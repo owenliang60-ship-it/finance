@@ -60,6 +60,10 @@ class DataPackage:
     # From Company DB
     company_record: Optional[CompanyRecord] = None
 
+    # Macro Briefing (Stage 0)
+    macro_briefing: Optional[str] = None  # Claude-generated macro narrative
+    macro_signals: list = field(default_factory=list)  # CrossAssetSignal dicts (fired only)
+
     # FMP enrichment (P0)
     analyst_estimates: Optional[list] = None
     earnings_calendar: Optional[list] = None
@@ -178,6 +182,10 @@ class DataPackage:
         # Macro environment (injected into all 6 lens prompts)
         if self.macro is not None:
             sections.append(self.macro.format_for_prompt())
+
+        # Macro briefing (Claude-generated narrative, injected after raw macro data)
+        if self.macro_briefing:
+            sections.append(f"### Macro Briefing\n{self.macro_briefing}")
 
         # Analyst consensus
         if self.analyst_estimates:
@@ -354,6 +362,21 @@ def collect_data(
         logger.warning(f"Macro data fetch failed: {e}")
         if scratchpad:
             scratchpad.log_reasoning("error", f"Macro data fetch failed: {e}")
+
+    # Cross-asset signal detection (runs after macro fetch)
+    if pkg.macro:
+        try:
+            from terminal.macro_briefing import detect_signals
+            signals = detect_signals(pkg.macro)
+            pkg.macro_signals = [s.__dict__ for s in signals if s.fired]
+            if scratchpad and pkg.macro_signals:
+                scratchpad.log_reasoning(
+                    "macro_signals",
+                    f"Detected {len(pkg.macro_signals)} active signals: "
+                    + ", ".join(s['label'] for s in pkg.macro_signals)
+                )
+        except Exception as e:
+            logger.warning(f"Macro signal detection failed: {e}")
 
     # FMP enrichment (analyst estimates, insider trades, news, earnings calendar)
     try:

@@ -92,6 +92,32 @@ def analyze_ticker(
                 f"{len(record.analyses)} analyses"
             )
 
+        # Phase 1.5: Macro briefing prompt (if macro data available)
+        if data_pkg.macro:
+            try:
+                from terminal.macro_briefing import generate_briefing_prompt, detect_signals
+                signals = detect_signals(data_pkg.macro)
+                active_signals = [s for s in signals if s.fired]
+                if active_signals or depth in ("standard", "full"):
+                    briefing_prompt = generate_briefing_prompt(data_pkg.macro, signals)
+                    result["macro_briefing_prompt"] = briefing_prompt
+                    result["macro_signals"] = [
+                        {"name": s.name, "label": s.label, "strength": s.strength,
+                         "evidence": s.evidence}
+                        for s in active_signals
+                    ]
+                    result["macro_briefing_instructions"] = (
+                        "IMPORTANT: Run this macro briefing FIRST, before the 6 lens analyses. "
+                        "Your response will be injected as context for all subsequent lenses. "
+                        "After you respond, store the narrative in data_pkg.macro_briefing."
+                    )
+                    scratchpad.log_reasoning(
+                        "macro_briefing",
+                        f"Generated briefing prompt with {len(active_signals)} active signals"
+                    )
+            except Exception as e:
+                logger.warning(f"Macro briefing generation failed: {e}")
+
         # Phase 2: Lens prompts (standard and full)
         if depth in ("standard", "full"):
             scratchpad.log_reasoning(

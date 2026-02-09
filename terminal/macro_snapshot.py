@@ -53,6 +53,9 @@ class MacroSnapshot:
     us30y_30d_chg_bp: Optional[int] = None
     vix_30d_chg: Optional[float] = None
     dxy_30d_chg: Optional[float] = None
+    usdjpy_30d_chg: Optional[float] = None       # USD/JPY 30d raw change
+    hy_spread_30d_chg: Optional[float] = None     # HY spread 30d raw change (pp)
+    fed_bs_30d_chg_pct: Optional[float] = None    # Fed BS 30d % change
 
     # ── Regime Assessment ──
     regime: str = "NEUTRAL"                   # RISK_ON / NEUTRAL / RISK_OFF / CRISIS

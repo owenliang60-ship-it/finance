@@ -355,6 +355,16 @@ def fetch_macro_snapshot() -> MacroSnapshot:
     snapshot.us30y_30d_chg_bp = _trend_bp(raw.get("DGS30", []))
     snapshot.vix_30d_chg = _trend_raw(raw.get("VIXCLS", []))
     snapshot.dxy_30d_chg = _trend_raw(raw.get("DTWEXBGS", []))
+    snapshot.usdjpy_30d_chg = _trend_raw(raw.get("DEXJPUS", []))
+    snapshot.hy_spread_30d_chg = _trend_raw(raw.get("BAMLH0A0HYM2", []))
+
+    # Fed BS 30d % change (weekly data, ~4 weeks ≈ 30 days)
+    walcl = raw.get("WALCL", [])
+    if len(walcl) > 4:
+        current_bs = walcl[0]["value"]
+        past_bs = walcl[min(4, len(walcl) - 1)]["value"]
+        if past_bs > 0:
+            snapshot.fed_bs_30d_chg_pct = round((current_bs - past_bs) / past_bs * 100, 2)
 
     # Classify VIX regime
     snapshot.vix_regime = _classify_vix(snapshot.vix)
