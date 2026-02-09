@@ -22,6 +22,9 @@ logs/
 # Data (可能包含大文件)
 /data/
 
+# Worktrees
+.worktrees/
+
 # Environment
 .env
 .env.local
