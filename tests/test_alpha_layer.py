@@ -796,8 +796,8 @@ class TestCommandsAlphaDepth:
         assert "alpha_prompts" not in result
 
     @patch("terminal.commands.collect_data")
-    def test_full_depth_no_alpha(self, mock_collect):
-        """depth='full' should NOT include alpha_prompts."""
+    def test_full_depth_includes_alpha(self, mock_collect):
+        """depth='full' includes alpha_prompts (merged depth)."""
         from terminal.commands import analyze_ticker
 
         pkg = _sample_data_package()
@@ -813,4 +813,5 @@ class TestCommandsAlphaDepth:
         mock_collect.return_value = pkg
 
         result = analyze_ticker("NVDA", depth="full")
-        assert "alpha_prompts" not in result
+        assert "alpha_prompts" in result
+        assert "alpha_instructions" in result

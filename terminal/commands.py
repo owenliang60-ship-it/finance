@@ -44,8 +44,7 @@ def analyze_ticker(
     Depth levels:
     - "quick":    Data + indicators snapshot (~5 sec)
     - "standard": + macro briefing (Stage 0) + 5 lens prompts for Claude to run
-    - "full":     + debate prompts + memo skeleton + scoring rubric
-    - "alpha":    + Layer 2 second-order thinking (red team + cycle + bet)
+    - "full":     + debate + memo + scoring + Layer 2 (red team + cycle + bet) + HB sync
 
     Returns a dict with data and (for standard/full/alpha) prompt sequences.
     Creates a scratchpad log for full analysis tracking.
@@ -162,8 +161,8 @@ def analyze_ticker(
         # Context summary for Claude
         result["context_summary"] = data_pkg.format_context()
 
-        # Phase 6: Layer 2 — Second-Order Thinking (alpha only)
-        if depth == "alpha":
+        # Phase 6: Layer 2 — Second-Order Thinking (full depth)
+        if depth in ("full", "alpha"):
             scratchpad.log_reasoning(
                 "phase_6_start",
                 "Alpha depth: enabling Layer 2 second-order thinking"
