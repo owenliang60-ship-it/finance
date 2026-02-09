@@ -60,6 +60,12 @@ class DataPackage:
     # From Company DB
     company_record: Optional[CompanyRecord] = None
 
+    # FMP enrichment (P0)
+    analyst_estimates: Optional[list] = None
+    earnings_calendar: Optional[list] = None
+    insider_trades: list = field(default_factory=list)
+    news: list = field(default_factory=list)
+
     @property
     def has_financials(self) -> bool:
         return self.fundamentals is not None or len(self.ratios) > 0
@@ -173,6 +179,63 @@ class DataPackage:
         if self.macro is not None:
             sections.append(self.macro.format_for_prompt())
 
+        # Analyst consensus
+        if self.analyst_estimates:
+            lines = ["### Analyst Consensus"]
+            for est in self.analyst_estimates[:2]:
+                date = est.get("date", "N/A")
+                eps_avg = est.get("estimatedEpsAvg", "N/A")
+                eps_low = est.get("estimatedEpsLow", "N/A")
+                eps_high = est.get("estimatedEpsHigh", "N/A")
+                rev = est.get("estimatedRevenueAvg")
+                rev_str = f"${rev / 1e9:.1f}B" if rev else "N/A"
+                lines.append(
+                    f"- {date}: EPS {eps_low}/{eps_avg}/{eps_high} (low/avg/high), "
+                    f"Revenue {rev_str}"
+                )
+            sections.append("\n".join(lines))
+
+        # Upcoming earnings
+        if self.earnings_calendar:
+            ec = self.earnings_calendar[0]
+            lines = ["### Upcoming Earnings"]
+            lines.append(
+                f"- Date: {ec.get('date', 'N/A')}\n"
+                f"- EPS Estimate: {ec.get('epsEstimated', 'N/A')}\n"
+                f"- Revenue Estimate: {ec.get('revenueEstimated', 'N/A')}"
+            )
+            sections.append("\n".join(lines))
+
+        # Recent insider activity
+        if self.insider_trades:
+            lines = ["### Recent Insider Activity"]
+            sorted_trades = sorted(
+                self.insider_trades,
+                key=lambda t: abs(t.get("securitiesTransacted", 0) * (t.get("price", 0) or 0)),
+                reverse=True,
+            )[:5]
+            for t in sorted_trades:
+                date = t.get("filingDate", t.get("transactionDate", "N/A"))
+                name = t.get("reportingName", "Unknown")
+                tx_type = t.get("transactionType", "N/A")
+                shares = t.get("securitiesTransacted", 0)
+                price = t.get("price", 0)
+                value = abs(shares * (price or 0))
+                value_str = f"${value:,.0f}" if value else "N/A"
+                lines.append(f"- {date}: {name} — {tx_type} {abs(shares):,.0f} shares @ ${price:.2f} ({value_str})")
+            sections.append("\n".join(lines))
+
+        # Recent news
+        if self.news:
+            lines = ["### Recent News"]
+            for n in self.news[:5]:
+                date = n.get("publishedDate", "N/A")
+                if "T" in str(date):
+                    date = str(date).split("T")[0]
+                title = n.get("title", "N/A")
+                lines.append(f"- {date}: {title}")
+            sections.append("\n".join(lines))
+
         return "\n\n".join(sections)
 
 
@@ -273,6 +336,80 @@ def collect_data(
         logger.warning(f"Macro data fetch failed: {e}")
         if scratchpad:
             scratchpad.log_reasoning("error", f"Macro data fetch failed: {e}")
+
+    # FMP enrichment (analyst estimates, insider trades, news, earnings calendar)
+    try:
+        from terminal.tools.registry import get_registry
+        registry = get_registry()
+    except Exception as e:
+        logger.warning(f"Tool registry not available: {e}")
+        registry = None
+
+    if registry:
+        # Analyst estimates
+        try:
+            result = registry.execute("get_analyst_estimates", symbol=symbol, period="quarter", limit=4)
+            if result.get("success"):
+                pkg.analyst_estimates = result.get("data", [])
+                if scratchpad:
+                    scratchpad.log_tool_call(
+                        "get_analyst_estimates", {"symbol": symbol},
+                        {"count": len(pkg.analyst_estimates or [])}
+                    )
+        except Exception as e:
+            logger.warning(f"Analyst estimates fetch failed for {symbol}: {e}")
+            if scratchpad:
+                scratchpad.log_reasoning("error", f"Analyst estimates fetch failed: {e}")
+
+        # Insider trades
+        try:
+            result = registry.execute("get_insider_trades", symbol=symbol, limit=20)
+            if result.get("success"):
+                pkg.insider_trades = result.get("data", [])
+                if scratchpad:
+                    scratchpad.log_tool_call(
+                        "get_insider_trades", {"symbol": symbol},
+                        {"count": len(pkg.insider_trades)}
+                    )
+        except Exception as e:
+            logger.warning(f"Insider trades fetch failed for {symbol}: {e}")
+            if scratchpad:
+                scratchpad.log_reasoning("error", f"Insider trades fetch failed: {e}")
+
+        # Stock news
+        try:
+            result = registry.execute("get_stock_news", tickers=symbol, limit=10)
+            if result.get("success"):
+                pkg.news = result.get("data", [])
+                if scratchpad:
+                    scratchpad.log_tool_call(
+                        "get_stock_news", {"tickers": symbol},
+                        {"count": len(pkg.news)}
+                    )
+        except Exception as e:
+            logger.warning(f"News fetch failed for {symbol}: {e}")
+            if scratchpad:
+                scratchpad.log_reasoning("error", f"News fetch failed: {e}")
+
+        # Earnings calendar
+        try:
+            from datetime import timedelta
+            today = datetime.now()
+            from_date = (today - timedelta(days=30)).strftime("%Y-%m-%d")
+            to_date = (today + timedelta(days=30)).strftime("%Y-%m-%d")
+            result = registry.execute("get_earnings_calendar", from_date=from_date, to_date=to_date)
+            if result.get("success"):
+                all_earnings = result.get("data", [])
+                pkg.earnings_calendar = [e for e in all_earnings if e.get("symbol") == symbol]
+                if scratchpad:
+                    scratchpad.log_tool_call(
+                        "get_earnings_calendar", {"from_date": from_date, "to_date": to_date},
+                        {"total": len(all_earnings), "filtered": len(pkg.earnings_calendar or [])}
+                    )
+        except Exception as e:
+            logger.warning(f"Earnings calendar fetch failed for {symbol}: {e}")
+            if scratchpad:
+                scratchpad.log_reasoning("error", f"Earnings calendar fetch failed: {e}")
 
     if scratchpad:
         has_data = pkg.company_record and pkg.company_record.has_data
