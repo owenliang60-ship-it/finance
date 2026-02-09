@@ -13,6 +13,7 @@ POOL_DIR = DATA_DIR / "pool"
 PRICE_DIR = DATA_DIR / "price"
 FUNDAMENTAL_DIR = DATA_DIR / "fundamental"
 RATINGS_DIR = DATA_DIR / "ratings"
+MACRO_DIR = DATA_DIR / "macro"
 
 # FMP API 配置 (从环境变量读取)
 FMP_API_KEY = os.environ.get("FMP_API_KEY", "")

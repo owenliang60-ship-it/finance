@@ -28,6 +28,7 @@ from knowledge.oprms.models import DNARating, TimingRating, OPRMSRating
 from knowledge.oprms.ratings import calculate_position_size
 
 from terminal.company_db import get_company_record, CompanyRecord
+from terminal.scratchpad import AnalysisScratchpad
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,9 @@ class DataPackage:
 
     # From Indicators
     indicators: Optional[dict] = None  # PMARP, RVOL signals
+
+    # From Macro Desk
+    macro: Optional[Any] = None  # MacroSnapshot (imported at runtime to avoid circular)
 
     # From Company DB
     company_record: Optional[CompanyRecord] = None
@@ -165,14 +169,27 @@ class DataPackage:
                 lines.append(f"{i}. {desc}")
             sections.append("\n".join(lines))
 
+        # Macro environment (injected into all 6 lens prompts)
+        if self.macro is not None:
+            sections.append(self.macro.format_for_prompt())
+
         return "\n\n".join(sections)
 
 
-def collect_data(symbol: str, price_days: int = 60) -> DataPackage:
+def collect_data(
+    symbol: str,
+    price_days: int = 60,
+    scratchpad: Optional[AnalysisScratchpad] = None,
+) -> DataPackage:
     """
     Phase 1: Collect all available data for a ticker.
 
     Calls Data Desk + Indicators + Company DB. No API calls to LLM.
+
+    Args:
+        symbol: Stock ticker
+        price_days: Number of days of price history
+        scratchpad: Optional scratchpad for logging
     """
     symbol = symbol.upper()
     pkg = DataPackage(
@@ -180,10 +197,31 @@ def collect_data(symbol: str, price_days: int = 60) -> DataPackage:
         collected_at=datetime.now().isoformat(),
     )
 
+    if scratchpad:
+        scratchpad.log_reasoning(
+            "data_collection_start",
+            f"Starting data collection for {symbol} ({price_days} days price history)"
+        )
+
     # Data Desk: stock data
     try:
         from src.data.data_query import get_stock_data
         stock = get_stock_data(symbol, price_days=price_days)
+
+        if scratchpad:
+            scratchpad.log_tool_call(
+                "get_stock_data",
+                {"symbol": symbol, "price_days": price_days},
+                {
+                    "has_info": stock.get("info") is not None,
+                    "has_profile": stock.get("profile") is not None,
+                    "has_fundamentals": stock.get("fundamentals") is not None,
+                    "ratios_count": len(stock.get("ratios", [])),
+                    "income_count": len(stock.get("income", [])),
+                    "price_days": len(stock.get("price", [])) if stock.get("price") else 0,
+                }
+            )
+
         pkg.info = stock.get("info")
         pkg.profile = stock.get("profile")
         pkg.fundamentals = stock.get("fundamentals")
@@ -192,16 +230,59 @@ def collect_data(symbol: str, price_days: int = 60) -> DataPackage:
         pkg.price = stock.get("price")
     except Exception as e:
         logger.warning(f"Data Desk query failed for {symbol}: {e}")
+        if scratchpad:
+            scratchpad.log_reasoning("error", f"Data Desk query failed: {e}")
 
     # Indicators
     try:
         from src.indicators.engine import run_indicators
         pkg.indicators = run_indicators(symbol)
+
+        if scratchpad and pkg.indicators:
+            scratchpad.log_tool_call(
+                "run_indicators",
+                {"symbol": symbol},
+                {
+                    "indicator_count": len(pkg.indicators),
+                    "indicators": list(pkg.indicators.keys()) if isinstance(pkg.indicators, dict) else None,
+                }
+            )
     except Exception as e:
         logger.warning(f"Indicator run failed for {symbol}: {e}")
+        if scratchpad:
+            scratchpad.log_reasoning("error", f"Indicator run failed: {e}")
 
     # Company DB
     pkg.company_record = get_company_record(symbol)
+
+    # Macro environment (FRED data)
+    try:
+        from terminal.macro_fetcher import get_macro_snapshot
+        pkg.macro = get_macro_snapshot()
+        if scratchpad and pkg.macro:
+            scratchpad.log_tool_call(
+                "get_macro_snapshot",
+                {},
+                {
+                    "data_sources": pkg.macro.data_source_count,
+                    "regime": pkg.macro.regime,
+                    "vix": pkg.macro.vix,
+                }
+            )
+    except Exception as e:
+        logger.warning(f"Macro data fetch failed: {e}")
+        if scratchpad:
+            scratchpad.log_reasoning("error", f"Macro data fetch failed: {e}")
+
+    if scratchpad:
+        has_data = pkg.company_record and pkg.company_record.has_data
+        scratchpad.log_reasoning(
+            "data_collection_complete",
+            f"Data collection complete. Has financials: {pkg.has_financials}, "
+            f"Company DB record: {has_data}, "
+            f"Price data points: {len(pkg.price) if pkg.price else 0}, "
+            f"Macro: {'yes' if pkg.macro else 'no'}"
+        )
 
     return pkg
 
@@ -348,12 +429,16 @@ def calculate_position(
     timing_coeff: Optional[float] = None,
     total_capital: float = 1_000_000,
     evidence_count: int = 0,
+    apply_regime: bool = True,
 ) -> dict:
     """
-    Calculate OPRMS position size with evidence gate.
+    Calculate OPRMS position size with evidence gate and regime adjustment.
 
+    Regime adjustment: RISK_OFF → ×0.7, CRISIS → ×0.4 (applied before evidence gate).
     Evidence threshold: 3+ primary sources for full position.
     """
+    from terminal.regime import get_current_regime, get_regime_adjustment
+
     dna_enum = DNARating(dna)
     timing_enum = TimingRating(timing)
 
@@ -366,6 +451,25 @@ def calculate_position(
     result.symbol = symbol
 
     output = result.to_dict()
+
+    # Regime adjustment (applied before evidence gate)
+    if apply_regime:
+        regime_assessment = get_current_regime()
+        regime_mult = get_regime_adjustment(regime_assessment.regime)
+        if regime_mult < 1.0:
+            output["regime_adjustment"] = {
+                "regime": regime_assessment.regime.value,
+                "multiplier": regime_mult,
+                "confidence": regime_assessment.confidence,
+                "rationale": regime_assessment.rationale,
+            }
+            output["pre_regime_position_pct"] = output["target_position_pct"]
+            output["target_position_pct"] = round(
+                output["target_position_pct"] * regime_mult, 2
+            )
+            output["target_position_usd"] = round(
+                output["target_position_usd"] * regime_mult, 2
+            )
 
     # Evidence gate
     if evidence_count < 3:

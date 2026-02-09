@@ -1,11 +1,19 @@
 """
-Macro regime interface — stub until macro data pipeline is built (Phase 2a+).
+Macro regime interface — uses MacroSnapshot from FRED data pipeline.
 
-Other modules can reference this now; it returns NEUTRAL by default.
+Decision tree:
+  CRISIS  → VIX > 45  OR  (VIX > 35 AND deep curve inversion)
+  RISK_OFF → (VIX > 25 AND curve inverted) OR GDP < 0 OR HY spread > 500bp
+  RISK_ON  → VIX < 18 AND curve positive AND GDP > 2%
+  NEUTRAL  → default
 """
+import logging
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class MarketRegime(str, Enum):
@@ -37,27 +45,41 @@ class RegimeAssessment:
 
 def get_current_regime() -> RegimeAssessment:
     """
-    Get current market regime assessment.
+    Get current market regime assessment using FRED macro data.
 
-    STUB: Returns NEUTRAL until macro data pipeline is built.
-    Future implementation will use:
-    - Fed funds rate trajectory
-    - Yield curve shape
-    - VIX / credit spreads
-    - Leading economic indicators
+    Falls back to NEUTRAL with low confidence if macro data is unavailable.
     """
-    from datetime import datetime
+    try:
+        from terminal.macro_fetcher import get_macro_snapshot
+        snapshot = get_macro_snapshot()
+    except Exception as e:
+        logger.warning("Macro snapshot unavailable: %s", e)
+        snapshot = None
+
+    if snapshot is None:
+        return RegimeAssessment(
+            regime=MarketRegime.NEUTRAL,
+            confidence="low",
+            rationale="Macro data unavailable — defaulting to NEUTRAL.",
+            data_sources=0,
+            assessed_at=datetime.now().isoformat(),
+        )
+
+    # Map snapshot regime string to enum
+    regime_map = {
+        "RISK_ON": MarketRegime.RISK_ON,
+        "NEUTRAL": MarketRegime.NEUTRAL,
+        "RISK_OFF": MarketRegime.RISK_OFF,
+        "CRISIS": MarketRegime.CRISIS,
+    }
+    regime = regime_map.get(snapshot.regime, MarketRegime.NEUTRAL)
 
     return RegimeAssessment(
-        regime=MarketRegime.NEUTRAL,
-        confidence="low",
-        rationale=(
-            "Stub implementation — no macro data pipeline yet. "
-            "Defaulting to NEUTRAL. Build macro data ingestion "
-            "(FRED API, VIX, yield curve) to activate regime detection."
-        ),
-        data_sources=0,
-        assessed_at=datetime.now().isoformat(),
+        regime=regime,
+        confidence=snapshot.regime_confidence,
+        rationale=snapshot.regime_rationale,
+        data_sources=snapshot.data_source_count,
+        assessed_at=snapshot.fetched_at or datetime.now().isoformat(),
     )
 
 
