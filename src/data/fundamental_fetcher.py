@@ -298,6 +298,73 @@ def update_all_fundamentals(symbols: List[str] = None):
     logger.info("所有基本面数据更新完成")
 
 
+def ensure_fundamentals_cached(symbol: str) -> bool:
+    """
+    确保该股票的基本面数据已缓存。如果没有，立即从 FMP API 获取并写入缓存。
+    配合 pool_manager.ensure_in_pool() 使用，分析即建库。
+
+    Returns:
+        True if data was fetched (or already cached), False on failure.
+    """
+    symbol = symbol.upper()
+    fetched_any = False
+
+    # Profile
+    if not get_profile(symbol):
+        logger.info(f"[auto-cache] Fetching profile for {symbol}")
+        profile = fetch_profile(symbol)
+        if profile:
+            profiles = _load_json(PROFILES_FILE)
+            profiles[symbol] = profile
+            _save_json(PROFILES_FILE, profiles)
+            fetched_any = True
+
+    # Ratios
+    if not get_ratios(symbol):
+        logger.info(f"[auto-cache] Fetching ratios for {symbol}")
+        data = fetch_ratios(symbol)
+        if data:
+            ratios = _load_json(RATIOS_FILE)
+            ratios[symbol] = data
+            _save_json(RATIOS_FILE, ratios)
+            fetched_any = True
+
+    # Income
+    if not get_income(symbol):
+        logger.info(f"[auto-cache] Fetching income for {symbol}")
+        data = fetch_income(symbol)
+        if data:
+            income = _load_json(INCOME_FILE)
+            income[symbol] = data
+            _save_json(INCOME_FILE, income)
+            fetched_any = True
+
+    # Balance sheet
+    if not get_balance_sheet(symbol):
+        logger.info(f"[auto-cache] Fetching balance sheet for {symbol}")
+        data = fetch_balance_sheet(symbol)
+        if data:
+            bs = _load_json(BALANCE_SHEET_FILE)
+            bs[symbol] = data
+            _save_json(BALANCE_SHEET_FILE, bs)
+            fetched_any = True
+
+    # Cash flow
+    if not get_cash_flow(symbol):
+        logger.info(f"[auto-cache] Fetching cash flow for {symbol}")
+        data = fetch_cash_flow(symbol)
+        if data:
+            cf = _load_json(CASH_FLOW_FILE)
+            cf[symbol] = data
+            _save_json(CASH_FLOW_FILE, cf)
+            fetched_any = True
+
+    if fetched_any:
+        logger.info(f"[auto-cache] Fundamental data cached for {symbol}")
+
+    return True
+
+
 def get_fundamental_summary(symbol: str) -> Dict:
     """获取基本面数据摘要"""
     profile = get_profile(symbol) or {}

@@ -147,6 +147,61 @@ def get_stock_info(symbol: str) -> Dict:
     return {}
 
 
+def ensure_in_pool(symbol: str) -> Dict:
+    """
+    确保股票在池中。如果不在，通过 FMP API 获取 profile 并加入 universe.json。
+    分析即纳入，日后 cron 正常维护。
+
+    Returns:
+        stock info dict (from pool or freshly added), empty dict if API fails.
+    """
+    symbol = symbol.upper()
+
+    # Already in pool?
+    info = get_stock_info(symbol)
+    if info:
+        return info
+
+    # Fetch profile from FMP
+    logger.info(f"'{symbol}' 不在股票池中，正在通过 FMP API 获取并加入...")
+    profile = fmp_client.get_profile(symbol)
+    if not profile:
+        logger.warning(f"FMP API 未返回 '{symbol}' 的 profile，无法加入股票池")
+        return {}
+
+    # Build stock info entry matching universe.json format
+    new_entry = {
+        "symbol": symbol,
+        "companyName": profile.get("companyName", ""),
+        "marketCap": profile.get("mktCap"),
+        "sector": profile.get("sector", ""),
+        "industry": profile.get("industry", ""),
+        "exchange": profile.get("exchangeShortName", profile.get("exchange", "")),
+        "country": profile.get("country", ""),
+        "source": "analysis",  # 区分来源：analysis vs screener
+        "added_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+    # Add to universe
+    stocks = load_universe()
+    stocks.append(new_entry)
+    save_universe(stocks)
+
+    # Record in history
+    history = load_history()
+    history.append({
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "entered": [symbol],
+        "exited": [],
+        "total_count": len(stocks),
+        "reason": "auto-admitted via analysis",
+    })
+    save_history(history)
+
+    logger.info(f"'{symbol}' ({new_entry['companyName']}) 已加入股票池 (source: analysis)")
+    return new_entry
+
+
 def print_universe_summary():
     """打印股票池概况"""
     stocks = load_universe()

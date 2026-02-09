@@ -266,6 +266,24 @@ def collect_data(
             f"Starting data collection for {symbol} ({price_days} days price history)"
         )
 
+    # Auto-admit: ensure ticker is in pool and fundamentals are cached
+    try:
+        from src.data.pool_manager import ensure_in_pool
+        from src.data.fundamental_fetcher import ensure_fundamentals_cached
+        pool_info = ensure_in_pool(symbol)
+        if pool_info:
+            ensure_fundamentals_cached(symbol)
+            if scratchpad:
+                source = pool_info.get("source", "screener")
+                scratchpad.log_reasoning(
+                    "auto_admit",
+                    f"{symbol} in pool (source: {source})"
+                )
+    except Exception as e:
+        logger.warning(f"Auto-admit failed for {symbol}: {e}")
+        if scratchpad:
+            scratchpad.log_reasoning("error", f"Auto-admit failed: {e}")
+
     # Data Desk: stock data
     try:
         from src.data.data_query import get_stock_data
