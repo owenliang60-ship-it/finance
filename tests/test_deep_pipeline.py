@@ -259,9 +259,10 @@ class TestCompileDeepReport:
             self._populate_research_dir(research_dir)
             report = compile_deep_report("TEST", research_dir)
 
-            output_path = research_dir / "full_report.md"
-            assert output_path.exists()
-            assert output_path.read_text() == report
+            # Find the dated report file
+            report_files = list(research_dir.glob("full_report_*.md"))
+            assert len(report_files) == 1
+            assert report_files[0].read_text() == report
 
     def test_handles_missing_optional_files(self, tmp_path):
         with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):

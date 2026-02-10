@@ -146,7 +146,7 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
     """Compile all research files into a single deep analysis report.
 
     Reads all files from research_dir and assembles them into
-    a structured markdown report. Writes result to research_dir/full_report.md.
+    a structured markdown report. Writes to research_dir/full_report_{date}.md.
 
     Args:
         symbol: Stock ticker
@@ -256,9 +256,17 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
 
     report = "\n".join(sections)
 
-    # Write to file
-    output_path = research_dir / "full_report.md"
+    # Write to file (dated filename for version tracking)
+    output_path = research_dir / f"full_report_{date}.md"
     output_path.write_text(report, encoding="utf-8")
     logger.info(f"Compiled deep report: {output_path} ({len(report)} chars)")
+
+    # Generate HTML version
+    try:
+        from terminal.html_report import compile_html_report
+        html_path = compile_html_report(symbol, research_dir, date=date)
+        logger.info(f"Compiled HTML report: {html_path}")
+    except Exception as e:
+        logger.warning(f"HTML report generation failed: {e}")
 
     return report
