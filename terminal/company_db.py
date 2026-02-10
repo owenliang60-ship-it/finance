@@ -25,7 +25,7 @@ def get_company_dir(symbol: str) -> Path:
     """Get (or create) the per-company data directory."""
     symbol = symbol.upper()
     d = _COMPANIES_DIR / symbol
-    for sub in ["memos", "analyses", "debates", "strategies", "trades"]:
+    for sub in ["memos", "analyses", "debates", "strategies", "trades", "research"]:
         (d / sub).mkdir(parents=True, exist_ok=True)
     return d
 

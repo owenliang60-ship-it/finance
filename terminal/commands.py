@@ -218,6 +218,116 @@ def analyze_ticker(
     return result
 
 
+def deep_analyze_ticker(
+    symbol: str,
+    price_days: int = 120,
+) -> Dict[str, Any]:
+    """
+    Setup phase for deep analysis — prepares all data and prompts.
+
+    Returns a dict consumed by the /deep-analysis skill, which handles
+    agent dispatch and LLM synthesis. All intermediate files go to
+    data/companies/{SYMBOL}/research/.
+
+    This function does NOT run any LLM analysis. It only:
+    1. Collects data (FMP + FRED + indicators)
+    2. Writes data_context.md to research dir
+    3. Prepares research queries for web search agents
+    4. Prepares lens agent prompts (with file read/write instructions)
+    5. Prepares macro briefing prompt
+    6. Prepares Gemini contrarian prompt
+    """
+    from terminal.deep_pipeline import (
+        get_research_dir,
+        write_data_context,
+        prepare_research_queries,
+        build_lens_agent_prompt,
+    )
+
+    symbol = symbol.upper()
+    result: Dict[str, Any] = {"symbol": symbol}
+
+    # 1. Collect data
+    scratchpad = AnalysisScratchpad(symbol, "deep")
+    data_pkg = collect_data(symbol, price_days=price_days, scratchpad=scratchpad)
+
+    # 2. Research directory + data context
+    research_dir = get_research_dir(symbol)
+    ctx_path = write_data_context(data_pkg, research_dir)
+    result["research_dir"] = str(research_dir)
+    result["data_context_path"] = str(ctx_path)
+    result["context_summary"] = data_pkg.format_context()
+
+    # 3. Research queries
+    info = data_pkg.info or {}
+    result["research_queries"] = prepare_research_queries(
+        symbol=symbol,
+        company_name=info.get("companyName", symbol),
+        sector=info.get("sector", ""),
+        industry=info.get("industry", ""),
+    )
+
+    # 4. Macro briefing prompt
+    if data_pkg.macro:
+        try:
+            from terminal.macro_briefing import generate_briefing_prompt, detect_signals
+            signals = detect_signals(data_pkg.macro)
+            result["macro_briefing_prompt"] = generate_briefing_prompt(data_pkg.macro, signals)
+            result["macro_signals"] = [
+                {"name": s.name, "label": s.label, "strength": s.strength}
+                for s in signals if s.fired
+            ]
+        except Exception as e:
+            logger.warning(f"Macro briefing generation failed: {e}")
+            result["macro_briefing_prompt"] = ""
+    else:
+        result["macro_briefing_prompt"] = ""
+
+    # 5. Lens agent prompts
+    lens_prompts = prepare_lens_prompts(symbol, data_pkg)
+    result["lens_agent_prompts"] = []
+    for lp in lens_prompts:
+        agent_prompt = build_lens_agent_prompt(lp, research_dir)
+        slug = lp["lens_name"].lower().replace("/", "_").replace(" ", "_")
+        slug = "".join(c for c in slug if c.isalnum() or c == "_")
+        result["lens_agent_prompts"].append({
+            "lens_name": lp["lens_name"],
+            "agent_prompt": agent_prompt,
+            "output_path": str(research_dir / f"lens_{slug}.md"),
+        })
+
+    # 6. Gemini contrarian prompt
+    company_name = info.get("companyName", symbol)
+    result["gemini_prompt"] = (
+        f"You are a contrarian investment analyst. Given the following data about "
+        f"{company_name} ({symbol}), provide a 500-word bearish counter-thesis. "
+        f"Focus on risks the market is ignoring, historical analogs of similar "
+        f"companies that failed, and structural weaknesses in the business model.\n\n"
+        f"Key data:\n{data_pkg.format_context()[:3000]}"
+    )
+
+    # 7. Data summary for reference
+    result["data"] = {
+        "info": data_pkg.info,
+        "latest_price": data_pkg.latest_price,
+        "indicators": data_pkg.indicators,
+        "has_financials": data_pkg.has_financials,
+    }
+
+    # 8. Alpha prompt args (for Phase 4 in skill)
+    record = data_pkg.company_record
+    result["alpha_prompt_args"] = {
+        "symbol": symbol,
+        "sector": info.get("sector", ""),
+        "data_context_path": str(ctx_path),
+        "l1_oprms": record.oprms if record and record.has_data else None,
+        "current_price": data_pkg.latest_price,
+    }
+
+    result["scratchpad_path"] = str(scratchpad.log_path)
+    return result
+
+
 def portfolio_status() -> Dict[str, Any]:
     """
     Comprehensive portfolio status check.
