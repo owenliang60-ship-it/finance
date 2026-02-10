@@ -372,6 +372,28 @@ def portfolio_status() -> Dict[str, Any]:
         "tickers": tracked,
     }
 
+    # Analysis freshness summary
+    try:
+        from terminal.freshness import check_all_freshness
+        reports = check_all_freshness()
+        if reports:
+            red = [r for r in reports if r.level.value == "RED"]
+            yellow = [r for r in reports if r.level.value == "YELLOW"]
+            green = [r for r in reports if r.level.value == "GREEN"]
+            result["analysis_freshness"] = {
+                "red_count": len(red),
+                "yellow_count": len(yellow),
+                "green_count": len(green),
+                "red_tickers": [
+                    {"symbol": r.symbol, "reasons": r.reasons} for r in red
+                ],
+                "yellow_tickers": [
+                    {"symbol": r.symbol, "reasons": r.reasons} for r in yellow
+                ],
+            }
+    except Exception as e:
+        result["freshness_error"] = str(e)
+
     return result
 
 
@@ -601,6 +623,61 @@ def replay_analysis_scratchpad(log_path: str) -> Dict[str, Any]:
         "timeline": timeline,
         "final_rating": final_rating,
     }
+
+
+def freshness_check(symbol: str = None) -> Dict[str, Any]:
+    """
+    Check analysis freshness for one ticker or all rated tickers.
+
+    Returns GREEN/YELLOW/RED status with reasons.
+    """
+    from terminal.freshness import check_freshness, check_all_freshness
+
+    if symbol:
+        report = check_freshness(symbol.upper())
+        return report.to_dict()
+    else:
+        reports = check_all_freshness()
+        summary = {
+            "RED": sum(1 for r in reports if r.level.value == "RED"),
+            "YELLOW": sum(1 for r in reports if r.level.value == "YELLOW"),
+            "GREEN": sum(1 for r in reports if r.level.value == "GREEN"),
+        }
+        return {
+            "total": len(reports),
+            "summary": summary,
+            "reports": [r.to_dict() for r in reports],
+        }
+
+
+def refresh_timing(symbol: str) -> Dict[str, Any]:
+    """
+    Prepare a lightweight timing refresh prompt (keeps DNA, re-evaluates Timing).
+
+    Returns the prompt for Claude to run, or error if no OPRMS exists.
+    """
+    from terminal.freshness import prepare_timing_refresh_prompt
+
+    result = prepare_timing_refresh_prompt(symbol.upper())
+    if result is None:
+        return {
+            "error": f"No OPRMS rating found for {symbol}. "
+            f"Run a full analysis first."
+        }
+    return result
+
+
+def evolution_view(symbol: str) -> Dict[str, Any]:
+    """
+    View the OPRMS evolution timeline for a ticker.
+
+    Returns structured timeline + formatted markdown text.
+    """
+    from terminal.freshness import get_evolution_timeline, format_evolution_text
+
+    timeline = get_evolution_timeline(symbol.upper())
+    timeline["formatted"] = format_evolution_text(timeline)
+    return timeline
 
 
 def _summarize_event(event: Dict[str, Any]) -> str:

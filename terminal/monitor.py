@@ -35,7 +35,14 @@ class MonitorReport:
     # Missing kill conditions
     missing_kill_conditions: List[str] = field(default_factory=list)
 
+    # Analysis freshness (from terminal.freshness)
+    analysis_freshness: List[dict] = field(default_factory=list)
+
     def to_dict(self) -> dict:
+        stale_analyses = sum(
+            1 for f in self.analysis_freshness
+            if f.get("level") in ("RED", "YELLOW")
+        )
         return {
             "generated_at": self.generated_at,
             "position_count": self.position_count,
@@ -45,12 +52,14 @@ class MonitorReport:
             "weight_drift": self.weight_drift,
             "stale_reviews": self.stale_reviews,
             "missing_kill_conditions": self.missing_kill_conditions,
+            "analysis_freshness": self.analysis_freshness,
             "summary": {
                 "total_alerts": len(self.exposure_alerts),
                 "positions_with_kill_conditions": len(self.kill_condition_status),
                 "positions_with_drift": len(self.weight_drift),
                 "stale_count": len(self.stale_reviews),
                 "missing_kc_count": len(self.missing_kill_conditions),
+                "stale_analyses": stale_analyses,
             },
         }
 
@@ -148,5 +157,17 @@ def run_full_monitor() -> dict:
                     })
             except ValueError:
                 pass
+
+    # 6. Analysis freshness
+    try:
+        from terminal.freshness import check_freshness
+        for p in positions:
+            try:
+                fr = check_freshness(p.symbol)
+                report.analysis_freshness.append(fr.to_dict())
+            except Exception as e:
+                logger.warning(f"Freshness check failed for {p.symbol}: {e}")
+    except Exception as e:
+        logger.error(f"Freshness module import failed: {e}")
 
     return report.to_dict()
