@@ -204,16 +204,15 @@ def deep_analyze_ticker(
     """
     Setup phase for deep analysis — prepares all data and prompts.
 
-    Returns a dict consumed by the /deep-analysis skill, which handles
-    agent dispatch and LLM synthesis. All intermediate files go to
-    data/companies/{SYMBOL}/research/.
+    Returns a slim dict consumed by the /deep-analysis skill. All large
+    prompt strings are written to research_dir/prompts/ and only file
+    paths are returned (~4KB instead of ~33KB).
 
     This function does NOT run any LLM analysis. It only:
     1. Collects data (FMP + FRED + indicators)
     2. Writes data_context.md to research dir
     3. Prepares research queries for web search agents
-    4. Prepares lens agent prompts (with file read/write instructions)
-    5. Prepares Gemini contrarian prompt
+    4. Writes all agent prompts to files (lens, gemini, synthesis, alpha)
     """
     from terminal.deep_pipeline import (
         get_research_dir,
@@ -222,6 +221,7 @@ def deep_analyze_ticker(
         build_lens_agent_prompt,
         build_synthesis_agent_prompt,
         build_alpha_agent_prompt,
+        write_agent_prompts,
     )
 
     symbol = symbol.upper()
@@ -236,7 +236,6 @@ def deep_analyze_ticker(
     ctx_path = write_data_context(data_pkg, research_dir)
     result["research_dir"] = str(research_dir)
     result["data_context_path"] = str(ctx_path)
-    result["context_summary"] = data_pkg.format_context()
 
     # 3. Research queries
     info = data_pkg.info or {}
@@ -247,22 +246,21 @@ def deep_analyze_ticker(
         industry=info.get("industry", ""),
     )
 
-    # 4. Lens agent prompts
+    # 4. Build all prompts (in memory temporarily)
     lens_prompts = prepare_lens_prompts(symbol, data_pkg)
-    result["lens_agent_prompts"] = []
+    lens_agent_prompts = []
     for lp in lens_prompts:
         agent_prompt = build_lens_agent_prompt(lp, research_dir)
         slug = lp["lens_name"].lower().replace("/", "_").replace(" ", "_")
         slug = "".join(c for c in slug if c.isalnum() or c == "_")
-        result["lens_agent_prompts"].append({
+        lens_agent_prompts.append({
             "lens_name": lp["lens_name"],
             "agent_prompt": agent_prompt,
             "output_path": str(research_dir / f"lens_{slug}.md"),
         })
 
-    # 5. Gemini contrarian prompt
     company_name = info.get("companyName", symbol)
-    result["gemini_prompt"] = (
+    gemini_prompt = (
         f"You are a contrarian investment analyst. Given the following data about "
         f"{company_name} ({symbol}), provide a 500-word bearish counter-thesis. "
         f"Focus on risks the market is ignoring, historical analogs of similar "
@@ -270,28 +268,34 @@ def deep_analyze_ticker(
         f"Key data:\n{data_pkg.format_context()[:3000]}"
     )
 
-    # 6. Data summary for reference
-    result["data"] = {
-        "info": data_pkg.info,
-        "latest_price": data_pkg.latest_price,
-        "indicators": data_pkg.indicators,
-        "has_financials": data_pkg.has_financials,
-    }
+    synthesis_prompt = build_synthesis_agent_prompt(research_dir, symbol)
 
-    # 7. Synthesis agent prompt (Phase 2)
-    result["synthesis_agent_prompt"] = build_synthesis_agent_prompt(
-        research_dir, symbol
-    )
-
-    # 8. Alpha agent prompt (Phase 3)
     record = data_pkg.company_record
-    result["alpha_agent_prompt"] = build_alpha_agent_prompt(
+    alpha_prompt = build_alpha_agent_prompt(
         research_dir=research_dir,
         symbol=symbol,
         sector=info.get("sector", ""),
         current_price=data_pkg.latest_price,
         l1_oprms=record.oprms if record and record.has_data else None,
     )
+
+    # 5. Write all prompts to disk, get back paths only
+    prompt_paths = write_agent_prompts(
+        research_dir=research_dir,
+        lens_agent_prompts=lens_agent_prompts,
+        gemini_prompt=gemini_prompt,
+        synthesis_prompt=synthesis_prompt,
+        alpha_prompt=alpha_prompt,
+    )
+    result.update(prompt_paths)
+
+    # 6. Data summary for reference (small, kept in-memory)
+    result["data"] = {
+        "info": data_pkg.info,
+        "latest_price": data_pkg.latest_price,
+        "indicators": data_pkg.indicators,
+        "has_financials": data_pkg.has_financials,
+    }
 
     result["scratchpad_path"] = str(scratchpad.log_path)
     return result
