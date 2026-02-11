@@ -220,6 +220,8 @@ def deep_analyze_ticker(
         write_data_context,
         prepare_research_queries,
         build_lens_agent_prompt,
+        build_synthesis_agent_prompt,
+        build_alpha_agent_prompt,
     )
 
     symbol = symbol.upper()
@@ -276,15 +278,20 @@ def deep_analyze_ticker(
         "has_financials": data_pkg.has_financials,
     }
 
-    # 7. Alpha prompt args (for Phase 4 in skill)
+    # 7. Synthesis agent prompt (Phase 2)
+    result["synthesis_agent_prompt"] = build_synthesis_agent_prompt(
+        research_dir, symbol
+    )
+
+    # 8. Alpha agent prompt (Phase 3)
     record = data_pkg.company_record
-    result["alpha_prompt_args"] = {
-        "symbol": symbol,
-        "sector": info.get("sector", ""),
-        "data_context_path": str(ctx_path),
-        "l1_oprms": record.oprms if record and record.has_data else None,
-        "current_price": data_pkg.latest_price,
-    }
+    result["alpha_agent_prompt"] = build_alpha_agent_prompt(
+        research_dir=research_dir,
+        symbol=symbol,
+        sector=info.get("sector", ""),
+        current_price=data_pkg.latest_price,
+        l1_oprms=record.oprms if record and record.has_data else None,
+    )
 
     result["scratchpad_path"] = str(scratchpad.log_path)
     return result

@@ -133,6 +133,278 @@ def build_lens_agent_prompt(
 """
 
 
+def build_synthesis_agent_prompt(research_dir: Path, symbol: str) -> str:
+    """Build a self-contained prompt for the Phase 2 Synthesis agent.
+
+    The agent reads 8 input files and writes debate.md, memo.md, oprms.md.
+    This offloads ~100KB of context from the main Claude process.
+
+    Args:
+        research_dir: Path to research directory with all Phase 0-1 outputs
+        symbol: Stock ticker
+
+    Returns:
+        Complete prompt string for a Task agent
+    """
+    symbol = symbol.upper()
+    rd = str(research_dir)
+
+    return f"""你是未来资本的高级投资分析师，正在执行 **{symbol}** 的综合研判。
+
+## 第一步：阅读基础材料
+
+阅读以下文件（缺失则跳过）：
+
+**数据上下文：**
+- `{rd}/data_context.md` — 财务数据、比率、技术指标、宏观环境
+
+**五维透镜分析：**
+- `{rd}/lens_quality_compounder.md` — 质量复利透镜
+- `{rd}/lens_imaginative_growth.md` — 想象力成长透镜
+- `{rd}/lens_fundamental_long_short.md` — 基本面多空透镜
+- `{rd}/lens_deep_value.md` — 深度价值透镜
+- `{rd}/lens_event_driven.md` — 事件驱动透镜
+
+**研究素材：**
+- `{rd}/earnings.md` — 最新财报要点
+- `{rd}/competitive.md` — 竞争格局
+- `{rd}/street.md` — 华尔街共识
+
+## 第二步：核心辩论 (debate.md)
+
+基于五维透镜分析，识别 **3 个核心张力/分歧**，然后对每个张力展开辩论：
+
+**辩论格式**：
+- 张力 1: [A vs B]
+  - 多头论点 (Bull): 具体论据 + 数据支撑
+  - 空头论点 (Bear): 具体反驳 + 数据支撑
+  - 裁决: 哪方更有说服力，为什么
+- 张力 2: [同上格式]
+- 张力 3: [同上格式]
+- **总裁决**: BUY / HOLD / SELL + 信心水平 (高/中/低)
+
+**要求**：500+ 字，使用中文，辩论必须有血有肉（不是泛泛的"机会与风险并存"）
+
+**写入文件**: `{rd}/debate.md`
+
+## 第三步：投资备忘录 (memo.md)
+
+基于辩论结论，撰写完整投资备忘录：
+
+**备忘录结构**：
+1. **执行摘要** (Executive Summary): 一段话概括结论和核心逻辑
+2. **变异观点** (Variant View): 我们与市场共识的关键分歧是什么？
+3. **关键力量** (Key Forces): 3-5 个驱动股价的核心力量，每个给方向 (↑/↓) 和权重
+4. **估值** (Valuation): DCF 三情景 (悲观/基准/乐观)，给出具体假设和目标价
+5. **风险框架** (Risk Framework): 关键风险 + 对冲/缓释策略
+6. **仓位建议** (Position Recommendation): 具体建议 + 触发条件
+
+**要求**：800+ 字，使用中文，DCF 必须有具体数字（不能只写"合理估值"）
+
+**写入文件**: `{rd}/memo.md`
+
+## 第四步：OPRMS 评级 (oprms.md)
+
+基于辩论和备忘录，给出 OPRMS 评级：
+
+**OPRMS 框架**：
+
+Y 轴 — 资产基因 (DNA):
+| 等级 | 名称 | 仓位上限 | 特征 |
+|------|------|---------|------|
+| S | 圣杯 | 25% | 改变人类进程的超级核心资产 |
+| A | 猛将 | 15% | 强周期龙头，细分赛道霸主 |
+| B | 黑马 | 7% | 强叙事驱动，赔率高但不确定 |
+| C | 跟班 | 2% | 补涨逻辑，基本不做 |
+
+X 轴 — 时机系数 (Timing):
+| 等级 | 名称 | 系数范围 | 特征 |
+|------|------|---------|------|
+| S | 千载难逢 | 1.0-1.5 | 历史性时刻，暴跌坑底/突破 |
+| A | 趋势确立 | 0.8-1.0 | 主升浪确认，右侧突破 |
+| B | 正常波动 | 0.4-0.6 | 回调支撑，震荡 |
+| C | 垃圾时间 | 0.1-0.3 | 左侧磨底，无催化剂 |
+
+核心公式: 最终仓位 = 总资产 × DNA上限 × Timing系数
+
+证据门槛: 每个评级必须列出 3+ 条具体证据
+
+**输出格式**：
+```
+### OPRMS 评级 — {symbol}
+
+**资产基因 (DNA)**: [S/A/B/C] — [名称]
+- 理由: [2-3 句]
+- 仓位上限: [X]%
+
+**时机系数 (Timing)**: [S/A/B/C] — [名称]
+- 系数: [X.X]
+- 理由: [2-3 句]
+
+**证据清单**:
+1. [证据1]
+2. [证据2]
+3. [证据3]
+...
+
+**投资桶**: [Long-term Compounder / Catalyst-Driven Long / Watch / Pass]
+
+**最终仓位**: DNA上限 [X]% × 时机系数 [X.X] = [Y.Y]%
+(conviction_modifier 暂设 1.0，待 Alpha Layer 调整)
+```
+
+**写入文件**: `{rd}/oprms.md`
+
+## 信息效率规则
+
+- **禁止重复原始数据** — 研究文件和透镜分析已提供事实，你只需综合判断
+- 引用数据时一句话概括即可
+- 辩论中的论点必须来自透镜分析的洞察，不是泛泛的风险提示
+"""
+
+
+def build_alpha_agent_prompt(
+    research_dir: Path,
+    symbol: str,
+    sector: str,
+    current_price: float | None,
+    l1_oprms: dict | None,
+) -> str:
+    """Build a self-contained prompt for the Phase 3 Alpha agent.
+
+    The agent reads 5 input files and writes 3 alpha analysis files.
+    Uses the actual framework text from the alpha generators as embedded prompts.
+
+    Args:
+        research_dir: Path to research directory with Phase 0-2 outputs
+        symbol: Stock ticker
+        sector: Company sector
+        current_price: Latest stock price
+        l1_oprms: Current OPRMS rating dict (or None)
+
+    Returns:
+        Complete prompt string for a Task agent
+    """
+    from knowledge.alpha.red_team import generate_red_team_prompt
+    from knowledge.alpha.cycle_pendulum import generate_cycle_prompt
+    from knowledge.alpha.asymmetric_bet import generate_bet_prompt
+
+    symbol = symbol.upper()
+    rd = str(research_dir)
+
+    # Generate framework prompts with placeholder markers
+    red_team_framework = generate_red_team_prompt(
+        symbol=symbol,
+        memo_summary="<<PLACEHOLDER: 从 memo.md 提取执行摘要段落>>",
+        l1_verdict="<<PLACEHOLDER: 从 debate.md 提取最终 BUY/HOLD/SELL 判定>>",
+        l1_key_forces="<<PLACEHOLDER: 从 memo.md 提取关键力量列表>>",
+        data_context="<<PLACEHOLDER: 从 data_context.md 读取全部内容>>",
+    )
+
+    cycle_framework = generate_cycle_prompt(
+        symbol=symbol,
+        sector=sector,
+        data_context="<<PLACEHOLDER: 从 data_context.md 读取全部内容>>",
+        red_team_summary="<<PLACEHOLDER: 用你在第二步写的 alpha_red_team.md 内容>>",
+        macro_briefing="<<PLACEHOLDER: 从 data_context.md 中提取宏观相关段落>>",
+    )
+
+    bet_framework = generate_bet_prompt(
+        symbol=symbol,
+        data_context="<<PLACEHOLDER: 从 data_context.md 读取全部内容>>",
+        red_team_summary="<<PLACEHOLDER: 用你在第二步写的 alpha_red_team.md 内容>>",
+        cycle_summary="<<PLACEHOLDER: 用你在第三步写的 alpha_cycle.md 内容>>",
+        l1_oprms=l1_oprms,
+        l1_verdict="<<PLACEHOLDER: 从 debate.md 提取最终 BUY/HOLD/SELL 判定>>",
+        current_price=current_price,
+    )
+
+    # Format OPRMS context for reference
+    if l1_oprms:
+        oprms_ref = (
+            f"当前 L1 OPRMS: DNA={l1_oprms.get('dna', 'N/A')}, "
+            f"Timing={l1_oprms.get('timing', 'N/A')}, "
+            f"Coeff={l1_oprms.get('timing_coeff', 'N/A')}"
+        )
+    else:
+        oprms_ref = "无现有 OPRMS 评级（首次分析）"
+
+    return f"""你是未来资本的 Layer 2 求导思维分析师，正在执行 **{symbol}** 的第二层深度分析。
+
+{oprms_ref}
+
+## 第一步：阅读基础材料
+
+阅读以下文件：
+- `{rd}/data_context.md` — 财务数据、宏观环境
+- `{rd}/debate.md` — L1 核心辩论和最终判定
+- `{rd}/memo.md` — L1 投资备忘录
+- `{rd}/oprms.md` — L1 OPRMS 评级
+- `{rd}/gemini_contrarian.md` — Gemini 对立观点（如存在）
+
+从这些文件中提取：
+- **l1_verdict**: debate.md 中的最终判定 (BUY/HOLD/SELL)
+- **memo_summary**: memo.md 中的执行摘要段落
+- **l1_key_forces**: memo.md 中的关键力量列表
+- **data_context**: data_context.md 全文
+
+## 第二步：红队试炼 (alpha_red_team.md)
+
+以下是红队试炼的完整框架。将其中的 <<PLACEHOLDER: ...>> 替换为你从第一步文件中提取的实际内容，然后执行分析。
+
+如果 gemini_contrarian.md 存在，将 Gemini 的对立观点融入你的攻击中（哪些地方 Gemini 的攻击更尖锐，采纳之）。
+
+---
+{red_team_framework}
+---
+
+**要求**：500+ 字，使用中文
+**写入文件**: `{rd}/alpha_red_team.md`
+
+## 第三步：周期钟摆 (alpha_cycle.md)
+
+以下是周期钟摆的完整框架。将 <<PLACEHOLDER: ...>> 替换为实际内容（红队摘要用你第二步的输出）。
+
+---
+{cycle_framework}
+---
+
+**要求**：500+ 字，使用中文
+**写入文件**: `{rd}/alpha_cycle.md`
+
+## 第四步：非对称赌注 (alpha_bet.md)
+
+以下是非对称赌注的完整框架。将 <<PLACEHOLDER: ...>> 替换为实际内容。
+
+---
+{bet_framework}
+---
+
+**要求**：500+ 字，使用中文
+**写入文件**: `{rd}/alpha_bet.md`
+
+## 第五步：更新 OPRMS conviction_modifier
+
+在 alpha_bet.md 的最终判决中，你会给出一个 conviction_modifier (0.5-1.5)。
+读取 `{rd}/oprms.md`，在文件末尾追加：
+
+```
+**Alpha Layer 调整**:
+- conviction_modifier: [你给出的值]
+- 调整后仓位: 原始仓位 × conviction_modifier = [新仓位]%
+- 调整理由: [一句话]
+```
+
+将更新后的内容写回 `{rd}/oprms.md`。
+
+## 输出要求
+
+- **所有输出使用中文**（金融术语可用英文括注）
+- **三个文件必须按顺序完成**（红队 → 周期 → 赌注），后一步依赖前一步的输出
+- 每个文件 500+ 字，追求信息密度
+"""
+
+
 def _read_research_file(research_dir: Path, filename: str) -> str:
     """Read a research file, returning empty string if missing."""
     path = research_dir / filename

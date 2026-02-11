@@ -401,3 +401,183 @@ class TestDeepAnalyzeTicker:
         result = deep_analyze_ticker("MSFT")
         assert "contrarian" in result["gemini_prompt"].lower()
         assert "MSFT" in result["gemini_prompt"]
+
+    @patch("terminal.commands.collect_data")
+    @patch("terminal.commands.prepare_lens_prompts")
+    def test_synthesis_agent_prompt_present(self, mock_lenses, mock_collect):
+        mock_pkg = MockDataPackage("AAPL")
+        mock_collect.return_value = mock_pkg
+        mock_lenses.return_value = []
+
+        from terminal.commands import deep_analyze_ticker
+
+        result = deep_analyze_ticker("AAPL")
+        assert "synthesis_agent_prompt" in result
+        assert "AAPL" in result["synthesis_agent_prompt"]
+
+    @patch("terminal.commands.collect_data")
+    @patch("terminal.commands.prepare_lens_prompts")
+    def test_alpha_agent_prompt_present(self, mock_lenses, mock_collect):
+        mock_pkg = MockDataPackage("AAPL")
+        mock_collect.return_value = mock_pkg
+        mock_lenses.return_value = []
+
+        from terminal.commands import deep_analyze_ticker
+
+        result = deep_analyze_ticker("AAPL")
+        assert "alpha_agent_prompt" in result
+        assert "AAPL" in result["alpha_agent_prompt"]
+
+
+class TestBuildSynthesisAgentPrompt:
+    """Tests for build_synthesis_agent_prompt()."""
+
+    def test_contains_all_input_file_references(self, tmp_path):
+        from terminal.deep_pipeline import build_synthesis_agent_prompt
+
+        prompt = build_synthesis_agent_prompt(tmp_path, "TEST")
+        assert "data_context.md" in prompt
+        assert "lens_quality_compounder.md" in prompt
+        assert "lens_imaginative_growth.md" in prompt
+        assert "lens_fundamental_long_short.md" in prompt
+        assert "lens_deep_value.md" in prompt
+        assert "lens_event_driven.md" in prompt
+        assert "earnings.md" in prompt
+        assert "competitive.md" in prompt
+        assert "street.md" in prompt
+
+    def test_contains_oprms_framework(self, tmp_path):
+        from terminal.deep_pipeline import build_synthesis_agent_prompt
+
+        prompt = build_synthesis_agent_prompt(tmp_path, "MSFT")
+        # OPRMS framework elements
+        assert "圣杯" in prompt
+        assert "猛将" in prompt
+        assert "黑马" in prompt
+        assert "跟班" in prompt
+        assert "千载难逢" in prompt
+        assert "DNA" in prompt
+        assert "Timing" in prompt
+        assert "25%" in prompt  # S-tier position cap
+
+    def test_contains_output_format(self, tmp_path):
+        from terminal.deep_pipeline import build_synthesis_agent_prompt
+
+        prompt = build_synthesis_agent_prompt(tmp_path, "NVDA")
+        # Output file instructions
+        assert "debate.md" in prompt
+        assert "memo.md" in prompt
+        assert "oprms.md" in prompt
+        # Chinese output requirement
+        assert "中文" in prompt
+
+    def test_contains_debate_structure(self, tmp_path):
+        from terminal.deep_pipeline import build_synthesis_agent_prompt
+
+        prompt = build_synthesis_agent_prompt(tmp_path, "TEST")
+        assert "张力" in prompt or "tension" in prompt.lower()
+        assert "BUY" in prompt
+        assert "HOLD" in prompt
+        assert "SELL" in prompt
+        assert "500+" in prompt  # minimum word count
+
+    def test_contains_memo_structure(self, tmp_path):
+        from terminal.deep_pipeline import build_synthesis_agent_prompt
+
+        prompt = build_synthesis_agent_prompt(tmp_path, "TEST")
+        assert "Executive Summary" in prompt or "执行摘要" in prompt
+        assert "Variant View" in prompt or "变异观点" in prompt
+        assert "DCF" in prompt
+        assert "800+" in prompt  # minimum word count
+
+    def test_symbol_uppercased(self, tmp_path):
+        from terminal.deep_pipeline import build_synthesis_agent_prompt
+
+        prompt = build_synthesis_agent_prompt(tmp_path, "msft")
+        assert "MSFT" in prompt
+
+
+class TestBuildAlphaAgentPrompt:
+    """Tests for build_alpha_agent_prompt()."""
+
+    def test_contains_three_framework_sections(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_agent_prompt
+
+        prompt = build_alpha_agent_prompt(
+            tmp_path, "TEST", "Technology", 150.0, None
+        )
+        # All three alpha frameworks embedded
+        assert "红队试炼" in prompt
+        assert "周期钟摆" in prompt
+        assert "非对称赌注" in prompt
+
+    def test_contains_placeholder_markers(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_agent_prompt
+
+        prompt = build_alpha_agent_prompt(
+            tmp_path, "TEST", "Technology", 150.0, None
+        )
+        assert "<<PLACEHOLDER:" in prompt
+
+    def test_contains_input_file_references(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_agent_prompt
+
+        prompt = build_alpha_agent_prompt(
+            tmp_path, "MSFT", "Technology", 350.0, None
+        )
+        assert "data_context.md" in prompt
+        assert "debate.md" in prompt
+        assert "memo.md" in prompt
+        assert "oprms.md" in prompt
+        assert "gemini_contrarian.md" in prompt
+
+    def test_contains_output_file_references(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_agent_prompt
+
+        prompt = build_alpha_agent_prompt(
+            tmp_path, "MSFT", "Technology", 350.0, None
+        )
+        assert "alpha_red_team.md" in prompt
+        assert "alpha_cycle.md" in prompt
+        assert "alpha_bet.md" in prompt
+
+    def test_with_oprms_context(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_agent_prompt
+
+        oprms = {
+            "dna": "S",
+            "timing": "B",
+            "timing_coeff": 0.55,
+            "investment_bucket": "Long-term Compounder",
+        }
+        prompt = build_alpha_agent_prompt(
+            tmp_path, "MSFT", "Technology", 350.0, oprms
+        )
+        assert "DNA=S" in prompt
+        assert "Timing=B" in prompt
+        assert "0.55" in prompt
+
+    def test_without_oprms_context(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_agent_prompt
+
+        prompt = build_alpha_agent_prompt(
+            tmp_path, "MSFT", "Technology", 350.0, None
+        )
+        assert "首次分析" in prompt or "无现有" in prompt
+
+    def test_conviction_modifier_update_instruction(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_agent_prompt
+
+        prompt = build_alpha_agent_prompt(
+            tmp_path, "TEST", "Technology", 100.0, None
+        )
+        assert "conviction_modifier" in prompt
+        assert "oprms.md" in prompt
+
+    def test_symbol_uppercased(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_agent_prompt
+
+        prompt = build_alpha_agent_prompt(
+            tmp_path, "msft", "Technology", 350.0, None
+        )
+        assert "MSFT" in prompt
