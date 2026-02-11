@@ -238,11 +238,11 @@ def test_backward_compatibility_collect_data(mock_data_sources):
 
 
 # ---------------------------------------------------------------------------
-# Macro briefing as Stage 0 (not a lens)
+# Macro briefing removed from pipeline (now standalone /macro skill)
 # ---------------------------------------------------------------------------
 
 def test_lenses_are_five_not_six():
-    """Macro analysis is Stage 0 briefing, not a lens. Only 5 lenses exist."""
+    """Only 5 lenses exist (no Macro-Tactical)."""
     from knowledge.philosophies.base import get_all_lenses
     lenses = get_all_lenses()
     assert len(lenses) == 5
@@ -250,19 +250,18 @@ def test_lenses_are_five_not_six():
     assert "Macro-Tactical" not in lens_names
 
 
-def test_analyze_ticker_standard_has_briefing_and_five_lenses(
+def test_analyze_ticker_standard_has_five_lenses_no_macro_briefing(
     tmp_path, monkeypatch, mock_data_sources
 ):
-    """Standard depth returns macro_briefing_prompt (Stage 0) + 5 lens prompts."""
+    """Standard depth returns 5 lens prompts but no macro_briefing_prompt."""
     monkeypatch.setattr("terminal.scratchpad._COMPANIES_DIR", tmp_path)
 
-    # Mock macro snapshot so briefing prompt is generated
+    # Mock macro snapshot (raw data still used by lenses)
     mock_snapshot = MagicMock()
     mock_snapshot.regime = "NEUTRAL"
     mock_snapshot.data_source_count = 10
     mock_snapshot.vix = 18.0
     mock_snapshot.format_for_prompt.return_value = "Mock macro data"
-    # Mock all fields used by signal detectors
     mock_snapshot.japan_rate = None
     mock_snapshot.usdjpy_30d_chg = None
     mock_snapshot.hy_spread = None
@@ -282,15 +281,11 @@ def test_analyze_ticker_standard_has_briefing_and_five_lenses(
 
     result = analyze_ticker("TEST", depth="standard")
 
-    # Stage 0: macro briefing prompt exists
-    assert "macro_briefing_prompt" in result
-    assert len(result["macro_briefing_prompt"]) > 0
+    # macro_briefing_prompt no longer in result (moved to /macro skill)
+    assert "macro_briefing_prompt" not in result
 
     # 5 lens prompts (no Macro-Tactical)
     assert "lens_prompts" in result
     assert len(result["lens_prompts"]) == 5
     lens_names = [p["lens_name"] for p in result["lens_prompts"]]
     assert "Macro-Tactical" not in lens_names
-
-    # Instructions mention sequence: briefing first, then lenses
-    assert "Stage 0" in result["lens_instructions"] or "FIRST" in result["lens_instructions"]

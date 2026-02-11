@@ -168,7 +168,8 @@ class TestBuildLensAgentPrompt:
         assert "data_context.md" in prompt
         assert "earnings.md" in prompt
         assert "competitive.md" in prompt
-        assert "macro_briefing.md" in prompt
+        # macro_briefing.md no longer listed (macro briefing moved to /macro skill)
+        assert "macro_briefing.md" not in prompt
 
     def test_contains_lens_prompt(self, tmp_path):
         from terminal.deep_pipeline import build_lens_agent_prompt
@@ -220,7 +221,6 @@ class TestCompileDeepReport:
             "competitive.md": "## Competitive\nTEST leads with 35% market share vs RIVAL 25%.",
             "street.md": "## Street\nConsensus BUY. Average PT $150. Range $120-$180.",
             "gemini_contrarian.md": "## Contrarian View\nMarket may be underpricing competitive risk.",
-            "macro_briefing.md": "## Macro\nRISK_ON regime. Low VIX, positive curve.",
             "lens_quality_compounder.md": "## Quality Compounder\nFour moats identified. ROIC 30%. Rating: 4/5 stars.",
             "lens_imaginative_growth.md": "## Imaginative Growth\nTAM $200B. Revenue CAGR 25%. Rating: 5/5 stars.",
             "lens_fundamental_long_short.md": "## Fundamental L/S\nLong thesis strong. Short risk: valuation. Rating: 3/5 stars.",
@@ -272,7 +272,6 @@ class TestCompileDeepReport:
             # Only write required files, skip gemini_contrarian + research files
             required = {
                 "data_context.md": "### Company: TEST",
-                "macro_briefing.md": "## Macro",
                 "lens_quality_compounder.md": "## QC",
                 "lens_imaginative_growth.md": "## IG",
                 "lens_fundamental_long_short.md": "## FLS",
@@ -303,17 +302,17 @@ class TestCompileDeepReport:
             self._populate_research_dir(research_dir)
             report = compile_deep_report("TEST", research_dir)
 
-            # Check section ordering (Chinese headers, no Research Context)
-            macro_idx = report.index("宏观环境")
+            # Check section ordering (Chinese headers, no Research Context, no Macro)
             lens_idx = report.index("五维透镜分析")
             debate_idx = report.index("核心辩论")
             memo_idx = report.index("投资备忘录")
             oprms_idx = report.index("OPRMS 评级与仓位")
             alpha_idx = report.index("求导思维")
 
-            assert macro_idx < lens_idx < debate_idx < memo_idx < oprms_idx < alpha_idx
-            # Research Context should NOT be in the report
+            assert lens_idx < debate_idx < memo_idx < oprms_idx < alpha_idx
+            # Research Context and Macro should NOT be in the report
             assert "Research Context" not in report
+            assert "宏观环境" not in report
 
 
 class TestDeepAnalyzeTicker:
@@ -336,7 +335,8 @@ class TestDeepAnalyzeTicker:
         assert "data_context_path" in result
         assert "research_queries" in result
         assert "lens_agent_prompts" in result
-        assert "macro_briefing_prompt" in result
+        # macro_briefing_prompt no longer returned (moved to /macro skill)
+        assert "macro_briefing_prompt" not in result
         assert "gemini_prompt" in result
         assert "context_summary" in result
 
