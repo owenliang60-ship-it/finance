@@ -405,6 +405,71 @@ def build_alpha_agent_prompt(
 """
 
 
+def write_agent_prompts(
+    research_dir: Path,
+    lens_agent_prompts: List[Dict[str, str]],
+    gemini_prompt: str,
+    synthesis_prompt: str,
+    alpha_prompt: str,
+) -> Dict[str, Any]:
+    """Write all agent prompts to files, return path references.
+
+    This keeps large prompt strings on disk instead of in the main
+    Claude context window (~29KB saved).
+
+    Args:
+        research_dir: Path to research directory
+        lens_agent_prompts: List of {lens_name, agent_prompt, output_path}
+        gemini_prompt: Gemini contrarian prompt string
+        synthesis_prompt: Phase 2 synthesis agent prompt string
+        alpha_prompt: Phase 3 alpha agent prompt string
+
+    Returns:
+        Dict with prompt file paths:
+        - lens_prompt_paths: [{lens_name, prompt_path, output_path}]
+        - gemini_prompt_path: str
+        - synthesis_prompt_path: str
+        - alpha_prompt_path: str
+    """
+    prompts_dir = research_dir / "prompts"
+    prompts_dir.mkdir(exist_ok=True)
+
+    # Lens prompts
+    lens_paths = []
+    for lp in lens_agent_prompts:
+        slug = _slugify(lp["lens_name"])
+        prompt_path = prompts_dir / f"lens_{slug}.txt"
+        prompt_path.write_text(lp["agent_prompt"], encoding="utf-8")
+        lens_paths.append({
+            "lens_name": lp["lens_name"],
+            "prompt_path": str(prompt_path),
+            "output_path": lp["output_path"],
+        })
+
+    # Gemini prompt
+    gemini_path = prompts_dir / "gemini.txt"
+    gemini_path.write_text(gemini_prompt, encoding="utf-8")
+
+    # Synthesis prompt
+    synthesis_path = prompts_dir / "synthesis.txt"
+    synthesis_path.write_text(synthesis_prompt, encoding="utf-8")
+
+    # Alpha prompt
+    alpha_path = prompts_dir / "alpha.txt"
+    alpha_path.write_text(alpha_prompt, encoding="utf-8")
+
+    logger.info(
+        f"Wrote {len(lens_paths) + 3} prompt files to {prompts_dir}"
+    )
+
+    return {
+        "lens_prompt_paths": lens_paths,
+        "gemini_prompt_path": str(gemini_path),
+        "synthesis_prompt_path": str(synthesis_path),
+        "alpha_prompt_path": str(alpha_path),
+    }
+
+
 def _read_research_file(research_dir: Path, filename: str) -> str:
     """Read a research file, returning empty string if missing."""
     path = research_dir / filename
@@ -413,18 +478,90 @@ def _read_research_file(research_dir: Path, filename: str) -> str:
     return ""
 
 
+def _extract_summary_from_sections(
+    oprms: str, memo: str, debate: str, alpha_bet: str,
+) -> str:
+    """Extract key metrics from analysis files for report_summary.md.
+
+    Pulls OPRMS rating, verdict, and key conclusions into ~3KB summary.
+    """
+    lines = []
+
+    # OPRMS rating
+    if oprms:
+        lines.append("## OPRMS 评级")
+        lines.append("")
+        # Extract just the rating block (first ~30 lines usually sufficient)
+        oprms_lines = oprms.strip().split("\n")
+        for line in oprms_lines[:40]:
+            lines.append(line)
+        lines.append("")
+
+    # Debate verdict (last paragraph or "总裁决" section)
+    if debate:
+        lines.append("## 辩论总裁决")
+        lines.append("")
+        # Find verdict section
+        verdict_found = False
+        for i, line in enumerate(debate.split("\n")):
+            if any(kw in line for kw in ["总裁决", "总体判定", "Overall Verdict", "最终判定"]):
+                verdict_found = True
+                # Include this line + next 5
+                for vl in debate.split("\n")[i:i + 6]:
+                    lines.append(vl)
+                break
+        if not verdict_found:
+            # Fallback: last 5 lines
+            for vl in debate.strip().split("\n")[-5:]:
+                lines.append(vl)
+        lines.append("")
+
+    # Memo executive summary (first paragraph after header)
+    if memo:
+        lines.append("## 执行摘要")
+        lines.append("")
+        memo_lines = memo.strip().split("\n")
+        in_summary = False
+        summary_count = 0
+        for line in memo_lines:
+            if any(kw in line for kw in ["执行摘要", "Executive Summary"]):
+                in_summary = True
+                continue
+            if in_summary:
+                if line.startswith("##") or line.startswith("**") and summary_count > 2:
+                    break
+                lines.append(line)
+                summary_count += 1
+                if summary_count >= 8:
+                    break
+        lines.append("")
+
+    # Alpha bet conclusion
+    if alpha_bet:
+        lines.append("## 非对称赌注结论")
+        lines.append("")
+        bet_lines = alpha_bet.strip().split("\n")
+        # Last 8 lines typically contain the verdict
+        for bl in bet_lines[-8:]:
+            lines.append(bl)
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def compile_deep_report(symbol: str, research_dir: Path) -> str:
     """Compile all research files into a single deep analysis report.
 
     Reads all files from research_dir and assembles them into
     a structured markdown report. Writes to research_dir/full_report_{date}.md.
+    Also generates report_summary.md (~3KB) for lightweight consumption.
 
     Args:
         symbol: Stock ticker
         research_dir: Path containing all intermediate analysis files
 
     Returns:
-        Complete report as markdown string
+        Path to the compiled report file (string)
     """
     symbol = symbol.upper()
     date = datetime.now().strftime("%Y-%m-%d")
@@ -525,6 +662,16 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
     output_path.write_text(report, encoding="utf-8")
     logger.info(f"Compiled deep report: {output_path} ({len(report)} chars)")
 
+    # Write report summary (~3KB) for Heptabase + user display
+    summary = _extract_summary_from_sections(oprms, memo, debate, alpha_bet)
+    summary_header = (
+        f"# {symbol} 深度分析摘要\n\n"
+        f"**日期**: {date} | **完整报告**: `{output_path.name}`\n\n---\n\n"
+    )
+    summary_path = research_dir / "report_summary.md"
+    summary_path.write_text(summary_header + summary, encoding="utf-8")
+    logger.info(f"Wrote report summary: {summary_path} ({len(summary)} chars)")
+
     # Generate HTML version
     try:
         from terminal.html_report import compile_html_report
@@ -533,4 +680,4 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
     except Exception as e:
         logger.warning(f"HTML report generation failed: {e}")
 
-    return report
+    return str(output_path)

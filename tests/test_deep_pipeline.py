@@ -226,8 +226,8 @@ class TestCompileDeepReport:
             "lens_fundamental_long_short.md": "## Fundamental L/S\nLong thesis strong. Short risk: valuation. Rating: 3/5 stars.",
             "lens_deep_value.md": "## Deep Value\nDCF suggests 20% upside. Margin of safety thin. Rating: 3/5 stars.",
             "lens_event_driven.md": "## Event-Driven\nEarnings catalyst in 60 days. Rating: 4/5 stars.",
-            "debate.md": "## Debate\n3 tensions identified. Bull wins with caveats.",
-            "memo.md": "## Investment Memo\nBUY with 12% position. Key risk: competition.",
+            "debate.md": "## Debate\n3 tensions identified.\n\n### 总裁决\nBUY — 高信心。Bull wins with caveats.",
+            "memo.md": "## Investment Memo\n\n### 执行摘要\nBUY with 12% position. Key risk: competition.\n\n### 变异观点\nMarket underrates AI monetization.",
             "oprms.md": "## OPRMS\nDNA: S | Timing: B (0.55) | Position: 11.7%",
             "alpha_red_team.md": "## Red Team\nCisco analog attack. Thesis survives but weakened.",
             "alpha_cycle.md": "## Cycle\nSentiment 7/10. Late expansion. Early majority adoption.",
@@ -237,13 +237,28 @@ class TestCompileDeepReport:
             (research_dir / name).write_text(content)
         return files
 
+    def test_returns_path_string(self, tmp_path):
+        """compile_deep_report now returns path string, not report content."""
+        with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):
+            from terminal.deep_pipeline import get_research_dir, compile_deep_report
+
+            research_dir = get_research_dir("TEST")
+            self._populate_research_dir(research_dir)
+            result = compile_deep_report("TEST", research_dir)
+
+            # Returns a path string
+            assert isinstance(result, str)
+            assert Path(result).exists()
+            assert "full_report_" in result
+
     def test_compiles_all_sections(self, tmp_path):
         with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):
             from terminal.deep_pipeline import get_research_dir, compile_deep_report
 
             research_dir = get_research_dir("TEST")
             self._populate_research_dir(research_dir)
-            report = compile_deep_report("TEST", research_dir)
+            report_path = compile_deep_report("TEST", research_dir)
+            report = Path(report_path).read_text(encoding="utf-8")
 
             assert "TEST 深度研究报告" in report
             assert "质量复利" in report
@@ -257,12 +272,40 @@ class TestCompileDeepReport:
 
             research_dir = get_research_dir("TEST")
             self._populate_research_dir(research_dir)
-            report = compile_deep_report("TEST", research_dir)
+            report_path = compile_deep_report("TEST", research_dir)
 
             # Find the dated report file
             report_files = list(research_dir.glob("full_report_*.md"))
             assert len(report_files) == 1
-            assert report_files[0].read_text() == report
+            assert str(report_files[0]) == report_path
+
+    def test_writes_report_summary(self, tmp_path):
+        """compile_deep_report should generate report_summary.md."""
+        with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):
+            from terminal.deep_pipeline import get_research_dir, compile_deep_report
+
+            research_dir = get_research_dir("TEST")
+            self._populate_research_dir(research_dir)
+            compile_deep_report("TEST", research_dir)
+
+            summary_path = research_dir / "report_summary.md"
+            assert summary_path.exists()
+            summary = summary_path.read_text(encoding="utf-8")
+            assert "TEST 深度分析摘要" in summary
+            assert "OPRMS" in summary
+
+    def test_report_summary_contains_verdict(self, tmp_path):
+        """report_summary.md should extract debate verdict."""
+        with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):
+            from terminal.deep_pipeline import get_research_dir, compile_deep_report
+
+            research_dir = get_research_dir("TEST")
+            self._populate_research_dir(research_dir)
+            compile_deep_report("TEST", research_dir)
+
+            summary = (research_dir / "report_summary.md").read_text(encoding="utf-8")
+            assert "辩论总裁决" in summary
+            assert "BUY" in summary
 
     def test_handles_missing_optional_files(self, tmp_path):
         with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):
@@ -287,7 +330,8 @@ class TestCompileDeepReport:
             for name, content in required.items():
                 (research_dir / name).write_text(content)
 
-            report = compile_deep_report("TEST", research_dir)
+            report_path = compile_deep_report("TEST", research_dir)
+            report = Path(report_path).read_text(encoding="utf-8")
             # Should compile without error
             assert "TEST" in report
             # Gemini section should be gracefully absent
@@ -300,7 +344,8 @@ class TestCompileDeepReport:
 
             research_dir = get_research_dir("TEST")
             self._populate_research_dir(research_dir)
-            report = compile_deep_report("TEST", research_dir)
+            report_path = compile_deep_report("TEST", research_dir)
+            report = Path(report_path).read_text(encoding="utf-8")
 
             # Check section ordering (Chinese headers, no Research Context, no Macro)
             lens_idx = report.index("五维透镜分析")
@@ -313,6 +358,65 @@ class TestCompileDeepReport:
             # Research Context and Macro should NOT be in the report
             assert "Research Context" not in report
             assert "宏观环境" not in report
+
+
+class TestWriteAgentPrompts:
+    """Tests for write_agent_prompts()."""
+
+    def test_writes_all_prompt_files(self, tmp_path):
+        from terminal.deep_pipeline import write_agent_prompts
+
+        lens_prompts = [
+            {"lens_name": "Quality Compounder", "agent_prompt": "QC prompt text", "output_path": "/out/qc.md"},
+            {"lens_name": "Deep Value", "agent_prompt": "DV prompt text", "output_path": "/out/dv.md"},
+        ]
+        result = write_agent_prompts(
+            research_dir=tmp_path,
+            lens_agent_prompts=lens_prompts,
+            gemini_prompt="Gemini prompt text",
+            synthesis_prompt="Synthesis prompt text",
+            alpha_prompt="Alpha prompt text",
+        )
+
+        # All paths exist
+        assert Path(result["gemini_prompt_path"]).exists()
+        assert Path(result["synthesis_prompt_path"]).exists()
+        assert Path(result["alpha_prompt_path"]).exists()
+        for lp in result["lens_prompt_paths"]:
+            assert Path(lp["prompt_path"]).exists()
+            assert "lens_name" in lp
+            assert "output_path" in lp
+
+    def test_prompt_content_preserved(self, tmp_path):
+        from terminal.deep_pipeline import write_agent_prompts
+
+        result = write_agent_prompts(
+            research_dir=tmp_path,
+            lens_agent_prompts=[
+                {"lens_name": "Test Lens", "agent_prompt": "EXACT_CONTENT_123", "output_path": "/out/test.md"},
+            ],
+            gemini_prompt="GEMINI_EXACT",
+            synthesis_prompt="SYNTH_EXACT",
+            alpha_prompt="ALPHA_EXACT",
+        )
+
+        assert Path(result["gemini_prompt_path"]).read_text() == "GEMINI_EXACT"
+        assert Path(result["synthesis_prompt_path"]).read_text() == "SYNTH_EXACT"
+        assert Path(result["alpha_prompt_path"]).read_text() == "ALPHA_EXACT"
+        assert Path(result["lens_prompt_paths"][0]["prompt_path"]).read_text() == "EXACT_CONTENT_123"
+
+    def test_creates_prompts_subdirectory(self, tmp_path):
+        from terminal.deep_pipeline import write_agent_prompts
+
+        write_agent_prompts(
+            research_dir=tmp_path,
+            lens_agent_prompts=[],
+            gemini_prompt="g",
+            synthesis_prompt="s",
+            alpha_prompt="a",
+        )
+
+        assert (tmp_path / "prompts").is_dir()
 
 
 class TestDeepAnalyzeTicker:
@@ -334,11 +438,18 @@ class TestDeepAnalyzeTicker:
         assert "research_dir" in result
         assert "data_context_path" in result
         assert "research_queries" in result
-        assert "lens_agent_prompts" in result
-        # macro_briefing_prompt no longer returned (moved to /macro skill)
-        assert "macro_briefing_prompt" not in result
-        assert "gemini_prompt" in result
-        assert "context_summary" in result
+        # Prompt paths instead of prompt strings
+        assert "lens_prompt_paths" in result
+        assert "gemini_prompt_path" in result
+        assert "synthesis_prompt_path" in result
+        assert "alpha_prompt_path" in result
+        # context_summary no longer returned (use data_context.md file)
+        assert "context_summary" not in result
+        # Old keys should NOT be present
+        assert "lens_agent_prompts" not in result
+        assert "gemini_prompt" not in result
+        assert "synthesis_agent_prompt" not in result
+        assert "alpha_agent_prompt" not in result
 
     @patch("terminal.commands.collect_data")
     @patch("terminal.commands.prepare_lens_prompts")
@@ -355,7 +466,7 @@ class TestDeepAnalyzeTicker:
 
     @patch("terminal.commands.collect_data")
     @patch("terminal.commands.prepare_lens_prompts")
-    def test_lens_agent_prompts_have_output_paths(self, mock_lenses, mock_collect):
+    def test_lens_prompt_paths_have_files(self, mock_lenses, mock_collect):
         mock_pkg = MockDataPackage("MSFT")
         mock_collect.return_value = mock_pkg
         mock_lenses.return_value = [
@@ -366,10 +477,13 @@ class TestDeepAnalyzeTicker:
         from terminal.commands import deep_analyze_ticker
 
         result = deep_analyze_ticker("MSFT")
-        for lap in result["lens_agent_prompts"]:
-            assert "lens_name" in lap
-            assert "agent_prompt" in lap
-            assert "output_path" in lap
+        for lp in result["lens_prompt_paths"]:
+            assert "lens_name" in lp
+            assert "prompt_path" in lp
+            assert "output_path" in lp
+            assert Path(lp["prompt_path"]).exists()
+            content = Path(lp["prompt_path"]).read_text()
+            assert "data_context.md" in content
 
     @patch("terminal.commands.collect_data")
     @patch("terminal.commands.prepare_lens_prompts")
@@ -391,7 +505,7 @@ class TestDeepAnalyzeTicker:
 
     @patch("terminal.commands.collect_data")
     @patch("terminal.commands.prepare_lens_prompts")
-    def test_gemini_prompt_contains_data(self, mock_lenses, mock_collect):
+    def test_gemini_prompt_file_contains_data(self, mock_lenses, mock_collect):
         mock_pkg = MockDataPackage("MSFT")
         mock_collect.return_value = mock_pkg
         mock_lenses.return_value = []
@@ -399,12 +513,15 @@ class TestDeepAnalyzeTicker:
         from terminal.commands import deep_analyze_ticker
 
         result = deep_analyze_ticker("MSFT")
-        assert "contrarian" in result["gemini_prompt"].lower()
-        assert "MSFT" in result["gemini_prompt"]
+        gemini_path = Path(result["gemini_prompt_path"])
+        assert gemini_path.exists()
+        content = gemini_path.read_text()
+        assert "contrarian" in content.lower()
+        assert "MSFT" in content
 
     @patch("terminal.commands.collect_data")
     @patch("terminal.commands.prepare_lens_prompts")
-    def test_synthesis_agent_prompt_present(self, mock_lenses, mock_collect):
+    def test_synthesis_prompt_file_present(self, mock_lenses, mock_collect):
         mock_pkg = MockDataPackage("AAPL")
         mock_collect.return_value = mock_pkg
         mock_lenses.return_value = []
@@ -412,12 +529,14 @@ class TestDeepAnalyzeTicker:
         from terminal.commands import deep_analyze_ticker
 
         result = deep_analyze_ticker("AAPL")
-        assert "synthesis_agent_prompt" in result
-        assert "AAPL" in result["synthesis_agent_prompt"]
+        synth_path = Path(result["synthesis_prompt_path"])
+        assert synth_path.exists()
+        content = synth_path.read_text()
+        assert "AAPL" in content
 
     @patch("terminal.commands.collect_data")
     @patch("terminal.commands.prepare_lens_prompts")
-    def test_alpha_agent_prompt_present(self, mock_lenses, mock_collect):
+    def test_alpha_prompt_file_present(self, mock_lenses, mock_collect):
         mock_pkg = MockDataPackage("AAPL")
         mock_collect.return_value = mock_pkg
         mock_lenses.return_value = []
@@ -425,8 +544,10 @@ class TestDeepAnalyzeTicker:
         from terminal.commands import deep_analyze_ticker
 
         result = deep_analyze_ticker("AAPL")
-        assert "alpha_agent_prompt" in result
-        assert "AAPL" in result["alpha_agent_prompt"]
+        alpha_path = Path(result["alpha_prompt_path"])
+        assert alpha_path.exists()
+        content = alpha_path.read_text()
+        assert "AAPL" in content
 
 
 class TestBuildSynthesisAgentPrompt:
