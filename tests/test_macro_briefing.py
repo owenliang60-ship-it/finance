@@ -330,20 +330,13 @@ class TestMacroSnapshotNewFields:
 # ===========================================================================
 
 class TestPipelineIntegration:
-    def test_briefing_in_context(self):
-        """macro_briefing shows in format_context()."""
+    def test_briefing_not_in_context(self):
+        """macro_briefing no longer rendered in format_context() (moved to /macro skill)."""
         from terminal.pipeline import DataPackage
         pkg = DataPackage(symbol="TEST")
         pkg.macro_briefing = "Market is trading goldilocks narrative."
         ctx = pkg.format_context()
-        assert "### Macro Briefing" in ctx
-        assert "goldilocks narrative" in ctx
-
-    def test_no_briefing_in_context(self):
-        """No macro_briefing → no section in format_context()."""
-        from terminal.pipeline import DataPackage
-        pkg = DataPackage(symbol="TEST")
-        ctx = pkg.format_context()
+        # Macro briefing removed from format_context — raw macro data still present via MacroSnapshot
         assert "### Macro Briefing" not in ctx
 
     def test_data_package_has_new_fields(self):

@@ -43,7 +43,7 @@ def analyze_ticker(
 
     Depth levels:
     - "quick":    Data + indicators snapshot (~5 sec)
-    - "standard": + macro briefing (Stage 0) + 5 lens prompts for Claude to run
+    - "standard": + 5 lens prompts for Claude to run (macro data injected into each lens)
     - "full":     + debate + memo + scoring + Layer 2 (red team + cycle + bet) + HB sync
 
     Returns a dict with data and (for standard/full/alpha) prompt sequences.
@@ -93,26 +93,6 @@ def analyze_ticker(
                 f"{len(record.analyses)} analyses"
             )
 
-        # Stage 0: Macro briefing (runs BEFORE lens analyses)
-        if data_pkg.macro and depth in ("standard", "full", "alpha"):
-            try:
-                from terminal.macro_briefing import generate_briefing_prompt, detect_signals
-                signals = detect_signals(data_pkg.macro)
-                active_signals = [s for s in signals if s.fired]
-                briefing_prompt = generate_briefing_prompt(data_pkg.macro, signals)
-                result["macro_briefing_prompt"] = briefing_prompt
-                result["macro_signals"] = [
-                    {"name": s.name, "label": s.label, "strength": s.strength,
-                     "evidence": s.evidence}
-                    for s in active_signals
-                ]
-                scratchpad.log_reasoning(
-                    "stage_0_macro_briefing",
-                    f"Generated briefing prompt with {len(active_signals)} active signals"
-                )
-            except Exception as e:
-                logger.warning(f"Macro briefing generation failed: {e}")
-
         # Phase 2: Lens prompts (standard, full, alpha)
         if depth in ("standard", "full", "alpha"):
             scratchpad.log_reasoning(
@@ -124,10 +104,9 @@ def analyze_ticker(
             result["lens_prompts"] = prompts
             result["lens_instructions"] = (
                 "ANALYSIS SEQUENCE:\n"
-                "1. FIRST run the macro_briefing_prompt (Stage 0) — this is the macro analysis.\n"
-                "   Your response becomes the macro narrative for all subsequent lenses.\n"
-                f"2. THEN run each of the {len(prompts)} lens analyses below in sequence.\n"
-                "3. After all lenses, identify the 3 key tensions across perspectives."
+                f"1. Run each of the {len(prompts)} lens analyses below in sequence.\n"
+                "   Each lens prompt already includes macro data context.\n"
+                "2. After all lenses, identify the 3 key tensions across perspectives."
             )
 
             scratchpad.log_reasoning(
@@ -234,8 +213,7 @@ def deep_analyze_ticker(
     2. Writes data_context.md to research dir
     3. Prepares research queries for web search agents
     4. Prepares lens agent prompts (with file read/write instructions)
-    5. Prepares macro briefing prompt
-    6. Prepares Gemini contrarian prompt
+    5. Prepares Gemini contrarian prompt
     """
     from terminal.deep_pipeline import (
         get_research_dir,
@@ -267,23 +245,7 @@ def deep_analyze_ticker(
         industry=info.get("industry", ""),
     )
 
-    # 4. Macro briefing prompt
-    if data_pkg.macro:
-        try:
-            from terminal.macro_briefing import generate_briefing_prompt, detect_signals
-            signals = detect_signals(data_pkg.macro)
-            result["macro_briefing_prompt"] = generate_briefing_prompt(data_pkg.macro, signals)
-            result["macro_signals"] = [
-                {"name": s.name, "label": s.label, "strength": s.strength}
-                for s in signals if s.fired
-            ]
-        except Exception as e:
-            logger.warning(f"Macro briefing generation failed: {e}")
-            result["macro_briefing_prompt"] = ""
-    else:
-        result["macro_briefing_prompt"] = ""
-
-    # 5. Lens agent prompts
+    # 4. Lens agent prompts
     lens_prompts = prepare_lens_prompts(symbol, data_pkg)
     result["lens_agent_prompts"] = []
     for lp in lens_prompts:
@@ -296,7 +258,7 @@ def deep_analyze_ticker(
             "output_path": str(research_dir / f"lens_{slug}.md"),
         })
 
-    # 6. Gemini contrarian prompt
+    # 5. Gemini contrarian prompt
     company_name = info.get("companyName", symbol)
     result["gemini_prompt"] = (
         f"You are a contrarian investment analyst. Given the following data about "
@@ -306,7 +268,7 @@ def deep_analyze_ticker(
         f"Key data:\n{data_pkg.format_context()[:3000]}"
     )
 
-    # 7. Data summary for reference
+    # 6. Data summary for reference
     result["data"] = {
         "info": data_pkg.info,
         "latest_price": data_pkg.latest_price,
@@ -314,7 +276,7 @@ def deep_analyze_ticker(
         "has_financials": data_pkg.has_financials,
     }
 
-    # 8. Alpha prompt args (for Phase 4 in skill)
+    # 7. Alpha prompt args (for Phase 4 in skill)
     record = data_pkg.company_record
     result["alpha_prompt_args"] = {
         "symbol": symbol,

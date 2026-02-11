@@ -902,11 +902,11 @@ def build_header(symbol: str, research_dir: Path) -> str:
         if m2:
             mcap = "$" + m2.group(1)
 
-    macro_path = research_dir / "macro_briefing.md"
-    if macro_path.exists():
-        macro = macro_path.read_text(encoding="utf-8")
-        r, _ = _extract_regime(macro)
-        regime = r
+    # Extract regime from data_context.md (MacroSnapshot.format_for_prompt())
+    if ctx_path.exists():
+        m_regime = re.search(r"\*\*Regime:\s*(\w+)\*\*", ctx)
+        if m_regime:
+            regime = m_regime.group(1).upper()
 
     parts = ['<div class="header">']
     parts.append('  <div class="header-badge">CONFIDENTIAL &mdash; RESEARCH DESK</div>')
@@ -935,12 +935,11 @@ def build_header(symbol: str, research_dir: Path) -> str:
 def build_toc() -> str:
     """Build table of contents sidebar."""
     items = [
-        ("sec-macro", "I. \u5b8f\u89c2\u73af\u5883"),
-        ("sec-lenses", "II. \u4e94\u7ef4\u900f\u955c"),
-        ("sec-debate", "III. \u6838\u5fc3\u8fa9\u8bba"),
-        ("sec-memo", "IV. \u6295\u8d44\u5907\u5fd8\u5f55"),
-        ("sec-oprms", "V. OPRMS \u8bc4\u7ea7"),
-        ("sec-alpha", "VI. \u6c42\u5bfc\u601d\u7ef4"),
+        ("sec-lenses", "I. \u4e94\u7ef4\u900f\u955c"),
+        ("sec-debate", "II. \u6838\u5fc3\u8fa9\u8bba"),
+        ("sec-memo", "III. \u6295\u8d44\u5907\u5fd8\u5f55"),
+        ("sec-oprms", "IV. OPRMS \u8bc4\u7ea7"),
+        ("sec-alpha", "V. \u6c42\u5bfc\u601d\u7ef4"),
     ]
     parts = ['<div class="toc">']
     parts.append('  <div class="toc-label">CONTENTS</div>')
@@ -984,7 +983,7 @@ def build_macro_section(text: str) -> str:
 
 
 def build_lenses_section(research_dir: Path) -> str:
-    """Build Section II: Five Lenses Analysis."""
+    """Build Section I: Five Lenses Analysis."""
     lens_keys = [
         "quality_compounder",
         "imaginative_growth",
@@ -1044,7 +1043,7 @@ def build_lenses_section(research_dir: Path) -> str:
         return ""
 
     parts = ['<div class="section" id="sec-lenses">']
-    parts.append('  <div class="section-label">Section II</div>')
+    parts.append('  <div class="section-label">Section I</div>')
     parts.append('  <div class="section-title">'
                  + '\u4e94\u7ef4\u900f\u955c\u5206\u6790 &mdash; '
                  + '<span>Five Lenses</span></div>')
@@ -1054,12 +1053,12 @@ def build_lenses_section(research_dir: Path) -> str:
 
 
 def build_debate_section(text: str) -> str:
-    """Build Section III: Core Debate with tension blocks."""
+    """Build Section II: Core Debate with tension blocks."""
     if not text or not text.strip():
         return ""
 
     parts = ['<div class="section" id="sec-debate">']
-    parts.append('  <div class="section-label">Section III</div>')
+    parts.append('  <div class="section-label">Section II</div>')
     parts.append('  <div class="section-title">'
                  + '\u6838\u5fc3\u8fa9\u8bba &mdash; <span>Debate</span></div>')
 
@@ -1141,12 +1140,12 @@ def build_debate_section(text: str) -> str:
 
 
 def build_memo_section(text: str) -> str:
-    """Build Section IV: Investment Memo."""
+    """Build Section III: Investment Memo."""
     if not text or not text.strip():
         return ""
 
     parts = ['<div class="section" id="sec-memo">']
-    parts.append('  <div class="section-label">Section IV</div>')
+    parts.append('  <div class="section-label">Section III</div>')
     parts.append('  <div class="section-title">'
                  + '\u6295\u8d44\u5907\u5fd8\u5f55 &mdash; <span>Memo</span></div>')
 
@@ -1160,7 +1159,7 @@ def build_memo_section(text: str) -> str:
 
 
 def build_oprms_section(text: str) -> str:
-    """Build Section V: OPRMS Rating with snap cards."""
+    """Build Section IV: OPRMS Rating with snap cards."""
     if not text or not text.strip():
         return ""
 
@@ -1172,7 +1171,7 @@ def build_oprms_section(text: str) -> str:
     grade_colors = {"S": "gold", "A": "green", "B": "blue", "C": "red"}
 
     parts = ['<div class="section" id="sec-oprms">']
-    parts.append('  <div class="section-label">Section V</div>')
+    parts.append('  <div class="section-label">Section IV</div>')
     parts.append('  <div class="section-title">'
                  + 'OPRMS \u8bc4\u7ea7\u4e0e\u4ed3\u4f4d &mdash; '
                  + '<span>Rating</span></div>')
@@ -1242,13 +1241,13 @@ def build_alpha_section(
     cycle: str,
     bet: str,
 ) -> str:
-    """Build Section VI: Alpha Layer (Second-Order Thinking)."""
+    """Build Section V: Alpha Layer (Second-Order Thinking)."""
     has_content = any(t.strip() for t in [red_team, gemini, cycle, bet] if t)
     if not has_content:
         return ""
 
     parts = ['<div class="section" id="sec-alpha">']
-    parts.append('  <div class="section-label">Section VI</div>')
+    parts.append('  <div class="section-label">Section V</div>')
     parts.append('  <div class="section-title">'
                  + '\u6c42\u5bfc\u601d\u7ef4 &mdash; '
                  + '<span>Alpha Layer</span></div>')
@@ -1335,7 +1334,6 @@ def compile_html_report(
         return ""
 
     # Read all sections
-    macro = _read("macro_briefing.md")
     debate = _read("debate.md")
     memo = _read("memo.md")
     oprms = _read("oprms.md")
@@ -1347,7 +1345,6 @@ def compile_html_report(
     # Build sections
     header_html = build_header(symbol, research_dir)
     toc_html = build_toc()
-    macro_html = build_macro_section(macro)
     lenses_html = build_lenses_section(research_dir)
     debate_html = build_debate_section(debate)
     memo_html = build_memo_section(memo)
@@ -1368,7 +1365,6 @@ def compile_html_report(
     doc += toc_html + '\n'
     doc += '<div class="container">\n'
     doc += header_html + '\n'
-    doc += macro_html + '\n'
     doc += lenses_html + '\n'
     doc += debate_html + '\n'
     doc += memo_html + '\n'

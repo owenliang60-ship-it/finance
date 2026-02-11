@@ -193,10 +193,6 @@ class DataPackage:
         if self.macro is not None:
             sections.append(self.macro.format_for_prompt())
 
-        # Macro briefing (Claude-generated narrative, injected after raw macro data)
-        if self.macro_briefing:
-            sections.append(f"### Macro Briefing\n{self.macro_briefing}")
-
         # Analyst consensus
         if self.analyst_estimates:
             lines = ["### Analyst Consensus"]

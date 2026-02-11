@@ -108,7 +108,6 @@ def build_lens_agent_prompt(
 - `{research_dir}/earnings.md` — 最新财报要点、管理层评论、指引
 - `{research_dir}/competitive.md` — 竞争格局、同行对比
 - `{research_dir}/street.md` — 分析师共识、目标价、多空争论
-- `{research_dir}/macro_briefing.md` — 宏观环境叙事
 
 文件缺失或为空则跳过，用已有数据继续。
 
@@ -160,7 +159,6 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
 
     # Read all sections (research files excluded from final report — they serve as lens input only)
     gemini = _read_research_file(research_dir, "gemini_contrarian.md")
-    macro = _read_research_file(research_dir, "macro_briefing.md")
     lens_qc = _read_research_file(research_dir, "lens_quality_compounder.md")
     lens_ig = _read_research_file(research_dir, "lens_imaginative_growth.md")
     lens_fls = _read_research_file(research_dir, "lens_fundamental_long_short.md")
@@ -182,14 +180,8 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
         f"",
     ]
 
-    # I. 宏观环境
-    if macro:
-        sections.append("## I. 宏观环境")
-        sections.append(macro)
-        sections.append("")
-
-    # II. 五维透镜分析
-    sections.append("## II. 五维透镜分析")
+    # I. 五维透镜分析
+    sections.append("## I. 五维透镜分析")
     sections.append("")
     if lens_qc:
         sections.append("### 1. 质量复利")
@@ -212,27 +204,27 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
         sections.append(lens_ed)
         sections.append("")
 
-    # III. 核心辩论
+    # II. 核心辩论
     if debate:
-        sections.append("## III. 核心辩论")
+        sections.append("## II. 核心辩论")
         sections.append(debate)
         sections.append("")
 
-    # IV. 投资备忘录
+    # III. 投资备忘录
     if memo:
-        sections.append("## IV. 投资备忘录")
+        sections.append("## III. 投资备忘录")
         sections.append(memo)
         sections.append("")
 
-    # V. OPRMS 评级与仓位
+    # IV. OPRMS 评级与仓位
     if oprms:
-        sections.append("## V. OPRMS 评级与仓位")
+        sections.append("## IV. OPRMS 评级与仓位")
         sections.append(oprms)
         sections.append("")
 
-    # VI. 第二层 — 求导思维
+    # V. 第二层 — 求导思维
     if alpha_rt or alpha_cy or alpha_bet:
-        sections.append("## VI. 第二层 — 求导思维")
+        sections.append("## V. 第二层 — 求导思维")
         sections.append("")
         if alpha_rt:
             sections.append("### 红队试炼")

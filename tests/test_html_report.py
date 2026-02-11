@@ -393,9 +393,7 @@ class TestBuildHeader:
 
     def test_with_context(self, tmp_path):
         ctx = tmp_path / "data_context.md"
-        ctx.write_text("Latest: $417.00\nMarket Cap: $1.35T\n")
-        macro = tmp_path / "macro_briefing.md"
-        macro.write_text("**Regime**: RISK_ON\n")
+        ctx.write_text("Latest: $417.00\nMarket Cap: $1.35T\n**Regime: RISK_ON** (confidence: high)\n")
         result = build_header("TSLA", tmp_path)
         assert "$417.00" in result
         assert "$1.35T" in result
@@ -405,7 +403,7 @@ class TestBuildHeader:
 class TestBuildToc:
     def test_has_all_sections(self):
         result = build_toc()
-        assert "sec-macro" in result
+        assert "sec-macro" not in result  # macro removed from deep analysis
         assert "sec-lenses" in result
         assert "sec-debate" in result
         assert "sec-memo" in result
@@ -570,7 +568,7 @@ class TestCompileHtmlReport:
     def test_e2e_full(self, tmp_path):
         """Test with all sections present."""
         files = {
-            "macro_briefing.md": "# Macro\n\n**一句话**: OK.\n**Regime**: RISK_ON\n\n---\n\nNarrative.",
+            "data_context.md": "### Company: TSLA\n**Regime: RISK_ON** (confidence: high)\n",
             "lens_quality_compounder.md": "# QC\n\n---\n\n**星级：4 / 5** | **判定：BUY** | **目标 IRR：15%**",
             "lens_deep_value.md": "# DV\n\n---\n\n**星级：2 / 5** | **判定：PASS**",
             "debate.md": "# Debate\n\n---\n\n## 总体判定\n\n**HOLD**\n\nText.",
@@ -591,7 +589,7 @@ class TestCompileHtmlReport:
         # Verify structure
         assert "<!DOCTYPE html>" in content
         assert "TSLA" in content
-        assert "sec-macro" in content
+        assert "sec-macro" not in content  # macro removed from deep analysis
         assert "sec-lenses" in content
         assert "sec-debate" in content
         assert "sec-memo" in content
