@@ -231,8 +231,11 @@ def deep_analyze_ticker(
     scratchpad = AnalysisScratchpad(symbol, "deep")
     data_pkg = collect_data(symbol, price_days=price_days, scratchpad=scratchpad)
 
-    # 2. Research directory + data context
-    research_dir = get_research_dir(symbol)
+    # 2. Research directory (timestamped subdir per run)
+    from datetime import datetime as _dt
+    base_research_dir = get_research_dir(symbol)
+    research_dir = base_research_dir / _dt.now().strftime("%Y%m%d_%H%M%S")
+    research_dir.mkdir(parents=True, exist_ok=True)
     ctx_path = write_data_context(data_pkg, research_dir)
     result["research_dir"] = str(research_dir)
     result["data_context_path"] = str(ctx_path)

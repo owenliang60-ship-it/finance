@@ -195,7 +195,7 @@ class TestBuildLensAgentPrompt:
         prompt = build_lens_agent_prompt(lens_dict, tmp_path)
         assert "lens_quality_compounder.md" in prompt
         assert "使用中文撰写" in prompt
-        assert "500-700" in prompt
+        assert "不少于 500 字" in prompt
 
     def test_slug_generation(self, tmp_path):
         from terminal.deep_pipeline import build_lens_agent_prompt

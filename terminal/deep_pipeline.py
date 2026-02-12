@@ -122,7 +122,7 @@ def build_lens_agent_prompt(
 ## 输出要求
 
 - **使用中文撰写**（金融术语可用英文括注，如「护城河 (moat)」）
-- **500-700 字**，追求信息密度而非篇幅
+- **不少于 500 字**，追求信息密度而非篇幅
 - **禁止重复研究文件中的原始数据** — 研究文件已提供事实，你只需提供本透镜独有的分析判断
 - 引用数据时一句话概括（如「ROIC 连续 5 年 >25%」），不要复制整段
 - 输出结构：
@@ -153,12 +153,12 @@ def build_synthesis_agent_prompt(research_dir: Path, symbol: str) -> str:
 
 ## 第一步：阅读基础材料
 
-阅读以下文件（缺失则跳过）：
+**仔细、完整地**阅读以下文件（缺失则跳过）：
 
 **数据上下文：**
 - `{rd}/data_context.md` — 财务数据、比率、技术指标、宏观环境
 
-**五维透镜分析：**
+**五维透镜分析（最重要 — 必须逐篇精读，这是你做综合研判的核心输入）：**
 - `{rd}/lens_quality_compounder.md` — 质量复利透镜
 - `{rd}/lens_imaginative_growth.md` — 想象力成长透镜
 - `{rd}/lens_fundamental_long_short.md` — 基本面多空透镜
@@ -169,6 +169,8 @@ def build_synthesis_agent_prompt(research_dir: Path, symbol: str) -> str:
 - `{rd}/earnings.md` — 最新财报要点
 - `{rd}/competitive.md` — 竞争格局
 - `{rd}/street.md` — 华尔街共识
+
+**关键要求**：五维透镜分析是独立分析师从不同视角得出的判断，你必须充分理解每个透镜的核心论点、评级和触杀条件，在辩论和备忘录中交叉引用、对比和综合这些观点。不要泛泛概括，要具体引用各透镜的关键判断和分歧。
 
 ## 第二步：核心辩论 (debate.md)
 
