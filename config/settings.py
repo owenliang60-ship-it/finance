@@ -89,3 +89,61 @@ DOLLAR_VOLUME_LOOKBACK = 30     # 新面孔回看天数
 
 # Benchmark symbols (always included in price updates)
 BENCHMARK_SYMBOLS = ["SPY", "QQQ"]
+
+# ============ Attention Engine (Engine B) ============
+
+# Finnhub API (free tier: 60 req/min)
+FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
+
+# Paths
+ATTENTION_DIR = DATA_DIR / "attention"
+ATTENTION_DB_PATH = ATTENTION_DIR / "attention.db"
+ATTENTION_REPORT_DIR = ATTENTION_DIR
+
+# Google Trends
+GT_ANCHOR_KEYWORD = "stock market"
+GT_SLEEP_SECONDS = 60  # 安全间隔（Google 限流严格）
+GT_DEFAULT_TIMEFRAME = "today 3-m"
+
+# Reddit (PRAW read-only OAuth)
+REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID", "")
+REDDIT_CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET", "")
+REDDIT_USER_AGENT = "attention-engine/1.0 by future-capital"
+REDDIT_SUBREDDITS = ["stocks", "investing", "wallstreetbets", "options"]
+REDDIT_POSTS_PER_SUB = 200
+REDDIT_TICKER_BLACKLIST = {
+    "I", "A", "AM", "AT", "IT", "IS", "ON", "OR", "AN", "AS",
+    "BE", "BY", "DO", "GO", "IF", "IN", "ME", "MY", "NO", "OF",
+    "OK", "SO", "TO", "UP", "US", "WE", "AI", "ALL", "CEO", "GDP",
+    "IMO", "IPO", "LOL", "OMG", "SEC", "USD", "WSB", "YOY", "DD",
+    "EPS", "ETF", "FED", "ATH", "OTC", "PE", "PS", "IV", "DTE",
+    "OP", "TD", "PM", "UK", "EU", "JP", "CN", "HK", "RIP", "FYI",
+    "TL", "DR", "TA", "FA", "IMF", "GDP", "CPI", "PPI", "NFP",
+}
+
+# 初始主题关键词（手动维护）
+THEME_KEYWORDS_SEED = {
+    "memory": {
+        "keywords": ["DRAM price", "HBM memory", "memory shortage", "NAND flash"],
+        "tickers": ["MU", "WDC", "SNDK"],
+    },
+    "ai_chip": {
+        "keywords": ["AI chip", "GPU shortage", "AI accelerator"],
+        "tickers": ["NVDA", "AMD", "AVGO", "MRVL"],
+    },
+    "quantum": {
+        "keywords": ["quantum computing", "quantum chip"],
+        "tickers": ["GOOG", "IBM", "IONQ"],
+    },
+    "cybersecurity": {
+        "keywords": ["cybersecurity", "zero trust", "ransomware"],
+        "tickers": ["CRWD", "PANW", "ZS", "FTNT"],
+    },
+}
+
+# 评分权重
+ATTENTION_WEIGHTS = {
+    "reddit": 0.35,
+    "news": 0.35,
+    "trends": 0.30,
+}
