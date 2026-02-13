@@ -121,23 +121,205 @@ REDDIT_TICKER_BLACKLIST = {
     "TL", "DR", "TA", "FA", "IMF", "GDP", "CPI", "PPI", "NFP",
 }
 
-# 初始主题关键词（手动维护）
+# 初始主题关键词（手动维护，~25 主题 120+ 关键词）
 THEME_KEYWORDS_SEED = {
-    "memory": {
-        "keywords": ["DRAM price", "HBM memory", "memory shortage", "NAND flash"],
-        "tickers": ["MU", "WDC", "SNDK"],
-    },
+    # ===== AI 核心 =====
     "ai_chip": {
-        "keywords": ["AI chip", "GPU shortage", "AI accelerator"],
+        "keywords": [
+            "AI chip", "GPU shortage", "AI accelerator", "AI semiconductor",
+            "NVIDIA GPU", "AI training chip", "inference chip",
+        ],
         "tickers": ["NVDA", "AMD", "AVGO", "MRVL"],
     },
+    "ai_software": {
+        "keywords": [
+            "generative AI", "large language model", "ChatGPT",
+            "AI copilot", "AI assistant", "enterprise AI",
+        ],
+        "tickers": ["MSFT", "GOOG", "META", "ORCL", "PLTR"],
+    },
+    "ai_agent": {
+        "keywords": [
+            "AI agent", "autonomous AI", "agentic AI",
+            "AI workflow automation", "AI coding",
+        ],
+        "tickers": ["MSFT", "GOOG", "AMZN", "PLTR", "CRM"],
+    },
+    "ai_infra": {
+        "keywords": [
+            "AI data center", "AI infrastructure", "hyperscaler capex",
+            "GPU cluster", "AI server", "AI power consumption",
+        ],
+        "tickers": ["NVDA", "AMD", "AVGO", "MRVL", "DELL", "AMZN", "MSFT", "GOOG"],
+    },
+    # ===== 半导体 =====
+    "memory": {
+        "keywords": [
+            "DRAM price", "HBM memory", "memory shortage", "NAND flash",
+            "HBM3E", "DRAM demand", "memory cycle",
+        ],
+        "tickers": ["MU", "WDC"],
+    },
+    "semicap": {
+        "keywords": [
+            "semiconductor equipment", "chip manufacturing",
+            "EUV lithography", "foundry expansion", "wafer fab",
+        ],
+        "tickers": ["ASML", "AMAT", "LRCX", "KLAC", "TSM"],
+    },
+    "chip_design": {
+        "keywords": [
+            "ARM architecture", "RISC-V", "custom silicon",
+            "edge AI chip", "mobile processor",
+        ],
+        "tickers": ["ARM", "QCOM", "AVGO", "MRVL"],
+    },
+    # ===== 数据中心 & 基建 =====
+    "liquid_cooling": {
+        "keywords": [
+            "liquid cooling", "data center cooling", "immersion cooling",
+            "direct-to-chip cooling", "thermal management",
+        ],
+        "tickers": ["NVDA", "DELL", "AMZN", "MSFT", "GOOG"],
+    },
+    "cloud": {
+        "keywords": [
+            "cloud computing", "cloud migration", "multi-cloud",
+            "AWS revenue", "Azure growth", "Google Cloud",
+        ],
+        "tickers": ["AMZN", "MSFT", "GOOG", "ORCL", "SNOW"],
+    },
+    "nuclear_power": {
+        "keywords": [
+            "small modular reactor", "nuclear data center",
+            "nuclear energy AI", "SMR nuclear",
+        ],
+        "tickers": ["AMZN", "MSFT", "GOOG"],
+    },
+    # ===== 网络安全 =====
+    "cybersecurity": {
+        "keywords": [
+            "cybersecurity", "zero trust", "ransomware",
+            "cloud security", "SASE", "XDR security",
+            "cybersecurity spending", "data breach",
+        ],
+        "tickers": ["CRWD", "PANW", "ZS", "FTNT"],
+    },
+    # ===== 自动驾驶 & 机器人 =====
+    "autonomous_driving": {
+        "keywords": [
+            "self driving car", "autonomous vehicle", "robotaxi",
+            "Tesla FSD", "Waymo", "lidar technology",
+        ],
+        "tickers": ["TSLA", "GOOG", "UBER"],
+    },
+    "humanoid_robot": {
+        "keywords": [
+            "humanoid robot", "Tesla Optimus", "Figure AI",
+            "robot automation", "industrial robot",
+        ],
+        "tickers": ["TSLA", "NVDA"],
+    },
+    # ===== 商业航天 =====
+    "space": {
+        "keywords": [
+            "commercial space", "SpaceX", "Starlink",
+            "satellite internet", "space economy",
+            "rocket launch", "space defense",
+        ],
+        "tickers": ["LMT", "RTX", "NOC", "BA"],
+    },
+    # ===== 量子计算 =====
     "quantum": {
-        "keywords": ["quantum computing", "quantum chip"],
+        "keywords": [
+            "quantum computing", "quantum chip", "quantum supremacy",
+            "quantum error correction", "quantum advantage",
+        ],
         "tickers": ["GOOG", "IBM", "IONQ"],
     },
-    "cybersecurity": {
-        "keywords": ["cybersecurity", "zero trust", "ransomware"],
-        "tickers": ["CRWD", "PANW", "ZS", "FTNT"],
+    # ===== 消费科技 =====
+    "ar_vr": {
+        "keywords": [
+            "augmented reality", "virtual reality", "Apple Vision Pro",
+            "Meta Quest", "spatial computing", "mixed reality",
+        ],
+        "tickers": ["AAPL", "META"],
+    },
+    "streaming": {
+        "keywords": [
+            "streaming wars", "Netflix subscriber", "streaming revenue",
+            "ad-supported streaming", "content spending",
+        ],
+        "tickers": ["NFLX", "DIS", "AMZN"],
+    },
+    "digital_ads": {
+        "keywords": [
+            "digital advertising", "social media ads", "programmatic ads",
+            "ad revenue growth", "connected TV ads",
+        ],
+        "tickers": ["META", "GOOG", "TTD", "APP"],
+    },
+    # ===== 电动车 & 能源 =====
+    "ev_battery": {
+        "keywords": [
+            "electric vehicle sales", "EV battery", "EV charging",
+            "Tesla delivery", "EV market share",
+        ],
+        "tickers": ["TSLA"],
+    },
+    # ===== 金融科技 & 加密 =====
+    "fintech": {
+        "keywords": [
+            "digital payments", "fintech growth", "buy now pay later",
+            "payment processing", "embedded finance",
+        ],
+        "tickers": ["V", "MA", "PYPL", "SQ"],
+    },
+    "crypto": {
+        "keywords": [
+            "Bitcoin price", "Ethereum", "crypto regulation",
+            "Bitcoin ETF", "crypto exchange",
+        ],
+        "tickers": ["COIN"],
+    },
+    # ===== 医疗 =====
+    "glp1": {
+        "keywords": [
+            "GLP-1", "Ozempic", "weight loss drug",
+            "Wegovy", "Mounjaro", "obesity drug",
+        ],
+        "tickers": ["LLY", "NVO"],
+    },
+    "biotech": {
+        "keywords": [
+            "gene therapy", "CRISPR", "mRNA vaccine",
+            "biotech breakthrough", "FDA approval",
+        ],
+        "tickers": ["ABBV", "AMGN", "GILD", "REGN"],
+    },
+    # ===== 国防 =====
+    "defense": {
+        "keywords": [
+            "defense spending", "military AI", "drone warfare",
+            "defense budget", "defense contract",
+        ],
+        "tickers": ["LMT", "RTX", "NOC", "GD"],
+    },
+    # ===== 企业软件 =====
+    "enterprise_sw": {
+        "keywords": [
+            "SaaS growth", "enterprise software", "software spending",
+            "database market", "data analytics",
+        ],
+        "tickers": ["ORCL", "SNOW", "PLTR", "NOW"],
+    },
+    # ===== 中美科技 =====
+    "china_tech": {
+        "keywords": [
+            "chip export ban", "China AI", "US China tech war",
+            "semiconductor sanctions", "DeepSeek",
+        ],
+        "tickers": ["NVDA", "ASML", "AMAT", "LRCX"],
     },
 }
 
