@@ -65,19 +65,50 @@ def save_oprms(symbol: str, rating: dict) -> None:
     Save current OPRMS rating and append to changelog.
 
     rating dict: {dna, timing, timing_coeff, evidence, investment_bucket, ...}
+    Dual-writes to both JSON files and SQLite company.db.
     """
     d = get_company_dir(symbol)
     now = datetime.now().isoformat()
     rating["updated_at"] = now
     rating["symbol"] = symbol.upper()
 
+    # Primary: JSON files
     _write_json(d / "oprms.json", rating)
     _append_jsonl(d / "oprms_changelog.jsonl", rating)
     logger.info(f"Saved OPRMS for {symbol}: DNA={rating.get('dna')} Timing={rating.get('timing')}")
 
+    # Secondary: SQLite dual-write
+    try:
+        from terminal.company_store import get_store
+        store = get_store()
+        store.upsert_company(symbol, source="analysis")
+        store.save_oprms_rating(
+            symbol=symbol,
+            dna=rating.get("dna", "?"),
+            timing=rating.get("timing", "?"),
+            timing_coeff=rating.get("timing_coeff", 0.5),
+            conviction_modifier=rating.get("conviction_modifier"),
+            evidence=rating.get("evidence", []),
+            investment_bucket=rating.get("investment_bucket", ""),
+            verdict=rating.get("verdict", ""),
+            position_pct=rating.get("position_pct"),
+        )
+    except Exception as e:
+        logger.warning(f"SQLite dual-write failed (non-fatal): {e}")
+
 
 def get_oprms(symbol: str) -> Optional[dict]:
-    """Get current OPRMS rating for a ticker."""
+    """Get current OPRMS rating for a ticker. Reads SQLite first, falls back to JSON."""
+    # Try SQLite first
+    try:
+        from terminal.company_store import get_store
+        store = get_store()
+        rating = store.get_current_oprms(symbol)
+        if rating:
+            return rating
+    except Exception:
+        pass
+    # Fallback: JSON file
     d = _COMPANIES_DIR / symbol.upper()
     return _read_json(d / "oprms.json")
 
@@ -304,10 +335,19 @@ def get_company_record(symbol: str) -> CompanyRecord:
 
 
 def list_all_companies() -> List[str]:
-    """List all tickers that have a company record."""
-    if not _COMPANIES_DIR.exists():
-        return []
-    return sorted([
-        d.name for d in _COMPANIES_DIR.iterdir()
-        if d.is_dir() and d.name.isupper()
-    ])
+    """List all tickers that have a company record. Merges SQLite + filesystem."""
+    symbols = set()
+    # SQLite source
+    try:
+        from terminal.company_store import get_store
+        store = get_store()
+        for row in store.list_companies():
+            symbols.add(row["symbol"])
+    except Exception:
+        pass
+    # Filesystem source
+    if _COMPANIES_DIR.exists():
+        for d in _COMPANIES_DIR.iterdir():
+            if d.is_dir() and d.name.isupper():
+                symbols.add(d.name)
+    return sorted(symbols)

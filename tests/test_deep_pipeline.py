@@ -702,3 +702,180 @@ class TestBuildAlphaAgentPrompt:
             tmp_path, "msft", "Technology", 350.0, None
         )
         assert "MSFT" in prompt
+
+
+class TestExtractStructuredData:
+    """Tests for extract_structured_data()."""
+
+    def _write_research_files(self, research_dir):
+        """Write realistic research files for extraction testing."""
+        (research_dir / "data_context.md").write_text(
+            "### Company: Micron Technology (MU)\n"
+            "- Sector: Technology\n- Market Cap: $444B\n\n"
+            "**Price**: Latest: $373.25\n\n"
+            "**Regime: RISK_ON**\n",
+            encoding="utf-8",
+        )
+        (research_dir / "lens_quality_compounder.md").write_text(
+            "## Quality Compounder Analysis\n\n"
+            "核心论点: ROIC 持续 >20%\n\n"
+            "**星级：4.0 / 5** | **判定：BUY** | **目标 IRR：15-20%**\n",
+            encoding="utf-8",
+        )
+        (research_dir / "lens_deep_value.md").write_text(
+            "## Deep Value Analysis\n\n"
+            "**星级：3.0 / 5** | **判定：HOLD** | **目标 IRR：8-12%**\n",
+            encoding="utf-8",
+        )
+        (research_dir / "debate.md").write_text(
+            "## 核心辩论\n\n"
+            "## 张力 1: Growth vs Value\n\n"
+            "**多头论点 (Bull):** Strong growth.\n\n"
+            "**空头论点 (Bear):** Overvalued.\n\n"
+            "## 总裁决\n\n**BUY — 高信心**\n\nReason: bull wins.\n",
+            encoding="utf-8",
+        )
+        (research_dir / "memo.md").write_text(
+            "## 投资备忘录\n\n"
+            "## 1. 执行摘要 (Executive Summary)\n\n"
+            "Micron is positioned for AI-driven growth.\n\n"
+            "## 3. 关键力量 (Key Forces)\n\n"
+            "| # | 力量 | 方向 | 权重 | 说明 |\n"
+            "|---|------|------|------|------|\n"
+            "| 1 | HBM Supply | ↑ | 35% | Strong demand |\n"
+            "| 2 | CapEx Risk | ↓ | 20% | FCF pressure |\n",
+            encoding="utf-8",
+        )
+        (research_dir / "oprms.md").write_text(
+            "### OPRMS 评级 — MU\n\n"
+            "## 资产基因\n"
+            "**评级: A — 猛将**\n"
+            "DNA 仓位上限：15%\n\n"
+            "## 时机系数\n"
+            "**评级: B — 正常波动**\n"
+            "**系数：0.5**\n\n"
+            "**证据清单**:\n"
+            "1. Revenue growth 57% YoY\n"
+            "2. HBM sold out through 2026\n"
+            "3. Gross margin expanding to 68%\n\n"
+            "**投资桶**: Catalyst-Driven Long\n\n"
+            "| 项目 | 值 |\n|---|---|\n"
+            "| **最终仓位** | **15% × 0.5 = 7.5%** |\n"
+            "| Verdict | **BUY** |\n",
+            encoding="utf-8",
+        )
+        (research_dir / "alpha_red_team.md").write_text(
+            "## 红队试炼\n\n"
+            "Attack vector 1: Cyclicality persists.\n"
+            "Attack vector 2: FCF negative risk.\n",
+            encoding="utf-8",
+        )
+        (research_dir / "alpha_cycle.md").write_text(
+            "## 周期钟摆\n\n"
+            "Sentiment at 7.5/10 — late expansion.\n"
+            "Business cycle turning.\n",
+            encoding="utf-8",
+        )
+        (research_dir / "alpha_bet.md").write_text(
+            "## 非对称赌注\n\n"
+            "Strategy: phased entry.\n"
+            "R:R ratio 1:4.7.\n\n"
+            "**Value**: 0.75\n"
+            "Final verdict: conditional buy.\n",
+            encoding="utf-8",
+        )
+
+    def test_extracts_lenses(self, tmp_path):
+        from terminal.deep_pipeline import extract_structured_data
+
+        self._write_research_files(tmp_path)
+        data = extract_structured_data("MU", tmp_path)
+
+        assert data["lens_quality_compounder"] is not None
+        lens_qc = json.loads(data["lens_quality_compounder"])
+        assert lens_qc["stars"] == "4.0"
+        assert lens_qc["verdict"] == "BUY"
+
+        assert data["lens_deep_value"] is not None
+        lens_dv = json.loads(data["lens_deep_value"])
+        assert lens_dv["stars"] == "3.0"
+        assert lens_dv["verdict"] == "HOLD"
+
+    def test_extracts_debate(self, tmp_path):
+        from terminal.deep_pipeline import extract_structured_data
+
+        self._write_research_files(tmp_path)
+        data = extract_structured_data("MU", tmp_path)
+
+        assert data["debate_verdict"] == "BUY — 高信心"
+        assert data["debate_summary"] is not None
+        assert len(data["debate_summary"]) > 0
+
+    def test_extracts_memo(self, tmp_path):
+        from terminal.deep_pipeline import extract_structured_data
+
+        self._write_research_files(tmp_path)
+        data = extract_structured_data("MU", tmp_path)
+
+        assert "Micron" in data["executive_summary"]
+        assert len(data["key_forces"]) == 2
+        assert "↑" in data["key_forces"][0]
+        assert "↓" in data["key_forces"][1]
+
+    def test_extracts_oprms(self, tmp_path):
+        from terminal.deep_pipeline import extract_structured_data
+
+        self._write_research_files(tmp_path)
+        data = extract_structured_data("MU", tmp_path)
+
+        assert data["oprms_dna"] == "A"
+        assert data["oprms_timing"] == "B"
+        assert data["oprms_timing_coeff"] == 0.5
+        assert data["oprms_position_pct"] == 7.5
+        assert data["verdict"] == "BUY"
+        assert data["investment_bucket"] == "Catalyst-Driven Long"
+        assert len(data["evidence"]) == 3
+
+    def test_extracts_alpha(self, tmp_path):
+        from terminal.deep_pipeline import extract_structured_data
+
+        self._write_research_files(tmp_path)
+        data = extract_structured_data("MU", tmp_path)
+
+        assert data["conviction_modifier"] == 0.75
+        assert data["red_team_summary"] is not None
+        assert data["cycle_position"] is not None
+        assert data["asymmetric_bet_summary"] is not None
+
+    def test_extracts_price_and_regime(self, tmp_path):
+        from terminal.deep_pipeline import extract_structured_data
+
+        self._write_research_files(tmp_path)
+        data = extract_structured_data("MU", tmp_path)
+
+        assert data["price_at_analysis"] == 373.25
+        assert data["regime_at_analysis"] == "RISK_ON"
+
+    def test_handles_missing_files(self, tmp_path):
+        """Should not crash if research files are missing."""
+        from terminal.deep_pipeline import extract_structured_data
+
+        data = extract_structured_data("EMPTY", tmp_path)
+
+        assert data["analysis_date"] is not None
+        assert data.get("oprms_dna") is None
+        assert data.get("debate_verdict") is None
+        assert data.get("lens_quality_compounder") is None
+
+    def test_handles_malformed_files(self, tmp_path):
+        """Should not crash on malformed content."""
+        from terminal.deep_pipeline import extract_structured_data
+
+        (tmp_path / "oprms.md").write_text("random text with no structure")
+        (tmp_path / "debate.md").write_text("no verdict here")
+        (tmp_path / "memo.md").write_text("no summary")
+
+        data = extract_structured_data("BAD", tmp_path)
+        # Should complete without error, fields are None
+        assert data.get("oprms_dna") in (None, "?")
+        assert data.get("debate_verdict") is None

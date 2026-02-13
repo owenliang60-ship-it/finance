@@ -657,6 +657,24 @@ def evolution_view(symbol: str) -> Dict[str, Any]:
     return timeline
 
 
+def dashboard() -> Dict[str, Any]:
+    """
+    Generate the Company Database HTML dashboard.
+
+    Returns dict with path to generated file and stats.
+    """
+    from terminal.dashboard import generate_dashboard
+    from terminal.company_store import get_store
+
+    path = generate_dashboard()
+    stats = get_store().get_stats()
+
+    return {
+        "dashboard_path": str(path),
+        "stats": stats,
+    }
+
+
 def _summarize_event(event: Dict[str, Any]) -> str:
     """
     Generate a human-readable summary for a scratchpad event.

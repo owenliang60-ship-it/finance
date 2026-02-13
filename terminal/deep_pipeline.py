@@ -10,6 +10,7 @@ Architecture:
 
 The skill calls these functions, dispatches agents, then calls compile_deep_report().
 """
+import json
 import logging
 import re
 from datetime import datetime
@@ -551,6 +552,232 @@ def _extract_summary_from_sections(
     return "\n".join(lines)
 
 
+def extract_structured_data(symbol: str, research_dir: Path) -> Dict[str, Any]:
+    """Extract structured data from research files for SQLite storage.
+
+    Reuses extraction helpers from html_report.py where possible.
+    Any field that fails extraction is set to None (never crashes).
+
+    Args:
+        symbol: Stock ticker
+        research_dir: Path containing intermediate analysis files
+
+    Returns:
+        Dict with all extractable fields for company_store.save_analysis()
+    """
+    data: Dict[str, Any] = {
+        "analysis_date": datetime.now().strftime("%Y-%m-%d"),
+        "depth": "deep",
+        "research_dir": str(research_dir),
+    }
+
+    # Lazy import to avoid circular dependency
+    from terminal.html_report import (
+        _extract_rating_line,
+        _extract_debate_verdict,
+        _extract_oprms_dna,
+        _extract_oprms_timing,
+        _extract_oprms_position,
+        _extract_oprms_verdict,
+        _extract_conviction_modifier,
+    )
+
+    # --- Lenses: extract star/verdict/IRR as JSON ---
+    lens_map = {
+        "lens_quality_compounder": "lens_quality_compounder.md",
+        "lens_imaginative_growth": "lens_imaginative_growth.md",
+        "lens_fundamental_long_short": "lens_fundamental_long_short.md",
+        "lens_deep_value": "lens_deep_value.md",
+        "lens_event_driven": "lens_event_driven.md",
+    }
+    for field, filename in lens_map.items():
+        try:
+            text = _read_research_file(research_dir, filename)
+            if text:
+                rating = _extract_rating_line(text)
+                if rating:
+                    data[field] = json.dumps(rating, ensure_ascii=False)
+        except Exception as e:
+            logger.warning("Failed to extract %s: %s", field, e)
+
+    # --- Debate ---
+    try:
+        debate = _read_research_file(research_dir, "debate.md")
+        if debate:
+            data["debate_verdict"] = _extract_debate_verdict(debate)
+            # First 500 chars as summary
+            lines = [l for l in debate.split("\n") if l.strip() and not l.startswith("#")]
+            data["debate_summary"] = "\n".join(lines[:10])[:500] if lines else None
+    except Exception as e:
+        logger.warning("Failed to extract debate: %s", e)
+
+    # --- Memo ---
+    try:
+        memo = _read_research_file(research_dir, "memo.md")
+        if memo:
+            # Executive summary: text between "执行摘要" header and next "##"
+            m = re.search(
+                r"(?:执行摘要|Executive Summary)\s*[)）]?\s*\n+(.+?)(?=\n##|\n---|\Z)",
+                memo, re.DOTALL,
+            )
+            if m:
+                data["executive_summary"] = m.group(1).strip()[:1000]
+
+            # Key forces: extract from table or list
+            forces = []
+            # Format A: | # | 力量 | 方向 | ... (with row number)
+            for fm in re.finditer(
+                r"\|\s*\d+\s*\|\s*(.+?)\s*\|\s*([↑↓])\s*\|", memo
+            ):
+                forces.append(f"{fm.group(2)} {fm.group(1).strip()}")
+            # Format B: | 力量 | 方向 | ... (no row number)
+            if not forces:
+                for fm in re.finditer(
+                    r"\|\s*([^|]+?)\s*\|\s*([↑↓])\s*\|", memo
+                ):
+                    name = fm.group(1).strip()
+                    if name and name != "力量" and not name.startswith("-"):
+                        forces.append(f"{fm.group(2)} {name}")
+            if forces:
+                data["key_forces"] = forces
+    except Exception as e:
+        logger.warning("Failed to extract memo: %s", e)
+
+    # --- OPRMS ---
+    try:
+        oprms = _read_research_file(research_dir, "oprms.md")
+        if oprms:
+            # Try html_report extractors first
+            dna_info = _extract_oprms_dna(oprms)
+            timing_info = _extract_oprms_timing(oprms)
+            position_val, _ = _extract_oprms_position(oprms)
+
+            # Fallback: match actual agent output format
+            # Format: **资产基因 (DNA)**: A — 猛将
+            if dna_info.get("grade") == "?":
+                m_dna = re.search(
+                    r"\*\*资产基因\s*\(DNA\)\*\*[：:]\s*([SABC])\s*[—-]", oprms
+                )
+                if m_dna:
+                    dna_info["grade"] = m_dna.group(1)
+                # Fallback: DNA: A
+                if dna_info.get("grade") == "?":
+                    m_dna2 = re.search(r"DNA[）)]*[：:]\s*([SABC])\b", oprms)
+                    if m_dna2:
+                        dna_info["grade"] = m_dna2.group(1)
+
+            if timing_info.get("grade") == "?":
+                m_timing = re.search(
+                    r"\*\*时机系数\s*\(Timing\)\*\*[：:]\s*([SABC])\s*[—-]", oprms
+                )
+                if m_timing:
+                    timing_info["grade"] = m_timing.group(1)
+            if timing_info.get("coeff") == "?":
+                m_coeff = re.search(r"系数[：:]\s*([\d.]+)", oprms)
+                if m_coeff:
+                    timing_info["coeff"] = m_coeff.group(1)
+
+            # Fallback position: DNA上限 X% × 时机系数 X.X = Y.Y%
+            if not position_val:
+                m_pos = re.search(r"=\s*([\d.]+)%", oprms)
+                if m_pos:
+                    position_val = m_pos.group(1) + "%"
+
+            data["oprms_dna"] = dna_info.get("grade") if dna_info.get("grade") != "?" else None
+            data["oprms_timing"] = timing_info.get("grade") if timing_info.get("grade") != "?" else None
+            try:
+                coeff = timing_info.get("coeff", "0")
+                data["oprms_timing_coeff"] = float(coeff) if coeff != "?" else None
+            except (ValueError, TypeError):
+                data["oprms_timing_coeff"] = None
+            try:
+                if position_val:
+                    data["oprms_position_pct"] = float(position_val.replace("%", ""))
+            except (ValueError, TypeError):
+                data["oprms_position_pct"] = None
+
+            # Extract verdict
+            verdict = _extract_oprms_verdict(oprms)
+            if verdict:
+                data["verdict"] = verdict
+
+            # Investment bucket
+            m_bucket = re.search(r"\*\*投资桶\*\*[：:]\s*(.+)", oprms)
+            if m_bucket:
+                data["investment_bucket"] = m_bucket.group(1).strip()
+
+            # Evidence list
+            evidence = []
+            in_evidence = False
+            for line in oprms.split("\n"):
+                if "证据清单" in line:
+                    in_evidence = True
+                    continue
+                if in_evidence:
+                    m_ev = re.match(r"^\d+\.\s+(.+)$", line.strip())
+                    if m_ev:
+                        evidence.append(m_ev.group(1).strip()[:200])
+                    elif line.strip().startswith("**") and evidence:
+                        break  # Next section
+            if evidence:
+                data["evidence"] = evidence
+    except Exception as e:
+        logger.warning("Failed to extract OPRMS: %s", e)
+
+    # --- Alpha Layer ---
+    try:
+        # Check oprms.md for conviction_modifier (appended by alpha agent)
+        oprms_text = _read_research_file(research_dir, "oprms.md")
+        if oprms_text:
+            m_cm = re.search(r"conviction_modifier[：:]\s*([\d.]+)", oprms_text)
+            if m_cm:
+                try:
+                    data["conviction_modifier"] = float(m_cm.group(1))
+                except (ValueError, TypeError):
+                    pass
+
+        alpha_bet = _read_research_file(research_dir, "alpha_bet.md")
+        if alpha_bet:
+            # Conviction modifier fallback from alpha_bet itself
+            if data.get("conviction_modifier") is None:
+                cm = _extract_conviction_modifier(alpha_bet)
+                if cm:
+                    try:
+                        data["conviction_modifier"] = float(cm)
+                    except (ValueError, TypeError):
+                        pass
+            # Summary: last meaningful paragraph
+            lines = [l for l in alpha_bet.split("\n") if l.strip()]
+            data["asymmetric_bet_summary"] = "\n".join(lines[-5:])[:500] if lines else None
+
+        red_team = _read_research_file(research_dir, "alpha_red_team.md")
+        if red_team:
+            lines = [l for l in red_team.split("\n") if l.strip() and not l.startswith("#")]
+            data["red_team_summary"] = "\n".join(lines[:5])[:500] if lines else None
+
+        cycle = _read_research_file(research_dir, "alpha_cycle.md")
+        if cycle:
+            lines = [l for l in cycle.split("\n") if l.strip() and not l.startswith("#")]
+            data["cycle_position"] = "\n".join(lines[:5])[:500] if lines else None
+    except Exception as e:
+        logger.warning("Failed to extract alpha: %s", e)
+
+    # --- Price at analysis ---
+    try:
+        ctx = _read_research_file(research_dir, "data_context.md")
+        if ctx:
+            m_price = re.search(r"Latest:\s*\$?([\d,.]+)", ctx)
+            if m_price:
+                data["price_at_analysis"] = float(m_price.group(1).replace(",", ""))
+            m_regime = re.search(r"\*\*Regime:\s*(\w+)\*\*", ctx)
+            if m_regime:
+                data["regime_at_analysis"] = m_regime.group(1).upper()
+    except Exception as e:
+        logger.warning("Failed to extract price/regime: %s", e)
+
+    return data
+
+
 def compile_deep_report(symbol: str, research_dir: Path) -> str:
     """Compile all research files into a single deep analysis report.
 
@@ -675,11 +902,47 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
     logger.info(f"Wrote report summary: {summary_path} ({len(summary)} chars)")
 
     # Generate HTML version
+    html_path = None
     try:
         from terminal.html_report import compile_html_report
         html_path = compile_html_report(symbol, research_dir, date=date)
         logger.info(f"Compiled HTML report: {html_path}")
     except Exception as e:
         logger.warning(f"HTML report generation failed: {e}")
+
+    # Auto-save to SQLite company database
+    try:
+        from terminal.company_store import get_store
+        store = get_store()
+
+        # Extract structured data from research files
+        structured = extract_structured_data(symbol, research_dir)
+        structured["report_path"] = str(output_path)
+        if html_path:
+            structured["html_report_path"] = str(html_path)
+
+        # Ensure company exists in DB
+        store.upsert_company(symbol, source="analysis")
+
+        # Save analysis summary
+        store.save_analysis(symbol, structured)
+
+        # Save OPRMS rating if extracted
+        if structured.get("oprms_dna") and structured.get("oprms_timing"):
+            store.save_oprms_rating(
+                symbol=symbol,
+                dna=structured["oprms_dna"],
+                timing=structured["oprms_timing"],
+                timing_coeff=structured.get("oprms_timing_coeff", 0.5),
+                conviction_modifier=structured.get("conviction_modifier"),
+                evidence=structured.get("evidence", []),
+                investment_bucket=structured.get("investment_bucket", ""),
+                verdict=structured.get("verdict", ""),
+                position_pct=structured.get("oprms_position_pct"),
+            )
+
+        logger.info(f"Auto-saved {symbol} to company.db")
+    except Exception as e:
+        logger.warning(f"Auto-save to company.db failed (non-fatal): {e}")
 
     return str(output_path)
