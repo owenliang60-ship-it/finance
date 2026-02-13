@@ -942,6 +942,11 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
             )
 
         logger.info(f"Auto-saved {symbol} to company.db")
+
+        # Auto-regenerate dashboard
+        from terminal.dashboard import generate_dashboard
+        generate_dashboard()
+        logger.info("Dashboard regenerated")
     except Exception as e:
         logger.warning(f"Auto-save to company.db failed (non-fatal): {e}")
 
