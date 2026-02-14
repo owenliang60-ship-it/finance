@@ -237,22 +237,155 @@ def format_section_e(dv_result: dict) -> str:
     return "\n".join(lines)
 
 
-def format_section_f(cluster_result: dict) -> str:
-    """F. 聚类报告 (周报，独立消息)"""
+
+
+# 行业中英映射 (常见 FMP industry → 中文)
+INDUSTRY_CN = {
+    "Semiconductors": "半导体",
+    "Software - Infrastructure": "基础软件",
+    "Software - Application": "应用软件",
+    "Internet Content & Information": "互联网",
+    "Consumer Electronics": "消费电子",
+    "Banks - Diversified": "银行",
+    "Capital Markets": "资本市场",
+    "Financial Data & Stock Exchanges": "金融数据",
+    "Credit Services": "信贷",
+    "Insurance - Diversified": "保险",
+    "Drug Manufacturers - General": "制药",
+    "Healthcare Plans": "医疗保险",
+    "Medical Devices": "医疗器械",
+    "Biotechnology": "生物科技",
+    "Entertainment": "娱乐",
+    "Auto Manufacturers": "汽车",
+    "Internet Retail": "电商",
+    "Specialty Retail": "零售",
+    "Restaurants": "餐饮",
+    "Aerospace & Defense": "航空航天",
+    "Information Technology Services": "IT服务",
+    "Communication Equipment": "通信设备",
+    "Electronic Components": "电子元件",
+    "Semiconductor Equipment & Materials": "半导体设备",
+}
+
+SECTOR_CN = {
+    "Technology": "科技",
+    "Financial Services": "金融",
+    "Healthcare": "医疗",
+    "Consumer Cyclical": "消费",
+    "Communication Services": "传媒",
+    "Industrials": "工业",
+    "Energy": "能源",
+    "Consumer Defensive": "必需消费",
+    "Real Estate": "地产",
+    "Utilities": "公用事业",
+    "Basic Materials": "基础材料",
+}
+
+
+def _build_symbol_info(universe: list) -> dict:
+    """从 universe 构建 {symbol: {industry, sector}} 映射"""
+    return {
+        item["symbol"]: {
+            "industry": item.get("industry", ""),
+            "sector": item.get("sector", ""),
+        }
+        for item in universe
+    }
+
+
+def _label_cluster(members: list, symbol_info: dict) -> str:
+    """给一个 cluster 打中文标签: industry 投票 > sector 投票 > '混合'"""
+    from collections import Counter
+
+    industries = [symbol_info[s]["industry"] for s in members if s in symbol_info and symbol_info[s]["industry"]]
+    if industries:
+        counter = Counter(industries)
+        top_industry, top_count = counter.most_common(1)[0]
+        if top_count / len(members) > 0.5:
+            return INDUSTRY_CN.get(top_industry, top_industry)
+
+    sectors = [symbol_info[s]["sector"] for s in members if s in symbol_info and symbol_info[s]["sector"]]
+    if sectors:
+        counter = Counter(sectors)
+        top_sector, top_count = counter.most_common(1)[0]
+        if top_count / len(members) > 0.5:
+            return SECTOR_CN.get(top_sector, top_sector)
+
+    return "混合"
+
+
+def format_section_f(cluster_result: dict, universe: list = None) -> str:
+    """F. 聚类报告 (周报，独立消息)
+
+    Args:
+        cluster_result: run_weekly_clustering() 的返回值
+        universe: load_universe() 返回的 [{symbol, sector, industry, ...}]，
+                  用于生成中文标签。None 时尝试自动加载。
+    """
     lines = ["*F. 相关性聚类 (周报)*"]
 
     clusters = cluster_result.get("clusters", {})
     comparison = cluster_result.get("comparison")
+    n_clusters = len(clusters)
 
+    # 自动加载 universe（零 API 调用，读本地 JSON）
+    symbol_info = {}
+    if universe is None:
+        try:
+            from src.data.pool_manager import load_universe
+            universe = load_universe()
+        except Exception:
+            universe = []
+    if universe:
+        symbol_info = _build_symbol_info(universe)
+
+    # 摘要行
+    jaccard = comparison.get("jaccard", 0) if comparison else 0
     if comparison and comparison.get("new_formation"):
-        lines.append("NEW FORMATION: Jaccard={:.2f} 集群结构显著变化".format(
-            comparison.get("jaccard", 0)))
+        stability = "重组"
+    elif jaccard >= 0.8:
+        stability = "稳定"
+    elif jaccard >= 0.5:
+        stability = "微调"
+    else:
+        stability = "变动"
+    summary_parts = ["30d", "{}组".format(n_clusters)]
+    if comparison:
+        summary_parts.append("Jaccard={:.2f} {}".format(jaccard, stability))
+    lines.append(" | ".join(summary_parts))
+    lines.append("")
 
+    # 各 cluster 带标签
     for cid, members in clusters.items():
-        members_str = ", ".join(members[:8])
-        if len(members) > 8:
+        label = _label_cluster(members, symbol_info)
+        members_str = " ".join(members[:10])
+        if len(members) > 10:
             members_str += "..."
-        lines.append("Cluster {}: {} ({})".format(cid, members_str, len(members)))
+        lines.append("{} ({}): {}".format(label, len(members), members_str))
+
+    # 变动行
+    if comparison:
+        changes = comparison.get("changes", [])
+        moves = []
+        for change in changes:
+            cid = change.get("current_cluster")
+            # 找到该 cluster 的标签
+            if cid is not None and str(cid) in clusters:
+                cluster_members = clusters[str(cid)]
+            elif cid is not None and cid in clusters:
+                cluster_members = clusters[cid]
+            else:
+                cluster_members = []
+            cluster_label = _label_cluster(cluster_members, symbol_info) if cluster_members else "?"
+
+            for sym in change.get("added", []):
+                moves.append("{}→{}".format(sym, cluster_label))
+            for sym in change.get("removed", []):
+                moves.append("{}←{}".format(sym, cluster_label))
+
+        if moves:
+            lines.append("")
+            lines.append("变动: {}".format("  ".join(moves)))
 
     return "\n".join(lines)
 

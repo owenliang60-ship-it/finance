@@ -68,10 +68,10 @@ class TestComputeClusters:
 
     def test_insufficient_data(self):
         """数据天数不足 corr_window+1 时应跳过。"""
-        prices = _make_correlated_prices([["A", "B", "C"]], n_days=30)
-        result = compute_clusters(prices, corr_window=60)
+        prices = _make_correlated_prices([["A", "B", "C"]], n_days=20)
+        result = compute_clusters(prices, corr_window=30)
 
-        # 30 天 < 61 天要求，全部跳过
+        # 20 天 < 31 天要求，全部跳过
         assert result["clusters"] == {}
         assert result["n_clusters"] == 0
 

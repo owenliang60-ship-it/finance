@@ -247,18 +247,104 @@ class TestFormatSectionE:
 class TestFormatSectionF:
     """F. 聚类"""
 
-    def test_with_clusters(self):
+    def test_with_clusters_basic(self):
+        """基本聚类输出包含标题、摘要、成员"""
         cluster_result = {
             "clusters": {
                 "0": ["NVDA", "AMD", "AVGO"],
                 "1": ["JPM", "GS"],
             },
+            "comparison": {"jaccard": 0.85, "new_formation": False, "changes": []},
+        }
+        result = format_section_f(cluster_result)
+        assert "相关性聚类" in result
+        assert "30d" in result
+        assert "2组" in result
+        assert "Jaccard=0.85" in result
+        assert "稳定" in result
+        assert "NVDA" in result
+
+    def test_with_sector_labels(self):
+        """universe 提供 sector/industry 时，cluster 带中文标签"""
+        universe = [
+            {"symbol": "NVDA", "sector": "Technology", "industry": "Semiconductors"},
+            {"symbol": "AMD", "sector": "Technology", "industry": "Semiconductors"},
+            {"symbol": "AVGO", "sector": "Technology", "industry": "Semiconductors"},
+            {"symbol": "JPM", "sector": "Financial Services", "industry": "Banks - Diversified"},
+            {"symbol": "GS", "sector": "Financial Services", "industry": "Banks - Diversified"},
+            {"symbol": "MS", "sector": "Financial Services", "industry": "Capital Markets"},
+        ]
+        cluster_result = {
+            "clusters": {
+                "0": ["NVDA", "AMD", "AVGO"],
+                "1": ["JPM", "GS", "MS"],
+            },
+            "comparison": {"jaccard": 0.9, "new_formation": False, "changes": []},
+        }
+        result = format_section_f(cluster_result, universe=universe)
+        assert "半导体" in result  # 3/3 Semiconductors > 50%
+        assert "银行" in result    # 2/3 Banks-Diversified > 50% → 银行
+
+    def test_with_changes(self):
+        """comparison.changes 中的 added/removed 显示为变动行"""
+        universe = [
+            {"symbol": "NVDA", "sector": "Technology", "industry": "Semiconductors"},
+            {"symbol": "AMD", "sector": "Technology", "industry": "Semiconductors"},
+            {"symbol": "PLTR", "sector": "Technology", "industry": "Software - Infrastructure"},
+            {"symbol": "JPM", "sector": "Financial Services", "industry": "Banks - Diversified"},
+            {"symbol": "GS", "sector": "Financial Services", "industry": "Banks - Diversified"},
+            {"symbol": "INTC", "sector": "Technology", "industry": "Semiconductors"},
+        ]
+        cluster_result = {
+            "clusters": {
+                "0": ["NVDA", "AMD", "PLTR"],
+                "1": ["JPM", "GS"],
+            },
+            "comparison": {
+                "jaccard": 0.7,
+                "new_formation": False,
+                "changes": [
+                    {
+                        "current_cluster": "0",
+                        "matched_previous": "0",
+                        "jaccard": 0.5,
+                        "added": ["PLTR"],
+                        "removed": ["INTC"],
+                    },
+                ],
+            },
+        }
+        result = format_section_f(cluster_result, universe=universe)
+        assert "变动" in result
+        assert "PLTR→" in result
+        assert "INTC←" in result
+
+    def test_no_changes_no_line(self):
+        """无变动时不显示变动行"""
+        cluster_result = {
+            "clusters": {"0": ["NVDA", "AMD"]},
+            "comparison": {"jaccard": 1.0, "new_formation": False, "changes": []},
+        }
+        result = format_section_f(cluster_result)
+        assert "变动" not in result
+
+    def test_new_formation(self):
+        """new_formation 触发时显示'重组'"""
+        cluster_result = {
+            "clusters": {"0": ["NVDA", "AMD"]},
             "comparison": {"jaccard": 0.2, "new_formation": True, "changes": []},
         }
         result = format_section_f(cluster_result)
-        assert "NEW FORMATION" in result
-        assert "Cluster 0" in result
-        assert "NVDA" in result
+        assert "重组" in result
+
+    def test_no_universe_fallback(self):
+        """没有 universe 数据时标签 fallback 为'混合'"""
+        cluster_result = {
+            "clusters": {"0": ["NVDA", "AMD", "AVGO"]},
+            "comparison": None,
+        }
+        result = format_section_f(cluster_result, universe=[])
+        assert "混合" in result
 
 
 class TestFormatMorningReport:

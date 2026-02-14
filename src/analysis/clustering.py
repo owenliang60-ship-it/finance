@@ -2,7 +2,7 @@
 层次聚类引擎 — Ward 聚类 + Jaccard 变化检测，用于每周轮动监控。
 
 算法流程：
-1. 从日收益率构建 60 天滚动相关矩阵
+1. 从日收益率构建 30 天滚动相关矩阵
 2. 转换为距离矩阵: distance = sqrt(2 * (1 - corr))
 3. Ward 层次聚类 (scipy)
 4. fcluster 按距离阈值切割
@@ -35,7 +35,7 @@ MAX_HISTORY_WEEKS = 52
 
 def compute_clusters(
     price_dict: Dict[str, pd.DataFrame],
-    corr_window: int = 60,
+    corr_window: int = 30,
     distance_threshold: float = 1.0,
 ) -> dict:
     """
@@ -286,7 +286,7 @@ def save_cluster_history(path: Path, entry: dict) -> None:
 def run_weekly_clustering(
     price_dict: Dict[str, pd.DataFrame],
     history_path: Path = None,
-    corr_window: int = 60,
+    corr_window: int = 30,
     distance_threshold: float = 1.0,
 ) -> dict:
     """
