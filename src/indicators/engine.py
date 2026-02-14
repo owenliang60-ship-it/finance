@@ -152,7 +152,13 @@ def get_indicator_summary(results: Dict[str, Dict]) -> Dict:
         "signals": {},
         "top_pmarp": [],
         "top_rvol": [],
-        "low_pmarp": []
+        "low_pmarp": [],
+        "pmarp_crossovers": {
+            "breakout_98": [],   # 上穿 98% — 进入极强
+            "fading_98": [],     # 下穿 98% — 强势衰减
+            "crashed_2": [],     # 下穿 2% — 进入极弱
+            "recovery_2": [],    # 上穿 2% — 极端下跌结束
+        },
     }
 
     pmarp_list = []
@@ -175,11 +181,24 @@ def get_indicator_summary(results: Dict[str, Dict]) -> Dict:
         # 收集 PMARP 值
         pmarp_data = data.get("pmarp", {})
         if pmarp_data.get("current") is not None:
-            pmarp_list.append({
+            entry = {
                 "symbol": symbol,
                 "value": pmarp_data["current"],
+                "previous": pmarp_data.get("previous"),
                 "signal": pmarp_data.get("signal")
-            })
+            }
+            pmarp_list.append(entry)
+
+            # 收集穿越事件
+            sig = pmarp_data.get("signal")
+            if sig == "bullish_breakout":
+                summary["pmarp_crossovers"]["breakout_98"].append(entry)
+            elif sig == "momentum_fading":
+                summary["pmarp_crossovers"]["fading_98"].append(entry)
+            elif sig == "oversold_bounce":
+                summary["pmarp_crossovers"]["crashed_2"].append(entry)
+            elif sig == "oversold_recovery":
+                summary["pmarp_crossovers"]["recovery_2"].append(entry)
 
         # 收集 RVOL 值
         rvol_data = data.get("rvol", {})

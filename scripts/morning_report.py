@@ -87,19 +87,46 @@ def send_telegram(message: str, max_retries: int = 3) -> bool:
 # ============================================================
 
 def format_section_a(indicator_summary: dict) -> str:
-    """A. PMARP 极值"""
+    """A. PMARP 极值 (四种穿越信号)"""
     lines = ["*A. PMARP 极值*"]
 
-    high = [x for x in indicator_summary.get("top_pmarp", []) if x["value"] >= 98]
-    low = [x for x in indicator_summary.get("low_pmarp", []) if x["value"] <= 2]
+    crossovers = indicator_summary.get("pmarp_crossovers", {})
 
-    if high:
-        items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in high)
-        lines.append("突破98%: {}".format(items))
-    if low:
-        items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in low)
-        lines.append("跌破2%: {}".format(items))
-    if not high and not low:
+    # 优先使用穿越事件数据
+    breakout = crossovers.get("breakout_98", [])
+    fading = crossovers.get("fading_98", [])
+    crashed = crossovers.get("crashed_2", [])
+    recovery = crossovers.get("recovery_2", [])
+
+    has_any = breakout or fading or crashed or recovery
+
+    if not has_any:
+        # 向后兼容: 如果没有 pmarp_crossovers，用旧的 value 过滤方式
+        high = [x for x in indicator_summary.get("top_pmarp", []) if x["value"] >= 98]
+        low = [x for x in indicator_summary.get("low_pmarp", []) if x["value"] <= 2]
+        if high:
+            items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in high)
+            lines.append("突破98%: {}".format(items))
+            has_any = True
+        if low:
+            items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in low)
+            lines.append("跌破2%: {}".format(items))
+            has_any = True
+    else:
+        if breakout:
+            items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in breakout)
+            lines.append("上穿98%: {}".format(items))
+        if fading:
+            items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in fading)
+            lines.append("下穿98%: {}".format(items))
+        if crashed:
+            items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in crashed)
+            lines.append("下穿2%: {}".format(items))
+        if recovery:
+            items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in recovery)
+            lines.append("上穿2%: {}".format(items))
+
+    if not has_any:
         lines.append("今日无极值信号")
 
     return "\n".join(lines)

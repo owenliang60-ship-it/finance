@@ -20,9 +20,10 @@ from scripts.morning_report import (
 
 
 class TestFormatSectionA:
-    """A. PMARP 极值"""
+    """A. PMARP 极值 (四种穿越信号)"""
 
-    def test_with_high_and_low(self):
+    def test_with_high_and_low_legacy(self):
+        """向后兼容: 没有 pmarp_crossovers 时用 value 过滤"""
         summary = {
             "top_pmarp": [
                 {"symbol": "NVDA", "value": 99.1, "signal": "overbought"},
@@ -36,9 +37,78 @@ class TestFormatSectionA:
         assert "PMARP" in result
         assert "NVDA" in result
         assert "INTC" in result
-        assert "98%" in result or "突破98%" in result
+        assert "98%" in result
+
+    def test_four_crossover_signals(self):
+        """四种穿越信号全显示"""
+        summary = {
+            "top_pmarp": [],
+            "low_pmarp": [],
+            "pmarp_crossovers": {
+                "breakout_98": [
+                    {"symbol": "NVDA", "value": 98.7, "previous": 97.2, "signal": "bullish_breakout"},
+                ],
+                "fading_98": [
+                    {"symbol": "TSLA", "value": 97.1, "previous": 98.5, "signal": "momentum_fading"},
+                ],
+                "crashed_2": [
+                    {"symbol": "INTC", "value": 1.3, "previous": 2.8, "signal": "oversold_bounce"},
+                ],
+                "recovery_2": [
+                    {"symbol": "BA", "value": 2.5, "previous": 1.7, "signal": "oversold_recovery"},
+                ],
+            },
+        }
+        result = format_section_a(summary)
+        assert "上穿98%" in result
+        assert "NVDA" in result
+        assert "下穿98%" in result
+        assert "TSLA" in result
+        assert "下穿2%" in result
+        assert "INTC" in result
+        assert "上穿2%" in result
+        assert "BA" in result
+
+    def test_partial_crossovers(self):
+        """只有部分穿越信号"""
+        summary = {
+            "top_pmarp": [],
+            "low_pmarp": [],
+            "pmarp_crossovers": {
+                "breakout_98": [
+                    {"symbol": "NVDA", "value": 99.0, "previous": 97.5, "signal": "bullish_breakout"},
+                ],
+                "fading_98": [],
+                "crashed_2": [],
+                "recovery_2": [
+                    {"symbol": "BA", "value": 3.1, "previous": 1.8, "signal": "oversold_recovery"},
+                ],
+            },
+        }
+        result = format_section_a(summary)
+        assert "上穿98%" in result
+        assert "NVDA" in result
+        assert "上穿2%" in result
+        assert "BA" in result
+        assert "下穿98%" not in result
+        assert "下穿2%" not in result
 
     def test_no_extremes(self):
+        summary = {
+            "top_pmarp": [{"symbol": "AAPL", "value": 60.0, "signal": "neutral"}],
+            "low_pmarp": [{"symbol": "AAPL", "value": 60.0, "signal": "neutral"}],
+            "pmarp_crossovers": {
+                "breakout_98": [],
+                "fading_98": [],
+                "crashed_2": [],
+                "recovery_2": [],
+            },
+        }
+        result = format_section_a(summary)
+        assert "无极值信号" in result
+
+    def test_no_extremes_without_crossovers_key(self):
+        """没有 pmarp_crossovers 且无极值"""
         summary = {
             "top_pmarp": [{"symbol": "AAPL", "value": 60.0, "signal": "neutral"}],
             "low_pmarp": [{"symbol": "AAPL", "value": 60.0, "signal": "neutral"}],
