@@ -2,7 +2,7 @@
 
 **未来资本 AI Trading Desk | Updated: 2026-02-15**
 
-**Code Stats**: ~90+ Python files, 650+ tests passing
+**Code Stats**: ~90+ Python files, 678 tests passing
 
 ---
 
@@ -381,9 +381,11 @@ portfolio/holdings/
 | `fmp_client.py` | 250 | FMP API wrapper, 2s rate limit |
 | `fundamental_fetcher.py` | 413 | Financial statements fetch + store |
 | `data_validator.py` | 322 | Schema validation + quality checks |
+| `data_guardian.py` | 215 | Snapshot backup/restore + retention policy (max 10) |
+| `data_health.py` | 321 | Full-chain health check (8 checks: pool/coverage/freshness/consistency) |
 | `data_query.py` | 277 | Unified `get_stock_data(symbol)` interface |
 | `dollar_volume.py` | 255 | Liquidity ranking system |
-| `pool_manager.py` | 300 | Stock pool management + auto-admission + stale data cleanup |
+| `pool_manager.py` | 363 | Stock pool management + auto-admission + stale data cleanup + safety fuse (30%) |
 | `price_fetcher.py` | 221 | OHLCV price data fetch + CSV storage |
 
 #### Technical Indicators (`src/indicators/`)
@@ -413,7 +415,7 @@ BENCHMARK_SYMBOLS = ["SPY", "QQQ"]
 
 | Script | Purpose |
 |--------|---------|
-| `update_data.py` | Price + fundamental updates (--price / --all) |
+| `update_data.py` | Price + fundamental updates (--price / --all / --check) + auto health check |
 | `scan_indicators.py` | Run indicators on all stocks |
 | `daily_scan.py` | Daily automated scan |
 | `collect_dollar_volume.py` | Dollar volume ranking |
@@ -447,7 +449,8 @@ data/
 ├── ratings/                      OPRMS rating snapshots
 ├── themes/{slug}.json            Investment themes
 ├── pool/                         Stock pool configs
-└── correlation/matrix.json       Pairwise correlation cache
+├── correlation/matrix.json       Pairwise correlation cache
+└── .backups/                     Data snapshots (tar.gz, max 10)
 ```
 
 **Data Formats**:
@@ -456,7 +459,11 @@ data/
 - **CSV**: Tabular time series (price data)
 - **SQLite**: Queryable aggregates (company.db)
 
-**Data Hygiene**: `cleanup_stale_data()` runs automatically after pool refresh — removes stale price CSVs and fundamental JSON entries for exited stocks.
+**Data Hygiene**: `cleanup_stale_data()` runs automatically after pool refresh — removes stale price CSVs and fundamental JSON entries for exited stocks. Safety fuse aborts if >30% of data would be deleted. Auto-snapshot before any deletion.
+
+**Data Guardian**: `data_guardian.py` provides snapshot/restore for `data/` (price, fundamental, pool, company.db). Max 10 snapshots at `data/.backups/`. Triggered automatically before cleanup and available manually.
+
+**Health Check**: `data_health.py` runs 8 checks (pool integrity, price/fundamental coverage, freshness, consistency, company.db). Embedded in `update_data.py` (post-update + `--check`) and sync scripts (pre-push, post-pull). Returns PASS/WARN/FAIL.
 
 ---
 
@@ -594,7 +601,8 @@ python-dotenv       # Environment variables
 | HTML Reports + Agent-ization + Slim Context | 2026-02-11 | +2,800 |
 | Unified Company DB (SQLite + Dashboard + Migration) | 2026-02-13 | +2,300 |
 | Pool Cleanup (stale data auto-removal) | 2026-02-15 | cleanup |
-| **Current** | 2026-02-15 | **650+ tests** |
+| Data Guardian (snapshot/fuse/health check) | 2026-02-15 | +1,157 |
+| **Current** | 2026-02-15 | **678 tests** |
 
 ---
 
