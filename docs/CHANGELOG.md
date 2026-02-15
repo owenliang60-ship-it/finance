@@ -33,7 +33,8 @@
 | 聚类优化 (6 new tests, 647 total) | 2026-02-14 | optimize |
 | Pool Cleanup (7 new tests, 651 total) | 2026-02-15 | cleanup |
 | Data Guardian (27 new tests, 678 total) | 2026-02-15 | +1,157 |
-| **当前** | 2026-02-15 | **~150 files, 678 tests** |
+| Theme Engine P2 (40 new tests, 718 total) | 2026-02-15 | +1,493 |
+| **当前** | 2026-02-15 | **~150 files, 718 tests** |
 
 ---
 
@@ -145,6 +146,16 @@
 - sync 脚本: push 前/pull 后自动健康检查
 - conftest.py: session 级 data/ 文件守卫
 - 10 files changed, +1157 lines, 27 new tests, 678 total pass
+
+### Theme Engine P2 (DONE 2026-02-15)
+- Engine A (量价动量) + Engine B (注意力量化) 信号合并
+- `terminal/theme_pool.py`: 池子动态扩展管理器 (source=attention, 只增不减, max_new=10 安全阀)
+- `scripts/scan_themes.py`: 周频主线扫描入口 (--no-expand / --dry-run / --top-n)
+- 信号合并: converged (双引擎共振) / momentum_only / narrative_only
+- 主题热力图: 按 THEME_KEYWORDS_SEED 归类
+- 7 Section 终端报告 + JSON 存档 (data/scans/theme_*.json)
+- `pool_manager.py`: `_get_non_screener_stocks()` 保留 analysis + attention 源
+- 4 files changed + 3 new files, +1493 lines, 40 new tests, 718 total pass
 
 ---
 
