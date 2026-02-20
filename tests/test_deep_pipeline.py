@@ -879,3 +879,181 @@ class TestExtractStructuredData:
         # Should complete without error, fields are None
         assert data.get("oprms_dna") in (None, "?")
         assert data.get("debate_verdict") is None
+
+    def test_extracts_alpha_debate(self, tmp_path):
+        """Should extract debate fields from alpha_debate.md."""
+        from terminal.deep_pipeline import extract_structured_data
+
+        self._write_research_files(tmp_path)
+        (tmp_path / "alpha_debate.md").write_text(
+            "## 终极辩论 — MU\n\n"
+            "Round 1 content...\n\n"
+            "核心分歧: 周期顶部 vs 结构性增长\n"
+            "final_conviction_modifier: 1.15\n"
+            "final_action: 执行\n",
+            encoding="utf-8",
+        )
+        data = extract_structured_data("MU", tmp_path)
+
+        assert data["debate_conviction_modifier"] == 1.15
+        assert data["debate_final_action"] == "执行"
+        assert "周期" in data["debate_key_disagreement"]
+        # debate overrides bet conviction_modifier
+        assert data["conviction_modifier"] == 1.15
+
+    def test_alpha_debate_missing_graceful(self, tmp_path):
+        """Should handle missing alpha_debate.md gracefully."""
+        from terminal.deep_pipeline import extract_structured_data
+
+        self._write_research_files(tmp_path)
+        data = extract_structured_data("MU", tmp_path)
+
+        # No debate fields when file is absent
+        assert data.get("debate_conviction_modifier") is None
+        assert data.get("debate_final_action") is None
+
+
+class TestBuildAlphaDebatePrompt:
+    """Tests for build_alpha_debate_prompt()."""
+
+    def test_returns_string(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_debate_prompt
+
+        prompt = build_alpha_debate_prompt(tmp_path, "TEST")
+        assert isinstance(prompt, str)
+        assert len(prompt) > 100
+
+    def test_contains_symbol(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_debate_prompt
+
+        prompt = build_alpha_debate_prompt(tmp_path, "NVDA")
+        assert "NVDA" in prompt
+
+    def test_contains_personas(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_debate_prompt
+
+        prompt = build_alpha_debate_prompt(tmp_path, "TEST")
+        assert "索罗斯" in prompt
+        assert "马克斯" in prompt
+
+    def test_injects_past_experiences(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_debate_prompt
+
+        prompt = build_alpha_debate_prompt(
+            tmp_path, "TEST",
+            past_experiences="### 历史分析 #1\n- 价格: $500\n",
+        )
+        assert "历史经验" in prompt
+        assert "$500" in prompt
+
+    def test_default_rounds(self, tmp_path):
+        from terminal.deep_pipeline import build_alpha_debate_prompt
+
+        prompt = build_alpha_debate_prompt(tmp_path, "TEST", rounds=2)
+        assert "Round 1" in prompt
+        assert "Round 2" in prompt
+
+
+class TestWriteAgentPromptsDebate:
+    """Tests for alpha_debate_prompt in write_agent_prompts()."""
+
+    def test_debate_prompt_written(self, tmp_path):
+        from terminal.deep_pipeline import write_agent_prompts
+
+        result = write_agent_prompts(
+            research_dir=tmp_path,
+            lens_agent_prompts=[],
+            gemini_prompt="g",
+            synthesis_prompt="s",
+            alpha_prompt="a",
+            alpha_debate_prompt="DEBATE_CONTENT",
+        )
+        assert result["alpha_debate_prompt_path"] != ""
+        assert Path(result["alpha_debate_prompt_path"]).exists()
+        assert Path(result["alpha_debate_prompt_path"]).read_text() == "DEBATE_CONTENT"
+
+    def test_debate_prompt_empty_when_not_provided(self, tmp_path):
+        from terminal.deep_pipeline import write_agent_prompts
+
+        result = write_agent_prompts(
+            research_dir=tmp_path,
+            lens_agent_prompts=[],
+            gemini_prompt="g",
+            synthesis_prompt="s",
+            alpha_prompt="a",
+        )
+        assert result["alpha_debate_prompt_path"] == ""
+
+    def test_debate_prompt_empty_string_skipped(self, tmp_path):
+        from terminal.deep_pipeline import write_agent_prompts
+
+        result = write_agent_prompts(
+            research_dir=tmp_path,
+            lens_agent_prompts=[],
+            gemini_prompt="g",
+            synthesis_prompt="s",
+            alpha_prompt="a",
+            alpha_debate_prompt="",
+        )
+        assert result["alpha_debate_prompt_path"] == ""
+
+
+class TestCompileDeepReportWithDebate:
+    """Tests for alpha_debate in compile_deep_report()."""
+
+    def test_includes_debate_in_report(self, tmp_path):
+        with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):
+            from terminal.deep_pipeline import get_research_dir, compile_deep_report
+
+            research_dir = get_research_dir("TEST")
+            # Minimal files
+            (research_dir / "data_context.md").write_text("### Company: TEST")
+            (research_dir / "alpha_red_team.md").write_text("## RT")
+            (research_dir / "alpha_cycle.md").write_text("## Cycle")
+            (research_dir / "alpha_bet.md").write_text("## Bet")
+            (research_dir / "alpha_debate.md").write_text(
+                "## 终极辩论\n\n索罗斯 vs 马克斯 debate content"
+            )
+
+            report_path = compile_deep_report("TEST", research_dir)
+            report = Path(report_path).read_text(encoding="utf-8")
+
+            assert "终极辩论" in report
+            assert "索罗斯 vs 马克斯" in report
+
+    def test_debate_absent_when_no_file(self, tmp_path):
+        with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):
+            from terminal.deep_pipeline import get_research_dir, compile_deep_report
+
+            research_dir = get_research_dir("TEST")
+            (research_dir / "data_context.md").write_text("### Company: TEST")
+            (research_dir / "alpha_red_team.md").write_text("## RT")
+            (research_dir / "alpha_cycle.md").write_text("## Cycle")
+            (research_dir / "alpha_bet.md").write_text("## Bet")
+
+            report_path = compile_deep_report("TEST", research_dir)
+            report = Path(report_path).read_text(encoding="utf-8")
+
+            assert "终极辩论" not in report
+
+
+class TestDeepAnalyzeTickerDebate:
+    """Tests for alpha debate prompt in deep_analyze_ticker()."""
+
+    @patch("terminal.commands.collect_data")
+    @patch("terminal.commands.prepare_lens_prompts")
+    def test_returns_debate_prompt_path(self, mock_lenses, mock_collect):
+        mock_pkg = MockDataPackage("MSFT")
+        mock_collect.return_value = mock_pkg
+        mock_lenses.return_value = []
+
+        from terminal.commands import deep_analyze_ticker
+
+        result = deep_analyze_ticker("MSFT")
+        assert "alpha_debate_prompt_path" in result
+        assert result["alpha_debate_prompt_path"] != ""
+        debate_path = Path(result["alpha_debate_prompt_path"])
+        assert debate_path.exists()
+        content = debate_path.read_text()
+        assert "MSFT" in content
+        assert "索罗斯" in content

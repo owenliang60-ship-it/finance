@@ -83,6 +83,9 @@ def company_dir(tmp_path):
         },
         "final_verdict": "HOLD",
         "symbol": "TEST",
+        "debate_conviction_modifier": 1.15,
+        "debate_final_action": "执行",
+        "debate_key_disagreement": "周期风险 vs 非对称赌注",
     }
     (sym_dir / "analyses" / "20260209_170000_alpha.json").write_text(json.dumps(alpha))
 
@@ -157,6 +160,15 @@ class TestPrepareSync:
         assert "Euphoria" in card
         assert "Asymmetric Bet" in card
         assert "-7.5%" in card  # EV (-0.0755 → -7.5%)
+
+    def test_card_has_debate_section(self, _patch_root):
+        from terminal.heptabase_sync import prepare_heptabase_sync
+
+        card = prepare_heptabase_sync("TEST")["card_content"]
+        assert "Alpha Debate" in card
+        assert "1.15" in card
+        assert "执行" in card
+        assert "周期风险 vs 非对称赌注" in card
 
     def test_journal_format_brevity(self, _patch_root):
         from terminal.heptabase_sync import prepare_heptabase_sync

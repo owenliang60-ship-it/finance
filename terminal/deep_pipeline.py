@@ -408,12 +408,39 @@ def build_alpha_agent_prompt(
 """
 
 
+def build_alpha_debate_prompt(
+    research_dir: Path,
+    symbol: str,
+    rounds: int = 2,
+    past_experiences: str = "",
+) -> str:
+    """Build a self-contained prompt for the Phase 4 Alpha Debate agent.
+
+    Args:
+        research_dir: Path to research directory with Phase 0-3 outputs
+        symbol: Stock ticker
+        rounds: Number of debate rounds (default 2)
+        past_experiences: Formatted past experiences block (from memory)
+
+    Returns:
+        Complete prompt string for a Task agent
+    """
+    from knowledge.alpha.debate import generate_alpha_debate_prompt
+    return generate_alpha_debate_prompt(
+        symbol=symbol.upper(),
+        research_dir_str=str(research_dir),
+        rounds=rounds,
+        past_experiences=past_experiences,
+    )
+
+
 def write_agent_prompts(
     research_dir: Path,
     lens_agent_prompts: List[Dict[str, str]],
     gemini_prompt: str,
     synthesis_prompt: str,
     alpha_prompt: str,
+    alpha_debate_prompt: str = "",
 ) -> Dict[str, Any]:
     """Write all agent prompts to files, return path references.
 
@@ -426,6 +453,7 @@ def write_agent_prompts(
         gemini_prompt: Gemini contrarian prompt string
         synthesis_prompt: Phase 2 synthesis agent prompt string
         alpha_prompt: Phase 3 alpha agent prompt string
+        alpha_debate_prompt: Phase 4 alpha debate agent prompt string
 
     Returns:
         Dict with prompt file paths:
@@ -433,6 +461,7 @@ def write_agent_prompts(
         - gemini_prompt_path: str
         - synthesis_prompt_path: str
         - alpha_prompt_path: str
+        - alpha_debate_prompt_path: str (empty string if no debate prompt)
     """
     prompts_dir = research_dir / "prompts"
     prompts_dir.mkdir(exist_ok=True)
@@ -461,8 +490,16 @@ def write_agent_prompts(
     alpha_path = prompts_dir / "alpha.txt"
     alpha_path.write_text(alpha_prompt, encoding="utf-8")
 
+    # Alpha debate prompt (Phase 4)
+    alpha_debate_path_str = ""
+    if alpha_debate_prompt:
+        debate_path = prompts_dir / "alpha_debate.txt"
+        debate_path.write_text(alpha_debate_prompt, encoding="utf-8")
+        alpha_debate_path_str = str(debate_path)
+
+    total = len(lens_paths) + 3 + (1 if alpha_debate_prompt else 0)
     logger.info(
-        f"Wrote {len(lens_paths) + 3} prompt files to {prompts_dir}"
+        f"Wrote {total} prompt files to {prompts_dir}"
     )
 
     return {
@@ -470,6 +507,7 @@ def write_agent_prompts(
         "gemini_prompt_path": str(gemini_path),
         "synthesis_prompt_path": str(synthesis_path),
         "alpha_prompt_path": str(alpha_path),
+        "alpha_debate_prompt_path": alpha_debate_path_str,
     }
 
 
@@ -762,6 +800,36 @@ def extract_structured_data(symbol: str, research_dir: Path) -> Dict[str, Any]:
     except Exception as e:
         logger.warning("Failed to extract alpha: %s", e)
 
+    # --- Alpha Debate (Phase 4 — overrides conviction_modifier) ---
+    try:
+        alpha_debate = _read_research_file(research_dir, "alpha_debate.md")
+        if alpha_debate:
+            # conviction_modifier from debate overrides bet (final verdict)
+            m_cm = re.search(r"(?:final_)?conviction_modifier[：:]\s*([\d.]+)", alpha_debate)
+            if m_cm:
+                try:
+                    data["debate_conviction_modifier"] = float(m_cm.group(1))
+                    # Override the main conviction_modifier (debate is final)
+                    data["conviction_modifier"] = data["debate_conviction_modifier"]
+                except (ValueError, TypeError):
+                    pass
+
+            m_action = re.search(
+                r"(?:final_action|最终行动)[：:]\s*(执行|搁置|放弃)",
+                alpha_debate,
+            )
+            if m_action:
+                data["debate_final_action"] = m_action.group(1)
+
+            m_disagree = re.search(
+                r"(?:核心分歧|key_disagreement)[：:]\s*(.+?)(?:\n|$)",
+                alpha_debate,
+            )
+            if m_disagree:
+                data["debate_key_disagreement"] = m_disagree.group(1).strip()[:200]
+    except Exception as e:
+        logger.warning("Failed to extract alpha debate: %s", e)
+
     # --- Price at analysis ---
     try:
         ctx = _read_research_file(research_dir, "data_context.md")
@@ -808,6 +876,7 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
     alpha_rt = _read_research_file(research_dir, "alpha_red_team.md")
     alpha_cy = _read_research_file(research_dir, "alpha_cycle.md")
     alpha_bet = _read_research_file(research_dir, "alpha_bet.md")
+    alpha_debate = _read_research_file(research_dir, "alpha_debate.md")
 
     sections = [
         f"# {symbol} 深度研究报告",
@@ -861,7 +930,7 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
         sections.append("")
 
     # V. 第二层 — 求导思维
-    if alpha_rt or alpha_cy or alpha_bet:
+    if alpha_rt or alpha_cy or alpha_bet or alpha_debate:
         sections.append("## V. 第二层 — 求导思维")
         sections.append("")
         if alpha_rt:
@@ -879,6 +948,10 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
         if alpha_bet:
             sections.append("### 非对称赌注")
             sections.append(alpha_bet)
+            sections.append("")
+        if alpha_debate:
+            sections.append("### 终极辩论")
+            sections.append(alpha_debate)
             sections.append("")
 
     sections.append("---")
@@ -949,5 +1022,15 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
         logger.info("Dashboard regenerated")
     except Exception as e:
         logger.warning(f"Auto-save to company.db failed (non-fatal): {e}")
+
+    # Store situation memory for future analyses
+    try:
+        from terminal.memory import extract_situation_summary, store_situation
+        situation = extract_situation_summary(symbol, research_dir)
+        if situation:
+            store_situation(symbol, situation)
+            logger.info(f"Stored situation memory for {symbol}")
+    except Exception as e:
+        logger.warning(f"Memory storage failed (non-fatal): {e}")
 
     return str(output_path)

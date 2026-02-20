@@ -1328,9 +1328,10 @@ def build_alpha_section(
     gemini: str,
     cycle: str,
     bet: str,
+    alpha_debate: str = "",
 ) -> str:
     """Build Section V: Alpha Layer (Second-Order Thinking)."""
-    has_content = any(t.strip() for t in [red_team, gemini, cycle, bet] if t)
+    has_content = any(t.strip() for t in [red_team, gemini, cycle, bet, alpha_debate] if t)
     if not has_content:
         return ""
 
@@ -1385,6 +1386,31 @@ def build_alpha_section(
         parts.append('    </div>')
         parts.append('  </div>')
 
+    # Alpha Debate — purple regime box (final verdict)
+    if alpha_debate and alpha_debate.strip():
+        # Extract final conviction modifier from debate
+        m_cm = re.search(r"(?:final_)?conviction_modifier[：:]\s*([\d.]+)", alpha_debate)
+        debate_cm = m_cm.group(1) if m_cm else None
+        m_action = re.search(r"(?:final_action|最终行动)[：:]\s*(执行|搁置|放弃)", alpha_debate)
+        debate_action = m_action.group(1) if m_action else None
+
+        parts.append('  <div class="regime-box purple">')
+        parts.append('    <h3>\u7ec8\u6781\u8fa9\u8bba &mdash; Alpha Debate')
+        badge_parts = []
+        if debate_cm:
+            badge_parts.append('Conviction: ' + html.escape(debate_cm))
+        if debate_action:
+            badge_parts.append(html.escape(debate_action))
+        if badge_parts:
+            parts.append('    <span style="float:right;font-size:12px;">'
+                        + ' | '.join(badge_parts) + '</span>')
+        parts.append('    </h3>')
+        body = _strip_first_heading(alpha_debate)
+        parts.append('    <div class="prose">')
+        parts.append(md_to_html(body))
+        parts.append('    </div>')
+        parts.append('  </div>')
+
     parts.append('</div>')
     return "\n".join(parts)
 
@@ -1429,6 +1455,7 @@ def compile_html_report(
     gemini = _read("gemini_contrarian.md")
     cycle = _read("alpha_cycle.md")
     bet = _read("alpha_bet.md")
+    alpha_debate_text = _read("alpha_debate.md")
 
     # Build sections
     header_html = build_header(symbol, research_dir)
@@ -1437,7 +1464,7 @@ def compile_html_report(
     debate_html = build_debate_section(debate)
     memo_html = build_memo_section(memo)
     oprms_html = build_oprms_section(oprms)
-    alpha_html = build_alpha_section(red_team, gemini, cycle, bet)
+    alpha_html = build_alpha_section(red_team, gemini, cycle, bet, alpha_debate_text)
 
     doc = '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n'
     doc += '<meta charset="UTF-8">\n'

@@ -166,6 +166,81 @@ class AnalysisScratchpad:
         })
         logger.info(f"Scratchpad complete: {self.log_path}")
 
+    def log_debate_round(
+        self,
+        round_num: int,
+        persona: str,
+        stance: str,
+        key_argument_summary: str,
+    ) -> None:
+        """
+        Log a debate round contribution.
+
+        Args:
+            round_num: Debate round number (1, 2, ...)
+            persona: Debater name (e.g., "索罗斯", "马克斯")
+            stance: Position taken (e.g., "行动", "等待")
+            key_argument_summary: One-line summary of argument
+        """
+        if len(key_argument_summary) > 500:
+            key_argument_summary = key_argument_summary[:500] + "..."
+
+        self._append({
+            "type": "debate_round",
+            "timestamp": datetime.now().isoformat(),
+            "round": round_num,
+            "persona": persona,
+            "stance": stance,
+            "key_argument": key_argument_summary,
+        })
+
+    def log_debate_synthesis(
+        self,
+        final_conviction_modifier: float,
+        final_action: str,
+        key_disagreement: str,
+    ) -> None:
+        """
+        Log the debate synthesis / referee verdict.
+
+        Args:
+            final_conviction_modifier: 0.5-1.5 conviction adjustment
+            final_action: "执行" / "搁置" / "放弃"
+            key_disagreement: One-line core disagreement summary
+        """
+        self._append({
+            "type": "debate_synthesis",
+            "timestamp": datetime.now().isoformat(),
+            "conviction_modifier": final_conviction_modifier,
+            "action": final_action,
+            "key_disagreement": key_disagreement,
+        })
+
+    def log_memory_retrieval(
+        self,
+        source: str,
+        query: str,
+        matches_count: int,
+        relevance: str,
+    ) -> None:
+        """
+        Log a memory retrieval operation.
+
+        Args:
+            source: Memory source (e.g., "same_ticker", "cross_ticker")
+            query: What was queried
+            matches_count: Number of matches found
+            relevance: Brief relevance assessment
+        """
+        self._append({
+            "type": "memory_retrieval",
+            "timestamp": datetime.now().isoformat(),
+            "source": source,
+            "query": query,
+            "matches_count": matches_count,
+            "relevance": relevance,
+        })
+
     def get_path(self) -> Path:
         """Return path to scratchpad log file."""
         return self.log_path

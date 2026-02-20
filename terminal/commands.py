@@ -221,6 +221,7 @@ def deep_analyze_ticker(
         build_lens_agent_prompt,
         build_synthesis_agent_prompt,
         build_alpha_agent_prompt,
+        build_alpha_debate_prompt,
         write_agent_prompts,
     )
 
@@ -283,6 +284,29 @@ def deep_analyze_ticker(
         l1_oprms=record.oprms if record and record.has_data else None,
     )
 
+    # 4b. Retrieve past experiences for memory injection
+    past_experiences = ""
+    try:
+        from terminal.memory import (
+            retrieve_same_ticker_experiences,
+            format_past_experiences,
+        )
+        same_ticker = retrieve_same_ticker_experiences(symbol, limit=3)
+        if same_ticker:
+            past_experiences = format_past_experiences(same_ticker)
+            logger.info(
+                "Retrieved %d past experiences for %s", len(same_ticker), symbol
+            )
+    except Exception as e:
+        logger.warning("Memory retrieval failed (non-fatal): %s", e)
+
+    # 4c. Build alpha debate prompt (Phase 4)
+    alpha_debate_prompt = build_alpha_debate_prompt(
+        research_dir=research_dir,
+        symbol=symbol,
+        past_experiences=past_experiences,
+    )
+
     # 5. Write all prompts to disk, get back paths only
     prompt_paths = write_agent_prompts(
         research_dir=research_dir,
@@ -290,6 +314,7 @@ def deep_analyze_ticker(
         gemini_prompt=gemini_prompt,
         synthesis_prompt=synthesis_prompt,
         alpha_prompt=alpha_prompt,
+        alpha_debate_prompt=alpha_debate_prompt,
     )
     result.update(prompt_paths)
 

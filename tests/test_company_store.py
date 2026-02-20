@@ -186,6 +186,27 @@ class TestAnalyses:
         assert "4.5" in analysis["lens_quality_compounder"]
         assert "HOLD" in analysis["lens_deep_value"]
 
+    def test_debate_fields_roundtrip(self, store):
+        store.upsert_company("AAPL")
+        store.save_analysis("AAPL", {
+            "analysis_date": "2026-02-20",
+            "debate_conviction_modifier": 1.15,
+            "debate_final_action": "执行",
+            "debate_key_disagreement": "周期 vs 成长",
+        })
+        analysis = store.get_latest_analysis("AAPL")
+        assert analysis["debate_conviction_modifier"] == 1.15
+        assert analysis["debate_final_action"] == "执行"
+        assert analysis["debate_key_disagreement"] == "周期 vs 成长"
+
+    def test_debate_fields_default_null(self, store):
+        store.upsert_company("AAPL")
+        store.save_analysis("AAPL", {"analysis_date": "2026-02-20"})
+        analysis = store.get_latest_analysis("AAPL")
+        assert analysis["debate_conviction_modifier"] is None
+        assert analysis["debate_final_action"] is None
+        assert analysis["debate_key_disagreement"] is None
+
     def test_analyses_limit(self, store):
         store.upsert_company("AAPL")
         for i in range(5):
