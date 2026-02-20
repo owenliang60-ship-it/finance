@@ -94,14 +94,14 @@ def _sample_alpha_dict() -> dict:
 # ===========================================================================
 
 class TestAlphaLens:
-    def test_three_lenses_defined(self):
-        """ALPHA_LENSES has exactly 3 entries."""
-        assert len(ALPHA_LENSES) == 3
+    def test_four_lenses_defined(self):
+        """ALPHA_LENSES has exactly 4 entries."""
+        assert len(ALPHA_LENSES) == 4
 
     def test_lens_phases_sequential(self):
-        """Phases are 1, 2, 3 in order."""
+        """Phases are 1, 2, 3, 4 in order."""
         phases = [l.phase for l in ALPHA_LENSES]
-        assert phases == [1, 2, 3]
+        assert phases == [1, 2, 3, 4]
 
     def test_lens_names(self):
         """Each lens has distinct name and name_cn."""
@@ -109,6 +109,7 @@ class TestAlphaLens:
         assert "Red Team Gauntlet" in names
         assert "Cycle & Pendulum" in names
         assert "Asymmetric Bet" in names
+        assert "Alpha Debate" in names
 
     def test_lens_has_persona(self):
         """Each lens has a non-empty persona."""
@@ -151,6 +152,7 @@ class TestAlphaPackage:
             "core_insight", "bet_structure", "entry_signal", "target_exit",
             "thesis_invalidation", "noise_to_ignore", "real_danger_signals",
             "conviction_level", "conviction_modifier", "action",
+            "debate_conviction_modifier", "debate_final_action", "debate_key_disagreement",
         }
         assert set(d.keys()) == expected_keys
 

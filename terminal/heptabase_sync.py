@@ -182,6 +182,21 @@ def _format_card(
                 lines.append(f"- **Asymmetry**: {bet['asymmetry']}")
             lines.append("")
 
+        # Alpha Debate conclusion (if available) — flat keys from AlphaPackage
+        has_debate = (
+            alpha.get("debate_conviction_modifier") is not None
+            or alpha.get("debate_final_action")
+        )
+        if has_debate:
+            lines.append("### Alpha Debate (Final Verdict)")
+            if alpha.get("debate_key_disagreement"):
+                lines.append(f"- **Core Disagreement**: {alpha['debate_key_disagreement']}")
+            if alpha.get("debate_conviction_modifier") is not None:
+                lines.append(f"- **Conviction Modifier**: {alpha['debate_conviction_modifier']}")
+            if alpha.get("debate_final_action"):
+                lines.append(f"- **Action**: {alpha['debate_final_action']}")
+            lines.append("")
+
         lines.append("---")
         lines.append("")
 

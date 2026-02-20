@@ -36,7 +36,8 @@
 | Theme Engine P2 (40 new tests, 718 total) | 2026-02-15 | +1,493 |
 | RS Backtest Engine (69 new tests, 787 total) | 2026-02-16 | +3,143 |
 | Factor Study Framework (51 new tests, 838 total) | 2026-02-16 | +3,769 |
-| **当前** | 2026-02-16 | **~170 files, 838 tests** |
+| Alpha Debate + Agent Memory (57 new tests, 795 total) | 2026-02-20 | +1,800 |
+| **当前** | 2026-02-20 | **~175 files, 795 tests** |
 
 ---
 
@@ -190,3 +191,20 @@
 8. ~~P1.96: Slim Deep Context~~ -- 418 total pass
 9. ~~P0: Agent-ized Deep Analysis 实战验证~~ -- MU 11 agent E2E 通过
 10. ~~P1.97: Unified Company DB~~ -- 466 total pass
+
+### Alpha Debate + Agent Memory (DONE 2026-02-20)
+- 灵感来源: TradingAgents (双层辩论), Dexter (Scratchpad 审计), ai-hedge-fund (agent 架构)
+- Alpha Debate (Phase 4): 索罗斯 vs 马克斯终极辩论 — 行动派 vs 耐心派
+  - `knowledge/alpha/debate.py`: prompt 生成器 (2 轮辩论 + 裁判综合)
+  - conviction_modifier (0.5-1.5) 覆盖 bet 层的（辩论为最终裁决）
+  - final_action: 执行 / 搁置 / 放弃
+- Agent Memory: 跨会话经验积累
+  - `terminal/memory.py`: 情境提取 + SQLite 存储 + 检索 + prompt 注入
+  - `company_store.py`: schema 迁移 (situation_summary + 3 debate 列)
+  - 历史分析自动存储 → 下次同 ticker 分析时注入 past_experiences
+- Scratchpad: 3 个新事件类型 (debate_round, debate_synthesis, memory_retrieval)
+- Pipeline: Phase 0-1-2-3 → **Phase 4 (Alpha Debate)** → compile
+- HTML: 紫色 regime-box 辩论卡片
+- Heptabase: card_content 增加辩论结论 section
+- Deep Analysis Skill: Phase 4 agent 调度 + Phase 5 assembly
+- 12 files changed + 4 new files, ~+1800 lines, 57 new tests, 775 total pass

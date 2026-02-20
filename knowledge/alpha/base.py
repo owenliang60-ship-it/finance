@@ -41,6 +41,13 @@ ALPHA_LENSES = [
         persona="索罗斯——不是学者索罗斯，是亲手按下'执行'按钮的交易员索罗斯",
         tags=["execution", "sizing", "asymmetry", "conviction"],
     ),
+    AlphaLens(
+        name="Alpha Debate",
+        name_cn="终极辩论",
+        phase=4,
+        persona="索罗斯 vs 马克斯——行动派对耐心派的终极对决",
+        tags=["debate", "conviction", "execution", "timing"],
+    ),
 ]
 
 
@@ -78,6 +85,11 @@ class AlphaPackage:
     conviction_modifier: float = 1.0         # 0.5-1.5, adjusts OPRMS timing_coeff
     action: str = ""                         # 执行 / 搁置 / 放弃
 
+    # Alpha Debate outputs (Phase 4 — final verdict overrides bet)
+    debate_conviction_modifier: Optional[float] = None   # 0.5-1.5, overrides conviction_modifier
+    debate_final_action: str = ""                        # 执行 / 搁置 / 放弃
+    debate_key_disagreement: str = ""                    # one-line summary of core disagreement
+
     def to_dict(self) -> dict:
         """Serialize to dict for JSON persistence."""
         return {
@@ -107,6 +119,10 @@ class AlphaPackage:
             "conviction_level": self.conviction_level,
             "conviction_modifier": self.conviction_modifier,
             "action": self.action,
+            # Alpha Debate
+            "debate_conviction_modifier": self.debate_conviction_modifier,
+            "debate_final_action": self.debate_final_action,
+            "debate_key_disagreement": self.debate_key_disagreement,
         }
 
     @classmethod
@@ -139,4 +155,8 @@ class AlphaPackage:
             conviction_level=d.get("conviction_level", ""),
             conviction_modifier=d.get("conviction_modifier", 1.0),
             action=d.get("action", ""),
+            # Alpha Debate
+            debate_conviction_modifier=d.get("debate_conviction_modifier"),
+            debate_final_action=d.get("debate_final_action", ""),
+            debate_key_disagreement=d.get("debate_key_disagreement", ""),
         )

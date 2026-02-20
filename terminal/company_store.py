@@ -128,6 +128,24 @@ class CompanyStore:
         conn = self._get_conn()
         conn.executescript(_SCHEMA)
         conn.commit()
+        self._migrate_if_needed()
+
+    def _migrate_if_needed(self) -> None:
+        """Add new columns to analyses table if missing (idempotent)."""
+        conn = self._get_conn()
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(analyses)")}
+        new_cols = [
+            ("situation_summary", "TEXT"),
+            ("debate_conviction_modifier", "REAL"),
+            ("debate_final_action", "TEXT"),
+            ("debate_key_disagreement", "TEXT"),
+        ]
+        for col, typ in new_cols:
+            if col not in columns:
+                conn.execute(
+                    "ALTER TABLE analyses ADD COLUMN %s %s" % (col, typ)
+                )
+        conn.commit()
 
     def close(self) -> None:
         if self._conn:
@@ -343,8 +361,10 @@ class CompanyStore:
                  oprms_dna, oprms_timing, oprms_timing_coeff, oprms_position_pct,
                  price_at_analysis, regime_at_analysis,
                  research_dir, report_path, html_report_path,
+                 debate_conviction_modifier, debate_final_action,
+                 debate_key_disagreement,
                  created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 symbol,
@@ -372,6 +392,9 @@ class CompanyStore:
                 data.get("research_dir"),
                 data.get("report_path"),
                 data.get("html_report_path"),
+                data.get("debate_conviction_modifier"),
+                data.get("debate_final_action"),
+                data.get("debate_key_disagreement"),
                 now,
             ),
         )
@@ -401,6 +424,71 @@ class CompanyStore:
         conn = self._get_conn()
         rows = conn.execute(
             "SELECT * FROM analyses WHERE symbol = ? ORDER BY created_at DESC LIMIT ?",
+            (symbol.upper(), limit),
+        ).fetchall()
+        results = []
+        for row in rows:
+            d = dict(row)
+            if d.get("key_forces"):
+                try:
+                    d["key_forces"] = json.loads(d["key_forces"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            results.append(d)
+        return results
+
+    def update_situation_summary(
+        self,
+        symbol: str,
+        situation_json: str,
+        analysis_id: Optional[int] = None,
+    ) -> None:
+        """Update situation_summary on an analysis row.
+
+        Args:
+            symbol: Stock ticker
+            situation_json: JSON string of structured situation
+            analysis_id: Specific analysis ID; if None, updates latest
+        """
+        symbol = symbol.upper()
+        conn = self._get_conn()
+        if analysis_id is not None:
+            conn.execute(
+                "UPDATE analyses SET situation_summary = ? WHERE id = ?",
+                (situation_json, analysis_id),
+            )
+        else:
+            # Update the latest analysis for this symbol
+            row = conn.execute(
+                "SELECT id FROM analyses WHERE symbol = ? ORDER BY created_at DESC LIMIT 1",
+                (symbol,),
+            ).fetchone()
+            if row:
+                conn.execute(
+                    "UPDATE analyses SET situation_summary = ? WHERE id = ?",
+                    (situation_json, row["id"]),
+                )
+        conn.commit()
+
+    def get_analyses_with_memory(
+        self,
+        symbol: str,
+        limit: int = 3,
+    ) -> List[Dict[str, Any]]:
+        """Get analyses that have a situation_summary (memory-enabled).
+
+        Args:
+            symbol: Stock ticker
+            limit: Max results
+
+        Returns:
+            List of analysis dicts with situation_summary, newest first
+        """
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM analyses WHERE symbol = ? "
+            "AND situation_summary IS NOT NULL "
+            "ORDER BY created_at DESC LIMIT ?",
             (symbol.upper(), limit),
         ).fetchall()
         results = []

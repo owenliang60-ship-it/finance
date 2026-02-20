@@ -202,3 +202,66 @@ def test_scratchpad_malformed_json(tmp_path, monkeypatch):
     events = read_scratchpad(scratchpad.log_path)
     reasoning_events = [e for e in events if e["type"] == "reasoning"]
     assert len(reasoning_events) == 2  # Initial + step2 (skips malformed)
+
+
+def test_scratchpad_debate_round(tmp_path, monkeypatch):
+    """Test debate round logging."""
+    monkeypatch.setattr("terminal.scratchpad._COMPANIES_DIR", tmp_path)
+
+    scratchpad = AnalysisScratchpad("NVDA", "deep")
+
+    scratchpad.log_debate_round(1, "索罗斯", "行动", "反身性证据强烈，时间窗口正在关闭")
+    scratchpad.log_debate_round(1, "马克斯", "等待", "周期位置不支持行动，等待成本低")
+
+    events = read_scratchpad(scratchpad.log_path)
+    debate_events = [e for e in events if e["type"] == "debate_round"]
+
+    assert len(debate_events) == 2
+    assert debate_events[0]["round"] == 1
+    assert debate_events[0]["persona"] == "索罗斯"
+    assert debate_events[0]["stance"] == "行动"
+    assert "反身性" in debate_events[0]["key_argument"]
+    assert debate_events[1]["persona"] == "马克斯"
+
+
+def test_scratchpad_debate_synthesis(tmp_path, monkeypatch):
+    """Test debate synthesis logging."""
+    monkeypatch.setattr("terminal.scratchpad._COMPANIES_DIR", tmp_path)
+
+    scratchpad = AnalysisScratchpad("TSLA", "deep")
+
+    scratchpad.log_debate_synthesis(
+        final_conviction_modifier=1.2,
+        final_action="执行",
+        key_disagreement="周期位置 vs 反身性时间窗口",
+    )
+
+    events = read_scratchpad(scratchpad.log_path)
+    synth_events = [e for e in events if e["type"] == "debate_synthesis"]
+
+    assert len(synth_events) == 1
+    assert synth_events[0]["conviction_modifier"] == 1.2
+    assert synth_events[0]["action"] == "执行"
+    assert "周期" in synth_events[0]["key_disagreement"]
+
+
+def test_scratchpad_memory_retrieval(tmp_path, monkeypatch):
+    """Test memory retrieval logging."""
+    monkeypatch.setattr("terminal.scratchpad._COMPANIES_DIR", tmp_path)
+
+    scratchpad = AnalysisScratchpad("AAPL", "deep")
+
+    scratchpad.log_memory_retrieval(
+        source="same_ticker",
+        query="AAPL",
+        matches_count=3,
+        relevance="Found 3 prior analyses, most recent 2 weeks ago",
+    )
+
+    events = read_scratchpad(scratchpad.log_path)
+    mem_events = [e for e in events if e["type"] == "memory_retrieval"]
+
+    assert len(mem_events) == 1
+    assert mem_events[0]["source"] == "same_ticker"
+    assert mem_events[0]["matches_count"] == 3
+    assert "2 weeks" in mem_events[0]["relevance"]
