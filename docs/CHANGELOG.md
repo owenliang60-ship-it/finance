@@ -37,7 +37,8 @@
 | RS Backtest Engine (69 new tests, 787 total) | 2026-02-16 | +3,143 |
 | Factor Study Framework (51 new tests, 838 total) | 2026-02-16 | +3,769 |
 | Alpha Debate + Agent Memory (60 new tests, 898 total) | 2026-02-20 | +1,800 |
-| **当前** | 2026-02-20 | **~175 files, 898 tests** |
+| Company Profiler (23 new tests, 921 total) | 2026-02-20 | +580 |
+| **当前** | 2026-02-20 | **~178 files, 921 tests** |
 
 ---
 
@@ -208,3 +209,12 @@
 - Heptabase: card_content 增加辩论结论 section
 - Deep Analysis Skill: Phase 4 agent 调度 + Phase 5 assembly
 - 12 files changed + 4 new files, ~+1800 lines, 57 new tests, 775 total pass
+
+### Company Profiler (DONE 2026-02-20)
+- 元提示词驱动的个性化 Deep Analysis — 解决"所有公司用同一套 prompt"的问题
+- `knowledge/meta/company_profiler.py`: 元提示词 + 8 种公司原型分类表 + 5 透镜适用度矩阵
+- `build_profiler_prompt()`: 直接嵌入 data_context（无 placeholder），生成 company_profile.md
+- Pipeline 贯穿: lens (先读 profile + 个性化指引) → synthesis (Synthesis 指引) → alpha (Alpha 指引)
+- `compile_deep_report()`: 报告开头增加「0. 公司画像」section
+- Shell: Phase 0b 新增第 5 个并行 profiler agent (sonnet, ~$1, 每 ticker +3%)
+- 3 new files + 3 modified, +580 lines, 23 new tests, 921 total pass
