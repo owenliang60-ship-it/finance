@@ -83,19 +83,19 @@ class TestDebatePromptStructure:
 
     def test_default_two_rounds(self):
         prompt = _basic_prompt(rounds=2)
-        assert "Round 1" in prompt
-        assert "Round 2" in prompt
+        assert "交换 1/2" in prompt
+        assert "交换 2/2" in prompt
 
     def test_single_round(self):
         prompt = _basic_prompt(rounds=1)
-        assert "Round 1" in prompt
-        assert "Round 2" not in prompt
+        assert "交换 1/1" in prompt
+        assert "交换 2/" not in prompt
 
     def test_three_rounds(self):
         prompt = _basic_prompt(rounds=3)
-        assert "Round 1" in prompt
-        assert "Round 2" in prompt
-        assert "Round 3" in prompt
+        assert "交换 1/3" in prompt
+        assert "交换 2/3" in prompt
+        assert "交换 3/3" in prompt
 
     def test_referee_synthesis(self):
         """Prompt includes referee synthesis section."""

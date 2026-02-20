@@ -34,8 +34,10 @@
 | Pool Cleanup (7 new tests, 651 total) | 2026-02-15 | cleanup |
 | Data Guardian (27 new tests, 678 total) | 2026-02-15 | +1,157 |
 | Theme Engine P2 (40 new tests, 718 total) | 2026-02-15 | +1,493 |
-| Alpha Debate + Agent Memory (57 new tests, 775 total) | 2026-02-20 | +1,800 |
-| **当前** | 2026-02-20 | **~170 files, 775 tests** |
+| RS Backtest Engine (69 new tests, 787 total) | 2026-02-16 | +3,143 |
+| Factor Study Framework (51 new tests, 838 total) | 2026-02-16 | +3,769 |
+| Alpha Debate + Agent Memory (60 new tests, 898 total) | 2026-02-20 | +1,800 |
+| **当前** | 2026-02-20 | **~175 files, 898 tests** |
 
 ---
 
@@ -157,6 +159,23 @@
 - 7 Section 终端报告 + JSON 存档 (data/scans/theme_*.json)
 - `pool_manager.py`: `_get_non_screener_stocks()` 保留 analysis + attention 源
 - 4 files changed + 3 new files, +1493 lines, 40 new tests, 718 total pass
+
+### RS Backtest Engine (DONE 2026-02-16)
+- 策略回测引擎: RS 排名 → Top-N 选股 → 等权/市值加权 → 定期再平衡 → NAV 跟踪
+- BacktestEngine + PortfolioState + Rebalancer + BacktestMetrics (Sharpe/MDD/Calmar)
+- 参数优化器 + HTML 报告 (暗色主题 + Chart.js)
+- 美股 + 币圈双适配器 (USStocksAdapter / CryptoAdapter)
+- 11 files +3143 lines, 69 new tests, 787 total pass
+
+### Factor Study Framework (DONE 2026-02-16)
+- 通用因子有效性研究: 任意因子插入 → 双轨分析 (IC + 事件研究)
+- Track 1: Spearman IC → IC_IR → 分位数单调性 → IC 衰减曲线
+- Track 2: 4 信号类型 (threshold/cross_up/cross_down/sustained) → t-test
+- 8 因子适配器 (RS_B/C, PMARP, RVOL, DV_Accel, RVOL_Sustained, Crypto_RS_B/C)
+- 参数网格扫描 + HTML 报告 (Chart.js) + CSV 导出
+- CLI: `scripts/run_factor_study.py --market us_stocks --factor RS_Rating_B`
+- 10 files +3769 lines, 51 new tests, 838 total pass
+- 币圈实测结论: RS_C cross_down_5 at 3d 有显著均值回归 (+2.39%, t=14.85)
 
 ---
 

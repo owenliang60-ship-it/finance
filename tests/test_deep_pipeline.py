@@ -950,8 +950,8 @@ class TestBuildAlphaDebatePrompt:
         from terminal.deep_pipeline import build_alpha_debate_prompt
 
         prompt = build_alpha_debate_prompt(tmp_path, "TEST", rounds=2)
-        assert "Round 1" in prompt
-        assert "Round 2" in prompt
+        assert "交换 1/2" in prompt
+        assert "交换 2/2" in prompt
 
 
 class TestWriteAgentPromptsDebate:
