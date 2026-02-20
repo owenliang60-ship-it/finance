@@ -36,8 +36,8 @@
 | Theme Engine P2 (40 new tests, 718 total) | 2026-02-15 | +1,493 |
 | RS Backtest Engine (69 new tests, 787 total) | 2026-02-16 | +3,143 |
 | Factor Study Framework (51 new tests, 838 total) | 2026-02-16 | +3,769 |
-| Alpha Debate + Agent Memory (57 new tests, 795 total) | 2026-02-20 | +1,800 |
-| **当前** | 2026-02-20 | **~175 files, 795 tests** |
+| Alpha Debate + Agent Memory (60 new tests, 898 total) | 2026-02-20 | +1,800 |
+| **当前** | 2026-02-20 | **~175 files, 898 tests** |
 
 ---
 
