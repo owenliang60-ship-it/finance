@@ -9,7 +9,7 @@
 #   ./scripts/auto_deep_analyze.sh --skip-heptabase AAPL # 跳过 Heptabase 同步
 #   ./scripts/auto_deep_analyze.sh --skip-db AAPL       # 跳过 DB 存储
 #
-# 每只股票 ~25-30 分钟，13 个独立 claude -p 调用
+# 每只股票 ~25-30 分钟，14 个独立 claude -p 调用
 # 使用 deep_analyze_ticker() 预生成的同一套 prompt 文件，质量与手动一致
 #
 set -euo pipefail
@@ -97,7 +97,7 @@ echo "  Heptabase:  $(if $SKIP_HEPTABASE; then echo "跳过"; else echo "同步"
 echo "  DB Save:    $(if $SKIP_DB; then echo "跳过"; else echo "存储"; fi)"
 echo "  日志目录:   $LOG_DIR"
 echo ""
-echo "  Pipeline: Phase 0 (setup+research) → Phase 1 (5 lens) →"
+echo "  Pipeline: Phase 0a (setup) → Phase 0b (research+profiler) → Phase 1 (5 lens) →"
 echo "            Phase 2 (synthesis) → Phase 3 (alpha) → Phase 4 (compile+save)"
 echo "═══════════════════════════════════════════════════════"
 echo ""
@@ -105,8 +105,8 @@ echo ""
 if $DRY_RUN; then
     echo "[DRY RUN] 以上为计划，未执行任何分析。"
     echo ""
-    echo "每只股票将执行 13 个 claude -p 调用:"
-    echo "  Phase 0b: 4× research agents (parallel, sonnet, \$1/ea)"
+    echo "每只股票将执行 14 个 claude -p 调用:"
+    echo "  Phase 0b: 4× research agents + 1× profiler (parallel, sonnet, \$1/ea)"
     echo "  Phase 1:  5× lens agents (parallel, opus, \$3/ea)"
     echo "  Phase 2:  1× synthesis agent (opus, \$5)"
     echo "  Phase 3:  1× alpha agent (opus, \$5)"
@@ -221,6 +221,7 @@ batch = {
     'symbol': setup['symbol'],
     'research_dir': setup['research_dir'],
     'research_queries': setup['research_queries'],
+    'profiler_prompt_path': setup.get('profiler_prompt_path', ''),
     'lens_prompt_paths': setup['lens_prompt_paths'],
     'gemini_prompt_path': setup['gemini_prompt_path'],
     'synthesis_prompt_path': setup['synthesis_prompt_path'],
@@ -259,7 +260,8 @@ print(json.dumps(batch))
         lens_output_files+=("$loutput")
     done
 
-    local gemini_prompt_path synthesis_prompt_path alpha_prompt_path
+    local profiler_prompt_path gemini_prompt_path synthesis_prompt_path alpha_prompt_path
+    profiler_prompt_path=$(echo "$setup_json" | "$VENV_PYTHON" -c "import json,sys; d=json.load(sys.stdin); print(d.get('profiler_prompt_path',''))")
     gemini_prompt_path=$(echo "$setup_json" | "$VENV_PYTHON" -c "import json,sys; d=json.load(sys.stdin); print(d['gemini_prompt_path'])")
     synthesis_prompt_path=$(echo "$setup_json" | "$VENV_PYTHON" -c "import json,sys; d=json.load(sys.stdin); print(d['synthesis_prompt_path'])")
     alpha_prompt_path=$(echo "$setup_json" | "$VENV_PYTHON" -c "import json,sys; d=json.load(sys.stdin); print(d['alpha_prompt_path'])")
@@ -270,8 +272,8 @@ print(json.dumps(batch))
     q_competitive=$(echo "$setup_json" | "$VENV_PYTHON" -c "import json,sys; d=json.load(sys.stdin); print(d['research_queries']['competitive'])")
     q_street=$(echo "$setup_json" | "$VENV_PYTHON" -c "import json,sys; d=json.load(sys.stdin); print(d['research_queries']['street'])")
 
-    # ─── Phase 0b: Research Agents (parallel) ─────────
-    log "  [$ticker] Phase 0b: 4 research agents 启动 (parallel)..."
+    # ─── Phase 0b: Research + Profiler Agents (parallel) ─────────
+    log "  [$ticker] Phase 0b: 4 research agents + 1 profiler 启动 (parallel)..."
 
     # Earnings agent
     run_agent "research-earnings" "sonnet" 1 \
@@ -297,14 +299,29 @@ print(json.dumps(batch))
         "$LOG_DIR/${BATCH_ID}_${ticker}_gemini.log" &
     local pid_gemini=$!
 
-    # Wait for research agents (timeout 8 min)
+    # Company Profiler agent (parallel with research agents)
+    local pid_profiler=""
+    if [[ -n "$profiler_prompt_path" ]] && [[ -f "$profiler_prompt_path" ]]; then
+        run_agent_from_file "profiler" "sonnet" 1 \
+            "$profiler_prompt_path" \
+            "$LOG_DIR/${BATCH_ID}_${ticker}_profiler.log" &
+        pid_profiler=$!
+    fi
+
+    # Wait for research + profiler agents (timeout 8 min)
     local research_timeout=480
     local research_start=$(date +%s)
     local research_done=false
 
+    # Build PID list (profiler may be empty)
+    local all_phase0b_pids="$pid_earnings $pid_competitive $pid_street $pid_gemini"
+    if [[ -n "$pid_profiler" ]]; then
+        all_phase0b_pids="$all_phase0b_pids $pid_profiler"
+    fi
+
     while true; do
         local all_done=true
-        for pid in $pid_earnings $pid_competitive $pid_street $pid_gemini; do
+        for pid in $all_phase0b_pids; do
             if kill -0 "$pid" 2>/dev/null; then
                 all_done=false
                 break
@@ -319,7 +336,7 @@ print(json.dumps(batch))
         local elapsed=$(( $(date +%s) - research_start ))
         if [[ "$elapsed" -ge "$research_timeout" ]]; then
             log "  [$ticker] ⚠️ Research timeout (${research_timeout}s) — killing remaining agents"
-            for pid in $pid_earnings $pid_competitive $pid_street $pid_gemini; do
+            for pid in $all_phase0b_pids; do
                 kill "$pid" 2>/dev/null || true
             done
             break
@@ -335,7 +352,19 @@ print(json.dumps(batch))
             research_ok=$((research_ok + 1))
         fi
     done
-    log "  [$ticker] Phase 0b 完成 — $research_ok/4 research files"
+
+    # Check profiler output
+    local profiler_ok="N/A"
+    if [[ -n "$pid_profiler" ]]; then
+        if check_file_quality "$rd/company_profile.md" 800; then
+            profiler_ok="✓"
+        else
+            profiler_ok="✗"
+            log "  [$ticker] ⚠️ company_profile.md 缺失或过短 (<800 chars)"
+        fi
+    fi
+
+    log "  [$ticker] Phase 0b 完成 — $research_ok/4 research files, profiler: $profiler_ok"
 
     # ─── Phase 1: Five Lens Analysis (parallel) ───────
     log "  [$ticker] Phase 1: 5 lens agents 启动 (parallel)..."

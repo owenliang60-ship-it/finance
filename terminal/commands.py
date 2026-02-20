@@ -218,6 +218,7 @@ def deep_analyze_ticker(
         get_research_dir,
         write_data_context,
         prepare_research_queries,
+        build_profiler_prompt,
         build_lens_agent_prompt,
         build_synthesis_agent_prompt,
         build_alpha_agent_prompt,
@@ -249,6 +250,9 @@ def deep_analyze_ticker(
         sector=info.get("sector", ""),
         industry=info.get("industry", ""),
     )
+
+    # 3b. Build profiler prompt
+    profiler_prompt = build_profiler_prompt(research_dir, ctx_path)
 
     # 4. Build all prompts (in memory temporarily)
     lens_prompts = prepare_lens_prompts(symbol, data_pkg)
@@ -315,6 +319,7 @@ def deep_analyze_ticker(
         synthesis_prompt=synthesis_prompt,
         alpha_prompt=alpha_prompt,
         alpha_debate_prompt=alpha_debate_prompt,
+        profiler_prompt=profiler_prompt,
     )
     result.update(prompt_paths)
 

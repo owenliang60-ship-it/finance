@@ -79,6 +79,34 @@ def _slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
+def build_profiler_prompt(research_dir: Path, data_context_path: Path) -> str:
+    """Build a self-contained prompt for the Company Profiler agent.
+
+    Reads data_context.md at build time and embeds it directly into the
+    meta-prompt, so the agent receives real data — no placeholder substitution.
+
+    Args:
+        research_dir: Path to research directory
+        data_context_path: Path to data_context.md
+
+    Returns:
+        Complete prompt string for the profiler agent
+    """
+    from knowledge.meta.company_profiler import generate_profiler_prompt
+
+    data_context = data_context_path.read_text(encoding="utf-8")
+    output_path = research_dir / "company_profile.md"
+
+    profiler_instructions = generate_profiler_prompt(data_context)
+
+    return f"""{profiler_instructions}
+
+## 输出指令
+
+将完整的公司画像写入：`{output_path}`
+"""
+
+
 def build_lens_agent_prompt(
     lens_dict: Dict[str, str],
     research_dir: Path,
@@ -105,12 +133,15 @@ def build_lens_agent_prompt(
 ## 第一步：阅读上下文文件
 
 阅读以下文件了解公司和市场背景：
+- `{research_dir}/company_profile.md` — 公司画像与个性化分析指引（**最重要，请先读**）
 - `{research_dir}/data_context.md` — 财务数据、比率、技术指标、宏观环境
 - `{research_dir}/earnings.md` — 最新财报要点、管理层评论、指引
 - `{research_dir}/competitive.md` — 竞争格局、同行对比
 - `{research_dir}/street.md` — 分析师共识、目标价、多空争论
 
 文件缺失或为空则跳过，用已有数据继续。
+
+**关键要求**：company_profile.md 中有针对 **{lens_dict["lens_name"]}** 透镜的个性化指引（适用度、焦点调整、弱化/忽略、补充关注），请严格遵循这些指引调整你的分析重点。
 
 ## 第二步：执行分析
 
@@ -156,6 +187,9 @@ def build_synthesis_agent_prompt(research_dir: Path, symbol: str) -> str:
 
 **仔细、完整地**阅读以下文件（缺失则跳过）：
 
+**公司画像（最先读）：**
+- `{rd}/company_profile.md` — 公司原型、价值驱动因素、各透镜个性化指引
+
 **数据上下文：**
 - `{rd}/data_context.md` — 财务数据、比率、技术指标、宏观环境
 
@@ -172,6 +206,8 @@ def build_synthesis_agent_prompt(research_dir: Path, symbol: str) -> str:
 - `{rd}/street.md` — 华尔街共识
 
 **关键要求**：五维透镜分析是独立分析师从不同视角得出的判断，你必须充分理解每个透镜的核心论点、评级和触杀条件，在辩论和备忘录中交叉引用、对比和综合这些观点。不要泛泛概括，要具体引用各透镜的关键判断和分歧。
+
+**参考公司画像**：company_profile.md 中的「Synthesis 指引」章节提供了针对该公司类型的综合研判建议（估值方法选择、同类参照等），请在分析中遵循。
 
 ## 第二步：核心辩论 (debate.md)
 
@@ -339,6 +375,7 @@ def build_alpha_agent_prompt(
 ## 第一步：阅读基础材料
 
 阅读以下文件：
+- `{rd}/company_profile.md` — 公司画像（含 Alpha 指引，优先读）
 - `{rd}/data_context.md` — 财务数据、宏观环境
 - `{rd}/debate.md` — L1 核心辩论和最终判定
 - `{rd}/memo.md` — L1 投资备忘录
@@ -350,6 +387,8 @@ def build_alpha_agent_prompt(
 - **memo_summary**: memo.md 中的执行摘要段落
 - **l1_key_forces**: memo.md 中的关键力量列表
 - **data_context**: data_context.md 全文
+
+**参考公司画像**：company_profile.md 中的「Alpha 指引」章节提供了红队攻击切入点、周期定位考量和赌注结构建议，请在分析中遵循。
 
 ## 第二步：红队试炼 (alpha_red_team.md)
 
@@ -441,6 +480,7 @@ def write_agent_prompts(
     synthesis_prompt: str,
     alpha_prompt: str,
     alpha_debate_prompt: str = "",
+    profiler_prompt: str = "",
 ) -> Dict[str, Any]:
     """Write all agent prompts to files, return path references.
 
@@ -454,9 +494,11 @@ def write_agent_prompts(
         synthesis_prompt: Phase 2 synthesis agent prompt string
         alpha_prompt: Phase 3 alpha agent prompt string
         alpha_debate_prompt: Phase 4 alpha debate agent prompt string
+        profiler_prompt: Phase 0.5 company profiler prompt string
 
     Returns:
         Dict with prompt file paths:
+        - profiler_prompt_path: str (empty string if no profiler prompt)
         - lens_prompt_paths: [{lens_name, prompt_path, output_path}]
         - gemini_prompt_path: str
         - synthesis_prompt_path: str
@@ -465,6 +507,13 @@ def write_agent_prompts(
     """
     prompts_dir = research_dir / "prompts"
     prompts_dir.mkdir(exist_ok=True)
+
+    # Profiler prompt
+    profiler_path_str = ""
+    if profiler_prompt:
+        profiler_path = prompts_dir / "profiler.txt"
+        profiler_path.write_text(profiler_prompt, encoding="utf-8")
+        profiler_path_str = str(profiler_path)
 
     # Lens prompts
     lens_paths = []
@@ -497,12 +546,17 @@ def write_agent_prompts(
         debate_path.write_text(alpha_debate_prompt, encoding="utf-8")
         alpha_debate_path_str = str(debate_path)
 
-    total = len(lens_paths) + 3 + (1 if alpha_debate_prompt else 0)
+    total = (
+        len(lens_paths) + 3
+        + (1 if alpha_debate_prompt else 0)
+        + (1 if profiler_prompt else 0)
+    )
     logger.info(
         f"Wrote {total} prompt files to {prompts_dir}"
     )
 
     return {
+        "profiler_prompt_path": profiler_path_str,
         "lens_prompt_paths": lens_paths,
         "gemini_prompt_path": str(gemini_path),
         "synthesis_prompt_path": str(synthesis_path),
@@ -864,6 +918,7 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
     date = datetime.now().strftime("%Y-%m-%d")
 
     # Read all sections (research files excluded from final report — they serve as lens input only)
+    company_profile = _read_research_file(research_dir, "company_profile.md")
     gemini = _read_research_file(research_dir, "gemini_contrarian.md")
     lens_qc = _read_research_file(research_dir, "lens_quality_compounder.md")
     lens_ig = _read_research_file(research_dir, "lens_imaginative_growth.md")
@@ -886,6 +941,12 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
         f"---",
         f"",
     ]
+
+    # 0. 公司画像
+    if company_profile:
+        sections.append("## 0. 公司画像")
+        sections.append(company_profile)
+        sections.append("")
 
     # I. 五维透镜分析
     sections.append("## I. 五维透镜分析")
