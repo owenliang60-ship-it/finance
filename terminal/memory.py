@@ -137,7 +137,7 @@ def extract_situation_summary(
     try:
         source = debate if debate else bet
         if source:
-            m_cm = re.search(r"conviction_modifier[：:]\s*([\d.]+)", source)
+            m_cm = re.search(r"(?:debate_|final_)?conviction_modifier[：:]\s*([\d.]+)", source)
             m_action = re.search(
                 r"(?:final_action|最终行动|行动建议)[：:]\s*(执行|搁置|放弃)",
                 source,

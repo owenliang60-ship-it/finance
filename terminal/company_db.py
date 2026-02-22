@@ -43,10 +43,12 @@ def _read_json(path: Path, default: Any = None) -> Any:
 
 
 def _write_json(path: Path, data: Any) -> None:
-    """Write JSON atomically."""
+    """Write JSON atomically (write to temp file, then rename)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
+    tmp = path.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    tmp.replace(path)
 
 
 def _append_jsonl(path: Path, record: dict) -> None:

@@ -25,6 +25,8 @@ _COMPANIES_DIR = Path(__file__).parent.parent / "data" / "companies"
 def get_research_dir(symbol: str) -> Path:
     """Get (or create) the research subdirectory for a ticker."""
     symbol = symbol.upper()
+    if not re.match(r"^[A-Z0-9.\-]{1,10}$", symbol):
+        raise ValueError(f"Invalid ticker symbol: {symbol!r}")
     d = _COMPANIES_DIR / symbol / "research"
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -623,7 +625,7 @@ def _extract_summary_from_sections(
                 in_summary = True
                 continue
             if in_summary:
-                if line.startswith("##") or line.startswith("**") and summary_count > 2:
+                if (line.startswith("##") or line.startswith("**")) and summary_count > 2:
                     break
                 lines.append(line)
                 summary_count += 1
@@ -788,7 +790,7 @@ def extract_structured_data(symbol: str, research_dir: Path) -> Dict[str, Any]:
             except (ValueError, TypeError):
                 data["oprms_position_pct"] = None
 
-            # Extract verdict
+            # Extract verdict (now also checks 投资桶 as fallback)
             verdict = _extract_oprms_verdict(oprms)
             if verdict:
                 data["verdict"] = verdict
@@ -797,6 +799,9 @@ def extract_structured_data(symbol: str, research_dir: Path) -> Dict[str, Any]:
             m_bucket = re.search(r"\*\*投资桶\*\*[：:]\s*(.+)", oprms)
             if m_bucket:
                 data["investment_bucket"] = m_bucket.group(1).strip()
+                # Use bucket as verdict fallback if verdict still empty
+                if not data.get("verdict"):
+                    data["verdict"] = data["investment_bucket"]
 
             # Evidence list
             evidence = []
