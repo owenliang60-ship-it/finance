@@ -101,7 +101,7 @@ class TestDebatePromptStructure:
         """Prompt includes referee synthesis section."""
         prompt = _basic_prompt()
         assert "裁判" in prompt
-        assert "final_conviction_modifier" in prompt
+        assert "debate_conviction_modifier" in prompt
         assert "final_action" in prompt
 
     def test_conviction_modifier_range(self):

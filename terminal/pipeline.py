@@ -225,16 +225,16 @@ class DataPackage:
             lines = ["### Recent Insider Activity"]
             sorted_trades = sorted(
                 self.insider_trades,
-                key=lambda t: abs(t.get("securitiesTransacted", 0) * (t.get("price", 0) or 0)),
+                key=lambda t: abs((t.get("securitiesTransacted") or 0) * (t.get("price") or 0)),
                 reverse=True,
             )[:5]
             for t in sorted_trades:
                 date = t.get("filingDate", t.get("transactionDate", "N/A"))
                 name = t.get("reportingName", "Unknown")
                 tx_type = t.get("transactionType", "N/A")
-                shares = t.get("securitiesTransacted", 0)
-                price = t.get("price", 0)
-                value = abs(shares * (price or 0))
+                shares = t.get("securitiesTransacted") or 0
+                price = t.get("price") or 0
+                value = abs(shares * price)
                 value_str = f"${value:,.0f}" if value else "N/A"
                 lines.append(f"- {date}: {name} — {tx_type} {abs(shares):,.0f} shares @ ${price:.2f} ({value_str})")
             sections.append("\n".join(lines))

@@ -525,12 +525,15 @@ class CompanyStore:
         )
 
         for cond in conditions:
+            desc = cond.get("description", "")
+            if not desc:
+                continue
             conn.execute(
                 """
                 INSERT INTO kill_conditions (symbol, description, source_lens, is_active, created_at)
                 VALUES (?, ?, ?, 1, ?)
                 """,
-                (symbol, cond["description"], cond.get("source_lens", ""), now),
+                (symbol, desc, cond.get("source_lens", ""), now),
             )
         conn.commit()
         return len(conditions)

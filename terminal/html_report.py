@@ -742,76 +742,156 @@ def _extract_one_liner(text: str) -> Optional[str]:
 def _extract_rating_line(text: str) -> Optional[Dict[str, str]]:
     """Extract star/verdict/IRR from lens rating section.
 
-    Pattern: **星级：X / 5** | **判定：BUY** | **目标 IRR：X%**
+    Handles multiple LLM output formats:
+    1. Pipe-delimited: **星级：X / 5** | **判定：BUY** | **目标 IRR：X%**
+    2. Star-emoji: **★★★★☆ (4/5) | BUY | IRR 14%**
+    3. Table row: | 星级 | **★★★★☆ (4/5)** |
     """
+    # Format 1: pipe-delimited bold labels (supports multi-word verdicts)
     m = re.search(
         r"\*\*星级[：:]\s*([\d.]+)\s*/\s*5\*\*"
-        r"\s*\|\s*\*\*判定[：:]\s*(\w+)\*\*"
+        r"\s*\|\s*\*\*判定[：:]\s*([^*]+?)\*\*"
         r"(?:\s*\|\s*\*\*目标\s*IRR[：:]\s*([^*]+)\*\*)?",
         text,
     )
     if m:
         return {
             "stars": m.group(1),
-            "verdict": m.group(2),
+            "verdict": m.group(2).strip(),
             "irr": m.group(3).strip() if m.group(3) else "",
+        }
+    # Format 2: star-emoji inline ★★★★☆ (4/5) — BUY or | BUY
+    m = re.search(
+        r"[★☆]{3,}\s*\(?([\d.]+)/5\)?"
+        r"\s*[|—\-]\s*\*?\*?([A-Z][A-Z /()a-z]+?)\*?\*?"
+        r"(?:\s*[|—\-]\s*(?:目标\s*)?IRR[：:]\s*([^*\n]+))?",
+        text,
+    )
+    if m:
+        return {
+            "stars": m.group(1),
+            "verdict": m.group(2).strip(),
+            "irr": m.group(3).strip() if m.group(3) else "",
+        }
+    # Format 3: table row | 星级 | **★...X/5** |
+    m = re.search(r"\|\s*星级\s*\|\s*\*\*[★☆]*([\d.]+)\s*/?\s*5\)?\*\*\s*\|", text)
+    if m:
+        v = re.search(r"\|\s*判定\s*\|\s*\*\*([^*|]+)\*\*\s*\|", text)
+        irr_m = re.search(r"\|\s*(?:目标\s*)?IRR\s*\|\s*\*\*([^*|]+)\*\*\s*\|", text)
+        return {
+            "stars": m.group(1),
+            "verdict": v.group(1).strip() if v else "",
+            "irr": irr_m.group(1).strip() if irr_m else "",
         }
     return None
 
 
 def _extract_oprms_dna(text: str) -> Dict[str, str]:
-    """Extract DNA rating from OPRMS section."""
+    """Extract DNA rating from OPRMS section.
+
+    Handles formats:
+    1. Current: **资产基因 (DNA)**: A — 猛将
+    2. Legacy:  **评级: B — 黑马**
+    """
     result = {"grade": "?", "name": "", "cap": "?%"}
-    m = re.search(r"\*\*评级:\s*([SABC])\s*[—-]\s*(.+?)\*\*", text)
+    # Format 1 (current): **资产基因 (DNA)**: A — 猛将
+    m = re.search(r"\*\*资产基因\s*\(DNA\)\*\*[：:]\s*([SABC])\s*[—-]\s*(.+?)(?:\n|$)", text)
     if m:
         result["grade"] = m.group(1)
         result["name"] = m.group(2).strip()
-    m2 = re.search(r"DNA\s*仓位上限[：:]\s*(\d+%)", text)
+    # Format 2 (legacy): **评级: B — 黑马**
+    if result["grade"] == "?":
+        m = re.search(r"\*\*评级[：:]\s*([SABC])\s*[—-]\s*(.+?)\*\*", text)
+        if m:
+            result["grade"] = m.group(1)
+            result["name"] = m.group(2).strip()
+    # Cap: "- 仓位上限: 7%" or "DNA 仓位上限：7%"
+    m2 = re.search(r"仓位上限[：:]\s*(\d+(?:-\d+)?%)", text)
     if m2:
         result["cap"] = m2.group(1)
     return result
 
 
 def _extract_oprms_timing(text: str) -> Dict[str, str]:
-    """Extract timing rating from OPRMS section."""
+    """Extract timing rating from OPRMS section.
+
+    Handles formats:
+    1. Current: **时机系数 (Timing)**: B — 正常波动  /  - 系数: 0.5
+    2. Legacy:  ## 时机系数 section with **评级: B — ...** and **系数: 0.5**
+    """
     result = {"grade": "?", "name": "", "coeff": "?"}
-    # Find Timing section
+    # Find Timing section (if exists as H2)
     timing_section = ""
     m = re.search(r"## 时机系数.*?\n(.*?)(?=\n## |\Z)", text, re.DOTALL)
     if m:
         timing_section = m.group(1)
-    m2 = re.search(r"\*\*评级:\s*([SABC])\s*[—-]\s*(.+?)\*\*", timing_section)
-    if m2:
-        result["grade"] = m2.group(1)
-        result["name"] = m2.group(2).strip()
-    m3 = re.search(r"\*\*系数[：:]\s*([\d.]+)\*\*", timing_section)
+    # Format 1 (current): **时机系数 (Timing)**: B — 正常波动
+    m1 = re.search(
+        r"\*\*时机系数\s*\(Timing\)\*\*[：:]\s*([SABC])\s*[—-]\s*(.+?)(?:\n|$)",
+        text,
+    )
+    if m1:
+        result["grade"] = m1.group(1)
+        result["name"] = m1.group(2).strip()
+    # Format 2 (legacy): **评级: B — 正常波动** inside timing section
+    if result["grade"] == "?" and timing_section:
+        m2 = re.search(r"\*\*评级[：:]\s*([SABC])\s*[—-]\s*(.+?)\*\*", timing_section)
+        if m2:
+            result["grade"] = m2.group(1)
+            result["name"] = m2.group(2).strip()
+    # Coefficient: "- 系数: 0.5" (plain) or "**系数: 0.5**" (bold)
+    search_text = timing_section if timing_section else text
+    m3 = re.search(r"系数[：:]\s*([\d.]+)", search_text)
     if m3:
         result["coeff"] = m3.group(1)
     return result
 
 
 def _extract_oprms_position(text: str) -> Tuple[Optional[str], Optional[str]]:
-    """Extract final position from OPRMS table.
+    """Extract final position from OPRMS section.
 
-    Returns (display_value, formula). Display_value is just the result
-    percentage; formula is the full calculation string.
+    Returns (display_value, formula). Handles:
+    1. Table: | **最终仓位** | **formula = result** |
+    2. Inline: **最终仓位**: formula = **result**
+    3. Plain: **最终仓位**: formula = result
     """
+    # Format 1 (table): | **最终仓位** | **formula = result** |
     m = re.search(r"\*\*最终仓位\*\*\s*\|\s*\*\*(.+?)\*\*", text)
     if m:
         raw = m.group(1).strip()
-        # Try to split on "=" to get just the result
         if "=" in raw:
             parts = raw.split("=")
             return parts[-1].strip(), parts[0].strip()
+        return raw, None
+    # Format 2/3 (inline): **最终仓位**: formula = result
+    m = re.search(r"\*\*最终仓位\*\*[：:]\s*(.+?)(?:\n|$)", text)
+    if m:
+        raw = m.group(1).strip()
+        eq_m = re.search(r"=\s*\*?\*?([\d.]+%?)\*?\*?", raw)
+        if eq_m:
+            return eq_m.group(1).strip("*"), raw[:raw.rfind("=")].strip()
         return raw, None
     return None, None
 
 
 def _extract_oprms_verdict(text: str) -> Optional[str]:
-    """Extract overall verdict from OPRMS."""
+    """Extract overall verdict from OPRMS.
+
+    Handles:
+    1. Table: | Verdict | **BUY** |
+    2. Chinese: **投资桶**: Long-term Compounder
+    """
+    # Format 1 (English table)
     m = re.search(r"Verdict\s*\|\s*\*\*(.+?)\*\*", text)
     if m:
         return m.group(1).strip()
+    # Format 2 (Chinese): **投资桶**: Long-term Compounder / Watch / Pass
+    m = re.search(
+        r"\*\*投资桶\*\*[：:]\s*(.+?)(?:\n|$)",
+        text,
+    )
+    if m:
+        return m.group(1).strip().strip("*")
     return None
 
 
@@ -826,13 +906,25 @@ def _extract_conviction_modifier(text: str) -> Optional[str]:
 def _extract_debate_verdict(text: str) -> Optional[str]:
     """Extract overall verdict from debate.
 
-    Handles three formats:
-    - Chinese A: ## 总体判定\\n\\n**VERDICT**
-    - Chinese B: ## 总裁决\\n\\n**VERDICT**
+    Handles formats:
+    - H2 heading: ## 总体判定\\n\\n**VERDICT**
+    - H2 heading: ## 总裁决\\n\\n**VERDICT**
+    - Bold inline: **总裁决**: VERDICT  or  **总裁决**：VERDICT
     - English:   ## Overall Verdict: VERDICT
     """
-    # Chinese: ## 总体判定 / ## 总裁决 followed by **verdict**
+    # Chinese H2: ## 总体判定 / ## 总裁决 followed by **verdict**
     m = re.search(r"##\s*(?:总体判定|总裁决)\s*\n+\*\*(.+?)\*\*", text)
+    if m:
+        return m.group(1).strip()
+    # Bold-inline: **总裁决**: VERDICT or **总体判定**: VERDICT
+    m = re.search(
+        r"\*\*(?:总体判定|总裁决)\*\*[：:]\s*(.+?)(?:\n|$)",
+        text,
+    )
+    if m:
+        return m.group(1).strip().strip("*")
+    # Variant: 总裁决/总体判定 (without bold) followed by bold content
+    m = re.search(r"(?:总体判定|总裁决)[：:]\s*\*\*(.+?)\*\*", text)
     if m:
         return m.group(1).strip()
     # English: ## Overall Verdict: verdict text (in heading itself)
