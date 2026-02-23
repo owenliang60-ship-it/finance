@@ -114,8 +114,15 @@ def _apply_filters(stocks: List[Dict]) -> List[Dict]:
 
 
 def _get_non_screener_stocks(stocks: List[Dict]) -> List[Dict]:
-    """保留非 screener 来源的股票 (source=analysis|attention)，这些不会被池刷新删除。"""
-    return [s for s in stocks if s.get("source") in ("analysis", "attention")]
+    """保留非 screener 来源的股票，这些不会被池刷新删除。
+
+    所有带 source 标记（且非 screener）的股票永久保留，包括：
+    - analysis: 深度分析纳入
+    - attention: 周报/注意力引擎纳入
+    - manual: 用户手动加入（如 ETF 成分股）
+    - 未来新增的任何非 screener 来源
+    """
+    return [s for s in stocks if s.get("source") and s.get("source") != "screener"]
 
 
 # backward compat alias
@@ -368,6 +375,76 @@ def ensure_in_pool(symbol: str) -> Dict:
 
     logger.info(f"'{symbol}' ({new_entry['companyName']}) 已加入股票池 (source: analysis)")
     return new_entry
+
+
+def batch_add_to_pool(symbols: List[str], source: str = "manual", reason: str = "") -> Dict:
+    """
+    批量加入股票到池中（通过 FMP API 获取 profile）。
+
+    Args:
+        symbols: 股票代码列表
+        source: 来源标记（manual/analysis/attention 等，非 screener 均永久保留）
+        reason: 加入原因（记入历史）
+
+    Returns:
+        {"added": [...], "skipped": [...], "failed": [...]}
+    """
+    import time
+    from config.settings import API_CALL_INTERVAL
+
+    symbols = [s.upper().strip() for s in symbols]
+    stocks = load_universe()
+    existing = {s.get("symbol") for s in stocks}
+
+    result = {"added": [], "skipped": [], "failed": []}
+
+    for sym in symbols:
+        if sym in existing:
+            result["skipped"].append(sym)
+            continue
+
+        profile = fmp_client.get_profile(sym)
+        if not profile:
+            logger.warning(f"FMP API 未返回 '{sym}' 的 profile，跳过")
+            result["failed"].append(sym)
+            time.sleep(API_CALL_INTERVAL)
+            continue
+
+        entry = {
+            "symbol": sym,
+            "companyName": profile.get("companyName", ""),
+            "marketCap": profile.get("mktCap"),
+            "sector": profile.get("sector", ""),
+            "industry": profile.get("industry", ""),
+            "exchange": profile.get("exchangeShortName", profile.get("exchange", "")),
+            "country": profile.get("country", ""),
+            "source": source,
+            "added_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        stocks.append(entry)
+        existing.add(sym)
+        result["added"].append(sym)
+        logger.info(f"'{sym}' ({entry['companyName']}) 已加入 (source: {source})")
+        time.sleep(API_CALL_INTERVAL)
+
+    if result["added"]:
+        save_universe(stocks)
+
+        history = load_history()
+        history.append({
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "entered": result["added"],
+            "exited": [],
+            "total_count": len(stocks),
+            "reason": reason or f"batch-add ({source})",
+        })
+        save_history(history)
+
+    logger.info(
+        f"批量加入完成: added={len(result['added'])}, "
+        f"skipped={len(result['skipped'])}, failed={len(result['failed'])}"
+    )
+    return result
 
 
 def print_universe_summary():

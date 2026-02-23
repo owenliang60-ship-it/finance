@@ -218,6 +218,7 @@ def get_pool_expansion_stats() -> Dict:
         "screener": 0,
         "analysis": 0,
         "attention": 0,
+        "manual": 0,
         "unknown": 0,
     }
 
@@ -227,10 +228,12 @@ def get_pool_expansion_stats() -> Dict:
             stats["analysis"] += 1
         elif source == POOL_SOURCE_ATTENTION:
             stats["attention"] += 1
-        elif source == "screener":
+        elif source == "manual":
+            stats["manual"] += 1
+        elif source == "screener" or not source:
+            # 无 source 字段 = screener
             stats["screener"] += 1
         else:
-            # 默认（无 source 字段）= screener
-            stats["screener"] += 1
+            stats["unknown"] += 1
 
     return stats
