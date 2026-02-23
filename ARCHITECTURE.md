@@ -1,8 +1,8 @@
 # Architecture — Finance Workspace
 
-**未来资本 AI Trading Desk | Updated: 2026-02-15**
+**未来资本 AI Trading Desk | Updated: 2026-02-16**
 
-**Code Stats**: ~90+ Python files, 678 tests passing
+**Code Stats**: ~170+ Python files, 838 tests passing
 
 ---
 
@@ -131,13 +131,31 @@
 ║  │300 call/min│  │120 req/min │  │ +memo+scoring   │                  ║
 ║  └────────────┘  └────────────┘  └─────────────────┘                  ║
 ║                                                                        ║
+║  ════════════ BACKTEST 层 (回测研究, ~4,500 lines) ═══════════        ║
+║                                                                        ║
+║  ┌─────────── 策略回测引擎 ──────────┐ ┌─── 因子研究框架 ────────┐     ║
+║  │ engine.py (219L) 核心循环         │ │ protocol.py (65L) ABC   │     ║
+║  │ portfolio.py (197L) NAV跟踪       │ │ factors.py (310L) 8因子  │     ║
+║  │ metrics.py (231L) Sharpe/MDD/α/β  │ │ signals.py (112L) 4信号  │     ║
+║  │ rebalancer.py (144L) Top-N换仓    │ │ forward_returns.py (99L)│     ║
+║  │ sweep.py (148L) 参数扫描          │ │ ic_analysis.py (217L)   │     ║
+║  │ optimizer.py (380L) Walk-Forward  │ │ event_study.py (126L)   │     ║
+║  │ report.py (290L) HTML/CSV         │ │ sweep.py (169L) 参数网格│     ║
+║  │ config.py (152L) 含FactorStudy    │ │ runner.py (195L) 编排   │     ║
+║  │                                   │ │ report.py (389L) HTML   │     ║
+║  │ adapters/                         │ └────────────────────────┘     ║
+║  │  us_stocks.py (185L)              │                                ║
+║  │  crypto.py (200L)                 │ 双轨分析:                      ║
+║  │  crypto_rs.py (201L)              │  Track 1: IC (连续预测力)       ║
+║  └───────────────────────────────────┘  Track 2: 事件研究 (信号检验)   ║
+║                                                                        ║
 ║  ════════════ INFRA ═══════════════════════════════════════            ║
 ║                                                                        ║
 ║  ┌────────────┐  ┌────────────┐  ┌─────────────────┐                  ║
-║  │ Cloud      │  │ Tests      │  │ Heptabase       │                  ║
-║  │ aliyun cron│  │ 11 files   │  │ "未来资本" 白板   │                  ║
-║  │ price+scan │  │ 179 pass   │  │ 双向同步(planned)│                  ║
-║  │ daily 06:30│  │ 2,783 lines│  │                 │                  ║
+║  │ Cloud      │  │ Tests      │  │ Obsidian        │                  ║
+║  │ aliyun cron│  │ 20 files   │  │ Cards/ 分析摘要   │                  ║
+║  │ price+scan │  │ 838 pass   │  │ Journal/ 日志     │                  ║
+║  │ daily 06:30│  │ 4,445 lines│  │                 │                  ║
 ║  └────────────┘  └────────────┘  └─────────────────┘                  ║
 ║                                                                        ║
 ╚══════════════════════════════════════════════════════════════════════════╝
@@ -467,7 +485,114 @@ data/
 
 ---
 
-### Layer 6: Skeleton Modules (Built, Awaiting Activation)
+### Layer 6: Backtest Desk — ~4,500 lines
+
+**Location**: `backtest/` (20 files, 2 subsystems)
+
+两个独立但互补的框架，解决不同层次的问题：
+
+#### 框架 A: 策略回测引擎 (`backtest/`)
+
+**目的**: "这个策略赚不赚钱？" — 给定选股规则 + 换仓频率 → 模拟持仓 → 计算绩效
+
+```
+数据加载 → 逐日循环:
+  slice_to_date(t) → RS排名 → Top-N选股 → Rebalancer换仓
+  → PortfolioState更新(NAV/持仓/成本) → 下一日
+→ compute_metrics() → Sharpe/CAGR/MaxDD/α/β
+→ ParameterSweep → 参数网格扫描 → 最优组合
+→ WalkForwardOptimizer → 滚动窗口验证
+```
+
+| 文件 | 行数 | 职能 |
+|------|------|------|
+| `engine.py` | 219 | 回测核心循环（防前视: slice→rank→trade→next） |
+| `portfolio.py` | 197 | PortfolioState: NAV 跟踪、持仓管理、交易成本 |
+| `metrics.py` | 231 | 20+ 指标: Sharpe/Sortino/Calmar/α/β/IR/MaxDD |
+| `rebalancer.py` | 144 | Top-N 换仓 + sell_buffer 缓冲 |
+| `sweep.py` | 148 | 参数网格扫描 (rs_method × top_n × freq × buffer) |
+| `optimizer.py` | 380 | Walk-Forward 优化 (滚动训练/验证窗口) |
+| `report.py` | 290 | HTML 报告 (暗色主题 + Chart.js 净值曲线) |
+| `config.py` | 152 | BacktestConfig + FactorStudyConfig 配置类 |
+| `adapters/us_stocks.py` | 185 | 美股 CSV 加载 + 日期切片 |
+| `adapters/crypto.py` | 200 | 币安合约 CSV 加载 (兼容 timestamp/open_time) |
+| `adapters/crypto_rs.py` | 201 | 币圈 RS 纯计算 (B: Z-Score, C: Clenow, 短周期 7d/3d/1d) |
+
+**关键参数**:
+
+| 市场 | RS 方法 | Top-N | 换仓频率 | 成本 | 基准 |
+|------|---------|-------|----------|------|------|
+| 美股 | B/C | 5-20 | W/2W/M | 5bps | SPY |
+| 币圈 | B/C | 5-20 | D/3D/W | 4bps | BTCUSDT |
+
+#### 框架 B: 因子有效性研究 (`backtest/factor_study/`)
+
+**目的**: "这个因子有没有预测力？" — 先验证因子，再构建策略
+
+**方法论**: 不做交易模拟，直接统计检验
+
+```
+数据加载(一次) → 逐日切片(防前视) → 计算因子分数 → 积累 score_history
+                                                        │
+                                     ┌──────────────────┴──────────────────┐
+                                     ▼                                     ▼
+                              Track 1: IC 分析                      Track 2: 事件研究
+                              ──────────────                        ──────────────
+                              每天 Spearman(分数, 收益)              定义信号规则
+                              → IC 时间序列                          → 检测事件日期
+                              → Mean IC / IC_IR                     → 收集事件后收益
+                              → 分位数单调性                         → t-test (H0: mean=0)
+                              → IC 衰减曲线                          → hit rate / p-value
+```
+
+| 文件 | 行数 | 职能 |
+|------|------|------|
+| `protocol.py` | 65 | Factor ABC + FactorMeta (统一接口) |
+| `factors.py` | 310 | 8 个因子适配器 (RS_B/C × 美股/币圈, PMARP, RVOL, DV, RVOL_Sustained) |
+| `signals.py` | 112 | 4 种信号类型 (threshold / cross_up / cross_down / sustained) |
+| `forward_returns.py` | 99 | 前向收益矩阵 (评估用, 合法使用完整数据) |
+| `ic_analysis.py` | 217 | Track 1: IC / IC_IR / 分位数收益 / IC 衰减曲线 |
+| `event_study.py` | 126 | Track 2: 事件研究 (mean return / hit rate / t-stat / p-value) |
+| `sweep.py` | 169 | 每因子默认参数网格 + 自定义扫描 |
+| `runner.py` | 195 | 编排器 (数据加载→逐日计算→双轨分析) |
+| `report.py` | 389 | 文本 + HTML (IC 衰减曲线 + 分位数柱状图 + 事件统计表) + CSV |
+
+**已注册因子**:
+
+| 因子 | 分数含义 | 范围 | 方向 | 市场 |
+|------|---------|------|------|------|
+| RS_Rating_B | Z-Score 横截面动量排名 | 0-99 | 高=强 | 美股 |
+| RS_Rating_C | Clenow 回归动量排名 | 0-99 | 高=强 | 美股 |
+| Crypto_RS_B | Z-Score 短周期 (7d/3d/1d) | 0-99 | 高=强 | 币圈 |
+| Crypto_RS_C | Clenow 短周期 (7d/3d/1d) | 0-99 | 高=强 | 币圈 |
+| PMARP | 价格动量百分位 | 0-100 | 高=强 | 美股 |
+| RVOL | 相对成交量 (σ) | -5~10 | 高=强 | 美股 |
+| DV_Acceleration | 美元交易量 5d/20d 加速比 | 0-5 | 高=强 | 美股 |
+| RVOL_Sustained | 持续放量天数 | 0-30 | 高=强 | 美股 |
+
+**四种信号类型**:
+
+| 类型 | 规则 | 示例 |
+|------|------|------|
+| threshold | score > X | RS > 90 |
+| cross_up | 前期 ≤ X, 本期 > X | RS 从 85 突破 90 |
+| cross_down | 前期 ≥ X, 本期 < X | RS 跌破 20 |
+| sustained | 连续 N 期 > X (去重) | RS > 80 持续 5 周 |
+
+**两个框架的关系**:
+```
+因子研究 (Factor Study)          策略回测 (Backtest Engine)
+━━━━━━━━━━━━━━━━━━━              ━━━━━━━━━━━━━━━━━━━━━
+回答: 因子有没有预测力？           回答: 这个策略赚不赚钱？
+方法: IC + 事件研究               方法: 模拟持仓 + 绩效计算
+输出: p-value, IC_IR              输出: Sharpe, CAGR, MaxDD
+       ↓                                ↑
+  验证因子有效 ──────────────────→ 用有效因子构建策略
+```
+
+---
+
+### Layer 7: Skeleton Modules (Built, Awaiting Activation)
 
 | Module | Directory | Status |
 |--------|-----------|--------|

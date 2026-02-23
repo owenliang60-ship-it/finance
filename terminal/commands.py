@@ -176,18 +176,6 @@ def analyze_ticker(
                 f"Prepared {len(alpha_prompts)} alpha prompts"
             )
 
-        # Heptabase sync hint (full and alpha depth)
-        if depth in ("full", "alpha"):
-            result["heptabase_sync_ready"] = True
-            result["heptabase_sync_instructions"] = (
-                "HEPTABASE SYNC:\n"
-                "分析完成后，执行以下步骤同步到 Heptabase：\n"
-                f"1. 调用 terminal.heptabase_sync.prepare_heptabase_sync('{symbol}')\n"
-                "2. 用返回的 card_content 调用 mcp__heptabase__save_to_note_card\n"
-                "3. 用返回的 journal_entry 调用 mcp__heptabase__append_to_journal\n"
-                "4. 提醒用户将卡片从 main space 拖到「未来资本」白板"
-            )
-
     except Exception as e:
         # Log error before re-raising
         scratchpad.log_reasoning("error", f"Analysis failed: {str(e)}")

@@ -27,8 +27,7 @@ Create `.env` file in the workspace root:
 # Financial Modeling Prep API (required)
 FMP_API_KEY=your_api_key_here
 
-# Optional: Heptabase integration
-HEPTABASE_API_TOKEN=your_token_here
+# Optional: Obsidian MCP integration (configured in Claude Code settings)
 ```
 
 Get FMP API key at [financialmodelingprep.com](https://financialmodelingprep.com) (Starter plan: $22/mo).

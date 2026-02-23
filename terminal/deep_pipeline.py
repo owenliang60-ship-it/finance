@@ -1030,7 +1030,7 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
     output_path.write_text(report, encoding="utf-8")
     logger.info(f"Compiled deep report: {output_path} ({len(report)} chars)")
 
-    # Write report summary (~3KB) for Heptabase + user display
+    # Write report summary (~3KB) for user display
     summary = _extract_summary_from_sections(oprms, memo, debate, alpha_bet)
     summary_header = (
         f"# {symbol} 深度分析摘要\n\n"

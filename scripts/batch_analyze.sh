@@ -117,7 +117,7 @@ generate_prompt() {
     local ticker="$1"
     local depth="$2"
     cat <<'PROMPT_HEADER'
-# ⚠️ 铁律：全部输出必须使用中文。所有分析、备忘录、存入数据库的内容、Heptabase 卡片——一律中文。英文仅用于专有名词（公司名、指标名）。
+# ⚠️ 铁律：全部输出必须使用中文。所有分析、备忘录、存入数据库的内容——一律中文。英文仅用于专有名词（公司名、指标名）。
 
 # ⚠️ 质量要求：
 # - 每个 Lens 分析必须写 500-800 字，包含 3-4 个明确的子板块（如护城河/单元经济/管理层/结论）
@@ -195,10 +195,6 @@ result = analyze_ticker('${ticker}', depth='${depth}', price_days=120)
 - save_alpha_package(): Alpha 完整数据
 
 ⚠️ 所有存入的文本内容必须是中文。
-
-## 步骤 9: 同步到 Heptabase
-用 mcp__heptabase__save_to_note_card 创建分析卡片（中文，包含 OPRMS + 核心发现 + Kill Conditions + Action Plan）。
-用 mcp__heptabase__append_to_journal 追加今日日志条目（中文，3-4 行摘要）。
 
 所有步骤完成后，打印 "✅ ${ticker} 分析完成" 和结果摘要表格，然后退出。
 PROMPT

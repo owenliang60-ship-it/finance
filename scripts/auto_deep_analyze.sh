@@ -52,7 +52,7 @@ while [[ $# -gt 0 ]]; do
         --budget)
             if [[ $# -lt 2 ]]; then echo "❌ --budget requires a value"; exit 1; fi
             BUDGET_PER_TICKER="$2"; shift 2 ;;
-        --skip-heptabase) SKIP_HEPTABASE=true; shift ;;
+        --skip-heptabase) SKIP_HEPTABASE=true; shift ;; # deprecated, kept for backward compat
         --skip-db)        SKIP_DB=true; shift ;;
         --help|-h)
             head -10 "$0" | tail -9
@@ -93,7 +93,7 @@ echo "  Batch ID:   $BATCH_ID"
 echo "  待分析:     ${#TICKERS[@]} 只股票: ${TICKERS[*]}"
 echo "  每只预算:   \$$BUDGET_PER_TICKER"
 echo "  预估总费用: ~\$$(( ${#TICKERS[@]} * BUDGET_PER_TICKER )) (上限)"
-echo "  Heptabase:  $(if $SKIP_HEPTABASE; then echo "跳过"; else echo "同步"; fi)"
+echo "  Obsidian:   $(if $SKIP_HEPTABASE; then echo "跳过"; else echo "同步(via skill)"; fi)"
 echo "  DB Save:    $(if $SKIP_DB; then echo "跳过"; else echo "存储"; fi)"
 echo "  日志目录:   $LOG_DIR"
 echo ""
@@ -657,36 +657,8 @@ print('\\n✅ DB save complete for ${ticker}')
         fi
     fi
 
-    # ─── Phase 4c: Heptabase Sync ─────────────────────
-    if ! $SKIP_HEPTABASE; then
-        log "  [$ticker] Phase 4c: Heptabase sync agent 启动..."
-
-        local summary_path="$rd/report_summary.md"
-
-        if [[ -f "$summary_path" ]]; then
-            local hb_prompt="你是一个 Heptabase 同步助手。请执行以下操作：
-
-1. 读取文件 ${summary_path}
-2. 调用 mcp__heptabase__save_to_note_card，将文件内容作为 card content（第一行 H1 会成为卡片标题）
-3. 调用 mcp__heptabase__append_to_journal，内容为：
-   ## ${ticker} 深度分析完成
-   - 日期：$(date +%Y-%m-%d)
-   - 类型：Auto Deep Analysis (batch)
-   - 完整报告：${report_path}
-
-如果 MCP 调用失败，重试一次。仍失败则打印错误信息。"
-
-            if run_agent "heptabase" "haiku" 1 \
-                "$hb_prompt" \
-                "$LOG_DIR/${BATCH_ID}_${ticker}_heptabase.log"; then
-                log "  [$ticker] Phase 4c 完成 — Heptabase sync ✓"
-            else
-                log "  [$ticker] ⚠️ Phase 4c Heptabase sync 可能失败，查看日志"
-            fi
-        else
-            log "  [$ticker] ⚠️ report_summary.md 不存在，跳过 Heptabase"
-        fi
-    fi
+    # ─── Phase 4c: Obsidian Sync (now handled by /deep-analysis skill) ───
+    # Heptabase sync removed (2026-02-22). Use /deep-analysis skill for Obsidian sync.
 
     # ─── Summary ──────────────────────────────────────
     local ticker_end=$(date +%s)

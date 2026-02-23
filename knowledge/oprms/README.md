@@ -1,6 +1,6 @@
 # OPRMS 评级系统
 
-双维度评级 → 仓位计算。来自 Heptabase "未来资本"白板。
+双维度评级 → 仓位计算。
 
 ## 核心公式
 
@@ -50,4 +50,4 @@ result = calculate_position_size(
 
 ## 知识镜像
 
-Heptabase "未来资本"白板包含 OPRMS 的可视化版本（只读镜像，via MCP 同步）。代码中的 `models.py` 是单一数据源。
+代码中的 `models.py` 是单一数据源。
