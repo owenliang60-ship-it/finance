@@ -37,7 +37,7 @@ class BaseFMPTool(FinanceTool):
         if not self._api_key_checked:
             self._is_available = (
                 FMP_CLIENT_AVAILABLE
-                and os.getenv("FMP_API_KEY") is not None
+                and bool(os.getenv("FMP_API_KEY"))
             )
             self._api_key_checked = True
         return self._is_available

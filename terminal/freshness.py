@@ -152,7 +152,7 @@ def _get_current_price(symbol: str) -> Optional[float]:
         from src.data.price_fetcher import get_price_df
         df = get_price_df(symbol, max_age_days=7)
         if df is not None and not df.empty:
-            return float(df["close"].iloc[-1])
+            return float(df["close"].iloc[0])
     except Exception as e:
         logger.warning(f"Failed to get current price for {symbol}: {e}")
     return None
@@ -173,14 +173,21 @@ def _get_current_regime() -> Optional[str]:
 def _get_latest_earnings_date(symbol: str) -> Optional[str]:
     """Get the most recent earnings date from FMP."""
     try:
-        from terminal.tools.registry import get_tool
-        tool = get_tool("get_earnings_calendar")
+        from datetime import timedelta
+        from terminal.tools.registry import get_registry
+        tool = get_registry().get_tool("get_earnings_calendar")
         if tool:
-            result = tool.execute({"symbol": symbol})
-            if result and isinstance(result, list) and len(result) > 0:
-                return result[0].get("date")
-    except Exception:
-        pass
+            today = datetime.now()
+            from_date = (today - timedelta(days=90)).strftime("%Y-%m-%d")
+            to_date = today.strftime("%Y-%m-%d")
+            result = tool.execute(from_date=from_date, to_date=to_date)
+            if result and isinstance(result, list):
+                matches = [e for e in result if e.get("symbol", "").upper() == symbol.upper()]
+                if matches:
+                    matches.sort(key=lambda e: e.get("date", ""), reverse=True)
+                    return matches[0].get("date")
+    except Exception as e:
+        logger.warning(f"Failed to get earnings date for {symbol}: {e}")
     return None
 
 

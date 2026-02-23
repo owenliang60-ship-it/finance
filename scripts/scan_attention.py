@@ -63,8 +63,8 @@ def _get_known_tickers() -> set:
     """Get the set of known tickers from the stock pool + common large caps."""
     known = set()
     try:
-        from src.data.stock_pool import get_stock_list
-        pool = get_stock_list()
+        from src.data.pool_manager import get_symbols
+        pool = get_symbols()
         known.update(t.upper() for t in pool)
     except Exception:
         pass

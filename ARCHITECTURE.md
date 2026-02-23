@@ -438,7 +438,7 @@ BENCHMARK_SYMBOLS = ["SPY", "QQQ"]
 | `daily_scan.py` | Daily automated scan |
 | `collect_dollar_volume.py` | Dollar volume ranking |
 | `backfill_dollar_volume.py` | Historical backfill |
-| `test_fmp_api.py` | API connectivity test |
+| `check_fmp_api.py` | API connectivity test |
 
 ---
 

@@ -307,7 +307,7 @@ def ensure_fundamentals_cached(symbol: str) -> bool:
         True if data was fetched (or already cached), False on failure.
     """
     symbol = symbol.upper()
-    fetched_any = False
+    all_ok = True
 
     # Profile
     if not get_profile(symbol):
@@ -317,7 +317,8 @@ def ensure_fundamentals_cached(symbol: str) -> bool:
             profiles = _load_json(PROFILES_FILE)
             profiles[symbol] = profile
             _save_json(PROFILES_FILE, profiles)
-            fetched_any = True
+        else:
+            all_ok = False
 
     # Ratios
     if not get_ratios(symbol):
@@ -327,7 +328,8 @@ def ensure_fundamentals_cached(symbol: str) -> bool:
             ratios = _load_json(RATIOS_FILE)
             ratios[symbol] = data
             _save_json(RATIOS_FILE, ratios)
-            fetched_any = True
+        else:
+            all_ok = False
 
     # Income
     if not get_income(symbol):
@@ -337,7 +339,8 @@ def ensure_fundamentals_cached(symbol: str) -> bool:
             income = _load_json(INCOME_FILE)
             income[symbol] = data
             _save_json(INCOME_FILE, income)
-            fetched_any = True
+        else:
+            all_ok = False
 
     # Balance sheet
     if not get_balance_sheet(symbol):
@@ -347,7 +350,8 @@ def ensure_fundamentals_cached(symbol: str) -> bool:
             bs = _load_json(BALANCE_SHEET_FILE)
             bs[symbol] = data
             _save_json(BALANCE_SHEET_FILE, bs)
-            fetched_any = True
+        else:
+            all_ok = False
 
     # Cash flow
     if not get_cash_flow(symbol):
@@ -357,12 +361,13 @@ def ensure_fundamentals_cached(symbol: str) -> bool:
             cf = _load_json(CASH_FLOW_FILE)
             cf[symbol] = data
             _save_json(CASH_FLOW_FILE, cf)
-            fetched_any = True
+        else:
+            all_ok = False
 
-    if fetched_any:
+    if all_ok:
         logger.info(f"[auto-cache] Fundamental data cached for {symbol}")
 
-    return True
+    return all_ok
 
 
 def get_fundamental_summary(symbol: str) -> Dict:
