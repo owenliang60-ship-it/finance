@@ -28,3 +28,8 @@ logs/
 # Environment
 .env
 .env.local
+
+# Misc
+*.pdf
+*.backup.*
+trading-memo.html
