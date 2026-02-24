@@ -255,6 +255,7 @@ def format_past_experiences(
                 % (oprms.get("dna", "?"), oprms.get("timing", "?"),
                    oprms.get("coeff", "?"))
             )
+        thesis = str(thesis)[:200].lstrip("#").strip()
         lines.append("- **论文摘要**: %s" % thesis)
         lines.append("- **行动**: %s (conviction: %s)" % (action, cm))
 

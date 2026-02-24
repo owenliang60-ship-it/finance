@@ -305,6 +305,38 @@ class TestDashboardAndStats:
 # Edge cases
 # ---------------------------------------------------------------------------
 
+class TestMemorySQL:
+    """Tests for memory-related SQL behavior."""
+
+    def test_update_situation_summary_targets_latest(self, store):
+        """update_situation_summary should update the most recent analysis."""
+        store.upsert_company("AAPL")
+        store.save_analysis("AAPL", {"analysis_date": "2026-02-10"})
+        store.save_analysis("AAPL", {"analysis_date": "2026-02-15"})
+
+        store.update_situation_summary("AAPL", '{"price": 250}')
+
+        analyses = store.get_analyses("AAPL")
+        # Latest (Feb 15) should have the summary
+        assert analyses[0]["situation_summary"] == '{"price": 250}'
+        # Older (Feb 10) should remain None
+        assert analyses[1]["situation_summary"] is None
+
+    def test_get_analyses_with_memory(self, store):
+        """get_analyses_with_memory should only return rows with situation_summary."""
+        store.upsert_company("AAPL")
+        store.save_analysis("AAPL", {"analysis_date": "2026-02-10"})
+        store.save_analysis("AAPL", {"analysis_date": "2026-02-15"})
+
+        # Only add memory to the older one
+        older = store.get_analyses("AAPL")[-1]
+        store.update_situation_summary("AAPL", '{"price": 200}', analysis_id=older["id"])
+
+        memory_rows = store.get_analyses_with_memory("AAPL")
+        assert len(memory_rows) == 1
+        assert memory_rows[0]["analysis_date"] == "2026-02-10"
+
+
 class TestEdgeCases:
     def test_db_path_creates_parent(self, tmp_path):
         db_path = tmp_path / "deep" / "nested" / "company.db"

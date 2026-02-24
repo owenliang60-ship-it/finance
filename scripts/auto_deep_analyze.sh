@@ -460,7 +460,7 @@ print(json.dumps(batch))
         # Recheck
         lens_count=0
         for i in $(seq 0 $((n_lenses - 1))); do
-            if [[ -f "${lens_output_files[$i]}" ]]; then
+            if check_file_quality "${lens_output_files[$i]}" 1500; then
                 lens_count=$((lens_count + 1))
             fi
         done
@@ -552,7 +552,7 @@ print(path)
 import sys
 sys.path.insert(0, '${PROJECT_DIR}')
 from pathlib import Path
-from terminal.company_db import save_oprms, save_memo, save_analysis, save_kill_conditions, save_alpha_package, save_meta
+from terminal.company_db import save_oprms, save_memo, save_analysis, save_kill_conditions, save_alpha_package
 
 rd = Path('${rd}')
 

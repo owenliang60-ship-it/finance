@@ -213,6 +213,16 @@ class TestBuildLensAgentPrompt:
 class TestCompileDeepReport:
     """Tests for compile_deep_report()."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_side_effects(self):
+        with (
+            patch("terminal.html_report.compile_html_report", return_value=None),
+            patch("terminal.company_store.get_store"),
+            patch("terminal.dashboard.generate_dashboard"),
+            patch("terminal.memory.extract_situation_summary", return_value=None),
+        ):
+            yield
+
     def _populate_research_dir(self, research_dir):
         """Create all expected files in research_dir for compilation."""
         files = {
@@ -832,7 +842,7 @@ class TestExtractStructuredData:
         assert data["oprms_timing"] == "B"
         assert data["oprms_timing_coeff"] == 0.5
         assert data["oprms_position_pct"] == 7.5
-        assert data["verdict"] == "BUY"
+        assert data["oprms_verdict"] == "BUY"
         assert data["investment_bucket"] == "Catalyst-Driven Long"
         assert len(data["evidence"]) == 3
 
@@ -954,6 +964,37 @@ class TestBuildAlphaDebatePrompt:
         assert "交换 2/2" in prompt
 
 
+class TestReportSummaryAlternativeFormats:
+    """Test that _extract_summary_from_sections handles varied formats."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_side_effects(self):
+        with (
+            patch("terminal.html_report.compile_html_report", return_value=None),
+            patch("terminal.company_store.get_store"),
+            patch("terminal.dashboard.generate_dashboard"),
+            patch("terminal.memory.extract_situation_summary", return_value=None),
+        ):
+            yield
+
+    def test_report_summary_handles_alternative_verdict_format(self, tmp_path):
+        """report_summary should extract verdict from **总裁决**: BUY format."""
+        with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):
+            from terminal.deep_pipeline import get_research_dir, compile_deep_report
+
+            research_dir = get_research_dir("ALT")
+            (research_dir / "data_context.md").write_text("### Company: ALT")
+            (research_dir / "debate.md").write_text(
+                "## 辩论\n\n张力分析...\n\n**总裁决**: BUY — 中信心\n\n理由充分。"
+            )
+            (research_dir / "memo.md").write_text("## Memo\n\n### 执行摘要\nBuy recommendation.")
+            (research_dir / "oprms.md").write_text("## OPRMS\nDNA: A")
+
+            compile_deep_report("ALT", research_dir)
+            summary = (research_dir / "report_summary.md").read_text(encoding="utf-8")
+            assert "BUY" in summary
+
+
 class TestWriteAgentPromptsDebate:
     """Tests for alpha_debate_prompt in write_agent_prompts()."""
 
@@ -1000,6 +1041,16 @@ class TestWriteAgentPromptsDebate:
 
 class TestCompileDeepReportWithDebate:
     """Tests for alpha_debate in compile_deep_report()."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_side_effects(self):
+        with (
+            patch("terminal.html_report.compile_html_report", return_value=None),
+            patch("terminal.company_store.get_store"),
+            patch("terminal.dashboard.generate_dashboard"),
+            patch("terminal.memory.extract_situation_summary", return_value=None),
+        ):
+            yield
 
     def test_includes_debate_in_report(self, tmp_path):
         with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):

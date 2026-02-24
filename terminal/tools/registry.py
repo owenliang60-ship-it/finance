@@ -8,7 +8,7 @@ Provides:
 - Graceful degradation (skip unavailable tools)
 """
 import logging
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from terminal.tools.protocol import FinanceTool, ToolCategory, ToolMetadata
 
 logger = logging.getLogger(__name__)
@@ -103,7 +103,7 @@ class ToolRegistry:
 
         return [t.metadata for t in tools]
 
-    def execute(self, tool_name: str, **kwargs) -> any:
+    def execute(self, tool_name: str, **kwargs) -> Any:
         """
         Execute a tool by name.
 
@@ -137,7 +137,7 @@ class ToolRegistry:
             logger.error(f"Tool '{tool_name}' execution failed: {e}")
             raise RuntimeError(f"Tool execution failed: {e}") from e
 
-    def check_availability(self) -> Dict[str, Dict[str, any]]:
+    def check_availability(self) -> Dict[str, Dict[str, Any]]:
         """
         Check availability status of all registered tools.
 

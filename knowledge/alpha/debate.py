@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 def generate_alpha_debate_prompt(
     symbol: str,
     research_dir_str: str,
-    rounds: int = 3,
+    rounds: int = 2,
     past_experiences: str = "",
 ) -> str:
     """Generate the Alpha Debate prompt for LLM execution.
