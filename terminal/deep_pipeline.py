@@ -61,15 +61,15 @@ def prepare_research_queries(
     return {
         "earnings": (
             f"{company_name} {symbol} latest quarterly earnings results "
-            f"revenue guidance management commentary transcript highlights 2026"
+            f"revenue guidance management commentary transcript highlights {datetime.now().year}"
         ),
         "competitive": (
             f"{company_name} {symbol} vs competitors market share "
-            f"{industry} competitive landscape comparison 2026"
+            f"{industry} competitive landscape comparison {datetime.now().year}"
         ),
         "street": (
             f"{symbol} analyst ratings price targets upgrades downgrades "
-            f"Wall Street consensus bull bear debate 2026"
+            f"Wall Street consensus bull bear debate {datetime.now().year}"
         ),
     }
 
@@ -309,7 +309,13 @@ def build_alpha_agent_prompt(
     current_price: float | None,
     l1_oprms: dict | None,
 ) -> str:
-    """Build a self-contained prompt for the Phase 3 Alpha agent.
+    """Build a self-contained prompt for the Phase 3 Alpha agent (deep pipeline path).
+
+    NOTE: This is the **deep pipeline** alpha prompt path, used in file-driven
+    batch analysis. The **standard pipeline** has a separate path in
+    pipeline.prepare_alpha_prompts() that returns deferred generators for
+    interactive use. Both paths use the same underlying generators
+    (knowledge.alpha.*) but with different orchestration strategies.
 
     The agent reads 5 input files and writes 3 alpha analysis files.
     Uses the actual framework text from the alpha generators as embedded prompts.
@@ -357,6 +363,11 @@ def build_alpha_agent_prompt(
         l1_verdict="<<PLACEHOLDER: 从 debate.md 提取最终 BUY/HOLD/SELL 判定>>",
         current_price=current_price,
     )
+
+    # Verify placeholder markers are present in generated frameworks
+    assert "<<PLACEHOLDER" in red_team_framework, "red_team_framework missing placeholders"
+    assert "<<PLACEHOLDER" in cycle_framework, "cycle_framework missing placeholders"
+    assert "<<PLACEHOLDER" in bet_framework, "bet_framework missing placeholders"
 
     # Format OPRMS context for reference
     if l1_oprms:
@@ -597,17 +608,18 @@ def _extract_summary_from_sections(
         lines.append("## 辩论总裁决")
         lines.append("")
         # Find verdict section
+        debate_lines = debate.split("\n")
         verdict_found = False
-        for i, line in enumerate(debate.split("\n")):
+        for i, line in enumerate(debate_lines):
             if any(kw in line for kw in ["总裁决", "总体判定", "Overall Verdict", "最终判定"]):
                 verdict_found = True
                 # Include this line + next 5
-                for vl in debate.split("\n")[i:i + 6]:
+                for vl in debate_lines[i:i + 6]:
                     lines.append(vl)
                 break
         if not verdict_found:
             # Fallback: last 5 lines
-            for vl in debate.strip().split("\n")[-5:]:
+            for vl in debate_lines[-5:]:
                 lines.append(vl)
         lines.append("")
 
@@ -619,11 +631,11 @@ def _extract_summary_from_sections(
         in_summary = False
         summary_count = 0
         for line in memo_lines:
-            if any(kw in line for kw in ["执行摘要", "Executive Summary"]):
+            if any(kw in line for kw in ["执行摘要", "Executive Summary", "执行摘要 (Executive Summary)"]):
                 in_summary = True
                 continue
             if in_summary:
-                if line.startswith("##") or line.startswith("**") and summary_count > 2:
+                if (line.startswith("##") or line.startswith("**")) and summary_count > 2:
                     break
                 lines.append(line)
                 summary_count += 1
@@ -791,7 +803,7 @@ def extract_structured_data(symbol: str, research_dir: Path) -> Dict[str, Any]:
             # Extract verdict
             verdict = _extract_oprms_verdict(oprms)
             if verdict:
-                data["verdict"] = verdict
+                data["oprms_verdict"] = verdict
 
             # Investment bucket
             m_bucket = re.search(r"\*\*投资桶\*\*[：:]\s*(.+)", oprms)
@@ -821,10 +833,10 @@ def extract_structured_data(symbol: str, research_dir: Path) -> Dict[str, Any]:
         # Check oprms.md for conviction_modifier (appended by alpha agent)
         oprms_text = _read_research_file(research_dir, "oprms.md")
         if oprms_text:
-            m_cm = re.search(r"conviction_modifier[：:]\s*([\d.]+)", oprms_text)
-            if m_cm:
+            cm_matches = re.findall(r"conviction_modifier[：:]\s*([\d.]+)", oprms_text)
+            if cm_matches:
                 try:
-                    data["conviction_modifier"] = float(m_cm.group(1))
+                    data["conviction_modifier"] = float(cm_matches[-1])
                 except (ValueError, TypeError):
                     pass
 
@@ -1071,18 +1083,21 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
                 conviction_modifier=structured.get("conviction_modifier"),
                 evidence=structured.get("evidence", []),
                 investment_bucket=structured.get("investment_bucket", ""),
-                verdict=structured.get("verdict", ""),
+                verdict=structured.get("oprms_verdict", ""),
                 position_pct=structured.get("oprms_position_pct"),
             )
 
         logger.info(f"Auto-saved {symbol} to company.db")
+    except Exception as e:
+        logger.warning(f"Auto-save to company.db failed (non-fatal): {e}")
 
-        # Auto-regenerate dashboard
+    # Auto-regenerate dashboard (separate try block)
+    try:
         from terminal.dashboard import generate_dashboard
         generate_dashboard()
         logger.info("Dashboard regenerated")
     except Exception as e:
-        logger.warning(f"Auto-save to company.db failed (non-fatal): {e}")
+        logger.warning(f"Dashboard regeneration failed (non-fatal): {e}")
 
     # Store situation memory for future analyses
     try:

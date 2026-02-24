@@ -134,6 +134,8 @@ class CompanyStore:
         """Add new columns to analyses table if missing (idempotent)."""
         conn = self._get_conn()
         columns = {row[1] for row in conn.execute("PRAGMA table_info(analyses)")}
+        _ALLOWED_COLS = {"situation_summary", "debate_conviction_modifier", "debate_final_action", "debate_key_disagreement"}
+        _ALLOWED_TYPES = {"TEXT", "REAL", "INTEGER"}
         new_cols = [
             ("situation_summary", "TEXT"),
             ("debate_conviction_modifier", "REAL"),
@@ -141,10 +143,10 @@ class CompanyStore:
             ("debate_key_disagreement", "TEXT"),
         ]
         for col, typ in new_cols:
+            if col not in _ALLOWED_COLS or typ not in _ALLOWED_TYPES:
+                raise ValueError(f"Unexpected migration column: {col} {typ}")
             if col not in columns:
-                conn.execute(
-                    "ALTER TABLE analyses ADD COLUMN %s %s" % (col, typ)
-                )
+                conn.execute(f"ALTER TABLE analyses ADD COLUMN {col} {typ}")
         conn.commit()
 
     def close(self) -> None:
@@ -229,27 +231,27 @@ class CompanyStore:
         pool_set = {s.upper() for s in pool_symbols}
         now = datetime.now().isoformat()
 
-        # Reset all to out of pool
-        conn.execute("UPDATE companies SET in_pool = 0")
+        with conn:
+            # Reset all to out of pool
+            conn.execute("UPDATE companies SET in_pool = 0")
 
-        # Set pool members
-        count = 0
-        for sym in pool_set:
-            result = conn.execute(
-                "UPDATE companies SET in_pool = 1, updated_at = ? WHERE symbol = ?",
-                (now, sym),
-            )
-            if result.rowcount > 0:
-                count += 1
-            else:
-                # Company not in DB yet — insert minimal record
-                conn.execute(
-                    "INSERT INTO companies (symbol, in_pool, source, first_seen, updated_at) "
-                    "VALUES (?, 1, 'pool', ?, ?)",
-                    (sym, now, now),
+            # Set pool members
+            count = 0
+            for sym in pool_set:
+                result = conn.execute(
+                    "UPDATE companies SET in_pool = 1, updated_at = ? WHERE symbol = ?",
+                    (now, sym),
                 )
-                count += 1
-        conn.commit()
+                if result.rowcount > 0:
+                    count += 1
+                else:
+                    # Company not in DB yet — insert minimal record
+                    conn.execute(
+                        "INSERT INTO companies (symbol, in_pool, source, first_seen, updated_at) "
+                        "VALUES (?, 1, 'pool', ?, ?)",
+                        (sym, now, now),
+                    )
+                    count += 1
         return count
 
     # ---- OPRMS Ratings ----
@@ -275,25 +277,25 @@ class CompanyStore:
         now = datetime.now().isoformat()
         conn = self._get_conn()
 
-        # Mark previous as non-current
-        conn.execute(
-            "UPDATE oprms_ratings SET is_current = 0 WHERE symbol = ? AND is_current = 1",
-            (symbol,),
-        )
+        with conn:
+            # Mark previous as non-current
+            conn.execute(
+                "UPDATE oprms_ratings SET is_current = 0 WHERE symbol = ? AND is_current = 1",
+                (symbol,),
+            )
 
-        cursor = conn.execute(
-            """
-            INSERT INTO oprms_ratings
+            cursor = conn.execute(
+                """
+                INSERT INTO oprms_ratings
+                    (symbol, dna, timing, timing_coeff, conviction_modifier,
+                     evidence, investment_bucket, verdict, position_pct,
+                     is_current, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                """,
                 (symbol, dna, timing, timing_coeff, conviction_modifier,
-                 evidence, investment_bucket, verdict, position_pct,
-                 is_current, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-            """,
-            (symbol, dna, timing, timing_coeff, conviction_modifier,
-             json.dumps(evidence or [], ensure_ascii=False),
-             investment_bucket, verdict, position_pct, now),
-        )
-        conn.commit()
+                 json.dumps(evidence or [], ensure_ascii=False),
+                 investment_bucket, verdict, position_pct, now),
+            )
         logger.info(
             "Saved OPRMS for %s: DNA=%s Timing=%s Coeff=%.2f",
             symbol, dna, timing, timing_coeff,
@@ -518,21 +520,21 @@ class CompanyStore:
         now = datetime.now().isoformat()
         conn = self._get_conn()
 
-        # Deactivate existing
-        conn.execute(
-            "UPDATE kill_conditions SET is_active = 0 WHERE symbol = ? AND is_active = 1",
-            (symbol,),
-        )
-
-        for cond in conditions:
+        with conn:
+            # Deactivate existing
             conn.execute(
-                """
-                INSERT INTO kill_conditions (symbol, description, source_lens, is_active, created_at)
-                VALUES (?, ?, ?, 1, ?)
-                """,
-                (symbol, cond["description"], cond.get("source_lens", ""), now),
+                "UPDATE kill_conditions SET is_active = 0 WHERE symbol = ? AND is_active = 1",
+                (symbol,),
             )
-        conn.commit()
+
+            for cond in conditions:
+                conn.execute(
+                    """
+                    INSERT INTO kill_conditions (symbol, description, source_lens, is_active, created_at)
+                    VALUES (?, ?, ?, 1, ?)
+                    """,
+                    (symbol, cond["description"], cond.get("source_lens", ""), now),
+                )
         return len(conditions)
 
     def get_kill_conditions(self, symbol: str, active_only: bool = True) -> List[Dict[str, Any]]:
@@ -614,6 +616,7 @@ _store: Optional[CompanyStore] = None
 def get_store(db_path: Optional[Path] = None) -> CompanyStore:
     """Get or create the singleton CompanyStore instance."""
     global _store
-    if _store is None or (db_path and _store.db_path != db_path):
+    resolved = db_path or _DEFAULT_DB_PATH
+    if _store is None or _store.db_path != resolved:
         _store = CompanyStore(db_path)
     return _store

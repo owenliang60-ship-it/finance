@@ -421,6 +421,7 @@ def collect_data(
 
     # FMP enrichment (analyst estimates, insider trades, news, earnings calendar)
     try:
+        import terminal.tools  # noqa: F401 — ensure auto-registration
         from terminal.tools.registry import get_registry
         registry = get_registry()
     except Exception as e:
@@ -716,7 +717,13 @@ def prepare_alpha_prompts(
     l1_oprms: Optional[dict] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Phase 6: Generate 3 sequential Layer 2 prompts.
+    Phase 6: Generate 3 sequential Layer 2 prompts (standard pipeline path).
+
+    NOTE: This is the **standard pipeline** alpha prompt path, used in interactive
+    analysis. The **deep pipeline** has a separate path in
+    deep_pipeline.build_alpha_agent_prompt() that embeds frameworks with <<PLACEHOLDER>>
+    markers for file-driven agents. Both paths use the same underlying generators
+    (knowledge.alpha.*) but with different orchestration strategies.
 
     Returns list of prompt dicts. Prompts B and C include a prompt_generator
     callable + prompt_args so Claude can render them after receiving previous outputs.

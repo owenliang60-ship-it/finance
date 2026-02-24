@@ -214,28 +214,30 @@ class Get10YTreasuryYieldTool(BaseFREDTool):
 
 
 class GetCPIInflationTool(BaseFREDTool):
-    """获取 CPI 通胀率（月度同比）"""
+    """获取 CPI 价格指数（原始值，非同比变化率）"""
 
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
             name="get_cpi_inflation",
             category=ToolCategory.MACRO,
-            description="Get CPI inflation rate (12-month percent change)",
+            description="Get CPI price index (raw, NOT YoY% — compute manually)",
             provider="FRED",
             requires_api_key=True,
             api_key_env_var="FRED_API_KEY",
         )
 
     def execute(self, limit: int = 12) -> List[Dict]:
-        """
-        获取 CPI 通胀率（同比）
+        """获取 CPI 价格指数（原始值，非同比变化率）
+
+        注意：返回的是 CPI 指数原始值（如 314.2），不是 YoY%。
+        需要 YoY% 请使用 macro_fetcher.py 的 _compute_cpi_yoy()。
 
         Args:
             limit: 返回数量（默认 12 个月）
 
         Returns:
-            [{date: "2024-10", value: 2.6}, ...]
+            [{date: "2024-10", value: 314.2}, ...]
         """
         return self._fetch_series("CPIAUCSL", limit=limit)
 

@@ -52,6 +52,7 @@ def generate_profiler_prompt(data_context: str) -> str:
     Returns:
         Complete prompt string for the profiler agent.
     """
+    safe_context = data_context.replace("</data_context>", "&lt;/data_context&gt;")
     return f"""\
 你是未来资本的**公司画像分析师**。你的任务是阅读公司的财务数据，判断其**原型和阶段**，然后为下游 5 个透镜分析师、综合研判和 Alpha 层提供个性化的分析指引。
 
@@ -60,7 +61,7 @@ def generate_profiler_prompt(data_context: str) -> str:
 以下是公司的完整数据上下文（财务数据、比率、技术指标、宏观环境）：
 
 <data_context>
-{data_context}
+{safe_context}
 </data_context>
 
 ## 公司原型参考表
