@@ -270,6 +270,34 @@ class CryptoRSCFactor(Factor):
         return dict(zip(result_df["symbol"], result_df["rs_rank"].astype(float)))
 
 
+# ── Market Momentum ─────────────────────────────────────
+
+class MarketMomentumFactor(Factor):
+    """Market Momentum — 物理学第一性原理资金动量 Z-Score"""
+
+    @property
+    def meta(self) -> FactorMeta:
+        return FactorMeta(
+            name="Market_Momentum",
+            score_name="zscore",
+            score_range=(-5, 5),
+            higher_is_stronger=True,
+            min_data_days=172,
+        )
+
+    def compute(
+        self,
+        price_dict: Dict[str, pd.DataFrame],
+        date: str,
+    ) -> Dict[str, float]:
+        from src.indicators.market_momentum import scan_market_momentum
+
+        result_df = scan_market_momentum(price_dict, threshold=-999)
+        if result_df.empty:
+            return {}
+        return dict(zip(result_df["symbol"], result_df["zscore"].astype(float)))
+
+
 # ══════════════════════════════════════════════════════════
 # 注册表
 # ══════════════════════════════════════════════════════════
@@ -283,6 +311,7 @@ ALL_FACTORS: Dict[str, Type[Factor]] = {
     "RVOL_Sustained": RVOLSustainedFactor,
     "Crypto_RS_B": CryptoRSBFactor,
     "Crypto_RS_C": CryptoRSCFactor,
+    "Market_Momentum": MarketMomentumFactor,
 }
 
 

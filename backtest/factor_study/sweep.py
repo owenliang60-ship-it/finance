@@ -63,6 +63,12 @@ _DEFAULT_GRIDS: Dict[str, dict] = {
         "cross_down": [10, 20, 30],
         "sustained": [(70, 3), (70, 5), (80, 3), (80, 5), (90, 3)],
     },
+    "Market_Momentum": {
+        "threshold": [1.0, 1.5, 2.0],
+        "cross_up": [1.0, 1.5, 2.0],
+        "cross_down": [-1.0, -1.5, -2.0],
+        "sustained": [(1.5, 3), (1.5, 5), (2.0, 3)],
+    },
 }
 
 
