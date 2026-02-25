@@ -130,6 +130,27 @@
 ║  │13 endpoints│  │ 16 series  │  │ 6 lenses+debate │                  ║
 ║  │300 call/min│  │120 req/min │  │ +memo+scoring   │                  ║
 ║  └────────────┘  └────────────┘  └─────────────────┘                  ║
+║  ┌────────────────┐                                                   ║
+║  │ MarketData.app │                                                   ║
+║  │ Starter $12    │                                                   ║
+║  │ Options chain  │                                                   ║
+║  │ 10K credits/mo │                                                   ║
+║  └────────────────┘                                                   ║
+║                                                                        ║
+║  ════════════ OPTIONS 层 (期权策略, ~1,200 lines) ════════════        ║
+║                                                                        ║
+║  ┌─────────── terminal/options/ ────────┐ ┌── knowledge/options/ ──┐   ║
+║  │ iv_tracker.py (180L) IV/HV/Rank     │ │ agent_profile.md       │   ║
+║  │ chain_analyzer.py (280L) 流动性+结构  │ │ strategies/ (24 files) │   ║
+║  │ commands.py (180L) 编排入口           │ │  _index.md 快速查找      │   ║
+║  │ formatter.py (280L) 展示格式          │ └────────────────────────┘   ║
+║  └──────────────────────────────────────┘                              ║
+║  ┌─── src/data/ ──────────────┐ ┌─── scripts/ ────────────────┐       ║
+║  │ marketdata_client.py (250L)│ │ update_options_iv.py (cron) │       ║
+║  │ Bearer auth + rate limit   │ └─────────────────────────────┘       ║
+║  │ chain/expiry/quote/atm_iv  │                                       ║
+║  └────────────────────────────┘ Skill: /options SYMBOL                ║
+║                                 对话式期权策略讨论                       ║
 ║                                                                        ║
 ║  ════════════ BACKTEST 层 (回测研究, ~4,500 lines) ═══════════        ║
 ║                                                                        ║

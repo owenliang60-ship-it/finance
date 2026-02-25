@@ -27,6 +27,7 @@
 | **Research Desk** | `reports/` | 投资论文、行业研究、宏观分析 | 有调研报告 |
 | **Risk Desk** | `risk/` | IPS、暴露监控、压力测试 | 骨架 |
 | **Backtest Desk** | `backtest/` | 策略回测引擎、因子有效性研究、参数优化 | LIVE（RS 回测 + 因子研究双框架） |
+| **Options Desk** | `terminal/options/`, `knowledge/options/` | 期权策略讨论、IV 追踪、链分析 | LIVE（/options skill + 24 playbooks + IV cron） |
 | **Trading Desk** | `trading/` | 交易日志、策略库、期权展期记录 | 骨架 |
 
 ---
@@ -34,8 +35,9 @@
 ## Data Desk 技术细节
 
 ### 数据源
-- **FMP API** (financialmodelingprep.com) — 唯一数据源，付费 Starter 版
-- API Key: 环境变量 `FMP_API_KEY`
+- **FMP API** (financialmodelingprep.com) — 基本面+价格，付费 Starter 版
+- **MarketData.app** — 期权链+IV 数据，Starter 版 ($12/月, 10K credits)
+- API Keys: 环境变量 `FMP_API_KEY`, `MARKETDATA_API_KEY`
 - 调用间隔: 2 秒防限流
 
 ### 股票池
@@ -68,6 +70,7 @@
 | Dollar Volume 采集 | 日频 | 周二-六 06:45 | `cron_scan.log` |
 | 股票池刷新 | 周频 | 周六 08:00 | `cron_pool.log` |
 | 基本面更新 | 周频 | 周六 10:00 | `cron_fundamental.log` |
+| **IV 数据更新** | 日频 | 周二-六 06:50 | `cron_options_iv.log` |
 
 ### 常用命令
 
@@ -137,7 +140,7 @@ ssh aliyun "tail -30 /root/workspace/Finance/logs/cron_scan.log"
 ├── risk/                       # Risk Desk (骨架)
 ├── trading/                    # Trading Desk (骨架)
 ├── docs/                       # 文档中心 (详见下方导航)
-├── tests/                      # 测试套件 (838 pass)
+├── tests/                      # 测试套件 (1021+ pass)
 └── ARCHITECTURE.md             # 系统架构全貌
 ```
 

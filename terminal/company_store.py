@@ -100,6 +100,51 @@ CREATE TABLE IF NOT EXISTS kill_conditions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_kill_symbol ON kill_conditions(symbol);
+
+CREATE TABLE IF NOT EXISTS iv_daily (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    date TEXT NOT NULL,
+    iv_30d REAL,
+    iv_60d REAL,
+    hv_30d REAL,
+    put_call_ratio REAL,
+    total_volume INTEGER,
+    total_oi INTEGER,
+    created_at TEXT NOT NULL,
+    UNIQUE(symbol, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_iv_daily_symbol ON iv_daily(symbol);
+CREATE INDEX IF NOT EXISTS idx_iv_daily_date ON iv_daily(symbol, date);
+
+CREATE TABLE IF NOT EXISTS options_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    snapshot_date TEXT NOT NULL,
+    expiration TEXT NOT NULL,
+    strike REAL NOT NULL,
+    side TEXT NOT NULL,
+    bid REAL,
+    ask REAL,
+    mid REAL,
+    last REAL,
+    volume INTEGER,
+    open_interest INTEGER,
+    iv REAL,
+    delta REAL,
+    gamma REAL,
+    theta REAL,
+    vega REAL,
+    dte INTEGER,
+    in_the_money INTEGER,
+    underlying_price REAL,
+    created_at TEXT NOT NULL,
+    UNIQUE(symbol, snapshot_date, expiration, strike, side)
+);
+
+CREATE INDEX IF NOT EXISTS idx_options_snap_symbol ON options_snapshots(symbol, snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_options_snap_exp ON options_snapshots(symbol, expiration);
 """
 
 
@@ -131,8 +176,10 @@ class CompanyStore:
         self._migrate_if_needed()
 
     def _migrate_if_needed(self) -> None:
-        """Add new columns to analyses table if missing (idempotent)."""
+        """Run idempotent schema migrations for existing databases."""
         conn = self._get_conn()
+
+        # --- Migration 1: analyses 新列 ---
         columns = {row[1] for row in conn.execute("PRAGMA table_info(analyses)")}
         _ALLOWED_COLS = {"situation_summary", "debate_conviction_modifier", "debate_final_action", "debate_key_disagreement"}
         _ALLOWED_TYPES = {"TEXT", "REAL", "INTEGER"}
@@ -147,7 +194,71 @@ class CompanyStore:
                 raise ValueError(f"Unexpected migration column: {col} {typ}")
             if col not in columns:
                 conn.execute(f"ALTER TABLE analyses ADD COLUMN {col} {typ}")
+
+        # --- Migration 2: options_snapshots UNIQUE 约束 ---
+        # SQLite 不支持 ALTER TABLE ADD CONSTRAINT，需要检测并重建表
+        self._migrate_options_snapshots_unique(conn)
+
         conn.commit()
+
+    def _migrate_options_snapshots_unique(self, conn) -> None:
+        """Ensure options_snapshots has UNIQUE(symbol, snapshot_date, expiration, strike, side).
+
+        If the table exists without the constraint, rebuild it. Idempotent.
+        """
+        # Check if table exists
+        table_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='options_snapshots'"
+        ).fetchone()
+        if not table_exists:
+            return  # _init_db will create it with UNIQUE via _SCHEMA
+
+        # Check if UNIQUE constraint already exists by inspecting the CREATE TABLE SQL
+        create_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='options_snapshots'"
+        ).fetchone()
+        if create_sql and "UNIQUE" in (create_sql[0] or ""):
+            return  # Already has UNIQUE constraint
+
+        # Rebuild table with UNIQUE constraint (SQLite limitation)
+        logger.info("Migrating options_snapshots: adding UNIQUE constraint")
+        conn.executescript("""
+            -- Deduplicate: keep the latest row per (symbol, snapshot_date, expiration, strike, side)
+            CREATE TABLE options_snapshots_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL,
+                snapshot_date TEXT NOT NULL,
+                expiration TEXT NOT NULL,
+                strike REAL NOT NULL,
+                side TEXT NOT NULL,
+                bid REAL, ask REAL, mid REAL, last REAL,
+                volume INTEGER, open_interest INTEGER, iv REAL,
+                delta REAL, gamma REAL, theta REAL, vega REAL,
+                dte INTEGER, in_the_money INTEGER,
+                underlying_price REAL,
+                created_at TEXT NOT NULL,
+                UNIQUE(symbol, snapshot_date, expiration, strike, side)
+            );
+
+            INSERT OR REPLACE INTO options_snapshots_new
+                (symbol, snapshot_date, expiration, strike, side,
+                 bid, ask, mid, last, volume, open_interest, iv,
+                 delta, gamma, theta, vega, dte, in_the_money,
+                 underlying_price, created_at)
+            SELECT symbol, snapshot_date, expiration, strike, side,
+                   bid, ask, mid, last, volume, open_interest, iv,
+                   delta, gamma, theta, vega, dte, in_the_money,
+                   underlying_price, created_at
+            FROM options_snapshots
+            GROUP BY symbol, snapshot_date, expiration, strike, side
+            HAVING id = MAX(id);
+
+            DROP TABLE options_snapshots;
+            ALTER TABLE options_snapshots_new RENAME TO options_snapshots;
+
+            CREATE INDEX IF NOT EXISTS idx_options_snap_symbol ON options_snapshots(symbol, snapshot_date);
+            CREATE INDEX IF NOT EXISTS idx_options_snap_exp ON options_snapshots(symbol, expiration);
+        """)
 
     def close(self) -> None:
         if self._conn:
@@ -550,6 +661,198 @@ class CompanyStore:
         query += " ORDER BY created_at DESC"
         rows = conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]
+
+    # ---- IV Daily ----
+
+    def save_iv_daily(
+        self,
+        symbol: str,
+        date: str,
+        iv_30d: Optional[float] = None,
+        iv_60d: Optional[float] = None,
+        hv_30d: Optional[float] = None,
+        put_call_ratio: Optional[float] = None,
+        total_volume: Optional[int] = None,
+        total_oi: Optional[int] = None,
+    ) -> None:
+        """Save daily IV summary for a symbol (upsert on symbol+date)."""
+        symbol = symbol.upper()
+        now = datetime.now().isoformat()
+        conn = self._get_conn()
+        conn.execute(
+            """
+            INSERT INTO iv_daily
+                (symbol, date, iv_30d, iv_60d, hv_30d,
+                 put_call_ratio, total_volume, total_oi, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(symbol, date) DO UPDATE SET
+                iv_30d = excluded.iv_30d,
+                iv_60d = excluded.iv_60d,
+                hv_30d = excluded.hv_30d,
+                put_call_ratio = excluded.put_call_ratio,
+                total_volume = excluded.total_volume,
+                total_oi = excluded.total_oi,
+                created_at = excluded.created_at
+            """,
+            (symbol, date, iv_30d, iv_60d, hv_30d,
+             put_call_ratio, total_volume, total_oi, now),
+        )
+        conn.commit()
+
+    def get_iv_history(
+        self, symbol: str, limit: int = 252
+    ) -> List[Dict[str, Any]]:
+        """Get IV history for a symbol, newest first."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM iv_daily WHERE symbol = ? ORDER BY date DESC LIMIT ?",
+            (symbol.upper(), limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_latest_iv(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get the most recent IV daily record for a symbol."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM iv_daily WHERE symbol = ? ORDER BY date DESC LIMIT 1",
+            (symbol.upper(),),
+        ).fetchone()
+        return dict(row) if row else None
+
+    # ---- Options Snapshots ----
+
+    def save_options_snapshot(
+        self,
+        symbol: str,
+        snapshot_date: str,
+        contracts: List[Dict[str, Any]],
+    ) -> int:
+        """Save a batch of option contracts from a chain snapshot.
+
+        Args:
+            symbol: Underlying symbol
+            snapshot_date: Date of the snapshot (YYYY-MM-DD)
+            contracts: List of contract dicts with keys matching schema columns
+
+        Returns:
+            Number of contracts saved
+        """
+        symbol = symbol.upper()
+        now = datetime.now().isoformat()
+        conn = self._get_conn()
+
+        count = 0
+        with conn:
+            for c in contracts:
+                conn.execute(
+                    """
+                    INSERT INTO options_snapshots
+                        (symbol, snapshot_date, expiration, strike, side,
+                         bid, ask, mid, last, volume, open_interest, iv,
+                         delta, gamma, theta, vega, dte, in_the_money,
+                         underlying_price, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(symbol, snapshot_date, expiration, strike, side) DO UPDATE SET
+                         bid = excluded.bid, ask = excluded.ask, mid = excluded.mid,
+                         last = excluded.last, volume = excluded.volume,
+                         open_interest = excluded.open_interest, iv = excluded.iv,
+                         delta = excluded.delta, gamma = excluded.gamma,
+                         theta = excluded.theta, vega = excluded.vega,
+                         dte = excluded.dte, in_the_money = excluded.in_the_money,
+                         underlying_price = excluded.underlying_price,
+                         created_at = excluded.created_at
+                    """,
+                    (
+                        symbol, snapshot_date,
+                        c.get("expiration", ""),
+                        c.get("strike", 0),
+                        c.get("side", ""),
+                        c.get("bid"),
+                        c.get("ask"),
+                        c.get("mid"),
+                        c.get("last"),
+                        c.get("volume"),
+                        c.get("open_interest"),
+                        c.get("iv"),
+                        c.get("delta"),
+                        c.get("gamma"),
+                        c.get("theta"),
+                        c.get("vega"),
+                        c.get("dte"),
+                        1 if c.get("in_the_money") else 0,
+                        c.get("underlying_price"),
+                        now,
+                    ),
+                )
+                count += 1
+        logger.info(
+            "Saved %d option contracts for %s (%s)", count, symbol, snapshot_date
+        )
+        return count
+
+    def get_options_snapshot(
+        self,
+        symbol: str,
+        snapshot_date: Optional[str] = None,
+        expiration: Optional[str] = None,
+        side: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get option contracts from a snapshot.
+
+        Args:
+            symbol: Underlying symbol
+            snapshot_date: Filter by snapshot date; if None, uses latest
+            expiration: Filter by expiration date
+            side: Filter by 'call' or 'put'
+
+        Returns:
+            List of contract dicts
+        """
+        conn = self._get_conn()
+        symbol = symbol.upper()
+
+        if snapshot_date is None:
+            row = conn.execute(
+                "SELECT MAX(snapshot_date) as d FROM options_snapshots WHERE symbol = ?",
+                (symbol,),
+            ).fetchone()
+            if not row or not row["d"]:
+                return []
+            snapshot_date = row["d"]
+
+        query = "SELECT * FROM options_snapshots WHERE symbol = ? AND snapshot_date = ?"
+        params: list = [symbol, snapshot_date]
+
+        if expiration:
+            query += " AND expiration = ?"
+            params.append(expiration)
+        if side:
+            query += " AND side = ?"
+            params.append(side)
+
+        query += " ORDER BY expiration, strike, side"
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def cleanup_old_snapshots(self, retain_days: int = 7) -> int:
+        """Delete option snapshots older than retain_days.
+
+        Returns:
+            Number of rows deleted
+        """
+        from datetime import timedelta
+        conn = self._get_conn()
+        cutoff_date = (datetime.now() - timedelta(days=retain_days)).strftime("%Y-%m-%d")
+
+        cursor = conn.execute(
+            "DELETE FROM options_snapshots WHERE snapshot_date < ?",
+            (cutoff_date,),
+        )
+        conn.commit()
+        deleted = cursor.rowcount
+        if deleted > 0:
+            logger.info("Cleaned up %d old option snapshot rows (before %s)", deleted, cutoff_date)
+        return deleted
 
     # ---- Aggregate Queries ----
 

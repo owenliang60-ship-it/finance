@@ -345,6 +345,21 @@ THEME_MAX_NEW_TICKERS = 10                 # 每次池扩展最多新增几只
 THEME_RS_THRESHOLD = 80                    # RS 动量信号阈值 (百分位)
 POOL_SOURCE_ATTENTION = "attention"        # 注意力引擎来源标记
 
+# ============ MarketData.app (Options) ============
+
+MARKETDATA_API_KEY = os.environ.get("MARKETDATA_API_KEY", "")
+MARKETDATA_BASE_URL = "https://api.marketdata.app/v1"
+MARKETDATA_CALL_INTERVAL = 2  # 秒，防限流
+
+# Options 配置
+OPTIONS_IV_LOOKBACK_DAYS = 252    # IV rank/percentile 回看天数
+OPTIONS_CHAIN_DTE_MIN = 7        # Chain 最小 DTE
+OPTIONS_CHAIN_DTE_MAX = 120      # Chain 最大 DTE
+OPTIONS_SNAPSHOT_RETAIN_DAYS = 7  # Chain 快照保留天数
+OPTIONS_LIQUIDITY_MIN_OI = 200   # 最低 OI 标准
+OPTIONS_LIQUIDITY_MIN_VOLUME = 100  # 最低日成交量
+OPTIONS_LIQUIDITY_MAX_SPREAD_PCT = 0.10  # 最大 bid-ask spread (占 mid %)
+
 # Telegram 配置 (从环境变量读取)
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
