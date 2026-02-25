@@ -200,8 +200,9 @@ class MarketDataClient:
     ) -> Optional[float]:
         """获取指定日期的 ATM IV（历史 EOD 数据）。
 
-        使用 dte=30 + strikeLimit=2 取近 ATM 的 call+put，平均 IV。
-        1 credit / 1000 symbols — cost 极低。
+        双策略:
+        1. 先读 API 返回的 iv 字段（高级 plan 或未来 Starter 支持时直接用）
+        2. 若 IV 全 None → 用 BS solver 从 bid/ask/strike 反推
 
         Args:
             symbol: 标的代码
@@ -219,12 +220,28 @@ class MarketDataClient:
         if not data or data.get("s") != "ok":
             return None
 
+        # Strategy 1: use API-provided IV if available
         iv_values = data.get("iv", [])
         valid_ivs = [v for v in iv_values if v is not None and v > 0]
-        if not valid_ivs:
-            return None
+        if valid_ivs:
+            return round(sum(valid_ivs) / len(valid_ivs), 4)
 
-        return round(sum(valid_ivs) / len(valid_ivs), 4)
+        # Strategy 2: BS solver fallback from bid/ask/strike/dte
+        try:
+            from terminal.options.iv_solver import compute_atm_iv_from_chain
+            from terminal.options.risk_free_rate import get_risk_free_rate
+
+            rfr = get_risk_free_rate(date)
+            iv = compute_atm_iv_from_chain(data, risk_free_rate=rfr)
+            if iv is not None:
+                logger.debug(
+                    "BS solver IV for %s on %s: %.4f (rfr=%.4f)",
+                    symbol, date, iv, rfr,
+                )
+            return iv
+        except Exception as e:
+            logger.warning("BS solver failed for %s/%s: %s", symbol, date, e)
+            return None
 
     # ========== Stock Quote (for underlying price) ==========
 

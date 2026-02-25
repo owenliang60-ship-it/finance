@@ -136,6 +136,11 @@ def backfill(args):
         )
         return
 
+    # Initialize risk-free rate cache for BS solver
+    from terminal.options.risk_free_rate import refresh_risk_free_rates
+    rfr_count = refresh_risk_free_rates(start_date=args.start)
+    logger.info("Risk-free rates loaded: %d data points", rfr_count)
+
     # Initialize client
     from src.data.marketdata_client import MarketDataClient
     client = MarketDataClient()
