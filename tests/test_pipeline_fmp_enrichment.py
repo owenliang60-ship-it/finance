@@ -58,6 +58,17 @@ SAMPLE_NEWS = [
     },
 ]
 
+SAMPLE_ANALYST_RECOMMENDATIONS = [
+    # Two grades from same firm — should deduplicate (keep first = latest)
+    {"gradingCompany": "Morgan Stanley", "newGrade": "Overweight", "date": "2026-02-01"},
+    {"gradingCompany": "Morgan Stanley", "newGrade": "Equal-Weight", "date": "2025-11-01"},
+    # Different firms
+    {"gradingCompany": "Goldman Sachs", "newGrade": "Buy", "date": "2026-01-15"},
+    {"gradingCompany": "JP Morgan", "newGrade": "Neutral", "date": "2026-01-10"},
+    {"gradingCompany": "Barclays", "newGrade": "Underweight", "date": "2025-12-20"},
+    {"gradingCompany": "Citi", "newGrade": "Strong Buy", "date": "2026-02-05"},
+]
+
 SAMPLE_EARNINGS_CALENDAR = [
     {
         "symbol": "NVDA",
@@ -84,6 +95,7 @@ class TestDataPackageFMPFields:
     def test_default_values(self):
         pkg = DataPackage(symbol="NVDA")
         assert pkg.analyst_estimates is None
+        assert pkg.analyst_recommendations is None
         assert pkg.earnings_calendar is None
         assert pkg.insider_trades == []
         assert pkg.news == []
@@ -92,11 +104,13 @@ class TestDataPackageFMPFields:
         pkg = DataPackage(
             symbol="NVDA",
             analyst_estimates=SAMPLE_ESTIMATES,
+            analyst_recommendations=SAMPLE_ANALYST_RECOMMENDATIONS,
             earnings_calendar=SAMPLE_EARNINGS_CALENDAR[:1],
             insider_trades=SAMPLE_INSIDER_TRADES,
             news=SAMPLE_NEWS,
         )
         assert len(pkg.analyst_estimates) == 2
+        assert len(pkg.analyst_recommendations) == 6
         assert len(pkg.earnings_calendar) == 1
         assert len(pkg.insider_trades) == 2
         assert len(pkg.news) == 2
@@ -144,10 +158,40 @@ class TestFormatContextFMPEnrichment:
         assert "2026-02-08" in ctx
         assert "T14:30" not in ctx
 
+    def test_analyst_rating_distribution_section(self):
+        """Analyst rating distribution should render with firm dedup and bucketing."""
+        pkg = DataPackage(symbol="NVDA", analyst_recommendations=SAMPLE_ANALYST_RECOMMENDATIONS)
+        ctx = pkg.format_context()
+        assert "### Analyst Rating Distribution" in ctx
+        # Morgan Stanley appears twice but should be deduped (Overweight = Buy bucket)
+        # Buy: Morgan Stanley (Overweight) + Goldman Sachs (Buy) + Citi (Strong Buy) = 3
+        assert "Buy/Outperform: 3" in ctx
+        # Hold: JP Morgan (Neutral) = 1
+        assert "Hold/Neutral: 1" in ctx
+        # Sell: Barclays (Underweight) = 1
+        assert "Sell/Underperform: 1" in ctx
+        # Total: 5 unique firms
+        assert "Total Analysts: 5" in ctx
+
+    def test_analyst_rating_distribution_percentages(self):
+        """Percentages should be computed correctly."""
+        pkg = DataPackage(symbol="NVDA", analyst_recommendations=SAMPLE_ANALYST_RECOMMENDATIONS)
+        ctx = pkg.format_context()
+        # 3/5 = 60%, 1/5 = 20%, 1/5 = 20%
+        assert "60%" in ctx
+        assert "20%" in ctx
+
+    def test_analyst_rating_no_data_no_section(self):
+        """No analyst_recommendations should produce no section."""
+        pkg = DataPackage(symbol="NVDA", analyst_recommendations=None)
+        ctx = pkg.format_context()
+        assert "### Analyst Rating Distribution" not in ctx
+
     def test_no_data_no_sections(self):
         pkg = DataPackage(symbol="NVDA")
         ctx = pkg.format_context()
         assert "### Analyst Consensus" not in ctx
+        assert "### Analyst Rating Distribution" not in ctx
         assert "### Upcoming Earnings" not in ctx
         assert "### Recent Insider Activity" not in ctx
         assert "### Recent News" not in ctx
@@ -183,6 +227,7 @@ class TestCollectDataFMPEnrichment:
         if results is None:
             results = {
                 "get_analyst_estimates": SAMPLE_ESTIMATES,
+                "get_analyst_recommendations": SAMPLE_ANALYST_RECOMMENDATIONS,
                 "get_insider_trades": SAMPLE_INSIDER_TRADES,
                 "get_stock_news": SAMPLE_NEWS,
                 "get_earnings_calendar": SAMPLE_EARNINGS_CALENDAR,
@@ -216,6 +261,7 @@ class TestCollectDataFMPEnrichment:
         pkg = collect_data("NVDA")
 
         assert pkg.analyst_estimates == SAMPLE_ESTIMATES
+        assert pkg.analyst_recommendations == SAMPLE_ANALYST_RECOMMENDATIONS
         assert pkg.insider_trades == SAMPLE_INSIDER_TRADES
         assert pkg.news == SAMPLE_NEWS
         # earnings_calendar is filtered by symbol
@@ -241,6 +287,7 @@ class TestCollectDataFMPEnrichment:
         pkg = collect_data("NVDA")
 
         assert pkg.analyst_estimates is None
+        assert pkg.analyst_recommendations is None
         assert pkg.earnings_calendar is None
         assert pkg.insider_trades == []
         assert pkg.news == []

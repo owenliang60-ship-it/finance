@@ -521,18 +521,19 @@ class GetAnalystRecommendationsTool(BaseFMPTool):
             api_key_env_var="FMP_API_KEY",
         )
 
-    def execute(self, symbol: str) -> List[Dict]:
+    def execute(self, symbol: str, limit: int = 200) -> List[Dict]:
         """
         Execute: get analyst recommendations.
 
         Args:
             symbol: Stock ticker symbol
+            limit: Number of records to retrieve (default: 200)
 
         Returns:
             List of analyst recommendation dicts (most recent first)
         """
         return self._execute_client_method(
-            "get_analyst_recommendations", symbol=symbol
+            "get_analyst_recommendations", symbol=symbol, limit=limit
         )
 
 
