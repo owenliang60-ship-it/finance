@@ -139,7 +139,8 @@ CREATE TABLE IF NOT EXISTS options_snapshots (
     dte INTEGER,
     in_the_money INTEGER,
     underlying_price REAL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    UNIQUE(symbol, snapshot_date, expiration, strike, side)
 );
 
 CREATE INDEX IF NOT EXISTS idx_options_snap_symbol ON options_snapshots(symbol, snapshot_date);
@@ -685,6 +686,15 @@ class CompanyStore:
                          delta, gamma, theta, vega, dte, in_the_money,
                          underlying_price, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(symbol, snapshot_date, expiration, strike, side) DO UPDATE SET
+                         bid = excluded.bid, ask = excluded.ask, mid = excluded.mid,
+                         last = excluded.last, volume = excluded.volume,
+                         open_interest = excluded.open_interest, iv = excluded.iv,
+                         delta = excluded.delta, gamma = excluded.gamma,
+                         theta = excluded.theta, vega = excluded.vega,
+                         dte = excluded.dte, in_the_money = excluded.in_the_money,
+                         underlying_price = excluded.underlying_price,
+                         created_at = excluded.created_at
                     """,
                     (
                         symbol, snapshot_date,
@@ -764,11 +774,9 @@ class CompanyStore:
         Returns:
             Number of rows deleted
         """
-        conn = self._get_conn()
-        cutoff = datetime.now()
-        # Calculate cutoff date
         from datetime import timedelta
-        cutoff_date = (cutoff - timedelta(days=retain_days)).strftime("%Y-%m-%d")
+        conn = self._get_conn()
+        cutoff_date = (datetime.now() - timedelta(days=retain_days)).strftime("%Y-%m-%d")
 
         cursor = conn.execute(
             "DELETE FROM options_snapshots WHERE snapshot_date < ?",

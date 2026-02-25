@@ -86,6 +86,12 @@ def main():
 
     result = update_daily_iv(symbols, store)
 
+    # Cleanup old snapshots once (not per-symbol)
+    from config.settings import OPTIONS_SNAPSHOT_RETAIN_DAYS
+    deleted = store.cleanup_old_snapshots(retain_days=OPTIONS_SNAPSHOT_RETAIN_DAYS)
+    if deleted:
+        logger.info("Cleaned up %d old snapshot rows", deleted)
+
     elapsed = (datetime.now() - start).total_seconds()
     logger.info(
         "=== IV Update Complete: %d/%d success in %.1fs ===",

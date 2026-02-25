@@ -172,19 +172,21 @@ class MarketDataClient:
     def get_atm_iv_data(self, symbol: str) -> Optional[Dict]:
         """获取 ATM 期权数据用于 IV 提取。
 
-        使用 strikeLimit=2 + range=atm 压缩 credit 消耗。
-        只拉最近月的 ATM call + put，取 IV 平均。
+        使用 strikeLimit=2 + range=atm + DTE 约束压缩 credit 消耗。
+        只拉近月 ATM call + put，取 IV 平均。
 
         Args:
             symbol: 标的代码
 
         Returns:
-            Chain 数据（ATM 范围，strike 限制 2）
+            Chain 数据（ATM 范围，近月，strike 限制 2）
         """
         return self.get_options_chain(
             symbol,
             strike_limit=2,
             option_range="atm",
+            dte_min=7,
+            dte_max=45,
         )
 
     # ========== Stock Quote (for underlying price) ==========

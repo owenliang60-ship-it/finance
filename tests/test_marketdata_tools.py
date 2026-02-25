@@ -89,7 +89,7 @@ class TestGetOptionQuoteTool:
 
     def test_metadata(self):
         tool = GetOptionQuoteTool()
-        assert tool.metadata.name == "get_option_quote"
+        assert tool.metadata.name == "get_options_quote"
         assert tool.metadata.category == ToolCategory.OPTIONS
 
     @patch("terminal.tools.marketdata_tools.marketdata_client")
@@ -124,7 +124,7 @@ class TestFactory:
         names = {t.metadata.name for t in tools}
         assert "get_options_chain" in names
         assert "get_options_expirations" in names
-        assert "get_option_quote" in names
+        assert "get_options_quote" in names
 
     def test_all_tools_have_options_category(self):
         tools = create_marketdata_tools()

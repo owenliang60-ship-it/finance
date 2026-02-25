@@ -122,14 +122,14 @@ class TestFetchAndStoreChain:
         result = fetch_and_store_chain("AAPL", store, client=mock_client)
         assert result is None
 
-    def test_cleanup_called(self, store):
-        """Should clean old snapshots after storing new ones."""
+    def test_no_cleanup_per_symbol(self, store):
+        """Cleanup should NOT be called per-symbol (moved to cron script)."""
         mock_client = MagicMock()
         mock_client.get_options_chain.return_value = _sample_chain_response()
 
         with patch.object(store, "cleanup_old_snapshots") as mock_cleanup:
             fetch_and_store_chain("AAPL", store, client=mock_client)
-            mock_cleanup.assert_called_once()
+            mock_cleanup.assert_not_called()
 
 
 class TestAnalyzeLiquidity:

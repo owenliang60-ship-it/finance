@@ -157,7 +157,7 @@ class GetOptionQuoteTool(BaseMarketDataTool):
     @property
     def metadata(self) -> ToolMetadata:
         return ToolMetadata(
-            name="get_option_quote",
+            name="get_options_quote",
             category=ToolCategory.OPTIONS,
             description="Get quote for a specific option contract by OCC symbol",
             provider="MarketData",

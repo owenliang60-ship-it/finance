@@ -159,8 +159,9 @@ class TestIVPercentile:
         store.save_iv_daily("AAPL", "2026-01-05", iv_30d=0.28)
 
         pctl = get_iv_percentile("AAPL", store)
-        # Current = 0.28, values below: 0.20, 0.25 = 2 out of 5 = 40%
-        assert pctl == 40.0
+        # Current = 0.28 (history[0]), comparison set = [0.35, 0.30, 0.25, 0.20]
+        # Below: 0.20, 0.25 = 2 out of 4 = 50%
+        assert pctl == 50.0
 
     def test_iv_percentile_no_data(self, store):
         """Should return None when no data."""

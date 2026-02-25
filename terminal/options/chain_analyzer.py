@@ -75,9 +75,6 @@ def fetch_and_store_chain(
     # Store in DB
     count = store.save_options_snapshot(symbol, today, contracts)
 
-    # Clean up old snapshots
-    store.cleanup_old_snapshots(retain_days=OPTIONS_SNAPSHOT_RETAIN_DAYS)
-
     # Collect unique expirations
     expirations = sorted(set(c["expiration"] for c in contracts))
 
@@ -196,13 +193,20 @@ def analyze_liquidity(
     avg_volume = sum(v["volume"] for v in valid) / len(valid)
 
     # Determine verdict
-    if avg_spread <= 0.03 and avg_oi >= 1000 and avg_volume >= 500:
+    # Thresholds derived from config constants (EXCELLENT = tightest, NO_GO = worst)
+    if (avg_spread <= OPTIONS_LIQUIDITY_MAX_SPREAD_PCT * 0.3
+            and avg_oi >= OPTIONS_LIQUIDITY_MIN_OI * 5
+            and avg_volume >= OPTIONS_LIQUIDITY_MIN_VOLUME * 5):
         verdict = "EXCELLENT"
-    elif avg_spread <= 0.05 and avg_oi >= 500 and avg_volume >= 200:
+    elif (avg_spread <= OPTIONS_LIQUIDITY_MAX_SPREAD_PCT * 0.5
+            and avg_oi >= OPTIONS_LIQUIDITY_MIN_OI * 2.5
+            and avg_volume >= OPTIONS_LIQUIDITY_MIN_VOLUME * 2):
         verdict = "GOOD"
-    elif avg_spread <= OPTIONS_LIQUIDITY_MAX_SPREAD_PCT and avg_oi >= OPTIONS_LIQUIDITY_MIN_OI:
+    elif (avg_spread <= OPTIONS_LIQUIDITY_MAX_SPREAD_PCT
+            and avg_oi >= OPTIONS_LIQUIDITY_MIN_OI
+            and avg_volume >= OPTIONS_LIQUIDITY_MIN_VOLUME):
         verdict = "FAIR"
-    elif avg_spread <= 0.15 and avg_oi >= 100:
+    elif avg_spread <= OPTIONS_LIQUIDITY_MAX_SPREAD_PCT * 1.5 and avg_oi >= OPTIONS_LIQUIDITY_MIN_OI * 0.5:
         verdict = "POOR"
     else:
         verdict = "NO_GO"
@@ -332,10 +336,12 @@ def filter_liquid_strikes(
 
         if oi < min_oi:
             continue
-        if bid is not None and ask is not None and mid and mid > 0:
-            spread_pct = (ask - bid) / mid
-            if spread_pct > max_spread_pct:
-                continue
+        # Spread filter: contracts with missing/zero mid are illiquid by definition
+        if not (bid is not None and ask is not None and mid and mid > 0):
+            continue
+        spread_pct = (ask - bid) / mid
+        if spread_pct > max_spread_pct:
+            continue
 
         liquid.append(c)
 

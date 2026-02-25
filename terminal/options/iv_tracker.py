@@ -139,12 +139,13 @@ def get_iv_percentile(
     if current_iv is None:
         return None
 
-    iv_values = [h["iv_30d"] for h in history if h.get("iv_30d") is not None]
-    if len(iv_values) < 2:
+    # Exclude current day (history[0]) from comparison set — standard IVP definition
+    historical_ivs = [h["iv_30d"] for h in history[1:] if h.get("iv_30d") is not None]
+    if not historical_ivs:
         return None
 
-    below_count = sum(1 for v in iv_values if v < current_iv)
-    percentile = below_count / len(iv_values) * 100
+    below_count = sum(1 for v in historical_ivs if v < current_iv)
+    percentile = below_count / len(historical_ivs) * 100
     return round(percentile, 1)
 
 
