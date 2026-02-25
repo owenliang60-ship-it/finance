@@ -165,18 +165,20 @@ class TestOptionsChain:
 
         client.get_options_chain(
             "AAPL",
-            dte_min=7,
-            dte_max=120,
+            dte=30,
+            date_from="2026-03-01",
+            date_to="2026-06-01",
             strike_limit=2,
-            option_range="atm",
+            option_range="otm",
         )
 
         call_kwargs = mock_get.call_args
         params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params", {})
-        assert params["from"] == "7"
-        assert params["to"] == "120"
+        assert params["dte"] == 30
+        assert params["from"] == "2026-03-01"
+        assert params["to"] == "2026-06-01"
         assert params["strikeLimit"] == 2
-        assert params["range"] == "atm"
+        assert params["range"] == "otm"
 
     @patch("src.data.marketdata_client.requests.get")
     def test_get_options_expirations(self, mock_get, client, mock_response):
@@ -189,7 +191,7 @@ class TestOptionsChain:
 
     @patch("src.data.marketdata_client.requests.get")
     def test_get_atm_iv_data(self, mock_get, client, mock_response):
-        """ATM IV data should use strikeLimit=2 and range=atm."""
+        """ATM IV data should use dte=30 and strikeLimit=2."""
         mock_get.return_value = mock_response(200, {"s": "ok"})
 
         client.get_atm_iv_data("AAPL")
@@ -197,7 +199,8 @@ class TestOptionsChain:
         call_kwargs = mock_get.call_args
         params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params", {})
         assert params["strikeLimit"] == 2
-        assert params["range"] == "atm"
+        assert params["dte"] == 30
+        assert "range" not in params
 
 
 class TestStockQuote:

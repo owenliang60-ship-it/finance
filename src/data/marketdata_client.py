@@ -58,7 +58,7 @@ class MarketDataClient:
                     url, params=params, headers=headers, timeout=API_TIMEOUT
                 )
 
-                if resp.status_code == 200:
+                if resp.status_code in (200, 203):
                     data = resp.json()
                     # MarketData.app wraps responses in {"s": "ok", ...}
                     if isinstance(data, dict) and data.get("s") == "ok":
@@ -104,8 +104,9 @@ class MarketDataClient:
         self,
         symbol: str,
         expiration: Optional[str] = None,
-        dte_min: Optional[int] = None,
-        dte_max: Optional[int] = None,
+        dte: Optional[int] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
         strike_limit: Optional[int] = None,
         option_range: Optional[str] = None,
         side: Optional[str] = None,
@@ -115,10 +116,11 @@ class MarketDataClient:
         Args:
             symbol: 标的代码
             expiration: 指定到期日 (YYYY-MM-DD)
-            dte_min: 最小 DTE
-            dte_max: 最大 DTE
-            strike_limit: 限制每个到期日的 strike 数量（省 credit）
-            option_range: 'itm', 'otm', 'atm'
+            dte: 目标 DTE，返回最接近此值的单个到期日
+            date_from: 到期日范围起始 (YYYY-MM-DD)
+            date_to: 到期日范围结束 (YYYY-MM-DD)
+            strike_limit: 限制返回的 strike 总数（最接近 ATM 的优先）
+            option_range: 'itm', 'otm', 'all'
             side: 'call' 或 'put'
 
         Returns:
@@ -127,10 +129,12 @@ class MarketDataClient:
         params = {}
         if expiration:
             params["expiration"] = expiration
-        if dte_min is not None:
-            params["from"] = "{}".format(dte_min)  # DTE from
-        if dte_max is not None:
-            params["to"] = "{}".format(dte_max)  # DTE to
+        if dte is not None:
+            params["dte"] = dte
+        if date_from:
+            params["from"] = date_from
+        if date_to:
+            params["to"] = date_to
         if strike_limit is not None:
             params["strikeLimit"] = strike_limit
         if option_range:
@@ -172,21 +176,19 @@ class MarketDataClient:
     def get_atm_iv_data(self, symbol: str) -> Optional[Dict]:
         """获取 ATM 期权数据用于 IV 提取。
 
-        使用 strikeLimit=2 + range=atm + DTE 约束压缩 credit 消耗。
-        只拉近月 ATM call + put，取 IV 平均。
+        使用 dte=30 取最接近 30 天的到期日 + strikeLimit=2 压缩 credit 消耗。
+        拉近 ATM 的 call + put，取 IV 平均。
 
         Args:
             symbol: 标的代码
 
         Returns:
-            Chain 数据（ATM 范围，近月，strike 限制 2）
+            Chain 数据（近 ATM，~30 天到期，strike 限制 2）
         """
         return self.get_options_chain(
             symbol,
+            dte=30,
             strike_limit=2,
-            option_range="atm",
-            dte_min=7,
-            dte_max=45,
         )
 
     # ========== Stock Quote (for underlying price) ==========

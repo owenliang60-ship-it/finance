@@ -51,13 +51,14 @@ class TestGetOptionsChainTool:
         tool._api_key_checked = True
         tool._is_available = True
 
-        result = tool.execute("AAPL", dte_min=7, dte_max=120)
+        result = tool.execute("AAPL", dte=30)
 
         mock_client.get_options_chain.assert_called_once_with(
             symbol="AAPL",
             expiration=None,
-            dte_min=7,
-            dte_max=120,
+            dte=30,
+            date_from=None,
+            date_to=None,
             strike_limit=None,
             option_range=None,
             side=None,

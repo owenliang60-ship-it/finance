@@ -23,7 +23,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from config.settings import MARKETDATA_API_KEY
+from config.settings import BENCHMARK_SYMBOLS, MARKETDATA_API_KEY
 from terminal.company_store import get_store
 from terminal.options.iv_tracker import update_daily_iv
 
@@ -60,7 +60,11 @@ def main():
     else:
         companies = store.list_companies(in_pool_only=True)
         symbols = [c["symbol"] for c in companies]
-        logger.info("Updating IV for %d pool stocks", len(symbols))
+        # 加入 benchmark ETF（SPY/QQQ），去重
+        for bm in BENCHMARK_SYMBOLS:
+            if bm not in symbols:
+                symbols.append(bm)
+        logger.info("Updating IV for %d pool stocks + benchmarks", len(symbols))
 
     if not symbols:
         logger.warning("No symbols to update — exiting")

@@ -91,8 +91,9 @@ class GetOptionsChainTool(BaseMarketDataTool):
         self,
         symbol: str,
         expiration: Optional[str] = None,
-        dte_min: Optional[int] = None,
-        dte_max: Optional[int] = None,
+        dte: Optional[int] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
         strike_limit: Optional[int] = None,
         option_range: Optional[str] = None,
         side: Optional[str] = None,
@@ -102,10 +103,11 @@ class GetOptionsChainTool(BaseMarketDataTool):
         Args:
             symbol: Stock ticker symbol
             expiration: Specific expiration date (YYYY-MM-DD)
-            dte_min: Minimum days to expiration
-            dte_max: Maximum days to expiration
-            strike_limit: Limit strikes per expiration (saves credits)
-            option_range: 'itm', 'otm', or 'atm'
+            dte: Target DTE, returns closest single expiration
+            date_from: Expiration date range start (YYYY-MM-DD)
+            date_to: Expiration date range end (YYYY-MM-DD)
+            strike_limit: Limit total strikes returned (closest to ATM first)
+            option_range: 'itm', 'otm', or 'all'
             side: 'call' or 'put'
 
         Returns:
@@ -115,8 +117,9 @@ class GetOptionsChainTool(BaseMarketDataTool):
             "get_options_chain",
             symbol=symbol,
             expiration=expiration,
-            dte_min=dte_min,
-            dte_max=dte_max,
+            dte=dte,
+            date_from=date_from,
+            date_to=date_to,
             strike_limit=strike_limit,
             option_range=option_range,
             side=side,

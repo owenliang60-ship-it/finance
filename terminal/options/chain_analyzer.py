@@ -51,7 +51,12 @@ def fetch_and_store_chain(
     symbol = symbol.upper()
     today = datetime.now().strftime("%Y-%m-%d")
 
-    data = client.get_options_chain(symbol, dte_min=dte_min, dte_max=dte_max)
+    # Convert DTE to date range for API
+    from datetime import timedelta
+    today = datetime.now()
+    date_from = (today + timedelta(days=dte_min)).strftime("%Y-%m-%d")
+    date_to = (today + timedelta(days=dte_max)).strftime("%Y-%m-%d")
+    data = client.get_options_chain(symbol, date_from=date_from, date_to=date_to)
     if not data or data.get("s") != "ok":
         logger.warning("No chain data for %s", symbol)
         return None
