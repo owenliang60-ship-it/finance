@@ -145,7 +145,7 @@ ssh aliyun "tail -30 /root/workspace/Finance/logs/cron_scan.log"
 
 ## 文档导航
 
-CC 启动时优先读取本文件 + MEMORY.md（自动注入）。需要更深信息时按需查阅：
+CC 启动时优先读取本文件 + 根工作区 L1/L2。需要更深信息时按需查阅：
 
 | 目录 | 内容 | 文件数 |
 |------|------|--------|
@@ -162,7 +162,7 @@ CC 启动时优先读取本文件 + MEMORY.md（自动注入）。需要更深�
 
 ## 已知陷阱
 
-详见 `docs/issues/` + `docs/postmortems/` + MEMORY.md Known Traps。
+详见 `docs/issues/` + `docs/postmortems/` + `.claude/long-term-memory.md` 反模式 section。
 
 ## 注意事项
 

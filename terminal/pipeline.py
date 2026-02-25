@@ -313,7 +313,7 @@ def collect_data(
                     "has_fundamentals": stock.get("fundamentals") is not None,
                     "ratios_count": len(stock.get("ratios", [])),
                     "income_count": len(stock.get("income", [])),
-                    "price_days": len(stock.get("price", [])) if stock.get("price") else 0,
+                    "price_days": stock.get("price", {}).get("records", 0) if stock.get("price") else 0,
                 }
             )
 
@@ -499,7 +499,7 @@ def collect_data(
             "data_collection_complete",
             f"Data collection complete. Has financials: {pkg.has_financials}, "
             f"Company DB record: {has_data}, "
-            f"Price data points: {len(pkg.price) if pkg.price else 0}, "
+            f"Price data points: {pkg.price.get('records', 0) if pkg.price else 0}, "
             f"Macro: {'yes' if pkg.macro else 'no'}"
         )
 

@@ -168,6 +168,7 @@ def store_situation(
     symbol: str,
     situation: Dict[str, Any],
     store: Optional[Any] = None,
+    analysis_id: Optional[int] = None,
 ) -> None:
     """Write situation summary into SQLite (latest analysis row).
 
@@ -175,6 +176,7 @@ def store_situation(
         symbol: Stock ticker
         situation: Dict from extract_situation_summary()
         store: Optional CompanyStore instance (uses singleton if None)
+        analysis_id: Specific analysis ID to update; if None, updates latest
     """
     if store is None:
         from terminal.company_store import get_store
@@ -182,7 +184,7 @@ def store_situation(
 
     symbol = symbol.upper()
     situation_json = json.dumps(situation, ensure_ascii=False)
-    store.update_situation_summary(symbol, situation_json)
+    store.update_situation_summary(symbol, situation_json, analysis_id=analysis_id)
     logger.info("Stored situation memory for %s (%d chars)", symbol, len(situation_json))
 
 

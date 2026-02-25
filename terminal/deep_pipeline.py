@@ -1062,6 +1062,7 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
         logger.warning(f"HTML report generation failed: {e}")
 
     # Auto-save to SQLite company database
+    analysis_id = None
     try:
         from terminal.company_store import get_store
         store = get_store()
@@ -1076,27 +1077,30 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
         store.upsert_company(symbol, source="analysis")
 
         # Save analysis summary
-        store.save_analysis(symbol, structured)
-
-        # Save OPRMS rating if extracted
-        if structured.get("oprms_dna") and structured.get("oprms_timing"):
-            store.save_oprms_rating(
-                symbol=symbol,
-                dna=structured["oprms_dna"],
-                timing=structured["oprms_timing"],
-                timing_coeff=structured.get("oprms_timing_coeff", 0.5),
-                conviction_modifier=structured.get("conviction_modifier"),
-                evidence=structured.get("evidence", []),
-                investment_bucket=structured.get("investment_bucket", ""),
-                verdict=structured.get("oprms_verdict", ""),
-                position_pct=structured.get("oprms_position_pct"),
-            )
-
-        logger.info(f"Auto-saved {symbol} to company.db")
+        analysis_id = store.save_analysis(symbol, structured)
+        logger.info(f"Auto-saved {symbol} to company.db (analysis_id={analysis_id})")
     except Exception as e:
-        logger.warning(f"Auto-save to company.db failed (non-fatal): {e}")
+        logger.error(f"Auto-save to company.db FAILED for {symbol}: {e}")
 
-    # Auto-regenerate dashboard (separate try block)
+    # Save OPRMS rating (degradable)
+    if analysis_id:
+        try:
+            if structured.get("oprms_dna") and structured.get("oprms_timing"):
+                store.save_oprms_rating(
+                    symbol=symbol,
+                    dna=structured["oprms_dna"],
+                    timing=structured["oprms_timing"],
+                    timing_coeff=structured.get("oprms_timing_coeff", 0.5),
+                    conviction_modifier=structured.get("conviction_modifier"),
+                    evidence=structured.get("evidence", []),
+                    investment_bucket=structured.get("investment_bucket", ""),
+                    verdict=structured.get("verdict", ""),
+                    position_pct=structured.get("oprms_position_pct"),
+                )
+        except Exception as e:
+            logger.warning(f"OPRMS rating save failed for {symbol} (non-fatal): {e}")
+
+    # Auto-regenerate dashboard (degradable)
     try:
         from terminal.dashboard import generate_dashboard
         generate_dashboard()
@@ -1109,7 +1113,7 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
         from terminal.memory import extract_situation_summary, store_situation
         situation = extract_situation_summary(symbol, research_dir)
         if situation:
-            store_situation(symbol, situation)
+            store_situation(symbol, situation, analysis_id=analysis_id)
             logger.info(f"Stored situation memory for {symbol}")
     except Exception as e:
         logger.warning(f"Memory storage failed (non-fatal): {e}")
