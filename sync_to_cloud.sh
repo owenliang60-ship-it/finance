@@ -45,6 +45,7 @@ sync_data() {
     echo "📊 同步数据..."
     rsync -avz "$LOCAL_DIR/data/fundamental/" "$REMOTE/data/fundamental/"
     rsync -avz "$LOCAL_DIR/data/pool/" "$REMOTE/data/pool/"
+    rsync -avz "$LOCAL_DIR/data/company.db" "$REMOTE/data/company.db"
     # 量价数据通常云端自己更新，除非需要可以取消注释
     # rsync -avz "$LOCAL_DIR/data/price/" "$REMOTE/data/price/"
     echo "✅ 数据同步完成"
@@ -54,10 +55,12 @@ verify_cloud() {
     echo "🔍 验证云端..."
     ssh aliyun "cd /root/workspace/Finance && python3 -c \"
 from config.settings import FMP_API_KEY
-from src.data.pool_manager import get_symbols
+from src.data.pool_manager import get_symbols, sync_db_pool
 from terminal.pipeline import collect_data
 print(f'API Key: OK')
 print(f'股票池: {len(get_symbols())} 只')
+synced = sync_db_pool()
+print(f'DB pool synced: {synced} companies')
 print(f'Pipeline: OK')
 \""
     echo "✅ 云端验证通过"
@@ -71,6 +74,8 @@ pull_data() {
     rsync -avz "$REMOTE/data/fundamental/" "$LOCAL_DIR/data/fundamental/"
     # 股票池 (云端周六更新)
     rsync -avz "$REMOTE/data/pool/" "$LOCAL_DIR/data/pool/"
+    # company.db (云端 IV cron 每日写入)
+    rsync -avz "$REMOTE/data/company.db" "$LOCAL_DIR/data/company.db"
     echo "✅ 本地数据已更新到云端最新版本"
 }
 

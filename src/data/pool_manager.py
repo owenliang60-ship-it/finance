@@ -196,9 +196,18 @@ def refresh_universe() -> Tuple[List[Dict], List[str], List[str]]:
     # 保存新股票池
     save_universe(new_stocks)
 
+    # 同步 company.db 的 in_pool 列
+    new_symbol_list = [s.get("symbol") for s in new_stocks if s.get("symbol")]
+    try:
+        from terminal.company_store import get_store
+        store = get_store()
+        synced = store.sync_pool(new_symbol_list)
+        logger.info("DB pool synced: %d companies", synced)
+    except Exception as e:
+        logger.warning("DB pool sync failed (non-fatal): %s", e)
+
     # 清理已退出股票的残留数据
     if exited:
-        new_symbol_list = [s.get("symbol") for s in new_stocks if s.get("symbol")]
         cleanup_stale_data(new_symbol_list)
 
     return new_stocks, list(entered), list(exited)
@@ -305,6 +314,18 @@ def cleanup_stale_data(active_symbols: List[str] = None) -> Dict[str, int]:
     logger.info(f"数据清理完成: 删除 {stats['csv_deleted']} 个 CSV, "
                 f"清理 {stats['fundamental_cleaned']} 条基本面条目")
     return stats
+
+
+def sync_db_pool() -> int:
+    """Sync universe.json -> company.db in_pool column.
+
+    Standalone function for scripts/cron to call without refresh_universe().
+    """
+    symbols = get_symbols()
+    if not symbols:
+        return 0
+    from terminal.company_store import get_store
+    return get_store().sync_pool(symbols)
 
 
 def get_symbols() -> List[str]:
