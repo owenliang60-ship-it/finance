@@ -168,6 +168,37 @@ class TestAnalyzeLiquidity:
         result = analyze_liquidity("AAPL", store, "2026-02-24")
         assert result["verdict"] in ("POOR", "NO_GO")
 
+    def test_atm_not_diluted_by_otm(self, store):
+        """ATM liquidity should NOT be diluted by deep OTM contracts."""
+        # 2 liquid ATM contracts + many illiquid deep OTM
+        contracts = [
+            {
+                "expiration": "2026-03-21", "strike": 200, "side": "call",
+                "bid": 8.50, "ask": 8.70, "mid": 8.60,
+                "volume": 1500, "open_interest": 25000,
+                "underlying_price": 202.50,
+            },
+            {
+                "expiration": "2026-03-21", "strike": 200, "side": "put",
+                "bid": 6.00, "ask": 6.15, "mid": 6.075,
+                "volume": 800, "open_interest": 18000,
+                "underlying_price": 202.50,
+            },
+        ]
+        # Add 20 deep OTM contracts with terrible liquidity
+        for i in range(20):
+            contracts.append({
+                "expiration": "2026-03-21", "strike": 300 + i * 10, "side": "call",
+                "bid": 0.01, "ask": 0.10, "mid": 0.055,
+                "volume": 1, "open_interest": 5,
+                "underlying_price": 202.50,
+            })
+        store.save_options_snapshot("AAPL", "2026-02-24", contracts)
+
+        result = analyze_liquidity("AAPL", store, "2026-02-24")
+        # Should NOT be NO_GO — ATM strikes are liquid
+        assert result["verdict"] != "NO_GO"
+
 
 class TestTermStructure:
     """Test term structure extraction."""
@@ -287,3 +318,19 @@ class TestEarningsProximity:
         result = get_earnings_proximity("aapl", fmp_client=mock_fmp)
         assert result["zone"] == "CLEAR"
         assert result["days_to_earnings"] in (49, 50)  # Off-by-one from time-of-day
+
+    def test_picks_closest_earnings(self):
+        """Should pick the closest future earnings, not the first match."""
+        mock_fmp = MagicMock()
+        from datetime import timedelta
+        far = (datetime.now() + timedelta(days=40)).strftime("%Y-%m-%d")
+        near = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
+        # Far date listed FIRST — old code would return CLEAR
+        mock_fmp.get_earnings_calendar.return_value = [
+            {"symbol": "AAPL", "date": far},
+            {"symbol": "AAPL", "date": near},
+        ]
+
+        result = get_earnings_proximity("AAPL", fmp_client=mock_fmp)
+        assert result["zone"] == "BLACKOUT"
+        assert result["days_to_earnings"] in (2, 3)

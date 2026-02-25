@@ -162,9 +162,24 @@ def analyze_liquidity(
             "avg_volume": None,
         }
 
-    # Focus on contracts with reasonable data
-    valid = []
+    # Find underlying price to filter ATM-adjacent strikes only
+    underlying = None
     for c in contracts:
+        if c.get("underlying_price"):
+            underlying = c["underlying_price"]
+            break
+
+    # Filter to ATM-adjacent strikes (±10% of underlying) to avoid OTM dilution
+    if underlying and underlying > 0:
+        atm_low = underlying * 0.90
+        atm_high = underlying * 1.10
+        atm_contracts = [c for c in contracts if atm_low <= (c.get("strike") or 0) <= atm_high]
+    else:
+        atm_contracts = contracts  # Fallback: use all if no underlying
+
+    # Focus on ATM contracts with valid bid/ask data
+    valid = []
+    for c in atm_contracts:
         bid = c.get("bid")
         ask = c.get("ask")
         mid = c.get("mid")
@@ -436,36 +451,43 @@ def get_earnings_proximity(
             "zone": "CLEAR",  # No earnings data = assume safe
         }
 
-    # Find this symbol's next earnings
+    # Find the CLOSEST future earnings for this symbol
     symbol = symbol.upper()
+    closest_days = None
+    closest_date_str = None
+
     for entry in calendar:
-        if entry.get("symbol", "").upper() == symbol:
-            earnings_date_str = entry.get("date", "")
-            if not earnings_date_str:
-                continue
-            try:
-                earnings_date = datetime.strptime(earnings_date_str, "%Y-%m-%d")
-                days = (earnings_date - today).days
+        if entry.get("symbol", "").upper() != symbol:
+            continue
+        earnings_date_str = entry.get("date", "")
+        if not earnings_date_str:
+            continue
+        try:
+            earnings_date = datetime.strptime(earnings_date_str, "%Y-%m-%d")
+            days = (earnings_date - today).days
+            if days < 0:
+                continue  # Past earnings
+            if closest_days is None or days < closest_days:
+                closest_days = days
+                closest_date_str = earnings_date_str
+        except ValueError:
+            continue
 
-                if days < 0:
-                    continue  # Past earnings
+    if closest_days is not None:
+        if closest_days > 30:
+            zone = "CLEAR"
+        elif closest_days > 10:
+            zone = "CAUTION"
+        elif closest_days > 5:
+            zone = "T5_WARNING"
+        else:
+            zone = "BLACKOUT"
 
-                if days > 30:
-                    zone = "CLEAR"
-                elif days > 10:
-                    zone = "CAUTION"
-                elif days > 5:
-                    zone = "T5_WARNING"
-                else:
-                    zone = "BLACKOUT"
-
-                return {
-                    "days_to_earnings": days,
-                    "earnings_date": earnings_date_str,
-                    "zone": zone,
-                }
-            except ValueError:
-                continue
+        return {
+            "days_to_earnings": closest_days,
+            "earnings_date": closest_date_str,
+            "zone": zone,
+        }
 
     return {
         "days_to_earnings": None,

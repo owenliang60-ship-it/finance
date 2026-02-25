@@ -176,8 +176,10 @@ class CompanyStore:
         self._migrate_if_needed()
 
     def _migrate_if_needed(self) -> None:
-        """Add new columns to analyses table if missing (idempotent)."""
+        """Run idempotent schema migrations for existing databases."""
         conn = self._get_conn()
+
+        # --- Migration 1: analyses 新列 ---
         columns = {row[1] for row in conn.execute("PRAGMA table_info(analyses)")}
         _ALLOWED_COLS = {"situation_summary", "debate_conviction_modifier", "debate_final_action", "debate_key_disagreement"}
         _ALLOWED_TYPES = {"TEXT", "REAL", "INTEGER"}
@@ -192,7 +194,71 @@ class CompanyStore:
                 raise ValueError(f"Unexpected migration column: {col} {typ}")
             if col not in columns:
                 conn.execute(f"ALTER TABLE analyses ADD COLUMN {col} {typ}")
+
+        # --- Migration 2: options_snapshots UNIQUE 约束 ---
+        # SQLite 不支持 ALTER TABLE ADD CONSTRAINT，需要检测并重建表
+        self._migrate_options_snapshots_unique(conn)
+
         conn.commit()
+
+    def _migrate_options_snapshots_unique(self, conn) -> None:
+        """Ensure options_snapshots has UNIQUE(symbol, snapshot_date, expiration, strike, side).
+
+        If the table exists without the constraint, rebuild it. Idempotent.
+        """
+        # Check if table exists
+        table_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='options_snapshots'"
+        ).fetchone()
+        if not table_exists:
+            return  # _init_db will create it with UNIQUE via _SCHEMA
+
+        # Check if UNIQUE constraint already exists by inspecting the CREATE TABLE SQL
+        create_sql = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='options_snapshots'"
+        ).fetchone()
+        if create_sql and "UNIQUE" in (create_sql[0] or ""):
+            return  # Already has UNIQUE constraint
+
+        # Rebuild table with UNIQUE constraint (SQLite limitation)
+        logger.info("Migrating options_snapshots: adding UNIQUE constraint")
+        conn.executescript("""
+            -- Deduplicate: keep the latest row per (symbol, snapshot_date, expiration, strike, side)
+            CREATE TABLE options_snapshots_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL,
+                snapshot_date TEXT NOT NULL,
+                expiration TEXT NOT NULL,
+                strike REAL NOT NULL,
+                side TEXT NOT NULL,
+                bid REAL, ask REAL, mid REAL, last REAL,
+                volume INTEGER, open_interest INTEGER, iv REAL,
+                delta REAL, gamma REAL, theta REAL, vega REAL,
+                dte INTEGER, in_the_money INTEGER,
+                underlying_price REAL,
+                created_at TEXT NOT NULL,
+                UNIQUE(symbol, snapshot_date, expiration, strike, side)
+            );
+
+            INSERT OR REPLACE INTO options_snapshots_new
+                (symbol, snapshot_date, expiration, strike, side,
+                 bid, ask, mid, last, volume, open_interest, iv,
+                 delta, gamma, theta, vega, dte, in_the_money,
+                 underlying_price, created_at)
+            SELECT symbol, snapshot_date, expiration, strike, side,
+                   bid, ask, mid, last, volume, open_interest, iv,
+                   delta, gamma, theta, vega, dte, in_the_money,
+                   underlying_price, created_at
+            FROM options_snapshots
+            GROUP BY symbol, snapshot_date, expiration, strike, side
+            HAVING id = MAX(id);
+
+            DROP TABLE options_snapshots;
+            ALTER TABLE options_snapshots_new RENAME TO options_snapshots;
+
+            CREATE INDEX IF NOT EXISTS idx_options_snap_symbol ON options_snapshots(symbol, snapshot_date);
+            CREATE INDEX IF NOT EXISTS idx_options_snap_exp ON options_snapshots(symbol, expiration);
+        """)
 
     def close(self) -> None:
         if self._conn:

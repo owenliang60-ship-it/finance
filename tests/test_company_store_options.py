@@ -315,3 +315,99 @@ class TestSchemaCreation:
         }
         # At least the unique constraint index should exist
         assert len(indexes) >= 1
+
+    def test_options_snapshot_upsert(self, store):
+        """UNIQUE constraint should cause upsert, not duplicate rows."""
+        contracts = [
+            {
+                "expiration": "2026-03-21", "strike": 200.0, "side": "call",
+                "bid": 8.50, "ask": 8.80, "mid": 8.65,
+                "underlying_price": 202.50,
+            },
+        ]
+        store.save_options_snapshot("AAPL", "2026-02-24", contracts)
+        # Save again with updated bid — should upsert, not duplicate
+        contracts[0]["bid"] = 9.00
+        store.save_options_snapshot("AAPL", "2026-02-24", contracts)
+
+        result = store.get_options_snapshot("AAPL", "2026-02-24")
+        assert len(result) == 1  # Not 2
+        assert result[0]["bid"] == 9.00  # Updated value
+
+    def test_migration_adds_unique_to_old_table(self, tmp_path):
+        """Migration should add UNIQUE constraint to pre-existing options_snapshots."""
+        import sqlite3
+        db_path = tmp_path / "old.db"
+        # Create old-style table WITHOUT UNIQUE constraint
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript("""
+            CREATE TABLE companies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT UNIQUE NOT NULL,
+                company_name TEXT, sector TEXT, industry TEXT,
+                in_pool INTEGER DEFAULT 0, source TEXT DEFAULT 'manual',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE analyses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL, analysis_date TEXT,
+                executive_summary TEXT, debate_verdict TEXT,
+                key_forces TEXT, price_at_analysis REAL,
+                report_path TEXT, html_report_path TEXT,
+                cycle_position TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                situation_summary TEXT, debate_conviction_modifier REAL,
+                debate_final_action TEXT, debate_key_disagreement TEXT
+            );
+            CREATE TABLE kill_conditions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL, description TEXT,
+                severity TEXT DEFAULT 'WARNING',
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE iv_daily (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL, date TEXT NOT NULL,
+                iv_30d REAL, iv_60d REAL, hv_30d REAL,
+                put_call_ratio REAL, total_volume INTEGER, total_oi INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(symbol, date)
+            );
+            CREATE TABLE options_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT NOT NULL, snapshot_date TEXT NOT NULL,
+                expiration TEXT NOT NULL, strike REAL NOT NULL, side TEXT NOT NULL,
+                bid REAL, ask REAL, mid REAL, last REAL,
+                volume INTEGER, open_interest INTEGER, iv REAL,
+                delta REAL, gamma REAL, theta REAL, vega REAL,
+                dte INTEGER, in_the_money INTEGER, underlying_price REAL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            INSERT INTO companies (symbol) VALUES ('AAPL');
+            INSERT INTO options_snapshots
+                (symbol, snapshot_date, expiration, strike, side, bid, created_at)
+            VALUES ('AAPL', '2026-02-24', '2026-03-21', 200.0, 'call', 8.50, datetime('now'));
+        """)
+        conn.close()
+
+        # Open with CompanyStore — migration should run
+        migrated_store = CompanyStore(db_path=db_path)
+
+        # Verify UNIQUE constraint exists now
+        conn2 = migrated_store._get_conn()
+        create_sql = conn2.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='options_snapshots'"
+        ).fetchone()[0]
+        assert "UNIQUE" in create_sql
+
+        # Verify old data survived
+        result = migrated_store.get_options_snapshot("AAPL", "2026-02-24")
+        assert len(result) == 1
+
+        # Verify upsert works now
+        migrated_store.save_options_snapshot("AAPL", "2026-02-24", [
+            {"expiration": "2026-03-21", "strike": 200.0, "side": "call", "bid": 9.00},
+        ])
+        result = migrated_store.get_options_snapshot("AAPL", "2026-02-24")
+        assert len(result) == 1
+        assert result[0]["bid"] == 9.00
