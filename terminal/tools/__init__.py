@@ -25,9 +25,10 @@ logger = logging.getLogger(__name__)
 # Initialize global registry
 registry = get_registry()
 
-# Auto-register FMP tools
+# Auto-register tools
 _fmp_tools_loaded = False
 _fred_tools_loaded = False
+_marketdata_tools_loaded = False
 
 
 def _load_fmp_tools():
@@ -94,9 +95,43 @@ def _load_fred_tools():
         logger.error(f"Failed to load FRED tools: {e}")
 
 
+def _load_marketdata_tools():
+    """Load MarketData.app tools into registry (conditional on API key)."""
+    global _marketdata_tools_loaded
+    if _marketdata_tools_loaded:
+        return
+
+    try:
+        from terminal.tools.marketdata_tools import create_marketdata_tools
+
+        tools = create_marketdata_tools()
+        for tool in tools:
+            registry.register(tool)
+
+        available_count = sum(1 for t in tools if t.is_available())
+        total_count = len(tools)
+
+        if available_count > 0:
+            logger.info(
+                f"Loaded {available_count}/{total_count} MarketData tools "
+                f"(provider: MarketData.app - options data)"
+            )
+        else:
+            logger.info(
+                f"MarketData tools registered but unavailable "
+                f"(missing MARKETDATA_API_KEY)"
+            )
+
+        _marketdata_tools_loaded = True
+
+    except Exception as e:
+        logger.error(f"Failed to load MarketData tools: {e}")
+
+
 # Auto-load on import
 _load_fmp_tools()
 _load_fred_tools()
+_load_marketdata_tools()
 
 
 # Re-export key components for convenience

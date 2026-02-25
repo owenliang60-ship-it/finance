@@ -38,6 +38,12 @@
 | Factor Study Framework (51 new tests, 838 total) | 2026-02-16 | +3,769 |
 | Alpha Debate + Agent Memory (60 new tests, 898 total) | 2026-02-20 | +1,800 |
 | Company Profiler (23 new tests, 921 total) | 2026-02-20 | +580 |
+| **Options Module** (100 new tests, 1021 total) | 2026-02-25 | +2,400 |
+|   ↳ MarketData.app client + DB schema (iv_daily + options_snapshots) | | |
+|   ↳ IV Tracker (rank/percentile/HV) + Chain Analyzer (liquidity/term structure/earnings) | | |
+|   ↳ Commands orchestrator + Formatter (context/chain/comparison/memo) | | |
+|   ↳ Tool Registry (3 MarketData tools) + Daily IV Cron | | |
+|   ↳ /options conversational skill + 24 strategy playbooks | | |
 | **当前** | 2026-02-20 | **~178 files, 921 tests** |
 
 ---
