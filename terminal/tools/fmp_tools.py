@@ -505,6 +505,37 @@ class GetStockNewsTool(BaseFMPTool):
         )
 
 
+# ========== Analyst Recommendations ==========
+
+class GetAnalystRecommendationsTool(BaseFMPTool):
+    """Get analyst recommendation distribution (Strong Buy/Buy/Hold/Sell/Strong Sell)."""
+
+    @property
+    def metadata(self) -> ToolMetadata:
+        return ToolMetadata(
+            name="get_analyst_recommendations",
+            category=ToolCategory.FUNDAMENTALS,
+            description="Get analyst rating distribution (Buy/Hold/Sell)",
+            provider="FMP",
+            requires_api_key=True,
+            api_key_env_var="FMP_API_KEY",
+        )
+
+    def execute(self, symbol: str) -> List[Dict]:
+        """
+        Execute: get analyst recommendations.
+
+        Args:
+            symbol: Stock ticker symbol
+
+        Returns:
+            List of analyst recommendation dicts (most recent first)
+        """
+        return self._execute_client_method(
+            "get_analyst_recommendations", symbol=symbol
+        )
+
+
 # ========== Tool Factory ==========
 
 def create_fmp_tools() -> List[FinanceTool]:
@@ -531,6 +562,7 @@ def create_fmp_tools() -> List[FinanceTool]:
         GetAnalystEstimatesTool(),
         GetEarningsCalendarTool(),
         GetInsiderTradesTool(),
+        GetAnalystRecommendationsTool(),
         # News
         GetStockNewsTool(),
     ]

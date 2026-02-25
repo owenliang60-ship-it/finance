@@ -67,6 +67,7 @@ class DataPackage:
 
     # FMP enrichment (P0)
     analyst_estimates: Optional[list] = None
+    analyst_recommendations: Optional[list] = None
     earnings_calendar: Optional[list] = None
     insider_trades: list = field(default_factory=list)
     news: list = field(default_factory=list)
@@ -114,19 +115,19 @@ class DataPackage:
                     lines.append(f"- {key}: {val}")
             sections.append("\n".join(lines))
 
-        # Recent ratios (latest 2 periods)
+        # Recent ratios (last 4 quarters)
         if self.ratios:
-            latest = self.ratios[:2]
+            latest = self.ratios[:4]
             sections.append(
-                "### Financial Ratios (Recent)\n"
+                "### Financial Ratios (Last 4 Quarters)\n"
                 + json.dumps(latest, indent=2, default=str)
             )
 
-        # Income statement (latest 2 periods)
+        # Income statement (last 4 quarters)
         if self.income:
-            latest = self.income[:2]
+            latest = self.income[:4]
             sections.append(
-                "### Income Statement (Recent)\n"
+                "### Income Statement (Last 4 Quarters)\n"
                 + json.dumps(latest, indent=2, default=str)
             )
 
@@ -208,6 +209,41 @@ class DataPackage:
                     f"Revenue {rev_str}"
                 )
             sections.append("\n".join(lines))
+
+        # Analyst rating distribution (from grades data)
+        if self.analyst_recommendations:
+            # Deduplicate: keep latest grade per analyst firm
+            latest_by_firm: dict = {}
+            for rec in self.analyst_recommendations:
+                firm = rec.get("gradingCompany", "")
+                if firm and firm not in latest_by_firm:
+                    latest_by_firm[firm] = rec.get("newGrade", "").strip()
+
+            if latest_by_firm:
+                # Map grade strings to buckets
+                buy_keywords = {"buy", "outperform", "overweight", "positive", "accumulate", "strong buy", "strong-buy", "top pick"}
+                hold_keywords = {"hold", "neutral", "equal-weight", "equal weight", "market perform", "sector perform", "peer perform", "in-line", "inline"}
+                sell_keywords = {"sell", "underperform", "underweight", "negative", "reduce", "strong sell"}
+
+                buy_count = hold_count = sell_count = 0
+                for grade_str in latest_by_firm.values():
+                    g = grade_str.lower()
+                    if any(kw in g for kw in buy_keywords):
+                        buy_count += 1
+                    elif any(kw in g for kw in sell_keywords):
+                        sell_count += 1
+                    elif any(kw in g for kw in hold_keywords):
+                        hold_count += 1
+                    # else: unknown grade, skip
+
+                total = buy_count + hold_count + sell_count
+                if total > 0:
+                    lines = ["### Analyst Rating Distribution"]
+                    lines.append(f"- Buy/Outperform: {buy_count} ({buy_count/total:.0%})")
+                    lines.append(f"- Hold/Neutral: {hold_count} ({hold_count/total:.0%})")
+                    lines.append(f"- Sell/Underperform: {sell_count} ({sell_count/total:.0%})")
+                    lines.append(f"- Total Analysts: {total}")
+                    sections.append("\n".join(lines))
 
         # Upcoming earnings
         if self.earnings_calendar:
@@ -444,6 +480,21 @@ def collect_data(
             if scratchpad:
                 scratchpad.log_reasoning("error", f"Analyst estimates fetch failed: {e}")
 
+        # Analyst recommendations (rating distribution)
+        try:
+            result = registry.execute("get_analyst_recommendations", symbol=symbol)
+            if result:
+                pkg.analyst_recommendations = result
+                if scratchpad:
+                    scratchpad.log_tool_call(
+                        "get_analyst_recommendations", {"symbol": symbol},
+                        {"count": len(pkg.analyst_recommendations)}
+                    )
+        except Exception as e:
+            logger.warning(f"Analyst recommendations fetch failed for {symbol}: {e}")
+            if scratchpad:
+                scratchpad.log_reasoning("error", f"Analyst recommendations fetch failed: {e}")
+
         # Insider trades
         try:
             result = registry.execute("get_insider_trades", symbol=symbol, limit=20)
@@ -524,6 +575,8 @@ def prepare_lens_prompts(
     if lenses is None:
         lenses = get_all_lenses()
 
+    from knowledge.prompts.provenance import DATA_PROVENANCE_INSTRUCTIONS
+
     context = {"Financial Data": data_package.format_context()}
 
     # Add existing analyses for reference
@@ -534,7 +587,7 @@ def prepare_lens_prompts(
 
     prompts = []
     for lens in lenses:
-        prompt = format_prompt(lens, symbol, context)
+        prompt = format_prompt(lens, symbol, context) + DATA_PROVENANCE_INSTRUCTIONS
         prompts.append({
             "lens_name": lens.name,
             "horizon": lens.horizon,

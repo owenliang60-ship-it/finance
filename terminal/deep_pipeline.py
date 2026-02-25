@@ -71,6 +71,7 @@ def prepare_research_queries(
         ),
         "street": (
             f"{symbol} analyst ratings price targets upgrades downgrades "
+            f"short interest short squeeze institutional ownership "
             f"Wall Street consensus bull bear debate {datetime.now().year}"
         ),
     }
@@ -127,6 +128,8 @@ def build_lens_agent_prompt(
     Returns:
         Complete prompt string for a Task agent
     """
+    from knowledge.prompts.provenance import DATA_PROVENANCE_INSTRUCTIONS
+
     slug = _slugify(lens_dict["lens_name"])
     output_path = research_dir / f"lens_{slug}.md"
 
@@ -139,9 +142,9 @@ def build_lens_agent_prompt(
 - `{research_dir}/data_context.md` — 财务数据、比率、技术指标、宏观环境
 - `{research_dir}/earnings.md` — 最新财报要点、管理层评论、指引
 - `{research_dir}/competitive.md` — 竞争格局、同行对比
-- `{research_dir}/street.md` — 分析师共识、目标价、多空争论
+- `{research_dir}/street.md` — 分析师共识、目标价、多空争论、做空数据
 
-文件缺失或为空则跳过，用已有数据继续。
+文件缺失或为空则跳过，用已有数据继续。**数据缺失时写"该数据未提供"并跳过相关分析维度，绝不编造具体数字。**
 
 **关键要求**：company_profile.md 中有针对 **{lens_dict["lens_name"]}** 透镜的个性化指引（适用度、焦点调整、弱化/忽略、补充关注），请严格遵循这些指引调整你的分析重点。
 
@@ -164,7 +167,7 @@ def build_lens_agent_prompt(
   2. **独特视角**（只有本透镜能看到的洞察，300-400 字）
   3. **评级**：星级 (1-5) + BUY/HOLD/PASS 判定 + 目标 IRR
   4. **触杀条件**：2-3 个本透镜视角下的可观测触发条件
-"""
+{DATA_PROVENANCE_INSTRUCTIONS}"""
 
 
 def build_synthesis_agent_prompt(research_dir: Path, symbol: str) -> str:
@@ -180,6 +183,8 @@ def build_synthesis_agent_prompt(research_dir: Path, symbol: str) -> str:
     Returns:
         Complete prompt string for a Task agent
     """
+    from knowledge.prompts.provenance import DATA_PROVENANCE_INSTRUCTIONS
+
     symbol = symbol.upper()
     rd = str(research_dir)
 
@@ -301,7 +306,7 @@ X 轴 — 时机系数 (Timing):
 - **禁止重复原始数据** — 研究文件和透镜分析已提供事实，你只需综合判断
 - 引用数据时一句话概括即可
 - 辩论中的论点必须来自透镜分析的洞察，不是泛泛的风险提示
-"""
+{DATA_PROVENANCE_INSTRUCTIONS}"""
 
 
 def build_alpha_agent_prompt(
@@ -335,6 +340,7 @@ def build_alpha_agent_prompt(
     from knowledge.alpha.red_team import generate_red_team_prompt
     from knowledge.alpha.cycle_pendulum import generate_cycle_prompt
     from knowledge.alpha.asymmetric_bet import generate_bet_prompt
+    from knowledge.prompts.provenance import DATA_PROVENANCE_INSTRUCTIONS
 
     symbol = symbol.upper()
     rd = str(research_dir)
@@ -457,7 +463,7 @@ def build_alpha_agent_prompt(
 - **所有输出使用中文**（金融术语可用英文括注）
 - **三个文件必须按顺序完成**（红队 → 周期 → 赌注），后一步依赖前一步的输出
 - 每个文件 500+ 字，追求信息密度
-"""
+{DATA_PROVENANCE_INSTRUCTIONS}"""
 
 
 def build_alpha_debate_prompt(
@@ -478,12 +484,14 @@ def build_alpha_debate_prompt(
         Complete prompt string for a Task agent
     """
     from knowledge.alpha.debate import generate_alpha_debate_prompt
-    return generate_alpha_debate_prompt(
+    from knowledge.prompts.provenance import DATA_PROVENANCE_INSTRUCTIONS
+    prompt = generate_alpha_debate_prompt(
         symbol=symbol.upper(),
         research_dir_str=str(research_dir),
         rounds=rounds,
         past_experiences=past_experiences,
     )
+    return prompt + "\n" + DATA_PROVENANCE_INSTRUCTIONS
 
 
 def write_agent_prompts(

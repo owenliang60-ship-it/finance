@@ -46,6 +46,7 @@ class MockDataPackage:
         self.price = {"close": 100.0}
         self.indicators = {"symbol": symbol, "signals": [], "pmarp": {"current": 65.0}}
         self.analyst_estimates = None
+        self.analyst_recommendations = None
         self.earnings_calendar = None
         self.insider_trades = []
         self.news = []

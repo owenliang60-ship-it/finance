@@ -23,7 +23,7 @@ def get_lens() -> InvestmentLens:
         key_questions=[
             "How does the company's EV/EBITDA compare to sector peers, and is the spread justified by fundamentals?",
             "What specific catalyst will cause the market to re-rate this stock within 1-3 years?",
-            "What is the short interest, and what are shorts seeing that the market might be missing?",
+            "What is the short interest, and what are shorts seeing that the market might be missing? (If short interest data is not provided in the context, analyze the bear thesis based on other available indicators instead of citing specific short interest numbers.)",
             "What are the key sector dynamics — is the industry consolidating, growing, or declining?",
             "What is the natural hedge pair if this is a long position? What would you short against it?",
         ],

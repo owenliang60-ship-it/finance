@@ -260,6 +260,23 @@ class FMPClient:
         data = self._request("stock_news", params)
         return data if isinstance(data, list) else []
 
+    def get_analyst_recommendations(self, symbol: str, limit: int = 200) -> List[Dict]:
+        """
+        获取分析师评级历史 (grades endpoint)
+
+        每条记录含 gradingCompany, newGrade, action 等字段。
+        调用方可聚合为 Buy/Hold/Sell 分布。
+
+        Args:
+            symbol: 股票代码
+            limit: 返回数量（默认 200 条，覆盖近期评级）
+
+        Returns:
+            评级记录列表（最新在前）
+        """
+        data = self._request("grades", {"symbol": symbol, "limit": limit})
+        return data if isinstance(data, list) else []
+
 
 # 单例
 fmp_client = FMPClient()
