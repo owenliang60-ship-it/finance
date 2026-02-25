@@ -110,6 +110,7 @@ class MarketDataClient:
         strike_limit: Optional[int] = None,
         option_range: Optional[str] = None,
         side: Optional[str] = None,
+        date: Optional[str] = None,
     ) -> Optional[Dict]:
         """获取期权链数据。
 
@@ -122,6 +123,7 @@ class MarketDataClient:
             strike_limit: 限制返回的 strike 总数（最接近 ATM 的优先）
             option_range: 'itm', 'otm', 'all'
             side: 'call' 或 'put'
+            date: 历史查询日期 (YYYY-MM-DD)，查 EOD 快照
 
         Returns:
             Chain 数据 dict，包含 optionSymbol, strike, bid, ask, iv, delta 等数组
@@ -141,6 +143,8 @@ class MarketDataClient:
             params["range"] = option_range
         if side:
             params["side"] = side
+        if date:
+            params["date"] = date
 
         return self._request("options/chain/{}".format(symbol), params)
 
@@ -190,6 +194,37 @@ class MarketDataClient:
             dte=30,
             strike_limit=2,
         )
+
+    def get_historical_atm_iv(
+        self, symbol: str, date: str
+    ) -> Optional[float]:
+        """获取指定日期的 ATM IV（历史 EOD 数据）。
+
+        使用 dte=30 + strikeLimit=2 取近 ATM 的 call+put，平均 IV。
+        1 credit / 1000 symbols — cost 极低。
+
+        Args:
+            symbol: 标的代码
+            date: 查询日期 (YYYY-MM-DD)
+
+        Returns:
+            ATM IV as float (e.g. 0.28), or None if no data
+        """
+        data = self.get_options_chain(
+            symbol,
+            dte=30,
+            strike_limit=2,
+            date=date,
+        )
+        if not data or data.get("s") != "ok":
+            return None
+
+        iv_values = data.get("iv", [])
+        valid_ivs = [v for v in iv_values if v is not None and v > 0]
+        if not valid_ivs:
+            return None
+
+        return round(sum(valid_ivs) / len(valid_ivs), 4)
 
     # ========== Stock Quote (for underlying price) ==========
 

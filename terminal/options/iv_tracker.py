@@ -22,7 +22,9 @@ from config.settings import (
 logger = logging.getLogger(__name__)
 
 
-def compute_hv(symbol: str, window: int = 30) -> Optional[float]:
+def compute_hv(
+    symbol: str, window: int = 30, as_of: Optional[str] = None
+) -> Optional[float]:
     """Compute historical (realized) volatility from price CSV.
 
     Uses close-to-close log returns, annualized (×sqrt(252)).
@@ -30,6 +32,8 @@ def compute_hv(symbol: str, window: int = 30) -> Optional[float]:
     Args:
         symbol: Stock ticker
         window: Number of trading days for HV calculation
+        as_of: Cutoff date (YYYY-MM-DD). Only use prices on or before this date.
+               If None, uses all available data (latest window).
 
     Returns:
         Annualized HV as decimal (e.g., 0.25 = 25%), or None if insufficient data
@@ -40,14 +44,22 @@ def compute_hv(symbol: str, window: int = 30) -> Optional[float]:
         return None
 
     import csv
-    closes = []
+    rows = []
     with open(csv_path, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
             try:
-                closes.append(float(row["close"]))
+                date_str = row.get("date", "")
+                close = float(row["close"])
+                rows.append((date_str, close))
             except (KeyError, ValueError):
                 continue
+
+    # CSVs are newest-first; filter by as_of if specified
+    if as_of:
+        rows = [(d, c) for d, c in rows if d <= as_of]
+
+    closes = [c for _, c in rows]
 
     if len(closes) < window + 1:
         logger.warning(
