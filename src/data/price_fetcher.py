@@ -54,6 +54,13 @@ def save_price_cache(symbol: str, df: pd.DataFrame):
     df.to_csv(cache_path, index=False)
     logger.debug(f"保存缓存 {symbol}: {len(df)} 条")
 
+    # Dual-write to market.db (non-fatal)
+    try:
+        from src.data.market_store import get_store
+        get_store().upsert_daily_prices_df(symbol, df)
+    except Exception as e:
+        logger.warning(f"[market.db] price dual-write failed for {symbol}: {e}")
+
 
 def get_cache_latest_date(symbol: str) -> Optional[datetime]:
     """获取缓存中最新的日期"""

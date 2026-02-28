@@ -94,6 +94,25 @@ def update_profiles(symbols: List[str] = None) -> Dict[str, Dict]:
     return profiles
 
 
+def _sync_to_market_db(table_type: str, data: Dict) -> None:
+    """Dual-write to market.db (non-fatal, failure only logs warning)."""
+    try:
+        from src.data.market_store import get_store
+        store = get_store()
+        upsert_fn = {
+            "income": store.upsert_income,
+            "balance_sheet": store.upsert_balance_sheet,
+            "cash_flow": store.upsert_cash_flow,
+            "ratios": store.upsert_ratios,
+        }[table_type]
+        for symbol, rows in data.items():
+            if symbol == "_meta" or not isinstance(rows, list):
+                continue
+            upsert_fn(symbol, rows)
+    except Exception as e:
+        logger.warning("[market.db] dual-write %s failed: %s", table_type, e)
+
+
 def get_profile(symbol: str) -> Optional[Dict]:
     """获取公司概况 (优先用缓存)"""
     profiles = _load_json(PROFILES_FILE)
@@ -136,6 +155,7 @@ def update_ratios(symbols: List[str] = None) -> Dict[str, List[Dict]]:
     _save_json(RATIOS_FILE, ratios)
     logger.info(f"财务比率更新完成: {updated_count}/{len(symbols)}")
 
+    _sync_to_market_db("ratios", ratios)
     return ratios
 
 
@@ -181,6 +201,7 @@ def update_income(symbols: List[str] = None) -> Dict[str, List[Dict]]:
     _save_json(INCOME_FILE, income)
     logger.info(f"收入报表更新完成: {updated_count}/{len(symbols)}")
 
+    _sync_to_market_db("income", income)
     return income
 
 
@@ -226,6 +247,7 @@ def update_balance_sheets(symbols: List[str] = None) -> Dict[str, List[Dict]]:
     _save_json(BALANCE_SHEET_FILE, balance_sheets)
     logger.info(f"资产负债表更新完成: {updated_count}/{len(symbols)}")
 
+    _sync_to_market_db("balance_sheet", balance_sheets)
     return balance_sheets
 
 
@@ -271,6 +293,7 @@ def update_cash_flows(symbols: List[str] = None) -> Dict[str, List[Dict]]:
     _save_json(CASH_FLOW_FILE, cash_flows)
     logger.info(f"现金流量表更新完成: {updated_count}/{len(symbols)}")
 
+    _sync_to_market_db("cash_flow", cash_flows)
     return cash_flows
 
 
@@ -328,6 +351,7 @@ def ensure_fundamentals_cached(symbol: str) -> bool:
             ratios = _load_json(RATIOS_FILE)
             ratios[symbol] = data
             _save_json(RATIOS_FILE, ratios)
+            _sync_to_market_db("ratios", {symbol: data})
         else:
             all_ok = False
 
@@ -339,6 +363,7 @@ def ensure_fundamentals_cached(symbol: str) -> bool:
             income = _load_json(INCOME_FILE)
             income[symbol] = data
             _save_json(INCOME_FILE, income)
+            _sync_to_market_db("income", {symbol: data})
         else:
             all_ok = False
 
@@ -350,6 +375,7 @@ def ensure_fundamentals_cached(symbol: str) -> bool:
             bs = _load_json(BALANCE_SHEET_FILE)
             bs[symbol] = data
             _save_json(BALANCE_SHEET_FILE, bs)
+            _sync_to_market_db("balance_sheet", {symbol: data})
         else:
             all_ok = False
 
@@ -361,6 +387,7 @@ def ensure_fundamentals_cached(symbol: str) -> bool:
             cf = _load_json(CASH_FLOW_FILE)
             cf[symbol] = data
             _save_json(CASH_FLOW_FILE, cf)
+            _sync_to_market_db("cash_flow", {symbol: data})
         else:
             all_ok = False
 
