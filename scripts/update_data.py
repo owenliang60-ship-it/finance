@@ -89,6 +89,15 @@ def main():
         print("=" * 40)
         target_symbols = symbols or get_symbols()
         update_all_fundamentals(target_symbols)
+
+        # Pre-compute metrics in market.db
+        try:
+            from src.data.metrics_calculator import compute_all_metrics
+            print("\n--- 预计算 metrics ---")
+            result = compute_all_metrics(target_symbols)
+            print(f"Metrics computed for {len(result)} symbols")
+        except Exception as e:
+            print(f"Warning: metrics computation failed: {e}")
         print()
 
     # 计算相关性矩阵

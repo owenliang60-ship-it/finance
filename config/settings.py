@@ -72,6 +72,7 @@ API_TIMEOUT = 30
 PRICE_HISTORY_YEARS = 5  # 保留5年量价数据
 
 # Dollar Volume 配置
+MARKET_DB_PATH = DATA_DIR / "market.db"
 DOLLAR_VOLUME_DB = DATA_DIR / "dollar_volume.db"
 DOLLAR_VOLUME_TOP_N = 200       # 存储 Top 200
 DOLLAR_VOLUME_REPORT_N = 50     # 推送 Top 50
