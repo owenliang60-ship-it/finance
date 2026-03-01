@@ -9,6 +9,8 @@ from src.data.metrics_calculator import (
     _safe_div,
     _avg,
     _yoy_growth,
+    _cagr,
+    _delta,
     _find_yoy_match,
     _sum_last_n,
 )
@@ -176,6 +178,34 @@ class TestHelpers:
         rows = [{"period": "Q4", "fiscal_year": "2024"}]
         assert _find_yoy_match(rows, "Q4", "2024") is None
 
+    def test_delta_normal(self):
+        assert _delta(0.30, 0.25) == pytest.approx(0.05)
+
+    def test_delta_negative(self):
+        assert _delta(0.20, 0.25) == pytest.approx(-0.05)
+
+    def test_delta_none(self):
+        assert _delta(None, 0.25) is None
+        assert _delta(0.30, None) is None
+
+    def test_cagr_normal(self):
+        # 100 → 110 → 121 → 133.1 over 3 periods = 10% per period
+        assert _cagr(133.1, 100, 3) == pytest.approx(0.10, abs=0.001)
+
+    def test_cagr_decline(self):
+        # 80 from base 100 over 3 periods
+        assert _cagr(80, 100, 3) == pytest.approx(-0.0717, abs=0.001)
+
+    def test_cagr_negative_base(self):
+        assert _cagr(100, -50, 3) is None
+
+    def test_cagr_zero_base(self):
+        assert _cagr(100, 0, 3) is None
+
+    def test_cagr_none(self):
+        assert _cagr(None, 100, 3) is None
+        assert _cagr(100, None, 3) is None
+
 
 # ---------------------------------------------------------------------------
 # Margin metrics
@@ -310,6 +340,168 @@ class TestGrowth:
         # Both should have NULL YoY (no fiscal_year-1 data)
         for m in metrics:
             assert m["revenue_growth_yoy"] is None
+
+
+# ---------------------------------------------------------------------------
+# QoQ Growth & Delta
+# ---------------------------------------------------------------------------
+
+class TestQoQ:
+    def test_revenue_growth_qoq(self, store):
+        _seed_full_data(store)
+        compute_metrics("AAPL", store)
+
+        # Most recent quarter (Q4'24): revenue 94930 vs Q3'24: 85778
+        m = store.get_metrics("AAPL", limit=1)[0]
+        expected = (94930e6 - 85778e6) / abs(85778e6)
+        assert m["revenue_growth_qoq"] == pytest.approx(expected, abs=0.001)
+
+    def test_net_income_growth_qoq(self, store):
+        _seed_full_data(store)
+        compute_metrics("AAPL", store)
+
+        m = store.get_metrics("AAPL", limit=1)[0]
+        # Q4'24 NI=14736 vs Q3'24 NI=21448 → decline
+        expected = (14736e6 - 21448e6) / abs(21448e6)
+        assert m["net_income_growth_qoq"] == pytest.approx(expected, abs=0.001)
+
+    def test_eps_growth_qoq(self, store):
+        _seed_full_data(store)
+        compute_metrics("AAPL", store)
+
+        m = store.get_metrics("AAPL", limit=1)[0]
+        # Q4'24 eps=0.97 vs Q3'24 eps=1.40
+        expected = (0.97 - 1.40) / abs(1.40)
+        assert m["eps_growth_qoq"] == pytest.approx(expected, abs=0.001)
+
+    def test_net_margin_delta_qoq(self, store):
+        _seed_full_data(store)
+        compute_metrics("AAPL", store)
+
+        metrics = store.get_metrics("AAPL", limit=2)
+        m_latest = metrics[0]  # Q4'24
+        m_prev = metrics[1]    # Q3'24
+        # Delta should equal difference in net_margin
+        expected = m_latest["net_margin"] - m_prev["net_margin"]
+        assert m_latest["net_margin_delta_qoq"] == pytest.approx(expected, abs=1e-6)
+
+    def test_gross_margin_delta_qoq(self, store):
+        _seed_full_data(store)
+        compute_metrics("AAPL", store)
+
+        metrics = store.get_metrics("AAPL", limit=2)
+        m_latest = metrics[0]
+        m_prev = metrics[1]
+        expected = m_latest["gross_margin"] - m_prev["gross_margin"]
+        assert m_latest["gross_margin_delta_qoq"] == pytest.approx(expected, abs=1e-6)
+
+    def test_oldest_quarter_qoq_is_none(self, store):
+        """The oldest quarter should have NULL QoQ fields."""
+        _seed_full_data(store)
+        compute_metrics("AAPL", store)
+
+        # Get all metrics, oldest is last
+        metrics = store.get_metrics("AAPL", limit=20)
+        oldest = metrics[-1]
+        assert oldest["revenue_growth_qoq"] is None
+        assert oldest["net_income_growth_qoq"] is None
+        assert oldest["eps_growth_qoq"] is None
+        assert oldest["operating_income_growth_qoq"] is None
+        assert oldest["gross_margin_delta_qoq"] is None
+        assert oldest["operating_margin_delta_qoq"] is None
+        assert oldest["net_margin_delta_qoq"] is None
+        assert oldest["ebitda_margin_delta_qoq"] is None
+        assert oldest["roe_delta_qoq"] is None
+        assert oldest["roic_delta_qoq"] is None
+
+    def test_single_quarter_qoq_is_none(self, store):
+        """Symbol with only 1 quarter should have NULL QoQ."""
+        store.upsert_income("SOLO", [
+            {"date": "2024-09-28", "fiscalYear": "2024", "period": "Q4",
+             "revenue": 100e6, "netIncome": 10e6},
+        ])
+        compute_metrics("SOLO", store)
+        m = store.get_metrics("SOLO", limit=1)[0]
+        assert m["revenue_growth_qoq"] is None
+        assert m["net_margin_delta_qoq"] is None
+        assert m["revenue_cagr_4q"] is None
+        assert m["net_margin_change_4q"] is None
+
+
+# ---------------------------------------------------------------------------
+# CAGR & 4Q Change
+# ---------------------------------------------------------------------------
+
+class TestCAGR:
+    def test_revenue_cagr_4q(self, store):
+        """CAGR over 4 quarters (Q4'24 vs Q1'24, 3 periods)."""
+        _seed_full_data(store)
+        compute_metrics("AAPL", store)
+
+        m = store.get_metrics("AAPL", limit=1)[0]
+        # Q4'24 revenue=94930, Q1'24 revenue=119575, 3 periods
+        expected = (94930e6 / 119575e6) ** (1.0 / 3) - 1
+        assert m["revenue_cagr_4q"] == pytest.approx(expected, abs=0.001)
+
+    def test_net_income_cagr_4q(self, store):
+        _seed_full_data(store)
+        compute_metrics("AAPL", store)
+
+        m = store.get_metrics("AAPL", limit=1)[0]
+        # Q4'24 NI=14736, Q1'24 NI=33916, 3 periods
+        expected = (14736e6 / 33916e6) ** (1.0 / 3) - 1
+        assert m["net_income_cagr_4q"] == pytest.approx(expected, abs=0.001)
+
+    def test_eps_cagr_4q(self, store):
+        _seed_full_data(store)
+        compute_metrics("AAPL", store)
+
+        m = store.get_metrics("AAPL", limit=1)[0]
+        # Q4'24 eps=0.97, Q1'24 eps=2.18
+        expected = (0.97 / 2.18) ** (1.0 / 3) - 1
+        assert m["eps_cagr_4q"] == pytest.approx(expected, abs=0.001)
+
+    def test_net_margin_change_4q(self, store):
+        _seed_full_data(store)
+        compute_metrics("AAPL", store)
+
+        metrics = store.get_metrics("AAPL", limit=4)
+        m_latest = metrics[0]   # Q4'24
+        m_base = metrics[3]     # Q1'24
+        expected = m_latest["net_margin"] - m_base["net_margin"]
+        assert m_latest["net_margin_change_4q"] == pytest.approx(expected, abs=1e-6)
+
+    def test_insufficient_quarters_cagr_is_none(self, store):
+        """Less than 4 quarters should produce NULL CAGR."""
+        store.upsert_income("SHORT", [
+            {"date": "2024-09-28", "fiscalYear": "2024", "period": "Q4",
+             "revenue": 100e6, "netIncome": 10e6},
+            {"date": "2024-06-29", "fiscalYear": "2024", "period": "Q3",
+             "revenue": 90e6, "netIncome": 9e6},
+            {"date": "2024-03-30", "fiscalYear": "2024", "period": "Q2",
+             "revenue": 80e6, "netIncome": 8e6},
+        ])
+        compute_metrics("SHORT", store)
+        m = store.get_metrics("SHORT", limit=1)[0]
+        assert m["revenue_cagr_4q"] is None
+        assert m["net_margin_change_4q"] is None
+
+    def test_negative_base_cagr_is_none(self, store):
+        """Negative base income should produce NULL CAGR."""
+        store.upsert_income("NEG", [
+            {"date": "2024-09-28", "fiscalYear": "2024", "period": "Q4",
+             "revenue": 100e6, "netIncome": 10e6},
+            {"date": "2024-06-29", "fiscalYear": "2024", "period": "Q3",
+             "revenue": 90e6, "netIncome": 9e6},
+            {"date": "2024-03-30", "fiscalYear": "2024", "period": "Q2",
+             "revenue": 80e6, "netIncome": 8e6},
+            {"date": "2023-12-30", "fiscalYear": "2024", "period": "Q1",
+             "revenue": 70e6, "netIncome": -5e6},
+        ])
+        compute_metrics("NEG", store)
+        m = store.get_metrics("NEG", limit=1)[0]
+        assert m["revenue_cagr_4q"] is not None  # revenue base positive
+        assert m["net_income_cagr_4q"] is None    # NI base negative
 
 
 # ---------------------------------------------------------------------------

@@ -160,6 +160,20 @@ _METRICS_FIELDS = [
     # Growth YoY
     "revenue_growth_yoy", "net_income_growth_yoy", "eps_growth_yoy",
     "operating_income_growth_yoy",
+    # Growth QoQ
+    "revenue_growth_qoq", "net_income_growth_qoq", "eps_growth_qoq",
+    "operating_income_growth_qoq",
+    # Margin delta QoQ (decimal; e.g. 0.02 = +2 pp)
+    "gross_margin_delta_qoq", "operating_margin_delta_qoq",
+    "net_margin_delta_qoq", "ebitda_margin_delta_qoq",
+    # Return delta QoQ (decimal; e.g. 0.02 = +2 pp)
+    "roe_delta_qoq", "roic_delta_qoq",
+    # CAGR trailing 4Q (per-quarter compound growth rate)
+    "revenue_cagr_4q", "gross_profit_cagr_4q", "operating_income_cagr_4q",
+    "ebitda_cagr_4q", "net_income_cagr_4q", "eps_cagr_4q",
+    # Margin change trailing 4Q (decimal; total pp change Q0 vs Q-3)
+    "gross_margin_change_4q", "operating_margin_change_4q",
+    "net_margin_change_4q", "ebitda_margin_change_4q",
     # Cash flow
     "fcf_margin", "fcf_to_net_income", "operating_cf_to_revenue",
 ]
@@ -272,7 +286,26 @@ class MarketStore:
     def _init_db(self) -> None:
         conn = self._get_conn()
         conn.executescript(_SCHEMA)
+        self._migrate_add_columns(conn)
         conn.commit()
+
+    def _migrate_add_columns(self, conn: sqlite3.Connection) -> None:
+        """Add any new columns defined in field lists but missing from existing tables."""
+        migrations = [
+            ("metrics_quarterly", _METRICS_FIELDS, True),
+        ]
+        for table, fields, already_snake in migrations:
+            existing = {row[1] for row in conn.execute(
+                f"PRAGMA table_info({table})"
+            ).fetchall()}
+            snake_fields = fields if already_snake else [_camel_to_snake(f) for f in fields]
+            for col in snake_fields:
+                if col not in existing:
+                    sql_t = _sql_type(col)
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {sql_t}")
+                    logger.info("Migration: added column %s.%s", table, col)
+        # Invalidate column cache so upsert sees updated schema
+        _TABLE_COLUMNS.pop("metrics_quarterly", None)
 
     def close(self) -> None:
         if self._conn:

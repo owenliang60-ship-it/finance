@@ -1,7 +1,7 @@
 """
 Pre-computed metrics engine for market.db.
 
-Computes ~22 derived metrics from income, balance sheet, and cash flow data,
+Computes ~41 derived metrics from income, balance sheet, and cash flow data,
 storing results in the metrics_quarterly table. Designed for screening queries
 like "net_margin > 25% for 4 consecutive quarters".
 
@@ -85,6 +85,37 @@ def _yoy_growth(current_val: Any, prior_val: Any) -> Optional[float]:
     if p == 0:
         return None
     return (c - p) / abs(p)
+
+
+def _cagr(current_val: Any, base_val: Any, periods: int = 3) -> Optional[float]:
+    """Compound growth rate over N periods. Returns None if base <= 0 or inputs invalid.
+
+    Default periods=3 for trailing 4 quarters (3 transitions between Q0..Q-3).
+    """
+    if current_val is None or base_val is None:
+        return None
+    try:
+        c = float(current_val)
+        b = float(base_val)
+    except (TypeError, ValueError):
+        return None
+    if b <= 0 or c < 0:
+        return None
+    return (c / b) ** (1.0 / periods) - 1
+
+
+def _delta(current_val: Any, prior_val: Any) -> Optional[float]:
+    """Compute difference (current - prior). Returns None if either is None.
+
+    Units match the input: margin/return values stored as decimals (e.g. 0.25)
+    produce a decimal delta (e.g. 0.02 = +2 percentage points).
+    """
+    if current_val is None or prior_val is None:
+        return None
+    try:
+        return float(current_val) - float(prior_val)
+    except (TypeError, ValueError):
+        return None
 
 
 def compute_metrics(symbol: str, store: Optional[MarketStore] = None) -> int:
@@ -234,6 +265,74 @@ def compute_metrics(symbol: str, store: Optional[MarketStore] = None) -> int:
         m["operating_cf_to_revenue"] = _safe_div(op_cf, revenue)
 
         results.append(m)
+
+    # --- Pass 2: QoQ (results are date DESC, so [i+1] is the prior quarter) ---
+    # Store the source income row alongside each result to avoid index desync
+    # (Pass 1 may skip income rows with missing dates via `continue`)
+    income_used = [inc for inc in income if inc.get("date")]
+
+    for i, m in enumerate(results):
+        if i + 1 < len(results):
+            prev = results[i + 1]
+            inc_cur = income_used[i]
+            inc_prev = income_used[i + 1]
+            # Growth QoQ (absolute values from income)
+            m["revenue_growth_qoq"] = _yoy_growth(inc_cur.get("revenue"), inc_prev.get("revenue"))
+            m["net_income_growth_qoq"] = _yoy_growth(inc_cur.get("net_income"), inc_prev.get("net_income"))
+            m["eps_growth_qoq"] = _yoy_growth(inc_cur.get("eps_diluted"), inc_prev.get("eps_diluted"))
+            m["operating_income_growth_qoq"] = _yoy_growth(
+                inc_cur.get("operating_income"), inc_prev.get("operating_income")
+            )
+            # Margin delta QoQ (decimal; e.g. 0.02 = +2 pp)
+            m["gross_margin_delta_qoq"] = _delta(m.get("gross_margin"), prev.get("gross_margin"))
+            m["operating_margin_delta_qoq"] = _delta(m.get("operating_margin"), prev.get("operating_margin"))
+            m["net_margin_delta_qoq"] = _delta(m.get("net_margin"), prev.get("net_margin"))
+            m["ebitda_margin_delta_qoq"] = _delta(m.get("ebitda_margin"), prev.get("ebitda_margin"))
+            # Return delta QoQ (decimal; e.g. 0.02 = +2 pp)
+            m["roe_delta_qoq"] = _delta(m.get("roe"), prev.get("roe"))
+            m["roic_delta_qoq"] = _delta(m.get("roic"), prev.get("roic"))
+        else:
+            # Oldest quarter in results — no prior quarter to compare against
+            m["revenue_growth_qoq"] = None
+            m["net_income_growth_qoq"] = None
+            m["eps_growth_qoq"] = None
+            m["operating_income_growth_qoq"] = None
+            m["gross_margin_delta_qoq"] = None
+            m["operating_margin_delta_qoq"] = None
+            m["net_margin_delta_qoq"] = None
+            m["ebitda_margin_delta_qoq"] = None
+            m["roe_delta_qoq"] = None
+            m["roic_delta_qoq"] = None
+
+    # --- Pass 3: CAGR trailing 4Q (need i+3 in results = 4 quarters) ---
+    for i, m in enumerate(results):
+        if i + 3 < len(results):
+            base = results[i + 3]
+            inc_cur = income_used[i]
+            inc_base = income_used[i + 3]
+            # CAGR (absolute values from income, 3 periods over 4 quarters)
+            m["revenue_cagr_4q"] = _cagr(inc_cur.get("revenue"), inc_base.get("revenue"))
+            m["gross_profit_cagr_4q"] = _cagr(inc_cur.get("gross_profit"), inc_base.get("gross_profit"))
+            m["operating_income_cagr_4q"] = _cagr(inc_cur.get("operating_income"), inc_base.get("operating_income"))
+            m["ebitda_cagr_4q"] = _cagr(inc_cur.get("ebitda"), inc_base.get("ebitda"))
+            m["net_income_cagr_4q"] = _cagr(inc_cur.get("net_income"), inc_base.get("net_income"))
+            m["eps_cagr_4q"] = _cagr(inc_cur.get("eps_diluted"), inc_base.get("eps_diluted"))
+            # Margin total change over 4Q (decimal pp, from computed metrics)
+            m["gross_margin_change_4q"] = _delta(m.get("gross_margin"), base.get("gross_margin"))
+            m["operating_margin_change_4q"] = _delta(m.get("operating_margin"), base.get("operating_margin"))
+            m["net_margin_change_4q"] = _delta(m.get("net_margin"), base.get("net_margin"))
+            m["ebitda_margin_change_4q"] = _delta(m.get("ebitda_margin"), base.get("ebitda_margin"))
+        else:
+            m["revenue_cagr_4q"] = None
+            m["gross_profit_cagr_4q"] = None
+            m["operating_income_cagr_4q"] = None
+            m["ebitda_cagr_4q"] = None
+            m["net_income_cagr_4q"] = None
+            m["eps_cagr_4q"] = None
+            m["gross_margin_change_4q"] = None
+            m["operating_margin_change_4q"] = None
+            m["net_margin_change_4q"] = None
+            m["ebitda_margin_change_4q"] = None
 
     if results:
         count = store.upsert_metrics(symbol, results)
