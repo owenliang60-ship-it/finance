@@ -463,6 +463,43 @@ class MarketStore:
                          limit: int = 0) -> List[Dict[str, Any]]:
         return self._get_rows("daily_price", symbol, start_date, end_date, limit)
 
+    def get_daily_prices_df(self, symbol: str,
+                            limit: int = 0) -> Optional[pd.DataFrame]:
+        """Return daily prices as a DataFrame matching CSV cache format.
+
+        Returns DataFrame with columns:
+            ["date", "open", "high", "low", "close", "volume", "change", "changePercent"]
+        Sorted by date descending (newest first). date dtype is datetime64[ns].
+        Returns None if no data found.
+        """
+        rows = self.get_daily_prices(symbol, limit=limit)
+        if not rows:
+            return None
+
+        df = pd.DataFrame(rows)
+
+        # Drop symbol column (CSV format doesn't include it)
+        if "symbol" in df.columns:
+            df = df.drop(columns=["symbol"])
+
+        # Rename change_pct → changePercent to match CSV convention
+        if "change_pct" in df.columns:
+            df = df.rename(columns={"change_pct": "changePercent"})
+
+        # Convert date to datetime64
+        df["date"] = pd.to_datetime(df["date"])
+
+        # Align column order to match PRICE_COLUMNS
+        _PRICE_COLUMNS = ["date", "open", "high", "low", "close",
+                          "volume", "change", "changePercent"]
+        available = [c for c in _PRICE_COLUMNS if c in df.columns]
+        df = df[available]
+
+        # Sort descending (newest first) and reset index
+        df = df.sort_values("date", ascending=False).reset_index(drop=True)
+
+        return df
+
     # ---- Income ----
 
     def upsert_income(self, symbol: str, rows: List[Dict]) -> int:

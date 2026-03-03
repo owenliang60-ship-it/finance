@@ -29,8 +29,8 @@ def _get_cache_path(symbol: str) -> Path:
     return PRICE_DIR / f"{symbol}.csv"
 
 
-def load_price_cache(symbol: str) -> Optional[pd.DataFrame]:
-    """加载本地缓存的量价数据"""
+def _load_price_cache_csv(symbol: str) -> Optional[pd.DataFrame]:
+    """加载 CSV 缓存的量价数据 (fallback 路径)"""
     cache_path = _get_cache_path(symbol)
     if not cache_path.exists():
         return None
@@ -40,8 +40,23 @@ def load_price_cache(symbol: str) -> Optional[pd.DataFrame]:
         df = df.sort_values("date", ascending=False).reset_index(drop=True)
         return df
     except Exception as e:
-        logger.error(f"加载缓存失败 {symbol}: {e}")
+        logger.error(f"加载 CSV 缓存失败 {symbol}: {e}")
         return None
+
+
+def load_price_cache(symbol: str) -> Optional[pd.DataFrame]:
+    """加载本地缓存的量价数据 (market.db 主路径, CSV fallback)"""
+    # 主路径: market.db
+    try:
+        from src.data.market_store import get_store
+        df = get_store().get_daily_prices_df(symbol)
+        if df is not None and not df.empty:
+            return df
+    except Exception as e:
+        logger.warning(f"[market.db] 读取失败 {symbol}: {e}, 降级到 CSV")
+
+    # Fallback: CSV
+    return _load_price_cache_csv(symbol)
 
 
 def save_price_cache(symbol: str, df: pd.DataFrame):
