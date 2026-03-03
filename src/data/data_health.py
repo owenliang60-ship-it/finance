@@ -18,12 +18,25 @@ from typing import List, Optional
 
 import sys
 sys.path.insert(0, str(__file__).rsplit("/src", 1)[0])
-from config.settings import DATA_DIR, POOL_DIR, PRICE_DIR, FUNDAMENTAL_DIR
+from config.settings import DATA_DIR, POOL_DIR, PRICE_DIR, FUNDAMENTAL_DIR, MARKET_DB_PATH
 
 logger = logging.getLogger(__name__)
 
 UNIVERSE_FILE = POOL_DIR / "universe.json"
 COMPANY_DB = DATA_DIR / "company.db"
+MARKET_DB = MARKET_DB_PATH
+
+# market.db 的 8 个数据表 (来自 market_store._SCHEMA)
+MARKET_DB_EXPECTED_TABLES = {
+    "daily_price",
+    "income_quarterly",
+    "balance_sheet_quarterly",
+    "cash_flow_quarterly",
+    "metrics_quarterly",
+    "ratios_annual",
+    "iv_daily",
+    "options_snapshots",
+}
 
 
 @dataclass
@@ -291,6 +304,202 @@ def _check_price_pool_consistency(symbols: List[str]) -> CheckResult:
                            f"{ratio:.0%} 一致, 缺少 {len(missing)} 只")
 
 
+def _check_market_db() -> CheckResult:
+    """检查 market.db 存在 + 8 个数据表齐全。"""
+    if not MARKET_DB.exists():
+        return CheckResult("market.db", "FAIL", "数据库文件不存在")
+
+    try:
+        conn = sqlite3.connect(str(MARKET_DB))
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = {row[0] for row in cursor.fetchall()}
+        conn.close()
+
+        missing = MARKET_DB_EXPECTED_TABLES - tables
+        if missing:
+            return CheckResult("market.db", "FAIL",
+                               f"缺少 {len(missing)} 个表: {sorted(missing)}")
+
+        return CheckResult("market.db", "PASS",
+                           f"正常, {len(tables)} 个表")
+
+    except sqlite3.DatabaseError as e:
+        return CheckResult("market.db", "FAIL", f"数据库损坏: {e}")
+
+
+def _check_mdb_price_coverage(symbols: List[str]) -> CheckResult:
+    """检查 market.db daily_price 覆盖率 vs 股票池。"""
+    if not symbols:
+        return CheckResult("mdb价格覆盖率", "FAIL", "无股票池数据")
+
+    if not MARKET_DB.exists():
+        return CheckResult("mdb价格覆盖率", "FAIL", "market.db 不存在")
+
+    try:
+        conn = sqlite3.connect(str(MARKET_DB))
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT symbol FROM daily_price")
+        db_symbols = {row[0] for row in cursor.fetchall()}
+        conn.close()
+    except sqlite3.DatabaseError as e:
+        return CheckResult("mdb价格覆盖率", "FAIL", f"查询失败: {e}")
+
+    covered = sum(1 for s in symbols if s in db_symbols)
+    ratio = covered / len(symbols)
+
+    if ratio >= 0.95:
+        return CheckResult("mdb价格覆盖率", "PASS",
+                           f"{covered}/{len(symbols)} ({ratio:.0%})")
+    elif ratio >= 0.80:
+        missing = [s for s in symbols if s not in db_symbols][:10]
+        return CheckResult("mdb价格覆盖率", "WARN",
+                           f"{covered}/{len(symbols)} ({ratio:.0%}), 缺失: {missing}")
+    else:
+        return CheckResult("mdb价格覆盖率", "FAIL",
+                           f"{covered}/{len(symbols)} ({ratio:.0%})")
+
+
+def _check_mdb_price_freshness() -> CheckResult:
+    """检查 market.db daily_price 新鲜度: 最新日期距今交易日。"""
+    if not MARKET_DB.exists():
+        return CheckResult("mdb价格新鲜度", "FAIL", "market.db 不存在")
+
+    try:
+        conn = sqlite3.connect(str(MARKET_DB))
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(date) FROM daily_price")
+        row = cursor.fetchone()
+        conn.close()
+    except sqlite3.DatabaseError as e:
+        return CheckResult("mdb价格新鲜度", "FAIL", f"查询失败: {e}")
+
+    if not row or not row[0]:
+        return CheckResult("mdb价格新鲜度", "FAIL", "daily_price 无数据")
+
+    date_str = row[0]
+    try:
+        latest_date = datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return CheckResult("mdb价格新鲜度", "WARN", f"无法解析日期: {date_str}")
+
+    now = datetime.now()
+    calendar_days = (now - latest_date).days
+    weeks = calendar_days // 7
+    trading_days = calendar_days - (weeks * 2)
+
+    if trading_days <= 3:
+        return CheckResult("mdb价格新鲜度", "PASS",
+                           f"最新: {date_str}, ~{trading_days} 交易日前")
+    elif trading_days <= 7:
+        return CheckResult("mdb价格新鲜度", "WARN",
+                           f"最新: {date_str}, ~{trading_days} 交易日前")
+    else:
+        return CheckResult("mdb价格新鲜度", "FAIL",
+                           f"最新: {date_str}, ~{trading_days} 交易日前")
+
+
+def _check_mdb_fundamental_coverage(symbols: List[str]) -> CheckResult:
+    """检查 market.db income_quarterly 覆盖率 vs 股票池。"""
+    if not symbols:
+        return CheckResult("mdb基本面覆盖率", "FAIL", "无股票池数据")
+
+    if not MARKET_DB.exists():
+        return CheckResult("mdb基本面覆盖率", "FAIL", "market.db 不存在")
+
+    try:
+        conn = sqlite3.connect(str(MARKET_DB))
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT symbol FROM income_quarterly")
+        db_symbols = {row[0] for row in cursor.fetchall()}
+        conn.close()
+    except sqlite3.DatabaseError as e:
+        return CheckResult("mdb基本面覆盖率", "FAIL", f"查询失败: {e}")
+
+    covered = sum(1 for s in symbols if s in db_symbols)
+    ratio = covered / len(symbols)
+
+    if ratio >= 0.95:
+        return CheckResult("mdb基本面覆盖率", "PASS",
+                           f"{covered}/{len(symbols)} ({ratio:.0%})")
+    elif ratio >= 0.80:
+        return CheckResult("mdb基本面覆盖率", "WARN",
+                           f"{covered}/{len(symbols)} ({ratio:.0%})")
+    else:
+        return CheckResult("mdb基本面覆盖率", "FAIL",
+                           f"{covered}/{len(symbols)} ({ratio:.0%})")
+
+
+def _check_mdb_iv_coverage(symbols: List[str]) -> CheckResult:
+    """检查 market.db iv_daily 覆盖率 vs 股票池。"""
+    if not symbols:
+        return CheckResult("mdb IV覆盖率", "FAIL", "无股票池数据")
+
+    if not MARKET_DB.exists():
+        return CheckResult("mdb IV覆盖率", "FAIL", "market.db 不存在")
+
+    try:
+        conn = sqlite3.connect(str(MARKET_DB))
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT symbol FROM iv_daily")
+        db_symbols = {row[0] for row in cursor.fetchall()}
+        conn.close()
+    except sqlite3.DatabaseError as e:
+        return CheckResult("mdb IV覆盖率", "FAIL", f"查询失败: {e}")
+
+    covered = sum(1 for s in symbols if s in db_symbols)
+    ratio = covered / len(symbols)
+
+    if ratio >= 0.50:
+        return CheckResult("mdb IV覆盖率", "PASS",
+                           f"{covered}/{len(symbols)} ({ratio:.0%})")
+    elif ratio >= 0.30:
+        return CheckResult("mdb IV覆盖率", "WARN",
+                           f"{covered}/{len(symbols)} ({ratio:.0%})")
+    else:
+        return CheckResult("mdb IV覆盖率", "FAIL",
+                           f"{covered}/{len(symbols)} ({ratio:.0%})")
+
+
+def _check_mdb_iv_freshness() -> CheckResult:
+    """检查 market.db iv_daily 新鲜度: 最新日期距今交易日。"""
+    if not MARKET_DB.exists():
+        return CheckResult("mdb IV新鲜度", "FAIL", "market.db 不存在")
+
+    try:
+        conn = sqlite3.connect(str(MARKET_DB))
+        cursor = conn.cursor()
+        cursor.execute("SELECT MAX(date) FROM iv_daily")
+        row = cursor.fetchone()
+        conn.close()
+    except sqlite3.DatabaseError as e:
+        return CheckResult("mdb IV新鲜度", "FAIL", f"查询失败: {e}")
+
+    if not row or not row[0]:
+        return CheckResult("mdb IV新鲜度", "FAIL", "iv_daily 无数据")
+
+    date_str = row[0]
+    try:
+        latest_date = datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return CheckResult("mdb IV新鲜度", "WARN", f"无法解析日期: {date_str}")
+
+    now = datetime.now()
+    calendar_days = (now - latest_date).days
+    weeks = calendar_days // 7
+    trading_days = calendar_days - (weeks * 2)
+
+    if trading_days <= 3:
+        return CheckResult("mdb IV新鲜度", "PASS",
+                           f"最新: {date_str}, ~{trading_days} 交易日前")
+    elif trading_days <= 7:
+        return CheckResult("mdb IV新鲜度", "WARN",
+                           f"最新: {date_str}, ~{trading_days} 交易日前")
+    else:
+        return CheckResult("mdb IV新鲜度", "FAIL",
+                           f"最新: {date_str}, ~{trading_days} 交易日前")
+
+
 def health_check(verbose: bool = False) -> HealthReport:
     """
     一站式数据健康检查。
@@ -309,6 +518,14 @@ def health_check(verbose: bool = False) -> HealthReport:
     report.add(_check_pool_freshness())
     report.add(_check_company_db())
     report.add(_check_price_pool_consistency(symbols))
+
+    # market.db 检查
+    report.add(_check_market_db())
+    report.add(_check_mdb_price_coverage(symbols))
+    report.add(_check_mdb_price_freshness())
+    report.add(_check_mdb_fundamental_coverage(symbols))
+    report.add(_check_mdb_iv_coverage(symbols))
+    report.add(_check_mdb_iv_freshness())
 
     if verbose:
         print(report.summary())
