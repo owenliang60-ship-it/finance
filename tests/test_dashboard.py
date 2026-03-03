@@ -1,9 +1,13 @@
 """Tests for terminal.dashboard — HTML Dashboard generator."""
 import pytest
 from pathlib import Path
+from unittest.mock import patch
 
 from terminal.company_store import CompanyStore
 from terminal.dashboard import generate_dashboard
+
+# Symbols to return from mocked get_symbols()
+_MOCK_POOL_SYMBOLS = ["NVDA", "MSFT", "GOOG"]
 
 
 @pytest.fixture
@@ -14,11 +18,11 @@ def populated_store(tmp_path):
 
     # Add companies
     store.upsert_company("NVDA", company_name="NVIDIA", sector="Technology",
-                         exchange="NASDAQ", in_pool=True)
+                         exchange="NASDAQ")
     store.upsert_company("MSFT", company_name="Microsoft", sector="Technology",
-                         exchange="NASDAQ", in_pool=True)
+                         exchange="NASDAQ")
     store.upsert_company("GOOG", company_name="Alphabet", sector="Technology",
-                         exchange="NASDAQ", in_pool=True)
+                         exchange="NASDAQ")
     store.upsert_company("AAPL", company_name="Apple", sector="Technology",
                          exchange="NASDAQ")
 
@@ -52,13 +56,13 @@ class TestDashboard:
         store, tmp_path = populated_store
         output = tmp_path / "dashboard.html"
 
-        # Monkey-patch get_store to return our test store
         import terminal.dashboard as mod
         original = mod.get_store
         mod.get_store = lambda: store
 
         try:
-            path = generate_dashboard(output_path=output)
+            with patch("src.data.pool_manager.get_symbols", return_value=_MOCK_POOL_SYMBOLS):
+                path = generate_dashboard(output_path=output)
             assert path.exists()
             assert path.suffix == ".html"
         finally:
@@ -73,7 +77,8 @@ class TestDashboard:
         mod.get_store = lambda: store
 
         try:
-            path = generate_dashboard(output_path=output)
+            with patch("src.data.pool_manager.get_symbols", return_value=_MOCK_POOL_SYMBOLS):
+                path = generate_dashboard(output_path=output)
             content = path.read_text(encoding="utf-8")
 
             # Company names
@@ -105,7 +110,8 @@ class TestDashboard:
         mod.get_store = lambda: store
 
         try:
-            path = generate_dashboard(output_path=output)
+            with patch("src.data.pool_manager.get_symbols", return_value=_MOCK_POOL_SYMBOLS):
+                path = generate_dashboard(output_path=output)
             content = path.read_text(encoding="utf-8")
             assert "filterTable" in content
             assert "sortTable" in content
@@ -121,7 +127,8 @@ class TestDashboard:
         mod.get_store = lambda: store
 
         try:
-            path = generate_dashboard(output_path=output)
+            with patch("src.data.pool_manager.get_symbols", return_value=_MOCK_POOL_SYMBOLS):
+                path = generate_dashboard(output_path=output)
             content = path.read_text(encoding="utf-8")
             assert "nvda_report.html" in content
             assert "View" in content
@@ -138,7 +145,8 @@ class TestDashboard:
         mod.get_store = lambda: store
 
         try:
-            path = generate_dashboard(output_path=output)
+            with patch("src.data.pool_manager.get_symbols", return_value=[]):
+                path = generate_dashboard(output_path=output)
             assert path.exists()
             content = path.read_text(encoding="utf-8")
             assert "0" in content  # Total should be 0

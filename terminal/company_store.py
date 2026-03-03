@@ -275,7 +275,6 @@ class CompanyStore:
         industry: str = "",
         exchange: str = "",
         market_cap: Optional[float] = None,
-        in_pool: bool = False,
         source: str = "",
     ) -> None:
         """Insert or update a company profile."""
@@ -285,21 +284,20 @@ class CompanyStore:
         conn.execute(
             """
             INSERT INTO companies (symbol, company_name, sector, industry,
-                                   exchange, market_cap, in_pool, source,
+                                   exchange, market_cap, source,
                                    first_seen, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(symbol) DO UPDATE SET
                 company_name = CASE WHEN excluded.company_name != '' THEN excluded.company_name ELSE companies.company_name END,
                 sector = CASE WHEN excluded.sector != '' THEN excluded.sector ELSE companies.sector END,
                 industry = CASE WHEN excluded.industry != '' THEN excluded.industry ELSE companies.industry END,
                 exchange = CASE WHEN excluded.exchange != '' THEN excluded.exchange ELSE companies.exchange END,
                 market_cap = COALESCE(excluded.market_cap, companies.market_cap),
-                in_pool = MAX(companies.in_pool, excluded.in_pool),
                 source = CASE WHEN excluded.source != '' THEN excluded.source ELSE companies.source END,
                 updated_at = excluded.updated_at
             """,
             (symbol, company_name, sector, industry, exchange,
-             market_cap, int(in_pool), source, now, now),
+             market_cap, source, now, now),
         )
         conn.commit()
 
@@ -321,8 +319,15 @@ class CompanyStore:
         conn = self._get_conn()
         query = "SELECT * FROM companies"
         conditions = []
+        params: list = []
         if in_pool_only:
-            conditions.append("in_pool = 1")
+            from src.data.pool_manager import get_symbols
+            pool_symbols = get_symbols()
+            if not pool_symbols:
+                return []
+            placeholders = ",".join("?" for _ in pool_symbols)
+            conditions.append(f"symbol IN ({placeholders})")
+            params.extend(pool_symbols)
         if has_oprms_only:
             conditions.append(
                 "symbol IN (SELECT symbol FROM oprms_ratings WHERE is_current = 1)"
@@ -330,40 +335,8 @@ class CompanyStore:
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY symbol"
-        rows = conn.execute(query).fetchall()
+        rows = conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]
-
-    def sync_pool(self, pool_symbols: List[str]) -> int:
-        """Sync stock pool: set in_pool=1 for given symbols, 0 for others.
-
-        Returns number of companies updated.
-        """
-        conn = self._get_conn()
-        pool_set = {s.upper() for s in pool_symbols}
-        now = datetime.now().isoformat()
-
-        with conn:
-            # Reset all to out of pool
-            conn.execute("UPDATE companies SET in_pool = 0")
-
-            # Set pool members
-            count = 0
-            for sym in pool_set:
-                result = conn.execute(
-                    "UPDATE companies SET in_pool = 1, updated_at = ? WHERE symbol = ?",
-                    (now, sym),
-                )
-                if result.rowcount > 0:
-                    count += 1
-                else:
-                    # Company not in DB yet — insert minimal record
-                    conn.execute(
-                        "INSERT INTO companies (symbol, in_pool, source, first_seen, updated_at) "
-                        "VALUES (?, 1, 'pool', ?, ?)",
-                        (sym, now, now),
-                    )
-                    count += 1
-        return count
 
     # ---- OPRMS Ratings ----
 
@@ -887,7 +860,8 @@ class CompanyStore:
         """Get database statistics."""
         conn = self._get_conn()
         total = conn.execute("SELECT COUNT(*) FROM companies").fetchone()[0]
-        in_pool = conn.execute("SELECT COUNT(*) FROM companies WHERE in_pool = 1").fetchone()[0]
+        from src.data.pool_manager import get_symbols
+        in_pool = len(get_symbols())
         rated = conn.execute(
             "SELECT COUNT(DISTINCT symbol) FROM oprms_ratings WHERE is_current = 1"
         ).fetchone()[0]

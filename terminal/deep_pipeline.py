@@ -1076,7 +1076,7 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
             structured["html_report_path"] = str(html_path)
 
         # Ensure company exists in DB
-        store.upsert_company(symbol, in_pool=True, source="analysis")
+        store.upsert_company(symbol, source="analysis")
 
         # Save analysis summary
         analysis_id = store.save_analysis(symbol, structured)

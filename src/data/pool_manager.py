@@ -196,18 +196,9 @@ def refresh_universe() -> Tuple[List[Dict], List[str], List[str]]:
     # 保存新股票池
     save_universe(new_stocks)
 
-    # 同步 company.db 的 in_pool 列
-    new_symbol_list = [s.get("symbol") for s in new_stocks if s.get("symbol")]
-    try:
-        from terminal.company_store import get_store
-        store = get_store()
-        synced = store.sync_pool(new_symbol_list)
-        logger.info("DB pool synced: %d companies", synced)
-    except Exception as e:
-        logger.warning("DB pool sync failed (non-fatal): %s", e)
-
     # 清理已退出股票的残留数据
     if exited:
+        new_symbol_list = [s.get("symbol") for s in new_stocks if s.get("symbol")]
         cleanup_stale_data(new_symbol_list)
 
     return new_stocks, list(entered), list(exited)
@@ -316,18 +307,6 @@ def cleanup_stale_data(active_symbols: List[str] = None) -> Dict[str, int]:
     return stats
 
 
-def sync_db_pool() -> int:
-    """Sync universe.json -> company.db in_pool column.
-
-    Standalone function for scripts/cron to call without refresh_universe().
-    """
-    symbols = get_symbols()
-    if not symbols:
-        return 0
-    from terminal.company_store import get_store
-    return get_store().sync_pool(symbols)
-
-
 def get_symbols() -> List[str]:
     """获取当前股票池的所有代码"""
     stocks = load_universe()
@@ -394,7 +373,7 @@ def ensure_in_pool(symbol: str) -> Dict:
     })
     save_history(history)
 
-    # Sync to company.db so in_pool=True is set
+    # Sync to company.db
     try:
         from terminal.company_store import get_store
         store = get_store()
@@ -404,7 +383,7 @@ def ensure_in_pool(symbol: str) -> Dict:
             industry=new_entry.get("industry", ""),
             exchange=new_entry.get("exchange", ""),
             market_cap=new_entry.get("marketCap"),
-            in_pool=True, source="analysis",
+            source="analysis",
         )
     except Exception as e:
         logger.warning(f"Sync to company.db failed (non-fatal): {e}")

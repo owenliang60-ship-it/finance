@@ -162,9 +162,11 @@ def _build_html(
     parts.append('</div>')
 
     # Stats cards
+    from src.data.pool_manager import get_symbols
+    pool_count = len(get_symbols())
     parts.append('<div class="stats-grid">')
     parts.append(_stat_card("Total", str(stats["total_companies"]), "Companies in DB"))
-    parts.append(_stat_card("Pool", str(stats["in_pool"]), "Active stock pool"))
+    parts.append(_stat_card("Pool", str(pool_count), "Active stock pool"))
     parts.append(_stat_card("Rated", str(stats["rated"]), "With OPRMS rating"))
     parts.append(_stat_card("Analyzed", str(stats["analyzed"]), "With deep analysis"))
 
@@ -191,11 +193,6 @@ def _build_html(
     parts.append('<option value="">All DNA</option>')
     for g in ["S", "A", "B", "C"]:
         parts.append(f'<option value="{g}">{g}</option>')
-    parts.append('</select>')
-    parts.append('<select id="pool-filter" onchange="filterTable()">')
-    parts.append('<option value="">All</option>')
-    parts.append('<option value="1">In Pool</option>')
-    parts.append('<option value="0">Out of Pool</option>')
     parts.append('</select>')
     parts.append('</div>')
 
@@ -260,18 +257,15 @@ def _build_table(companies: List[Dict[str, Any]], show_analysis: bool) -> str:
         parts.append('<th>Report</th>')
     else:
         parts.append('<th>Exchange</th>')
-        parts.append('<th>In Pool</th>')
     parts.append('</tr></thead>')
     parts.append('<tbody>')
 
     for c in companies:
-        pool_val = c.get("in_pool", 0)
         dna_val = c.get("dna") or ""
         parts.append(
             f'<tr data-symbol="{html.escape(c.get("symbol", ""))}" '
             f'data-name="{html.escape(c.get("company_name", ""))}" '
-            f'data-dna="{html.escape(dna_val)}" '
-            f'data-pool="{pool_val}">'
+            f'data-dna="{html.escape(dna_val)}">'
         )
         parts.append(f'<td class="symbol">{html.escape(c.get("symbol", ""))}</td>')
         parts.append(f'<td>{html.escape(c.get("company_name", "")[:30])}</td>')
@@ -299,8 +293,6 @@ def _build_table(companies: List[Dict[str, Any]], show_analysis: bool) -> str:
                 parts.append('<td class="dim">—</td>')
         else:
             parts.append(f'<td class="dim">{html.escape(c.get("exchange", ""))}</td>')
-            pool_icon = "In Pool" if pool_val else "—"
-            parts.append(f'<td class="dim">{pool_icon}</td>')
 
         parts.append('</tr>')
 
@@ -511,20 +503,17 @@ _FILTER_JS = """
 function filterTable() {
   var search = document.getElementById('search').value.toLowerCase();
   var dnaFilter = document.getElementById('dna-filter').value;
-  var poolFilter = document.getElementById('pool-filter').value;
   var rows = document.querySelectorAll('.company-table tbody tr');
 
   rows.forEach(function(row) {
     var symbol = (row.getAttribute('data-symbol') || '').toLowerCase();
     var name = (row.getAttribute('data-name') || '').toLowerCase();
     var dna = row.getAttribute('data-dna') || '';
-    var pool = row.getAttribute('data-pool') || '';
 
     var matchSearch = !search || symbol.indexOf(search) >= 0 || name.indexOf(search) >= 0;
     var matchDna = !dnaFilter || dna === dnaFilter;
-    var matchPool = !poolFilter || pool === poolFilter;
 
-    row.style.display = (matchSearch && matchDna && matchPool) ? '' : 'none';
+    row.style.display = (matchSearch && matchDna) ? '' : 'none';
   });
 }
 

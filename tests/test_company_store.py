@@ -2,6 +2,7 @@
 import json
 import pytest
 from pathlib import Path
+from unittest.mock import patch
 
 from terminal.company_store import CompanyStore
 
@@ -55,9 +56,10 @@ class TestCompanies:
         assert symbols == ["AAPL", "GOOG", "MSFT"]  # sorted
 
     def test_list_in_pool_only(self, store):
-        store.upsert_company("AAPL", in_pool=True)
-        store.upsert_company("MSFT", in_pool=False)
-        pool = store.list_companies(in_pool_only=True)
+        store.upsert_company("AAPL")
+        store.upsert_company("MSFT")
+        with patch("src.data.pool_manager.get_symbols", return_value=["AAPL"]):
+            pool = store.list_companies(in_pool_only=True)
         assert len(pool) == 1
         assert pool[0]["symbol"] == "AAPL"
 
@@ -68,20 +70,6 @@ class TestCompanies:
         rated = store.list_companies(has_oprms_only=True)
         assert len(rated) == 1
         assert rated[0]["symbol"] == "MSFT"
-
-    def test_sync_pool(self, store):
-        store.upsert_company("AAPL", in_pool=True)
-        store.upsert_company("MSFT", in_pool=True)
-        # Sync with new pool — GOOG in, MSFT out
-        count = store.sync_pool(["AAPL", "GOOG"])
-        assert count == 2
-        aapl = store.get_company("AAPL")
-        assert aapl["in_pool"] == 1
-        msft = store.get_company("MSFT")
-        assert msft["in_pool"] == 0
-        goog = store.get_company("GOOG")
-        assert goog is not None
-        assert goog["in_pool"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -280,14 +268,15 @@ class TestDashboardAndStats:
         assert msft["dna"] is None  # no OPRMS
 
     def test_stats(self, store):
-        store.upsert_company("AAPL", in_pool=True)
-        store.upsert_company("MSFT", in_pool=True)
+        store.upsert_company("AAPL")
+        store.upsert_company("MSFT")
         store.upsert_company("GOOG")
         store.save_oprms_rating("AAPL", dna="S", timing="A", timing_coeff=0.9)
         store.save_oprms_rating("MSFT", dna="A", timing="B", timing_coeff=0.5)
         store.save_analysis("AAPL", {"analysis_date": "2026-02-13"})
 
-        stats = store.get_stats()
+        with patch("src.data.pool_manager.get_symbols", return_value=["AAPL", "MSFT"]):
+            stats = store.get_stats()
         assert stats["total_companies"] == 3
         assert stats["in_pool"] == 2
         assert stats["rated"] == 2

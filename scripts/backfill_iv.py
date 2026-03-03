@@ -84,17 +84,8 @@ def backfill(args):
     if args.symbols:
         symbols = [s.upper() for s in args.symbols]
     else:
-        companies = store.list_companies(in_pool_only=True)
-        symbols = [c["symbol"] for c in companies]
-
-        # Fallback: if in_pool is empty, sync from universe.json and retry
-        if not symbols:
-            logger.warning("No in_pool companies — syncing from universe.json")
-            from src.data.pool_manager import sync_db_pool
-            synced = sync_db_pool()
-            logger.info("sync_db_pool: %d companies synced", synced)
-            companies = store.list_companies(in_pool_only=True)
-            symbols = [c["symbol"] for c in companies]
+        from src.data.pool_manager import get_symbols
+        symbols = get_symbols()
 
         for bm in BENCHMARK_SYMBOLS:
             if bm not in symbols:
