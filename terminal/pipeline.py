@@ -1,14 +1,15 @@
 """
-Analysis pipeline — ticker → data → lens prompts → debate prompts → memo → score → OPRMS.
+Analysis pipeline — shared building blocks for deep analysis.
 
-Four depth levels:
-- quick:    Data + indicators only (~5 sec, $0)
-- standard: + macro briefing + 5-lens analysis prompts (~1 min, ~$2)
-- full:     + 5-round debate + memo + scoring (~5 min, ~$13-15)
-- alpha:    + Layer 2 second-order thinking (3 prompts, ~$3-5 extra)
+Provides:
+- collect_data(): Data collection from FMP + FRED + indicators
+- prepare_lens_prompts(): 5-lens analysis prompt generation
+- prepare_debate_prompts(): 5-round debate prompt generation
+- DataPackage: Unified data container
+- calculate_position(): OPRMS position sizing
 
 Claude IS the analyst. This module generates structured prompts with injected data
-context. Claude responds in conversation to complete the analysis.
+context. The deep pipeline (deep_pipeline.py) orchestrates the full analysis flow.
 """
 import json
 import logging
@@ -756,101 +757,3 @@ def calculate_position(
 
     return output
 
-
-# ---------------------------------------------------------------------------
-# Alpha Layer — Layer 2 Second-Order Thinking (Phase 6)
-# ---------------------------------------------------------------------------
-
-def prepare_alpha_prompts(
-    symbol: str,
-    data_package: DataPackage,
-    l1_memo_summary: str,
-    l1_verdict: str,
-    l1_key_forces: str,
-    l1_oprms: Optional[dict] = None,
-) -> List[Dict[str, Any]]:
-    """
-    Phase 6: Generate 3 sequential Layer 2 prompts (standard pipeline path).
-
-    NOTE: This is the **standard pipeline** alpha prompt path, used in interactive
-    analysis. The **deep pipeline** has a separate path in
-    deep_pipeline.build_alpha_agent_prompt() that embeds frameworks with <<PLACEHOLDER>>
-    markers for file-driven agents. Both paths use the same underlying generators
-    (knowledge.alpha.*) but with different orchestration strategies.
-
-    Returns list of prompt dicts. Prompts B and C include a prompt_generator
-    callable + prompt_args so Claude can render them after receiving previous outputs.
-
-    Args:
-        symbol: Ticker
-        data_package: Full DataPackage from Phase 1
-        l1_memo_summary: Executive summary from L1 memo
-        l1_verdict: BUY/HOLD/SELL from L1
-        l1_key_forces: 3 key forces from L1 debate
-        l1_oprms: Current OPRMS rating dict (or None)
-    """
-    from knowledge.alpha.red_team import generate_red_team_prompt
-    from knowledge.alpha.cycle_pendulum import generate_cycle_prompt
-    from knowledge.alpha.asymmetric_bet import generate_bet_prompt
-
-    data_context = data_package.format_context()
-    sector = ""
-    if data_package.info:
-        sector = data_package.info.get("sector", "Unknown")
-
-    macro_briefing = data_package.macro_briefing or ""
-
-    # Prompt A: Red Team — fully rendered, no dependencies
-    red_team_prompt = generate_red_team_prompt(
-        symbol=symbol,
-        memo_summary=l1_memo_summary,
-        l1_verdict=l1_verdict,
-        l1_key_forces=l1_key_forces,
-        data_context=data_context,
-    )
-
-    prompts = [
-        {
-            "phase": 1,
-            "phase_cn": "红队试炼",
-            "name": "Red Team Gauntlet",
-            "sequence": "A",
-            "prompt": red_team_prompt,
-            "depends_on": None,
-        },
-        {
-            "phase": 2,
-            "phase_cn": "周期钟摆定位",
-            "name": "Cycle & Pendulum",
-            "sequence": "B",
-            "prompt": None,  # Deferred — needs red_team_summary
-            "depends_on": "A",
-            "prompt_generator": "generate_cycle_prompt",
-            "prompt_args": {
-                "symbol": symbol,
-                "sector": sector,
-                "data_context": data_context,
-                "macro_briefing": macro_briefing,
-                # red_team_summary: Claude fills after Phase A
-            },
-        },
-        {
-            "phase": 3,
-            "phase_cn": "非对称赌注",
-            "name": "Asymmetric Bet",
-            "sequence": "C",
-            "prompt": None,  # Deferred — needs red_team + cycle summaries
-            "depends_on": "B",
-            "prompt_generator": "generate_bet_prompt",
-            "prompt_args": {
-                "symbol": symbol,
-                "data_context": data_context,
-                "l1_oprms": l1_oprms,
-                "l1_verdict": l1_verdict,
-                "current_price": data_package.latest_price,
-                # red_team_summary, cycle_summary: Claude fills after Phases A & B
-            },
-        },
-    ]
-
-    return prompts

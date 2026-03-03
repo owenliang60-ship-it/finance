@@ -394,6 +394,21 @@ def ensure_in_pool(symbol: str) -> Dict:
     })
     save_history(history)
 
+    # Sync to company.db so in_pool=True is set
+    try:
+        from terminal.company_store import get_store
+        store = get_store()
+        store.upsert_company(
+            symbol, company_name=new_entry["companyName"],
+            sector=new_entry.get("sector", ""),
+            industry=new_entry.get("industry", ""),
+            exchange=new_entry.get("exchange", ""),
+            market_cap=new_entry.get("marketCap"),
+            in_pool=True, source="analysis",
+        )
+    except Exception as e:
+        logger.warning(f"Sync to company.db failed (non-fatal): {e}")
+
     logger.info(f"'{symbol}' ({new_entry['companyName']}) 已加入股票池 (source: analysis)")
     return new_entry
 

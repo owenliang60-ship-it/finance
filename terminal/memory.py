@@ -6,7 +6,7 @@ them in SQLite (via company_store) for retrieval in future analyses.
 
 Memory flow:
   compile_deep_report() → extract_situation_summary() → store_situation()
-  deep_analyze_ticker()  → retrieve_same_ticker_experiences() → format_past_experiences()
+  analyze_ticker()  → retrieve_same_ticker_experiences() → format_past_experiences()
 """
 import json
 import logging

@@ -10,7 +10,7 @@
 #   ./scripts/auto_deep_analyze.sh --skip-db AAPL       # 跳过 DB 存储
 #
 # 每只股票 ~25-30 分钟，14 个独立 claude -p 调用
-# 使用 deep_analyze_ticker() 预生成的同一套 prompt 文件，质量与手动一致
+# 使用 analyze_ticker() 预生成的同一套 prompt 文件，质量与手动一致
 #
 set -euo pipefail
 
@@ -215,8 +215,8 @@ analyze_ticker() {
     setup_json=$("$VENV_PYTHON" -c "
 import json, sys
 sys.path.insert(0, '$PROJECT_DIR')
-from terminal.commands import deep_analyze_ticker
-setup = deep_analyze_ticker('$ticker')
+from terminal.commands import analyze_ticker
+setup = analyze_ticker('$ticker')
 batch = {
     'symbol': setup['symbol'],
     'research_dir': setup['research_dir'],

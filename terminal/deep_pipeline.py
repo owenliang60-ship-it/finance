@@ -316,13 +316,7 @@ def build_alpha_agent_prompt(
     current_price: float | None,
     l1_oprms: dict | None,
 ) -> str:
-    """Build a self-contained prompt for the Phase 3 Alpha agent (deep pipeline path).
-
-    NOTE: This is the **deep pipeline** alpha prompt path, used in file-driven
-    batch analysis. The **standard pipeline** has a separate path in
-    pipeline.prepare_alpha_prompts() that returns deferred generators for
-    interactive use. Both paths use the same underlying generators
-    (knowledge.alpha.*) but with different orchestration strategies.
+    """Build a self-contained prompt for the Phase 3 Alpha agent.
 
     The agent reads 5 input files and writes 3 alpha analysis files.
     Uses the actual framework text from the alpha generators as embedded prompts.
@@ -1082,7 +1076,7 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
             structured["html_report_path"] = str(html_path)
 
         # Ensure company exists in DB
-        store.upsert_company(symbol, source="analysis")
+        store.upsert_company(symbol, in_pool=True, source="analysis")
 
         # Save analysis summary
         analysis_id = store.save_analysis(symbol, structured)

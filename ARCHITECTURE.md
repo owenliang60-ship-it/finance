@@ -21,7 +21,7 @@
 ║                          │                                             ║
 ║  ┌───────────────────────▼──────────────────────────┐                  ║
 ║  │  commands.py (490L) 顶层入口                      │                  ║
-║  │  ├─ analyze_ticker(sym, depth)                   │                  ║
+║  │  ├─ analyze_ticker(sym) → deep pipeline          │                  ║
 ║  │  ├─ portfolio_status()                           │                  ║
 ║  │  ├─ position_advisor(sym, shares, price)         │                  ║
 ║  │  ├─ company_lookup(sym)                          │                  ║
@@ -30,21 +30,18 @@
 ║  └───────────────────────┬──────────────────────────┘                  ║
 ║                          │                                             ║
 ║  ┌───────────────────────▼──────────────────────────┐                  ║
-║  │  pipeline.py (661L) 分析流水线                     │                  ║
+║  │  pipeline.py (661L) 共享构建模块                    │                  ║
 ║  │                                                   │                  ║
-║  │  Stage 0: collect_data()                          │                  ║
+║  │  collect_data()                                   │                  ║
 ║  │    ├─ FRED macro fetch → MacroSnapshot            │                  ║
 ║  │    ├─ Signal detection (5 cross-asset detectors)  │                  ║
 ║  │    ├─ FMP enrichment (estimates/earnings/         │                  ║
 ║  │    │   insider/news)                              │                  ║
 ║  │    └─ → DataPackage                               │                  ║
 ║  │                                                   │                  ║
-║  │  Stage 1: macro_briefing prompt                   │                  ║
-║  │  Stage 2: 6× lens prompts (→ Claude responds)    │                  ║
-║  │  Stage 3: debate prompt (→ Claude responds)       │                  ║
-║  │  Stage 4: memo skeleton                           │                  ║
-║  │  Stage 5: score → OPRMS rating                    │                  ║
-║  │  Stage 6: position sizing                         │                  ║
+║  │  prepare_lens_prompts() → 5 lens analysis         │                  ║
+║  │  prepare_debate_prompts() → 5-round debate        │                  ║
+║  │  calculate_position() → OPRMS sizing              │                  ║
 ║  └──────┬───────────┬──────────┬─────────────────────┘                 ║
 ║         │           │          │                                        ║
 ║  ┌──────▼─────┐ ┌──▼───────┐ ┌▼─────────────────────┐                 ║
@@ -186,15 +183,18 @@
 
 ---
 
-## Data Flow: `analyze_ticker("NVDA", depth="full")`
+## Data Flow: `analyze_ticker("NVDA")`
+
+Deep analysis is the single pipeline. `analyze_ticker()` prepares data + prompts,
+`auto_deep_analyze.sh` orchestrates multi-agent execution (~15 agents/ticker).
 
 ```
-User 对话
+User 对话 or auto_deep_analyze.sh
   │
   ▼
-commands.analyze_ticker("NVDA", "full")
+commands.analyze_ticker("NVDA")
   │
-  ├── Stage 0: collect_data("NVDA") ───────────────────────────────┐
+  ├── Phase 0: collect_data("NVDA") ───────────────────────────────┐
   │     ├─ macro_fetcher → FRED 16 series → MacroSnapshot (cached) │
   │     ├─ regime.classify() → CRISIS / RISK_OFF / ON / NEUTRAL    │
   │     ├─ macro_briefing.detect_signals() → 5 cross-asset signals │
@@ -202,26 +202,19 @@ commands.analyze_ticker("NVDA", "full")
   │     ├─ fmp_tools.get_earnings_calendar("NVDA")                 │
   │     ├─ fmp_tools.get_insider_trades("NVDA")                    │
   │     └─ fmp_tools.get_stock_news("NVDA")                        │
-  │     → DataPackage { macro, signals, estimates, earnings, ... } │
+  │     → DataPackage + data_context.md written to research_dir    │
   │                                                                 │
-  ├── Stage 1: generate_briefing_prompt(signals, snapshot)          │
-  │     → Claude generates macro narrative                          │
+  ├── Phase 1: Write agent prompts to files                         │
+  │     ├─ profiler_prompt.md (Company Profiler)                    │
+  │     ├─ lens_*.md (5 lens agent prompts)                         │
+  │     ├─ gemini_prompt.md (Contrarian counter-thesis)             │
+  │     ├─ synthesis_prompt.md (Cross-lens synthesis)                │
+  │     ├─ alpha_prompt.md (Red team + cycle + bet)                 │
+  │     └─ alpha_debate_prompt.md (Phase 4 debate)                  │
   │                                                                 │
-  ├── Stage 2: prepare_lens_prompts(DataPackage)                    │
-  │     → 6 lens prompts (each investment philosophy)               │
-  │     → Claude answers each sequentially                          │
-  │                                                                 │
-  ├── Stage 3: debate prompt (Bull vs Bear)                         │
-  │     → Claude simulates 5-round adversarial debate               │
-  │                                                                 │
-  ├── Stage 4: prepare_memo_skeleton()                              │
-  │     → Investment memo (9 buckets)                               │
-  │                                                                 │
-  ├── Stage 5: score → OPRMS rating (DNA + Timing)                  │
-  │                                                                 │
-  └── Stage 6: calculate_position()                                 │
-        → Total × DNA_cap × Timing × regime_mult × evidence_gate   │
-        → Final position recommendation                             │
+  └── Returns: { research_dir, prompt_paths, research_queries }     │
+        → Shell orchestrator runs ~15 claude -p agents              │
+        → compile_deep_report() → HTML report + company.db          │
 ```
 
 ---
@@ -236,8 +229,8 @@ The orchestration layer. Every user-facing function lives here.
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `commands.py` | 490 | Top-level entry points Claude calls |
-| `pipeline.py` | 661 | Multi-stage analysis workflow (data→prompt→score→OPRMS) |
+| `commands.py` | 490 | Top-level entry points (analyze_ticker = deep pipeline) |
+| `pipeline.py` | 661 | Shared building blocks (collect_data, lens prompts, debate, position sizing) |
 | `macro_fetcher.py` | 448 | FRED 16-series fetch, 4h/12h cache, derived values |
 | `macro_briefing.py` | 346 | 5 cross-asset signal detectors (carry unwind, credit stress, liquidity drain, reflation, risk rally) |
 | `macro_snapshot.py` | 162 | MacroSnapshot dataclass (33+ fields incl trends) |
@@ -255,14 +248,14 @@ The orchestration layer. Every user-facing function lives here.
 
 #### Key Commands (`commands.py`)
 
-| Command | Purpose | Depth |
-|---------|---------|-------|
-| `analyze_ticker(sym, depth)` | Full analysis pipeline | quick/standard/full |
-| `portfolio_status()` | Holdings + exposure alerts + company DB coverage | — |
-| `position_advisor(sym, shares, price)` | OPRMS-based position sizing | — |
-| `company_lookup(sym)` | Everything in company DB for a ticker | — |
-| `run_monitor()` | Full portfolio health sweep | — |
-| `theme_status(slug)` | Investment theme membership | — |
+| Command | Purpose |
+|---------|---------|
+| `analyze_ticker(sym)` | Deep analysis setup (data + prompts to files) |
+| `portfolio_status()` | Holdings + exposure alerts + company DB coverage |
+| `position_advisor(sym, shares, price)` | OPRMS-based position sizing |
+| `company_lookup(sym)` | Everything in company DB for a ticker |
+| `run_monitor()` | Full portfolio health sweep |
+| `theme_status(slug)` | Investment theme membership |
 
 #### Macro Pipeline
 

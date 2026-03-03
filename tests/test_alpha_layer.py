@@ -6,21 +6,17 @@ Covers:
 - Red Team Gauntlet prompt generation
 - Cycle & Pendulum prompt generation
 - Asymmetric Bet prompt generation
-- Pipeline integration (prepare_alpha_prompts)
 - Company DB persistence (save_alpha_package, get_latest_alpha)
 """
 import json
 import pytest
-import shutil
-from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from knowledge.alpha.base import AlphaLens, AlphaPackage, ALPHA_LENSES
 from knowledge.alpha.red_team import generate_red_team_prompt
 from knowledge.alpha.cycle_pendulum import generate_cycle_prompt
 from knowledge.alpha.asymmetric_bet import generate_bet_prompt
-from terminal.pipeline import prepare_alpha_prompts, DataPackage
 
 
 # ---------------------------------------------------------------------------
@@ -41,24 +37,6 @@ def _sample_data_context() -> str:
         "### Price Data\n"
         "- Latest: $880.50 (2026-02-07)\n"
     )
-
-
-def _sample_data_package() -> DataPackage:
-    """Create a minimal DataPackage for pipeline tests."""
-    pkg = DataPackage(
-        symbol="NVDA",
-        collected_at="2026-02-09T10:00:00",
-        info={
-            "companyName": "NVIDIA",
-            "sector": "Technology",
-            "industry": "Semiconductors",
-            "marketCap": 3200_000_000_000,
-            "exchange": "NASDAQ",
-        },
-        fundamentals={"pe": 65, "roe": 115, "revenueGrowth": 1.22},
-        price={"latest_close": 880.50, "latest_date": "2026-02-07", "records": 252},
-    )
-    return pkg
 
 
 def _sample_alpha_dict() -> dict:
@@ -503,164 +481,6 @@ class TestAsymmetricBetPrompt:
 
 
 # ===========================================================================
-# TestPipelineIntegration
-# ===========================================================================
-
-class TestPipelineIntegration:
-    def test_returns_three_prompts(self):
-        """prepare_alpha_prompts returns exactly 3 prompt dicts."""
-        pkg = _sample_data_package()
-        prompts = prepare_alpha_prompts(
-            symbol="NVDA",
-            data_package=pkg,
-            l1_memo_summary="AI leader",
-            l1_verdict="BUY",
-            l1_key_forces="AI demand, CUDA moat, data center growth",
-        )
-        assert len(prompts) == 3
-
-    def test_correct_sequence(self):
-        """Prompts are in A, B, C order."""
-        pkg = _sample_data_package()
-        prompts = prepare_alpha_prompts(
-            symbol="NVDA",
-            data_package=pkg,
-            l1_memo_summary="AI leader",
-            l1_verdict="BUY",
-            l1_key_forces="AI demand",
-        )
-        assert prompts[0]["sequence"] == "A"
-        assert prompts[1]["sequence"] == "B"
-        assert prompts[2]["sequence"] == "C"
-
-    def test_first_prompt_rendered(self):
-        """Prompt A (Red Team) is fully rendered."""
-        pkg = _sample_data_package()
-        prompts = prepare_alpha_prompts(
-            symbol="NVDA",
-            data_package=pkg,
-            l1_memo_summary="AI leader",
-            l1_verdict="BUY",
-            l1_key_forces="AI demand",
-        )
-        assert prompts[0]["prompt"] is not None
-        assert "红队试炼" in prompts[0]["prompt"]
-        assert "NVDA" in prompts[0]["prompt"]
-
-    def test_deferred_prompts_have_generator(self):
-        """Prompts B and C have prompt_generator and prompt_args."""
-        pkg = _sample_data_package()
-        prompts = prepare_alpha_prompts(
-            symbol="NVDA",
-            data_package=pkg,
-            l1_memo_summary="AI leader",
-            l1_verdict="BUY",
-            l1_key_forces="AI demand",
-        )
-        # Prompt B
-        assert prompts[1]["prompt"] is None
-        assert prompts[1]["prompt_generator"] == "generate_cycle_prompt"
-        assert "symbol" in prompts[1]["prompt_args"]
-        assert "sector" in prompts[1]["prompt_args"]
-
-        # Prompt C
-        assert prompts[2]["prompt"] is None
-        assert prompts[2]["prompt_generator"] == "generate_bet_prompt"
-        assert "symbol" in prompts[2]["prompt_args"]
-        assert "current_price" in prompts[2]["prompt_args"]
-
-    def test_dependency_chain(self):
-        """A has no deps, B depends on A, C depends on B."""
-        pkg = _sample_data_package()
-        prompts = prepare_alpha_prompts(
-            symbol="NVDA",
-            data_package=pkg,
-            l1_memo_summary="test",
-            l1_verdict="BUY",
-            l1_key_forces="test",
-        )
-        assert prompts[0]["depends_on"] is None
-        assert prompts[1]["depends_on"] == "A"
-        assert prompts[2]["depends_on"] == "B"
-
-    def test_phase_numbers(self):
-        """Phases are 1, 2, 3."""
-        pkg = _sample_data_package()
-        prompts = prepare_alpha_prompts(
-            symbol="NVDA",
-            data_package=pkg,
-            l1_memo_summary="test",
-            l1_verdict="BUY",
-            l1_key_forces="test",
-        )
-        assert [p["phase"] for p in prompts] == [1, 2, 3]
-
-    def test_chinese_names(self):
-        """Each prompt has a Chinese name."""
-        pkg = _sample_data_package()
-        prompts = prepare_alpha_prompts(
-            symbol="NVDA",
-            data_package=pkg,
-            l1_memo_summary="test",
-            l1_verdict="BUY",
-            l1_key_forces="test",
-        )
-        assert prompts[0]["phase_cn"] == "红队试炼"
-        assert prompts[1]["phase_cn"] == "周期钟摆定位"
-        assert prompts[2]["phase_cn"] == "非对称赌注"
-
-    def test_oprms_passed_through(self):
-        """OPRMS from L1 is included in Prompt C args."""
-        pkg = _sample_data_package()
-        oprms = {"dna": "S", "timing": "A", "timing_coeff": 0.9}
-        prompts = prepare_alpha_prompts(
-            symbol="NVDA",
-            data_package=pkg,
-            l1_memo_summary="test",
-            l1_verdict="BUY",
-            l1_key_forces="test",
-            l1_oprms=oprms,
-        )
-        assert prompts[2]["prompt_args"]["l1_oprms"] == oprms
-
-    def test_sector_extracted(self):
-        """Sector is extracted from DataPackage.info."""
-        pkg = _sample_data_package()
-        prompts = prepare_alpha_prompts(
-            symbol="NVDA",
-            data_package=pkg,
-            l1_memo_summary="test",
-            l1_verdict="BUY",
-            l1_key_forces="test",
-        )
-        assert prompts[1]["prompt_args"]["sector"] == "Technology"
-
-    def test_sector_defaults_when_no_info(self):
-        """Sector defaults to empty string when no info."""
-        pkg = DataPackage(symbol="NVDA", collected_at="2026-02-09")
-        prompts = prepare_alpha_prompts(
-            symbol="NVDA",
-            data_package=pkg,
-            l1_memo_summary="test",
-            l1_verdict="BUY",
-            l1_key_forces="test",
-        )
-        assert prompts[1]["prompt_args"]["sector"] == ""
-
-    def test_current_price_in_bet_args(self):
-        """Current price is passed to Prompt C args."""
-        pkg = _sample_data_package()
-        prompts = prepare_alpha_prompts(
-            symbol="NVDA",
-            data_package=pkg,
-            l1_memo_summary="test",
-            l1_verdict="BUY",
-            l1_key_forces="test",
-        )
-        assert prompts[2]["prompt_args"]["current_price"] == 880.50
-
-
-# ===========================================================================
 # TestCompanyDBAlpha
 # ===========================================================================
 
@@ -729,91 +549,3 @@ class TestCompanyDBAlpha:
         assert saved["symbol"] == "NVDA"
 
 
-# ===========================================================================
-# TestCommandsAlphaDepth
-# ===========================================================================
-
-class TestCommandsAlphaDepth:
-    """Test that analyze_ticker(depth='alpha') includes alpha prompts."""
-
-    @patch("terminal.commands.collect_data")
-    def test_alpha_depth_includes_alpha_prompts(self, mock_collect):
-        """depth='alpha' should include alpha_prompts in result."""
-        from terminal.commands import analyze_ticker
-
-        pkg = _sample_data_package()
-        # Add a mock company_record
-        mock_record = MagicMock()
-        mock_record.has_data = False
-        mock_record.oprms = None
-        mock_record.kill_conditions = []
-        mock_record.memos = []
-        mock_record.analyses = []
-        pkg.company_record = mock_record
-        pkg.macro = None
-
-        mock_collect.return_value = pkg
-
-        result = analyze_ticker("NVDA", depth="alpha")
-        assert "alpha_prompts" in result
-        assert "alpha_instructions" in result
-        assert len(result["alpha_prompts"]) == 3
-
-    @patch("terminal.commands.collect_data")
-    def test_alpha_depth_includes_lens_prompts(self, mock_collect):
-        """depth='alpha' should also include lens prompts (it's a superset of full)."""
-        from terminal.commands import analyze_ticker
-
-        pkg = _sample_data_package()
-        mock_record = MagicMock()
-        mock_record.has_data = False
-        mock_record.oprms = None
-        mock_record.kill_conditions = []
-        mock_record.memos = []
-        mock_record.analyses = []
-        pkg.company_record = mock_record
-        pkg.macro = None
-
-        mock_collect.return_value = pkg
-
-        result = analyze_ticker("NVDA", depth="alpha")
-        assert "lens_prompts" in result
-        assert "debate_instructions" in result
-        assert "memo_skeleton" in result
-
-    @patch("terminal.commands.collect_data")
-    def test_quick_depth_no_alpha(self, mock_collect):
-        """depth='quick' should NOT include alpha_prompts."""
-        from terminal.commands import analyze_ticker
-
-        pkg = _sample_data_package()
-        mock_record = MagicMock()
-        mock_record.has_data = False
-        pkg.company_record = mock_record
-        pkg.macro = None
-
-        mock_collect.return_value = pkg
-
-        result = analyze_ticker("NVDA", depth="quick")
-        assert "alpha_prompts" not in result
-
-    @patch("terminal.commands.collect_data")
-    def test_full_depth_includes_alpha(self, mock_collect):
-        """depth='full' includes alpha_prompts (merged depth)."""
-        from terminal.commands import analyze_ticker
-
-        pkg = _sample_data_package()
-        mock_record = MagicMock()
-        mock_record.has_data = False
-        mock_record.oprms = None
-        mock_record.kill_conditions = []
-        mock_record.memos = []
-        mock_record.analyses = []
-        pkg.company_record = mock_record
-        pkg.macro = None
-
-        mock_collect.return_value = pkg
-
-        result = analyze_ticker("NVDA", depth="full")
-        assert "alpha_prompts" in result
-        assert "alpha_instructions" in result

@@ -431,7 +431,7 @@ class TestWriteAgentPrompts:
 
 
 class TestDeepAnalyzeTicker:
-    """Tests for commands.deep_analyze_ticker() setup phase."""
+    """Tests for commands.analyze_ticker() setup phase."""
 
     @patch("terminal.commands.collect_data")
     @patch("terminal.commands.prepare_lens_prompts")
@@ -442,9 +442,9 @@ class TestDeepAnalyzeTicker:
             {"lens_name": "Quality Compounder", "horizon": "20y", "core_metric": "ROIC", "prompt": "Analyze."},
         ]
 
-        from terminal.commands import deep_analyze_ticker
+        from terminal.commands import analyze_ticker
 
-        result = deep_analyze_ticker("MSFT")
+        result = analyze_ticker("MSFT")
 
         assert "research_dir" in result
         assert "data_context_path" in result
@@ -470,9 +470,9 @@ class TestDeepAnalyzeTicker:
         mock_lenses.return_value = []
 
         with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):
-            from terminal.commands import deep_analyze_ticker
+            from terminal.commands import analyze_ticker
 
-            result = deep_analyze_ticker("TEST")
+            result = analyze_ticker("TEST")
             assert Path(result["data_context_path"]).exists()
 
     @patch("terminal.commands.collect_data")
@@ -485,9 +485,9 @@ class TestDeepAnalyzeTicker:
             {"lens_name": "Deep Value", "horizon": "3-5y", "core_metric": "Book", "prompt": "Analyze DV."},
         ]
 
-        from terminal.commands import deep_analyze_ticker
+        from terminal.commands import analyze_ticker
 
-        result = deep_analyze_ticker("MSFT")
+        result = analyze_ticker("MSFT")
         for lp in result["lens_prompt_paths"]:
             assert "lens_name" in lp
             assert "prompt_path" in lp
@@ -505,9 +505,9 @@ class TestDeepAnalyzeTicker:
         mock_collect.return_value = mock_pkg
         mock_lenses.return_value = []
 
-        from terminal.commands import deep_analyze_ticker
+        from terminal.commands import analyze_ticker
 
-        result = deep_analyze_ticker("NVDA")
+        result = analyze_ticker("NVDA")
         queries = result["research_queries"]
         assert "earnings" in queries
         assert "competitive" in queries
@@ -521,9 +521,9 @@ class TestDeepAnalyzeTicker:
         mock_collect.return_value = mock_pkg
         mock_lenses.return_value = []
 
-        from terminal.commands import deep_analyze_ticker
+        from terminal.commands import analyze_ticker
 
-        result = deep_analyze_ticker("MSFT")
+        result = analyze_ticker("MSFT")
         gemini_path = Path(result["gemini_prompt_path"])
         assert gemini_path.exists()
         content = gemini_path.read_text()
@@ -537,9 +537,9 @@ class TestDeepAnalyzeTicker:
         mock_collect.return_value = mock_pkg
         mock_lenses.return_value = []
 
-        from terminal.commands import deep_analyze_ticker
+        from terminal.commands import analyze_ticker
 
-        result = deep_analyze_ticker("AAPL")
+        result = analyze_ticker("AAPL")
         synth_path = Path(result["synthesis_prompt_path"])
         assert synth_path.exists()
         content = synth_path.read_text()
@@ -552,9 +552,9 @@ class TestDeepAnalyzeTicker:
         mock_collect.return_value = mock_pkg
         mock_lenses.return_value = []
 
-        from terminal.commands import deep_analyze_ticker
+        from terminal.commands import analyze_ticker
 
-        result = deep_analyze_ticker("AAPL")
+        result = analyze_ticker("AAPL")
         alpha_path = Path(result["alpha_prompt_path"])
         assert alpha_path.exists()
         content = alpha_path.read_text()
@@ -1090,7 +1090,7 @@ class TestCompileDeepReportWithDebate:
 
 
 class TestDeepAnalyzeTickerDebate:
-    """Tests for alpha debate prompt in deep_analyze_ticker()."""
+    """Tests for alpha debate prompt in analyze_ticker()."""
 
     @patch("terminal.commands.collect_data")
     @patch("terminal.commands.prepare_lens_prompts")
@@ -1099,9 +1099,9 @@ class TestDeepAnalyzeTickerDebate:
         mock_collect.return_value = mock_pkg
         mock_lenses.return_value = []
 
-        from terminal.commands import deep_analyze_ticker
+        from terminal.commands import analyze_ticker
 
-        result = deep_analyze_ticker("MSFT")
+        result = analyze_ticker("MSFT")
         assert "alpha_debate_prompt_path" in result
         assert result["alpha_debate_prompt_path"] != ""
         debate_path = Path(result["alpha_debate_prompt_path"])

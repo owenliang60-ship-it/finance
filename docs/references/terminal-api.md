@@ -27,70 +27,57 @@ Top-level entry points for Claude. Each returns a structured dict for Claude to 
 
 ### `analyze_ticker`
 
-Full ticker analysis pipeline with 3 depth levels.
+Deep analysis setup — prepares data and writes all agent prompts to files.
+Does NOT run LLM analysis. Returns prompt paths for shell orchestration.
 
 **Signature**:
 ```python
 def analyze_ticker(
     symbol: str,
-    depth: str = "quick",
-    price_days: int = 60,
+    price_days: int = 120,
 ) -> Dict[str, Any]
 ```
 
 **Parameters**:
 - `symbol` (str): Ticker symbol (case-insensitive, auto-uppercased)
-- `depth` (str): Analysis depth level
-  - `"quick"`: Data snapshot only (~5 sec, $0)
-  - `"standard"`: + 6 lens analysis prompts (~1 min, ~$2)
-  - `"full"`: + debate + memo + scoring (~5 min, ~$13-15)
-- `price_days` (int): Days of price history to include (default: 60)
+- `price_days` (int): Days of price history to include (default: 120)
 
 **Returns**:
 ```python
 {
-    "symbol": "AAPL",
-    "depth": "full",
+    "symbol": "NVDA",
+    "research_dir": "/path/to/research/NVDA/20260303_120000",
+    "data_context_path": "/path/to/data_context.md",
+    "research_queries": [...],           # Web search queries
+    "profiler_prompt_path": "...",       # Company profiler prompt
+    "lens_prompt_paths": ["..."],        # 5 lens agent prompt files
+    "gemini_prompt_path": "...",         # Contrarian counter-thesis
+    "synthesis_prompt_path": "...",      # Cross-lens synthesis
+    "alpha_prompt_path": "...",          # Alpha agent prompt
+    "alpha_debate_prompt_path": "...",   # Alpha debate prompt
     "data": {
-        "info": {...},           # Company name, sector, market cap
-        "profile": {...},        # Business description, CEO, etc.
-        "fundamentals": {...},   # P/E, ROE, margins
+        "info": {...},
         "latest_price": 175.23,
-        "indicators": {...},     # PMARP, RVOL signals
+        "indicators": {...},
         "has_financials": True
     },
-    "existing_record": {         # If company has prior analysis
-        "oprms": {...},
-        "kill_conditions_count": 3,
-        "memos_count": 5,
-        "analyses_count": 12
-    },
-    "lens_prompts": [...],       # (standard/full only) 6 structured prompts
-    "lens_instructions": "...",  # Instructions for Claude
-    "debate_instructions": "...", # (full only) How to run debate
-    "memo_skeleton": {...},      # (full only) Memo template
-    "scoring_rubric": "...",     # (full only) Quality gates
-    "context_summary": "..."     # Formatted data context
+    "scratchpad_path": "..."
 }
 ```
 
-**Side Effects**: None (read-only).
+**Side Effects**: Creates research directory and writes prompt files.
 
 **Example**:
 ```python
 from terminal.commands import analyze_ticker
 
-# Quick data check
-result = analyze_ticker("NVDA", depth="quick")
-print(result["data"]["indicators"])  # PMARP, RVOL signals
-
-# Full analysis
-result = analyze_ticker("NVDA", depth="full")
-# Claude runs lens_prompts, then debate, then writes memo
-# After memo, Claude calls terminal.company_db.save_memo() to persist
+result = analyze_ticker("NVDA")
+print(result["research_dir"])       # Research directory with all prompts
+print(result["lens_prompt_paths"])  # Paths to 5 lens agent prompts
+# Shell orchestrator (auto_deep_analyze.sh) runs ~15 agents using these paths
 ```
 
-**Code Reference**: `terminal/commands.py:29-93`
+**Code Reference**: `terminal/commands.py:34-170`
 
 ---
 
@@ -1782,62 +1769,23 @@ def get_current_regime() -> Dict[str, Any]
 
 ## Usage Patterns
 
-### Full Analysis Workflow
+### Deep Analysis Workflow
 
 ```python
 from terminal.commands import analyze_ticker
-from terminal.company_db import save_memo, save_oprms
 
-# Step 1: Run full analysis
-result = analyze_ticker("NVDA", depth="full")
+# Step 1: Setup — prepares data + writes all agent prompts to files
+result = analyze_ticker("NVDA")
+print(result["research_dir"])        # /path/to/research/NVDA/20260303_120000
+print(result["lens_prompt_paths"])   # 5 lens agent prompt files
 
-# Step 2: Claude runs lens prompts
-for prompt in result["lens_prompts"]:
-    # Claude responds to each lens
-    pass
+# Step 2: Shell orchestration — auto_deep_analyze.sh runs ~15 agents
+# ./scripts/auto_deep_analyze.sh NVDA
 
-# Step 3: Identify tensions
-tensions = [...]  # Claude identifies 3 key tensions
-
-# Step 4: Run debate
-from terminal.pipeline import prepare_debate_prompts
-debate_prompts = prepare_debate_prompts("NVDA", tensions, result["context_summary"])
-for prompt in debate_prompts:
-    # Claude runs each debate round
-    pass
-
-# Step 5: Write memo
-memo_text = """
-# Investment Memo: NVDA
-...
-"""
-
-# Step 6: Score memo
-from terminal.pipeline import score_memo
-score = score_memo(memo_text)
-if score["pass"]:
-    save_memo("NVDA", memo_text)
-else:
-    print(f"Revise memo: {score['feedback']}")
-
-# Step 7: Assign OPRMS and save
-oprms = {
-    "dna": "S",
-    "timing": "A",
-    "timing_coeff": 0.9,
-    "investment_bucket": "Core",
-    "evidence": ["Q4 earnings", "H100 backlog", "CUDA moat"],
-    "rationale": "AI infrastructure leader"
-}
-save_oprms("NVDA", oprms)
-
-# Step 8: Define kill conditions
-from terminal.company_db import save_kill_conditions
-conditions = [
-    {"description": "Close below $600", "metric": "price", "threshold": 600},
-    {"description": "Gross margin < 70%", "metric": "grossMargin", "threshold": 0.70}
-]
-save_kill_conditions("NVDA", conditions)
+# Step 3: Compile report (called by shell orchestrator)
+from terminal.deep_pipeline import compile_deep_report
+report_path = compile_deep_report("NVDA", result["research_dir"])
+# → HTML report + auto-save to company.db (in_pool=True)
 ```
 
 ---
@@ -1946,7 +1894,7 @@ logging.basicConfig(level=logging.INFO)
 
 **Optimization tips**:
 - Batch API calls when possible (Data Desk handles rate limiting)
-- Use `depth="quick"` for fast data checks
+- Use `collect_data()` directly for fast data checks without prompt generation
 - Cache `DataPackage` results to avoid redundant API calls
 
 ---

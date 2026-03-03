@@ -39,17 +39,12 @@ In Claude Code, with this workspace open:
 ```python
 from terminal.commands import analyze_ticker
 
-# Quick data snapshot (5 sec, free)
-result = analyze_ticker("AAPL", depth="quick")
-
-# Standard analysis with 6 investment lenses (1 min, ~$2)
-result = analyze_ticker("AAPL", depth="standard")
-
-# Full analysis with debate + memo + OPRMS rating (5 min, ~$13-15)
-result = analyze_ticker("AAPL", depth="full")
+# Deep analysis setup — prepares data + agent prompts
+result = analyze_ticker("AAPL")
+print(result["research_dir"])  # All prompts written here
 ```
 
-Claude will guide you through the analysis prompts and generate an investment memo with OPRMS rating.
+Use `./scripts/auto_deep_analyze.sh AAPL` for fully automated multi-agent analysis (~25 min/ticker).
 
 ### 4. View Results
 
@@ -63,7 +58,7 @@ Analysis results are stored in:
 
 | Command | Purpose | Time | Cost |
 |---------|---------|------|------|
-| `analyze_ticker(symbol, depth)` | Research a ticker with 3 depth levels | 5s - 5min | $0 - $15 |
+| `analyze_ticker(symbol)` | Deep analysis setup (data + prompts) | ~10s | $0 |
 | `portfolio_status()` | Holdings summary + exposure alerts | Instant | $0 |
 | `position_advisor(symbol)` | OPRMS-based position sizing | Instant | $0 |
 | `company_lookup(symbol)` | Retrieve all knowledge on a ticker | Instant | $0 |
@@ -167,7 +162,7 @@ Lenses are defined in `knowledge/philosophies/` and injected into the analysis p
 
 ## Next Steps
 
-1. **Run first analysis**: `analyze_ticker("NVDA", depth="full")`
+1. **Run first analysis**: `analyze_ticker("NVDA")`
 2. **Input holdings**: Add positions to `portfolio/holdings/positions.json`
 3. **Set up monitoring**: Configure alerts in `portfolio/exposure/rules.py`
 4. **Explore themes**: Create investment themes in `data/themes/`
