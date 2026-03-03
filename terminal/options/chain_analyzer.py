@@ -36,7 +36,7 @@ def fetch_and_store_chain(
 
     Args:
         symbol: Stock ticker
-        store: CompanyStore instance
+        store: MarketStore or CompanyStore instance
         client: MarketDataClient (defaults to singleton)
         dte_min: Minimum DTE filter
         dte_max: Maximum DTE filter
@@ -338,7 +338,7 @@ def filter_liquid_strikes(
 
     Args:
         symbol: Stock ticker
-        store: CompanyStore instance
+        store: MarketStore or CompanyStore instance
         expiration: Expiration date to filter
         min_oi: Minimum open interest
         max_spread_pct: Maximum bid-ask spread as % of mid

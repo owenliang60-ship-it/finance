@@ -100,7 +100,7 @@ def get_iv_rank(
 
     Args:
         symbol: Stock ticker
-        store: CompanyStore instance
+        store: MarketStore or CompanyStore instance
         lookback: Number of trading days to look back
 
     Returns:
@@ -137,7 +137,7 @@ def get_iv_percentile(
 
     Args:
         symbol: Stock ticker
-        store: CompanyStore instance
+        store: MarketStore or CompanyStore instance
         lookback: Number of trading days to look back
 
     Returns:
@@ -214,7 +214,7 @@ def update_daily_iv(
 
     Args:
         symbols: List of stock tickers
-        store: CompanyStore instance
+        store: MarketStore or CompanyStore instance
         client: MarketDataClient instance (defaults to singleton)
 
     Returns:
