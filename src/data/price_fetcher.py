@@ -60,21 +60,21 @@ def load_price_cache(symbol: str) -> Optional[pd.DataFrame]:
 
 
 def save_price_cache(symbol: str, df: pd.DataFrame):
-    """保存量价数据到缓存"""
-    PRICE_DIR.mkdir(parents=True, exist_ok=True)
-    cache_path = _get_cache_path(symbol)
-
-    # 确保列顺序和格式
+    """保存量价数据到缓存 (market.db 主写, CSV 副写)"""
     df = df.sort_values("date", ascending=False).reset_index(drop=True)
-    df.to_csv(cache_path, index=False)
-    logger.debug(f"保存缓存 {symbol}: {len(df)} 条")
 
-    # Dual-write to market.db (non-fatal)
+    # 主写: market.db (必须成功, 异常传播)
+    from src.data.market_store import get_store
+    get_store().upsert_daily_prices_df(symbol, df)
+
+    # 副写: CSV (non-fatal)
     try:
-        from src.data.market_store import get_store
-        get_store().upsert_daily_prices_df(symbol, df)
+        PRICE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_path = _get_cache_path(symbol)
+        df.to_csv(cache_path, index=False)
+        logger.debug(f"保存缓存 {symbol}: {len(df)} 条")
     except Exception as e:
-        logger.warning(f"[market.db] price dual-write failed for {symbol}: {e}")
+        logger.warning(f"[CSV] price write failed for {symbol}: {e}")
 
 
 def get_cache_latest_date(symbol: str) -> Optional[datetime]:
