@@ -66,7 +66,7 @@ def get_existing_dates(store, symbol):
     """Get set of dates already in DB for a symbol.
 
     Args:
-        store: CompanyStore instance
+        store: MarketStore instance
         symbol: Stock ticker
 
     Returns:
@@ -150,10 +150,20 @@ def backfill(args):
     no_data_count = 0
     credits_used = 0
 
+    # Track consecutive no_data per symbol to skip bad symbols early
+    consecutive_nodata = {}  # symbol -> consecutive no_data count
+    skip_symbols = set()     # symbols to skip (no options on MarketData)
+    NODATA_SKIP_THRESHOLD = 5  # skip after N consecutive no_data
+
     start_time = datetime.now()
 
     for day_idx, date in enumerate(trading_days):
         for sym_idx, symbol in enumerate(symbols):
+            # Skip symbols known to have no options data
+            if symbol in skip_symbols:
+                skipped += 1
+                continue
+
             # Check if already exists
             if date in existing_map[symbol]:
                 skipped += 1
@@ -166,6 +176,11 @@ def backfill(args):
                     "Stopping. Re-run to continue from checkpoint.",
                     credits_used, args.daily_limit,
                 )
+                if skip_symbols:
+                    logger.info(
+                        "Skipped symbols (no options data): %s",
+                        ", ".join(sorted(skip_symbols)),
+                    )
                 _print_summary(
                     start_time, processed, skipped, success,
                     failures, no_data_count, credits_used,
@@ -180,8 +195,19 @@ def backfill(args):
 
                 if iv is None:
                     no_data_count += 1
-                    # Still count — API was called, credit spent
+                    # Track consecutive no_data for this symbol
+                    consecutive_nodata[symbol] = consecutive_nodata.get(symbol, 0) + 1
+                    if consecutive_nodata[symbol] >= NODATA_SKIP_THRESHOLD:
+                        skip_symbols.add(symbol)
+                        logger.warning(
+                            "Skipping %s — %d consecutive no_data, "
+                            "likely no options on MarketData.app",
+                            symbol, consecutive_nodata[symbol],
+                        )
                     continue
+
+                # Success resets consecutive counter
+                consecutive_nodata[symbol] = 0
 
                 # Compute HV as of that date
                 hv = compute_hv(symbol, window=30, as_of=date)
@@ -199,6 +225,15 @@ def backfill(args):
                 failures += 1
                 processed += 1
                 credits_used += 1
+                # Count errors toward consecutive nodata too
+                consecutive_nodata[symbol] = consecutive_nodata.get(symbol, 0) + 1
+                if consecutive_nodata[symbol] >= NODATA_SKIP_THRESHOLD:
+                    skip_symbols.add(symbol)
+                    logger.warning(
+                        "Skipping %s — %d consecutive errors, "
+                        "likely no options on MarketData.app",
+                        symbol, consecutive_nodata[symbol],
+                    )
                 logger.error("Error %s/%s: %s", symbol, date, e)
 
             # Progress log every 100 API calls
@@ -210,12 +245,18 @@ def backfill(args):
                     "Progress: %d processed, %d success, %d no_data, "
                     "%d failures, %d skipped | "
                     "Credits: %d used, %d remaining | "
-                    "Rate: %.1f/sec",
+                    "Rate: %.1f/sec | Skipped symbols: %d",
                     processed, success, no_data_count,
                     failures, skipped,
                     credits_used, remaining, rate,
+                    len(skip_symbols),
                 )
 
+    if skip_symbols:
+        logger.info(
+            "Skipped symbols (no options data): %s",
+            ", ".join(sorted(skip_symbols)),
+        )
     _print_summary(
         start_time, processed, skipped, success,
         failures, no_data_count, credits_used,
