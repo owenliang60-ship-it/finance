@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 from pathlib import Path
 
 from terminal.company_store import CompanyStore
+from src.data.market_store import MarketStore
 from terminal.options.commands import prepare_options_context, _get_deep_analysis, _get_oprms
 from terminal.options.formatter import (
     format_options_context,
@@ -15,16 +16,24 @@ from terminal.options.formatter import (
 
 @pytest.fixture
 def store(tmp_path):
-    """Create a fresh CompanyStore."""
-    db_path = tmp_path / "test.db"
+    """Create a fresh CompanyStore for company-dimension data."""
+    db_path = tmp_path / "test_company.db"
     s = CompanyStore(db_path=db_path)
     s.upsert_company("AAPL", company_name="Apple Inc.", sector="Technology")
     return s
 
 
 @pytest.fixture
-def store_with_data(store):
-    """Store with OPRMS + analysis + IV data."""
+def mkt_store(tmp_path):
+    """Create a fresh MarketStore for IV/options data."""
+    db_path = tmp_path / "test_market.db"
+    s = MarketStore(db_path=db_path)
+    return s
+
+
+@pytest.fixture
+def store_with_data(store, mkt_store):
+    """Stores with OPRMS + analysis + IV data."""
     store.save_oprms_rating(
         "AAPL", dna="S", timing="A", timing_coeff=0.9,
         position_pct=18.0, verdict="Strong conviction"
@@ -36,8 +45,8 @@ def store_with_data(store):
         "key_forces": ["AI", "Services growth"],
         "price_at_analysis": 200.0,
     })
-    store.save_iv_daily("AAPL", "2026-02-20", iv_30d=0.28, hv_30d=0.22)
-    store.save_iv_daily("AAPL", "2026-02-21", iv_30d=0.30, hv_30d=0.24)
+    mkt_store.save_iv_daily("AAPL", "2026-02-20", iv_30d=0.28, hv_30d=0.22)
+    mkt_store.save_iv_daily("AAPL", "2026-02-21", iv_30d=0.30, hv_30d=0.24)
 
     # Add option contracts
     contracts = [
@@ -56,8 +65,8 @@ def store_with_data(store):
             "dte": 25, "in_the_money": False, "underlying_price": 202.50,
         },
     ]
-    store.save_options_snapshot("AAPL", "2026-02-24", contracts)
-    return store
+    mkt_store.save_options_snapshot("AAPL", "2026-02-24", contracts)
+    return store, mkt_store
 
 
 class TestPrepareOptionsContext:
@@ -65,6 +74,7 @@ class TestPrepareOptionsContext:
 
     def test_full_context(self, store_with_data):
         """Should return complete context with all fields."""
+        company_store, mkt_store = store_with_data
         mock_client = MagicMock()
         mock_client.get_options_chain.return_value = {
             "s": "ok",
@@ -84,7 +94,8 @@ class TestPrepareOptionsContext:
 
         ctx = prepare_options_context(
             "AAPL",
-            store=store_with_data,
+            store=company_store,
+            market_store=mkt_store,
             client=mock_client,
             fmp_client=mock_fmp,
         )
@@ -100,13 +111,15 @@ class TestPrepareOptionsContext:
 
     def test_skip_chain_fetch(self, store_with_data):
         """Should use existing snapshot when skip_chain_fetch=True."""
+        company_store, mkt_store = store_with_data
         mock_fmp = MagicMock()
         mock_fmp.get_earnings_calendar.return_value = []
         mock_fmp.get_realtime_price.return_value = 205.0
 
         ctx = prepare_options_context(
             "AAPL",
-            store=store_with_data,
+            store=company_store,
+            market_store=mkt_store,
             fmp_client=mock_fmp,
             skip_chain_fetch=True,
         )
@@ -115,7 +128,7 @@ class TestPrepareOptionsContext:
         assert ctx["chain_summary"] is None
         assert ctx["liquidity"] is not None
 
-    def test_no_data_symbol(self, store):
+    def test_no_data_symbol(self, store, mkt_store):
         """Should handle symbol with no data gracefully."""
         mock_fmp = MagicMock()
         mock_fmp.get_earnings_calendar.return_value = []
@@ -124,6 +137,7 @@ class TestPrepareOptionsContext:
         ctx = prepare_options_context(
             "UNKNOWN",
             store=store,
+            market_store=mkt_store,
             fmp_client=mock_fmp,
             skip_chain_fetch=True,
         )
@@ -138,7 +152,8 @@ class TestGetDeepAnalysis:
     """Test deep analysis extraction."""
 
     def test_with_analysis(self, store_with_data):
-        result = _get_deep_analysis("AAPL", store_with_data)
+        company_store, _ = store_with_data
+        result = _get_deep_analysis("AAPL", company_store)
         assert result["executive_summary"] is not None
         assert result["debate_verdict"] == "STRONG BUY"
         assert result["price_at_analysis"] == 200.0
@@ -152,7 +167,8 @@ class TestGetOPRMS:
     """Test OPRMS extraction."""
 
     def test_with_oprms(self, store_with_data):
-        result = _get_oprms("AAPL", store_with_data)
+        company_store, _ = store_with_data
+        result = _get_oprms("AAPL", company_store)
         assert result["dna"] == "S"
         assert result["timing"] == "A"
         assert result["position_pct"] == 18.0

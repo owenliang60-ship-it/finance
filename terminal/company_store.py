@@ -635,7 +635,7 @@ class CompanyStore:
         rows = conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]
 
-    # ---- IV Daily ----
+    # ---- IV Daily (DEPRECATED — use market_store) ----
 
     def save_iv_daily(
         self,
@@ -649,6 +649,7 @@ class CompanyStore:
         total_oi: Optional[int] = None,
     ) -> None:
         """Save daily IV summary for a symbol (upsert on symbol+date)."""
+        logger.warning("DEPRECATED: use market_store.save_iv_daily() instead")
         symbol = symbol.upper()
         now = datetime.now().isoformat()
         conn = self._get_conn()
@@ -676,6 +677,7 @@ class CompanyStore:
         self, symbol: str, limit: int = 252
     ) -> List[Dict[str, Any]]:
         """Get IV history for a symbol, newest first."""
+        logger.warning("DEPRECATED: use market_store.get_iv_history() instead")
         conn = self._get_conn()
         rows = conn.execute(
             "SELECT * FROM iv_daily WHERE symbol = ? ORDER BY date DESC LIMIT ?",
@@ -685,6 +687,7 @@ class CompanyStore:
 
     def get_latest_iv(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Get the most recent IV daily record for a symbol."""
+        logger.warning("DEPRECATED: use market_store.get_latest_iv() instead")
         conn = self._get_conn()
         row = conn.execute(
             "SELECT * FROM iv_daily WHERE symbol = ? ORDER BY date DESC LIMIT 1",
@@ -692,7 +695,7 @@ class CompanyStore:
         ).fetchone()
         return dict(row) if row else None
 
-    # ---- Options Snapshots ----
+    # ---- Options Snapshots (DEPRECATED — use market_store) ----
 
     def save_options_snapshot(
         self,
@@ -710,6 +713,7 @@ class CompanyStore:
         Returns:
             Number of contracts saved
         """
+        logger.warning("DEPRECATED: use market_store.save_options_snapshot() instead")
         symbol = symbol.upper()
         now = datetime.now().isoformat()
         conn = self._get_conn()
@@ -781,6 +785,7 @@ class CompanyStore:
         Returns:
             List of contract dicts
         """
+        logger.warning("DEPRECATED: use market_store.get_options_snapshot() instead")
         conn = self._get_conn()
         symbol = symbol.upper()
 
@@ -813,6 +818,7 @@ class CompanyStore:
         Returns:
             Number of rows deleted
         """
+        logger.warning("DEPRECATED: use market_store.cleanup_old_snapshots() instead")
         from datetime import timedelta
         conn = self._get_conn()
         cutoff_date = (datetime.now() - timedelta(days=retain_days)).strftime("%Y-%m-%d")

@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock, call
 from pathlib import Path
 from datetime import datetime
 
-from terminal.company_store import CompanyStore
+from src.data.market_store import MarketStore
 from terminal.options.iv_tracker import compute_hv
 
 
@@ -14,11 +14,9 @@ from terminal.options.iv_tracker import compute_hv
 
 @pytest.fixture
 def store(tmp_path):
-    """Create a fresh CompanyStore with temp DB."""
-    db_path = tmp_path / "test.db"
-    s = CompanyStore(db_path=db_path)
-    s.upsert_company("AAPL", company_name="Apple")
-    s.upsert_company("MSFT", company_name="Microsoft")
+    """Create a fresh MarketStore with temp DB."""
+    db_path = tmp_path / "test_market.db"
+    s = MarketStore(db_path=db_path)
     return s
 
 

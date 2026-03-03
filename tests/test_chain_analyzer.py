@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime
 
-from terminal.company_store import CompanyStore
+from src.data.market_store import MarketStore
 from terminal.options.chain_analyzer import (
     fetch_and_store_chain,
     _parse_chain_response,
@@ -17,10 +17,9 @@ from terminal.options.chain_analyzer import (
 
 @pytest.fixture
 def store(tmp_path):
-    """Create a fresh CompanyStore."""
-    db_path = tmp_path / "test.db"
-    s = CompanyStore(db_path=db_path)
-    s.upsert_company("AAPL")
+    """Create a fresh MarketStore."""
+    db_path = tmp_path / "test_market.db"
+    s = MarketStore(db_path=db_path)
     return s
 
 

@@ -8,7 +8,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from terminal.company_store import get_store
+from terminal.company_store import get_store as get_company_store
+from src.data.market_store import get_store as get_market_store
 from terminal.options.iv_tracker import get_iv_history_summary
 from terminal.options.chain_analyzer import (
     fetch_and_store_chain,
@@ -26,6 +27,7 @@ _PROJECT_ROOT = Path(__file__).parent.parent.parent
 def prepare_options_context(
     symbol: str,
     store=None,
+    market_store=None,
     client=None,
     fmp_client=None,
     skip_chain_fetch: bool = False,
@@ -45,7 +47,8 @@ def prepare_options_context(
 
     Args:
         symbol: Stock ticker
-        store: CompanyStore instance (defaults to singleton)
+        store: CompanyStore instance for company-dimension data (defaults to singleton)
+        market_store: MarketStore instance for IV/options data (defaults to singleton)
         client: MarketDataClient instance (defaults to singleton)
         fmp_client: FMPClient instance for earnings (defaults to singleton)
         skip_chain_fetch: Skip fetching new chain data (use existing snapshot)
@@ -56,13 +59,15 @@ def prepare_options_context(
     symbol = symbol.upper()
 
     if store is None:
-        store = get_store()
+        store = get_company_store()
+    if market_store is None:
+        market_store = get_market_store()
 
     # 1. Fetch and store chain data (unless skipped)
     chain_summary = None
     underlying_price = None
     if not skip_chain_fetch:
-        chain_summary = fetch_and_store_chain(symbol, store, client=client)
+        chain_summary = fetch_and_store_chain(symbol, market_store, client=client)
         if chain_summary:
             underlying_price = chain_summary.get("underlying_price")
 
@@ -77,23 +82,23 @@ def prepare_options_context(
         if fmp_client:
             underlying_price = fmp_client.get_realtime_price(symbol)
 
-    # 3. Deep analysis + OPRMS
+    # 3. Deep analysis + OPRMS (from company_store)
     deep_analysis = _get_deep_analysis(symbol, store)
     oprms = _get_oprms(symbol, store)
 
-    # 4. IV Summary
-    iv_summary = get_iv_history_summary(symbol, store)
+    # 4. IV Summary (from market_store)
+    iv_summary = get_iv_history_summary(symbol, market_store)
 
-    # 5. Liquidity
-    liquidity = analyze_liquidity(symbol, store)
+    # 5. Liquidity (from market_store)
+    liquidity = analyze_liquidity(symbol, market_store)
 
-    # 6. Term structure
-    term_structure = get_term_structure(symbol, store)
+    # 6. Term structure (from market_store)
+    term_structure = get_term_structure(symbol, market_store)
 
     # 7. Earnings proximity
     earnings = get_earnings_proximity(symbol, fmp_client=fmp_client)
 
-    # 8. Kill conditions
+    # 8. Kill conditions (from company_store)
     kill_conditions = store.get_kill_conditions(symbol)
 
     # 9. Report summary path

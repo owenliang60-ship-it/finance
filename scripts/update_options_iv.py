@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Daily IV Update Script — 采集股票池 ATM IV 并存入 company.db
+Daily IV Update Script — 采集股票池 ATM IV 并存入 market.db
 
 用法:
     python scripts/update_options_iv.py              # 更新全部股票池
@@ -24,7 +24,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from config.settings import BENCHMARK_SYMBOLS, MARKETDATA_API_KEY
-from terminal.company_store import get_store
+from src.data.market_store import get_store
 from terminal.options.iv_tracker import update_daily_iv
 
 logging.basicConfig(

@@ -2,7 +2,7 @@
 """
 IV 历史数据回填脚本
 
-从 MarketData.app 拉取历史 ATM IV + 本地价格算 HV，写入 company.db iv_daily 表。
+从 MarketData.app 拉取历史 ATM IV + 本地价格算 HV，写入 market.db iv_daily 表。
 支持断点续传、credits 限额、dry-run。
 
 用法:
@@ -26,7 +26,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from config.settings import BENCHMARK_SYMBOLS, MARKETDATA_API_KEY
-from terminal.company_store import get_store
+from src.data.market_store import get_store
 from terminal.options.iv_tracker import compute_hv
 
 logging.basicConfig(
