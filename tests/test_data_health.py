@@ -157,7 +157,7 @@ class TestHealthCheck:
 
         assert "PASS" in summary
         assert "池完整性" in summary
-        assert "价格覆盖率" in summary
+        assert "基本面覆盖率" in summary
 
 
 class TestCheckPoolIntegrity:

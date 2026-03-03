@@ -14,10 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from config.settings import (
-    OPTIONS_IV_LOOKBACK_DAYS,
-    PRICE_DIR,
-)
+from config.settings import OPTIONS_IV_LOOKBACK_DAYS
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +22,10 @@ logger = logging.getLogger(__name__)
 def compute_hv(
     symbol: str, window: int = 30, as_of: Optional[str] = None
 ) -> Optional[float]:
-    """Compute historical (realized) volatility from price CSV.
+    """Compute historical (realized) volatility from price data.
 
     Uses close-to-close log returns, annualized (×sqrt(252)).
+    Reads from market.db (via get_price_df) with CSV fallback.
 
     Args:
         symbol: Stock ticker
@@ -38,38 +36,27 @@ def compute_hv(
     Returns:
         Annualized HV as decimal (e.g., 0.25 = 25%), or None if insufficient data
     """
-    csv_path = PRICE_DIR / "{}.csv".format(symbol.upper())
-    if not csv_path.exists():
-        logger.warning("No price data for %s at %s", symbol, csv_path)
+    import pandas as pd
+    from src.data.price_fetcher import get_price_df
+
+    df = get_price_df(symbol, max_age_days=0)
+    if df is None or df.empty:
+        logger.warning("No price data for %s", symbol)
         return None
 
-    import csv
-    rows = []
-    with open(csv_path, "r") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            try:
-                date_str = row.get("date", "")
-                close = float(row["close"])
-                rows.append((date_str, close))
-            except (KeyError, ValueError):
-                continue
-
-    # CSVs are newest-first; filter by as_of if specified
+    # Filter by as_of if specified (df is descending, date is datetime64)
     if as_of:
-        rows = [(d, c) for d, c in rows if d <= as_of]
+        df = df[df["date"] <= pd.to_datetime(as_of)]
 
-    closes = [c for _, c in rows]
-
-    if len(closes) < window + 1:
+    if len(df) < window + 1:
         logger.warning(
             "Insufficient price data for %s HV: need %d, got %d",
-            symbol, window + 1, len(closes),
+            symbol, window + 1, len(df),
         )
         return None
 
-    # closes are newest-first in our CSVs, reverse for chronological
-    closes = closes[:window + 1]
+    # Take the most recent (window+1) rows, then reverse to chronological
+    closes = df["close"].head(window + 1).tolist()
     closes.reverse()
 
     # Log returns

@@ -12,7 +12,7 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 
-from config.settings import DATA_DIR, PRICE_DIR
+from config.settings import DATA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ CORRELATION_CACHE_FILE = CORRELATION_CACHE_DIR / "matrix.json"
 
 def load_price_returns(symbol: str, window: int = 120) -> Optional[pd.Series]:
     """
-    Load daily returns for a symbol from CSV price data.
+    Load daily returns for a symbol from price data (market.db → CSV fallback).
 
     Args:
         symbol: Stock ticker
@@ -31,17 +31,16 @@ def load_price_returns(symbol: str, window: int = 120) -> Optional[pd.Series]:
     Returns:
         pd.Series of daily returns indexed by date, or None if data unavailable
     """
-    csv_path = PRICE_DIR / f"{symbol}.csv"
-    if not csv_path.exists():
-        logger.warning(f"No price data for {symbol}")
-        return None
+    from src.data.price_fetcher import get_price_df
 
     try:
-        df = pd.read_csv(csv_path, parse_dates=["date"])
-        df = df.sort_values("date", ascending=True).reset_index(drop=True)
+        df = get_price_df(symbol, days=window + 1, max_age_days=0)
+        if df is None or df.empty:
+            logger.warning(f"No price data for {symbol}")
+            return None
 
-        # Use most recent 'window' days
-        df = df.tail(window + 1)  # +1 because we lose one row to pct_change
+        # get_price_df returns descending; sort ascending for pct_change
+        df = df.sort_values("date", ascending=True).reset_index(drop=True)
 
         returns = df.set_index("date")["close"].pct_change().dropna()
         returns.name = symbol

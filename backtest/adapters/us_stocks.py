@@ -1,18 +1,13 @@
 """
-美股数据适配器 — 加载 data/price/*.csv + 复用 RS 计算
+美股数据适配器 — 加载 market.db 量价数据 + 复用 RS 计算
 """
 
 import logging
-from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
-
-# 项目路径
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
-_PRICE_DIR = _PROJECT_ROOT / "data" / "price"
 
 
 class USStocksAdapter:
@@ -159,27 +154,31 @@ class USStocksAdapter:
     # ── 内部方法 ──────────────────────────────────────
 
     def _discover_symbols(self) -> List[str]:
-        """自动发现 data/price/ 下所有 CSV"""
-        if not _PRICE_DIR.exists():
+        """从 market.db 发现有价格数据的股票"""
+        try:
+            from src.data.market_store import get_store
+            import sqlite3
+            store = get_store()
+            conn = store._get_conn()
+            rows = conn.execute("SELECT DISTINCT symbol FROM daily_price").fetchall()
+            return sorted(
+                r[0] for r in rows
+                if r[0] not in ("SPY", "QQQ")  # 基准单独处理
+            )
+        except Exception as e:
+            logger.warning(f"market.db 发现股票失败: {e}")
             return []
-        return sorted(
-            p.stem for p in _PRICE_DIR.glob("*.csv")
-            if p.stem not in ("SPY", "QQQ")  # 基准单独处理
-        )
 
     def _load_csv(self, symbol: str) -> Optional[pd.DataFrame]:
-        """加载单只股票的 CSV"""
-        csv_path = _PRICE_DIR / f"{symbol}.csv"
-        if not csv_path.exists():
-            return None
-
+        """加载单只股票的量价数据 (market.db → CSV fallback)"""
         try:
-            df = pd.read_csv(csv_path)
-            if "date" not in df.columns or "close" not in df.columns:
-                logger.warning(f"{symbol}: CSV 缺少 date/close 列")
+            from src.data.price_fetcher import get_price_df
+            df = get_price_df(symbol, max_age_days=0)
+            if df is None or df.empty:
                 return None
+            # get_price_df returns descending; backtest needs ascending
             df = df.sort_values("date", ascending=True).reset_index(drop=True)
             return df
         except Exception as e:
-            logger.warning(f"{symbol}: CSV 加载失败: {e}")
+            logger.warning(f"{symbol}: 加载失败: {e}")
             return None

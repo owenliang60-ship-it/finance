@@ -37,38 +37,49 @@ def store_with_iv(store):
     return store
 
 
+def _make_hv_price_df(n, start_price=100.0, increment=0.5):
+    """Create a price DataFrame for HV tests (descending order)."""
+    import pandas as pd
+    from datetime import datetime, timedelta
+    dates = [datetime(2026, 1, 1) + timedelta(days=i) for i in range(n)]
+    prices = [start_price + i * increment for i in range(n)]
+    df = pd.DataFrame({
+        "date": pd.to_datetime(dates),
+        "open": prices,
+        "high": prices,
+        "low": prices,
+        "close": prices,
+        "volume": [1000] * n,
+        "change": [0.0] * n,
+        "changePercent": [0.0] * n,
+    })
+    return df.sort_values("date", ascending=False).reset_index(drop=True)
+
+
 class TestComputeHV:
     """Test historical volatility computation."""
 
-    def test_compute_hv_basic(self, tmp_path):
-        """Should compute HV from price CSV."""
-        # Create a simple price CSV with known data
-        csv_path = tmp_path / "AAPL.csv"
-        # 32 days of close prices (need window+1)
-        prices = [100 + i * 0.5 for i in range(32)]  # Slowly rising
-        with open(csv_path, "w") as f:
-            f.write("date,close\n")
-            for i, p in enumerate(prices):
-                f.write("2026-01-{:02d},{:.2f}\n".format(i + 1, p))
+    def test_compute_hv_basic(self):
+        """Should compute HV from price data."""
+        df = _make_hv_price_df(32)
 
-        with patch("terminal.options.iv_tracker.PRICE_DIR", tmp_path):
+        with patch("src.data.price_fetcher.load_price_cache", return_value=df):
             hv = compute_hv("AAPL", window=30)
             assert hv is not None
             assert 0 < hv < 1  # Should be a reasonable annualized vol
 
-    def test_compute_hv_insufficient_data(self, tmp_path):
+    def test_compute_hv_insufficient_data(self):
         """Should return None with insufficient data."""
-        csv_path = tmp_path / "AAPL.csv"
-        with open(csv_path, "w") as f:
-            f.write("date,close\n2026-01-01,100\n")
+        df = _make_hv_price_df(1)
 
-        with patch("terminal.options.iv_tracker.PRICE_DIR", tmp_path):
+        with patch("src.data.price_fetcher.load_price_cache", return_value=df):
             hv = compute_hv("AAPL", window=30)
             assert hv is None
 
-    def test_compute_hv_no_file(self, tmp_path):
-        """Should return None when no price file."""
-        with patch("terminal.options.iv_tracker.PRICE_DIR", tmp_path):
+    def test_compute_hv_no_data(self):
+        """Should return None when no price data."""
+        with patch("src.data.price_fetcher.load_price_cache", return_value=None), \
+             patch("src.data.price_fetcher.fetch_and_update_price", return_value=None):
             hv = compute_hv("NOFILE", window=30)
             assert hv is None
 

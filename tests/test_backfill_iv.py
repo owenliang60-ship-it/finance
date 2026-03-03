@@ -20,19 +20,41 @@ def store(tmp_path):
     return s
 
 
+def _make_price_df_60d():
+    """Create a price DataFrame with 60 days of data, newest-first."""
+    import pandas as pd
+    from datetime import timedelta
+    base_price = 150.0
+    dates = []
+    closes = []
+    for i in range(60):
+        date_obj = datetime(2026, 3, 1) - timedelta(days=i)
+        dates.append(date_obj)
+        closes.append(base_price + (60 - i) * 0.5)
+    df = pd.DataFrame({
+        "date": pd.to_datetime(dates),
+        "open": [c - 1 for c in closes],
+        "high": [c + 1 for c in closes],
+        "low": [c - 2 for c in closes],
+        "close": closes,
+        "volume": [1000000] * 60,
+        "change": [0.5] * 60,
+        "changePercent": [0.33] * 60,
+    })
+    return df.sort_values("date", ascending=False).reset_index(drop=True)
+
+
 @pytest.fixture
 def price_csv(tmp_path):
-    """Create a price CSV with 60 days of data, newest-first."""
+    """Create a price CSV with 60 days of data, newest-first (legacy fixture name)."""
     csv_path = tmp_path / "AAPL.csv"
-    # Generate 60 trading days of data, newest first
-    # Dates: 2026-01-01 to 2026-03-01 (approx)
     lines = ["date,open,high,low,close,volume,change,changePercent"]
     base_price = 150.0
     for i in range(60):
-        day_offset = i  # newest first
+        day_offset = i
         date_obj = datetime(2026, 3, 1) - __import__("datetime").timedelta(days=day_offset)
         date_str = date_obj.strftime("%Y-%m-%d")
-        close = base_price + (60 - i) * 0.5  # rising prices
+        close = base_price + (60 - i) * 0.5
         lines.append("{},{:.2f},{:.2f},{:.2f},{:.2f},1000000,0.5,0.33".format(
             date_str, close - 1, close + 1, close - 2, close
         ))
@@ -167,37 +189,37 @@ class TestCreditLimit:
 class TestComputeHVAsOf:
     """Test compute_hv with as_of date parameter."""
 
-    def test_as_of_filters_data(self, price_csv):
+    def test_as_of_filters_data(self):
         """Should only use prices on or before as_of date."""
-        with patch("terminal.options.iv_tracker.PRICE_DIR", price_csv):
-            # Use a date in the middle of our data range
+        df = _make_price_df_60d()
+        with patch("src.data.price_fetcher.load_price_cache", return_value=df):
             hv_full = compute_hv("AAPL", window=30)
             hv_earlier = compute_hv("AAPL", window=30, as_of="2026-02-15")
 
             assert hv_full is not None
             assert hv_earlier is not None
-            # Different data windows should give different (or at least valid) results
             assert hv_full > 0
             assert hv_earlier > 0
 
-    def test_as_of_none_uses_all(self, price_csv):
+    def test_as_of_none_uses_all(self):
         """as_of=None should behave same as before."""
-        with patch("terminal.options.iv_tracker.PRICE_DIR", price_csv):
+        df = _make_price_df_60d()
+        with patch("src.data.price_fetcher.load_price_cache", return_value=df):
             hv_default = compute_hv("AAPL", window=30)
             hv_none = compute_hv("AAPL", window=30, as_of=None)
             assert hv_default == hv_none
 
-    def test_as_of_too_early(self, price_csv):
+    def test_as_of_too_early(self):
         """Should return None if not enough data before as_of."""
-        with patch("terminal.options.iv_tracker.PRICE_DIR", price_csv):
+        df = _make_price_df_60d()
+        with patch("src.data.price_fetcher.load_price_cache", return_value=df):
             hv = compute_hv("AAPL", window=30, as_of="2026-01-05")
-            assert hv is None  # Only ~5 days of data before this date
+            assert hv is None
 
-    def test_as_of_exact_boundary(self, price_csv):
+    def test_as_of_exact_boundary(self):
         """Should include the as_of date itself."""
-        with patch("terminal.options.iv_tracker.PRICE_DIR", price_csv):
-            # Our data goes from ~2026-01-01 to 2026-03-01
-            # Pick a date with at least 31 days of data before it
+        df = _make_price_df_60d()
+        with patch("src.data.price_fetcher.load_price_cache", return_value=df):
             hv = compute_hv("AAPL", window=30, as_of="2026-02-28")
             assert hv is not None
             assert hv > 0

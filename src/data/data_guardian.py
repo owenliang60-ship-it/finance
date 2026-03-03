@@ -15,13 +15,14 @@ from typing import List, Dict, Optional
 
 import sys
 sys.path.insert(0, str(__file__).rsplit("/src", 1)[0])
-from config.settings import DATA_DIR, PRICE_DIR, FUNDAMENTAL_DIR, POOL_DIR
+from config.settings import DATA_DIR, PRICE_DIR, FUNDAMENTAL_DIR, POOL_DIR, MARKET_DB_PATH
 
 logger = logging.getLogger(__name__)
 
 BACKUP_DIR = DATA_DIR / ".backups"
 MAX_SNAPSHOTS = 10
 COMPANY_DB = DATA_DIR / "company.db"
+MARKET_DB = MARKET_DB_PATH
 
 
 def _get_backup_targets() -> Dict[str, Path]:
@@ -74,6 +75,11 @@ def snapshot(reason: str = "manual") -> Optional[Path]:
             company_db = _self.COMPANY_DB
             if company_db.exists():
                 tar.add(str(company_db), arcname="company.db")
+                files_added += 1
+
+            market_db = _self.MARKET_DB
+            if market_db.exists():
+                tar.add(str(market_db), arcname="market.db")
                 files_added += 1
 
         logger.info(f"快照创建成功: {filename} ({files_added} 个文件)")
@@ -183,6 +189,8 @@ def _resolve_restore_target(arcname: str) -> Optional[Path]:
 
     if arcname == "company.db":
         return _self.COMPANY_DB
+    if arcname == "market.db":
+        return _self.MARKET_DB
 
     parts = arcname.split("/", 1)
     if len(parts) != 2:

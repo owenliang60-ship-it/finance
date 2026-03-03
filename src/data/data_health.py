@@ -511,13 +511,10 @@ def health_check(verbose: bool = False) -> HealthReport:
     symbols = _load_universe_symbols()
 
     report.add(_check_pool_integrity())
-    report.add(_check_price_coverage(symbols))
     report.add(_check_fundamental_coverage(symbols))
-    report.add(_check_price_freshness())
     report.add(_check_fundamental_freshness())
     report.add(_check_pool_freshness())
     report.add(_check_company_db())
-    report.add(_check_price_pool_consistency(symbols))
 
     # market.db 检查
     report.add(_check_market_db())

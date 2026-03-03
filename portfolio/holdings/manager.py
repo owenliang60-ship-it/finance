@@ -232,7 +232,7 @@ def remove_from_watchlist(symbol: str) -> Optional[WatchlistEntry]:
 
 def refresh_prices(positions: Optional[List[Position]] = None) -> List[Position]:
     """
-    Update current_price for all positions from Data Desk price CSVs.
+    Update current_price for all positions via get_price_df (market.db → CSV fallback).
     Also recalculates current_weight based on portfolio total value.
     """
     if positions is None:
@@ -241,19 +241,15 @@ def refresh_prices(positions: Optional[List[Position]] = None) -> List[Position]
     if not positions:
         return positions
 
-    price_dir = _PROJECT_ROOT / "data" / "price"
+    from src.data.price_fetcher import get_price_df
 
     for p in positions:
-        csv_path = price_dir / f"{p.symbol}.csv"
-        if csv_path.exists():
-            try:
-                import pandas as pd
-                df = pd.read_csv(csv_path, parse_dates=["date"])
-                df = df.sort_values("date", ascending=False)
-                if not df.empty:
-                    p.current_price = float(df["close"].iloc[0])
-            except Exception as e:
-                logger.warning(f"Failed to read price for {p.symbol}: {e}")
+        try:
+            df = get_price_df(p.symbol, days=1, max_age_days=0)
+            if df is not None and not df.empty:
+                p.current_price = float(df["close"].iloc[0])
+        except Exception as e:
+            logger.warning(f"Failed to read price for {p.symbol}: {e}")
 
     # Recalculate weights
     total_value = sum(p.market_value for p in positions)

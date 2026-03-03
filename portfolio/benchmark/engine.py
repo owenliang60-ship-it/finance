@@ -1,13 +1,12 @@
 """
 Benchmark comparison engine — portfolio returns vs SPY, QQQ, equal-weight.
 
-Reads price data from Data Desk (data/price/*.csv).
+Reads price data via get_price_df() (market.db → CSV fallback).
 SPY/QQQ benchmark data must be added to the price fetcher separately.
 Gracefully degrades if benchmark data is not yet available.
 """
 import logging
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -16,9 +15,6 @@ import numpy as np
 from portfolio.holdings.schema import Position
 
 logger = logging.getLogger(__name__)
-
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
-_PRICE_DIR = _PROJECT_ROOT / "data" / "price"
 
 # Supported benchmarks
 BENCHMARKS = {
@@ -211,16 +207,16 @@ class BenchmarkEngine:
     # -----------------------------------------------------------------------
 
     def _load_prices(self, symbol: str) -> Optional[pd.DataFrame]:
-        """Load price CSV from Data Desk cache."""
+        """Load price data via get_price_df (market.db → CSV fallback)."""
         if symbol in self._price_cache:
             return self._price_cache[symbol]
 
-        csv_path = _PRICE_DIR / f"{symbol}.csv"
-        if not csv_path.exists():
-            return None
-
         try:
-            df = pd.read_csv(csv_path, parse_dates=["date"])
+            from src.data.price_fetcher import get_price_df
+            df = get_price_df(symbol, max_age_days=0)
+            if df is None or df.empty:
+                return None
+            # get_price_df returns descending; benchmark needs ascending
             df = df.sort_values("date", ascending=True).reset_index(drop=True)
             self._price_cache[symbol] = df
             return df

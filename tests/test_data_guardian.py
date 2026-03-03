@@ -39,6 +39,9 @@ def mock_data_dir(tmp_path, monkeypatch):
     # 模拟 company.db
     (tmp_path / "company.db").write_text("fake db content")
 
+    # 模拟 market.db
+    (tmp_path / "market.db").write_text("fake market db content")
+
     # Monkeypatch 模块常量
     import src.data.data_guardian as guardian
     monkeypatch.setattr(guardian, "DATA_DIR", tmp_path)
@@ -47,6 +50,7 @@ def mock_data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(guardian, "POOL_DIR", pool_dir)
     monkeypatch.setattr(guardian, "BACKUP_DIR", backup_dir)
     monkeypatch.setattr(guardian, "COMPANY_DB", tmp_path / "company.db")
+    monkeypatch.setattr(guardian, "MARKET_DB", tmp_path / "market.db")
 
     return tmp_path
 
@@ -69,9 +73,10 @@ class TestSnapshot:
         with tarfile.open(path, "r:gz") as tar:
             names = tar.getnames()
 
-        # 5 CSV + 1 JSON + 1 universe.json + 1 company.db = 8
-        assert len(names) == 8
+        # 5 CSV + 1 JSON + 1 universe.json + 1 company.db + 1 market.db = 9
+        assert len(names) == 9
         assert "company.db" in names
+        assert "market.db" in names
         assert "price/AAPL.csv" in names
         assert "fundamental/profiles.json" in names
         assert "pool/universe.json" in names
