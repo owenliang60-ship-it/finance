@@ -90,14 +90,16 @@ health_check_local() {
 
 push_all() {
     health_check_local
-    sync_code
+    echo "⚠️  代码同步已改用 git push + 云端 git pull，跳过 rsync 代码同步"
     sync_data
     verify_cloud
 }
 
 case "${1:-}" in
     --code)
-        sync_code
+        echo "⚠️  --code 已废弃：云端改用 git pull 自动同步代码"
+        echo "   代码推送请用: git push origin main"
+        echo "   云端每日 06:25 自动 git pull"
         ;;
     --data)
         sync_data
