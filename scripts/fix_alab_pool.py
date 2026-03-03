@@ -18,10 +18,10 @@ def main():
         print(f"FAILED: could not add {symbol} to pool")
         return
 
-    # 2. Verify in_pool flag in company.db
-    store = get_store()
-    row = store.get_company(symbol)
-    print(f"{symbol} in_pool = {row['in_pool'] if row else 'NOT FOUND'}")
+    # 2. Verify pool membership via universe.json
+    from src.data.pool_manager import get_symbols
+    in_pool = symbol in get_symbols()
+    print(f"{symbol} in pool (universe.json) = {in_pool}")
 
     # 3. Backfill fundamentals
     from src.data.fundamental_fetcher import update_all_fundamentals

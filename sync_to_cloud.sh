@@ -55,12 +55,10 @@ verify_cloud() {
     echo "🔍 验证云端..."
     ssh aliyun "cd /root/workspace/Finance && python3 -c \"
 from config.settings import FMP_API_KEY
-from src.data.pool_manager import get_symbols, sync_db_pool
+from src.data.pool_manager import get_symbols
 from terminal.pipeline import collect_data
 print(f'API Key: OK')
 print(f'股票池: {len(get_symbols())} 只')
-synced = sync_db_pool()
-print(f'DB pool synced: {synced} companies')
 print(f'Pipeline: OK')
 \""
     echo "✅ 云端验证通过"

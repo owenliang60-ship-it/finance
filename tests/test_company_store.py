@@ -285,8 +285,10 @@ class TestDashboardAndStats:
         assert stats["dna_distribution"]["A"] == 1
 
     def test_empty_stats(self, store):
-        stats = store.get_stats()
+        with patch("src.data.pool_manager.get_symbols", return_value=[]):
+            stats = store.get_stats()
         assert stats["total_companies"] == 0
+        assert stats["in_pool"] == 0
         assert stats["rated"] == 0
 
 

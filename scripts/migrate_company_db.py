@@ -167,21 +167,9 @@ def migrate_company_dirs(store: CompanyStore, dry_run: bool = False) -> dict:
 
 
 def sync_stock_pool(store: CompanyStore, dry_run: bool = False) -> int:
-    """Mark in_pool based on config/settings.py stock pool."""
-    try:
-        from config.settings import STOCK_POOL
-        pool_symbols = [s["symbol"] for s in STOCK_POOL if "symbol" in s]
-    except ImportError:
-        logger.warning("Could not import STOCK_POOL from config.settings")
-        return 0
-
-    if dry_run:
-        logger.info("Would sync pool with %d symbols", len(pool_symbols))
-        return len(pool_symbols)
-
-    count = store.sync_pool(pool_symbols)
-    logger.info("Synced stock pool: %d symbols", count)
-    return count
+    """Retired in P1.1: in_pool is now driven by pool_manager.get_symbols()."""
+    logger.info("sync_stock_pool: no-op (in_pool column retired)")
+    return 0
 
 
 def main():
