@@ -154,15 +154,32 @@ class USStocksAdapter:
     # ── 内部方法 ──────────────────────────────────────
 
     def _discover_symbols(self) -> List[str]:
-        """从 market.db 发现有价格数据的股票"""
+        """从 market.db 发现有价格数据的股票 (CSV fallback)"""
         try:
             from src.data.market_store import get_store
             store = get_store()
             symbols = store.get_symbols("daily_price")
-            return [s for s in symbols if s not in ("SPY", "QQQ")]
+            symbols = [s for s in symbols if s not in ("SPY", "QQQ")]
+            if symbols:
+                return symbols
         except Exception as e:
             logger.warning(f"market.db 发现股票失败: {e}")
-            return []
+
+        # CSV fallback
+        try:
+            from config.settings import PRICE_DIR
+            if PRICE_DIR.exists():
+                symbols = sorted(
+                    f.stem for f in PRICE_DIR.glob("*.csv")
+                    if f.stem not in ("SPY", "QQQ")
+                )
+                if symbols:
+                    logger.info(f"CSV fallback: 发现 {len(symbols)} 只股票")
+                    return symbols
+        except Exception as e:
+            logger.warning(f"CSV fallback 发现股票也失败: {e}")
+
+        return []
 
     def _load_csv(self, symbol: str) -> Optional[pd.DataFrame]:
         """加载单只股票的量价数据 (market.db → CSV fallback)"""

@@ -8,6 +8,7 @@
 - list_snapshots(): 列出所有可用快照
 """
 import logging
+import sqlite3
 import tarfile
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +34,16 @@ def _get_backup_targets() -> Dict[str, Path]:
         "fundamental": _self.FUNDAMENTAL_DIR,
         "pool": _self.POOL_DIR,
     }
+
+
+def _checkpoint_wal(db_path: Path) -> None:
+    """Flush WAL journal into main DB file so a raw file copy is consistent."""
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.close()
+    except Exception as e:
+        logger.warning(f"WAL checkpoint 失败 ({db_path.name}): {e}")
 
 
 def snapshot(reason: str = "manual") -> Optional[Path]:
@@ -80,6 +91,7 @@ def snapshot(reason: str = "manual") -> Optional[Path]:
 
             market_db = _self.MARKET_DB
             if market_db.exists():
+                _checkpoint_wal(market_db)
                 tar.add(str(market_db), arcname="market.db")
                 files_added += 1
 
