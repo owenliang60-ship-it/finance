@@ -108,7 +108,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for system design details.
 - **Server**: Aliyun (`ssh aliyun`)
 - **Path**: `/root/workspace/Finance/`
 - **Cron Jobs**: Daily price updates (06:30 BJT), weekly fundamentals refresh (Saturday 10:00)
-- **Sync Script**: `./sync_to_cloud.sh [--code|--data|--all]`
+- **Sync Script**: `./sync_to_cloud.sh [--pull|--push|--sync|--status]`
 
 ---
 

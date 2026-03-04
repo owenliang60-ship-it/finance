@@ -59,8 +59,8 @@
 ### 云端部署
 - SSH 别名: `aliyun`
 - 部署目录: `/root/workspace/Finance/`
-- 环境变量: `/root/workspace/Finance/.env`
-- 同步脚本: `./sync_to_cloud.sh [--code|--data|--all]`
+- 环境变量: `/root/workspace/Finance/.env`（必须包含 `FINANCE_ENV=cloud`，控制云端跳过 CSV 副写）
+- 同步脚本: `./sync_to_cloud.sh [--pull|--push|--sync|--status]`
 
 ### 定时任务（云端 cron，北京时间）
 
@@ -85,7 +85,7 @@ python -c "from src.data.data_validator import print_data_report; print_data_rep
 # 云端
 ssh aliyun "tail -30 /root/workspace/Finance/logs/cron_price.log"
 ssh aliyun "tail -30 /root/workspace/Finance/logs/cron_scan.log"
-./sync_to_cloud.sh --all
+./sync_to_cloud.sh --sync
 ```
 
 ---
