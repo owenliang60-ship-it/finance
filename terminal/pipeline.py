@@ -195,21 +195,63 @@ class DataPackage:
         if self.macro is not None:
             sections.append(self.macro.format_for_prompt())
 
-        # Analyst consensus
+        # Analyst consensus — split into forward (future) and recent (past)
         if self.analyst_estimates:
-            lines = ["### Analyst Consensus"]
-            for est in self.analyst_estimates[:2]:
-                date = est.get("date", "N/A")
-                eps_avg = est.get("estimatedEpsAvg", "N/A")
-                eps_low = est.get("estimatedEpsLow", "N/A")
-                eps_high = est.get("estimatedEpsHigh", "N/A")
-                rev = est.get("estimatedRevenueAvg")
-                rev_str = f"${rev / 1e9:.1f}B" if rev else "N/A"
-                lines.append(
-                    f"- {date}: EPS {eps_low}/{eps_avg}/{eps_high} (low/avg/high), "
-                    f"Revenue {rev_str}"
-                )
-            sections.append("\n".join(lines))
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            forward = [e for e in self.analyst_estimates if e.get("date", "") >= today_str]
+            recent = [e for e in self.analyst_estimates if e.get("date", "") < today_str]
+
+            # Forward Estimates table
+            if forward:
+                forward_sorted = sorted(forward, key=lambda e: e.get("date", ""))
+                lines = ["### Forward Estimates"]
+                lines.append("")
+                lines.append("| Quarter | EPS (Low/Avg/High) | Revenue | Net Income | EBITDA |")
+                lines.append("|---------|-------------------|---------|------------|--------|")
+                for est in forward_sorted:
+                    date = est.get("date", "N/A")
+                    eps_low = est.get("estimatedEpsLow", "N/A")
+                    eps_avg = est.get("estimatedEpsAvg", "N/A")
+                    eps_high = est.get("estimatedEpsHigh", "N/A")
+                    rev = est.get("estimatedRevenueAvg")
+                    rev_str = f"${rev / 1e9:.1f}B" if rev else "N/A"
+                    ni = est.get("estimatedNetIncomeAvg")
+                    ni_str = f"${ni / 1e9:.1f}B" if ni else "N/A"
+                    ebitda = est.get("estimatedEbitdaAvg")
+                    ebitda_str = f"${ebitda / 1e9:.1f}B" if ebitda else "N/A"
+                    lines.append(
+                        f"| {date} | {eps_low}/{eps_avg}/{eps_high} | {rev_str} | {ni_str} | {ebitda_str} |"
+                    )
+
+                # Growth trajectory (first vs last quarter)
+                first_rev = forward_sorted[0].get("estimatedRevenueAvg")
+                last_rev = forward_sorted[-1].get("estimatedRevenueAvg")
+                first_eps = forward_sorted[0].get("estimatedEpsAvg")
+                last_eps = forward_sorted[-1].get("estimatedEpsAvg")
+                if len(forward_sorted) >= 2 and first_rev and last_rev and first_rev > 0:
+                    rev_growth = (last_rev - first_rev) / first_rev * 100
+                    lines.append(f"\n**Growth Trajectory** (Q1→Q{len(forward_sorted)}): Revenue {rev_growth:+.1f}%")
+                    if first_eps and last_eps and first_eps > 0:
+                        eps_growth = (last_eps - first_eps) / first_eps * 100
+                        lines[-1] += f", EPS {eps_growth:+.1f}%"
+                sections.append("\n".join(lines))
+
+            # Recent estimates (compact list, most recent 2)
+            # FMP returns estimates in descending date order
+            if recent:
+                lines = ["### Recent Analyst Estimates"]
+                for est in recent[:2]:
+                    date = est.get("date", "N/A")
+                    eps_avg = est.get("estimatedEpsAvg", "N/A")
+                    eps_low = est.get("estimatedEpsLow", "N/A")
+                    eps_high = est.get("estimatedEpsHigh", "N/A")
+                    rev = est.get("estimatedRevenueAvg")
+                    rev_str = f"${rev / 1e9:.1f}B" if rev else "N/A"
+                    lines.append(
+                        f"- {date}: EPS {eps_low}/{eps_avg}/{eps_high} (low/avg/high), "
+                        f"Revenue {rev_str}"
+                    )
+                sections.append("\n".join(lines))
 
         # Analyst rating distribution (from grades data)
         if self.analyst_recommendations:
@@ -468,7 +510,7 @@ def collect_data(
     if registry:
         # Analyst estimates
         try:
-            result = registry.execute("get_analyst_estimates", symbol=symbol, period="quarter", limit=4)
+            result = registry.execute("get_analyst_estimates", symbol=symbol, period="quarter", limit=8)
             if result:
                 pkg.analyst_estimates = result
                 if scratchpad:

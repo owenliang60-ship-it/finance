@@ -428,7 +428,7 @@ class GetAnalystEstimatesTool(BaseFMPTool):
             api_key_env_var="FMP_API_KEY",
         )
 
-    def execute(self, symbol: str, period: str = "quarter", limit: int = 4) -> List[Dict]:
+    def execute(self, symbol: str, period: str = "quarter", limit: int = 8) -> List[Dict]:
         """
         Execute: get analyst estimates.
 

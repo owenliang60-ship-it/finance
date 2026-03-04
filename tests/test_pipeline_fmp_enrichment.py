@@ -14,6 +14,46 @@ from terminal.pipeline import DataPackage, collect_data
 # ---------------------------------------------------------------------------
 
 SAMPLE_ESTIMATES = [
+    # Future quarters (forward)
+    {
+        "date": "2027-10-31",
+        "estimatedEpsAvg": 1.25,
+        "estimatedEpsLow": 1.05,
+        "estimatedEpsHigh": 1.45,
+        "estimatedRevenueAvg": 58_000_000_000,
+        "estimatedNetIncomeAvg": 22_000_000_000,
+        "estimatedEbitdaAvg": 30_000_000_000,
+    },
+    {
+        "date": "2027-07-31",
+        "estimatedEpsAvg": 1.15,
+        "estimatedEpsLow": 0.98,
+        "estimatedEpsHigh": 1.32,
+        "estimatedRevenueAvg": 54_000_000_000,
+        "estimatedNetIncomeAvg": 20_000_000_000,
+        "estimatedEbitdaAvg": 27_000_000_000,
+    },
+    {
+        "date": "2027-04-30",
+        "estimatedEpsAvg": 1.05,
+        "estimatedEpsLow": 0.90,
+        "estimatedEpsHigh": 1.22,
+        "estimatedRevenueAvg": 50_000_000_000,
+    },
+    {
+        "date": "2027-01-31",
+        "estimatedEpsAvg": 0.98,
+        "estimatedEpsLow": 0.82,
+        "estimatedEpsHigh": 1.12,
+        "estimatedRevenueAvg": 47_000_000_000,
+    },
+    {
+        "date": "2026-10-31",
+        "estimatedEpsAvg": 0.95,
+        "estimatedEpsLow": 0.80,
+        "estimatedEpsHigh": 1.10,
+        "estimatedRevenueAvg": 46_000_000_000,
+    },
     {
         "date": "2026-04-30",
         "estimatedEpsAvg": 0.88,
@@ -21,12 +61,20 @@ SAMPLE_ESTIMATES = [
         "estimatedEpsHigh": 1.02,
         "estimatedRevenueAvg": 44_500_000_000,
     },
+    # Past quarters (recent)
     {
         "date": "2026-01-31",
         "estimatedEpsAvg": 0.81,
         "estimatedEpsLow": 0.70,
         "estimatedEpsHigh": 0.95,
         "estimatedRevenueAvg": 39_200_000_000,
+    },
+    {
+        "date": "2025-10-31",
+        "estimatedEpsAvg": 0.73,
+        "estimatedEpsLow": 0.62,
+        "estimatedEpsHigh": 0.85,
+        "estimatedRevenueAvg": 35_000_000_000,
     },
 ]
 
@@ -109,7 +157,7 @@ class TestDataPackageFMPFields:
             insider_trades=SAMPLE_INSIDER_TRADES,
             news=SAMPLE_NEWS,
         )
-        assert len(pkg.analyst_estimates) == 2
+        assert len(pkg.analyst_estimates) == 8
         assert len(pkg.analyst_recommendations) == 6
         assert len(pkg.earnings_calendar) == 1
         assert len(pkg.insider_trades) == 2
@@ -123,13 +171,63 @@ class TestDataPackageFMPFields:
 class TestFormatContextFMPEnrichment:
     """Test format_context() renders FMP sections correctly."""
 
-    def test_analyst_consensus_section(self):
+    def test_forward_estimates_table(self):
+        """Forward estimates should render as a markdown table with all fields."""
         pkg = DataPackage(symbol="NVDA", analyst_estimates=SAMPLE_ESTIMATES)
         ctx = pkg.format_context()
-        assert "### Analyst Consensus" in ctx
+        assert "### Forward Estimates" in ctx
+        # Table headers
+        assert "| Quarter | EPS (Low/Avg/High) | Revenue | Net Income | EBITDA |" in ctx
+        # Forward quarters should be present (sorted by date ascending)
         assert "2026-04-30" in ctx
-        assert "EPS 0.75/0.88/1.02" in ctx
+        assert "2026-10-31" in ctx
+        assert "2027-10-31" in ctx
+        # EPS data in table row
+        assert "0.75/0.88/1.02" in ctx
+        # Revenue formatting
         assert "$44.5B" in ctx
+        # Net Income and EBITDA from enriched records
+        assert "$22.0B" in ctx   # estimatedNetIncomeAvg
+        assert "$30.0B" in ctx   # estimatedEbitdaAvg
+
+    def test_forward_estimates_missing_fields_graceful(self):
+        """Records without estimatedNetIncomeAvg/estimatedEbitdaAvg should show N/A."""
+        # Use only a record without optional fields
+        estimates = [{"date": "2099-12-31", "estimatedEpsAvg": 1.0,
+                      "estimatedEpsLow": 0.8, "estimatedEpsHigh": 1.2,
+                      "estimatedRevenueAvg": 10_000_000_000}]
+        pkg = DataPackage(symbol="TEST", analyst_estimates=estimates)
+        ctx = pkg.format_context()
+        assert "### Forward Estimates" in ctx
+        # Missing fields should be N/A
+        assert "N/A" in ctx
+
+    def test_forward_estimates_growth_trajectory(self):
+        """Growth trajectory should compute rev and EPS growth across forward quarters."""
+        pkg = DataPackage(symbol="NVDA", analyst_estimates=SAMPLE_ESTIMATES)
+        ctx = pkg.format_context()
+        assert "Growth Trajectory" in ctx
+        # First forward Q: 2026-04-30 rev=$44.5B, last: 2027-10-31 rev=$58B
+        # Growth = (58-44.5)/44.5 = 30.3%
+        assert "+30.3%" in ctx
+
+    def test_recent_estimates_section(self):
+        """Past quarters should render as compact list under Recent Analyst Estimates."""
+        pkg = DataPackage(symbol="NVDA", analyst_estimates=SAMPLE_ESTIMATES)
+        ctx = pkg.format_context()
+        assert "### Recent Analyst Estimates" in ctx
+        assert "2026-01-31" in ctx
+        assert "EPS 0.7/0.81/0.95" in ctx
+
+    def test_no_future_dates_skips_forward_section(self):
+        """When all estimates are in the past, Forward Estimates section is skipped."""
+        past_only = [{"date": "2020-01-31", "estimatedEpsAvg": 0.5,
+                      "estimatedEpsLow": 0.4, "estimatedEpsHigh": 0.6,
+                      "estimatedRevenueAvg": 10_000_000_000}]
+        pkg = DataPackage(symbol="TEST", analyst_estimates=past_only)
+        ctx = pkg.format_context()
+        assert "### Forward Estimates" not in ctx
+        assert "### Recent Analyst Estimates" in ctx
 
     def test_earnings_calendar_section(self):
         pkg = DataPackage(
@@ -190,7 +288,8 @@ class TestFormatContextFMPEnrichment:
     def test_no_data_no_sections(self):
         pkg = DataPackage(symbol="NVDA")
         ctx = pkg.format_context()
-        assert "### Analyst Consensus" not in ctx
+        assert "### Forward Estimates" not in ctx
+        assert "### Recent Analyst Estimates" not in ctx
         assert "### Analyst Rating Distribution" not in ctx
         assert "### Upcoming Earnings" not in ctx
         assert "### Recent Insider Activity" not in ctx

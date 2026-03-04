@@ -243,6 +243,7 @@ class TestCompileDeepReport:
             "alpha_red_team.md": "## Red Team\nCisco analog attack. Thesis survives but weakened.",
             "alpha_cycle.md": "## Cycle\nSentiment 7/10. Late expansion. Early majority adoption.",
             "alpha_bet.md": "## Asymmetric Bet\nBarbell structure. R:R 1:4.7. TAKE IT.",
+            "company_profile.md": "# Company Profile: TEST\n\n## 业务概览\nTest Corp是全球领先的科技公司。\n\n## 前瞻指引分析\n未来增长稳健。\n\n## 公司原型与阶段\n- **原型**: 超级成长股\n- **阶段**: Hyper-growth",
         }
         for name, content in files.items():
             (research_dir / name).write_text(content)
@@ -276,6 +277,10 @@ class TestCompileDeepReport:
             assert "想象力成长" in report
             assert "红队试炼" in report
             assert "非对称赌注" in report
+            # Company profile with 业务概览 should be included
+            assert "0. 公司画像" in report
+            assert "业务概览" in report
+            assert "前瞻指引分析" in report
 
     def test_writes_full_report_file(self, tmp_path):
         with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):
