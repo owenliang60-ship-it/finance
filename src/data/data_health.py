@@ -111,6 +111,7 @@ def _check_pool_integrity() -> CheckResult:
         return CheckResult("池完整性", "PASS", f"股票池 {count} 只")
 
 
+# TODO(P4): remove after CSV retirement — unreachable since P2
 def _check_price_coverage(symbols: List[str]) -> CheckResult:
     """检查价格覆盖率: CSV 数量 vs 池数量。"""
     if not symbols:
@@ -165,6 +166,7 @@ def _check_fundamental_coverage(symbols: List[str]) -> CheckResult:
         return CheckResult("基本面覆盖率", "FAIL", f"{covered}/{len(symbols)} ({ratio:.0%})")
 
 
+# TODO(P4): remove after CSV retirement — unreachable since P2
 def _check_price_freshness() -> CheckResult:
     """检查价格新鲜度: 最新 CSV 的最后日期。"""
     if not PRICE_DIR.exists():
@@ -282,6 +284,7 @@ def _check_company_db() -> CheckResult:
         return CheckResult("company.db", "FAIL", f"数据库损坏: {e}")
 
 
+# TODO(P4): remove after CSV retirement — unreachable since P2
 def _check_price_pool_consistency(symbols: List[str]) -> CheckResult:
     """检查价格-池一致性: 池内每只股票都有对应 CSV。"""
     if not symbols:

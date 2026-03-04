@@ -2,7 +2,7 @@
 Holdings manager — CRUD operations for portfolio positions.
 
 Data is persisted as JSON in portfolio/holdings/.
-Reads price data from Data Desk (data/price/*.csv) for price refresh.
+Reads price data from Data Desk (market.db → CSV fallback) for price refresh.
 Reads profiles from Data Desk (data/fundamental/profiles.json) for metadata.
 """
 import json

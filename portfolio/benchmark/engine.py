@@ -102,7 +102,7 @@ class BenchmarkEngine:
         if prices is None or prices.empty:
             logger.warning(
                 f"Benchmark {benchmark} price data not available. "
-                f"Add {benchmark}.csv to data/price/ to enable comparison."
+                f"Ensure {benchmark} price data is in market.db to enable comparison."
             )
             return None
 

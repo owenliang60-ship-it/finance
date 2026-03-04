@@ -40,7 +40,8 @@ def snapshot(reason: str = "manual") -> Optional[Path]:
     对关键数据创建轻量快照。
 
     备份内容:
-    - data/price/*.csv
+    - data/market.db (主时序数据库)
+    - data/price/*.csv (副写备份)
     - data/fundamental/*.json
     - data/company.db
     - data/pool/universe.json

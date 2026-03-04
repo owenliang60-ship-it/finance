@@ -1,5 +1,5 @@
 """
-美股数据适配器 — 加载 market.db 量价数据 + 复用 RS 计算
+美股数据适配器 — 加载 market.db 量价数据 (CSV fallback) + 复用 RS 计算
 """
 
 import logging
@@ -14,7 +14,7 @@ class USStocksAdapter:
     """
     美股数据适配器
 
-    加载 data/price/*.csv，提供:
+    加载 market.db 量价数据 (CSV fallback)，提供:
     - 价格数据加载 (全量 + 按日期切片)
     - RS 计算函数路由
     - 交易日期序列
@@ -23,7 +23,7 @@ class USStocksAdapter:
     def __init__(self, symbols: Optional[List[str]] = None):
         """
         Args:
-            symbols: 要加载的股票列表。None = 自动发现 price 目录下所有 CSV
+            symbols: 要加载的股票列表。None = 自动发现 market.db 中所有股票
         """
         self._price_cache: Dict[str, pd.DataFrame] = {}
         self._symbols = symbols
@@ -157,14 +157,9 @@ class USStocksAdapter:
         """从 market.db 发现有价格数据的股票"""
         try:
             from src.data.market_store import get_store
-            import sqlite3
             store = get_store()
-            conn = store._get_conn()
-            rows = conn.execute("SELECT DISTINCT symbol FROM daily_price").fetchall()
-            return sorted(
-                r[0] for r in rows
-                if r[0] not in ("SPY", "QQQ")  # 基准单独处理
-            )
+            symbols = store.get_symbols("daily_price")
+            return [s for s in symbols if s not in ("SPY", "QQQ")]
         except Exception as e:
             logger.warning(f"market.db 发现股票失败: {e}")
             return []

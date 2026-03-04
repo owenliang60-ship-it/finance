@@ -849,6 +849,15 @@ class MarketStore:
             logger.info("Cleaned up %d old option snapshot rows (before %s)", deleted, cutoff_date)
         return deleted
 
+    # ---- Symbol Discovery ----
+
+    def get_symbols(self, table: str = "daily_price") -> List[str]:
+        """Return sorted list of distinct symbols in a table."""
+        _validate_table(table)
+        conn = self._get_conn()
+        rows = conn.execute(f"SELECT DISTINCT symbol FROM {table}").fetchall()
+        return sorted(r[0] for r in rows)
+
     # ---- Stats ----
 
     def get_stats(self) -> Dict[str, int]:

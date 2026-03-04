@@ -1,7 +1,6 @@
 """
 量价数据获取与缓存
-遵循 quant-development skill 规范：
-- CSV 格式存储
+- market.db 主存储, CSV 副写 (P2 迁移后)
 - 增量更新
 - 数据验证
 """
