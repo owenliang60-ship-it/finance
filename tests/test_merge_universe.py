@@ -185,6 +185,34 @@ def test_malformed_target_json(tmp_path):
     assert target_file.read_text() == "not valid json [[["
 
 
+def test_incoming_not_a_list(tmp_path):
+    """incoming 是合法 JSON 但不是列表时，应返回 0 且不修改 target。"""
+    target_file = tmp_path / "target.json"
+    target_file.write_text(json.dumps([{"symbol": "AAPL", "source": "screener"}]))
+    incoming_file = tmp_path / "incoming.json"
+    incoming_file.write_text(json.dumps({"symbol": "MSFT", "source": "screener"}))  # dict, not list
+
+    added = merge_universe(str(incoming_file), str(target_file))
+
+    assert added == 0
+    result = _read(str(target_file))
+    assert len(result) == 1
+    assert result[0]["symbol"] == "AAPL"
+
+
+def test_target_not_a_list(tmp_path):
+    """target 是合法 JSON 但不是列表时，应返回 0 且不覆盖 target。"""
+    target_file = tmp_path / "target.json"
+    target_file.write_text(json.dumps("just a string"))
+    incoming_file = tmp_path / "incoming.json"
+    incoming_file.write_text(json.dumps([{"symbol": "MSFT", "source": "screener"}]))
+
+    added = merge_universe(str(incoming_file), str(target_file))
+
+    assert added == 0
+    assert json.loads(target_file.read_text()) == "just a string"
+
+
 def test_empty_incoming_list(tmp_path):
     """incoming 为空列表时，返回 0 且 target 不变。"""
     target_file = tmp_path / "target.json"

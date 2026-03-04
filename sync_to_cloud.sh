@@ -45,28 +45,41 @@ exit(0 if r.level != 'FAIL' else 1)
     info "健康检查通过"
 }
 
-# ── 安全检查: 文件大小不能缩超 50% ──
+# ── 安全检查: source 不能比 dest 缩超 50% ──
+# 用法: check_file_size <local_file> <remote_file> <label> <direction>
+#   direction: pull (source=remote, dest=local) | push (source=local, dest=remote)
 check_file_size() {
     local local_file="$1"
     local remote_file="$2"
     local label="$3"
+    local direction="${4:-pull}"
 
-    if [ ! -f "$local_file" ]; then
-        # 本地无文件，首次拉取，跳过检查
-        return 0
+    local local_size=0
+    if [ -f "$local_file" ]; then
+        local_size=$(stat -f%z "$local_file" 2>/dev/null || stat -c%s "$local_file" 2>/dev/null || echo 0)
     fi
-
-    local local_size
-    local_size=$(stat -f%z "$local_file" 2>/dev/null || stat -c%s "$local_file" 2>/dev/null || echo 0)
     local remote_size
     remote_size=$(ssh "$REMOTE_HOST" "stat -c%s '$remote_file' 2>/dev/null || echo 0")
 
-    if [ "$local_size" -gt 0 ] && [ "$remote_size" -gt 0 ]; then
-        local ratio=$((remote_size * 100 / local_size))
-        if [ "$ratio" -lt 50 ]; then
-            error "$label 大小异常: 本地 ${local_size}B -> 云端 ${remote_size}B (${ratio}%)，中止"
-            exit 1
-        fi
+    # 确定 source/dest 大小
+    local source_size dest_size
+    if [ "$direction" = "push" ]; then
+        source_size=$local_size
+        dest_size=$remote_size
+    else
+        source_size=$remote_size
+        dest_size=$local_size
+    fi
+
+    # dest 为 0 = 首次传输，跳过检查
+    if [ "$dest_size" -eq 0 ] || [ "$source_size" -eq 0 ]; then
+        return 0
+    fi
+
+    local ratio=$((source_size * 100 / dest_size))
+    if [ "$ratio" -lt 50 ]; then
+        error "$label 大小异常: source ${source_size}B vs dest ${dest_size}B (${ratio}%)，中止"
+        exit 1
     fi
 }
 
@@ -86,7 +99,7 @@ print('WAL checkpoint OK')
 
     # 2. rsync market.db 云端→本地 (+ 文件大小安全检查)
     info "拉取 market.db..."
-    check_file_size "$LOCAL_DIR/data/market.db" "$REMOTE_DIR/data/market.db" "market.db"
+    check_file_size "$LOCAL_DIR/data/market.db" "$REMOTE_DIR/data/market.db" "market.db" "pull"
     rsync -avz "$REMOTE/data/market.db" "$LOCAL_DIR/data/market.db"
 
     # 3. rsync fundamental/ 云端→本地 (--delete 清理云端已删除的过期文件)
@@ -119,7 +132,7 @@ push_to_cloud() {
 
     # 2. rsync company.db 本地→云端 (+ 文件大小安全检查)
     info "推送 company.db..."
-    check_file_size "$LOCAL_DIR/data/company.db" "$REMOTE_DIR/data/company.db" "company.db"
+    check_file_size "$LOCAL_DIR/data/company.db" "$REMOTE_DIR/data/company.db" "company.db" "push"
     rsync -avz "$LOCAL_DIR/data/company.db" "$REMOTE/data/company.db"
 
     # 3. universe.json merge: 本地→云端
@@ -242,10 +255,10 @@ case "${1:-}" in
         show_status
         ;;
     --code|--data|--all)
-        warn "--code/--data/--all 已废弃，请使用 --pull/--push/--sync"
+        error "--code/--data/--all 已废弃，请使用 --pull/--push/--sync"
         echo ""
         show_help
-        exit 0
+        exit 1
         ;;
     *)
         show_help

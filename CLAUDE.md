@@ -85,7 +85,7 @@ python -c "from src.data.data_validator import print_data_report; print_data_rep
 # 云端
 ssh aliyun "tail -30 /root/workspace/Finance/logs/cron_price.log"
 ssh aliyun "tail -30 /root/workspace/Finance/logs/cron_scan.log"
-./sync_to_cloud.sh --all
+./sync_to_cloud.sh --sync
 ```
 
 ---

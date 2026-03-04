@@ -498,6 +498,9 @@ def merge_universe(incoming_path: str, target_path: str = None) -> int:
     except (json.JSONDecodeError, ValueError) as e:
         logger.error(f"merge_universe: incoming JSON 解析失败: {incoming_file} — {e}")
         return 0
+    if not isinstance(incoming_stocks, list):
+        logger.error(f"merge_universe: incoming 不是列表: {type(incoming_stocks).__name__}")
+        return 0
 
     # 读取 target
     if target_file.exists():
@@ -506,6 +509,9 @@ def merge_universe(incoming_path: str, target_path: str = None) -> int:
                 target_stocks = json.load(f)
         except (json.JSONDecodeError, ValueError) as e:
             logger.error(f"merge_universe: target JSON 解析失败: {target_file} — {e}，中止合并以保护现有数据")
+            return 0
+        if not isinstance(target_stocks, list):
+            logger.error(f"merge_universe: target 不是列表: {type(target_stocks).__name__}，中止合并以保护现有数据")
             return 0
     else:
         target_stocks = []
