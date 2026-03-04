@@ -26,6 +26,14 @@ logger = logging.getLogger(__name__)
 UNIVERSE_FILE = POOL_DIR / "universe.json"
 HISTORY_FILE = POOL_DIR / "pool_history.json"
 
+# Source 优先级 (高 = 赢)
+_SOURCE_PRIORITY = {"analysis": 4, "manual": 3, "attention": 2, "screener": 1}
+
+
+def _get_source_priority(entry: Dict) -> int:
+    """返回 universe 条目的 source 优先级，缺失视为 screener。"""
+    return _SOURCE_PRIORITY.get(entry.get("source", ""), 1)
+
 
 def _normalize_company_name(name: str) -> str:
     """标准化公司名，用于去重"""
@@ -460,6 +468,80 @@ def batch_add_to_pool(symbols: List[str], source: str = "manual", reason: str = 
         f"skipped={len(result['skipped'])}, failed={len(result['failed'])}"
     )
     return result
+
+
+def merge_universe(incoming_path: str, target_path: str = None) -> int:
+    """按 symbol 取并集合并两个 universe.json，相同 symbol 保留 source 优先级更高的条目。
+
+    规则：
+    - 只增不减（union）
+    - 同 symbol 冲突：source 优先级高的赢
+    - 同优先级：保留 target（本地/已有）条目（稳定性）
+
+    Args:
+        incoming_path: 要合入的 universe.json 路径
+        target_path: 目标 universe.json 路径，None 则用默认 UNIVERSE_FILE
+
+    Returns:
+        新增的 symbol 数量
+    """
+    incoming_file = Path(incoming_path)
+    target_file = Path(target_path) if target_path else UNIVERSE_FILE
+
+    # 读取 incoming
+    if not incoming_file.exists():
+        logger.warning(f"merge_universe: incoming 文件不存在: {incoming_file}")
+        return 0
+    try:
+        with open(incoming_file, "r", encoding="utf-8") as f:
+            incoming_stocks = json.load(f)
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error(f"merge_universe: incoming JSON 解析失败: {incoming_file} — {e}")
+        return 0
+
+    # 读取 target
+    if target_file.exists():
+        try:
+            with open(target_file, "r", encoding="utf-8") as f:
+                target_stocks = json.load(f)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"merge_universe: target JSON 解析失败: {target_file} — {e}，中止合并以保护现有数据")
+            return 0
+    else:
+        target_stocks = []
+
+    # 建立 target 索引
+    target_by_symbol = {s.get("symbol"): s for s in target_stocks if s.get("symbol")}
+    original_count = len(target_by_symbol)
+
+    # 合并: 遍历 incoming，只增不减
+    for entry in incoming_stocks:
+        sym = entry.get("symbol")
+        if not sym:
+            continue
+        if sym not in target_by_symbol:
+            # 新 symbol，直接加入
+            target_by_symbol[sym] = entry
+        else:
+            # 已有 symbol，比较优先级
+            incoming_priority = _get_source_priority(entry)
+            target_priority = _get_source_priority(target_by_symbol[sym])
+            if incoming_priority > target_priority:
+                target_by_symbol[sym] = entry
+
+    new_count = len(target_by_symbol) - original_count
+
+    # 写回 target
+    merged = list(target_by_symbol.values())
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(target_file, "w", encoding="utf-8") as f:
+        json.dump(merged, f, ensure_ascii=False, indent=2)
+
+    if new_count:
+        logger.info(f"merge_universe: 合并完成，新增 {new_count} 个 symbol (总计 {len(merged)})")
+    else:
+        logger.info(f"merge_universe: 无新增 symbol (总计 {len(merged)})")
+    return new_count
 
 
 def print_universe_summary():

@@ -12,7 +12,7 @@ from typing import Optional, List
 
 import sys
 sys.path.insert(0, str(__file__).rsplit("/src", 1)[0])
-from config.settings import PRICE_DIR, PRICE_HISTORY_YEARS
+from config.settings import PRICE_DIR, PRICE_HISTORY_YEARS, IS_CLOUD
 from src.data.fmp_client import fmp_client
 from src.data.pool_manager import get_symbols
 
@@ -66,14 +66,15 @@ def save_price_cache(symbol: str, df: pd.DataFrame):
     from src.data.market_store import get_store
     get_store().upsert_daily_prices_df(symbol, df)
 
-    # 副写: CSV (non-fatal)
-    try:
-        PRICE_DIR.mkdir(parents=True, exist_ok=True)
-        cache_path = _get_cache_path(symbol)
-        df.to_csv(cache_path, index=False)
-        logger.debug(f"保存缓存 {symbol}: {len(df)} 条")
-    except Exception as e:
-        logger.warning(f"[CSV] price write failed for {symbol}: {e}")
+    # 副写: CSV (non-fatal, 云端跳过)
+    if not IS_CLOUD:
+        try:
+            PRICE_DIR.mkdir(parents=True, exist_ok=True)
+            cache_path = _get_cache_path(symbol)
+            df.to_csv(cache_path, index=False)
+            logger.debug(f"保存缓存 {symbol}: {len(df)} 条")
+        except Exception as e:
+            logger.warning(f"[CSV] price write failed for {symbol}: {e}")
 
 
 def get_cache_latest_date(symbol: str) -> Optional[datetime]:

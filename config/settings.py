@@ -11,6 +11,10 @@ PROJECT_ROOT = Path(__file__).parent.parent
 # 自动加载 .env（API keys 等敏感配置）
 load_dotenv(PROJECT_ROOT / ".env")
 
+# 环境标识 (云端 .env 设置 FINANCE_ENV=cloud)
+FINANCE_ENV = os.environ.get("FINANCE_ENV", "local")
+IS_CLOUD = FINANCE_ENV == "cloud"
+
 # 数据目录
 DATA_DIR = PROJECT_ROOT / "data"
 POOL_DIR = DATA_DIR / "pool"
