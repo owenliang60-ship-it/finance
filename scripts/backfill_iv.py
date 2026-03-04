@@ -284,8 +284,8 @@ def main():
     )
     parser.add_argument(
         "--start",
-        default=(datetime.now() - timedelta(days=730)).strftime("%Y-%m-%d"),
-        help="Start date YYYY-MM-DD (default: 2 years ago)",
+        default=(datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d"),
+        help="Start date YYYY-MM-DD (default: 1 year ago)",
     )
     parser.add_argument(
         "--end",

@@ -710,3 +710,14 @@ echo "  总耗时: ${BATCH_MINS} 分钟"
 echo "  进度日志: $PROGRESS_LOG"
 echo "  详细日志: $LOG_DIR/${BATCH_ID}_*.log"
 echo "═══════════════════════════════════════════════════════"
+
+# ── Phase 5: 同步分析结果到云端 ─────────────────────────
+if [ "$DONE" -gt 0 ]; then
+    echo ""
+    log "上传分析结果到云端..."
+    if "$PROJECT_DIR/sync_to_cloud.sh" --push >> "$PROGRESS_LOG" 2>&1; then
+        log "✅ Cloud push 完成"
+    else
+        log "⚠️ Cloud push 失败，本地分析已保存"
+    fi
+fi

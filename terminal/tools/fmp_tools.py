@@ -245,11 +245,11 @@ class GetRatiosTool(BaseFMPTool):
 
     def execute(self, symbol: str, limit: int = 4) -> List[Dict]:
         """
-        Execute: get financial ratios.
+        Execute: get financial ratios (annual only, FMP Starter limitation).
 
         Args:
             symbol: Stock ticker symbol
-            limit: Number of quarters to retrieve
+            limit: Number of years to retrieve
 
         Returns:
             List of ratio dicts (most recent first)

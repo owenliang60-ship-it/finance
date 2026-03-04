@@ -1,8 +1,8 @@
 # Architecture — Finance Workspace
 
-**未来资本 AI Trading Desk | Updated: 2026-02-16**
+**未来资本 AI Trading Desk | Updated: 2026-03-04**
 
-**Code Stats**: ~170+ Python files, 838 tests passing
+**Code Stats**: ~167 Python files, 1285 tests passing, 36,800+ lines
 
 ---
 
@@ -10,7 +10,7 @@
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════╗
-║                   未来资本 AI 交易台 (17,192 lines)                      ║
+║               未来资本 AI 交易台 (36,800+ lines)                         ║
 ╠══════════════════════════════════════════════════════════════════════════╣
 ║                                                                        ║
 ║  ┌──────────────── HUMAN (Boss) ─────────────────────┐                 ║
@@ -107,17 +107,27 @@
 ║  │  └─ pool_manager (245)                           │                  ║
 ║  └──────────────────────────────────────────────────┘                  ║
 ║                                                                        ║
-║  ════════════ STORAGE 层 ══════════════════════════════════            ║
+║  ════════════ STORAGE 层 (P3 所有权模型) ══════════════════            ║
 ║                                                                        ║
 ║  data/                                                                 ║
-║  ├─ company.db            SQLite (统一公司DB: OPRMS+分析+kill)           ║
-║  ├─ price/*.csv           池内股 5年日频 + SPY/QQQ                       ║
-║  ├─ fundamental/*.json    利润表/资产负债表/现金流/比率/档案                 ║
-║  ├─ macro/                macro_snapshot.json (FRED cache)             ║
+║  ├─ market.db (31MB)      云端独占写入, pull到本地                        ║
+║  │  ├─ daily_price        145sym × 5yr OHLCV (178K rows)               ║
+║  │  ├─ income_quarterly   季度利润表 (1160 rows)                         ║
+║  │  ├─ balance_sheet_q    季度资产负债表                                  ║
+║  │  ├─ cash_flow_q        季度现金流                                     ║
+║  │  ├─ ratios_annual      年度估值比率                                    ║
+║  │  ├─ metrics_quarterly  45项衍生指标 (1160 rows)                       ║
+║  │  ├─ iv_daily           期权IV聚合 (23K rows)                          ║
+║  │  └─ options_snapshots  期权链快照                                      ║
+║  ├─ company.db (3.4MB)    本地独占写入, push到云端                        ║
+║  │  ├─ companies          元数据+sector+market_cap                       ║
+║  │  ├─ oprms_ratings      OPRMS评级历史                                  ║
+║  │  ├─ analyses           深度分析记录                                    ║
+║  │  └─ kill_conditions    交易触发条件                                    ║
+║  ├─ pool/universe.json    双端merge (并集, 只增不减)                      ║
+║  ├─ macro/                FRED cache (4h/12h TTL)                      ║
 ║  ├─ companies/{SYM}/      per-ticker 分析存档                           ║
-║  ├─ ratings/              OPRMS 评级历史                                ║
-║  ├─ themes/               投资主题                                      ║
-║  └─ pool/                 股票池配置                                     ║
+║  └─ .backups/             Data Guardian 快照 (max 10)                  ║
 ║                                                                        ║
 ║  ════════════ EXTERNAL APIs ═══════════════════════════════            ║
 ║                                                                        ║
@@ -171,9 +181,10 @@
 ║                                                                        ║
 ║  ┌────────────┐  ┌────────────┐  ┌─────────────────┐                  ║
 ║  │ Cloud      │  │ Tests      │  │ Obsidian        │                  ║
-║  │ aliyun cron│  │ 20 files   │  │ Cards/ 分析摘要   │                  ║
-║  │ price+scan │  │ 838 pass   │  │ Journal/ 日志     │                  ║
-║  │ daily 06:30│  │ 4,445 lines│  │                 │                  ║
+║  │ aliyun cron│  │ 78 files   │  │ Cards/ 分析摘要   │                  ║
+║  │ 5 daily +  │  │ 1285 pass  │  │ Journal/ 日志     │                  ║
+║  │ 2 weekly   │  │            │  │                 │                  ║
+║  │ launchd 9am│  │            │  │                 │                  ║
 ║  └────────────┘  └────────────┘  └─────────────────┘                  ║
 ║                                                                        ║
 ╚══════════════════════════════════════════════════════════════════════════╝
@@ -456,46 +467,50 @@ BENCHMARK_SYMBOLS = ["SPY", "QQQ"]
 
 ---
 
-### Layer 5: Storage
+### Layer 5: Storage (P3 所有权模型)
+
+每个数据存储有且仅有一个写入方，同步 = 单向拷贝，永不冲突。
 
 ```
 data/
-├── company.db                    SQLite — unified company DB (OPRMS, analyses, kill conditions)
-├── price/*.csv                   池内股 × 5yr daily OHLCV + SPY/QQQ benchmark
-├── fundamental/
-│   ├── income.json               Income statements
-│   ├── balance_sheet.json        Balance sheets
-│   ├── cash_flow.json            Cash flow statements
-│   ├── ratios.json               Financial ratios
-│   └── profiles.json             Company profiles
-├── macro/
-│   └── macro_snapshot.json       FRED cache (4h/12h TTL)
+├── market.db (31MB)              云端独占写入 → pull 到本地
+│   ├─ daily_price                145 symbols × 5yr OHLCV (178K rows)
+│   ├─ income_quarterly           季度利润表 (1160 rows)
+│   ├─ balance_sheet_quarterly    季度资产负债表
+│   ├─ cash_flow_quarterly        季度现金流
+│   ├─ ratios_annual              年度估值比率
+│   ├─ metrics_quarterly          45 项衍生指标 (margins/returns/growth/CAGR)
+│   ├─ iv_daily                   期权 IV 聚合 (23K rows)
+│   └─ options_snapshots          期权链快照
+├── company.db (3.4MB)            本地独占写入 → push 到云端
+│   ├─ companies                  元数据 + sector + market_cap
+│   ├─ oprms_ratings              OPRMS 评级历史
+│   ├─ analyses                   深度分析记录
+│   └─ kill_conditions            交易触发条件
+├── pool/universe.json            双端 merge（并集，只增不减）
+├── macro/macro_snapshot.json     FRED cache (4h/12h TTL)
 ├── companies/{SYMBOL}/           Per-ticker knowledge store
-│   ├── oprms.json                Current OPRMS rating
-│   ├── oprms_history.jsonl       Rating changelog (append-only)
-│   ├── kill_conditions.json      Invalidation triggers
-│   ├── memos.jsonl               Investment memos (timestamped)
-│   ├── analyses.jsonl            Full analysis results
-│   ├── scratchpad/               Debug logs
-│   └── meta.json                 Theme memberships, tags
-├── ratings/                      OPRMS rating snapshots
-├── themes/{slug}.json            Investment themes
-├── pool/                         Stock pool configs
-├── correlation/matrix.json       Pairwise correlation cache
-└── .backups/                     Data snapshots (tar.gz, max 10)
+│   ├── oprms.json, memos.jsonl, analyses.jsonl
+│   ├── kill_conditions.json, meta.json
+│   └── scratchpad/
+├── price/*.csv                   **退役中** (market.db 副写)
+├── fundamental/*.json            **退役中** (market.db 副写)
+└── .backups/                     Data Guardian 快照 (tar.gz, max 10)
 ```
 
-**Data Formats**:
-- **JSON**: Single-record data (oprms.json, meta.json)
-- **JSONL**: Append-only logs (memos.jsonl, analyses.jsonl)
-- **CSV**: Tabular time series (price data)
-- **SQLite**: Queryable aggregates (company.db)
+**Sync (P3 所有权模型)**:
+- `./sync_to_cloud.sh --pull`: market.db + fundamental/ + universe merge (云端→本地)
+- `./sync_to_cloud.sh --push`: company.db + universe merge (本地→云端)
+- 安全: health_check 门卫 + 文件大小 50% 熔断 + 云端验证
+- 自动化: launchd 每天 09:00 auto-pull + deep analysis 后 auto-push
 
-**Data Hygiene**: `cleanup_stale_data()` runs automatically after pool refresh — removes stale price CSVs and fundamental JSON entries for exited stocks. Safety fuse aborts if >30% of data would be deleted. Auto-snapshot before any deletion.
+**Data Hygiene**: `cleanup_stale_data()` runs automatically after pool refresh — removes stale data for exited stocks. Safety fuse aborts if >30% of data would be deleted. Auto-snapshot before any deletion.
 
-**Data Guardian**: `data_guardian.py` provides snapshot/restore for `data/` (price, fundamental, pool, company.db). Max 10 snapshots at `data/.backups/`. Triggered automatically before cleanup and available manually.
+**Data Guardian**: `data_guardian.py` provides snapshot/restore for `data/`. Max 10 snapshots at `data/.backups/`. Triggered automatically before cleanup and available manually.
 
-**Health Check**: `data_health.py` runs 8 checks (pool integrity, price/fundamental coverage, freshness, consistency, company.db). Embedded in `update_data.py` (post-update + `--check`) and sync scripts (pre-push, post-pull). Returns PASS/WARN/FAIL.
+**Health Check**: `data_health.py` runs 11 checks (pool integrity, price/fundamental/IV coverage, freshness, DB integrity, mdb tables). Embedded in `update_data.py` (post-update + `--check`) and `sync_to_cloud.sh` (pre-push, post-pull). Returns PASS/WARN/FAIL.
+
+**Metrics Calculator**: `metrics_calculator.py` computes 45 derived metrics from income/BS/CF data. Runs on cloud as part of weekly fundamental cron. Output: `metrics_quarterly` table in market.db.
 
 ---
 
@@ -663,32 +678,36 @@ python-dotenv       # Environment variables
 | Server | Aliyun ECS (Beijing) |
 | SSH | `ssh aliyun` |
 | Path | `/root/workspace/Finance/` |
-| Sync | `./sync_to_cloud.sh [--code\|--data\|--all]` |
+| Sync | `./sync_to_cloud.sh [--pull\|--push\|--sync\|--status]` |
+| Auto-pull | macOS launchd daily 09:00 (`com.finance.sync-pull`) |
+| Auto-push | `auto_deep_analyze.sh` Phase 5 (after successful analysis) |
 
-### Cron Jobs (Beijing Time, Tue-Sat)
+### Cron Jobs (Beijing Time)
 
-| Time | Task | Log |
-|------|------|-----|
-| 06:30 | Price data update | `cron_price.log` |
-| 06:45 | Dollar volume scan | `cron_scan.log` |
-| Sat 08:00 | Stock pool refresh + stale data cleanup | `cron_pool.log` |
-| Sat 10:00 | Fundamentals update | `cron_fundamental.log` |
+| Time | Task | Frequency | Log |
+|------|------|-----------|-----|
+| 06:25 | Git auto-pull (code deploy) | Daily | — |
+| 06:30 | Price data update | Tue-Sat | `cron_price.log` |
+| 06:45 | Dollar volume scan | Tue-Sat | `cron_scan.log` |
+| 06:50 | IV data update | Tue-Sat | `cron_options_iv.log` |
+| 08:00 | Stock pool refresh + stale data cleanup | Saturday | `cron_pool.log` |
+| 10:00 | Fundamentals + metrics computation | Saturday | `cron_fundamental.log` |
 
 ---
 
-## Code Stats by Layer
+## Code Stats
 
-| Layer | Files | Lines | % of Total |
-|-------|-------|-------|-----------|
-| **terminal/** (orchestration) | 16 | 4,944 | 29% |
-| **tests/** | 11 | 2,783 | 16% |
-| **knowledge/** (investment frameworks) | 15 | ~2,000 | 12% |
-| **portfolio/** (holdings + exposure) | 10 | ~2,000 | 12% |
-| **src/** (data + indicators + analysis) | 10 | ~2,400 | 14% |
-| **scripts/** (operations) | 8 | ~1,100 | 6% |
-| **config/** | 1 | 92 | 1% |
-| Other (risk/, trading/ skeletons) | ~14 | ~1,800 | 10% |
-| **Total** | **~85** | **17,192** | 100% |
+| Layer | Files | Purpose |
+|-------|-------|---------|
+| **terminal/** | 36 | Orchestration, pipeline, macro, tools, options |
+| **knowledge/** | 32 | OPRMS, philosophies, debate, memo, alpha, meta |
+| **src/** | 25 | Data engine, indicators, analysis |
+| **backtest/** | 9 | RS engine, factor study framework |
+| **portfolio/** | 10 | Holdings, exposure, benchmark |
+| **scripts/** | ~15 | Operations, cron, automation |
+| **factor_research_codex1/** | 16 | Autonomous factor mining |
+| **tests/** | 78 | 1,285 tests passing |
+| **Total** | **~167** | **36,800+ lines** |
 
 ---
 
@@ -727,21 +746,21 @@ python-dotenv       # Environment variables
 
 ## Build History
 
-| Milestone | Date | Delta |
+| Milestone | Date | Tests |
 |-----------|------|-------|
 | Phase 1: Valuation → Finance merge + Desk skeleton | 2026-02-06 | — |
-| Phase 2 P0: 4 desks built (92 files, 9006 lines) | 2026-02-07 | +9,006 |
-| Terminal layer (7 files, 1462 lines) | 2026-02-07 | +1,462 |
-| FRED Macro Pipeline (42 files, 103 tests) | 2026-02-09 | +9,837 |
-| P0 FMP Enrichment (13 new tests) | 2026-02-09 | +137 |
-| P1 Benchmark + Correlation (14 new tests, 130 total) | 2026-02-09 | +397 |
-| Macro Briefing Layer (40 new tests, 179 total) | 2026-02-09 | +773 |
-| Alpha Layer (L2) + Data Freshness + Deep Pipeline v2 | 2026-02-10 | +4,600 |
-| HTML Reports + Agent-ization + Slim Context | 2026-02-11 | +2,800 |
-| Unified Company DB (SQLite + Dashboard + Migration) | 2026-02-13 | +2,300 |
-| Pool Cleanup (stale data auto-removal) | 2026-02-15 | cleanup |
-| Data Guardian (snapshot/fuse/health check) | 2026-02-15 | +1,157 |
-| **Current** | 2026-02-15 | **678 tests** |
+| Phase 2 P0: 4 desks built (92 files, 9006 lines) | 2026-02-07 | — |
+| FRED Macro Pipeline + FMP Enrichment + Macro Briefing | 2026-02-09 | 179 |
+| Alpha Layer + Data Freshness + Deep Pipeline v2 | 2026-02-10 | 326 |
+| HTML Reports + Agent-ization + Slim Context | 2026-02-11 | 418 |
+| Unified Company DB + Attention Engine | 2026-02-13 | 545 |
+| Data Guardian + Theme Engine P2 | 2026-02-15 | 718 |
+| RS Backtest Engine + Factor Study Framework | 2026-02-16 | 838 |
+| Alpha Debate + Agent Memory + Company Profiler | 2026-02-20 | 921 |
+| Options Module (IV + chains + BS solver + 24 playbooks) | 2026-02-25 | 1,021 |
+| Deep Analysis 增强 (业务概览 + 前瞻指引 + Forward Estimates) | 2026-02-28 | — |
+| Data Infra Upgrade (P1-P3: market.db primary + DB ownership) | 2026-03-03 | 1,285 |
+| Automated Sync (launchd pull + auto-push + metrics on cloud) | 2026-03-04 | 1,285 |
 
 ---
 

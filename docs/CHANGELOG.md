@@ -44,7 +44,28 @@
 |   ↳ Commands orchestrator + Formatter (context/chain/comparison/memo) | | |
 |   ↳ Tool Registry (3 MarketData tools) + Daily IV Cron | | |
 |   ↳ /options conversational skill + 24 strategy playbooks | | |
-| **当前** | 2026-02-20 | **~178 files, 921 tests** |
+| **Deep Analysis 增强** | 2026-02-28 | +500 |
+|   ↳ 业务概览 section + 前瞻指引 + Forward Estimates 表格 | | |
+|   ↳ Shell orchestrator Phase 0b 数据采集优化 | | |
+| **Data Infra P1: market.db 主写入** | 2026-03-01 | infra |
+|   ↳ 7 个直读 CSV 文件迁移到 market.db/get_price_df | | |
+|   ↳ 写路径翻转: market.db 主写, CSV 副写 | | |
+| **Data Infra P2: 基本面入库** | 2026-03-02 | infra |
+|   ↳ income/BS/CF/ratios 写入 market.db (quarterly tables) | | |
+|   ↳ IV 表从 company.db 迁移到 market.db | | |
+|   ↳ data_health.py 升级: 11 项检查 (新增 mdb 覆盖率/新鲜度/IV) | | |
+| **Data Infra P3: DB 所有权 + 云端同步** (264 new tests, 1285 total) | 2026-03-03 | +3,200 |
+|   ↳ 所有权模型: market.db=云端, company.db=本地, universe=merge | | |
+|   ↳ sync_to_cloud.sh 重写: --pull/--push/--sync/--status | | |
+|   ↳ 文件大小 50% 熔断 + WAL checkpoint + 健康检查门卫 | | |
+|   ↳ 云端 git clone + 06:25 auto-pull (代码部署自动化) | | |
+|   ↳ FINANCE_ENV=cloud 控制 CSV 副写跳过 | | |
+| **Automated Sync + Metrics** | 2026-03-04 | ops |
+|   ↳ macOS launchd 每天 09:00 auto-pull 云端数据 | | |
+|   ↳ auto_deep_analyze.sh Phase 5: 分析完成自动 push company.db | | |
+|   ↳ metrics_calculator 激活: 45 项衍生指标, 云端周六 cron 自动计算 | | |
+|   ↳ sync_to_cloud.sh TTY 检测 (非交互模式禁用颜色) | | |
+| **当前** | 2026-03-04 | **~167 files, 1285 tests** |
 
 ---
 

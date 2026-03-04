@@ -122,7 +122,7 @@ def get_profile(symbol: str) -> Optional[Dict]:
 # ========== 财务比率 ==========
 
 def fetch_ratios(symbol: str, limit: int = 4) -> List[Dict]:
-    """获取单只股票的财务比率"""
+    """获取单只股票的财务比率（年度，FMP Starter 不支持季度）"""
     if USE_REGISTRY:
         data = registry.execute("get_ratios", symbol=symbol, limit=limit)
     else:

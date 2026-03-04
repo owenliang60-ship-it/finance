@@ -164,7 +164,7 @@ class FMPClient:
         return None
 
     def get_ratios(self, symbol: str, limit: int = 4) -> List[Dict]:
-        """获取财务比率 (最近几个季度)"""
+        """获取财务比率 (年度，FMP Starter 不支持季度)"""
         data = self._request("ratios", {"symbol": symbol, "limit": limit})
         return data if isinstance(data, list) else []
 

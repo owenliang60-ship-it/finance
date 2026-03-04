@@ -97,7 +97,9 @@ def main():
             result = compute_all_metrics(target_symbols)
             print(f"Metrics computed for {len(result)} symbols")
         except Exception as e:
-            print(f"Warning: metrics computation failed: {e}")
+            import traceback
+            print(f"ERROR: metrics computation failed: {e}")
+            traceback.print_exc()
         print()
 
     # 计算相关性矩阵

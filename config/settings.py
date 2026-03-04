@@ -46,6 +46,10 @@ PERMANENTLY_EXCLUDED = {
     "UNP", "ADP",
     # 用户手动排除的医疗器械/军工
     "SYK", "NOC",
+    # 用户手动排除的银行 & 保险 (含投行/券商)
+    "BAC", "BBVA", "BMO", "BRK-A", "BRK-B", "C", "CB", "HDB",
+    "HSBC", "IBKR", "IBN", "JPM", "MFG", "MUFG", "PGR", "RY",
+    "SAN", "TD", "UBS", "WFC",
 }
 
 # 永久排除的行业 (这些行业的股票永远不加入)
@@ -65,6 +69,16 @@ EXCLUDED_INDUSTRIES = [
     "Railroads",                   # 铁路
     "Industrial - Machinery",      # 工业机械
     "Staffing & Employment Services",  # 人力资源
+    # 银行 & 保险 — 全部排除
+    "Banks - Diversified",         # 大型银行
+    "Banks - Regional",            # 区域银行
+    "Insurance - Diversified",     # 多元保险
+    "Insurance - Property & Casualty",  # 财产险
+    "Insurance - Life",            # 寿险
+    "Insurance - Specialty",       # 特种险
+    "Insurance - Reinsurance",     # 再保险
+    "Insurance Brokers",           # 保险经纪
+    "Investment - Banking & Investment Services",  # 投行/券商
 ]
 
 # API 调用配置 (防限流)
