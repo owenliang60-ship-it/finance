@@ -70,7 +70,7 @@ class TestGenerateProfilerPrompt:
         from knowledge.meta.company_profiler import generate_profiler_prompt
 
         result = generate_profiler_prompt("dummy")
-        assert "800" in result  # minimum word count
+        assert "1200" in result  # minimum word count
 
 
 # ── Test build_profiler_prompt() ─────────────────────────────────────────

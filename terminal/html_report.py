@@ -1108,6 +1108,7 @@ def build_header(symbol: str, research_dir: Path) -> str:
 def build_toc() -> str:
     """Build table of contents sidebar."""
     items = [
+        ("sec-overview", "0. \u516c\u53f8\u753b\u50cf"),
         ("sec-lenses", "I. \u4e94\u7ef4\u900f\u955c"),
         ("sec-debate", "II. \u6838\u5fc3\u8fa9\u8bba"),
         ("sec-memo", "III. \u6295\u8d44\u5907\u5fd8\u5f55"),
@@ -1118,6 +1119,28 @@ def build_toc() -> str:
     parts.append('  <div class="toc-label">CONTENTS</div>')
     for anchor, label in items:
         parts.append('  <a href="#' + anchor + '">' + label + '</a>')
+    parts.append('</div>')
+    return "\n".join(parts)
+
+
+def build_overview_section(research_dir: Path) -> str:
+    """Build Section 0: Company Overview from company_profile.md."""
+    path = research_dir / "company_profile.md"
+    if not path.exists():
+        return ""
+    text = path.read_text(encoding="utf-8")
+    if not text.strip():
+        return ""
+
+    parts = ['<div class="section" id="sec-overview">']
+    parts.append('  <div class="section-label">Section 0</div>')
+    parts.append('  <div class="section-title">'
+                 + '\u516c\u53f8\u753b\u50cf &mdash; <span>Company Profile</span></div>')
+    parts.append('  <div class="section-card">')
+    parts.append('    <div class="prose">')
+    parts.append(md_to_html(text))
+    parts.append('    </div>')
+    parts.append('  </div>')
     parts.append('</div>')
     return "\n".join(parts)
 
@@ -1552,6 +1575,7 @@ def compile_html_report(
     # Build sections
     header_html = build_header(symbol, research_dir)
     toc_html = build_toc()
+    overview_html = build_overview_section(research_dir)
     lenses_html = build_lenses_section(research_dir)
     debate_html = build_debate_section(debate)
     memo_html = build_memo_section(memo)
@@ -1572,6 +1596,7 @@ def compile_html_report(
     doc += toc_html + '\n'
     doc += '<div class="container">\n'
     doc += header_html + '\n'
+    doc += overview_html + '\n'
     doc += lenses_html + '\n'
     doc += debate_html + '\n'
     doc += memo_html + '\n'
