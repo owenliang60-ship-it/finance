@@ -23,6 +23,11 @@ from config.settings import (
 logger = logging.getLogger(__name__)
 
 
+class MarketClosedError(Exception):
+    """Raised when MarketData.app returns 'Market closed on this date'."""
+    pass
+
+
 class MarketDataClient:
     """MarketData.app API 客户端"""
 
@@ -79,6 +84,15 @@ class MarketDataClient:
                     logger.error("MarketData.app auth failed — check API key")
                     return None
                 else:
+                    # Detect "Market closed" in 404 responses
+                    if resp.status_code == 404:
+                        try:
+                            body = resp.json()
+                            errmsg = body.get("errmsg", "")
+                            if "Market closed" in errmsg:
+                                raise MarketClosedError(errmsg)
+                        except (ValueError, KeyError):
+                            pass
                     logger.error(
                         "MarketData API error %d: %s",
                         resp.status_code,

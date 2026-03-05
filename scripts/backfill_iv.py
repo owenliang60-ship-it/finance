@@ -27,6 +27,7 @@ sys.path.insert(0, str(project_root))
 
 from config.settings import BENCHMARK_SYMBOLS, MARKETDATA_API_KEY
 from src.data.market_store import get_store
+from src.data.marketdata_client import MarketClosedError
 from terminal.options.iv_tracker import compute_hv
 
 logging.basicConfig(
@@ -153,11 +154,16 @@ def backfill(args):
     # Track consecutive no_data per symbol to skip bad symbols early
     consecutive_nodata = {}  # symbol -> consecutive no_data count
     skip_symbols = set()     # symbols to skip (no options on MarketData)
+    market_closed_dates = set()  # dates where market is closed (holidays)
     NODATA_SKIP_THRESHOLD = 5  # skip after N consecutive no_data
 
     start_time = datetime.now()
 
     for day_idx, date in enumerate(trading_days):
+        # Skip known market-closed dates
+        if date in market_closed_dates:
+            continue
+
         for sym_idx, symbol in enumerate(symbols):
             # Skip symbols known to have no options data
             if symbol in skip_symbols:
@@ -180,6 +186,11 @@ def backfill(args):
                     logger.info(
                         "Skipped symbols (no options data): %s",
                         ", ".join(sorted(skip_symbols)),
+                    )
+                if market_closed_dates:
+                    logger.info(
+                        "Market closed dates detected: %s",
+                        ", ".join(sorted(market_closed_dates)),
                     )
                 _print_summary(
                     start_time, processed, skipped, success,
@@ -221,6 +232,18 @@ def backfill(args):
                 )
                 success += 1
 
+            except MarketClosedError:
+                # Market closed on this date — skip entire date, don't penalize symbol
+                credits_used += 1
+                processed += 1
+                market_closed_dates.add(date)
+                logger.info(
+                    "Market closed on %s — skipping rest of date "
+                    "(saved %d API calls)",
+                    date, len(symbols) - sym_idx - 1,
+                )
+                break  # skip remaining symbols for this date
+
             except Exception as e:
                 failures += 1
                 processed += 1
@@ -256,6 +279,12 @@ def backfill(args):
         logger.info(
             "Skipped symbols (no options data): %s",
             ", ".join(sorted(skip_symbols)),
+        )
+    if market_closed_dates:
+        logger.info(
+            "Market closed dates detected (%d): %s",
+            len(market_closed_dates),
+            ", ".join(sorted(market_closed_dates)),
         )
     _print_summary(
         start_time, processed, skipped, success,
