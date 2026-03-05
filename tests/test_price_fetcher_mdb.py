@@ -130,11 +130,10 @@ class TestGetDailyPricesDf:
 # ---------------------------------------------------------------------------
 
 class TestLoadPriceCacheRouting:
-    """Test that load_price_cache() reads from market.db with CSV fallback."""
+    """Test that load_price_cache() reads from market.db."""
 
-    @patch("src.data.price_fetcher._load_price_cache_csv")
-    def test_reads_mdb_when_data_exists(self, mock_csv):
-        """When market.db has data, should NOT fall back to CSV."""
+    def test_reads_mdb_when_data_exists(self):
+        """When market.db has data, returns it."""
         from src.data.price_fetcher import load_price_cache
 
         fake_df = _make_price_df(5)
@@ -146,15 +145,10 @@ class TestLoadPriceCacheRouting:
 
         assert result is not None
         assert len(result) == 5
-        mock_csv.assert_not_called()
 
-    @patch("src.data.price_fetcher._load_price_cache_csv")
-    def test_fallback_csv_when_db_empty(self, mock_csv):
-        """When market.db returns None, should fall back to CSV."""
+    def test_returns_none_when_db_empty(self):
+        """When market.db returns None, returns None."""
         from src.data.price_fetcher import load_price_cache
-
-        csv_df = _make_price_df(3)
-        mock_csv.return_value = csv_df
 
         fake_store = MagicMock()
         fake_store.get_daily_prices_df.return_value = None
@@ -162,23 +156,16 @@ class TestLoadPriceCacheRouting:
         with patch("src.data.market_store.get_store", return_value=fake_store):
             result = load_price_cache("AAPL")
 
-        mock_csv.assert_called_once_with("AAPL")
-        assert result is not None
-        assert len(result) == 3
+        assert result is None
 
-    @patch("src.data.price_fetcher._load_price_cache_csv")
-    def test_fallback_csv_when_db_error(self, mock_csv):
-        """When market.db raises exception, should fall back to CSV."""
+    def test_returns_none_when_db_error(self):
+        """When market.db raises exception, returns None."""
         from src.data.price_fetcher import load_price_cache
-
-        csv_df = _make_price_df(2)
-        mock_csv.return_value = csv_df
 
         with patch("src.data.market_store.get_store", side_effect=Exception("DB error")):
             result = load_price_cache("AAPL")
 
-        mock_csv.assert_called_once_with("AAPL")
-        assert result is not None
+        assert result is None
 
     def test_get_price_df_via_mdb(self):
         """End-to-end: get_price_df() routes through load_price_cache → market.db."""
@@ -196,11 +183,11 @@ class TestLoadPriceCacheRouting:
 
 
 # ---------------------------------------------------------------------------
-# Tests for save_price_cache() write path flip (P2.3)
+# Tests for save_price_cache() — market.db only (P4: CSV retired)
 # ---------------------------------------------------------------------------
 
 class TestSavePriceCacheWritePath:
-    """Test that save_price_cache writes to market.db first, CSV second."""
+    """Test that save_price_cache writes to market.db."""
 
     def test_db_write_failure_propagates(self):
         """When market.db write fails, exception should propagate."""
@@ -214,43 +201,15 @@ class TestSavePriceCacheWritePath:
             with pytest.raises(Exception, match="DB write error"):
                 save_price_cache("AAPL", df)
 
-    def test_csv_write_failure_silent(self, tmp_path):
-        """When CSV write fails, should log warning but not raise."""
+    def test_db_write_succeeds(self):
+        """Normal case: market.db write succeeds."""
         from src.data.price_fetcher import save_price_cache
 
         df = _make_price_df(3)
         fake_store = MagicMock()
         fake_store.upsert_daily_prices_df.return_value = 3
 
-        with patch("src.data.market_store.get_store", return_value=fake_store), \
-             patch("src.data.price_fetcher.PRICE_DIR", tmp_path / "nonexistent" / "deep"):
-            # CSV write will fail because parent dir doesn't exist
-            # (we patched PRICE_DIR.mkdir to not be called first)
-            # Actually PRICE_DIR.mkdir is called, let's make to_csv fail
-            pass
-
-        # Simpler approach: mock to_csv to raise
-        with patch("src.data.market_store.get_store", return_value=fake_store), \
-             patch("pandas.DataFrame.to_csv", side_effect=OSError("disk full")):
-            # Should NOT raise despite CSV write failure
+        with patch("src.data.market_store.get_store", return_value=fake_store):
             save_price_cache("AAPL", df)
 
-        # DB write should have been called
-        fake_store.upsert_daily_prices_df.assert_called()
-
-    def test_both_writes_succeed(self, tmp_path):
-        """Normal case: both market.db and CSV writes succeed."""
-        from src.data.price_fetcher import save_price_cache
-
-        df = _make_price_df(3)
-        fake_store = MagicMock()
-        fake_store.upsert_daily_prices_df.return_value = 3
-
-        with patch("src.data.market_store.get_store", return_value=fake_store), \
-             patch("src.data.price_fetcher.PRICE_DIR", tmp_path):
-            save_price_cache("AAPL", df)
-
-        # DB was called
         fake_store.upsert_daily_prices_df.assert_called_once()
-        # CSV was written
-        assert (tmp_path / "AAPL.csv").exists()

@@ -1,5 +1,5 @@
 """
-美股数据适配器 — 加载 market.db 量价数据 (CSV fallback) + 复用 RS 计算
+美股数据适配器 — 加载 market.db 量价数据 + 复用 RS 计算
 """
 
 import logging
@@ -14,7 +14,7 @@ class USStocksAdapter:
     """
     美股数据适配器
 
-    加载 market.db 量价数据 (CSV fallback)，提供:
+    加载 market.db 量价数据，提供:
     - 价格数据加载 (全量 + 按日期切片)
     - RS 计算函数路由
     - 交易日期序列
@@ -44,7 +44,7 @@ class USStocksAdapter:
             symbols = self._discover_symbols()
 
         for sym in symbols:
-            df = self._load_csv(sym)
+            df = self._load_prices(sym)
             if df is not None and len(df) >= 70:
                 self._price_cache[sym] = df
 
@@ -74,7 +74,7 @@ class USStocksAdapter:
         Returns:
             [(date_str, close_price), ...]
         """
-        df = self._load_csv(symbol)
+        df = self._load_prices(symbol)
         if df is None or df.empty:
             logger.warning(f"基准 {symbol} 数据不可用")
             return []
@@ -154,35 +154,19 @@ class USStocksAdapter:
     # ── 内部方法 ──────────────────────────────────────
 
     def _discover_symbols(self) -> List[str]:
-        """从 market.db 发现有价格数据的股票 (CSV fallback)"""
+        """从 market.db 发现有价格数据的股票"""
         try:
             from src.data.market_store import get_store
             store = get_store()
             symbols = store.get_symbols("daily_price")
             symbols = [s for s in symbols if s not in ("SPY", "QQQ")]
-            if symbols:
-                return symbols
+            return symbols
         except Exception as e:
             logger.warning(f"market.db 发现股票失败: {e}")
+            return []
 
-        # CSV fallback
-        try:
-            from config.settings import PRICE_DIR
-            if PRICE_DIR.exists():
-                symbols = sorted(
-                    f.stem for f in PRICE_DIR.glob("*.csv")
-                    if f.stem not in ("SPY", "QQQ")
-                )
-                if symbols:
-                    logger.info(f"CSV fallback: 发现 {len(symbols)} 只股票")
-                    return symbols
-        except Exception as e:
-            logger.warning(f"CSV fallback 发现股票也失败: {e}")
-
-        return []
-
-    def _load_csv(self, symbol: str) -> Optional[pd.DataFrame]:
-        """加载单只股票的量价数据 (market.db → CSV fallback)"""
+    def _load_prices(self, symbol: str) -> Optional[pd.DataFrame]:
+        """加载单只股票的量价数据 (market.db)"""
         try:
             from src.data.price_fetcher import get_price_df
             df = get_price_df(symbol, max_age_days=0)

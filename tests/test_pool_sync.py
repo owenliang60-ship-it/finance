@@ -44,7 +44,6 @@ class TestRefreshUniversePoolSync:
         with patch("src.data.pool_manager.POOL_DIR", pool_dir), \
              patch("src.data.pool_manager.UNIVERSE_FILE", pool_dir / "universe.json"), \
              patch("src.data.pool_manager.HISTORY_FILE", pool_dir / "pool_history.json"), \
-             patch("src.data.pool_manager.PRICE_DIR", price_dir), \
              patch("src.data.pool_manager.FUNDAMENTAL_DIR", fundamental_dir), \
              patch("src.data.pool_manager.fmp_client") as mock_fmp:
             mock_fmp.get_large_cap_stocks.return_value = fake_stocks

@@ -61,7 +61,7 @@
 
 - 同步脚本: `./sync_to_cloud.sh [--pull|--push|--sync|--status]`
 - 安全检查: health_check 门卫 + 文件大小 50% 熔断 + 云端验证
-- CSV 价格文件: **退役中**（market.db 为主写入源，CSV 副写保留中，即将删除）
+- CSV 价格文件: **已退役**（P4 完成，market.db 为唯一数据源）
 
 ### 数据验证三层架构
 

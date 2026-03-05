@@ -13,7 +13,7 @@ from typing import Dict, List, Any, Tuple
 import sys
 sys.path.insert(0, str(__file__).rsplit("/src", 1)[0])
 
-from config.settings import POOL_DIR, PRICE_DIR, FUNDAMENTAL_DIR
+from config.settings import POOL_DIR, FUNDAMENTAL_DIR
 from src.data.pool_manager import load_universe, get_symbols
 from src.data.price_fetcher import load_price_cache, validate_price_data
 from src.data.fundamental_fetcher import get_profile, get_ratios, get_income
