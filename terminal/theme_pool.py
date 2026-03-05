@@ -42,7 +42,7 @@ def expand_pool_from_attention(
     dry_run: bool = False,
 ) -> Dict:
     """
-    热股不在池 -> FMP profile -> price CSV -> 加入 universe.json
+    热股不在池 -> FMP profile -> 获取价格数据 -> 加入 universe.json
 
     Args:
         hot_tickers: Engine B 返回的热门 ticker 列表

@@ -6,7 +6,7 @@ Core functions:
 - get_iv_rank(): (current - 52w_low) / (52w_high - 52w_low) × 100
 - get_iv_percentile(): % of days IV was below current over lookback
 - get_iv_history_summary(): One-stop IV snapshot for a symbol
-- compute_hv(): Historical (realized) volatility from price CSV data
+- compute_hv(): Historical (realized) volatility from price data
 """
 import logging
 import math
@@ -25,7 +25,7 @@ def compute_hv(
     """Compute historical (realized) volatility from price data.
 
     Uses close-to-close log returns, annualized (×sqrt(252)).
-    Reads from market.db (via get_price_df) with CSV fallback.
+    Reads from market.db via get_price_df().
 
     Args:
         symbol: Stock ticker

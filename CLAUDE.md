@@ -79,7 +79,7 @@
 ### 云端部署
 - SSH 别名: `aliyun`
 - 部署目录: `/root/workspace/Finance/`
-- 环境变量: `/root/workspace/Finance/.env`（必须包含 `FINANCE_ENV=cloud`，控制云端跳过 CSV 副写）
+- 环境变量: `/root/workspace/Finance/.env`（必须包含 `FINANCE_ENV=cloud`）
 - 代码部署: 云端 06:25 自动 `git pull`（不再用 rsync 同步代码）
 
 ### 定时任务

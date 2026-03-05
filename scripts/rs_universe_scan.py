@@ -4,7 +4,7 @@
 未来资本 RS Universe Scan — 全市场动量排名
 
 对美股 $10B+ 市值的所有股票做 RS 动量排名，寻找强势股。
-池内已有缓存的股票直接用本地 CSV，池外股票调用 FMP API 获取 4 个月数据。
+池内已有缓存的股票直接用 market.db，池外股票调用 FMP API 获取 4 个月数据。
 
 用法:
     python scripts/rs_universe_scan.py                   # 默认 $10B+
@@ -26,7 +26,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import (
-    DATA_DIR, SCANS_DIR, PRICE_DIR,
+    DATA_DIR, SCANS_DIR,
     TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
 )
 from src.data import get_price_df, get_symbols

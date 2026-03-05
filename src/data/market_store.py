@@ -435,7 +435,7 @@ class MarketStore:
         return self._bulk_upsert("daily_price", symbol, rows, convert=True)
 
     def upsert_daily_prices_df(self, symbol: str, df: pd.DataFrame) -> int:
-        """Upsert daily prices from a DataFrame (as stored in CSV cache)."""
+        """Upsert daily prices from a DataFrame."""
         if df is None or df.empty:
             return 0
         records = df.to_dict("records")
@@ -465,7 +465,7 @@ class MarketStore:
 
     def get_daily_prices_df(self, symbol: str,
                             limit: int = 0) -> Optional[pd.DataFrame]:
-        """Return daily prices as a DataFrame matching CSV cache format.
+        """Return daily prices as a DataFrame.
 
         Returns DataFrame with columns:
             ["date", "open", "high", "low", "close", "volume", "change", "changePercent"]
@@ -478,11 +478,11 @@ class MarketStore:
 
         df = pd.DataFrame(rows)
 
-        # Drop symbol column (CSV format doesn't include it)
+        # Drop symbol column (not part of the standard price columns)
         if "symbol" in df.columns:
             df = df.drop(columns=["symbol"])
 
-        # Rename change_pct → changePercent to match CSV convention
+        # Rename change_pct → changePercent to match PRICE_COLUMNS convention
         if "change_pct" in df.columns:
             df = df.rename(columns={"change_pct": "changePercent"})
 
