@@ -14,11 +14,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 @pytest.fixture
 def mock_healthy_data(tmp_path, monkeypatch):
     """创建一个健康的 data/ 目录，所有检查都应 PASS。"""
-    price_dir = tmp_path / "price"
     fundamental_dir = tmp_path / "fundamental"
     pool_dir = tmp_path / "pool"
 
-    price_dir.mkdir()
     fundamental_dir.mkdir()
     pool_dir.mkdir()
 
@@ -29,12 +27,7 @@ def mock_healthy_data(tmp_path, monkeypatch):
     universe = [{"symbol": s} for s in symbols]
     (pool_dir / "universe.json").write_text(json.dumps(universe))
 
-    # 价格 CSV (所有都有, 最新日期是今天)
     today = datetime.now().strftime("%Y-%m-%d")
-    for s in symbols:
-        (price_dir / f"{s}.csv").write_text(
-            f"date,open,high,low,close,volume\n{today},100,105,99,103,1000000\n"
-        )
 
     # 基本面 JSON
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -74,7 +67,6 @@ def mock_healthy_data(tmp_path, monkeypatch):
     # Monkeypatch
     import src.data.data_health as health
     monkeypatch.setattr(health, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(health, "PRICE_DIR", price_dir)
     monkeypatch.setattr(health, "FUNDAMENTAL_DIR", fundamental_dir)
     monkeypatch.setattr(health, "POOL_DIR", pool_dir)
     monkeypatch.setattr(health, "UNIVERSE_FILE", pool_dir / "universe.json")
@@ -87,11 +79,9 @@ def mock_healthy_data(tmp_path, monkeypatch):
 @pytest.fixture
 def mock_unhealthy_data(tmp_path, monkeypatch):
     """创建一个有问题的 data/ 目录，应触发 WARN/FAIL。"""
-    price_dir = tmp_path / "price"
     fundamental_dir = tmp_path / "fundamental"
     pool_dir = tmp_path / "pool"
 
-    price_dir.mkdir()
     fundamental_dir.mkdir()
     pool_dir.mkdir()
 
@@ -103,13 +93,6 @@ def mock_unhealthy_data(tmp_path, monkeypatch):
     import os
     old_time = (datetime.now() - timedelta(days=25)).timestamp()
     os.utime(pool_dir / "universe.json", (old_time, old_time))
-
-    # 只有 30 个 CSV (60% 覆盖率)
-    old_date = (datetime.now() - timedelta(days=15)).strftime("%Y-%m-%d")
-    for s in symbols[:30]:
-        (price_dir / f"{s}.csv").write_text(
-            f"date,open,high,low,close,volume\n{old_date},100,105,99,103,1000000\n"
-        )
 
     # 基本面: 40天前更新
     old_str = (datetime.now() - timedelta(days=40)).strftime("%Y-%m-%d %H:%M:%S")
@@ -123,7 +106,6 @@ def mock_unhealthy_data(tmp_path, monkeypatch):
 
     import src.data.data_health as health
     monkeypatch.setattr(health, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(health, "PRICE_DIR", price_dir)
     monkeypatch.setattr(health, "FUNDAMENTAL_DIR", fundamental_dir)
     monkeypatch.setattr(health, "POOL_DIR", pool_dir)
     monkeypatch.setattr(health, "UNIVERSE_FILE", pool_dir / "universe.json")
@@ -190,26 +172,6 @@ class TestCheckPoolIntegrity:
         result = _check_pool_integrity()
         assert result.status == "WARN"
 
-
-class TestCheckPriceFreshness:
-    def test_fresh_price(self, mock_healthy_data):
-        from src.data.data_health import _check_price_freshness
-        result = _check_price_freshness()
-        assert result.status == "PASS"
-
-    def test_stale_price(self, tmp_path, monkeypatch):
-        import src.data.data_health as health
-        price_dir = tmp_path / "price"
-        price_dir.mkdir()
-        old_date = (datetime.now() - timedelta(days=20)).strftime("%Y-%m-%d")
-        (price_dir / "TEST.csv").write_text(
-            f"date,open,high,low,close,volume\n{old_date},100,105,99,103,1000000\n"
-        )
-        monkeypatch.setattr(health, "PRICE_DIR", price_dir)
-
-        from src.data.data_health import _check_price_freshness
-        result = _check_price_freshness()
-        assert result.status == "FAIL"
 
 
 class TestCheckCompanyDb:

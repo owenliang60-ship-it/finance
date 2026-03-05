@@ -147,7 +147,7 @@ class FreshnessReport:
 # ---------------------------------------------------------------------------
 
 def _get_current_price(symbol: str) -> Optional[float]:
-    """Get latest price from CSV cache."""
+    """Get latest price from market.db."""
     try:
         from src.data.price_fetcher import get_price_df
         df = get_price_df(symbol, max_age_days=7)

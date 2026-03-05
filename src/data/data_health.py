@@ -18,7 +18,7 @@ from typing import List, Optional
 
 import sys
 sys.path.insert(0, str(__file__).rsplit("/src", 1)[0])
-from config.settings import DATA_DIR, POOL_DIR, PRICE_DIR, FUNDAMENTAL_DIR, MARKET_DB_PATH
+from config.settings import DATA_DIR, POOL_DIR, FUNDAMENTAL_DIR, MARKET_DB_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -111,29 +111,6 @@ def _check_pool_integrity() -> CheckResult:
         return CheckResult("池完整性", "PASS", f"股票池 {count} 只")
 
 
-# TODO(P4): remove after CSV retirement — unreachable since P2
-def _check_price_coverage(symbols: List[str]) -> CheckResult:
-    """检查价格覆盖率: CSV 数量 vs 池数量。"""
-    if not symbols:
-        return CheckResult("价格覆盖率", "FAIL", "无股票池数据")
-
-    if not PRICE_DIR.exists():
-        return CheckResult("价格覆盖率", "FAIL", "价格目录不存在")
-
-    csv_symbols = {f.stem for f in PRICE_DIR.glob("*.csv")}
-    covered = sum(1 for s in symbols if s in csv_symbols)
-    ratio = covered / len(symbols)
-
-    if ratio >= 0.95:
-        return CheckResult("价格覆盖率", "PASS", f"{covered}/{len(symbols)} ({ratio:.0%})")
-    elif ratio >= 0.80:
-        missing = [s for s in symbols if s not in csv_symbols][:10]
-        return CheckResult("价格覆盖率", "WARN",
-                           f"{covered}/{len(symbols)} ({ratio:.0%}), 缺失: {missing}")
-    else:
-        return CheckResult("价格覆盖率", "FAIL",
-                           f"{covered}/{len(symbols)} ({ratio:.0%})")
-
 
 def _check_fundamental_coverage(symbols: List[str]) -> CheckResult:
     """检查基本面覆盖率: JSON 条目数 vs 池数量。"""
@@ -165,48 +142,6 @@ def _check_fundamental_coverage(symbols: List[str]) -> CheckResult:
     else:
         return CheckResult("基本面覆盖率", "FAIL", f"{covered}/{len(symbols)} ({ratio:.0%})")
 
-
-# TODO(P4): remove after CSV retirement — unreachable since P2
-def _check_price_freshness() -> CheckResult:
-    """检查价格新鲜度: 最新 CSV 的最后日期。"""
-    if not PRICE_DIR.exists():
-        return CheckResult("价格新鲜度", "FAIL", "价格目录不存在")
-
-    csv_files = list(PRICE_DIR.glob("*.csv"))
-    if not csv_files:
-        return CheckResult("价格新鲜度", "FAIL", "无价格 CSV 文件")
-
-    # 取 mtime 最新的 CSV，读最后一行的日期
-    latest_csv = max(csv_files, key=lambda f: f.stat().st_mtime)
-    try:
-        # 读最后几行找日期
-        with open(latest_csv, "r") as f:
-            lines = f.readlines()
-        if len(lines) < 2:
-            return CheckResult("价格新鲜度", "FAIL", f"{latest_csv.stem}: CSV 无数据行")
-
-        last_line = lines[-1].strip()
-        date_str = last_line.split(",")[0]
-        latest_date = datetime.strptime(date_str, "%Y-%m-%d")
-    except (ValueError, IndexError):
-        return CheckResult("价格新鲜度", "WARN", f"{latest_csv.stem}: 无法解析日期")
-
-    # 计算交易日距离
-    now = datetime.now()
-    calendar_days = (now - latest_date).days
-    # 粗略估计交易日 (减去周末)
-    weeks = calendar_days // 7
-    trading_days = calendar_days - (weeks * 2)
-
-    if trading_days <= 3:
-        return CheckResult("价格新鲜度", "PASS",
-                           f"最新: {date_str} ({latest_csv.stem}), ~{trading_days} 交易日前")
-    elif trading_days <= 7:
-        return CheckResult("价格新鲜度", "WARN",
-                           f"最新: {date_str} ({latest_csv.stem}), ~{trading_days} 交易日前")
-    else:
-        return CheckResult("价格新鲜度", "FAIL",
-                           f"最新: {date_str} ({latest_csv.stem}), ~{trading_days} 交易日前")
 
 
 def _check_fundamental_freshness() -> CheckResult:
@@ -283,28 +218,6 @@ def _check_company_db() -> CheckResult:
     except sqlite3.DatabaseError as e:
         return CheckResult("company.db", "FAIL", f"数据库损坏: {e}")
 
-
-# TODO(P4): remove after CSV retirement — unreachable since P2
-def _check_price_pool_consistency(symbols: List[str]) -> CheckResult:
-    """检查价格-池一致性: 池内每只股票都有对应 CSV。"""
-    if not symbols:
-        return CheckResult("价格-池一致性", "FAIL", "无股票池数据")
-
-    if not PRICE_DIR.exists():
-        return CheckResult("价格-池一致性", "FAIL", "价格目录不存在")
-
-    csv_symbols = {f.stem for f in PRICE_DIR.glob("*.csv")}
-    missing = [s for s in symbols if s not in csv_symbols]
-    ratio = (len(symbols) - len(missing)) / len(symbols)
-
-    if ratio >= 1.0:
-        return CheckResult("价格-池一致性", "PASS", "100% 一致")
-    elif ratio >= 0.90:
-        return CheckResult("价格-池一致性", "WARN",
-                           f"{ratio:.0%} 一致, 缺少: {missing[:10]}")
-    else:
-        return CheckResult("价格-池一致性", "FAIL",
-                           f"{ratio:.0%} 一致, 缺少 {len(missing)} 只")
 
 
 def _check_market_db() -> CheckResult:

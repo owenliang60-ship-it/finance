@@ -22,7 +22,7 @@ CORRELATION_CACHE_FILE = CORRELATION_CACHE_DIR / "matrix.json"
 
 def load_price_returns(symbol: str, window: int = 120) -> Optional[pd.Series]:
     """
-    Load daily returns for a symbol from price data (market.db → CSV fallback).
+    Load daily returns for a symbol from price data (market.db).
 
     Args:
         symbol: Stock ticker

@@ -61,7 +61,7 @@
 
 - 同步脚本: `./sync_to_cloud.sh [--pull|--push|--sync|--status]`
 - 安全检查: health_check 门卫 + 文件大小 50% 熔断 + 云端验证
-- CSV 价格文件: **退役中**（market.db 为主写入源，CSV 副写保留中，即将删除）
+- CSV 价格文件: **已退役**（P4 完成，market.db 为唯一数据源）
 
 ### 数据验证三层架构
 
@@ -79,7 +79,7 @@
 ### 云端部署
 - SSH 别名: `aliyun`
 - 部署目录: `/root/workspace/Finance/`
-- 环境变量: `/root/workspace/Finance/.env`（必须包含 `FINANCE_ENV=cloud`，控制云端跳过 CSV 副写）
+- 环境变量: `/root/workspace/Finance/.env`（必须包含 `FINANCE_ENV=cloud`）
 - 代码部署: 云端 06:25 自动 `git pull`（不再用 rsync 同步代码）
 
 ### 定时任务
