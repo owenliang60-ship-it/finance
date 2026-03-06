@@ -15,6 +15,7 @@ Usage:
 import logging
 import re
 import sqlite3
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -301,16 +302,18 @@ class MarketStore:
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path or _DEFAULT_DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn: Optional[sqlite3.Connection] = None
+        self._local = threading.local()
         self._init_db()
 
     def _get_conn(self) -> sqlite3.Connection:
-        if self._conn is None:
-            self._conn = sqlite3.connect(str(self.db_path))
-            self._conn.row_factory = sqlite3.Row
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.execute("PRAGMA foreign_keys=ON")
-        return self._conn
+        conn = getattr(self._local, 'conn', None)
+        if conn is None:
+            conn = sqlite3.connect(str(self.db_path))
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            self._local.conn = conn
+        return conn
 
     def _init_db(self) -> None:
         conn = self._get_conn()
@@ -337,9 +340,10 @@ class MarketStore:
         _TABLE_COLUMNS.pop("metrics_quarterly", None)
 
     def close(self) -> None:
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        conn = getattr(self._local, 'conn', None)
+        if conn:
+            conn.close()
+            self._local.conn = None
 
     # ---- Internal helpers ----
 
