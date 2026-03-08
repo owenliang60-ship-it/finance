@@ -28,8 +28,16 @@ FMP_API_KEY = os.environ.get("FMP_API_KEY", "")
 FMP_BASE_URL = "https://financialmodelingprep.com/stable"
 
 # 股票池配置
-MARKET_CAP_THRESHOLD = 100_000_000_000  # 1000亿美元
+MARKET_CAP_THRESHOLD = 100_000_000_000  # 1000亿美元（非科技板块）
+TECH_MARKET_CAP_THRESHOLD = 10_000_000_000  # 100亿美元（科技板块）
 EXCHANGES = ["NYSE", "NASDAQ"]  # 交易所过滤已足够，不再按注册国过滤
+
+# 广义科技板块定义（用于低阈值扩池）
+TECH_SECTORS = ["Technology"]
+TECH_COMM_INDUSTRIES = [
+    "Internet Content & Information",
+    "Electronic Gaming & Multimedia",
+]
 
 # 过滤策略：使用排除法 (EXCLUDED_SECTORS + EXCLUDED_INDUSTRIES + PERMANENTLY_EXCLUDED)
 # 不维护 ALLOWED 白名单，只维护黑名单——新行业默认进入，需要排除时手动加入

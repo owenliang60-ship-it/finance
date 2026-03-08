@@ -45,7 +45,7 @@
 
 ### 股票池
 - 美股大市值精选（市值 > $1000 亿），NYSE + NASDAQ
-- 当前: **145 只**
+- 数量由云端 `--pool` 周频自动刷新，以 `data/pool/universe.json` 为准
 - 排除行业: Consumer Defensive, Energy, Utilities, Basic Materials, Real Estate
 - 具体配置见 `config/settings.py`
 

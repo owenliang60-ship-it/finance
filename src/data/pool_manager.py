@@ -14,6 +14,7 @@ import sys
 sys.path.insert(0, str(__file__).rsplit("/src", 1)[0])
 from config.settings import (
     POOL_DIR, FUNDAMENTAL_DIR, MARKET_CAP_THRESHOLD,
+    TECH_MARKET_CAP_THRESHOLD, TECH_SECTORS, TECH_COMM_INDUSTRIES,
     EXCLUDED_SECTORS, EXCLUDED_INDUSTRIES, PERMANENTLY_EXCLUDED,
     BENCHMARK_SYMBOLS,
 )
@@ -144,15 +145,34 @@ def refresh_universe() -> Tuple[List[Dict], List[str], List[str]]:
     - 保留通过分析加入的股票 (source=analysis)
     返回: (新股票池, 新进入的股票, 退出的股票)
     """
-    logger.info(f"开始刷新股票池 (市值阈值: ${MARKET_CAP_THRESHOLD/1e9:.0f}B)")
+    logger.info(f"开始刷新股票池 (通用阈值: ${MARKET_CAP_THRESHOLD/1e9:.0f}B, 科技阈值: ${TECH_MARKET_CAP_THRESHOLD/1e9:.0f}B)")
 
-    # 获取最新大市值股票
+    # 1) 通用大市值股票
     raw_stocks = fmp_client.get_large_cap_stocks(MARKET_CAP_THRESHOLD)
     if not raw_stocks:
         logger.error("获取股票列表失败")
         return [], [], []
+    logger.info(f"通用池 API 返回 {len(raw_stocks)} 只股票")
 
-    logger.info(f"API 返回 {len(raw_stocks)} 只股票")
+    # 2) 科技板块扩池：低阈值筛选 Technology sector + 科技类 Communication Services
+    import time
+    from config.settings import API_CALL_INTERVAL
+    tech_stocks = fmp_client.get_large_cap_stocks(TECH_MARKET_CAP_THRESHOLD)
+    time.sleep(API_CALL_INTERVAL)
+    if tech_stocks:
+        tech_filtered = [
+            s for s in tech_stocks
+            if s.get("sector") in TECH_SECTORS
+            or (s.get("sector") == "Communication Services"
+                and s.get("industry") in TECH_COMM_INDUSTRIES)
+        ]
+        # 合并（去重由后续 _deduplicate_stocks 处理）
+        existing_syms = {s.get("symbol") for s in raw_stocks}
+        added = [s for s in tech_filtered if s.get("symbol") not in existing_syms]
+        raw_stocks.extend(added)
+        logger.info(f"科技扩池新增 {len(added)} 只 (阈值 ${TECH_MARKET_CAP_THRESHOLD/1e9:.0f}B)")
+
+    logger.info(f"合并后 API 返回 {len(raw_stocks)} 只股票")
 
     # 去重
     new_stocks = _deduplicate_stocks(raw_stocks)
