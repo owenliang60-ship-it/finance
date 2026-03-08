@@ -58,6 +58,35 @@ PERMANENTLY_EXCLUDED = {
     "BAC", "BBVA", "BMO", "BRK-A", "BRK-B", "C", "CB", "HDB",
     "HSBC", "IBKR", "IBN", "JPM", "MFG", "MUFG", "PGR", "RY",
     "SAN", "TD", "UBS", "WFC",
+    # --- 2026-03-08 扩池筛选后排除 ---
+    # PC/打印/外设/存储
+    "DELL", "HPQ", "HPE", "LOGI", "NTAP",
+    # 通信设备(非光通信)
+    "MSI", "NOK",
+    # 网络安全
+    "FTNT", "ZS", "CHKP", "GEN", "OKTA", "RBRK",
+    # 云 & 基础设施 SaaS
+    "SNOW", "DDOG", "MDB", "IOT", "CFLT", "NTNX", "AKAM", "FFIV",
+    "VRSN", "GDDY", "DT",
+    # 应用软件
+    "ADSK", "WDAY", "FICO", "TEAM", "PTC", "SSNC", "HUBS", "TYL",
+    "GWRE", "BSY", "ZM", "MSTR", "TTD", "FIG",
+    # 金融科技
+    "FISV", "FIS", "XYZ", "AFRM", "CPAY",
+    # IT 服务 & 咨询
+    "INFY", "CTSH", "WIT", "LDOS", "CACI", "GIB", "CDW", "IT", "SNX",
+    # 金融数据 & 后台
+    "BR", "JKHY",
+    # 互联网 & 平台
+    "DASH", "BIDU", "RDDT", "GRAB", "TWLO", "PINS", "Z",
+    # 游戏
+    "NTES", "EA", "RBLX", "TTWO", "BILI",
+    # 工业科技(非半导体设备)
+    "GRMN", "KEYS", "FTV", "TRMB", "J",
+    # 电子制造服务
+    "CLS", "JBL", "FLEX",
+    # 其他
+    "TOST", "TME", "KSPI", "BVC", "NXT", "IONQ",
 }
 
 # 永久排除的行业 (这些行业的股票永远不加入)
