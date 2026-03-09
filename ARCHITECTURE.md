@@ -209,7 +209,7 @@ commands.analyze_ticker("NVDA")
   │     ├─ macro_fetcher → FRED 16 series → MacroSnapshot (cached) │
   │     ├─ regime.classify() → CRISIS / RISK_OFF / ON / NEUTRAL    │
   │     ├─ macro_briefing.detect_signals() → 5 cross-asset signals │
-  │     ├─ fmp_tools.get_analyst_estimates("NVDA")                 │
+  │     ├─ yfinance → forward_estimates + forward_metadata           │
   │     ├─ fmp_tools.get_earnings_calendar("NVDA")                 │
   │     ├─ fmp_tools.get_insider_trades("NVDA")                    │
   │     └─ fmp_tools.get_stock_news("NVDA")                        │

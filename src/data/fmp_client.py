@@ -216,22 +216,6 @@ class FMPClient:
         data = self._request("earning_calendar", params)
         return data if isinstance(data, list) else []
 
-    def get_analyst_estimates(self, symbol: str, period: str = "quarter", limit: int = 8) -> List[Dict]:
-        """
-        获取分析师盈利预期
-
-        Args:
-            symbol: 股票代码
-            period: quarter 或 annual
-            limit: 返回数量
-        """
-        data = self._request("analyst-estimates", {
-            "symbol": symbol,
-            "period": period,
-            "limit": limit
-        })
-        return data if isinstance(data, list) else []
-
     def get_insider_trades(self, symbol: str, limit: int = 50) -> List[Dict]:
         """
         获取内部人交易记录

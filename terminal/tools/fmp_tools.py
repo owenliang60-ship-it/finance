@@ -414,37 +414,6 @@ class GetEarningsCalendarTool(BaseFMPTool):
         )
 
 
-class GetAnalystEstimatesTool(BaseFMPTool):
-    """Get analyst earnings estimates."""
-
-    @property
-    def metadata(self) -> ToolMetadata:
-        return ToolMetadata(
-            name="get_analyst_estimates",
-            category=ToolCategory.FUNDAMENTALS,
-            description="Get analyst earnings estimates",
-            provider="FMP",
-            requires_api_key=True,
-            api_key_env_var="FMP_API_KEY",
-        )
-
-    def execute(self, symbol: str, period: str = "quarter", limit: int = 8) -> List[Dict]:
-        """
-        Execute: get analyst estimates.
-
-        Args:
-            symbol: Stock ticker symbol
-            period: 'quarter' or 'annual'
-            limit: Number of periods to retrieve
-
-        Returns:
-            List of analyst estimate dicts
-        """
-        return self._execute_client_method(
-            "get_analyst_estimates", symbol=symbol, period=period, limit=limit
-        )
-
-
 class GetInsiderTradesTool(BaseFMPTool):
     """Get insider trading activity."""
 
@@ -560,7 +529,6 @@ def create_fmp_tools() -> List[FinanceTool]:
         GetBalanceSheetTool(),
         GetCashFlowTool(),
         GetKeyMetricsTool(),
-        GetAnalystEstimatesTool(),
         GetEarningsCalendarTool(),
         GetInsiderTradesTool(),
         GetAnalystRecommendationsTool(),
