@@ -1,6 +1,6 @@
-"""Tests for FMP enrichment in pipeline.py (P0).
+"""Tests for pipeline.py enrichment (forward estimates + FMP).
 
-Tests DataPackage FMP fields, collect_data() FMP enrichment, and format_context() rendering.
+Tests DataPackage fields, collect_data() enrichment, and format_context() rendering.
 """
 import pytest
 from datetime import datetime
@@ -10,73 +10,31 @@ from terminal.pipeline import DataPackage, collect_data
 
 
 # ---------------------------------------------------------------------------
-# Sample FMP data
+# Sample data
 # ---------------------------------------------------------------------------
 
-SAMPLE_ESTIMATES = [
-    # Future quarters (forward)
-    {
-        "date": "2027-10-31",
-        "estimatedEpsAvg": 1.25,
-        "estimatedEpsLow": 1.05,
-        "estimatedEpsHigh": 1.45,
-        "estimatedRevenueAvg": 58_000_000_000,
-        "estimatedNetIncomeAvg": 22_000_000_000,
-        "estimatedEbitdaAvg": 30_000_000_000,
-    },
-    {
-        "date": "2027-07-31",
-        "estimatedEpsAvg": 1.15,
-        "estimatedEpsLow": 0.98,
-        "estimatedEpsHigh": 1.32,
-        "estimatedRevenueAvg": 54_000_000_000,
-        "estimatedNetIncomeAvg": 20_000_000_000,
-        "estimatedEbitdaAvg": 27_000_000_000,
-    },
-    {
-        "date": "2027-04-30",
-        "estimatedEpsAvg": 1.05,
-        "estimatedEpsLow": 0.90,
-        "estimatedEpsHigh": 1.22,
-        "estimatedRevenueAvg": 50_000_000_000,
-    },
-    {
-        "date": "2027-01-31",
-        "estimatedEpsAvg": 0.98,
-        "estimatedEpsLow": 0.82,
-        "estimatedEpsHigh": 1.12,
-        "estimatedRevenueAvg": 47_000_000_000,
-    },
-    {
-        "date": "2026-10-31",
-        "estimatedEpsAvg": 0.95,
-        "estimatedEpsLow": 0.80,
-        "estimatedEpsHigh": 1.10,
-        "estimatedRevenueAvg": 46_000_000_000,
-    },
-    {
-        "date": "2026-04-30",
-        "estimatedEpsAvg": 0.88,
-        "estimatedEpsLow": 0.75,
-        "estimatedEpsHigh": 1.02,
-        "estimatedRevenueAvg": 44_500_000_000,
-    },
-    # Past quarters (recent)
-    {
-        "date": "2026-01-31",
-        "estimatedEpsAvg": 0.81,
-        "estimatedEpsLow": 0.70,
-        "estimatedEpsHigh": 0.95,
-        "estimatedRevenueAvg": 39_200_000_000,
-    },
-    {
-        "date": "2025-10-31",
-        "estimatedEpsAvg": 0.73,
-        "estimatedEpsLow": 0.62,
-        "estimatedEpsHigh": 0.85,
-        "estimatedRevenueAvg": 35_000_000_000,
-    },
+SAMPLE_FORWARD_ESTIMATES = [
+    {"date": "2026-03-09", "period": "0q",
+     "eps_avg": 1.95, "eps_low": 1.85, "eps_high": 2.16,
+     "eps_num_analysts": 29, "eps_growth": 0.1846,
+     "rev_avg": 109_079_879_710, "rev_num_analysts": 32, "rev_growth": 0.1439,
+     "growth_stock": 0.185, "growth_index": 0.133,
+     "eps_trend_current": 1.95454, "eps_trend_90d": 1.84290,
+     "eps_rev_up_30d": 25, "eps_rev_down_30d": 1},
+    {"date": "2026-03-09", "period": "+1q",
+     "eps_avg": 1.72, "eps_low": 1.59, "eps_high": 1.86,
+     "eps_num_analysts": 27, "eps_growth": 0.0986,
+     "rev_avg": 101_642_789_290, "rev_num_analysts": 29, "rev_growth": 0.0809},
 ]
+
+SAMPLE_FORWARD_METADATA = {
+    "date": "2026-03-09",
+    "price_target_current": 257.46,
+    "price_target_high": 350.0,
+    "price_target_low": 205.0,
+    "price_target_mean": 292.15,
+    "price_target_median": 300.0,
+}
 
 SAMPLE_INSIDER_TRADES = [
     {
@@ -134,30 +92,33 @@ SAMPLE_EARNINGS_CALENDAR = [
 
 
 # ---------------------------------------------------------------------------
-# TestDataPackageFMPFields
+# TestDataPackageFields
 # ---------------------------------------------------------------------------
 
-class TestDataPackageFMPFields:
-    """Test DataPackage FMP field defaults and creation."""
+class TestDataPackageFields:
+    """Test DataPackage field defaults and creation."""
 
     def test_default_values(self):
         pkg = DataPackage(symbol="NVDA")
-        assert pkg.analyst_estimates is None
+        assert pkg.forward_estimates is None
+        assert pkg.forward_metadata is None
         assert pkg.analyst_recommendations is None
         assert pkg.earnings_calendar is None
         assert pkg.insider_trades == []
         assert pkg.news == []
 
-    def test_creation_with_data(self):
+    def test_creation_with_forward_data(self):
         pkg = DataPackage(
             symbol="NVDA",
-            analyst_estimates=SAMPLE_ESTIMATES,
+            forward_estimates=SAMPLE_FORWARD_ESTIMATES,
+            forward_metadata=SAMPLE_FORWARD_METADATA,
             analyst_recommendations=SAMPLE_ANALYST_RECOMMENDATIONS,
             earnings_calendar=SAMPLE_EARNINGS_CALENDAR[:1],
             insider_trades=SAMPLE_INSIDER_TRADES,
             news=SAMPLE_NEWS,
         )
-        assert len(pkg.analyst_estimates) == 8
+        assert len(pkg.forward_estimates) == 2
+        assert pkg.forward_metadata["price_target_mean"] == 292.15
         assert len(pkg.analyst_recommendations) == 6
         assert len(pkg.earnings_calendar) == 1
         assert len(pkg.insider_trades) == 2
@@ -165,69 +126,55 @@ class TestDataPackageFMPFields:
 
 
 # ---------------------------------------------------------------------------
-# TestFormatContextFMPEnrichment
+# TestFormatContextForwardEstimates
+# ---------------------------------------------------------------------------
+
+class TestFormatContextForwardEstimates:
+    """Test format_context() renders forward estimates sections correctly."""
+
+    def test_forward_estimates_consensus_table(self):
+        pkg = DataPackage(symbol="NVDA", forward_estimates=SAMPLE_FORWARD_ESTIMATES)
+        ctx = pkg.format_context()
+        assert "### Forward Estimates (Consensus)" in ctx
+        assert "| 0q |" in ctx
+        assert "1.85/1.95/2.16" in ctx
+        assert "$109.1B" in ctx
+        assert "+18.5%" in ctx
+
+    def test_estimate_momentum_section(self):
+        pkg = DataPackage(symbol="NVDA", forward_estimates=SAMPLE_FORWARD_ESTIMATES)
+        ctx = pkg.format_context()
+        assert "### Estimate Momentum" in ctx
+        assert "25 up / 1 down" in ctx
+        assert "EPS Drift" in ctx
+        assert "outgrowing market" in ctx
+
+    def test_price_targets_section(self):
+        pkg = DataPackage(
+            symbol="NVDA",
+            forward_estimates=SAMPLE_FORWARD_ESTIMATES,
+            forward_metadata=SAMPLE_FORWARD_METADATA,
+        )
+        ctx = pkg.format_context()
+        assert "### Analyst Price Targets" in ctx
+        assert "$257.46" in ctx
+        assert "$292.15" in ctx
+        assert "Implied Upside: +13.5%" in ctx
+
+    def test_no_forward_estimates_no_sections(self):
+        pkg = DataPackage(symbol="NVDA")
+        ctx = pkg.format_context()
+        assert "### Forward Estimates" not in ctx
+        assert "### Estimate Momentum" not in ctx
+        assert "### Analyst Price Targets" not in ctx
+
+
+# ---------------------------------------------------------------------------
+# TestFormatContextFMPEnrichment (unchanged sections)
 # ---------------------------------------------------------------------------
 
 class TestFormatContextFMPEnrichment:
-    """Test format_context() renders FMP sections correctly."""
-
-    def test_forward_estimates_table(self):
-        """Forward estimates should render as a markdown table with all fields."""
-        pkg = DataPackage(symbol="NVDA", analyst_estimates=SAMPLE_ESTIMATES)
-        ctx = pkg.format_context()
-        assert "### Forward Estimates" in ctx
-        # Table headers
-        assert "| Quarter | EPS (Low/Avg/High) | Revenue | Net Income | EBITDA |" in ctx
-        # Forward quarters should be present (sorted by date ascending)
-        assert "2026-04-30" in ctx
-        assert "2026-10-31" in ctx
-        assert "2027-10-31" in ctx
-        # EPS data in table row
-        assert "0.75/0.88/1.02" in ctx
-        # Revenue formatting
-        assert "$44.5B" in ctx
-        # Net Income and EBITDA from enriched records
-        assert "$22.0B" in ctx   # estimatedNetIncomeAvg
-        assert "$30.0B" in ctx   # estimatedEbitdaAvg
-
-    def test_forward_estimates_missing_fields_graceful(self):
-        """Records without estimatedNetIncomeAvg/estimatedEbitdaAvg should show N/A."""
-        # Use only a record without optional fields
-        estimates = [{"date": "2099-12-31", "estimatedEpsAvg": 1.0,
-                      "estimatedEpsLow": 0.8, "estimatedEpsHigh": 1.2,
-                      "estimatedRevenueAvg": 10_000_000_000}]
-        pkg = DataPackage(symbol="TEST", analyst_estimates=estimates)
-        ctx = pkg.format_context()
-        assert "### Forward Estimates" in ctx
-        # Missing fields should be N/A
-        assert "N/A" in ctx
-
-    def test_forward_estimates_growth_trajectory(self):
-        """Growth trajectory should compute rev and EPS growth across forward quarters."""
-        pkg = DataPackage(symbol="NVDA", analyst_estimates=SAMPLE_ESTIMATES)
-        ctx = pkg.format_context()
-        assert "Growth Trajectory" in ctx
-        # First forward Q: 2026-04-30 rev=$44.5B, last: 2027-10-31 rev=$58B
-        # Growth = (58-44.5)/44.5 = 30.3%
-        assert "+30.3%" in ctx
-
-    def test_recent_estimates_section(self):
-        """Past quarters should render as compact list under Recent Analyst Estimates."""
-        pkg = DataPackage(symbol="NVDA", analyst_estimates=SAMPLE_ESTIMATES)
-        ctx = pkg.format_context()
-        assert "### Recent Analyst Estimates" in ctx
-        assert "2026-01-31" in ctx
-        assert "EPS 0.7/0.81/0.95" in ctx
-
-    def test_no_future_dates_skips_forward_section(self):
-        """When all estimates are in the past, Forward Estimates section is skipped."""
-        past_only = [{"date": "2020-01-31", "estimatedEpsAvg": 0.5,
-                      "estimatedEpsLow": 0.4, "estimatedEpsHigh": 0.6,
-                      "estimatedRevenueAvg": 10_000_000_000}]
-        pkg = DataPackage(symbol="TEST", analyst_estimates=past_only)
-        ctx = pkg.format_context()
-        assert "### Forward Estimates" not in ctx
-        assert "### Recent Analyst Estimates" in ctx
+    """Test format_context() renders FMP sections correctly (insider, news, ratings, earnings)."""
 
     def test_earnings_calendar_section(self):
         pkg = DataPackage(
@@ -261,21 +208,15 @@ class TestFormatContextFMPEnrichment:
         pkg = DataPackage(symbol="NVDA", analyst_recommendations=SAMPLE_ANALYST_RECOMMENDATIONS)
         ctx = pkg.format_context()
         assert "### Analyst Rating Distribution" in ctx
-        # Morgan Stanley appears twice but should be deduped (Overweight = Buy bucket)
-        # Buy: Morgan Stanley (Overweight) + Goldman Sachs (Buy) + Citi (Strong Buy) = 3
         assert "Buy/Outperform: 3" in ctx
-        # Hold: JP Morgan (Neutral) = 1
         assert "Hold/Neutral: 1" in ctx
-        # Sell: Barclays (Underweight) = 1
         assert "Sell/Underperform: 1" in ctx
-        # Total: 5 unique firms
         assert "Total Analysts: 5" in ctx
 
     def test_analyst_rating_distribution_percentages(self):
         """Percentages should be computed correctly."""
         pkg = DataPackage(symbol="NVDA", analyst_recommendations=SAMPLE_ANALYST_RECOMMENDATIONS)
         ctx = pkg.format_context()
-        # 3/5 = 60%, 1/5 = 20%, 1/5 = 20%
         assert "60%" in ctx
         assert "20%" in ctx
 
@@ -289,7 +230,8 @@ class TestFormatContextFMPEnrichment:
         pkg = DataPackage(symbol="NVDA")
         ctx = pkg.format_context()
         assert "### Forward Estimates" not in ctx
-        assert "### Recent Analyst Estimates" not in ctx
+        assert "### Estimate Momentum" not in ctx
+        assert "### Analyst Price Targets" not in ctx
         assert "### Analyst Rating Distribution" not in ctx
         assert "### Upcoming Earnings" not in ctx
         assert "### Recent Insider Activity" not in ctx
@@ -299,7 +241,6 @@ class TestFormatContextFMPEnrichment:
         """Insider trades should be sorted by transaction value (descending)."""
         pkg = DataPackage(symbol="NVDA", insider_trades=SAMPLE_INSIDER_TRADES)
         ctx = pkg.format_context()
-        # Jensen Huang trade ($13.05M) should appear before Colette Kress ($6.4M)
         jensen_pos = ctx.index("Jensen Huang")
         colette_pos = ctx.index("Colette Kress")
         assert jensen_pos < colette_pos
@@ -315,17 +256,16 @@ class TestFormatContextFMPEnrichment:
 
 
 # ---------------------------------------------------------------------------
-# TestCollectDataFMPEnrichment
+# TestCollectDataEnrichment
 # ---------------------------------------------------------------------------
 
-class TestCollectDataFMPEnrichment:
-    """Test collect_data() FMP enrichment integration."""
+class TestCollectDataEnrichment:
+    """Test collect_data() enrichment integration."""
 
     def _make_mock_registry(self, results=None):
         """Create a mock registry that returns configured results."""
         if results is None:
             results = {
-                "get_analyst_estimates": SAMPLE_ESTIMATES,
                 "get_analyst_recommendations": SAMPLE_ANALYST_RECOMMENDATIONS,
                 "get_insider_trades": SAMPLE_INSIDER_TRADES,
                 "get_stock_news": SAMPLE_NEWS,
@@ -345,11 +285,24 @@ class TestCollectDataFMPEnrichment:
     @mock.patch("src.indicators.engine.run_indicators")
     @mock.patch("src.data.data_query.get_stock_data")
     @mock.patch("terminal.tools.registry.get_registry")
-    def test_all_fmp_fields_populated(
-        self, mock_get_registry, mock_stock, mock_indicators,
-        mock_macro, mock_company
+    @mock.patch("src.data.yfinance_client.yfinance_client")
+    @mock.patch("src.data.market_store.get_store")
+    def test_forward_estimates_from_yfinance_fallback(
+        self, mock_get_store, mock_yf, mock_get_registry, mock_stock,
+        mock_indicators, mock_macro, mock_company
     ):
-        """All 4 FMP fields should be populated when registry works."""
+        """When market.db has no data, yfinance live fallback should be used."""
+        # market.db returns empty
+        mock_store = mock.MagicMock()
+        mock_store.get_latest_forward_estimates.return_value = []
+        mock_store.get_latest_forward_metadata.return_value = None
+        mock_get_store.return_value = mock_store
+
+        # yfinance returns data
+        mock_yf.get_forward_estimates.return_value = (
+            SAMPLE_FORWARD_ESTIMATES, SAMPLE_FORWARD_METADATA
+        )
+
         mock_registry = self._make_mock_registry()
         mock_get_registry.return_value = mock_registry
         mock_stock.return_value = {}
@@ -359,13 +312,8 @@ class TestCollectDataFMPEnrichment:
 
         pkg = collect_data("NVDA")
 
-        assert pkg.analyst_estimates == SAMPLE_ESTIMATES
-        assert pkg.analyst_recommendations == SAMPLE_ANALYST_RECOMMENDATIONS
-        assert pkg.insider_trades == SAMPLE_INSIDER_TRADES
-        assert pkg.news == SAMPLE_NEWS
-        # earnings_calendar is filtered by symbol
-        assert len(pkg.earnings_calendar) == 1
-        assert pkg.earnings_calendar[0]["symbol"] == "NVDA"
+        assert pkg.forward_estimates == SAMPLE_FORWARD_ESTIMATES
+        assert pkg.forward_metadata == SAMPLE_FORWARD_METADATA
 
     @mock.patch("terminal.pipeline.get_company_record")
     @mock.patch("terminal.macro_fetcher.get_macro_snapshot")
@@ -385,7 +333,6 @@ class TestCollectDataFMPEnrichment:
 
         pkg = collect_data("NVDA")
 
-        assert pkg.analyst_estimates is None
         assert pkg.analyst_recommendations is None
         assert pkg.earnings_calendar is None
         assert pkg.insider_trades == []
@@ -402,7 +349,6 @@ class TestCollectDataFMPEnrichment:
     ):
         """If one FMP tool fails, others should still work."""
         results = {
-            "get_analyst_estimates": SAMPLE_ESTIMATES,
             "get_insider_trades": SAMPLE_INSIDER_TRADES,
             "get_stock_news": SAMPLE_NEWS,
             "get_earnings_calendar": SAMPLE_EARNINGS_CALENDAR,
@@ -428,36 +374,4 @@ class TestCollectDataFMPEnrichment:
         # Insider trades should remain default (empty list) due to error
         assert pkg.insider_trades == []
         # Others should still be populated
-        assert pkg.analyst_estimates == SAMPLE_ESTIMATES
-        assert pkg.news == SAMPLE_NEWS
-
-    @mock.patch("terminal.pipeline.get_company_record")
-    @mock.patch("terminal.macro_fetcher.get_macro_snapshot")
-    @mock.patch("src.indicators.engine.run_indicators")
-    @mock.patch("src.data.data_query.get_stock_data")
-    @mock.patch("terminal.tools.registry.get_registry")
-    def test_tool_returns_failure(
-        self, mock_get_registry, mock_stock, mock_indicators,
-        mock_macro, mock_company
-    ):
-        """If a tool returns empty list, the field should stay at default."""
-        results = {
-            "get_analyst_estimates": [],  # empty = no data
-            "get_insider_trades": SAMPLE_INSIDER_TRADES,
-            "get_stock_news": SAMPLE_NEWS,
-            "get_earnings_calendar": SAMPLE_EARNINGS_CALENDAR,
-        }
-        mock_registry = self._make_mock_registry(results)
-        mock_get_registry.return_value = mock_registry
-        mock_stock.return_value = {}
-        mock_indicators.return_value = {}
-        mock_macro.return_value = None
-        mock_company.return_value = None
-
-        pkg = collect_data("NVDA")
-
-        # analyst_estimates should remain None (empty list = no data)
-        assert pkg.analyst_estimates is None
-        # Others should be populated
-        assert pkg.insider_trades == SAMPLE_INSIDER_TRADES
         assert pkg.news == SAMPLE_NEWS

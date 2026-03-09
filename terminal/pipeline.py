@@ -67,11 +67,15 @@ class DataPackage:
     macro_signals: list = field(default_factory=list)  # CrossAssetSignal dicts (fired only)
 
     # FMP enrichment (P0)
-    analyst_estimates: Optional[list] = None
+    analyst_estimates: Optional[list] = None  # DEPRECATED — kept for backward compat
     analyst_recommendations: Optional[list] = None
     earnings_calendar: Optional[list] = None
     insider_trades: list = field(default_factory=list)
     news: list = field(default_factory=list)
+
+    # Forward estimates (yfinance consensus)
+    forward_estimates: Optional[list] = None
+    forward_metadata: Optional[dict] = None
 
     @property
     def has_financials(self) -> bool:
@@ -195,62 +199,88 @@ class DataPackage:
         if self.macro is not None:
             sections.append(self.macro.format_for_prompt())
 
-        # Analyst consensus — split into forward (future) and recent (past)
-        if self.analyst_estimates:
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            forward = [e for e in self.analyst_estimates if e.get("date", "") >= today_str]
-            recent = [e for e in self.analyst_estimates if e.get("date", "") < today_str]
+        # Forward estimates (yfinance consensus)
+        if self.forward_estimates:
+            lines = ["### Forward Estimates (Consensus)"]
+            lines.append("")
+            lines.append("| Period | EPS (Low/Avg/High) | Analysts | Revenue | Analysts | EPS Growth | Rev Growth |")
+            lines.append("|--------|-------------------|----------|---------|----------|------------|------------|")
 
-            # Forward Estimates table
-            if forward:
-                forward_sorted = sorted(forward, key=lambda e: e.get("date", ""))
-                lines = ["### Forward Estimates"]
-                lines.append("")
-                lines.append("| Quarter | EPS (Low/Avg/High) | Revenue | Net Income | EBITDA |")
-                lines.append("|---------|-------------------|---------|------------|--------|")
-                for est in forward_sorted:
-                    date = est.get("date", "N/A")
-                    eps_low = est.get("estimatedEpsLow", "N/A")
-                    eps_avg = est.get("estimatedEpsAvg", "N/A")
-                    eps_high = est.get("estimatedEpsHigh", "N/A")
-                    rev = est.get("estimatedRevenueAvg")
-                    rev_str = f"${rev / 1e9:.1f}B" if rev else "N/A"
-                    ni = est.get("estimatedNetIncomeAvg")
-                    ni_str = f"${ni / 1e9:.1f}B" if ni else "N/A"
-                    ebitda = est.get("estimatedEbitdaAvg")
-                    ebitda_str = f"${ebitda / 1e9:.1f}B" if ebitda else "N/A"
-                    lines.append(
-                        f"| {date} | {eps_low}/{eps_avg}/{eps_high} | {rev_str} | {ni_str} | {ebitda_str} |"
+            for row in self.forward_estimates:
+                period = row.get("period", "?")
+                eps_l = row.get("eps_low")
+                eps_a = row.get("eps_avg")
+                eps_h = row.get("eps_high")
+                eps_str = f"{eps_l:.2f}/{eps_a:.2f}/{eps_h:.2f}" if all(v is not None for v in [eps_l, eps_a, eps_h]) else "N/A"
+                eps_n = row.get("eps_num_analysts", "N/A")
+                rev = row.get("rev_avg")
+                rev_str = f"${rev / 1e9:.1f}B" if rev else "N/A"
+                rev_n = row.get("rev_num_analysts", "N/A")
+                eps_g = row.get("eps_growth")
+                eps_g_str = f"{eps_g:+.1%}" if eps_g is not None else "N/A"
+                rev_g = row.get("rev_growth")
+                rev_g_str = f"{rev_g:+.1%}" if rev_g is not None else "N/A"
+                lines.append(f"| {period} | {eps_str} | {eps_n} | {rev_str} | {rev_n} | {eps_g_str} | {rev_g_str} |")
+
+            sections.append("\n".join(lines))
+
+        # Estimate momentum (pre-digested signals from eps_trend + eps_revisions)
+        if self.forward_estimates:
+            signals = []
+
+            # EPS revision momentum (from 0q and 0y)
+            for target_period in ("0q", "0y"):
+                row = next((r for r in self.forward_estimates if r.get("period") == target_period), None)
+                if row:
+                    up = row.get("eps_rev_up_30d")
+                    down = row.get("eps_rev_down_30d")
+                    if up is not None and down is not None:
+                        signals.append(f"**EPS Revision (30d)**: {up} up / {down} down ({target_period})")
+
+            # EPS drift (90d → current, from 0q)
+            row_0q = next((r for r in self.forward_estimates if r.get("period") == "0q"), None)
+            if row_0q:
+                current = row_0q.get("eps_trend_current")
+                ago_90 = row_0q.get("eps_trend_90d")
+                if current is not None and ago_90 is not None and ago_90 > 0:
+                    drift_pct = (current - ago_90) / ago_90 * 100
+                    direction = "trending higher" if drift_pct > 0 else "trending lower"
+                    signals.append(
+                        f"**EPS Drift (90d\u2192now)**: ${ago_90:.2f} \u2192 ${current:.2f} "
+                        f"({drift_pct:+.1f}%) \u2014 estimates {direction}"
                     )
 
-                # Growth trajectory (first vs last quarter)
-                first_rev = forward_sorted[0].get("estimatedRevenueAvg")
-                last_rev = forward_sorted[-1].get("estimatedRevenueAvg")
-                first_eps = forward_sorted[0].get("estimatedEpsAvg")
-                last_eps = forward_sorted[-1].get("estimatedEpsAvg")
-                if len(forward_sorted) >= 2 and first_rev and last_rev and first_rev > 0:
-                    rev_growth = (last_rev - first_rev) / first_rev * 100
-                    lines.append(f"\n**Growth Trajectory** (Q1→Q{len(forward_sorted)}): Revenue {rev_growth:+.1f}%")
-                    if first_eps and last_eps and first_eps > 0:
-                        eps_growth = (last_eps - first_eps) / first_eps * 100
-                        lines[-1] += f", EPS {eps_growth:+.1f}%"
-                sections.append("\n".join(lines))
-
-            # Recent estimates (compact list, most recent 2)
-            # FMP returns estimates in descending date order
-            if recent:
-                lines = ["### Recent Analyst Estimates"]
-                for est in recent[:2]:
-                    date = est.get("date", "N/A")
-                    eps_avg = est.get("estimatedEpsAvg", "N/A")
-                    eps_low = est.get("estimatedEpsLow", "N/A")
-                    eps_high = est.get("estimatedEpsHigh", "N/A")
-                    rev = est.get("estimatedRevenueAvg")
-                    rev_str = f"${rev / 1e9:.1f}B" if rev else "N/A"
-                    lines.append(
-                        f"- {date}: EPS {eps_low}/{eps_avg}/{eps_high} (low/avg/high), "
-                        f"Revenue {rev_str}"
+            # Growth vs index (from 0q)
+            if row_0q:
+                stock_g = row_0q.get("growth_stock")
+                index_g = row_0q.get("growth_index")
+                if stock_g is not None and index_g is not None:
+                    comparison = "outgrowing market" if stock_g > index_g else "underperforming market"
+                    signals.append(
+                        f"**Growth vs Index**: Stock {stock_g:+.1%} vs S&P {index_g:+.1%} (0q) "
+                        f"\u2014 {comparison}"
                     )
+
+            if signals:
+                sections.append("### Estimate Momentum\n\n- " + "\n- ".join(signals))
+
+        # Analyst price targets
+        if self.forward_metadata:
+            m = self.forward_metadata
+            current = m.get("price_target_current")
+            mean = m.get("price_target_mean")
+            median = m.get("price_target_median")
+            high = m.get("price_target_high")
+            low = m.get("price_target_low")
+            lines = ["### Analyst Price Targets"]
+            if current and mean and median:
+                lines.append(f"- Current: ${current:.2f} | Consensus: ${mean:.2f} (mean) / ${median:.2f} (median)")
+            if high and low:
+                lines.append(f"- Range: ${low:.2f} \u2014 ${high:.2f}")
+            if current and mean and current > 0:
+                upside = (mean - current) / current * 100
+                lines.append(f"- **Implied Upside: {upside:+.1f}%**")
+            if len(lines) > 1:
                 sections.append("\n".join(lines))
 
         # Analyst rating distribution (from grades data)
@@ -507,22 +537,49 @@ def collect_data(
         logger.warning(f"Tool registry not available: {e}")
         registry = None
 
-    if registry:
-        # Analyst estimates
-        try:
-            result = registry.execute("get_analyst_estimates", symbol=symbol, period="quarter", limit=8)
-            if result:
-                pkg.analyst_estimates = result
-                if scratchpad:
-                    scratchpad.log_tool_call(
-                        "get_analyst_estimates", {"symbol": symbol},
-                        {"count": len(pkg.analyst_estimates)}
-                    )
-        except Exception as e:
-            logger.warning(f"Analyst estimates fetch failed for {symbol}: {e}")
-            if scratchpad:
-                scratchpad.log_reasoning("error", f"Analyst estimates fetch failed: {e}")
+    # Forward estimates (from market.db, fallback to live yfinance)
+    try:
+        from src.data.market_store import get_store
+        store = get_store()
+        fe_rows = store.get_latest_forward_estimates(symbol)
+        fe_meta = store.get_latest_forward_metadata(symbol)
+        fe_source = "market.db"
 
+        # Staleness check: if data > 7 days old, fetch live
+        if fe_rows:
+            from datetime import timedelta
+            fetch_date = fe_rows[0].get("date", "")
+            try:
+                age = (datetime.now() - datetime.strptime(fetch_date, "%Y-%m-%d")).days
+            except ValueError:
+                age = 999
+            if age > 7:
+                logger.info(f"{symbol}: forward estimates stale ({age}d), fetching live")
+                fe_rows, fe_meta = None, None
+
+        if not fe_rows:
+            # Live yfinance fallback (read-only, no DB write)
+            from src.data.yfinance_client import yfinance_client
+            fe_rows_raw, fe_meta_raw = yfinance_client.get_forward_estimates(symbol)
+            fe_rows = fe_rows_raw if fe_rows_raw else None
+            fe_meta = fe_meta_raw if fe_meta_raw else None
+            fe_source = "yfinance_live"
+
+        if fe_rows:
+            pkg.forward_estimates = fe_rows
+            if scratchpad:
+                scratchpad.log_tool_call(
+                    "get_forward_estimates", {"symbol": symbol},
+                    {"count": len(fe_rows), "source": fe_source}
+                )
+        if fe_meta:
+            pkg.forward_metadata = fe_meta
+    except Exception as e:
+        logger.warning(f"Forward estimates fetch failed for {symbol}: {e}")
+        if scratchpad:
+            scratchpad.log_reasoning("error", f"Forward estimates fetch failed: {e}")
+
+    if registry:
         # Analyst recommendations (rating distribution)
         try:
             result = registry.execute("get_analyst_recommendations", symbol=symbol)
