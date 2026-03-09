@@ -31,6 +31,8 @@ def main():
     parser.add_argument("--symbols", type=str, help="指定股票代码，逗号分隔")
     parser.add_argument("--force", action="store_true", help="强制全量更新")
     parser.add_argument("--correlation", action="store_true", help="计算相关性矩阵")
+    parser.add_argument("--forward-estimates", action="store_true",
+                        help="更新前瞻预期数据 (yfinance)")
     parser.add_argument("--check", action="store_true", help="仅运行数据健康检查")
 
     args = parser.parse_args()
@@ -42,7 +44,8 @@ def main():
         sys.exit(0 if report.level != "FAIL" else 1)
 
     # 如果没有指定任何选项，显示帮助
-    if not any([args.all, args.pool, args.price, args.fundamental, args.correlation]):
+    if not any([args.all, args.pool, args.price, args.fundamental,
+                args.forward_estimates, args.correlation]):
         parser.print_help()
         return
 
@@ -100,6 +103,39 @@ def main():
             import traceback
             print(f"ERROR: metrics computation failed: {e}")
             traceback.print_exc()
+        print()
+
+    # 更新前瞻预期数据
+    if args.all or args.forward_estimates:
+        print("=" * 40)
+        print("Step 3b: 更新前瞻预期数据 (yfinance)")
+        print("=" * 40)
+        import time
+        from src.data.yfinance_client import yfinance_client
+        from src.data.market_store import get_store
+
+        store = get_store()
+        target_symbols = symbols or get_symbols()
+        success = 0
+        failed = []
+
+        for sym in target_symbols:
+            try:
+                estimates, metadata = yfinance_client.get_forward_estimates(sym)
+                if estimates:
+                    store.upsert_forward_estimates(sym, estimates)
+                if metadata:
+                    store.upsert_forward_metadata(sym, [metadata])
+                success += 1
+                print(f"  ✓ {sym}: {len(estimates)} periods")
+            except Exception as e:
+                failed.append(sym)
+                print(f"  ✗ {sym}: {e}")
+            time.sleep(1)  # polite to Yahoo
+
+        print(f"\n✅ 成功: {success}")
+        if failed:
+            print(f"❌ 失败: {failed}")
         print()
 
     # 计算相关性矩阵
