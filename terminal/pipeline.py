@@ -273,11 +273,11 @@ class DataPackage:
             high = m.get("price_target_high")
             low = m.get("price_target_low")
             lines = ["### Analyst Price Targets"]
-            if current and mean and median:
+            if current is not None and mean is not None and median is not None:
                 lines.append(f"- Current: ${current:.2f} | Consensus: ${mean:.2f} (mean) / ${median:.2f} (median)")
-            if high and low:
+            if high is not None and low is not None:
                 lines.append(f"- Range: ${low:.2f} \u2014 ${high:.2f}")
-            if current and mean and current > 0:
+            if current is not None and mean is not None and current > 0:
                 upside = (mean - current) / current * 100
                 lines.append(f"- **Implied Upside: {upside:+.1f}%**")
             if len(lines) > 1:
@@ -547,7 +547,6 @@ def collect_data(
 
         # Staleness check: if data > 7 days old, fetch live
         if fe_rows:
-            from datetime import timedelta
             fetch_date = fe_rows[0].get("date", "")
             try:
                 age = (datetime.now() - datetime.strptime(fetch_date, "%Y-%m-%d")).days

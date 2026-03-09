@@ -15,6 +15,7 @@ import math
 from datetime import date
 from typing import Any, Dict, List, Tuple
 
+import numpy as np
 import yfinance as yf
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,6 @@ def _safe_val(v: Any) -> Any:
     if v is None:
         return None
     # Convert numpy types to Python native (prevents SQLite blob storage)
-    import numpy as np
     if isinstance(v, (np.integer,)):
         return int(v)
     if isinstance(v, (np.floating,)):
