@@ -24,9 +24,15 @@ _PERIODS = ("0q", "+1q", "0y", "+1y")
 
 
 def _safe_val(v: Any) -> Any:
-    """Convert NaN/inf to None for SQLite compatibility."""
+    """Convert NaN/inf to None, numpy types to Python native for SQLite."""
     if v is None:
         return None
+    # Convert numpy types to Python native (prevents SQLite blob storage)
+    import numpy as np
+    if isinstance(v, (np.integer,)):
+        return int(v)
+    if isinstance(v, (np.floating,)):
+        v = float(v)
     if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
         return None
     return v
