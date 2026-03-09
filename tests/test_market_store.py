@@ -438,3 +438,76 @@ class TestEdgeCases:
         store.upsert_daily_prices_df("AAPL", df)
         rows = store.get_daily_prices("AAPL")
         assert rows[0]["open"] is None
+
+
+# ---------------------------------------------------------------------------
+# Forward Estimates
+# ---------------------------------------------------------------------------
+
+class TestForwardEstimates:
+    """Test forward_estimates and forward_metadata tables."""
+
+    def test_upsert_and_get_forward_estimates(self, tmp_path):
+        store = MarketStore(db_path=tmp_path / "test.db")
+        rows = [
+            {"symbol": "AAPL", "date": "2026-03-09", "period": "0q",
+             "eps_avg": 1.95, "eps_low": 1.85, "eps_high": 2.16,
+             "eps_num_analysts": 29, "rev_avg": 109_079_879_710.0,
+             "rev_growth": 0.1439, "eps_growth": 0.1846},
+            {"symbol": "AAPL", "date": "2026-03-09", "period": "+1q",
+             "eps_avg": 1.72, "eps_low": 1.59, "eps_high": 1.86,
+             "eps_num_analysts": 27, "rev_avg": 101_642_789_290.0,
+             "rev_growth": 0.0809, "eps_growth": 0.0986},
+        ]
+        count = store.upsert_forward_estimates("AAPL", rows)
+        assert count == 2
+
+        result = store.get_forward_estimates("AAPL")
+        assert len(result) == 2
+        assert result[0]["period"] in ("0q", "+1q")
+        assert result[0]["eps_avg"] in (1.95, 1.72)
+
+    def test_upsert_forward_estimates_replaces_on_conflict(self, tmp_path):
+        store = MarketStore(db_path=tmp_path / "test.db")
+        rows = [{"symbol": "AAPL", "date": "2026-03-09", "period": "0q",
+                 "eps_avg": 1.95, "eps_low": 1.85, "eps_high": 2.16}]
+        store.upsert_forward_estimates("AAPL", rows)
+
+        # Update same PK with new data
+        rows[0]["eps_avg"] = 2.05
+        store.upsert_forward_estimates("AAPL", rows)
+
+        result = store.get_forward_estimates("AAPL")
+        assert len(result) == 1
+        assert result[0]["eps_avg"] == 2.05
+
+    def test_get_latest_forward_estimates(self, tmp_path):
+        store = MarketStore(db_path=tmp_path / "test.db")
+        # Two different fetch dates
+        old = [{"symbol": "AAPL", "date": "2026-03-02", "period": "0q", "eps_avg": 1.90}]
+        new = [{"symbol": "AAPL", "date": "2026-03-09", "period": "0q", "eps_avg": 1.95}]
+        store.upsert_forward_estimates("AAPL", old)
+        store.upsert_forward_estimates("AAPL", new)
+
+        result = store.get_latest_forward_estimates("AAPL")
+        assert len(result) == 1
+        assert result[0]["date"] == "2026-03-09"
+        assert result[0]["eps_avg"] == 1.95
+
+    def test_upsert_and_get_forward_metadata(self, tmp_path):
+        store = MarketStore(db_path=tmp_path / "test.db")
+        rows = [{"symbol": "AAPL", "date": "2026-03-09",
+                 "price_target_current": 257.46, "price_target_high": 350.0,
+                 "price_target_low": 205.0, "price_target_mean": 292.15,
+                 "price_target_median": 300.0}]
+        count = store.upsert_forward_metadata("AAPL", rows)
+        assert count == 1
+
+        result = store.get_latest_forward_metadata("AAPL")
+        assert result is not None
+        assert result["price_target_mean"] == 292.15
+
+    def test_empty_data_returns_empty(self, tmp_path):
+        store = MarketStore(db_path=tmp_path / "test.db")
+        assert store.get_latest_forward_estimates("AAPL") == []
+        assert store.get_latest_forward_metadata("AAPL") is None

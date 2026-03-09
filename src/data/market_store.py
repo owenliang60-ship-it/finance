@@ -258,6 +258,38 @@ _SCHEMA = "\n\n".join([
 );""",
     "CREATE INDEX IF NOT EXISTS idx_snap_symbol ON options_snapshots(symbol, snapshot_date);",
     "CREATE INDEX IF NOT EXISTS idx_snap_exp ON options_snapshots(symbol, expiration);",
+
+    # -- Forward estimates (yfinance consensus) --
+    """CREATE TABLE IF NOT EXISTS forward_estimates (
+    symbol TEXT NOT NULL,
+    date TEXT NOT NULL,
+    period TEXT NOT NULL,
+    eps_avg REAL, eps_low REAL, eps_high REAL,
+    eps_year_ago REAL, eps_growth REAL, eps_num_analysts INTEGER,
+    rev_avg REAL, rev_low REAL, rev_high REAL,
+    rev_year_ago REAL, rev_growth REAL, rev_num_analysts INTEGER,
+    growth_stock REAL, growth_index REAL,
+    eps_trend_current REAL, eps_trend_7d REAL, eps_trend_30d REAL,
+    eps_trend_60d REAL, eps_trend_90d REAL,
+    eps_rev_up_7d INTEGER, eps_rev_up_30d INTEGER,
+    eps_rev_down_7d INTEGER, eps_rev_down_30d INTEGER,
+    PRIMARY KEY (symbol, date, period)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_fe_symbol ON forward_estimates(symbol);",
+    "CREATE INDEX IF NOT EXISTS idx_fe_date ON forward_estimates(date);",
+
+    # -- Forward metadata (price targets) --
+    """CREATE TABLE IF NOT EXISTS forward_metadata (
+    symbol TEXT NOT NULL,
+    date TEXT NOT NULL,
+    price_target_current REAL,
+    price_target_high REAL,
+    price_target_low REAL,
+    price_target_mean REAL,
+    price_target_median REAL,
+    PRIMARY KEY (symbol, date)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_fm_symbol ON forward_metadata(symbol);",
 ])
 
 # Pre-compute snake-case column sets per table for fast lookup
@@ -277,6 +309,7 @@ _VALID_TABLES = frozenset({
     "daily_price", "income_quarterly", "balance_sheet_quarterly",
     "cash_flow_quarterly", "ratios_annual", "metrics_quarterly",
     "iv_daily", "options_snapshots",
+    "forward_estimates", "forward_metadata",
 })
 
 
@@ -543,6 +576,64 @@ class MarketStore:
 
     def get_metrics(self, symbol: str, limit: int = 8) -> List[Dict[str, Any]]:
         return self._get_rows("metrics_quarterly", symbol, limit=limit)
+
+    # ---- Forward Estimates (yfinance) ----
+
+    def upsert_forward_estimates(self, symbol: str, rows: List[Dict]) -> int:
+        """Upsert forward estimate rows. PK: (symbol, date, period)."""
+        _validate_table("forward_estimates")
+        if not rows:
+            return 0
+        conn = self._get_conn()
+        valid_cols = _get_table_columns("forward_estimates", conn)
+        count = 0
+        with conn:
+            for row in rows:
+                data = {k: v for k, v in row.items() if k in valid_cols}
+                data["symbol"] = symbol.upper()
+                if "date" not in data or not data["date"]:
+                    continue
+                if "period" not in data or not data["period"]:
+                    continue
+                cols = [c for c in data if c in valid_cols]
+                placeholders = ", ".join(["?"] * len(cols))
+                col_names = ", ".join(cols)
+                values = [data[c] for c in cols]
+                conn.execute(
+                    f"INSERT OR REPLACE INTO forward_estimates ({col_names}) VALUES ({placeholders})",
+                    values,
+                )
+                count += 1
+        return count
+
+    def get_forward_estimates(self, symbol: str, limit: int = 0) -> List[Dict[str, Any]]:
+        """Get all forward estimate rows for a symbol, sorted by date DESC."""
+        return self._get_rows("forward_estimates", symbol, limit=limit)
+
+    def get_latest_forward_estimates(self, symbol: str) -> List[Dict[str, Any]]:
+        """Get forward estimates from the most recent fetch_date only."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT MAX(date) as max_date FROM forward_estimates WHERE symbol = ?",
+            [symbol.upper()],
+        ).fetchone()
+        if not row or not row["max_date"]:
+            return []
+        latest_date = row["max_date"]
+        rows = conn.execute(
+            "SELECT * FROM forward_estimates WHERE symbol = ? AND date = ? ORDER BY period",
+            [symbol.upper(), latest_date],
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def upsert_forward_metadata(self, symbol: str, rows: List[Dict]) -> int:
+        """Upsert forward metadata rows (price targets). PK: (symbol, date)."""
+        return self._bulk_upsert("forward_metadata", symbol, rows, convert=False)
+
+    def get_latest_forward_metadata(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get the most recent forward metadata row for a symbol."""
+        rows = self._get_rows("forward_metadata", symbol, limit=1)
+        return rows[0] if rows else None
 
     # ---- Screener ----
 
