@@ -1,10 +1,15 @@
 """
-Tests for Black-Scholes IV Solver.
+Tests for Black-Scholes Pricing, Greeks & IV Solver.
 """
+import math
 import pytest
 from terminal.options.iv_solver import (
     bs_price,
+    bs_delta,
+    bs_gamma,
+    bs_theta,
     bs_vega,
+    bs_rho,
     implied_volatility,
     compute_atm_iv_from_chain,
     _norm_cdf,
@@ -67,6 +72,135 @@ class TestBSVega:
     def test_vega_zero_at_expiry(self):
         vega = bs_vega(100, 100, 0, 0.05, 0.30)
         assert vega == 0.0
+
+
+class TestBSDelta:
+    """Delta sanity checks."""
+
+    def test_atm_call_near_half(self):
+        """ATM call delta ≈ 0.5."""
+        d = bs_delta(100, 100, 0.25, 0.05, 0.30, "call")
+        assert 0.45 < d < 0.65
+
+    def test_atm_put_near_neg_half(self):
+        """ATM put delta ≈ -0.5 (positive rates shift it toward -0.4)."""
+        d = bs_delta(100, 100, 0.25, 0.05, 0.30, "put")
+        assert -0.65 < d < -0.35
+
+    def test_deep_itm_call_near_one(self):
+        d = bs_delta(200, 100, 0.25, 0.05, 0.30, "call")
+        assert d > 0.99
+
+    def test_deep_otm_call_near_zero(self):
+        d = bs_delta(50, 100, 0.25, 0.05, 0.30, "call")
+        assert d < 0.01
+
+    def test_call_put_delta_relationship(self):
+        """Call delta - Put delta = 1 (approximately, for same inputs)."""
+        dc = bs_delta(100, 100, 0.25, 0.05, 0.30, "call")
+        dp = bs_delta(100, 100, 0.25, 0.05, 0.30, "put")
+        assert abs((dc - dp) - 1.0) < 1e-8
+
+    def test_expiry_call_itm(self):
+        assert bs_delta(110, 100, 0, 0.05, 0.30, "call") == 1.0
+
+    def test_expiry_call_otm(self):
+        assert bs_delta(90, 100, 0, 0.05, 0.30, "call") == 0.0
+
+    def test_expiry_put_itm(self):
+        assert bs_delta(90, 100, 0, 0.05, 0.30, "put") == -1.0
+
+    def test_expiry_put_otm(self):
+        assert bs_delta(110, 100, 0, 0.05, 0.30, "put") == 0.0
+
+
+class TestBSGamma:
+    """Gamma sanity checks."""
+
+    def test_atm_gamma_positive(self):
+        g = bs_gamma(100, 100, 0.25, 0.05, 0.30)
+        assert g > 0
+
+    def test_atm_gamma_highest(self):
+        """ATM gamma > OTM gamma."""
+        g_atm = bs_gamma(100, 100, 0.25, 0.05, 0.30)
+        g_otm = bs_gamma(80, 100, 0.25, 0.05, 0.30)
+        assert g_atm > g_otm
+
+    def test_gamma_increases_near_expiry(self):
+        """ATM gamma increases as T decreases."""
+        g_far = bs_gamma(100, 100, 1.0, 0.05, 0.30)
+        g_near = bs_gamma(100, 100, 0.01, 0.05, 0.30)
+        assert g_near > g_far
+
+    def test_gamma_zero_at_expiry(self):
+        assert bs_gamma(100, 100, 0, 0.05, 0.30) == 0.0
+
+    def test_gamma_numerical_check(self):
+        """Gamma ≈ (delta(S+h) - delta(S-h)) / (2h)."""
+        S, K, T, r, sigma = 100, 100, 0.25, 0.05, 0.30
+        h = 0.01
+        d_up = bs_delta(S + h, K, T, r, sigma, "call")
+        d_dn = bs_delta(S - h, K, T, r, sigma, "call")
+        numerical_gamma = (d_up - d_dn) / (2 * h)
+        analytical_gamma = bs_gamma(S, K, T, r, sigma)
+        assert abs(numerical_gamma - analytical_gamma) < 1e-4
+
+
+class TestBSTheta:
+    """Theta sanity checks."""
+
+    def test_long_call_theta_negative(self):
+        """Long call theta is negative (time decay)."""
+        t = bs_theta(100, 100, 0.25, 0.05, 0.30, "call")
+        assert t < 0
+
+    def test_long_put_theta_negative(self):
+        """Long put theta is negative."""
+        t = bs_theta(100, 100, 0.25, 0.05, 0.30, "put")
+        assert t < 0
+
+    def test_atm_theta_largest(self):
+        """ATM theta magnitude > OTM theta magnitude."""
+        t_atm = abs(bs_theta(100, 100, 0.25, 0.05, 0.30, "call"))
+        t_otm = abs(bs_theta(80, 100, 0.25, 0.05, 0.30, "call"))
+        assert t_atm > t_otm
+
+    def test_theta_zero_at_expiry(self):
+        assert bs_theta(100, 100, 0, 0.05, 0.30, "call") == 0.0
+
+    def test_theta_numerical_check(self):
+        """Theta ≈ (price(T-h) - price(T)) / h (per day)."""
+        S, K, T, r, sigma = 100, 100, 0.25, 0.05, 0.30
+        h = 1 / 365.0  # 1 day
+        p1 = bs_price(S, K, T, r, sigma, "call")
+        p2 = bs_price(S, K, T - h, r, sigma, "call")
+        numerical_theta = (p2 - p1) / 1.0  # per day (h = 1 day)
+        analytical_theta = bs_theta(S, K, T, r, sigma, "call")
+        assert abs(numerical_theta - analytical_theta) < 0.01
+
+
+class TestBSRho:
+    """Rho sanity checks."""
+
+    def test_call_rho_positive(self):
+        """Call rho is positive (higher rates → higher call value)."""
+        rho = bs_rho(100, 100, 0.25, 0.05, 0.30, "call")
+        assert rho > 0
+
+    def test_put_rho_negative(self):
+        """Put rho is negative."""
+        rho = bs_rho(100, 100, 0.25, 0.05, 0.30, "put")
+        assert rho < 0
+
+    def test_rho_zero_at_expiry(self):
+        assert bs_rho(100, 100, 0, 0.05, 0.30, "call") == 0.0
+
+    def test_rho_increases_with_dte(self):
+        """Longer DTE → larger rho magnitude."""
+        rho_short = abs(bs_rho(100, 100, 0.1, 0.05, 0.30, "call"))
+        rho_long = abs(bs_rho(100, 100, 1.0, 0.05, 0.30, "call"))
+        assert rho_long > rho_short
 
 
 class TestImpliedVolatility:

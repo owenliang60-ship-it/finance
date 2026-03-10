@@ -1,10 +1,13 @@
 """
-Black-Scholes IV Solver — 从期权链 bid/ask 反推 Implied Volatility
+Black-Scholes Pricing, Greeks & IV Solver
 
 纯 Python 实现，零外部依赖（math.erf for norm CDF），兼容云端 Python 3.10。
 
-用途: MarketData.app Starter 版历史 EOD 的 iv/Greeks 字段全是 None，
-但 bid/ask/strike/dte/underlyingPrice 都有 → 可用 BS 反推 IV。
+提供:
+- bs_price: European option pricing
+- bs_delta / bs_gamma / bs_theta / bs_vega / bs_rho: Greeks
+- implied_volatility: Newton-Raphson + bisection IV solver
+- compute_atm_iv_from_chain: 从 MarketData.app 链数据反推 ATM IV
 """
 import math
 import logging
@@ -83,6 +86,93 @@ def bs_vega(S: float, K: float, T: float, r: float, sigma: float) -> float:
     sqrt_T = math.sqrt(T)
     d1 = (math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqrt_T)
     return S * _norm_pdf(d1) * sqrt_T
+
+
+def bs_delta(
+    S: float, K: float, T: float, r: float, sigma: float, option_type: str
+) -> float:
+    """BS Delta (dPrice/dS).
+
+    Args:
+        S: underlying price
+        K: strike price
+        T: time to expiry in years
+        r: risk-free rate
+        sigma: volatility
+        option_type: 'call' or 'put'
+
+    Returns:
+        Delta: call [0, 1], put [-1, 0]
+    """
+    if T <= 0 or sigma <= 0:
+        if option_type == "call":
+            return 1.0 if S > K else 0.0
+        return -1.0 if S < K else 0.0
+
+    sqrt_T = math.sqrt(T)
+    d1 = (math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqrt_T)
+
+    if option_type == "call":
+        return _norm_cdf(d1)
+    return _norm_cdf(d1) - 1.0
+
+
+def bs_gamma(S: float, K: float, T: float, r: float, sigma: float) -> float:
+    """BS Gamma (dDelta/dS). Same for call and put.
+
+    Returns:
+        Gamma (delta sensitivity per $1 change in S)
+    """
+    if T <= 0 or sigma <= 0:
+        return 0.0
+    sqrt_T = math.sqrt(T)
+    d1 = (math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqrt_T)
+    return _norm_pdf(d1) / (S * sigma * sqrt_T)
+
+
+def bs_theta(
+    S: float, K: float, T: float, r: float, sigma: float, option_type: str
+) -> float:
+    """BS Theta (dPrice/dT), expressed as daily decay (÷ 365).
+
+    Returns:
+        Theta per calendar day (negative for long options)
+    """
+    if T <= 0 or sigma <= 0:
+        return 0.0
+    sqrt_T = math.sqrt(T)
+    d1 = (math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqrt_T)
+    d2 = d1 - sigma * sqrt_T
+
+    # First term: time decay of option premium
+    term1 = -(S * _norm_pdf(d1) * sigma) / (2.0 * sqrt_T)
+
+    if option_type == "call":
+        term2 = -r * K * math.exp(-r * T) * _norm_cdf(d2)
+    else:
+        term2 = r * K * math.exp(-r * T) * _norm_cdf(-d2)
+
+    # Convert annualized theta to per-calendar-day
+    return (term1 + term2) / 365.0
+
+
+def bs_rho(
+    S: float, K: float, T: float, r: float, sigma: float, option_type: str
+) -> float:
+    """BS Rho (dPrice/dr).
+
+    Returns:
+        Rho (price sensitivity per 1.0 change in r)
+    """
+    if T <= 0 or sigma <= 0:
+        return 0.0
+    sqrt_T = math.sqrt(T)
+    d1 = (math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqrt_T)
+    d2 = d1 - sigma * sqrt_T
+
+    if option_type == "call":
+        return K * T * math.exp(-r * T) * _norm_cdf(d2)
+    return -K * T * math.exp(-r * T) * _norm_cdf(-d2)
 
 
 def implied_volatility(

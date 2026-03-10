@@ -225,6 +225,128 @@ def format_strategy_comparison(strategies: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def format_probability_summary(prob: Dict[str, Any]) -> str:
+    """Format probability-weighted P&L summary (Phase 2 compact version).
+
+    Args:
+        prob: Output from compute_probability_summary()
+
+    Returns:
+        3-line compact summary string
+    """
+    epnl = prob.get("expected_pnl", 0)
+    win = prob.get("win_probability", 0)
+    median = prob.get("median_pnl", 0)
+    p25 = prob.get("pctl_25", 0)
+
+    sign = "+" if epnl >= 0 else ""
+    return (
+        "Expected P&L: {}{:.0f} | Win Prob: {:.0f}%\n"
+        "Median P&L: {}{:.0f} | Worst 25%: {}{:.0f}"
+    ).format(
+        sign, epnl,
+        win * 100,
+        "+" if median >= 0 else "", median,
+        "+" if p25 >= 0 else "", p25,
+    )
+
+
+def format_scenario_matrix(result: Dict[str, Any], strategy_name: str = "") -> str:
+    """Format full scenario analysis as markdown (Phase 3 expanded version).
+
+    Args:
+        result: Output from generate_scenario_matrix()
+        strategy_name: Display name for the strategy
+
+    Returns:
+        Formatted markdown string with P&L matrix, IV sensitivity, probability summary
+    """
+    lines = []
+    S = result.get("underlying_price", 0)
+    avg_iv = result.get("avg_iv", 0)
+    max_dte = result.get("max_dte", 0)
+    skew = result.get("skew_alpha", 0)
+
+    # Header
+    if strategy_name:
+        lines.append("### {} Scenario Analysis".format(strategy_name))
+    else:
+        lines.append("### Scenario Analysis")
+    lines.append("S=${:.2f} | IV={:.1f}% | DTE={} | Skew \u03b1={:.2f}".format(
+        S, avg_iv * 100, max_dte, skew
+    ))
+    lines.append("")
+
+    # P&L Matrix
+    price_points = result.get("price_points", [])
+    time_points = result.get("time_points", [])
+    pnl_matrix = result.get("pnl_matrix", {})
+    sigma_labels = result.get("sigma_labels", {})
+
+    # Header row: | Price (σ) | Entry | +7d | +14d | Expiry |
+    time_headers = []
+    for d in time_points:
+        if d == 0:
+            time_headers.append("Entry")
+        elif d == max_dte:
+            time_headers.append("Expiry")
+        else:
+            time_headers.append("+{}d".format(d))
+
+    header = "| Price | " + " | ".join(time_headers) + " |"
+    sep = "|------:" + "|------:" * len(time_points) + "|"
+    lines.append(header)
+    lines.append(sep)
+
+    for price in price_points:
+        label = sigma_labels.get(price, "")
+        price_col = "${:.0f} ({})".format(price, label)
+        values = []
+        for d in time_points:
+            pnl = pnl_matrix.get(price, {}).get(d, 0)
+            sign = "+" if pnl >= 0 else ""
+            values.append("{}{:.0f}".format(sign, pnl))
+        lines.append("| {} | {} |".format(price_col, " | ".join(values)))
+
+    lines.append("")
+
+    # IV Sensitivity
+    iv_sens = result.get("iv_sensitivity", {})
+    eval_day = result.get("iv_eval_day", 7)
+    if iv_sens:
+        lines.append("**IV Sensitivity** (+{}d, current price):".format(eval_day))
+        parts = []
+        for label, pnl in iv_sens.items():
+            sign = "+" if pnl >= 0 else ""
+            if pnl >= 0:
+                parts.append("IV {}: +${:.0f}".format(label, pnl))
+            else:
+                parts.append("IV {}: -${:.0f}".format(label, abs(pnl)))
+        lines.append("  " + " | ".join(parts))
+        lines.append("")
+
+    # Probability Summary
+    prob = result.get("probability_summary", {})
+    horizon = result.get("probability_horizon_days", 0)
+    if prob:
+        lines.append("**Probability-Weighted Summary** ({}d horizon):".format(horizon))
+        epnl = prob.get("expected_pnl", 0)
+        win = prob.get("win_probability", 0)
+        median = prob.get("median_pnl", 0)
+        p25 = prob.get("pctl_25", 0)
+        p75 = prob.get("pctl_75", 0)
+        lines.append("  E[P&L]: {}{:.0f} | Win Prob: {:.0f}%".format(
+            "+" if epnl >= 0 else "", epnl, win * 100
+        ))
+        lines.append("  25th: {}{:.0f} | Median: {}{:.0f} | 75th: {}{:.0f}".format(
+            "+" if p25 >= 0 else "", p25,
+            "+" if median >= 0 else "", median,
+            "+" if p75 >= 0 else "", p75,
+        ))
+
+    return "\n".join(lines)
+
+
 def format_trade_memo(memo: Dict[str, Any]) -> str:
     """Format a trade memo for the user.
 
