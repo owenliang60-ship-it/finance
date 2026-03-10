@@ -1,8 +1,8 @@
 # Architecture — Finance Workspace
 
-**未来资本 AI Trading Desk | Updated: 2026-03-04**
+**未来资本 AI Trading Desk | Updated: 2026-03-10**
 
-**Code Stats**: ~169 Python files, 1232 tests passing, 38,200+ lines
+**Code Stats**: ~170 Python files, 1,235+ tests passing, 38,200+ lines
 
 ---
 
@@ -147,10 +147,11 @@
 ║  ════════════ OPTIONS 层 (期权策略, ~1,200 lines) ════════════        ║
 ║                                                                        ║
 ║  ┌─────────── terminal/options/ ────────┐ ┌── knowledge/options/ ──┐   ║
-║  │ iv_tracker.py (180L) IV/HV/Rank     │ │ agent_profile.md       │   ║
-║  │ chain_analyzer.py (280L) 流动性+结构  │ │ strategies/ (24 files) │   ║
-║  │ commands.py (180L) 编排入口           │ │  _index.md 快速查找      │   ║
-║  │ formatter.py (280L) 展示格式          │ └────────────────────────┘   ║
+║  │ iv_tracker.py (280L) IV/HV/Rank     │ │ agent_profile.md       │   ║
+║  │ chain_analyzer.py (501L) 流动性+结构  │ │ strategies/ (24 files) │   ║
+║  │ scenario_analyzer (412L) BS场景分析   │ │  _index.md 快速查找      │   ║
+║  │ commands.py (181L) 编排入口           │ └────────────────────────┘   ║
+║  │ formatter.py (402L) 展示格式          │                              ║
 ║  └──────────────────────────────────────┘                              ║
 ║  ┌─── src/data/ ──────────────┐ ┌─── scripts/ ────────────────┐       ║
 ║  │ marketdata_client.py (250L)│ │ update_options_iv.py (cron) │       ║
@@ -788,6 +789,7 @@ python-dotenv       # Environment variables
 | Automated Sync (launchd pull + auto-push + metrics on cloud) | 2026-03-04 | 1,285 |
 | Forward Estimates: FMP→yfinance 迁移 (6 datasets + market.db + pipeline fallback) | 2026-03-09 | 1,285 |
 | Social Sentiment: Adanos 接入 (Reddit + X + weighted_buzz + attention_zscore + 晨报 Section G) | 2026-03-10 | 1,232 |
+| Options Scenario Analyzer: BS 概率加权 P&L + 多策略对比 | 2026-03-10 | 1,235 |
 
 ---
 

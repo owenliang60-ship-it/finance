@@ -4,7 +4,7 @@
 
 Manage a multi-million dollar US equity portfolio with professional research, risk monitoring, and trading discipline — powered by Claude and the Desk Model.
 
-**Code Stats**: ~167 Python files | 1,285 tests passing | 36,800+ lines
+**Code Stats**: ~170 Python files | 1,235+ tests passing | 38,200+ lines
 
 ---
 
@@ -28,17 +28,18 @@ Manage a multi-million dollar US equity portfolio with professional research, ri
 ║  │OPRMS    │ │FMP+   │ │RS rank │ │IV track │                    ║
 ║  │6 lens   │ │FRED+  │ │factor  │ │BS solver│                    ║
 ║  │debate   │ │MktData│ │study   │ │24 plays │                    ║
-║  │alpha    │ │       │ │        │ │         │                    ║
+║  │alpha    │ │Adanos │ │        │ │scenario │                    ║
 ║  └─────────┘ └───┬───┘ └────────┘ └─────────┘                   ║
 ║                  │                                               ║
 ║  ┌───────────────▼──────────────────────────────┐                ║
 ║  │              Storage Layer                    │                ║
 ║  │  market.db (cloud-owned) │ company.db (local) │                ║
-║  │  price+fundamental+IV    │ OPRMS+analysis     │                ║
+║  │  price+fundamental+IV+  │ OPRMS+analysis     │                ║
+║  │  social sentiment        │                    │                ║
 ║  └──────────────────────────────────────────────┘                ║
 ║                                                                  ║
 ║  ┌──────────── Cloud (Aliyun) ──────────────────┐                ║
-║  │  Daily cron: price 06:30 │ IV 06:50           │                ║
+║  │  Daily: price 06:30 │ IV 06:50 │ social 06:55 │                ║
 ║  │  Weekly: pool 08:00 │ fundamental+metrics 10:00│               ║
 ║  │  Auto git pull 06:25 │ launchd pull 09:00     │                ║
 ║  └───────────────────────────────────────────────┘                ║
@@ -70,7 +71,7 @@ Each database has a single owner — sync is always one-way copy, never conflict
 
 | Database | Owner | Contents | Sync |
 |----------|-------|----------|------|
-| **market.db** (31 MB) | Cloud | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, iv_daily, options_snapshots | Cloud → Local (pull) |
+| **market.db** (31 MB) | Cloud | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, iv_daily, options_snapshots, forward_estimates, forward_metadata, social_sentiment | Cloud → Local (pull) |
 | **company.db** (3.4 MB) | Local | companies, oprms_ratings, analyses, kill_conditions, situation_summary | Local → Cloud (push) |
 | **universe.json** | Both | Stock pool definitions | Bidirectional merge (union) |
 
@@ -78,9 +79,11 @@ Each database has a single owner — sync is always one-way copy, never conflict
 
 | Source | Data | Plan |
 |--------|------|------|
-| **FMP API** | Fundamentals, price, estimates, analyst grades, insider, news | Starter ($22/mo) |
+| **FMP API** | Fundamentals, price, analyst grades, insider, news | Starter ($22/mo) |
+| **yfinance** | Forward estimates (EPS/revenue consensus, price targets, EPS trend/revisions, growth) | Free |
 | **FRED API** | 16 macro series (yields, CPI, VIX, HY spread, etc.) | Free |
 | **MarketData.app** | Options chains, IV history | Starter ($12/mo) |
+| **Adanos** | Social sentiment (Reddit + X per ticker, 7-day rolling window) | Hobby ($20/mo) |
 
 ### Stock Pool
 - **Universe**: 145 US large-cap equities (market cap > $100B)
@@ -107,8 +110,10 @@ Each database has a single owner — sync is always one-way copy, never conflict
 | 06:30 | Price data update | Tue-Sat |
 | 06:45 | Dollar volume scan | Tue-Sat |
 | 06:50 | IV data update | Tue-Sat |
+| 06:55 | Social sentiment (Adanos) | Tue-Sat |
 | 08:00 | Stock pool refresh | Saturday |
 | 10:00 | Fundamental + metrics computation | Saturday |
+| 10:30 | Forward estimates (yfinance) | Saturday |
 
 ---
 
@@ -187,6 +192,7 @@ pip install -r requirements.txt
 # 2. Environment (.env)
 FMP_API_KEY=your_key_here
 MARKETDATA_API_KEY=your_key_here  # optional, for options
+ADANOS_API_KEY=your_key_here      # optional, for social sentiment
 
 # 3. Update data
 python scripts/update_data.py --all
@@ -230,6 +236,9 @@ python scripts/update_data.py --all
 | Deep Analysis enhancements (business overview + forward estimates) | 2026-02-28 | DONE |
 | **Data Infra Upgrade (P1-P3: market.db primary + DB ownership + cloud sync)** | 2026-03-03 | DONE |
 | **Automated Sync (launchd pull + auto-push + metrics on cloud)** | 2026-03-04 | DONE |
+| **Forward Estimates: FMP→yfinance migration** | 2026-03-09 | DONE |
+| **Social Sentiment: Adanos integration (Reddit + X)** | 2026-03-10 | DONE |
+| **Options Scenario Analyzer (BS probability-weighted P&L)** | 2026-03-10 | DONE |
 | CSV retirement | — | NEXT |
 | Portfolio desk activation (real holdings) | — | PLANNED |
 

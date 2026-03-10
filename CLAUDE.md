@@ -41,8 +41,9 @@
 - **yfinance** — 前瞻预期（EPS/Revenue consensus、价格目标、EPS趋势/修正、增长预期），免费
 - **FRED API** — 16 宏观序列（收益率曲线、CPI、VIX、HY spread 等），免费
 - **MarketData.app** — 期权链+IV 数据，Starter 版 ($12/月, 10K credits)
-- API Keys: 环境变量 `FMP_API_KEY`, `MARKETDATA_API_KEY`
-- 调用间隔: FMP 2 秒防限流；yfinance 1 秒间隔
+- **Adanos** — 社交情感（Reddit + X，按 ticker 查 buzz/mentions/sentiment），Hobby 版 ($20/月)
+- API Keys: 环境变量 `FMP_API_KEY`, `MARKETDATA_API_KEY`, `ADANOS_API_KEY`
+- 调用间隔: FMP 2 秒防限流；yfinance 1 秒间隔；Adanos 2 秒间隔
 
 ### 股票池
 - 美股大市值精选（市值 > $1000 亿），NYSE + NASDAQ
@@ -56,7 +57,7 @@
 
 | 数据库 | 所有权 | 内容 | 同步方向 |
 |--------|--------|------|----------|
-| **market.db** (~31 MB) | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios_annual, metrics_quarterly, iv_daily, options_snapshots, forward_estimates, forward_metadata | 云端 → 本地 (pull) |
+| **market.db** (~31 MB) | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios_annual, metrics_quarterly, iv_daily, options_snapshots, forward_estimates, forward_metadata, social_sentiment | 云端 → 本地 (pull) |
 | **company.db** (~3.4 MB) | 本地独占写入 | companies, oprms_ratings, analyses, kill_conditions, situation_summary | 本地 → 云端 (push) |
 | **universe.json** | 双端 | 股票池定义 | 双向 merge（并集） |
 
@@ -113,7 +114,8 @@
 source .venv/bin/activate
 python scripts/update_data.py --price          # 更新量价
 python scripts/update_data.py --forward-estimates  # 更新前瞻预期 (yfinance)
-python scripts/update_data.py --all            # 全量更新（含前瞻预期）
+python scripts/update_data.py --social-sentiment  # 更新社交情感 (Adanos)
+python scripts/update_data.py --all            # 全量更新（含前瞻预期+社交情感）
 python scripts/scan_indicators.py --save       # 指标扫描
 python -c "from src.data.data_validator import print_data_report; print_data_report()"
 
