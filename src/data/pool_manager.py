@@ -28,7 +28,7 @@ UNIVERSE_FILE = POOL_DIR / "universe.json"
 HISTORY_FILE = POOL_DIR / "pool_history.json"
 
 # Source 优先级 (高 = 赢)
-_SOURCE_PRIORITY = {"analysis": 4, "manual": 3, "attention": 2, "screener": 1}
+_SOURCE_PRIORITY = {"analysis": 4, "manual": 3, "screener": 1}
 
 
 def _get_source_priority(entry: Dict) -> int:
@@ -127,7 +127,6 @@ def _get_non_screener_stocks(stocks: List[Dict]) -> List[Dict]:
 
     所有带 source 标记（且非 screener）的股票永久保留，包括：
     - analysis: 深度分析纳入
-    - attention: 周报/注意力引擎纳入
     - manual: 用户手动加入（如 ETF 成分股）
     - 未来新增的任何非 screener 来源
     """
@@ -184,7 +183,7 @@ def refresh_universe() -> Tuple[List[Dict], List[str], List[str]]:
 
     new_stocks = sorted(new_stocks, key=lambda x: x.get("marketCap", 0), reverse=True)
 
-    # 保留非 screener 来源的股票 (analysis + attention)
+    # 保留非 screener 来源的股票 (analysis, manual 等)
     old_stocks = load_universe()
     non_screener_stocks = _get_non_screener_stocks(old_stocks)
     screener_symbols = {s.get("symbol") for s in new_stocks}
@@ -403,7 +402,7 @@ def batch_add_to_pool(symbols: List[str], source: str = "manual", reason: str = 
 
     Args:
         symbols: 股票代码列表
-        source: 来源标记（manual/analysis/attention 等，非 screener 均永久保留）
+        source: 来源标记（manual/analysis 等，非 screener 均永久保留）
         reason: 加入原因（记入历史）
 
     Returns:

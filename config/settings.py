@@ -136,38 +136,7 @@ DOLLAR_VOLUME_LOOKBACK = 30     # 新面孔回看天数
 # Benchmark symbols (always included in price updates)
 BENCHMARK_SYMBOLS = ["SPY", "QQQ"]
 
-# ============ Attention Engine (Engine B) ============
-
-# Finnhub API (free tier: 60 req/min)
-FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
-
-# Paths
-ATTENTION_DIR = DATA_DIR / "attention"
-ATTENTION_DB_PATH = ATTENTION_DIR / "attention.db"
-ATTENTION_REPORT_DIR = ATTENTION_DIR
-
-# Google Trends
-GT_ANCHOR_KEYWORD = "stock market"
-GT_SLEEP_SECONDS = 60  # 安全间隔（Google 限流严格）
-GT_DEFAULT_TIMEFRAME = "today 3-m"
-
-# Reddit (PRAW read-only OAuth)
-REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID", "")
-REDDIT_CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET", "")
-REDDIT_USER_AGENT = "attention-engine/1.0 by future-capital"
-REDDIT_SUBREDDITS = ["stocks", "investing", "wallstreetbets", "options"]
-REDDIT_POSTS_PER_SUB = 200
-REDDIT_TICKER_BLACKLIST = {
-    "I", "A", "AM", "AT", "IT", "IS", "ON", "OR", "AN", "AS",
-    "BE", "BY", "DO", "GO", "IF", "IN", "ME", "MY", "NO", "OF",
-    "OK", "SO", "TO", "UP", "US", "WE", "AI", "ALL", "CEO", "GDP",
-    "IMO", "IPO", "LOL", "OMG", "SEC", "USD", "WSB", "YOY", "DD",
-    "EPS", "ETF", "FED", "ATH", "OTC", "PE", "PS", "IV", "DTE",
-    "OP", "TD", "PM", "UK", "EU", "JP", "CN", "HK", "RIP", "FYI",
-    "TL", "DR", "TA", "FA", "IMF", "GDP", "CPI", "PPI", "NFP",
-}
-
-# 初始主题关键词（手动维护，~25 主题 120+ 关键词）
+# ============ 主题关键词（手动维护，~25 主题 120+ 关键词） ============
 THEME_KEYWORDS_SEED = {
     # ===== AI 核心 =====
     "ai_chip": {
@@ -369,14 +338,7 @@ THEME_KEYWORDS_SEED = {
     },
 }
 
-# 评分权重
-ATTENTION_WEIGHTS = {
-    "reddit": 0.35,
-    "news": 0.35,
-    "trends": 0.30,
-}
-
-# ============ Momentum Engine (Engine A) ============
+# ============ Momentum Engine ============
 
 # 聚类数据目录
 CLUSTERING_DIR = DATA_DIR / "clustering"
@@ -394,12 +356,9 @@ DV_ACCELERATION_THRESHOLD = 1.5  # 5d/20d ratio 阈值
 # RVOL 持续放量阈值
 RVOL_SUSTAINED_THRESHOLD = 2.0   # σ 阈值
 
-# ============ Theme Engine P2 ============
+# ============ Theme Engine ============
 
-THEME_TOP_N = 20                           # Engine B 注意力榜取 Top N
-THEME_MAX_NEW_TICKERS = 10                 # 每次池扩展最多新增几只
 THEME_RS_THRESHOLD = 80                    # RS 动量信号阈值 (百分位)
-POOL_SOURCE_ATTENTION = "attention"        # 注意力引擎来源标记
 
 # ============ MarketData.app (Options) ============
 

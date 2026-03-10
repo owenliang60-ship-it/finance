@@ -465,14 +465,14 @@ class TestRefreshUniversePreservesAnalysis:
 
 
 # ---------------------------------------------------------------------------
-# Tests: attention source preservation
+# Tests: non-screener source preservation
 # ---------------------------------------------------------------------------
 
-class TestAttentionSourcePreservation:
-    """Tests for refresh_universe() preserving attention-source stocks."""
+class TestNonScreenerSourcePreservation:
+    """Tests for refresh_universe() preserving non-screener stocks."""
 
-    def test_preserves_attention_stocks(self):
-        """Stocks with source=attention survive pool refresh."""
+    def test_preserves_manual_stocks(self):
+        """Stocks with source=manual survive pool refresh."""
         pool = EXISTING_POOL + [
             {
                 "symbol": "IONQ",
@@ -480,7 +480,7 @@ class TestAttentionSourcePreservation:
                 "marketCap": 8_000_000_000,
                 "sector": "Technology",
                 "industry": "Computer Hardware",
-                "source": "attention",
+                "source": "manual",
                 "added_at": "2026-02-15 10:00:00",
             },
         ]
@@ -500,12 +500,12 @@ class TestAttentionSourcePreservation:
         assert "IONQ" in symbols  # Preserved!
         assert "IONQ" not in exited
 
-    def test_non_screener_stocks_includes_both_sources(self):
-        """_get_non_screener_stocks returns both analysis and attention."""
+    def test_non_screener_stocks_includes_multiple_sources(self):
+        """_get_non_screener_stocks returns analysis and manual sources."""
         stocks = [
             {"symbol": "AAPL", "source": "screener"},
             {"symbol": "VRT", "source": "analysis"},
-            {"symbol": "IONQ", "source": "attention"},
+            {"symbol": "IONQ", "source": "manual"},
             {"symbol": "MSFT"},  # no source
         ]
         result = _get_non_screener_stocks(stocks)
@@ -519,7 +519,7 @@ class TestAttentionSourcePreservation:
         """_get_analysis_stocks is an alias for _get_non_screener_stocks."""
         stocks = [
             {"symbol": "VRT", "source": "analysis"},
-            {"symbol": "IONQ", "source": "attention"},
+            {"symbol": "IONQ", "source": "manual"},
         ]
         result = _get_analysis_stocks(stocks)
         assert len(result) == 2

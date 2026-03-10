@@ -86,7 +86,7 @@ def test_empty_target(tmp_path):
     incoming_file = tmp_path / "incoming.json"
     incoming_file.write_text(json.dumps([
         {"symbol": "AMD", "source": "screener"},
-        {"symbol": "MU", "source": "attention"},
+        {"symbol": "MU", "source": "manual"},
     ]))
     target_file = tmp_path / "target.json"
     # target 不存在
@@ -118,15 +118,15 @@ def test_custom_target_path(tmp_path):
 # ── 7. 缺失 source 视为 screener ──
 def test_missing_source_treated_as_screener(tmp_universe):
     target = [{"symbol": "AAPL", "companyName": "Apple"}]  # 无 source 字段
-    incoming = [{"symbol": "AAPL", "companyName": "Apple-new", "source": "attention"}]
+    incoming = [{"symbol": "AAPL", "companyName": "Apple-new", "source": "manual"}]
     inc_path, tgt_path = tmp_universe(target, incoming)
 
     merge_universe(inc_path, tgt_path)
 
     result = _read(tgt_path)
     aapl = [s for s in result if s["symbol"] == "AAPL"][0]
-    # attention (2) > screener (1)，incoming 赢
-    assert aapl["source"] == "attention"
+    # manual (3) > screener (1)，incoming 赢
+    assert aapl["source"] == "manual"
 
 
 # ── 8. 完整合并 roundtrip ──
@@ -231,7 +231,6 @@ def test_empty_incoming_list(tmp_path):
 def test_get_source_priority():
     assert _get_source_priority({"source": "analysis"}) == 4
     assert _get_source_priority({"source": "manual"}) == 3
-    assert _get_source_priority({"source": "attention"}) == 2
     assert _get_source_priority({"source": "screener"}) == 1
     assert _get_source_priority({}) == 1  # 缺失 = screener
     assert _get_source_priority({"source": "unknown"}) == 1  # 未知 = screener

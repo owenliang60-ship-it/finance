@@ -1,4 +1,4 @@
-"""Tests for scripts/scan_themes.py — signal merge, theme matching, report formatting.
+"""Tests for scripts/scan_themes.py — momentum signal detection, theme matching, report formatting.
 
 Tests:
 1. has_momentum_signal: RS Rating B trigger
@@ -7,20 +7,14 @@ Tests:
 4. has_momentum_signal: RVOL sustained trigger
 5. has_momentum_signal: PMARP breakout trigger
 6. has_momentum_signal: no signal
-7. merge_signals: converged, momentum_only, narrative_only
-8. merge_signals: empty attention
-9. merge_signals: empty momentum
-10. match_themes: matches tickers to themes
-11. match_themes: no overlap
-12. format_theme_report: produces valid report
-13. get_latest_week_start: returns monday
-14. fetch_attention_ranking: reads from store
+7. get_momentum_tickers: returns sorted list
+8. match_themes: matches tickers to themes
+9. match_themes: no overlap
+10. format_theme_report: produces valid report
 """
-import json
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from unittest import mock
 
 import pandas as pd
 
@@ -30,12 +24,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.scan_themes import (
     has_momentum_signal,
-    merge_signals,
+    get_momentum_tickers,
     match_themes,
     format_theme_report,
-    get_latest_week_start,
-    fetch_attention_ranking,
-    _find_attention_score,
 )
 
 
@@ -155,67 +146,36 @@ class TestHasMomentumSignal:
         momentum["rs_rating_b"] = _make_rs_df([
             {"symbol": "NVDA", "rs_rank": 70},
         ])
-        # Default threshold 80 — should NOT trigger
         assert has_momentum_signal("NVDA", momentum, EMPTY_INDICATOR_SUMMARY, rs_threshold=80) is False
-        # Lowered threshold 60 — should trigger
         assert has_momentum_signal("NVDA", momentum, EMPTY_INDICATOR_SUMMARY, rs_threshold=60) is True
 
 
 # ---------------------------------------------------------------------------
-# Tests: merge_signals
+# Tests: get_momentum_tickers
 # ---------------------------------------------------------------------------
 
-class TestMergeSignals:
-    """Tests for merge_signals()."""
+class TestGetMomentumTickers:
+    """Tests for get_momentum_tickers()."""
 
-    def test_full_merge(self):
-        """Converged, momentum_only, narrative_only all populated correctly."""
-        attention = [
-            {"ticker": "NVDA", "composite_score": 3.0},
-            {"ticker": "IONQ", "composite_score": 2.0},
-        ]
+    def test_returns_sorted_list(self):
+        """Returns sorted list of tickers with momentum signals."""
         momentum = dict(EMPTY_MOMENTUM)
         momentum["rs_rating_b"] = _make_rs_df([
-            {"symbol": "NVDA", "rs_rank": 95},
-            {"symbol": "TSLA", "rs_rank": 85},
-        ])
-        symbols = ["NVDA", "TSLA", "AAPL", "IONQ"]
-
-        result = merge_signals(attention, momentum, EMPTY_INDICATOR_SUMMARY, symbols)
-
-        assert "NVDA" in result["converged"]       # in both
-        assert "TSLA" in result["momentum_only"]    # momentum only
-        assert "IONQ" in result["narrative_only"]   # attention only
-        assert "AAPL" not in result["converged"]
-        assert "AAPL" not in result["momentum_only"]
-
-    def test_empty_attention(self):
-        """No attention data -> no converged, no narrative_only."""
-        momentum = dict(EMPTY_MOMENTUM)
-        momentum["rs_rating_b"] = _make_rs_df([
+            {"symbol": "TSLA", "rs_rank": 95},
             {"symbol": "NVDA", "rs_rank": 90},
+            {"symbol": "AAPL", "rs_rank": 50},
         ])
-        result = merge_signals([], momentum, EMPTY_INDICATOR_SUMMARY, ["NVDA"])
+        result = get_momentum_tickers(
+            momentum, EMPTY_INDICATOR_SUMMARY, ["NVDA", "TSLA", "AAPL"]
+        )
+        assert result == ["NVDA", "TSLA"]
 
-        assert result["converged"] == []
-        assert result["momentum_only"] == ["NVDA"]
-        assert result["narrative_only"] == []
-
-    def test_empty_momentum(self):
-        """No momentum signals -> all attention goes to narrative_only."""
-        attention = [{"ticker": "IONQ", "composite_score": 2.0}]
-        result = merge_signals(attention, EMPTY_MOMENTUM, EMPTY_INDICATOR_SUMMARY, ["AAPL"])
-
-        assert result["converged"] == []
-        assert result["momentum_only"] == []
-        assert result["narrative_only"] == ["IONQ"]
-
-    def test_both_empty(self):
-        """Both engines empty -> all categories empty."""
-        result = merge_signals([], EMPTY_MOMENTUM, EMPTY_INDICATOR_SUMMARY, [])
-        assert result["converged"] == []
-        assert result["momentum_only"] == []
-        assert result["narrative_only"] == []
+    def test_empty_when_no_signals(self):
+        """Returns empty list when no momentum signals."""
+        result = get_momentum_tickers(
+            EMPTY_MOMENTUM, EMPTY_INDICATOR_SUMMARY, ["AAPL", "GOOG"]
+        )
+        assert result == []
 
 
 # ---------------------------------------------------------------------------
@@ -238,7 +198,7 @@ class TestMatchThemes:
         assert result["ai_chip"] == ["NVDA"]
         assert "memory" in result
         assert result["memory"] == ["MU"]
-        assert "fintech" not in result  # no overlap
+        assert "fintech" not in result
 
     def test_no_overlap(self):
         """No tickers match any theme."""
@@ -256,7 +216,6 @@ class TestMatchThemes:
     def test_uses_default_seed(self):
         """Uses THEME_KEYWORDS_SEED by default."""
         result = match_themes(["NVDA", "AMD"])
-        # Should find at least ai_chip
         assert "ai_chip" in result
         assert "NVDA" in result["ai_chip"]
 
@@ -269,99 +228,38 @@ class TestFormatThemeReport:
     """Tests for format_theme_report()."""
 
     def test_produces_valid_report(self):
-        """Report contains all 7 sections."""
+        """Report contains all sections."""
         report = format_theme_report(
-            expand_result={"added": [{"symbol": "IONQ"}], "failed": [], "dry_run": False},
-            merged={"converged": ["NVDA"], "momentum_only": ["TSLA"], "narrative_only": ["IONQ"]},
+            momentum_tickers=["NVDA", "TSLA"],
             theme_map={"ai_chip": ["NVDA"]},
             cluster_result={"clusters": {"0": ["NVDA", "AMD"]}},
-            attention_ranking=[{"ticker": "NVDA", "composite_score": 3.0}],
-            pool_stats={"total": 50, "screener": 45, "analysis": 3, "attention": 2},
             elapsed=42.0,
         )
 
-        assert "A. 池子扩展" in report
-        assert "B. 主线共振" in report
-        assert "C. 动量先行" in report
-        assert "D. 叙事先行" in report
-        assert "E. 主题热力图" in report
-        assert "F. 聚类周报" in report
-        assert "G. 建议深度分析" in report
-        assert "IONQ" in report
+        assert "A. 动量信号" in report
+        assert "B. 主题热力图" in report
+        assert "C. 聚类周报" in report
+        assert "D. 建议深度分析" in report
         assert "NVDA" in report
         assert "42s" in report
 
     def test_empty_report(self):
         """Report works with empty data."""
         report = format_theme_report(
-            expand_result={},
-            merged={"converged": [], "momentum_only": [], "narrative_only": []},
+            momentum_tickers=[],
             theme_map={},
             cluster_result={},
-            attention_ranking=[],
-            pool_stats={"total": 0, "screener": 0, "analysis": 0, "attention": 0},
             elapsed=1.0,
         )
-        assert "无共振信号" in report
+        assert "无动量信号" in report
         assert "无主题信号" in report
 
-    def test_no_expand_report(self):
-        """Report shows skip message when expand is None."""
+    def test_cluster_display(self):
+        """Cluster section shows member counts."""
         report = format_theme_report(
-            expand_result={},
-            merged={"converged": [], "momentum_only": [], "narrative_only": []},
+            momentum_tickers=["NVDA"],
             theme_map={},
-            cluster_result={},
-            attention_ranking=[],
-            pool_stats={"total": 50, "screener": 50, "analysis": 0, "attention": 0},
+            cluster_result={"clusters": {"0": ["NVDA", "AMD"], "1": ["TSLA"]}},
             elapsed=1.0,
         )
-        # Empty expand_result → "跳过池扩展"
-        # (since there are no "added" keys in empty dict when checked)
-        assert "A. 池子扩展" in report
-
-
-# ---------------------------------------------------------------------------
-# Tests: helpers
-# ---------------------------------------------------------------------------
-
-class TestHelpers:
-    """Tests for helper functions."""
-
-    def test_get_latest_week_start(self):
-        """Returns a Monday date string."""
-        result = get_latest_week_start()
-        dt = datetime.strptime(result, "%Y-%m-%d")
-        assert dt.weekday() == 0  # Monday
-
-    def test_find_attention_score(self):
-        """Finds composite_score for a ticker."""
-        ranking = [
-            {"ticker": "NVDA", "composite_score": 3.5},
-            {"ticker": "AMD", "composite_score": 2.1},
-        ]
-        assert _find_attention_score("NVDA", ranking) == 3.5
-        assert _find_attention_score("AAPL", ranking) == 0.0
-
-    def test_fetch_attention_ranking_no_data(self):
-        """fetch_attention_ranking returns [] when no weeks."""
-        with mock.patch("scripts.scan_themes.get_attention_store") as mock_store:
-            mock_store.return_value.get_all_weeks.return_value = []
-            result = fetch_attention_ranking()
-        assert result == []
-
-    def test_fetch_attention_ranking_with_data(self):
-        """fetch_attention_ranking reads latest week."""
-        mock_ranking = [
-            {"ticker": "NVDA", "composite_score": 3.0, "rank": 1},
-        ]
-        with mock.patch("scripts.scan_themes.get_attention_store") as mock_store:
-            store_instance = mock_store.return_value
-            store_instance.get_all_weeks.return_value = ["2026-02-09", "2026-02-02"]
-            store_instance.get_weekly_ranking.return_value = mock_ranking
-
-            result = fetch_attention_ranking(top_n=10)
-
-        assert len(result) == 1
-        assert result[0]["ticker"] == "NVDA"
-        store_instance.get_weekly_ranking.assert_called_once_with("2026-02-09", top_n=10)
+        assert "2 个集群" in report
