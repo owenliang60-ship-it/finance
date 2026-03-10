@@ -290,6 +290,38 @@ _SCHEMA = "\n\n".join([
     PRIMARY KEY (symbol, date)
 );""",
     "CREATE INDEX IF NOT EXISTS idx_fm_symbol ON forward_metadata(symbol);",
+
+    # -- Social sentiment (Adanos: Reddit + X) --
+    """CREATE TABLE IF NOT EXISTS social_sentiment (
+    symbol TEXT NOT NULL,
+    date TEXT NOT NULL,
+    source TEXT NOT NULL,
+
+    buzz_score REAL,
+    total_mentions INTEGER,
+    sentiment_score REAL,
+    positive_count INTEGER,
+    negative_count INTEGER,
+    neutral_count INTEGER,
+    bullish_pct INTEGER,
+    bearish_pct INTEGER,
+    trend TEXT,
+    total_upvotes INTEGER,
+
+    unique_posts INTEGER,
+    subreddit_count INTEGER,
+    is_validated INTEGER,
+
+    top_mentions TEXT,
+    top_subreddits TEXT,
+
+    period_days INTEGER,
+    created_at TEXT NOT NULL,
+
+    PRIMARY KEY (symbol, date, source)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_social_date ON social_sentiment(date);",
+    "CREATE INDEX IF NOT EXISTS idx_social_symbol ON social_sentiment(symbol);",
 ])
 
 # Pre-compute snake-case column sets per table for fast lookup
@@ -310,6 +342,7 @@ _VALID_TABLES = frozenset({
     "cash_flow_quarterly", "ratios_annual", "metrics_quarterly",
     "iv_daily", "options_snapshots",
     "forward_estimates", "forward_metadata",
+    "social_sentiment",
 })
 
 
@@ -634,6 +667,102 @@ class MarketStore:
         """Get the most recent forward metadata row for a symbol."""
         rows = self._get_rows("forward_metadata", symbol, limit=1)
         return rows[0] if rows else None
+
+    # ---- Social Sentiment ----
+
+    def upsert_social_sentiment(self, symbol: str, rows: List[Dict]) -> int:
+        """Upsert social sentiment rows. PK: (symbol, date, source).
+
+        Args:
+            symbol: Stock ticker.
+            rows: List of dicts from adanos_client.get_sentiment_rows().
+
+        Returns:
+            Number of rows upserted.
+        """
+        if not rows:
+            return 0
+        conn = self._get_conn()
+        valid_cols = _get_table_columns("social_sentiment", conn)
+        count = 0
+        with conn:
+            for row in rows:
+                data = {k: v for k, v in row.items() if k in valid_cols}
+                data["symbol"] = symbol.upper()
+                if not data.get("date") or not data.get("source"):
+                    continue
+                cols = [c for c in data if c in valid_cols]
+                placeholders = ", ".join(["?"] * len(cols))
+                col_names = ", ".join(cols)
+                values = [data[c] for c in cols]
+                conn.execute(
+                    "INSERT OR REPLACE INTO social_sentiment ({}) VALUES ({})".format(
+                        col_names, placeholders),
+                    values,
+                )
+                count += 1
+        return count
+
+    def get_social_sentiment(
+        self,
+        symbol: str,
+        source: Optional[str] = None,
+        limit: int = 30,
+    ) -> List[Dict[str, Any]]:
+        """Get sentiment history for a symbol, newest first.
+
+        Args:
+            symbol: Stock ticker.
+            source: Filter by 'reddit' or 'x'. None = both.
+            limit: Max rows to return.
+        """
+        conn = self._get_conn()
+        query = "SELECT * FROM social_sentiment WHERE symbol = ?"
+        params: list = [symbol.upper()]
+        if source:
+            query += " AND source = ?"
+            params.append(source)
+        query += " ORDER BY date DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_latest_social_sentiment(
+        self,
+        symbol: str,
+        source: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Get most recent sentiment snapshot for a symbol."""
+        rows = self.get_social_sentiment(symbol, source=source, limit=1)
+        return rows[0] if rows else None
+
+    def get_social_sentiment_bulk(
+        self,
+        symbols: List[str],
+        source: Optional[str] = None,
+        days: int = 1,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Get latest N days of sentiment for multiple symbols.
+
+        Returns:
+            {symbol: [rows]} dict for building cross-sectional views.
+        """
+        conn = self._get_conn()
+        result: Dict[str, List[Dict[str, Any]]] = {}
+
+        for sym in symbols:
+            query = "SELECT * FROM social_sentiment WHERE symbol = ?"
+            params: list = [sym.upper()]
+            if source:
+                query += " AND source = ?"
+                params.append(source)
+            query += " ORDER BY date DESC LIMIT ?"
+            params.append(days * 2)  # 2 sources per day
+            rows = conn.execute(query, params).fetchall()
+            if rows:
+                result[sym] = [dict(r) for r in rows]
+
+        return result
 
     # ---- Screener ----
 

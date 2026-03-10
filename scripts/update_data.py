@@ -33,6 +33,8 @@ def main():
     parser.add_argument("--correlation", action="store_true", help="计算相关性矩阵")
     parser.add_argument("--forward-estimates", action="store_true",
                         help="更新前瞻预期数据 (yfinance)")
+    parser.add_argument("--social-sentiment", action="store_true",
+                        help="更新社交情感数据 (Adanos: Reddit + X)")
     parser.add_argument("--check", action="store_true", help="仅运行数据健康检查")
 
     args = parser.parse_args()
@@ -45,7 +47,7 @@ def main():
 
     # 如果没有指定任何选项，显示帮助
     if not any([args.all, args.pool, args.price, args.fundamental,
-                args.forward_estimates, args.correlation]):
+                args.forward_estimates, args.social_sentiment, args.correlation]):
         parser.print_help()
         return
 
@@ -136,6 +138,45 @@ def main():
         print(f"\n✅ 成功: {success}")
         if failed:
             print(f"❌ 失败: {failed}")
+        print()
+
+    # 更新社交情感数据
+    if args.all or args.social_sentiment:
+        print("=" * 40)
+        print("Step 3c: 更新社交情感数据 (Adanos: Reddit + X)")
+        print("=" * 40)
+        import time as _time
+        from src.data.adanos_client import adanos_client
+        from src.data.market_store import get_store
+
+        store = get_store()
+        target_symbols = symbols or get_symbols()
+        success = 0
+        failed = []
+
+        for sym in target_symbols:
+            sym_ok = True
+            for source in ("reddit", "x"):
+                try:
+                    rows = adanos_client.get_sentiment_rows(sym, source=source)
+                    if rows:
+                        store.upsert_social_sentiment(sym, rows)
+                        print("  {} {}: {} days".format(
+                            chr(10003), sym, len(rows)), end="")
+                    else:
+                        print("  - {}/{}: no data".format(sym, source), end="")
+                except Exception as e:
+                    sym_ok = False
+                    print("  {} {}/{}: {}".format(chr(10007), sym, source, e), end="")
+            print()  # newline after both sources
+            if sym_ok:
+                success += 1
+            else:
+                failed.append(sym)
+
+        print("\n{} 成功: {}".format(chr(9989), success))
+        if failed:
+            print("{} 失败: {}".format(chr(10060), failed))
         print()
 
     # 计算相关性矩阵

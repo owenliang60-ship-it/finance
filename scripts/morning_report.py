@@ -390,10 +390,63 @@ def format_section_f(cluster_result: dict, universe: list = None) -> str:
     return "\n".join(lines)
 
 
+def format_section_social(social_scan: dict) -> str:
+    """G. 社交情绪雷达"""
+    lines = ["*G. 社交情绪雷达*"]
+
+    alerts = social_scan.get("alerts", [])
+    extreme = social_scan.get("extreme_sentiment", [])
+    reversals = social_scan.get("trend_reversals", [])
+    n_data = social_scan.get("symbols_with_data", 0)
+
+    # Sub-section 1: 注意力异动
+    if alerts:
+        lines.append("注意力异动 (Z>=2.0):")
+        for sig in alerts[:8]:
+            z = sig.get("attention_zscore", 0)
+            buzz = sig.get("weighted_buzz", 0)
+            sent = sig.get("reddit_sentiment") or sig.get("x_sentiment") or 0
+            r_m = sig.get("reddit_mentions", 0)
+            x_m = sig.get("x_mentions", 0)
+            tag = "!!!" if z >= 4.0 else ""
+            lines.append("  {} Z={:.1f} buzz={:.0f} sent={:+.2f} (R{}+X{}){}"
+                         .format(sig["symbol"], z, buzz or 0, sent, r_m, x_m, tag))
+    else:
+        lines.append("注意力异动: 无")
+
+    # Sub-section 2: 情绪极端
+    if extreme:
+        lines.append("")
+        lines.append("情绪极端 (bull>=60 or <=20):")
+        # Deduplicate by symbol, show both sources
+        seen = set()
+        for item in extreme[:10]:
+            sym = item["symbol"]
+            if sym in seen:
+                continue
+            seen.add(sym)
+            lines.append("  {} {}: bull {}%".format(
+                sym, item["source"], item["bullish_pct"]))
+
+    # Sub-section 3: 趋势分歧
+    if reversals:
+        lines.append("")
+        lines.append("趋势分歧 (Reddit vs X):")
+        for item in reversals[:8]:
+            lines.append("  {} R:{} X:{}".format(
+                item["symbol"], item["reddit_trend"], item["x_trend"]))
+
+    lines.append("")
+    lines.append("覆盖: {}只".format(n_data))
+
+    return "\n".join(lines)
+
+
 def format_morning_report(
     indicator_summary: dict,
     momentum_results: dict,
     dv_result: dict = None,
+    social_scan: dict = None,
     elapsed: float = 0,
 ) -> str:
     """格式化完整晨报"""
@@ -431,6 +484,11 @@ def format_morning_report(
     # E. Dollar Volume
     if dv_result:
         lines.append(format_section_e(dv_result))
+        lines.append("")
+
+    # G. 社交情绪雷达
+    if social_scan and social_scan.get("symbols_with_data", 0) > 0:
+        lines.append(format_section_social(social_scan))
         lines.append("")
 
     # Footer
@@ -516,7 +574,17 @@ def main():
         # 4. Dollar Volume 采集
         dv_result = run_dollar_volume()
 
-        # 5. 聚类 (仅周六或强制)
+        # 5. 社交情绪雷达
+        social_scan = None
+        try:
+            from src.indicators.social_attention import scan_social_signals
+            logger.info("开始社交情绪扫描...")
+            social_scan = scan_social_signals(symbols)
+            logger.info("社交情绪扫描完成: %d 只有数据", social_scan.get("symbols_with_data", 0))
+        except Exception as e:
+            logger.warning("社交情绪扫描失败: %s", e)
+
+        # 6. 聚类 (仅周六或强制)
         is_saturday = datetime.now().weekday() == 5
         cluster_result = None
         if is_saturday or args.clustering:
@@ -524,9 +592,10 @@ def main():
 
         elapsed = time.time() - start_time
 
-        # 6. 格式化
+        # 7. 格式化
         daily_msg = format_morning_report(
-            indicator_summary, momentum_results, dv_result, elapsed)
+            indicator_summary, momentum_results, dv_result,
+            social_scan=social_scan, elapsed=elapsed)
 
         # 7. 保存 JSON
         SCANS_DIR.mkdir(parents=True, exist_ok=True)

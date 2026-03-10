@@ -375,6 +375,13 @@ OPTIONS_LIQUIDITY_MIN_OI = 200   # 最低 OI 标准
 OPTIONS_LIQUIDITY_MIN_VOLUME = 100  # 最低日成交量
 OPTIONS_LIQUIDITY_MAX_SPREAD_PCT = 0.10  # 最大 bid-ask spread (占 mid %)
 
+# ============ Adanos (Social Sentiment) ============
+
+ADANOS_API_KEY = os.environ.get("ADANOS_API_KEY", "")
+ADANOS_BASE_URL = "https://api.adanos.org"
+ADANOS_CALL_INTERVAL = 2  # 秒，防限流
+ADANOS_REQUEST_DAYS = 7   # 每次请求回看天数（upsert 覆盖，自动补漏）
+
 # Telegram 配置 (从环境变量读取)
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
