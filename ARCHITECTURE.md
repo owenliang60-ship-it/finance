@@ -2,7 +2,7 @@
 
 **未来资本 AI Trading Desk | Updated: 2026-03-04**
 
-**Code Stats**: ~167 Python files, 1285 tests passing, 36,800+ lines
+**Code Stats**: ~169 Python files, 1232 tests passing, 38,200+ lines
 
 ---
 
@@ -35,8 +35,8 @@
 ║  │  collect_data()                                   │                  ║
 ║  │    ├─ FRED macro fetch → MacroSnapshot            │                  ║
 ║  │    ├─ Signal detection (5 cross-asset detectors)  │                  ║
-║  │    ├─ FMP enrichment (estimates/earnings/         │                  ║
-║  │    │   insider/news)                              │                  ║
+║  │    ├─ yfinance → forward_estimates + metadata     │                  ║
+║  │    ├─ FMP enrichment (earnings/insider/news)      │                  ║
 ║  │    └─ → DataPackage                               │                  ║
 ║  │                                                   │                  ║
 ║  │  prepare_lens_prompts() → 5 lens analysis         │                  ║
@@ -134,15 +134,15 @@
 ║  ┌────────────┐  ┌────────────┐  ┌─────────────────┐                  ║
 ║  │ FMP API    │  │ FRED API   │  │ Claude (LLM)    │                  ║
 ║  │ Starter $22│  │ Free       │  │ IS the analyst  │                  ║
-║  │13 endpoints│  │ 16 series  │  │ 6 lenses+debate │                  ║
+║  │12 endpoints│  │ 16 series  │  │ 6 lenses+debate │                  ║
 ║  │300 call/min│  │120 req/min │  │ +memo+scoring   │                  ║
 ║  └────────────┘  └────────────┘  └─────────────────┘                  ║
-║  ┌────────────────┐                                                   ║
-║  │ MarketData.app │                                                   ║
-║  │ Starter $12    │                                                   ║
-║  │ Options chain  │                                                   ║
-║  │ 10K credits/mo │                                                   ║
-║  └────────────────┘                                                   ║
+║  ┌────────────────┐ ┌──────────────┐                                  ║
+║  │ MarketData.app │ │ yfinance     │                                  ║
+║  │ Starter $12    │ │ Free         │                                  ║
+║  │ Options chain  │ │ Forward est. │                                  ║
+║  │ 10K credits/mo │ │ 6 datasets   │                                  ║
+║  └────────────────┘ └──────────────┘                                  ║
 ║                                                                        ║
 ║  ════════════ OPTIONS 层 (期权策略, ~1,200 lines) ════════════        ║
 ║                                                                        ║
@@ -325,7 +325,7 @@ def get_treasury_yields() -> ToolResult:
 | Category | Count | Examples |
 |----------|-------|---------|
 | FRED | 16 | treasury yields, VIX, CPI, GDP, unemployment, HY spread |
-| FMP | 14 | analyst estimates, earnings calendar, insider trades, stock news, profile, financials |
+| FMP | 13 | analyst grades, earnings calendar, insider trades, stock news, profile, financials |
 
 ---
 
@@ -422,6 +422,8 @@ portfolio/holdings/
 | File | Lines | Purpose |
 |------|-------|---------|
 | `fmp_client.py` | 250 | FMP API wrapper, 2s rate limit |
+| `adanos_client.py` | 246 | Adanos API wrapper (Reddit + X social sentiment, retry + rate limit) |
+| `yfinance_client.py` | 142 | yfinance wrapper, forward estimates (6 datasets, NaN→None) |
 | `fundamental_fetcher.py` | 413 | Financial statements fetch + store |
 | `data_validator.py` | 322 | Schema validation + quality checks |
 | `data_guardian.py` | 215 | Snapshot backup/restore + retention policy (max 10) |
@@ -438,6 +440,7 @@ portfolio/holdings/
 | `engine.py` | 252 | Indicator orchestration (`run_indicators()`) |
 | `pmarp.py` | 187 | Price momentum percentile (>98% = strong trend) |
 | `rvol.py` | 193 | Relative volume (>4σ = anomaly) |
+| `social_attention.py` | 255 | Social attention signals (weighted_buzz + attention_zscore from Adanos) |
 
 #### Analysis Engines (`src/analysis/`)
 
@@ -458,7 +461,7 @@ BENCHMARK_SYMBOLS = ["SPY", "QQQ"]
 
 | Script | Purpose |
 |--------|---------|
-| `update_data.py` | Price + fundamental updates (--price / --all / --check) + auto health check |
+| `update_data.py` | Price + fundamental + forward estimates + social sentiment updates (--price / --forward-estimates / --social-sentiment / --all / --check) + auto health check |
 | `scan_indicators.py` | Run indicators on all stocks |
 | `daily_scan.py` | Daily automated scan |
 | `collect_dollar_volume.py` | Dollar volume ranking |
@@ -481,7 +484,10 @@ data/
 │   ├─ ratios_annual              年度估值比率
 │   ├─ metrics_quarterly          45 项衍生指标 (margins/returns/growth/CAGR)
 │   ├─ iv_daily                   期权 IV 聚合 (23K rows)
-│   └─ options_snapshots          期权链快照
+│   ├─ options_snapshots          期权链快照
+│   ├─ forward_estimates          前瞻预期 (EPS/Revenue consensus, 4 periods per symbol)
+│   ├─ forward_metadata           分析师价格目标 (current/high/low/mean/median)
+│   └─ social_sentiment           社交情感 (Reddit + X, PK: symbol+date+source)
 ├── company.db (3.4MB)            本地独占写入 → push 到云端
 │   ├─ companies                  元数据 + sector + market_cap
 │   ├─ oprms_ratings              OPRMS 评级历史
@@ -637,11 +643,13 @@ data/
 
 | API | Plan | Rate Limit | Endpoints Used | Cost |
 |-----|------|-----------|----------------|------|
-| FMP | Starter | 300/min | 13 (profile, financials, estimates, earnings, insider, news, ...) | $22/mo |
+| FMP | Starter | 300/min | 12 (profile, financials, earnings, insider, news, grades, ...) | $22/mo |
+| yfinance | Free | ~1/s | 6 datasets (earnings/revenue/growth/PT/trend/revisions) | Free |
 | FRED | Free | 120/min | 16 macro series | Free |
+| Adanos | Hobby | 2s interval | Social sentiment (Reddit + X per ticker, 7-day window) | $20/mo |
 | Claude | — | — | 6 lenses + debate + memo + scoring per analysis | ~$13-15/full analysis |
 
-### FMP Endpoints (13 active)
+### FMP Endpoints (12 active)
 
 1. Stock screener (market cap, sector filter)
 2. Company profile
@@ -652,12 +660,25 @@ data/
 7. Financial ratios
 8. Historical price (5 years daily)
 9. Quote (latest price)
-10. **Analyst estimates** (NEW)
-11. **Earnings calendar** (NEW)
-12. **Insider trades** (NEW)
-13. **Stock news** (NEW)
+10. **Analyst recommendations/grades** (firm-level Buy/Hold/Sell)
+11. **Earnings calendar**
+12. **Insider trades**
+13. **Stock news**
 
-**NOT available on FMP Starter**: Options chain, Greeks, bonds, Level 2 data.
+**NOT available on FMP Starter**: Options chain, Greeks, bonds, Level 2 data, analyst-estimates endpoint (402).
+
+### yfinance Forward Estimates (6 datasets)
+
+1. `earnings_estimate` — EPS consensus (avg/low/high, analyst count, growth)
+2. `revenue_estimate` — Revenue consensus
+3. `growth_estimates` — Stock vs index growth trends
+4. `eps_trend` — EPS estimate drift (7d/30d/60d/90d)
+5. `eps_revisions` — Up/down revision counts
+6. `analyst_price_targets` — Price target metadata (current/high/low/mean/median)
+
+**Storage**: `forward_estimates` (3-col PK: symbol/date/period) + `forward_metadata` (2-col PK: symbol/date) in market.db
+**Staleness**: 7-day cache; pipeline falls back to live yfinance if DB data >7 days old
+**Client**: `src/data/yfinance_client.py` — thin wrapper, NaN→None, numpy→native conversion
 
 ### Python Dependencies
 
@@ -665,6 +686,7 @@ data/
 numpy>=2.4          # Numerical computing (indicators, correlation)
 pandas>=3.0         # Data manipulation (price, financials)
 requests>=2.32      # HTTP client (FMP + FRED APIs)
+yfinance>=0.2.28    # Forward estimates (analyst consensus, price targets)
 python-dateutil>=2.9 # Date parsing
 python-dotenv       # Environment variables
 ```
@@ -690,8 +712,10 @@ python-dotenv       # Environment variables
 | 06:30 | Price data update | Tue-Sat | `cron_price.log` |
 | 06:45 | Dollar volume scan | Tue-Sat | `cron_scan.log` |
 | 06:50 | IV data update | Tue-Sat | `cron_options_iv.log` |
+| 06:55 | Social sentiment (Adanos: Reddit + X) | Tue-Sat | `cron_social.log` |
 | 08:00 | Stock pool refresh + stale data cleanup | Saturday | `cron_pool.log` |
 | 10:00 | Fundamentals + metrics computation | Saturday | `cron_fundamental.log` |
+| 10:30 | Forward estimates (yfinance) | Saturday | `cron_forward.log` |
 
 ---
 
@@ -737,6 +761,7 @@ python-dotenv       # Environment variables
 | Add new investment lens | Create `knowledge/philosophies/new_lens.py` implementing `InvestmentLens` protocol |
 | Add new technical indicator | Create `src/indicators/new.py`, register in `engine.py:INDICATORS` |
 | Add new FMP endpoint | Add tool in `terminal/tools/fmp_tools.py`, wire into `pipeline.py:collect_data()` |
+| Add new yfinance dataset | Extend `src/data/yfinance_client.py` mapper, add columns to `market_store.py` schema |
 | Add new FRED series | Add tool in `terminal/tools/fred_tools.py`, extend `MacroSnapshot` fields |
 | Add new signal detector | Add function in `terminal/macro_briefing.py:SIGNAL_DETECTORS` |
 | Add new exposure alert | Define rule in `portfolio/exposure/alerts.py` |
@@ -761,6 +786,8 @@ python-dotenv       # Environment variables
 | Deep Analysis 增强 (业务概览 + 前瞻指引 + Forward Estimates) | 2026-02-28 | — |
 | Data Infra Upgrade (P1-P3: market.db primary + DB ownership) | 2026-03-03 | 1,285 |
 | Automated Sync (launchd pull + auto-push + metrics on cloud) | 2026-03-04 | 1,285 |
+| Forward Estimates: FMP→yfinance 迁移 (6 datasets + market.db + pipeline fallback) | 2026-03-09 | 1,285 |
+| Social Sentiment: Adanos 接入 (Reddit + X + weighted_buzz + attention_zscore + 晨报 Section G) | 2026-03-10 | 1,232 |
 
 ---
 

@@ -405,12 +405,23 @@ def format_section_social(social_scan: dict) -> str:
         for sig in alerts[:8]:
             z = sig.get("attention_zscore", 0)
             buzz = sig.get("weighted_buzz", 0)
-            sent = sig.get("reddit_sentiment") or sig.get("x_sentiment") or 0
             r_m = sig.get("reddit_mentions", 0)
             x_m = sig.get("x_mentions", 0)
+            # Weighted average sentiment across sources
+            r_s = sig.get("reddit_sentiment")
+            x_s = sig.get("x_sentiment")
+            total_m = r_m + x_m
+            if r_s is not None and x_s is not None and total_m > 0:
+                sent = (r_s * r_m + x_s * x_m) / total_m
+            elif r_s is not None:
+                sent = r_s
+            elif x_s is not None:
+                sent = x_s
+            else:
+                sent = 0.0
             tag = "!!!" if z >= 4.0 else ""
             lines.append("  {} Z={:.1f} buzz={:.0f} sent={:+.2f} (R{}+X{}){}"
-                         .format(sig["symbol"], z, buzz or 0, sent, r_m, x_m, tag))
+                         .format(sig["symbol"], z, buzz if buzz is not None else 0, sent, r_m, x_m, tag))
     else:
         lines.append("注意力异动: 无")
 
@@ -418,15 +429,15 @@ def format_section_social(social_scan: dict) -> str:
     if extreme:
         lines.append("")
         lines.append("情绪极端 (bull>=60 or <=20):")
-        # Deduplicate by symbol, show both sources
+        # Deduplicate by (symbol, source), keep both sources per ticker
         seen = set()
         for item in extreme[:10]:
-            sym = item["symbol"]
-            if sym in seen:
+            key = (item["symbol"], item["source"])
+            if key in seen:
                 continue
-            seen.add(sym)
+            seen.add(key)
             lines.append("  {} {}: bull {}%".format(
-                sym, item["source"], item["bullish_pct"]))
+                item["symbol"], item["source"], item["bullish_pct"]))
 
     # Sub-section 3: 趋势分歧
     if reversals:

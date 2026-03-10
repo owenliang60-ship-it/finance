@@ -65,7 +65,20 @@
 |   ↳ auto_deep_analyze.sh Phase 5: 分析完成自动 push company.db | | |
 |   ↳ metrics_calculator 激活: 45 项衍生指标, 云端周六 cron 自动计算 | | |
 |   ↳ sync_to_cloud.sh TTY 检测 (非交互模式禁用颜色) | | |
-| **当前** | 2026-03-04 | **~167 files, 1285 tests** |
+| **Forward Estimates: FMP→yfinance 迁移** | 2026-03-09 | redesign |
+|   ↳ FMP analyst-estimates Starter 版 402 → yfinance 6-dataset 替代 | | |
+|   ↳ yfinance_client.py (thin wrapper, 6 datasets merge, NaN→None) | | |
+|   ↳ market.db: forward_estimates (3-col PK) + forward_metadata (2-col PK) | | |
+|   ↳ pipeline.py: DB 优先读取 + 7 天过期 live fallback | | |
+|   ↳ update_data.py: --forward-estimates flag + --all 包含 | | |
+| **Social Sentiment: Adanos 接入** (49 new tests, 1232 total) | 2026-03-10 | +1,406 |
+|   ↳ Attention Engine 移除 (Engine B 全量清理) | | |
+|   ↳ adanos_client.py (API 客户端, 限流+重试, Reddit + X) | | |
+|   ↳ market_store.py: social_sentiment 表 (PK: symbol+date+source) | | |
+|   ↳ social_attention.py: weighted_buzz + attention_zscore (20 日滚动) | | |
+|   ↳ 晨报 Section G: 社交雷达 (注意力异常 + 极端情绪 + 趋势背离) | | |
+|   ↳ 云端 cron 06:55 Tue-Sat 日频采集 | | |
+| **当前** | 2026-03-10 | **~169 files, 1232 tests** |
 
 ---
 

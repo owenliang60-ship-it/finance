@@ -165,8 +165,12 @@ class TestGetSentimentRows:
         assert rows[0]["buzz_score"] == 78.0  # day-level buzz
         assert rows[0]["total_mentions"] == 113
         assert rows[0]["sentiment_score"] == 0.032
-        assert rows[0]["bullish_pct"] == 33  # aggregate level
+        assert rows[0]["bullish_pct"] == 33  # aggregate, only on latest day
         assert rows[0]["subreddit_count"] == 29
+        # Non-latest days should have None for aggregate fields
+        assert rows[1]["bullish_pct"] is None
+        assert rows[1]["subreddit_count"] is None
+        assert rows[2]["positive_count"] is None
         assert rows[0]["created_at"] is not None
 
         # top_mentions JSON only on first (latest) day
@@ -199,6 +203,31 @@ class TestGetSentimentRows:
         assert rows[0]["subreddit_count"] is None
         # top_subreddits should be None for X
         assert rows[0]["top_subreddits"] is None
+
+    @patch("src.data.adanos_client.requests.get")
+    def test_reversed_daily_trend_order(self, mock_get, client):
+        """Aggregate fields must land on max-date row regardless of API ordering."""
+        reversed_response = dict(SAMPLE_REDDIT_RESPONSE)
+        reversed_response["daily_trend"] = list(reversed(
+            SAMPLE_REDDIT_RESPONSE["daily_trend"]
+        ))
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = reversed_response
+        mock_get.return_value = mock_resp
+
+        rows = client.get_sentiment_rows("NVDA", source="reddit", days=7)
+        assert len(rows) == 3
+        # Find the row with max date — it should have aggregate fields
+        latest_row = [r for r in rows if r["date"] == "2026-03-08"][0]
+        oldest_row = [r for r in rows if r["date"] == "2026-03-06"][0]
+        assert latest_row["bullish_pct"] == 33
+        assert latest_row["top_mentions"] is not None
+        assert latest_row["subreddit_count"] == 29
+        # Older rows should NOT have aggregate fields
+        assert oldest_row["bullish_pct"] is None
+        assert oldest_row["top_mentions"] is None
+        assert oldest_row["subreddit_count"] is None
 
     @patch("src.data.adanos_client.requests.get")
     def test_api_failure_returns_empty(self, mock_get, client):

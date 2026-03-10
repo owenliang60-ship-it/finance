@@ -185,32 +185,41 @@ class AdanosClient:
         top_subreddits_json = json.dumps(top_subreddits_raw, ensure_ascii=False) if top_subreddits_raw else None
 
         rows = []
+        # Find actual latest date (API ordering not guaranteed across sources)
+        latest_date = max(
+            (d.get("date", "") for d in daily_trend),
+            default=None,
+        )
         for day in daily_trend:
             date_str = day.get("date")
             if not date_str:
                 continue
 
+            is_latest = (date_str == latest_date)
             row = {
                 "date": date_str,
                 "source": source,
-                # Aggregate-level (same for all days in this response)
-                "buzz_score": day.get("buzz_score") or data.get("buzz_score"),
+                # Per-day fields (from daily_trend array)
+                "buzz_score": day.get("buzz_score") if day.get("buzz_score") is not None else data.get("buzz_score"),
                 "total_mentions": day.get("mentions"),
                 "sentiment_score": day.get("sentiment"),
-                "positive_count": data.get("positive_count"),
-                "negative_count": data.get("negative_count"),
-                "neutral_count": data.get("neutral_count"),
-                "bullish_pct": data.get("bullish_pct"),
-                "bearish_pct": data.get("bearish_pct"),
-                "trend": data.get("trend"),
-                "total_upvotes": data.get("total_upvotes"),
-                # Source-specific
-                "unique_posts": data.get(config["unique_posts_field"]),
-                "subreddit_count": data.get("subreddit_count"),
-                "is_validated": 1 if data.get("is_validated") else (0 if source == "x" else None),
+                # Period-level aggregates (only on latest day to avoid
+                # misleading downstream consumers — these cover the full
+                # request period, not individual days)
+                "positive_count": data.get("positive_count") if is_latest else None,
+                "negative_count": data.get("negative_count") if is_latest else None,
+                "neutral_count": data.get("neutral_count") if is_latest else None,
+                "bullish_pct": data.get("bullish_pct") if is_latest else None,
+                "bearish_pct": data.get("bearish_pct") if is_latest else None,
+                "trend": data.get("trend") if is_latest else None,
+                "total_upvotes": data.get("total_upvotes") if is_latest else None,
+                # Source-specific (period-level)
+                "unique_posts": data.get(config["unique_posts_field"]) if is_latest else None,
+                "subreddit_count": data.get("subreddit_count") if is_latest else None,
+                "is_validated": (1 if data.get("is_validated") else (0 if source == "x" else None)) if is_latest else None,
                 # JSON blobs (only on latest day to avoid redundancy)
-                "top_mentions": top_mentions_json if date_str == daily_trend[0].get("date") else None,
-                "top_subreddits": top_subreddits_json if date_str == daily_trend[0].get("date") else None,
+                "top_mentions": top_mentions_json if is_latest else None,
+                "top_subreddits": top_subreddits_json if is_latest else None,
                 # Metadata
                 "period_days": data.get("period_days", days),
                 "created_at": now,
