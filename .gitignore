@@ -22,6 +22,15 @@ logs/
 # Data (可能包含大文件)
 /data/
 
+# Portfolio holdings (real positions, cost basis, trade history)
+portfolio/holdings/holdings.json
+portfolio/holdings/watchlist.json
+portfolio/holdings/history.json
+
+# Trading journal entries (README, template, schema are public)
+trading/journal/examples/
+trading/journal/[0-9]*.md
+
 # Worktrees
 .worktrees/
 

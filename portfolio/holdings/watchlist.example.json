@@ -1,0 +1,17 @@
+[
+  {
+    "symbol": "NVDA",
+    "company_name": "NVIDIA Corporation",
+    "sector": "Technology",
+    "industry": "Semiconductors",
+    "dna_rating": "S",
+    "investment_bucket": "Long-term Compounder",
+    "target_entry_price": 120.00,
+    "thesis_summary": "Example watchlist entry - not real data",
+    "kill_conditions": [
+      "Data center revenue growth < 30% YoY for 2 consecutive quarters"
+    ],
+    "added_date": "2026-01-10",
+    "notes": ""
+  }
+]

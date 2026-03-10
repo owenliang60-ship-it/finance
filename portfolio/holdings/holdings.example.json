@@ -1,0 +1,24 @@
+[
+  {
+    "symbol": "AAPL",
+    "company_name": "Apple Inc.",
+    "sector": "Technology",
+    "industry": "Consumer Electronics",
+    "dna_rating": "S",
+    "timing_rating": "B",
+    "investment_bucket": "Long-term Compounder",
+    "cost_basis": 185.50,
+    "shares": 100,
+    "current_price": 0.0,
+    "current_weight": 0.0,
+    "target_weight": 0.0,
+    "kill_conditions": [
+      "Services revenue growth < 12% YoY for 2 consecutive quarters",
+      "Consolidated gross margin < 44% for 2 consecutive quarters"
+    ],
+    "memo_id": "AAPL-2026-Q1",
+    "entry_date": "2026-01-15",
+    "last_review_date": "2026-02-01",
+    "notes": "Example position - not real data"
+  }
+]
