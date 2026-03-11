@@ -52,8 +52,7 @@ def snapshot(reason: str = "manual") -> Optional[Path]:
 
     备份内容:
     - data/market.db (主时序数据库)
-    - data/price/*.csv (副写备份)
-    - data/fundamental/*.json
+    - data/fundamental/profiles.json (公司概况)
     - data/company.db
     - data/pool/universe.json
 

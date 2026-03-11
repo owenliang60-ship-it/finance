@@ -23,8 +23,6 @@ logger = logging.getLogger(__name__)
 
 # 文件路径
 PROFILES_FILE = FUNDAMENTAL_DIR / "profiles.json"
-RATIOS_FILE = FUNDAMENTAL_DIR / "ratios.json"
-INCOME_FILE = FUNDAMENTAL_DIR / "income.json"
 UNIVERSE_FILE = POOL_DIR / "universe.json"
 
 
@@ -39,6 +37,28 @@ def _load_json_meta(path: Path) -> Dict:
     except Exception as e:
         logger.error(f"加载 {path} 失败: {e}")
         return {}
+
+
+def _get_market_db_freshness(table: str) -> Dict:
+    """查询 market.db 中某张表的最新日期作为新鲜度指标"""
+    try:
+        from src.data.market_store import get_store
+        store = get_store()
+        conn = store._get_conn()
+        row = conn.execute(
+            f"SELECT MAX(date) as max_date FROM {table}"
+        ).fetchone()
+        if row and row["max_date"]:
+            max_date = datetime.strptime(row["max_date"], "%Y-%m-%d")
+            age_days = (datetime.now() - max_date).days
+            return {
+                "updated_at": row["max_date"],
+                "age_days": age_days,
+                "is_fresh": age_days <= 14  # 周频更新，14天内算新鲜
+            }
+    except Exception as e:
+        logger.warning("Failed to check %s freshness: %s", table, e)
+    return {"updated_at": None, "age_days": -1, "is_fresh": False}
 
 
 def check_data_freshness(max_days: int = 5) -> Dict[str, Any]:
@@ -79,34 +99,38 @@ def check_data_freshness(max_days: int = 5) -> Dict[str, Any]:
             results["is_fresh"] = False
 
     # 2. 检查基本面数据
-    for name, path in [("profiles", PROFILES_FILE), ("ratios", RATIOS_FILE), ("income", INCOME_FILE)]:
-        if path.exists():
-            meta = _load_json_meta(path)
-            updated_at = meta.get("updated_at", "Unknown")
-            if updated_at != "Unknown":
-                try:
-                    update_time = datetime.strptime(updated_at, "%Y-%m-%d %H:%M:%S")
-                    age_days = (now - update_time).days
-                except ValueError:
-                    age_days = -1
-            else:
+    # Profiles: still JSON
+    if PROFILES_FILE.exists():
+        meta = _load_json_meta(PROFILES_FILE)
+        updated_at = meta.get("updated_at", "Unknown")
+        if updated_at != "Unknown":
+            try:
+                update_time = datetime.strptime(updated_at, "%Y-%m-%d %H:%M:%S")
+                age_days = (now - update_time).days
+            except ValueError:
                 age_days = -1
-
-            is_fresh = age_days <= max_days if age_days >= 0 else False
-            results["details"][name] = {
-                "updated_at": updated_at,
-                "age_days": age_days,
-                "is_fresh": is_fresh
-            }
-            if not is_fresh:
-                results["is_fresh"] = False
         else:
-            results["details"][name] = {
-                "updated_at": None,
-                "age_days": -1,
-                "is_fresh": False,
-                "error": "File not found"
-            }
+            age_days = -1
+
+        is_fresh = age_days <= max_days if age_days >= 0 else False
+        results["details"]["profiles"] = {
+            "updated_at": updated_at,
+            "age_days": age_days,
+            "is_fresh": is_fresh
+        }
+        if not is_fresh:
+            results["is_fresh"] = False
+    else:
+        results["details"]["profiles"] = {
+            "updated_at": None, "age_days": -1, "is_fresh": False, "error": "File not found"
+        }
+        results["is_fresh"] = False
+
+    # Ratios & Income: market.db
+    for name, table in [("ratios", "ratios_annual"), ("income", "income_quarterly")]:
+        freshness_info = _get_market_db_freshness(table)
+        results["details"][name] = freshness_info
+        if not freshness_info.get("is_fresh", False):
             results["is_fresh"] = False
 
     # 3. 抽样检查量价数据

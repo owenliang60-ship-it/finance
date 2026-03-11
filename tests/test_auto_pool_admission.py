@@ -38,10 +38,6 @@ from src.data.fundamental_fetcher import (
     get_balance_sheet,
     get_cash_flow,
     PROFILES_FILE,
-    RATIOS_FILE,
-    INCOME_FILE,
-    BALANCE_SHEET_FILE,
-    CASH_FLOW_FILE,
 )
 
 
@@ -66,8 +62,8 @@ SAMPLE_PROFILE = {
 }
 
 SAMPLE_RATIOS = [
-    {"period": "Q3", "priceEarningsRatio": 55.0, "returnOnEquity": 0.35},
-    {"period": "Q2", "priceEarningsRatio": 48.0, "returnOnEquity": 0.30},
+    {"date": "2025-12-31", "period": "FY", "priceEarningsRatio": 55.0, "returnOnEquity": 0.35},
+    {"date": "2024-12-31", "period": "FY", "priceEarningsRatio": 48.0, "returnOnEquity": 0.30},
 ]
 
 SAMPLE_INCOME = [
@@ -124,16 +120,15 @@ def _isolate_pool(tmp_path, monkeypatch):
     monkeypatch.setattr("src.data.pool_manager.HISTORY_FILE", history)
     monkeypatch.setattr("src.data.pool_manager.POOL_DIR", pool_dir)
 
-    # Fundamental files
-    for fname in ["profiles.json", "ratios.json", "income.json",
-                   "balance_sheet.json", "cash_flow.json"]:
-        (fund_dir / fname).write_text("{}")
-
+    # Profile JSON (still file-based)
+    (fund_dir / "profiles.json").write_text("{}")
     monkeypatch.setattr("src.data.fundamental_fetcher.PROFILES_FILE", fund_dir / "profiles.json")
-    monkeypatch.setattr("src.data.fundamental_fetcher.RATIOS_FILE", fund_dir / "ratios.json")
-    monkeypatch.setattr("src.data.fundamental_fetcher.INCOME_FILE", fund_dir / "income.json")
-    monkeypatch.setattr("src.data.fundamental_fetcher.BALANCE_SHEET_FILE", fund_dir / "balance_sheet.json")
-    monkeypatch.setattr("src.data.fundamental_fetcher.CASH_FLOW_FILE", fund_dir / "cash_flow.json")
+
+    # Ratios/Income/BS/CF now use market.db — create a temp DB via MarketStore
+    from src.data.market_store import MarketStore
+    test_db = tmp_path / "market.db"
+    test_store = MarketStore(test_db)
+    monkeypatch.setattr("src.data.fundamental_fetcher._get_market_store", lambda: test_store)
 
 
 # ---------------------------------------------------------------------------
@@ -226,13 +221,16 @@ class TestEnsureFundamentalsCached:
 
     def test_skips_already_cached(self):
         """If data already cached, no fetch calls made."""
-        # Pre-populate cache via module-level references (monkeypatched paths)
+        # Pre-populate profile in JSON
         import src.data.fundamental_fetcher as ff
         ff._save_json(ff.PROFILES_FILE, {"VRT": SAMPLE_PROFILE})
-        ff._save_json(ff.RATIOS_FILE, {"VRT": SAMPLE_RATIOS})
-        ff._save_json(ff.INCOME_FILE, {"VRT": SAMPLE_INCOME})
-        ff._save_json(ff.BALANCE_SHEET_FILE, {"VRT": SAMPLE_BALANCE_SHEET})
-        ff._save_json(ff.CASH_FLOW_FILE, {"VRT": SAMPLE_CASH_FLOW})
+
+        # Pre-populate ratios/income/BS/CF in market.db
+        store = ff._get_market_store()
+        store.upsert_ratios("VRT", SAMPLE_RATIOS)
+        store.upsert_income("VRT", SAMPLE_INCOME)
+        store.upsert_balance_sheet("VRT", SAMPLE_BALANCE_SHEET)
+        store.upsert_cash_flow("VRT", SAMPLE_CASH_FLOW)
 
         with mock.patch("src.data.fundamental_fetcher.fetch_profile") as mock_prof, \
              mock.patch("src.data.fundamental_fetcher.fetch_ratios") as mock_rat, \

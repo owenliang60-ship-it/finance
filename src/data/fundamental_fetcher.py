@@ -1,10 +1,10 @@
 """
-基本面数据获取与缓存
-- 公司概况 (profiles)
-- 财务比率 (ratios)
-- 收入报表 (income)
-- 资产负债表 (balance_sheet)
-- 现金流量表 (cash_flow)
+基本面数据获取与存储
+- 公司概况 (profiles) → JSON 缓存
+- 财务比率 (ratios) → market.db
+- 收入报表 (income) → market.db
+- 资产负债表 (balance_sheet) → market.db
+- 现金流量表 (cash_flow) → market.db
 """
 import json
 import logging
@@ -29,12 +29,8 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# 文件路径
+# Profiles 仍用 JSON（静态元数据，不适合入时序库）
 PROFILES_FILE = FUNDAMENTAL_DIR / "profiles.json"
-RATIOS_FILE = FUNDAMENTAL_DIR / "ratios.json"
-INCOME_FILE = FUNDAMENTAL_DIR / "income.json"
-BALANCE_SHEET_FILE = FUNDAMENTAL_DIR / "balance_sheet.json"
-CASH_FLOW_FILE = FUNDAMENTAL_DIR / "cash_flow.json"
 
 
 def _load_json(path: Path) -> Dict:
@@ -52,7 +48,13 @@ def _save_json(path: Path, data: Dict):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-# ========== 公司概况 ==========
+def _get_market_store():
+    """Lazy import market_store to avoid circular imports."""
+    from src.data.market_store import get_store
+    return get_store()
+
+
+# ========== 公司概况 (JSON) ==========
 
 def fetch_profile(symbol: str) -> Optional[Dict]:
     """获取单只股票的公司概况"""
@@ -94,32 +96,13 @@ def update_profiles(symbols: List[str] = None) -> Dict[str, Dict]:
     return profiles
 
 
-def _sync_to_market_db(table_type: str, data: Dict) -> None:
-    """Dual-write to market.db (non-fatal, failure only logs warning)."""
-    try:
-        from src.data.market_store import get_store
-        store = get_store()
-        upsert_fn = {
-            "income": store.upsert_income,
-            "balance_sheet": store.upsert_balance_sheet,
-            "cash_flow": store.upsert_cash_flow,
-            "ratios": store.upsert_ratios,
-        }[table_type]
-        for symbol, rows in data.items():
-            if symbol == "_meta" or not isinstance(rows, list):
-                continue
-            upsert_fn(symbol, rows)
-    except Exception as e:
-        logger.warning("[market.db] dual-write %s failed: %s", table_type, e)
-
-
 def get_profile(symbol: str) -> Optional[Dict]:
-    """获取公司概况 (优先用缓存)"""
+    """获取公司概况 (JSON 缓存)"""
     profiles = _load_json(PROFILES_FILE)
     return profiles.get(symbol)
 
 
-# ========== 财务比率 ==========
+# ========== 财务比率 (market.db) ==========
 
 def fetch_ratios(symbol: str, limit: int = 4) -> List[Dict]:
     """获取单只股票的财务比率（年度，FMP Starter 不支持季度）"""
@@ -130,42 +113,33 @@ def fetch_ratios(symbol: str, limit: int = 4) -> List[Dict]:
     return data
 
 
-def update_ratios(symbols: List[str] = None) -> Dict[str, List[Dict]]:
-    """批量更新财务比率"""
+def update_ratios(symbols: List[str] = None):
+    """批量更新财务比率 → market.db"""
     if symbols is None:
         symbols = get_symbols()
 
     logger.info(f"更新 {len(symbols)} 只股票的财务比率...")
 
-    ratios = _load_json(RATIOS_FILE)
+    store = _get_market_store()
     updated_count = 0
 
     for i, symbol in enumerate(symbols, 1):
         logger.info(f"[{i}/{len(symbols)}] {symbol}")
         data = fetch_ratios(symbol)
         if data:
-            ratios[symbol] = data
+            store.upsert_ratios(symbol, data)
             updated_count += 1
 
-    ratios["_meta"] = {
-        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "count": len(ratios) - 1
-    }
-
-    _save_json(RATIOS_FILE, ratios)
     logger.info(f"财务比率更新完成: {updated_count}/{len(symbols)}")
-
-    _sync_to_market_db("ratios", ratios)
-    return ratios
 
 
 def get_ratios(symbol: str) -> List[Dict]:
-    """获取财务比率 (优先用缓存)"""
-    ratios = _load_json(RATIOS_FILE)
-    return ratios.get(symbol, [])
+    """获取财务比率 (market.db)"""
+    store = _get_market_store()
+    return store.get_ratios(symbol)
 
 
-# ========== 收入报表 ==========
+# ========== 收入报表 (market.db) ==========
 
 def fetch_income(symbol: str, period: str = "quarter", limit: int = 8) -> List[Dict]:
     """获取收入报表"""
@@ -176,42 +150,33 @@ def fetch_income(symbol: str, period: str = "quarter", limit: int = 8) -> List[D
     return data
 
 
-def update_income(symbols: List[str] = None) -> Dict[str, List[Dict]]:
-    """批量更新收入报表"""
+def update_income(symbols: List[str] = None):
+    """批量更新收入报表 → market.db"""
     if symbols is None:
         symbols = get_symbols()
 
     logger.info(f"更新 {len(symbols)} 只股票的收入报表...")
 
-    income = _load_json(INCOME_FILE)
+    store = _get_market_store()
     updated_count = 0
 
     for i, symbol in enumerate(symbols, 1):
         logger.info(f"[{i}/{len(symbols)}] {symbol}")
         data = fetch_income(symbol)
         if data:
-            income[symbol] = data
+            store.upsert_income(symbol, data)
             updated_count += 1
 
-    income["_meta"] = {
-        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "count": len(income) - 1
-    }
-
-    _save_json(INCOME_FILE, income)
     logger.info(f"收入报表更新完成: {updated_count}/{len(symbols)}")
-
-    _sync_to_market_db("income", income)
-    return income
 
 
 def get_income(symbol: str) -> List[Dict]:
-    """获取收入报表 (优先用缓存)"""
-    income = _load_json(INCOME_FILE)
-    return income.get(symbol, [])
+    """获取收入报表 (market.db)"""
+    store = _get_market_store()
+    return store.get_income(symbol)
 
 
-# ========== 资产负债表 ==========
+# ========== 资产负债表 (market.db) ==========
 
 def fetch_balance_sheet(symbol: str, period: str = "quarter", limit: int = 8) -> List[Dict]:
     """获取资产负债表"""
@@ -222,42 +187,33 @@ def fetch_balance_sheet(symbol: str, period: str = "quarter", limit: int = 8) ->
     return data
 
 
-def update_balance_sheets(symbols: List[str] = None) -> Dict[str, List[Dict]]:
-    """批量更新资产负债表"""
+def update_balance_sheets(symbols: List[str] = None):
+    """批量更新资产负债表 → market.db"""
     if symbols is None:
         symbols = get_symbols()
 
     logger.info(f"更新 {len(symbols)} 只股票的资产负债表...")
 
-    balance_sheets = _load_json(BALANCE_SHEET_FILE)
+    store = _get_market_store()
     updated_count = 0
 
     for i, symbol in enumerate(symbols, 1):
         logger.info(f"[{i}/{len(symbols)}] {symbol}")
         data = fetch_balance_sheet(symbol)
         if data:
-            balance_sheets[symbol] = data
+            store.upsert_balance_sheet(symbol, data)
             updated_count += 1
 
-    balance_sheets["_meta"] = {
-        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "count": len(balance_sheets) - 1
-    }
-
-    _save_json(BALANCE_SHEET_FILE, balance_sheets)
     logger.info(f"资产负债表更新完成: {updated_count}/{len(symbols)}")
-
-    _sync_to_market_db("balance_sheet", balance_sheets)
-    return balance_sheets
 
 
 def get_balance_sheet(symbol: str) -> List[Dict]:
-    """获取资产负债表 (优先用缓存)"""
-    balance_sheets = _load_json(BALANCE_SHEET_FILE)
-    return balance_sheets.get(symbol, [])
+    """获取资产负债表 (market.db)"""
+    store = _get_market_store()
+    return store.get_balance_sheet(symbol)
 
 
-# ========== 现金流量表 ==========
+# ========== 现金流量表 (market.db) ==========
 
 def fetch_cash_flow(symbol: str, period: str = "quarter", limit: int = 8) -> List[Dict]:
     """获取现金流量表"""
@@ -268,39 +224,30 @@ def fetch_cash_flow(symbol: str, period: str = "quarter", limit: int = 8) -> Lis
     return data
 
 
-def update_cash_flows(symbols: List[str] = None) -> Dict[str, List[Dict]]:
-    """批量更新现金流量表"""
+def update_cash_flows(symbols: List[str] = None):
+    """批量更新现金流量表 → market.db"""
     if symbols is None:
         symbols = get_symbols()
 
     logger.info(f"更新 {len(symbols)} 只股票的现金流量表...")
 
-    cash_flows = _load_json(CASH_FLOW_FILE)
+    store = _get_market_store()
     updated_count = 0
 
     for i, symbol in enumerate(symbols, 1):
         logger.info(f"[{i}/{len(symbols)}] {symbol}")
         data = fetch_cash_flow(symbol)
         if data:
-            cash_flows[symbol] = data
+            store.upsert_cash_flow(symbol, data)
             updated_count += 1
 
-    cash_flows["_meta"] = {
-        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "count": len(cash_flows) - 1
-    }
-
-    _save_json(CASH_FLOW_FILE, cash_flows)
     logger.info(f"现金流量表更新完成: {updated_count}/{len(symbols)}")
-
-    _sync_to_market_db("cash_flow", cash_flows)
-    return cash_flows
 
 
 def get_cash_flow(symbol: str) -> List[Dict]:
-    """获取现金流量表 (优先用缓存)"""
-    cash_flows = _load_json(CASH_FLOW_FILE)
-    return cash_flows.get(symbol, [])
+    """获取现金流量表 (market.db)"""
+    store = _get_market_store()
+    return store.get_cash_flow(symbol)
 
 
 # ========== 聚合接口 ==========
@@ -323,7 +270,7 @@ def update_all_fundamentals(symbols: List[str] = None):
 
 def ensure_fundamentals_cached(symbol: str) -> bool:
     """
-    确保该股票的基本面数据已缓存。如果没有，立即从 FMP API 获取并写入缓存。
+    确保该股票的基本面数据已缓存。如果没有，立即从 FMP API 获取并写入。
     配合 pool_manager.ensure_in_pool() 使用，分析即建库。
 
     Returns:
@@ -331,8 +278,9 @@ def ensure_fundamentals_cached(symbol: str) -> bool:
     """
     symbol = symbol.upper()
     all_ok = True
+    store = _get_market_store()
 
-    # Profile
+    # Profile (JSON)
     if not get_profile(symbol):
         logger.info(f"[auto-cache] Fetching profile for {symbol}")
         profile = fetch_profile(symbol)
@@ -343,51 +291,39 @@ def ensure_fundamentals_cached(symbol: str) -> bool:
         else:
             all_ok = False
 
-    # Ratios
+    # Ratios (market.db)
     if not get_ratios(symbol):
         logger.info(f"[auto-cache] Fetching ratios for {symbol}")
         data = fetch_ratios(symbol)
         if data:
-            ratios = _load_json(RATIOS_FILE)
-            ratios[symbol] = data
-            _save_json(RATIOS_FILE, ratios)
-            _sync_to_market_db("ratios", {symbol: data})
+            store.upsert_ratios(symbol, data)
         else:
             all_ok = False
 
-    # Income
+    # Income (market.db)
     if not get_income(symbol):
         logger.info(f"[auto-cache] Fetching income for {symbol}")
         data = fetch_income(symbol)
         if data:
-            income = _load_json(INCOME_FILE)
-            income[symbol] = data
-            _save_json(INCOME_FILE, income)
-            _sync_to_market_db("income", {symbol: data})
+            store.upsert_income(symbol, data)
         else:
             all_ok = False
 
-    # Balance sheet
+    # Balance sheet (market.db)
     if not get_balance_sheet(symbol):
         logger.info(f"[auto-cache] Fetching balance sheet for {symbol}")
         data = fetch_balance_sheet(symbol)
         if data:
-            bs = _load_json(BALANCE_SHEET_FILE)
-            bs[symbol] = data
-            _save_json(BALANCE_SHEET_FILE, bs)
-            _sync_to_market_db("balance_sheet", {symbol: data})
+            store.upsert_balance_sheet(symbol, data)
         else:
             all_ok = False
 
-    # Cash flow
+    # Cash flow (market.db)
     if not get_cash_flow(symbol):
         logger.info(f"[auto-cache] Fetching cash flow for {symbol}")
         data = fetch_cash_flow(symbol)
         if data:
-            cf = _load_json(CASH_FLOW_FILE)
-            cf[symbol] = data
-            _save_json(CASH_FLOW_FILE, cf)
-            _sync_to_market_db("cash_flow", {symbol: data})
+            store.upsert_cash_flow(symbol, data)
         else:
             all_ok = False
 
