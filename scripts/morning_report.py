@@ -395,11 +395,10 @@ def format_section_social(social_scan: dict) -> str:
     lines = ["*G. 社交情绪雷达*"]
 
     alerts = social_scan.get("alerts", [])
-    extreme = social_scan.get("extreme_sentiment", [])
-    reversals = social_scan.get("trend_reversals", [])
+    all_signals = social_scan.get("all_signals", {})
     n_data = social_scan.get("symbols_with_data", 0)
 
-    # Sub-section 1: 注意力异动
+    # Sub-section 1: 注意力异动 (Z-score >= 2.0)
     if alerts:
         lines.append("注意力异动 (Z>=2.0):")
         for sig in alerts[:8]:
@@ -407,7 +406,6 @@ def format_section_social(social_scan: dict) -> str:
             buzz = sig.get("weighted_buzz", 0)
             r_m = sig.get("reddit_mentions", 0)
             x_m = sig.get("x_mentions", 0)
-            # Weighted average sentiment across sources
             r_s = sig.get("reddit_sentiment")
             x_s = sig.get("x_sentiment")
             total_m = r_m + x_m
@@ -425,27 +423,41 @@ def format_section_social(social_scan: dict) -> str:
     else:
         lines.append("注意力异动: 无")
 
-    # Sub-section 2: 情绪极端
-    if extreme:
-        lines.append("")
-        lines.append("情绪极端 (bull>=60 or <=20):")
-        # Deduplicate by (symbol, source), keep both sources per ticker
-        seen = set()
-        for item in extreme[:10]:
-            key = (item["symbol"], item["source"])
-            if key in seen:
-                continue
-            seen.add(key)
-            lines.append("  {} {}: bull {}%".format(
-                item["symbol"], item["source"], item["bullish_pct"]))
+    # Sub-section 2: Buzz Score 前十
+    if all_signals:
+        buzz_ranked = sorted(
+            [(sym, sig) for sym, sig in all_signals.items()
+             if sig.get("weighted_buzz") is not None],
+            key=lambda x: x[1]["weighted_buzz"],
+            reverse=True,
+        )[:10]
+        if buzz_ranked:
+            lines.append("")
+            lines.append("Buzz Score Top 10:")
+            for sym, sig in buzz_ranked:
+                buzz = sig["weighted_buzz"]
+                r_m = sig.get("reddit_mentions", 0)
+                x_m = sig.get("x_mentions", 0)
+                lines.append("  {:<6} buzz={:>6.1f}  (R{}+X{})".format(
+                    sym, buzz, r_m, x_m))
 
-    # Sub-section 3: 趋势分歧
-    if reversals:
-        lines.append("")
-        lines.append("趋势分歧 (Reddit vs X):")
-        for item in reversals[:8]:
-            lines.append("  {} R:{} X:{}".format(
-                item["symbol"], item["reddit_trend"], item["x_trend"]))
+    # Sub-section 3: 提及量前十
+    if all_signals:
+        mentions_ranked = sorted(
+            [(sym, sig) for sym, sig in all_signals.items()
+             if sig.get("combined_mentions", 0) > 0],
+            key=lambda x: x[1]["combined_mentions"],
+            reverse=True,
+        )[:10]
+        if mentions_ranked:
+            lines.append("")
+            lines.append("提及量 Top 10:")
+            for sym, sig in mentions_ranked:
+                total = sig["combined_mentions"]
+                r_m = sig.get("reddit_mentions", 0)
+                x_m = sig.get("x_mentions", 0)
+                lines.append("  {:<6} {:>5}次  (R{}+X{})".format(
+                    sym, total, r_m, x_m))
 
     lines.append("")
     lines.append("覆盖: {}只".format(n_data))

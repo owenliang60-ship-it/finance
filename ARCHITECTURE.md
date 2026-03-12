@@ -500,7 +500,6 @@ data/
 │   ├── oprms.json, memos.jsonl, analyses.jsonl
 │   ├── kill_conditions.json, meta.json
 │   └── scratchpad/
-├── price/*.csv                   **退役中** (market.db 副写)
 ├── fundamental/*.json            **退役中** (market.db 副写)
 └── .backups/                     Data Guardian 快照 (tar.gz, max 10)
 ```
