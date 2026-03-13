@@ -729,9 +729,8 @@ python-dotenv       # Environment variables
 | **backtest/** | 9 | RS engine, factor study framework |
 | **portfolio/** | 10 | Holdings, exposure, benchmark |
 | **scripts/** | ~15 | Operations, cron, automation |
-| **factor_research_codex1/** | 16 | Autonomous factor mining |
 | **tests/** | 78 | 1,285 tests passing |
-| **Total** | **~167** | **36,800+ lines** |
+| **Total** | **~150** | **34,500+ lines** |
 
 ---
 

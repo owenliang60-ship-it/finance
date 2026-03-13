@@ -180,7 +180,6 @@ ssh aliyun "tail -30 /root/workspace/Finance/logs/cron_options_iv.log"
 ├── scripts/                    # 运维脚本
 ├── config/                     # 配置 (settings.py)
 ├── data/                       # 数据文件 (market.db, company.db, pool/, macro/)
-├── factor_research_codex1/     # 自主因子挖掘 (miner, evaluation, registry)
 ├── reports/                    # 研究报告
 ├── risk/                       # Risk Desk (骨架)
 ├── trading/                    # Trading Desk (骨架)
