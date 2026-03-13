@@ -8,8 +8,8 @@ import pytest
 
 from backtest.config import FactorStudyConfig
 from backtest.factor_study.protocol import Factor, FactorMeta
-from backtest.factor_study.runner import FactorStudyRunner, _filter_score_history
-from backtest.factor_study.signals import SignalDefinition, SignalType
+from backtest.factor_study.runner import FactorStudyRunner, _filter_score_history, _filter_events
+from backtest.factor_study.signals import SignalDefinition, SignalType, detect_signals
 from typing import Dict, List, Tuple
 
 
@@ -214,3 +214,64 @@ class TestFilterScoreHistory:
 
         filtered = _filter_score_history(history, dates_set)
         assert "AAPL" not in filtered
+
+
+class TestFilterEvents:
+    def test_filters_by_date_set(self):
+        events = {"AAPL": ["2024-01-01", "2024-01-08", "2024-01-15"]}
+        filtered = _filter_events(events, {"2024-01-01", "2024-01-15"})
+        assert filtered["AAPL"] == ["2024-01-01", "2024-01-15"]
+
+    def test_empty_after_filter(self):
+        events = {"AAPL": ["2024-01-01"]}
+        filtered = _filter_events(events, {"2024-02-01"})
+        assert "AAPL" not in filtered
+
+
+class TestBoundaryCrossSignal:
+    """P1-2 回归测试: cross/sustained 信号不应因 IS/OOS 分割丢失边界事件."""
+
+    def test_cross_up_at_oos_boundary_detected(self):
+        """IS 末尾 85 → OOS 首日 95, 跨 90 阈值的 cross_up 应被检测到."""
+        # IS 日期: d1, d2  |  OOS 日期: d3, d4
+        history = {
+            "SYN01": [
+                ("2024-01-01", 80),   # IS
+                ("2024-01-08", 85),   # IS — 最后一个 IS 点
+                ("2024-01-15", 95),   # OOS — 首个 OOS 点, 跨过 90
+                ("2024-01-22", 92),   # OOS
+            ],
+        }
+        signal_def = SignalDefinition(
+            signal_type=SignalType.CROSS_UP, threshold=90,
+        )
+        oos_dates = {"2024-01-15", "2024-01-22"}
+
+        # 正确做法: 用完整历史检测, 然后过滤事件
+        all_events = detect_signals(history, signal_def)
+        oos_events = _filter_events(all_events, oos_dates)
+
+        assert "SYN01" in oos_events
+        assert "2024-01-15" in oos_events["SYN01"]
+
+    def test_cross_up_lost_if_history_filtered_first(self):
+        """反例: 如果先过滤历史再检测, 边界事件会丢失."""
+        history = {
+            "SYN01": [
+                ("2024-01-01", 80),
+                ("2024-01-08", 85),   # IS
+                ("2024-01-15", 95),   # OOS
+                ("2024-01-22", 92),
+            ],
+        }
+        signal_def = SignalDefinition(
+            signal_type=SignalType.CROSS_UP, threshold=90,
+        )
+        oos_dates = {"2024-01-15", "2024-01-22"}
+
+        # 错误做法: 先过滤历史, OOS 首日变成序列第一个点, 没有前值
+        filtered_hist = _filter_score_history(history, oos_dates)
+        events = detect_signals(filtered_hist, signal_def)
+
+        # 证明: 边界事件丢失了
+        assert "SYN01" not in events

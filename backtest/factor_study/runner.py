@@ -254,8 +254,10 @@ class FactorStudyRunner:
 
         is_date_set = set(is_dates)
         for signal_def in sweep:
-            is_score_hist = _filter_score_history(score_dict, is_date_set)
-            events = detect_signals(is_score_hist, signal_def)
+            # 用完整历史做信号检测 (cross/sustained 需要前一个观测值)
+            # 然后只保留落在 IS 窗口内的事件
+            events = detect_signals(score_dict, signal_def)
+            events = _filter_events(events, is_date_set)
             if not events:
                 continue
             evts = run_event_study(name, signal_def, events, return_matrices)
@@ -271,10 +273,9 @@ class FactorStudyRunner:
             oos_date_set = set(oos_dates)
             result.oos_event_results = []
             for signal_def in sweep:
-                oos_score_hist = _filter_score_history(
-                    score_dict, oos_date_set,
-                )
-                events = detect_signals(oos_score_hist, signal_def)
+                # 用完整历史做信号检测，保留 OOS 窗口内的事件
+                events = detect_signals(score_dict, signal_def)
+                events = _filter_events(events, oos_date_set)
                 if not events:
                     continue
                 evts = run_event_study(
@@ -293,6 +294,19 @@ def _filter_score_history(
     filtered: Dict[str, List[Tuple[str, float]]] = {}
     for sym, history in score_history.items():
         f = [(d, s) for d, s in history if d in dates_set]
+        if f:
+            filtered[sym] = f
+    return filtered
+
+
+def _filter_events(
+    events: Dict[str, List[str]],
+    dates_set: set,
+) -> Dict[str, List[str]]:
+    """过滤事件，只保留落在指定日期集合内的事件日期."""
+    filtered: Dict[str, List[str]] = {}
+    for sym, event_dates in events.items():
+        f = [d for d in event_dates if d in dates_set]
         if f:
             filtered[sym] = f
     return filtered

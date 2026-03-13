@@ -189,6 +189,24 @@ class BacktestEngine:
             else action.to_buy
         )
 
+        # 两遍执行: 先卖(释放现金) → 再买(用释放的现金补仓)
+        # 避免单遍执行时顺序依赖导致低配仓位买不进去
+        # Pass 1: 减仓 (释放现金)
+        for sym in adjust_symbols:
+            price = current_prices.get(sym)
+            if not price or price <= 0 or sym not in weights:
+                continue
+            target_notional = nav * weights[sym]
+            current_shares = self.portfolio.holdings.get(sym, 0)
+            current_value = current_shares * price
+            diff = target_notional - current_value
+            if diff < 0:
+                sell_shares = min(-diff / price, current_shares)
+                if sell_shares * price > 1.0:  # 最小交易金额 $1
+                    self._turnover_notional += sell_shares * price
+                    self.portfolio.sell(sym, sell_shares, price, date)
+
+        # Pass 2: 加仓 (用已释放的现金)
         for sym in adjust_symbols:
             price = current_prices.get(sym)
             if not price or price <= 0 or sym not in weights:
@@ -200,11 +218,6 @@ class BacktestEngine:
             if diff > 0:
                 self._turnover_notional += diff
                 self.portfolio.buy(sym, diff, price, date)
-            elif diff < 0:
-                sell_shares = min(-diff / price, current_shares)
-                if sell_shares * price > 1.0:  # 最小交易金额 $1
-                    self._turnover_notional += sell_shares * price
-                    self.portfolio.sell(sym, sell_shares, price, date)
 
     # ── 辅助方法 ──────────────────────────────────────
 

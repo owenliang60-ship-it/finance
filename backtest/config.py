@@ -30,9 +30,10 @@ class BacktestConfig:
 
     def label(self) -> str:
         """参数组合的可读标签"""
+        rb = "eqw" if self.rebalance_held else "drift"
         return (
             f"{self.market}_{self.rs_method}_top{self.top_n}"
-            f"_{self.rebalance_freq}_buf{self.sell_buffer}"
+            f"_{self.rebalance_freq}_buf{self.sell_buffer}_{rb}"
         )
 
 

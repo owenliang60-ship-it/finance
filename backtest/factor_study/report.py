@@ -204,6 +204,56 @@ def export_csv(results: FactorStudyResults) -> Path:
         ev_df.to_csv(ev_path, index=False)
         logger.info(f"事件研究结果已导出: {ev_path}")
 
+    # OOS IC results
+    if results.oos_ic_results:
+        oos_ic_rows = []
+        for ic in results.oos_ic_results:
+            row = {
+                "factor": ic.factor_name,
+                "split": "OOS",
+                "horizon": ic.horizon,
+                "mean_ic": ic.mean_ic,
+                "std_ic": ic.std_ic,
+                "ic_ir": ic.ic_ir,
+                "ic_hit_rate": ic.ic_hit_rate,
+                "top_bottom_spread": ic.top_bottom_spread,
+            }
+            for q, ret in ic.quantile_returns.items():
+                row[f"Q{q}_return"] = ret
+            oos_ic_rows.append(row)
+
+        oos_ic_df = pd.DataFrame(oos_ic_rows)
+        oos_ic_path = _OUTPUT_DIR / f"ic_oos_{name}_{date_str}.csv"
+        oos_ic_df.to_csv(oos_ic_path, index=False)
+        logger.info(f"OOS IC 结果已导出: {oos_ic_path}")
+
+    # OOS Event results
+    if results.oos_event_results:
+        p_values = [ev.p_value for ev in results.oos_event_results]
+        p_fdr_values = _apply_bh_fdr(p_values)
+
+        oos_ev_rows = []
+        for ev, p_fdr in zip(results.oos_event_results, p_fdr_values):
+            oos_ev_rows.append({
+                "factor": ev.factor_name,
+                "split": "OOS",
+                "signal": ev.signal_label,
+                "horizon": ev.horizon,
+                "n_events": ev.n_events,
+                "n_effective": ev.n_effective,
+                "mean_return": ev.mean_return,
+                "median_return": ev.median_return,
+                "hit_rate": ev.hit_rate,
+                "t_stat": ev.t_stat,
+                "p_value": ev.p_value,
+                "p_fdr": p_fdr,
+            })
+
+        oos_ev_df = pd.DataFrame(oos_ev_rows)
+        oos_ev_path = _OUTPUT_DIR / f"events_oos_{name}_{date_str}.csv"
+        oos_ev_df.to_csv(oos_ev_path, index=False)
+        logger.info(f"OOS 事件研究结果已导出: {oos_ev_path}")
+
     return _OUTPUT_DIR
 
 

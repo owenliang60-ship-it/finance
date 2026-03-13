@@ -248,3 +248,17 @@ class TestBacktestEngine:
         assert isinstance(metrics, BacktestMetrics)
         assert metrics.n_days > 0
         assert metrics.n_trades > 0
+
+    def test_label_includes_rebalance_mode(self):
+        """label() 区分 rebalance_held 模式"""
+        config_eqw = BacktestConfig(
+            market="us_stocks", rs_method="B", top_n=10,
+            rebalance_freq="M", sell_buffer=5, rebalance_held=True,
+        )
+        config_drift = BacktestConfig(
+            market="us_stocks", rs_method="B", top_n=10,
+            rebalance_freq="M", sell_buffer=5, rebalance_held=False,
+        )
+        assert config_eqw.label() != config_drift.label()
+        assert "eqw" in config_eqw.label()
+        assert "drift" in config_drift.label()
