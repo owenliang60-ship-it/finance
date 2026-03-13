@@ -57,6 +57,13 @@ class MockAdapter:
             all_dates.update(df["date"].astype(str).tolist())
         return sorted(all_dates)
 
+    def get_benchmark_nav(self, symbol="SPY"):
+        """生成合成基准数据 — 与股票同日期，微正 drift"""
+        all_dates = self.get_trading_dates()
+        rng = np.random.RandomState(99)
+        prices = 100 * np.exp(np.cumsum(rng.normal(0.0003, 0.01, len(all_dates))))
+        return list(zip(all_dates, prices.tolist()))
+
     def slice_to_date(self, date: str):
         sliced = {}
         for sym, df in self._data.items():
@@ -197,6 +204,44 @@ class TestFactorStudyRunner:
 
         # 应该有更少的计算日期
         assert r.n_computation_dates < 10
+
+    def test_benchmark_excess_returns(self):
+        """With benchmark_symbol set, runner uses excess returns."""
+        config = FactorStudyConfig(
+            market="us_stocks",
+            computation_freq="W",
+            forward_horizons=[5, 10],
+            n_quantiles=5,
+            benchmark_symbol="SPY",
+        )
+        adapter = MockAdapter()
+        runner = FactorStudyRunner(config, adapter)
+        runner.add_factor(RankFactor())
+
+        results = runner.run()
+        r = results[0]
+
+        assert len(r.ic_results) >= 1
+        assert r.config.benchmark_symbol == "SPY"
+
+    def test_no_benchmark_uses_raw(self):
+        """Without benchmark_symbol, runner uses raw returns."""
+        config = FactorStudyConfig(
+            market="us_stocks",
+            computation_freq="W",
+            forward_horizons=[5],
+            n_quantiles=5,
+            benchmark_symbol=None,
+        )
+        adapter = MockAdapter()
+        runner = FactorStudyRunner(config, adapter)
+        runner.add_factor(RankFactor())
+
+        results = runner.run()
+        r = results[0]
+
+        assert len(r.ic_results) >= 1
+        assert r.config.benchmark_symbol is None
 
     def test_multiple_factors(self):
         config = FactorStudyConfig(

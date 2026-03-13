@@ -22,9 +22,14 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+import pandas as pd
+
 from backtest.config import FREQ_DAYS, FactorStudyConfig
 from backtest.factor_study.event_study import EventStudyResult, run_event_study
-from backtest.factor_study.forward_returns import build_return_matrix
+from backtest.factor_study.forward_returns import (
+    build_excess_return_matrix,
+    build_return_matrix,
+)
 from backtest.factor_study.ic_analysis import ICDecayCurve, ICResult, analyze_ic
 from backtest.factor_study.protocol import Factor
 from backtest.factor_study.signals import SignalDefinition, detect_signals
@@ -104,10 +109,37 @@ class FactorStudyRunner:
         logger.info(f"计算频率={self._config.computation_freq}, 计算日数={len(computation_dates)}")
 
         # Step 4: 前向收益矩阵 (一次，跨因子共享)
-        logger.info("构建前向收益矩阵...")
-        return_matrices = build_return_matrix(
-            full_data, computation_dates, self._config.forward_horizons,
-        )
+        # 有 benchmark 时自动减去基准收益 → 超额收益
+        benchmark_df = None
+        if self._config.benchmark_symbol:
+            benchmark_nav = self._adapter.get_benchmark_nav(
+                self._config.benchmark_symbol,
+            )
+            if benchmark_nav:
+                benchmark_df = pd.DataFrame(
+                    benchmark_nav, columns=["date", "close"],
+                )
+                logger.info(
+                    f"基准已加载: {self._config.benchmark_symbol}, "
+                    f"{len(benchmark_df)} 日"
+                )
+            else:
+                logger.warning(
+                    f"基准 {self._config.benchmark_symbol} 数据不可用，"
+                    f"使用原始收益"
+                )
+
+        if benchmark_df is not None:
+            logger.info("构建超额前向收益矩阵 (vs %s)...", self._config.benchmark_symbol)
+            return_matrices = build_excess_return_matrix(
+                full_data, benchmark_df, computation_dates,
+                self._config.forward_horizons,
+            )
+        else:
+            logger.info("构建前向收益矩阵...")
+            return_matrices = build_return_matrix(
+                full_data, computation_dates, self._config.forward_horizons,
+            )
 
         # Step 3+5+6: 逐因子计算
         all_results: List[FactorStudyResults] = []

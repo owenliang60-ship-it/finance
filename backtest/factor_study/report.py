@@ -38,8 +38,10 @@ def print_results(results: FactorStudyResults):
 
     # IC 汇总
     if results.ic_results:
+        bench = results.config.benchmark_symbol
+        ic_label = f"IC 分析 (Excess vs {bench})" if bench else "IC 分析"
         print(f"\n{'─'*70}")
-        print("  Track 1: IC 分析")
+        print(f"  Track 1: {ic_label}")
         print(f"{'─'*70}")
         print(f"  {'Horizon':>8} {'Mean IC':>10} {'Std IC':>10} "
               f"{'IC_IR':>8} {'Hit%':>8} {'Q5-Q1':>10}")
@@ -53,7 +55,8 @@ def print_results(results: FactorStudyResults):
     if results.ic_results:
         longest = results.ic_results[-1]
         if longest.quantile_returns:
-            print(f"\n  分位数收益 (horizon={longest.horizon}d):")
+            q_label = "超额分位数收益" if bench else "分位数收益"
+            print(f"\n  {q_label} (horizon={longest.horizon}d):")
             for q in sorted(longest.quantile_returns.keys()):
                 ret = longest.quantile_returns[q]
                 bar = "█" * max(1, int(abs(ret) * 500))
@@ -245,6 +248,15 @@ def _build_config_section(all_results: List[FactorStudyResults]) -> str:
 
 
 def _build_ic_table(all_results: List[FactorStudyResults]) -> str:
+    # 检测是否使用了 benchmark
+    benchmark = None
+    for r in all_results:
+        if r.config.benchmark_symbol:
+            benchmark = r.config.benchmark_symbol
+            break
+
+    ret_label = f"Excess Return (vs {benchmark})" if benchmark else "Forward Return"
+
     rows = ""
     for r in all_results:
         for ic in r.ic_results:
@@ -259,7 +271,8 @@ def _build_ic_table(all_results: List[FactorStudyResults]) -> str:
                 <td>{ic.top_bottom_spread:.4f}</td>
             </tr>"""
 
-    return f"""<table>
+    return f"""<p style="color:#888;font-size:12px;">收益类型: {ret_label}</p>
+<table>
     <thead><tr>
         <th>因子</th><th>Horizon</th><th>Mean IC</th>
         <th>Std IC</th><th>IC_IR</th><th>Hit%</th><th>Q5-Q1</th>
@@ -324,6 +337,13 @@ def _build_quantile_chart(all_results: List[FactorStudyResults]) -> str:
         labels = ["Q1", "Q2", "Q3", "Q4", "Q5"]
         data = [0, 0, 0, 0, 0]
 
+    # 检测是否使用了 benchmark
+    chart_label = "Mean Forward Return"
+    for r in all_results:
+        if r.config.benchmark_symbol:
+            chart_label = f"Mean Excess Return (vs {r.config.benchmark_symbol})"
+            break
+
     bg_colors = [
         "'#f44336'" if d < 0 else "'#4caf50'" for d in data
     ]
@@ -334,7 +354,7 @@ new Chart(document.getElementById('quantileChart'), {{
     data: {{
         labels: {labels},
         datasets: [{{
-            label: 'Mean Forward Return',
+            label: '{chart_label}',
             data: {data},
             backgroundColor: [{','.join(bg_colors)}],
         }}]

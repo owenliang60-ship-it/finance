@@ -68,6 +68,56 @@ def build_return_matrix(
     return result
 
 
+def build_excess_return_matrix(
+    price_dict: Dict[str, pd.DataFrame],
+    benchmark_df: pd.DataFrame,
+    computation_dates: List[str],
+    horizons: List[int],
+) -> Dict[int, pd.DataFrame]:
+    """
+    构建超额前向收益矩阵 (stock return - benchmark return)
+
+    Args:
+        price_dict: {symbol: price_df}，完整数据（含未来数据）
+        benchmark_df: benchmark 价格 df，含 [date, close] 列
+        computation_dates: 计算日期列表 (sorted)
+        horizons: 前向窗口列表
+
+    Returns:
+        {horizon: DataFrame[index=date, columns=symbol, values=excess_return]}
+        excess_return = stock_fwd_ret(h) - benchmark_fwd_ret(h)
+    """
+    raw = build_return_matrix(price_dict, computation_dates, horizons)
+
+    # 构建 benchmark 快速索引
+    bench_dates = benchmark_df["date"].astype(str).tolist()
+    bench_closes = benchmark_df["close"].astype(float).tolist()
+    bench_idx = {d: i for i, d in enumerate(bench_dates)}
+
+    for h in horizons:
+        # 计算 benchmark 各日期的前向收益
+        bench_rets: Dict[str, float] = {}
+        for date_str in computation_dates:
+            if date_str not in bench_idx:
+                continue
+            start_i = bench_idx[date_str]
+            end_i = start_i + h
+            if end_i >= len(bench_closes):
+                continue
+            p0 = bench_closes[start_i]
+            if p0 == 0:
+                continue
+            bench_rets[date_str] = bench_closes[end_i] / p0 - 1.0
+
+        # 逐行减去 benchmark 收益
+        ret_df = raw[h]
+        for date_str in ret_df.index:
+            if date_str in bench_rets:
+                ret_df.loc[date_str] -= bench_rets[date_str]
+
+    return raw
+
+
 def _forward_return(
     symbol: str,
     comp_date: str,
