@@ -180,18 +180,31 @@ class BacktestEngine:
         # 计算当前 NAV 用于分配
         nav = self.portfolio.compute_nav(current_prices)
 
-        # 执行买入 (目标权重分配)
-        for sym in action.to_buy:
+        # 调整目标持仓权重
+        # rebalance_held=True: 所有目标持仓(to_hold+to_buy)回到目标权重
+        # rebalance_held=False: 只买入新股，已有持仓保持漂移
+        adjust_symbols = (
+            action.to_hold + action.to_buy
+            if self.config.rebalance_held
+            else action.to_buy
+        )
+
+        for sym in adjust_symbols:
             price = current_prices.get(sym)
-            if price and price > 0 and sym in weights:
-                target_notional = nav * weights[sym]
-                # 已持有的不重复买
-                current_shares = self.portfolio.holdings.get(sym, 0)
-                current_value = current_shares * price
-                buy_amount = target_notional - current_value
-                if buy_amount > 0:
-                    self._turnover_notional += buy_amount
-                    self.portfolio.buy(sym, buy_amount, price, date)
+            if not price or price <= 0 or sym not in weights:
+                continue
+            target_notional = nav * weights[sym]
+            current_shares = self.portfolio.holdings.get(sym, 0)
+            current_value = current_shares * price
+            diff = target_notional - current_value
+            if diff > 0:
+                self._turnover_notional += diff
+                self.portfolio.buy(sym, diff, price, date)
+            elif diff < 0:
+                sell_shares = min(-diff / price, current_shares)
+                if sell_shares * price > 1.0:  # 最小交易金额 $1
+                    self._turnover_notional += sell_shares * price
+                    self.portfolio.sell(sym, sell_shares, price, date)
 
     # ── 辅助方法 ──────────────────────────────────────
 

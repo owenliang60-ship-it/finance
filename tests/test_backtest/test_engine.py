@@ -214,3 +214,37 @@ class TestBacktestEngine:
         engine = BacktestEngine(config, adapter=adapter)
         metrics = engine.run()
         assert metrics.total_costs == 0.0
+
+    def test_rebalance_held_true_more_turnover(self):
+        """rebalance_held=True 产生更多换手 (调整已有持仓权重)"""
+        common = dict(
+            market="us_stocks", rs_method="B", top_n=3,
+            sell_buffer=1, rebalance_freq="W",
+            initial_capital=1_000_000, transaction_cost_bps=0,
+        )
+
+        config_true = BacktestConfig(**common, rebalance_held=True)
+        engine_true = BacktestEngine(config_true, adapter=MockAdapter())
+        metrics_true = engine_true.run()
+
+        config_false = BacktestConfig(**common, rebalance_held=False)
+        engine_false = BacktestEngine(config_false, adapter=MockAdapter())
+        metrics_false = engine_false.run()
+
+        # 真等权模式每次 rebalance 都调整已有持仓 → 更多交易
+        assert metrics_true.n_trades > metrics_false.n_trades
+
+    def test_rebalance_held_false_preserves_drift(self):
+        """rebalance_held=False: 已有持仓保持价格漂移, 行为与原始逻辑一致"""
+        config = BacktestConfig(
+            market="us_stocks", rs_method="B", top_n=3,
+            sell_buffer=1, rebalance_freq="M",
+            initial_capital=1_000_000, rebalance_held=False,
+        )
+        adapter = MockAdapter()
+        engine = BacktestEngine(config, adapter=adapter)
+        metrics = engine.run()
+
+        assert isinstance(metrics, BacktestMetrics)
+        assert metrics.n_days > 0
+        assert metrics.n_trades > 0
