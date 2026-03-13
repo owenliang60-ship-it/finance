@@ -67,60 +67,82 @@ def print_results(results: FactorStudyResults):
     print(f"  股票数: {results.n_symbols}")
     print(f"  耗时: {results.elapsed_seconds:.1f}s")
 
-    # IC 汇总
+    bench = results.config.benchmark_symbol
+
+    # IS 日期范围
+    if results.is_dates:
+        print(f"\n  In-Sample: {results.is_dates[0]} ~ {results.is_dates[-1]}"
+              f" ({len(results.is_dates)} 日)")
+    if results.oos_skipped:
+        print(f"  OOS skipped: 数据不足 ({len(results.oos_dates)} < "
+              f"{results.config.min_oos_dates})")
+    elif results.oos_dates:
+        print(f"  Out-of-Sample: {results.oos_dates[0]} ~ {results.oos_dates[-1]}"
+              f" ({len(results.oos_dates)} 日)")
+
+    # ── In-Sample IC ──
     if results.ic_results:
-        bench = results.config.benchmark_symbol
-        ic_label = f"IC 分析 (Excess vs {bench})" if bench else "IC 分析"
+        ic_label = f"IC 分析 — IS (Excess vs {bench})" if bench else "IC 分析 — IS"
         print(f"\n{'─'*70}")
         print(f"  Track 1: {ic_label}")
         print(f"{'─'*70}")
-        print(f"  {'Horizon':>8} {'Mean IC':>10} {'Std IC':>10} "
-              f"{'IC_IR':>8} {'Hit%':>8} {'Q5-Q1':>10}")
-        print(f"  {'─'*8} {'─'*10} {'─'*10} {'─'*8} {'─'*8} {'─'*10}")
+        _print_ic_table(results.ic_results)
 
-        for ic in results.ic_results:
-            print(f"  {ic.horizon:>8d} {ic.mean_ic:>10.4f} {ic.std_ic:>10.4f} "
-                  f"{ic.ic_ir:>8.2f} {ic.ic_hit_rate:>7.1%} {ic.top_bottom_spread:>10.4f}")
-
-    # 分位数收益 (最长 horizon)
-    if results.ic_results:
-        longest = results.ic_results[-1]
-        if longest.quantile_returns:
-            q_label = "超额分位数收益" if bench else "分位数收益"
-            print(f"\n  {q_label} (horizon={longest.horizon}d):")
-            for q in sorted(longest.quantile_returns.keys()):
-                ret = longest.quantile_returns[q]
-                bar = "█" * max(1, int(abs(ret) * 500))
-                sign = "+" if ret >= 0 else ""
-                print(f"    Q{q}: {sign}{ret:.4f}  {bar}")
-
-    # 事件研究 Top 10
-    if results.event_results:
+    # ── OOS IC ──
+    if results.oos_ic_results:
+        ic_label = f"IC 分析 — OOS (Excess vs {bench})" if bench else "IC 分析 — OOS"
         print(f"\n{'─'*70}")
-        print("  Track 2: 事件研究 (Top 10 by |t-stat|, BH-FDR corrected)")
+        print(f"  Track 1: {ic_label}")
         print(f"{'─'*70}")
+        _print_ic_table(results.oos_ic_results)
 
-        # BH-FDR 校正
-        p_values = [ev.p_value for ev in results.event_results]
-        p_fdr_values = _apply_bh_fdr(p_values)
+    # ── In-Sample Events ──
+    _print_event_section(results.event_results, "IS")
 
-        # 按 |t_stat| 排序，携带 FDR p-value
-        indexed_events = list(zip(results.event_results, p_fdr_values))
-        indexed_events.sort(key=lambda x: abs(x[0].t_stat), reverse=True)
-        top10 = indexed_events[:10]
-
-        print(f"  {'Signal':<30} {'H':>4} {'N':>6} {'Neff':>6} {'Mean':>8} "
-              f"{'Hit%':>7} {'t-stat':>8} {'p-val':>8} {'p-FDR':>8}")
-        print(f"  {'─'*30} {'─'*4} {'─'*6} {'─'*6} {'─'*8} "
-              f"{'─'*7} {'─'*8} {'─'*8} {'─'*8}")
-
-        for ev, p_fdr in top10:
-            sig = "**" if p_fdr < 0.05 else "  "
-            print(f"  {ev.signal_label:<30} {ev.horizon:>4d} {ev.n_events:>6d} "
-                  f"{ev.n_effective:>6d} {ev.mean_return:>8.4f} {ev.hit_rate:>6.1%} "
-                  f"{ev.t_stat:>8.2f} {ev.p_value:>7.4f} {p_fdr:>7.4f} {sig}")
+    # ── OOS Events ──
+    if results.oos_event_results:
+        _print_event_section(results.oos_event_results, "OOS")
 
     print(f"{'='*70}\n")
+
+
+def _print_ic_table(ic_results):
+    """打印 IC 汇总表"""
+    print(f"  {'Horizon':>8} {'Mean IC':>10} {'Std IC':>10} "
+          f"{'IC_IR':>8} {'Hit%':>8} {'Q5-Q1':>10}")
+    print(f"  {'─'*8} {'─'*10} {'─'*10} {'─'*8} {'─'*8} {'─'*10}")
+    for ic in ic_results:
+        print(f"  {ic.horizon:>8d} {ic.mean_ic:>10.4f} {ic.std_ic:>10.4f} "
+              f"{ic.ic_ir:>8.2f} {ic.ic_hit_rate:>7.1%} "
+              f"{ic.top_bottom_spread:>10.4f}")
+
+
+def _print_event_section(event_results, label):
+    """打印事件研究 section"""
+    if not event_results:
+        return
+
+    print(f"\n{'─'*70}")
+    print(f"  Track 2: 事件研究 — {label} (Top 10, BH-FDR corrected)")
+    print(f"{'─'*70}")
+
+    p_values = [ev.p_value for ev in event_results]
+    p_fdr_values = _apply_bh_fdr(p_values)
+
+    indexed_events = list(zip(event_results, p_fdr_values))
+    indexed_events.sort(key=lambda x: abs(x[0].t_stat), reverse=True)
+    top10 = indexed_events[:10]
+
+    print(f"  {'Signal':<30} {'H':>4} {'N':>6} {'Neff':>6} {'Mean':>8} "
+          f"{'Hit%':>7} {'t-stat':>8} {'p-val':>8} {'p-FDR':>8}")
+    print(f"  {'─'*30} {'─'*4} {'─'*6} {'─'*6} {'─'*8} "
+          f"{'─'*7} {'─'*8} {'─'*8} {'─'*8}")
+
+    for ev, p_fdr in top10:
+        sig = "**" if p_fdr < 0.05 else "  "
+        print(f"  {ev.signal_label:<30} {ev.horizon:>4d} {ev.n_events:>6d} "
+              f"{ev.n_effective:>6d} {ev.mean_return:>8.4f} {ev.hit_rate:>6.1%} "
+              f"{ev.t_stat:>8.2f} {ev.p_value:>7.4f} {p_fdr:>7.4f} {sig}")
 
 
 # ══════════════════════════════════════════════════════════
@@ -197,17 +219,17 @@ def generate_html_report(
     factor_names = [r.factor_name for r in all_results]
     title = ", ".join(factor_names)
 
-    # IC 表格
+    # IS 结果
     ic_table_html = _build_ic_table(all_results)
-
-    # IC 衰减曲线数据
     decay_chart_js = _build_decay_chart(all_results)
-
-    # 分位数图表
     quantile_chart_js = _build_quantile_chart(all_results)
-
-    # 事件研究表格
     event_table_html = _build_event_table(all_results)
+
+    # OOS 结果
+    oos_section = _build_oos_section(all_results)
+
+    # IS/OOS 日期范围信息
+    split_info = _build_split_info(all_results)
 
     html = f"""<!DOCTYPE html>
 <html lang="zh">
@@ -217,7 +239,7 @@ def generate_html_report(
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
     body {{ font-family: -apple-system, sans-serif; max-width: 1400px; margin: auto; padding: 20px; background: #1a1a2e; color: #e0e0e0; }}
-    h1 {{ color: #ffd700; }} h2 {{ color: #4fc3f7; margin-top: 30px; }}
+    h1 {{ color: #ffd700; }} h2 {{ color: #4fc3f7; margin-top: 30px; }} h3 {{ color: #ff9800; }}
     table {{ border-collapse: collapse; width: 100%; margin: 15px 0; }}
     th, td {{ border: 1px solid #333; padding: 6px 10px; text-align: right; font-size: 13px; }}
     th {{ background: #2a2a4a; color: #ffd700; }}
@@ -226,6 +248,7 @@ def generate_html_report(
     .config {{ background: #2a2a4a; padding: 15px; border-radius: 8px; margin: 15px 0; }}
     .chart-row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }}
     canvas {{ background: #1e1e3a; border-radius: 8px; margin: 10px 0; }}
+    .oos-warn {{ background: #4a3000; padding: 10px; border-radius: 6px; border-left: 4px solid #ff9800; margin: 15px 0; }}
 </style>
 </head>
 <body>
@@ -233,23 +256,28 @@ def generate_html_report(
 <p>生成时间: {now} | 因子: {title}</p>
 
 {_build_config_section(all_results)}
+{split_info}
 
-<h2>Track 1: IC 分析</h2>
+<h2>In-Sample 结果</h2>
+
+<h3>Track 1: IC 分析</h3>
 {ic_table_html}
 
 <div class="chart-row">
     <div>
-        <h2>IC 衰减曲线</h2>
+        <h3>IC 衰减曲线</h3>
         <canvas id="decayChart" width="600" height="350"></canvas>
     </div>
     <div>
-        <h2>分位数收益</h2>
+        <h3>分位数收益</h3>
         <canvas id="quantileChart" width="600" height="350"></canvas>
     </div>
 </div>
 
-<h2>Track 2: 事件研究 (显著信号)</h2>
+<h3>Track 2: 事件研究 — IS (显著信号)</h3>
 {event_table_html}
+
+{oos_section}
 
 <script>
 {decay_chart_js}
@@ -273,6 +301,142 @@ def save_html_report(html: str, factor_names: List[str]) -> Path:
 
 
 # ── 内部构建函数 ──────────────────────────────────────────
+
+def _build_split_info(all_results: List[FactorStudyResults]) -> str:
+    """构建 IS/OOS 日期分割信息"""
+    if not all_results:
+        return ""
+    r = all_results[0]
+
+    parts = []
+    if r.is_dates:
+        parts.append(
+            f"<strong>In-Sample ({len(r.is_dates)} 日):</strong> "
+            f"{r.is_dates[0]} ~ {r.is_dates[-1]}"
+        )
+    if r.oos_skipped:
+        parts.append(
+            f'<div class="oos-warn">OOS skipped: 数据不足 '
+            f"({len(r.oos_dates)} < {r.config.min_oos_dates} 最小门槛)</div>"
+        )
+    elif r.oos_dates:
+        parts.append(
+            f"<strong>Out-of-Sample ({len(r.oos_dates)} 日):</strong> "
+            f"{r.oos_dates[0]} ~ {r.oos_dates[-1]}"
+        )
+
+    return '<div class="config">' + " | ".join(parts) + "</div>"
+
+
+def _build_oos_section(all_results: List[FactorStudyResults]) -> str:
+    """构建 OOS 区块的 HTML"""
+    if not all_results:
+        return ""
+    r = all_results[0]
+
+    if r.oos_skipped:
+        return (
+            '<div class="oos-warn">'
+            f"OOS skipped: 数据不足 ({len(r.oos_dates)} 日 < "
+            f"{r.config.min_oos_dates} 最小门槛)"
+            "</div>"
+        )
+
+    # 构建 OOS IC 表
+    oos_ic_rows = ""
+    has_oos_ic = False
+    for res in all_results:
+        if res.oos_ic_results:
+            has_oos_ic = True
+            for ic in res.oos_ic_results:
+                sig_class = ' class="sig"' if abs(ic.ic_ir) >= 0.5 else ""
+                oos_ic_rows += f"""<tr>
+                    <td style="text-align:left">{ic.factor_name}</td>
+                    <td>{ic.horizon}d</td>
+                    <td{sig_class}>{ic.mean_ic:.4f}</td>
+                    <td>{ic.std_ic:.4f}</td>
+                    <td{sig_class}>{ic.ic_ir:.2f}</td>
+                    <td>{ic.ic_hit_rate:.1%}</td>
+                    <td>{ic.top_bottom_spread:.4f}</td>
+                </tr>"""
+
+    if not has_oos_ic:
+        return ""
+
+    oos_ic_table = f"""<table>
+    <thead><tr>
+        <th>因子</th><th>Horizon</th><th>Mean IC</th>
+        <th>Std IC</th><th>IC_IR</th><th>Hit%</th><th>Q5-Q1</th>
+    </tr></thead>
+    <tbody>{oos_ic_rows}</tbody>
+</table>"""
+
+    # 构建 OOS 事件表
+    oos_events = []
+    for res in all_results:
+        if res.oos_event_results:
+            oos_events.extend(res.oos_event_results)
+
+    if oos_events:
+        oos_event_table = _build_event_table_from_list(oos_events)
+    else:
+        oos_event_table = "<p>无 OOS 事件研究结果</p>"
+
+    return f"""
+<h2>Out-of-Sample 结果</h2>
+
+<h3>Track 1: IC 分析 — OOS</h3>
+{oos_ic_table}
+
+<h3>Track 2: 事件研究 — OOS</h3>
+{oos_event_table}
+"""
+
+
+def _build_event_table_from_list(events) -> str:
+    """从事件列表构建 HTML 事件表 (带 FDR)"""
+    if not events:
+        return "<p>无事件研究结果</p>"
+
+    p_values = [ev.p_value for ev in events]
+    p_fdr_values = _apply_bh_fdr(p_values)
+    indexed = list(zip(events, p_fdr_values))
+
+    significant = [(ev, pf) for ev, pf in indexed
+                   if pf < 0.10 and ev.n_events >= 5]
+    significant.sort(key=lambda x: abs(x[0].t_stat), reverse=True)
+    display = significant[:30] if significant else sorted(
+        indexed, key=lambda x: abs(x[0].t_stat), reverse=True
+    )[:20]
+
+    rows = ""
+    for ev, p_fdr in display:
+        sig_class = ' class="sig"' if p_fdr < 0.05 else ""
+        star = "**" if p_fdr < 0.01 else ("*" if p_fdr < 0.05 else "")
+        rows += f"""<tr>
+            <td style="text-align:left">{ev.factor_name}</td>
+            <td style="text-align:left">{ev.signal_label}</td>
+            <td>{ev.horizon}d</td>
+            <td>{ev.n_events}</td>
+            <td>{ev.n_effective}</td>
+            <td{sig_class}>{ev.mean_return:.4f}</td>
+            <td>{ev.median_return:.4f}</td>
+            <td>{ev.hit_rate:.1%}</td>
+            <td{sig_class}>{ev.t_stat:.2f}{star}</td>
+            <td>{ev.p_value:.4f}</td>
+            <td{sig_class}>{p_fdr:.4f}</td>
+        </tr>"""
+
+    return f"""<p style="color:#888;font-size:12px;">BH-FDR corrected ({len(events)} hypotheses)</p>
+<table>
+    <thead><tr>
+        <th>因子</th><th>信号</th><th>Horizon</th>
+        <th>N</th><th>N_eff</th><th>Mean Ret</th><th>Median</th>
+        <th>Hit%</th><th>t-stat</th><th>p-value</th><th>p-FDR</th>
+    </tr></thead>
+    <tbody>{rows}</tbody>
+</table>"""
+
 
 def _build_config_section(all_results: List[FactorStudyResults]) -> str:
     if not all_results:
@@ -411,51 +575,8 @@ new Chart(document.getElementById('quantileChart'), {{
 
 
 def _build_event_table(all_results: List[FactorStudyResults]) -> str:
-    # 合并所有因子的事件结果
+    """构建 IS 事件表"""
     all_events = []
     for r in all_results:
         all_events.extend(r.event_results)
-
-    if not all_events:
-        return "<p>无事件研究结果</p>"
-
-    # BH-FDR 校正所有 p-value
-    p_values = [ev.p_value for ev in all_events]
-    p_fdr_values = _apply_bh_fdr(p_values)
-    indexed = list(zip(all_events, p_fdr_values))
-
-    # 只展示 FDR 显著的 (p_fdr < 0.10) 或 Top 30
-    significant = [(ev, pf) for ev, pf in indexed
-                   if pf < 0.10 and ev.n_events >= 5]
-    significant.sort(key=lambda x: abs(x[0].t_stat), reverse=True)
-    display = significant[:30] if significant else sorted(
-        indexed, key=lambda x: abs(x[0].t_stat), reverse=True
-    )[:20]
-
-    rows = ""
-    for ev, p_fdr in display:
-        sig_class = ' class="sig"' if p_fdr < 0.05 else ""
-        star = "**" if p_fdr < 0.01 else ("*" if p_fdr < 0.05 else "")
-        rows += f"""<tr>
-            <td style="text-align:left">{ev.factor_name}</td>
-            <td style="text-align:left">{ev.signal_label}</td>
-            <td>{ev.horizon}d</td>
-            <td>{ev.n_events}</td>
-            <td>{ev.n_effective}</td>
-            <td{sig_class}>{ev.mean_return:.4f}</td>
-            <td>{ev.median_return:.4f}</td>
-            <td>{ev.hit_rate:.1%}</td>
-            <td{sig_class}>{ev.t_stat:.2f}{star}</td>
-            <td>{ev.p_value:.4f}</td>
-            <td{sig_class}>{p_fdr:.4f}</td>
-        </tr>"""
-
-    return f"""<p style="color:#888;font-size:12px;">显著性基于 Benjamini-Hochberg FDR 校正 (共 {len(all_events)} 个假设)</p>
-<table>
-    <thead><tr>
-        <th>因子</th><th>信号</th><th>Horizon</th>
-        <th>N</th><th>N_eff</th><th>Mean Ret</th><th>Median</th>
-        <th>Hit%</th><th>t-stat</th><th>p-value</th><th>p-FDR</th>
-    </tr></thead>
-    <tbody>{rows}</tbody>
-</table>"""
+    return _build_event_table_from_list(all_events)

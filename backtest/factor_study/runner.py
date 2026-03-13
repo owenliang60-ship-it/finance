@@ -43,9 +43,18 @@ class FactorStudyResults:
     """单个因子的完整研究结果"""
     factor_name: str
     config: FactorStudyConfig
+    # In-Sample 结果 (始终有)
     ic_results: List[ICResult] = field(default_factory=list)
     ic_decay: Optional[ICDecayCurve] = None
     event_results: List[EventStudyResult] = field(default_factory=list)
+    # Out-of-Sample 结果 (数据不足时为 None)
+    oos_ic_results: Optional[List[ICResult]] = None
+    oos_ic_decay: Optional[ICDecayCurve] = None
+    oos_event_results: Optional[List[EventStudyResult]] = None
+    # 元信息
+    is_dates: List[str] = field(default_factory=list)
+    oos_dates: List[str] = field(default_factory=list)
+    oos_skipped: bool = False
     n_computation_dates: int = 0
     n_symbols: int = 0
     elapsed_seconds: float = 0.0
@@ -171,15 +180,40 @@ class FactorStudyRunner:
         computation_dates: List[str],
         return_matrices: Dict,
     ) -> FactorStudyResults:
-        """运行单个因子的完整研究"""
+        """运行单个因子的完整研究 (含 IS/OOS 分割)"""
         name = factor.meta.name
+
+        # IS/OOS 日期分割
+        split_idx = int(
+            len(computation_dates) * (1 - self._config.oos_fraction)
+        )
+        is_dates = computation_dates[:split_idx]
+        oos_dates = computation_dates[split_idx:]
+        has_oos = len(oos_dates) >= self._config.min_oos_dates
+
+        if has_oos:
+            logger.info(
+                f"  IS/OOS 分割: IS={len(is_dates)} 日 "
+                f"({is_dates[0]}~{is_dates[-1]}), "
+                f"OOS={len(oos_dates)} 日 "
+                f"({oos_dates[0]}~{oos_dates[-1]})"
+            )
+        else:
+            logger.info(
+                f"  OOS 跳过: OOS 日期数 {len(oos_dates)} < "
+                f"最小门槛 {self._config.min_oos_dates}"
+            )
+
         result = FactorStudyResults(
             factor_name=name,
             config=self._config,
             n_computation_dates=len(computation_dates),
+            is_dates=list(is_dates),
+            oos_dates=list(oos_dates),
+            oos_skipped=not has_oos,
         )
 
-        # Step 3: 逐日计算因子分数
+        # Step 3: 逐日计算因子分数 (所有日期，IS+OOS)
         score_history: Dict[str, List[Tuple[str, float]]] = defaultdict(list)
         symbols_seen = set()
 
@@ -195,33 +229,70 @@ class FactorStudyRunner:
                 symbols_seen.add(sym)
 
             if (i + 1) % 50 == 0:
-                logger.debug(f"  {name}: {i+1}/{len(computation_dates)} 日, {len(scores)} symbols")
+                logger.debug(
+                    f"  {name}: {i+1}/{len(computation_dates)} 日, "
+                    f"{len(scores)} symbols"
+                )
 
         result.n_symbols = len(symbols_seen)
-        logger.info(f"  因子分数计算完成: {len(score_history)} symbols × {len(computation_dates)} 日")
+        logger.info(
+            f"  因子分数计算完成: {len(score_history)} symbols × "
+            f"{len(computation_dates)} 日"
+        )
 
         if not score_history:
             return result
 
-        # Step 5: Track 1 — IC 分析
-        ic_results, ic_decay = analyze_ic(
-            factor.meta, dict(score_history), return_matrices,
-            computation_dates, self._config.n_quantiles,
-        )
-        result.ic_results = ic_results
-        result.ic_decay = ic_decay
-
-        # Step 6: Track 2 — 事件研究
+        score_dict = dict(score_history)
         sweep = self._sweep_overrides.get(name) or get_default_sweep(name)
 
+        # ── In-Sample ─────────────────────────────────────
+        result.ic_results, result.ic_decay = analyze_ic(
+            factor.meta, score_dict, return_matrices,
+            is_dates, self._config.n_quantiles,
+        )
+
+        is_date_set = set(is_dates)
         for signal_def in sweep:
-            events = detect_signals(dict(score_history), signal_def)
+            is_score_hist = _filter_score_history(score_dict, is_date_set)
+            events = detect_signals(is_score_hist, signal_def)
             if not events:
                 continue
+            evts = run_event_study(name, signal_def, events, return_matrices)
+            result.event_results.extend(evts)
 
-            event_results = run_event_study(
-                name, signal_def, events, return_matrices,
+        # ── Out-of-Sample ─────────────────────────────────
+        if has_oos:
+            result.oos_ic_results, result.oos_ic_decay = analyze_ic(
+                factor.meta, score_dict, return_matrices,
+                oos_dates, self._config.n_quantiles,
             )
-            result.event_results.extend(event_results)
+
+            oos_date_set = set(oos_dates)
+            result.oos_event_results = []
+            for signal_def in sweep:
+                oos_score_hist = _filter_score_history(
+                    score_dict, oos_date_set,
+                )
+                events = detect_signals(oos_score_hist, signal_def)
+                if not events:
+                    continue
+                evts = run_event_study(
+                    name, signal_def, events, return_matrices,
+                )
+                result.oos_event_results.extend(evts)
 
         return result
+
+
+def _filter_score_history(
+    score_history: Dict[str, List[Tuple[str, float]]],
+    dates_set: set,
+) -> Dict[str, List[Tuple[str, float]]]:
+    """过滤 score_history，只保留指定日期集合内的记录."""
+    filtered: Dict[str, List[Tuple[str, float]]] = {}
+    for sym, history in score_history.items():
+        f = [(d, s) for d, s in history if d in dates_set]
+        if f:
+            filtered[sym] = f
+    return filtered

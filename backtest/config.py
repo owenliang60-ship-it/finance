@@ -114,6 +114,8 @@ class FactorStudyConfig:
     benchmark_symbol: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+    oos_fraction: float = 0.3       # 最后 30% 的日期作为 OOS
+    min_oos_dates: int = 50         # OOS 最少计算日数，不够则跳过 OOS
 
     def __post_init__(self):
         if not self.forward_horizons:
