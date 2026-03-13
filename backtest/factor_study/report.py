@@ -15,6 +15,37 @@ import pandas as pd
 
 from backtest.factor_study.runner import FactorStudyResults
 
+# ══════════════════════════════════════════════════════════
+# 多重检验校正
+# ══════════════════════════════════════════════════════════
+
+
+def _apply_bh_fdr(p_values: List[float]) -> List[float]:
+    """Benjamini-Hochberg FDR 校正 (无外部依赖).
+
+    给定 N 个原始 p-value，返回 FDR 调整后的 p-value。
+    排序后从大到小: p_adj[i] = min(p_adj[i+1], p[i] * N / rank)
+    """
+    n = len(p_values)
+    if n == 0:
+        return []
+
+    # 按 p-value 升序排列，保留原始索引
+    indexed = sorted(enumerate(p_values), key=lambda x: x[1])
+    adjusted = [0.0] * n
+
+    # 从大到小调整
+    prev = 1.0
+    for rank_idx in range(n - 1, -1, -1):
+        orig_idx, p = indexed[rank_idx]
+        rank = rank_idx + 1
+        adj = min(prev, p * n / rank)
+        adj = min(adj, 1.0)
+        adjusted[orig_idx] = adj
+        prev = adj
+
+    return adjusted
+
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -66,25 +97,28 @@ def print_results(results: FactorStudyResults):
     # 事件研究 Top 10
     if results.event_results:
         print(f"\n{'─'*70}")
-        print("  Track 2: 事件研究 (Top 10 by |t-stat|)")
+        print("  Track 2: 事件研究 (Top 10 by |t-stat|, BH-FDR corrected)")
         print(f"{'─'*70}")
 
-        # 按 |t_stat| 排序
-        sorted_events = sorted(
-            results.event_results,
-            key=lambda x: abs(x.t_stat),
-            reverse=True,
-        )[:10]
+        # BH-FDR 校正
+        p_values = [ev.p_value for ev in results.event_results]
+        p_fdr_values = _apply_bh_fdr(p_values)
+
+        # 按 |t_stat| 排序，携带 FDR p-value
+        indexed_events = list(zip(results.event_results, p_fdr_values))
+        indexed_events.sort(key=lambda x: abs(x[0].t_stat), reverse=True)
+        top10 = indexed_events[:10]
 
         print(f"  {'Signal':<30} {'H':>4} {'N':>6} {'Neff':>6} {'Mean':>8} "
-              f"{'Hit%':>7} {'t-stat':>8} {'p-val':>8}")
-        print(f"  {'─'*30} {'─'*4} {'─'*6} {'─'*6} {'─'*8} {'─'*7} {'─'*8} {'─'*8}")
+              f"{'Hit%':>7} {'t-stat':>8} {'p-val':>8} {'p-FDR':>8}")
+        print(f"  {'─'*30} {'─'*4} {'─'*6} {'─'*6} {'─'*8} "
+              f"{'─'*7} {'─'*8} {'─'*8} {'─'*8}")
 
-        for ev in sorted_events:
-            sig = "**" if ev.p_value < 0.05 else "  "
+        for ev, p_fdr in top10:
+            sig = "**" if p_fdr < 0.05 else "  "
             print(f"  {ev.signal_label:<30} {ev.horizon:>4d} {ev.n_events:>6d} "
                   f"{ev.n_effective:>6d} {ev.mean_return:>8.4f} {ev.hit_rate:>6.1%} "
-                  f"{ev.t_stat:>8.2f} {ev.p_value:>7.4f} {sig}")
+                  f"{ev.t_stat:>8.2f} {ev.p_value:>7.4f} {p_fdr:>7.4f} {sig}")
 
     print(f"{'='*70}\n")
 
@@ -123,8 +157,12 @@ def export_csv(results: FactorStudyResults) -> Path:
 
     # Event results
     if results.event_results:
+        # BH-FDR 校正
+        p_values = [ev.p_value for ev in results.event_results]
+        p_fdr_values = _apply_bh_fdr(p_values)
+
         ev_rows = []
-        for ev in results.event_results:
+        for ev, p_fdr in zip(results.event_results, p_fdr_values):
             ev_rows.append({
                 "factor": ev.factor_name,
                 "signal": ev.signal_label,
@@ -136,6 +174,7 @@ def export_csv(results: FactorStudyResults) -> Path:
                 "hit_rate": ev.hit_rate,
                 "t_stat": ev.t_stat,
                 "p_value": ev.p_value,
+                "p_fdr": p_fdr,
             })
 
         ev_df = pd.DataFrame(ev_rows)
@@ -372,22 +411,31 @@ new Chart(document.getElementById('quantileChart'), {{
 
 
 def _build_event_table(all_results: List[FactorStudyResults]) -> str:
-    # 合并所有因子的事件结果，按 |t_stat| 排序
+    # 合并所有因子的事件结果
     all_events = []
     for r in all_results:
         all_events.extend(r.event_results)
 
-    # 只展示显著的 (p < 0.10) 或 Top 30
-    significant = [e for e in all_events if e.p_value < 0.10 and e.n_events >= 5]
-    significant.sort(key=lambda x: abs(x.t_stat), reverse=True)
+    if not all_events:
+        return "<p>无事件研究结果</p>"
+
+    # BH-FDR 校正所有 p-value
+    p_values = [ev.p_value for ev in all_events]
+    p_fdr_values = _apply_bh_fdr(p_values)
+    indexed = list(zip(all_events, p_fdr_values))
+
+    # 只展示 FDR 显著的 (p_fdr < 0.10) 或 Top 30
+    significant = [(ev, pf) for ev, pf in indexed
+                   if pf < 0.10 and ev.n_events >= 5]
+    significant.sort(key=lambda x: abs(x[0].t_stat), reverse=True)
     display = significant[:30] if significant else sorted(
-        all_events, key=lambda x: abs(x.t_stat), reverse=True
+        indexed, key=lambda x: abs(x[0].t_stat), reverse=True
     )[:20]
 
     rows = ""
-    for ev in display:
-        sig_class = ' class="sig"' if ev.p_value < 0.05 else ""
-        star = "**" if ev.p_value < 0.01 else ("*" if ev.p_value < 0.05 else "")
+    for ev, p_fdr in display:
+        sig_class = ' class="sig"' if p_fdr < 0.05 else ""
+        star = "**" if p_fdr < 0.01 else ("*" if p_fdr < 0.05 else "")
         rows += f"""<tr>
             <td style="text-align:left">{ev.factor_name}</td>
             <td style="text-align:left">{ev.signal_label}</td>
@@ -399,13 +447,15 @@ def _build_event_table(all_results: List[FactorStudyResults]) -> str:
             <td>{ev.hit_rate:.1%}</td>
             <td{sig_class}>{ev.t_stat:.2f}{star}</td>
             <td>{ev.p_value:.4f}</td>
+            <td{sig_class}>{p_fdr:.4f}</td>
         </tr>"""
 
-    return f"""<table>
+    return f"""<p style="color:#888;font-size:12px;">显著性基于 Benjamini-Hochberg FDR 校正 (共 {len(all_events)} 个假设)</p>
+<table>
     <thead><tr>
         <th>因子</th><th>信号</th><th>Horizon</th>
         <th>N</th><th>N_eff</th><th>Mean Ret</th><th>Median</th>
-        <th>Hit%</th><th>t-stat</th><th>p-value</th>
+        <th>Hit%</th><th>t-stat</th><th>p-value</th><th>p-FDR</th>
     </tr></thead>
     <tbody>{rows}</tbody>
 </table>"""
