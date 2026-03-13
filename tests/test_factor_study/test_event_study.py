@@ -123,6 +123,70 @@ class TestRunEventStudy:
         assert r5.mean_return > 0
 
 
+class TestDateClustering:
+    """R4: 日期聚类 t-test — 消除重叠窗口导致的样本膨胀"""
+
+    def test_n_effective_less_than_n_events(self):
+        """同一日期多只股票触发 → n_effective < n_events."""
+        # 3 只股票同一天触发 → n_events=3, n_effective=1 (一个日期)
+        events = {
+            "AAPL": ["2024-01-01"],
+            "MSFT": ["2024-01-01"],
+            "GOOG": ["2024-01-01"],
+        }
+        ret_matrices = _make_return_matrices()
+        sig = SignalDefinition(SignalType.THRESHOLD, 90)
+
+        results = run_event_study("Test", sig, events, ret_matrices)
+        r5 = [r for r in results if r.horizon == 5][0]
+
+        assert r5.n_events == 3
+        assert r5.n_effective == 1  # 只有一个独立日期
+
+    def test_different_dates_give_higher_n_effective(self):
+        """不同日期的事件 → n_effective 更高."""
+        events = {
+            "AAPL": ["2024-01-01", "2024-01-03", "2024-01-05"],
+        }
+        ret_matrices = _make_return_matrices()
+        sig = SignalDefinition(SignalType.THRESHOLD, 90)
+
+        results = run_event_study("Test", sig, events, ret_matrices)
+        r5 = [r for r in results if r.horizon == 5][0]
+
+        assert r5.n_events == 3
+        assert r5.n_effective == 3  # 3 个不同日期
+
+    def test_cluster_mean_is_cross_sectional_average(self):
+        """同一日期的多个事件取截面均值."""
+        # 2024-01-01: AAPL=0.05, MSFT=0.02 → 均值=0.035
+        events = {
+            "AAPL": ["2024-01-01"],
+            "MSFT": ["2024-01-01"],
+        }
+        ret_matrices = _make_return_matrices()
+        sig = SignalDefinition(SignalType.THRESHOLD, 90)
+
+        results = run_event_study("Test", sig, events, ret_matrices)
+        r5 = [r for r in results if r.horizon == 5][0]
+
+        assert r5.n_effective == 1
+        # 均值 = (0.05 + 0.02) / 2 = 0.035
+        assert abs(r5.mean_return - 0.035) < 1e-10
+
+    def test_single_date_no_t_test(self):
+        """只有一个独立日期 → t-test 不可做, p_value=1."""
+        events = {"AAPL": ["2024-01-01"]}
+        ret_matrices = _make_return_matrices()
+        sig = SignalDefinition(SignalType.THRESHOLD, 90)
+
+        results = run_event_study("Test", sig, events, ret_matrices)
+        r5 = [r for r in results if r.horizon == 5][0]
+
+        assert r5.n_effective == 1
+        assert r5.p_value == 1.0  # 无法做 t-test
+
+
 class TestEventStudyResult:
     def test_dataclass_fields(self):
         r = EventStudyResult(
@@ -130,6 +194,7 @@ class TestEventStudyResult:
             signal_label="threshold_90",
             horizon=5,
             n_events=10,
+            n_effective=7,
             mean_return=0.03,
             median_return=0.025,
             hit_rate=0.7,
@@ -137,4 +202,15 @@ class TestEventStudyResult:
             p_value=0.02,
         )
         assert r.factor_name == "RS_B"
+        assert r.n_effective == 7
         assert r.p_value < 0.05
+
+    def test_default_n_effective(self):
+        """n_effective 默认值为 0."""
+        r = EventStudyResult(
+            factor_name="Test",
+            signal_label="threshold_90",
+            horizon=5,
+            n_events=0,
+        )
+        assert r.n_effective == 0

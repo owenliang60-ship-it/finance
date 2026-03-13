@@ -76,14 +76,14 @@ def print_results(results: FactorStudyResults):
             reverse=True,
         )[:10]
 
-        print(f"  {'Signal':<30} {'H':>4} {'N':>6} {'Mean':>8} "
+        print(f"  {'Signal':<30} {'H':>4} {'N':>6} {'Neff':>6} {'Mean':>8} "
               f"{'Hit%':>7} {'t-stat':>8} {'p-val':>8}")
-        print(f"  {'─'*30} {'─'*4} {'─'*6} {'─'*8} {'─'*7} {'─'*8} {'─'*8}")
+        print(f"  {'─'*30} {'─'*4} {'─'*6} {'─'*6} {'─'*8} {'─'*7} {'─'*8} {'─'*8}")
 
         for ev in sorted_events:
             sig = "**" if ev.p_value < 0.05 else "  "
             print(f"  {ev.signal_label:<30} {ev.horizon:>4d} {ev.n_events:>6d} "
-                  f"{ev.mean_return:>8.4f} {ev.hit_rate:>6.1%} "
+                  f"{ev.n_effective:>6d} {ev.mean_return:>8.4f} {ev.hit_rate:>6.1%} "
                   f"{ev.t_stat:>8.2f} {ev.p_value:>7.4f} {sig}")
 
     print(f"{'='*70}\n")
@@ -130,6 +130,7 @@ def export_csv(results: FactorStudyResults) -> Path:
                 "signal": ev.signal_label,
                 "horizon": ev.horizon,
                 "n_events": ev.n_events,
+                "n_effective": ev.n_effective,
                 "mean_return": ev.mean_return,
                 "median_return": ev.median_return,
                 "hit_rate": ev.hit_rate,
@@ -392,6 +393,7 @@ def _build_event_table(all_results: List[FactorStudyResults]) -> str:
             <td style="text-align:left">{ev.signal_label}</td>
             <td>{ev.horizon}d</td>
             <td>{ev.n_events}</td>
+            <td>{ev.n_effective}</td>
             <td{sig_class}>{ev.mean_return:.4f}</td>
             <td>{ev.median_return:.4f}</td>
             <td>{ev.hit_rate:.1%}</td>
@@ -402,7 +404,7 @@ def _build_event_table(all_results: List[FactorStudyResults]) -> str:
     return f"""<table>
     <thead><tr>
         <th>因子</th><th>信号</th><th>Horizon</th>
-        <th>N</th><th>Mean Ret</th><th>Median</th>
+        <th>N</th><th>N_eff</th><th>Mean Ret</th><th>Median</th>
         <th>Hit%</th><th>t-stat</th><th>p-value</th>
     </tr></thead>
     <tbody>{rows}</tbody>
