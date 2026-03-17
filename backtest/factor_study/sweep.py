@@ -33,6 +33,12 @@ _DEFAULT_GRIDS: Dict[str, dict] = {
         "cross_down": [2, 5, 10],
         "sustained": [(90, 3), (90, 5), (95, 3), (95, 5), (95, 7)],
     },
+    "Crypto_PMARP": {
+        "threshold": [90, 95, 98],
+        "cross_up": [90, 95, 98],
+        "cross_down": [2, 5, 10],
+        "sustained": [(90, 3), (90, 5), (95, 3), (95, 5), (95, 7)],
+    },
     "RVOL": {
         "threshold": [2.0, 3.0, 4.0],
         "cross_up": [2.0, 3.0, 4.0],

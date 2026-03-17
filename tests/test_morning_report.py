@@ -23,7 +23,7 @@ class TestFormatSectionA:
     """A. PMARP 极值 (四种穿越信号)"""
 
     def test_with_high_and_low_legacy(self):
-        """向后兼容: 没有 pmarp_crossovers 时用 value 过滤"""
+        """向后兼容: 没有 pmarp_crossovers 时用 value 过滤 (上穿98%已移除)"""
         summary = {
             "top_pmarp": [
                 {"symbol": "NVDA", "value": 99.1, "signal": "overbought"},
@@ -35,9 +35,9 @@ class TestFormatSectionA:
         }
         result = format_section_a(summary)
         assert "PMARP" in result
-        assert "NVDA" in result
+        # 上穿98% 已移除 (因子研究证明不显著)
+        assert "NVDA" not in result
         assert "INTC" in result
-        assert "98%" in result
 
     def test_four_crossover_signals(self):
         """四种穿越信号全显示"""
@@ -60,8 +60,8 @@ class TestFormatSectionA:
             },
         }
         result = format_section_a(summary)
-        assert "上穿98%" in result
-        assert "NVDA" in result
+        # 上穿98% 已移除 (因子研究证明不显著)
+        assert "上穿98%" not in result
         assert "下穿98%" in result
         assert "TSLA" in result
         assert "下穿2%" in result
@@ -86,8 +86,8 @@ class TestFormatSectionA:
             },
         }
         result = format_section_a(summary)
-        assert "上穿98%" in result
-        assert "NVDA" in result
+        # 上穿98% 已移除 (因子研究证明不显著)，只有 recovery 信号
+        assert "上穿98%" not in result
         assert "上穿2%" in result
         assert "BA" in result
         assert "下穿98%" not in result

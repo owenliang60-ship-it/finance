@@ -93,29 +93,22 @@ def format_section_a(indicator_summary: dict) -> str:
     crossovers = indicator_summary.get("pmarp_crossovers", {})
 
     # 优先使用穿越事件数据
-    breakout = crossovers.get("breakout_98", [])
+    # 注: 上穿98% (breakout_98) 已移除 — 因子研究证明不显著
+    # 详见 docs/research/2026-03-17-pmarp-crossover-factor-study.md
     fading = crossovers.get("fading_98", [])
     crashed = crossovers.get("crashed_2", [])
     recovery = crossovers.get("recovery_2", [])
 
-    has_any = breakout or fading or crashed or recovery
+    has_any = fading or crashed or recovery
 
     if not has_any:
         # 向后兼容: 如果没有 pmarp_crossovers，用旧的 value 过滤方式
-        high = [x for x in indicator_summary.get("top_pmarp", []) if x["value"] >= 98]
         low = [x for x in indicator_summary.get("low_pmarp", []) if x["value"] <= 2]
-        if high:
-            items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in high)
-            lines.append("突破98%: {}".format(items))
-            has_any = True
         if low:
             items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in low)
             lines.append("跌破2%: {}".format(items))
             has_any = True
     else:
-        if breakout:
-            items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in breakout)
-            lines.append("上穿98%: {}".format(items))
         if fading:
             items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in fading)
             lines.append("下穿98%: {}".format(items))

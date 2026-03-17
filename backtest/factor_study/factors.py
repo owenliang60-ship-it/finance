@@ -270,6 +270,44 @@ class CryptoRSCFactor(Factor):
         return dict(zip(result_df["symbol"], result_df["rs_rank"].astype(float)))
 
 
+# ── Crypto PMARP ─────────────────────────────────────────
+
+class CryptoPMARPFactor(Factor):
+    """Crypto PMARP — Price Moving Average Ratio Percentile (加密货币适配)"""
+
+    @property
+    def meta(self) -> FactorMeta:
+        return FactorMeta(
+            name="Crypto_PMARP",
+            score_name="current",
+            score_range=(0, 100),
+            higher_is_stronger=True,
+            min_data_days=170,
+        )
+
+    def compute(
+        self,
+        price_dict,
+        date: str,
+    ) -> Dict[str, float]:
+        from src.indicators.pmarp import analyze_pmarp
+        import numpy as np
+
+        scores: Dict[str, float] = {}
+        for symbol, data in price_dict.items():
+            # CryptoAdapter.slice_to_date() 返回 np.ndarray
+            if isinstance(data, pd.DataFrame):
+                df = data
+            else:
+                arr = np.asarray(data, dtype=np.float64)
+                df = pd.DataFrame({"close": arr})
+
+            result = analyze_pmarp(df)
+            if result["current"] is not None:
+                scores[symbol] = float(result["current"])
+        return scores
+
+
 # ── Market Momentum ─────────────────────────────────────
 
 class MarketMomentumFactor(Factor):
@@ -311,6 +349,7 @@ ALL_FACTORS: Dict[str, Type[Factor]] = {
     "RVOL_Sustained": RVOLSustainedFactor,
     "Crypto_RS_B": CryptoRSBFactor,
     "Crypto_RS_C": CryptoRSCFactor,
+    "Crypto_PMARP": CryptoPMARPFactor,
     "Market_Momentum": MarketMomentumFactor,
 }
 

@@ -52,12 +52,16 @@ def main():
     parser.add_argument("--thresholds", type=str, help="自定义阈值 (逗号分隔, 如 90,95,98)")
     parser.add_argument("--benchmark", type=str,
                         help="基准 (逗号分隔, 默认: QQQ,POOL_AVG)")
+    parser.add_argument("--horizons", type=str, help="前瞻窗口 (逗号分隔, 如 7,30,60)")
+    parser.add_argument("--symbols", type=str, help="指定标的 (逗号分隔, 如 BTCUSDT,ETHUSDT)")
+    parser.add_argument("--cache-dir", type=str, help="加密货币数据目录 (覆盖默认)")
     parser.add_argument("--start", type=str, help="起始日期 (YYYY-MM-DD)")
     parser.add_argument("--end", type=str, help="结束日期 (YYYY-MM-DD)")
     parser.add_argument("--freq", choices=["D", "W"], help="计算频率 (覆盖默认)")
     parser.add_argument("--html", action="store_true", help="生成 HTML 报告")
     parser.add_argument("--csv", action="store_true", help="导出 CSV")
     parser.add_argument("--list", action="store_true", help="列出所有可用因子")
+    parser.add_argument("--no-oos", action="store_true", help="不做 IS/OOS 分割，全量数据作为单一样本")
     parser.add_argument("-v", "--verbose", action="store_true", help="详细日志")
 
     args = parser.parse_args()
@@ -99,6 +103,10 @@ def main():
         overrides["end_date"] = args.end
     if args.freq:
         overrides["computation_freq"] = args.freq
+    if args.horizons:
+        overrides["forward_horizons"] = [int(h) for h in args.horizons.split(",")]
+    if args.no_oos:
+        overrides["oos_fraction"] = 0.0
 
     if args.market == "crypto":
         config = crypto_factor_study(**overrides)
@@ -106,7 +114,8 @@ def main():
         config = us_factor_study(**overrides)
 
     # 适配器
-    adapter = _create_adapter(args.market)
+    symbols = args.symbols.split(",") if args.symbols else None
+    adapter = _create_adapter(args.market, symbols=symbols, cache_dir_override=args.cache_dir)
 
     # Runner
     runner = FactorStudyRunner(config, adapter)
@@ -146,19 +155,27 @@ def main():
         print(f"HTML 报告: {path}")
 
 
-def _create_adapter(market: str):
+def _create_adapter(market: str, symbols=None, cache_dir_override=None):
     """创建数据适配器"""
     if market == "crypto":
         from pathlib import Path
         from backtest.adapters.crypto import CryptoAdapter
 
-        # 尝试两种缓存目录
-        quant_root = _ROOT.parent / "Quant"
-        cache_v2 = quant_root / "cache" / "binance_daily_cache"
-        cache_v1 = quant_root / "cache" / "daily_klines"
-        cache_dir = cache_v2 if cache_v2.exists() else cache_v1
+        if cache_dir_override:
+            cache_dir = Path(cache_dir_override)
+        else:
+            # 优先使用 Finance 本地 crypto 数据（完整历史）
+            local_crypto = _ROOT / "data" / "crypto"
+            if local_crypto.exists() and any(local_crypto.glob("*.csv")):
+                cache_dir = local_crypto
+            else:
+                # 回退到 Quant 缓存
+                quant_root = _ROOT.parent / "Quant"
+                cache_v2 = quant_root / "cache" / "binance_daily_cache"
+                cache_v1 = quant_root / "cache" / "daily_klines"
+                cache_dir = cache_v2 if cache_v2.exists() else cache_v1
 
-        return CryptoAdapter(cache_dir=cache_dir)
+        return CryptoAdapter(symbols=symbols, cache_dir=cache_dir)
     else:
         from backtest.adapters.us_stocks import USStocksAdapter
         return USStocksAdapter()
