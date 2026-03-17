@@ -571,7 +571,46 @@ def main():
     parser.add_argument("--no-telegram", action="store_true", help="不推送 Telegram")
     parser.add_argument("--clustering", action="store_true", help="强制运行聚类")
     parser.add_argument("--symbols", type=str, help="指定股票代码，逗号分隔")
+    parser.add_argument("--no-social", action="store_true",
+                        help="跳过社交情绪 Section G（社交数据延后采集时使用）")
+    parser.add_argument("--social-only", action="store_true",
+                        help="仅发送社交情绪日报（配合延后 cron 使用）")
     args = parser.parse_args()
+
+    # --social-only: 仅发送社交情绪日报（独立 cron 调用）
+    if args.social_only:
+        logger.info("=" * 60)
+        logger.info("社交情绪日报 开始")
+        logger.info("=" * 60)
+        start_time = time.time()
+        try:
+            if args.symbols:
+                symbols = [s.strip().upper() for s in args.symbols.split(",")]
+            else:
+                symbols = get_symbols()
+
+            from src.indicators.social_attention import scan_social_signals
+            social_scan = scan_social_signals(symbols)
+            logger.info("社交情绪扫描完成: %d 只有数据", social_scan.get("symbols_with_data", 0))
+
+            social_msg = "*未来资本 社交情绪日报*\n{}\n\n{}".format(
+                datetime.now().strftime("%Y-%m-%d %H:%M"),
+                format_section_social(social_scan),
+            )
+
+            if not args.no_telegram:
+                send_telegram(social_msg)
+            else:
+                print(social_msg)
+        except Exception as e:
+            logger.error("社交情绪日报异常: %s", e)
+            if not args.no_telegram:
+                send_telegram("*社交情绪日报异常*\n\n错误: {}".format(str(e)[:200]))
+
+        elapsed = time.time() - start_time
+        logger.info("社交情绪日报完成，耗时 %.1f 秒", elapsed)
+        logger.info("=" * 60)
+        return
 
     logger.info("=" * 60)
     logger.info("未来资本 晨报 开始")
@@ -597,15 +636,18 @@ def main():
         # 4. Dollar Volume 采集
         dv_result = run_dollar_volume()
 
-        # 5. 社交情绪雷达
+        # 5. 社交情绪雷达（--no-social 时跳过）
         social_scan = None
-        try:
-            from src.indicators.social_attention import scan_social_signals
-            logger.info("开始社交情绪扫描...")
-            social_scan = scan_social_signals(symbols)
-            logger.info("社交情绪扫描完成: %d 只有数据", social_scan.get("symbols_with_data", 0))
-        except Exception as e:
-            logger.warning("社交情绪扫描失败: %s", e)
+        if not args.no_social:
+            try:
+                from src.indicators.social_attention import scan_social_signals
+                logger.info("开始社交情绪扫描...")
+                social_scan = scan_social_signals(symbols)
+                logger.info("社交情绪扫描完成: %d 只有数据", social_scan.get("symbols_with_data", 0))
+            except Exception as e:
+                logger.warning("社交情绪扫描失败: %s", e)
+        else:
+            logger.info("跳过社交情绪（--no-social），将由 10:20 社交日报独立发送")
 
         # 6. 聚类 (仅周六或强制)
         is_saturday = datetime.now().weekday() == 5
@@ -620,7 +662,7 @@ def main():
             indicator_summary, momentum_results, dv_result,
             social_scan=social_scan, elapsed=elapsed)
 
-        # 7. 保存 JSON
+        # 8. 保存 JSON
         SCANS_DIR.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         save_path = SCANS_DIR / "morning_{}.json".format(timestamp)
@@ -638,7 +680,7 @@ def main():
             json.dump(save_data, f, ensure_ascii=False, indent=2, default=str)
         logger.info("结果已保存: %s", save_path)
 
-        # 8. 发送 Telegram
+        # 9. 发送 Telegram
         if not args.no_telegram:
             # 日报 (拆分如果超长)
             if len(daily_msg) > 4000:
