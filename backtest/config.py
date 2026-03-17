@@ -145,8 +145,10 @@ def us_factor_study(**overrides) -> FactorStudyConfig:
         computation_freq="W",
         forward_horizons=list(_US_HORIZONS),
         n_quantiles=5,
-        benchmark_symbols=["QQQ", "POOL_AVG"],
     )
+    # 只在调用方没指定任何基准时才设默认值
+    if "benchmark_symbol" not in overrides and "benchmark_symbols" not in overrides:
+        defaults["benchmark_symbols"] = ["QQQ", "POOL_AVG"]
     defaults.update(overrides)
     return FactorStudyConfig(**defaults)
 
@@ -158,7 +160,8 @@ def crypto_factor_study(**overrides) -> FactorStudyConfig:
         computation_freq="D",
         forward_horizons=list(_CRYPTO_HORIZONS),
         n_quantiles=5,
-        benchmark_symbols=["BTCUSDT"],
     )
+    if "benchmark_symbol" not in overrides and "benchmark_symbols" not in overrides:
+        defaults["benchmark_symbols"] = ["BTCUSDT"]
     defaults.update(overrides)
     return FactorStudyConfig(**defaults)

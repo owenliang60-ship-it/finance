@@ -382,7 +382,13 @@ class TestBackwardCompatSingleBenchmark:
         assert config.benchmark_symbols == ["SPY"]
 
     def test_old_style_factory_override(self):
-        """旧式 us_factor_study(benchmark_symbol="SPY") 迁移"""
+        """旧式 us_factor_study(benchmark_symbol="SPY") — 真实场景不传 benchmark_symbols"""
+        config = us_factor_study(benchmark_symbol="SPY")
+        # benchmark_symbol 指定 → 覆盖工厂默认，迁移到 benchmark_symbols
+        assert config.benchmark_symbols == ["SPY"]
+        assert config.benchmark_symbol == "SPY"
+
+    def test_old_style_factory_override_with_empty_list(self):
+        """旧式 + 显式空列表"""
         config = us_factor_study(benchmark_symbol="SPY", benchmark_symbols=[])
-        # benchmark_symbol 有值, benchmark_symbols 空 → 迁移
         assert config.benchmark_symbols == ["SPY"]

@@ -158,11 +158,13 @@ def _print_event_section(event_results, label):
 # ══════════════════════════════════════════════════════════
 
 def export_csv(results: FactorStudyResults) -> Path:
-    """导出完整结果到 CSV"""
+    """导出完整结果到 CSV — 每个基准独立文件，FDR 口径正确"""
     _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     date_str = datetime.now().strftime("%Y%m%d")
     name = results.factor_name
     bench = _bench_display(results)
+    # 基准后缀: "PMARP_QQQ_20260317.csv" 或 "PMARP_20260317.csv" (无基准)
+    bench_suffix = f"_{bench}" if bench else ""
 
     # IC results
     if results.ic_results:
@@ -183,15 +185,11 @@ def export_csv(results: FactorStudyResults) -> Path:
             ic_rows.append(row)
 
         ic_df = pd.DataFrame(ic_rows)
-        ic_path = _OUTPUT_DIR / f"ic_{name}_{date_str}.csv"
-        # 追加模式: 多基准结果合并到同一文件
-        if ic_path.exists():
-            ic_df.to_csv(ic_path, mode="a", header=False, index=False)
-        else:
-            ic_df.to_csv(ic_path, index=False)
+        ic_path = _OUTPUT_DIR / f"ic_{name}{bench_suffix}_{date_str}.csv"
+        ic_df.to_csv(ic_path, index=False)
         logger.info(f"IC 结果已导出: {ic_path}")
 
-    # Event results
+    # Event results — FDR 在单个基准的完整假设族上校正
     if results.event_results:
         p_values = [ev.p_value for ev in results.event_results]
         p_fdr_values = _apply_bh_fdr(p_values)
@@ -214,11 +212,8 @@ def export_csv(results: FactorStudyResults) -> Path:
             })
 
         ev_df = pd.DataFrame(ev_rows)
-        ev_path = _OUTPUT_DIR / f"events_{name}_{date_str}.csv"
-        if ev_path.exists():
-            ev_df.to_csv(ev_path, mode="a", header=False, index=False)
-        else:
-            ev_df.to_csv(ev_path, index=False)
+        ev_path = _OUTPUT_DIR / f"events_{name}{bench_suffix}_{date_str}.csv"
+        ev_df.to_csv(ev_path, index=False)
         logger.info(f"事件研究结果已导出: {ev_path}")
 
     # OOS IC results
@@ -241,11 +236,8 @@ def export_csv(results: FactorStudyResults) -> Path:
             oos_ic_rows.append(row)
 
         oos_ic_df = pd.DataFrame(oos_ic_rows)
-        oos_ic_path = _OUTPUT_DIR / f"ic_oos_{name}_{date_str}.csv"
-        if oos_ic_path.exists():
-            oos_ic_df.to_csv(oos_ic_path, mode="a", header=False, index=False)
-        else:
-            oos_ic_df.to_csv(oos_ic_path, index=False)
+        oos_ic_path = _OUTPUT_DIR / f"ic_oos_{name}{bench_suffix}_{date_str}.csv"
+        oos_ic_df.to_csv(oos_ic_path, index=False)
         logger.info(f"OOS IC 结果已导出: {oos_ic_path}")
 
     # OOS Event results
@@ -272,11 +264,8 @@ def export_csv(results: FactorStudyResults) -> Path:
             })
 
         oos_ev_df = pd.DataFrame(oos_ev_rows)
-        oos_ev_path = _OUTPUT_DIR / f"events_oos_{name}_{date_str}.csv"
-        if oos_ev_path.exists():
-            oos_ev_df.to_csv(oos_ev_path, mode="a", header=False, index=False)
-        else:
-            oos_ev_df.to_csv(oos_ev_path, index=False)
+        oos_ev_path = _OUTPUT_DIR / f"events_oos_{name}{bench_suffix}_{date_str}.csv"
+        oos_ev_df.to_csv(oos_ev_path, index=False)
         logger.info(f"OOS 事件研究结果已导出: {oos_ev_path}")
 
     return _OUTPUT_DIR
