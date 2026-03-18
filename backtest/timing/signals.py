@@ -176,9 +176,10 @@ def vix_ma_signals(
         return []
 
     target_dates = set(price_df["date"].astype(str))
+
+    # 在完整 VIX 历史上计算 MA，保留 lookback
     vix = aux_data.copy()
     vix["date"] = vix["date"].astype(str)
-    vix = vix[vix["date"].isin(target_dates)].reset_index(drop=True)
 
     if len(vix) < vix_ma_period + 1:
         return []
@@ -191,6 +192,9 @@ def vix_ma_signals(
     signals = []
 
     for i in range(warmup, len(close)):
+        if dates.iloc[i] not in target_dates:
+            continue
+
         prev_diff = close.iloc[i - 1] - ma.iloc[i - 1]
         curr_diff = close.iloc[i] - ma.iloc[i]
 
@@ -221,11 +225,12 @@ def vix_spike_signals(
         return []
 
     target_dates = set(price_df["date"].astype(str))
+
+    # 在完整 VIX 上跟踪状态，只在 target_dates 发信号
     vix = aux_data.copy()
     vix["date"] = vix["date"].astype(str)
-    vix = vix[vix["date"].isin(target_dates)].reset_index(drop=True)
 
-    if len(vix) < 2:
+    if len(vix) < 1:
         return []
 
     close = vix["close"].astype(float)
@@ -234,13 +239,15 @@ def vix_spike_signals(
     signals = []
     in_market = False
 
-    for i in range(1, len(close)):
+    for i in range(len(close)):
         if not in_market and close.iloc[i] > buy_threshold:
-            signals.append((dates.iloc[i], "BUY"))
             in_market = True
+            if dates.iloc[i] in target_dates:
+                signals.append((dates.iloc[i], "BUY"))
         elif in_market and close.iloc[i] < sell_threshold:
-            signals.append((dates.iloc[i], "SELL"))
             in_market = False
+            if dates.iloc[i] in target_dates:
+                signals.append((dates.iloc[i], "SELL"))
 
     return signals
 
@@ -262,9 +269,10 @@ def vix_percentile_signals(
         return []
 
     target_dates = set(price_df["date"].astype(str))
+
+    # 在完整 VIX 上计算百分位 + 跟踪状态
     vix = aux_data.copy()
     vix["date"] = vix["date"].astype(str)
-    vix = vix[vix["date"].isin(target_dates)].reset_index(drop=True)
 
     if len(vix) < lookback + 1:
         return []
@@ -280,11 +288,13 @@ def vix_percentile_signals(
         pctile = (window < close.iloc[i]).sum() / len(window) * 100
 
         if not in_market and pctile > buy_pctile:
-            signals.append((dates.iloc[i], "BUY"))
             in_market = True
+            if dates.iloc[i] in target_dates:
+                signals.append((dates.iloc[i], "BUY"))
         elif in_market and pctile < sell_pctile:
-            signals.append((dates.iloc[i], "SELL"))
             in_market = False
+            if dates.iloc[i] in target_dates:
+                signals.append((dates.iloc[i], "SELL"))
 
     return signals
 
@@ -306,9 +316,10 @@ def vix_rsi_signals(
         return []
 
     target_dates = set(price_df["date"].astype(str))
+
+    # 在完整 VIX 上计算 RSI
     vix = aux_data.copy()
     vix["date"] = vix["date"].astype(str)
-    vix = vix[vix["date"].isin(target_dates)].reset_index(drop=True)
 
     if len(vix) < period + 2:
         return []
@@ -325,12 +336,19 @@ def vix_rsi_signals(
 
     rs = avg_gain / avg_loss.replace(0, np.nan)
     rsi = 100 - (100 / (1 + rs))
-    rsi = rsi.fillna(50)
+    # avg_loss == 0 时: 纯涨 → RSI=100, 无波动 → RSI=50
+    fill_values = pd.Series(
+        np.where(avg_gain > 0, 100.0, 50.0), index=close.index
+    )
+    rsi = rsi.fillna(fill_values)
 
     warmup = period + 1
     signals = []
 
     for i in range(warmup, len(close)):
+        if dates.iloc[i] not in target_dates:
+            continue
+
         prev_rsi = rsi.iloc[i - 1]
         curr_rsi = rsi.iloc[i]
 

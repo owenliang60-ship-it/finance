@@ -272,6 +272,26 @@ class TestVIXMASignals:
         for date, _ in signals:
             assert date in target_dates
 
+    def test_short_price_window_preserves_vix_history(self):
+        """P1 回归: 10 天价格窗口 + 30 天 VIX → MA(20) 应正常计算
+        旧代码: 先裁到 10 天 → 10 < 21 → return []
+        新代码: 在 30 天 VIX 上算 MA → 检测到下穿 → BUY
+        """
+        # 30 天 VIX: 20 天稳定高位 + 10 天快速下降 (穿 MA → BUY)
+        vix_vals = [25.0] * 20 + [24, 22, 20, 18, 16, 14, 12, 10, 10, 10]
+        vix_df = _make_vix_df(vix_vals, start_date="2024-01-01")
+
+        # price_df 只覆盖后 10 天，日期与 VIX 对齐
+        price_dates = vix_df["date"].iloc[20:].tolist()
+        price_df = pd.DataFrame({"date": price_dates, "close": [100.0] * 10})
+
+        signals = vix_ma_signals(price_df, vix_ma_period=20, aux_data=vix_df)
+
+        buy_signals = [s for s in signals if s[1] == "BUY"]
+        assert len(buy_signals) > 0, (
+            "Short price window should not prevent VIX MA from using full history"
+        )
+
 
 class TestVIXSpikeSignals:
     def test_spike_buy(self):
@@ -313,6 +333,20 @@ class TestVIXSpikeSignals:
         buy_signals = [s for s in signals if s[1] == "BUY"]
         assert len(buy_signals) == 1, "Should only trigger one BUY per spike"
 
+    def test_day_zero_spike(self):
+        """P2 回归: VIX 第一天就 > threshold → 应立即 BUY"""
+        vix_vals = [35, 36, 37, 34, 32, 28, 18]
+        vix_df = _make_vix_df(vix_vals)
+        price_df = _make_price_df([100] * len(vix_vals))
+
+        signals = vix_spike_signals(price_df, buy_threshold=30, sell_threshold=20, aux_data=vix_df)
+
+        assert len(signals) > 0
+        assert signals[0][1] == "BUY"
+        assert signals[0][0] == vix_df["date"].iloc[0], (
+            "BUY should fire on day 0, got %s" % signals[0][0]
+        )
+
 
 class TestVIXPercentileSignals:
     def test_extreme_high_buy(self):
@@ -345,6 +379,23 @@ class TestVIXPercentileSignals:
             price_df, lookback=252, aux_data=vix_df,
         )
         assert signals == []
+
+    def test_short_price_window_preserves_vix_history(self):
+        """P1 回归: 300 天 VIX + 100 天价格窗口 → 百分位应正常工作"""
+        # 300 天 VIX: 前 260 天低位，然后飙升
+        vix_vals = [15] * 260 + [40, 42, 45] + [15] * 37
+        vix_df = _make_vix_df(vix_vals, start_date="2023-01-01")
+        # price_df 只覆盖后 100 天（包含飙升点）
+        price_df = _make_price_df([100] * 100, start_date="2023-09-18")
+
+        signals = vix_percentile_signals(
+            price_df, lookback=252, buy_pctile=90, sell_pctile=20, aux_data=vix_df,
+        )
+
+        buy_signals = [s for s in signals if s[1] == "BUY"]
+        assert len(buy_signals) > 0, (
+            "300-day VIX history with 100-day price window should still detect percentile spike"
+        )
 
 
 class TestVIXRSISignals:
@@ -384,6 +435,25 @@ class TestVIXRSISignals:
         warmup_dates = set(vix_df["date"].iloc[:warmup].tolist())
         for date, _ in signals:
             assert date not in warmup_dates
+
+    def test_pure_rally_rsi_100(self):
+        """P2 回归: VIX 纯涨时 RSI 应为 100，不是 50"""
+        # 20 天横盘 + 30 天每天涨 5%
+        vix_vals = [15.0] * 20
+        for _ in range(30):
+            vix_vals.append(vix_vals[-1] * 1.05)
+
+        vix_df = _make_vix_df(vix_vals)
+        price_df = _make_price_df([100] * len(vix_vals))
+
+        signals = vix_rsi_signals(
+            price_df, period=14, overbought=70, oversold=30, aux_data=vix_df,
+        )
+
+        buy_signals = [s for s in signals if s[1] == "BUY"]
+        assert len(buy_signals) > 0, (
+            "VIX pure rally should push RSI above 70 and trigger BUY"
+        )
 
 
 class TestSignalRegistry:
