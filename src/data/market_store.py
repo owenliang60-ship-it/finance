@@ -322,6 +322,18 @@ _SCHEMA = "\n\n".join([
 );""",
     "CREATE INDEX IF NOT EXISTS idx_social_date ON social_sentiment(date);",
     "CREATE INDEX IF NOT EXISTS idx_social_symbol ON social_sentiment(symbol);",
+
+    # Broad market RVOL scan hits (for factor backtesting)
+    """CREATE TABLE IF NOT EXISTS broad_scan_hits (
+    symbol TEXT NOT NULL,
+    date TEXT NOT NULL,
+    rvol REAL NOT NULL,
+    return_pct REAL NOT NULL,
+    market_cap REAL,
+    in_pool INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (symbol, date)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_bsh_date ON broad_scan_hits(date);",
 ])
 
 # Pre-compute snake-case column sets per table for fast lookup
@@ -342,7 +354,7 @@ _VALID_TABLES = frozenset({
     "cash_flow_quarterly", "ratios_annual", "metrics_quarterly",
     "iv_daily", "options_snapshots",
     "forward_estimates", "forward_metadata",
-    "social_sentiment",
+    "social_sentiment", "broad_scan_hits",
 })
 
 
@@ -1072,6 +1084,42 @@ class MarketStore:
         if deleted > 0:
             logger.info("Cleaned up %d old option snapshot rows (before %s)", deleted, cutoff_date)
         return deleted
+
+    # ---- Broad Market Scan ----
+
+    def save_broad_scan_hits(self, rows: List[Dict]) -> int:
+        """Save broad market RVOL scan hits (multi-symbol batch upsert).
+
+        Args:
+            rows: [{symbol, date, rvol, return_pct, market_cap, in_pool}, ...]
+
+        Returns:
+            Number of rows saved.
+        """
+        if not rows:
+            return 0
+        conn = self._get_conn()
+        count = 0
+        with conn:
+            for row in rows:
+                if not row.get("symbol") or not row.get("date"):
+                    continue
+                conn.execute(
+                    """INSERT OR REPLACE INTO broad_scan_hits
+                       (symbol, date, rvol, return_pct, market_cap, in_pool)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (
+                        row["symbol"].upper(),
+                        row["date"],
+                        row["rvol"],
+                        row["return_pct"],
+                        row.get("market_cap"),
+                        1 if row.get("in_pool") else 0,
+                    ),
+                )
+                count += 1
+        logger.info("Saved %d broad scan hits", count)
+        return count
 
     # ---- Symbol Discovery ----
 

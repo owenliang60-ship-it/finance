@@ -13,8 +13,6 @@ from scripts.morning_report import (
     format_section_b,
     format_section_c,
     format_section_d,
-    format_section_e,
-    format_section_f,
     format_morning_report,
 )
 
@@ -118,71 +116,7 @@ class TestFormatSectionA:
 
 
 class TestFormatSectionB:
-    """B. RS 动量评级"""
-
-    def test_basic_formatting(self):
-        rs_b = pd.DataFrame([
-            {"symbol": "NVDA", "rs_rank": 99, "z_3m": 2.31, "z_1m": 1.87, "z_1w": 1.54},
-            {"symbol": "PLTR", "rs_rank": 97, "z_3m": 2.10, "z_1m": 1.92, "z_1w": 0.84},
-        ])
-        rs_c = pd.DataFrame([
-            {"symbol": "PLTR", "rs_rank": 99, "clenow_63d": 0.94, "clenow_21d": 0.87, "clenow_10d": 0.72},
-        ])
-        result = format_section_b(rs_b, rs_c)
-        assert "Method B" in result
-        assert "Method C" in result
-        assert "NVDA" in result
-        assert "PLTR" in result
-
-    def test_sort_order_by_rs_rank(self):
-        """Bug fix: top/bottom must be sorted by rs_rank, not DataFrame iteration order"""
-        # DataFrame in arbitrary order (simulating pool iteration order)
-        rs_b = pd.DataFrame([
-            {"symbol": "AAPL", "rs_rank": 50, "z_3m": 0.5, "z_1m": 0.3, "z_1w": 0.1},
-            {"symbol": "NVDA", "rs_rank": 99, "z_3m": 2.3, "z_1m": 1.8, "z_1w": 1.5},
-            {"symbol": "INTC", "rs_rank": 5,  "z_3m": -1.8, "z_1m": -1.5, "z_1w": -0.9},
-            {"symbol": "PLTR", "rs_rank": 97, "z_3m": 2.1, "z_1m": 1.9, "z_1w": 0.8},
-            {"symbol": "MSFT", "rs_rank": 75, "z_3m": 1.0, "z_1m": 0.7, "z_1w": 0.4},
-            {"symbol": "BA",   "rs_rank": 10, "z_3m": -1.5, "z_1m": -1.2, "z_1w": -0.7},
-        ])
-        rs_c = pd.DataFrame([
-            {"symbol": "AAPL", "rs_rank": 60, "clenow_63d": 0.3, "clenow_21d": 0.2, "clenow_10d": 0.1},
-            {"symbol": "NVDA", "rs_rank": 98, "clenow_63d": 0.9, "clenow_21d": 0.8, "clenow_10d": 0.7},
-            {"symbol": "INTC", "rs_rank": 3,  "clenow_63d": -0.5, "clenow_21d": -0.3, "clenow_10d": -0.2},
-        ])
-        result = format_section_b(rs_b, rs_c)
-        lines = result.split("\n")
-
-        # Method B: first data line should be NVDA (P99), not AAPL
-        b_data_lines = [l for l in lines if l.strip().startswith(("1 ", " 1 "))]
-        assert len(b_data_lines) >= 1
-        assert "NVDA" in b_data_lines[0], "Top 1 should be NVDA (P99), got: {}".format(b_data_lines[0])
-
-        # Bottom should include INTC (P5) and BA (P10)
-        assert "INTC" in result
-        assert "BA" in result
-        # INTC should show P5 in bottom section
-        bottom_line_idx = next(i for i, l in enumerate(lines) if "Bottom" in l)
-        bottom_line = lines[bottom_line_idx]
-        assert "INTC" in bottom_line
-        assert "P5" in bottom_line
-
-        # Method C: first data line should be NVDA (P98)
-        c_section = result[result.index("Method C"):]
-        c_lines = c_section.split("\n")
-        c_data_lines = [l for l in c_lines if l.strip().startswith(("1 ", " 1 "))]
-        assert len(c_data_lines) >= 1
-        assert "NVDA" in c_data_lines[0], "C Top 1 should be NVDA (P98)"
-
-    def test_empty_dataframes(self):
-        rs_b = pd.DataFrame()
-        rs_c = pd.DataFrame()
-        result = format_section_b(rs_b, rs_c)
-        assert "RS" in result
-
-
-class TestFormatSectionC:
-    """C. 量能加速"""
+    """B. 量能加速"""
 
     def test_with_signals(self):
         dv_df = pd.DataFrame([
@@ -190,7 +124,7 @@ class TestFormatSectionC:
             {"symbol": "MU", "dv_5d": 890e6, "dv_20d": 520e6, "ratio": 1.7, "signal": True},
             {"symbol": "AAPL", "dv_5d": 5e9, "dv_20d": 4.9e9, "ratio": 1.02, "signal": False},
         ])
-        result = format_section_c(dv_df)
+        result = format_section_b(dv_df)
         assert "TSLA" in result
         assert "MU" in result
         assert "AAPL" not in result  # signal=False → filtered
@@ -200,12 +134,12 @@ class TestFormatSectionC:
         dv_df = pd.DataFrame([
             {"symbol": "AAPL", "dv_5d": 5e9, "dv_20d": 4.9e9, "ratio": 1.02, "signal": False},
         ])
-        result = format_section_c(dv_df)
+        result = format_section_b(dv_df)
         assert "无加速信号" in result
 
 
-class TestFormatSectionD:
-    """D. RVOL 持续放量"""
+class TestFormatSectionC:
+    """C. RVOL 持续放量"""
 
     def test_with_sustained(self):
         rvol_list = [
@@ -214,19 +148,19 @@ class TestFormatSectionD:
             {"symbol": "MU", "level": "sustained_3d", "days": 3,
              "values": [3.5, 2.8, 2.3], "latest_rvol": 3.5},
         ]
-        result = format_section_d(rvol_list)
+        result = format_section_c(rvol_list)
         assert "TSLA" in result
         assert "MU" in result
         assert "5日连续" in result
         assert "3日连续" in result
 
     def test_empty(self):
-        result = format_section_d([])
+        result = format_section_c([])
         assert "无持续放量" in result
 
 
-class TestFormatSectionE:
-    """E. Dollar Volume"""
+class TestFormatSectionD:
+    """D. Dollar Volume"""
 
     def test_with_rankings(self):
         dv_result = {
@@ -238,113 +172,10 @@ class TestFormatSectionE:
                 {"rank": 12, "symbol": "ARM", "dollar_volume": 1.2e9},
             ],
         }
-        result = format_section_e(dv_result)
+        result = format_section_d(dv_result)
         assert "NVDA" in result
         assert "ARM" in result
         assert "新面孔" in result
-
-
-class TestFormatSectionF:
-    """F. 聚类"""
-
-    def test_with_clusters_basic(self):
-        """基本聚类输出包含标题、摘要、成员"""
-        cluster_result = {
-            "clusters": {
-                "0": ["NVDA", "AMD", "AVGO"],
-                "1": ["JPM", "GS"],
-            },
-            "comparison": {"jaccard": 0.85, "new_formation": False, "changes": []},
-        }
-        result = format_section_f(cluster_result)
-        assert "相关性聚类" in result
-        assert "30d" in result
-        assert "2组" in result
-        assert "Jaccard=0.85" in result
-        assert "稳定" in result
-        assert "NVDA" in result
-
-    def test_with_sector_labels(self):
-        """universe 提供 sector/industry 时，cluster 带中文标签"""
-        universe = [
-            {"symbol": "NVDA", "sector": "Technology", "industry": "Semiconductors"},
-            {"symbol": "AMD", "sector": "Technology", "industry": "Semiconductors"},
-            {"symbol": "AVGO", "sector": "Technology", "industry": "Semiconductors"},
-            {"symbol": "JPM", "sector": "Financial Services", "industry": "Banks - Diversified"},
-            {"symbol": "GS", "sector": "Financial Services", "industry": "Banks - Diversified"},
-            {"symbol": "MS", "sector": "Financial Services", "industry": "Capital Markets"},
-        ]
-        cluster_result = {
-            "clusters": {
-                "0": ["NVDA", "AMD", "AVGO"],
-                "1": ["JPM", "GS", "MS"],
-            },
-            "comparison": {"jaccard": 0.9, "new_formation": False, "changes": []},
-        }
-        result = format_section_f(cluster_result, universe=universe)
-        assert "半导体" in result  # 3/3 Semiconductors > 50%
-        assert "银行" in result    # 2/3 Banks-Diversified > 50% → 银行
-
-    def test_with_changes(self):
-        """comparison.changes 中的 added/removed 显示为变动行"""
-        universe = [
-            {"symbol": "NVDA", "sector": "Technology", "industry": "Semiconductors"},
-            {"symbol": "AMD", "sector": "Technology", "industry": "Semiconductors"},
-            {"symbol": "PLTR", "sector": "Technology", "industry": "Software - Infrastructure"},
-            {"symbol": "JPM", "sector": "Financial Services", "industry": "Banks - Diversified"},
-            {"symbol": "GS", "sector": "Financial Services", "industry": "Banks - Diversified"},
-            {"symbol": "INTC", "sector": "Technology", "industry": "Semiconductors"},
-        ]
-        cluster_result = {
-            "clusters": {
-                "0": ["NVDA", "AMD", "PLTR"],
-                "1": ["JPM", "GS"],
-            },
-            "comparison": {
-                "jaccard": 0.7,
-                "new_formation": False,
-                "changes": [
-                    {
-                        "current_cluster": "0",
-                        "matched_previous": "0",
-                        "jaccard": 0.5,
-                        "added": ["PLTR"],
-                        "removed": ["INTC"],
-                    },
-                ],
-            },
-        }
-        result = format_section_f(cluster_result, universe=universe)
-        assert "变动" in result
-        assert "PLTR→" in result
-        assert "INTC←" in result
-
-    def test_no_changes_no_line(self):
-        """无变动时不显示变动行"""
-        cluster_result = {
-            "clusters": {"0": ["NVDA", "AMD"]},
-            "comparison": {"jaccard": 1.0, "new_formation": False, "changes": []},
-        }
-        result = format_section_f(cluster_result)
-        assert "变动" not in result
-
-    def test_new_formation(self):
-        """new_formation 触发时显示'重组'"""
-        cluster_result = {
-            "clusters": {"0": ["NVDA", "AMD"]},
-            "comparison": {"jaccard": 0.2, "new_formation": True, "changes": []},
-        }
-        result = format_section_f(cluster_result)
-        assert "重组" in result
-
-    def test_no_universe_fallback(self):
-        """没有 universe 数据时标签 fallback 为'混合'"""
-        cluster_result = {
-            "clusters": {"0": ["NVDA", "AMD", "AVGO"]},
-            "comparison": None,
-        }
-        result = format_section_f(cluster_result, universe=[])
-        assert "混合" in result
 
 
 class TestFormatMorningReport:
@@ -361,12 +192,6 @@ class TestFormatMorningReport:
             "top_rvol": [],
         }
         momentum_results = {
-            "rs_rating_b": pd.DataFrame([
-                {"symbol": "NVDA", "rs_rank": 99, "z_3m": 2.0, "z_1m": 1.5, "z_1w": 1.0},
-            ]),
-            "rs_rating_c": pd.DataFrame([
-                {"symbol": "NVDA", "rs_rank": 99, "clenow_63d": 0.9, "clenow_21d": 0.8, "clenow_10d": 0.7},
-            ]),
             "dv_acceleration": pd.DataFrame(columns=["symbol", "dv_5d", "dv_20d", "ratio", "signal"]),
             "rvol_sustained": [],
             "symbols_scanned": 77,
@@ -388,8 +213,6 @@ class TestFormatMorningReport:
             "top_rvol": [],
         }
         momentum_results = {
-            "rs_rating_b": pd.DataFrame(),
-            "rs_rating_c": pd.DataFrame(),
             "dv_acceleration": pd.DataFrame(columns=["symbol", "dv_5d", "dv_20d", "ratio", "signal"]),
             "rvol_sustained": [],
             "symbols_scanned": 10,
@@ -397,6 +220,5 @@ class TestFormatMorningReport:
 
         result = format_morning_report(indicator_summary, momentum_results, elapsed=5)
         assert "PMARP" in result
-        assert "RS" in result
         assert "DV" in result or "量能" in result
         assert "RVOL" in result

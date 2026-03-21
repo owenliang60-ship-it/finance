@@ -87,6 +87,13 @@ PERMANENTLY_EXCLUDED = {
     "CLS", "JBL", "FLEX",
     # 其他
     "TOST", "TME", "KSPI", "BVC", "NXT", "IONQ",
+    # --- 2026-03-20 非科技股精简 ---
+    # 传统消费
+    "LOW", "TM", "MCD", "TJX", "BKNG", "SBUX",
+    # 传统药企
+    "JNJ", "MRK", "PFE", "BMY", "GSK", "SNY",
+    # 其他
+    "GE", "COF",
 }
 
 # 永久排除的行业 (这些行业的股票永远不加入)
@@ -342,9 +349,6 @@ THEME_KEYWORDS_SEED = {
 }
 
 # ============ Momentum Engine ============
-
-# 聚类数据目录
-CLUSTERING_DIR = DATA_DIR / "clustering"
 
 # 晨报输出目录
 SCANS_DIR = DATA_DIR / "scans"

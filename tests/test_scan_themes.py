@@ -232,14 +232,12 @@ class TestFormatThemeReport:
         report = format_theme_report(
             momentum_tickers=["NVDA", "TSLA"],
             theme_map={"ai_chip": ["NVDA"]},
-            cluster_result={"clusters": {"0": ["NVDA", "AMD"]}},
             elapsed=42.0,
         )
 
         assert "A. 动量信号" in report
         assert "B. 主题热力图" in report
-        assert "C. 聚类周报" in report
-        assert "D. 建议深度分析" in report
+        assert "C. 建议深度分析" in report
         assert "NVDA" in report
         assert "42s" in report
 
@@ -248,18 +246,7 @@ class TestFormatThemeReport:
         report = format_theme_report(
             momentum_tickers=[],
             theme_map={},
-            cluster_result={},
             elapsed=1.0,
         )
         assert "无动量信号" in report
         assert "无主题信号" in report
-
-    def test_cluster_display(self):
-        """Cluster section shows member counts."""
-        report = format_theme_report(
-            momentum_tickers=["NVDA"],
-            theme_map={},
-            cluster_result={"clusters": {"0": ["NVDA", "AMD"], "1": ["TSLA"]}},
-            elapsed=1.0,
-        )
-        assert "2 个集群" in report

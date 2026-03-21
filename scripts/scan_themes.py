@@ -8,7 +8,6 @@
 
 用法:
     python scripts/scan_themes.py                    # 完整周扫描
-    python scripts/scan_themes.py --clustering       # 强制运行聚类
 """
 
 import sys
@@ -144,7 +143,6 @@ def match_themes(
 def format_theme_report(
     momentum_tickers: List[str],
     theme_map: Dict[str, List[str]],
-    cluster_result: Dict,
     elapsed: float,
 ) -> str:
     """格式化主线报告（终端文本）。"""
@@ -180,22 +178,8 @@ def format_theme_report(
         lines.append("  无主题信号")
     lines.append("")
 
-    # C: 聚类周报
-    lines.append("[ C. 聚类周报 ]")
-    clusters = cluster_result.get("clusters", {})
-    if clusters:
-        lines.append("  {} 个集群".format(len(clusters)))
-        for cid, members in clusters.items():
-            members_str = " ".join(members[:10])
-            if len(members) > 10:
-                members_str += "..."
-            lines.append("  C{}: {} ({})".format(cid, members_str, len(members)))
-    else:
-        lines.append("  无聚类数据")
-    lines.append("")
-
-    # D: 建议深度分析
-    lines.append("[ D. 建议深度分析 ]")
+    # C: 建议深度分析
+    lines.append("[ C. 建议深度分析 ]")
     if momentum_tickers:
         lines.append("  动量标的: {}".format(" ".join(momentum_tickers[:10])))
     else:
@@ -213,9 +197,7 @@ def format_theme_report(
 # 主流程
 # ============================================================
 
-def run_theme_scan(
-    force_clustering: bool = False,
-) -> Dict[str, Any]:
+def run_theme_scan() -> Dict[str, Any]:
     """
     执行完整主线扫描。
 
@@ -223,7 +205,6 @@ def run_theme_scan(
         {
             "momentum_tickers": [...],
             "theme_map": {...},
-            "cluster_result": {...},
             "report": str,
         }
     """
@@ -242,16 +223,6 @@ def run_theme_scan(
     )
     logger.info("动量信号: %d 只", len(momentum_tickers))
 
-    # 聚类 (周六或强制)
-    is_saturday = datetime.now().weekday() == 5
-    cluster_result = {}
-    if is_saturday or force_clustering:
-        try:
-            from scripts.morning_report import run_clustering
-            cluster_result = run_clustering(symbols)
-        except Exception as e:
-            logger.warning("聚类失败: %s", e)
-
     # Step 2: 主题匹配
     logger.info("Step 2: 主题匹配")
     theme_map = match_themes(momentum_tickers)
@@ -262,7 +233,6 @@ def run_theme_scan(
     report = format_theme_report(
         momentum_tickers,
         theme_map,
-        cluster_result,
         elapsed,
     )
 
@@ -283,7 +253,6 @@ def run_theme_scan(
     return {
         "momentum_tickers": momentum_tickers,
         "theme_map": theme_map,
-        "cluster_result": cluster_result,
         "report": report,
         "save_path": str(save_path),
     }
@@ -291,16 +260,13 @@ def run_theme_scan(
 
 def main():
     parser = argparse.ArgumentParser(description="未来资本 主线扫描")
-    parser.add_argument("--clustering", action="store_true", help="强制运行聚类")
-    args = parser.parse_args()
+    parser.parse_args()
 
     logger.info("=" * 60)
     logger.info("未来资本 主线扫描 开始")
     logger.info("=" * 60)
 
-    result = run_theme_scan(
-        force_clustering=args.clustering,
-    )
+    result = run_theme_scan()
 
     print(result["report"])
 

@@ -379,9 +379,10 @@ def scan_candidates(
                 "return_pct": round(return_pct, 2),
                 "marketCap": metadata.get(symbol, {}).get("marketCap"),
                 "shortName": metadata.get(symbol, {}).get("shortName", symbol),
+                "in_pool": symbol in pool_symbols,
             })
 
-    outside = [item for item in triggered if item["symbol"] not in pool_symbols]
+    outside = [item for item in triggered if not item["in_pool"]]
     outside.sort(key=lambda x: (-x["rvol"], -x["return_pct"], x["symbol"]))
 
     latest_dates = [frame.index.max() for frame in price_frames.values() if not frame.empty]
@@ -394,6 +395,7 @@ def scan_candidates(
         "triggered_total": len(triggered),
         "outside_total": len(outside),
         "outside_candidates": outside,
+        "all_triggered": triggered,
     }
 
 
@@ -550,6 +552,22 @@ def main():
 
         scan_result = scan_candidates(price_frames, metadata, pool_symbols)
         scan_date = scan_result["scan_date"]
+
+        # 持久化到 SQLite（含池内，供因子回测）
+        from src.data.market_store import get_store
+        store = get_store()
+        db_rows = [
+            {
+                "symbol": item["symbol"],
+                "date": scan_date,
+                "rvol": item["rvol"],
+                "return_pct": item["return_pct"],
+                "market_cap": item.get("marketCap"),
+                "in_pool": item.get("in_pool", False),
+            }
+            for item in scan_result["all_triggered"]
+        ]
+        store.save_broad_scan_hits(db_rows)
 
         tracker = _read_json(TRACKER_PATH)
         tracker = update_streak_tracker(
