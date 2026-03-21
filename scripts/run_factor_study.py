@@ -164,16 +164,7 @@ def _create_adapter(market: str, symbols=None, cache_dir_override=None):
         if cache_dir_override:
             cache_dir = Path(cache_dir_override)
         else:
-            # 优先使用 Finance 本地 crypto 数据（完整历史）
-            local_crypto = _ROOT / "data" / "crypto"
-            if local_crypto.exists() and any(local_crypto.glob("*.csv")):
-                cache_dir = local_crypto
-            else:
-                # 回退到 Quant 缓存
-                quant_root = _ROOT.parent / "Quant"
-                cache_v2 = quant_root / "cache" / "binance_daily_cache"
-                cache_v1 = quant_root / "cache" / "daily_klines"
-                cache_dir = cache_v2 if cache_v2.exists() else cache_v1
+            cache_dir = _ROOT / "data" / "crypto" / "binance_daily_cache"
 
         return CryptoAdapter(symbols=symbols, cache_dir=cache_dir)
     else:

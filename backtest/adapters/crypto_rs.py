@@ -1,5 +1,5 @@
 """
-币圈 RS 纯计算模块 — 从 Quant/scanners/binance_rs_fast_scanner.py 提取
+币圈 RS 纯计算模块 — 基于 Z-Score + Clenow 回归动量算法
 
 脱离 Binance API / Telegram / 缓存依赖。
 输入: {symbol: np.ndarray(close_prices)} → 输出: DataFrame[symbol, ..., rs_rank]

@@ -1,7 +1,7 @@
 """
-币安合约数据适配器 — 加载 Quant/cache/ 下的 OHLCV CSV
+币安合约数据适配器 — 加载本地 crypto 缓存的 OHLCV CSV
 
-缓存结构: Quant/cache/daily_klines/{SYMBOL}.csv
+缓存结构: Finance/data/crypto/binance_daily_cache/{SYMBOL}.csv
 每个 CSV 列: open_time, open, high, low, close, volume, quote_volume, ...
 """
 
@@ -14,16 +14,16 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Quant 项目根目录
-_QUANT_ROOT = Path(__file__).parent.parent.parent.parent / "Quant"
-_CACHE_DIR = _QUANT_ROOT / "cache" / "daily_klines"
+# Finance 本地 crypto 缓存
+_FINANCE_ROOT = Path(__file__).parent.parent.parent
+_CACHE_DIR = _FINANCE_ROOT / "data" / "crypto" / "binance_daily_cache"
 
 
 class CryptoAdapter:
     """
     币安合约数据适配器
 
-    加载 Quant/cache/daily_klines/*.csv，提供:
+    加载 data/crypto/binance_daily_cache/*.csv，提供:
     - 价格数据加载 (全量 + 按日期切片)
     - RS 计算函数路由 (使用 crypto_rs 独立模块)
     - 交易日期序列

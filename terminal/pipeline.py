@@ -191,7 +191,7 @@ class DataPackage:
             kc = self.company_record.kill_conditions
             lines = ["### Active Kill Conditions"]
             for i, c in enumerate(kc, 1):
-                desc = c.get("description", str(c))
+                desc = c.get("description", str(c)) if isinstance(c, dict) else str(c)
                 lines.append(f"{i}. {desc}")
             sections.append("\n".join(lines))
 

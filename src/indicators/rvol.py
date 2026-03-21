@@ -1,6 +1,6 @@
 """
 RVOL 指标 (Relative Volume - 相对成交量)
-复用自 Quant/scanners/binance_rvol_scanner.py
+(Vol - Mean) / StdDev 标准化成交量
 
 公式:
     RVOL = (当前成交量 - 均值) / 标准差

@@ -1,6 +1,6 @@
 """
 PMARP 指标 (Price Moving Average Ratio Percentile)
-复用自 Quant/scanners/binance_pmarp_scanner.py
+Price/EMA(20) 的 N 日百分位排名
 
 公式:
     PMAR = Price / EMA(Price, period)

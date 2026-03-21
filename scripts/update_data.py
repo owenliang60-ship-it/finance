@@ -23,7 +23,7 @@ from src.data.fundamental_fetcher import update_all_fundamentals
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Valuation Agent 数据更新")
+    parser = argparse.ArgumentParser(description="Finance 数据更新")
     parser.add_argument("--all", action="store_true", help="更新所有数据")
     parser.add_argument("--pool", action="store_true", help="更新股票池")
     parser.add_argument("--price", action="store_true", help="更新量价数据")
