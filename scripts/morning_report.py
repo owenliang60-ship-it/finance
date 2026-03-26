@@ -8,6 +8,8 @@ A. PMARP 极值
 B. 量能加速 (DV Acceleration)
 C. RVOL 持续放量
 D. Dollar Volume Top 50 + 新面孔
+E. 市场情绪脉搏 (Adanos market-level)
+F. 社交热门 Top 10 + 热门板块 (Adanos trending)
 
 用法:
     python scripts/morning_report.py                  # 完整晨报
@@ -186,6 +188,99 @@ def format_section_d(dv_result: dict) -> str:
 
 
 
+def format_section_market_pulse(market_data: dict) -> str:
+    """E. 市场情绪脉搏 (Adanos market-level sentiment)"""
+    lines = ["*E. 市场情绪脉搏*"]
+
+    reddit = market_data.get("reddit")
+    twitter = market_data.get("twitter")
+
+    if not reddit and not twitter:
+        lines.append("无市场情绪数据")
+        return "\n".join(lines)
+
+    for source, label in [("reddit", "Reddit"), ("twitter", "𝕏")]:
+        row = market_data.get(source)
+        if not row:
+            continue
+        buzz = row.get("buzz_score", 0) or 0
+        trend = row.get("trend", "—")
+        bull = row.get("bullish_pct", 0) or 0
+        bear = row.get("bearish_pct", 0) or 0
+        mentions = row.get("mentions", 0) or 0
+        sentiment = row.get("sentiment_score")
+        sent_str = "{:+.2f}".format(sentiment) if sentiment is not None else "n/a"
+        # Trend arrow
+        arrow = {"bullish": "↑", "bearish": "↓", "neutral": "→"}.get(trend, "·")
+        lines.append("{} {} buzz={:.0f} {}bull/{}bear sent={} ({}提及)".format(
+            label, arrow, buzz, bull, bear, sent_str, mentions))
+
+    return "\n".join(lines)
+
+
+def format_section_trending(trending_data: dict) -> str:
+    """F. 社交热门 + 热门板块 (Adanos trending)"""
+    lines = ["*F. 社交热门*"]
+
+    # Sub-section 1: Trending stocks (merge Reddit + X, dedupe by ticker, rank by buzz)
+    stocks = trending_data.get("stocks", [])
+    if stocks:
+        # Merge across sources: keep highest buzz per ticker
+        merged = {}
+        for row in stocks:
+            ticker = row.get("ticker", "")
+            if not ticker:
+                continue
+            buzz = row.get("buzz_score", 0) or 0
+            existing = merged.get(ticker)
+            if existing is None or buzz > (existing.get("buzz_score", 0) or 0):
+                merged[ticker] = row
+        ranked = sorted(merged.values(), key=lambda x: x.get("buzz_score", 0) or 0, reverse=True)[:10]
+        lines.append("热门个股 Top 10:")
+        for i, row in enumerate(ranked, 1):
+            ticker = row.get("ticker", "?")
+            buzz = row.get("buzz_score", 0) or 0
+            trend = row.get("trend", "")
+            sentiment = row.get("sentiment_score")
+            sent_str = "{:+.2f}".format(sentiment) if sentiment is not None else ""
+            arrow = {"bullish": "↑", "bearish": "↓", "neutral": "→"}.get(trend, "")
+            lines.append("  {:>2}. {:<6} buzz={:>5.0f} {} {}".format(
+                i, ticker, buzz, arrow, sent_str).rstrip())
+    else:
+        lines.append("热门个股: 无数据")
+
+    # Sub-section 2: Trending sectors
+    sectors = trending_data.get("sectors", [])
+    if sectors:
+        # Merge across sources: keep highest buzz per sector
+        merged_s = {}
+        for row in sectors:
+            sector = row.get("sector", "")
+            if not sector:
+                continue
+            buzz = row.get("buzz_score", 0) or 0
+            existing = merged_s.get(sector)
+            if existing is None or buzz > (existing.get("buzz_score", 0) or 0):
+                merged_s[sector] = row
+        ranked_s = sorted(merged_s.values(), key=lambda x: x.get("buzz_score", 0) or 0, reverse=True)[:8]
+        lines.append("")
+        lines.append("热门板块:")
+        for row in ranked_s:
+            sector = row.get("sector", "?")
+            buzz = row.get("buzz_score", 0) or 0
+            top_tickers = row.get("top_tickers", "")
+            if isinstance(top_tickers, list):
+                top_tickers = ", ".join(top_tickers[:4])
+            elif isinstance(top_tickers, str) and top_tickers.startswith("["):
+                try:
+                    top_tickers = ", ".join(json.loads(top_tickers)[:4])
+                except Exception:
+                    pass
+            lines.append("  {}: buzz={:.0f} ({})".format(sector, buzz, top_tickers or "—"))
+
+    return "\n".join(lines)
+
+
 def format_section_social(social_scan: dict) -> str:
     """G. 社交情绪雷达"""
     lines = ["*G. 社交情绪雷达*"]
@@ -265,6 +360,8 @@ def format_morning_report(
     indicator_summary: dict,
     momentum_results: dict,
     dv_result: dict = None,
+    market_pulse: dict = None,
+    trending_data: dict = None,
     social_scan: dict = None,
     elapsed: float = 0,
 ) -> str:
@@ -298,7 +395,17 @@ def format_morning_report(
         lines.append(format_section_d(dv_result))
         lines.append("")
 
-    # E. 社交情绪雷达
+    # E. 市场情绪脉搏
+    if market_pulse:
+        lines.append(format_section_market_pulse(market_pulse))
+        lines.append("")
+
+    # F. 社交热门
+    if trending_data:
+        lines.append(format_section_trending(trending_data))
+        lines.append("")
+
+    # G. 社交情绪雷达
     if social_scan and social_scan.get("symbols_with_data", 0) > 0:
         lines.append(format_section_social(social_scan))
         lines.append("")
@@ -400,7 +507,39 @@ def main():
         # 4. Dollar Volume 采集
         dv_result = run_dollar_volume()
 
-        # 5. 社交情绪雷达（--no-social 时跳过）
+        # 5. 市场情绪脉搏 + 社交热门 (Adanos market-level)
+        market_pulse = None
+        trending_data = None
+        if not args.no_social:
+            try:
+                from src.data.market_store import get_store
+                from datetime import timezone
+                store = get_store()
+                today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+                # Market sentiment (Reddit + X)
+                pulse = {}
+                for src in ["reddit", "twitter"]:
+                    row = store.get_latest_market_sentiment(source=src)
+                    if row and row.get("date") == today_utc:
+                        pulse[src] = row
+                if pulse:
+                    market_pulse = pulse
+                    logger.info("市场情绪脉搏: %s", list(pulse.keys()))
+
+                # Trending stocks + sectors
+                t_data = {"stocks": [], "sectors": []}
+                for src in ["reddit", "twitter"]:
+                    t_data["stocks"].extend(store.get_social_trending(today_utc, src))
+                    t_data["sectors"].extend(store.get_social_trending_sectors(today_utc, src))
+                if t_data["stocks"] or t_data["sectors"]:
+                    trending_data = t_data
+                    logger.info("社交热门: %d stocks, %d sectors",
+                                len(t_data["stocks"]), len(t_data["sectors"]))
+            except Exception as e:
+                logger.warning("市场级社交数据加载失败: %s", e)
+
+        # 6. 社交情绪雷达（--no-social 时跳过）
         social_scan = None
         if not args.no_social:
             try:
@@ -415,12 +554,13 @@ def main():
 
         elapsed = time.time() - start_time
 
-        # 6. 格式化
+        # 7. 格式化
         daily_msg = format_morning_report(
             indicator_summary, momentum_results, dv_result,
+            market_pulse=market_pulse, trending_data=trending_data,
             social_scan=social_scan, elapsed=elapsed)
 
-        # 7. 保存 JSON
+        # 8. 保存 JSON
         SCANS_DIR.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         save_path = SCANS_DIR / "morning_{}.json".format(timestamp)
@@ -436,7 +576,7 @@ def main():
             json.dump(save_data, f, ensure_ascii=False, indent=2, default=str)
         logger.info("结果已保存: %s", save_path)
 
-        # 8. 发送 Telegram
+        # 9. 发送 Telegram
         if not args.no_telegram:
             # 日报 (拆分如果超长)
             if len(daily_msg) > 4000:
