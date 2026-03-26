@@ -19,7 +19,7 @@
   "symbol": "BTCUSDT",
   "interval": "4h",
   "data_dir": "../data/crypto",           // 相对 forge/ 的路径
-  "data_snapshot_hash": null,             // runner 首轮自动计算并填入
+  "data_snapshot_hash": "",               // 必须在创建 campaign 时由 `forge init` 填入，不可为 null
 
   // 时间窗口
   "warmup_start": "2017-08-17",
@@ -200,133 +200,168 @@ def compute_data_hash(data_dir: Path, symbol: str, interval: str) -> str:
     ...
 ```
 
-### 3.2 策略接口 Contract
+### 3.2 策略接口 Contract — 包裹现有接口，不发明新协议
 
-`strategies/helen_candidate.py` 必须暴露以下接口供 evaluator import：
+> **Review 修复 #1**: 不引入 `evaluate_bar()` + dict state 新协议。
+> candidate/champion 直接就是 `dual_engine.py` 的副本，保留原有的
+> `DualEngineConfig` / `DualEngineState` / `evaluate_dual_engine_snapshot()`。
+> evaluator 通过 `importlib` 从 candidate 文件 import 这些类，用法和
+> `run_dual_engine_backtest()` 完全一致，确保 baseline 不漂移。
+
+`strategies/helen_candidate.py` 的结构：
 
 ```python
 """
-策略文件必须实现的接口。
-evaluator 会动态 import 并调用这些函数。
+Helen 策略 — Forge candidate 副本。
+直接复用 DualEngineConfig / DualEngineState / evaluate_dual_engine_snapshot 的接口。
+Agent 可修改此文件中的任何逻辑。
+evaluator 通过 importlib 加载此文件。
 """
 
-from dataclasses import dataclass
-from typing import List
-import pandas as pd
+# --- 直接从主仓 import 基础设施（指标计算、回测工具） ---
+from src.indicators.bbwp import analyze_bbwp, calculate_bbwp
+from src.indicators.pmarp import analyze_pmarp, calculate_pmarp
+from src.indicators.rvol import analyze_rvol, calculate_rvol_series
 
+# --- 以下为策略代码，agent 可以自由修改 ---
+# （初始版本 = dual_engine.py 的完整副本）
+
+@dataclass(frozen=True)
+class DualEngineConfig:
+    ema_period: int = 144
+    # ... 与 src/timing/dual_engine.py 完全一致
+    left_max_hold_bars: int = 540
 
 @dataclass
-class StrategyConfig:
-    """策略可调参数，对应 surface.yaml 的白名单。"""
-    ema_period: int = 144
-    right_bear_slope_pct: float = -0.03
-    right_neutral_slope_pct: float = 0.0
-    right_trend_slope_pct: float = 0.03
-    pmarp_lookback: int = 150
-    bbwp_lookback: int = 252
-    rvol_window: int = 20
-    left_max_hold_bars: int = 540
-    # ... agent 可以加新字段
+class DualEngineState:
+    # ... 与 src/timing/dual_engine.py 完全一致
 
+def evaluate_dual_engine_snapshot(snapshot, state=None, config=None):
+    # ... 与 src/timing/dual_engine.py 完全一致
+    # agent 可以修改任何内部逻辑
 
-def evaluate_bar(
-    snapshot_4h: dict,
-    snapshot_1d: dict,
-    state: dict,
-    config: StrategyConfig,
-) -> tuple[float, dict, list[str]]:
-    """
-    评估单根 4H bar。
-
-    Args:
-        snapshot_4h: 指标快照 {"close": float, "ema_slope_pct": float, "pmarp": {...}, "bbwp": {...}, "rvol": {...}}
-        snapshot_1d: 同上，日线级别
-        state: 可变状态 dict（由 evaluator 跨 bar 传递）
-        config: 策略配置
-
-    Returns:
-        (target_position_pct, updated_state, reasons)
-        target_position_pct: 0.0 ~ 100.0
-        updated_state: 更新后的状态 dict
-        reasons: 触发原因列表
-    """
-    ...
-
-
-def get_default_config() -> StrategyConfig:
-    """返回默认配置。"""
-    ...
-
-
-def get_initial_state() -> dict:
-    """返回初始状态。"""
-    ...
+def build_dual_engine_snapshot(df_4h, df_daily, config=None):
+    # ... 与 src/timing/dual_engine.py 完全一致
 ```
 
-### 3.3 评估流程伪代码
+**evaluator 的验证方式**：动态 import candidate，检查是否存在
+`DualEngineConfig` / `DualEngineState` / `evaluate_dual_engine_snapshot` /
+`build_dual_engine_snapshot` 四个名字。不检查签名细节——如果 import 成功
+且回测能跑通，就是合格的 candidate。
+
+### 3.3 Level 1 参数面闭环设计
+
+> **Review 修复 #2**: Level 1 不改 Python 代码。agent 只修改一个 JSON 参数
+> 覆盖文件，evaluator 用它构造 `DualEngineConfig`。
+
+```
+Level 1 流程:
+  1. runner 复制 champion → candidate（Python 文件不变）
+  2. runner 同时复制 champion_params.json → candidate_params.json
+  3. agent 只修改 candidate_params.json（不碰 Python）
+  4. evaluator: config = DualEngineConfig(**candidate_params)
+  5. mutation guard: diff candidate.py vs champion.py == 0（字节一致）
+                     diff candidate_params.json 只含白名单 key
+```
+
+`candidate_params.json` 示例：
+```json
+{
+  "ema_period": 144,
+  "right_bear_slope_pct": -0.03,
+  "right_neutral_slope_pct": 0.0,
+  "right_trend_slope_pct": 0.03,
+  "pmarp_lookback": 150,
+  "bbwp_lookback": 252,
+  "rvol_window": 20,
+  "left_max_hold_bars": 540
+}
+```
+
+Level 1 mutation guard 变成纯 JSON diff：只有白名单 key 允许变化，value 在范围内。
+不需要 AST 分析。
+
+Level 2（结构进化）解锁后，agent 才可以改 `candidate.py` 本身。
+
+### 3.4 评估流程伪代码
+
+> **Review 修复 #4**: 直接调用 `run_dual_engine_backtest()`（现有公共函数），
+> 用 `start_timestamp` 参数做窗口切片。不发明 `run_window_backtest` 等新 helper。
 
 ```python
-def evaluate(campaign_path, strategy_path):
+def evaluate(campaign_path, strategy_path, params_path=None):
     campaign = load_campaign(campaign_path)
-    strategy = dynamic_import(strategy_path)  # importlib
 
-    # 数据加载
+    # 1. 动态 import candidate 策略
+    strategy_mod = importlib.import_module_from_path(strategy_path)
+    ConfigClass = strategy_mod.DualEngineConfig
+    StateClass = strategy_mod.DualEngineState
+
+    # 2. 构造 config（Level 1: 从 params JSON 覆盖；Level 2: 用 candidate 内置默认值）
+    if params_path and params_path.exists():
+        params = json.loads(params_path.read_text())
+        config = ConfigClass(**params)
+    else:
+        config = ConfigClass()
+
+    # 3. 数据加载（复用主仓 CryptoAdapter）
     adapter_4h = CryptoAdapter(symbols=[campaign.symbol], interval="4h")
     adapter_1d = CryptoAdapter(symbols=[campaign.symbol], interval="1d")
     df_4h = adapter_4h.load_all()[campaign.symbol]
     df_1d = adapter_1d.load_all()[campaign.symbol]
 
-    # 预计算指标（全量，一次性）
-    config = strategy.get_default_config()
-    prepared_4h = prepare_indicator_frame(df_4h, config)
-    prepared_1d = prepare_indicator_frame(df_1d, config)
+    # 4. 对每个窗口，调用现有 run_dual_engine_backtest()
+    #    全量数据都传入（含 warmup），用 start_timestamp 切窗口
+    #    run_dual_engine_backtest 内部会用全量预热指标，只在 start 后计分
+    all_windows = campaign.visible_windows + [campaign.holdout_window]
+    window_results = {}
 
-    # 遍历所有 4H bar，生成 target_positions
-    state = strategy.get_initial_state()
-    all_targets = []        # len == len(prepared_4h)
-    all_timestamps = []
-
-    for i in range(len(prepared_4h)):
-        snap_4h = snapshot_from_row(prepared_4h, i)
-        snap_1d = get_aligned_daily_snapshot(prepared_1d, prepared_4h, i)
-        target, state, reasons = strategy.evaluate_bar(snap_4h, snap_1d, state, config)
-        all_targets.append(target / 100.0)
-        all_timestamps.append(snap_4h["timestamp"])
-
-    # 对每个窗口切片并跑回测
-    visible_results = []
-    for window in campaign.visible_windows:
-        result = run_window_backtest(
-            prepared_4h, all_targets, all_timestamps,
-            window, campaign
+    for window in all_windows:
+        # 每个窗口独立 state，保证窗口间不互相污染
+        result = run_dual_engine_backtest(
+            symbol=campaign.symbol,
+            price_4h_df=df_4h,
+            price_daily_df=df_1d,
+            state=StateClass(),
+            config=config,
+            transaction_cost_bps=campaign.transaction_cost_bps,
+            rebalance_dead_zone_pct=campaign.rebalance_dead_zone_pct,
+            start_timestamp=window["start"],
         )
-        visible_results.append(result)
+        # NOTE: run_dual_engine_backtest 的 start_timestamp 只控制起点，
+        #       不控制终点。需要对 result 做 end-date 截断。
+        #       这是 evaluator 唯一需要新增的 helper。
+        trimmed = trim_result_to_end(result, window["end"])
+        window_results[window["name"]] = to_window_result(trimmed, window)
 
-    holdout_result = run_window_backtest(
-        prepared_4h, all_targets, all_timestamps,
-        campaign.holdout_window, campaign
-    )
+    # 5. 分离 visible vs holdout
+    visible = [window_results[w["name"]] for w in campaign.visible_windows]
+    holdout = window_results.get("holdout")
 
-    # 门槛检查（每个 visible window）
-    for wr in visible_results:
+    # 6. 门槛检查
+    for wr in visible:
         if wr.max_drawdown < campaign.gate_max_mdd:
             return ForgeResult(status="FAIL_GATE", ...)
         if wr.mean_exposure < campaign.gate_min_exposure:
             return ForgeResult(status="FAIL_GATE", ...)
 
-    # 计算 visible_score
-    visible_score = min(wr.excess_cagr for wr in visible_results)
+    # 7. 计算 visible_score
+    visible_score = min(wr.excess_cagr for wr in visible)
 
     return ForgeResult(
         status="PASS",
         visible_score=visible_score,
-        visible_windows=visible_results,
-        holdout=holdout_result,
+        visible_windows=visible,
+        holdout=holdout,
         strategy_hash=hash_file(strategy_path),
         data_hash=compute_data_hash(...),
         infra_sha=get_git_sha(),
     )
 ```
+
+**唯一需要新增的 helper**：`trim_result_to_end(result, end_date)` —— 截断
+NAV 序列到 end_date，重算 metrics。现有 `_trim_continuous_result()` 只做起点截断，
+需要扩展支持终点截断。这是 Phase 1 的一个明确工作项。
 
 ---
 
@@ -462,16 +497,21 @@ def _check_stop_rules(
     campaign: dict,
     round_num: int,
     stale_count: int,
-    champion_holdout_baseline: float,
+    initial_holdout_baseline: float,
     current_holdout: float,
 ) -> tuple[bool, str]:
     """
     检查是否应停机。
 
+    > Review 修复 #3: holdout baseline 用 campaign 初始 champion 的值，
+    > 不随 promote 更新。理由：如果跟着 champion 更新，meltdown 检测
+    > 会被"缓慢恶化"骗过（每次只差一点就不触发）。
+    > 初始 baseline 是 Helen v2.0 人工验证过的版本，是绝对锚点。
+
     规则:
     - round_num >= max_rounds → 停
     - stale_count >= stale_stop_rounds → 停
-    - current_holdout < champion_holdout_baseline + holdout_meltdown_threshold → 停
+    - current_holdout < initial_holdout_baseline + holdout_meltdown_threshold → 停
 
     Returns:
         (should_stop: bool, reason: str)
@@ -482,9 +522,14 @@ def _check_stop_rules(
 def _determine_level(
     campaign: dict,
     stale_count: int,
+    error_count: int,
 ) -> str:
     """
     判断当前应使用 Level 1（参数面）还是 Level 2（结构进化）。
+
+    > Review 修复 #5: 只有 stale_count（有效但无改进）触发升级，
+    > error_count（guard 失败/语法错误）不计入。
+    > 错误率不是探索成熟度。
 
     如果 stale_count >= structural_unlock_after_stale → "structural"
     否则 → "parameter"
@@ -502,15 +547,18 @@ def run_campaign(strategy_name, campaign_path, max_rounds):
     # 初始化：评估 champion 作为 baseline
     champion_result = evaluate_champion(campaign, strategy_name)
     best_score = champion_result.visible_score
-    champion_holdout_baseline = champion_result.holdout.excess_cagr
+    # Review 修复 #3: 初始 baseline 是绝对锚点，不随 promote 更新
+    initial_holdout_baseline = champion_result.holdout.excess_cagr
 
-    stale_count = 0
+    # Review 修复 #5: 分离两种计数
+    stale_count = 0   # 有效实验但无改进 → 触发 Level 2 升级 + stale 停机
+    error_count = 0   # guard 失败/语法错误 → 不触发升级，连续过多则告警
 
     for round_num in range(1, max_rounds + 1):
-        level = _determine_level(campaign, stale_count)
+        level = _determine_level(campaign, stale_count, error_count)
 
-        # 1. 复制 champion → candidate
-        _copy_champion_to_candidate(strategy_name)
+        # 1. 复制 champion → candidate（Level 1 同时复制 params.json）
+        _copy_champion_to_candidate(strategy_name, level)
 
         # 2. 调用 agent
         public_log_tail = read_last_n_lines(public_log, 20)
@@ -524,11 +572,19 @@ def run_campaign(strategy_name, campaign_path, max_rounds):
             _write_public_log(round_result, ...)
             _write_private_log(round_result, ...)
             _discard_candidate(strategy_name)
-            stale_count += 1
+            error_count += 1  # 不计入 stale_count
+            if error_count >= 5:
+                print(f"WARNING: {error_count} consecutive guard failures")
             continue
 
         # 4. 评估 candidate
         candidate_result = evaluate(campaign_path, candidate_path)
+        if candidate_result.status == "ERROR":
+            error_count += 1  # runtime error 也不计入 stale
+            _discard_candidate(strategy_name)
+            continue
+
+        error_count = 0  # 成功评估，重置 error 计数
 
         # 5. 比较
         accepted = (
@@ -553,7 +609,7 @@ def run_campaign(strategy_name, campaign_path, max_rounds):
         # 8. 停机检查
         should_stop, stop_reason = _check_stop_rules(
             campaign, round_num, stale_count,
-            champion_holdout_baseline,
+            initial_holdout_baseline,  # 修复 #3: 不跟随 champion 更新
             candidate_result.holdout.excess_cagr if candidate_result.holdout else None,
         )
         if should_stop:
@@ -570,17 +626,19 @@ def run_campaign(strategy_name, campaign_path, max_rounds):
 ### Phase 1: 骨架 + 数据管道（可验证：champion 能跑通评估）
 
 - [ ] 创建 `forge/` 目录结构
-- [ ] 编写 `campaign.lock.json`（Helen BTC 配置）
+- [ ] 编写 `campaign.lock.json`（Helen BTC 配置）+ `forge init` 填入 data_snapshot_hash
 - [ ] 编写 `manifests/helen_surface.yaml`
-- [ ] 从 `src/timing/dual_engine.py` 提取 `strategies/helen_champion.py`
-  - 重构为 `evaluate_bar()` / `get_default_config()` / `get_initial_state()` 接口
+- [ ] 从 `src/timing/dual_engine.py` 完整复制为 `strategies/helen_champion.py`
+  - **不改接口**，保留 DualEngineConfig / DualEngineState / evaluate_dual_engine_snapshot
+  - 只改 import 路径（指标从主仓 import，策略逻辑自包含）
+- [ ] 扩展 `_trim_continuous_result()` 支持 end-date 截断（唯一需要新增的 helper）
 - [ ] 编写 `evaluator.py` 核心
-  - 动态 import 策略
-  - 预计算指标（全量一次性，非逐 bar）
-  - 多窗口回测 + holdout 回测
-  - 门槛检查 + visible_score 计算
-  - stdout 输出格式
+  - importlib 动态加载 candidate/champion
+  - 对每个窗口调用现有 `run_dual_engine_backtest(start_timestamp=...)` + end 截断
+  - 门槛检查 + visible_score = min(excess_cagr) 计算
+  - stdout 输出格式（holdout=HIDDEN）
 - [ ] 验证：`python evaluator.py --champion-only` 输出 Helen v2.0 baseline
+- [ ] **Baseline 一致性验证**：champion 的 visible window C 结果必须与 `run_dual_engine_btc_backtest.py --start-date 2021-01-01` 截至 2023-06-30 的结果完全一致
 
 ### Phase 2: runner 控制面（可验证：手动 1 轮循环跑通）
 
@@ -613,7 +671,7 @@ def run_campaign(strategy_name, campaign_path, max_rounds):
 
 | 层级 | 测试什么 | 方法 |
 |------|---------|------|
-| evaluator | 窗口切片正确性 | 对比 `run_dual_engine_backtest --start-date` 的结果 |
+| evaluator | 窗口切片正确性 | 对比 Window C (2021-01 → 2023-06) 与 `run_dual_engine_backtest --start-date 2021-01-01` 截至 2023-06-30，验证起点+终点都正确 |
 | evaluator | 门槛判定 | 构造一个超过 MDD 门槛的策略，断言 FAIL_GATE |
 | evaluator | visible_score 计算 | 手算 min(3 窗口 excess_cagr) 对比 |
 | runner | mutation guard | 构造一个改了 evaluator.py 的 diff，断言 FAIL_GUARD |
@@ -628,3 +686,4 @@ def run_campaign(strategy_name, campaign_path, max_rounds):
 | 版本 | 日期 | 内容 |
 |------|------|------|
 | v0.1 | 2026-03-26 | 接口级实现计划，覆盖 campaign.lock / evaluator / runner / strategy contract / 实现顺序 |
+| v0.2 | 2026-03-26 | Review 修复 5 个问题：(1) 策略 contract 改为包裹现有 DualEngineConfig/State/evaluate_dual_engine_snapshot，不发明新协议 (2) Level 1 参数面改为 JSON 覆盖 + 纯 JSON diff guard (3) holdout meltdown baseline 固定为初始 champion，不随 promote 漂移 (4) evaluator 直接调用 run_dual_engine_backtest + end-date 截断，不发明新 helper (5) stale_count/error_count 分离，错误率不计入探索成熟度 |
