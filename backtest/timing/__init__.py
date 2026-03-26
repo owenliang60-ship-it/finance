@@ -19,6 +19,14 @@ from backtest.timing.signals import (
     SIGNAL_REGISTRY,
 )
 from backtest.timing.engine import TimingResult, run_timing_backtest
+from backtest.timing.continuous_engine import (
+    ContinuousTimingResult,
+    run_continuous_backtest,
+)
+from backtest.timing.dual_engine_backtest import (
+    DualEngineBacktestResult,
+    run_dual_engine_backtest,
+)
 from backtest.timing.runner import (
     TimingStudyConfig,
     AggregateResult,
@@ -39,6 +47,10 @@ __all__ = [
     "SIGNAL_REGISTRY",
     "TimingResult",
     "run_timing_backtest",
+    "ContinuousTimingResult",
+    "run_continuous_backtest",
+    "DualEngineBacktestResult",
+    "run_dual_engine_backtest",
     "TimingStudyConfig",
     "AggregateResult",
     "run_timing_study",

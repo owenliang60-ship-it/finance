@@ -147,3 +147,43 @@ class TestCryptoAdapter:
         fn_c = adapter.get_rs_function("C")
         assert callable(fn_b)
         assert callable(fn_c)
+
+    @pytest.fixture
+    def temp_cache_4h(self, tmp_path):
+        cache_dir = tmp_path / "four_hour_klines"
+        cache_dir.mkdir()
+
+        rng = np.random.RandomState(7)
+        for sym in ["BTCUSDT", "ETHUSDT"]:
+            dates = pd.date_range("2024-01-01", periods=36, freq="4h")
+            df = pd.DataFrame({
+                "date": dates.strftime("%Y-%m-%d %H:%M:%S"),
+                "open": 100 * np.exp(np.cumsum(rng.normal(0.001, 0.02, 36))),
+                "high": 101 * np.exp(np.cumsum(rng.normal(0.001, 0.02, 36))),
+                "low": 99 * np.exp(np.cumsum(rng.normal(0.001, 0.02, 36))),
+                "close": 100 * np.exp(np.cumsum(rng.normal(0.001, 0.02, 36))),
+                "volume": rng.uniform(1e5, 1e6, 36),
+            })
+            df.to_csv(cache_dir / f"{sym}.csv", index=False)
+
+        return cache_dir
+
+    def test_supports_4h_interval(self, temp_cache_4h):
+        from backtest.adapters.crypto import CryptoAdapter
+
+        adapter = CryptoAdapter(cache_dir=temp_cache_4h, interval="4h")
+        data = adapter.load_all()
+
+        assert len(data) == 2
+        assert data["BTCUSDT"]["date"].iloc[0].endswith("00:00:00")
+
+    def test_slice_to_intraday_timestamp(self, temp_cache_4h):
+        from backtest.adapters.crypto import CryptoAdapter
+
+        adapter = CryptoAdapter(cache_dir=temp_cache_4h, interval="4h")
+        adapter.load_all()
+
+        cutoff = "2024-01-03 08:00:00"
+        sliced = adapter.slice_to_date_df(cutoff)
+
+        assert sliced["BTCUSDT"]["date"].iloc[-1] <= cutoff

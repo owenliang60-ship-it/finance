@@ -1,8 +1,11 @@
 """
 币安合约数据适配器 — 加载本地 crypto 缓存的 OHLCV CSV
 
-缓存结构: Finance/data/crypto/binance_daily_cache/{SYMBOL}.csv
-每个 CSV 列: open_time, open, high, low, close, volume, quote_volume, ...
+缓存结构:
+- Finance/data/crypto/binance_daily_cache/{SYMBOL}.csv
+- Finance/data/crypto/binance_4h_cache/{SYMBOL}.csv
+
+每个 CSV 列: open_time, date, open, high, low, close, volume, quote_volume, ...
 """
 
 import logging
@@ -11,12 +14,31 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+from src.path_utils import resolve_shared_repo_root
 
 logger = logging.getLogger(__name__)
 
 # Finance 本地 crypto 缓存
-_FINANCE_ROOT = Path(__file__).parent.parent.parent
-_CACHE_DIR = _FINANCE_ROOT / "data" / "crypto" / "binance_daily_cache"
+_FINANCE_ROOT = resolve_shared_repo_root(
+    Path(__file__).parent.parent.parent,
+    required_paths=(
+        "data/crypto/binance_daily_cache",
+        "data/crypto/binance_4h_cache",
+    ),
+)
+_CACHE_DIRS = {
+    "1d": _FINANCE_ROOT / "data" / "crypto" / "binance_daily_cache",
+    "4h": _FINANCE_ROOT / "data" / "crypto" / "binance_4h_cache",
+}
+
+
+def _normalize_interval(interval: str) -> str:
+    value = interval.strip().lower()
+    if value in {"1d", "d", "day", "daily"}:
+        return "1d"
+    if value in {"4h", "4hr", "4hour", "240m"}:
+        return "4h"
+    raise ValueError(f"Unsupported crypto interval: {interval}")
 
 
 class CryptoAdapter:
@@ -29,17 +51,23 @@ class CryptoAdapter:
     - 交易日期序列
     """
 
-    def __init__(self, symbols: Optional[List[str]] = None,
-                 cache_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        symbols: Optional[List[str]] = None,
+        cache_dir: Optional[Path] = None,
+        interval: str = "1d",
+    ):
         """
         Args:
             symbols: 要加载的币种列表 (e.g. ["BTCUSDT", "ETHUSDT"])
                      None = 自动发现 cache 目录下所有 CSV
             cache_dir: 覆盖默认缓存目录 (测试用)
+            interval: "1d" 或 "4h"，决定默认 cache 目录
         """
         self._price_cache: Dict[str, pd.DataFrame] = {}
         self._symbols = symbols
-        self._cache_dir = cache_dir or _CACHE_DIR
+        self.interval = _normalize_interval(interval)
+        self._cache_dir = cache_dir or _CACHE_DIRS[self.interval]
 
     def load_all(self) -> Dict[str, pd.DataFrame]:
         """
@@ -100,8 +128,9 @@ class CryptoAdapter:
             self.load_all()
 
         sliced = {}
+        cutoff = pd.to_datetime(date)
         for sym, df in self._price_cache.items():
-            mask = df["date"].astype(str) <= date
+            mask = pd.to_datetime(df["date"]) <= cutoff
             cut = df[mask]
             if len(cut) >= 15:  # 币圈最小数据要求
                 sliced[sym] = cut["close"].values.astype(np.float64)
@@ -119,8 +148,9 @@ class CryptoAdapter:
             self.load_all()
 
         sliced = {}
+        cutoff = pd.to_datetime(date)
         for sym, df in self._price_cache.items():
-            mask = df["date"].astype(str) <= date
+            mask = pd.to_datetime(df["date"]) <= cutoff
             cut = df[mask]
             if len(cut) >= 15:
                 sliced[sym] = cut.reset_index(drop=True)
@@ -181,19 +211,33 @@ class CryptoAdapter:
             df = pd.read_csv(csv_path)
 
             # 兼容不同格式的列名
-            if "open_time" in df.columns and "date" not in df.columns:
-                df["date"] = pd.to_datetime(
-                    df["open_time"], unit="ms"
-                ).dt.strftime("%Y-%m-%d")
-            elif "timestamp" in df.columns and "date" not in df.columns:
-                df["date"] = pd.to_datetime(df["timestamp"]).dt.strftime("%Y-%m-%d")
+            dt_series = None
+            if "open_time" in df.columns:
+                dt_series = pd.to_datetime(df["open_time"], unit="ms", utc=True)
+            elif "timestamp" in df.columns:
+                ts = df["timestamp"]
+                if pd.api.types.is_numeric_dtype(ts):
+                    dt_series = pd.to_datetime(ts, unit="ms", utc=True)
+                else:
+                    dt_series = pd.to_datetime(ts, utc=True)
+            elif "date" in df.columns:
+                dt_series = pd.to_datetime(df["date"], utc=False)
+
+            if dt_series is not None:
+                fmt = "%Y-%m-%d" if self.interval == "1d" else "%Y-%m-%d %H:%M:%S"
+                df["date"] = dt_series.dt.strftime(fmt)
 
             if "date" not in df.columns or "close" not in df.columns:
                 logger.warning(f"{symbol}: CSV 缺少 date/close 列")
                 return None
 
-            df["close"] = df["close"].astype(float)
-            df = df.sort_values("date", ascending=True).reset_index(drop=True)
+            for col in ("open", "high", "low", "close", "volume", "quote_volume"):
+                if col in df.columns:
+                    df[col] = df[col].astype(float)
+
+            df["_sort_dt"] = pd.to_datetime(df["date"])
+            df = df.sort_values("_sort_dt", ascending=True).drop(columns="_sort_dt")
+            df = df.reset_index(drop=True)
             return df
         except Exception as e:
             logger.warning(f"{symbol}: CSV 加载失败: {e}")

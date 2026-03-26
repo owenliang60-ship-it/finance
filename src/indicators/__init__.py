@@ -1,4 +1,5 @@
 # Technical indicators
+from .bbwp import calculate_bbw, calculate_bbwp, analyze_bbwp
 from .pmarp import calculate_pmarp, check_pmarp_crossover
 from .rvol import calculate_rvol, check_rvol_signal
 from .engine import run_indicators, get_indicator_summary, run_momentum_scan
