@@ -36,6 +36,8 @@ def main():
                         help="更新前瞻预期数据 (yfinance)")
     parser.add_argument("--social-sentiment", action="store_true",
                         help="更新社交情感数据 (Adanos: Reddit + X)")
+    parser.add_argument("--extended-prices", action="store_true",
+                        help="更新扩展池价格数据 (yfinance, $10B+ stocks)")
     parser.add_argument("--check", action="store_true", help="仅运行数据健康检查")
 
     args = parser.parse_args()
@@ -48,7 +50,8 @@ def main():
 
     # 如果没有指定任何选项，显示帮助
     if not any([args.all, args.pool, args.price, args.fundamental,
-                args.forward_estimates, args.social_sentiment, args.correlation]):
+                args.forward_estimates, args.social_sentiment,
+                args.extended_prices, args.correlation]):
         parser.print_help()
         return
 
@@ -220,6 +223,21 @@ def main():
         print("\n{} 成功: {}".format(chr(9989), success))
         if failed:
             print("{} 失败: {}".format(chr(10060), failed))
+        print()
+
+    # 更新扩展池价格数据
+    if args.all or args.extended_prices:
+        print("=" * 40)
+        print("Step 3d: 更新扩展池价格 (yfinance, $10B+ stocks)")
+        print("=" * 40)
+        from src.data.extended_price_fetcher import update_extended_prices
+        result = update_extended_prices(full_backfill=args.force, symbols=symbols)
+        print(
+            "\n%s 成功: %d/%d, %d rows upserted"
+            % (chr(9989), result["success"], result["total"], result["rows_inserted"])
+        )
+        if result["failed"]:
+            print("%s 失败: %s" % (chr(10060), result["failed"][:20]))
         print()
 
     # 计算相关性矩阵
