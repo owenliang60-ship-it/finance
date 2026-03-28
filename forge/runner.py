@@ -58,6 +58,7 @@ def run_campaign(
     campaign_id = campaign["campaign_id"]
     public_log = common.FORGE_ROOT / "logs" / campaign_id / "experiments_public.tsv"
     private_log = common.FORGE_ROOT / "logs" / campaign_id / "experiments_private.jsonl"
+    private_buffer: list[dict] = []  # holdout data stays in memory until campaign ends
     effective_max_rounds = int(max_rounds or campaign["max_rounds"])
 
     champion_result = evaluate(
@@ -81,6 +82,7 @@ def run_campaign(
         _copy_champion_to_candidate(strategy_name)
         _IMMUTABLE_GUARD_HASHES = _capture_immutable_hashes(campaign, campaign_path, paths)
 
+        workspace_baseline = _capture_workspace_state()
         public_log_tail = common.read_last_n_lines(public_log, 20)
         champion_code = paths.champion_path.read_text(encoding="utf-8")
         try:
@@ -108,7 +110,28 @@ def run_campaign(
                 reason=str(exc),
             )
             _write_public_log(round_result, public_log)
-            _write_private_log(round_result, campaign, private_log)
+            private_buffer.append(_make_private_record(round_result, campaign))
+            _discard_candidate(strategy_name)
+            error_count += 1
+            continue
+
+        # Check workspace isolation: agent must only modify candidate files
+        ws_ok, ws_reason = _check_workspace_isolation(workspace_baseline, strategy_name)
+        if not ws_ok:
+            round_result = RoundResult(
+                round_num=round_num,
+                level=level,
+                strategy_name=strategy_name,
+                hypothesis=hypothesis,
+                status="FAIL_GUARD",
+                visible_score=0.0,
+                best_visible_score=best_score,
+                accepted=False,
+                strategy_hash="",
+                reason=ws_reason,
+            )
+            _write_public_log(round_result, public_log)
+            private_buffer.append(_make_private_record(round_result, campaign))
             _discard_candidate(strategy_name)
             error_count += 1
             continue
@@ -133,7 +156,7 @@ def run_campaign(
                 reason=reason,
             )
             _write_public_log(round_result, public_log)
-            _write_private_log(round_result, campaign, private_log)
+            private_buffer.append(_make_private_record(round_result, campaign))
             _discard_candidate(strategy_name)
             error_count += 1
             if error_count >= 5:
@@ -161,7 +184,7 @@ def run_campaign(
                 holdout_mdd=candidate_result.holdout.max_drawdown if candidate_result.holdout else None,
             )
             _write_public_log(round_result, public_log)
-            _write_private_log(round_result, campaign, private_log)
+            private_buffer.append(_make_private_record(round_result, campaign))
             _discard_candidate(strategy_name)
             error_count += 1
             continue
@@ -196,7 +219,7 @@ def run_campaign(
             stale_count += 1
 
         _write_public_log(round_result, public_log)
-        _write_private_log(round_result, campaign, private_log)
+        private_buffer.append(_make_private_record(round_result, campaign))
 
         should_stop, stop_reason = _check_stop_rules(
             campaign=campaign,
@@ -206,6 +229,7 @@ def run_campaign(
             current_holdout=round_result.holdout_excess_cagr if accepted else None,
         )
         if should_stop:
+            _flush_private_log(private_buffer, private_log)
             print(
                 json.dumps(
                     {
@@ -220,6 +244,7 @@ def run_campaign(
             )
             return
 
+    _flush_private_log(private_buffer, private_log)
     print(
         json.dumps(
             {
@@ -301,6 +326,62 @@ Champion code:
     if payload is not None and isinstance(payload.get("result"), str):
         return payload["result"]
     return completed.stdout
+
+
+def _capture_workspace_state() -> set[str]:
+    """Snapshot modified/untracked file paths before agent invocation."""
+    result = subprocess.run(
+        ["git", "status", "--porcelain", "-u"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    files = set()
+    for line in result.stdout.strip().splitlines():
+        if len(line) > 3:
+            # git status --porcelain: "XY filename" or "XY orig -> renamed"
+            path = line[3:].split(" -> ")[-1].strip()
+            files.add(path)
+    return files
+
+
+def _check_workspace_isolation(
+    baseline: set[str],
+    strategy_name: str,
+) -> tuple[bool, str]:
+    """Verify agent only modified candidate files. Revert unauthorized changes."""
+    current = _capture_workspace_state()
+    new_changes = current - baseline
+
+    if not new_changes:
+        return True, "ok"
+
+    paths = common.get_strategy_paths(strategy_name)
+    try:
+        allowed = {
+            str(paths.candidate_path.relative_to(PROJECT_ROOT)),
+            str(paths.candidate_params_path.relative_to(PROJECT_ROOT)),
+        }
+    except ValueError:
+        allowed = set()
+
+    unauthorized = new_changes - allowed
+    if not unauthorized:
+        return True, "ok"
+
+    # Revert unauthorized tracked-file changes
+    for file_path in unauthorized:
+        full_path = PROJECT_ROOT / file_path
+        subprocess.run(
+            ["git", "checkout", "--", file_path],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+        )
+        # Remove any new untracked files the agent created
+        if full_path.exists() and file_path not in baseline:
+            full_path.unlink(missing_ok=True)
+
+    return False, f"agent modified unauthorized files: {', '.join(sorted(unauthorized))}"
 
 
 def _mutation_guard(
@@ -405,20 +486,27 @@ def _write_public_log(round_result: RoundResult, log_path: Path) -> None:
     _append_tsv(log_path, header, row)
 
 
-def _write_private_log(
-    round_result: RoundResult,
-    campaign: dict,
-    log_path: Path,
-) -> None:
-    """Append a full-fidelity JSONL record including holdout metrics."""
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
+def _make_private_record(round_result: RoundResult, campaign: dict) -> dict:
+    """Build a private log record (kept in memory until campaign ends)."""
+    return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "campaign_id": campaign["campaign_id"],
         **asdict(round_result),
     }
+
+
+def _flush_private_log(buffer: list[dict], log_path: Path) -> None:
+    """Write all accumulated private records to disk at campaign end.
+
+    Holdout data stays in memory during the campaign so the optimizing
+    agent cannot read it from the filesystem.
+    """
+    if not buffer:
+        return
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, ensure_ascii=False, default=_json_default) + "\n")
+        for record in buffer:
+            handle.write(json.dumps(record, ensure_ascii=False, default=_json_default) + "\n")
 
 
 def _json_default(obj):
@@ -540,14 +628,12 @@ def _capture_immutable_hashes(campaign: dict, campaign_path: Path, paths) -> dic
         paths.champion_path,
         paths.champion_params_path,
     ]
-    # Track campaign-specific log files if they exist
+    # Track public log if it exists (private log is deferred to campaign end)
     campaign_id = campaign.get("campaign_id", "")
     if campaign_id:
-        log_dir = common.FORGE_ROOT / "logs" / campaign_id
-        for log_name in ("experiments_public.tsv", "experiments_private.jsonl"):
-            log_path = log_dir / log_name
-            if log_path.exists():
-                tracked.append(log_path)
+        public_log_path = common.FORGE_ROOT / "logs" / campaign_id / "experiments_public.tsv"
+        if public_log_path.exists():
+            tracked.append(public_log_path)
     return {path.resolve(): common.hash_file(path.resolve()) for path in tracked}
 
 
@@ -565,7 +651,7 @@ def _append_tsv(path: Path, header: str, row: list[str]) -> None:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Forge optimization loop.")
-    parser.add_argument("--strategy", default="helen")
+    parser.add_argument("--strategy", default=None)
     parser.add_argument(
         "--campaign",
         default=str(common.resolve_campaign_path()),
