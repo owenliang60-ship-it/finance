@@ -21,13 +21,19 @@ class USStocksAdapter:
     - 交易日期序列
     """
 
-    def __init__(self, symbols: Optional[List[str]] = None):
+    def __init__(
+        self,
+        symbols: Optional[List[str]] = None,
+        universe: Optional[str] = None,
+    ):
         """
         Args:
-            symbols: 要加载的股票列表。None = 自动发现 market.db 中所有股票
+            symbols: 要加载的股票列表。None = 自动发现
+            universe: 过滤模式: "pool" (池内 ~147), "extended" (~533), None (all in db)
         """
         self._price_cache: Dict[str, pd.DataFrame] = {}
         self._symbols = symbols
+        self._universe = universe
 
     def load_all(self) -> Dict[str, pd.DataFrame]:
         """
@@ -199,27 +205,36 @@ class USStocksAdapter:
     # ── 内部方法 ──────────────────────────────────────
 
     def _discover_symbols(self) -> List[str]:
-        """从 market.db 发现有价格数据的股票"""
+        """从 market.db 发现有价格数据的股票，按 universe 参数过滤"""
         try:
-            from src.data.market_store import get_store
-            store = get_store()
-            symbols = store.get_symbols("daily_price")
-            symbols = [s for s in symbols if s not in ("SPY", "QQQ", "^VIX")]
-            return symbols
+            if self._universe == "pool":
+                from src.data.pool_manager import get_symbols as get_pool_symbols
+                return get_pool_symbols()
+            elif self._universe == "extended":
+                from src.data.extended_universe_manager import get_extended_symbols
+                return get_extended_symbols()
+            else:
+                # Default: all symbols in market.db
+                from src.data.market_store import get_store
+                store = get_store()
+                symbols = store.get_symbols("daily_price")
+                symbols = [s for s in symbols if s not in ("SPY", "QQQ", "^VIX")]
+                return symbols
         except Exception as e:
-            logger.warning(f"market.db 发现股票失败: {e}")
+            logger.warning("market.db 发现股票失败: %s", e)
             return []
 
     def _load_prices(self, symbol: str) -> Optional[pd.DataFrame]:
-        """加载单只股票的量价数据 (market.db)"""
+        """加载单只股票的量价数据 (直接读 market.db，不触发 FMP fetch)"""
         try:
-            from src.data.price_fetcher import get_price_df
-            df = get_price_df(symbol, max_age_days=0)
+            from src.data.market_store import get_store
+            store = get_store()
+            df = store.get_daily_prices_df(symbol)
             if df is None or df.empty:
                 return None
-            # get_price_df returns descending; backtest needs ascending
+            # Ensure ascending order for backtest
             df = df.sort_values("date", ascending=True).reset_index(drop=True)
             return df
         except Exception as e:
-            logger.warning(f"{symbol}: 加载失败: {e}")
+            logger.warning("%s: 加载失败: %s", symbol, e)
             return None

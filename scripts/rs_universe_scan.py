@@ -88,8 +88,11 @@ def fetch_universe(client: FMPClient, min_mcap_b: float) -> list:
 
 
 def load_price_data(symbols: list, client: FMPClient) -> dict:
-    """加载价格数据: 池内用缓存，池外调 API"""
-    pool_symbols = set(get_symbols())
+    """加载价格数据: 先查 market.db 缓存（池内+扩展池），未命中才调 API"""
+    from src.data.market_store import get_store
+
+    store = get_store()
+    cached_symbols = set(store.get_symbols("daily_price"))
     price_dict = {}
     api_calls = 0
 
@@ -97,22 +100,23 @@ def load_price_data(symbols: list, client: FMPClient) -> dict:
     from_date = (datetime.now() - timedelta(days=PRICE_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
 
     for i, sym in enumerate(symbols):
-        if sym in pool_symbols:
-            # 池内: 用本地缓存 (免 API)
+        if sym in cached_symbols:
+            # 缓存命中: 池内或扩展池 (免 API)
             df = get_price_df(sym, max_age_days=0)
             if df is not None and not df.empty:
                 if 'date' in df.columns:
                     df = df.sort_values('date').reset_index(drop=True)
                 price_dict[sym] = df
-        else:
-            # 池外: 调 API 取 4 个月
-            raw = client.get_historical_price_range(sym, from_date, to_date)
-            api_calls += 1
-            if raw:
-                df = pd.DataFrame(raw)
-                if 'date' in df.columns and 'close' in df.columns:
-                    df = df.sort_values('date').reset_index(drop=True)
-                    price_dict[sym] = df
+                continue
+
+        # 缓存未命中: 调 API 取 4 个月
+        raw = client.get_historical_price_range(sym, from_date, to_date)
+        api_calls += 1
+        if raw:
+            df = pd.DataFrame(raw)
+            if 'date' in df.columns and 'close' in df.columns:
+                df = df.sort_values('date').reset_index(drop=True)
+                price_dict[sym] = df
 
         if (i + 1) % 50 == 0:
             logger.info("价格加载进度: %d/%d (API: %d)", i + 1, len(symbols), api_calls)

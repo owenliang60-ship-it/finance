@@ -62,7 +62,7 @@ def run_single(args):
     )
 
     print(f"\n启动回测: {config.label()}")
-    engine = BacktestEngine(config)
+    engine = BacktestEngine(config, adapter=_make_adapter(args))
     metrics = engine.run()
 
     print_metrics(metrics, config)
@@ -90,6 +90,15 @@ def run_single(args):
     return metrics
 
 
+def _make_adapter(args):
+    """Create adapter with optional universe filter."""
+    universe = getattr(args, "universe", None)
+    if universe and args.market == "us_stocks":
+        from backtest.adapters.us_stocks import USStocksAdapter
+        return USStocksAdapter(universe=universe)
+    return None
+
+
 def run_sweep(args):
     """参数扫描"""
     sweep = ParameterSweep(args.market)
@@ -102,6 +111,7 @@ def run_sweep(args):
     df = sweep.run(
         start_date=args.start_date,
         end_date=args.end_date,
+        adapter=_make_adapter(args),
         progress_callback=progress,
     )
 
@@ -112,7 +122,7 @@ def run_sweep(args):
     print(f"CSV 导出: {csv_path}")
 
     # 稳健性排名
-    optimizer = ParamOptimizer(args.market)
+    optimizer = ParamOptimizer(args.market, adapter=_make_adapter(args))
     robust_df = optimizer.rank_with_robustness(df)
 
     print("\n稳健性排名 Top 10:")
@@ -133,7 +143,7 @@ def run_optimize(args):
     print(f"\n启动优化: {args.market}")
     print(f"  Walk-Forward: 训练 {train_months}月 | 测试 {test_months}月 | 步进 {step_months}月")
 
-    optimizer = ParamOptimizer(args.market)
+    optimizer = ParamOptimizer(args.market, adapter=_make_adapter(args))
     result = optimizer.walk_forward(
         train_months=train_months,
         test_months=test_months,
@@ -180,6 +190,8 @@ def main():
     parser.add_argument("--end-date", type=str, default=None)
     parser.add_argument("--sweep", action="store_true", help="参数扫描模式")
     parser.add_argument("--optimize", action="store_true", help="优化模式 (sweep + walk-forward)")
+    parser.add_argument("--universe", choices=["pool", "extended"],
+                        default=None, help="股票池范围: pool (~147) / extended (~533) / 默认=全部")
     parser.add_argument("--html", action="store_true", help="生成 HTML 报告")
     parser.add_argument("-v", "--verbose", action="store_true")
 

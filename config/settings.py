@@ -348,6 +348,14 @@ THEME_KEYWORDS_SEED = {
     },
 }
 
+# ============ Extended Universe (yfinance batch prices for $10B+ stocks) ============
+
+EXTENDED_UNIVERSE_FILE = POOL_DIR / "extended_universe.json"
+EXTENDED_PRICE_CHUNK_SIZE = 200               # yfinance batch download chunk size
+EXTENDED_PRICE_BACKFILL_START = "2021-02-01"  # 5-year backfill start date
+EXTENDED_PRICE_INCREMENTAL_PERIOD = "5d"      # Daily incremental period
+EXTENDED_UNIVERSE_MIN_MCAP_B = 10             # $10B minimum market cap
+
 # ============ Momentum Engine ============
 
 # 晨报输出目录

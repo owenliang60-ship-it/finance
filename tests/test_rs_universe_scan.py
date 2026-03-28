@@ -119,11 +119,13 @@ class TestFetchUniverse:
 class TestLoadPriceData:
     """价格数据加载"""
 
-    @patch("scripts.rs_universe_scan.get_symbols")
+    @patch("src.data.market_store.get_store")
     @patch("scripts.rs_universe_scan.get_price_df")
-    def test_pool_symbols_use_cache(self, mock_get_price_df, mock_get_symbols):
-        """池内股票应该用本地缓存"""
-        mock_get_symbols.return_value = ["AAPL", "MSFT"]
+    def test_cached_symbols_use_cache(self, mock_get_price_df, mock_get_store):
+        """缓存中的股票应该用本地缓存（池内+扩展池）"""
+        mock_store = MagicMock()
+        mock_store.get_symbols.return_value = ["AAPL", "MSFT"]
+        mock_get_store.return_value = mock_store
         mock_df = pd.DataFrame({"date": ["2026-01-01"], "close": [200.0]})
         mock_get_price_df.return_value = mock_df
 
@@ -132,14 +134,16 @@ class TestLoadPriceData:
 
         assert "AAPL" in result
         mock_get_price_df.assert_called_once_with("AAPL", max_age_days=0)
-        # Should NOT call API for pool symbols
+        # Should NOT call API for cached symbols
         mock_client.get_historical_price_range.assert_not_called()
 
-    @patch("scripts.rs_universe_scan.get_symbols")
+    @patch("src.data.market_store.get_store")
     @patch("scripts.rs_universe_scan.get_price_df")
-    def test_nonpool_symbols_use_api(self, mock_get_price_df, mock_get_symbols):
-        """池外股票应该调 API"""
-        mock_get_symbols.return_value = ["AAPL"]  # PLTR not in pool
+    def test_uncached_symbols_use_api(self, mock_get_price_df, mock_get_store):
+        """缓存中没有的股票应该调 API"""
+        mock_store = MagicMock()
+        mock_store.get_symbols.return_value = ["AAPL"]  # PLTR not cached
+        mock_get_store.return_value = mock_store
 
         mock_client = MagicMock()
         mock_client.get_historical_price_range.return_value = [
@@ -153,11 +157,13 @@ class TestLoadPriceData:
         mock_client.get_historical_price_range.assert_called_once()
         mock_get_price_df.assert_not_called()
 
-    @patch("scripts.rs_universe_scan.get_symbols")
+    @patch("src.data.market_store.get_store")
     @patch("scripts.rs_universe_scan.get_price_df")
-    def test_mixed_pool_and_nonpool(self, mock_get_price_df, mock_get_symbols):
-        """混合: 池内+池外"""
-        mock_get_symbols.return_value = ["AAPL"]
+    def test_mixed_cached_and_uncached(self, mock_get_price_df, mock_get_store):
+        """混合: 缓存+未缓存"""
+        mock_store = MagicMock()
+        mock_store.get_symbols.return_value = ["AAPL"]
+        mock_get_store.return_value = mock_store
         mock_df = pd.DataFrame({"date": ["2026-01-01"], "close": [200.0]})
         mock_get_price_df.return_value = mock_df
 
