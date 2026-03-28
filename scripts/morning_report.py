@@ -190,16 +190,25 @@ def format_section_d(dv_result: dict) -> str:
 
 def format_section_market_pulse(market_data: dict) -> str:
     """E. 市场情绪脉搏 (Adanos market-level sentiment)"""
-    lines = ["*E. 市场情绪脉搏*"]
+    # Show data date if not today
+    dates = set(r.get("date") for r in market_data.values() if isinstance(r, dict) and r.get("date"))
+    date_tag = ""
+    if dates:
+        from datetime import datetime as _dt, timezone as _tz
+        _today = _dt.now(_tz.utc).strftime("%Y-%m-%d")
+        stale = [d for d in dates if d != _today]
+        if stale:
+            date_tag = " [{}]".format(max(dates))
+    lines = ["*E. 市场情绪脉搏{}*".format(date_tag)]
 
     reddit = market_data.get("reddit")
-    twitter = market_data.get("twitter")
+    x_data = market_data.get("x")
 
-    if not reddit and not twitter:
+    if not reddit and not x_data:
         lines.append("无市场情绪数据")
         return "\n".join(lines)
 
-    for source, label in [("reddit", "Reddit"), ("twitter", "𝕏")]:
+    for source, label in [("reddit", "Reddit"), ("x", "𝕏")]:
         row = market_data.get(source)
         if not row:
             continue
@@ -220,7 +229,14 @@ def format_section_market_pulse(market_data: dict) -> str:
 
 def format_section_trending(trending_data: dict) -> str:
     """F. 社交热门 + 热门板块 (Adanos trending)"""
-    lines = ["*F. 社交热门*"]
+    data_date = trending_data.get("date", "")
+    date_tag = ""
+    if data_date:
+        from datetime import datetime as _dt, timezone as _tz
+        _today = _dt.now(_tz.utc).strftime("%Y-%m-%d")
+        if data_date != _today:
+            date_tag = " [{}]".format(data_date)
+    lines = ["*F. 社交热门{}*".format(date_tag)]
 
     # Sub-section 1: Trending stocks (merge Reddit + X, dedupe by ticker, rank by buzz)
     stocks = trending_data.get("stocks", [])
@@ -235,9 +251,9 @@ def format_section_trending(trending_data: dict) -> str:
             existing = merged.get(ticker)
             if existing is None or buzz > (existing.get("buzz_score", 0) or 0):
                 merged[ticker] = row
-        ranked = sorted(merged.values(), key=lambda x: x.get("buzz_score", 0) or 0, reverse=True)[:10]
-        lines.append("热门个股 Top 10:")
-        for i, row in enumerate(ranked, 1):
+        ranked = sorted(merged.values(), key=lambda x: x.get("buzz_score", 0) or 0, reverse=True)[10:20]
+        lines.append("热门个股 #11-20:")
+        for i, row in enumerate(ranked, 11):
             ticker = row.get("ticker", "?")
             buzz = row.get("buzz_score", 0) or 0
             trend = row.get("trend", "")
@@ -460,13 +476,57 @@ def main():
             else:
                 symbols = get_symbols()
 
+            # Section E + F: 市场级社交数据 (Adanos market-level)
+            from src.data.market_store import get_store
+            from datetime import timezone, timedelta
+            store = get_store()
+            now_utc = datetime.now(timezone.utc)
+            today_utc = now_utc.strftime("%Y-%m-%d")
+            yesterday_utc = (now_utc - timedelta(days=1)).strftime("%Y-%m-%d")
+            fresh_dates = {today_utc, yesterday_utc}
+
+            market_pulse = None
+            pulse = {}
+            for src in ["reddit", "x"]:
+                row = store.get_latest_market_sentiment(source=src)
+                if row and row.get("date") in fresh_dates:
+                    pulse[src] = row
+            if pulse:
+                market_pulse = pulse
+                logger.info("市场情绪脉搏: %s", list(pulse.keys()))
+
+            trending_data = None
+            t_data = {"stocks": [], "sectors": []}
+            trending_date = None
+            for candidate_date in [today_utc, yesterday_utc]:
+                for src in ["reddit", "x"]:
+                    t_data["stocks"].extend(store.get_social_trending(candidate_date, src))
+                    t_data["sectors"].extend(store.get_social_trending_sectors(candidate_date, src))
+                if t_data["stocks"] or t_data["sectors"]:
+                    trending_date = candidate_date
+                    break
+                t_data = {"stocks": [], "sectors": []}
+            if t_data["stocks"] or t_data["sectors"]:
+                t_data["date"] = trending_date
+                trending_data = t_data
+                logger.info("社交热门: %d stocks, %d sectors", len(t_data["stocks"]), len(t_data["sectors"]))
+
+            # Section G: per-stock 社交情绪雷达
             from src.indicators.social_attention import scan_social_signals
             social_scan = scan_social_signals(symbols)
             logger.info("社交情绪扫描完成: %d 只有数据", social_scan.get("symbols_with_data", 0))
 
+            # 组装消息: E + F + G
+            sections = []
+            if market_pulse:
+                sections.append(format_section_market_pulse(market_pulse))
+            if trending_data:
+                sections.append(format_section_trending(trending_data))
+            sections.append(format_section_social(social_scan))
+
             social_msg = "*未来资本 社交情绪日报*\n{}\n\n{}".format(
                 datetime.now().strftime("%Y-%m-%d %H:%M"),
-                format_section_social(social_scan),
+                "\n\n".join(sections),
             )
 
             if not args.no_telegram:
@@ -513,29 +573,41 @@ def main():
         if not args.no_social:
             try:
                 from src.data.market_store import get_store
-                from datetime import timezone
+                from datetime import timezone, timedelta
                 store = get_store()
-                today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                now_utc = datetime.now(timezone.utc)
+                today_utc = now_utc.strftime("%Y-%m-%d")
+                yesterday_utc = (now_utc - timedelta(days=1)).strftime("%Y-%m-%d")
+                fresh_dates = {today_utc, yesterday_utc}
 
-                # Market sentiment (Reddit + X)
+                # Market sentiment (Reddit + X) — accept latest within 2 days
                 pulse = {}
-                for src in ["reddit", "twitter"]:
+                for src in ["reddit", "x"]:
                     row = store.get_latest_market_sentiment(source=src)
-                    if row and row.get("date") == today_utc:
+                    if row and row.get("date") in fresh_dates:
                         pulse[src] = row
                 if pulse:
                     market_pulse = pulse
-                    logger.info("市场情绪脉搏: %s", list(pulse.keys()))
+                    dates_seen = set(r.get("date") for r in pulse.values())
+                    logger.info("市场情绪脉搏: %s (data: %s)", list(pulse.keys()), dates_seen)
 
-                # Trending stocks + sectors
+                # Trending stocks + sectors — try today first, fallback to yesterday
                 t_data = {"stocks": [], "sectors": []}
-                for src in ["reddit", "twitter"]:
-                    t_data["stocks"].extend(store.get_social_trending(today_utc, src))
-                    t_data["sectors"].extend(store.get_social_trending_sectors(today_utc, src))
+                trending_date = None
+                for candidate_date in [today_utc, yesterday_utc]:
+                    for src in ["reddit", "x"]:
+                        t_data["stocks"].extend(store.get_social_trending(candidate_date, src))
+                        t_data["sectors"].extend(store.get_social_trending_sectors(candidate_date, src))
+                    if t_data["stocks"] or t_data["sectors"]:
+                        trending_date = candidate_date
+                        break
+                    # Reset for next candidate
+                    t_data = {"stocks": [], "sectors": []}
                 if t_data["stocks"] or t_data["sectors"]:
+                    t_data["date"] = trending_date
                     trending_data = t_data
-                    logger.info("社交热门: %d stocks, %d sectors",
-                                len(t_data["stocks"]), len(t_data["sectors"]))
+                    logger.info("社交热门: %d stocks, %d sectors (data: %s)",
+                                len(t_data["stocks"]), len(t_data["sectors"]), trending_date)
             except Exception as e:
                 logger.warning("市场级社交数据加载失败: %s", e)
 
