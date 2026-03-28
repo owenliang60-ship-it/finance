@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import Any, Callable, List
 
 import pandas as pd
 
-from backtest.metrics import compute_metrics
 from backtest.timing.continuous_engine import (
     ContinuousTimingResult,
     run_continuous_backtest,
+    trim_continuous_result_window,
 )
 from src.indicators.bbwp import calculate_bbwp
 from src.indicators.pmarp import calculate_pmarp
@@ -25,7 +25,7 @@ from src.timing.dual_engine import (
 
 @dataclass
 class DualEngineBacktestResult:
-    evaluations: List[DualEngineEvaluation] = field(default_factory=list)
+    evaluations: List[Any] = field(default_factory=list)
     backtest: ContinuousTimingResult | None = None
 
 
@@ -38,6 +38,7 @@ def run_dual_engine_backtest(
     transaction_cost_bps: float = 10.0,
     rebalance_dead_zone_pct: float = 5.0,
     start_timestamp: str | None = None,
+    evaluate_snapshot_fn: Callable[..., Any] | None = None,
 ) -> DualEngineBacktestResult:
     """
     Evaluate the dual-engine system on each completed 4H bar and backtest
@@ -45,11 +46,12 @@ def run_dual_engine_backtest(
     """
     config = config or DualEngineConfig()
     working_state = state or DualEngineState(risk_mode=config.risk_mode)
+    evaluator = evaluate_snapshot_fn or evaluate_dual_engine_snapshot
     ordered_4h = _prepare_indicator_frame(price_4h_df, config)
     ordered_daily = _prepare_indicator_frame(price_daily_df, config)
     daily_close_times = pd.to_datetime(ordered_daily["date"]) + pd.Timedelta(days=1)
 
-    evaluations: List[DualEngineEvaluation] = []
+    evaluations: List[Any] = []
     targets: List[float] = []
 
     for i in range(len(ordered_4h)):
@@ -61,7 +63,7 @@ def run_dual_engine_backtest(
             "1d": _snapshot_from_frame_row(ordered_daily, daily_idx) if daily_idx >= 0 else _empty_snapshot(),
         }
 
-        evaluation = evaluate_dual_engine_snapshot(snapshot, state=working_state, config=config)
+        evaluation = evaluator(snapshot, state=working_state, config=config)
         working_state = evaluation.state
         evaluations.append(evaluation)
         targets.append(evaluation.target_position_pct / 100.0)
@@ -88,7 +90,11 @@ def run_dual_engine_backtest(
         days_per_year=365 * 6,
     )
     if start_timestamp:
-        backtest = _trim_continuous_result(backtest, start_timestamp, days_per_year=365 * 6)
+        backtest = trim_continuous_result_window(
+            backtest,
+            start_timestamp=start_timestamp,
+            days_per_year=365 * 6,
+        )
 
     return DualEngineBacktestResult(evaluations=visible_evaluations, backtest=backtest)
 
@@ -172,9 +178,9 @@ def _empty_snapshot() -> dict:
 def _window_backtest_inputs(
     ordered_4h: pd.DataFrame,
     targets: List[float],
-    evaluations: List[DualEngineEvaluation],
+    evaluations: List[Any],
     start_timestamp: str,
-) -> tuple[pd.DataFrame, List[float], List[DualEngineEvaluation]]:
+) -> tuple[pd.DataFrame, List[float], List[Any]]:
     timestamps = pd.to_datetime(ordered_4h["date"])
     start_ts = pd.Timestamp(start_timestamp)
     visible_mask = timestamps >= start_ts
@@ -189,40 +195,3 @@ def _window_backtest_inputs(
     return execution_price_df, execution_targets, visible_evaluations
 
 
-def _trim_continuous_result(
-    result: ContinuousTimingResult,
-    start_timestamp: str,
-    days_per_year: int,
-) -> ContinuousTimingResult:
-    start_ts = pd.Timestamp(start_timestamp)
-    strategy_nav = [(dt, nav) for dt, nav in result.strategy_nav if pd.Timestamp(dt) >= start_ts]
-    buyhold_nav = [(dt, nav) for dt, nav in result.buyhold_nav if pd.Timestamp(dt) >= start_ts]
-    if not strategy_nav or not buyhold_nav:
-        raise ValueError(f"No NAV data found on or after start_timestamp={start_timestamp}")
-
-    strategy_metrics = compute_metrics(
-        strategy_nav,
-        benchmark_nav=buyhold_nav,
-        total_costs=result.strategy_metrics.total_costs,
-        n_trades=result.n_rebalances,
-        annual_turnover=result.strategy_metrics.annual_turnover,
-        days_per_year=days_per_year,
-    )
-    buyhold_metrics = compute_metrics(
-        buyhold_nav,
-        n_trades=0,
-        days_per_year=days_per_year,
-    )
-    return ContinuousTimingResult(
-        symbol=result.symbol,
-        signal_name=result.signal_name,
-        strategy_nav=strategy_nav,
-        buyhold_nav=buyhold_nav,
-        strategy_metrics=strategy_metrics,
-        buyhold_metrics=buyhold_metrics,
-        excess_cagr=round(strategy_metrics.cagr - buyhold_metrics.cagr, 6),
-        sharpe_diff=round(strategy_metrics.sharpe_ratio - buyhold_metrics.sharpe_ratio, 4),
-        mdd_diff=round(strategy_metrics.max_drawdown - buyhold_metrics.max_drawdown, 6),
-        n_rebalances=result.n_rebalances,
-        mean_exposure=result.mean_exposure,
-    )

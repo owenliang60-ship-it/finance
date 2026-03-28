@@ -1,0 +1,10 @@
+{
+  "bbwp_lookback": 252,
+  "ema_period": 70,
+  "left_max_hold_bars": 900,
+  "pmarp_lookback": 150,
+  "right_bear_slope_pct": -0.10,
+  "right_neutral_slope_pct": -0.02,
+  "right_trend_slope_pct": 0.01,
+  "rvol_window": 10
+}

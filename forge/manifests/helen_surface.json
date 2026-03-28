@@ -1,0 +1,52 @@
+{
+  "parameters": {
+    "bbwp_lookback": {
+      "default": 252,
+      "range": [100, 500],
+      "step": 25,
+      "type": "int"
+    },
+    "ema_period": {
+      "default": 144,
+      "range": [50, 300],
+      "step": 10,
+      "type": "int"
+    },
+    "left_max_hold_bars": {
+      "default": 540,
+      "range": [90, 1080],
+      "step": 90,
+      "type": "int"
+    },
+    "pmarp_lookback": {
+      "default": 150,
+      "range": [50, 300],
+      "step": 10,
+      "type": "int"
+    },
+    "right_bear_slope_pct": {
+      "default": -0.03,
+      "range": [-0.1, 0.0],
+      "step": 0.005,
+      "type": "float"
+    },
+    "right_neutral_slope_pct": {
+      "default": 0.0,
+      "range": [-0.02, 0.05],
+      "step": 0.005,
+      "type": "float"
+    },
+    "right_trend_slope_pct": {
+      "default": 0.03,
+      "range": [0.01, 0.2],
+      "step": 0.01,
+      "type": "float"
+    },
+    "rvol_window": {
+      "default": 20,
+      "range": [10, 60],
+      "step": 5,
+      "type": "int"
+    }
+  }
+}

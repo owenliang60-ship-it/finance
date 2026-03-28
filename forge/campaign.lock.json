@@ -1,0 +1,45 @@
+{
+  "base_infra_sha": "a08d877",
+  "campaign_id": "helen_v2_btc_001",
+  "created_at": "2026-03-26T00:00:00Z",
+  "data_dir": "../data/crypto",
+  "data_snapshot_hash": "fe5b52d5dd077f0671404bfb433368233c07eb013d8110af225e46ba0626bad2",
+  "days_per_year": 2190,
+  "gate_max_mdd": -0.55,
+  "gate_min_excess_cagr": -0.15,
+  "gate_min_exposure": 0.2,
+  "holdout_meltdown_threshold": -0.15,
+  "holdout_window": {
+    "end": "2026-03-26",
+    "name": "holdout",
+    "start": "2023-07-01"
+  },
+  "interval": "4h",
+  "max_rounds": 50,
+  "parameter_surface_manifest": "manifests/helen_surface.json",
+  "rebalance_dead_zone_pct": 5.0,
+  "score_function": "min_calmar",
+  "stale_stop_rounds": 20,
+  "strategy_name": "helen",
+  "structural_unlock_after_stale": 10,
+  "symbol": "BTCUSDT",
+  "transaction_cost_bps": 10.0,
+  "visible_windows": [
+    {
+      "end": "2021-12-31",
+      "name": "A",
+      "start": "2019-01-01"
+    },
+    {
+      "end": "2022-12-31",
+      "name": "B",
+      "start": "2020-01-01"
+    },
+    {
+      "end": "2023-06-30",
+      "name": "C",
+      "start": "2021-01-01"
+    }
+  ],
+  "warmup_start": "2017-08-17"
+}

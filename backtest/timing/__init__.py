@@ -22,6 +22,8 @@ from backtest.timing.engine import TimingResult, run_timing_backtest
 from backtest.timing.continuous_engine import (
     ContinuousTimingResult,
     run_continuous_backtest,
+    trim_continuous_result_window,
+    window_slice,
 )
 from backtest.timing.dual_engine_backtest import (
     DualEngineBacktestResult,
@@ -51,6 +53,8 @@ __all__ = [
     "run_continuous_backtest",
     "DualEngineBacktestResult",
     "run_dual_engine_backtest",
+    "trim_continuous_result_window",
+    "window_slice",
     "TimingStudyConfig",
     "AggregateResult",
     "run_timing_study",
