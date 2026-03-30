@@ -419,6 +419,15 @@ _SCHEMA = "\n\n".join([
     PRIMARY KEY (symbol, date)
 );""",
     "CREATE INDEX IF NOT EXISTS idx_bsh_date ON broad_scan_hits(date);",
+
+    # -- Historical market cap (for universe reconstitution) --
+    """CREATE TABLE IF NOT EXISTS historical_market_cap (
+    symbol TEXT NOT NULL,
+    date TEXT NOT NULL,
+    market_cap REAL NOT NULL,
+    PRIMARY KEY (symbol, date)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_hmc_date ON historical_market_cap(date);",
 ])
 
 # Pre-compute snake-case column sets per table for fast lookup
@@ -442,6 +451,7 @@ _VALID_TABLES = frozenset({
     "social_sentiment", "market_sentiment",
     "social_trending",
     "social_trending_sectors", "broad_scan_hits",
+    "historical_market_cap",
 })
 
 
@@ -1373,6 +1383,40 @@ class MarketStore:
         conn = self._get_conn()
         rows = conn.execute(f"SELECT DISTINCT symbol FROM {table}").fetchall()
         return sorted(r[0] for r in rows)
+
+    # ---- Historical market cap (universe reconstitution) ----
+
+    def upsert_historical_market_cap(self, symbol: str, rows: List[Dict]) -> int:
+        """写入历史市值数据。"""
+        if not rows:
+            return 0
+        sql = """INSERT OR REPLACE INTO historical_market_cap
+                 (symbol, date, market_cap) VALUES (?, ?, ?)"""
+        data = [(r.get("symbol", symbol), r["date"], r["market_cap"]) for r in rows]
+        conn = self._get_conn()
+        conn.executemany(sql, data)
+        conn.commit()
+        return len(data)
+
+    def get_market_cap_at(self, symbol: str, date: str) -> Optional[float]:
+        """查询 symbol 在 date（或之前最近交易日）的市值。无数据返回 None。"""
+        sql = """SELECT market_cap FROM historical_market_cap
+                 WHERE symbol = ? AND date <= ?
+                 ORDER BY date DESC LIMIT 1"""
+        conn = self._get_conn()
+        row = conn.execute(sql, (symbol, date)).fetchone()
+        return row[0] if row else None
+
+    def get_bulk_market_caps_at(self, date: str) -> Dict[str, float]:
+        """查询所有 symbol 在 date（或之前最近日）的市值。"""
+        sql = """SELECT symbol, market_cap FROM historical_market_cap
+                 WHERE (symbol, date) IN (
+                     SELECT symbol, MAX(date) FROM historical_market_cap
+                     WHERE date <= ? GROUP BY symbol
+                 )"""
+        conn = self._get_conn()
+        rows = conn.execute(sql, (date,)).fetchall()
+        return {r[0]: r[1] for r in rows}
 
     # ---- Stats ----
 
