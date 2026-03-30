@@ -84,7 +84,11 @@ def run_single(args):
             metrics=metrics,
             config=config,
         )
-        suffix = "reconstituted" if getattr(args, "reconstitute", None) else "original"
+        mcap = getattr(args, "reconstitute", None)
+        if mcap:
+            suffix = f"reconstituted_{mcap:.0e}"
+        else:
+            suffix = "original"
         path = save_html_report(html, config, suffix=suffix)
         print(f"HTML 报告: {path}")
 

@@ -62,6 +62,25 @@ def test_coverage_gate_raises_on_low_coverage():
             adapter.slice_to_date("2024-03-01")
 
 
+def test_coverage_gate_fires_every_rebalance():
+    """覆盖率门卫不是只检查一次 — 第二次 rebalance 覆盖率下降也应 raise"""
+    adapter = _make_adapter(
+        [f"S{i}" for i in range(10)], mcap_threshold=10_000_000_000
+    )
+    good_caps = {f"S{i}": 50_000_000_000 for i in range(10)}  # 100%
+    bad_caps = {f"S{i}": 50_000_000_000 for i in range(5)}   # 50%
+
+    # 第一次通过
+    with patch("backtest.adapters.us_stocks._get_bulk_mcaps", return_value=good_caps):
+        sliced = adapter.slice_to_date("2024-02-15")
+    assert len(sliced) == 10
+
+    # 第二次覆盖率下降 → 应该 raise，不能放行
+    with patch("backtest.adapters.us_stocks._get_bulk_mcaps", return_value=bad_caps):
+        with pytest.raises(ValueError, match="覆盖率"):
+            adapter.slice_to_date("2024-03-01")
+
+
 def test_no_filter_without_threshold():
     """不设 mcap_threshold 时，所有股票都通过"""
     adapter = _make_adapter(["A", "B"])

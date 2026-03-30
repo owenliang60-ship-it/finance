@@ -43,7 +43,6 @@ class USStocksAdapter:
         self._symbols = symbols
         self._universe = universe
         self._mcap_threshold = mcap_threshold
-        self._mcap_coverage_checked = False
 
     def load_all(self) -> Dict[str, pd.DataFrame]:
         """
@@ -168,24 +167,21 @@ class USStocksAdapter:
         if self._mcap_threshold and sliced:
             mcaps = _get_bulk_mcaps(date)
 
-            # 覆盖率门卫（只在首次 rebalance 检查一次）
-            if not self._mcap_coverage_checked:
-                has_data = sum(1 for sym in sliced if sym in mcaps)
-                coverage = has_data / len(sliced)
-                if coverage < 0.9:
-                    missing = [sym for sym in sliced if sym not in mcaps]
-                    raise ValueError(
-                        f"reconstitution 覆盖率 {coverage:.1%} < 90% "
-                        f"({has_data}/{len(sliced)}). "
-                        f"缺失 mcap 数据的 symbols: {missing[:20]}..."
-                    )
-                logger.info(f"reconstitution 覆盖率 {coverage:.1%} ✓ ({has_data}/{len(sliced)})")
-                self._mcap_coverage_checked = True
+            # 覆盖率门卫 — 每次 rebalance 都检查
+            has_data = sum(1 for sym in sliced if sym in mcaps)
+            coverage = has_data / len(sliced) if sliced else 0
+            if coverage < 0.9:
+                missing = [sym for sym in sliced if sym not in mcaps]
+                raise ValueError(
+                    f"{date}: reconstitution 覆盖率 {coverage:.1%} < 90% "
+                    f"({has_data}/{len(sliced)}). "
+                    f"缺失 mcap 数据的 symbols: {missing[:20]}..."
+                )
 
             before = len(sliced)
             sliced = {
                 sym: df for sym, df in sliced.items()
-                if sym not in mcaps  # 无数据 → 保留
+                if sym not in mcaps  # 无数据 → 保留（覆盖率门卫已确保 <10%）
                 or mcaps[sym] >= self._mcap_threshold  # 有数据且达标 → 保留
             }
             filtered = before - len(sliced)

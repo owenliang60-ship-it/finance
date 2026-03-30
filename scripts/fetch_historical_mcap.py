@@ -39,15 +39,20 @@ def fetch_all(symbols, years=5, skip_existing=False):
     to_date = datetime.now().strftime("%Y-%m-%d")
     from_date = (datetime.now() - timedelta(days=years * 365)).strftime("%Y-%m-%d")
 
-    # 如果 skip_existing，查已有 symbol
+    # 如果 skip_existing，查已有 symbol（要求行数 >= 年数×200×0.8 才算充分）
     existing = set()
     if skip_existing:
+        min_rows = int(years * 200 * 0.8)
         conn = store._get_conn()
         rows = conn.execute(
-            "SELECT DISTINCT symbol FROM historical_market_cap"
+            "SELECT symbol, COUNT(*) as cnt FROM historical_market_cap GROUP BY symbol"
         ).fetchall()
-        existing = {r[0] for r in rows}
-        logger.info(f"已有 {len(existing)} symbols，将跳过")
+        for r in rows:
+            if r[1] >= min_rows:
+                existing.add(r[0])
+            else:
+                logger.info(f"  {r[0]}: 仅 {r[1]} 行 (需 {min_rows})，将重新拉取")
+        logger.info(f"已有 {len(existing)} symbols（>= {min_rows} rows），将跳过")
 
     total = len(symbols)
     success = 0
