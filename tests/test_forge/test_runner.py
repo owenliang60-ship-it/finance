@@ -65,6 +65,26 @@ def test_extract_hypothesis_reads_first_tagged_line():
     assert runner._extract_hypothesis(output) == "raise ema to reduce whipsaw"
 
 
+def test_extract_hypothesis_handles_leading_whitespace():
+    output = "  HYPOTHESIS: test with spaces"
+    assert runner._extract_hypothesis(output) == "test with spaces"
+
+
+def test_extract_hypothesis_handles_markdown_bold():
+    output = "**HYPOTHESIS:** use EMA instead of SMA"
+    assert runner._extract_hypothesis(output) == "use EMA instead of SMA"
+
+
+def test_extract_hypothesis_handles_case_insensitive():
+    output = "Hypothesis: lower fast period"
+    assert runner._extract_hypothesis(output) == "lower fast period"
+
+
+def test_extract_hypothesis_returns_missing_when_absent():
+    output = "I changed the params\nDone"
+    assert runner._extract_hypothesis(output) == "missing_hypothesis"
+
+
 def test_parse_claude_cli_payload_reads_json_result():
     payload = runner._parse_claude_cli_payload(
         '{"type":"result","is_error":false,"result":"HYPOTHESIS: test"}'

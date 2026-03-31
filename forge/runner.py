@@ -285,6 +285,10 @@ def _invoke_agent(
             "StrategyConfig / run_backtest exports."
         )
     )
+    champion_params = ""
+    if paths.champion_params_path.exists():
+        champion_params = paths.champion_params_path.read_text(encoding="utf-8")
+
     prompt = f"""{forge_md}
 
 Current level: {current_level}
@@ -301,6 +305,11 @@ Rules:
 2. {level_rule}
 3. Do not modify forge/common.py, forge/runner.py, forge/evaluator.py, forge/campaign.lock.json, forge/forge.md, manifest files, or logs.
 4. Optimize only for visible_score shown by evaluator output. Holdout is hidden.
+
+Current champion params:
+```json
+{champion_params}
+```
 
 Recent public log tail:
 {public_log_tail or "(empty)"}
@@ -427,10 +436,21 @@ def _mutation_guard(
 
 
 def _extract_hypothesis(agent_output: str) -> str:
-    """Extract the first `HYPOTHESIS:` line from agent stdout."""
+    """Extract the first `HYPOTHESIS:` line from agent stdout.
+
+    Handles common variations: leading whitespace, markdown bold,
+    case-insensitive prefix, and `#` headers.
+    """
+    import re
+
+    pattern = re.compile(
+        r"^\s*(?:[#*_`]*\s*)?HYPOTHESIS\s*[:：]\s*(.+)",
+        re.IGNORECASE,
+    )
     for line in agent_output.splitlines():
-        if line.startswith("HYPOTHESIS:"):
-            value = line.split(":", 1)[1].strip()
+        match = pattern.match(line)
+        if match:
+            value = match.group(1).strip().strip("*_`").strip()
             return value or "missing_hypothesis_body"
     return "missing_hypothesis"
 
