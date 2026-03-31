@@ -1,0 +1,16 @@
+{
+  "parameters": {
+    "fast_period": {
+      "default": 30,
+      "range": [5, 100],
+      "step": 3,
+      "type": "int"
+    },
+    "slow_period": {
+      "default": 150,
+      "range": [20, 500],
+      "step": 10,
+      "type": "int"
+    }
+  }
+}
