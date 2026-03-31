@@ -113,6 +113,7 @@ class Rebalancer:
         action: RebalanceAction,
         rs_df: pd.DataFrame,
         weighting: str = "equal",
+        volatilities: Dict[str, float] | None = None,
     ) -> Dict[str, float]:
         """
         计算目标权重
@@ -120,7 +121,8 @@ class Rebalancer:
         Args:
             action: RebalanceAction
             rs_df: RS 排名数据
-            weighting: "equal" 或 "rs_weighted"
+            weighting: "equal", "rs_weighted", 或 "inv_vol"
+            volatilities: {symbol: annualized_vol} — inv_vol 模式需要
 
         Returns:
             {symbol: target_weight} — 权重和为 1.0
@@ -133,6 +135,9 @@ class Rebalancer:
             w = 1.0 / len(target_symbols)
             return {sym: w for sym in target_symbols}
 
+        if weighting == "inv_vol":
+            return self._inv_vol_weights(target_symbols, volatilities)
+
         # RS 加权: 用 rs_rank 作为权重
         rs_map = dict(zip(rs_df["symbol"], rs_df["rs_rank"]))
         raw_weights = {sym: max(rs_map.get(sym, 0), 1) for sym in target_symbols}
@@ -142,3 +147,32 @@ class Rebalancer:
             return {sym: w for sym in target_symbols}
 
         return {sym: w / total for sym, w in raw_weights.items()}
+
+    def _inv_vol_weights(
+        self,
+        symbols: List[str],
+        volatilities: Dict[str, float] | None,
+    ) -> Dict[str, float]:
+        """Inverse-volatility 加权，缺失 vol 的用中位数替代"""
+        if not volatilities:
+            w = 1.0 / len(symbols)
+            return {sym: w for sym in symbols}
+
+        # 收集有效 vol 值
+        valid_vols = {s: v for s, v in volatilities.items() if s in symbols and v > 0}
+
+        if not valid_vols:
+            w = 1.0 / len(symbols)
+            return {sym: w for sym in symbols}
+
+        # 缺失 vol 的用中位数替代
+        sorted_vols = sorted(valid_vols.values())
+        median_vol = sorted_vols[len(sorted_vols) // 2]
+        all_vols = {}
+        for sym in symbols:
+            vol = valid_vols.get(sym, median_vol)
+            all_vols[sym] = max(vol, 0.001)  # floor 防除零
+
+        inv = {sym: 1.0 / v for sym, v in all_vols.items()}
+        total = sum(inv.values())
+        return {sym: w / total for sym, w in inv.items()}

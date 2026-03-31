@@ -14,7 +14,7 @@ class BacktestConfig:
     rs_method: Literal["B", "C"]
     top_n: int = 10
     sell_buffer: int = 5
-    weighting: Literal["equal", "rs_weighted"] = "equal"
+    weighting: Literal["equal", "rs_weighted", "inv_vol"] = "equal"
     rebalance_freq: Literal["D", "3D", "W", "2W", "M"] = "M"
     transaction_cost_bps: float = 5.0
     initial_capital: float = 1_000_000.0
@@ -22,6 +22,13 @@ class BacktestConfig:
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     rebalance_held: bool = True  # True=真等权, False=动量持有(原行为)
+    # Regime filter
+    regime_symbol: Optional[str] = None           # e.g. "SPY"; None = disabled
+    regime_ma_period: int = 200                   # SMA period for regime check
+    regime_mode: Literal["cash", "scale"] = "cash"  # cash=清仓, scale=缩放
+    regime_scale_factor: float = 0.5              # scale 模式下的缩放系数
+    # Vol-targeted sizing
+    vol_lookback: int = 60                        # inv_vol 波动率回看天数
     mcap_threshold: Optional[float] = None  # 历史市值阈值 (e.g. 10e9), None=不过滤
 
     @property
@@ -36,6 +43,12 @@ class BacktestConfig:
             f"{self.market}_{self.rs_method}_top{self.top_n}"
             f"_{self.rebalance_freq}_buf{self.sell_buffer}_{rb}"
         )
+        if self.weighting != "equal":
+            base += f"_{self.weighting}"
+            if self.weighting == "inv_vol":
+                base += f"{self.vol_lookback}"
+        if self.regime_symbol:
+            base += f"_regime{self.regime_ma_period}_{self.regime_mode}"
         if self.mcap_threshold:
             base += f"_mcap{self.mcap_threshold:.0e}"
         return base

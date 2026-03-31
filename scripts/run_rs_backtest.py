@@ -51,7 +51,7 @@ def setup_logging(verbose: bool = False):
 def run_single(args):
     """单次回测"""
     factory = crypto_preset if args.market == "crypto" else us_preset
-    config = factory(
+    overrides = dict(
         rs_method=args.method,
         top_n=args.top_n,
         rebalance_freq=args.freq,
@@ -59,7 +59,16 @@ def run_single(args):
         weighting=args.weighting,
         start_date=args.start_date,
         end_date=args.end_date,
+        vol_lookback=args.vol_lookback,
     )
+    if args.regime:
+        overrides.update(
+            regime_symbol=args.regime,
+            regime_ma_period=args.regime_ma,
+            regime_mode=args.regime_mode,
+            regime_scale_factor=args.regime_scale,
+        )
+    config = factory(**overrides)
 
     print(f"\n启动回测: {config.label()}")
     engine = BacktestEngine(config, adapter=_make_adapter(args))
@@ -83,6 +92,7 @@ def run_single(args):
             benchmark_nav=benchmark_nav,
             metrics=metrics,
             config=config,
+            regime_stats=engine.regime_stats if config.regime_symbol else None,
         )
         mcap = getattr(args, "reconstitute", None)
         if mcap:
@@ -191,7 +201,7 @@ def main():
     parser.add_argument("--top-n", type=int, default=10)
     parser.add_argument("--freq", default="M", choices=["D", "3D", "W", "2W", "M"])
     parser.add_argument("--buffer", type=int, default=5)
-    parser.add_argument("--weighting", choices=["equal", "rs_weighted"], default="equal")
+    parser.add_argument("--weighting", choices=["equal", "rs_weighted", "inv_vol"], default="equal")
     parser.add_argument("--start-date", type=str, default=None)
     parser.add_argument("--end-date", type=str, default=None)
     parser.add_argument("--sweep", action="store_true", help="参数扫描模式")
@@ -201,6 +211,16 @@ def main():
     parser.add_argument("--reconstitute", type=float, default=None,
                         metavar="MCAP",
                         help="历史市值阈值 (e.g. 10e9)，启用 universe reconstitution")
+    parser.add_argument("--regime", type=str, default=None, metavar="SYMBOL",
+                        help="Regime filter index symbol (e.g. SPY)")
+    parser.add_argument("--regime-ma", type=int, default=200,
+                        help="Regime MA period (default: 200)")
+    parser.add_argument("--regime-mode", choices=["cash", "scale"], default="cash",
+                        help="Regime off behavior: cash (清仓) or scale (缩放)")
+    parser.add_argument("--regime-scale", type=float, default=0.5,
+                        help="Scale factor when regime off (default: 0.5)")
+    parser.add_argument("--vol-lookback", type=int, default=60,
+                        help="Volatility lookback days for inv_vol weighting (default: 60)")
     parser.add_argument("--html", action="store_true", help="生成 HTML 报告")
     parser.add_argument("-v", "--verbose", action="store_true")
 

@@ -103,6 +103,24 @@ class USStocksAdapter:
 
         return list(zip(df["date"].astype(str), df["close"].astype(float)))
 
+    def get_index_prices(self, symbol: str = "SPY") -> pd.Series:
+        """
+        获取指数的收盘价 Series (用于 regime filter)
+
+        Args:
+            symbol: 指数代码 (e.g. "SPY")
+
+        Returns:
+            pd.Series, index=date_str, values=close_price
+            空 Series 如果数据不可用
+        """
+        df = self._load_prices(symbol)
+        if df is None or df.empty:
+            logger.warning(f"Regime index {symbol} 数据不可用")
+            return pd.Series(dtype=float)
+        s = df.set_index(df["date"].astype(str))["close"].astype(float)
+        return s[~s.index.duplicated(keep="last")].sort_index()
+
     def _compute_pool_avg_nav(self) -> List[Tuple[str, float]]:
         """
         合成池内等权平均 NAV

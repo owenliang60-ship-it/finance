@@ -107,3 +107,66 @@ class TestComputeWeights:
         action = RebalanceAction(to_sell=[], to_buy=[], to_hold=[], target_count=0)
         weights = r.compute_weights(action, rs, "equal")
         assert weights == {}
+
+
+class TestInvVolWeighting:
+    """Inverse-volatility 加权"""
+
+    def test_inv_vol_basic(self):
+        """低波动股票权重更高"""
+        r = Rebalancer(top_n=3)
+        rs = _make_rs_df([("A", 99), ("B", 90), ("C", 80)])
+        action = RebalanceAction(
+            to_sell=[], to_buy=["A", "B", "C"], to_hold=[], target_count=3
+        )
+        volatilities = {"A": 0.10, "B": 0.20, "C": 0.40}
+        weights = r.compute_weights(action, rs, "inv_vol", volatilities=volatilities)
+
+        assert len(weights) == 3
+        assert abs(sum(weights.values()) - 1.0) < 1e-9
+        assert weights["A"] > weights["B"] > weights["C"]
+
+    def test_inv_vol_equal_vols(self):
+        """等波动率 → 等权重"""
+        r = Rebalancer(top_n=2)
+        rs = _make_rs_df([("A", 99), ("B", 90)])
+        action = RebalanceAction(
+            to_sell=[], to_buy=["A", "B"], to_hold=[], target_count=2
+        )
+        volatilities = {"A": 0.20, "B": 0.20}
+        weights = r.compute_weights(action, rs, "inv_vol", volatilities=volatilities)
+        assert abs(weights["A"] - weights["B"]) < 1e-9
+
+    def test_inv_vol_missing_vol_fallback(self):
+        """某只股票无波动率数据 → 用中位数 fallback"""
+        r = Rebalancer(top_n=2)
+        rs = _make_rs_df([("A", 99), ("B", 90)])
+        action = RebalanceAction(
+            to_sell=[], to_buy=["A", "B"], to_hold=[], target_count=2
+        )
+        volatilities = {"A": 0.20}  # B 缺失
+        weights = r.compute_weights(action, rs, "inv_vol", volatilities=volatilities)
+        assert len(weights) == 2
+        assert abs(sum(weights.values()) - 1.0) < 1e-9
+
+    def test_inv_vol_zero_vol_capped(self):
+        """零波动率 → 不会除零"""
+        r = Rebalancer(top_n=2)
+        rs = _make_rs_df([("A", 99), ("B", 90)])
+        action = RebalanceAction(
+            to_sell=[], to_buy=["A", "B"], to_hold=[], target_count=2
+        )
+        volatilities = {"A": 0.0, "B": 0.20}
+        weights = r.compute_weights(action, rs, "inv_vol", volatilities=volatilities)
+        assert len(weights) == 2
+        assert abs(sum(weights.values()) - 1.0) < 1e-9
+
+    def test_inv_vol_no_volatilities(self):
+        """无 volatilities dict → 等权 fallback"""
+        r = Rebalancer(top_n=2)
+        rs = _make_rs_df([("A", 99), ("B", 90)])
+        action = RebalanceAction(
+            to_sell=[], to_buy=["A", "B"], to_hold=[], target_count=2
+        )
+        weights = r.compute_weights(action, rs, "inv_vol", volatilities=None)
+        assert abs(weights["A"] - weights["B"]) < 1e-9

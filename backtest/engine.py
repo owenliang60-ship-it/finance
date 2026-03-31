@@ -13,7 +13,10 @@ BacktestEngine — 核心回测循环（市场无关）
 """
 
 import logging
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
 
 from backtest.config import BacktestConfig, FREQ_DAYS
 from backtest.metrics import BacktestMetrics, compute_metrics, TRADING_DAYS_PER_YEAR, CALENDAR_DAYS_PER_YEAR
@@ -55,6 +58,20 @@ class BacktestEngine:
         self._rs_func = adapter.get_rs_function(config.rs_method)
         self._rebalance_count = 0
         self._turnover_notional = 0.0  # 累计换手金额
+
+        # Regime filter: 加载 index 价格
+        self._regime_index: Optional[pd.Series] = None
+        if config.regime_symbol and hasattr(adapter, 'get_index_prices'):
+            self._regime_index = adapter.get_index_prices(config.regime_symbol)
+            if self._regime_index is not None and self._regime_index.empty:
+                logger.warning(f"Regime index {config.regime_symbol} 无数据, regime filter 禁用")
+                self._regime_index = None
+
+        # Regime 统计
+        self._regime_on_count = 0
+        self._regime_off_count = 0
+        self._regime_switches = 0
+        self._last_regime_state: Optional[bool] = None
 
     def run(self) -> BacktestMetrics:
         """
@@ -148,6 +165,29 @@ class BacktestEngine:
         """执行单次换仓"""
         self._rebalance_count += 1
 
+        # ── Regime check ──
+        regime_on = self._check_regime(date)
+
+        # 统计
+        if regime_on:
+            self._regime_on_count += 1
+        else:
+            self._regime_off_count += 1
+        if self._last_regime_state is not None and regime_on != self._last_regime_state:
+            self._regime_switches += 1
+        self._last_regime_state = regime_on
+
+        if not regime_on and self.config.regime_mode == "cash":
+            # 清仓所有持仓
+            for sym in list(self.portfolio.holdings.keys()):
+                price = current_prices.get(sym)
+                if price and price > 0:
+                    shares = self.portfolio.holdings.get(sym, 0)
+                    if shares > 0:
+                        self._turnover_notional += shares * price
+                        self.portfolio.sell_all(sym, price, date)
+            return
+
         # 防前视: 只截取到当日
         sliced = self.adapter.slice_to_date(date)
 
@@ -163,9 +203,18 @@ class BacktestEngine:
         action = self.rebalancer.compute(rs_df, current_holdings)
 
         # 计算目标权重
+        volatilities = None
+        if self.config.weighting == "inv_vol":
+            volatilities = self._compute_volatilities(sliced, self.config.vol_lookback)
+
         weights = self.rebalancer.compute_weights(
-            action, rs_df, self.config.weighting
+            action, rs_df, self.config.weighting, volatilities=volatilities
         )
+
+        # Regime scale 模式: 缩放权重
+        regime_scale_active = not regime_on and self.config.regime_mode == "scale"
+        if regime_scale_active:
+            weights = {sym: w * self.config.regime_scale_factor for sym, w in weights.items()}
 
         # 执行卖出
         for sym in action.to_sell:
@@ -183,9 +232,11 @@ class BacktestEngine:
         # 调整目标持仓权重
         # rebalance_held=True: 所有目标持仓(to_hold+to_buy)回到目标权重
         # rebalance_held=False: 只买入新股，已有持仓保持漂移
+        # P2 fix: regime scale 期间必须调整所有持仓（包括 to_hold），
+        # 否则 drift 模式下已有持仓不会被缩减
         adjust_symbols = (
             action.to_hold + action.to_buy
-            if self.config.rebalance_held
+            if self.config.rebalance_held or regime_scale_active
             else action.to_buy
         )
 
@@ -218,6 +269,61 @@ class BacktestEngine:
             if diff > 0:
                 self._turnover_notional += diff
                 self.portfolio.buy(sym, diff, price, date)
+
+    @property
+    def regime_stats(self) -> dict:
+        """Regime filter 统计"""
+        total = self._regime_on_count + self._regime_off_count
+        return {
+            "regime_on_pct": self._regime_on_count / total if total > 0 else 1.0,
+            "regime_off_pct": self._regime_off_count / total if total > 0 else 0.0,
+            "n_switches": self._regime_switches,
+            "n_rebalances_on": self._regime_on_count,
+            "n_rebalances_off": self._regime_off_count,
+        }
+
+    def _check_regime(self, date: str) -> bool:
+        """
+        检查 regime 状态: index close > SMA(regime_ma_period)
+
+        Returns:
+            True = regime on (做多), False = regime off
+        """
+        if self._regime_index is None:
+            return True
+
+        mask = self._regime_index.index <= date
+        sliced = self._regime_index[mask]
+
+        if len(sliced) < self.config.regime_ma_period:
+            return True  # 数据不足，默认 regime on
+
+        ma = sliced.iloc[-self.config.regime_ma_period:].mean()
+        current = sliced.iloc[-1]
+        return current > ma
+
+    def _compute_volatilities(
+        self, sliced: Dict[str, pd.DataFrame], lookback: int
+    ) -> Dict[str, float]:
+        """
+        计算各股票的年化波动率
+
+        Args:
+            sliced: {symbol: price_df} — 已截取到当日
+            lookback: 回看天数
+
+        Returns:
+            {symbol: annualized_vol}
+        """
+        vols: Dict[str, float] = {}
+        for sym, df in sliced.items():
+            if len(df) < lookback + 1:
+                continue
+            closes = df["close"].astype(float).values[-lookback:]
+            returns = np.diff(closes) / closes[:-1]
+            if len(returns) > 1:
+                vols[sym] = float(np.std(returns, ddof=1) * np.sqrt(252))
+        return vols
 
     # ── 辅助方法 ──────────────────────────────────────
 

@@ -108,6 +108,7 @@ def generate_html_report(
     metrics: BacktestMetrics,
     config: BacktestConfig,
     sweep_df: Optional[pd.DataFrame] = None,
+    regime_stats: Optional[dict] = None,
 ) -> str:
     """
     生成 HTML 报告
@@ -200,7 +201,22 @@ def generate_html_report(
     Top {config.top_n} | Buffer={config.sell_buffer} |
     频率={config.rebalance_freq} | 权重={config.weighting} |
     成本={config.transaction_cost_bps}bps
-</div>
+</div>"""
+
+    # Regime stats section
+    regime_html = ""
+    if regime_stats:
+        regime_html = f"""
+<div class="config">
+    <strong>Regime Filter:</strong>
+    {config.regime_symbol} &gt; MA{config.regime_ma_period} |
+    模式={config.regime_mode} |
+    Regime On: {regime_stats['regime_on_pct']:.1%} |
+    Off: {regime_stats['regime_off_pct']:.1%} |
+    Switches: {regime_stats['n_switches']}
+</div>"""
+
+    html += f"""{regime_html}
 
 <div class="metric-grid">
     <div class="metric-box">
