@@ -17,6 +17,30 @@ REMOTE_DIR="/root/workspace/Finance"
 REMOTE="$REMOTE_HOST:$REMOTE_DIR"
 PYTHON="$LOCAL_DIR/.venv/bin/python"
 
+# ── 文件锁 (防止并发 sync) ──
+LOCK_FILE="/tmp/finance-companydb-sync.lock"
+
+acquire_lock() {
+    if [ -f "$LOCK_FILE" ]; then
+        local pid
+        pid=$(cat "$LOCK_FILE" 2>/dev/null)
+        if kill -0 "$pid" 2>/dev/null; then
+            error "另一个 sync 操作正在进行 (PID=$pid)"
+            exit 1
+        fi
+        # Stale lock — process gone
+        rm -f "$LOCK_FILE"
+    fi
+    echo $$ > "$LOCK_FILE"
+}
+
+release_lock() {
+    rm -f "$LOCK_FILE"
+}
+
+trap release_lock EXIT
+acquire_lock
+
 # ── 颜色 (非 TTY 时禁用，避免日志污染) ──
 if [ -t 1 ]; then
     RED='\033[0;31m'
