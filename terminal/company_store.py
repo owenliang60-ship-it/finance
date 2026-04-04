@@ -145,6 +145,45 @@ CREATE TABLE IF NOT EXISTS options_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_options_snap_symbol ON options_snapshots(symbol, snapshot_date);
 CREATE INDEX IF NOT EXISTS idx_options_snap_exp ON options_snapshots(symbol, expiration);
+
+CREATE TABLE IF NOT EXISTS holdings (
+    position_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL REFERENCES companies(symbol),
+    shares REAL NOT NULL,
+    avg_cost REAL NOT NULL,
+    open_date TEXT NOT NULL,
+    close_date TEXT,
+    realized_pnl REAL,
+    status TEXT NOT NULL DEFAULT 'OPEN',
+    last_updated TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_holdings_open_symbol
+    ON holdings(symbol) WHERE status = 'OPEN';
+
+CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    position_id INTEGER NOT NULL REFERENCES holdings(position_id),
+    symbol TEXT NOT NULL,
+    action TEXT NOT NULL,
+    shares REAL NOT NULL,
+    price REAL NOT NULL,
+    date TEXT NOT NULL,
+    notes TEXT DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_txn_symbol ON transactions(symbol);
+CREATE INDEX IF NOT EXISTS idx_txn_position ON transactions(position_id);
+
+CREATE TABLE IF NOT EXISTS portfolio_cash (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,
+    amount REAL NOT NULL,
+    balance_after REAL NOT NULL,
+    notes TEXT DEFAULT '',
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -198,6 +237,50 @@ class CompanyStore:
         # --- Migration 2: options_snapshots UNIQUE 约束 ---
         # SQLite 不支持 ALTER TABLE ADD CONSTRAINT，需要检测并重建表
         self._migrate_options_snapshots_unique(conn)
+
+        # --- Migration 3: Portfolio tables ---
+        tables = {row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+        if "holdings" not in tables:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS holdings (
+                    position_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL REFERENCES companies(symbol),
+                    shares REAL NOT NULL,
+                    avg_cost REAL NOT NULL,
+                    open_date TEXT NOT NULL,
+                    close_date TEXT,
+                    realized_pnl REAL,
+                    status TEXT NOT NULL DEFAULT 'OPEN',
+                    last_updated TEXT NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_holdings_open_symbol
+                    ON holdings(symbol) WHERE status = 'OPEN';
+
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    position_id INTEGER NOT NULL REFERENCES holdings(position_id),
+                    symbol TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    shares REAL NOT NULL,
+                    price REAL NOT NULL,
+                    date TEXT NOT NULL,
+                    notes TEXT DEFAULT '',
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_txn_symbol ON transactions(symbol);
+                CREATE INDEX IF NOT EXISTS idx_txn_position ON transactions(position_id);
+
+                CREATE TABLE IF NOT EXISTS portfolio_cash (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    action TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    balance_after REAL NOT NULL,
+                    notes TEXT DEFAULT '',
+                    updated_at TEXT NOT NULL
+                );
+            """)
 
         conn.commit()
 
@@ -587,6 +670,139 @@ class CompanyStore:
                     pass
             results.append(d)
         return results
+
+    # ---- Holdings ----
+
+    def insert_holding(self, symbol: str, shares: float, avg_cost: float,
+                       open_date: str) -> int:
+        symbol = symbol.upper()
+        now = datetime.now().isoformat()
+        conn = self._get_conn()
+        cur = conn.execute(
+            """INSERT INTO holdings (symbol, shares, avg_cost, open_date, status, last_updated)
+               VALUES (?, ?, ?, ?, 'OPEN', ?)""",
+            (symbol, shares, avg_cost, open_date, now),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+    def get_open_holding(self, symbol: str) -> Optional[Dict[str, Any]]:
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM holdings WHERE symbol = ? AND status = 'OPEN'",
+            (symbol.upper(),),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_all_open_holdings(self) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM holdings WHERE status = 'OPEN' ORDER BY symbol"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def update_holding(self, position_id: int, **kwargs) -> None:
+        allowed = {"shares", "avg_cost", "last_updated"}
+        fields = {k: v for k, v in kwargs.items() if k in allowed}
+        if not fields:
+            return
+        fields["last_updated"] = datetime.now().isoformat()
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        conn = self._get_conn()
+        conn.execute(
+            f"UPDATE holdings SET {set_clause} WHERE position_id = ?",
+            (*fields.values(), position_id),
+        )
+        conn.commit()
+
+    def close_holding(self, position_id: int, close_date: str,
+                      realized_pnl: float) -> None:
+        now = datetime.now().isoformat()
+        conn = self._get_conn()
+        conn.execute(
+            """UPDATE holdings SET status = 'CLOSED', close_date = ?,
+               realized_pnl = ?, last_updated = ? WHERE position_id = ?""",
+            (close_date, realized_pnl, now, position_id),
+        )
+        conn.commit()
+
+    # ---- Transactions ----
+
+    def insert_transaction(self, position_id: int, symbol: str, action: str,
+                           shares: float, price: float, date: str,
+                           notes: str = "") -> int:
+        now = datetime.now().isoformat()
+        conn = self._get_conn()
+        cur = conn.execute(
+            """INSERT INTO transactions
+               (position_id, symbol, action, shares, price, date, notes, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (position_id, symbol.upper(), action, shares, price, date, notes, now),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+    def get_transactions(self, symbol: str, position_id: int = None) -> List[Dict]:
+        conn = self._get_conn()
+        if position_id:
+            rows = conn.execute(
+                "SELECT * FROM transactions WHERE position_id = ? ORDER BY date",
+                (position_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM transactions WHERE symbol = ? ORDER BY date",
+                (symbol.upper(),),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ---- Portfolio Cash ----
+
+    def set_cash(self, amount: float, notes: str = "") -> None:
+        now = datetime.now().isoformat()
+        conn = self._get_conn()
+        current = self.get_cash_balance()
+        delta = amount - current
+        conn.execute(
+            """INSERT INTO portfolio_cash (action, amount, balance_after, notes, updated_at)
+               VALUES ('SET', ?, ?, ?, ?)""",
+            (delta, amount, notes, now),
+        )
+        conn.commit()
+
+    def adjust_cash(self, delta: float, action: str = "WITHDRAW",
+                    notes: str = "") -> None:
+        now = datetime.now().isoformat()
+        conn = self._get_conn()
+        current = self.get_cash_balance()
+        new_balance = current + delta
+        conn.execute(
+            """INSERT INTO portfolio_cash (action, amount, balance_after, notes, updated_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (action, delta, new_balance, notes, now),
+        )
+        conn.commit()
+
+    def get_cash_balance(self) -> float:
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT balance_after FROM portfolio_cash ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        return row["balance_after"] if row else 0.0
+
+    def get_cash_history(self) -> List[Dict]:
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM portfolio_cash ORDER BY id"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ---- Checkpoint ----
+
+    def checkpoint(self) -> None:
+        """Flush WAL journal so raw file copy is consistent."""
+        conn = self._get_conn()
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     # ---- Kill Conditions ----
 
