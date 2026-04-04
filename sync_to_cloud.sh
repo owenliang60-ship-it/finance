@@ -134,12 +134,22 @@ push_to_cloud() {
     # 1. 本地健康检查
     health_check_local
 
-    # 2. rsync company.db 本地→云端 (+ 文件大小安全检查)
+    # 2. Checkpoint company.db WAL before push (ensures latest commits are in main file)
+    info "Checkpoint company.db WAL..."
+    "$PYTHON" -c "
+import sqlite3
+conn = sqlite3.connect('data/company.db')
+conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+conn.close()
+print('company.db WAL checkpoint OK')
+"
+
+    # 3. rsync company.db 本地→云端 (+ 文件大小安全检查)
     info "推送 company.db..."
     check_file_size "$LOCAL_DIR/data/company.db" "$REMOTE_DIR/data/company.db" "company.db" "push"
     rsync -avz "$LOCAL_DIR/data/company.db" "$REMOTE/data/company.db"
 
-    # 3. universe.json merge: 本地→云端
+    # 4. universe.json merge: 本地→云端
     info "合并 universe.json (本地→云端)..."
     scp "$LOCAL_DIR/data/pool/universe.json" "$REMOTE_HOST:/tmp/universe_local.json"
     ssh "$REMOTE_HOST" "cd $REMOTE_DIR && python3 -c \"
@@ -148,7 +158,7 @@ added = merge_universe('/tmp/universe_local.json')
 print(f'合并完成: 新增 {added} 个 symbol')
 \" && rm -f /tmp/universe_local.json"
 
-    # 4. 拉回合并后的 universe.json (通过 merge 确保只增不减)
+    # 5. 拉回合并后的 universe.json (通过 merge 确保只增不减)
     info "拉回合并后的 universe.json..."
     scp "$REMOTE/data/pool/universe.json" "/tmp/universe_merged_cloud.json"
     cd "$LOCAL_DIR"

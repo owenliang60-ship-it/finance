@@ -85,6 +85,7 @@ def snapshot(reason: str = "manual") -> Optional[Path]:
 
             company_db = _self.COMPANY_DB
             if company_db.exists():
+                _checkpoint_wal(company_db)
                 tar.add(str(company_db), arcname="company.db")
                 files_added += 1
 
