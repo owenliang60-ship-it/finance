@@ -171,28 +171,41 @@ def analyze_ticker(
 
 def portfolio_status() -> Dict[str, Any]:
     """
-    Comprehensive portfolio status check.
+    Comprehensive portfolio status check with total_NAV semantics.
 
     Combines holdings, exposure alerts, and company DB records.
     """
-    result: Dict[str, Any] = {}
+    result: Dict[str, Any] = {"has_holdings": False}
 
     # Holdings
     try:
-        from portfolio.holdings.manager import (
-            load_holdings,
-            refresh_prices,
-            get_portfolio_summary,
-        )
-        positions = load_holdings()
+        from portfolio.holdings.manager import PortfolioManager
+        from src.data.price_fetcher import get_price_df
+
+        mgr = PortfolioManager()
+        positions = mgr.load_holdings()
+
         if positions:
-            positions = refresh_prices(positions)
-            result["summary"] = get_portfolio_summary(positions)
+            result["has_holdings"] = True
+
+            # Fetch latest prices — get_price_df returns descending, iloc[0] = newest
+            prices = {}
+            for p in positions:
+                try:
+                    df = get_price_df(p.symbol, days=5, max_age_days=0)
+                    if df is not None and not df.empty:
+                        prices[p.symbol] = df["close"].iloc[0]
+                except Exception:
+                    pass
+
+            summary = mgr.get_portfolio_summary(prices)
+            result["summary"] = summary
 
             # Run exposure alerts
             try:
                 from portfolio.exposure.alerts import run_all_checks
-                alerts = run_all_checks(positions)
+                refreshed = mgr.refresh_prices(prices)
+                alerts = run_all_checks(refreshed)
                 result["alerts"] = [a.to_dict() for a in alerts]
                 result["alert_counts"] = {
                     "CRITICAL": sum(1 for a in alerts if a.level.value == "CRITICAL"),

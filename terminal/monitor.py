@@ -18,7 +18,8 @@ class MonitorReport:
     """Full monitoring sweep result."""
     generated_at: str = ""
     position_count: int = 0
-    total_value: float = 0.0
+    total_value: float = 0.0    # invested value (no cash)
+    total_nav: float = 0.0      # total NAV (invested + cash)
 
     # Exposure alerts (from portfolio/exposure/alerts.py)
     exposure_alerts: List[dict] = field(default_factory=list)
@@ -47,6 +48,7 @@ class MonitorReport:
             "generated_at": self.generated_at,
             "position_count": self.position_count,
             "total_value": self.total_value,
+            "total_nav": self.total_nav,
             "exposure_alerts": self.exposure_alerts,
             "kill_condition_status": self.kill_condition_status,
             "weight_drift": self.weight_drift,
@@ -98,6 +100,14 @@ def run_full_monitor() -> dict:
 
     report.position_count = len(positions)
     report.total_value = sum(p.market_value for p in positions)
+
+    # Compute total_nav (invested + cash)
+    try:
+        from portfolio.holdings.manager import PortfolioManager
+        mgr = PortfolioManager()
+        report.total_nav = report.total_value + mgr._store.get_cash_balance()
+    except Exception:
+        report.total_nav = report.total_value  # fallback: no cash info
 
     # 2. Run exposure alerts
     try:
