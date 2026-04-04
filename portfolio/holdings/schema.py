@@ -73,6 +73,12 @@ class Position:
     # Misc
     notes: str = ""
 
+    # DB-backed fields (SQLite lifecycle)
+    position_id: Optional[int] = None          # DB primary key
+    status: str = "OPEN"                        # OPEN / CLOSED
+    close_date: Optional[str] = None
+    realized_pnl: Optional[float] = None
+
     @property
     def max_weight(self) -> float:
         """Hard cap from DNA rating."""
@@ -120,6 +126,10 @@ class Position:
             "entry_date": self.entry_date,
             "last_review_date": self.last_review_date,
             "notes": self.notes,
+            "position_id": self.position_id,
+            "status": self.status,
+            "close_date": self.close_date,
+            "realized_pnl": self.realized_pnl,
         }
 
     @classmethod
@@ -143,6 +153,10 @@ class Position:
             entry_date=data.get("entry_date", ""),
             last_review_date=data.get("last_review_date", ""),
             notes=data.get("notes", ""),
+            position_id=data.get("position_id"),
+            status=data.get("status", "OPEN"),
+            close_date=data.get("close_date"),
+            realized_pnl=data.get("realized_pnl"),
         )
 
 
