@@ -1056,12 +1056,23 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
 
     # Generate HTML version
     html_path = None
+    pdf_path = None
     try:
         from terminal.html_report import compile_html_report
         html_path = compile_html_report(symbol, research_dir, date=date)
         logger.info(f"Compiled HTML report: {html_path}")
     except Exception as e:
         logger.warning(f"HTML report generation failed: {e}")
+
+    if html_path:
+        try:
+            from terminal.pdf_report import html_to_pdf
+
+            pdf_path = html_to_pdf(html_path)
+            if pdf_path:
+                logger.info(f"Compiled PDF report: {pdf_path}")
+        except Exception as e:
+            logger.warning(f"PDF report generation failed: {e}")
 
     # Auto-save to SQLite company database
     analysis_id = None

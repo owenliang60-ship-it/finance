@@ -323,6 +323,23 @@ class TestCompileDeepReport:
             assert "辩论总裁决" in summary
             assert "BUY" in summary
 
+    def test_generates_pdf_when_html_exists(self, tmp_path):
+        with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):
+            from terminal.deep_pipeline import get_research_dir, compile_deep_report
+
+            research_dir = get_research_dir("TEST")
+            self._populate_research_dir(research_dir)
+            html_path = research_dir / "full_report_2026-04-08.html"
+            pdf_path = research_dir / "full_report_2026-04-08.pdf"
+
+            with (
+                patch("terminal.html_report.compile_html_report", return_value=html_path),
+                patch("terminal.pdf_report.html_to_pdf", return_value=pdf_path) as mock_pdf,
+            ):
+                compile_deep_report("TEST", research_dir)
+
+            mock_pdf.assert_called_once_with(html_path)
+
     def test_handles_missing_optional_files(self, tmp_path):
         with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path):
             from terminal.deep_pipeline import get_research_dir, compile_deep_report

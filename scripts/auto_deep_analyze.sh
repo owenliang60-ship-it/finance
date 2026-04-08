@@ -660,6 +660,41 @@ print('\\n✅ DB save complete for ${ticker}')
     # ─── Phase 4c: Obsidian Sync (now handled by /deep-analysis skill) ───
     # Heptabase sync removed (2026-02-22). Use /deep-analysis skill for Obsidian sync.
 
+    # ─── Phase 4d: PDF Delivery ───────────────────────
+    local pdf_file
+    pdf_file=$(find "$rd" -name "full_report_*.pdf" -type f | head -1)
+
+    if [[ -z "$pdf_file" ]]; then
+        local html_file
+        html_file=$(find "$rd" -name "full_report_*.html" -type f | head -1)
+        if [[ -n "$html_file" ]]; then
+            log "  [$ticker] Phase 4d: 生成 PDF..."
+            pdf_file=$("$VENV_PYTHON" -c "
+import sys
+sys.path.insert(0, '$PROJECT_DIR')
+from pathlib import Path
+from terminal.pdf_report import html_to_pdf
+
+pdf = html_to_pdf(Path('$html_file'))
+print(pdf if pdf else '')
+" 2>>"$ticker_log")
+        fi
+    fi
+
+    if [[ -n "$pdf_file" ]] && [[ -f "$pdf_file" ]]; then
+        log "  [$ticker] Phase 4d: PDF → Telegram 群组..."
+        "$VENV_PYTHON" -c "
+import sys
+sys.path.insert(0, '$PROJECT_DIR')
+from src.telegram_bot import send_document
+
+send_document('$pdf_file', caption='*${ticker}* 深度分析报告', channel='group')
+" 2>>"$ticker_log"
+        log "  [$ticker] Phase 4d 完成"
+    else
+        log "  [$ticker] ⚠️ 无 PDF 报告，跳过 Telegram 文档发送"
+    fi
+
     # ─── Summary ──────────────────────────────────────
     local ticker_end=$(date +%s)
     local ticker_elapsed=$(( ticker_end - ticker_start ))

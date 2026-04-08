@@ -12,10 +12,11 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pandas as pd
-from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, MARKET_DB_PATH
+from config.settings import MARKET_DB_PATH
 from terminal.company_store import get_store
 from src.indicators.pmarp import analyze_pmarp
 from src.indicators.rvol import analyze_rvol
+from src.telegram_bot import send_message, split_message
 
 logger = logging.getLogger(__name__)
 
@@ -245,30 +246,12 @@ def detect_timing_change(ratings: list) -> dict | None:
     return None
 
 
-# ---- Telegram ----
-
-def send_telegram(message: str, max_retries: int = 3) -> bool:
-    """发送 Telegram 消息 (Markdown 格式)."""
-    import requests
-    token = TELEGRAM_BOT_TOKEN
-    chat_id = TELEGRAM_CHAT_ID
-    if not token or not chat_id:
-        logger.info("[Telegram] 未配置，跳过发送")
-        return False
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
-    import time
-    for attempt in range(1, max_retries + 1):
-        try:
-            resp = requests.post(url, json=payload, timeout=15)
-            resp.raise_for_status()
-            logger.info("[Telegram] 消息已发送")
-            return True
-        except Exception as e:
-            logger.warning("[Telegram] 第%d次发送失败: %s", attempt, e)
-            if attempt < max_retries:
-                time.sleep(attempt * 2)
-    return False
+def _send_private_report(message: str, dry_run: bool = False) -> str:
+    """Deliver a portfolio report to the private channel unless dry-run."""
+    if not dry_run:
+        for part in split_message(message):
+            send_message(part, channel="private")
+    return message
 
 
 # ---- 格式化 ----
@@ -335,9 +318,7 @@ def run_intelligence(dry_run: bool = False) -> str:
 
     if not positions and not option_positions and cash <= 0:
         msg = "📊 Portfolio Intelligence: 无持仓"
-        if not dry_run:
-            send_telegram(msg)
-        return msg
+        return _send_private_report(msg, dry_run=dry_run)
 
     # Load prices from market.db
     conn = sqlite3.connect(str(MARKET_DB_PATH))
@@ -508,10 +489,7 @@ def run_intelligence(dry_run: bool = False) -> str:
 
     report = format_report(action_signals, summary, kc_data)
 
-    if not dry_run:
-        send_telegram(report)
-
-    return report
+    return _send_private_report(report, dry_run=dry_run)
 
 
 if __name__ == "__main__":

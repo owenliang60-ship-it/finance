@@ -29,9 +29,10 @@ import requests
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from config.settings import SCANS_DIR, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from config.settings import SCANS_DIR
 from src.data import load_universe
 from src.indicators.rvol import calculate_rvol
+from src.telegram_bot import send_message, split_message
 
 os.environ.setdefault("XDG_CACHE_HOME", str(SCANS_DIR / ".cache"))
 
@@ -56,35 +57,17 @@ UNIVERSE_CACHE_PATH = SCANS_DIR / "broad_universe.json"
 TRACKER_PATH = SCANS_DIR / "broad_scan_tracker.json"
 YF_CACHE_DIR = SCANS_DIR / ".yfinance"
 
+def _send_group_message(message: str) -> bool:
+    """Route a single message to the public group."""
+    return send_message(message, channel="group")
 
-def send_telegram(message: str, max_retries: int = 3) -> bool:
-    """发送 Telegram 消息 (Markdown 格式)."""
-    token = TELEGRAM_BOT_TOKEN
-    chat_id = TELEGRAM_CHAT_ID
 
-    if not token or not chat_id:
-        logger.info("[Telegram] 未配置，跳过发送")
-        return False
-
-    url = "https://api.telegram.org/bot{}/sendMessage".format(token)
-    payload = {
-        "chat_id": chat_id,
-        "text": message,
-        "parse_mode": "Markdown",
-    }
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            response = requests.post(url, json=payload, timeout=15)
-            response.raise_for_status()
-            logger.info("[Telegram] 消息已发送")
-            return True
-        except Exception as e:
-            logger.warning("[Telegram] 第%d次发送失败: %s", attempt, e)
-            if attempt < max_retries:
-                time.sleep(attempt * 2)
-
-    return False
+def _send_group_report(report: str) -> bool:
+    """Send the broad scan report to the public group, splitting when needed."""
+    ok = True
+    for part in split_message(report, split_marker="🟡 今日新触发"):
+        ok = _send_group_message(part) and ok
+    return ok
 
 
 def _read_json(path: Path) -> dict:
@@ -595,20 +578,7 @@ def main():
         print(report)
 
         if not args.no_telegram:
-            if len(report) > 4000:
-                # 拆分发送：先发🔴部分，再发🟡部分
-                split_marker = "🟡 今日新触发"
-                if split_marker in report:
-                    idx = report.index(split_marker)
-                    part1 = report[:idx].rstrip()
-                    part2 = report[idx:]
-                    send_telegram(part1)
-                    send_telegram(part2)
-                else:
-                    send_telegram(report[:4000])
-                    send_telegram(report[4000:])
-            else:
-                send_telegram(report)
+            _send_group_report(report)
 
     except Exception as e:
         logger.error("Broad Market RVOL Scan 异常: %s", e)
@@ -617,7 +587,7 @@ def main():
 
         if not args.no_telegram:
             error_msg = "*Broad Market RVOL Scan 异常*\n\n错误: {}".format(str(e)[:200])
-            send_telegram(error_msg)
+            _send_group_message(error_msg)
 
         raise
     finally:

@@ -27,11 +27,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import (
     DATA_DIR, SCANS_DIR,
-    TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
 )
 from src.data import get_price_df, get_symbols
 from src.data.fmp_client import FMPClient
 from src.indicators.rs_rating import compute_rs_rating_b, compute_rs_rating_c
+from src.telegram_bot import send_message, split_message
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,37 +44,17 @@ RS_UNIVERSE_BOTTOM_N = 10
 RS_CONSOLE_TOP_N = 50
 PRICE_LOOKBACK_DAYS = 120  # 4 months of data for RS calculation
 
+def _send_group_message(message: str) -> bool:
+    """Route a single message to the public group."""
+    return send_message(message, channel="group")
 
-def send_telegram(message: str, max_retries: int = 3) -> bool:
-    """发送 Telegram 消息 (Markdown 格式)"""
-    import requests
 
-    token = TELEGRAM_BOT_TOKEN
-    chat_id = TELEGRAM_CHAT_ID
-
-    if not token or not chat_id:
-        logger.info("[Telegram] 未配置，跳过发送")
-        return False
-
-    url = "https://api.telegram.org/bot{}/sendMessage".format(token)
-    payload = {
-        "chat_id": chat_id,
-        "text": message,
-        "parse_mode": "Markdown",
-    }
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            response = requests.post(url, json=payload, timeout=15)
-            response.raise_for_status()
-            logger.info("[Telegram] 消息已发送")
-            return True
-        except Exception as e:
-            logger.warning("[Telegram] 第%d次发送失败: %s", attempt, e)
-            if attempt < max_retries:
-                time.sleep(attempt * 2)
-
-    return False
+def _send_group_report(message: str) -> bool:
+    """Send the RS universe report to the public group, splitting when needed."""
+    ok = True
+    for part in split_message(message, split_marker="*Method C"):
+        ok = _send_group_message(part) and ok
+    return ok
 
 
 def fetch_universe(client: FMPClient, min_mcap_b: float) -> list:
@@ -277,16 +257,7 @@ def main():
         # 6. Telegram 推送
         if not args.no_telegram:
             msg = format_rs_report(rs_b, rs_c, len(price_dict), elapsed)
-            if len(msg) > 4000:
-                # 拆分: Method B + Method C
-                split_idx = msg.rfind("*Method C")
-                if split_idx > 0:
-                    send_telegram(msg[:split_idx].strip())
-                    send_telegram(msg[split_idx:].strip())
-                else:
-                    send_telegram(msg[:4000])
-            else:
-                send_telegram(msg)
+            _send_group_report(msg)
 
     except Exception as e:
         logger.error("RS Universe Scan 异常: %s", e)
@@ -295,7 +266,7 @@ def main():
 
         if not args.no_telegram:
             error_msg = "*RS Universe Scan 异常*\n\n错误: {}".format(str(e)[:200])
-            send_telegram(error_msg)
+            _send_group_message(error_msg)
 
     elapsed = time.time() - start_time
     logger.info("RS Universe Scan 完成，耗时 %.1f 秒 (%.1f 分钟)", elapsed, elapsed / 60)

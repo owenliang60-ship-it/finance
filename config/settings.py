@@ -401,3 +401,4 @@ ADANOS_TRENDING_LIMIT = 20  # 市场级 trending / sectors 默认保留条数
 # Telegram 配置 (从环境变量读取)
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+TELEGRAM_GROUP_CHAT_ID = os.environ.get("TELEGRAM_GROUP_CHAT_ID", "")
