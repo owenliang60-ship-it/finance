@@ -108,16 +108,22 @@ class BacktestEngine:
         )
 
         # ── 主循环 ────────────────────────────────────
+        # Forward-fill: 维护最后已知价格，防止缺失日将持仓市值归零
+        last_known_prices: Dict[str, float] = {}
+
         for date in trading_dates:
             current_prices = self.adapter.get_prices_at(date)
 
             if not current_prices:
                 continue
 
-            if date in rebalance_set:
-                self._rebalance(date, current_prices)
+            # 合并今日价格到 last_known，缺失的股票保留上次价格
+            last_known_prices.update(current_prices)
 
-            self.portfolio.take_snapshot(date, current_prices)
+            if date in rebalance_set:
+                self._rebalance(date, last_known_prices)
+
+            self.portfolio.take_snapshot(date, last_known_prices)
 
         # ── 计算指标 ──────────────────────────────────
         nav_series = self.portfolio.nav_series()
