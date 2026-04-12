@@ -68,20 +68,8 @@ class PipelineRunner:
         self,
         path: Path,
         frame: pd.DataFrame,
-        warnings: list[str],
     ) -> None:
-        try:
-            frame.to_parquet(path)
-        except Exception:
-            fallback_path = path.with_suffix(".json")
-            fallback_path.write_text(frame.to_json(orient="table"), encoding="utf-8")
-            path.write_text(
-                f"PARQUET_UNAVAILABLE\nSee {fallback_path.name} for JSON fallback.\n",
-                encoding="utf-8",
-            )
-            warnings.append(
-                f"{path.name}: parquet engine unavailable, wrote JSON fallback {fallback_path.name}"
-            )
+        frame.to_parquet(path)
 
     def run(self) -> PipelineResult:
         """Execute the V3 research pipeline.
@@ -168,10 +156,10 @@ class PipelineRunner:
         report_md_path = artifact_dir / "report.md"
         report_html_path = artifact_dir / "report.html"
 
-        self._write_frame_artifact(signals_is_path, signals_is, warnings)
-        self._write_frame_artifact(signals_oos_path, signals_oos, warnings)
-        self._write_frame_artifact(nav_is_path, run_is.nav, warnings)
-        self._write_frame_artifact(nav_oos_path, run_oos.nav, warnings)
+        self._write_frame_artifact(signals_is_path, signals_is)
+        self._write_frame_artifact(signals_oos_path, signals_oos)
+        self._write_frame_artifact(nav_is_path, run_is.nav)
+        self._write_frame_artifact(nav_oos_path, run_oos.nav)
 
         evaluation = EvaluationEngine(pit_data)
         evaluation_output = evaluation.evaluate(
