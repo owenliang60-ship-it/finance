@@ -35,9 +35,9 @@ def test_slice_to_date_filters_by_mcap():
     assert "SMALL" not in sliced
 
 
-def test_missing_mcap_data_keeps_stock():
-    """无 mcap 数据的 symbol 应被保留（不踢出），避免数据缺失污染结果"""
-    # 10 symbols, 9 有 mcap 数据 (90% 覆盖率通过), 1 个缺失 → 应保留
+def test_missing_mcap_data_drops_stock_after_coverage_gate():
+    """覆盖率通过后，缺失 mcap 的 symbol 仍应剔除，避免 partial PIT 漏风."""
+    # 10 symbols, 9 有 mcap 数据 (90% 覆盖率通过), 1 个缺失 → 应剔除
     symbols = [f"S{i}" for i in range(9)] + ["NO_DATA"]
     adapter = _make_adapter(symbols, mcap_threshold=10_000_000_000)
     mock_caps = {f"S{i}": 50_000_000_000 for i in range(9)}  # NO_DATA not in dict
@@ -46,7 +46,7 @@ def test_missing_mcap_data_keeps_stock():
         sliced = adapter.slice_to_date("2024-03-01")
 
     assert "S0" in sliced
-    assert "NO_DATA" in sliced  # 保留，不踢出
+    assert "NO_DATA" not in sliced
 
 
 def test_coverage_gate_raises_on_low_coverage():

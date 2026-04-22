@@ -173,6 +173,19 @@ class FMPClient:
             if "date" in row and "marketCap" in row
         ]
 
+    def get_delisted_companies(self, page: int = 0, limit: int = 100) -> List[Dict]:
+        """
+        获取退市公司列表（分页）。
+
+        注意：当前 FMP 套餐下能否翻完整个历史列表取决于 entitlement。
+        这个 helper 只封装单页请求，不假设 page>0 一定可用。
+        """
+        data = self._request(
+            "delisted-companies",
+            {"page": page, "limit": limit},
+        )
+        return data if isinstance(data, list) else []
+
     def get_quote(self, symbol: str) -> Optional[Dict]:
         """获取实时报价"""
         data = self._request("quote", {"symbol": symbol})

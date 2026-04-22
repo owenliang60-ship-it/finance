@@ -188,6 +188,47 @@ class TestOOSSplit:
         assert r.ic_results is not None
         assert len(r.ic_results) >= 1
 
+    def test_explicit_oos_start_date_splits_by_calendar_boundary(self):
+        """显式 oos_start_date 应按日期而不是比例切分."""
+        config = FactorStudyConfig(
+            market="us_stocks",
+            computation_freq="W",
+            forward_horizons=[5],
+            oos_start_date="2023-10-01",
+            min_oos_dates=5,
+        )
+        adapter = MockAdapter()
+        runner = FactorStudyRunner(config, adapter)
+        runner.add_factor(RankFactor())
+
+        results = runner.run()
+        r = results[0]
+
+        assert r.is_dates
+        assert r.oos_dates
+        assert all(d < "2023-10-01" for d in r.is_dates)
+        assert all(d >= "2023-10-01" for d in r.oos_dates)
+
+    def test_explicit_oos_start_date_overrides_fraction(self):
+        """同时给出 oos_start_date 和 oos_fraction 时，以日期边界为准."""
+        config = FactorStudyConfig(
+            market="us_stocks",
+            computation_freq="W",
+            forward_horizons=[5],
+            oos_start_date="2023-10-01",
+            oos_fraction=0.9,
+            min_oos_dates=5,
+        )
+        adapter = MockAdapter()
+        runner = FactorStudyRunner(config, adapter)
+        runner.add_factor(RankFactor())
+
+        results = runner.run()
+        r = results[0]
+
+        assert r.is_dates[-1] < "2023-10-01"
+        assert r.oos_dates[0] >= "2023-10-01"
+
 
 class TestFilterScoreHistory:
     def test_filters_by_date_set(self):

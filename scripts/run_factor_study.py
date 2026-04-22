@@ -62,9 +62,17 @@ def main():
     parser.add_argument("--csv", action="store_true", help="导出 CSV")
     parser.add_argument("--list", action="store_true", help="列出所有可用因子")
     parser.add_argument("--no-oos", action="store_true", help="不做 IS/OOS 分割，全量数据作为单一样本")
+    parser.add_argument("--oos-start", type=str,
+                        help="显式 OOS 起始日期 (YYYY-MM-DD)，优先于默认最后 30%% 切分")
+    parser.add_argument("--universe", choices=["pool", "extended", "extended_true"], default=None,
+                        help="美股 universe 切换 (pool=~151 / extended=~533 active / extended_true=active+delisted overlay / 默认=all in db)")
+    parser.add_argument("--mcap-threshold", type=float, default=None,
+                        help="历史市值阈值美元 (e.g. 10e9)，每个 rebalance 日 PIT 过滤")
     parser.add_argument("-v", "--verbose", action="store_true", help="详细日志")
 
     args = parser.parse_args()
+    if args.no_oos and args.oos_start:
+        parser.error("--no-oos 与 --oos-start 不能同时使用")
 
     # 日志
     level = logging.DEBUG if args.verbose else logging.INFO
@@ -107,6 +115,8 @@ def main():
         overrides["forward_horizons"] = [int(h) for h in args.horizons.split(",")]
     if args.no_oos:
         overrides["oos_fraction"] = 0.0
+    if args.oos_start:
+        overrides["oos_start_date"] = args.oos_start
 
     if args.market == "crypto":
         config = crypto_factor_study(**overrides)
@@ -115,7 +125,13 @@ def main():
 
     # 适配器
     symbols = args.symbols.split(",") if args.symbols else None
-    adapter = _create_adapter(args.market, symbols=symbols, cache_dir_override=args.cache_dir)
+    adapter = _create_adapter(
+        args.market,
+        symbols=symbols,
+        cache_dir_override=args.cache_dir,
+        universe=args.universe,
+        mcap_threshold=args.mcap_threshold,
+    )
 
     # Runner
     runner = FactorStudyRunner(config, adapter)
@@ -155,7 +171,13 @@ def main():
         print(f"HTML 报告: {path}")
 
 
-def _create_adapter(market: str, symbols=None, cache_dir_override=None):
+def _create_adapter(
+    market: str,
+    symbols=None,
+    cache_dir_override=None,
+    universe=None,
+    mcap_threshold=None,
+):
     """创建数据适配器"""
     if market == "crypto":
         from pathlib import Path
@@ -169,7 +191,11 @@ def _create_adapter(market: str, symbols=None, cache_dir_override=None):
         return CryptoAdapter(symbols=symbols, cache_dir=cache_dir)
     else:
         from backtest.adapters.us_stocks import USStocksAdapter
-        return USStocksAdapter()
+        return USStocksAdapter(
+            symbols=symbols,
+            universe=universe,
+            mcap_threshold=mcap_threshold,
+        )
 
 
 if __name__ == "__main__":
