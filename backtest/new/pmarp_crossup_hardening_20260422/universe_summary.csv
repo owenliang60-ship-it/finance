@@ -1,0 +1,2 @@
+universe,symbols_loaded,symbols_with_scores,date_start,date_end,study_start,oos_start,benchmark,ema_period,lookback,mcap_threshold
+extended,529,524,2021-07-01,2026-04-21,2021-07-01,2025-01-01,SPY,20,150,10000000000.0

@@ -238,23 +238,43 @@ class FactorStudyRunner:
         name = factor.meta.name
 
         # IS/OOS 日期分割
-        split_idx = int(
-            len(computation_dates) * (1 - self._config.oos_fraction)
-        )
-        is_dates = computation_dates[:split_idx]
-        oos_dates = computation_dates[split_idx:]
+        if self._config.oos_start_date:
+            is_dates = [
+                d for d in computation_dates
+                if d < self._config.oos_start_date
+            ]
+            oos_dates = [
+                d for d in computation_dates
+                if d >= self._config.oos_start_date
+            ]
+        else:
+            split_idx = int(
+                len(computation_dates) * (1 - self._config.oos_fraction)
+            )
+            is_dates = computation_dates[:split_idx]
+            oos_dates = computation_dates[split_idx:]
         has_oos = len(oos_dates) >= self._config.min_oos_dates
 
         if has_oos:
+            split_mode = (
+                f"显式起点 {self._config.oos_start_date}"
+                if self._config.oos_start_date
+                else f"最后 {self._config.oos_fraction:.0%}"
+            )
             logger.info(
-                f"  IS/OOS 分割: IS={len(is_dates)} 日 "
+                f"  IS/OOS 分割 ({split_mode}): IS={len(is_dates)} 日 "
                 f"({is_dates[0]}~{is_dates[-1]}), "
                 f"OOS={len(oos_dates)} 日 "
                 f"({oos_dates[0]}~{oos_dates[-1]})"
             )
         else:
+            split_mode = (
+                f"显式起点 {self._config.oos_start_date}"
+                if self._config.oos_start_date
+                else f"最后 {self._config.oos_fraction:.0%}"
+            )
             logger.info(
-                f"  OOS 跳过: OOS 日期数 {len(oos_dates)} < "
+                f"  OOS 跳过 ({split_mode}): OOS 日期数 {len(oos_dates)} < "
                 f"最小门槛 {self._config.min_oos_dates}"
             )
 

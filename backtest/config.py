@@ -134,7 +134,8 @@ class FactorStudyConfig:
     benchmark_symbols: List[str] = field(default_factory=list)
     start_date: Optional[str] = None
     end_date: Optional[str] = None
-    oos_fraction: float = 0.3       # 最后 30% 的日期作为 OOS
+    oos_start_date: Optional[str] = None         # 显式 OOS 起点 (YYYY-MM-DD), 优先于 oos_fraction
+    oos_fraction: float = 0.3                    # 若未显式指定 OOS 起点，则最后 30% 的日期作为 OOS
     min_oos_dates: int = 50         # OOS 最少计算日数，不够则跳过 OOS
 
     def __post_init__(self):
