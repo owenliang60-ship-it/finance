@@ -1,0 +1,231 @@
+{
+  "factor": {
+    "is": {
+      "PMARP_Rebound_V1": {
+        "by_horizon": {
+          "21": {
+            "ic_mean": -0.290794499618029,
+            "ic_tstat": -2.5880572348284123,
+            "n_ic_obs": 119,
+            "p_value": 0.01086404799709818,
+            "top_bottom_spread": -0.040637285912984246,
+            "top_decile_excess_return": -0.005238117427159167
+          },
+          "5": {
+            "ic_mean": 0.163665186354262,
+            "ic_tstat": 1.6609050550066675,
+            "n_ic_obs": 119,
+            "p_value": 0.09938738633731622,
+            "top_bottom_spread": 0.00026981301079997684,
+            "top_decile_excess_return": 0.003291089031111839
+          },
+          "63": {
+            "ic_mean": -0.3801299540795339,
+            "ic_tstat": -4.467897785765744,
+            "n_ic_obs": 119,
+            "p_value": 1.8230253991539233e-05,
+            "top_bottom_spread": -0.06887702341483622,
+            "top_decile_excess_return": -0.008475852647967762
+          }
+        },
+        "ic_decay": {
+          "21": -0.290794499618029,
+          "5": 0.163665186354262,
+          "63": -0.3801299540795339
+        },
+        "ic_mean": 0.163665186354262,
+        "ic_tstat": 1.6609050550066675,
+        "primary_horizon": 5,
+        "top_bottom_spread": 0.00026981301079997684,
+        "top_decile_excess_return": 0.003291089031111839
+      },
+      "combo": {
+        "by_horizon": {
+          "21": {
+            "ic_mean": -0.290794499618029,
+            "ic_tstat": -2.5880572348284123,
+            "n_ic_obs": 119,
+            "p_value": 0.01086404799709818,
+            "top_bottom_spread": -0.040637285912984246,
+            "top_decile_excess_return": -0.005238117427159167
+          },
+          "5": {
+            "ic_mean": 0.163665186354262,
+            "ic_tstat": 1.6609050550066675,
+            "n_ic_obs": 119,
+            "p_value": 0.09938738633731622,
+            "top_bottom_spread": 0.00026981301079997684,
+            "top_decile_excess_return": 0.003291089031111839
+          },
+          "63": {
+            "ic_mean": -0.3801299540795339,
+            "ic_tstat": -4.467897785765744,
+            "n_ic_obs": 119,
+            "p_value": 1.8230253991539233e-05,
+            "top_bottom_spread": -0.06887702341483622,
+            "top_decile_excess_return": -0.008475852647967762
+          }
+        },
+        "ic_decay": {
+          "21": -0.290794499618029,
+          "5": 0.163665186354262,
+          "63": -0.3801299540795339
+        },
+        "ic_mean": 0.163665186354262,
+        "ic_tstat": 1.6609050550066675,
+        "primary_horizon": 5,
+        "top_bottom_spread": 0.00026981301079997684,
+        "top_decile_excess_return": 0.003291089031111839
+      }
+    },
+    "oos": {
+      "PMARP_Rebound_V1": {
+        "by_horizon": {
+          "21": {
+            "ic_mean": 0.0741714806932198,
+            "ic_tstat": 0.9133320450361373,
+            "n_ic_obs": 345,
+            "p_value": 0.36170760446687983,
+            "top_bottom_spread": 0.00326778443744458,
+            "top_decile_excess_return": 0.010007437614956382
+          },
+          "5": {
+            "ic_mean": 0.0166380962033136,
+            "ic_tstat": 0.29899429336253336,
+            "n_ic_obs": 345,
+            "p_value": 0.7651249461681952,
+            "top_bottom_spread": -0.0015671193453113698,
+            "top_decile_excess_return": -3.3334712147916324e-05
+          },
+          "63": {
+            "ic_mean": -0.027558977396110948,
+            "ic_tstat": -0.34756415515424577,
+            "n_ic_obs": 307,
+            "p_value": 0.7284064729646185,
+            "top_bottom_spread": -0.0031376113372993714,
+            "top_decile_excess_return": 0.016464104724276816
+          }
+        },
+        "ic_decay": {
+          "21": 0.0741714806932198,
+          "5": 0.0166380962033136,
+          "63": -0.027558977396110948
+        },
+        "ic_mean": 0.0166380962033136,
+        "ic_tstat": 0.29899429336253336,
+        "primary_horizon": 5,
+        "top_bottom_spread": -0.0015671193453113698,
+        "top_decile_excess_return": -3.3334712147916324e-05
+      },
+      "combo": {
+        "by_horizon": {
+          "21": {
+            "ic_mean": 0.0741714806932198,
+            "ic_tstat": 0.9133320450361373,
+            "n_ic_obs": 345,
+            "p_value": 0.36170760446687983,
+            "top_bottom_spread": 0.00326778443744458,
+            "top_decile_excess_return": 0.010007437614956382
+          },
+          "5": {
+            "ic_mean": 0.0166380962033136,
+            "ic_tstat": 0.29899429336253336,
+            "n_ic_obs": 345,
+            "p_value": 0.7651249461681952,
+            "top_bottom_spread": -0.0015671193453113698,
+            "top_decile_excess_return": -3.3334712147916324e-05
+          },
+          "63": {
+            "ic_mean": -0.027558977396110948,
+            "ic_tstat": -0.34756415515424577,
+            "n_ic_obs": 307,
+            "p_value": 0.7284064729646185,
+            "top_bottom_spread": -0.0031376113372993714,
+            "top_decile_excess_return": 0.016464104724276816
+          }
+        },
+        "ic_decay": {
+          "21": 0.0741714806932198,
+          "5": 0.0166380962033136,
+          "63": -0.027558977396110948
+        },
+        "ic_mean": 0.0166380962033136,
+        "ic_tstat": 0.29899429336253336,
+        "primary_horizon": 5,
+        "top_bottom_spread": -0.0015671193453113698,
+        "top_decile_excess_return": -3.3334712147916324e-05
+      }
+    }
+  },
+  "gates": {
+    "annual_turnover_within_limit": {
+      "pass": true,
+      "threshold": 20.0,
+      "value": 3.9792
+    },
+    "is_sharpe_positive": {
+      "pass": true,
+      "value": 0.6309
+    },
+    "oos_ic_positive": {
+      "pass": true,
+      "value": 0.0166380962033136
+    },
+    "oos_sharpe_positive": {
+      "pass": true,
+      "value": 0.7988
+    },
+    "oos_vs_is_sharpe_ratio_gte_0_5": {
+      "pass": true,
+      "threshold": 0.5,
+      "value": 1.2661277540022189
+    }
+  },
+  "shared_root": "/Users/owen/CC workspace/Finance",
+  "strategy": {
+    "is": {
+      "alpha": 0.035587,
+      "annual_turnover": 1.4899,
+      "annual_volatility": 0.059067,
+      "benchmark_cagr": 0.040536,
+      "beta": 0.0925,
+      "cagr": 0.037268,
+      "calmar_ratio": 0.5738,
+      "excess_cagr": -0.003268,
+      "information_ratio": -0.0937,
+      "ir": -0.0937,
+      "max_dd_duration": 50,
+      "max_drawdown": -0.064954,
+      "n_days": 640,
+      "n_trades": 740,
+      "sharpe_ratio": 0.6309,
+      "sortino_ratio": 0.8927,
+      "total_costs": 566.45,
+      "total_return": 0.097382,
+      "tracking_error": 0.176302,
+      "win_rate": 0.4851
+    },
+    "oos": {
+      "alpha": 0.041732,
+      "annual_turnover": 3.9792,
+      "annual_volatility": 0.047474,
+      "benchmark_cagr": 0.174103,
+      "beta": -0.0109,
+      "cagr": 0.037924,
+      "calmar_ratio": 0.7046,
+      "excess_cagr": -0.136179,
+      "information_ratio": -0.7916,
+      "ir": -0.7916,
+      "max_dd_duration": 28,
+      "max_drawdown": -0.053825,
+      "n_days": 582,
+      "n_trades": 1732,
+      "sharpe_ratio": 0.7988,
+      "sortino_ratio": 1.0277,
+      "total_costs": 1327.27,
+      "total_return": 0.08977,
+      "tracking_error": 0.170447,
+      "win_rate": 0.5267
+    }
+  }
+}

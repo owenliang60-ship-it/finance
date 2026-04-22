@@ -42,6 +42,8 @@ class UniverseBuilder:
                 (start_date, end_date),
             ).fetchall()
         dates = [row[0] for row in rows]
+        if rebalance == "daily":
+            return dates
         if rebalance == "weekly":
             return dates[::5]
         if rebalance == "monthly_first_trading_day":
@@ -61,6 +63,7 @@ class UniverseBuilder:
         end_date: str,
         rebalance: str,
         market_cap_min_usd: float,
+        include_sectors: List[str],
         exclude_sectors: List[str],
         min_names: int,
     ) -> UniverseBuildResult:
@@ -69,12 +72,21 @@ class UniverseBuilder:
         kept_frames: List[pd.DataFrame] = []
         effective_start: Optional[str] = None
         skipped_dates: List[str] = []
+        full_universe = self._universe_panel(
+            rebalance_dates=rebalance_dates,
+            market_cap_min_usd=market_cap_min_usd,
+            include_sectors=include_sectors,
+            exclude_sectors=exclude_sectors,
+        )
+        frames_by_date = {
+            str(date_value): frame.reset_index(drop=True)
+            for date_value, frame in full_universe.groupby("date", sort=False)
+        }
 
         for rebalance_date in rebalance_dates:
-            frame = self._universe_at(
-                rebalance_date=rebalance_date,
-                market_cap_min_usd=market_cap_min_usd,
-                exclude_sectors=exclude_sectors,
+            frame = frames_by_date.get(
+                rebalance_date,
+                pd.DataFrame(columns=["date", "symbol", "market_cap", "sector"]),
             )
 
             if frame.empty:
@@ -103,7 +115,6 @@ class UniverseBuilder:
                 effective_start = rebalance_date
 
             frame = frame.copy()
-            frame["date"] = rebalance_date
             kept_frames.append(frame)
 
         if effective_start is None:
@@ -126,10 +137,71 @@ class UniverseBuilder:
             warnings=warnings,
         )
 
+    def _universe_panel(
+        self,
+        rebalance_dates: List[str],
+        market_cap_min_usd: float,
+        include_sectors: List[str],
+        exclude_sectors: List[str],
+    ) -> pd.DataFrame:
+        if not rebalance_dates:
+            return pd.DataFrame(columns=["date", "symbol", "market_cap", "sector"])
+
+        max_date = max(rebalance_dates)
+        with self._market_conn() as market_conn, self._company_conn() as company_conn:
+            market_caps = pd.read_sql_query(
+                """
+                SELECT symbol, date, market_cap
+                FROM historical_market_cap
+                WHERE date <= ?
+                ORDER BY symbol, date
+                """,
+                market_conn,
+                params=(max_date,),
+            )
+            sectors = pd.read_sql_query(
+                "SELECT symbol, sector FROM companies",
+                company_conn,
+            )
+
+        if market_caps.empty:
+            return pd.DataFrame(columns=["date", "symbol", "market_cap", "sector"])
+
+        rebalance_frame = pd.DataFrame({"date": pd.to_datetime(rebalance_dates)})
+        market_caps["date"] = pd.to_datetime(market_caps["date"])
+
+        expanded: List[pd.DataFrame] = []
+        for symbol, symbol_caps in market_caps.groupby("symbol", sort=True):
+            aligned = pd.merge_asof(
+                rebalance_frame,
+                symbol_caps[["date", "market_cap"]].sort_values("date"),
+                on="date",
+                direction="backward",
+            )
+            aligned["symbol"] = str(symbol)
+            expanded.append(aligned)
+
+        merged = pd.concat(expanded, ignore_index=True)
+        merged = merged.dropna(subset=["market_cap"])
+        if merged.empty:
+            return pd.DataFrame(columns=["date", "symbol", "market_cap", "sector"])
+
+        merged["date"] = merged["date"].dt.strftime("%Y-%m-%d")
+        merged = merged[merged["market_cap"] >= market_cap_min_usd]
+        merged = merged.merge(sectors, on="symbol", how="left")
+        if include_sectors:
+            merged = merged[merged["sector"].isin(include_sectors)]
+        if exclude_sectors:
+            merged = merged[~merged["sector"].isin(exclude_sectors)]
+        return merged[["date", "symbol", "market_cap", "sector"]].sort_values(
+            ["date", "symbol"]
+        ).reset_index(drop=True)
+
     def _universe_at(
         self,
         rebalance_date: str,
         market_cap_min_usd: float,
+        include_sectors: List[str],
         exclude_sectors: List[str],
     ) -> pd.DataFrame:
         with self._market_conn() as market_conn, self._company_conn() as company_conn:
@@ -161,6 +233,8 @@ class UniverseBuilder:
             )
 
         merged = market_caps.merge(sectors, on="symbol", how="left")
+        if include_sectors:
+            merged = merged[merged["sector"].isin(include_sectors)]
         if exclude_sectors:
             merged = merged[~merged["sector"].isin(exclude_sectors)]
         return merged.reset_index(drop=True)

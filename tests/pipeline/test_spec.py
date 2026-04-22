@@ -55,6 +55,7 @@ spec_id: "three_factor"
 benchmark: "SPY"
 universe:
   market_cap_min_usd: 10000000000
+  include_sectors: ["Technology"]
   exclude_sectors: ["Energy"]
   min_names: 30
 factors:
@@ -91,6 +92,7 @@ period:
 
     spec = StrategySpec.from_yaml(path)
     assert len(spec.factors) == 3
+    assert spec.universe.include_sectors == ["Technology"]
     assert spec.portfolio.weighting == "inv_vol"
     assert spec.resolved_newey_west_lag_days() == 21
 

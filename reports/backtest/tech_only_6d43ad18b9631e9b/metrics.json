@@ -1,0 +1,154 @@
+{
+  "factor": {
+    "is": {},
+    "oos": {
+      "PMARP_Rebound_V1": {
+        "by_horizon": {
+          "21": {
+            "ic_mean": -0.11618468236965346,
+            "ic_tstat": -1.1006510213126601,
+            "n_ic_obs": 173,
+            "p_value": 0.27258654437752383,
+            "top_bottom_spread": -0.048336937418196946,
+            "top_decile_excess_return": -0.010788572691919173
+          },
+          "5": {
+            "ic_mean": 0.001633472910068661,
+            "ic_tstat": 0.017767124017243858,
+            "n_ic_obs": 188,
+            "p_value": 0.9858435741089768,
+            "top_bottom_spread": -0.0013668939771273722,
+            "top_decile_excess_return": 0.0005130262943324524
+          },
+          "63": {
+            "ic_mean": -0.5411375661375661,
+            "ic_tstat": -5.9437569970646615,
+            "n_ic_obs": 144,
+            "p_value": 2.0321845279227818e-08,
+            "top_bottom_spread": -0.21915373965935694,
+            "top_decile_excess_return": -0.0438125943573657
+          }
+        },
+        "ic_decay": {
+          "21": -0.11618468236965346,
+          "5": 0.001633472910068661,
+          "63": -0.5411375661375661
+        },
+        "ic_mean": 0.001633472910068661,
+        "ic_tstat": 0.017767124017243858,
+        "primary_horizon": 5,
+        "top_bottom_spread": -0.0013668939771273722,
+        "top_decile_excess_return": 0.0005130262943324524
+      },
+      "combo": {
+        "by_horizon": {
+          "21": {
+            "ic_mean": -0.11618468236965346,
+            "ic_tstat": -1.1006510213126601,
+            "n_ic_obs": 173,
+            "p_value": 0.27258654437752383,
+            "top_bottom_spread": -0.048336937418196946,
+            "top_decile_excess_return": -0.010788572691919173
+          },
+          "5": {
+            "ic_mean": 0.001633472910068661,
+            "ic_tstat": 0.017767124017243858,
+            "n_ic_obs": 188,
+            "p_value": 0.9858435741089768,
+            "top_bottom_spread": -0.0013668939771273722,
+            "top_decile_excess_return": 0.0005130262943324524
+          },
+          "63": {
+            "ic_mean": -0.5411375661375661,
+            "ic_tstat": -5.9437569970646615,
+            "n_ic_obs": 144,
+            "p_value": 2.0321845279227818e-08,
+            "top_bottom_spread": -0.21915373965935694,
+            "top_decile_excess_return": -0.0438125943573657
+          }
+        },
+        "ic_decay": {
+          "21": -0.11618468236965346,
+          "5": 0.001633472910068661,
+          "63": -0.5411375661375661
+        },
+        "ic_mean": 0.001633472910068661,
+        "ic_tstat": 0.017767124017243858,
+        "primary_horizon": 5,
+        "top_bottom_spread": -0.0013668939771273722,
+        "top_decile_excess_return": 0.0005130262943324524
+      }
+    }
+  },
+  "gates": {
+    "annual_turnover_within_limit": {
+      "pass": true,
+      "threshold": 20.0,
+      "value": 2.8328
+    },
+    "is_sharpe_positive": {
+      "pass": false,
+      "value": 0.0
+    },
+    "oos_ic_positive": {
+      "pass": true,
+      "value": 0.001633472910068661
+    },
+    "oos_sharpe_positive": {
+      "pass": true,
+      "value": 0.2479
+    },
+    "oos_vs_is_sharpe_ratio_gte_0_5": {
+      "pass": true,
+      "threshold": 0.5,
+      "value": null
+    }
+  },
+  "shared_root": "/Users/owen/CC workspace/Finance",
+  "strategy": {
+    "is": {
+      "alpha": 0.0,
+      "annual_turnover": 0.0,
+      "annual_volatility": 0.0,
+      "benchmark_cagr": 0.0,
+      "beta": 0.0,
+      "cagr": 0.0,
+      "calmar_ratio": 0.0,
+      "excess_cagr": 0.0,
+      "information_ratio": 0.0,
+      "ir": 0.0,
+      "max_dd_duration": 0,
+      "max_drawdown": 0.0,
+      "n_days": 0,
+      "n_trades": 0,
+      "sharpe_ratio": 0.0,
+      "sortino_ratio": 0.0,
+      "total_costs": 0.0,
+      "total_return": 0.0,
+      "tracking_error": 0.0,
+      "win_rate": 0.0
+    },
+    "oos": {
+      "alpha": 0.02133,
+      "annual_turnover": 2.8328,
+      "annual_volatility": 0.123495,
+      "benchmark_cagr": 0.153453,
+      "beta": 0.0376,
+      "cagr": 0.030614,
+      "calmar_ratio": 0.2176,
+      "excess_cagr": -0.122839,
+      "information_ratio": -0.6367,
+      "ir": -0.6367,
+      "max_dd_duration": 186,
+      "max_drawdown": -0.140667,
+      "n_days": 494,
+      "n_trades": 963,
+      "sharpe_ratio": 0.2479,
+      "sortino_ratio": 0.2752,
+      "total_costs": 755.99,
+      "total_return": 0.060894,
+      "tracking_error": 0.203818,
+      "win_rate": 0.497
+    }
+  }
+}

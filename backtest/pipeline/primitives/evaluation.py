@@ -291,6 +291,8 @@ class EvaluationEngine:
         return gates
 
     def _horizons(self, rebalance: str) -> List[int]:
+        if rebalance == "daily":
+            return [5, 21, 63]
         if rebalance == "weekly":
             return [5, 10, 21]
         return [21, 42, 63]

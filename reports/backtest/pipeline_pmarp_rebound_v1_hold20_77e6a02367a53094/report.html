@@ -1,0 +1,114 @@
+<html><head><meta charset='utf-8'><title>Backtest Pipeline Report</title><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:960px;margin:40px auto;padding:0 20px;line-height:1.5} pre{background:#f5f5f5;padding:16px;overflow:auto;border-radius:8px}</style></head><body><pre># Backtest Pipeline Report — pipeline_pmarp_rebound_v1_hold20
+
+## Summary
+- Benchmark: `SPY`
+- Rebalance: `daily`
+- Factors: PMARP_Rebound_V1
+- OOS capital reset: `True` (fresh capital; OOS does not inherit IS positions)
+
+## Key Gates
+- is_sharpe_positive: `{&#x27;value&#x27;: -0.5117, &#x27;pass&#x27;: False}`
+- oos_sharpe_positive: `{&#x27;value&#x27;: 1.8178, &#x27;pass&#x27;: True}`
+- oos_ic_positive: `{&#x27;value&#x27;: 0.022314921365554283, &#x27;pass&#x27;: True}`
+- oos_vs_is_sharpe_ratio_gte_0_5: `{&#x27;value&#x27;: -3.552472151651358, &#x27;threshold&#x27;: 0.5, &#x27;pass&#x27;: True}`
+- annual_turnover_within_limit: `{&#x27;value&#x27;: 4.5847, &#x27;threshold&#x27;: 20.0, &#x27;pass&#x27;: True}`
+
+## Strategy Metrics
+### IS
+- is.cagr: `-0.045199`
+- is.annual_volatility: `0.088323`
+- is.sharpe_ratio: `-0.5117`
+- is.max_drawdown: `-0.106473`
+- is.annual_turnover: `4.7729`
+- is.excess_cagr: `-0.285186`
+- is.ir: `-1.7298`
+### OOS
+- oos.cagr: `0.125158`
+- oos.annual_volatility: `0.068852`
+- oos.sharpe_ratio: `1.8178`
+- oos.max_drawdown: `-0.04819`
+- oos.annual_turnover: `4.5847`
+- oos.excess_cagr: `-0.042672000000000015`
+- oos.ir: `-0.2403`
+
+## Factor Metrics
+### IS Combo
+- is.combo.primary_horizon: `5`
+- is.combo.ic_mean: `0.0497464844523668`
+- is.combo.ic_tstat: `0.5975481609776703`
+- is.combo.top_bottom_spread: `0.0040502371270410035`
+- is.combo.top_decile_excess_return: `-0.0048651254311791415`
+- is.combo.ic_decay: `{&#x27;5&#x27;: 0.0497464844523668, &#x27;21&#x27;: 0.23778083230637975, &#x27;63&#x27;: 0.3686606322969959}`
+### OOS Combo
+- oos.combo.primary_horizon: `5`
+- oos.combo.ic_mean: `0.022314921365554283`
+- oos.combo.ic_tstat: `0.24324712091024933`
+- oos.combo.top_bottom_spread: `0.0029790587933383513`
+- oos.combo.top_decile_excess_return: `0.0041911184527425645`
+- oos.combo.ic_decay: `{&#x27;5&#x27;: 0.022314921365554283, &#x27;21&#x27;: -0.057212775997221806, &#x27;63&#x27;: -0.027948824630746823}`
+
+## Spec
+```json
+{
+  &quot;benchmark&quot;: &quot;SPY&quot;,
+  &quot;combo&quot;: {
+    &quot;method&quot;: &quot;single&quot;
+  },
+  &quot;evaluation&quot;: {
+    &quot;newey_west_lag_days&quot;: 5
+  },
+  &quot;execution&quot;: {
+    &quot;spread_bps&quot;: 2.0,
+    &quot;timing&quot;: &quot;next_open&quot;,
+    &quot;transaction_cost_bps&quot;: 5.0
+  },
+  &quot;factors&quot;: [
+    {
+      &quot;direction&quot;: &quot;higher_is_better&quot;,
+      &quot;name&quot;: &quot;PMARP_Rebound_V1&quot;,
+      &quot;params&quot;: {
+        &quot;holding_window_days&quot;: 20,
+        &quot;pmarp_ema_period&quot;: 20,
+        &quot;pmarp_lookback&quot;: 150,
+        &quot;regime_fast_ema&quot;: 120,
+        &quot;regime_slope_lookback&quot;: 20,
+        &quot;regime_slow_ema&quot;: 144,
+        &quot;regime_symbol&quot;: &quot;SPY&quot;,
+        &quot;rvol_lookback&quot;: 120,
+        &quot;rvol_threshold&quot;: 2.0,
+        &quot;score_mode&quot;: &quot;signal_rvol&quot;,
+        &quot;trigger_threshold&quot;: 2.0
+      },
+      &quot;transform&quot;: &quot;raw&quot;,
+      &quot;weight&quot;: 1.0
+    }
+  ],
+  &quot;notes&quot;: &quot;Quick-sweep winner on 2026-04-12: PMARP upcross 2% trigger + RVOL&gt;2 confirmation + SPY EMA120/144 regime, carried for 20 trading days.&quot;,
+  &quot;period&quot;: {
+    &quot;start&quot;: &quot;2024-01-02&quot;,
+    &quot;test_end&quot;: &quot;2025-12-31&quot;,
+    &quot;train_end&quot;: &quot;2024-12-31&quot;
+  },
+  &quot;portfolio&quot;: {
+    &quot;max_annual_turnover&quot;: 20.0,
+    &quot;max_position_weight&quot;: 0.1,
+    &quot;rebalance&quot;: &quot;daily&quot;,
+    &quot;selection&quot;: &quot;top_n&quot;,
+    &quot;threshold&quot;: null,
+    &quot;top_n&quot;: 10,
+    &quot;vol_lookback_days&quot;: 60,
+    &quot;weighting&quot;: &quot;equal&quot;
+  },
+  &quot;spec_id&quot;: &quot;pipeline_pmarp_rebound_v1_hold20&quot;,
+  &quot;universe&quot;: {
+    &quot;exclude_sectors&quot;: [
+      &quot;Utilities&quot;,
+      &quot;Energy&quot;,
+      &quot;Real Estate&quot;
+    ],
+    &quot;market_cap_min_usd&quot;: 100000000000.0,
+    &quot;min_names&quot;: 20
+  }
+}
+```
+</pre></body></html>

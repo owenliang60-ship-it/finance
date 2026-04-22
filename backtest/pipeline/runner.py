@@ -116,6 +116,7 @@ class PipelineRunner:
             end_date=self.spec.period.test_end.isoformat(),
             rebalance=self.spec.portfolio.rebalance,
             market_cap_min_usd=self.spec.universe.market_cap_min_usd,
+            include_sectors=self.spec.universe.include_sectors,
             exclude_sectors=self.spec.universe.exclude_sectors,
             min_names=self.spec.universe.min_names,
         )

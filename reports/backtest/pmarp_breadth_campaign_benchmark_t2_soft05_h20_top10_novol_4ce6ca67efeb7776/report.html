@@ -1,0 +1,122 @@
+<html><head><meta charset='utf-8'><title>Backtest Pipeline Report</title><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:960px;margin:40px auto;padding:0 20px;line-height:1.5} pre{background:#f5f5f5;padding:16px;overflow:auto;border-radius:8px}</style></head><body><pre># Backtest Pipeline Report — pmarp_breadth_campaign_benchmark_t2_soft05_h20_top10_novol
+
+## Summary
+- Benchmark: `SPY`
+- Rebalance: `daily`
+- Factors: PMARP_Rebound_V1
+- OOS capital reset: `True` (fresh capital; OOS does not inherit IS positions)
+
+## Key Gates
+- is_sharpe_positive: `{&#x27;value&#x27;: -0.4988, &#x27;pass&#x27;: False}`
+- oos_sharpe_positive: `{&#x27;value&#x27;: 0.9423, &#x27;pass&#x27;: True}`
+- oos_ic_positive: `{&#x27;value&#x27;: 0.00464168445743318, &#x27;pass&#x27;: True}`
+- oos_vs_is_sharpe_ratio_gte_0_5: `{&#x27;value&#x27;: -1.8891339214113874, &#x27;threshold&#x27;: 0.5, &#x27;pass&#x27;: True}`
+- annual_turnover_within_limit: `{&#x27;value&#x27;: 22.6292, &#x27;threshold&#x27;: 20.0, &#x27;pass&#x27;: False}`
+
+## Strategy Metrics
+### IS
+- is.cagr: `-0.074011`
+- is.annual_volatility: `0.148368`
+- is.sharpe_ratio: `-0.4988`
+- is.max_drawdown: `-0.272651`
+- is.annual_turnover: `10.4294`
+- is.excess_cagr: `-0.114547`
+- is.ir: `-0.6776`
+### OOS
+- oos.cagr: `0.193484`
+- oos.annual_volatility: `0.205325`
+- oos.sharpe_ratio: `0.9423`
+- oos.max_drawdown: `-0.198453`
+- oos.annual_turnover: `22.6292`
+- oos.excess_cagr: `0.01938099999999998`
+- oos.ir: `-0.082`
+
+## Factor Metrics
+### IS Combo
+- is.combo.primary_horizon: `5`
+- is.combo.ic_mean: `-0.08560104044856476`
+- is.combo.ic_tstat: `-2.6209866529200743`
+- is.combo.top_bottom_spread: `-0.010514215219466017`
+- is.combo.top_decile_excess_return: `-0.007398926283033039`
+- is.combo.ic_decay: `{&#x27;5&#x27;: -0.08560104044856476, &#x27;21&#x27;: -0.1575283339116294, &#x27;63&#x27;: -0.0679196847880527}`
+### OOS Combo
+- oos.combo.primary_horizon: `5`
+- oos.combo.ic_mean: `0.00464168445743318`
+- oos.combo.ic_tstat: `0.2898667633734703`
+- oos.combo.top_bottom_spread: `0.0005467051023180658`
+- oos.combo.top_decile_excess_return: `-0.000616462834868152`
+- oos.combo.ic_decay: `{&#x27;5&#x27;: 0.00464168445743318, &#x27;21&#x27;: 0.003792639976233042, &#x27;63&#x27;: 0.008017672636238605}`
+
+## Spec
+```json
+{
+  &quot;benchmark&quot;: &quot;SPY&quot;,
+  &quot;combo&quot;: {
+    &quot;method&quot;: &quot;single&quot;
+  },
+  &quot;evaluation&quot;: {
+    &quot;newey_west_lag_days&quot;: 5
+  },
+  &quot;execution&quot;: {
+    &quot;spread_bps&quot;: 2.0,
+    &quot;timing&quot;: &quot;next_open&quot;,
+    &quot;transaction_cost_bps&quot;: 5.0
+  },
+  &quot;factors&quot;: [
+    {
+      &quot;direction&quot;: &quot;higher_is_better&quot;,
+      &quot;name&quot;: &quot;PMARP_Rebound_V1&quot;,
+      &quot;params&quot;: {
+        &quot;confirm_floor&quot;: 0.5,
+        &quot;confirm_mode&quot;: &quot;soft&quot;,
+        &quot;holding_window_days&quot;: 20,
+        &quot;pmarp_ema_period&quot;: 20,
+        &quot;pmarp_lookback&quot;: 150,
+        &quot;recent_peak_threshold&quot;: 2.0,
+        &quot;recent_peak_window&quot;: 0,
+        &quot;regime_breadth_threshold&quot;: 0.5,
+        &quot;regime_fast_ema&quot;: 120,
+        &quot;regime_mode&quot;: &quot;benchmark_ema&quot;,
+        &quot;regime_slope_lookback&quot;: 20,
+        &quot;regime_slow_ema&quot;: 144,
+        &quot;regime_symbol&quot;: &quot;SPY&quot;,
+        &quot;rvol_lookback&quot;: 120,
+        &quot;rvol_threshold&quot;: 2.0,
+        &quot;score_mode&quot;: &quot;signal_rvol&quot;,
+        &quot;trigger_threshold&quot;: 2.0,
+        &quot;vol_lookback&quot;: 60
+      },
+      &quot;transform&quot;: &quot;raw&quot;,
+      &quot;weight&quot;: 1.0
+    }
+  ],
+  &quot;notes&quot;: &quot;Use the known soft05 10B benchmark EMA control as the first sanity baseline.&quot;,
+  &quot;period&quot;: {
+    &quot;start&quot;: &quot;2021-07-01&quot;,
+    &quot;test_end&quot;: &quot;2026-04-10&quot;,
+    &quot;train_end&quot;: &quot;2023-12-31&quot;
+  },
+  &quot;portfolio&quot;: {
+    &quot;max_annual_turnover&quot;: 20.0,
+    &quot;max_position_weight&quot;: 0.1,
+    &quot;rebalance&quot;: &quot;daily&quot;,
+    &quot;selection&quot;: &quot;top_n&quot;,
+    &quot;threshold&quot;: null,
+    &quot;top_n&quot;: 10,
+    &quot;vol_lookback_days&quot;: 60,
+    &quot;weighting&quot;: &quot;equal&quot;
+  },
+  &quot;spec_id&quot;: &quot;pmarp_breadth_campaign_benchmark_t2_soft05_h20_top10_novol&quot;,
+  &quot;universe&quot;: {
+    &quot;exclude_sectors&quot;: [
+      &quot;Utilities&quot;,
+      &quot;Energy&quot;,
+      &quot;Real Estate&quot;
+    ],
+    &quot;include_sectors&quot;: [],
+    &quot;market_cap_min_usd&quot;: 10000000000.0,
+    &quot;min_names&quot;: 20
+  }
+}
+```
+</pre></body></html>

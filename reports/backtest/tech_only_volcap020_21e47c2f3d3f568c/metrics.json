@@ -1,0 +1,77 @@
+{
+  "factor": {
+    "is": {},
+    "oos": {}
+  },
+  "gates": {
+    "annual_turnover_within_limit": {
+      "pass": true,
+      "threshold": 20.0,
+      "value": 0.0467
+    },
+    "is_sharpe_positive": {
+      "pass": false,
+      "value": 0.0
+    },
+    "oos_ic_positive": {
+      "pass": false,
+      "value": 0.0
+    },
+    "oos_sharpe_positive": {
+      "pass": false,
+      "value": -0.2799
+    },
+    "oos_vs_is_sharpe_ratio_gte_0_5": {
+      "pass": false,
+      "threshold": 0.5,
+      "value": null
+    }
+  },
+  "shared_root": "/Users/owen/CC workspace/Finance",
+  "strategy": {
+    "is": {
+      "alpha": 0.0,
+      "annual_turnover": 0.0,
+      "annual_volatility": 0.0,
+      "benchmark_cagr": 0.0,
+      "beta": 0.0,
+      "cagr": 0.0,
+      "calmar_ratio": 0.0,
+      "excess_cagr": 0.0,
+      "information_ratio": 0.0,
+      "ir": 0.0,
+      "max_dd_duration": 0,
+      "max_drawdown": 0.0,
+      "n_days": 0,
+      "n_trades": 0,
+      "sharpe_ratio": 0.0,
+      "sortino_ratio": 0.0,
+      "total_costs": 0.0,
+      "total_return": 0.0,
+      "tracking_error": 0.0,
+      "win_rate": 0.0
+    },
+    "oos": {
+      "alpha": -0.008081,
+      "annual_turnover": 0.0467,
+      "annual_volatility": 0.023272,
+      "benchmark_cagr": 0.153453,
+      "beta": 0.0062,
+      "cagr": -0.006513,
+      "calmar_ratio": -0.1562,
+      "excess_cagr": -0.159966,
+      "information_ratio": -0.9721,
+      "ir": -0.9721,
+      "max_dd_duration": 103,
+      "max_drawdown": -0.041706,
+      "n_days": 494,
+      "n_trades": 63,
+      "sharpe_ratio": -0.2799,
+      "sortino_ratio": -0.3344,
+      "total_costs": 12.87,
+      "total_return": -0.012728,
+      "tracking_error": 0.168907,
+      "win_rate": 0.4483
+    }
+  }
+}

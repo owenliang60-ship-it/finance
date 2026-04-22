@@ -105,6 +105,7 @@ def test_reconstitutes_pit_universe_happy_path(tmp_path):
         end_date=dates[-1],
         rebalance="weekly",
         market_cap_min_usd=10_000_000_000,
+        include_sectors=[],
         exclude_sectors=[],
         min_names=2,
     )
@@ -132,6 +133,7 @@ def test_head_missing_shifts_effective_start(tmp_path):
         end_date=dates[-1],
         rebalance="weekly",
         market_cap_min_usd=10_000_000_000,
+        include_sectors=[],
         exclude_sectors=[],
         min_names=2,
     )
@@ -168,6 +170,7 @@ def test_middle_coverage_break_aborts(tmp_path):
             end_date=dates[-1],
             rebalance="weekly",
             market_cap_min_usd=10_000_000_000,
+            include_sectors=[],
             exclude_sectors=[],
             min_names=2,
         )
@@ -200,6 +203,7 @@ def test_min_names_skips_single_rebalance_with_warning(tmp_path):
         end_date=dates[-1],
         rebalance="weekly",
         market_cap_min_usd=10_000_000_000,
+        include_sectors=[],
         exclude_sectors=[],
         min_names=2,
     )
@@ -228,6 +232,62 @@ def test_skip_ratio_aborts_when_over_ten_percent(tmp_path):
             end_date=dates[-1],
             rebalance="weekly",
             market_cap_min_usd=10_000_000_000,
+            include_sectors=[],
             exclude_sectors=[],
             min_names=2,
         )
+
+
+def test_include_sectors_filters_universe(tmp_path):
+    symbols = ["AAA", "BBB", "CCC"]
+    dates = _bdates("2024-01-01", 20)
+    market_db = tmp_path / "market.db"
+    company_db = tmp_path / "company.db"
+    _seed_market_db(market_db, _make_price_rows(symbols, dates))
+
+    conn = sqlite3.connect(company_db)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE companies (
+            symbol TEXT PRIMARY KEY,
+            company_name TEXT,
+            sector TEXT,
+            industry TEXT,
+            exchange TEXT,
+            market_cap REAL,
+            in_pool INTEGER,
+            source TEXT,
+            first_seen TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    cur.executemany(
+        "INSERT INTO companies VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+            ("AAA", "AAA", "Technology", "Software", "NASDAQ", 1e11, 1, "manual", "2024-01-01", "2024-01-01"),
+            ("BBB", "BBB", "Healthcare", "Biotech", "NASDAQ", 1e11, 1, "manual", "2024-01-01", "2024-01-01"),
+            ("CCC", "CCC", "Technology", "Hardware", "NASDAQ", 1e11, 1, "manual", "2024-01-01", "2024-01-01"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    _insert_mcaps(
+        market_db,
+        [(sym, dates[0], 20_000_000_000) for sym in symbols],
+    )
+
+    builder = UniverseBuilder(market_db, company_db)
+    result = builder.build(
+        start_date="2024-01-01",
+        end_date=dates[-1],
+        rebalance="weekly",
+        market_cap_min_usd=10_000_000_000,
+        include_sectors=["Technology"],
+        exclude_sectors=[],
+        min_names=2,
+    )
+
+    assert set(result.universe_df["symbol"]) == {"AAA", "CCC"}

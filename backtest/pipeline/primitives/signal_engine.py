@@ -25,31 +25,45 @@ class SignalEngine:
 
         for factor_input in factors:
             factor = get_factor(factor_input.name)
-            rows = []
-            for as_of_date in dates:
-                symbols = (
-                    universe_df.loc[universe_df["date"] == as_of_date, "symbol"]
-                    .astype(str)
-                    .tolist()
-                )
-                scores = factor.compute(
-                    pit_data=self.pit_data,
-                    symbols=symbols,
-                    as_of_date=as_of_date,
-                    params=factor_input.params,
-                )
-                transformed = self._transform_scores(
-                    scores=scores,
-                    symbols=symbols,
+            raw_panel = factor.compute_panel(
+                pit_data=self.pit_data,
+                universe_df=universe_df,
+                params=factor_input.params,
+            )
+            if raw_panel is not None:
+                frame = self._transform_panel(
+                    raw_panel=raw_panel,
+                    universe_df=universe_df,
+                    dates=dates,
                     transform=factor_input.transform,
                     direction=factor_input.direction,
                 )
-                rows.extend(
-                    {"date": as_of_date, "symbol": symbol, "value": value}
-                    for symbol, value in transformed.items()
-                )
+            else:
+                rows = []
+                for as_of_date in dates:
+                    symbols = (
+                        universe_df.loc[universe_df["date"] == as_of_date, "symbol"]
+                        .astype(str)
+                        .tolist()
+                    )
+                    scores = factor.compute(
+                        pit_data=self.pit_data,
+                        symbols=symbols,
+                        as_of_date=as_of_date,
+                        params=factor_input.params,
+                    )
+                    transformed = self._transform_scores(
+                        scores=scores,
+                        symbols=symbols,
+                        transform=factor_input.transform,
+                        direction=factor_input.direction,
+                    )
+                    rows.extend(
+                        {"date": as_of_date, "symbol": symbol, "value": value}
+                        for symbol, value in transformed.items()
+                    )
 
-            frame = pd.DataFrame(rows).pivot(index="date", columns="symbol", values="value").sort_index()
+                frame = pd.DataFrame(rows).pivot(index="date", columns="symbol", values="value").sort_index()
             factor_frames[factor_input.name] = frame
 
         combo_frame = self._combine_frames(
@@ -92,6 +106,48 @@ class SignalEngine:
         else:
             raise ValueError(f"Unsupported transform: {transform}")
         return {symbol: (float(value) if pd.notna(value) else float("nan")) for symbol, value in transformed.items()}
+
+    def _transform_panel(
+        self,
+        raw_panel: pd.DataFrame,
+        universe_df: pd.DataFrame,
+        dates: List[str],
+        transform: str,
+        direction: str,
+    ) -> pd.DataFrame:
+        if raw_panel.empty:
+            return pd.DataFrame(index=pd.Index(dates, name="date"))
+
+        panel = raw_panel.copy()
+        panel.index = panel.index.astype(str)
+        panel.columns = panel.columns.astype(str)
+
+        rows = []
+        for as_of_date in dates:
+            symbols = (
+                universe_df.loc[universe_df["date"] == as_of_date, "symbol"]
+                .astype(str)
+                .tolist()
+            )
+            if as_of_date in panel.index:
+                row = panel.loc[as_of_date]
+                if isinstance(row, pd.DataFrame):
+                    row = row.iloc[-1]
+                scores = {symbol: row.get(symbol) for symbol in symbols}
+            else:
+                scores = {}
+            transformed = self._transform_scores(
+                scores=scores,
+                symbols=symbols,
+                transform=transform,
+                direction=direction,
+            )
+            rows.extend(
+                {"date": as_of_date, "symbol": symbol, "value": value}
+                for symbol, value in transformed.items()
+            )
+
+        return pd.DataFrame(rows).pivot(index="date", columns="symbol", values="value").sort_index()
 
     def _combine_frames(
         self,

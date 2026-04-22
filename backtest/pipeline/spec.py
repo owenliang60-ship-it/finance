@@ -199,6 +199,7 @@ class ComboSpec:
 @dataclass
 class UniverseSpec:
     market_cap_min_usd: float
+    include_sectors: List[str] = field(default_factory=list)
     exclude_sectors: List[str] = field(default_factory=list)
     min_names: int = 20
 
@@ -206,6 +207,7 @@ class UniverseSpec:
     def from_dict(cls, payload: Dict[str, Any]) -> "UniverseSpec":
         return cls(
             market_cap_min_usd=float(payload["market_cap_min_usd"]),
+            include_sectors=list(payload.get("include_sectors", [])),
             exclude_sectors=list(payload.get("exclude_sectors", [])),
             min_names=int(payload.get("min_names", 20)),
         )
@@ -216,7 +218,7 @@ class PortfolioSpec:
     selection: Literal["top_n", "threshold"]
     top_n: Optional[int] = None
     threshold: Optional[float] = None
-    rebalance: Literal["weekly", "monthly_first_trading_day"] = "monthly_first_trading_day"
+    rebalance: Literal["daily", "weekly", "monthly_first_trading_day"] = "monthly_first_trading_day"
     weighting: Literal["equal", "inv_vol"] = "equal"
     vol_lookback_days: int = 60
     max_position_weight: float = 1.0
@@ -342,7 +344,7 @@ class StrategySpec:
     def resolved_newey_west_lag_days(self) -> int:
         if self.evaluation.newey_west_lag_days is not None:
             return self.evaluation.newey_west_lag_days
-        if self.portfolio.rebalance == "weekly":
+        if self.portfolio.rebalance in {"daily", "weekly"}:
             return 5
         return 21
 
