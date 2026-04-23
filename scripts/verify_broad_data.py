@@ -10,7 +10,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -118,9 +118,6 @@ def classify_coverage(
     latest_last: str,
     today: date,
 ) -> str:
-    if coverage.row_count < PARTIAL_MIN_ROWS:
-        return "missing"
-
     first_date = _parse_date(coverage.first_date)
     last_date = _parse_date(coverage.last_date)
     if first_date is None or last_date is None:
@@ -138,11 +135,14 @@ def classify_coverage(
     ):
         return "full"
 
-    # IPO grace: newer listings can still count as full if history is proportionally dense.
-    if first_date > earliest and first_date <= today - timedelta(days=IPO_GRACE_DAYS):
+    # IPO grace: recent listings can count as full if their available history is dense.
+    if first_date > earliest and first_date > today - timedelta(days=IPO_GRACE_DAYS):
         expected_rows = max((today - first_date).days * 5 // 7, 1)
-        if coverage.row_count >= max(int(expected_rows * 0.6), PARTIAL_MIN_ROWS):
+        if last_date >= latest and coverage.row_count >= max(int(expected_rows * 0.6), 1):
             return "full"
+
+    if coverage.row_count < PARTIAL_MIN_ROWS:
+        return "missing"
 
     return "partial"
 
@@ -207,8 +207,8 @@ def run_sanity_checks(store: MarketStore) -> List[str]:
         if kind == "mcap":
             actual = store.get_market_cap_at(symbol, as_of)
             if expected is None:
-                if actual is None:
-                    failures.append(f"{symbol} missing market cap on {as_of}")
+                if actual is not None:
+                    failures.append(f"{symbol} expected missing market cap on {as_of}, got {actual}")
                 continue
             low = expected * (1 - (tolerance or 0))
             high = expected * (1 + (tolerance or 0))
@@ -217,7 +217,7 @@ def run_sanity_checks(store: MarketStore) -> List[str]:
                     f"{symbol} market cap {actual} outside [{low}, {high}] on {as_of}"
                 )
         elif kind == "price_exists":
-            rows = store.get_daily_prices(symbol, start_date=as_of, limit=1)
+            rows = store.get_daily_prices(symbol, start_date=as_of, end_date=as_of, limit=1)
             if not rows or rows[0]["date"] != as_of:
                 failures.append(f"{symbol} missing daily price on {as_of}")
     return failures

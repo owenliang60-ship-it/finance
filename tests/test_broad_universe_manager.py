@@ -78,6 +78,7 @@ def test_finalize_filters_by_max_historical_mcap(manager_env, monkeypatch):
 
 def test_get_new_symbols_vs_price(manager_env, monkeypatch):
     bum, store, _ = manager_env
+    monkeypatch.setattr(bum, "_PRICE_SUFFICIENT_ROWS", 1)
     monkeypatch.setattr(bum, "_fetch_yfscreen_dedup", lambda _min_mcap: {"AAPL", "MSFT"})
     bum.build_over_inclusive_seed()
     store.upsert_historical_market_cap("AAPL", [{"date": "2024-01-02", "market_cap": 2_000_000_000}])
@@ -89,3 +90,26 @@ def test_get_new_symbols_vs_price(manager_env, monkeypatch):
     )
 
     assert bum.get_new_symbols_vs_price() == ["MSFT"]
+
+
+def test_get_new_symbols_vs_price_treats_partial_history_as_new(manager_env, monkeypatch):
+    bum, store, _ = manager_env
+    monkeypatch.setattr(bum, "_PRICE_SUFFICIENT_ROWS", 2)
+    monkeypatch.setattr(bum, "_fetch_yfscreen_dedup", lambda _min_mcap: {"AAPL", "MSFT"})
+    bum.build_over_inclusive_seed()
+    store.upsert_historical_market_cap("AAPL", [{"date": "2024-01-02", "market_cap": 2_000_000_000}])
+    store.upsert_historical_market_cap("MSFT", [{"date": "2024-01-02", "market_cap": 2_000_000_000}])
+    bum.finalize_broad_universe()
+    store.upsert_daily_prices(
+        "AAPL",
+        [{"date": "2024-01-02", "close": 100, "open": 100, "high": 100, "low": 100, "volume": 1}],
+    )
+    store.upsert_daily_prices(
+        "MSFT",
+        [
+            {"date": "2024-01-02", "close": 100, "open": 100, "high": 100, "low": 100, "volume": 1},
+            {"date": "2024-01-03", "close": 101, "open": 101, "high": 101, "low": 101, "volume": 1},
+        ],
+    )
+
+    assert bum.get_new_symbols_vs_price() == ["AAPL"]

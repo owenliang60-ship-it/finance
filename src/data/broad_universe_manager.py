@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Set
 
 from config.settings import (
+    BROAD_PRICE_BACKFILL_START,
     BROAD_UNIVERSE_FILE,
     BROAD_UNIVERSE_MAX_COUNT,
     BROAD_UNIVERSE_MIN_COUNT,
@@ -31,6 +32,7 @@ from config.settings import (
 logger = logging.getLogger(__name__)
 
 _SQLITE_CHUNK = 500
+_PRICE_SUFFICIENT_ROWS = 1000
 
 
 def _read_json(path: Path) -> Dict:
@@ -95,6 +97,28 @@ def _load_existing_price_symbols() -> Set[str]:
             "SELECT DISTINCT symbol FROM daily_price WHERE date >= '2021-02-01'"
         ).fetchall()
         return {row[0] for row in rows}
+    finally:
+        conn.close()
+
+
+def _load_existing_price_sufficient_symbols(
+    min_rows: int | None = None,
+) -> Set[str]:
+    min_rows = min_rows or _PRICE_SUFFICIENT_ROWS
+    if not MARKET_DB_PATH.exists():
+        return set()
+    conn = sqlite3.connect(str(MARKET_DB_PATH))
+    try:
+        rows = conn.execute(
+            """
+            SELECT symbol, COUNT(*) AS row_count
+            FROM daily_price
+            WHERE date >= ?
+            GROUP BY symbol
+            """,
+            (BROAD_PRICE_BACKFILL_START,),
+        ).fetchall()
+        return {row[0] for row in rows if row[1] >= min_rows}
     finally:
         conn.close()
 
@@ -243,7 +267,7 @@ def load_broad_universe() -> Dict:
 
 
 def get_new_symbols_vs_price() -> List[str]:
-    return sorted(set(get_broad_symbols()) - _load_existing_price_symbols())
+    return sorted(set(get_broad_symbols()) - _load_existing_price_sufficient_symbols())
 
 
 def main() -> None:
