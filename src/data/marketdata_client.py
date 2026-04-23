@@ -8,7 +8,7 @@ Rate limit: 串行调用，间隔防限流
 import requests
 import time
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import sys
 sys.path.insert(0, str(__file__).rsplit("/src", 1)[0])
@@ -21,6 +21,33 @@ from config.settings import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_headers(resp: Any) -> Dict[str, str]:
+    """Best-effort conversion of response headers to a plain dict."""
+    raw_headers = getattr(resp, "headers", None)
+    if raw_headers is None:
+        return {}
+    try:
+        return {str(k): str(v) for k, v in dict(raw_headers).items()}
+    except Exception:
+        try:
+            return {str(k): str(v) for k, v in raw_headers.items()}
+        except Exception:
+            return {}
+
+
+def _extract_first_values(data: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
+    """Normalize array-style MarketData payload values into scalars."""
+    result: Dict[str, Any] = {}
+    for key in keys:
+        value = data.get(key)
+        if isinstance(value, list):
+            if value:
+                result[key] = value[0]
+        elif value is not None:
+            result[key] = value
+    return result
 
 
 class MarketClosedError(Exception):
@@ -43,7 +70,9 @@ class MarketDataClient:
             time.sleep(MARKETDATA_CALL_INTERVAL - elapsed)
         self._last_call_time = time.time()
 
-    def _request(self, endpoint: str, params: Optional[Dict] = None) -> Any:
+    def _request_with_meta(
+        self, endpoint: str, params: Optional[Dict] = None
+    ) -> Tuple[Any, Dict[str, str]]:
         """发送 API 请求，带重试。
 
         MarketData.app 用 Bearer token 认证（不是 query param）。
@@ -62,27 +91,28 @@ class MarketDataClient:
                 resp = requests.get(
                     url, params=params, headers=headers, timeout=API_TIMEOUT
                 )
+                response_headers = _coerce_headers(resp)
 
                 if resp.status_code in (200, 203):
                     data = resp.json()
                     # MarketData.app wraps responses in {"s": "ok", ...}
                     if isinstance(data, dict) and data.get("s") == "ok":
-                        return data
+                        return data, response_headers
                     elif isinstance(data, dict) and data.get("s") == "no_data":
                         logger.info("No data for %s: %s", endpoint, params)
-                        return None
+                        return None, response_headers
                     # Some endpoints return raw data
-                    return data
+                    return data, response_headers
                 elif resp.status_code == 429:
                     wait_time = (attempt + 1) * 5
                     logger.warning("Rate limited, waiting %ds...", wait_time)
                     time.sleep(wait_time)
                 elif resp.status_code == 402:
                     logger.error("MarketData.app credit limit reached")
-                    return None
+                    return None, response_headers
                 elif resp.status_code == 401:
                     logger.error("MarketData.app auth failed — check API key")
-                    return None
+                    return None, response_headers
                 else:
                     # Detect "Market closed" in 404 responses
                     if resp.status_code == 404:
@@ -98,7 +128,7 @@ class MarketDataClient:
                         resp.status_code,
                         resp.text[:200],
                     )
-                    return None
+                    return None, response_headers
 
             except requests.exceptions.Timeout:
                 logger.warning(
@@ -110,7 +140,11 @@ class MarketDataClient:
         logger.error(
             "Failed after %d attempts: %s", API_RETRY_TIMES, endpoint
         )
-        return None
+        return None, {}
+
+    def _request(self, endpoint: str, params: Optional[Dict] = None) -> Any:
+        data, _headers = self._request_with_meta(endpoint, params)
+        return data
 
     # ========== Options Chain ==========
 
@@ -188,6 +222,14 @@ class MarketDataClient:
             报价 dict
         """
         return self._request("options/quotes/{}".format(option_symbol))
+
+    def get_options_quote_with_meta(self, option_symbol: str) -> Optional[Dict[str, Any]]:
+        """Get normalized option quote plus raw payload and response headers."""
+        data, headers = self._request_with_meta("options/quotes/{}".format(option_symbol))
+        if not data or not isinstance(data, dict):
+            return None
+        quote = _extract_first_values(data, ["mid", "last", "bid", "ask"])
+        return {"quote": quote, "raw": data, "headers": headers}
 
     # ========== Options for IV Extraction ==========
 
@@ -271,13 +313,16 @@ class MarketDataClient:
         data = self._request("stocks/quotes/{}".format(symbol))
         if data and isinstance(data, dict) and data.get("s") == "ok":
             # Extract first element from arrays
-            result = {}
-            for key in ["last", "bid", "ask", "volume", "mid"]:
-                arr = data.get(key, [])
-                if arr:
-                    result[key] = arr[0]
-            return result
+            return _extract_first_values(data, ["last", "bid", "ask", "volume", "mid"])
         return None
+
+    def get_stock_quote_with_meta(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Get normalized stock quote plus raw payload and response headers."""
+        data, headers = self._request_with_meta("stocks/quotes/{}".format(symbol))
+        if not data or not isinstance(data, dict) or data.get("s") != "ok":
+            return None
+        quote = _extract_first_values(data, ["last", "bid", "ask", "volume", "mid"])
+        return {"quote": quote, "raw": data, "headers": headers}
 
 
 # 单例

@@ -8,6 +8,7 @@ import sys
 import logging
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -105,56 +106,6 @@ def fetch_hk_price_history(hk_symbols: list) -> dict:
             df["low"] = df["close"] * 0.999
             result[sym] = df
     return result
-
-
-# ---- Option price helpers ----
-
-def _yf_option_mid(symbol: str, expiration: str, strike: float, side: str) -> float | None:
-    """Fetch mid price for a specific option contract via yfinance."""
-    try:
-        import yfinance as yf
-        import time
-        time.sleep(1)
-        ticker = yf.Ticker(symbol)
-        chain = ticker.option_chain(expiration)
-        df = chain.puts if side.upper() == "PUT" else chain.calls
-        # Find closest strike
-        matches = df[df["strike"] == strike]
-        if matches.empty:
-            # Try nearest
-            idx = (df["strike"] - strike).abs().idxmin()
-            matches = df.loc[[idx]]
-        if not matches.empty:
-            row = matches.iloc[0]
-            bid = float(row.get("bid", 0) or 0)
-            ask = float(row.get("ask", 0) or 0)
-            if bid > 0 and ask > 0:
-                return (bid + ask) / 2
-            last = float(row.get("lastPrice", 0) or 0)
-            if last > 0:
-                return last
-    except Exception as e:
-        logger.warning("[yfinance] Option fetch failed %s %s %s %.0f: %s", symbol, expiration, side, strike, e)
-    return None
-
-
-def fetch_option_prices(positions: list) -> dict:
-    """Fetch live mid prices for open option positions.
-
-    Returns {(symbol, expiration, strike, side): mid_premium}.
-    Only includes entries where a live price was found.
-    """
-    result = {}
-    # Group by (symbol, expiration) to minimize API calls
-    seen_chains = {}
-    for p in positions:
-        key = (p["symbol"], p["expiration"], p["strike"], p["side"])
-        mid = _yf_option_mid(p["symbol"], p["expiration"], p["strike"], p["side"])
-        if mid is not None:
-            result[key] = mid
-            logger.info("[yfinance] Option %s %s %s %.0f: mid $%.2f", p["symbol"], p["expiration"], p["side"], p["strike"], mid)
-    return result
-
 
 # ---- 信号检测函数 ----
 
@@ -254,11 +205,28 @@ def _send_private_report(message: str, dry_run: bool = False) -> str:
     return message
 
 
+def _latest_signal_date(df: pd.DataFrame) -> str | None:
+    """Extract the most recent YYYY-MM-DD date from a price frame."""
+    if df is None or len(df) == 0 or "date" not in df.columns:
+        return None
+    value = pd.to_datetime(df["date"].iloc[-1])
+    return value.strftime("%Y-%m-%d")
+
+
 # ---- 格式化 ----
 
-def format_report(action_signals: list, summary: dict, kill_conditions: dict) -> str:
+def format_report(
+    action_signals: list,
+    summary: dict,
+    kill_conditions: dict,
+    snapshot_line: str | None = None,
+) -> str:
     """格式化 3 区块 Telegram 报告."""
     lines = []
+
+    if snapshot_line:
+        lines.append(snapshot_line)
+        lines.append("")
 
     # Block 1: 行动信号
     if action_signals:
@@ -309,6 +277,11 @@ def run_intelligence(dry_run: bool = False) -> str:
     """运行完整 Intelligence 管道, 返回格式化报告."""
     import sqlite3
     from portfolio.holdings.manager import PortfolioManager
+    from portfolio.holdings.live_quote_provider import (
+        QuoteResult,
+        fetch_option_live_quotes,
+        fetch_stock_live_quotes,
+    )
 
     store = get_store()
     mgr = PortfolioManager(store=store)
@@ -327,6 +300,8 @@ def run_intelligence(dry_run: bool = False) -> str:
     price_latest = {}  # symbol -> float
 
     no_price_symbols = []
+    fallback_symbols = []
+    signals_as_of = None
     hk_symbols = [p.symbol for p in positions if is_hk_ticker(p.symbol)]
 
     for p in positions:
@@ -340,8 +315,43 @@ def run_intelligence(dry_run: bool = False) -> str:
             df["close"] = pd.to_numeric(df["close"])
             df["volume"] = pd.to_numeric(df["volume"])
             prices_map[p.symbol] = df
-            price_latest[p.symbol] = df["close"].iloc[-1]
     conn.close()
+
+    for df in prices_map.values():
+        latest_date = _latest_signal_date(df)
+        if latest_date and (signals_as_of is None or latest_date > signals_as_of):
+            signals_as_of = latest_date
+
+    us_symbols = [p.symbol for p in positions if not is_hk_ticker(p.symbol)]
+    stock_live_result = QuoteResult()
+    if us_symbols:
+        stock_live_result = fetch_stock_live_quotes(us_symbols)
+        price_latest.update(stock_live_result.prices)
+        if stock_live_result.credit_header_available:
+            logger.info(
+                "Stock live quotes: %d/%d success, failed=%s, request_count=%d, credits=%s/%s",
+                len(stock_live_result.prices), len(us_symbols), stock_live_result.failed,
+                stock_live_result.request_count, stock_live_result.credits_used,
+                stock_live_result.credits_remaining,
+            )
+        else:
+            logger.info(
+                "Stock live quotes: %d/%d success, failed=%s, request_count=%d (credit header unavailable)",
+                len(stock_live_result.prices), len(us_symbols), stock_live_result.failed,
+                stock_live_result.request_count,
+            )
+
+        for sym in stock_live_result.failed:
+            df = prices_map.get(sym)
+            if df is not None and len(df) > 0:
+                fallback_price = float(df["close"].iloc[-1])
+                fallback_date = _latest_signal_date(df) or "unknown"
+                price_latest[sym] = fallback_price
+                fallback_symbols.append(sym)
+                logger.warning(
+                    "[fallback] %s -> T-1 close $%.2f from %s",
+                    sym, fallback_price, fallback_date,
+                )
 
     # Fetch HK prices via yfinance (not in market.db)
     if hk_symbols:
@@ -352,6 +362,9 @@ def run_intelligence(dry_run: bool = False) -> str:
             price_latest[sym] = usd_price
         for sym, df in hk_history.items():
             prices_map[sym] = df
+            latest_date = _latest_signal_date(df)
+            if latest_date and (signals_as_of is None or latest_date > signals_as_of):
+                signals_as_of = latest_date
 
     # Mark symbols with no price at all
     for p in positions:
@@ -359,12 +372,26 @@ def run_intelligence(dry_run: bool = False) -> str:
             price_latest[p.symbol] = p.cost_basis
             no_price_symbols.append(p.symbol)
 
-    # Fetch option live prices via yfinance
+    # Fetch option live prices via MarketData
     option_prices = {}
+    option_live_result = QuoteResult()
     if option_positions:
         logger.info("Fetching option prices for %d legs...", len(option_positions))
-        option_prices = fetch_option_prices(option_positions)
-        logger.info("Got live prices for %d/%d option legs", len(option_prices), len(option_positions))
+        option_live_result = fetch_option_live_quotes(option_positions)
+        option_prices = option_live_result.prices
+        if option_live_result.credit_header_available:
+            logger.info(
+                "Option live quotes: %d/%d success, failed=%s, request_count=%d, credits=%s/%s",
+                len(option_prices), len(option_positions), option_live_result.failed,
+                option_live_result.request_count, option_live_result.credits_used,
+                option_live_result.credits_remaining,
+            )
+        else:
+            logger.info(
+                "Option live quotes: %d/%d success, failed=%s, request_count=%d (credit header unavailable)",
+                len(option_prices), len(option_positions), option_live_result.failed,
+                option_live_result.request_count,
+            )
 
     # NAV + weights (now with HK + option prices)
     nav = mgr.get_total_nav(price_latest, option_prices)
@@ -427,8 +454,8 @@ def run_intelligence(dry_run: bool = False) -> str:
         if rows:
             qqq_df = pd.DataFrame([dict(r) for r in reversed(rows)])
             qqq_df["close"] = pd.to_numeric(qqq_df["close"])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to load QQQ benchmark prices: %s", e)
 
     qqq_beta = calc_qqq_beta(
         [p.symbol for p in positions_refreshed], prices_map, qqq_df, weights
@@ -487,7 +514,38 @@ def run_intelligence(dry_run: bool = False) -> str:
         "dna_distribution": dna_dist,
     }
 
-    report = format_report(action_signals, summary, kc_data)
+    et_now = datetime.now(ZoneInfo("America/New_York"))
+    snapshot_line = (
+        f"📍 NAV 快照 ET {et_now.strftime('%Y-%m-%d %H:%M')} "
+        f"| live {len(stock_live_result.prices)}/{len(us_symbols)} "
+        f"| signals as of {signals_as_of or 'unknown'}"
+    )
+    if fallback_symbols:
+        snapshot_line += f" | ⚠️ fallback: {','.join(fallback_symbols)}"
+    if option_positions:
+        snapshot_line += f" | opt {len(option_prices)}/{len(option_positions)}"
+    if option_live_result.failed:
+        snapshot_line += f" | ⚠️ opt_fail: {len(option_live_result.failed)}"
+
+    credit_fragments = []
+    if stock_live_result.request_count > 0:
+        if stock_live_result.credit_header_available:
+            credit_fragments.append(
+                f"stock credits {stock_live_result.credits_used or '?'}"
+                f"/{stock_live_result.credits_remaining or '?'}"
+            )
+    if option_live_result.request_count > 0:
+        if option_live_result.credit_header_available:
+            credit_fragments.append(
+                f"option credits {option_live_result.credits_used or '?'}"
+                f"/{option_live_result.credits_remaining or '?'}"
+            )
+    if credit_fragments:
+        snapshot_line += " | " + " | ".join(credit_fragments)
+    elif stock_live_result.request_count > 0 or option_live_result.request_count > 0:
+        snapshot_line += " | credit header unavailable"
+
+    report = format_report(action_signals, summary, kc_data, snapshot_line=snapshot_line)
 
     return _send_private_report(report, dry_run=dry_run)
 

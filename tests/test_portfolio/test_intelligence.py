@@ -138,6 +138,22 @@ class TestFormatReport:
         assert "退出条件审视" in report
         assert "$2,000,000" in report
 
+    def test_snapshot_line_appears_first(self):
+        from scripts.portfolio_intelligence import format_report
+        summary = {
+            "total_nav": 1_000_000, "invested_pct": 0.50, "cash_pct": 0.50,
+            "qqq_beta": None, "total_pnl": 0, "total_pnl_pct": 0,
+            "sectors": {}, "sector_warnings": [],
+            "total_positions": 5, "dna_distribution": "A×5",
+        }
+        report = format_report(
+            [],
+            summary,
+            {},
+            snapshot_line="📍 NAV 快照 ET 2026-04-22 10:05 | live 1/1 | signals as of 2026-04-21",
+        )
+        assert report.splitlines()[0].startswith("📍 NAV 快照 ET")
+
     def test_no_signals_no_block1(self):
         from scripts.portfolio_intelligence import format_report
         summary = {
@@ -149,6 +165,22 @@ class TestFormatReport:
         report = format_report([], summary, {})
         assert "行动信号" not in report
         assert "组合概览" in report
+
+    def test_credit_header_unavailable_does_not_claim_delay(self):
+        from scripts.portfolio_intelligence import format_report
+        summary = {
+            "total_nav": 1_000_000, "invested_pct": 0.50, "cash_pct": 0.50,
+            "qqq_beta": None, "total_pnl": 0, "total_pnl_pct": 0,
+            "sectors": {}, "sector_warnings": [],
+            "total_positions": 5, "dna_distribution": "A×5",
+        }
+        report = format_report(
+            [],
+            summary,
+            {},
+            snapshot_line="📍 NAV 快照 ET 2026-04-22 10:05 | credit header unavailable",
+        )
+        assert "delay ~" not in report
 
 
 class TestHKTickerMapping:
@@ -201,38 +233,6 @@ class TestFetchHKPrices:
         result = fetch_hk_prices(["07709"])
         assert "07709" in result
         assert result["07709"] == pytest.approx(32.0 / 7.8366, rel=1e-2)
-
-
-class TestFetchOptionPrices:
-    def test_returns_keyed_dict(self, monkeypatch):
-        from scripts.portfolio_intelligence import fetch_option_prices
-        import scripts.portfolio_intelligence as mod
-
-        positions = [
-            {"symbol": "QQQ", "expiration": "2026-06-18", "strike": 570.0,
-             "side": "PUT", "quantity": 9, "avg_premium": 6.75},
-        ]
-        # Mock: return a mid price
-        monkeypatch.setattr(mod, "_yf_option_mid",
-                            lambda sym, exp, strike, side: 8.50)
-        result = fetch_option_prices(positions)
-        key = ("QQQ", "2026-06-18", 570.0, "PUT")
-        assert key in result
-        assert result[key] == pytest.approx(8.50)
-
-    def test_fallback_on_failure(self, monkeypatch):
-        from scripts.portfolio_intelligence import fetch_option_prices
-        import scripts.portfolio_intelligence as mod
-
-        positions = [
-            {"symbol": "QQQ", "expiration": "2026-06-18", "strike": 570.0,
-             "side": "PUT", "quantity": 9, "avg_premium": 6.75},
-        ]
-        monkeypatch.setattr(mod, "_yf_option_mid",
-                            lambda sym, exp, strike, side: None)
-        result = fetch_option_prices(positions)
-        # No entry → manager falls back to avg_premium
-        assert len(result) == 0
 
 
 class TestQQQBetaDateAlignment:

@@ -223,3 +223,59 @@ class TestStockQuote:
         assert result["last"] == 225.50
         assert result["bid"] == 225.40
         assert result["ask"] == 225.60
+
+    @patch("src.data.marketdata_client.requests.get")
+    def test_get_stock_quote_with_meta(self, mock_get, client, mock_response):
+        """Metadata helper should preserve normalized quote, raw payload, and headers."""
+        data = {
+            "s": "ok",
+            "last": [225.50],
+            "bid": [225.40],
+            "ask": [225.60],
+            "mid": [225.50],
+            "updated": ["2026-04-22T10:05:00-04:00"],
+        }
+        resp = mock_response(200, data)
+        resp.headers = {"X-Api-Cost": "1", "X-Api-Quota-Remaining": "9999"}
+        mock_get.return_value = resp
+
+        result = client.get_stock_quote_with_meta("AAPL")
+
+        assert result["quote"] == {
+            "last": 225.50,
+            "bid": 225.40,
+            "ask": 225.60,
+            "mid": 225.50,
+        }
+        assert result["raw"]["s"] == "ok"
+        assert result["headers"]["X-Api-Cost"] == "1"
+
+
+class TestOptionQuote:
+    """Test option quote helpers."""
+
+    @patch("src.data.marketdata_client.requests.get")
+    def test_get_options_quote_with_meta(self, mock_get, client, mock_response):
+        """Options metadata helper should normalize first-element arrays."""
+        data = {
+            "s": "ok",
+            "mid": [2.50],
+            "last": [2.55],
+            "bid": [2.45],
+            "ask": [2.55],
+            "updated": ["2026-04-22T10:05:00-04:00"],
+        }
+        resp = mock_response(200, data)
+        resp.headers = {"X-Api-Cost": "1"}
+        mock_get.return_value = resp
+
+        result = client.get_options_quote_with_meta("AAPL260321C00200000")
+
+        assert result["quote"] == {
+            "mid": 2.50,
+            "last": 2.55,
+            "bid": 2.45,
+            "ask": 2.55,
+        }
+        assert result["raw"]["s"] == "ok"
+        assert result["headers"]["X-Api-Cost"] == "1"

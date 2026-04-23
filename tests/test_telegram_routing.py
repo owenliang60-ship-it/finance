@@ -190,10 +190,11 @@ class TestPortfolioRouting:
         mock_deliver.assert_called_once_with("📊 Portfolio Intelligence: 无持仓", dry_run=False)
 
     @patch("scripts.portfolio_intelligence._send_private_report", side_effect=lambda message, dry_run=False: message)
+    @patch("portfolio.holdings.live_quote_provider.fetch_stock_live_quotes")
     @patch("sqlite3.connect", return_value=_FakeSqliteConn())
     @patch("portfolio.holdings.manager.PortfolioManager")
     @patch("scripts.portfolio_intelligence.get_store")
-    def test_run_intelligence_normal_uses_private_delivery(self, mock_get_store, mock_manager_cls, _sqlite, mock_deliver):
+    def test_run_intelligence_normal_uses_private_delivery(self, mock_get_store, mock_manager_cls, _sqlite, mock_fetch_stock, mock_deliver):
         mock_store = MagicMock()
         mock_store.get_open_option_positions.return_value = []
         mock_store.get_cash_balance.return_value = 100
@@ -215,9 +216,19 @@ class TestPortfolioRouting:
         mock_manager.get_total_nav.return_value = 1000.0
         mock_manager.refresh_prices.return_value = [position]
         mock_manager_cls.return_value = mock_manager
+        mock_fetch_stock.return_value = SimpleNamespace(
+            prices={"AAPL": 125.0},
+            failed=[],
+            quote_meta={"AAPL": {"price_field": "mid"}},
+            request_count=1,
+            credit_header_available=False,
+            credits_used=None,
+            credits_remaining=None,
+        )
 
         result = portfolio_intelligence.run_intelligence(dry_run=False)
 
         assert "组合概览" in result
+        assert "NAV 快照 ET" in result
         mock_deliver.assert_called_once()
         assert mock_deliver.call_args.kwargs["dry_run"] is False
