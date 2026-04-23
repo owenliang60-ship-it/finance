@@ -13,7 +13,7 @@ import sys
 import time
 import argparse
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -30,8 +30,55 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
-def fetch_all_stocks(client: FMPClient) -> list:
-    """分页拉取全市场股票，返回去重列表"""
+def fetch_recent_delisted_symbols(
+    client: FMPClient,
+    as_of_date: str,
+    lookback_days: int = 120,
+    max_pages: int = 3,
+    page_size: int = 200,
+):
+    """拉取近期退市名单，过滤 screener 里残留的脏活跃标记。"""
+    target_date = datetime.strptime(as_of_date, "%Y-%m-%d").date()
+    cutoff_date = target_date - timedelta(days=lookback_days)
+
+    delisted_symbols = set()
+    api_calls = 0
+
+    for page in range(max_pages):
+        rows = client.get_delisted_companies(page=page, limit=page_size)
+        api_calls += 1
+
+        if not rows:
+            break
+
+        reached_cutoff = False
+        for row in rows:
+            symbol = row.get("symbol")
+            raw_date = row.get("delistedDate")
+            if not symbol or not raw_date:
+                continue
+
+            try:
+                delisted_date = datetime.strptime(raw_date, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+
+            if delisted_date > target_date:
+                continue
+            if delisted_date < cutoff_date:
+                reached_cutoff = True
+                continue
+
+            delisted_symbols.add(symbol)
+
+        if len(rows) < page_size or reached_cutoff:
+            break
+
+    return delisted_symbols, api_calls
+
+
+def fetch_all_stocks(client: FMPClient, as_of_date: str = None) -> list:
+    """分页拉取全市场股票，返回去重列表。"""
     all_stocks = {}
     api_calls = 0
 
@@ -62,6 +109,24 @@ def fetch_all_stocks(client: FMPClient) -> list:
         symbol = s.get("symbol")
         if symbol and symbol not in all_stocks:
             all_stocks[symbol] = s
+
+    if as_of_date:
+        delisted_symbols, delisted_calls = fetch_recent_delisted_symbols(
+            client, as_of_date
+        )
+        api_calls += delisted_calls
+
+        removed = 0
+        for symbol in delisted_symbols:
+            if all_stocks.pop(symbol, None) is not None:
+                removed += 1
+
+        if removed:
+            logger.info(
+                "  Filtered %d recently delisted symbols as of %s",
+                removed,
+                as_of_date,
+            )
 
     return list(all_stocks.values()), api_calls
 
@@ -126,7 +191,7 @@ def collect_daily(date: str = None, force: bool = False) -> dict:
     # 拉取全市场
     client = FMPClient()
     logger.info(f"Fetching all US stocks for {date}...")
-    stocks, api_calls = fetch_all_stocks(client)
+    stocks, api_calls = fetch_all_stocks(client, as_of_date=date)
     logger.info(f"Total unique stocks: {len(stocks)}")
 
     # 计算排名
