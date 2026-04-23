@@ -62,39 +62,19 @@ def _send_group_report(message: str) -> bool:
 # ============================================================
 
 def format_section_a(indicator_summary: dict) -> str:
-    """A. PMARP 极值 (四种穿越信号)"""
+    """A. PMARP 极值 (仅保留上穿2%报警)"""
     lines = ["*A. PMARP 极值*"]
 
     crossovers = indicator_summary.get("pmarp_crossovers", {})
 
-    # 优先使用穿越事件数据
-    # 注: 上穿98% (breakout_98) 已移除 — 因子研究证明不显著
-    # 详见 docs/research/2026-03-17-pmarp-crossover-factor-study.md
-    fading = crossovers.get("fading_98", [])
-    crashed = crossovers.get("crashed_2", [])
+    # 只保留上穿2%报警。
+    # 98% 上下穿已移除；下穿2%也不再作为晨报报警信号。
     recovery = crossovers.get("recovery_2", [])
 
-    has_any = fading or crashed or recovery
-
-    if not has_any:
-        # 向后兼容: 如果没有 pmarp_crossovers，用旧的 value 过滤方式
-        low = [x for x in indicator_summary.get("low_pmarp", []) if x["value"] <= 2]
-        if low:
-            items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in low)
-            lines.append("跌破2%: {}".format(items))
-            has_any = True
+    if recovery:
+        items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in recovery)
+        lines.append("上穿2%: {}".format(items))
     else:
-        if fading:
-            items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in fading)
-            lines.append("下穿98%: {}".format(items))
-        if crashed:
-            items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in crashed)
-            lines.append("下穿2%: {}".format(items))
-        if recovery:
-            items = "  ".join("{} {:.1f}%".format(x["symbol"], x["value"]) for x in recovery)
-            lines.append("上穿2%: {}".format(items))
-
-    if not has_any:
         lines.append("今日无极值信号")
 
     return "\n".join(lines)
