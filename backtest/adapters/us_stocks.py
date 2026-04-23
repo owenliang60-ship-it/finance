@@ -8,13 +8,21 @@ from typing import Callable, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+from backtest.pipeline.paths import resolve_shared_data_root
+
 logger = logging.getLogger(__name__)
+
+
+def _get_market_store():
+    from src.data.market_store import get_store
+
+    data_root = resolve_shared_data_root()
+    return get_store(data_root / "data" / "market.db")
 
 
 def _get_bulk_mcaps(date: str) -> Dict[str, float]:
     """从 market.db 查询所有 symbol 在 date 的历史市值"""
-    from src.data.market_store import get_store
-    return get_store().get_bulk_market_caps_at(date)
+    return _get_market_store().get_bulk_market_caps_at(date)
 
 
 class USStocksAdapter:
@@ -281,8 +289,7 @@ class USStocksAdapter:
                 return get_extended_true_symbols()
             else:
                 # Default: all symbols in market.db
-                from src.data.market_store import get_store
-                store = get_store()
+                store = _get_market_store()
                 symbols = store.get_symbols("daily_price")
                 symbols = [s for s in symbols if s not in ("SPY", "QQQ", "^VIX")]
                 return symbols
@@ -293,8 +300,7 @@ class USStocksAdapter:
     def _load_prices(self, symbol: str) -> Optional[pd.DataFrame]:
         """加载单只股票的量价数据 (直接读 market.db，不触发 FMP fetch)"""
         try:
-            from src.data.market_store import get_store
-            store = get_store()
+            store = _get_market_store()
             df = store.get_daily_prices_df(symbol)
             if df is None or df.empty:
                 return None

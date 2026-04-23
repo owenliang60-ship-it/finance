@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import subprocess
 from pathlib import Path
 
@@ -25,9 +26,21 @@ def resolve_main_repo_root() -> Path:
 
 
 def resolve_shared_data_root() -> Path:
+    def has_real_market_db(root: Path) -> bool:
+        db_path = root / "data" / "market.db"
+        if not db_path.exists():
+            return False
+        try:
+            with sqlite3.connect(db_path) as conn:
+                row = conn.execute("SELECT COUNT(*) FROM daily_price").fetchone()
+            return bool(row and row[0] > 0)
+        except Exception:
+            return False
+
     current_root = resolve_repo_root()
-    current_data = current_root / "data"
-    if current_data.exists():
+    if has_real_market_db(current_root):
         return current_root
     main_root = resolve_main_repo_root()
-    return main_root if (main_root / "data").exists() else current_root
+    if has_real_market_db(main_root):
+        return main_root
+    return current_root
