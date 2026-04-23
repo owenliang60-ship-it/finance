@@ -356,6 +356,27 @@ EXTENDED_PRICE_BACKFILL_START = "2021-02-01"  # 5-year backfill start date
 EXTENDED_PRICE_INCREMENTAL_PERIOD = "5d"      # Daily incremental period
 EXTENDED_UNIVERSE_MIN_MCAP_B = 10             # $10B minimum market cap
 
+# ============ Broad Universe ($1B+ bootstrap research universe) ============
+
+BROAD_UNIVERSE_SEED_FILE = POOL_DIR / "broad_universe_seed.json"
+BROAD_UNIVERSE_FILE = POOL_DIR / "broad_universe.json"
+
+BROAD_UNIVERSE_SEED_MIN_MCAP_USD = int(5e8)   # $500M seed threshold
+BROAD_UNIVERSE_MIN_MCAP_USD = int(1e9)        # $1B final threshold
+BROAD_UNIVERSE_SEED_MIN_COUNT = 2000
+BROAD_UNIVERSE_SEED_MAX_COUNT = 6000
+BROAD_UNIVERSE_MIN_COUNT = 2500
+BROAD_UNIVERSE_MAX_COUNT = 4000
+BROAD_UNIVERSE_PAGE_SIZE = 250
+BROAD_PRICE_BACKFILL_START = "2021-02-01"
+
+# Broad scan v3 split: stable universe definition vs tunable group routing.
+BROAD_SCAN_UNIVERSE_SOURCE = "market_db"      # "market_db" | "yf_screen"
+BROAD_SCAN_GROUP_ALERT_MIN_MCAP = int(1e9)
+BROAD_SCAN_GROUP_ALERT_MIN_ADV = 3_000_000
+BROAD_SCAN_HIGH_TIER_MCAP = int(5e9)
+BROAD_SCAN_HIGH_TIER_STREAK = 3
+
 # ============ Momentum Engine ============
 
 # 晨报输出目录

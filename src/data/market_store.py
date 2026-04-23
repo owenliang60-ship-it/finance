@@ -1418,6 +1418,39 @@ class MarketStore:
         rows = conn.execute(sql, (date,)).fetchall()
         return {r[0]: r[1] for r in rows}
 
+    def list_symbols_in_historical_market_cap(self) -> List[str]:
+        """Return symbols that have any historical market cap rows."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT DISTINCT symbol FROM historical_market_cap"
+        ).fetchall()
+        return sorted(row[0] for row in rows)
+
+    def get_symbols_with_market_cap_at(
+        self, date: str, threshold_usd: int, freshness_days: int = 90
+    ) -> List[str]:
+        """Return symbols whose latest as-of market cap is fresh and above threshold."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            """
+            WITH latest AS (
+                SELECT symbol, market_cap, date,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY symbol ORDER BY date DESC
+                       ) AS rn
+                FROM historical_market_cap
+                WHERE date <= ?
+            )
+            SELECT symbol
+            FROM latest
+            WHERE rn = 1
+              AND date >= date(?, ?)
+              AND market_cap >= ?
+            """,
+            (date, date, f"-{freshness_days} days", threshold_usd),
+        ).fetchall()
+        return sorted(row[0] for row in rows)
+
     # ---- Stats ----
 
     def get_stats(self) -> Dict[str, int]:

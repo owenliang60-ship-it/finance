@@ -194,12 +194,14 @@ def _yf_download_ohlcv(
 def update_extended_prices(
     full_backfill: bool = False,
     symbols: Optional[List[str]] = None,
+    start_date: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Update extended universe prices in market.db.
 
     Args:
         full_backfill: Force 5-year backfill for all symbols.
         symbols: Override symbol list (default: get_extended_only_symbols()).
+        start_date: Optional incremental start date for symbols with existing history.
 
     Returns:
         Stats dict with total, success, failed, rows_inserted.
@@ -250,9 +252,14 @@ def update_extended_prices(
 
     # Incremental batch (last 5 days)
     if incremental_symbols:
-        logger.info("Starting incremental update (%s)...", EXTENDED_PRICE_INCREMENTAL_PERIOD)
+        if start_date:
+            logger.info("Starting incremental update from %s...", start_date)
+        else:
+            logger.info("Starting incremental update (%s)...", EXTENDED_PRICE_INCREMENTAL_PERIOD)
         frames = _yf_download_ohlcv(
-            incremental_symbols, period=EXTENDED_PRICE_INCREMENTAL_PERIOD,
+            incremental_symbols,
+            period=None if start_date else EXTENDED_PRICE_INCREMENTAL_PERIOD,
+            start=start_date,
         )
         all_frames.update(frames)
         failed = set(incremental_symbols) - set(frames.keys())

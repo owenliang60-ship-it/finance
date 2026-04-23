@@ -56,3 +56,47 @@ def test_upsert_idempotent(store):
     store.upsert_historical_market_cap("AAPL", rows)
     cap = store.get_market_cap_at("AAPL", "2024-01-02")
     assert cap == 3_100_000_000_000
+
+
+def test_list_symbols_in_historical_market_cap(store):
+    store.upsert_historical_market_cap(
+        "AAPL", [{"symbol": "AAPL", "date": "2024-01-02", "market_cap": 1}]
+    )
+    store.upsert_historical_market_cap(
+        "MSFT", [{"symbol": "MSFT", "date": "2024-01-02", "market_cap": 1}]
+    )
+
+    assert store.list_symbols_in_historical_market_cap() == ["AAPL", "MSFT"]
+
+
+def test_get_symbols_with_market_cap_at_uses_latest_as_of_snapshot(store):
+    store.upsert_historical_market_cap(
+        "AAPL",
+        [
+            {"symbol": "AAPL", "date": "2024-01-02", "market_cap": 3_000_000_000},
+            {"symbol": "AAPL", "date": "2024-06-01", "market_cap": 500_000_000},
+        ],
+    )
+    store.upsert_historical_market_cap(
+        "MSFT",
+        [{"symbol": "MSFT", "date": "2024-06-01", "market_cap": 2_000_000_000}],
+    )
+
+    result = store.get_symbols_with_market_cap_at("2024-07-01", 1_000_000_000, freshness_days=90)
+
+    assert result == ["MSFT"]
+
+
+def test_get_symbols_with_market_cap_at_excludes_stale_rows(store):
+    store.upsert_historical_market_cap(
+        "OLD",
+        [{"symbol": "OLD", "date": "2024-01-02", "market_cap": 3_000_000_000}],
+    )
+    store.upsert_historical_market_cap(
+        "NEW",
+        [{"symbol": "NEW", "date": "2024-06-15", "market_cap": 3_000_000_000}],
+    )
+
+    result = store.get_symbols_with_market_cap_at("2024-07-01", 1_000_000_000, freshness_days=30)
+
+    assert result == ["NEW"]

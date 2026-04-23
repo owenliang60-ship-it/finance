@@ -159,3 +159,21 @@ class TestUpdateExtendedPrices:
 
         assert result["success"] == 0
         assert "XOM" in result["failed"]
+
+    def test_incremental_start_date_for_existing_symbols(self):
+        mock_store = MagicMock()
+        mock_store.get_daily_prices.return_value = [{"date": "2026-03-27"}]
+        mock_store.upsert_daily_prices_df.return_value = 5
+        mock_frames = {"XOM": pd.DataFrame({"date": ["2026-03-27"], "close": [100]})}
+
+        with patch("src.data.extended_universe_manager.get_extended_only_symbols", return_value=["XOM"]), \
+             patch("src.data.market_store.get_store", return_value=mock_store), \
+             patch("src.data.extended_price_fetcher._yf_download_ohlcv", return_value=mock_frames) as mock_dl:
+            result = update_extended_prices(symbols=["XOM"], start_date="2026-03-20")
+
+        assert result["success"] == 1
+        mock_dl.assert_called_once_with(
+            ["XOM"],
+            period=None,
+            start="2026-03-20",
+        )

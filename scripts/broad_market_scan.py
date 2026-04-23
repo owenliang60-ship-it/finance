@@ -29,7 +29,15 @@ import requests
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from config.settings import SCANS_DIR
+from config.settings import (
+    BROAD_SCAN_GROUP_ALERT_MIN_ADV,
+    BROAD_SCAN_GROUP_ALERT_MIN_MCAP,
+    BROAD_SCAN_HIGH_TIER_MCAP,
+    BROAD_SCAN_HIGH_TIER_STREAK,
+    BROAD_SCAN_UNIVERSE_SOURCE,
+    BROAD_UNIVERSE_MIN_MCAP_USD,
+    SCANS_DIR,
+)
 from src.data import load_universe
 from src.indicators.rvol import calculate_rvol
 from src.telegram_bot import send_message, split_message
@@ -185,8 +193,39 @@ def fetch_universe_metadata(
     min_mcap_b: float,
     refresh: bool = False,
     cache_path: Path = UNIVERSE_CACHE_PATH,
+    as_of_date: Optional[str] = None,
 ) -> dict:
     """获取或刷新 universe metadata cache。"""
+    as_of_date = as_of_date or date.today().isoformat()
+    if BROAD_SCAN_UNIVERSE_SOURCE == "market_db":
+        from src.data.market_store import get_store
+
+        cache = _read_json(cache_path)
+        store = get_store()
+        symbols = store.get_symbols_with_market_cap_at(
+            as_of_date,
+            BROAD_UNIVERSE_MIN_MCAP_USD,
+            freshness_days=90,
+        )
+        bulk_caps = store.get_bulk_market_caps_at(as_of_date)
+        stocks = {
+            symbol: {
+                "marketCap": bulk_caps.get(symbol),
+                "shortName": symbol,
+                "longName": symbol,
+                "exchange": "DB",
+            }
+            for symbol in symbols
+        }
+        payload = {
+            "updated": date.today().isoformat(),
+            "market_cap_threshold": BROAD_UNIVERSE_MIN_MCAP_USD,
+            "last_scan_date": cache.get("last_scan_date"),
+            "source": "market_db",
+            "stocks": stocks,
+        }
+        return payload
+
     min_mcap = int(min_mcap_b * 1_000_000_000)
     cache = _read_json(cache_path)
 
@@ -437,6 +476,39 @@ def apply_tracker_stats(candidates: List[dict], tracker: dict) -> List[dict]:
     return enriched
 
 
+def compute_adv_20d(frame: Optional[pd.DataFrame]) -> float:
+    if frame is None or frame.empty or len(frame) < 20:
+        return 0.0
+    dollar_volume = frame["close"] * frame["volume"]
+    return float(dollar_volume.tail(20).mean())
+
+
+def classify_tier(hit_meta: dict) -> str:
+    market_cap = hit_meta.get("marketCap") or 0
+    streak = hit_meta.get("consecutive_days", 1)
+    if market_cap >= BROAD_SCAN_HIGH_TIER_MCAP or streak >= BROAD_SCAN_HIGH_TIER_STREAK:
+        return "🔥"
+    return "📊"
+
+
+def split_group_candidates(
+    candidates: List[dict], price_frames: Dict[str, pd.DataFrame]
+) -> tuple[List[dict], List[dict]]:
+    group_candidates: List[dict] = []
+    log_only_candidates: List[dict] = []
+    for candidate in candidates:
+        item = dict(candidate)
+        item["adv_20d"] = compute_adv_20d(price_frames.get(item["symbol"]))
+        market_cap = item.get("marketCap") or 0
+        if item["adv_20d"] < BROAD_SCAN_GROUP_ALERT_MIN_ADV:
+            log_only_candidates.append(item)
+        elif market_cap < BROAD_SCAN_GROUP_ALERT_MIN_MCAP:
+            log_only_candidates.append(item)
+        else:
+            group_candidates.append(item)
+    return group_candidates, log_only_candidates
+
+
 def format_broad_scan_report(
     candidates: List[dict],
     symbols_scanned: int,
@@ -460,8 +532,10 @@ def format_broad_scan_report(
     lines.append("🔴 连续出现 ≥3 天:")
     if streaks:
         for item in streaks:
+            tier = classify_tier(item)
             lines.append(
-                "  {} | RVOL {:.1f}σ | {:+.1f}% | 连续{}天 | {}".format(
+                "  {} {} | RVOL {:.1f}σ | {:+.1f}% | 连续{}天 | {}".format(
+                    tier,
                     item["symbol"],
                     item["rvol"],
                     item["return_pct"],
@@ -477,8 +551,10 @@ def format_broad_scan_report(
     if today_hits:
         for item in today_hits:
             streak_text = "首次" if item.get("consecutive_days", 1) <= 1 else "第{}天".format(item["consecutive_days"])
+            tier = classify_tier(item)
             lines.append(
-                "  {} | RVOL {:.1f}σ | {:+.1f}% | {} | {}".format(
+                "  {} {} | RVOL {:.1f}σ | {:+.1f}% | {} | {}".format(
+                    tier,
                     item["symbol"],
                     item["rvol"],
                     item["return_pct"],
@@ -508,6 +584,11 @@ def main():
                         help="最低市值 ($B), 默认 5")
     parser.add_argument("--no-telegram", action="store_true",
                         help="不推送 Telegram")
+    parser.add_argument(
+        "--dry-run-send",
+        action="store_true",
+        help="Send the report to Telegram without mutating DB/tracker/cache state",
+    )
     parser.add_argument("--refresh-universe", action="store_true",
                         help="强制刷新 universe metadata cache")
     args = parser.parse_args()
@@ -521,6 +602,7 @@ def main():
         universe_cache = fetch_universe_metadata(
             min_mcap_b=args.min_mcap,
             refresh=args.refresh_universe,
+            as_of_date=date.today().isoformat(),
         )
         metadata = universe_cache.get("stocks", {})
         symbols = sorted(metadata.keys())
@@ -536,43 +618,56 @@ def main():
         scan_result = scan_candidates(price_frames, metadata, pool_symbols)
         scan_date = scan_result["scan_date"]
 
-        # 持久化到 SQLite（含池内，供因子回测）
         from src.data.market_store import get_store
-        store = get_store()
-        db_rows = [
-            {
-                "symbol": item["symbol"],
-                "date": scan_date,
-                "rvol": item["rvol"],
-                "return_pct": item["return_pct"],
-                "market_cap": item.get("marketCap"),
-                "in_pool": item.get("in_pool", False),
-            }
-            for item in scan_result["all_triggered"]
-        ]
-        store.save_broad_scan_hits(db_rows)
-
         tracker = _read_json(TRACKER_PATH)
-        tracker = update_streak_tracker(
+        updated_tracker = update_streak_tracker(
             tracker=tracker,
             candidates=scan_result["outside_candidates"],
             scan_date=scan_date,
         )
-        _write_json(TRACKER_PATH, tracker)
+        ranked_candidates = apply_tracker_stats(scan_result["outside_candidates"], updated_tracker)
+        group_candidates, log_only_candidates = split_group_candidates(
+            ranked_candidates,
+            price_frames,
+        )
+        top_candidates = group_candidates[:BROAD_SCAN_TOP_N]
 
-        universe_cache["last_scan_date"] = scan_date
-        _write_json(UNIVERSE_CACHE_PATH, universe_cache)
+        if log_only_candidates:
+            logger.info(
+                "Filtered %d low-liquidity/group-threshold hits to log-only: %s",
+                len(log_only_candidates),
+                [item["symbol"] for item in log_only_candidates[:10]],
+            )
 
-        ranked_candidates = apply_tracker_stats(scan_result["outside_candidates"], tracker)
-        top_candidates = ranked_candidates[:BROAD_SCAN_TOP_N]
+        if not args.dry_run_send:
+            store = get_store()
+            db_rows = [
+                {
+                    "symbol": item["symbol"],
+                    "date": scan_date,
+                    "rvol": item["rvol"],
+                    "return_pct": item["return_pct"],
+                    "market_cap": item.get("marketCap"),
+                    "in_pool": item.get("in_pool", False),
+                }
+                for item in scan_result["all_triggered"]
+            ]
+            store.save_broad_scan_hits(db_rows)
+            _write_json(TRACKER_PATH, updated_tracker)
+            universe_cache["last_scan_date"] = scan_date
+            _write_json(UNIVERSE_CACHE_PATH, universe_cache)
 
         report = format_broad_scan_report(
             candidates=top_candidates,
             symbols_scanned=scan_result["symbols_scanned"],
             triggered_total=scan_result["triggered_total"],
-            outside_total=scan_result["outside_total"],
+            outside_total=len(group_candidates),
             scan_date=scan_date,
-            min_mcap_b=args.min_mcap,
+            min_mcap_b=(
+                BROAD_UNIVERSE_MIN_MCAP_USD / 1_000_000_000
+                if BROAD_SCAN_UNIVERSE_SOURCE == "market_db"
+                else args.min_mcap
+            ),
         )
 
         print(report)

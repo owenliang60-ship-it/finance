@@ -141,7 +141,10 @@ class FMPClient:
         return []
 
     def get_historical_market_cap(
-        self, symbol: str, from_date: str, to_date: str
+        self,
+        symbol: str,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
     ) -> List[Dict]:
         """
         获取历史市值 (日频)
@@ -157,10 +160,12 @@ class FMPClient:
         Returns:
             [{"symbol": str, "date": str, "market_cap": float}, ...]
         """
-        data = self._request(
-            "historical-market-capitalization",
-            {"symbol": symbol, "from": from_date, "to": to_date},
-        )
+        params = {"symbol": symbol}
+        if from_date:
+            params["from"] = from_date
+        if to_date:
+            params["to"] = to_date
+        data = self._request("historical-market-capitalization", params)
         if not data:
             return []
         return [
