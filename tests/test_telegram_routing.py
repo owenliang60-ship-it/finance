@@ -200,6 +200,10 @@ class TestPortfolioRouting:
         mock_store.get_cash_balance.return_value = 100
         mock_store.get_kill_conditions.return_value = []
         mock_store.get_oprms_history.return_value = []
+        # get_positions_as_of() walks _get_conn().execute().fetchone(); make it
+        # return (None,) so the helper short-circuits to None without comparing
+        # MagicMocks under max().
+        mock_store._get_conn.return_value.execute.return_value.fetchone.return_value = (None,)
         mock_get_store.return_value = mock_store
 
         position = SimpleNamespace(
