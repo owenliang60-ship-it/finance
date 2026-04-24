@@ -4,7 +4,11 @@ set -euo pipefail
 cd /root/workspace/Finance
 source .env 2>/dev/null || true
 
-PYTHON=".venv/bin/python"
+if [ -x ".venv/bin/python" ]; then
+  PYTHON=".venv/bin/python"
+else
+  PYTHON="python3"
+fi
 MODE="${1:-unknown}"
 LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
