@@ -37,7 +37,7 @@ SANITY_TOLERANCE = 0.10
 SQLITE_CHUNK = 500
 
 SANITY_CHECKS = [
-    ("mcap", "AAPL", "2021-02-03", 2.2e12, SANITY_TOLERANCE),
+    ("mcap", "AAPL", "2021-06-01", 2.07e12, SANITY_TOLERANCE),
     ("mcap", "MSFT", "2023-03-01", 1.8e12, SANITY_TOLERANCE),
     ("mcap", "NVDA", "2024-01-02", 1.2e12, SANITY_TOLERANCE),
     ("mcap", "SIVB", "2023-03-09", None, 0.40),
@@ -135,8 +135,8 @@ def classify_coverage(
     ):
         return "full"
 
-    # IPO grace: recent listings can count as full if their available history is dense.
-    if first_date > earliest and first_date > today - timedelta(days=IPO_GRACE_DAYS):
+    # Post-start IPOs can count as full if their available history is proportionally dense.
+    if first_date > earliest:
         expected_rows = max((today - first_date).days * 5 // 7, 1)
         if last_date >= latest and coverage.row_count >= max(int(expected_rows * 0.6), 1):
             return "full"

@@ -54,13 +54,24 @@ def test_classify_recent_ipo_dense_history_as_full():
     assert status == "full"
 
 
+def test_classify_older_ipo_dense_history_as_full():
+    status = classify_coverage(
+        CoverageRow(row_count=800, first_date="2022-01-03", last_date="2026-04-01"),
+        min_rows=900,
+        earliest_first="2021-06-01",
+        latest_last="2026-03-01",
+        today=date(2026, 4, 23),
+    )
+    assert status == "full"
+
+
 class _SanityStore:
     def __init__(self, sivb_cap=None):
         self.sivb_cap = sivb_cap
 
     def get_market_cap_at(self, symbol, as_of):
         mapping = {
-            ("AAPL", "2021-02-03"): 2.2e12,
+            ("AAPL", "2021-06-01"): 2.07e12,
             ("MSFT", "2023-03-01"): 1.8e12,
             ("NVDA", "2024-01-02"): 1.2e12,
             ("SIVB", "2023-03-09"): self.sivb_cap,
