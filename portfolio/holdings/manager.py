@@ -17,6 +17,7 @@ from portfolio.holdings.schema import (
     OPRMS_TIMING_DEFAULTS,
     OPRMS_TIMING_COEFFICIENTS,
 )
+from terminal.company_store import _normalize_strategy_tag
 
 logger = logging.getLogger(__name__)
 
@@ -450,6 +451,7 @@ class PortfolioManager:
         """Mutating core. Caller owns the BEGIN/COMMIT/ROLLBACK."""
         import datetime as dt
 
+        strategy_tag = _normalize_strategy_tag(strategy_tag)
         derivation = self._derive_option_lifecycle(
             symbol=symbol, expiration=expiration, strike=strike, side=side,
             action=action, quantity=quantity, premium=premium,

@@ -231,7 +231,8 @@ class TestPositionsAsOf:
     def test_returns_none_when_empty(self, tmp_path):
         from scripts.portfolio_intelligence import get_positions_as_of
         store = self._store(tmp_path)
-        assert get_positions_as_of(store) is None
+        result = get_positions_as_of(store)
+        assert result == {"latest": None, "oldest_open_option": None}
         store.close()
 
     def test_returns_iso_date_after_writes(self, tmp_path):
@@ -242,10 +243,13 @@ class TestPositionsAsOf:
         mgr = PortfolioManager(store=store)
         mgr.execute_trade("NVDA", "BUY", shares=10, price=130.0, date="2026-04-23")
         result = get_positions_as_of(store)
-        assert isinstance(result, str)
+        latest = result["latest"]
+        assert isinstance(latest, str)
         # YYYY-MM-DD format
-        assert len(result) == 10
-        assert result[4] == "-" and result[7] == "-"
+        assert len(latest) == 10
+        assert latest[4] == "-" and latest[7] == "-"
+        # No open option legs → oldest_open_option is None
+        assert result["oldest_open_option"] is None
         store.close()
 
     def test_picks_max_across_sources(self, tmp_path, monkeypatch):
@@ -271,7 +275,33 @@ class TestPositionsAsOf:
             ("DEPOSIT", 1000.0, 1000.0, "seed", "2026-04-23T08:00:00"),
         )
         result = get_positions_as_of(store)
-        assert result == "2026-04-23"
+        assert result["latest"] == "2026-04-23"
+        assert result["oldest_open_option"] == "2026-04-22"
+        store.close()
+
+    def test_stale_option_leg_surfaced_when_cash_newer(self, tmp_path):
+        """Old OPEN option leg + new cash write → oldest_open_option exposes staleness."""
+        from scripts.portfolio_intelligence import get_positions_as_of
+        store = self._store(tmp_path)
+        conn = store._get_conn()
+        # Stale OPEN leg — 3 months old
+        conn.execute(
+            "INSERT INTO option_positions (symbol, expiration, strike, side, quantity, "
+            "avg_premium, open_date, status, strategy_tag, notes, last_updated) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', '', '', ?)",
+            ("NVDA", "2026-05-16", 140.0, "PUT", -10, 3.20,
+             "2026-01-24", "2026-01-24T09:30:00"),
+        )
+        # Fresh cash write — yesterday
+        conn.execute(
+            "INSERT INTO portfolio_cash (action, amount, balance_after, notes, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("DEPOSIT", 5000.0, 5000.0, "salary", "2026-04-23T08:00:00"),
+        )
+        result = get_positions_as_of(store)
+        # latest reflects newest write (cash), oldest_open_option reflects stale leg
+        assert result["latest"] == "2026-04-23"
+        assert result["oldest_open_option"] == "2026-01-24"
         store.close()
 
 

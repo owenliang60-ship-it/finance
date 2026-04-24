@@ -322,6 +322,217 @@ class TestOptionLifecycleSchema:
         assert len(all_pos) == 2
 
 
+class TestOptionLifecycleStrategyTagNormalization:
+    """P1 fix: strategy_tag must never be NULL in DB; dup OPEN legs must raise."""
+
+    def test_insert_option_position_with_none_tag_stores_empty_string(self, store):
+        store.upsert_company("QQQ", company_name="Invesco QQQ Trust")
+        oid = store.insert_option_position(
+            symbol="QQQ", expiration="2026-09-18", strike=410.0, side="PUT",
+            quantity=-10, avg_premium=4.78, open_date="2026-04-01",
+            strategy_tag=None,
+        )
+        row = store._get_conn().execute(
+            "SELECT strategy_tag FROM option_positions WHERE id = ?", (oid,)
+        ).fetchone()
+        assert row["strategy_tag"] == ""
+
+    def test_insert_option_transaction_with_none_tag_stores_empty_string(self, store):
+        store.upsert_company("QQQ", company_name="Invesco QQQ Trust")
+        oid = store.insert_option_position(
+            symbol="QQQ", expiration="2026-09-18", strike=410.0, side="PUT",
+            quantity=-10, avg_premium=4.78, open_date="2026-04-01",
+        )
+        tid = store.insert_option_transaction(
+            option_position_id=oid, symbol="QQQ", expiration="2026-09-18",
+            strike=410.0, side="PUT", action="STO", quantity=10,
+            premium=4.78, date="2026-04-01", strategy_tag=None,
+        )
+        row = store._get_conn().execute(
+            "SELECT strategy_tag FROM option_transactions WHERE id = ?", (tid,)
+        ).fetchone()
+        assert row["strategy_tag"] == ""
+
+    def test_get_open_option_position_raises_on_duplicate_legs(self, store):
+        from terminal.company_store import DuplicateOpenOptionLegError
+        store.upsert_company("QQQ", company_name="Invesco QQQ Trust")
+        conn = store._get_conn()
+        # Bypass unique index to seed a broken-invariant state (legacy dup).
+        conn.execute("DROP INDEX IF EXISTS idx_option_pos_open_contract")
+        for premium in (4.78, 5.00):
+            conn.execute(
+                "INSERT INTO option_positions (symbol, expiration, strike, side, "
+                "quantity, avg_premium, open_date, status, strategy_tag, notes, last_updated) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', '', '', ?)",
+                ("QQQ", "2026-09-18", 410.0, "PUT", -10, premium,
+                 "2026-04-01", "2026-04-01T00:00:00"),
+            )
+        with pytest.raises(DuplicateOpenOptionLegError) as excinfo:
+            store.get_open_option_position(
+                symbol="QQQ", expiration="2026-09-18", strike=410.0, side="PUT",
+            )
+        # Error message should list the conflicting row ids for manual reconciliation.
+        assert "ids=" in str(excinfo.value)
+
+    def test_get_open_option_position_treats_null_and_empty_as_same(self, store):
+        """NULL and '' must collapse under COALESCE lookup so no 'ghost' leg hides."""
+        from terminal.company_store import DuplicateOpenOptionLegError
+        store.upsert_company("QQQ", company_name="Invesco QQQ Trust")
+        conn = store._get_conn()
+        conn.execute("DROP INDEX IF EXISTS idx_option_pos_open_contract")
+        conn.execute(
+            "INSERT INTO option_positions (symbol, expiration, strike, side, "
+            "quantity, avg_premium, open_date, status, strategy_tag, notes, last_updated) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', NULL, '', ?)",
+            ("QQQ", "2026-09-18", 410.0, "PUT", -10, 4.78,
+             "2026-04-01", "2026-04-01T00:00:00"),
+        )
+        conn.execute(
+            "INSERT INTO option_positions (symbol, expiration, strike, side, "
+            "quantity, avg_premium, open_date, status, strategy_tag, notes, last_updated) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', '', '', ?)",
+            ("QQQ", "2026-09-18", 410.0, "PUT", -10, 5.00,
+             "2026-04-01", "2026-04-01T00:00:00"),
+        )
+        with pytest.raises(DuplicateOpenOptionLegError):
+            store.get_open_option_position(
+                symbol="QQQ", expiration="2026-09-18", strike=410.0, side="PUT",
+                strategy_tag=None,
+            )
+
+
+class TestOptionLifecycleMigration8:
+    """Migration 8: NULL→'' + dup detection + rebuild unique index."""
+
+    def test_migration_normalizes_null_strategy_tag(self, tmp_path):
+        db_path = tmp_path / "legacy.db"
+        s1 = CompanyStore(db_path=db_path)
+        s1.upsert_company("QQQ", company_name="Invesco QQQ Trust")
+        # Simulate legacy state: NULL strategy_tag + drop index so we can re-trigger.
+        conn = s1._get_conn()
+        conn.execute("DROP INDEX IF EXISTS idx_option_pos_open_contract")
+        conn.execute(
+            "INSERT INTO option_positions (symbol, expiration, strike, side, "
+            "quantity, avg_premium, open_date, status, strategy_tag, notes, last_updated) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', NULL, '', ?)",
+            ("QQQ", "2026-09-18", 410.0, "PUT", -10, 4.78,
+             "2026-04-01", "2026-04-01T00:00:00"),
+        )
+        conn.execute(
+            "INSERT INTO option_transactions (option_position_id, symbol, expiration, strike, "
+            "side, action, quantity, premium, date, strategy_tag, notes, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', ?)",
+            (None, "QQQ", "2026-09-18", 410.0, "PUT", "STO", 10, 4.78,
+             "2026-04-01", "2026-04-01T00:00:00"),
+        )
+        s1.close()
+
+        # Reopen → migration runs again, should normalize NULLs.
+        s2 = CompanyStore(db_path=db_path)
+        conn2 = s2._get_conn()
+        null_pos = conn2.execute(
+            "SELECT COUNT(*) FROM option_positions WHERE strategy_tag IS NULL"
+        ).fetchone()[0]
+        null_txn = conn2.execute(
+            "SELECT COUNT(*) FROM option_transactions WHERE strategy_tag IS NULL"
+        ).fetchone()[0]
+        assert null_pos == 0
+        assert null_txn == 0
+        # And the post-normalization lookup works via either NULL or '' input.
+        pos = s2.get_open_option_position(
+            symbol="QQQ", expiration="2026-09-18", strike=410.0, side="PUT",
+            strategy_tag=None,
+        )
+        assert pos is not None
+        s2.close()
+
+    def test_migration_aborts_on_existing_duplicates(self, tmp_path):
+        from terminal.company_store import DuplicateOpenOptionLegError
+        db_path = tmp_path / "dup.db"
+        s1 = CompanyStore(db_path=db_path)
+        s1.upsert_company("QQQ", company_name="Invesco QQQ Trust")
+        conn = s1._get_conn()
+        conn.execute("DROP INDEX IF EXISTS idx_option_pos_open_contract")
+        # Seed a NULL + '' pair that collapse to a dup under COALESCE.
+        conn.execute(
+            "INSERT INTO option_positions (symbol, expiration, strike, side, "
+            "quantity, avg_premium, open_date, status, strategy_tag, notes, last_updated) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', NULL, '', ?)",
+            ("QQQ", "2026-09-18", 410.0, "PUT", -10, 4.78,
+             "2026-04-01", "2026-04-01T00:00:00"),
+        )
+        conn.execute(
+            "INSERT INTO option_positions (symbol, expiration, strike, side, "
+            "quantity, avg_premium, open_date, status, strategy_tag, notes, last_updated) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', '', '', ?)",
+            ("QQQ", "2026-09-18", 410.0, "PUT", -10, 5.00,
+             "2026-04-01", "2026-04-01T00:00:00"),
+        )
+        # Rewrite the NULL→'' first by hand so the detection step runs against the
+        # collapsed key — we want the RuntimeError from the GROUP BY step, not
+        # from a failed CREATE INDEX (the migration normalizes before detecting).
+        s1.close()
+        with pytest.raises(DuplicateOpenOptionLegError) as excinfo:
+            CompanyStore(db_path=db_path)
+        assert "duplicate OPEN contract key" in str(excinfo.value)
+
+    def test_migration_raises_cleanly_on_legacy_raw_index_with_null_plus_empty(self, tmp_path):
+        """Legacy DB: raw index + (NULL, '') pair must raise DuplicateOpenOptionLegError,
+        NOT sqlite3.IntegrityError from the NULL→'' UPDATE step."""
+        import sqlite3
+        from terminal.company_store import DuplicateOpenOptionLegError
+        db_path = tmp_path / "legacy_raw_idx.db"
+        s1 = CompanyStore(db_path=db_path)
+        s1.upsert_company("QQQ", company_name="Invesco QQQ Trust")
+        conn = s1._get_conn()
+        # Reconstruct legacy state: drop the new COALESCE index, re-create the
+        # old raw-strategy_tag version, then seed a NULL + '' pair that was
+        # legal under the raw index but collapses to a dup under COALESCE.
+        conn.execute("DROP INDEX IF EXISTS idx_option_pos_open_contract")
+        conn.execute("""
+            CREATE UNIQUE INDEX idx_option_pos_open_contract
+                ON option_positions(symbol, expiration, strike, side, strategy_tag)
+                WHERE status = 'OPEN'
+        """)
+        conn.execute(
+            "INSERT INTO option_positions (symbol, expiration, strike, side, "
+            "quantity, avg_premium, open_date, status, strategy_tag, notes, last_updated) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', NULL, '', ?)",
+            ("QQQ", "2026-09-18", 410.0, "PUT", -10, 4.78,
+             "2026-04-01", "2026-04-01T00:00:00"),
+        )
+        conn.execute(
+            "INSERT INTO option_positions (symbol, expiration, strike, side, "
+            "quantity, avg_premium, open_date, status, strategy_tag, notes, last_updated) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', '', '', ?)",
+            ("QQQ", "2026-09-18", 410.0, "PUT", -10, 5.00,
+             "2026-04-01", "2026-04-01T00:00:00"),
+        )
+        s1.close()
+
+        with pytest.raises(DuplicateOpenOptionLegError) as excinfo:
+            CompanyStore(db_path=db_path)
+        # Must surface explicit dup detail/ids, not an opaque IntegrityError.
+        assert "duplicate OPEN contract key" in str(excinfo.value)
+        assert not isinstance(excinfo.value, sqlite3.IntegrityError)
+
+    def test_migration_idempotent(self, tmp_path):
+        """Running migration twice on a clean DB must not error."""
+        db_path = tmp_path / "clean.db"
+        s1 = CompanyStore(db_path=db_path)
+        s1.upsert_company("QQQ", company_name="Invesco QQQ Trust")
+        s1.insert_option_position(
+            symbol="QQQ", expiration="2026-09-18", strike=410.0, side="PUT",
+            quantity=-10, avg_premium=4.78, open_date="2026-04-01",
+        )
+        s1.close()
+        # Reopen — migration runs again; should be a clean no-op.
+        s2 = CompanyStore(db_path=db_path)
+        positions = s2.get_open_option_positions()
+        assert len(positions) == 1
+        s2.close()
+
+
 class TestCheckpoint:
     def test_checkpoint_company_db(self, store):
         """checkpoint should not raise."""
