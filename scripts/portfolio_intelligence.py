@@ -231,6 +231,46 @@ def _latest_signal_date(df: pd.DataFrame) -> str | None:
     return value.strftime("%Y-%m-%d")
 
 
+# ---- positions-as-of helper ----
+
+def get_positions_as_of(store) -> str | None:
+    """Return the latest YYYY-MM-DD timestamp across all position-book writes.
+
+    Looks at:
+      - holdings.last_updated for OPEN holdings
+      - option_positions.last_updated for OPEN option legs
+      - portfolio_cash.updated_at (latest row)
+
+    Reports the *position book* freshness, NOT price/signals freshness.
+    Returns None if no rows exist anywhere. Surfaces the fact, no judgment.
+    """
+    conn = store._get_conn()
+    candidates: list[str] = []
+
+    row = conn.execute(
+        "SELECT MAX(last_updated) FROM holdings WHERE status = 'OPEN'"
+    ).fetchone()
+    if row and row[0]:
+        candidates.append(row[0])
+
+    row = conn.execute(
+        "SELECT MAX(last_updated) FROM option_positions WHERE status = 'OPEN'"
+    ).fetchone()
+    if row and row[0]:
+        candidates.append(row[0])
+
+    row = conn.execute(
+        "SELECT MAX(updated_at) FROM portfolio_cash"
+    ).fetchone()
+    if row and row[0]:
+        candidates.append(row[0])
+
+    if not candidates:
+        return None
+    # ISO timestamps sort lexicographically. Slice to date portion.
+    return max(candidates)[:10]
+
+
 # ---- 格式化 ----
 
 def format_report(
@@ -536,8 +576,10 @@ def run_intelligence(dry_run: bool = False, allow_local: bool = False) -> str:
     }
 
     et_now = datetime.now(ZoneInfo("America/New_York"))
+    positions_as_of = get_positions_as_of(store)
     snapshot_line = (
         f"📍 NAV 快照 ET {et_now.strftime('%Y-%m-%d %H:%M')} "
+        f"| positions as of {positions_as_of or 'unknown'} "
         f"| live {len(stock_live_result.prices)}/{len(us_symbols)} "
         f"| signals as of {signals_as_of or 'unknown'}"
     )

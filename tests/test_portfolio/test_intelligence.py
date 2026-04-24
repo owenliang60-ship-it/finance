@@ -166,6 +166,25 @@ class TestFormatReport:
         assert "行动信号" not in report
         assert "组合概览" in report
 
+    def test_snapshot_line_includes_positions_as_of(self):
+        from scripts.portfolio_intelligence import format_report
+        summary = {
+            "total_nav": 1_000_000, "invested_pct": 0.50, "cash_pct": 0.50,
+            "qqq_beta": None, "total_pnl": 0, "total_pnl_pct": 0,
+            "sectors": {}, "sector_warnings": [],
+            "total_positions": 5, "dna_distribution": "A×5",
+        }
+        report = format_report(
+            [],
+            summary,
+            {},
+            snapshot_line=(
+                "📍 NAV 快照 ET 2026-04-24 10:05 | positions as of 2026-04-23 "
+                "| live 11/11 | signals as of 2026-04-24"
+            ),
+        )
+        assert "positions as of 2026-04-23" in report.splitlines()[0]
+
     def test_credit_header_unavailable_does_not_claim_delay(self):
         from scripts.portfolio_intelligence import format_report
         summary = {
@@ -199,6 +218,61 @@ class TestFormatReport:
         require_cloud_env(allow_local=True)
 
         assert "proceeding because local override was requested" in caplog.text
+
+
+class TestPositionsAsOf:
+    def _store(self, tmp_path):
+        from terminal.company_store import CompanyStore
+        s = CompanyStore(db_path=tmp_path / "pi_test.db")
+        s.upsert_company("NVDA", company_name="NVIDIA")
+        s.upsert_company("QQQ", company_name="Invesco QQQ Trust")
+        return s
+
+    def test_returns_none_when_empty(self, tmp_path):
+        from scripts.portfolio_intelligence import get_positions_as_of
+        store = self._store(tmp_path)
+        assert get_positions_as_of(store) is None
+        store.close()
+
+    def test_returns_iso_date_after_writes(self, tmp_path):
+        from scripts.portfolio_intelligence import get_positions_as_of
+        from portfolio.holdings.manager import PortfolioManager
+        store = self._store(tmp_path)
+        store.set_cash(100000.0)
+        mgr = PortfolioManager(store=store)
+        mgr.execute_trade("NVDA", "BUY", shares=10, price=130.0, date="2026-04-23")
+        result = get_positions_as_of(store)
+        assert isinstance(result, str)
+        # YYYY-MM-DD format
+        assert len(result) == 10
+        assert result[4] == "-" and result[7] == "-"
+        store.close()
+
+    def test_picks_max_across_sources(self, tmp_path, monkeypatch):
+        from scripts.portfolio_intelligence import get_positions_as_of
+        store = self._store(tmp_path)
+        # Hand-craft three rows with different timestamps
+        conn = store._get_conn()
+        conn.execute(
+            "INSERT INTO holdings (symbol, shares, avg_cost, open_date, status, last_updated) "
+            "VALUES (?, ?, ?, ?, 'OPEN', ?)",
+            ("NVDA", 10, 130.0, "2026-04-20", "2026-04-20T10:00:00"),
+        )
+        conn.execute(
+            "INSERT INTO option_positions (symbol, expiration, strike, side, quantity, "
+            "avg_premium, open_date, status, strategy_tag, notes, last_updated) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', '', '', ?)",
+            ("QQQ", "2026-09-18", 410.0, "PUT", -10, 4.78,
+             "2026-04-22", "2026-04-22T15:30:00"),
+        )
+        conn.execute(
+            "INSERT INTO portfolio_cash (action, amount, balance_after, notes, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("DEPOSIT", 1000.0, 1000.0, "seed", "2026-04-23T08:00:00"),
+        )
+        result = get_positions_as_of(store)
+        assert result == "2026-04-23"
+        store.close()
 
 
 class TestHKTickerMapping:
