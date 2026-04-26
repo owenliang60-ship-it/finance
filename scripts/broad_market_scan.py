@@ -58,6 +58,7 @@ BROAD_SCAN_RETURN_THRESHOLD = 3.0
 BROAD_SCAN_TOP_N = 20
 BROAD_SCAN_CACHE_MAX_AGE_DAYS = 7
 BROAD_SCAN_RETENTION_DAYS = 30
+BROAD_SCAN_DB_MIN_COVERAGE = 0.90
 SCREEN_PAGE_SIZE = 250
 DOWNLOAD_CHUNK_SIZE = 200
 
@@ -330,7 +331,7 @@ def normalize_downloaded_frames(data: pd.DataFrame, symbols: List[str]) -> Dict[
     return normalized
 
 
-def download_price_frames(symbols: List[str]) -> Dict[str, pd.DataFrame]:
+def download_price_frames(symbols: List[str], period: str = "6mo") -> Dict[str, pd.DataFrame]:
     if not symbols:
         return {}
 
@@ -349,7 +350,7 @@ def download_price_frames(symbols: List[str]) -> Dict[str, pd.DataFrame]:
         try:
             data = yf.download(
                 chunk,
-                period="6mo",
+                period=period,
                 interval="1d",
                 auto_adjust=False,
                 progress=False,
@@ -366,6 +367,87 @@ def download_price_frames(symbols: List[str]) -> Dict[str, pd.DataFrame]:
 
     logger.info("价格下载完成: %d/%d 只可用", len(frames), len(symbols))
     return frames
+
+
+def load_price_frames_from_market_db(
+    symbols: List[str],
+    rows_needed: int = BROAD_SCAN_LOOKBACK + 1,
+) -> Dict[str, pd.DataFrame]:
+    """Load recent close/volume frames from market.db daily_price."""
+    if not symbols:
+        return {}
+
+    from src.data.market_store import get_store
+
+    store = get_store()
+    frames: Dict[str, pd.DataFrame] = {}
+
+    for symbol in symbols:
+        rows = store.get_daily_prices(symbol, limit=rows_needed)
+        if len(rows) < rows_needed:
+            continue
+
+        frame = pd.DataFrame(rows)
+        required = {"date", "close", "volume"}
+        if frame.empty or not required.issubset(frame.columns):
+            continue
+
+        frame = frame[["date", "close", "volume"]].copy()
+        frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
+        frame["close"] = pd.to_numeric(frame["close"], errors="coerce")
+        frame["volume"] = pd.to_numeric(frame["volume"], errors="coerce")
+        frame = frame.dropna().sort_values("date").set_index("date")
+
+        if len(frame) >= rows_needed:
+            frames[symbol] = frame[["close", "volume"]]
+
+    if frames:
+        latest_date = max(frame.index.max() for frame in frames.values())
+        stale_symbols = [
+            symbol
+            for symbol, frame in frames.items()
+            if frame.index.max() != latest_date
+        ]
+        for symbol in stale_symbols:
+            frames.pop(symbol, None)
+        if stale_symbols:
+            logger.info(
+                "market.db 跳过 %d 只非最新日股票，最新日=%s",
+                len(stale_symbols),
+                latest_date.date().isoformat(),
+            )
+
+    logger.info("market.db 价格读取完成: %d/%d 只可用", len(frames), len(symbols))
+    return frames
+
+
+def load_price_frames(
+    symbols: List[str],
+    rows_needed: int = BROAD_SCAN_LOOKBACK + 1,
+) -> Dict[str, pd.DataFrame]:
+    """DB-first price loader; falls back to yfinance only when DB coverage is low."""
+    db_frames = load_price_frames_from_market_db(symbols, rows_needed=rows_needed)
+    if not symbols:
+        return db_frames
+
+    coverage = len(db_frames) / len(symbols)
+    if coverage >= BROAD_SCAN_DB_MIN_COVERAGE:
+        missing = len(symbols) - len(db_frames)
+        if missing:
+            logger.info("market.db 覆盖率 %.1f%%，跳过 %d 只数据不足股票", coverage * 100, missing)
+        return db_frames
+
+    missing_symbols = sorted(set(symbols) - set(db_frames))
+    logger.warning(
+        "market.db 价格覆盖率 %.1f%% 低于 %.0f%%，回退 yfinance 下载 %d 只缺失股票",
+        coverage * 100,
+        BROAD_SCAN_DB_MIN_COVERAGE * 100,
+        len(missing_symbols),
+    )
+    fallback_period = "1y" if rows_needed > 126 else "6mo"
+    fallback_frames = download_price_frames(missing_symbols, period=fallback_period)
+    db_frames.update(fallback_frames)
+    return db_frames
 
 
 def load_pool_symbols() -> set:
@@ -611,7 +693,7 @@ def main():
             raise RuntimeError("未获取到任何 universe 股票")
 
         pool_symbols = load_pool_symbols()
-        price_frames = download_price_frames(symbols)
+        price_frames = load_price_frames(symbols)
         if len(price_frames) < 10:
             raise RuntimeError("有效价格数据不足: {}".format(len(price_frames)))
 

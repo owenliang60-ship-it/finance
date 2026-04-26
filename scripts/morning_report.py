@@ -31,9 +31,9 @@ from config.settings import (
     DATA_DIR, SCANS_DIR,
     DOLLAR_VOLUME_REPORT_N, DOLLAR_VOLUME_LOOKBACK,
     DV_ACCELERATION_THRESHOLD, RVOL_SUSTAINED_THRESHOLD,
+    EXTENDED_UNIVERSE_MIN_MCAP_B,
 )
-from src.data import get_price_df, get_symbols
-from src.indicators.engine import run_all_indicators, get_indicator_summary, run_momentum_scan
+from src.data import get_symbols
 from src.indicators.dv_acceleration import format_dv
 from src.telegram_bot import send_message, split_message
 
@@ -42,6 +42,16 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
 )
 logger = logging.getLogger(__name__)
+
+EXTENDED_LAYER_MIN_MCAP = EXTENDED_UNIVERSE_MIN_MCAP_B * 1_000_000_000
+MORNING_SIGNAL_PRICE_ROWS = 180
+LAYER_ORDER = ["pool", "extend", "broad"]
+LAYER_LABELS = {
+    "pool": "Pool",
+    "extend": "Extend ($10B+)",
+    "broad": "Broad ($1B-$10B)",
+}
+LAYER_TOP_N = 8
 
 
 def _send_group_message(message: str) -> bool:
@@ -60,6 +70,265 @@ def _send_group_report(message: str) -> bool:
 # ============================================================
 # 格式化模块
 # ============================================================
+
+def _format_market_cap(market_cap: float | None) -> str:
+    if not market_cap:
+        return "N/A"
+    if market_cap >= 1e12:
+        return "${:.1f}T".format(market_cap / 1e12)
+    if market_cap >= 1e9:
+        return "${:.1f}B".format(market_cap / 1e9)
+    return "${:.0f}M".format(market_cap / 1e6)
+
+
+def _layer_for_symbol(symbol: str, metadata: dict, pool_symbols: set) -> str:
+    if symbol in pool_symbols:
+        return "pool"
+    market_cap = metadata.get(symbol, {}).get("marketCap") or 0
+    if market_cap >= EXTENDED_LAYER_MIN_MCAP:
+        return "extend"
+    return "broad"
+
+
+def _frame_with_date(symbol: str, frame) -> object:
+    df = frame.reset_index().copy()
+    if "date" not in df.columns:
+        first = df.columns[0]
+        df = df.rename(columns={first: "date"})
+    df["symbol"] = symbol
+    return df
+
+
+def _group_by_layer(items: list) -> dict:
+    grouped = {layer: [] for layer in LAYER_ORDER}
+    for item in items:
+        grouped.setdefault(item.get("layer", "broad"), []).append(item)
+    return grouped
+
+
+def _format_layered_items(
+    items: list,
+    empty_text: str,
+    formatter,
+    limit_per_layer: int = LAYER_TOP_N,
+) -> list[str]:
+    if not items:
+        return [empty_text]
+
+    lines = []
+    grouped = _group_by_layer(items)
+    for layer in LAYER_ORDER:
+        layer_items = grouped.get(layer, [])
+        lines.append("{}:".format(LAYER_LABELS[layer]))
+        if not layer_items:
+            lines.append("  无")
+            continue
+        for item in layer_items[:limit_per_layer]:
+            lines.append("  " + formatter(item))
+        if len(layer_items) > limit_per_layer:
+            lines.append("  ... +{} more".format(len(layer_items) - limit_per_layer))
+    return lines
+
+
+def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set) -> dict:
+    symbol = item["symbol"]
+    enriched = dict(item)
+    enriched["marketCap"] = metadata.get(symbol, {}).get("marketCap")
+    enriched["layer"] = _layer_for_symbol(symbol, metadata, pool_symbols)
+    return enriched
+
+
+def build_market_signal_report(symbols_override: list[str] | None = None) -> dict:
+    """Build broad-universe technical signal payload for the merged morning report."""
+    from datetime import date
+
+    from scripts.broad_market_scan import (
+        BROAD_SCAN_RETURN_THRESHOLD,
+        BROAD_SCAN_RVOL_THRESHOLD,
+        fetch_universe_metadata,
+        load_price_frames,
+        scan_candidates,
+    )
+    from src.data.market_store import get_store
+    from src.indicators.dv_acceleration import scan_dv_acceleration
+    from src.indicators.pmarp import analyze_pmarp
+    from src.indicators.rvol_sustained import scan_rvol_sustained
+
+    pool_symbols = set(get_symbols())
+    if symbols_override:
+        symbols = sorted({s.strip().upper() for s in symbols_override if s.strip()})
+        store = get_store()
+        bulk_caps = store.get_bulk_market_caps_at(date.today().isoformat())
+        metadata = {
+            symbol: {
+                "marketCap": bulk_caps.get(symbol),
+                "shortName": symbol,
+                "longName": symbol,
+                "exchange": "DB",
+            }
+            for symbol in symbols
+        }
+    else:
+        universe_cache = fetch_universe_metadata(as_of_date=date.today().isoformat(), min_mcap_b=1.0)
+        metadata = universe_cache.get("stocks", {})
+        symbols = sorted(metadata.keys())
+
+    price_frames = load_price_frames(symbols, rows_needed=MORNING_SIGNAL_PRICE_ROWS)
+    price_dict = {
+        symbol: _frame_with_date(symbol, frame)
+        for symbol, frame in price_frames.items()
+    }
+
+    broad_scan = scan_candidates(price_frames, metadata, pool_symbols)
+    broad_hits = sorted(
+        [_enrich_with_layer(item, metadata, pool_symbols) for item in broad_scan["all_triggered"]],
+        key=lambda x: (-x["rvol"], -x["return_pct"], x["symbol"]),
+    )
+
+    db_rows = [
+        {
+            "symbol": item["symbol"],
+            "date": broad_scan["scan_date"],
+            "rvol": item["rvol"],
+            "return_pct": item["return_pct"],
+            "market_cap": item.get("marketCap"),
+            "in_pool": item.get("in_pool", False),
+        }
+        for item in broad_scan["all_triggered"]
+    ]
+    if db_rows:
+        get_store().save_broad_scan_hits(db_rows)
+
+    pmarp_signals = []
+    for symbol, frame in price_dict.items():
+        result = analyze_pmarp(frame)
+        if result.get("signal") == "oversold_recovery":
+            pmarp_signals.append(_enrich_with_layer({
+                "symbol": symbol,
+                "value": result.get("current"),
+                "previous": result.get("previous"),
+                "signal": result.get("signal"),
+            }, metadata, pool_symbols))
+    pmarp_signals.sort(key=lambda x: (x.get("value") or 0, x["symbol"]))
+
+    dv_df = scan_dv_acceleration(price_dict, threshold=DV_ACCELERATION_THRESHOLD)
+    dv_hits = []
+    if len(dv_df) > 0:
+        for row in dv_df[dv_df["signal"]].to_dict("records"):
+            dv_hits.append(_enrich_with_layer(row, metadata, pool_symbols))
+    dv_hits.sort(key=lambda x: (-(x.get("ratio") or 0), x["symbol"]))
+
+    rvol_hits = [
+        _enrich_with_layer(item, metadata, pool_symbols)
+        for item in scan_rvol_sustained(price_dict, threshold=RVOL_SUSTAINED_THRESHOLD)
+    ]
+
+    scan_dates = [frame.index.max() for frame in price_frames.values() if not frame.empty]
+    as_of = max(scan_dates).date().isoformat() if scan_dates else date.today().isoformat()
+
+    return {
+        "as_of": as_of,
+        "symbols_scanned": len(symbols),
+        "symbols_with_data": len(price_frames),
+        "layer_counts": {
+            layer: sum(
+                1 for symbol in symbols
+                if _layer_for_symbol(symbol, metadata, pool_symbols) == layer
+            )
+            for layer in LAYER_ORDER
+        },
+        "broad_scan": {
+            "criteria": "RVOL ≥{:.0f}σ + 涨 ≥{:.0f}%".format(
+                BROAD_SCAN_RVOL_THRESHOLD,
+                BROAD_SCAN_RETURN_THRESHOLD,
+            ),
+            "hits": broad_hits,
+            "triggered_total": broad_scan["triggered_total"],
+        },
+        "pmarp": {
+            "criteria": "PMARP 上穿 2%",
+            "hits": pmarp_signals,
+        },
+        "dv_acceleration": {
+            "criteria": "DV >{:.1f}x".format(DV_ACCELERATION_THRESHOLD),
+            "hits": dv_hits,
+        },
+        "rvol_sustained": {
+            "criteria": "RVOL >{:.1f}σ 持续".format(RVOL_SUSTAINED_THRESHOLD),
+            "hits": rvol_hits,
+        },
+    }
+
+
+def format_section_broad_signal(market_signals: dict) -> str:
+    section = market_signals.get("broad_scan", {})
+    lines = ["*1. 广扫标准 ({})*".format(section.get("criteria", ""))]
+    lines.extend(_format_layered_items(
+        section.get("hits", []),
+        "无广扫触发",
+        lambda item: "{} | RVOL {:.1f}σ | {:+.1f}% | {}".format(
+            item["symbol"],
+            item["rvol"],
+            item["return_pct"],
+            _format_market_cap(item.get("marketCap")),
+        ),
+    ))
+    return "\n".join(lines)
+
+
+def format_section_layered_pmarp(market_signals: dict) -> str:
+    section = market_signals.get("pmarp", {})
+    lines = ["*2. PMARP 信号 ({})*".format(section.get("criteria", ""))]
+    lines.extend(_format_layered_items(
+        section.get("hits", []),
+        "无 PMARP 信号",
+        lambda item: "{} | {:.1f}% ({:.1f}→{:.1f}) | {}".format(
+            item["symbol"],
+            item.get("value") or 0,
+            item.get("previous") or 0,
+            item.get("value") or 0,
+            _format_market_cap(item.get("marketCap")),
+        ),
+    ))
+    return "\n".join(lines)
+
+
+def format_section_layered_dv(market_signals: dict) -> str:
+    section = market_signals.get("dv_acceleration", {})
+    lines = ["*3. 量能加速 ({})*".format(section.get("criteria", ""))]
+    lines.extend(_format_layered_items(
+        section.get("hits", []),
+        "无加速信号",
+        lambda item: "{} | {:.1f}x | 5d={} / 20d={} | {}".format(
+            item["symbol"],
+            item.get("ratio") or 0,
+            format_dv(item.get("dv_5d") or 0),
+            format_dv(item.get("dv_20d") or 0),
+            _format_market_cap(item.get("marketCap")),
+        ),
+    ))
+    return "\n".join(lines)
+
+
+def format_section_layered_rvol(market_signals: dict) -> str:
+    section = market_signals.get("rvol_sustained", {})
+    level_labels = {
+        "sustained_5d": "5日连续",
+        "sustained_3d": "3日连续",
+        "single": "单日",
+    }
+    lines = ["*4. RVOL 持续放量 ({})*".format(section.get("criteria", ""))]
+    lines.extend(_format_layered_items(
+        section.get("hits", []),
+        "无持续放量信号",
+        lambda item: "{} | {} | 最新 {:.1f}σ | {}".format(
+            item["symbol"],
+            level_labels.get(item.get("level"), item.get("level", "")),
+            item.get("latest_rvol") or 0,
+            _format_market_cap(item.get("marketCap")),
+        ),
+    ))
+    return "\n".join(lines)
 
 def format_section_a(indicator_summary: dict) -> str:
     """A. PMARP 极值 (仅保留上穿2%报警)"""
@@ -331,9 +600,10 @@ def format_section_social(social_scan: dict) -> str:
 
 
 def format_morning_report(
-    indicator_summary: dict,
-    momentum_results: dict,
+    indicator_summary: dict = None,
+    momentum_results: dict = None,
     dv_result: dict = None,
+    market_signals: dict = None,
     market_pulse: dict = None,
     trending_data: dict = None,
     social_scan: dict = None,
@@ -349,22 +619,42 @@ def format_morning_report(
         "",
     ]
 
-    # A. PMARP
-    lines.append(format_section_a(indicator_summary))
-    lines.append("")
+    indicator_summary = indicator_summary or {}
+    momentum_results = momentum_results or {}
 
-    # B. DV Acceleration
-    dv_acc = momentum_results.get("dv_acceleration")
-    if dv_acc is not None:
-        lines.append(format_section_b(dv_acc))
+    if market_signals:
+        lines.append("信号日: {} | 数据覆盖: {}/{}".format(
+            market_signals.get("as_of"),
+            market_signals.get("symbols_with_data", 0),
+            market_signals.get("symbols_scanned", 0),
+        ))
         lines.append("")
 
-    # C. RVOL Sustained
-    rvol_list = momentum_results.get("rvol_sustained", [])
-    lines.append(format_section_c(rvol_list))
-    lines.append("")
+        lines.append(format_section_broad_signal(market_signals))
+        lines.append("")
+        lines.append(format_section_layered_pmarp(market_signals))
+        lines.append("")
+        lines.append(format_section_layered_dv(market_signals))
+        lines.append("")
+        lines.append(format_section_layered_rvol(market_signals))
+        lines.append("")
+    else:
+        # A. PMARP
+        lines.append(format_section_a(indicator_summary))
+        lines.append("")
 
-    # D. Dollar Volume
+        # B. DV Acceleration
+        dv_acc = momentum_results.get("dv_acceleration")
+        if dv_acc is not None:
+            lines.append(format_section_b(dv_acc))
+            lines.append("")
+
+        # C. RVOL Sustained
+        rvol_list = momentum_results.get("rvol_sustained", [])
+        lines.append(format_section_c(rvol_list))
+        lines.append("")
+
+    # Dollar Volume format intentionally unchanged.
     if dv_result:
         lines.append(format_section_d(dv_result))
         lines.append("")
@@ -385,7 +675,11 @@ def format_morning_report(
         lines.append("")
 
     # Footer
-    n_scanned = momentum_results.get("symbols_scanned", 0)
+    n_scanned = (
+        market_signals.get("symbols_scanned", 0)
+        if market_signals
+        else momentum_results.get("symbols_scanned", 0)
+    )
     lines.append("扫描: {}只 | 耗时: {:.0f}s".format(n_scanned, elapsed))
 
     return "\n".join(lines)
@@ -509,23 +803,26 @@ def main():
 
     try:
         # 1. 获取股票列表
+        symbols_override = None
         if args.symbols:
-            symbols = [s.strip().upper() for s in args.symbols.split(",")]
+            symbols_override = [s.strip().upper() for s in args.symbols.split(",")]
+            symbols = symbols_override
         else:
             symbols = get_symbols()
         logger.info("股票池: %d 只", len(symbols))
 
-        # 2. PMARP + RVOL (per-stock indicators)
-        indicator_results = run_all_indicators(symbols, parallel=True)
-        indicator_summary = get_indicator_summary(indicator_results)
+        # 2. 广义市场技术信号（broad universe + market.db 价格）
+        market_signals = build_market_signal_report(symbols_override=symbols_override)
+        logger.info(
+            "市场信号完成: scanned=%d data=%d",
+            market_signals.get("symbols_scanned", 0),
+            market_signals.get("symbols_with_data", 0),
+        )
 
-        # 3. 跨截面动量信号 (RS Rating, DV Accel, RVOL Sustained)
-        momentum_results = run_momentum_scan(symbols, max_age_days=0)
-
-        # 4. Dollar Volume 采集
+        # 3. Dollar Volume 采集
         dv_result = run_dollar_volume()
 
-        # 5. 市场情绪脉搏 + 社交热门 (Adanos market-level)
+        # 4. 市场情绪脉搏 + 社交热门 (Adanos market-level)
         market_pulse = None
         trending_data = None
         if not args.no_social:
@@ -569,7 +866,7 @@ def main():
             except Exception as e:
                 logger.warning("市场级社交数据加载失败: %s", e)
 
-        # 6. 社交情绪雷达（--no-social 时跳过）
+        # 5. 社交情绪雷达（--no-social 时跳过）
         social_scan = None
         if not args.no_social:
             try:
@@ -584,29 +881,27 @@ def main():
 
         elapsed = time.time() - start_time
 
-        # 7. 格式化
+        # 6. 格式化
         daily_msg = format_morning_report(
-            indicator_summary, momentum_results, dv_result,
+            dv_result=dv_result, market_signals=market_signals,
             market_pulse=market_pulse, trending_data=trending_data,
             social_scan=social_scan, elapsed=elapsed)
 
-        # 8. 保存 JSON
+        # 7. 保存 JSON
         SCANS_DIR.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         save_path = SCANS_DIR / "morning_{}.json".format(timestamp)
         save_data = {
             "timestamp": timestamp,
-            "symbols_scanned": len(symbols),
+            "symbols_scanned": market_signals.get("symbols_scanned", len(symbols)),
             "elapsed": round(elapsed, 1),
-            "indicator_summary": indicator_summary,
-            "dv_acceleration_fired": momentum_results["dv_acceleration"][momentum_results["dv_acceleration"]["signal"]].to_dict("records") if len(momentum_results.get("dv_acceleration", [])) > 0 else [],
-            "rvol_sustained": momentum_results.get("rvol_sustained", []),
+            "market_signals": market_signals,
         }
         with open(save_path, "w", encoding="utf-8") as f:
             json.dump(save_data, f, ensure_ascii=False, indent=2, default=str)
         logger.info("结果已保存: %s", save_path)
 
-        # 9. 发送 Telegram
+        # 8. 发送 Telegram
         if not args.no_telegram:
             _send_group_report(daily_msg)
         else:

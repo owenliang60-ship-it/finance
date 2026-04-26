@@ -7,9 +7,12 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+import scripts.broad_market_scan as broad_market_scan
 from scripts.broad_market_scan import (
     _deduplicate_quotes,
     format_broad_scan_report,
+    load_price_frames,
+    load_price_frames_from_market_db,
     normalize_downloaded_frames,
     update_streak_tracker,
 )
@@ -89,6 +92,111 @@ class TestNormalizeDownloadedFrames:
         assert len(result["AAPL"]) == 2
         assert result["AAPL"].index.min() == index[0]
         assert result["AAPL"].index.max() == index[2]
+
+
+class TestLoadPriceFramesFromMarketDb:
+    def test_loads_recent_rows_sorted_ascending(self, monkeypatch):
+        rows = [
+            {"symbol": "AAPL", "date": "2026-01-03", "close": 103.0, "volume": 1300},
+            {"symbol": "AAPL", "date": "2026-01-02", "close": 102.0, "volume": 1200},
+            {"symbol": "AAPL", "date": "2026-01-01", "close": 101.0, "volume": 1100},
+        ]
+
+        class FakeStore:
+            def get_daily_prices(self, symbol, limit=0):
+                return rows[:limit]
+
+        import src.data.market_store as market_store
+
+        monkeypatch.setattr(market_store, "get_store", lambda: FakeStore())
+
+        result = load_price_frames_from_market_db(["AAPL"], rows_needed=3)
+
+        assert set(result.keys()) == {"AAPL"}
+        assert list(result["AAPL"]["close"]) == [101.0, 102.0, 103.0]
+        assert list(result["AAPL"].columns) == ["close", "volume"]
+
+    def test_skips_symbols_without_enough_rows(self, monkeypatch):
+        class FakeStore:
+            def get_daily_prices(self, symbol, limit=0):
+                return [{"symbol": symbol, "date": "2026-01-01", "close": 1.0, "volume": 100}]
+
+        import src.data.market_store as market_store
+
+        monkeypatch.setattr(market_store, "get_store", lambda: FakeStore())
+
+        assert load_price_frames_from_market_db(["AAPL"], rows_needed=3) == {}
+
+    def test_skips_symbols_not_fresh_to_latest_date(self, monkeypatch):
+        rows_by_symbol = {
+            "AAPL": [
+                {"symbol": "AAPL", "date": "2026-01-03", "close": 103.0, "volume": 1300},
+                {"symbol": "AAPL", "date": "2026-01-02", "close": 102.0, "volume": 1200},
+            ],
+            "MSFT": [
+                {"symbol": "MSFT", "date": "2026-01-02", "close": 202.0, "volume": 2200},
+                {"symbol": "MSFT", "date": "2026-01-01", "close": 201.0, "volume": 2100},
+            ],
+        }
+
+        class FakeStore:
+            def get_daily_prices(self, symbol, limit=0):
+                return rows_by_symbol[symbol][:limit]
+
+        import src.data.market_store as market_store
+
+        monkeypatch.setattr(market_store, "get_store", lambda: FakeStore())
+
+        result = load_price_frames_from_market_db(["AAPL", "MSFT"], rows_needed=2)
+
+        assert set(result.keys()) == {"AAPL"}
+
+
+class TestLoadPriceFrames:
+    def test_uses_market_db_without_download_when_coverage_is_sufficient(self, monkeypatch):
+        frame = pd.DataFrame(
+            {"close": [1.0, 2.0], "volume": [100.0, 200.0]},
+            index=pd.date_range("2026-01-01", periods=2),
+        )
+
+        monkeypatch.setattr(
+            broad_market_scan,
+            "load_price_frames_from_market_db",
+            lambda symbols, rows_needed=121: {symbol: frame for symbol in symbols},
+        )
+        monkeypatch.setattr(
+            broad_market_scan,
+            "download_price_frames",
+            lambda _symbols: (_ for _ in ()).throw(AssertionError("should not download")),
+        )
+
+        result = load_price_frames(["AAPL", "MSFT"])
+
+        assert set(result.keys()) == {"AAPL", "MSFT"}
+
+    def test_falls_back_to_download_when_db_coverage_is_low(self, monkeypatch):
+        frame = pd.DataFrame(
+            {"close": [1.0, 2.0], "volume": [100.0, 200.0]},
+            index=pd.date_range("2026-01-01", periods=2),
+        )
+        requested = []
+
+        monkeypatch.setattr(
+            broad_market_scan,
+            "load_price_frames_from_market_db",
+            lambda _symbols, rows_needed=121: {"AAPL": frame},
+        )
+
+        def fake_download(symbols, period="6mo"):
+            requested.extend(symbols)
+            return {symbol: frame for symbol in symbols}
+
+        monkeypatch.setattr(broad_market_scan, "download_price_frames", fake_download)
+
+        result = load_price_frames(["AAPL", "MSFT"])
+
+        assert requested == ["MSFT"]
+        assert set(result.keys()) == {"AAPL", "MSFT"}
 
 
 class TestUpdateStreakTracker:

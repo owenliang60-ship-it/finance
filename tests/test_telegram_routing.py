@@ -52,11 +52,9 @@ class TestMorningReportRouting:
     @patch("scripts.morning_report.send_message")
     @patch("scripts.morning_report.format_morning_report", return_value="group report")
     @patch("scripts.morning_report.run_dollar_volume", return_value={"rankings": [], "new_faces": []})
-    @patch("scripts.morning_report.run_momentum_scan", return_value={"dv_acceleration": pd.DataFrame(columns=["signal"]), "rvol_sustained": []})
-    @patch("scripts.morning_report.get_indicator_summary", return_value={"top_pmarp": [], "low_pmarp": [], "pmarp_crossovers": {}, "total": 1, "with_signals": 0, "errors": 0})
-    @patch("scripts.morning_report.run_all_indicators", return_value={})
+    @patch("scripts.morning_report.build_market_signal_report", return_value={"symbols_scanned": 1, "symbols_with_data": 1, "as_of": "2026-04-08"})
     @patch("scripts.morning_report.get_symbols", return_value=["AAPL"])
-    def test_main_routes_normal_report_to_group(self, _symbols, _indicators, _summary, _momentum, _dv, _format, mock_send, monkeypatch, tmp_path):
+    def test_main_routes_normal_report_to_group(self, _symbols, _signals, _dv, _format, mock_send, monkeypatch, tmp_path):
         monkeypatch.setattr(sys, "argv", ["morning_report.py", "--no-social"])
         monkeypatch.setattr(morning_report, "SCANS_DIR", tmp_path)
 
@@ -65,9 +63,9 @@ class TestMorningReportRouting:
         mock_send.assert_called_once_with("group report", channel="group")
 
     @patch("scripts.morning_report.send_message")
-    @patch("scripts.morning_report.run_all_indicators", side_effect=RuntimeError("boom"))
+    @patch("scripts.morning_report.build_market_signal_report", side_effect=RuntimeError("boom"))
     @patch("scripts.morning_report.get_symbols", return_value=["AAPL"])
-    def test_main_routes_errors_to_group(self, _symbols, _indicators, mock_send, monkeypatch):
+    def test_main_routes_errors_to_group(self, _symbols, _signals, mock_send, monkeypatch):
         monkeypatch.setattr(sys, "argv", ["morning_report.py", "--no-social"])
 
         morning_report.main()
@@ -94,7 +92,7 @@ class TestBroadMarketRouting:
     @patch("scripts.broad_market_scan._write_json")
     @patch("scripts.broad_market_scan._read_json", return_value={})
     @patch("scripts.broad_market_scan.scan_candidates", return_value={"scan_date": "2026-04-08", "all_triggered": [], "outside_candidates": [], "symbols_scanned": 10, "triggered_total": 0, "outside_total": 0})
-    @patch("scripts.broad_market_scan.download_price_frames", return_value={f"S{i}": pd.DataFrame() for i in range(10)})
+    @patch("scripts.broad_market_scan.load_price_frames", return_value={f"S{i}": pd.DataFrame() for i in range(10)})
     @patch("scripts.broad_market_scan.load_pool_symbols", return_value=set())
     @patch("scripts.broad_market_scan.fetch_universe_metadata", return_value={"stocks": {f"S{i}": {"marketCap": i} for i in range(10)}})
     @patch("src.data.market_store.get_store")

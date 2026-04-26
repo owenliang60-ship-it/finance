@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Daily market report pipeline for cloud cron.
-# Sends broad scan and pool morning report after data collection has had time to settle.
+# Sends the merged broad scan + morning report after data collection has had time to settle.
 
 set -u
 
@@ -34,7 +34,6 @@ run_step() {
 
 RC=0
 log_step "daily market report pipeline START"
-run_step "broad_market_scan" "$PYTHON" scripts/broad_market_scan.py || RC=$?
 run_step "morning_report" "$PYTHON" scripts/morning_report.py --no-social || RC=$?
 if [ "$RC" -eq 0 ]; then
   log_step "daily market report pipeline DONE"
