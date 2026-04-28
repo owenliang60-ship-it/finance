@@ -35,7 +35,7 @@ from config.settings import (
 )
 from src.data import get_symbols
 from src.indicators.dv_acceleration import format_dv
-from src.telegram_bot import send_message, send_photo, split_message
+from src.telegram_bot import send_document, send_message, send_photo, split_message
 
 logging.basicConfig(
     level=logging.INFO,
@@ -631,13 +631,17 @@ def _send_group_report(message: str) -> bool:
     return ok
 
 
-def _send_group_image_report(image_paths: list[Path]) -> bool:
-    """Send each visual morning-report section as one Telegram photo."""
+def _send_group_image_report(image_paths: list[Path], delivery: str = "document") -> bool:
+    """Send each visual morning-report section to the public group."""
     ok = True
     total = len(image_paths)
     for idx, path in enumerate(image_paths, 1):
         caption = "未来资本晨报 {}/{} — {}".format(idx, total, path.stem)
-        ok = send_photo(str(path), caption=caption, channel="group") and ok
+        if delivery == "photo":
+            sent = send_photo(str(path), caption=caption, channel="group")
+        else:
+            sent = send_document(str(path), caption=caption, channel="group")
+        ok = sent and ok
     return ok
 
 
@@ -1567,6 +1571,10 @@ _VISUAL_LAYER_COLORS = {
     "broad": ("#334155", "#e2e8f0"),
 }
 _TELEGRAM_PHOTO_MAX_DIMENSION_SUM = 9800
+_VISUAL_WIDTH = 2400
+_VISUAL_MARGIN = 76
+_VISUAL_TABLE_HEADER_H = 54
+_VISUAL_TABLE_ROW_H = 58
 
 
 def _load_visual_font(size: int, bold: bool = False):
@@ -1611,20 +1619,20 @@ def _rows_by_layer_and_bucket(rows: list[dict]) -> dict:
 
 
 def _estimate_visual_height(section: dict) -> int:
-    height = 190
+    height = 260
     for block in section.get("blocks", []):
-        height += 70
+        height += 90
         grouped = _rows_by_layer_and_bucket(block.get("rows", []))
         for layer in LAYER_ORDER:
             layer_rows = sum(len(rows) for rows in grouped.get(layer, {}).values())
-            height += 54
+            height += 72
             if not layer_rows:
-                height += 42
+                height += 58
                 continue
             for bucket in CONCEPT_BUCKET_ORDER:
                 rows = grouped.get(layer, {}).get(bucket, [])
                 if rows:
-                    height += 38 + 40 + 44 * len(rows)
+                    height += 50 + _VISUAL_TABLE_HEADER_H + _VISUAL_TABLE_ROW_H * len(rows) + 28
     return max(height + 260, 640)
 
 
@@ -1638,11 +1646,11 @@ def _scaled_widths(widths: list[int], total_width: int) -> list[int]:
 
 
 def _draw_visual_table_header(draw, x: int, y: int, col_widths: list[int], columns: list[str], font) -> int:
-    row_h = 40
+    row_h = _VISUAL_TABLE_HEADER_H
     draw.rectangle([x, y, x + sum(col_widths), y + row_h], fill="#f1f5f9")
     cur_x = x
     for width, column in zip(col_widths, columns):
-        _draw_fit(draw, (cur_x + 14, y + 9), column, font, "#334155", width - 24)
+        _draw_fit(draw, (cur_x + 18, y + 12), column, font, "#334155", width - 34)
         cur_x += width
     return y + row_h
 
@@ -1666,6 +1674,7 @@ def render_morning_report_images(
     market_signals: dict | None = None,
     dv_result: dict | None = None,
     output_dir: str | Path | None = None,
+    photo_safe: bool = False,
 ) -> list[Path]:
     """Render each morning-report section as one PNG image."""
     from PIL import Image, ImageDraw
@@ -1678,17 +1687,17 @@ def render_morning_report_images(
     out_dir = Path(output_dir) if output_dir else SCANS_DIR / "morning_images_{}".format(timestamp)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    width = 1800
-    margin = 58
+    width = _VISUAL_WIDTH
+    margin = _VISUAL_MARGIN
     content_w = width - margin * 2
-    title_font = _load_visual_font(44, bold=True)
-    subtitle_font = _load_visual_font(24)
-    block_font = _load_visual_font(28, bold=True)
-    layer_font = _load_visual_font(25, bold=True)
-    bucket_font = _load_visual_font(23, bold=True)
-    header_font = _load_visual_font(21, bold=True)
-    row_font = _load_visual_font(22)
-    small_font = _load_visual_font(20)
+    title_font = _load_visual_font(58, bold=True)
+    subtitle_font = _load_visual_font(32)
+    block_font = _load_visual_font(38, bold=True)
+    layer_font = _load_visual_font(34, bold=True)
+    bucket_font = _load_visual_font(31, bold=True)
+    header_font = _load_visual_font(29, bold=True)
+    row_font = _load_visual_font(30)
+    small_font = _load_visual_font(26)
 
     image_paths = []
     for index, section in enumerate(sections, 1):
@@ -1696,30 +1705,30 @@ def render_morning_report_images(
         image = Image.new("RGB", (width, height), "#f8fafc")
         draw = ImageDraw.Draw(image)
 
-        y = 46
-        draw.rounded_rectangle([margin, y, width - margin, y + 92], radius=18, fill="#0f172a")
-        _draw_fit(draw, (margin + 34, y + 22), section["title"], title_font, "#ffffff", content_w - 68)
-        y += 108
+        y = 60
+        draw.rounded_rectangle([margin, y, width - margin, y + 120], radius=24, fill="#0f172a")
+        _draw_fit(draw, (margin + 44, y + 30), section["title"], title_font, "#ffffff", content_w - 88)
+        y += 146
         _draw_fit(draw, (margin + 4, y), section.get("subtitle", ""), subtitle_font, "#475569", content_w)
-        y += 54
+        y += 72
 
         for block in section.get("blocks", []):
             draw.text((margin, y), block["title"], font=block_font, fill="#111827")
-            y += 46
+            y += 62
             grouped = _rows_by_layer_and_bucket(block.get("rows", []))
             col_widths = _scaled_widths(block.get("widths", []), content_w)
 
             for layer in LAYER_ORDER:
                 layer_rows = sum(len(rows) for rows in grouped.get(layer, {}).values())
                 dark, light = _VISUAL_LAYER_COLORS[layer]
-                draw.rounded_rectangle([margin, y, width - margin, y + 38], radius=10, fill=light)
+                draw.rounded_rectangle([margin, y, width - margin, y + 52], radius=13, fill=light)
                 layer_label = "{}  {}家公司".format(LAYER_LABELS[layer], layer_rows)
-                draw.text((margin + 16, y + 6), layer_label, font=layer_font, fill=dark)
-                y += 48
+                draw.text((margin + 20, y + 9), layer_label, font=layer_font, fill=dark)
+                y += 66
 
                 if not layer_rows:
                     draw.text((margin + 18, y), "无触发", font=small_font, fill="#64748b")
-                    y += 42
+                    y += 58
                     continue
 
                 for bucket in CONCEPT_BUCKET_ORDER:
@@ -1732,20 +1741,20 @@ def render_morning_report_images(
                         font=bucket_font,
                         fill="#0f172a",
                     )
-                    y += 36
+                    y += 50
                     y = _draw_visual_table_header(draw, margin, y, col_widths, block["columns"], header_font)
                     for row_idx, row in enumerate(rows):
-                        row_h = 44
+                        row_h = _VISUAL_TABLE_ROW_H
                         fill = "#ffffff" if row_idx % 2 == 0 else "#f8fafc"
                         draw.rectangle([margin, y, width - margin, y + row_h], fill=fill)
                         cur_x = margin
                         for col_width, cell in zip(col_widths, row["cells"]):
-                            _draw_fit(draw, (cur_x + 14, y + 10), cell, row_font, "#111827", col_width - 24)
+                            _draw_fit(draw, (cur_x + 18, y + 14), cell, row_font, "#111827", col_width - 34)
                             cur_x += col_width
                         y += row_h
-                    y += 18
-                y += 8
-            y += 14
+                    y += 26
+                y += 12
+            y += 20
 
         footer_y = y + 18
         draw.text(
@@ -1757,7 +1766,8 @@ def render_morning_report_images(
         final_height = min(height, footer_y + 58)
         image = image.crop((0, 0, width, final_height))
         path = out_dir / "{:02d}_{}.png".format(index, section["slug"])
-        image = _resize_for_telegram_photo(image)
+        if photo_safe:
+            image = _resize_for_telegram_photo(image)
         image.save(path, "PNG", optimize=True)
         image_paths.append(path)
 
@@ -2066,6 +2076,9 @@ def main():
                         help="仅发送社交情绪日报（配合延后 cron 使用）")
     parser.add_argument("--image-report", action="store_true",
                         help="每个晨报 section 生成一张图片；Telegram 发送图片而不是长文本")
+    parser.add_argument("--image-delivery", choices=["document", "photo"],
+                        default="document",
+                        help="图片发送方式：document 保留原始分辨率；photo 内联预览但会被 Telegram 压缩")
     parser.add_argument("--image-output-dir", type=str,
                         help="图片输出目录（默认 data/scans/morning_images_<timestamp>）")
     args = parser.parse_args()
@@ -2247,6 +2260,7 @@ def main():
                 market_signals=market_signals,
                 dv_result=dv_result,
                 output_dir=args.image_output_dir,
+                photo_safe=args.image_delivery == "photo",
             )
             logger.info("晨报图片已生成: %d 张", len(image_paths))
 
@@ -2269,7 +2283,7 @@ def main():
         # 8. 发送 Telegram
         if not args.no_telegram:
             if args.image_report and image_paths:
-                _send_group_image_report(image_paths)
+                _send_group_image_report(image_paths, delivery=args.image_delivery)
             else:
                 _send_group_report(daily_msg)
         else:
