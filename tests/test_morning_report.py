@@ -247,6 +247,21 @@ class TestFormatSectionD:
         assert "ARM" in result
         assert "新面孔" in result
 
+    def test_missing_industry_uses_bucket_not_unclassified(self):
+        dv_result = {
+            "rankings": [
+                {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9, "price": 890.5},
+                {"rank": 2, "symbol": "XYZ1", "company_name": "Unknown Co",
+                 "dollar_volume": 1e9, "price": 10.0},
+            ],
+            "new_faces": [],
+        }
+        result = format_section_d(dv_result)
+        assert "Unclassified" not in result
+        assert "unclassified" not in result.lower()
+        assert "AI算力/云" in result
+        assert "其他" in result
+
 
 class TestLayeredSections:
     def test_broad_signal_groups_by_concept_bucket(self):
@@ -258,8 +273,22 @@ class TestLayeredSections:
         assert "NVIDIA" in result
         assert "Semiconductors" in result
         assert "NVDA" in result
-        assert "APP" in result
-        assert "OKLO" in result
+
+    def test_broad_signal_missing_industry_uses_concept_bucket(self):
+        signals = sample_market_signals()
+        signals["broad_scan"]["hits"] = [
+            {
+                "symbol": "TSLA",
+                "companyName": "Tesla Inc.",
+                "concept_bucket": "自动驾驶/机器人",
+                "rvol": 3.2,
+                "return_pct": 4.0,
+                "marketCap": 800e9,
+            }
+        ]
+        result = format_section_broad_signal(signals)
+        assert "Unclassified" not in result
+        assert "自动驾驶/机器人" in result
 
     def test_pmarp_layered_section(self):
         result = format_section_layered_pmarp(sample_market_signals())

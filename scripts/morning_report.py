@@ -103,6 +103,239 @@ ETF_SYMBOLS = {
     "XLY", "XLI", "XLC", "EWY", "EWT", "FXI", "KWEB",
 }
 
+SYMBOL_BUCKET_OVERRIDES = {
+    # AI / cloud platforms and flagship application names.
+    "NVDA": "AI算力/云",
+    "MSFT": "AI算力/云",
+    "GOOG": "AI算力/云",
+    "GOOGL": "AI算力/云",
+    "AMZN": "AI算力/云",
+    "ORCL": "AI算力/云",
+    "PLTR": "AI算力/云",
+    "IBM": "AI算力/云",
+    "ANET": "AI算力/云",
+    "SNOW": "AI算力/云",
+    "CRWV": "AI算力/云",
+    # Semiconductor supply chain.
+    "AMD": "半导体链",
+    "AVGO": "半导体链",
+    "TSM": "半导体链",
+    "ASML": "半导体链",
+    "MU": "半导体链",
+    "ARM": "半导体链",
+    "INTC": "半导体链",
+    "MRVL": "半导体链",
+    "QCOM": "半导体链",
+    "LRCX": "半导体链",
+    "AMAT": "半导体链",
+    "KLAC": "半导体链",
+    "SMCI": "半导体链",
+    # Internet, ads, streaming.
+    "META": "互联网/广告",
+    "NFLX": "互联网/广告",
+    "APP": "互联网/广告",
+    "RDDT": "互联网/广告",
+    "PINS": "互联网/广告",
+    "UBER": "互联网/广告",
+    "LYFT": "互联网/广告",
+    # Software / SaaS.
+    "CRM": "软件/SaaS",
+    "NOW": "软件/SaaS",
+    "ADBE": "软件/SaaS",
+    "CRWD": "软件/SaaS",
+    "PANW": "软件/SaaS",
+    "NET": "软件/SaaS",
+    "DDOG": "软件/SaaS",
+    "MDB": "软件/SaaS",
+    # Autos, robots, electrification.
+    "TSLA": "自动驾驶/机器人",
+    "RIVN": "自动驾驶/机器人",
+    "LCID": "自动驾驶/机器人",
+    "XPEV": "自动驾驶/机器人",
+    "NIO": "自动驾驶/机器人",
+    # Finance / crypto / brokers.
+    "COIN": "金融/加密",
+    "MSTR": "金融/加密",
+    "HOOD": "金融/加密",
+    "SOFI": "金融/加密",
+    "PYPL": "金融/加密",
+    "SQ": "金融/加密",
+    "IBKR": "金融/加密",
+    "JPM": "金融/加密",
+    "GS": "金融/加密",
+    # Health care.
+    "LLY": "医药/生命科学",
+    "NVO": "医药/生命科学",
+    "UNH": "医药/生命科学",
+    "MRK": "医药/生命科学",
+    "VRTX": "医药/生命科学",
+    # Industrial / aerospace / defense.
+    "RKLB": "工业/航天/国防",
+    "ASTS": "工业/航天/国防",
+    "BA": "工业/航天/国防",
+    "LMT": "工业/航天/国防",
+    "GE": "工业/航天/国防",
+    # Consumer / commerce.
+    "AAPL": "消费/电商",
+    "PDD": "消费/电商",
+    "BABA": "消费/电商",
+    "SHOP": "消费/电商",
+    "MELI": "消费/电商",
+    "COST": "消费/电商",
+    "WMT": "消费/电商",
+    "HD": "消费/电商",
+    # Energy / materials.
+    "XOM": "能源/材料",
+    "CVX": "能源/材料",
+    "CCJ": "能源/材料",
+    "FCX": "能源/材料",
+    "ALB": "能源/材料",
+    # Current broad-signal fallback coverage when market_db has ticker/cap only.
+    "OGN": "医药/生命科学",
+    "CAH": "医药/生命科学",
+    "INBX": "医药/生命科学",
+    "ACLX": "医药/生命科学",
+    "ABCL": "医药/生命科学",
+    "RCUS": "医药/生命科学",
+    "MOH": "医药/生命科学",
+    "ERAS": "医药/生命科学",
+    "WST": "医药/生命科学",
+    "ICLR": "医药/生命科学",
+    "GRFS": "医药/生命科学",
+    "TFX": "医药/生命科学",
+    "MEDP": "医药/生命科学",
+    "MXL": "半导体链",
+    "AOSL": "半导体链",
+    "POWI": "半导体链",
+    "VICR": "半导体链",
+    "COHU": "半导体链",
+    "VECO": "半导体链",
+    "PI": "半导体链",
+    "SYNA": "半导体链",
+    "SNDK": "半导体链",
+    "STX": "半导体链",
+    "TEL": "通信/网络设备",
+    "KN": "通信/网络设备",
+    "CHTR": "通信/网络设备",
+    "EXTR": "通信/网络设备",
+    "CALX": "通信/网络设备",
+    "VZ": "通信/网络设备",
+    "GLW": "通信/网络设备",
+    "SRAD": "互联网/广告",
+    "LBRDK": "互联网/广告",
+    "SIRI": "互联网/广告",
+    "FICO": "软件/SaaS",
+    "FRSH": "软件/SaaS",
+    "PEGA": "软件/SaaS",
+    "WK": "软件/SaaS",
+    "AMSC": "数据中心电力",
+    "OKLO": "数据中心电力",
+    "ITRI": "数据中心电力",
+    "DQ": "能源/材料",
+    "ENIC": "能源/材料",
+    "WKC": "能源/材料",
+    "HLX": "能源/材料",
+    "AAUC": "能源/材料",
+    "KALU": "能源/材料",
+    "CLF": "能源/材料",
+    "LPX": "能源/材料",
+    "RS": "能源/材料",
+    "ROG": "能源/材料",
+    "TX": "能源/材料",
+    "FLS": "工业/航天/国防",
+    "HII": "工业/航天/国防",
+    "DRS": "工业/航天/国防",
+    "VVX": "工业/航天/国防",
+    "SON": "工业/航天/国防",
+    "PBI": "工业/航天/国防",
+    "AZZ": "工业/航天/国防",
+    "HTLD": "工业/航天/国防",
+    "SANM": "工业/航天/国防",
+    "RDW": "工业/航天/国防",
+    "VTOL": "工业/航天/国防",
+    "ICFI": "工业/航天/国防",
+    "TNC": "工业/航天/国防",
+    "URI": "地产/基础设施",
+    "BLD": "地产/基础设施",
+    "MAS": "地产/基础设施",
+    "MGRC": "地产/基础设施",
+    "ZWS": "地产/基础设施",
+    "IIPR": "地产/基础设施",
+    "SILA": "地产/基础设施",
+    "QXO": "地产/基础设施",
+    "NHI": "地产/基础设施",
+    "WSO": "地产/基础设施",
+    "STRA": "消费/电商",
+    "EDU": "消费/电商",
+    "MTN": "消费/电商",
+    "CAR": "消费/电商",
+    "MCRI": "消费/电商",
+    "PENN": "消费/电商",
+    "LULU": "消费/电商",
+    "BYD": "消费/电商",
+    "CHDN": "消费/电商",
+    "LVS": "消费/电商",
+    "TSCO": "消费/电商",
+    "TAL": "消费/电商",
+    "ABG": "消费/电商",
+    "HCSG": "医药/生命科学",
+    "CASH": "金融/加密",
+    "NYAX": "金融/加密",
+    "EVO": "金融/加密",
+    "WU": "金融/加密",
+    "WEX": "金融/加密",
+    "FBP": "金融/加密",
+    "TFIN": "金融/加密",
+    "SIGI": "金融/加密",
+    "NTRS": "金融/加密",
+    "VOYA": "金融/加密",
+    "UVE": "金融/加密",
+    "SEIC": "金融/加密",
+    "RY": "金融/加密",
+    "OUST": "自动驾驶/机器人",
+    "MBLY": "自动驾驶/机器人",
+    "VC": "自动驾驶/机器人",
+    "GNTX": "自动驾驶/机器人",
+    "CTOS": "自动驾驶/机器人",
+    "SEMR": "软件/SaaS",
+    "PDFS": "半导体链",
+    "FORM": "半导体链",
+    "NOK": "通信/网络设备",
+    "AKO-A": "消费/电商",
+    "DPZ": "消费/电商",
+    "DLTR": "消费/电商",
+    "AZO": "消费/电商",
+    "SXT": "能源/材料",
+    "LAC": "能源/材料",
+    "WES": "能源/材料",
+    "SHEL": "能源/材料",
+    "EPD": "能源/材料",
+    "KRP": "能源/材料",
+    "CNQ": "能源/材料",
+    "TDW": "能源/材料",
+    "KEN": "能源/材料",
+    "MOG-B": "工业/航天/国防",
+    "RHI": "工业/航天/国防",
+    "PLOW": "工业/航天/国防",
+    "PATK": "工业/航天/国防",
+    "CAE": "工业/航天/国防",
+    "TTEK": "工业/航天/国防",
+    "SKYW": "工业/航天/国防",
+    "WWD": "工业/航天/国防",
+    "FSV": "地产/基础设施",
+    "EGP": "地产/基础设施",
+    "SLM": "金融/加密",
+    "LC": "金融/加密",
+    "TCBI": "金融/加密",
+    "ENVA": "金融/加密",
+    "HLNE": "金融/加密",
+    "CNOB": "金融/加密",
+    "HCXY": "金融/加密",
+    "EBC": "金融/加密",
+    "BHFAP": "金融/加密",
+    "UHS": "医药/生命科学",
+}
+
 
 def _send_group_message(message: str) -> bool:
     """Route a single message to the public group."""
@@ -170,7 +403,8 @@ def _display_classification(item: dict) -> str:
         return industry
     if sector and sector != "Unknown":
         return sector
-    return "Unclassified"
+    bucket = item.get("concept_bucket") or _concept_bucket(item)
+    return bucket or "其他"
 
 
 def _normalize_metadata_entry(symbol: str, entry: dict) -> dict:
@@ -303,8 +537,12 @@ def _theme_bucket_for_symbol(symbol: str) -> str | None:
 
 def _concept_bucket(item: dict) -> str:
     symbol = (item.get("symbol") or "").upper()
+    if "-P" in symbol:
+        return "金融/加密"
     if symbol in ETF_SYMBOLS:
         return "ETF/宏观工具"
+    if symbol in SYMBOL_BUCKET_OVERRIDES:
+        return SYMBOL_BUCKET_OVERRIDES[symbol]
 
     theme_bucket = _theme_bucket_for_symbol(symbol)
     if theme_bucket:
@@ -315,13 +553,13 @@ def _concept_bucket(item: dict) -> str:
         for key in ["companyName", "shortName", "longName", "sector", "industry"]
     ).lower()
 
-    if any(k in text for k in ["semiconductor", "chip", "foundry", "memory", "dram", "nand"]):
+    if any(k in text for k in ["semiconductor", "chip", "foundry", "memory", "dram", "nand", "computer hardware", "storage"]):
         return "半导体链"
     if any(k in text for k in ["data center", "cloud", "gpu", "ai", "quantum"]):
         return "AI算力/云"
     if any(k in text for k in ["electrical", "electric", "power", "nuclear", "utility", "utilities", "grid", "fuel cell"]):
         return "数据中心电力"
-    if any(k in text for k in ["communication equipment", "network", "optical", "telecom", "satellite"]):
+    if any(k in text for k in ["communication equipment", "communication services", "network", "optical", "telecom", "satellite", "broadband", "cable"]):
         return "通信/网络设备"
     if any(k in text for k in ["internet content", "advertising", "media", "streaming", "entertainment"]):
         return "互联网/广告"
@@ -335,11 +573,11 @@ def _concept_bucket(item: dict) -> str:
         return "医药/生命科学"
     if any(k in text for k in ["aerospace", "defense", "industrial", "machinery", "logistics", "engineering"]):
         return "工业/航天/国防"
-    if any(k in text for k in ["consumer", "retail", "e-commerce", "apparel", "restaurant", "travel"]):
+    if any(k in text for k in ["consumer", "retail", "e-commerce", "apparel", "restaurant", "travel", "casino", "gaming", "education"]):
         return "消费/电商"
     if any(k in text for k in ["energy", "materials", "mining", "chemical", "metal", "lithium", "oil", "gas"]):
         return "能源/材料"
-    if any(k in text for k in ["real estate", "reit", "construction", "infrastructure"]):
+    if any(k in text for k in ["real estate", "reit", "construction", "infrastructure", "building products"]):
         return "地产/基础设施"
     if any(k in text for k in ["etf", "fund", "trust"]):
         return "ETF/宏观工具"
@@ -715,9 +953,22 @@ def format_section_d(dv_result: dict) -> str:
 
     rankings = dv_result.get("rankings", [])
     new_faces = dv_result.get("new_faces", [])
+    metadata = {}
+    symbols = []
+    for row in rankings + new_faces:
+        symbol = (row.get("symbol") or "").upper()
+        if not symbol:
+            continue
+        symbols.append(symbol)
+        metadata[symbol] = dict(row)
+    if symbols:
+        _merge_local_metadata(metadata, symbols)
 
     def normalize(row: dict) -> dict:
-        item = dict(row)
+        symbol = (row.get("symbol") or "").upper()
+        item = dict(metadata.get(symbol) or {})
+        item.update({k: v for k, v in row.items() if v not in (None, "")})
+        item["symbol"] = symbol or item.get("symbol", "")
         if row.get("company_name") and not item.get("companyName"):
             item["companyName"] = row.get("company_name")
         if row.get("market_cap") and not item.get("marketCap"):
