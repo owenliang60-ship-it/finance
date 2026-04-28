@@ -35,7 +35,7 @@ from config.settings import (
 )
 from src.data import get_symbols
 from src.indicators.dv_acceleration import format_dv
-from src.telegram_bot import send_message, split_message
+from src.telegram_bot import send_document, send_message, send_photo, split_message
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,6 +53,15 @@ LAYER_LABELS = {
 }
 LAYER_TOP_N = 8
 
+from terminal.concept_classifier import get_report_concept_classifier
+
+
+def _get_concept_classifier():
+    return get_report_concept_classifier()
+
+
+CONCEPT_BUCKET_ORDER = _get_concept_classifier().bucket_order
+
 
 def _send_group_message(message: str) -> bool:
     """Route a single message to the public group."""
@@ -64,6 +73,20 @@ def _send_group_report(message: str) -> bool:
     ok = True
     for part in split_message(message, split_marker="*D. Dollar Volume*"):
         ok = _send_group_message(part) and ok
+    return ok
+
+
+def _send_group_image_report(image_paths: list[Path], delivery: str = "document") -> bool:
+    """Send each visual morning-report section to the public group."""
+    ok = True
+    total = len(image_paths)
+    for idx, path in enumerate(image_paths, 1):
+        caption = "未来资本晨报 {}/{} — {}".format(idx, total, path.stem)
+        if delivery == "photo":
+            sent = send_photo(str(path), caption=caption, channel="group")
+        else:
+            sent = send_document(str(path), caption=caption, channel="group")
+        ok = sent and ok
     return ok
 
 
@@ -79,6 +102,177 @@ def _format_market_cap(market_cap: float | None) -> str:
     if market_cap >= 1e9:
         return "${:.1f}B".format(market_cap / 1e9)
     return "${:.0f}M".format(market_cap / 1e6)
+
+
+def _clean_company_name(name: str | None) -> str:
+    if not name:
+        return ""
+    cleaned = str(name)
+    suffixes = [
+        ", Inc.", ", Inc", " Inc.", " Inc", " Corporation", " Corp.", " Corp", " Incorporated",
+        " Class A Common Stock", " Common Stock", " plc", " Ltd.", " Ltd",
+        " Limited", " N.V.", " S.A.",
+    ]
+    for suffix in suffixes:
+        if cleaned.endswith(suffix):
+            cleaned = cleaned[: -len(suffix)]
+    return cleaned.strip()
+
+
+def _display_company(item: dict, max_len: int = 22) -> str:
+    symbol = item.get("symbol", "")
+    name = (
+        item.get("shortName")
+        or item.get("companyName")
+        or item.get("longName")
+        or item.get("company_name")
+        or ""
+    )
+    name = _clean_company_name(name)
+    if not name or name.upper() == symbol.upper():
+        return symbol
+    if len(name) > max_len:
+        name = name[: max_len - 1].rstrip() + "…"
+    return "{} {}".format(symbol, name)
+
+
+def _business_role(item: dict) -> str:
+    """Return our own business-role label, never the raw FMP industry string."""
+    return _get_concept_classifier().business_role(item)
+
+
+def _display_classification(item: dict) -> str:
+    return _business_role(item)
+
+
+def _display_concept_tags(item: dict) -> str:
+    """Return three-tier concept tags (e.g. '半导体 / 存储 / HBM') from the registry,
+    or fall back to the legacy single-bucket label when the symbol is unregistered."""
+    clf = _get_concept_classifier()
+    tags = clf.display_tags(item)
+    if tags:
+        return tags
+    return _concept_bucket(item)
+
+
+def _normalize_metadata_entry(symbol: str, entry: dict) -> dict:
+    return {
+        "symbol": symbol.upper(),
+        "companyName": (
+            entry.get("companyName")
+            or entry.get("company_name")
+            or entry.get("name")
+            or entry.get("longName")
+            or entry.get("shortName")
+            or ""
+        ),
+        "shortName": entry.get("shortName") or entry.get("companyName") or entry.get("company_name") or "",
+        "longName": entry.get("longName") or entry.get("companyName") or entry.get("company_name") or "",
+        "sector": entry.get("sector") or "",
+        "industry": entry.get("industry") or "",
+        "exchange": entry.get("exchange") or entry.get("exchangeShortName") or "",
+        "marketCap": entry.get("marketCap") or entry.get("market_cap") or entry.get("mktCap"),
+    }
+
+
+def _merge_metadata_entry(metadata: dict, symbol: str, entry: dict) -> None:
+    symbol = symbol.upper()
+    normalized = _normalize_metadata_entry(symbol, entry)
+    target = metadata.setdefault(symbol, {"symbol": symbol})
+    for key, value in normalized.items():
+        if value in (None, ""):
+            continue
+        if key == "marketCap":
+            if not target.get(key):
+                target[key] = value
+        elif not target.get(key) or target.get(key) == symbol:
+            target[key] = value
+
+
+def _iter_profile_records(payload) -> list[dict]:
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if isinstance(payload, dict):
+        records = []
+        for key, value in payload.items():
+            if isinstance(value, dict):
+                row = dict(value)
+                row.setdefault("symbol", key)
+                records.append(row)
+        return records
+    return []
+
+
+def _merge_local_metadata(metadata: dict, symbols: list[str]) -> None:
+    """Merge cheap local company metadata from company.db and JSON caches."""
+    wanted = {symbol.upper() for symbol in symbols}
+
+    try:
+        from terminal.company_store import get_store
+        for row in get_store().list_companies():
+            symbol = (row.get("symbol") or "").upper()
+            if symbol in wanted:
+                _merge_metadata_entry(metadata, symbol, row)
+    except Exception as exc:
+        logger.info("company.db metadata unavailable for morning report: %s", exc)
+
+    for path in [
+        DATA_DIR / "pool" / "universe.json",
+        DATA_DIR / "fundamental" / "profiles.json",
+        SCANS_DIR / "broad_universe.json",
+    ]:
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.info("metadata cache unreadable %s: %s", path, exc)
+            continue
+        if isinstance(payload, dict) and isinstance(payload.get("stocks"), dict):
+            payload = payload["stocks"]
+        for row in _iter_profile_records(payload):
+            symbol = (row.get("symbol") or row.get("ticker") or "").upper()
+            if symbol in wanted:
+                _merge_metadata_entry(metadata, symbol, row)
+
+
+def _metadata_has_company_classification(entry: dict) -> bool:
+    name = (
+        entry.get("companyName")
+        or entry.get("shortName")
+        or entry.get("longName")
+        or ""
+    )
+    has_name = bool(name and name != entry.get("symbol"))
+    return has_name and bool(entry.get("sector") or entry.get("industry"))
+
+
+def _hydrate_signal_metadata(metadata: dict, symbols: list[str]) -> None:
+    """Ensure triggered symbols have company names and classification if possible."""
+    _merge_local_metadata(metadata, symbols)
+    missing = [
+        symbol for symbol in sorted({s.upper() for s in symbols})
+        if not _metadata_has_company_classification(metadata.get(symbol, {}))
+    ]
+    if not missing:
+        return
+
+    try:
+        from config.settings import FMP_API_KEY
+        if not FMP_API_KEY:
+            return
+        from src.data.fmp_client import FMPClient
+        client = FMPClient()
+        for symbol in missing:
+            profile = client.get_profile(symbol)
+            if profile:
+                _merge_metadata_entry(metadata, symbol, profile)
+    except Exception as exc:
+        logger.info("live metadata fallback skipped: %s", exc)
+
+
+def _concept_bucket(item: dict) -> str:
+    return _get_concept_classifier().classify(item)
 
 
 def _layer_for_symbol(symbol: str, metadata: dict, pool_symbols: set) -> str:
@@ -130,11 +324,59 @@ def _format_layered_items(
     return lines
 
 
+def _group_by_concept_bucket(items: list) -> dict:
+    return _get_concept_classifier().group_items(items)
+
+
+def _format_bucketed_items(items: list, empty_text: str, formatter) -> list[str]:
+    if not items:
+        return [empty_text]
+
+    lines = []
+    grouped = _group_by_concept_bucket(items)
+    for bucket, bucket_items in grouped.items():
+        lines.append("{} ({}):".format(bucket, len(bucket_items)))
+        for item in bucket_items:
+            lines.append("  " + formatter(item))
+    return lines
+
+
+def _format_bucketed_table(
+    items: list,
+    empty_text: str,
+    header: str,
+    formatter,
+) -> list[str]:
+    if not items:
+        return [empty_text]
+
+    lines = [header]
+    grouped = _group_by_concept_bucket(items)
+    for bucket, bucket_items in grouped.items():
+        lines.append("{} ({}):".format(bucket, len(bucket_items)))
+        for item in bucket_items:
+            lines.append("  " + formatter(item))
+    return lines
+
+
+def _compact_company(item: dict) -> str:
+    symbol = item.get("symbol", "")
+    name = _display_company(item, max_len=18)
+    if name == symbol or name.startswith(symbol + " "):
+        return name
+    return symbol
+
+
 def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set) -> dict:
     symbol = item["symbol"]
+    meta = metadata.get(symbol, {})
     enriched = dict(item)
-    enriched["marketCap"] = metadata.get(symbol, {}).get("marketCap")
+    for key in ["companyName", "shortName", "longName", "sector", "industry", "exchange"]:
+        if meta.get(key):
+            enriched[key] = meta[key]
+    enriched["marketCap"] = meta.get("marketCap")
     enriched["layer"] = _layer_for_symbol(symbol, metadata, pool_symbols)
+    enriched["concept_bucket"] = _concept_bucket(enriched)
     return enriched
 
 
@@ -173,6 +415,8 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         metadata = universe_cache.get("stocks", {})
         symbols = sorted(metadata.keys())
 
+    _merge_local_metadata(metadata, symbols)
+
     price_frames = load_price_frames(symbols, rows_needed=MORNING_SIGNAL_PRICE_ROWS)
     price_dict = {
         symbol: _frame_with_date(symbol, frame)
@@ -180,10 +424,6 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     }
 
     broad_scan = scan_candidates(price_frames, metadata, pool_symbols)
-    broad_hits = sorted(
-        [_enrich_with_layer(item, metadata, pool_symbols) for item in broad_scan["all_triggered"]],
-        key=lambda x: (-x["rvol"], -x["return_pct"], x["symbol"]),
-    )
 
     db_rows = [
         {
@@ -199,28 +439,56 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     if db_rows:
         get_store().save_broad_scan_hits(db_rows)
 
-    pmarp_signals = []
+    pmarp_raw = []
     for symbol, frame in price_dict.items():
         result = analyze_pmarp(frame)
         if result.get("signal") == "oversold_recovery":
-            pmarp_signals.append(_enrich_with_layer({
+            pmarp_raw.append({
                 "symbol": symbol,
                 "value": result.get("current"),
                 "previous": result.get("previous"),
                 "signal": result.get("signal"),
-            }, metadata, pool_symbols))
-    pmarp_signals.sort(key=lambda x: (x.get("value") or 0, x["symbol"]))
+            })
 
     dv_df = scan_dv_acceleration(price_dict, threshold=DV_ACCELERATION_THRESHOLD)
-    dv_hits = []
+    dv_raw = []
     if len(dv_df) > 0:
         for row in dv_df[dv_df["signal"]].to_dict("records"):
-            dv_hits.append(_enrich_with_layer(row, metadata, pool_symbols))
+            dv_raw.append(row)
+
+    rvol_raw = scan_rvol_sustained(price_dict, threshold=RVOL_SUSTAINED_THRESHOLD)
+
+    signal_symbols = [
+        item["symbol"]
+        for item in (
+            list(broad_scan["all_triggered"])
+            + pmarp_raw
+            + dv_raw
+            + rvol_raw
+        )
+    ]
+    _hydrate_signal_metadata(metadata, signal_symbols)
+
+    broad_hits = sorted(
+        [_enrich_with_layer(item, metadata, pool_symbols) for item in broad_scan["all_triggered"]],
+        key=lambda x: (-x["rvol"], -x["return_pct"], x["symbol"]),
+    )
+
+    pmarp_signals = [
+        _enrich_with_layer(item, metadata, pool_symbols)
+        for item in pmarp_raw
+    ]
+    pmarp_signals.sort(key=lambda x: (x.get("value") or 0, x["symbol"]))
+
+    dv_hits = [
+        _enrich_with_layer(item, metadata, pool_symbols)
+        for item in dv_raw
+    ]
     dv_hits.sort(key=lambda x: (-(x.get("ratio") or 0), x["symbol"]))
 
     rvol_hits = [
         _enrich_with_layer(item, metadata, pool_symbols)
-        for item in scan_rvol_sustained(price_dict, threshold=RVOL_SUSTAINED_THRESHOLD)
+        for item in rvol_raw
     ]
 
     scan_dates = [frame.index.max() for frame in price_frames.values() if not frame.empty]
@@ -263,11 +531,14 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
 def format_section_broad_signal(market_signals: dict) -> str:
     section = market_signals.get("broad_scan", {})
     lines = ["*1. 广扫标准 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_layered_items(
+    lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无广扫触发",
-        lambda item: "{} | RVOL {:.1f}σ | {:+.1f}% | {}".format(
-            item["symbol"],
+        "标的 | 概念 | 业务角色 | RVOL | 涨幅 | 市值",
+        lambda item: "{} | {} | {} | {:.1f}σ | {:+.1f}% | {}".format(
+            _compact_company(item),
+            _display_concept_tags(item),
+            _display_classification(item),
             item["rvol"],
             item["return_pct"],
             _format_market_cap(item.get("marketCap")),
@@ -279,11 +550,14 @@ def format_section_broad_signal(market_signals: dict) -> str:
 def format_section_layered_pmarp(market_signals: dict) -> str:
     section = market_signals.get("pmarp", {})
     lines = ["*2. PMARP 信号 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_layered_items(
+    lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无 PMARP 信号",
-        lambda item: "{} | {:.1f}% ({:.1f}→{:.1f}) | {}".format(
-            item["symbol"],
+        "标的 | 概念 | 业务角色 | 当前 | 变化 | 市值",
+        lambda item: "{} | {} | {} | {:.1f}% | {:.1f}→{:.1f} | {}".format(
+            _compact_company(item),
+            _display_concept_tags(item),
+            _display_classification(item),
             item.get("value") or 0,
             item.get("previous") or 0,
             item.get("value") or 0,
@@ -296,11 +570,14 @@ def format_section_layered_pmarp(market_signals: dict) -> str:
 def format_section_layered_dv(market_signals: dict) -> str:
     section = market_signals.get("dv_acceleration", {})
     lines = ["*3. 量能加速 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_layered_items(
+    lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无加速信号",
-        lambda item: "{} | {:.1f}x | 5d={} / 20d={} | {}".format(
-            item["symbol"],
+        "标的 | 概念 | 业务角色 | 倍数 | 5d/20d | 市值",
+        lambda item: "{} | {} | {} | {:.1f}x | {}/{} | {}".format(
+            _compact_company(item),
+            _display_concept_tags(item),
+            _display_classification(item),
             item.get("ratio") or 0,
             format_dv(item.get("dv_5d") or 0),
             format_dv(item.get("dv_20d") or 0),
@@ -318,11 +595,14 @@ def format_section_layered_rvol(market_signals: dict) -> str:
         "single": "单日",
     }
     lines = ["*4. RVOL 持续放量 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_layered_items(
+    lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无持续放量信号",
-        lambda item: "{} | {} | 最新 {:.1f}σ | {}".format(
-            item["symbol"],
+        "标的 | 概念 | 业务角色 | 形态 | 最新 | 市值",
+        lambda item: "{} | {} | {} | {} | {:.1f}σ | {}".format(
+            _compact_company(item),
+            _display_concept_tags(item),
+            _display_classification(item),
             level_labels.get(item.get("level"), item.get("level", "")),
             item.get("latest_rvol") or 0,
             _format_market_cap(item.get("marketCap")),
@@ -388,30 +668,491 @@ def format_section_c(rvol_list: list) -> str:
     return "\n".join(lines)
 
 
+def _normalize_dv_items(dv_result: dict) -> dict:
+    """Normalize Dollar Volume rows into the same enriched item shape as signals."""
+    rankings = dv_result.get("rankings", [])
+    new_faces = dv_result.get("new_faces", [])
+    metadata = {}
+    symbols = []
+    for row in rankings + new_faces:
+        symbol = (row.get("symbol") or "").upper()
+        if not symbol:
+            continue
+        symbols.append(symbol)
+        metadata[symbol] = dict(row)
+    if symbols:
+        _merge_local_metadata(metadata, symbols)
+
+    try:
+        pool_symbols = set(get_symbols())
+    except Exception:
+        pool_symbols = set()
+
+    def normalize(row: dict) -> dict:
+        symbol = (row.get("symbol") or "").upper()
+        item = dict(metadata.get(symbol) or {})
+        item.update({k: v for k, v in row.items() if v not in (None, "")})
+        item["symbol"] = symbol or item.get("symbol", "")
+        if row.get("company_name") and not item.get("companyName"):
+            item["companyName"] = row.get("company_name")
+        if row.get("market_cap") and not item.get("marketCap"):
+            item["marketCap"] = row.get("market_cap")
+        item.setdefault("concept_bucket", _concept_bucket(item))
+        layer_meta = {symbol: {"marketCap": item.get("marketCap") or 0}}
+        item["layer"] = _layer_for_symbol(symbol, layer_meta, pool_symbols)
+        return item
+
+    return {
+        "rankings": [normalize(row) for row in rankings],
+        "new_faces": [normalize(row) for row in new_faces],
+    }
+
+
 def format_section_d(dv_result: dict) -> str:
     """D. Dollar Volume"""
     lines = ["*D. Dollar Volume*"]
-
-    rankings = dv_result.get("rankings", [])
-    new_faces = dv_result.get("new_faces", [])
+    normalized = _normalize_dv_items(dv_result)
 
     # 新面孔
-    if new_faces:
-        nf_items = "  ".join(
-            "#{} {} {}".format(nf["rank"], nf["symbol"], format_dv(nf["dollar_volume"]))
-            for nf in new_faces[:5])
-        lines.append("新面孔: {}".format(nf_items))
+    if normalized["new_faces"]:
+        lines.append("新面孔:")
+        lines.extend(_format_bucketed_table(
+            normalized["new_faces"],
+            "无新面孔",
+            "标的 | 业务角色 | 排名 | 成交额",
+            lambda item: "{} | {} | #{} | {}".format(
+                _compact_company(item),
+                _display_classification(item),
+                item["rank"],
+                format_dv(item["dollar_volume"]),
+            ),
+        ))
 
-    # Top 10
-    if rankings:
-        lines.append("```")
-        lines.append(" # Symbol  $Vol      Price")
-        for r in rankings[:10]:
-            lines.append("{:>2} {:<7} {:>8} ${:>7.0f}".format(
-                r["rank"], r["symbol"], format_dv(r["dollar_volume"]), r["price"]))
-        lines.append("```")
+    # Full ranking payload. Telegram splitting handles long reports.
+    if normalized["rankings"]:
+        lines.append("成交额 Top {}:".format(len(normalized["rankings"])))
+        lines.extend(_format_bucketed_table(
+            normalized["rankings"],
+            "无成交额排行",
+            "标的 | 业务角色 | 排名 | 成交额 | 价格",
+            lambda item: "{} | {} | #{} | {} | ${:.0f}".format(
+                _compact_company(item),
+                _display_classification(item),
+                item["rank"],
+                format_dv(item["dollar_volume"]),
+                item["price"],
+            ),
+        ))
 
     return "\n".join(lines)
+
+
+def _visual_row(item: dict, cells: list[str]) -> dict:
+    return {
+        "layer": item.get("layer", "broad"),
+        "bucket": item.get("concept_bucket") or _concept_bucket(item),
+        "cells": [str(cell) for cell in cells],
+    }
+
+
+def _visual_company(item: dict) -> str:
+    return _display_company(item, max_len=30)
+
+
+def _build_visual_block(
+    title: str,
+    columns: list[str],
+    items: list[dict],
+    row_builder,
+    widths: list[int],
+) -> dict:
+    return {
+        "title": title,
+        "columns": columns,
+        "widths": widths,
+        "rows": [_visual_row(item, row_builder(item)) for item in items],
+    }
+
+
+def build_morning_visual_sections(
+    market_signals: dict | None = None,
+    dv_result: dict | None = None,
+) -> list[dict]:
+    """Build image-report section specs grouped by layer and concept bucket."""
+    sections = []
+    as_of = (market_signals or {}).get("as_of") or datetime.now().strftime("%Y-%m-%d")
+    common_subtitle = "信号日 {} | Pool / Extend / Broad 分层，层内按题材聚类".format(as_of)
+
+    if market_signals:
+        broad = market_signals.get("broad_scan", {})
+        sections.append({
+            "slug": "01_broad_signal",
+            "title": "1. 广扫标准",
+            "subtitle": "{} | {}".format(broad.get("criteria", ""), common_subtitle),
+            "blocks": [
+                _build_visual_block(
+                    "触发公司",
+                    ["标的", "概念", "业务角色", "RVOL", "涨幅", "市值"],
+                    broad.get("hits", []),
+                    lambda item: [
+                        _visual_company(item),
+                        _display_concept_tags(item),
+                        _display_classification(item),
+                        "{:.1f}σ".format(item.get("rvol") or 0),
+                        "{:+.1f}%".format(item.get("return_pct") or 0),
+                        _format_market_cap(item.get("marketCap")),
+                    ],
+                    [320, 360, 280, 150, 150, 160],
+                ),
+            ],
+        })
+
+        pmarp = market_signals.get("pmarp", {})
+        sections.append({
+            "slug": "02_pmarp",
+            "title": "2. PMARP 信号",
+            "subtitle": "{} | {}".format(pmarp.get("criteria", ""), common_subtitle),
+            "blocks": [
+                _build_visual_block(
+                    "上穿/修复",
+                    ["标的", "概念", "业务角色", "当前", "变化", "市值"],
+                    pmarp.get("hits", []),
+                    lambda item: [
+                        _visual_company(item),
+                        _display_concept_tags(item),
+                        _display_classification(item),
+                        "{:.1f}%".format(item.get("value") or 0),
+                        "{:.1f}→{:.1f}".format(item.get("previous") or 0, item.get("value") or 0),
+                        _format_market_cap(item.get("marketCap")),
+                    ],
+                    [320, 360, 280, 150, 190, 160],
+                ),
+            ],
+        })
+
+        dv_acc = market_signals.get("dv_acceleration", {})
+        sections.append({
+            "slug": "03_dv_acceleration",
+            "title": "3. 量能加速",
+            "subtitle": "{} | {}".format(dv_acc.get("criteria", ""), common_subtitle),
+            "blocks": [
+                _build_visual_block(
+                    "DV 加速",
+                    ["标的", "概念", "业务角色", "倍数", "5d/20d", "市值"],
+                    dv_acc.get("hits", []),
+                    lambda item: [
+                        _visual_company(item),
+                        _display_concept_tags(item),
+                        _display_classification(item),
+                        "{:.1f}x".format(item.get("ratio") or 0),
+                        "{}/{}".format(
+                            format_dv(item.get("dv_5d") or 0),
+                            format_dv(item.get("dv_20d") or 0),
+                        ),
+                        _format_market_cap(item.get("marketCap")),
+                    ],
+                    [320, 360, 280, 150, 240, 160],
+                ),
+            ],
+        })
+
+        rvol = market_signals.get("rvol_sustained", {})
+        level_labels = {
+            "sustained_5d": "5日连续",
+            "sustained_3d": "3日连续",
+            "single": "单日",
+        }
+        sections.append({
+            "slug": "04_rvol_sustained",
+            "title": "4. RVOL 持续放量",
+            "subtitle": "{} | {}".format(rvol.get("criteria", ""), common_subtitle),
+            "blocks": [
+                _build_visual_block(
+                    "持续放量",
+                    ["标的", "概念", "业务角色", "形态", "最新", "市值"],
+                    rvol.get("hits", []),
+                    lambda item: [
+                        _visual_company(item),
+                        _display_concept_tags(item),
+                        _display_classification(item),
+                        level_labels.get(item.get("level"), item.get("level", "")),
+                        "{:.1f}σ".format(item.get("latest_rvol") or 0),
+                        _format_market_cap(item.get("marketCap")),
+                    ],
+                    [320, 360, 280, 170, 150, 160],
+                ),
+            ],
+        })
+
+    if dv_result:
+        normalized = _normalize_dv_items(dv_result)
+        blocks = []
+        if normalized["new_faces"]:
+            blocks.append(_build_visual_block(
+                "新面孔",
+                ["标的", "业务角色", "排名", "成交额"],
+                normalized["new_faces"],
+                lambda item: [
+                    _visual_company(item),
+                    _display_classification(item),
+                    "#{}".format(item.get("rank", "")),
+                    format_dv(item.get("dollar_volume") or 0),
+                ],
+                [420, 470, 160, 230],
+            ))
+        if normalized["rankings"]:
+            blocks.append(_build_visual_block(
+                "成交额 Top {}".format(len(normalized["rankings"])),
+                ["标的", "业务角色", "排名", "成交额", "价格"],
+                normalized["rankings"],
+                lambda item: [
+                    _visual_company(item),
+                    _display_classification(item),
+                    "#{}".format(item.get("rank", "")),
+                    format_dv(item.get("dollar_volume") or 0),
+                    "${:.0f}".format(item.get("price") or 0),
+                ],
+                [380, 430, 150, 230, 150],
+            ))
+        if blocks:
+            sections.append({
+                "slug": "05_dollar_volume",
+                "title": "D. Dollar Volume",
+                "subtitle": common_subtitle,
+                "blocks": blocks,
+            })
+
+    return sections
+
+
+_VISUAL_FONT_CANDIDATES = {
+    "regular": [
+        "/System/Library/Fonts/STHeiti Light.ttc",
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+        "/Library/Fonts/Arial Unicode.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ],
+    "bold": [
+        "/System/Library/Fonts/STHeiti Medium.ttc",
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+        "/Library/Fonts/Arial Unicode.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ],
+}
+
+_VISUAL_LAYER_COLORS = {
+    "pool": ("#1d4ed8", "#dbeafe"),
+    "extend": ("#b45309", "#fef3c7"),
+    "broad": ("#334155", "#e2e8f0"),
+}
+_TELEGRAM_PHOTO_MAX_DIMENSION_SUM = 9800
+_VISUAL_WIDTH = 2400
+_VISUAL_MARGIN = 76
+_VISUAL_TABLE_HEADER_H = 54
+_VISUAL_TABLE_ROW_H = 58
+
+
+def _load_visual_font(size: int, bold: bool = False):
+    from PIL import ImageFont
+
+    key = "bold" if bold else "regular"
+    for candidate in _VISUAL_FONT_CANDIDATES[key]:
+        path = Path(candidate)
+        if not path.exists():
+            continue
+        try:
+            return ImageFont.truetype(str(path), size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
+def _fit_text(draw, text: str, font, max_width: int) -> str:
+    text = str(text)
+    if draw.textlength(text, font=font) <= max_width:
+        return text
+    ellipsis = "…"
+    while text and draw.textlength(text + ellipsis, font=font) > max_width:
+        text = text[:-1]
+    return (text + ellipsis) if text else ellipsis
+
+
+def _draw_fit(draw, xy: tuple[int, int], text: str, font, fill: str, max_width: int) -> None:
+    draw.text(xy, _fit_text(draw, text, font, max_width), font=font, fill=fill)
+
+
+def _rows_by_layer_and_bucket(rows: list[dict]) -> dict:
+    grouped = {
+        layer: {bucket: [] for bucket in CONCEPT_BUCKET_ORDER}
+        for layer in LAYER_ORDER
+    }
+    for row in rows:
+        layer = row.get("layer", "broad")
+        bucket = row.get("bucket") or "其他"
+        grouped.setdefault(layer, {}).setdefault(bucket, []).append(row)
+    return grouped
+
+
+def _estimate_visual_height(section: dict) -> int:
+    height = 260
+    for block in section.get("blocks", []):
+        height += 90
+        grouped = _rows_by_layer_and_bucket(block.get("rows", []))
+        for layer in LAYER_ORDER:
+            layer_rows = sum(len(rows) for rows in grouped.get(layer, {}).values())
+            height += 72
+            if not layer_rows:
+                height += 58
+                continue
+            for bucket in CONCEPT_BUCKET_ORDER:
+                rows = grouped.get(layer, {}).get(bucket, [])
+                if rows:
+                    height += 50 + _VISUAL_TABLE_HEADER_H + _VISUAL_TABLE_ROW_H * len(rows) + 28
+    return max(height + 260, 640)
+
+
+def _scaled_widths(widths: list[int], total_width: int) -> list[int]:
+    raw_total = sum(widths) or total_width
+    scaled = [max(80, int(w * total_width / raw_total)) for w in widths]
+    diff = total_width - sum(scaled)
+    if scaled:
+        scaled[-1] += diff
+    return scaled
+
+
+def _draw_visual_table_header(draw, x: int, y: int, col_widths: list[int], columns: list[str], font) -> int:
+    row_h = _VISUAL_TABLE_HEADER_H
+    draw.rectangle([x, y, x + sum(col_widths), y + row_h], fill="#f1f5f9")
+    cur_x = x
+    for width, column in zip(col_widths, columns):
+        _draw_fit(draw, (cur_x + 18, y + 12), column, font, "#334155", width - 34)
+        cur_x += width
+    return y + row_h
+
+
+def _resize_for_telegram_photo(image):
+    width, height = image.size
+    if width + height <= _TELEGRAM_PHOTO_MAX_DIMENSION_SUM:
+        return image
+
+    scale = _TELEGRAM_PHOTO_MAX_DIMENSION_SUM / float(width + height)
+    new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+    try:
+        from PIL import Image
+        resampling = Image.Resampling.LANCZOS
+    except Exception:
+        resampling = 1
+    return image.resize(new_size, resampling)
+
+
+def render_morning_report_images(
+    market_signals: dict | None = None,
+    dv_result: dict | None = None,
+    output_dir: str | Path | None = None,
+    photo_safe: bool = False,
+) -> list[Path]:
+    """Render each morning-report section as one PNG image."""
+    from PIL import Image, ImageDraw
+
+    sections = build_morning_visual_sections(market_signals=market_signals, dv_result=dv_result)
+    if not sections:
+        return []
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = Path(output_dir) if output_dir else SCANS_DIR / "morning_images_{}".format(timestamp)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    width = _VISUAL_WIDTH
+    margin = _VISUAL_MARGIN
+    content_w = width - margin * 2
+    title_font = _load_visual_font(58, bold=True)
+    subtitle_font = _load_visual_font(32)
+    block_font = _load_visual_font(38, bold=True)
+    layer_font = _load_visual_font(34, bold=True)
+    bucket_font = _load_visual_font(31, bold=True)
+    header_font = _load_visual_font(29, bold=True)
+    row_font = _load_visual_font(30)
+    small_font = _load_visual_font(26)
+
+    image_paths = []
+    for index, section in enumerate(sections, 1):
+        height = _estimate_visual_height(section) + 2000
+        image = Image.new("RGB", (width, height), "#f8fafc")
+        draw = ImageDraw.Draw(image)
+
+        y = 60
+        draw.rounded_rectangle([margin, y, width - margin, y + 120], radius=24, fill="#0f172a")
+        _draw_fit(draw, (margin + 44, y + 30), section["title"], title_font, "#ffffff", content_w - 88)
+        y += 146
+        _draw_fit(draw, (margin + 4, y), section.get("subtitle", ""), subtitle_font, "#475569", content_w)
+        y += 72
+
+        for block in section.get("blocks", []):
+            draw.text((margin, y), block["title"], font=block_font, fill="#111827")
+            y += 62
+            grouped = _rows_by_layer_and_bucket(block.get("rows", []))
+            col_widths = _scaled_widths(block.get("widths", []), content_w)
+
+            for layer in LAYER_ORDER:
+                layer_rows = sum(len(rows) for rows in grouped.get(layer, {}).values())
+                dark, light = _VISUAL_LAYER_COLORS[layer]
+                draw.rounded_rectangle([margin, y, width - margin, y + 52], radius=13, fill=light)
+                layer_label = "{}  {}家公司".format(LAYER_LABELS[layer], layer_rows)
+                draw.text((margin + 20, y + 9), layer_label, font=layer_font, fill=dark)
+                y += 66
+
+                if not layer_rows:
+                    draw.text((margin + 18, y), "无触发", font=small_font, fill="#64748b")
+                    y += 58
+                    continue
+
+                for bucket in CONCEPT_BUCKET_ORDER:
+                    rows = grouped.get(layer, {}).get(bucket, [])
+                    if not rows:
+                        continue
+                    draw.text(
+                        (margin + 14, y),
+                        "{} ({})".format(bucket, len(rows)),
+                        font=bucket_font,
+                        fill="#0f172a",
+                    )
+                    y += 50
+                    y = _draw_visual_table_header(draw, margin, y, col_widths, block["columns"], header_font)
+                    for row_idx, row in enumerate(rows):
+                        row_h = _VISUAL_TABLE_ROW_H
+                        fill = "#ffffff" if row_idx % 2 == 0 else "#f8fafc"
+                        draw.rectangle([margin, y, width - margin, y + row_h], fill=fill)
+                        cur_x = margin
+                        for col_width, cell in zip(col_widths, row["cells"]):
+                            _draw_fit(draw, (cur_x + 18, y + 14), cell, row_font, "#111827", col_width - 34)
+                            cur_x += col_width
+                        y += row_h
+                    y += 26
+                y += 12
+            y += 20
+
+        footer_y = y + 18
+        draw.text(
+            (margin, footer_y),
+            "Generated {} | Future Capital Morning Report".format(datetime.now().strftime("%Y-%m-%d %H:%M")),
+            font=small_font,
+            fill="#64748b",
+        )
+        final_height = min(height, footer_y + 58)
+        image = image.crop((0, 0, width, final_height))
+        path = out_dir / "{:02d}_{}.png".format(index, section["slug"])
+        if photo_safe:
+            image = _resize_for_telegram_photo(image)
+        image.save(path, "PNG", optimize=True)
+        image_paths.append(path)
+
+    return image_paths
 
 
 
@@ -654,7 +1395,7 @@ def format_morning_report(
         lines.append(format_section_c(rvol_list))
         lines.append("")
 
-    # Dollar Volume format intentionally unchanged.
+    # D. Dollar Volume — also concept-bucketed for readability.
     if dv_result:
         lines.append(format_section_d(dv_result))
         lines.append("")
@@ -710,90 +1451,18 @@ def main():
     parser = argparse.ArgumentParser(description="未来资本 晨报")
     parser.add_argument("--no-telegram", action="store_true", help="不推送 Telegram")
     parser.add_argument("--symbols", type=str, help="指定股票代码，逗号分隔")
+    parser.add_argument("--include-social", action="store_true",
+                        help="启用社交情绪段（默认 skip：Adanos 采集 cron 已下线）")
     parser.add_argument("--no-social", action="store_true",
-                        help="跳过社交情绪 Section G（社交数据延后采集时使用）")
-    parser.add_argument("--social-only", action="store_true",
-                        help="仅发送社交情绪日报（配合延后 cron 使用）")
+                        help="[DEPRECATED] no-op；社交段默认已 skip，保留兼容老 cron 命令行")
+    parser.add_argument("--image-report", action="store_true",
+                        help="每个晨报 section 生成一张图片；Telegram 发送图片而不是长文本")
+    parser.add_argument("--image-delivery", choices=["document", "photo"],
+                        default="document",
+                        help="图片发送方式：document 保留原始分辨率；photo 内联预览但会被 Telegram 压缩")
+    parser.add_argument("--image-output-dir", type=str,
+                        help="图片输出目录（默认 data/scans/morning_images_<timestamp>）")
     args = parser.parse_args()
-
-    # --social-only: 仅发送社交情绪日报（独立 cron 调用）
-    if args.social_only:
-        logger.info("=" * 60)
-        logger.info("社交情绪日报 开始")
-        logger.info("=" * 60)
-        start_time = time.time()
-        try:
-            if args.symbols:
-                symbols = [s.strip().upper() for s in args.symbols.split(",")]
-            else:
-                symbols = get_symbols()
-
-            # Section E + F: 市场级社交数据 (Adanos market-level)
-            from src.data.market_store import get_store
-            from datetime import timezone, timedelta
-            store = get_store()
-            now_utc = datetime.now(timezone.utc)
-            today_utc = now_utc.strftime("%Y-%m-%d")
-            yesterday_utc = (now_utc - timedelta(days=1)).strftime("%Y-%m-%d")
-            fresh_dates = {today_utc, yesterday_utc}
-
-            market_pulse = None
-            pulse = {}
-            for src in ["reddit", "x"]:
-                row = store.get_latest_market_sentiment(source=src)
-                if row and row.get("date") in fresh_dates:
-                    pulse[src] = row
-            if pulse:
-                market_pulse = pulse
-                logger.info("市场情绪脉搏: %s", list(pulse.keys()))
-
-            trending_data = None
-            t_data = {"stocks": [], "sectors": []}
-            trending_date = None
-            for candidate_date in [today_utc, yesterday_utc]:
-                for src in ["reddit", "x"]:
-                    t_data["stocks"].extend(store.get_social_trending(candidate_date, src))
-                    t_data["sectors"].extend(store.get_social_trending_sectors(candidate_date, src))
-                if t_data["stocks"] or t_data["sectors"]:
-                    trending_date = candidate_date
-                    break
-                t_data = {"stocks": [], "sectors": []}
-            if t_data["stocks"] or t_data["sectors"]:
-                t_data["date"] = trending_date
-                trending_data = t_data
-                logger.info("社交热门: %d stocks, %d sectors", len(t_data["stocks"]), len(t_data["sectors"]))
-
-            # Section G: per-stock 社交情绪雷达
-            from src.indicators.social_attention import scan_social_signals
-            social_scan = scan_social_signals(symbols)
-            logger.info("社交情绪扫描完成: %d 只有数据", social_scan.get("symbols_with_data", 0))
-
-            # 组装消息: E + F + G
-            sections = []
-            if market_pulse:
-                sections.append(format_section_market_pulse(market_pulse))
-            if trending_data:
-                sections.append(format_section_trending(trending_data))
-            sections.append(format_section_social(social_scan))
-
-            social_msg = "*未来资本 社交情绪日报*\n{}\n\n{}".format(
-                datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "\n\n".join(sections),
-            )
-
-            if not args.no_telegram:
-                _send_group_message(social_msg)
-            else:
-                print(social_msg)
-        except Exception as e:
-            logger.error("社交情绪日报异常: %s", e)
-            if not args.no_telegram:
-                _send_group_message("*社交情绪日报异常*\n\n错误: {}".format(str(e)[:200]))
-
-        elapsed = time.time() - start_time
-        logger.info("社交情绪日报完成，耗时 %.1f 秒", elapsed)
-        logger.info("=" * 60)
-        return
 
     logger.info("=" * 60)
     logger.info("未来资本 晨报 开始")
@@ -822,10 +1491,10 @@ def main():
         # 3. Dollar Volume 采集
         dv_result = run_dollar_volume()
 
-        # 4. 市场情绪脉搏 + 社交热门 (Adanos market-level)
+        # 4. 市场情绪脉搏 + 社交热门 (Adanos market-level) — opt-in 默认 skip。
         market_pulse = None
         trending_data = None
-        if not args.no_social:
+        if args.include_social:
             try:
                 from src.data.market_store import get_store
                 from datetime import timezone, timedelta
@@ -866,9 +1535,9 @@ def main():
             except Exception as e:
                 logger.warning("市场级社交数据加载失败: %s", e)
 
-        # 5. 社交情绪雷达（--no-social 时跳过）
+        # 5. 社交情绪雷达 — opt-in 默认 skip。
         social_scan = None
-        if not args.no_social:
+        if args.include_social:
             try:
                 from src.indicators.social_attention import scan_social_signals
                 logger.info("开始社交情绪扫描...")
@@ -876,8 +1545,6 @@ def main():
                 logger.info("社交情绪扫描完成: %d 只有数据", social_scan.get("symbols_with_data", 0))
             except Exception as e:
                 logger.warning("社交情绪扫描失败: %s", e)
-        else:
-            logger.info("跳过社交情绪（--no-social），将由 10:20 社交日报独立发送")
 
         elapsed = time.time() - start_time
 
@@ -886,6 +1553,26 @@ def main():
             dv_result=dv_result, market_signals=market_signals,
             market_pulse=market_pulse, trending_data=trending_data,
             social_scan=social_scan, elapsed=elapsed)
+
+        image_paths = []
+        image_report_active = args.image_report
+        if image_report_active:
+            try:
+                image_paths = render_morning_report_images(
+                    market_signals=market_signals,
+                    dv_result=dv_result,
+                    output_dir=args.image_output_dir,
+                    photo_safe=args.image_delivery == "photo",
+                )
+                logger.info("晨报图片已生成: %d 张", len(image_paths))
+            except ImportError as exc:
+                # Pillow 缺失 (云端 git pull 部署后未自动装新依赖) → 降级到文本模式，
+                # 不让 cron 整体异常。文本路径是 first-class fallback。
+                logger.warning(
+                    "图片渲染依赖缺失 (%s)，降级到文本模式发送晨报", exc
+                )
+                image_report_active = False
+                image_paths = []
 
         # 7. 保存 JSON
         SCANS_DIR.mkdir(parents=True, exist_ok=True)
@@ -897,15 +1584,23 @@ def main():
             "elapsed": round(elapsed, 1),
             "market_signals": market_signals,
         }
+        if image_paths:
+            save_data["image_report_paths"] = [str(path) for path in image_paths]
         with open(save_path, "w", encoding="utf-8") as f:
             json.dump(save_data, f, ensure_ascii=False, indent=2, default=str)
         logger.info("结果已保存: %s", save_path)
 
         # 8. 发送 Telegram
         if not args.no_telegram:
-            _send_group_report(daily_msg)
+            if image_report_active and image_paths:
+                _send_group_image_report(image_paths, delivery=args.image_delivery)
+            else:
+                _send_group_report(daily_msg)
         else:
-            print(daily_msg)
+            if image_report_active and image_paths:
+                print("\n".join(str(path) for path in image_paths))
+            else:
+                print(daily_msg)
 
     except Exception as e:
         logger.error("晨报异常: %s", e)

@@ -9,6 +9,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.morning_report import (
+    build_morning_visual_sections,
     format_section_broad_signal,
     format_section_layered_dv,
     format_section_layered_pmarp,
@@ -18,6 +19,7 @@ from scripts.morning_report import (
     format_section_c,
     format_section_d,
     format_morning_report,
+    render_morning_report_images,
 )
 
 
@@ -29,28 +31,60 @@ def sample_market_signals():
         "broad_scan": {
             "criteria": "RVOL ≥3σ + 涨 ≥3%",
             "hits": [
-                {"symbol": "NVDA", "layer": "pool", "rvol": 3.5, "return_pct": 4.2, "marketCap": 3e12},
-                {"symbol": "APP", "layer": "extend", "rvol": 4.1, "return_pct": 5.5, "marketCap": 45e9},
-                {"symbol": "OKLO", "layer": "broad", "rvol": 5.2, "return_pct": 9.0, "marketCap": 6e9},
+                {
+                    "symbol": "NVDA", "companyName": "NVIDIA Corporation",
+                    "sector": "Technology", "industry": "Semiconductors",
+                    "concept_bucket": "AI算力/云", "layer": "pool",
+                    "rvol": 3.5, "return_pct": 4.2, "marketCap": 3e12,
+                },
+                {
+                    "symbol": "APP", "companyName": "AppLovin Corporation",
+                    "sector": "Technology", "industry": "Software - Application",
+                    "concept_bucket": "软件/SaaS", "layer": "extend",
+                    "rvol": 4.1, "return_pct": 5.5, "marketCap": 45e9,
+                },
+                {
+                    "symbol": "OKLO", "companyName": "Oklo Inc.",
+                    "sector": "Utilities", "industry": "Regulated Electric",
+                    "concept_bucket": "数据中心电力", "layer": "broad",
+                    "rvol": 5.2, "return_pct": 9.0, "marketCap": 6e9,
+                },
             ],
             "triggered_total": 3,
         },
         "pmarp": {
             "criteria": "PMARP 上穿 2%",
             "hits": [
-                {"symbol": "BA", "layer": "extend", "value": 2.5, "previous": 1.7, "marketCap": 12e9},
+                {
+                    "symbol": "BA", "companyName": "Boeing Company",
+                    "sector": "Industrials", "industry": "Aerospace & Defense",
+                    "concept_bucket": "工业/航天/国防", "layer": "extend",
+                    "value": 2.5, "previous": 1.7, "marketCap": 12e9,
+                },
             ],
         },
         "dv_acceleration": {
             "criteria": "DV >1.5x",
             "hits": [
-                {"symbol": "MU", "layer": "pool", "ratio": 1.8, "dv_5d": 900e6, "dv_20d": 500e6, "marketCap": 160e9},
+                {
+                    "symbol": "MU", "companyName": "Micron Technology, Inc.",
+                    "sector": "Technology", "industry": "Semiconductors",
+                    "concept_bucket": "半导体链", "layer": "pool",
+                    "ratio": 1.8, "dv_5d": 900e6, "dv_20d": 500e6,
+                    "marketCap": 160e9,
+                },
             ],
         },
         "rvol_sustained": {
             "criteria": "RVOL >2.0σ 持续",
             "hits": [
-                {"symbol": "RKLB", "layer": "broad", "level": "sustained_3d", "latest_rvol": 3.2, "marketCap": 8e9},
+                {
+                    "symbol": "RKLB", "companyName": "Rocket Lab USA, Inc.",
+                    "sector": "Industrials", "industry": "Aerospace & Defense",
+                    "concept_bucket": "工业/航天/国防", "layer": "broad",
+                    "level": "sustained_3d", "latest_rvol": 3.2,
+                    "marketCap": 8e9,
+                },
             ],
         },
     }
@@ -215,35 +249,167 @@ class TestFormatSectionD:
         assert "ARM" in result
         assert "新面孔" in result
 
+    def test_missing_industry_uses_bucket_not_unclassified(self):
+        dv_result = {
+            "rankings": [
+                {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9, "price": 890.5},
+                {"rank": 2, "symbol": "XYZ1", "company_name": "Unknown Co",
+                 "dollar_volume": 1e9, "price": 10.0},
+            ],
+            "new_faces": [],
+        }
+        result = format_section_d(dv_result)
+        assert "Unclassified" not in result
+        assert "unclassified" not in result.lower()
+        assert "AI算力/云" in result
+        assert "其他" in result
+
 
 class TestLayeredSections:
-    def test_broad_signal_groups_by_layer(self):
+    def test_broad_signal_groups_by_concept_bucket(self):
         result = format_section_broad_signal(sample_market_signals())
         assert "广扫标准" in result
-        assert "Pool:" in result
-        assert "Extend ($10B+):" in result
-        assert "Broad ($1B-$10B):" in result
+        assert "AI算力/云" in result
+        assert "软件/SaaS" in result
+        assert "数据中心电力" in result
+        assert "NVIDIA" in result
+        assert "GPU/AI加速器" in result
+        assert "Semiconductors" not in result
         assert "NVDA" in result
-        assert "APP" in result
-        assert "OKLO" in result
+
+    def test_broad_signal_missing_industry_uses_concept_bucket(self):
+        signals = sample_market_signals()
+        signals["broad_scan"]["hits"] = [
+            {
+                "symbol": "TSLA",
+                "companyName": "Tesla Inc.",
+                "concept_bucket": "自动驾驶/机器人",
+                "rvol": 3.2,
+                "return_pct": 4.0,
+                "marketCap": 800e9,
+            }
+        ]
+        result = format_section_broad_signal(signals)
+        assert "Unclassified" not in result
+        assert "自动驾驶/机器人" in result
+        assert "电动车/自动驾驶" in result
 
     def test_pmarp_layered_section(self):
         result = format_section_layered_pmarp(sample_market_signals())
         assert "PMARP 信号" in result
         assert "BA" in result
         assert "1.7→2.5" in result
+        assert "商用飞机/军工" in result
 
     def test_dv_layered_section(self):
         result = format_section_layered_dv(sample_market_signals())
         assert "量能加速" in result
         assert "MU" in result
         assert "1.8x" in result
+        assert "DRAM/HBM存储" in result
 
     def test_rvol_layered_section(self):
         result = format_section_layered_rvol(sample_market_signals())
         assert "RVOL 持续放量" in result
         assert "RKLB" in result
         assert "3日连续" in result
+        assert "小型火箭发射" in result
+
+    def test_layered_dv_renders_three_tier_concept_tags(self, monkeypatch, tmp_path):
+        """When registry has display_tags, the layered DV row shows the full three tiers."""
+        from src.data.market_store import MarketStore
+        from terminal.company_concepts import ConceptRegistry
+        from terminal.concept_classifier import ConceptClassifier
+        from scripts.build_company_concept_registry import build_registry
+        from terminal import concept_classifier as cc_mod
+        from config.settings import REPORT_CONCEPTS_PATH
+
+        cfg = PROJECT_ROOT / "config" / "concepts"
+        store = MarketStore(tmp_path / "market.db")
+        registry = ConceptRegistry(
+            taxonomy_path=cfg / "taxonomy.json",
+            themes_path=cfg / "concept_themes.json",
+            overrides_path=cfg / "company_concept_overrides.json",
+            watchlist_path=cfg / "concept_watchlist.json",
+        )
+        build_registry(
+            store=store, registry=registry,
+            universe_symbols=["MU"],
+            profiles={"MU": {"symbol": "MU", "industry": "Semiconductors"}},
+            portfolio_holdings=["MU"],
+            broad_top_symbols=["MU"],
+            review_csv_path=tmp_path / "review.csv",
+            save=True, force_save=False,
+        )
+        # Inject a registry-aware classifier into the morning_report singleton.
+        injected = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
+        monkeypatch.setattr(cc_mod, "_REPORT_CONCEPT_CLASSIFIER", injected)
+
+        result = format_section_layered_dv(sample_market_signals())
+        assert "MU" in result
+        # Three-tier tags from the registry are joined into the row.
+        assert "半导体" in result
+        assert "存储" in result
+        assert "HBM" in result
+        # Business role still rendered for context.
+        assert "DRAM/HBM存储" in result
+
+    def test_image_report_blocks_include_concept_column(self):
+        """B 的 image-report cron 走 build_morning_visual_sections —— 4 个 block 都
+        必须有'概念'列，否则三层标签不会出现在实际发出的图片晨报里。"""
+        sections = build_morning_visual_sections(sample_market_signals())
+        slugs_seen = set()
+        for sec in sections:
+            slugs_seen.add(sec["slug"])
+            for block in sec["blocks"]:
+                cols = block["columns"]
+                # broad/pmarp/dv/rvol 4 个 layered 信号 block 必带"概念"列
+                if sec["slug"] in {"01_broad_signal", "02_pmarp",
+                                   "03_dv_acceleration", "04_rvol_sustained"}:
+                    assert "概念" in cols, f"{sec['slug']} missing 概念 column: {cols}"
+                    # 列宽数组长度也要匹配
+                    assert len(block["widths"]) == len(cols)
+                    # 每行的单元格数也要匹配
+                    for row in block["rows"]:
+                        assert len(row["cells"]) == len(cols)
+        assert {"01_broad_signal", "02_pmarp",
+                "03_dv_acceleration", "04_rvol_sustained"}.issubset(slugs_seen)
+
+    def test_layered_dv_missing_registry_keeps_legacy_bucket(self, monkeypatch):
+        """No store / empty registry → row falls back to the legacy single bucket
+        and never shows Unclassified."""
+        from terminal.concept_classifier import ConceptClassifier
+        from terminal import concept_classifier as cc_mod
+        from config.settings import REPORT_CONCEPTS_PATH
+
+        legacy_only = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=None)
+        monkeypatch.setattr(cc_mod, "_REPORT_CONCEPT_CLASSIFIER", legacy_only)
+
+        result = format_section_layered_dv(sample_market_signals())
+        assert "Unclassified" not in result
+        assert "MU" in result
+        assert "DRAM/HBM存储" in result
+        # Legacy bucket label still appears on the concept column.
+        assert "半导体链" in result
+
+    def test_bucketed_sections_do_not_truncate_with_more(self):
+        data = sample_market_signals()
+        data["broad_scan"]["hits"] = [
+            {
+                "symbol": f"S{i}", "companyName": f"SignalCo {i}",
+                "sector": "Technology", "industry": "Semiconductors",
+                "concept_bucket": "半导体链", "rvol": 3.0 + i / 10,
+                "return_pct": 4.0 + i / 10, "marketCap": 1e9 + i,
+            }
+            for i in range(12)
+        ]
+
+        result = format_section_broad_signal(data)
+
+        assert "... +" not in result
+        assert "more" not in result
+        assert "S0 SignalCo 0" in result
+        assert "S11 SignalCo 11" in result
 
 
 class TestFormatMorningReport:
@@ -309,3 +475,48 @@ class TestFormatMorningReport:
         assert "4. RVOL 持续放量" in result
         assert "*D. Dollar Volume*" in result
         assert "扫描: 3只" in result
+
+
+class TestMorningVisualReport:
+    def test_visual_sections_group_rows_by_layer_and_bucket(self):
+        dv_result = {
+            "rankings": [
+                {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9, "price": 890.5},
+            ],
+            "new_faces": [],
+        }
+
+        sections = build_morning_visual_sections(
+            market_signals=sample_market_signals(),
+            dv_result=dv_result,
+        )
+
+        assert [section["slug"] for section in sections] == [
+            "01_broad_signal",
+            "02_pmarp",
+            "03_dv_acceleration",
+            "04_rvol_sustained",
+            "05_dollar_volume",
+        ]
+        first_rows = sections[0]["blocks"][0]["rows"]
+        assert {row["layer"] for row in first_rows} == {"pool", "extend", "broad"}
+        assert {row["bucket"] for row in first_rows} >= {"AI算力/云", "软件/SaaS", "数据中心电力"}
+
+    def test_render_visual_report_creates_one_png_per_section(self, tmp_path):
+        pytest.importorskip("PIL")
+        dv_result = {
+            "rankings": [
+                {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9, "price": 890.5},
+            ],
+            "new_faces": [],
+        }
+
+        paths = render_morning_report_images(
+            market_signals=sample_market_signals(),
+            dv_result=dv_result,
+            output_dir=tmp_path,
+        )
+
+        assert len(paths) == 5
+        assert all(path.exists() for path in paths)
+        assert all(path.suffix == ".png" for path in paths)

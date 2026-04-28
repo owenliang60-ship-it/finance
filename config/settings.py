@@ -395,6 +395,7 @@ RVOL_SUSTAINED_THRESHOLD = 2.0   # σ 阈值
 # ============ Theme Engine ============
 
 THEME_RS_THRESHOLD = 80                    # RS 动量信号阈值 (百分位)
+REPORT_CONCEPTS_PATH = PROJECT_ROOT / "config" / "concepts" / "report_concepts.json"
 
 # ============ MarketData.app (Options) ============
 

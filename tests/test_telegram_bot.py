@@ -11,6 +11,7 @@ from src.telegram_bot import (
     _resolve_chat_id,
     send_document,
     send_message,
+    send_photo,
     split_message,
 )
 
@@ -97,3 +98,22 @@ class TestSendDocument:
 
     def test_missing_file_returns_false(self):
         assert send_document("/nonexistent.pdf") is False
+
+
+class TestSendPhoto:
+    @patch("src.telegram_bot.TELEGRAM_BOT_TOKEN", "tok")
+    @patch("src.telegram_bot.TELEGRAM_GROUP_CHAT_ID", "222")
+    @patch("src.telegram_bot.requests.post")
+    def test_send_png(self, mock_post, tmp_path):
+        png = tmp_path / "section.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n")
+        mock_post.return_value = MagicMock()
+        mock_post.return_value.raise_for_status = MagicMock()
+
+        assert send_photo(str(png), caption="Section", channel="group") is True
+
+        assert mock_post.call_args.kwargs["data"]["chat_id"] == "222"
+        assert "photo" in mock_post.call_args.kwargs["files"]
+
+    def test_missing_file_returns_false(self):
+        assert send_photo("/nonexistent.png") is False

@@ -74,6 +74,59 @@ class TestMorningReportRouting:
         assert mock_send.call_args.kwargs["channel"] == "group"
         assert "晨报异常" in mock_send.call_args.args[0]
 
+    @patch("scripts.morning_report.send_message")
+    @patch("scripts.morning_report.scan_social_signals",
+           side_effect=AssertionError("social path must NOT run by default"),
+           create=True)
+    @patch("scripts.morning_report.format_morning_report", return_value="default body")
+    @patch("scripts.morning_report.run_dollar_volume",
+           return_value={"rankings": [], "new_faces": []})
+    @patch("scripts.morning_report.build_market_signal_report",
+           return_value={"symbols_scanned": 1, "symbols_with_data": 1, "as_of": "2026-04-08"})
+    @patch("scripts.morning_report.get_symbols", return_value=["AAPL"])
+    def test_main_skips_social_by_default(
+        self, _symbols, _signals, _dv, _format, _social, mock_send, monkeypatch, tmp_path
+    ):
+        """No --include-social → social scan & market pulse must NOT execute,
+        and the deprecated `--no-social` flag must still be accepted (no-op)."""
+        monkeypatch.setattr(sys, "argv", ["morning_report.py", "--no-social"])
+        monkeypatch.setattr(morning_report, "SCANS_DIR", tmp_path)
+        morning_report.main()
+        # If the social path were active the AssertionError side_effect would have
+        # surfaced as an unhandled exception → main() would route to error path.
+        assert any("default body" in str(call.args[0])
+                   for call in mock_send.call_args_list)
+
+    @patch("scripts.morning_report.send_message")
+    @patch("scripts.morning_report.render_morning_report_images",
+           side_effect=ImportError("No module named 'PIL'"))
+    @patch("scripts.morning_report.format_morning_report", return_value="fallback text body")
+    @patch("scripts.morning_report.run_dollar_volume",
+           return_value={"rankings": [], "new_faces": []})
+    @patch("scripts.morning_report.build_market_signal_report",
+           return_value={"symbols_scanned": 1, "symbols_with_data": 1, "as_of": "2026-04-08"})
+    @patch("scripts.morning_report.get_symbols", return_value=["AAPL"])
+    def test_main_falls_back_to_text_when_pillow_missing(
+        self, _symbols, _signals, _dv, _format, _render, mock_send, monkeypatch, tmp_path
+    ):
+        """Cron `--image-report` 在云端 git pull 后 PIL 缺失 → 整个晨报不能挂。
+        降级到文本路径仍发晨报。"""
+        monkeypatch.setattr(
+            sys, "argv",
+            ["morning_report.py", "--no-social", "--image-report",
+             "--image-delivery", "document"],
+        )
+        monkeypatch.setattr(morning_report, "SCANS_DIR", tmp_path)
+
+        morning_report.main()
+
+        assert mock_send.called
+        sent_bodies = [
+            (call.args[0] if call.args else call.kwargs.get("text", ""))
+            for call in mock_send.call_args_list
+        ]
+        assert any("fallback text body" in str(body) for body in sent_bodies)
+
 
 class TestBroadMarketRouting:
     @patch("scripts.broad_market_scan.send_message")
@@ -168,6 +221,32 @@ class TestPortfolioRouting:
         portfolio_intelligence._send_private_report("private report", dry_run=True)
 
         mock_send.assert_not_called()
+
+    @patch("scripts.portfolio_intelligence.send_document")
+    def test_send_private_image_report_routes_private_document(self, mock_send, tmp_path):
+        path = tmp_path / "pi.png"
+        path.write_bytes(b"png")
+
+        portfolio_intelligence._send_private_image_report([path], dry_run=False)
+
+        mock_send.assert_called_once_with(
+            str(path),
+            caption="Portfolio Intelligence 1/1",
+            channel="private",
+        )
+
+    @patch("scripts.portfolio_intelligence.send_photo")
+    def test_send_private_image_report_routes_private_photo(self, mock_send, tmp_path):
+        path = tmp_path / "pi.png"
+        path.write_bytes(b"png")
+
+        portfolio_intelligence._send_private_image_report([path], dry_run=False, delivery="photo")
+
+        mock_send.assert_called_once_with(
+            str(path),
+            caption="Portfolio Intelligence 1/1",
+            channel="private",
+        )
 
     @patch("scripts.portfolio_intelligence._send_private_report", side_effect=lambda message, dry_run=False: message)
     @patch("portfolio.holdings.manager.PortfolioManager")

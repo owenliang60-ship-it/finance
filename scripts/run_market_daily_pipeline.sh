@@ -39,5 +39,5 @@ run_step "broad_price_yfinance" "$PYTHON" scripts/update_extended_prices.py \
   --universe broad --incremental --incremental-days "$BROAD_INCREMENTAL_DAYS"
 run_step "pool_options_iv" "$PYTHON" scripts/update_options_iv.py
 run_step "broad_market_scan" "$PYTHON" scripts/broad_market_scan.py
-run_step "morning_report" "$PYTHON" scripts/morning_report.py --no-social
+run_step "morning_report" "$PYTHON" scripts/morning_report.py --no-social --image-report --image-delivery document
 log_step "daily market pipeline DONE"
