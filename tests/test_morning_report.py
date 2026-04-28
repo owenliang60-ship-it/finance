@@ -271,7 +271,8 @@ class TestLayeredSections:
         assert "软件/SaaS" in result
         assert "数据中心电力" in result
         assert "NVIDIA" in result
-        assert "Semiconductors" in result
+        assert "GPU/AI加速器" in result
+        assert "Semiconductors" not in result
         assert "NVDA" in result
 
     def test_broad_signal_missing_industry_uses_concept_bucket(self):
@@ -289,24 +290,28 @@ class TestLayeredSections:
         result = format_section_broad_signal(signals)
         assert "Unclassified" not in result
         assert "自动驾驶/机器人" in result
+        assert "电动车/自动驾驶" in result
 
     def test_pmarp_layered_section(self):
         result = format_section_layered_pmarp(sample_market_signals())
         assert "PMARP 信号" in result
         assert "BA" in result
         assert "1.7→2.5" in result
+        assert "商用飞机/军工" in result
 
     def test_dv_layered_section(self):
         result = format_section_layered_dv(sample_market_signals())
         assert "量能加速" in result
         assert "MU" in result
         assert "1.8x" in result
+        assert "DRAM/HBM存储" in result
 
     def test_rvol_layered_section(self):
         result = format_section_layered_rvol(sample_market_signals())
         assert "RVOL 持续放量" in result
         assert "RKLB" in result
         assert "3日连续" in result
+        assert "小型火箭发射" in result
 
     def test_bucketed_sections_do_not_truncate_with_more(self):
         data = sample_market_signals()

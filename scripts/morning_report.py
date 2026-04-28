@@ -116,6 +116,7 @@ SYMBOL_BUCKET_OVERRIDES = {
     "ANET": "AI算力/云",
     "SNOW": "AI算力/云",
     "CRWV": "AI算力/云",
+    "NBIS": "AI算力/云",
     # Semiconductor supply chain.
     "AMD": "半导体链",
     "AVGO": "半导体链",
@@ -214,6 +215,7 @@ SYMBOL_BUCKET_OVERRIDES = {
     "SYNA": "半导体链",
     "SNDK": "半导体链",
     "STX": "半导体链",
+    "COHR": "通信/网络设备",
     "TEL": "通信/网络设备",
     "KN": "通信/网络设备",
     "CHTR": "通信/网络设备",
@@ -292,6 +294,7 @@ SYMBOL_BUCKET_OVERRIDES = {
     "UVE": "金融/加密",
     "SEIC": "金融/加密",
     "RY": "金融/加密",
+    "AIG": "金融/加密",
     "OUST": "自动驾驶/机器人",
     "MBLY": "自动驾驶/机器人",
     "VC": "自动驾驶/机器人",
@@ -335,6 +338,284 @@ SYMBOL_BUCKET_OVERRIDES = {
     "BHFAP": "金融/加密",
     "UHS": "医药/生命科学",
 }
+
+BUSINESS_ROLE_OVERRIDES = {
+    # AI / cloud
+    "NVDA": "GPU/AI加速器",
+    "MSFT": "云+企业软件",
+    "GOOG": "搜索广告+云",
+    "GOOGL": "搜索广告+云",
+    "AMZN": "AWS云+电商",
+    "ORCL": "数据库+云",
+    "PLTR": "AI数据平台",
+    "IBM": "企业AI/混合云",
+    "CRWV": "GPU云算力租赁",
+    "AIG": "保险/金融服务",
+    "QS": "固态电池",
+    # Semiconductors and electronics
+    "AMD": "GPU/CPU",
+    "AVGO": "ASIC/网络芯片",
+    "TSM": "晶圆代工",
+    "ASML": "EUV光刻机",
+    "MU": "DRAM/HBM存储",
+    "INTC": "CPU/晶圆制造",
+    "ARM": "芯片IP授权",
+    "MRVL": "数据中心连接芯片",
+    "QCOM": "手机SoC/基带",
+    "LRCX": "刻蚀设备",
+    "AMAT": "半导体设备",
+    "KLAC": "量检测设备",
+    "SMCI": "AI服务器",
+    "MXL": "模拟/混合信号芯片",
+    "NVTS": "氮化镓功率芯片",
+    "AOSL": "功率半导体",
+    "TXN": "模拟芯片",
+    "POWI": "高压电源芯片",
+    "VICR": "电源模块",
+    "COHU": "半导体测试设备",
+    "RMBS": "内存接口IP",
+    "VECO": "薄膜沉积设备",
+    "ON": "汽车/功率芯片",
+    "PI": "RFID/IoT芯片",
+    "STM": "MCU/功率芯片",
+    "LSCC": "低功耗FPGA",
+    "SYNA": "人机接口芯片",
+    "PDFS": "半导体良率软件",
+    "FORM": "晶圆探针卡",
+    "SNDK": "闪存/存储",
+    "STX": "硬盘存储",
+    "WDC": "硬盘/闪存存储",
+    "COHR": "光通信器件/工业激光",
+    # Data center power / physical infra
+    "AMSC": "电网超导设备",
+    "OKLO": "小型核反应堆",
+    "GEV": "电网/燃机设备",
+    "VRT": "数据中心电力/散热",
+    "ITRI": "智能电表",
+    # Networking / optical / telecom
+    "LITE": "光通信器件",
+    "NBIS": "AI云基础设施",
+    "GLW": "光纤/显示玻璃",
+    "VZ": "无线通信运营商",
+    "TEL": "连接器/传感器",
+    "KN": "声学元件",
+    "CHTR": "有线宽带",
+    "EXTR": "企业网络设备",
+    "CALX": "宽带接入设备",
+    "NOK": "通信设备",
+    # Internet / ads / content
+    "META": "社交广告",
+    "NFLX": "流媒体内容",
+    "APP": "移动广告平台",
+    "RDDT": "社区内容平台",
+    "PINS": "视觉社交广告",
+    "SRAD": "体育数据/API",
+    "LBRDK": "宽带/媒体控股",
+    "SIRI": "卫星广播/音频",
+    # Software / SaaS
+    "NOW": "IT服务管理SaaS",
+    "CRM": "CRM企业软件",
+    "ADBE": "创意/营销软件",
+    "CRWD": "终端安全",
+    "PANW": "网络安全平台",
+    "NET": "边缘网络/安全",
+    "DDOG": "云监控",
+    "MDB": "文档数据库",
+    "SEMR": "搜索营销SaaS",
+    "PEGA": "流程自动化软件",
+    "WK": "财务报表SaaS",
+    "FICO": "信用评分/决策软件",
+    "FRSH": "客服SaaS",
+    # EV / robot / auto
+    "TSLA": "电动车/自动驾驶",
+    "TM": "全球整车制造",
+    "RIVN": "电动皮卡/SUV",
+    "LCID": "豪华电动车",
+    "XPEV": "智能电动车",
+    "NIO": "智能电动车",
+    "VC": "汽车座舱电子",
+    "OUST": "激光雷达",
+    "MBLY": "ADAS视觉芯片",
+    "GNTX": "汽车电子/后视镜",
+    "CTOS": "商用车租赁",
+    # Finance / crypto
+    "COIN": "加密交易所",
+    "MSTR": "比特币持仓公司",
+    "HOOD": "零售券商/交易App",
+    "SOFI": "消费金融平台",
+    "PYPL": "数字支付",
+    "SQ": "商户支付/金融App",
+    "IBKR": "电子券商",
+    "JPM": "大型银行",
+    "GS": "投行/资管",
+    "V": "卡组织支付网络",
+    "BRK-B": "保险+控股集团",
+    "CASH": "社区银行",
+    "SLM": "学生贷款",
+    "EVO": "支付处理/收单",
+    "LC": "在线消费贷",
+    "TCBI": "区域银行",
+    "ENVA": "在线小额信贷",
+    "HLNE": "另类资产管理",
+    "CNOB": "区域银行",
+    "EBC": "区域银行",
+    "WEX": "车队/企业支付",
+    # Health care
+    "LLY": "GLP-1/创新药",
+    "NVO": "GLP-1/糖尿病药",
+    "UNH": "医保管理",
+    "MRK": "大型制药",
+    "VRTX": "罕见病药",
+    "OGN": "女性健康/仿制药",
+    "CAH": "药品分销",
+    "DHR": "生命科学工具",
+    "ABCL": "抗体发现平台",
+    "NTLA": "基因编辑疗法",
+    "ACLX": "肿瘤细胞疗法",
+    "ERAS": "肿瘤靶向药",
+    "UHS": "医院运营",
+    "INBX": "肿瘤免疫药",
+    "MOH": "医保管理",
+    "WST": "药物包装/给药系统",
+    "ICLR": "临床CRO",
+    "GRFS": "血浆制品",
+    "TFX": "医疗器械",
+    "MEDP": "临床CRO",
+    # Industrial / aerospace / defense
+    "RKLB": "小型火箭发射",
+    "ASTS": "卫星直连手机",
+    "BA": "商用飞机/军工",
+    "LMT": "军工主承包商",
+    "NOC": "军工/航天系统",
+    "HII": "军舰制造",
+    "DRS": "军用电子",
+    "VVX": "国防服务",
+    "SON": "工业包装",
+    "FLS": "工业泵阀",
+    "MOG-B": "精密控制系统",
+    "PBI": "邮政/物流设备",
+    "AZZ": "金属镀锌/涂层",
+    "SANM": "电子制造服务",
+    "RDW": "空间基础设施",
+    "VTOL": "海上直升机服务",
+    "ICFI": "政府咨询",
+    "TNC": "清洁设备",
+    "CAT": "工程机械",
+    "RTX": "航空发动机/军工",
+    "PLOW": "扫雪/卡车附件",
+    "PATK": "房车/船舶零部件",
+    "CAE": "飞行模拟训练",
+    "TTEK": "工程咨询",
+    "SKYW": "区域航空",
+    "WWD": "航空/能源控制系统",
+    # Consumer / commerce
+    "AAPL": "消费电子生态",
+    "PDD": "折扣电商",
+    "BABA": "中国电商+云",
+    "SHOP": "电商建站平台",
+    "MELI": "拉美电商/支付",
+    "COST": "会员制仓储零售",
+    "WMT": "综合零售",
+    "HD": "家装零售",
+    "BKNG": "在线旅游",
+    "DPZ": "披萨连锁",
+    "DLTR": "折扣零售",
+    "AZO": "汽配零售",
+    "MTN": "滑雪度假村",
+    "STRA": "职业教育",
+    "EDU": "教育培训",
+    "MCRI": "赌场度假村",
+    "CAR": "租车服务",
+    "PENN": "博彩/体育娱乐",
+    "LULU": "运动服饰",
+    "BYD": "赌场酒店",
+    "CHDN": "赛马/博彩娱乐",
+    "LVS": "澳门/新加坡赌场",
+    "TSCO": "乡村零售",
+    "TAL": "教育培训",
+    "ABG": "汽车经销商",
+    # Energy / materials
+    "SHEL": "综合油气",
+    "XOM": "综合油气",
+    "CVX": "综合油气",
+    "EPD": "油气中游管道",
+    "WES": "油气中游管道",
+    "CNQ": "油砂/油气生产",
+    "KRP": "矿权版税",
+    "TDW": "海工船服务",
+    "KEN": "电力/能源控股",
+    "CLF": "钢铁",
+    "FCX": "铜矿",
+    "CCJ": "铀矿",
+    "ALB": "锂材料",
+    "LAC": "锂矿开发",
+    "SXT": "色素/香精材料",
+    "KALU": "铝材",
+    "DQ": "多晶硅",
+    "HLX": "海底油服",
+    "AAUC": "黄金勘探",
+    "LPX": "木建材",
+    "RS": "金属分销",
+    "ROG": "高性能材料",
+    "TX": "钢铁",
+    # Real estate / infrastructure
+    "WSO": "暖通设备分销",
+    "NHI": "医疗地产REIT",
+    "URI": "设备租赁",
+    "BLD": "建筑保温安装",
+    "MAS": "家装建材",
+    "MGRC": "模块建筑租赁",
+    "ZWS": "水处理/基础设施",
+    "IIPR": "大麻地产REIT",
+    "SILA": "医疗地产REIT",
+    "QXO": "建筑材料分销",
+    "FSV": "物业服务",
+    "EGP": "工业地产REIT",
+}
+
+BUCKET_ROLE_FALLBACKS = {
+    "AI算力/云": "AI/云基础设施",
+    "半导体链": "芯片/半导体环节",
+    "数据中心电力": "数据中心电力设备",
+    "通信/网络设备": "网络/通信基础设施",
+    "互联网/广告": "互联网平台/广告",
+    "软件/SaaS": "企业软件/SaaS",
+    "自动驾驶/机器人": "汽车/自动化",
+    "金融/加密": "金融服务",
+    "医药/生命科学": "医药/生命科学",
+    "工业/航天/国防": "工业/航天/国防",
+    "消费/电商": "消费/电商服务",
+    "能源/材料": "能源/材料",
+    "地产/基础设施": "地产/基础设施",
+    "ETF/宏观工具": "ETF/指数工具",
+    "其他": "待补业务标签",
+}
+
+BUSINESS_ROLE_KEYWORDS = [
+    (("gpu", "accelerator"), "GPU/AI加速器"),
+    (("cloud", "data center"), "云/数据中心"),
+    (("semiconductor equipment", "wafer", "lithography", "etch"), "半导体设备"),
+    (("semiconductor", "chip", "soc"), "芯片/半导体"),
+    (("memory", "dram", "nand", "storage"), "存储芯片/存储"),
+    (("optical", "fiber", "laser"), "光通信/光器件"),
+    (("communication equipment", "broadband", "telecom"), "通信设备/运营"),
+    (("software", "saas"), "企业软件/SaaS"),
+    (("cybersecurity", "security"), "网络安全"),
+    (("advertising", "internet content", "media", "streaming"), "互联网内容/广告"),
+    (("auto", "vehicle", "ev", "lidar"), "汽车/自动驾驶"),
+    (("bank", "capital markets", "insurance", "financial"), "金融服务"),
+    (("crypto", "bitcoin"), "加密资产相关"),
+    (("biotech", "therapeutics", "drug", "pharma"), "创新药/生物技术"),
+    (("medical", "diagnostics", "healthcare"), "医疗服务/器械"),
+    (("aerospace", "defense"), "航天/军工"),
+    (("industrial", "machinery", "engineering"), "工业设备/服务"),
+    (("retail", "e-commerce", "consumer"), "零售/消费"),
+    (("casino", "gaming", "travel", "restaurant"), "旅游/博彩/餐饮"),
+    (("oil", "gas", "energy"), "油气/能源"),
+    (("mining", "metal", "chemical", "materials"), "材料/矿业"),
+    (("reit", "real estate"), "REIT/地产"),
+    (("construction", "infrastructure", "building products"), "建筑/基建"),
+]
 
 
 def _send_group_message(message: str) -> bool:
@@ -396,15 +677,34 @@ def _display_company(item: dict, max_len: int = 22) -> str:
     return "{} {}".format(symbol, name)
 
 
-def _display_classification(item: dict) -> str:
-    industry = item.get("industry") or ""
-    sector = item.get("sector") or ""
-    if industry and industry != "Unknown":
-        return industry
-    if sector and sector != "Unknown":
-        return sector
+def _business_role(item: dict) -> str:
+    """Return our own business-role label, never the raw FMP industry string."""
+    symbol = (item.get("symbol") or "").upper()
+    if symbol in BUSINESS_ROLE_OVERRIDES:
+        return BUSINESS_ROLE_OVERRIDES[symbol]
+
+    text = " ".join(
+        str(item.get(key) or "")
+        for key in [
+            "companyName",
+            "shortName",
+            "longName",
+            "company_name",
+            "description",
+            "industry",
+            "sector",
+        ]
+    ).lower()
+    for keywords, label in BUSINESS_ROLE_KEYWORDS:
+        if any(keyword in text for keyword in keywords):
+            return label
+
     bucket = item.get("concept_bucket") or _concept_bucket(item)
-    return bucket or "其他"
+    return BUCKET_ROLE_FALLBACKS.get(bucket, "待补业务标签")
+
+
+def _display_classification(item: dict) -> str:
+    return _business_role(item)
 
 
 def _normalize_metadata_entry(symbol: str, entry: dict) -> dict:
@@ -555,7 +855,7 @@ def _concept_bucket(item: dict) -> str:
 
     if any(k in text for k in ["semiconductor", "chip", "foundry", "memory", "dram", "nand", "computer hardware", "storage"]):
         return "半导体链"
-    if any(k in text for k in ["data center", "cloud", "gpu", "ai", "quantum"]):
+    if any(k in text for k in ["data center", "cloud", "gpu", "artificial intelligence", "generative ai", "quantum"]):
         return "AI算力/云"
     if any(k in text for k in ["electrical", "electric", "power", "nuclear", "utility", "utilities", "grid", "fuel cell"]):
         return "数据中心电力"
@@ -565,7 +865,7 @@ def _concept_bucket(item: dict) -> str:
         return "互联网/广告"
     if any(k in text for k in ["software", "saas", "cybersecurity", "information technology services"]):
         return "软件/SaaS"
-    if any(k in text for k in ["auto", "vehicle", "robot", "lidar", "battery", "ev "]):
+    if any(k in text for k in ["auto", "vehicle", "electric vehicle", "robot", "lidar", "battery"]):
         return "自动驾驶/机器人"
     if any(k in text for k in ["financial", "bank", "capital markets", "crypto", "bitcoin", "insurance", "fintech"]):
         return "金融/加密"
