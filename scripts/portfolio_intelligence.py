@@ -28,6 +28,9 @@ DNA_LOSS_THRESHOLDS = {"S": -0.30, "A": -0.20, "B": -0.15, "C": -0.10}
 # ---- HK / USD 汇率 ----
 USD_HKD_RATE = 7.8366
 
+# ---- Portfolio reporting constants ----
+TOTAL_CAPITAL_USD = 5_000_000.0
+
 
 def require_cloud_env(allow_local: bool = False) -> None:
     """Guard MarketData live quotes behind the cloud runtime."""
@@ -161,6 +164,134 @@ def calc_sector_concentration(positions: list) -> dict:
     warnings = [f"{s} {w:.0%}" for s, w in sectors.items() if w > 0.40]
     sectors["_warnings"] = warnings
     return sectors
+
+
+def _format_usd_compact(value: float | None) -> str:
+    """Compact USD formatter for Telegram reports."""
+    if value is None:
+        return "$0"
+    sign = "-" if value < 0 else ""
+    value = abs(float(value))
+    if value >= 1_000_000:
+        return f"{sign}${value / 1_000_000:.2f}M"
+    if value >= 1_000:
+        return f"{sign}${value / 1_000:.1f}K"
+    return f"{sign}${value:,.0f}"
+
+
+def _format_pct(value: float | None) -> str:
+    return f"{(value or 0) * 100:.1f}%"
+
+
+def _position_market_value(position, nav: float) -> float:
+    """Return market value for a Position-like object, with mock-safe fallback."""
+    value = getattr(position, "market_value", None)
+    if value is not None:
+        return float(value)
+    shares = getattr(position, "shares", None)
+    current_price = getattr(position, "current_price", None)
+    if shares is not None and current_price is not None:
+        return float(shares) * float(current_price)
+    weight = getattr(position, "current_weight", 0) or 0
+    return float(weight) * float(nav or 0)
+
+
+def build_stock_position_details(
+    positions: list,
+    nav: float,
+    total_capital: float = TOTAL_CAPITAL_USD,
+) -> list[dict]:
+    """Build stock holding detail rows with tracked-NAV and total-capital weights."""
+    rows = []
+    for p in positions:
+        market_value = _position_market_value(p, nav)
+        rows.append({
+            "symbol": getattr(p, "symbol", ""),
+            "company_name": getattr(p, "company_name", "") or "",
+            "sector": getattr(p, "sector", "") or "Unknown",
+            "industry": getattr(p, "industry", "") or "",
+            "market_value": market_value,
+            "tracked_pct": (market_value / nav) if nav else 0,
+            "total_pct": (market_value / total_capital) if total_capital else 0,
+            "pnl": getattr(p, "unrealized_pnl", None),
+        })
+    return sorted(rows, key=lambda row: -abs(row["market_value"]))
+
+
+def build_option_position_details(
+    option_positions: list,
+    option_prices: dict,
+    nav: float,
+    total_capital: float = TOTAL_CAPITAL_USD,
+) -> list[dict]:
+    """Build option leg detail rows using live premium when available."""
+    rows = []
+    for op in option_positions:
+        key = (op["symbol"], op["expiration"], op["strike"], op["side"])
+        premium = (option_prices or {}).get(key, op["avg_premium"])
+        market_value = op["quantity"] * premium * 100
+        side_code = "C" if op["side"].upper() == "CALL" else "P"
+        rows.append({
+            "symbol": op["symbol"],
+            "contract": (
+                f"{op['symbol']} {op['expiration']} "
+                f"{op['strike']:g}{side_code} x{op['quantity']}"
+            ),
+            "strategy_tag": op.get("strategy_tag", ""),
+            "market_value": market_value,
+            "tracked_pct": (market_value / nav) if nav else 0,
+            "total_pct": (market_value / total_capital) if total_capital else 0,
+        })
+    return sorted(rows, key=lambda row: -abs(row["market_value"]))
+
+
+def calc_sector_exposure(position_details: list[dict]) -> dict:
+    """Aggregate stock exposure by sector for detailed concentration reporting."""
+    sectors: dict[str, dict] = {}
+    for row in position_details:
+        sector = row.get("sector") or "Unknown"
+        entry = sectors.setdefault(
+            sector,
+            {"value": 0.0, "tracked_pct": 0.0, "total_pct": 0.0, "symbols": []},
+        )
+        entry["value"] += row.get("market_value", 0) or 0
+        entry["tracked_pct"] += row.get("tracked_pct", 0) or 0
+        entry["total_pct"] += row.get("total_pct", 0) or 0
+        entry["symbols"].append(row.get("symbol", ""))
+    return dict(sorted(sectors.items(), key=lambda item: -item[1]["tracked_pct"]))
+
+
+def build_concentration_summary(position_details: list[dict], sector_exposure: dict) -> dict:
+    """Summarize top holding, top-five weight, and largest sector exposure."""
+    positive_positions = [row for row in position_details if row.get("market_value", 0) > 0]
+    positive_positions.sort(key=lambda row: -row["market_value"])
+
+    top_position = positive_positions[0] if positive_positions else None
+    top5 = positive_positions[:5]
+    top5_summary = {
+        "tracked_pct": sum(row.get("tracked_pct", 0) for row in top5),
+        "total_pct": sum(row.get("total_pct", 0) for row in top5),
+        "symbols": [row.get("symbol", "") for row in top5],
+    }
+    largest_sector = None
+    if sector_exposure:
+        sector, data = next(iter(sector_exposure.items()))
+        largest_sector = {"sector": sector, **data}
+
+    flags = []
+    if top_position and top_position["tracked_pct"] >= 0.20:
+        flags.append(f"单票 {top_position['symbol']} ≥20% NAV")
+    if top5_summary["tracked_pct"] >= 0.50:
+        flags.append("Top5 ≥50% NAV")
+    if largest_sector and largest_sector["tracked_pct"] >= 0.40:
+        flags.append(f"{largest_sector['sector']} ≥40% NAV")
+
+    return {
+        "top_position": top_position,
+        "top5": top5_summary,
+        "largest_sector": largest_sector,
+        "flags": flags,
+    }
 
 
 def _date_returns(df: pd.DataFrame) -> pd.Series:
@@ -302,14 +433,62 @@ def format_report(
 
     # Block 2: 组合概览
     lines.append("📊 *组合概览*\n")
-    lines.append(f"总资产: ${summary['total_nav']:,.0f} | "
-                 f"仓位 {summary['invested_pct']:.0%} | "
-                 f"现金 {summary['cash_pct']:.0%}")
+    total_capital = summary.get("total_capital")
+    if total_capital:
+        lines.append(
+            f"追踪NAV: ${summary['total_nav']:,.0f} "
+            f"({summary.get('tracked_nav_total_pct', 0):.1%} of $5M)"
+        )
+        lines.append(
+            f"已投入: {_format_usd_compact(summary.get('invested_value', 0))} | "
+            f"NAV {summary['invested_pct']:.0%} | "
+            f"Total {summary.get('invested_total_pct', 0):.1%} | "
+            f"现金 {_format_usd_compact(summary.get('cash', 0))}"
+        )
+    else:
+        lines.append(f"总资产: ${summary['total_nav']:,.0f} | "
+                     f"仓位 {summary['invested_pct']:.0%} | "
+                     f"现金 {summary['cash_pct']:.0%}")
     if summary.get("qqq_beta") is not None:
         lines.append(f"QQQ等效β: {summary['qqq_beta']:.2f}")
     total_pnl = summary.get("total_pnl", 0)
     total_pnl_pct = summary.get("total_pnl_pct", 0)
     lines.append(f"累计: ${total_pnl:+,.0f} ({total_pnl_pct:+.1%})")
+
+    concentration = summary.get("concentration") or {}
+    if concentration:
+        lines.append("\n集中度摘要:")
+        top = concentration.get("top_position")
+        if top:
+            lines.append(
+                "  最大单票: {} {} | NAV {} | Total {}".format(
+                    top["symbol"],
+                    _format_usd_compact(top["market_value"]),
+                    _format_pct(top["tracked_pct"]),
+                    _format_pct(top["total_pct"]),
+                )
+            )
+        top5 = concentration.get("top5") or {}
+        if top5.get("symbols"):
+            lines.append(
+                "  Top5: {} | NAV {} | Total {}".format(
+                    "/".join(top5["symbols"]),
+                    _format_pct(top5.get("tracked_pct")),
+                    _format_pct(top5.get("total_pct")),
+                )
+            )
+        sector = concentration.get("largest_sector")
+        if sector:
+            lines.append(
+                "  最大行业: {} {} | NAV {} | Total {}".format(
+                    sector["sector"],
+                    _format_usd_compact(sector.get("value")),
+                    _format_pct(sector.get("tracked_pct")),
+                    _format_pct(sector.get("total_pct")),
+                )
+            )
+        flags = concentration.get("flags") or []
+        lines.append("  风险提示: {}".format("；".join(flags) if flags else "无单项超阈值"))
 
     if summary.get("sector_warnings"):
         lines.append("\n行业集中度:")
@@ -318,6 +497,40 @@ def format_report(
                 continue
             flag = " ⚠️" if weight > 0.40 else ""
             lines.append(f"  {sector} {weight:.0%}{flag}")
+
+    position_details = summary.get("position_details") or []
+    option_details = summary.get("option_details") or []
+    if position_details or option_details:
+        lines.append("\n📌 *持仓明细*")
+        if position_details:
+            lines.append("股票:")
+            for row in position_details:
+                label = row["symbol"]
+                if row.get("company_name"):
+                    label += f" {row['company_name'][:18]}"
+                class_label = row.get("industry") or row.get("sector") or "Unknown"
+                lines.append(
+                    "  {} | {} | NAV {} | Total {} | {}".format(
+                        label,
+                        _format_usd_compact(row["market_value"]),
+                        _format_pct(row["tracked_pct"]),
+                        _format_pct(row["total_pct"]),
+                        class_label[:24],
+                    )
+                )
+        if option_details:
+            lines.append("期权:")
+            for row in option_details:
+                tag = f" [{row['strategy_tag']}]" if row.get("strategy_tag") else ""
+                lines.append(
+                    "  {}{} | {} | NAV {} | Total {}".format(
+                        row["contract"],
+                        tag,
+                        _format_usd_compact(row["market_value"]),
+                        _format_pct(row["tracked_pct"]),
+                        _format_pct(row["total_pct"]),
+                    )
+                )
 
     dna_dist = summary.get("dna_distribution", "")
     if dna_dist:
@@ -509,6 +722,14 @@ def run_intelligence(dry_run: bool = False, allow_local: bool = False) -> str:
     sector_conc = calc_sector_concentration([
         {"sector": p.sector, "weight": p.current_weight} for p in positions_refreshed
     ])
+    position_details = build_stock_position_details(
+        positions_refreshed, nav, TOTAL_CAPITAL_USD
+    )
+    option_details = build_option_position_details(
+        option_positions, option_prices, nav, TOTAL_CAPITAL_USD
+    )
+    sector_exposure = calc_sector_exposure(position_details)
+    concentration = build_concentration_summary(position_details, sector_exposure)
 
     # QQQ Beta
     qqq_df = None
@@ -571,13 +792,23 @@ def run_intelligence(dry_run: bool = False, allow_local: bool = False) -> str:
 
     summary = {
         "total_nav": nav,
+        "total_capital": TOTAL_CAPITAL_USD,
+        "tracked_nav_total_pct": nav / TOTAL_CAPITAL_USD if TOTAL_CAPITAL_USD else 0,
+        "invested_value": invested,
         "invested_pct": invested / nav if nav > 0 else 0,
+        "invested_total_pct": invested / TOTAL_CAPITAL_USD if TOTAL_CAPITAL_USD else 0,
+        "cash": cash,
         "cash_pct": cash / nav if nav > 0 else 0,
+        "cash_total_pct": cash / TOTAL_CAPITAL_USD if TOTAL_CAPITAL_USD else 0,
         "qqq_beta": qqq_beta,
         "total_pnl": total_pnl,
         "total_pnl_pct": total_pnl / invested if invested > 0 else 0,
         "sectors": {k: v for k, v in sector_conc.items() if not k.startswith("_")},
+        "sector_exposure": sector_exposure,
         "sector_warnings": sector_conc.get("_warnings", []),
+        "concentration": concentration,
+        "position_details": position_details,
+        "option_details": option_details,
         "total_positions": len(positions_refreshed),
         "dna_distribution": dna_dist,
     }

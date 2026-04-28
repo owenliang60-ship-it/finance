@@ -29,28 +29,60 @@ def sample_market_signals():
         "broad_scan": {
             "criteria": "RVOL ≥3σ + 涨 ≥3%",
             "hits": [
-                {"symbol": "NVDA", "layer": "pool", "rvol": 3.5, "return_pct": 4.2, "marketCap": 3e12},
-                {"symbol": "APP", "layer": "extend", "rvol": 4.1, "return_pct": 5.5, "marketCap": 45e9},
-                {"symbol": "OKLO", "layer": "broad", "rvol": 5.2, "return_pct": 9.0, "marketCap": 6e9},
+                {
+                    "symbol": "NVDA", "companyName": "NVIDIA Corporation",
+                    "sector": "Technology", "industry": "Semiconductors",
+                    "concept_bucket": "AI算力/云", "layer": "pool",
+                    "rvol": 3.5, "return_pct": 4.2, "marketCap": 3e12,
+                },
+                {
+                    "symbol": "APP", "companyName": "AppLovin Corporation",
+                    "sector": "Technology", "industry": "Software - Application",
+                    "concept_bucket": "软件/SaaS", "layer": "extend",
+                    "rvol": 4.1, "return_pct": 5.5, "marketCap": 45e9,
+                },
+                {
+                    "symbol": "OKLO", "companyName": "Oklo Inc.",
+                    "sector": "Utilities", "industry": "Regulated Electric",
+                    "concept_bucket": "数据中心电力", "layer": "broad",
+                    "rvol": 5.2, "return_pct": 9.0, "marketCap": 6e9,
+                },
             ],
             "triggered_total": 3,
         },
         "pmarp": {
             "criteria": "PMARP 上穿 2%",
             "hits": [
-                {"symbol": "BA", "layer": "extend", "value": 2.5, "previous": 1.7, "marketCap": 12e9},
+                {
+                    "symbol": "BA", "companyName": "Boeing Company",
+                    "sector": "Industrials", "industry": "Aerospace & Defense",
+                    "concept_bucket": "工业/航天/国防", "layer": "extend",
+                    "value": 2.5, "previous": 1.7, "marketCap": 12e9,
+                },
             ],
         },
         "dv_acceleration": {
             "criteria": "DV >1.5x",
             "hits": [
-                {"symbol": "MU", "layer": "pool", "ratio": 1.8, "dv_5d": 900e6, "dv_20d": 500e6, "marketCap": 160e9},
+                {
+                    "symbol": "MU", "companyName": "Micron Technology, Inc.",
+                    "sector": "Technology", "industry": "Semiconductors",
+                    "concept_bucket": "半导体链", "layer": "pool",
+                    "ratio": 1.8, "dv_5d": 900e6, "dv_20d": 500e6,
+                    "marketCap": 160e9,
+                },
             ],
         },
         "rvol_sustained": {
             "criteria": "RVOL >2.0σ 持续",
             "hits": [
-                {"symbol": "RKLB", "layer": "broad", "level": "sustained_3d", "latest_rvol": 3.2, "marketCap": 8e9},
+                {
+                    "symbol": "RKLB", "companyName": "Rocket Lab USA, Inc.",
+                    "sector": "Industrials", "industry": "Aerospace & Defense",
+                    "concept_bucket": "工业/航天/国防", "layer": "broad",
+                    "level": "sustained_3d", "latest_rvol": 3.2,
+                    "marketCap": 8e9,
+                },
             ],
         },
     }
@@ -217,12 +249,14 @@ class TestFormatSectionD:
 
 
 class TestLayeredSections:
-    def test_broad_signal_groups_by_layer(self):
+    def test_broad_signal_groups_by_concept_bucket(self):
         result = format_section_broad_signal(sample_market_signals())
         assert "广扫标准" in result
-        assert "Pool:" in result
-        assert "Extend ($10B+):" in result
-        assert "Broad ($1B-$10B):" in result
+        assert "AI算力/云" in result
+        assert "软件/SaaS" in result
+        assert "数据中心电力" in result
+        assert "NVIDIA" in result
+        assert "Semiconductors" in result
         assert "NVDA" in result
         assert "APP" in result
         assert "OKLO" in result
@@ -244,6 +278,25 @@ class TestLayeredSections:
         assert "RVOL 持续放量" in result
         assert "RKLB" in result
         assert "3日连续" in result
+
+    def test_bucketed_sections_do_not_truncate_with_more(self):
+        data = sample_market_signals()
+        data["broad_scan"]["hits"] = [
+            {
+                "symbol": f"S{i}", "companyName": f"SignalCo {i}",
+                "sector": "Technology", "industry": "Semiconductors",
+                "concept_bucket": "半导体链", "rvol": 3.0 + i / 10,
+                "return_pct": 4.0 + i / 10, "marketCap": 1e9 + i,
+            }
+            for i in range(12)
+        ]
+
+        result = format_section_broad_signal(data)
+
+        assert "... +" not in result
+        assert "more" not in result
+        assert "S0 SignalCo 0" in result
+        assert "S11 SignalCo 11" in result
 
 
 class TestFormatMorningReport:

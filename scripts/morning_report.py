@@ -53,6 +53,56 @@ LAYER_LABELS = {
 }
 LAYER_TOP_N = 8
 
+CONCEPT_BUCKET_ORDER = [
+    "AI算力/云",
+    "半导体链",
+    "数据中心电力",
+    "通信/网络设备",
+    "互联网/广告",
+    "软件/SaaS",
+    "自动驾驶/机器人",
+    "金融/加密",
+    "医药/生命科学",
+    "工业/航天/国防",
+    "消费/电商",
+    "能源/材料",
+    "地产/基础设施",
+    "ETF/宏观工具",
+    "其他",
+]
+
+THEME_BUCKET_HINTS = {
+    "ai_chip": "AI算力/云",
+    "ai_software": "AI算力/云",
+    "ai_agent": "AI算力/云",
+    "ai_infra": "AI算力/云",
+    "cloud": "AI算力/云",
+    "quantum": "AI算力/云",
+    "memory": "半导体链",
+    "semicap": "半导体链",
+    "chip_design": "半导体链",
+    "liquid_cooling": "数据中心电力",
+    "nuclear_power": "数据中心电力",
+    "cybersecurity": "软件/SaaS",
+    "enterprise_sw": "软件/SaaS",
+    "autonomous_driving": "自动驾驶/机器人",
+    "humanoid_robot": "自动驾驶/机器人",
+    "ev_battery": "自动驾驶/机器人",
+    "streaming": "互联网/广告",
+    "digital_ads": "互联网/广告",
+    "fintech": "金融/加密",
+    "crypto": "金融/加密",
+    "glp1": "医药/生命科学",
+    "biotech": "医药/生命科学",
+    "space": "工业/航天/国防",
+    "defense": "工业/航天/国防",
+}
+
+ETF_SYMBOLS = {
+    "SPY", "QQQ", "IWM", "DIA", "SOXX", "SMH", "XLK", "XLF", "XLE", "XLV",
+    "XLY", "XLI", "XLC", "EWY", "EWT", "FXI", "KWEB",
+}
+
 
 def _send_group_message(message: str) -> bool:
     """Route a single message to the public group."""
@@ -79,6 +129,221 @@ def _format_market_cap(market_cap: float | None) -> str:
     if market_cap >= 1e9:
         return "${:.1f}B".format(market_cap / 1e9)
     return "${:.0f}M".format(market_cap / 1e6)
+
+
+def _clean_company_name(name: str | None) -> str:
+    if not name:
+        return ""
+    cleaned = str(name)
+    suffixes = [
+        ", Inc.", ", Inc", " Inc.", " Inc", " Corporation", " Corp.", " Corp", " Incorporated",
+        " Class A Common Stock", " Common Stock", " plc", " Ltd.", " Ltd",
+        " Limited", " N.V.", " S.A.",
+    ]
+    for suffix in suffixes:
+        if cleaned.endswith(suffix):
+            cleaned = cleaned[: -len(suffix)]
+    return cleaned.strip()
+
+
+def _display_company(item: dict, max_len: int = 22) -> str:
+    symbol = item.get("symbol", "")
+    name = (
+        item.get("shortName")
+        or item.get("companyName")
+        or item.get("longName")
+        or item.get("company_name")
+        or ""
+    )
+    name = _clean_company_name(name)
+    if not name or name.upper() == symbol.upper():
+        return symbol
+    if len(name) > max_len:
+        name = name[: max_len - 1].rstrip() + "…"
+    return "{} {}".format(symbol, name)
+
+
+def _display_classification(item: dict) -> str:
+    industry = item.get("industry") or ""
+    sector = item.get("sector") or ""
+    if industry and industry != "Unknown":
+        return industry
+    if sector and sector != "Unknown":
+        return sector
+    return "Unclassified"
+
+
+def _normalize_metadata_entry(symbol: str, entry: dict) -> dict:
+    return {
+        "symbol": symbol.upper(),
+        "companyName": (
+            entry.get("companyName")
+            or entry.get("company_name")
+            or entry.get("name")
+            or entry.get("longName")
+            or entry.get("shortName")
+            or ""
+        ),
+        "shortName": entry.get("shortName") or entry.get("companyName") or entry.get("company_name") or "",
+        "longName": entry.get("longName") or entry.get("companyName") or entry.get("company_name") or "",
+        "sector": entry.get("sector") or "",
+        "industry": entry.get("industry") or "",
+        "exchange": entry.get("exchange") or entry.get("exchangeShortName") or "",
+        "marketCap": entry.get("marketCap") or entry.get("market_cap") or entry.get("mktCap"),
+    }
+
+
+def _merge_metadata_entry(metadata: dict, symbol: str, entry: dict) -> None:
+    symbol = symbol.upper()
+    normalized = _normalize_metadata_entry(symbol, entry)
+    target = metadata.setdefault(symbol, {"symbol": symbol})
+    for key, value in normalized.items():
+        if value in (None, ""):
+            continue
+        if key == "marketCap":
+            if not target.get(key):
+                target[key] = value
+        elif not target.get(key) or target.get(key) == symbol:
+            target[key] = value
+
+
+def _iter_profile_records(payload) -> list[dict]:
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if isinstance(payload, dict):
+        records = []
+        for key, value in payload.items():
+            if isinstance(value, dict):
+                row = dict(value)
+                row.setdefault("symbol", key)
+                records.append(row)
+        return records
+    return []
+
+
+def _merge_local_metadata(metadata: dict, symbols: list[str]) -> None:
+    """Merge cheap local company metadata from company.db and JSON caches."""
+    wanted = {symbol.upper() for symbol in symbols}
+
+    try:
+        from terminal.company_store import get_store
+        for row in get_store().list_companies():
+            symbol = (row.get("symbol") or "").upper()
+            if symbol in wanted:
+                _merge_metadata_entry(metadata, symbol, row)
+    except Exception as exc:
+        logger.info("company.db metadata unavailable for morning report: %s", exc)
+
+    for path in [
+        DATA_DIR / "pool" / "universe.json",
+        DATA_DIR / "fundamental" / "profiles.json",
+        SCANS_DIR / "broad_universe.json",
+    ]:
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.info("metadata cache unreadable %s: %s", path, exc)
+            continue
+        if isinstance(payload, dict) and isinstance(payload.get("stocks"), dict):
+            payload = payload["stocks"]
+        for row in _iter_profile_records(payload):
+            symbol = (row.get("symbol") or row.get("ticker") or "").upper()
+            if symbol in wanted:
+                _merge_metadata_entry(metadata, symbol, row)
+
+
+def _metadata_has_company_classification(entry: dict) -> bool:
+    name = (
+        entry.get("companyName")
+        or entry.get("shortName")
+        or entry.get("longName")
+        or ""
+    )
+    has_name = bool(name and name != entry.get("symbol"))
+    return has_name and bool(entry.get("sector") or entry.get("industry"))
+
+
+def _hydrate_signal_metadata(metadata: dict, symbols: list[str]) -> None:
+    """Ensure triggered symbols have company names and classification if possible."""
+    _merge_local_metadata(metadata, symbols)
+    missing = [
+        symbol for symbol in sorted({s.upper() for s in symbols})
+        if not _metadata_has_company_classification(metadata.get(symbol, {}))
+    ]
+    if not missing:
+        return
+
+    try:
+        from config.settings import FMP_API_KEY
+        if not FMP_API_KEY:
+            return
+        from src.data.fmp_client import FMPClient
+        client = FMPClient()
+        for symbol in missing:
+            profile = client.get_profile(symbol)
+            if profile:
+                _merge_metadata_entry(metadata, symbol, profile)
+    except Exception as exc:
+        logger.info("live metadata fallback skipped: %s", exc)
+
+
+def _theme_bucket_for_symbol(symbol: str) -> str | None:
+    try:
+        from config.settings import THEME_KEYWORDS_SEED
+        for theme, bucket in THEME_BUCKET_HINTS.items():
+            tickers = THEME_KEYWORDS_SEED.get(theme, {}).get("tickers", [])
+            if symbol in {ticker.upper() for ticker in tickers}:
+                return bucket
+    except Exception:
+        return None
+    return None
+
+
+def _concept_bucket(item: dict) -> str:
+    symbol = (item.get("symbol") or "").upper()
+    if symbol in ETF_SYMBOLS:
+        return "ETF/宏观工具"
+
+    theme_bucket = _theme_bucket_for_symbol(symbol)
+    if theme_bucket:
+        return theme_bucket
+
+    text = " ".join(
+        str(item.get(key) or "")
+        for key in ["companyName", "shortName", "longName", "sector", "industry"]
+    ).lower()
+
+    if any(k in text for k in ["semiconductor", "chip", "foundry", "memory", "dram", "nand"]):
+        return "半导体链"
+    if any(k in text for k in ["data center", "cloud", "gpu", "ai", "quantum"]):
+        return "AI算力/云"
+    if any(k in text for k in ["electrical", "electric", "power", "nuclear", "utility", "utilities", "grid", "fuel cell"]):
+        return "数据中心电力"
+    if any(k in text for k in ["communication equipment", "network", "optical", "telecom", "satellite"]):
+        return "通信/网络设备"
+    if any(k in text for k in ["internet content", "advertising", "media", "streaming", "entertainment"]):
+        return "互联网/广告"
+    if any(k in text for k in ["software", "saas", "cybersecurity", "information technology services"]):
+        return "软件/SaaS"
+    if any(k in text for k in ["auto", "vehicle", "robot", "lidar", "battery", "ev "]):
+        return "自动驾驶/机器人"
+    if any(k in text for k in ["financial", "bank", "capital markets", "crypto", "bitcoin", "insurance", "fintech"]):
+        return "金融/加密"
+    if any(k in text for k in ["health", "biotech", "drug", "pharma", "medical", "therapeutics"]):
+        return "医药/生命科学"
+    if any(k in text for k in ["aerospace", "defense", "industrial", "machinery", "logistics", "engineering"]):
+        return "工业/航天/国防"
+    if any(k in text for k in ["consumer", "retail", "e-commerce", "apparel", "restaurant", "travel"]):
+        return "消费/电商"
+    if any(k in text for k in ["energy", "materials", "mining", "chemical", "metal", "lithium", "oil", "gas"]):
+        return "能源/材料"
+    if any(k in text for k in ["real estate", "reit", "construction", "infrastructure"]):
+        return "地产/基础设施"
+    if any(k in text for k in ["etf", "fund", "trust"]):
+        return "ETF/宏观工具"
+    return "其他"
 
 
 def _layer_for_symbol(symbol: str, metadata: dict, pool_symbols: set) -> str:
@@ -130,11 +395,37 @@ def _format_layered_items(
     return lines
 
 
+def _group_by_concept_bucket(items: list) -> dict:
+    grouped = {bucket: [] for bucket in CONCEPT_BUCKET_ORDER}
+    for item in items:
+        bucket = item.get("concept_bucket") or _concept_bucket(item)
+        grouped.setdefault(bucket, []).append(item)
+    return {bucket: grouped[bucket] for bucket in CONCEPT_BUCKET_ORDER if grouped.get(bucket)}
+
+
+def _format_bucketed_items(items: list, empty_text: str, formatter) -> list[str]:
+    if not items:
+        return [empty_text]
+
+    lines = []
+    grouped = _group_by_concept_bucket(items)
+    for bucket, bucket_items in grouped.items():
+        lines.append("{} ({}):".format(bucket, len(bucket_items)))
+        for item in bucket_items:
+            lines.append("  " + formatter(item))
+    return lines
+
+
 def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set) -> dict:
     symbol = item["symbol"]
+    meta = metadata.get(symbol, {})
     enriched = dict(item)
-    enriched["marketCap"] = metadata.get(symbol, {}).get("marketCap")
+    for key in ["companyName", "shortName", "longName", "sector", "industry", "exchange"]:
+        if meta.get(key):
+            enriched[key] = meta[key]
+    enriched["marketCap"] = meta.get("marketCap")
     enriched["layer"] = _layer_for_symbol(symbol, metadata, pool_symbols)
+    enriched["concept_bucket"] = _concept_bucket(enriched)
     return enriched
 
 
@@ -173,6 +464,8 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         metadata = universe_cache.get("stocks", {})
         symbols = sorted(metadata.keys())
 
+    _merge_local_metadata(metadata, symbols)
+
     price_frames = load_price_frames(symbols, rows_needed=MORNING_SIGNAL_PRICE_ROWS)
     price_dict = {
         symbol: _frame_with_date(symbol, frame)
@@ -180,10 +473,6 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     }
 
     broad_scan = scan_candidates(price_frames, metadata, pool_symbols)
-    broad_hits = sorted(
-        [_enrich_with_layer(item, metadata, pool_symbols) for item in broad_scan["all_triggered"]],
-        key=lambda x: (-x["rvol"], -x["return_pct"], x["symbol"]),
-    )
 
     db_rows = [
         {
@@ -199,28 +488,56 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     if db_rows:
         get_store().save_broad_scan_hits(db_rows)
 
-    pmarp_signals = []
+    pmarp_raw = []
     for symbol, frame in price_dict.items():
         result = analyze_pmarp(frame)
         if result.get("signal") == "oversold_recovery":
-            pmarp_signals.append(_enrich_with_layer({
+            pmarp_raw.append({
                 "symbol": symbol,
                 "value": result.get("current"),
                 "previous": result.get("previous"),
                 "signal": result.get("signal"),
-            }, metadata, pool_symbols))
-    pmarp_signals.sort(key=lambda x: (x.get("value") or 0, x["symbol"]))
+            })
 
     dv_df = scan_dv_acceleration(price_dict, threshold=DV_ACCELERATION_THRESHOLD)
-    dv_hits = []
+    dv_raw = []
     if len(dv_df) > 0:
         for row in dv_df[dv_df["signal"]].to_dict("records"):
-            dv_hits.append(_enrich_with_layer(row, metadata, pool_symbols))
+            dv_raw.append(row)
+
+    rvol_raw = scan_rvol_sustained(price_dict, threshold=RVOL_SUSTAINED_THRESHOLD)
+
+    signal_symbols = [
+        item["symbol"]
+        for item in (
+            list(broad_scan["all_triggered"])
+            + pmarp_raw
+            + dv_raw
+            + rvol_raw
+        )
+    ]
+    _hydrate_signal_metadata(metadata, signal_symbols)
+
+    broad_hits = sorted(
+        [_enrich_with_layer(item, metadata, pool_symbols) for item in broad_scan["all_triggered"]],
+        key=lambda x: (-x["rvol"], -x["return_pct"], x["symbol"]),
+    )
+
+    pmarp_signals = [
+        _enrich_with_layer(item, metadata, pool_symbols)
+        for item in pmarp_raw
+    ]
+    pmarp_signals.sort(key=lambda x: (x.get("value") or 0, x["symbol"]))
+
+    dv_hits = [
+        _enrich_with_layer(item, metadata, pool_symbols)
+        for item in dv_raw
+    ]
     dv_hits.sort(key=lambda x: (-(x.get("ratio") or 0), x["symbol"]))
 
     rvol_hits = [
         _enrich_with_layer(item, metadata, pool_symbols)
-        for item in scan_rvol_sustained(price_dict, threshold=RVOL_SUSTAINED_THRESHOLD)
+        for item in rvol_raw
     ]
 
     scan_dates = [frame.index.max() for frame in price_frames.values() if not frame.empty]
@@ -263,11 +580,12 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
 def format_section_broad_signal(market_signals: dict) -> str:
     section = market_signals.get("broad_scan", {})
     lines = ["*1. 广扫标准 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_layered_items(
+    lines.extend(_format_bucketed_items(
         section.get("hits", []),
         "无广扫触发",
-        lambda item: "{} | RVOL {:.1f}σ | {:+.1f}% | {}".format(
-            item["symbol"],
+        lambda item: "{} | {} | RVOL {:.1f}σ | {:+.1f}% | {}".format(
+            _display_company(item),
+            _display_classification(item),
             item["rvol"],
             item["return_pct"],
             _format_market_cap(item.get("marketCap")),
@@ -279,11 +597,12 @@ def format_section_broad_signal(market_signals: dict) -> str:
 def format_section_layered_pmarp(market_signals: dict) -> str:
     section = market_signals.get("pmarp", {})
     lines = ["*2. PMARP 信号 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_layered_items(
+    lines.extend(_format_bucketed_items(
         section.get("hits", []),
         "无 PMARP 信号",
-        lambda item: "{} | {:.1f}% ({:.1f}→{:.1f}) | {}".format(
-            item["symbol"],
+        lambda item: "{} | {} | {:.1f}% ({:.1f}→{:.1f}) | {}".format(
+            _display_company(item),
+            _display_classification(item),
             item.get("value") or 0,
             item.get("previous") or 0,
             item.get("value") or 0,
@@ -296,11 +615,12 @@ def format_section_layered_pmarp(market_signals: dict) -> str:
 def format_section_layered_dv(market_signals: dict) -> str:
     section = market_signals.get("dv_acceleration", {})
     lines = ["*3. 量能加速 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_layered_items(
+    lines.extend(_format_bucketed_items(
         section.get("hits", []),
         "无加速信号",
-        lambda item: "{} | {:.1f}x | 5d={} / 20d={} | {}".format(
-            item["symbol"],
+        lambda item: "{} | {} | {:.1f}x | 5d={} / 20d={} | {}".format(
+            _display_company(item),
+            _display_classification(item),
             item.get("ratio") or 0,
             format_dv(item.get("dv_5d") or 0),
             format_dv(item.get("dv_20d") or 0),
@@ -318,11 +638,12 @@ def format_section_layered_rvol(market_signals: dict) -> str:
         "single": "单日",
     }
     lines = ["*4. RVOL 持续放量 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_layered_items(
+    lines.extend(_format_bucketed_items(
         section.get("hits", []),
         "无持续放量信号",
-        lambda item: "{} | {} | 最新 {:.1f}σ | {}".format(
-            item["symbol"],
+        lambda item: "{} | {} | {} | 最新 {:.1f}σ | {}".format(
+            _display_company(item),
+            _display_classification(item),
             level_labels.get(item.get("level"), item.get("level", "")),
             item.get("latest_rvol") or 0,
             _format_market_cap(item.get("marketCap")),
@@ -395,21 +716,43 @@ def format_section_d(dv_result: dict) -> str:
     rankings = dv_result.get("rankings", [])
     new_faces = dv_result.get("new_faces", [])
 
+    def normalize(row: dict) -> dict:
+        item = dict(row)
+        if row.get("company_name") and not item.get("companyName"):
+            item["companyName"] = row.get("company_name")
+        if row.get("market_cap") and not item.get("marketCap"):
+            item["marketCap"] = row.get("market_cap")
+        item.setdefault("concept_bucket", _concept_bucket(item))
+        return item
+
     # 新面孔
     if new_faces:
-        nf_items = "  ".join(
-            "#{} {} {}".format(nf["rank"], nf["symbol"], format_dv(nf["dollar_volume"]))
-            for nf in new_faces[:5])
-        lines.append("新面孔: {}".format(nf_items))
+        lines.append("新面孔:")
+        lines.extend(_format_bucketed_items(
+            [normalize(row) for row in new_faces],
+            "无新面孔",
+            lambda item: "{} | {} | #{} {}".format(
+                _display_company(item),
+                _display_classification(item),
+                item["rank"],
+                format_dv(item["dollar_volume"]),
+            ),
+        ))
 
-    # Top 10
+    # Full ranking payload. Telegram splitting handles long reports.
     if rankings:
-        lines.append("```")
-        lines.append(" # Symbol  $Vol      Price")
-        for r in rankings[:10]:
-            lines.append("{:>2} {:<7} {:>8} ${:>7.0f}".format(
-                r["rank"], r["symbol"], format_dv(r["dollar_volume"]), r["price"]))
-        lines.append("```")
+        lines.append("成交额 Top {}:".format(len(rankings)))
+        lines.extend(_format_bucketed_items(
+            [normalize(row) for row in rankings],
+            "无成交额排行",
+            lambda item: "{} | {} | #{} {} | ${:.0f}".format(
+                _display_company(item),
+                _display_classification(item),
+                item["rank"],
+                format_dv(item["dollar_volume"]),
+                item["price"],
+            ),
+        ))
 
     return "\n".join(lines)
 
@@ -654,7 +997,7 @@ def format_morning_report(
         lines.append(format_section_c(rvol_list))
         lines.append("")
 
-    # Dollar Volume format intentionally unchanged.
+    # D. Dollar Volume — also concept-bucketed for readability.
     if dv_result:
         lines.append(format_section_d(dv_result))
         lines.append("")

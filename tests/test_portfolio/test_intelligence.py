@@ -138,6 +138,67 @@ class TestFormatReport:
         assert "退出条件审视" in report
         assert "$2,000,000" in report
 
+    def test_total_capital_position_details_and_concentration(self):
+        from scripts.portfolio_intelligence import format_report
+        summary = {
+            "total_nav": 2_000_000,
+            "total_capital": 5_000_000,
+            "tracked_nav_total_pct": 0.40,
+            "invested_value": 1_250_000,
+            "invested_pct": 0.625,
+            "invested_total_pct": 0.25,
+            "cash": 750_000,
+            "cash_pct": 0.375,
+            "qqq_beta": None,
+            "total_pnl": 0,
+            "total_pnl_pct": 0,
+            "sectors": {},
+            "sector_warnings": [],
+            "concentration": {
+                "top_position": {
+                    "symbol": "NVDA", "market_value": 300_000,
+                    "tracked_pct": 0.15, "total_pct": 0.06,
+                },
+                "top5": {"symbols": ["NVDA", "MSFT"], "tracked_pct": 0.25, "total_pct": 0.10},
+                "largest_sector": {
+                    "sector": "Technology", "value": 800_000,
+                    "tracked_pct": 0.40, "total_pct": 0.16,
+                },
+                "flags": ["Technology ≥40% NAV"],
+            },
+            "position_details": [
+                {
+                    "symbol": "NVDA", "company_name": "NVIDIA Corporation",
+                    "sector": "Technology", "industry": "Semiconductors",
+                    "market_value": 300_000, "tracked_pct": 0.15,
+                    "total_pct": 0.06,
+                },
+            ],
+            "option_details": [
+                {
+                    "contract": "QQQ 2026-06-18 580P x10",
+                    "strategy_tag": "tail_hedge",
+                    "market_value": 23_000,
+                    "tracked_pct": 0.0115,
+                    "total_pct": 0.0046,
+                },
+            ],
+            "total_positions": 1,
+            "dna_distribution": "S×1",
+        }
+
+        report = format_report([], summary, {})
+
+        assert "追踪NAV" in report
+        assert "of $5M" in report
+        assert "持仓明细" in report
+        assert "NVDA NVIDIA" in report
+        assert "Semiconductors" in report
+        assert "QQQ 2026-06-18 580P x10" in report
+        assert "最大单票" in report
+        assert "Top5" in report
+        assert "Technology ≥40% NAV" in report
+
     def test_snapshot_line_appears_first(self):
         from scripts.portfolio_intelligence import format_report
         summary = {
