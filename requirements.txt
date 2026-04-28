@@ -7,3 +7,4 @@ python-dotenv>=1.0
 yfinance>=0.2.28
 pytest>=8.0
 weasyprint
+pillow>=12.0

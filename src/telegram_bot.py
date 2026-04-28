@@ -126,3 +126,46 @@ def send_document(
                 time.sleep(attempt * 2)
 
     return False
+
+
+def send_photo(
+    file_path: str,
+    caption: str = "",
+    channel: str = "group",
+    max_retries: int = 3,
+) -> bool:
+    """Send an image as an inline Telegram photo."""
+    path = Path(file_path)
+    if not path.exists():
+        logger.warning("[Telegram] 图片不存在: %s", file_path)
+        return False
+
+    token = TELEGRAM_BOT_TOKEN
+    chat_id = _resolve_chat_id(channel)
+
+    if not token or not chat_id:
+        logger.info("[Telegram] 未配置 (%s)，跳过发送", channel)
+        return False
+
+    url = API_BASE.format(token) + "/sendPhoto"
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            with path.open("rb") as handle:
+                data = {"chat_id": chat_id, "parse_mode": "Markdown"}
+                if caption:
+                    data["caption"] = caption
+                resp = requests.post(
+                    url, data=data, files={"photo": handle}, timeout=60
+                )
+                resp.raise_for_status()
+            logger.info("[Telegram] 图片已发送 → %s: %s", channel, path.name)
+            return True
+        except Exception as exc:
+            logger.warning(
+                "[Telegram] 图片发送第%d次失败 (%s): %s", attempt, channel, exc
+            )
+            if attempt < max_retries:
+                time.sleep(attempt * 2)
+
+    return False

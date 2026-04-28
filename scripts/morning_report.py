@@ -35,7 +35,7 @@ from config.settings import (
 )
 from src.data import get_symbols
 from src.indicators.dv_acceleration import format_dv
-from src.telegram_bot import send_message, split_message
+from src.telegram_bot import send_message, send_photo, split_message
 
 logging.basicConfig(
     level=logging.INFO,
@@ -628,6 +628,16 @@ def _send_group_report(message: str) -> bool:
     ok = True
     for part in split_message(message, split_marker="*D. Dollar Volume*"):
         ok = _send_group_message(part) and ok
+    return ok
+
+
+def _send_group_image_report(image_paths: list[Path]) -> bool:
+    """Send each visual morning-report section as one Telegram photo."""
+    ok = True
+    total = len(image_paths)
+    for idx, path in enumerate(image_paths, 1):
+        caption = "未来资本晨报 {}/{} — {}".format(idx, total, path.stem)
+        ok = send_photo(str(path), caption=caption, channel="group") and ok
     return ok
 
 
@@ -1277,10 +1287,8 @@ def format_section_c(rvol_list: list) -> str:
     return "\n".join(lines)
 
 
-def format_section_d(dv_result: dict) -> str:
-    """D. Dollar Volume"""
-    lines = ["*D. Dollar Volume*"]
-
+def _normalize_dv_items(dv_result: dict) -> dict:
+    """Normalize Dollar Volume rows into the same enriched item shape as signals."""
     rankings = dv_result.get("rankings", [])
     new_faces = dv_result.get("new_faces", [])
     metadata = {}
@@ -1294,6 +1302,11 @@ def format_section_d(dv_result: dict) -> str:
     if symbols:
         _merge_local_metadata(metadata, symbols)
 
+    try:
+        pool_symbols = set(get_symbols())
+    except Exception:
+        pool_symbols = set()
+
     def normalize(row: dict) -> dict:
         symbol = (row.get("symbol") or "").upper()
         item = dict(metadata.get(symbol) or {})
@@ -1304,13 +1317,26 @@ def format_section_d(dv_result: dict) -> str:
         if row.get("market_cap") and not item.get("marketCap"):
             item["marketCap"] = row.get("market_cap")
         item.setdefault("concept_bucket", _concept_bucket(item))
+        layer_meta = {symbol: {"marketCap": item.get("marketCap") or 0}}
+        item["layer"] = _layer_for_symbol(symbol, layer_meta, pool_symbols)
         return item
 
+    return {
+        "rankings": [normalize(row) for row in rankings],
+        "new_faces": [normalize(row) for row in new_faces],
+    }
+
+
+def format_section_d(dv_result: dict) -> str:
+    """D. Dollar Volume"""
+    lines = ["*D. Dollar Volume*"]
+    normalized = _normalize_dv_items(dv_result)
+
     # 新面孔
-    if new_faces:
+    if normalized["new_faces"]:
         lines.append("新面孔:")
         lines.extend(_format_bucketed_table(
-            [normalize(row) for row in new_faces],
+            normalized["new_faces"],
             "无新面孔",
             "标的 | 业务角色 | 排名 | 成交额",
             lambda item: "{} | {} | #{} | {}".format(
@@ -1322,10 +1348,10 @@ def format_section_d(dv_result: dict) -> str:
         ))
 
     # Full ranking payload. Telegram splitting handles long reports.
-    if rankings:
-        lines.append("成交额 Top {}:".format(len(rankings)))
+    if normalized["rankings"]:
+        lines.append("成交额 Top {}:".format(len(normalized["rankings"])))
         lines.extend(_format_bucketed_table(
-            [normalize(row) for row in rankings],
+            normalized["rankings"],
             "无成交额排行",
             "标的 | 业务角色 | 排名 | 成交额 | 价格",
             lambda item: "{} | {} | #{} | {} | ${:.0f}".format(
@@ -1338,6 +1364,404 @@ def format_section_d(dv_result: dict) -> str:
         ))
 
     return "\n".join(lines)
+
+
+def _visual_row(item: dict, cells: list[str]) -> dict:
+    return {
+        "layer": item.get("layer", "broad"),
+        "bucket": item.get("concept_bucket") or _concept_bucket(item),
+        "cells": [str(cell) for cell in cells],
+    }
+
+
+def _visual_company(item: dict) -> str:
+    return _display_company(item, max_len=30)
+
+
+def _build_visual_block(
+    title: str,
+    columns: list[str],
+    items: list[dict],
+    row_builder,
+    widths: list[int],
+) -> dict:
+    return {
+        "title": title,
+        "columns": columns,
+        "widths": widths,
+        "rows": [_visual_row(item, row_builder(item)) for item in items],
+    }
+
+
+def build_morning_visual_sections(
+    market_signals: dict | None = None,
+    dv_result: dict | None = None,
+) -> list[dict]:
+    """Build image-report section specs grouped by layer and concept bucket."""
+    sections = []
+    as_of = (market_signals or {}).get("as_of") or datetime.now().strftime("%Y-%m-%d")
+    common_subtitle = "信号日 {} | Pool / Extend / Broad 分层，层内按题材聚类".format(as_of)
+
+    if market_signals:
+        broad = market_signals.get("broad_scan", {})
+        sections.append({
+            "slug": "01_broad_signal",
+            "title": "1. 广扫标准",
+            "subtitle": "{} | {}".format(broad.get("criteria", ""), common_subtitle),
+            "blocks": [
+                _build_visual_block(
+                    "触发公司",
+                    ["标的", "业务角色", "RVOL", "涨幅", "市值"],
+                    broad.get("hits", []),
+                    lambda item: [
+                        _visual_company(item),
+                        _display_classification(item),
+                        "{:.1f}σ".format(item.get("rvol") or 0),
+                        "{:+.1f}%".format(item.get("return_pct") or 0),
+                        _format_market_cap(item.get("marketCap")),
+                    ],
+                    [380, 430, 150, 150, 160],
+                ),
+            ],
+        })
+
+        pmarp = market_signals.get("pmarp", {})
+        sections.append({
+            "slug": "02_pmarp",
+            "title": "2. PMARP 信号",
+            "subtitle": "{} | {}".format(pmarp.get("criteria", ""), common_subtitle),
+            "blocks": [
+                _build_visual_block(
+                    "上穿/修复",
+                    ["标的", "业务角色", "当前", "变化", "市值"],
+                    pmarp.get("hits", []),
+                    lambda item: [
+                        _visual_company(item),
+                        _display_classification(item),
+                        "{:.1f}%".format(item.get("value") or 0),
+                        "{:.1f}→{:.1f}".format(item.get("previous") or 0, item.get("value") or 0),
+                        _format_market_cap(item.get("marketCap")),
+                    ],
+                    [380, 430, 150, 190, 160],
+                ),
+            ],
+        })
+
+        dv_acc = market_signals.get("dv_acceleration", {})
+        sections.append({
+            "slug": "03_dv_acceleration",
+            "title": "3. 量能加速",
+            "subtitle": "{} | {}".format(dv_acc.get("criteria", ""), common_subtitle),
+            "blocks": [
+                _build_visual_block(
+                    "DV 加速",
+                    ["标的", "业务角色", "倍数", "5d/20d", "市值"],
+                    dv_acc.get("hits", []),
+                    lambda item: [
+                        _visual_company(item),
+                        _display_classification(item),
+                        "{:.1f}x".format(item.get("ratio") or 0),
+                        "{}/{}".format(
+                            format_dv(item.get("dv_5d") or 0),
+                            format_dv(item.get("dv_20d") or 0),
+                        ),
+                        _format_market_cap(item.get("marketCap")),
+                    ],
+                    [380, 430, 150, 240, 160],
+                ),
+            ],
+        })
+
+        rvol = market_signals.get("rvol_sustained", {})
+        level_labels = {
+            "sustained_5d": "5日连续",
+            "sustained_3d": "3日连续",
+            "single": "单日",
+        }
+        sections.append({
+            "slug": "04_rvol_sustained",
+            "title": "4. RVOL 持续放量",
+            "subtitle": "{} | {}".format(rvol.get("criteria", ""), common_subtitle),
+            "blocks": [
+                _build_visual_block(
+                    "持续放量",
+                    ["标的", "业务角色", "形态", "最新", "市值"],
+                    rvol.get("hits", []),
+                    lambda item: [
+                        _visual_company(item),
+                        _display_classification(item),
+                        level_labels.get(item.get("level"), item.get("level", "")),
+                        "{:.1f}σ".format(item.get("latest_rvol") or 0),
+                        _format_market_cap(item.get("marketCap")),
+                    ],
+                    [380, 430, 170, 150, 160],
+                ),
+            ],
+        })
+
+    if dv_result:
+        normalized = _normalize_dv_items(dv_result)
+        blocks = []
+        if normalized["new_faces"]:
+            blocks.append(_build_visual_block(
+                "新面孔",
+                ["标的", "业务角色", "排名", "成交额"],
+                normalized["new_faces"],
+                lambda item: [
+                    _visual_company(item),
+                    _display_classification(item),
+                    "#{}".format(item.get("rank", "")),
+                    format_dv(item.get("dollar_volume") or 0),
+                ],
+                [420, 470, 160, 230],
+            ))
+        if normalized["rankings"]:
+            blocks.append(_build_visual_block(
+                "成交额 Top {}".format(len(normalized["rankings"])),
+                ["标的", "业务角色", "排名", "成交额", "价格"],
+                normalized["rankings"],
+                lambda item: [
+                    _visual_company(item),
+                    _display_classification(item),
+                    "#{}".format(item.get("rank", "")),
+                    format_dv(item.get("dollar_volume") or 0),
+                    "${:.0f}".format(item.get("price") or 0),
+                ],
+                [380, 430, 150, 230, 150],
+            ))
+        if blocks:
+            sections.append({
+                "slug": "05_dollar_volume",
+                "title": "D. Dollar Volume",
+                "subtitle": common_subtitle,
+                "blocks": blocks,
+            })
+
+    return sections
+
+
+_VISUAL_FONT_CANDIDATES = {
+    "regular": [
+        "/System/Library/Fonts/STHeiti Light.ttc",
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+        "/Library/Fonts/Arial Unicode.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ],
+    "bold": [
+        "/System/Library/Fonts/STHeiti Medium.ttc",
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+        "/Library/Fonts/Arial Unicode.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ],
+}
+
+_VISUAL_LAYER_COLORS = {
+    "pool": ("#1d4ed8", "#dbeafe"),
+    "extend": ("#b45309", "#fef3c7"),
+    "broad": ("#334155", "#e2e8f0"),
+}
+_TELEGRAM_PHOTO_MAX_DIMENSION_SUM = 9800
+
+
+def _load_visual_font(size: int, bold: bool = False):
+    from PIL import ImageFont
+
+    key = "bold" if bold else "regular"
+    for candidate in _VISUAL_FONT_CANDIDATES[key]:
+        path = Path(candidate)
+        if not path.exists():
+            continue
+        try:
+            return ImageFont.truetype(str(path), size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
+def _fit_text(draw, text: str, font, max_width: int) -> str:
+    text = str(text)
+    if draw.textlength(text, font=font) <= max_width:
+        return text
+    ellipsis = "…"
+    while text and draw.textlength(text + ellipsis, font=font) > max_width:
+        text = text[:-1]
+    return (text + ellipsis) if text else ellipsis
+
+
+def _draw_fit(draw, xy: tuple[int, int], text: str, font, fill: str, max_width: int) -> None:
+    draw.text(xy, _fit_text(draw, text, font, max_width), font=font, fill=fill)
+
+
+def _rows_by_layer_and_bucket(rows: list[dict]) -> dict:
+    grouped = {
+        layer: {bucket: [] for bucket in CONCEPT_BUCKET_ORDER}
+        for layer in LAYER_ORDER
+    }
+    for row in rows:
+        layer = row.get("layer", "broad")
+        bucket = row.get("bucket") or "其他"
+        grouped.setdefault(layer, {}).setdefault(bucket, []).append(row)
+    return grouped
+
+
+def _estimate_visual_height(section: dict) -> int:
+    height = 190
+    for block in section.get("blocks", []):
+        height += 70
+        grouped = _rows_by_layer_and_bucket(block.get("rows", []))
+        for layer in LAYER_ORDER:
+            layer_rows = sum(len(rows) for rows in grouped.get(layer, {}).values())
+            height += 54
+            if not layer_rows:
+                height += 42
+                continue
+            for bucket in CONCEPT_BUCKET_ORDER:
+                rows = grouped.get(layer, {}).get(bucket, [])
+                if rows:
+                    height += 38 + 40 + 44 * len(rows)
+    return max(height + 260, 640)
+
+
+def _scaled_widths(widths: list[int], total_width: int) -> list[int]:
+    raw_total = sum(widths) or total_width
+    scaled = [max(80, int(w * total_width / raw_total)) for w in widths]
+    diff = total_width - sum(scaled)
+    if scaled:
+        scaled[-1] += diff
+    return scaled
+
+
+def _draw_visual_table_header(draw, x: int, y: int, col_widths: list[int], columns: list[str], font) -> int:
+    row_h = 40
+    draw.rectangle([x, y, x + sum(col_widths), y + row_h], fill="#f1f5f9")
+    cur_x = x
+    for width, column in zip(col_widths, columns):
+        _draw_fit(draw, (cur_x + 14, y + 9), column, font, "#334155", width - 24)
+        cur_x += width
+    return y + row_h
+
+
+def _resize_for_telegram_photo(image):
+    width, height = image.size
+    if width + height <= _TELEGRAM_PHOTO_MAX_DIMENSION_SUM:
+        return image
+
+    scale = _TELEGRAM_PHOTO_MAX_DIMENSION_SUM / float(width + height)
+    new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+    try:
+        from PIL import Image
+        resampling = Image.Resampling.LANCZOS
+    except Exception:
+        resampling = 1
+    return image.resize(new_size, resampling)
+
+
+def render_morning_report_images(
+    market_signals: dict | None = None,
+    dv_result: dict | None = None,
+    output_dir: str | Path | None = None,
+) -> list[Path]:
+    """Render each morning-report section as one PNG image."""
+    from PIL import Image, ImageDraw
+
+    sections = build_morning_visual_sections(market_signals=market_signals, dv_result=dv_result)
+    if not sections:
+        return []
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = Path(output_dir) if output_dir else SCANS_DIR / "morning_images_{}".format(timestamp)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    width = 1800
+    margin = 58
+    content_w = width - margin * 2
+    title_font = _load_visual_font(44, bold=True)
+    subtitle_font = _load_visual_font(24)
+    block_font = _load_visual_font(28, bold=True)
+    layer_font = _load_visual_font(25, bold=True)
+    bucket_font = _load_visual_font(23, bold=True)
+    header_font = _load_visual_font(21, bold=True)
+    row_font = _load_visual_font(22)
+    small_font = _load_visual_font(20)
+
+    image_paths = []
+    for index, section in enumerate(sections, 1):
+        height = _estimate_visual_height(section) + 2000
+        image = Image.new("RGB", (width, height), "#f8fafc")
+        draw = ImageDraw.Draw(image)
+
+        y = 46
+        draw.rounded_rectangle([margin, y, width - margin, y + 92], radius=18, fill="#0f172a")
+        _draw_fit(draw, (margin + 34, y + 22), section["title"], title_font, "#ffffff", content_w - 68)
+        y += 108
+        _draw_fit(draw, (margin + 4, y), section.get("subtitle", ""), subtitle_font, "#475569", content_w)
+        y += 54
+
+        for block in section.get("blocks", []):
+            draw.text((margin, y), block["title"], font=block_font, fill="#111827")
+            y += 46
+            grouped = _rows_by_layer_and_bucket(block.get("rows", []))
+            col_widths = _scaled_widths(block.get("widths", []), content_w)
+
+            for layer in LAYER_ORDER:
+                layer_rows = sum(len(rows) for rows in grouped.get(layer, {}).values())
+                dark, light = _VISUAL_LAYER_COLORS[layer]
+                draw.rounded_rectangle([margin, y, width - margin, y + 38], radius=10, fill=light)
+                layer_label = "{}  {}家公司".format(LAYER_LABELS[layer], layer_rows)
+                draw.text((margin + 16, y + 6), layer_label, font=layer_font, fill=dark)
+                y += 48
+
+                if not layer_rows:
+                    draw.text((margin + 18, y), "无触发", font=small_font, fill="#64748b")
+                    y += 42
+                    continue
+
+                for bucket in CONCEPT_BUCKET_ORDER:
+                    rows = grouped.get(layer, {}).get(bucket, [])
+                    if not rows:
+                        continue
+                    draw.text(
+                        (margin + 14, y),
+                        "{} ({})".format(bucket, len(rows)),
+                        font=bucket_font,
+                        fill="#0f172a",
+                    )
+                    y += 36
+                    y = _draw_visual_table_header(draw, margin, y, col_widths, block["columns"], header_font)
+                    for row_idx, row in enumerate(rows):
+                        row_h = 44
+                        fill = "#ffffff" if row_idx % 2 == 0 else "#f8fafc"
+                        draw.rectangle([margin, y, width - margin, y + row_h], fill=fill)
+                        cur_x = margin
+                        for col_width, cell in zip(col_widths, row["cells"]):
+                            _draw_fit(draw, (cur_x + 14, y + 10), cell, row_font, "#111827", col_width - 24)
+                            cur_x += col_width
+                        y += row_h
+                    y += 18
+                y += 8
+            y += 14
+
+        footer_y = y + 18
+        draw.text(
+            (margin, footer_y),
+            "Generated {} | Future Capital Morning Report".format(datetime.now().strftime("%Y-%m-%d %H:%M")),
+            font=small_font,
+            fill="#64748b",
+        )
+        final_height = min(height, footer_y + 58)
+        image = image.crop((0, 0, width, final_height))
+        path = out_dir / "{:02d}_{}.png".format(index, section["slug"])
+        image = _resize_for_telegram_photo(image)
+        image.save(path, "PNG", optimize=True)
+        image_paths.append(path)
+
+    return image_paths
 
 
 
@@ -1640,6 +2064,10 @@ def main():
                         help="跳过社交情绪 Section G（社交数据延后采集时使用）")
     parser.add_argument("--social-only", action="store_true",
                         help="仅发送社交情绪日报（配合延后 cron 使用）")
+    parser.add_argument("--image-report", action="store_true",
+                        help="每个晨报 section 生成一张图片；Telegram 发送图片而不是长文本")
+    parser.add_argument("--image-output-dir", type=str,
+                        help="图片输出目录（默认 data/scans/morning_images_<timestamp>）")
     args = parser.parse_args()
 
     # --social-only: 仅发送社交情绪日报（独立 cron 调用）
@@ -1813,6 +2241,15 @@ def main():
             market_pulse=market_pulse, trending_data=trending_data,
             social_scan=social_scan, elapsed=elapsed)
 
+        image_paths = []
+        if args.image_report:
+            image_paths = render_morning_report_images(
+                market_signals=market_signals,
+                dv_result=dv_result,
+                output_dir=args.image_output_dir,
+            )
+            logger.info("晨报图片已生成: %d 张", len(image_paths))
+
         # 7. 保存 JSON
         SCANS_DIR.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1823,15 +2260,23 @@ def main():
             "elapsed": round(elapsed, 1),
             "market_signals": market_signals,
         }
+        if image_paths:
+            save_data["image_report_paths"] = [str(path) for path in image_paths]
         with open(save_path, "w", encoding="utf-8") as f:
             json.dump(save_data, f, ensure_ascii=False, indent=2, default=str)
         logger.info("结果已保存: %s", save_path)
 
         # 8. 发送 Telegram
         if not args.no_telegram:
-            _send_group_report(daily_msg)
+            if args.image_report and image_paths:
+                _send_group_image_report(image_paths)
+            else:
+                _send_group_report(daily_msg)
         else:
-            print(daily_msg)
+            if args.image_report and image_paths:
+                print("\n".join(str(path) for path in image_paths))
+            else:
+                print(daily_msg)
 
     except Exception as e:
         logger.error("晨报异常: %s", e)

@@ -9,6 +9,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.morning_report import (
+    build_morning_visual_sections,
     format_section_broad_signal,
     format_section_layered_dv,
     format_section_layered_pmarp,
@@ -18,6 +19,7 @@ from scripts.morning_report import (
     format_section_c,
     format_section_d,
     format_morning_report,
+    render_morning_report_images,
 )
 
 
@@ -396,3 +398,48 @@ class TestFormatMorningReport:
         assert "4. RVOL 持续放量" in result
         assert "*D. Dollar Volume*" in result
         assert "扫描: 3只" in result
+
+
+class TestMorningVisualReport:
+    def test_visual_sections_group_rows_by_layer_and_bucket(self):
+        dv_result = {
+            "rankings": [
+                {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9, "price": 890.5},
+            ],
+            "new_faces": [],
+        }
+
+        sections = build_morning_visual_sections(
+            market_signals=sample_market_signals(),
+            dv_result=dv_result,
+        )
+
+        assert [section["slug"] for section in sections] == [
+            "01_broad_signal",
+            "02_pmarp",
+            "03_dv_acceleration",
+            "04_rvol_sustained",
+            "05_dollar_volume",
+        ]
+        first_rows = sections[0]["blocks"][0]["rows"]
+        assert {row["layer"] for row in first_rows} == {"pool", "extend", "broad"}
+        assert {row["bucket"] for row in first_rows} >= {"AI算力/云", "软件/SaaS", "数据中心电力"}
+
+    def test_render_visual_report_creates_one_png_per_section(self, tmp_path):
+        pytest.importorskip("PIL")
+        dv_result = {
+            "rankings": [
+                {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9, "price": 890.5},
+            ],
+            "new_faces": [],
+        }
+
+        paths = render_morning_report_images(
+            market_signals=sample_market_signals(),
+            dv_result=dv_result,
+            output_dir=tmp_path,
+        )
+
+        assert len(paths) == 5
+        assert all(path.exists() for path in paths)
+        assert all(path.suffix == ".png" for path in paths)
