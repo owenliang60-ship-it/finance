@@ -1,0 +1,15 @@
+cohort,events_total,events_with_earnings_info,events_near_earnings,events_with_social_info,events_social_spike,events_after_social_start,events_with_social_info_after_social_start,earnings_coverage,social_full_history_coverage,social_post_start_coverage,earnings_status,social_status,universe
+pmarp_up2_accept_rvol_recent3,718,718,51,52,0,67,52,1.0,0.07242339832869081,0.7761194029850746,usable,usable_post_start,pool
+pmarp_up2_base,2870,2870,134,233,3,342,233,1.0,0.08118466898954704,0.6812865497076024,usable,usable_post_start,pool
+pmarp_up2_reject_rvol_recent3,2152,2152,83,181,3,275,181,1.0,0.08410780669144981,0.6581818181818182,usable,usable_post_start,pool
+rvol_up2_pmarp_gte60,2446,2446,235,112,3,188,112,1.0,0.04578904333605887,0.5957446808510638,usable,exploratory,pool
+rvol_up2_pmarp_gte60_sign_pos_close_near_high,1030,1030,89,48,1,82,48,1.0,0.04660194174757282,0.5853658536585366,usable,exploratory,pool
+rvol_up2_pmarp_lt30_close_near_low,1067,1067,107,87,1,113,87,1.0,0.08153701968134958,0.7699115044247787,usable,usable_post_start,pool
+rvol_up2_pmarp_lt30_sign_neg,1793,1793,190,150,4,184,150,1.0,0.08365867261572783,0.8152173913043478,usable,usable_post_start,pool
+pmarp_up2_accept_rvol_recent3,2720,723,48,48,0,282,48,0.26580882352941176,0.01764705882352941,0.1702127659574468,exploratory,exploratory,extended
+pmarp_up2_base,9936,2729,118,211,3,1150,211,0.27465780998389694,0.021235909822866345,0.18347826086956523,exploratory,exploratory,extended
+pmarp_up2_reject_rvol_recent3,7216,2006,70,163,3,868,163,0.27799334811529935,0.022588691796008867,0.18778801843317972,exploratory,exploratory,extended
+rvol_up2_pmarp_gte60,8410,2233,210,95,2,839,95,0.2655172413793103,0.011296076099881093,0.11323003575685339,exploratory,exploratory,extended
+rvol_up2_pmarp_gte60_sign_pos_close_near_high,3148,913,80,42,1,266,42,0.2900254129606099,0.013341804320203304,0.15789473684210525,exploratory,exploratory,extended
+rvol_up2_pmarp_lt30_close_near_low,3981,1073,98,81,1,374,81,0.2695302687766893,0.020346646571213264,0.21657754010695188,exploratory,exploratory,extended
+rvol_up2_pmarp_lt30_sign_neg,6484,1790,180,138,4,624,138,0.27606415792720546,0.021283158544108574,0.22115384615384615,exploratory,exploratory,extended

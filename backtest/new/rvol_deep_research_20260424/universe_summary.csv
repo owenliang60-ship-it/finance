@@ -1,0 +1,3 @@
+universe,symbols_loaded,symbols_with_features,date_start,date_end,study_start,rvol_lookback,rvol_threshold_zscore,pmarp_ema_period,pmarp_lookback,pmarp_up_threshold,pmarp_low_cutoff,pmarp_high_cutoff,extended_volume_coverage_failed,price_rows,close_non_null_rate,volume_non_null_rate,high_low_non_null_rate
+pool,153,153,2021-02-01,2026-04-23,2021-07-01,150,2.0,20,150,2.0,30.0,60.0,False,187720,1.0,1.0,1.0
+extended,529,529,2021-02-01,2026-04-23,2021-07-01,150,2.0,20,150,2.0,30.0,60.0,False,672914,1.0,1.0,1.0

@@ -1,0 +1,114 @@
+<html><head><meta charset='utf-8'><title>Backtest Pipeline Report</title><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:960px;margin:40px auto;padding:0 20px;line-height:1.5} pre{background:#f5f5f5;padding:16px;overflow:auto;border-radius:8px}</style></head><body><pre># Backtest Pipeline Report — pipeline_rs_rating_b
+
+## Summary
+- Benchmark: `SPY`
+- Rebalance: `weekly`
+- Factors: RS_Rating_B
+- OOS capital reset: `True` (fresh capital; OOS does not inherit IS positions)
+
+## Key Gates
+- is_sharpe_positive: `{&#x27;value&#x27;: 0.1407, &#x27;pass&#x27;: True}`
+- oos_sharpe_positive: `{&#x27;value&#x27;: 0.5033, &#x27;pass&#x27;: True}`
+- oos_ic_positive: `{&#x27;value&#x27;: 0.001401088172451719, &#x27;pass&#x27;: True}`
+- oos_vs_is_sharpe_ratio_gte_0_5: `{&#x27;value&#x27;: 3.5771144278606966, &#x27;threshold&#x27;: 0.5, &#x27;pass&#x27;: True}`
+- annual_turnover_within_limit: `{&#x27;value&#x27;: 25.3213, &#x27;threshold&#x27;: 12.0, &#x27;pass&#x27;: False}`
+
+## Warnings
+- 2021-02-01: no historical market cap coverage yet, moving effective_start forward
+- 2021-02-08: no historical market cap coverage yet, moving effective_start forward
+- 2021-02-16: no historical market cap coverage yet, moving effective_start forward
+- 2021-02-23: no historical market cap coverage yet, moving effective_start forward
+- 2021-03-02: no historical market cap coverage yet, moving effective_start forward
+- 2021-03-09: no historical market cap coverage yet, moving effective_start forward
+- 2021-03-16: no historical market cap coverage yet, moving effective_start forward
+- 2021-03-23: no historical market cap coverage yet, moving effective_start forward
+- 2021-03-30: no historical market cap coverage yet, moving effective_start forward
+- 2021-04-07: no historical market cap coverage yet, moving effective_start forward
+
+## Strategy Metrics
+### IS
+- is.cagr: `0.021815`
+- is.annual_volatility: `0.155047`
+- is.sharpe_ratio: `0.1407`
+- is.max_drawdown: `-0.301882`
+- is.annual_turnover: `22.346`
+- is.excess_cagr: `-0.078114`
+- is.ir: `-0.2921`
+### OOS
+- oos.cagr: `0.092701`
+- oos.annual_volatility: `0.18417`
+- oos.sharpe_ratio: `0.5033`
+- oos.max_drawdown: `-0.197846`
+- oos.annual_turnover: `25.3213`
+- oos.excess_cagr: `-0.061254`
+- oos.ir: `-0.162`
+
+## Factor Metrics
+### IS Combo
+- is.combo.primary_horizon: `5`
+- is.combo.ic_mean: `-0.0024931945049035597`
+- is.combo.ic_tstat: `-0.19761521959547773`
+- is.combo.top_bottom_spread: `-0.0005677951386180536`
+- is.combo.top_decile_excess_return: `-0.0018015871194711202`
+- is.combo.ic_decay: `{&#x27;5&#x27;: -0.0024931945049035597, &#x27;10&#x27;: -0.010808254415578929, &#x27;21&#x27;: -0.006447622256407133}`
+### OOS Combo
+- oos.combo.primary_horizon: `5`
+- oos.combo.ic_mean: `0.001401088172451719`
+- oos.combo.ic_tstat: `0.060517017754998605`
+- oos.combo.top_bottom_spread: `-0.00038513717921724496`
+- oos.combo.top_decile_excess_return: `-0.00047576231069376115`
+- oos.combo.ic_decay: `{&#x27;5&#x27;: 0.001401088172451719, &#x27;10&#x27;: -0.0016193066805454959, &#x27;21&#x27;: 0.012914889732936858}`
+
+## Spec
+```json
+{
+  &quot;benchmark&quot;: &quot;SPY&quot;,
+  &quot;combo&quot;: {
+    &quot;method&quot;: &quot;single&quot;
+  },
+  &quot;evaluation&quot;: {
+    &quot;newey_west_lag_days&quot;: 5
+  },
+  &quot;execution&quot;: {
+    &quot;spread_bps&quot;: 2.0,
+    &quot;timing&quot;: &quot;next_open&quot;,
+    &quot;transaction_cost_bps&quot;: 5.0
+  },
+  &quot;factors&quot;: [
+    {
+      &quot;direction&quot;: &quot;higher_is_better&quot;,
+      &quot;name&quot;: &quot;RS_Rating_B&quot;,
+      &quot;params&quot;: {},
+      &quot;transform&quot;: &quot;rank_pct&quot;,
+      &quot;weight&quot;: 1.0
+    }
+  ],
+  &quot;notes&quot;: null,
+  &quot;period&quot;: {
+    &quot;start&quot;: &quot;2021-01-04&quot;,
+    &quot;test_end&quot;: &quot;2025-12-31&quot;,
+    &quot;train_end&quot;: &quot;2024-12-31&quot;
+  },
+  &quot;portfolio&quot;: {
+    &quot;max_annual_turnover&quot;: 12.0,
+    &quot;max_position_weight&quot;: 0.1,
+    &quot;rebalance&quot;: &quot;weekly&quot;,
+    &quot;selection&quot;: &quot;top_n&quot;,
+    &quot;threshold&quot;: null,
+    &quot;top_n&quot;: 20,
+    &quot;vol_lookback_days&quot;: 60,
+    &quot;weighting&quot;: &quot;equal&quot;
+  },
+  &quot;spec_id&quot;: &quot;pipeline_rs_rating_b&quot;,
+  &quot;universe&quot;: {
+    &quot;exclude_sectors&quot;: [
+      &quot;Utilities&quot;,
+      &quot;Energy&quot;,
+      &quot;Real Estate&quot;
+    ],
+    &quot;market_cap_min_usd&quot;: 100000000000.0,
+    &quot;min_names&quot;: 20
+  }
+}
+```
+</pre></body></html>

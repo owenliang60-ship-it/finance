@@ -1,0 +1,7 @@
+universe,bucket,raw_events,symbols
+pool,bbwp_down98_above_mid,634,148
+pool,bbwp_down98_all,1222,149
+pool,bbwp_down98_below_mid,588,142
+extended,bbwp_down98_above_mid,2227,515
+extended,bbwp_down98_all,4422,521
+extended,bbwp_down98_below_mid,2195,514

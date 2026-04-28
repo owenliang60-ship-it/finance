@@ -1,0 +1,101 @@
+rank,symbol,company,return_pct,mcap_2026_03_31_b,start_close,end_close,sector,industry,theme,meta_source
+1,MXL,"MaxLinear, Inc.",246.86602537047975,1.51715577,17.389999389648438,60.31999969482422,Technology,Semiconductors,通信/RF芯片,FMP profile live
+2,CRDO,Credo Technology Group Holding Ltd,107.77671247469902,16.5671163,93.87,195.04,Technology,Communication Equipment,AI数据中心互连,company.db
+3,NVTS,Navitas Semiconductor Corporation,97.03534777651086,1.94995688,8.77,17.28,Technology,Semiconductors,GaN功率半导体,company.db
+4,ALAB,"Astera Labs, Inc. Common Stock",94.19708029197082,18.577748,109.6,212.84,Technology,Semiconductors,AI数据中心互连,company.db
+5,INBX,"Inhibrx Biosciences, Inc.",91.96785826916589,1.04119101,67.2300033569336,129.05999755859375,Healthcare,Biotechnology,生物医药/创新药,FMP profile live
+6,OGN,Organon & Co.,87.97997761492253,1.55843028,5.989999771118164,11.260000228881836,Healthcare,Drug Manufacturers - General,生物医药/创新药,FMP profile live
+7,INTC,Intel Corporation,87.10627690913209,214.29528,44.13,82.57,Technology,Semiconductors,AI/CPU/晶圆制造,company.db
+8,RMBS,Rambus Inc.,84.12181797047542,9.26904426,86.03,158.4,Technology,Semiconductors,内存接口/IP,company.db
+9,AMKR,"Amkor Technology, Inc.",73.43992893626469,11.12952474,45.03,78.1,Technology,Semiconductors,先进封装/OSAT,universe.json
+10,AMD,"Advanced Micro Devices, Inc.",70.9728162021334,331.5909,203.43,347.81,Technology,Semiconductors,AI加速器/CPU,company.db
+11,BE,Bloom Energy Corporation,70.51442910915932,35.722472195,135.49,231.03,Industrials,Electrical Equipment & Parts,燃料电池/电力设备,company.db
+12,VICR,Vicor Corporation,69.8944091796875,7.277683,161.0,273.5299987792969,Technology,"Hardware, Equipment & Parts",电源模块/AI供电,FMP profile live
+13,MRVL,"Marvell Technology, Inc.",65.88591620393743,83.9944,99.05,164.31,Technology,Semiconductors,AI网络/定制芯片,company.db
+14,HUT,Hut 8 Corp.,63.86698571013261,4.940978229,46.90999984741211,76.87000274658203,Financial Services,Financial - Capital Markets,比特币矿企,FMP profile live
+15,FORM,"FormFactor, Inc.",59.89277786032883,7.52458119,96.98999786376953,155.0800018310547,Technology,Semiconductors,半导体测试设备,FMP profile live
+16,ANAB,"AnaptysBio, Inc.",59.249920839525075,1.02735933,36.973331451416016,58.880001068115234,Healthcare,Biotechnology,生物医药/创新药,FMP profile live
+17,ON,ON Semiconductor Corporation,58.91472868217056,24.817536,61.92,98.4,Technology,Semiconductors,功率/车规半导体,company.db
+18,BB,BlackBerry Limited,57.09876967919087,1.92257064,3.240000009536743,5.090000152587891,Technology,Software - Infrastructure,车载软件/网络安全,FMP profile live
+19,VSH,"Vishay Intertechnology, Inc.",56.61111407809787,2.443086,18.0,28.190000534057617,Technology,Semiconductors,分立器件/被动元件,FMP profile live
+20,SNDK,Sandisk Corporation,55.8063399124878,93.39498,635.34,989.9,Technology,"Hardware, Equipment & Parts",存储/NAND,company.db
+21,ARM,Arm Holdings plc American Depositary Shares,55.21549444738234,160.65936,151.28,234.81,Technology,Semiconductors,CPU IP/边缘AI,company.db
+22,ACLS,"Axcelis Technologies, Inc.",53.7709519415366,2.878499,93.08000183105469,143.1300048828125,Technology,Semiconductors,离子注入设备,FMP profile live
+23,HIMX,"Himax Technologies, Inc.",53.62135105963881,1.37311825,7.869999885559082,12.09000015258789,Technology,Semiconductors,显示/边缘AI芯片,FMP profile live
+24,OUST,"Ouster, Inc.",53.62002190595516,1.110803681,18.3700008392334,28.219999313354492,Technology,"Hardware, Equipment & Parts",激光雷达/自动驾驶,FMP profile live
+25,COHU,"Cohu, Inc.",53.26583611664826,1.43417956,30.6200008392334,46.93000030517578,Technology,Semiconductors,半导体测试设备,FMP profile live
+26,TTMI,"TTM Technologies, Inc.",52.95626904901343,10.06845442,97.41999816894531,149.00999450683594,Technology,"Hardware, Equipment & Parts",高端PCB/AI服务器,FMP profile live
+27,DIOD,Diodes Incorporated,52.94462094730341,3.15415808,68.26000213623047,104.4000015258789,Technology,Semiconductors,模拟/分立半导体,FMP profile live
+28,VECO,Veeco Instruments Inc.,52.77613292901599,2.00786414,33.86000061035156,51.72999954223633,Technology,Semiconductors,半导体设备,FMP profile live
+29,ICHR,"Ichor Holdings, Ltd.",52.17764294434062,1.603611223,46.61000061035156,70.93000030517578,Technology,Semiconductors,半导体设备零部件,FMP profile live
+30,ONTO,Onto Innovation Inc.,50.124335278747644,10.11897408,205.07000732421875,307.8599853515625,Technology,Semiconductors,半导体计量检测,FMP profile live
+31,STX,Seagate Technology Holdings plc,49.645190933224434,84.2284,391.76,586.25,Technology,Computer Hardware,存储/HDD,universe.json
+32,WDC,Western Digital Corporation,49.358571481385624,93.31905,270.49,404.0,Technology,Computer Hardware,存储/HDD/NAND,universe.json
+33,MPWR,"Monolithic Power Systems, Inc.",49.27150500754563,53.029661699,1093.35,1632.06,Technology,Semiconductors,电源管理芯片,company.db
+34,SANM,Sanmina Corporation,48.22585973990143,7.021302399,129.63999938964844,192.16000366210938,Technology,"Hardware, Equipment & Parts",电子制造服务/AI硬件,FMP profile live
+35,IONQ,"IonQ, Inc.",48.074917584742224,9.967663384,28.829999923706055,42.689998626708984,Technology,Computer Hardware,量子计算,FMP profile live
+36,IREN,IREN Limited,47.72462425008035,7.425849603,34.279998779296875,50.63999938964844,Financial Services,Financial - Capital Markets,AI数据中心/比特币矿企,FMP profile live
+37,ASX,"ASE Technology Holding Co., Ltd.",47.601476014760145,47.27200424,21.68,32.0,Technology,Semiconductors,先进封装/OSAT,company.db
+38,KALU,Kaiser Aluminum Corporation,47.58940955729949,1.95322608,120.51000213623047,177.86000061035156,Basic Materials,Aluminum,铝材/工业金属,FMP profile live
+39,APLD,Applied Digital Corporation,47.3462505454302,6.329071892,23.739999771118164,34.97999954223633,Technology,Information Technology Services,AI数据中心/算力基础设施,FMP profile live
+40,HIMS,"Hims & Hers Health, Inc.",47.20616150777561,4.71596608,20.760000228881836,30.559999465942383,Healthcare,Medical - Equipment & Services,远程医疗/消费医疗,FMP profile live
+41,MU,"Micron Technology, Inc.",47.0281790196543,380.07,337.84,496.72,Technology,Semiconductors,存储/DRAM HBM,company.db
+42,OSCR,"Oscar Health, Inc.",46.55622558496111,3.24884309,11.470000267028809,16.809999465942383,Healthcare,Medical - Healthcare Plans,医疗保险/InsurTech,FMP profile live
+43,AMSC,American Superconductor Corporation,46.17430361205079,1.48794445,33.849998474121094,49.47999954223633,Industrials,Industrial - Machinery,电网/超导/风电设备,FMP profile live
+44,STM,STMicroelectronics N.V.,46.07814761215629,34.55,34.55,50.47,Technology,Semiconductors,模拟/功率半导体,company.db
+45,CLS,Celestica Inc.,45.62979342563289,32.3932,281.67999267578125,410.2099914550781,Technology,"Hardware, Equipment & Parts",电子制造服务/AI服务器,FMP profile live
+46,ANET,"Arista Networks, Inc.",44.08698485095292,154.432684,122.78,176.91,Technology,Computer Hardware,AI数据中心网络,company.db
+47,POWI,"Power Integrations, Inc.",43.632812147843644,2.8328448,51.20000076293945,73.54000091552734,Technology,Semiconductors,功率半导体,FMP profile live
+48,VIAV,Viavi Solutions Inc.,43.47957257049166,7.434752,33.279998779296875,47.75,Technology,Communication Equipment,光通信测试/网络测试,FMP profile live
+49,TSHA,"Taysha Gene Therapies, Inc.",43.1767426345457,1.244514051,4.46999979019165,6.400000095367432,Healthcare,Biotechnology,生物医药/创新药,FMP profile live
+50,OKLO,Oklo Inc.,43.174026581031995,7.257584522,49.59000015258789,71.0,Utilities,Regulated Electric,核能/SMR,FMP profile live
+51,SMTC,Semtech Corporation,42.78840133572452,7.120014,76.88999938964844,109.79000091552734,Technology,Semiconductors,模拟/连接芯片,FMP profile live
+52,TXN,Texas Instruments Incorporated,42.752652724837745,176.47326,194.14,277.14,Technology,Semiconductors,模拟芯片,company.db
+53,SXT,Sensient Technologies Corporation,42.46876220226474,3.65243576,86.44000244140625,123.1500015258789,Basic Materials,Chemicals - Specialty,特种化学品/配料色素,FMP profile live
+54,LGN,Legence Corp. Class A Common stock,42.40170533050913,6.04415385,56.459999084472656,80.4000015258789,Industrials,Engineering & Construction,建筑工程/能源效率,FMP profile live
+55,CRWV,"CoreWeave, Inc. Class A Common Stock",42.17116303085064,33.69945,77.47,110.14,Technology,Software - Infrastructure,AI云/GPU算力,company.db
+56,PDFS,"PDF Solutions, Inc.",42.12779877617139,1.29283004,32.709999084472656,46.4900016784668,Technology,Software - Application,半导体制造软件/良率分析,FMP profile live
+57,NBIS,Nebius Group N.V.,41.8272937548188,25.020018081,103.76,147.16,Communication Services,Internet Content & Information,AI云/GPU算力,company.db
+58,CIFR,Cipher Mining Inc.,41.414148599651156,4.911229374,12.869999885559082,18.200000762939453,Financial Services,Financial - Capital Markets,比特币矿企/AI HPC,FMP profile live
+59,COHR,"Coherent, Inc.",41.08979471894545,37.041655,238.21,336.09,Technology,"Hardware, Equipment & Parts",光通信/光模块,company.db
+60,TER,"Teradyne, Inc.",41.02408419348311,46.36990152,296.46,418.08,Technology,Semiconductors,半导体测试设备,company.db
+61,PBI,Pitney Bowes Inc.,40.99547198894602,1.7410601,11.050000190734863,15.579999923706055,Industrials,Integrated Freight & Logistics,邮政物流/企业服务,FMP profile live
+62,GLXY,Galaxy Digital,40.94849910793981,3.510538215,18.450000762939453,26.0049991607666,Financial Services,Financial - Capital Markets,加密资产金融,FMP profile live
+63,IRDM,Iridium Communications Inc.,40.44700578922258,2.898276781,27.739999771118164,38.959999084472656,Communication Services,Telecommunications Services,卫星通信,FMP profile live
+64,POWL,"Powell Industries, Inc.",40.141934825614015,2.18397924,180.36000061035156,252.75999450683594,Industrials,Electrical Equipment & Parts,电力设备/电网,FMP profile live
+65,YSS,"York Space Systems, Inc.",40.09923030696956,2.39198577,22.170000076293945,31.059999465942383,Technology,Communication Equipment,航天/小卫星,FMP profile live
+66,ALGM,"Allegro MicroSystems, Inc.",39.96194134815367,5.838479434,31.530000686645508,44.130001068115234,Technology,Semiconductors,车规/磁传感芯片,FMP profile live
+67,CAR,"Avis Budget Group, Inc.",39.869723320555075,5.13392,145.85000610351562,204.0,Industrials,Rental & Leasing Services,汽车租赁/旅游周期,FMP profile live
+68,FLEX,Flex Ltd.,39.64253733665595,24.612959999,65.45999908447266,91.41000366210938,Technology,"Hardware, Equipment & Parts",电子制造服务/AI硬件,FMP profile live
+69,CORZ,"Core Scientific, Inc.",39.57218654762058,4.78126088,14.960000038146973,20.8799991607666,Technology,Software - Infrastructure,比特币矿企/AI HPC,FMP profile live
+70,LAR,Lithium Argentina AG,39.37126734825354,1.08487876,6.679999828338623,9.3100004196167,Basic Materials,Industrial Materials,锂资源,FMP profile live
+71,RVMD,"Revolution Medicines, Inc.",39.1259671483371,18.490060226,97.25,135.3000030517578,Healthcare,Biotechnology,生物医药/创新药,FMP profile live
+72,AFRM,"Affirm Holdings, Inc.",39.06591367328376,15.316285765,45.81999969482422,63.720001220703125,Technology,Software - Infrastructure,金融科技/BNPL,FMP profile live
+73,GFS,GLOBALFOUNDRIES Inc.,38.91636690647482,24.68643843,44.48,61.79,Technology,Semiconductors,晶圆代工,universe.json
+74,MCHP,Microchip Technology Incorporated,38.43058350100603,34.837712,64.61,89.44,Technology,Semiconductors,MCU/嵌入式半导体,company.db
+75,SYRE,"Spyre Therapeutics, Inc.",38.12450449206328,17.4545098,50.439998626708984,69.66999816894531,Healthcare,Biotechnology,生物医药/创新药,FMP profile live
+76,FN,Fabrinet,38.09441632152173,18.670416,521.52,720.19,Technology,"Hardware, Equipment & Parts",光通信/AI硬件制造,universe.json
+77,MSTR,Strategy Inc,37.03525648275383,36.6909504,124.80000305175781,171.02000427246094,Technology,Software - Application,比特币资产负债表,FMP profile live
+78,UMC,United Microelectronics Corporation,36.74832962138084,22.426664572,8.98,12.28,Technology,Semiconductors,晶圆代工,company.db
+79,AVGO,Broadcom Inc.,36.59009401957933,1467.38691,309.51,422.76,Technology,Semiconductors,AI网络/定制芯片,company.db
+80,NEXA,Nexa Resources S.A.,36.26062414786184,1.40255019,10.59000015258789,14.430000305175781,Basic Materials,Industrial Materials,锌/基本金属,FMP profile live
+81,VSAT,"Viasat, Inc.",35.349350897599116,5.963618,45.79999923706055,61.9900016784668,Technology,Communication Equipment,卫星通信,FMP profile live
+82,REAL,"The RealReal, Inc.",35.24228894441486,2.665881253,9.079999923706055,12.279999732971191,Consumer Cyclical,Luxury Goods,二手奢侈品/消费周期,FMP profile live
+83,SNX,TD SYNNEX Corporation,34.97125105333214,13.48920805,168.7100067138672,227.7100067138672,Technology,Technology Distributors,IT分销/硬件供应链,FMP profile live
+84,ADTN,"ADTRAN Holdings, Inc.",34.57869958546249,1.00485266,12.579999923706055,16.93000030517578,Technology,Communication Equipment,光通信/网络设备,FMP profile live
+85,RELY,"Remitly Global, Inc.",34.52456809873614,3.285117985,15.670000076293945,21.079999923706055,Technology,Software - Infrastructure,跨境汇款/FinTech,FMP profile live
+86,MBLY,Mobileye Global Inc.,34.35225176113943,5.59218,6.869999885559082,9.229999542236328,Consumer Cyclical,Auto - Parts,自动驾驶芯片,FMP profile live
+87,PVH,PVH Corp.,34.231646390698266,3.299648,69.76000213623047,93.63999938964844,Consumer Cyclical,Apparel - Manufacturers,服装品牌/消费周期,FMP profile live
+88,CIEN,Ciena Corporation,34.147283826597615,55.00287348,388.23,520.8,Technology,Communication Equipment,光通信/网络设备,universe.json
+89,SYNA,Synaptics Incorporated,34.009136755370186,2.724556,70.04000091552734,93.86000061035156,Technology,Semiconductors,边缘AI/人机接口芯片,FMP profile live
+90,URI,"United Rentals, Inc.",33.744643736930556,46.190704,728.5599975585938,974.4099731445312,Industrials,Rental & Leasing Services,租赁服务,FMP profile live
+91,AXTI,"AXT, Inc.",33.66093366093366,2.54808862,56.98,76.16,Technology,Semiconductors,化合物半导体材料,company.db
+92,UCTT,"Ultra Clean Holdings, Inc.",33.49952031010335,2.816754,62.18000030517578,83.01000213623047,Technology,Semiconductors,半导体设备零部件,FMP profile live
+93,KLIC,"Kulicke and Soffa Industries, Inc.",33.46013002939847,3.43840468,65.72000122070312,87.70999908447266,Technology,Semiconductors,先进封装设备,FMP profile live
+94,ENTG,"Entegris, Inc.",33.043329921528475,17.808756,117.24,155.98,Technology,Semiconductors,半导体材料/污染控制,company.db
+95,CTOS,"Custom Truck One Source, Inc.",33.028912370759535,1.4884992,6.570000171661377,8.739999771118164,Industrials,Rental & Leasing Services,特种车辆/设备租赁,FMP profile live
+96,LASR,"nLIGHT, Inc.",32.91827482826335,2.90408562,57.02000045776367,75.79000091552734,Technology,Semiconductors,激光器/光子器件,FMP profile live
+97,ERAS,"Erasca, Inc.",32.81829027063603,4.587575201,16.18000030517578,21.489999771118164,Healthcare,Biotechnology,生物医药/创新药,FMP profile live
+98,RXO,"RXO, Inc.",32.55813483219801,2.4666133,14.619999885559082,19.3799991607666,Industrials,Trucking,工业/物流/租赁,FMP profile live
+99,LSCC,Lattice Semiconductor Corporation,32.38464855541181,12.68196168,92.76,122.8,Technology,Semiconductors,FPGA/低功耗AI,universe.json
+100,LEGN,Legend Biotech Corporation,32.117188595552484,3.341821634,18.09000015258789,23.899999618530273,Healthcare,Biotechnology,生物医药/创新药,FMP profile live
