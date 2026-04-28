@@ -281,6 +281,114 @@ class TestFormatReport:
         assert "proceeding because local override was requested" in caplog.text
 
 
+class TestPortfolioVisualReport:
+    def _summary(self):
+        return {
+            "total_nav": 2_000_000,
+            "total_capital": 5_000_000,
+            "tracked_nav_total_pct": 0.40,
+            "invested_value": 1_250_000,
+            "invested_pct": 0.625,
+            "invested_total_pct": 0.25,
+            "cash": 750_000,
+            "cash_pct": 0.375,
+            "cash_total_pct": 0.15,
+            "qqq_beta": 1.23,
+            "total_pnl": 50_000,
+            "total_pnl_pct": 0.04,
+            "sectors": {},
+            "sector_warnings": [],
+            "concentration": {
+                "top_position": {
+                    "symbol": "NVDA",
+                    "market_value": 300_000,
+                    "tracked_pct": 0.15,
+                    "total_pct": 0.06,
+                },
+                "top5": {"symbols": ["NVDA", "MSFT"], "tracked_pct": 0.25, "total_pct": 0.10},
+                "largest_sector": {
+                    "sector": "Technology",
+                    "value": 800_000,
+                    "tracked_pct": 0.40,
+                    "total_pct": 0.16,
+                },
+                "flags": ["Technology ≥40% NAV"],
+            },
+            "position_details": [
+                {
+                    "symbol": "NVDA",
+                    "company_name": "NVIDIA Corporation",
+                    "sector": "Technology",
+                    "industry": "Semiconductors",
+                    "market_value": 300_000,
+                    "tracked_pct": 0.15,
+                    "total_pct": 0.06,
+                    "pnl": 45_000,
+                },
+                {
+                    "symbol": "TSLA",
+                    "company_name": "Tesla, Inc.",
+                    "sector": "Consumer Cyclical",
+                    "industry": "Auto Manufacturers",
+                    "market_value": 220_000,
+                    "tracked_pct": 0.11,
+                    "total_pct": 0.044,
+                    "pnl": -5_000,
+                },
+            ],
+            "option_details": [
+                {
+                    "symbol": "QQQ",
+                    "contract": "QQQ 2026-06-18 580P x10",
+                    "strategy_tag": "tail_hedge",
+                    "market_value": 23_000,
+                    "tracked_pct": 0.0115,
+                    "total_pct": 0.0046,
+                },
+            ],
+            "total_positions": 2,
+            "dna_distribution": "S×1 A×1",
+        }
+
+    def test_visual_sections_use_ticker_and_morning_concepts(self):
+        from scripts.portfolio_intelligence import build_portfolio_visual_sections
+
+        sections = build_portfolio_visual_sections(
+            action_signals=["NVDA | PMARP 99.1%"],
+            summary=self._summary(),
+            kill_conditions={},
+            snapshot_line="NAV 快照 ET 2026-04-28",
+        )
+
+        payload = repr(sections)
+        assert "NVIDIA Corporation" not in payload
+        assert "Tesla, Inc." not in payload
+        assert "Technology" not in payload
+        assert "NVDA" in payload
+        assert "TSLA" in payload
+        assert "AI算力/云" in payload
+        assert "自动驾驶/机器人" in payload
+
+    def test_render_portfolio_images(self, tmp_path):
+        from scripts.portfolio_intelligence import render_portfolio_report_images
+
+        paths = render_portfolio_report_images(
+            action_signals=[],
+            summary=self._summary(),
+            kill_conditions={"NVDA": {"dna": "S", "conditions": ["估值严重脱离基本面"]}},
+            snapshot_line="NAV 快照 ET 2026-04-28",
+            output_dir=tmp_path,
+        )
+
+        assert [path.name for path in paths] == [
+            "01_overview.png",
+            "02_stock_positions.png",
+            "03_option_positions.png",
+            "04_signals_exits.png",
+        ]
+        assert all(path.exists() and path.stat().st_size > 0 for path in paths)
+
+
 class TestPositionsAsOf:
     def _store(self, tmp_path):
         from terminal.company_store import CompanyStore

@@ -169,6 +169,32 @@ class TestPortfolioRouting:
 
         mock_send.assert_not_called()
 
+    @patch("scripts.portfolio_intelligence.send_document")
+    def test_send_private_image_report_routes_private_document(self, mock_send, tmp_path):
+        path = tmp_path / "pi.png"
+        path.write_bytes(b"png")
+
+        portfolio_intelligence._send_private_image_report([path], dry_run=False)
+
+        mock_send.assert_called_once_with(
+            str(path),
+            caption="Portfolio Intelligence 1/1",
+            channel="private",
+        )
+
+    @patch("scripts.portfolio_intelligence.send_photo")
+    def test_send_private_image_report_routes_private_photo(self, mock_send, tmp_path):
+        path = tmp_path / "pi.png"
+        path.write_bytes(b"png")
+
+        portfolio_intelligence._send_private_image_report([path], dry_run=False, delivery="photo")
+
+        mock_send.assert_called_once_with(
+            str(path),
+            caption="Portfolio Intelligence 1/1",
+            channel="private",
+        )
+
     @patch("scripts.portfolio_intelligence._send_private_report", side_effect=lambda message, dry_run=False: message)
     @patch("portfolio.holdings.manager.PortfolioManager")
     @patch("scripts.portfolio_intelligence.get_store")
