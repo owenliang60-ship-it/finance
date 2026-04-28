@@ -1,0 +1,51 @@
+{
+  "version": "2026-04-28",
+  "description": "Dynamic hot themes with 12-18 month lifecycle. Separated from evergreen taxonomy so HBM/液冷/硅光 don't pollute the long-term tree.",
+  "themes": [
+    {
+      "theme_id": "hbm",
+      "label": "HBM",
+      "parent_concept_id": "memory",
+      "lifecycle_state": "active",
+      "active_from": "2024-01-01",
+      "active_to": null,
+      "evidence": "AI training memory bottleneck; SK海力士/MU/Samsung supply chain"
+    },
+    {
+      "theme_id": "liquid_cooling",
+      "label": "液冷",
+      "parent_concept_id": "data_center_power",
+      "lifecycle_state": "active",
+      "active_from": "2024-06-01",
+      "active_to": null,
+      "evidence": "Hyperscaler 高功耗 GPU 部署驱动"
+    },
+    {
+      "theme_id": "ai_pc",
+      "label": "AI PC",
+      "parent_concept_id": "semiconductor",
+      "lifecycle_state": "watch",
+      "active_from": null,
+      "active_to": null,
+      "evidence": "Intel/Qualcomm/AMD NPU PC 周期；2026 量产"
+    },
+    {
+      "theme_id": "nuclear_revaluation",
+      "label": "核电重估",
+      "parent_concept_id": "nuclear_power",
+      "lifecycle_state": "active",
+      "active_from": "2024-09-01",
+      "active_to": null,
+      "evidence": "Hyperscaler PPA + SMR 监管开闸"
+    },
+    {
+      "theme_id": "silicon_photonics",
+      "label": "硅光",
+      "parent_concept_id": "optical_communications",
+      "lifecycle_state": "active",
+      "active_from": "2024-01-01",
+      "active_to": null,
+      "evidence": "AI 集群高带宽光互连，区分于 InP 接口"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "version": "2026-04-28",
+  "description": "Small-cap / pre-revenue / off-broad symbols that need to be in the registry even if they fall below broad universe market-cap threshold. These force-add into priority_list.",
+  "symbols": [
+    "POET",
+    "OKLO",
+    "DXYZ"
+  ]
+}

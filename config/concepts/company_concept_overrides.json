@@ -1,0 +1,246 @@
+{
+  "version": "2026-04-28",
+  "description": "Manual high-confidence concept overrides. Phase 1 seed = 24 high-priority symbols. Expand to 60-80 before cloud rollout (cover priority_list = portfolio holdings ∪ watchlist ∪ broad top 100 by 30d ADV).",
+  "symbols": {
+    "MU": {
+      "primary_concept_id": "semiconductor",
+      "secondary_concept_id": "memory",
+      "tertiary_concept_id": "memory_chips",
+      "theme_ids": ["hbm"],
+      "display_tags": ["半导体", "存储", "HBM"],
+      "business_role": "DRAM/HBM存储",
+      "confidence": 0.98,
+      "evidence": "Manual override: DRAM/NAND/HBM supplier"
+    },
+    "NVDA": {
+      "primary_concept_id": "ai_compute_cloud",
+      "secondary_concept_id": "gpu_accelerator",
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["AI算力/云", "GPU/AI加速器"],
+      "business_role": "GPU/AI加速器",
+      "confidence": 0.99,
+      "evidence": "Manual override: dominant AI training/inference GPU"
+    },
+    "MSFT": {
+      "primary_concept_id": "ai_compute_cloud",
+      "secondary_concept_id": "cloud_infra",
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["AI算力/云", "云基础设施"],
+      "business_role": "Azure/企业软件/AI",
+      "confidence": 0.97,
+      "evidence": "Manual override: Azure + enterprise software + OpenAI partner"
+    },
+    "GOOG": {
+      "primary_concept_id": "internet_ads",
+      "secondary_concept_id": null,
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["互联网/广告"],
+      "business_role": "搜索/广告/云/AI",
+      "confidence": 0.95,
+      "evidence": "Manual override: Google Search/Ads + GCP + DeepMind"
+    },
+    "AMZN": {
+      "primary_concept_id": "consumer_ecommerce",
+      "secondary_concept_id": null,
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["消费/电商"],
+      "business_role": "电商/AWS/广告",
+      "confidence": 0.95,
+      "evidence": "Manual override: e-commerce + AWS + ads"
+    },
+    "TSM": {
+      "primary_concept_id": "semiconductor",
+      "secondary_concept_id": "foundry",
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["半导体", "晶圆代工"],
+      "business_role": "晶圆代工",
+      "confidence": 0.99,
+      "evidence": "Manual override: leading-edge foundry"
+    },
+    "ASML": {
+      "primary_concept_id": "semiconductor",
+      "secondary_concept_id": "semiconductor_equipment",
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["半导体", "半导体设备"],
+      "business_role": "EUV光刻设备",
+      "confidence": 0.99,
+      "evidence": "Manual override: EUV lithography monopoly"
+    },
+    "META": {
+      "primary_concept_id": "internet_ads",
+      "secondary_concept_id": null,
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["互联网/广告"],
+      "business_role": "社交/广告/AI/Reality Labs",
+      "confidence": 0.95,
+      "evidence": "Manual override: Facebook/Instagram ads + AI infra"
+    },
+    "TSLA": {
+      "primary_concept_id": "evs_robotics",
+      "secondary_concept_id": "electric_vehicles",
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["自动驾驶/机器人", "电动车"],
+      "business_role": "电动车/自动驾驶/Optimus",
+      "confidence": 0.95,
+      "evidence": "Manual override: EV + FSD + humanoid robotics"
+    },
+    "PDD": {
+      "primary_concept_id": "consumer_ecommerce",
+      "secondary_concept_id": null,
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["消费/电商"],
+      "business_role": "跨境电商Temu/拼多多",
+      "confidence": 0.95,
+      "evidence": "Manual override: Temu + China PDD platform"
+    },
+    "DXYZ": {
+      "primary_concept_id": "finance_crypto",
+      "secondary_concept_id": null,
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["金融/加密"],
+      "business_role": "私募AI股权基金(Destiny Tech100)",
+      "confidence": 0.92,
+      "evidence": "Manual override: closed-end fund of pre-IPO AI names"
+    },
+    "SOXX": {
+      "primary_concept_id": "etf_macro",
+      "secondary_concept_id": "index_etf",
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["ETF/宏观工具", "指数ETF"],
+      "business_role": "半导体ETF",
+      "confidence": 0.99,
+      "evidence": "Manual override: iShares Semiconductor ETF"
+    },
+    "POET": {
+      "primary_concept_id": "network_equipment",
+      "secondary_concept_id": "optical_communications",
+      "tertiary_concept_id": "inp_optical_interface",
+      "theme_ids": [],
+      "display_tags": ["通信/网络设备", "光通信", "InP光接口"],
+      "business_role": "光通信/光器件(InP optical interposer)",
+      "confidence": 0.92,
+      "evidence": "Manual override: POET Technologies InP optical interposer; verified before freezing tertiary"
+    },
+    "COHR": {
+      "primary_concept_id": "network_equipment",
+      "secondary_concept_id": "optical_communications",
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["通信/网络设备", "光通信"],
+      "business_role": "光通信器件/激光",
+      "confidence": 0.96,
+      "evidence": "Manual override: Coherent post-II-VI; optical/laser"
+    },
+    "VRT": {
+      "primary_concept_id": "data_center_power",
+      "secondary_concept_id": "power_thermal",
+      "tertiary_concept_id": null,
+      "theme_ids": ["liquid_cooling"],
+      "display_tags": ["数据中心电力", "电源/散热"],
+      "business_role": "数据中心电源/散热/液冷",
+      "confidence": 0.96,
+      "evidence": "Manual override: Vertiv data center power & cooling"
+    },
+    "OKLO": {
+      "primary_concept_id": "energy_materials",
+      "secondary_concept_id": "nuclear_power",
+      "tertiary_concept_id": null,
+      "theme_ids": ["nuclear_revaluation"],
+      "display_tags": ["能源/材料", "核电"],
+      "business_role": "小型模块化核反应堆(SMR)",
+      "confidence": 0.93,
+      "evidence": "Manual override: Oklo SMR pre-revenue"
+    },
+    "SMCI": {
+      "primary_concept_id": "ai_compute_cloud",
+      "secondary_concept_id": "ai_server",
+      "tertiary_concept_id": null,
+      "theme_ids": ["liquid_cooling"],
+      "display_tags": ["AI算力/云", "AI服务器"],
+      "business_role": "AI服务器/液冷",
+      "confidence": 0.94,
+      "evidence": "Manual override: Super Micro AI server platform"
+    },
+    "AVGO": {
+      "primary_concept_id": "semiconductor",
+      "secondary_concept_id": "gpu_accelerator",
+      "tertiary_concept_id": null,
+      "theme_ids": ["hbm"],
+      "display_tags": ["半导体", "GPU/AI加速器"],
+      "business_role": "定制ASIC/网络芯片",
+      "confidence": 0.97,
+      "evidence": "Manual override: Broadcom custom AI ASIC + Tomahawk networking"
+    },
+    "AMD": {
+      "primary_concept_id": "semiconductor",
+      "secondary_concept_id": "gpu_accelerator",
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["半导体", "GPU/AI加速器"],
+      "business_role": "CPU/GPU/MI系列",
+      "confidence": 0.97,
+      "evidence": "Manual override: AMD Ryzen + EPYC + MI300 accelerators"
+    },
+    "WDC": {
+      "primary_concept_id": "semiconductor",
+      "secondary_concept_id": "memory",
+      "tertiary_concept_id": "memory_chips",
+      "theme_ids": [],
+      "display_tags": ["半导体", "存储", "存储芯片"],
+      "business_role": "NAND闪存/HDD",
+      "confidence": 0.95,
+      "evidence": "Manual override: Western Digital NAND/HDD post-Sandisk split"
+    },
+    "STX": {
+      "primary_concept_id": "semiconductor",
+      "secondary_concept_id": "memory",
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["半导体", "存储"],
+      "business_role": "HDD/数据中心存储",
+      "confidence": 0.95,
+      "evidence": "Manual override: Seagate HDD + HAMR"
+    },
+    "LITE": {
+      "primary_concept_id": "network_equipment",
+      "secondary_concept_id": "optical_communications",
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["通信/网络设备", "光通信"],
+      "business_role": "光通信器件",
+      "confidence": 0.95,
+      "evidence": "Manual override: Lumentum optical components"
+    },
+    "CIEN": {
+      "primary_concept_id": "network_equipment",
+      "secondary_concept_id": "optical_communications",
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["通信/网络设备", "光通信"],
+      "business_role": "光网络设备",
+      "confidence": 0.95,
+      "evidence": "Manual override: Ciena optical networking"
+    },
+    "GLW": {
+      "primary_concept_id": "network_equipment",
+      "secondary_concept_id": "optical_communications",
+      "tertiary_concept_id": null,
+      "theme_ids": [],
+      "display_tags": ["通信/网络设备", "光通信"],
+      "business_role": "光纤/光通信",
+      "confidence": 0.93,
+      "evidence": "Manual override: Corning optical fiber + Gorilla Glass"
+    }
+  }
+}

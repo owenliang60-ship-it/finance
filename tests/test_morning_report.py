@@ -315,6 +315,83 @@ class TestLayeredSections:
         assert "3日连续" in result
         assert "小型火箭发射" in result
 
+    def test_layered_dv_renders_three_tier_concept_tags(self, monkeypatch, tmp_path):
+        """When registry has display_tags, the layered DV row shows the full three tiers."""
+        from src.data.market_store import MarketStore
+        from terminal.company_concepts import ConceptRegistry
+        from terminal.concept_classifier import ConceptClassifier
+        from scripts.build_company_concept_registry import build_registry
+        from terminal import concept_classifier as cc_mod
+        from config.settings import REPORT_CONCEPTS_PATH
+
+        cfg = PROJECT_ROOT / "config" / "concepts"
+        store = MarketStore(tmp_path / "market.db")
+        registry = ConceptRegistry(
+            taxonomy_path=cfg / "taxonomy.json",
+            themes_path=cfg / "concept_themes.json",
+            overrides_path=cfg / "company_concept_overrides.json",
+            watchlist_path=cfg / "concept_watchlist.json",
+        )
+        build_registry(
+            store=store, registry=registry,
+            universe_symbols=["MU"],
+            profiles={"MU": {"symbol": "MU", "industry": "Semiconductors"}},
+            portfolio_holdings=["MU"],
+            broad_top_symbols=["MU"],
+            review_csv_path=tmp_path / "review.csv",
+            save=True, force_save=False,
+        )
+        # Inject a registry-aware classifier into the morning_report singleton.
+        injected = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
+        monkeypatch.setattr(cc_mod, "_REPORT_CONCEPT_CLASSIFIER", injected)
+
+        result = format_section_layered_dv(sample_market_signals())
+        assert "MU" in result
+        # Three-tier tags from the registry are joined into the row.
+        assert "半导体" in result
+        assert "存储" in result
+        assert "HBM" in result
+        # Business role still rendered for context.
+        assert "DRAM/HBM存储" in result
+
+    def test_image_report_blocks_include_concept_column(self):
+        """B 的 image-report cron 走 build_morning_visual_sections —— 4 个 block 都
+        必须有'概念'列，否则三层标签不会出现在实际发出的图片晨报里。"""
+        sections = build_morning_visual_sections(sample_market_signals())
+        slugs_seen = set()
+        for sec in sections:
+            slugs_seen.add(sec["slug"])
+            for block in sec["blocks"]:
+                cols = block["columns"]
+                # broad/pmarp/dv/rvol 4 个 layered 信号 block 必带"概念"列
+                if sec["slug"] in {"01_broad_signal", "02_pmarp",
+                                   "03_dv_acceleration", "04_rvol_sustained"}:
+                    assert "概念" in cols, f"{sec['slug']} missing 概念 column: {cols}"
+                    # 列宽数组长度也要匹配
+                    assert len(block["widths"]) == len(cols)
+                    # 每行的单元格数也要匹配
+                    for row in block["rows"]:
+                        assert len(row["cells"]) == len(cols)
+        assert {"01_broad_signal", "02_pmarp",
+                "03_dv_acceleration", "04_rvol_sustained"}.issubset(slugs_seen)
+
+    def test_layered_dv_missing_registry_keeps_legacy_bucket(self, monkeypatch):
+        """No store / empty registry → row falls back to the legacy single bucket
+        and never shows Unclassified."""
+        from terminal.concept_classifier import ConceptClassifier
+        from terminal import concept_classifier as cc_mod
+        from config.settings import REPORT_CONCEPTS_PATH
+
+        legacy_only = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=None)
+        monkeypatch.setattr(cc_mod, "_REPORT_CONCEPT_CLASSIFIER", legacy_only)
+
+        result = format_section_layered_dv(sample_market_signals())
+        assert "Unclassified" not in result
+        assert "MU" in result
+        assert "DRAM/HBM存储" in result
+        # Legacy bucket label still appears on the concept column.
+        assert "半导体链" in result
+
     def test_bucketed_sections_do_not_truncate_with_more(self):
         data = sample_market_signals()
         data["broad_scan"]["hits"] = [

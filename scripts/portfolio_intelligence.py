@@ -575,20 +575,19 @@ _PI_TABLE_ROW_H = 60
 
 def _pi_visual_deps():
     """Load morning-report visual helpers so PI and morning report share buckets."""
+    from terminal.concept_classifier import get_report_concept_classifier
     from scripts.morning_report import (
-        CONCEPT_BUCKET_ORDER,
-        _concept_bucket,
-        _display_classification,
         _draw_fit,
         _load_visual_font,
         _resize_for_telegram_photo,
         _scaled_widths,
     )
 
+    classifier = get_report_concept_classifier()
     return {
-        "bucket_order": CONCEPT_BUCKET_ORDER,
-        "concept_bucket": _concept_bucket,
-        "display_classification": _display_classification,
+        "bucket_order": classifier.bucket_order,
+        "concept_bucket": classifier.classify,
+        "display_classification": classifier.business_role,
         "draw_fit": _draw_fit,
         "font": _load_visual_font,
         "resize_photo": _resize_for_telegram_photo,

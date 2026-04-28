@@ -53,569 +53,14 @@ LAYER_LABELS = {
 }
 LAYER_TOP_N = 8
 
-CONCEPT_BUCKET_ORDER = [
-    "AI算力/云",
-    "半导体链",
-    "数据中心电力",
-    "通信/网络设备",
-    "互联网/广告",
-    "软件/SaaS",
-    "自动驾驶/机器人",
-    "金融/加密",
-    "医药/生命科学",
-    "工业/航天/国防",
-    "消费/电商",
-    "能源/材料",
-    "地产/基础设施",
-    "ETF/宏观工具",
-    "其他",
-]
+from terminal.concept_classifier import get_report_concept_classifier
 
-THEME_BUCKET_HINTS = {
-    "ai_chip": "AI算力/云",
-    "ai_software": "AI算力/云",
-    "ai_agent": "AI算力/云",
-    "ai_infra": "AI算力/云",
-    "cloud": "AI算力/云",
-    "quantum": "AI算力/云",
-    "memory": "半导体链",
-    "semicap": "半导体链",
-    "chip_design": "半导体链",
-    "liquid_cooling": "数据中心电力",
-    "nuclear_power": "数据中心电力",
-    "cybersecurity": "软件/SaaS",
-    "enterprise_sw": "软件/SaaS",
-    "autonomous_driving": "自动驾驶/机器人",
-    "humanoid_robot": "自动驾驶/机器人",
-    "ev_battery": "自动驾驶/机器人",
-    "streaming": "互联网/广告",
-    "digital_ads": "互联网/广告",
-    "fintech": "金融/加密",
-    "crypto": "金融/加密",
-    "glp1": "医药/生命科学",
-    "biotech": "医药/生命科学",
-    "space": "工业/航天/国防",
-    "defense": "工业/航天/国防",
-}
 
-ETF_SYMBOLS = {
-    "SPY", "QQQ", "IWM", "DIA", "SOXX", "SMH", "XLK", "XLF", "XLE", "XLV",
-    "XLY", "XLI", "XLC", "EWY", "EWT", "FXI", "KWEB",
-}
+def _get_concept_classifier():
+    return get_report_concept_classifier()
 
-SYMBOL_BUCKET_OVERRIDES = {
-    # AI / cloud platforms and flagship application names.
-    "NVDA": "AI算力/云",
-    "MSFT": "AI算力/云",
-    "GOOG": "AI算力/云",
-    "GOOGL": "AI算力/云",
-    "AMZN": "AI算力/云",
-    "ORCL": "AI算力/云",
-    "PLTR": "AI算力/云",
-    "IBM": "AI算力/云",
-    "ANET": "AI算力/云",
-    "SNOW": "AI算力/云",
-    "CRWV": "AI算力/云",
-    "NBIS": "AI算力/云",
-    # Semiconductor supply chain.
-    "AMD": "半导体链",
-    "AVGO": "半导体链",
-    "TSM": "半导体链",
-    "ASML": "半导体链",
-    "MU": "半导体链",
-    "ARM": "半导体链",
-    "INTC": "半导体链",
-    "MRVL": "半导体链",
-    "QCOM": "半导体链",
-    "LRCX": "半导体链",
-    "AMAT": "半导体链",
-    "KLAC": "半导体链",
-    "SMCI": "半导体链",
-    # Internet, ads, streaming.
-    "META": "互联网/广告",
-    "NFLX": "互联网/广告",
-    "APP": "互联网/广告",
-    "RDDT": "互联网/广告",
-    "PINS": "互联网/广告",
-    "UBER": "互联网/广告",
-    "LYFT": "互联网/广告",
-    # Software / SaaS.
-    "CRM": "软件/SaaS",
-    "NOW": "软件/SaaS",
-    "ADBE": "软件/SaaS",
-    "CRWD": "软件/SaaS",
-    "PANW": "软件/SaaS",
-    "NET": "软件/SaaS",
-    "DDOG": "软件/SaaS",
-    "MDB": "软件/SaaS",
-    # Autos, robots, electrification.
-    "TSLA": "自动驾驶/机器人",
-    "RIVN": "自动驾驶/机器人",
-    "LCID": "自动驾驶/机器人",
-    "XPEV": "自动驾驶/机器人",
-    "NIO": "自动驾驶/机器人",
-    # Finance / crypto / brokers.
-    "COIN": "金融/加密",
-    "MSTR": "金融/加密",
-    "HOOD": "金融/加密",
-    "SOFI": "金融/加密",
-    "PYPL": "金融/加密",
-    "SQ": "金融/加密",
-    "IBKR": "金融/加密",
-    "JPM": "金融/加密",
-    "GS": "金融/加密",
-    # Health care.
-    "LLY": "医药/生命科学",
-    "NVO": "医药/生命科学",
-    "UNH": "医药/生命科学",
-    "MRK": "医药/生命科学",
-    "VRTX": "医药/生命科学",
-    # Industrial / aerospace / defense.
-    "RKLB": "工业/航天/国防",
-    "ASTS": "工业/航天/国防",
-    "BA": "工业/航天/国防",
-    "LMT": "工业/航天/国防",
-    "GE": "工业/航天/国防",
-    # Consumer / commerce.
-    "AAPL": "消费/电商",
-    "PDD": "消费/电商",
-    "BABA": "消费/电商",
-    "SHOP": "消费/电商",
-    "MELI": "消费/电商",
-    "COST": "消费/电商",
-    "WMT": "消费/电商",
-    "HD": "消费/电商",
-    # Energy / materials.
-    "XOM": "能源/材料",
-    "CVX": "能源/材料",
-    "CCJ": "能源/材料",
-    "FCX": "能源/材料",
-    "ALB": "能源/材料",
-    # Current broad-signal fallback coverage when market_db has ticker/cap only.
-    "OGN": "医药/生命科学",
-    "CAH": "医药/生命科学",
-    "INBX": "医药/生命科学",
-    "ACLX": "医药/生命科学",
-    "ABCL": "医药/生命科学",
-    "RCUS": "医药/生命科学",
-    "MOH": "医药/生命科学",
-    "ERAS": "医药/生命科学",
-    "WST": "医药/生命科学",
-    "ICLR": "医药/生命科学",
-    "GRFS": "医药/生命科学",
-    "TFX": "医药/生命科学",
-    "MEDP": "医药/生命科学",
-    "MXL": "半导体链",
-    "AOSL": "半导体链",
-    "POWI": "半导体链",
-    "VICR": "半导体链",
-    "COHU": "半导体链",
-    "VECO": "半导体链",
-    "PI": "半导体链",
-    "SYNA": "半导体链",
-    "SNDK": "半导体链",
-    "STX": "半导体链",
-    "COHR": "通信/网络设备",
-    "TEL": "通信/网络设备",
-    "KN": "通信/网络设备",
-    "CHTR": "通信/网络设备",
-    "EXTR": "通信/网络设备",
-    "CALX": "通信/网络设备",
-    "VZ": "通信/网络设备",
-    "GLW": "通信/网络设备",
-    "SRAD": "互联网/广告",
-    "LBRDK": "互联网/广告",
-    "SIRI": "互联网/广告",
-    "FICO": "软件/SaaS",
-    "FRSH": "软件/SaaS",
-    "PEGA": "软件/SaaS",
-    "WK": "软件/SaaS",
-    "AMSC": "数据中心电力",
-    "OKLO": "数据中心电力",
-    "ITRI": "数据中心电力",
-    "DQ": "能源/材料",
-    "ENIC": "能源/材料",
-    "WKC": "能源/材料",
-    "HLX": "能源/材料",
-    "AAUC": "能源/材料",
-    "KALU": "能源/材料",
-    "CLF": "能源/材料",
-    "LPX": "能源/材料",
-    "RS": "能源/材料",
-    "ROG": "能源/材料",
-    "TX": "能源/材料",
-    "FLS": "工业/航天/国防",
-    "HII": "工业/航天/国防",
-    "DRS": "工业/航天/国防",
-    "VVX": "工业/航天/国防",
-    "SON": "工业/航天/国防",
-    "PBI": "工业/航天/国防",
-    "AZZ": "工业/航天/国防",
-    "HTLD": "工业/航天/国防",
-    "SANM": "工业/航天/国防",
-    "RDW": "工业/航天/国防",
-    "VTOL": "工业/航天/国防",
-    "ICFI": "工业/航天/国防",
-    "TNC": "工业/航天/国防",
-    "URI": "地产/基础设施",
-    "BLD": "地产/基础设施",
-    "MAS": "地产/基础设施",
-    "MGRC": "地产/基础设施",
-    "ZWS": "地产/基础设施",
-    "IIPR": "地产/基础设施",
-    "SILA": "地产/基础设施",
-    "QXO": "地产/基础设施",
-    "NHI": "地产/基础设施",
-    "WSO": "地产/基础设施",
-    "STRA": "消费/电商",
-    "EDU": "消费/电商",
-    "MTN": "消费/电商",
-    "CAR": "消费/电商",
-    "MCRI": "消费/电商",
-    "PENN": "消费/电商",
-    "LULU": "消费/电商",
-    "BYD": "消费/电商",
-    "CHDN": "消费/电商",
-    "LVS": "消费/电商",
-    "TSCO": "消费/电商",
-    "TAL": "消费/电商",
-    "ABG": "消费/电商",
-    "HCSG": "医药/生命科学",
-    "CASH": "金融/加密",
-    "NYAX": "金融/加密",
-    "EVO": "金融/加密",
-    "WU": "金融/加密",
-    "WEX": "金融/加密",
-    "FBP": "金融/加密",
-    "TFIN": "金融/加密",
-    "SIGI": "金融/加密",
-    "NTRS": "金融/加密",
-    "VOYA": "金融/加密",
-    "UVE": "金融/加密",
-    "SEIC": "金融/加密",
-    "RY": "金融/加密",
-    "AIG": "金融/加密",
-    "OUST": "自动驾驶/机器人",
-    "MBLY": "自动驾驶/机器人",
-    "VC": "自动驾驶/机器人",
-    "GNTX": "自动驾驶/机器人",
-    "CTOS": "自动驾驶/机器人",
-    "SEMR": "软件/SaaS",
-    "PDFS": "半导体链",
-    "FORM": "半导体链",
-    "NOK": "通信/网络设备",
-    "AKO-A": "消费/电商",
-    "DPZ": "消费/电商",
-    "DLTR": "消费/电商",
-    "AZO": "消费/电商",
-    "SXT": "能源/材料",
-    "LAC": "能源/材料",
-    "WES": "能源/材料",
-    "SHEL": "能源/材料",
-    "EPD": "能源/材料",
-    "KRP": "能源/材料",
-    "CNQ": "能源/材料",
-    "TDW": "能源/材料",
-    "KEN": "能源/材料",
-    "MOG-B": "工业/航天/国防",
-    "RHI": "工业/航天/国防",
-    "PLOW": "工业/航天/国防",
-    "PATK": "工业/航天/国防",
-    "CAE": "工业/航天/国防",
-    "TTEK": "工业/航天/国防",
-    "SKYW": "工业/航天/国防",
-    "WWD": "工业/航天/国防",
-    "FSV": "地产/基础设施",
-    "EGP": "地产/基础设施",
-    "SLM": "金融/加密",
-    "LC": "金融/加密",
-    "TCBI": "金融/加密",
-    "ENVA": "金融/加密",
-    "HLNE": "金融/加密",
-    "CNOB": "金融/加密",
-    "HCXY": "金融/加密",
-    "EBC": "金融/加密",
-    "BHFAP": "金融/加密",
-    "UHS": "医药/生命科学",
-}
 
-BUSINESS_ROLE_OVERRIDES = {
-    # AI / cloud
-    "NVDA": "GPU/AI加速器",
-    "MSFT": "云+企业软件",
-    "GOOG": "搜索广告+云",
-    "GOOGL": "搜索广告+云",
-    "AMZN": "AWS云+电商",
-    "ORCL": "数据库+云",
-    "PLTR": "AI数据平台",
-    "IBM": "企业AI/混合云",
-    "CRWV": "GPU云算力租赁",
-    "AIG": "保险/金融服务",
-    "QS": "固态电池",
-    # Semiconductors and electronics
-    "AMD": "GPU/CPU",
-    "AVGO": "ASIC/网络芯片",
-    "TSM": "晶圆代工",
-    "ASML": "EUV光刻机",
-    "MU": "DRAM/HBM存储",
-    "INTC": "CPU/晶圆制造",
-    "ARM": "芯片IP授权",
-    "MRVL": "数据中心连接芯片",
-    "QCOM": "手机SoC/基带",
-    "LRCX": "刻蚀设备",
-    "AMAT": "半导体设备",
-    "KLAC": "量检测设备",
-    "SMCI": "AI服务器",
-    "MXL": "模拟/混合信号芯片",
-    "NVTS": "氮化镓功率芯片",
-    "AOSL": "功率半导体",
-    "TXN": "模拟芯片",
-    "POWI": "高压电源芯片",
-    "VICR": "电源模块",
-    "COHU": "半导体测试设备",
-    "RMBS": "内存接口IP",
-    "VECO": "薄膜沉积设备",
-    "ON": "汽车/功率芯片",
-    "PI": "RFID/IoT芯片",
-    "STM": "MCU/功率芯片",
-    "LSCC": "低功耗FPGA",
-    "SYNA": "人机接口芯片",
-    "PDFS": "半导体良率软件",
-    "FORM": "晶圆探针卡",
-    "SNDK": "闪存/存储",
-    "STX": "硬盘存储",
-    "WDC": "硬盘/闪存存储",
-    "COHR": "光通信器件/工业激光",
-    # Data center power / physical infra
-    "AMSC": "电网超导设备",
-    "OKLO": "小型核反应堆",
-    "GEV": "电网/燃机设备",
-    "VRT": "数据中心电力/散热",
-    "ITRI": "智能电表",
-    # Networking / optical / telecom
-    "LITE": "光通信器件",
-    "NBIS": "AI云基础设施",
-    "GLW": "光纤/显示玻璃",
-    "VZ": "无线通信运营商",
-    "TEL": "连接器/传感器",
-    "KN": "声学元件",
-    "CHTR": "有线宽带",
-    "EXTR": "企业网络设备",
-    "CALX": "宽带接入设备",
-    "NOK": "通信设备",
-    # Internet / ads / content
-    "META": "社交广告",
-    "NFLX": "流媒体内容",
-    "APP": "移动广告平台",
-    "RDDT": "社区内容平台",
-    "PINS": "视觉社交广告",
-    "SRAD": "体育数据/API",
-    "LBRDK": "宽带/媒体控股",
-    "SIRI": "卫星广播/音频",
-    # Software / SaaS
-    "NOW": "IT服务管理SaaS",
-    "CRM": "CRM企业软件",
-    "ADBE": "创意/营销软件",
-    "CRWD": "终端安全",
-    "PANW": "网络安全平台",
-    "NET": "边缘网络/安全",
-    "DDOG": "云监控",
-    "MDB": "文档数据库",
-    "SEMR": "搜索营销SaaS",
-    "PEGA": "流程自动化软件",
-    "WK": "财务报表SaaS",
-    "FICO": "信用评分/决策软件",
-    "FRSH": "客服SaaS",
-    # EV / robot / auto
-    "TSLA": "电动车/自动驾驶",
-    "TM": "全球整车制造",
-    "RIVN": "电动皮卡/SUV",
-    "LCID": "豪华电动车",
-    "XPEV": "智能电动车",
-    "NIO": "智能电动车",
-    "VC": "汽车座舱电子",
-    "OUST": "激光雷达",
-    "MBLY": "ADAS视觉芯片",
-    "GNTX": "汽车电子/后视镜",
-    "CTOS": "商用车租赁",
-    # Finance / crypto
-    "COIN": "加密交易所",
-    "MSTR": "比特币持仓公司",
-    "HOOD": "零售券商/交易App",
-    "SOFI": "消费金融平台",
-    "PYPL": "数字支付",
-    "SQ": "商户支付/金融App",
-    "IBKR": "电子券商",
-    "JPM": "大型银行",
-    "GS": "投行/资管",
-    "V": "卡组织支付网络",
-    "BRK-B": "保险+控股集团",
-    "CASH": "社区银行",
-    "SLM": "学生贷款",
-    "EVO": "支付处理/收单",
-    "LC": "在线消费贷",
-    "TCBI": "区域银行",
-    "ENVA": "在线小额信贷",
-    "HLNE": "另类资产管理",
-    "CNOB": "区域银行",
-    "EBC": "区域银行",
-    "WEX": "车队/企业支付",
-    # Health care
-    "LLY": "GLP-1/创新药",
-    "NVO": "GLP-1/糖尿病药",
-    "UNH": "医保管理",
-    "MRK": "大型制药",
-    "VRTX": "罕见病药",
-    "OGN": "女性健康/仿制药",
-    "CAH": "药品分销",
-    "DHR": "生命科学工具",
-    "ABCL": "抗体发现平台",
-    "NTLA": "基因编辑疗法",
-    "ACLX": "肿瘤细胞疗法",
-    "ERAS": "肿瘤靶向药",
-    "UHS": "医院运营",
-    "INBX": "肿瘤免疫药",
-    "MOH": "医保管理",
-    "WST": "药物包装/给药系统",
-    "ICLR": "临床CRO",
-    "GRFS": "血浆制品",
-    "TFX": "医疗器械",
-    "MEDP": "临床CRO",
-    # Industrial / aerospace / defense
-    "RKLB": "小型火箭发射",
-    "ASTS": "卫星直连手机",
-    "BA": "商用飞机/军工",
-    "LMT": "军工主承包商",
-    "NOC": "军工/航天系统",
-    "HII": "军舰制造",
-    "DRS": "军用电子",
-    "VVX": "国防服务",
-    "SON": "工业包装",
-    "FLS": "工业泵阀",
-    "MOG-B": "精密控制系统",
-    "PBI": "邮政/物流设备",
-    "AZZ": "金属镀锌/涂层",
-    "SANM": "电子制造服务",
-    "RDW": "空间基础设施",
-    "VTOL": "海上直升机服务",
-    "ICFI": "政府咨询",
-    "TNC": "清洁设备",
-    "CAT": "工程机械",
-    "RTX": "航空发动机/军工",
-    "PLOW": "扫雪/卡车附件",
-    "PATK": "房车/船舶零部件",
-    "CAE": "飞行模拟训练",
-    "TTEK": "工程咨询",
-    "SKYW": "区域航空",
-    "WWD": "航空/能源控制系统",
-    # Consumer / commerce
-    "AAPL": "消费电子生态",
-    "PDD": "折扣电商",
-    "BABA": "中国电商+云",
-    "SHOP": "电商建站平台",
-    "MELI": "拉美电商/支付",
-    "COST": "会员制仓储零售",
-    "WMT": "综合零售",
-    "HD": "家装零售",
-    "BKNG": "在线旅游",
-    "DPZ": "披萨连锁",
-    "DLTR": "折扣零售",
-    "AZO": "汽配零售",
-    "MTN": "滑雪度假村",
-    "STRA": "职业教育",
-    "EDU": "教育培训",
-    "MCRI": "赌场度假村",
-    "CAR": "租车服务",
-    "PENN": "博彩/体育娱乐",
-    "LULU": "运动服饰",
-    "BYD": "赌场酒店",
-    "CHDN": "赛马/博彩娱乐",
-    "LVS": "澳门/新加坡赌场",
-    "TSCO": "乡村零售",
-    "TAL": "教育培训",
-    "ABG": "汽车经销商",
-    # Energy / materials
-    "SHEL": "综合油气",
-    "XOM": "综合油气",
-    "CVX": "综合油气",
-    "EPD": "油气中游管道",
-    "WES": "油气中游管道",
-    "CNQ": "油砂/油气生产",
-    "KRP": "矿权版税",
-    "TDW": "海工船服务",
-    "KEN": "电力/能源控股",
-    "CLF": "钢铁",
-    "FCX": "铜矿",
-    "CCJ": "铀矿",
-    "ALB": "锂材料",
-    "LAC": "锂矿开发",
-    "SXT": "色素/香精材料",
-    "KALU": "铝材",
-    "DQ": "多晶硅",
-    "HLX": "海底油服",
-    "AAUC": "黄金勘探",
-    "LPX": "木建材",
-    "RS": "金属分销",
-    "ROG": "高性能材料",
-    "TX": "钢铁",
-    # Real estate / infrastructure
-    "WSO": "暖通设备分销",
-    "NHI": "医疗地产REIT",
-    "URI": "设备租赁",
-    "BLD": "建筑保温安装",
-    "MAS": "家装建材",
-    "MGRC": "模块建筑租赁",
-    "ZWS": "水处理/基础设施",
-    "IIPR": "大麻地产REIT",
-    "SILA": "医疗地产REIT",
-    "QXO": "建筑材料分销",
-    "FSV": "物业服务",
-    "EGP": "工业地产REIT",
-}
-
-BUCKET_ROLE_FALLBACKS = {
-    "AI算力/云": "AI/云基础设施",
-    "半导体链": "芯片/半导体环节",
-    "数据中心电力": "数据中心电力设备",
-    "通信/网络设备": "网络/通信基础设施",
-    "互联网/广告": "互联网平台/广告",
-    "软件/SaaS": "企业软件/SaaS",
-    "自动驾驶/机器人": "汽车/自动化",
-    "金融/加密": "金融服务",
-    "医药/生命科学": "医药/生命科学",
-    "工业/航天/国防": "工业/航天/国防",
-    "消费/电商": "消费/电商服务",
-    "能源/材料": "能源/材料",
-    "地产/基础设施": "地产/基础设施",
-    "ETF/宏观工具": "ETF/指数工具",
-    "其他": "待补业务标签",
-}
-
-BUSINESS_ROLE_KEYWORDS = [
-    (("gpu", "accelerator"), "GPU/AI加速器"),
-    (("cloud", "data center"), "云/数据中心"),
-    (("semiconductor equipment", "wafer", "lithography", "etch"), "半导体设备"),
-    (("semiconductor", "chip", "soc"), "芯片/半导体"),
-    (("memory", "dram", "nand", "storage"), "存储芯片/存储"),
-    (("optical", "fiber", "laser"), "光通信/光器件"),
-    (("communication equipment", "broadband", "telecom"), "通信设备/运营"),
-    (("software", "saas"), "企业软件/SaaS"),
-    (("cybersecurity", "security"), "网络安全"),
-    (("advertising", "internet content", "media", "streaming"), "互联网内容/广告"),
-    (("auto", "vehicle", "ev", "lidar"), "汽车/自动驾驶"),
-    (("bank", "capital markets", "insurance", "financial"), "金融服务"),
-    (("crypto", "bitcoin"), "加密资产相关"),
-    (("biotech", "therapeutics", "drug", "pharma"), "创新药/生物技术"),
-    (("medical", "diagnostics", "healthcare"), "医疗服务/器械"),
-    (("aerospace", "defense"), "航天/军工"),
-    (("industrial", "machinery", "engineering"), "工业设备/服务"),
-    (("retail", "e-commerce", "consumer"), "零售/消费"),
-    (("casino", "gaming", "travel", "restaurant"), "旅游/博彩/餐饮"),
-    (("oil", "gas", "energy"), "油气/能源"),
-    (("mining", "metal", "chemical", "materials"), "材料/矿业"),
-    (("reit", "real estate"), "REIT/地产"),
-    (("construction", "infrastructure", "building products"), "建筑/基建"),
-]
+CONCEPT_BUCKET_ORDER = _get_concept_classifier().bucket_order
 
 
 def _send_group_message(message: str) -> bool:
@@ -693,32 +138,21 @@ def _display_company(item: dict, max_len: int = 22) -> str:
 
 def _business_role(item: dict) -> str:
     """Return our own business-role label, never the raw FMP industry string."""
-    symbol = (item.get("symbol") or "").upper()
-    if symbol in BUSINESS_ROLE_OVERRIDES:
-        return BUSINESS_ROLE_OVERRIDES[symbol]
-
-    text = " ".join(
-        str(item.get(key) or "")
-        for key in [
-            "companyName",
-            "shortName",
-            "longName",
-            "company_name",
-            "description",
-            "industry",
-            "sector",
-        ]
-    ).lower()
-    for keywords, label in BUSINESS_ROLE_KEYWORDS:
-        if any(keyword in text for keyword in keywords):
-            return label
-
-    bucket = item.get("concept_bucket") or _concept_bucket(item)
-    return BUCKET_ROLE_FALLBACKS.get(bucket, "待补业务标签")
+    return _get_concept_classifier().business_role(item)
 
 
 def _display_classification(item: dict) -> str:
     return _business_role(item)
+
+
+def _display_concept_tags(item: dict) -> str:
+    """Return three-tier concept tags (e.g. '半导体 / 存储 / HBM') from the registry,
+    or fall back to the legacy single-bucket label when the symbol is unregistered."""
+    clf = _get_concept_classifier()
+    tags = clf.display_tags(item)
+    if tags:
+        return tags
+    return _concept_bucket(item)
 
 
 def _normalize_metadata_entry(symbol: str, entry: dict) -> dict:
@@ -837,65 +271,8 @@ def _hydrate_signal_metadata(metadata: dict, symbols: list[str]) -> None:
         logger.info("live metadata fallback skipped: %s", exc)
 
 
-def _theme_bucket_for_symbol(symbol: str) -> str | None:
-    try:
-        from config.settings import THEME_KEYWORDS_SEED
-        for theme, bucket in THEME_BUCKET_HINTS.items():
-            tickers = THEME_KEYWORDS_SEED.get(theme, {}).get("tickers", [])
-            if symbol in {ticker.upper() for ticker in tickers}:
-                return bucket
-    except Exception:
-        return None
-    return None
-
-
 def _concept_bucket(item: dict) -> str:
-    symbol = (item.get("symbol") or "").upper()
-    if "-P" in symbol:
-        return "金融/加密"
-    if symbol in ETF_SYMBOLS:
-        return "ETF/宏观工具"
-    if symbol in SYMBOL_BUCKET_OVERRIDES:
-        return SYMBOL_BUCKET_OVERRIDES[symbol]
-
-    theme_bucket = _theme_bucket_for_symbol(symbol)
-    if theme_bucket:
-        return theme_bucket
-
-    text = " ".join(
-        str(item.get(key) or "")
-        for key in ["companyName", "shortName", "longName", "sector", "industry"]
-    ).lower()
-
-    if any(k in text for k in ["semiconductor", "chip", "foundry", "memory", "dram", "nand", "computer hardware", "storage"]):
-        return "半导体链"
-    if any(k in text for k in ["data center", "cloud", "gpu", "artificial intelligence", "generative ai", "quantum"]):
-        return "AI算力/云"
-    if any(k in text for k in ["electrical", "electric", "power", "nuclear", "utility", "utilities", "grid", "fuel cell"]):
-        return "数据中心电力"
-    if any(k in text for k in ["communication equipment", "communication services", "network", "optical", "telecom", "satellite", "broadband", "cable"]):
-        return "通信/网络设备"
-    if any(k in text for k in ["internet content", "advertising", "media", "streaming", "entertainment"]):
-        return "互联网/广告"
-    if any(k in text for k in ["software", "saas", "cybersecurity", "information technology services"]):
-        return "软件/SaaS"
-    if any(k in text for k in ["auto", "vehicle", "electric vehicle", "robot", "lidar", "battery"]):
-        return "自动驾驶/机器人"
-    if any(k in text for k in ["financial", "bank", "capital markets", "crypto", "bitcoin", "insurance", "fintech"]):
-        return "金融/加密"
-    if any(k in text for k in ["health", "biotech", "drug", "pharma", "medical", "therapeutics"]):
-        return "医药/生命科学"
-    if any(k in text for k in ["aerospace", "defense", "industrial", "machinery", "logistics", "engineering"]):
-        return "工业/航天/国防"
-    if any(k in text for k in ["consumer", "retail", "e-commerce", "apparel", "restaurant", "travel", "casino", "gaming", "education"]):
-        return "消费/电商"
-    if any(k in text for k in ["energy", "materials", "mining", "chemical", "metal", "lithium", "oil", "gas"]):
-        return "能源/材料"
-    if any(k in text for k in ["real estate", "reit", "construction", "infrastructure", "building products"]):
-        return "地产/基础设施"
-    if any(k in text for k in ["etf", "fund", "trust"]):
-        return "ETF/宏观工具"
-    return "其他"
+    return _get_concept_classifier().classify(item)
 
 
 def _layer_for_symbol(symbol: str, metadata: dict, pool_symbols: set) -> str:
@@ -948,11 +325,7 @@ def _format_layered_items(
 
 
 def _group_by_concept_bucket(items: list) -> dict:
-    grouped = {bucket: [] for bucket in CONCEPT_BUCKET_ORDER}
-    for item in items:
-        bucket = item.get("concept_bucket") or _concept_bucket(item)
-        grouped.setdefault(bucket, []).append(item)
-    return {bucket: grouped[bucket] for bucket in CONCEPT_BUCKET_ORDER if grouped.get(bucket)}
+    return _get_concept_classifier().group_items(items)
 
 
 def _format_bucketed_items(items: list, empty_text: str, formatter) -> list[str]:
@@ -1161,9 +534,10 @@ def format_section_broad_signal(market_signals: dict) -> str:
     lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无广扫触发",
-        "标的 | 业务角色 | RVOL | 涨幅 | 市值",
-        lambda item: "{} | {} | {:.1f}σ | {:+.1f}% | {}".format(
+        "标的 | 概念 | 业务角色 | RVOL | 涨幅 | 市值",
+        lambda item: "{} | {} | {} | {:.1f}σ | {:+.1f}% | {}".format(
             _compact_company(item),
+            _display_concept_tags(item),
             _display_classification(item),
             item["rvol"],
             item["return_pct"],
@@ -1179,9 +553,10 @@ def format_section_layered_pmarp(market_signals: dict) -> str:
     lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无 PMARP 信号",
-        "标的 | 业务角色 | 当前 | 变化 | 市值",
-        lambda item: "{} | {} | {:.1f}% | {:.1f}→{:.1f} | {}".format(
+        "标的 | 概念 | 业务角色 | 当前 | 变化 | 市值",
+        lambda item: "{} | {} | {} | {:.1f}% | {:.1f}→{:.1f} | {}".format(
             _compact_company(item),
+            _display_concept_tags(item),
             _display_classification(item),
             item.get("value") or 0,
             item.get("previous") or 0,
@@ -1198,9 +573,10 @@ def format_section_layered_dv(market_signals: dict) -> str:
     lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无加速信号",
-        "标的 | 业务角色 | 倍数 | 5d/20d | 市值",
-        lambda item: "{} | {} | {:.1f}x | {}/{} | {}".format(
+        "标的 | 概念 | 业务角色 | 倍数 | 5d/20d | 市值",
+        lambda item: "{} | {} | {} | {:.1f}x | {}/{} | {}".format(
             _compact_company(item),
+            _display_concept_tags(item),
             _display_classification(item),
             item.get("ratio") or 0,
             format_dv(item.get("dv_5d") or 0),
@@ -1222,9 +598,10 @@ def format_section_layered_rvol(market_signals: dict) -> str:
     lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无持续放量信号",
-        "标的 | 业务角色 | 形态 | 最新 | 市值",
-        lambda item: "{} | {} | {} | {:.1f}σ | {}".format(
+        "标的 | 概念 | 业务角色 | 形态 | 最新 | 市值",
+        lambda item: "{} | {} | {} | {} | {:.1f}σ | {}".format(
             _compact_company(item),
+            _display_concept_tags(item),
             _display_classification(item),
             level_labels.get(item.get("level"), item.get("level", "")),
             item.get("latest_rvol") or 0,
@@ -1415,16 +792,17 @@ def build_morning_visual_sections(
             "blocks": [
                 _build_visual_block(
                     "触发公司",
-                    ["标的", "业务角色", "RVOL", "涨幅", "市值"],
+                    ["标的", "概念", "业务角色", "RVOL", "涨幅", "市值"],
                     broad.get("hits", []),
                     lambda item: [
                         _visual_company(item),
+                        _display_concept_tags(item),
                         _display_classification(item),
                         "{:.1f}σ".format(item.get("rvol") or 0),
                         "{:+.1f}%".format(item.get("return_pct") or 0),
                         _format_market_cap(item.get("marketCap")),
                     ],
-                    [380, 430, 150, 150, 160],
+                    [320, 360, 280, 150, 150, 160],
                 ),
             ],
         })
@@ -1437,16 +815,17 @@ def build_morning_visual_sections(
             "blocks": [
                 _build_visual_block(
                     "上穿/修复",
-                    ["标的", "业务角色", "当前", "变化", "市值"],
+                    ["标的", "概念", "业务角色", "当前", "变化", "市值"],
                     pmarp.get("hits", []),
                     lambda item: [
                         _visual_company(item),
+                        _display_concept_tags(item),
                         _display_classification(item),
                         "{:.1f}%".format(item.get("value") or 0),
                         "{:.1f}→{:.1f}".format(item.get("previous") or 0, item.get("value") or 0),
                         _format_market_cap(item.get("marketCap")),
                     ],
-                    [380, 430, 150, 190, 160],
+                    [320, 360, 280, 150, 190, 160],
                 ),
             ],
         })
@@ -1459,10 +838,11 @@ def build_morning_visual_sections(
             "blocks": [
                 _build_visual_block(
                     "DV 加速",
-                    ["标的", "业务角色", "倍数", "5d/20d", "市值"],
+                    ["标的", "概念", "业务角色", "倍数", "5d/20d", "市值"],
                     dv_acc.get("hits", []),
                     lambda item: [
                         _visual_company(item),
+                        _display_concept_tags(item),
                         _display_classification(item),
                         "{:.1f}x".format(item.get("ratio") or 0),
                         "{}/{}".format(
@@ -1471,7 +851,7 @@ def build_morning_visual_sections(
                         ),
                         _format_market_cap(item.get("marketCap")),
                     ],
-                    [380, 430, 150, 240, 160],
+                    [320, 360, 280, 150, 240, 160],
                 ),
             ],
         })
@@ -1489,16 +869,17 @@ def build_morning_visual_sections(
             "blocks": [
                 _build_visual_block(
                     "持续放量",
-                    ["标的", "业务角色", "形态", "最新", "市值"],
+                    ["标的", "概念", "业务角色", "形态", "最新", "市值"],
                     rvol.get("hits", []),
                     lambda item: [
                         _visual_company(item),
+                        _display_concept_tags(item),
                         _display_classification(item),
                         level_labels.get(item.get("level"), item.get("level", "")),
                         "{:.1f}σ".format(item.get("latest_rvol") or 0),
                         _format_market_cap(item.get("marketCap")),
                     ],
-                    [380, 430, 170, 150, 160],
+                    [320, 360, 280, 170, 150, 160],
                 ),
             ],
         })
@@ -2070,10 +1451,10 @@ def main():
     parser = argparse.ArgumentParser(description="未来资本 晨报")
     parser.add_argument("--no-telegram", action="store_true", help="不推送 Telegram")
     parser.add_argument("--symbols", type=str, help="指定股票代码，逗号分隔")
+    parser.add_argument("--include-social", action="store_true",
+                        help="启用社交情绪段（默认 skip：Adanos 采集 cron 已下线）")
     parser.add_argument("--no-social", action="store_true",
-                        help="跳过社交情绪 Section G（社交数据延后采集时使用）")
-    parser.add_argument("--social-only", action="store_true",
-                        help="仅发送社交情绪日报（配合延后 cron 使用）")
+                        help="[DEPRECATED] no-op；社交段默认已 skip，保留兼容老 cron 命令行")
     parser.add_argument("--image-report", action="store_true",
                         help="每个晨报 section 生成一张图片；Telegram 发送图片而不是长文本")
     parser.add_argument("--image-delivery", choices=["document", "photo"],
@@ -2082,85 +1463,6 @@ def main():
     parser.add_argument("--image-output-dir", type=str,
                         help="图片输出目录（默认 data/scans/morning_images_<timestamp>）")
     args = parser.parse_args()
-
-    # --social-only: 仅发送社交情绪日报（独立 cron 调用）
-    if args.social_only:
-        logger.info("=" * 60)
-        logger.info("社交情绪日报 开始")
-        logger.info("=" * 60)
-        start_time = time.time()
-        try:
-            if args.symbols:
-                symbols = [s.strip().upper() for s in args.symbols.split(",")]
-            else:
-                symbols = get_symbols()
-
-            # Section E + F: 市场级社交数据 (Adanos market-level)
-            from src.data.market_store import get_store
-            from datetime import timezone, timedelta
-            store = get_store()
-            now_utc = datetime.now(timezone.utc)
-            today_utc = now_utc.strftime("%Y-%m-%d")
-            yesterday_utc = (now_utc - timedelta(days=1)).strftime("%Y-%m-%d")
-            fresh_dates = {today_utc, yesterday_utc}
-
-            market_pulse = None
-            pulse = {}
-            for src in ["reddit", "x"]:
-                row = store.get_latest_market_sentiment(source=src)
-                if row and row.get("date") in fresh_dates:
-                    pulse[src] = row
-            if pulse:
-                market_pulse = pulse
-                logger.info("市场情绪脉搏: %s", list(pulse.keys()))
-
-            trending_data = None
-            t_data = {"stocks": [], "sectors": []}
-            trending_date = None
-            for candidate_date in [today_utc, yesterday_utc]:
-                for src in ["reddit", "x"]:
-                    t_data["stocks"].extend(store.get_social_trending(candidate_date, src))
-                    t_data["sectors"].extend(store.get_social_trending_sectors(candidate_date, src))
-                if t_data["stocks"] or t_data["sectors"]:
-                    trending_date = candidate_date
-                    break
-                t_data = {"stocks": [], "sectors": []}
-            if t_data["stocks"] or t_data["sectors"]:
-                t_data["date"] = trending_date
-                trending_data = t_data
-                logger.info("社交热门: %d stocks, %d sectors", len(t_data["stocks"]), len(t_data["sectors"]))
-
-            # Section G: per-stock 社交情绪雷达
-            from src.indicators.social_attention import scan_social_signals
-            social_scan = scan_social_signals(symbols)
-            logger.info("社交情绪扫描完成: %d 只有数据", social_scan.get("symbols_with_data", 0))
-
-            # 组装消息: E + F + G
-            sections = []
-            if market_pulse:
-                sections.append(format_section_market_pulse(market_pulse))
-            if trending_data:
-                sections.append(format_section_trending(trending_data))
-            sections.append(format_section_social(social_scan))
-
-            social_msg = "*未来资本 社交情绪日报*\n{}\n\n{}".format(
-                datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "\n\n".join(sections),
-            )
-
-            if not args.no_telegram:
-                _send_group_message(social_msg)
-            else:
-                print(social_msg)
-        except Exception as e:
-            logger.error("社交情绪日报异常: %s", e)
-            if not args.no_telegram:
-                _send_group_message("*社交情绪日报异常*\n\n错误: {}".format(str(e)[:200]))
-
-        elapsed = time.time() - start_time
-        logger.info("社交情绪日报完成，耗时 %.1f 秒", elapsed)
-        logger.info("=" * 60)
-        return
 
     logger.info("=" * 60)
     logger.info("未来资本 晨报 开始")
@@ -2189,10 +1491,10 @@ def main():
         # 3. Dollar Volume 采集
         dv_result = run_dollar_volume()
 
-        # 4. 市场情绪脉搏 + 社交热门 (Adanos market-level)
+        # 4. 市场情绪脉搏 + 社交热门 (Adanos market-level) — opt-in 默认 skip。
         market_pulse = None
         trending_data = None
-        if not args.no_social:
+        if args.include_social:
             try:
                 from src.data.market_store import get_store
                 from datetime import timezone, timedelta
@@ -2233,9 +1535,9 @@ def main():
             except Exception as e:
                 logger.warning("市场级社交数据加载失败: %s", e)
 
-        # 5. 社交情绪雷达（--no-social 时跳过）
+        # 5. 社交情绪雷达 — opt-in 默认 skip。
         social_scan = None
-        if not args.no_social:
+        if args.include_social:
             try:
                 from src.indicators.social_attention import scan_social_signals
                 logger.info("开始社交情绪扫描...")
@@ -2243,8 +1545,6 @@ def main():
                 logger.info("社交情绪扫描完成: %d 只有数据", social_scan.get("symbols_with_data", 0))
             except Exception as e:
                 logger.warning("社交情绪扫描失败: %s", e)
-        else:
-            logger.info("跳过社交情绪（--no-social），将由 10:20 社交日报独立发送")
 
         elapsed = time.time() - start_time
 
@@ -2255,14 +1555,24 @@ def main():
             social_scan=social_scan, elapsed=elapsed)
 
         image_paths = []
-        if args.image_report:
-            image_paths = render_morning_report_images(
-                market_signals=market_signals,
-                dv_result=dv_result,
-                output_dir=args.image_output_dir,
-                photo_safe=args.image_delivery == "photo",
-            )
-            logger.info("晨报图片已生成: %d 张", len(image_paths))
+        image_report_active = args.image_report
+        if image_report_active:
+            try:
+                image_paths = render_morning_report_images(
+                    market_signals=market_signals,
+                    dv_result=dv_result,
+                    output_dir=args.image_output_dir,
+                    photo_safe=args.image_delivery == "photo",
+                )
+                logger.info("晨报图片已生成: %d 张", len(image_paths))
+            except ImportError as exc:
+                # Pillow 缺失 (云端 git pull 部署后未自动装新依赖) → 降级到文本模式，
+                # 不让 cron 整体异常。文本路径是 first-class fallback。
+                logger.warning(
+                    "图片渲染依赖缺失 (%s)，降级到文本模式发送晨报", exc
+                )
+                image_report_active = False
+                image_paths = []
 
         # 7. 保存 JSON
         SCANS_DIR.mkdir(parents=True, exist_ok=True)
@@ -2282,12 +1592,12 @@ def main():
 
         # 8. 发送 Telegram
         if not args.no_telegram:
-            if args.image_report and image_paths:
+            if image_report_active and image_paths:
                 _send_group_image_report(image_paths, delivery=args.image_delivery)
             else:
                 _send_group_report(daily_msg)
         else:
-            if args.image_report and image_paths:
+            if image_report_active and image_paths:
                 print("\n".join(str(path) for path in image_paths))
             else:
                 print(daily_msg)

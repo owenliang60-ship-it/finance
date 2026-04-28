@@ -12,11 +12,12 @@ Usage:
     store.upsert_income("AAPL", rows)
     store.screen({"net_margin >": 0.25})
 """
+import json
 import logging
 import re
 import sqlite3
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -428,6 +429,55 @@ _SCHEMA = "\n\n".join([
     PRIMARY KEY (symbol, date)
 );""",
     "CREATE INDEX IF NOT EXISTS idx_hmc_date ON historical_market_cap(date);",
+
+    # -- Concept registry: evergreen industry tree --
+    """CREATE TABLE IF NOT EXISTS concepts (
+    concept_id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    level INTEGER NOT NULL CHECK(level IN (1, 2, 3)),
+    parent_id TEXT REFERENCES concepts(concept_id),
+    concept_type TEXT NOT NULL DEFAULT 'evergreen',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_concepts_parent ON concepts(parent_id);",
+    "CREATE INDEX IF NOT EXISTS idx_concepts_level ON concepts(level);",
+
+    # -- Concept themes: dynamic hot themes (HBM, liquid cooling) with lifecycle --
+    """CREATE TABLE IF NOT EXISTS concept_themes (
+    theme_id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    parent_concept_id TEXT REFERENCES concepts(concept_id),
+    lifecycle_state TEXT NOT NULL DEFAULT 'watch',
+    active_from TEXT,
+    active_to TEXT,
+    source TEXT NOT NULL DEFAULT 'manual',
+    evidence TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_themes_parent ON concept_themes(parent_concept_id);",
+    "CREATE INDEX IF NOT EXISTS idx_themes_state ON concept_themes(lifecycle_state);",
+
+    # -- Company concept tags: Phase 1 materialized display path --
+    """CREATE TABLE IF NOT EXISTS company_concept_tags (
+    symbol TEXT PRIMARY KEY,
+    primary_concept_id TEXT NOT NULL REFERENCES concepts(concept_id),
+    secondary_concept_id TEXT REFERENCES concepts(concept_id),
+    tertiary_concept_id TEXT REFERENCES concepts(concept_id),
+    theme_ids TEXT DEFAULT '[]',
+    display_tags TEXT DEFAULT '',
+    business_role TEXT DEFAULT '',
+    confidence REAL NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT 'unknown',
+    evidence TEXT DEFAULT '',
+    needs_review INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_cct_primary ON company_concept_tags(primary_concept_id);",
+    "CREATE INDEX IF NOT EXISTS idx_cct_secondary ON company_concept_tags(secondary_concept_id);",
+    "CREATE INDEX IF NOT EXISTS idx_cct_tertiary ON company_concept_tags(tertiary_concept_id);",
 ])
 
 # Pre-compute snake-case column sets per table for fast lookup
@@ -452,6 +502,7 @@ _VALID_TABLES = frozenset({
     "social_trending",
     "social_trending_sectors", "broad_scan_hits",
     "historical_market_cap",
+    "concepts", "concept_themes", "company_concept_tags",
 })
 
 
@@ -1450,6 +1501,158 @@ class MarketStore:
             (date, date, f"-{freshness_days} days", threshold_usd),
         ).fetchall()
         return sorted(row[0] for row in rows)
+
+    # ---- Concept Registry ----
+
+    @staticmethod
+    def _utc_now_iso() -> str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def upsert_concepts(self, rows: List[Dict[str, Any]]) -> int:
+        """Upsert evergreen concept tree rows. Preserves created_at on update."""
+        if not rows:
+            return 0
+        conn = self._get_conn()
+        now = self._utc_now_iso()
+        count = 0
+        with conn:
+            for row in rows:
+                concept_id = row["concept_id"]
+                existing = conn.execute(
+                    "SELECT created_at FROM concepts WHERE concept_id = ?",
+                    (concept_id,),
+                ).fetchone()
+                created_at = existing[0] if existing else now
+                conn.execute(
+                    """INSERT OR REPLACE INTO concepts
+                    (concept_id, label, level, parent_id, concept_type, status,
+                     created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        concept_id,
+                        row["label"],
+                        int(row["level"]),
+                        row.get("parent_id"),
+                        row.get("concept_type", "evergreen"),
+                        row.get("status", "active"),
+                        created_at,
+                        now,
+                    ),
+                )
+                count += 1
+        return count
+
+    def upsert_concept_themes(self, rows: List[Dict[str, Any]]) -> int:
+        """Upsert dynamic theme rows. Preserves created_at on update."""
+        if not rows:
+            return 0
+        conn = self._get_conn()
+        now = self._utc_now_iso()
+        count = 0
+        with conn:
+            for row in rows:
+                theme_id = row["theme_id"]
+                existing = conn.execute(
+                    "SELECT created_at FROM concept_themes WHERE theme_id = ?",
+                    (theme_id,),
+                ).fetchone()
+                created_at = existing[0] if existing else now
+                conn.execute(
+                    """INSERT OR REPLACE INTO concept_themes
+                    (theme_id, label, parent_concept_id, lifecycle_state,
+                     active_from, active_to, source, evidence, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        theme_id,
+                        row["label"],
+                        row.get("parent_concept_id"),
+                        row.get("lifecycle_state", "watch"),
+                        row.get("active_from"),
+                        row.get("active_to"),
+                        row.get("source", "manual"),
+                        row.get("evidence", ""),
+                        created_at,
+                        now,
+                    ),
+                )
+                count += 1
+        return count
+
+    def upsert_company_concepts(self, rows: List[Dict[str, Any]]) -> int:
+        """Upsert per-symbol display tags. theme_ids list is JSON-encoded."""
+        if not rows:
+            return 0
+        conn = self._get_conn()
+        now = self._utc_now_iso()
+        count = 0
+        with conn:
+            for row in rows:
+                theme_ids = row.get("theme_ids", [])
+                if not isinstance(theme_ids, str):
+                    theme_ids = json.dumps(list(theme_ids), ensure_ascii=False)
+                conn.execute(
+                    """INSERT OR REPLACE INTO company_concept_tags
+                    (symbol, primary_concept_id, secondary_concept_id,
+                     tertiary_concept_id, theme_ids, display_tags, business_role,
+                     confidence, source, evidence, needs_review, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        str(row["symbol"]).upper(),
+                        row["primary_concept_id"],
+                        row.get("secondary_concept_id"),
+                        row.get("tertiary_concept_id"),
+                        theme_ids,
+                        row.get("display_tags", ""),
+                        row.get("business_role", ""),
+                        float(row.get("confidence", 0)),
+                        row.get("source", "unknown"),
+                        row.get("evidence", ""),
+                        int(row.get("needs_review", 0)),
+                        now,
+                    ),
+                )
+                count += 1
+        return count
+
+    def get_company_concepts(self, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Fetch tag rows by symbol; missing symbols are omitted."""
+        if not symbols:
+            return {}
+        conn = self._get_conn()
+        placeholders = ", ".join(["?"] * len(symbols))
+        rows = conn.execute(
+            f"SELECT * FROM company_concept_tags WHERE symbol IN ({placeholders})",
+            [s.upper() for s in symbols],
+        ).fetchall()
+        out: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            d = dict(row)
+            try:
+                d["theme_ids"] = json.loads(d.get("theme_ids") or "[]")
+            except (TypeError, ValueError):
+                d["theme_ids"] = []
+            out[d["symbol"]] = d
+        return out
+
+    def get_company_concept_coverage(self) -> Dict[str, int]:
+        """Aggregate row counts by source + needs_review for build summary."""
+        conn = self._get_conn()
+        total = conn.execute("SELECT COUNT(*) FROM company_concept_tags").fetchone()[0]
+        needs = conn.execute(
+            "SELECT COUNT(*) FROM company_concept_tags WHERE needs_review = 1"
+        ).fetchone()[0]
+        by_source = conn.execute(
+            "SELECT source, COUNT(*) FROM company_concept_tags GROUP BY source"
+        ).fetchall()
+        src = {row[0]: row[1] for row in by_source}
+        return {
+            "total": int(total),
+            "manual": int(src.get("manual", 0)),
+            "rule": int(src.get("rule", 0)),
+            "fallback": int(src.get("fallback", 0)),
+            "legacy": int(src.get("legacy", 0)),
+            "needs_review": int(needs),
+        }
 
     # ---- Stats ----
 
