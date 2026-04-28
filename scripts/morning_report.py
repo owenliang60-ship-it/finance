@@ -954,6 +954,32 @@ def _format_bucketed_items(items: list, empty_text: str, formatter) -> list[str]
     return lines
 
 
+def _format_bucketed_table(
+    items: list,
+    empty_text: str,
+    header: str,
+    formatter,
+) -> list[str]:
+    if not items:
+        return [empty_text]
+
+    lines = [header]
+    grouped = _group_by_concept_bucket(items)
+    for bucket, bucket_items in grouped.items():
+        lines.append("{} ({}):".format(bucket, len(bucket_items)))
+        for item in bucket_items:
+            lines.append("  " + formatter(item))
+    return lines
+
+
+def _compact_company(item: dict) -> str:
+    symbol = item.get("symbol", "")
+    name = _display_company(item, max_len=18)
+    if name == symbol or name.startswith(symbol + " "):
+        return name
+    return symbol
+
+
 def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set) -> dict:
     symbol = item["symbol"]
     meta = metadata.get(symbol, {})
@@ -1118,11 +1144,12 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
 def format_section_broad_signal(market_signals: dict) -> str:
     section = market_signals.get("broad_scan", {})
     lines = ["*1. 广扫标准 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_bucketed_items(
+    lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无广扫触发",
-        lambda item: "{} | {} | RVOL {:.1f}σ | {:+.1f}% | {}".format(
-            _display_company(item),
+        "标的 | 业务角色 | RVOL | 涨幅 | 市值",
+        lambda item: "{} | {} | {:.1f}σ | {:+.1f}% | {}".format(
+            _compact_company(item),
             _display_classification(item),
             item["rvol"],
             item["return_pct"],
@@ -1135,11 +1162,12 @@ def format_section_broad_signal(market_signals: dict) -> str:
 def format_section_layered_pmarp(market_signals: dict) -> str:
     section = market_signals.get("pmarp", {})
     lines = ["*2. PMARP 信号 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_bucketed_items(
+    lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无 PMARP 信号",
-        lambda item: "{} | {} | {:.1f}% ({:.1f}→{:.1f}) | {}".format(
-            _display_company(item),
+        "标的 | 业务角色 | 当前 | 变化 | 市值",
+        lambda item: "{} | {} | {:.1f}% | {:.1f}→{:.1f} | {}".format(
+            _compact_company(item),
             _display_classification(item),
             item.get("value") or 0,
             item.get("previous") or 0,
@@ -1153,11 +1181,12 @@ def format_section_layered_pmarp(market_signals: dict) -> str:
 def format_section_layered_dv(market_signals: dict) -> str:
     section = market_signals.get("dv_acceleration", {})
     lines = ["*3. 量能加速 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_bucketed_items(
+    lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无加速信号",
-        lambda item: "{} | {} | {:.1f}x | 5d={} / 20d={} | {}".format(
-            _display_company(item),
+        "标的 | 业务角色 | 倍数 | 5d/20d | 市值",
+        lambda item: "{} | {} | {:.1f}x | {}/{} | {}".format(
+            _compact_company(item),
             _display_classification(item),
             item.get("ratio") or 0,
             format_dv(item.get("dv_5d") or 0),
@@ -1176,11 +1205,12 @@ def format_section_layered_rvol(market_signals: dict) -> str:
         "single": "单日",
     }
     lines = ["*4. RVOL 持续放量 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_bucketed_items(
+    lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无持续放量信号",
-        lambda item: "{} | {} | {} | 最新 {:.1f}σ | {}".format(
-            _display_company(item),
+        "标的 | 业务角色 | 形态 | 最新 | 市值",
+        lambda item: "{} | {} | {} | {:.1f}σ | {}".format(
+            _compact_company(item),
             _display_classification(item),
             level_labels.get(item.get("level"), item.get("level", "")),
             item.get("latest_rvol") or 0,
@@ -1279,11 +1309,12 @@ def format_section_d(dv_result: dict) -> str:
     # 新面孔
     if new_faces:
         lines.append("新面孔:")
-        lines.extend(_format_bucketed_items(
+        lines.extend(_format_bucketed_table(
             [normalize(row) for row in new_faces],
             "无新面孔",
-            lambda item: "{} | {} | #{} {}".format(
-                _display_company(item),
+            "标的 | 业务角色 | 排名 | 成交额",
+            lambda item: "{} | {} | #{} | {}".format(
+                _compact_company(item),
                 _display_classification(item),
                 item["rank"],
                 format_dv(item["dollar_volume"]),
@@ -1293,11 +1324,12 @@ def format_section_d(dv_result: dict) -> str:
     # Full ranking payload. Telegram splitting handles long reports.
     if rankings:
         lines.append("成交额 Top {}:".format(len(rankings)))
-        lines.extend(_format_bucketed_items(
+        lines.extend(_format_bucketed_table(
             [normalize(row) for row in rankings],
             "无成交额排行",
-            lambda item: "{} | {} | #{} {} | ${:.0f}".format(
-                _display_company(item),
+            "标的 | 业务角色 | 排名 | 成交额 | 价格",
+            lambda item: "{} | {} | #{} | {} | ${:.0f}".format(
+                _compact_company(item),
                 _display_classification(item),
                 item["rank"],
                 format_dv(item["dollar_volume"]),
