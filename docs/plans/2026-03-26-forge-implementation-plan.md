@@ -28,7 +28,7 @@
     {"name": "B", "start": "2020-01-01", "end": "2022-12-31"},
     {"name": "C", "start": "2021-01-01", "end": "2023-06-30"}
   ],
-  "holdout_window": {"start": "2023-07-01", "end": "2026-03-26"},
+  "holdout_window": {"name": "holdout", "start": "2023-07-01", "end": "2026-03-26"},
 
   // 回测参数
   "transaction_cost_bps": 10.0,
@@ -171,6 +171,7 @@ class ForgeResult:
 def evaluate(
     campaign_path: Path,
     strategy_path: Path,
+    params_path: Optional[Path] = None,
 ) -> ForgeResult:
     """
     核心评估函数。
@@ -178,11 +179,12 @@ def evaluate(
     1. 加载 campaign.lock.json
     2. 加载数据（CryptoAdapter）
     3. 动态 import strategy_path 中的策略
-    4. 对每个 visible window 跑回测
-    5. 对 holdout window 跑回测
-    6. 检查门槛
-    7. 计算 visible_score
-    8. 返回 ForgeResult
+    4. Level 1 如有 params_path，则用 JSON 覆盖构造 DualEngineConfig
+    5. 对每个 visible window 跑回测
+    6. 对 holdout window 跑回测
+    7. 检查门槛
+    8. 计算 visible_score
+    9. 返回 ForgeResult
     """
     ...
 
@@ -282,6 +284,11 @@ Level 1 mutation guard 变成纯 JSON diff：只有白名单 key 允许变化，
 不需要 AST 分析。
 
 Level 2（结构进化）解锁后，agent 才可以改 `candidate.py` 本身。
+
+**Hypothesis 来源统一**：
+- Level 1: agent 在 stdout 首行输出 `HYPOTHESIS: ...`，runner 从 agent_output 提取
+- Level 2: 仍以 stdout 的 `HYPOTHESIS:` 为主，candidate 文件头注释只作为冗余副本
+- 不再依赖从 `candidate.py` 头部提取，因为 Level 1 的 Python 文件必须保持字节一致
 
 ### 3.4 评估流程伪代码
 
@@ -425,8 +432,11 @@ def run_campaign(
     ...
 
 
-def _copy_champion_to_candidate(strategy_name: str) -> None:
-    """复制 champion → candidate，给 agent 一个干净的起点。"""
+def _copy_champion_to_candidate(
+    strategy_name: str,
+    current_level: str,
+) -> None:
+    """复制 champion → candidate；Level 1 同时复制 champion_params → candidate_params。"""
     ...
 
 
@@ -439,7 +449,10 @@ def _invoke_agent(
 ) -> str:
     """
     调用 claude -p，返回 agent 的输出。
-    Agent 应修改 candidate 文件并在头部写入 hypothesis。
+    Agent 必须：
+    1. 在 stdout 首行输出 `HYPOTHESIS: ...`
+    2. Level 1 只修改 candidate_params.json
+    3. Level 2 才允许修改 candidate.py
     """
     ...
 
@@ -454,8 +467,13 @@ def _mutation_guard(
 
     检查项:
     - candidate 文件是否可 import（语法正确）
-    - candidate 是否实现了必要接口（evaluate_bar, get_default_config, get_initial_state）
-    - 如果 Level 1（参数模式），检查是否只修改了 surface.yaml 白名单中的参数值
+    - candidate 是否暴露 `DualEngineConfig` / `DualEngineState` / `evaluate_dual_engine_snapshot` / `build_dual_engine_snapshot`
+    - 如果 Level 1（参数模式）：
+      - candidate.py 必须与 champion.py 字节一致
+      - candidate_params.json 只允许改白名单 key，且 value 在范围内
+    - 如果 Level 2（结构模式）：
+      - candidate.py 可以变化，但必须保留上述 4 个导出名字
+      - candidate_params.json 必须与 champion_params.json 一致或直接删除，避免 Python 逻辑与 JSON 覆盖双重漂移
     - 没有修改 runner.py / evaluator.py / campaign.lock.json / private log
 
     Returns:
@@ -464,8 +482,8 @@ def _mutation_guard(
     ...
 
 
-def _extract_hypothesis(candidate_path: Path) -> str:
-    """从 candidate 文件头部提取 hypothesis 注释。"""
+def _extract_hypothesis(agent_output: str) -> str:
+    """从 agent stdout 的 `HYPOTHESIS:` 首行提取本轮实验假设。"""
     ...
 
 
@@ -543,6 +561,11 @@ def _determine_level(
 def run_campaign(strategy_name, campaign_path, max_rounds):
     campaign = load_campaign(campaign_path)
     forge_md = load_forge_md()
+    champion_path = path_for(strategy_name, "champion.py")
+    candidate_path = path_for(strategy_name, "candidate.py")
+    champion_params_path = path_for(strategy_name, "champion_params.json")
+    candidate_params_path = path_for(strategy_name, "candidate_params.json")
+    public_log = path_for("logs", "experiments_public.tsv")
 
     # 初始化：评估 champion 作为 baseline
     champion_result = evaluate_champion(campaign, strategy_name)
@@ -563,12 +586,13 @@ def run_campaign(strategy_name, campaign_path, max_rounds):
         # 2. 调用 agent
         public_log_tail = read_last_n_lines(public_log, 20)
         champion_code = read_file(champion_path)
-        _invoke_agent(forge_md, champion_code, public_log_tail, best_score, level)
+        agent_output = _invoke_agent(forge_md, champion_code, public_log_tail, best_score, level)
+        hypothesis = _extract_hypothesis(agent_output)
 
         # 3. Mutation guard
         passed, reason = _mutation_guard(strategy_name, campaign, level)
         if not passed:
-            round_result = RoundResult(status="FAIL_GUARD", ...)
+            round_result = RoundResult(hypothesis=hypothesis, status="FAIL_GUARD", ...)
             _write_public_log(round_result, ...)
             _write_private_log(round_result, ...)
             _discard_candidate(strategy_name)
@@ -578,7 +602,8 @@ def run_campaign(strategy_name, campaign_path, max_rounds):
             continue
 
         # 4. 评估 candidate
-        candidate_result = evaluate(campaign_path, candidate_path)
+        params_path = candidate_params_path if level == "parameter" else None
+        candidate_result = evaluate(campaign_path, candidate_path, params_path=params_path)
         if candidate_result.status == "ERROR":
             error_count += 1  # runtime error 也不计入 stale
             _discard_candidate(strategy_name)
@@ -602,7 +627,7 @@ def run_campaign(strategy_name, campaign_path, max_rounds):
             stale_count += 1
 
         # 7. 日志
-        round_result = build_round_result(round_num, candidate_result, accepted)
+        round_result = build_round_result(round_num, hypothesis, candidate_result, accepted)
         _write_public_log(round_result, ...)
         _write_private_log(round_result, ...)
 
@@ -645,7 +670,8 @@ def run_campaign(strategy_name, campaign_path, max_rounds):
 - [ ] 编写 `runner.py`
   - champion → candidate 复制
   - claude -p 调用
-  - mutation guard（import 检查 + 接口检查）
+  - hypothesis 从 agent stdout 的 `HYPOTHESIS:` 提取
+  - mutation guard（Level 1 = 纯 JSON diff；Level 2 = Python contract 检查）
   - promote / discard
   - public + private 日志
 - [ ] 编写 `forge.md`（agent 指令）
@@ -674,7 +700,9 @@ def run_campaign(strategy_name, campaign_path, max_rounds):
 | evaluator | 窗口切片正确性 | 对比 Window C (2021-01 → 2023-06) 与 `run_dual_engine_backtest --start-date 2021-01-01` 截至 2023-06-30，验证起点+终点都正确 |
 | evaluator | 门槛判定 | 构造一个超过 MDD 门槛的策略，断言 FAIL_GATE |
 | evaluator | visible_score 计算 | 手算 min(3 窗口 excess_cagr) 对比 |
+| evaluator | Level 1 params 覆盖生效 | 修改 `candidate_params.json` 中单个参数，断言结果相对默认配置发生变化 |
 | runner | mutation guard | 构造一个改了 evaluator.py 的 diff，断言 FAIL_GUARD |
+| runner | hypothesis 提取 | mock agent stdout 为 `HYPOTHESIS: ...`，断言 public/private log 都写入相同假设 |
 | runner | promote/discard | 跑 2 轮，1 接受 1 拒绝，检查文件状态 |
 | runner | 停机 | 设 stale_stop_rounds=3，跑到自动停 |
 | E2E | holdout 不泄漏 | 检查 public log 无 holdout 值，private log 有 |

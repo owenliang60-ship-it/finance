@@ -11,12 +11,14 @@
 1. **称呼规则**：每次回复前必须使用"Boss"作为称呼
 2. **决策确认**：遇到不确定的代码设计问题时，必须先询问 Boss，不得直接行动
 3. **代码开发管理**：所有涉及开发代码的任务，一律使用 git 和 worktree 进行开发管理
+4. **架构对齐**：所有开发必须对齐北极星（`docs/design/north-star.md`）。新增重大子系统先跑 `/architecture`，模块级 plan 必须注明对应北极星哪一层。发现架构需要调整时回到北极星讨论，不在 plan 层面偷偷改方向
 
 ---
 
 ## 系统架构（Desk Model）
 
 本工作区按机构交易台模式组织，每个 Desk 负责一个功能域。详见 `ARCHITECTURE.md`。
+北极星战略方向文档：`docs/design/north-star.md`。
 
 **Code Stats**: ~167 Python files, 1285 tests passing, 36,800+ lines
 
@@ -40,7 +42,7 @@
 - **FMP API** (financialmodelingprep.com) — 基本面+价格+分析师评级+内部交易，付费 Starter 版
 - **yfinance** — 前瞻预期（EPS/Revenue consensus、价格目标、EPS趋势/修正、增长预期），免费
 - **FRED API** — 16 宏观序列（收益率曲线、CPI、VIX、HY spread 等），免费
-- **MarketData.app** — 期权链+IV 数据，Starter 版 ($12/月, 10K credits)
+- **MarketData.app** — 期权链+IV 数据 + PI 盘中股票/期权报价，Starter 版 ($12/月, 10K credits)
 - **Adanos** — 社交情感（Reddit + X，按 ticker 查 buzz/mentions/sentiment），Hobby 版 ($20/月)
 - API Keys: 环境变量 `FMP_API_KEY`, `MARKETDATA_API_KEY`, `ADANOS_API_KEY`
 - 调用间隔: FMP 2 秒防限流；yfinance 1 秒间隔；Adanos 2 秒间隔
@@ -98,11 +100,11 @@
 | 股票池刷新 | 周频 | 周六 08:00 | `cron_pool.log` |
 | 基本面 + metrics 计算 | 周频 | 周六 10:00 | `cron_fundamental.log` |
 | **前瞻预期更新** | 周频 | 周六 10:30 | `cron_forward.log` |
-
-**本地 launchd**：
 | **Portfolio Intelligence** | 日频 | 夏令时 22:00 SGT / 冬令时 23:00 SGT | `cron_intelligence.log` |
 
 - **PI live quote 约束**: `scripts/portfolio_intelligence.py` 依赖 MarketData live quote，只允许在 `FINANCE_ENV=cloud` 环境运行；本地调试必须显式传 `--allow-local`
+
+**本地 launchd**：
 
 | 任务 | 时间 | plist |
 |------|------|-------|
@@ -178,7 +180,7 @@ ssh aliyun "tail -30 /root/workspace/Finance/logs/cron_options_iv.log"
 ├── terminal/                   # 编排中枢 (commands, pipeline, macro, tools, options/)
 ├── knowledge/                  # 投资框架 (OPRMS, philosophies, debate, memo, alpha, meta/)
 ├── backtest/                   # 回测引擎 + 因子研究 (engine, factor_study, adapters)
-├── portfolio/                  # 持仓管理 (holdings, exposure, benchmark)
+├── portfolio/                  # 持仓管理 (holdings, exposure, benchmark, live_quote_provider)
 ├── src/                        # 数据引擎 (data/, indicators/, analysis/)
 ├── scripts/                    # 运维脚本
 ├── config/                     # 配置 (settings.py)
