@@ -20,6 +20,7 @@ from scripts.morning_report import (
     format_section_d,
     format_morning_report,
     render_morning_report_images,
+    render_morning_report_pdf,
 )
 
 
@@ -529,3 +530,24 @@ class TestMorningVisualReport:
         assert len(paths) == 5
         assert all(path.exists() for path in paths)
         assert all(path.suffix == ".png" for path in paths)
+
+    def test_render_visual_report_pdf_combines_sections(self, tmp_path):
+        pytest.importorskip("PIL")
+        dv_result = {
+            "rankings": [
+                {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9, "price": 890.5},
+            ],
+            "new_faces": [],
+        }
+        paths = render_morning_report_images(
+            market_signals=sample_market_signals(),
+            dv_result=dv_result,
+            output_dir=tmp_path,
+        )
+
+        pdf_path = render_morning_report_pdf(paths)
+
+        assert pdf_path is not None
+        assert pdf_path.exists()
+        assert pdf_path.suffix == ".pdf"
+        assert pdf_path.read_bytes().startswith(b"%PDF")

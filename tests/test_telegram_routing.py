@@ -127,6 +127,39 @@ class TestMorningReportRouting:
         ]
         assert any("fallback text body" in str(body) for body in sent_bodies)
 
+    @patch("scripts.morning_report.send_document", return_value=True)
+    @patch("scripts.morning_report.render_morning_report_pdf")
+    @patch("scripts.morning_report.render_morning_report_images")
+    @patch("scripts.morning_report.format_morning_report", return_value="visual body")
+    @patch("scripts.morning_report.run_dollar_volume",
+           return_value={"rankings": [], "new_faces": []})
+    @patch("scripts.morning_report.build_market_signal_report",
+           return_value={"symbols_scanned": 1, "symbols_with_data": 1, "as_of": "2026-04-08"})
+    @patch("scripts.morning_report.get_symbols", return_value=["AAPL"])
+    def test_main_sends_visual_report_as_pdf(
+        self, _symbols, _signals, _dv, _format, mock_images, mock_pdf,
+        mock_send_document, monkeypatch, tmp_path
+    ):
+        image_path = tmp_path / "01_01_broad_signal.png"
+        image_path.write_bytes(b"\x89PNG\r\n\x1a\n")
+        pdf_path = tmp_path / "morning_report.pdf"
+        pdf_path.write_bytes(b"%PDF-fake")
+        mock_images.return_value = [image_path]
+        mock_pdf.return_value = pdf_path
+        monkeypatch.setattr(
+            sys, "argv",
+            ["morning_report.py", "--no-social", "--image-report",
+             "--image-delivery", "pdf"],
+        )
+        monkeypatch.setattr(morning_report, "SCANS_DIR", tmp_path)
+
+        morning_report.main()
+
+        mock_pdf.assert_called_once_with([image_path])
+        mock_send_document.assert_called_once()
+        assert mock_send_document.call_args.args[0] == str(pdf_path)
+        assert mock_send_document.call_args.kwargs["channel"] == "group"
+
 
 class TestBroadMarketRouting:
     @patch("scripts.broad_market_scan.send_message")

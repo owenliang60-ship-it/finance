@@ -90,6 +90,12 @@ def _send_group_image_report(image_paths: list[Path], delivery: str = "document"
     return ok
 
 
+def _send_group_pdf_report(pdf_path: Path) -> bool:
+    """Send the visual morning report as one PDF document."""
+    caption = "未来资本晨报 PDF — {}".format(datetime.now().strftime("%Y-%m-%d"))
+    return send_document(str(pdf_path), caption=caption, channel="group")
+
+
 # ============================================================
 # 格式化模块
 # ============================================================
@@ -1159,6 +1165,43 @@ def render_morning_report_images(
     return image_paths
 
 
+def render_morning_report_pdf(
+    image_paths: list[Path],
+    output_path: str | Path | None = None,
+) -> Path | None:
+    """Combine section PNGs into a single multi-page PDF."""
+    if not image_paths:
+        return None
+
+    from PIL import Image
+
+    paths = [Path(path) for path in image_paths if Path(path).exists()]
+    if not paths:
+        return None
+
+    pdf_path = Path(output_path) if output_path else paths[0].parent / "morning_report.pdf"
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+
+    pages = []
+    for path in paths:
+        with Image.open(path) as image:
+            pages.append(image.convert("RGB"))
+
+    first, rest = pages[0], pages[1:]
+    try:
+        first.save(
+            pdf_path,
+            "PDF",
+            save_all=True,
+            append_images=rest,
+            resolution=150.0,
+        )
+    finally:
+        for page in pages:
+            page.close()
+    return pdf_path
+
+
 
 def format_section_market_pulse(market_data: dict) -> str:
     """E. 市场情绪脉搏 (Adanos market-level sentiment)"""
@@ -1461,9 +1504,9 @@ def main():
                         help="[DEPRECATED] no-op；社交段默认已 skip，保留兼容老 cron 命令行")
     parser.add_argument("--image-report", action="store_true",
                         help="每个晨报 section 生成一张图片；Telegram 发送图片而不是长文本")
-    parser.add_argument("--image-delivery", choices=["document", "photo"],
-                        default="document",
-                        help="图片发送方式：document 保留原始分辨率；photo 内联预览但会被 Telegram 压缩")
+    parser.add_argument("--image-delivery", choices=["pdf", "document", "photo"],
+                        default="pdf",
+                        help="视觉晨报发送方式：pdf 合并为单文件；document/photo 逐张发送 PNG")
     parser.add_argument("--image-output-dir", type=str,
                         help="图片输出目录（默认 data/scans/morning_images_<timestamp>）")
     args = parser.parse_args()
@@ -1559,6 +1602,7 @@ def main():
             social_scan=social_scan, elapsed=elapsed)
 
         image_paths = []
+        pdf_path = None
         image_report_active = args.image_report
         if image_report_active:
             try:
@@ -1569,6 +1613,9 @@ def main():
                     photo_safe=args.image_delivery == "photo",
                 )
                 logger.info("晨报图片已生成: %d 张", len(image_paths))
+                if args.image_delivery == "pdf" and image_paths:
+                    pdf_path = render_morning_report_pdf(image_paths)
+                    logger.info("晨报 PDF 已生成: %s", pdf_path)
             except ImportError as exc:
                 # Pillow 缺失 (云端 git pull 部署后未自动装新依赖) → 降级到文本模式，
                 # 不让 cron 整体异常。文本路径是 first-class fallback。
@@ -1590,18 +1637,24 @@ def main():
         }
         if image_paths:
             save_data["image_report_paths"] = [str(path) for path in image_paths]
+        if pdf_path:
+            save_data["pdf_report_path"] = str(pdf_path)
         with open(save_path, "w", encoding="utf-8") as f:
             json.dump(save_data, f, ensure_ascii=False, indent=2, default=str)
         logger.info("结果已保存: %s", save_path)
 
         # 8. 发送 Telegram
         if not args.no_telegram:
-            if image_report_active and image_paths:
+            if image_report_active and pdf_path:
+                _send_group_pdf_report(pdf_path)
+            elif image_report_active and image_paths:
                 _send_group_image_report(image_paths, delivery=args.image_delivery)
             else:
                 _send_group_report(daily_msg)
         else:
-            if image_report_active and image_paths:
+            if image_report_active and pdf_path:
+                print(str(pdf_path))
+            elif image_report_active and image_paths:
                 print("\n".join(str(path) for path in image_paths))
             else:
                 print(daily_msg)

@@ -34,7 +34,7 @@ run_step() {
 
 RC=0
 log_step "daily market report pipeline START"
-run_step "morning_report" "$PYTHON" scripts/morning_report.py --no-social --image-report --image-delivery document || RC=$?
+run_step "morning_report" "$PYTHON" scripts/morning_report.py --no-social --image-report --image-delivery pdf || RC=$?
 if [ "$RC" -eq 0 ]; then
   log_step "daily market report pipeline DONE"
 else
