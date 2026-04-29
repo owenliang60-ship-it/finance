@@ -95,9 +95,31 @@ class TestSendDocument:
         assert send_document(str(pdf), caption="Test", channel="group") is True
 
         assert mock_post.call_args.kwargs["data"]["chat_id"] == "222"
+        assert "parse_mode" not in mock_post.call_args.kwargs["data"]
 
     def test_missing_file_returns_false(self):
         assert send_document("/nonexistent.pdf") is False
+
+    @patch("src.telegram_bot.TELEGRAM_BOT_TOKEN", "tok_secret")
+    @patch("src.telegram_bot.TELEGRAM_GROUP_CHAT_ID", "222")
+    @patch("src.telegram_bot.requests.post")
+    def test_failure_logs_sanitized_telegram_description(self, mock_post, tmp_path, caplog):
+        png = tmp_path / "01_01_broad_signal.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n")
+        response = MagicMock()
+        response.ok = False
+        response.status_code = 400
+        response.json.return_value = {
+            "ok": False,
+            "description": "Bad Request: can't parse entities",
+        }
+        response.text = "https://api.telegram.org/bottok_secret/sendDocument"
+        mock_post.return_value = response
+
+        assert send_document(str(png), caption="01_01_broad_signal", channel="group", max_retries=1) is False
+
+        assert "can't parse entities" in caplog.text
+        assert "tok_secret" not in caplog.text
 
 
 class TestSendPhoto:
@@ -113,6 +135,7 @@ class TestSendPhoto:
         assert send_photo(str(png), caption="Section", channel="group") is True
 
         assert mock_post.call_args.kwargs["data"]["chat_id"] == "222"
+        assert "parse_mode" not in mock_post.call_args.kwargs["data"]
         assert "photo" in mock_post.call_args.kwargs["files"]
 
     def test_missing_file_returns_false(self):

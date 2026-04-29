@@ -20,6 +20,22 @@ API_BASE = "https://api.telegram.org/bot{}"
 DEFAULT_MESSAGE_LIMIT = 4000
 
 
+def _sanitize_error_text(text: str) -> str:
+    token = TELEGRAM_BOT_TOKEN
+    if token:
+        text = text.replace(token, "<redacted>")
+    return text
+
+
+def _telegram_response_error(resp: requests.Response) -> str:
+    try:
+        payload = resp.json()
+        description = payload.get("description") or resp.text
+    except Exception:
+        description = resp.text
+    return _sanitize_error_text("HTTP {}: {}".format(resp.status_code, description[:300]))
+
+
 def _resolve_chat_id(channel: str) -> str:
     """Resolve a logical channel name to its Telegram chat_id."""
     if channel == "group":
@@ -74,11 +90,15 @@ def send_message(
     for attempt in range(1, max_retries + 1):
         try:
             resp = requests.post(url, json=payload, timeout=15)
-            resp.raise_for_status()
+            if not resp.ok:
+                raise RuntimeError(_telegram_response_error(resp))
             logger.info("[Telegram] 消息已发送 → %s", channel)
             return True
         except Exception as exc:
-            logger.warning("[Telegram] 第%d次发送失败 (%s): %s", attempt, channel, exc)
+            logger.warning(
+                "[Telegram] 第%d次发送失败 (%s): %s",
+                attempt, channel, _sanitize_error_text(str(exc)),
+            )
             if attempt < max_retries:
                 time.sleep(attempt * 2)
 
@@ -109,18 +129,20 @@ def send_document(
     for attempt in range(1, max_retries + 1):
         try:
             with path.open("rb") as handle:
-                data = {"chat_id": chat_id, "parse_mode": "Markdown"}
+                data = {"chat_id": chat_id}
                 if caption:
                     data["caption"] = caption
                 resp = requests.post(
                     url, data=data, files={"document": handle}, timeout=60
                 )
-                resp.raise_for_status()
+                if not resp.ok:
+                    raise RuntimeError(_telegram_response_error(resp))
             logger.info("[Telegram] 文件已发送 → %s: %s", channel, path.name)
             return True
         except Exception as exc:
             logger.warning(
-                "[Telegram] 文件发送第%d次失败 (%s): %s", attempt, channel, exc
+                "[Telegram] 文件发送第%d次失败 (%s): %s",
+                attempt, channel, _sanitize_error_text(str(exc)),
             )
             if attempt < max_retries:
                 time.sleep(attempt * 2)
@@ -152,18 +174,20 @@ def send_photo(
     for attempt in range(1, max_retries + 1):
         try:
             with path.open("rb") as handle:
-                data = {"chat_id": chat_id, "parse_mode": "Markdown"}
+                data = {"chat_id": chat_id}
                 if caption:
                     data["caption"] = caption
                 resp = requests.post(
                     url, data=data, files={"photo": handle}, timeout=60
                 )
-                resp.raise_for_status()
+                if not resp.ok:
+                    raise RuntimeError(_telegram_response_error(resp))
             logger.info("[Telegram] 图片已发送 → %s: %s", channel, path.name)
             return True
         except Exception as exc:
             logger.warning(
-                "[Telegram] 图片发送第%d次失败 (%s): %s", attempt, channel, exc
+                "[Telegram] 图片发送第%d次失败 (%s): %s",
+                attempt, channel, _sanitize_error_text(str(exc)),
             )
             if attempt < max_retries:
                 time.sleep(attempt * 2)

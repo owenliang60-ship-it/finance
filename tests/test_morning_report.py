@@ -478,6 +478,15 @@ class TestFormatMorningReport:
 
 
 class TestMorningVisualReport:
+    def test_visual_font_candidates_include_aliyun_cjk_before_dejavu(self):
+        from scripts.morning_report import _VISUAL_FONT_CANDIDATES
+
+        for key in ("regular", "bold"):
+            candidates = _VISUAL_FONT_CANDIDATES[key]
+            cjk_idx = candidates.index("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc")
+            dejavu_idx = next(i for i, path in enumerate(candidates) if "DejaVu" in path)
+            assert cjk_idx < dejavu_idx
+
     def test_visual_sections_group_rows_by_layer_and_bucket(self):
         dv_result = {
             "rankings": [
