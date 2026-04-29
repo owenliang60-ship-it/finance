@@ -1,16 +1,26 @@
 """Build company concept registry from taxonomy + overrides + profiles.
 
 Layered gate semantics:
-    priority_list = portfolio holdings ∪ watchlist ∪ override seed ∪ broad_top_100_by_30d_ADV
+    priority_list = portfolio holdings ∪ watchlist ∪ broad_top_100_by_30d_ADV
+        (override seed is NOT auto-added; overrides only apply to symbols
+        that are in scope from one of the three sources above)
     save requires priority_coverage == 100% AND tail_needs_review_rate < 30%
     --force-save bypasses the gate (logs forced_save=true)
+
+Review CSV contents (two queues, gate-independent):
+    hard_needs_review   — fallback rows (needs_review=1); these block the gate
+    soft_low_confidence — rule/legacy rows with confidence < 0.7; these do
+                          NOT block the gate but surface keyword-match risk
+                          to Boss for spot-check (rule confidence is 0.6 by
+                          construction, so all rule rows currently land here).
 
 Execution order is mandatory:
     1) upsert concepts (FK target)
     2) upsert concept_themes
     3) build company rows (manual → rule → legacy → fallback)
-    4) write review CSV
-    5) gate check; only on pass (or --force-save) upsert company tags
+    4) write review CSV (hard + soft)
+    5) gate check on hard rows only; only on pass (or --force-save) upsert
+       company tags
 
 CLI:
     python scripts/build_company_concept_registry.py --symbols broad --dry-run
@@ -41,6 +51,11 @@ logger = logging.getLogger(__name__)
 
 GATE_PRIORITY_COVERAGE = 1.0
 GATE_TAIL_NEEDS_REVIEW_MAX = 0.30
+# Rule confidence is 0.6 and legacy bucket fallback is 0.4 by construction.
+# Anything below this threshold from a non-manual source goes into the soft
+# review queue so Boss can spot-check keyword-driven decisions even though
+# they don't trip the gate.
+SOFT_REVIEW_CONFIDENCE_THRESHOLD = 0.7
 
 
 class BuildGateError(RuntimeError):
@@ -58,7 +73,8 @@ class BuildResult:
     rule: int
     fallback: int
     legacy: int
-    needs_review: int
+    needs_review: int           # hard queue: source=fallback (gate denominator)
+    soft_review: int            # soft queue: rule/legacy with confidence < 0.7
     tail_needs_review_rate: float
     review_csv: str | None
     saved: bool
@@ -77,7 +93,8 @@ class BuildResult:
             f"rule: {self.rule}",
             f"fallback: {self.fallback}",
             f"legacy: {self.legacy}",
-            f"needs_review: {self.needs_review}",
+            f"needs_review (hard): {self.needs_review}",
+            f"soft_review (low_conf): {self.soft_review}",
             f"tail_needs_review_rate: {self.tail_needs_review_rate * 100:.1f}%",
             f"review_csv: {self.review_csv or '-'}",
             f"saved: {'yes' if self.saved else 'no'}{forced_marker}",
@@ -165,9 +182,18 @@ def build_registry(
         tail_rate = 0.0
 
     # Step 8: review CSV (always written, both dry-run and save paths).
+    # Two queues: hard (needs_review=1, blocks gate) and soft (low-confidence
+    # rule/legacy, surfaces keyword-match risk to Boss but does NOT block).
     review_csv_path.parent.mkdir(parents=True, exist_ok=True)
     needs_review_rows = [r for r in rows if r["needs_review"] == 1]
+    soft_review_rows = [
+        r for r in rows
+        if r["needs_review"] == 0
+        and r["source"] in ("rule", "legacy")
+        and r["confidence"] < SOFT_REVIEW_CONFIDENCE_THRESHOLD
+    ]
     csv_fields = [
+        "review_reason",
         "symbol", "primary_concept_id", "secondary_concept_id",
         "tertiary_concept_id", "display_tags", "business_role",
         "confidence", "source", "evidence",
@@ -176,7 +202,11 @@ def build_registry(
         w = csv.DictWriter(fh, fieldnames=csv_fields)
         w.writeheader()
         for r in needs_review_rows:
-            w.writerow({k: r.get(k, "") for k in csv_fields})
+            w.writerow({**{k: r.get(k, "") for k in csv_fields},
+                        "review_reason": "hard_needs_review"})
+        for r in soft_review_rows:
+            w.writerow({**{k: r.get(k, "") for k in csv_fields},
+                        "review_reason": "soft_low_confidence"})
 
     # Source counters.
     by_source: dict[str, int] = {}
@@ -223,6 +253,7 @@ def build_registry(
         fallback=by_source.get("fallback", 0),
         legacy=by_source.get("legacy", 0),
         needs_review=len(needs_review_rows),
+        soft_review=len(soft_review_rows),
         tail_needs_review_rate=tail_rate,
         review_csv=str(review_csv_path),
         saved=will_save,

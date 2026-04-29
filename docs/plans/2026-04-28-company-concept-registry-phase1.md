@@ -2,9 +2,17 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Confidence: 88%**
+**Version: v4 (2026-04-29)**
+**Confidence: 92%** (post-review hardening)
 **不确定点**: POET 的精确 tertiary 需要实现前用公司 profile/官方描述核实；默认不再写死为“硅光”，先按 `通信/网络设备 / 光通信 / InP光接口` 处理。Boss 已确认 `MU = 半导体 / 存储 / HBM` 的展示语义、Phase 1 直接覆盖 broad 全量；标签语言采用中文主标签 + 行业标准英文缩写（HBM/DRAM/NAND/EUV/GPU/ETF/InP 等）。
 **北极星对齐**: `docs/design/north-star.md` 的数据层 + 宏观/Regime 侧翼里的“热点/主题”。本阶段只建设标签底座，不输出买卖建议，不进入 CIO-B。
+
+**v4 Changelog（review hardening, no scope change）**:
+- `_KEYWORD_RULES` 重排：所有 catch-all 下沉到列表底部，subcategory 优先；修复 NVDA-class profile 含 "Semiconductors" + "GPU" 时被误打成 semiconductor catch-all 的潜在 bug
+- Soft-warning review CSV：confidence < 0.7 的 rule/legacy 行也写入 review CSV（带 `review_reason=soft_low_confidence` 列），但**不影响 gate** — gate 仍按 `needs_review=1` 计算 tail rate；目的是给 Boss 一个 keyword-match 风险的抽查队列
+- `symbol_concept_edges` (Phase 2 N:M graph 表) 在 Phase 1 schema 一次性创建，避免 Phase 2 再做 schema migration；Phase 1 不写入
+- Cron 频率定为**周频**（与 Boss 确认）：build 脚本不进 daily morning report 路径，避免 build 失败 block 报告；新 symbol 进入 broad top 100 时最多延迟 7 天
+- E2E 覆盖补足：现有 `store_with_registry` fixture 已跑通 build → DB → classifier 链路；v4 新增 rule path / fallback path 的 e2e round-trip 验证
 
 **Goal:** Build a stable company concept registry so broad/pool/portfolio symbols can display concept labels like `MU = 半导体 / 存储 / HBM`, while preserving a path to future N:M concept graph clustering.
 
@@ -96,7 +104,11 @@ flowchart LR
 - **最大风险:** broad 全量 `needs_review` 比例过高，污染后续热点聚类。
   - **缓解:** 采用分层 gate：S/A 池（portfolio + watchlist + broad top 100）必须 100% 高置信覆盖；broad 长尾允许 `needs_review_rate < 30%` 后默认 save；超门槛时只允许 Boss 显式批准 `--force-save`。
 - **为什么不用更简单的做法:** 单纯扩 ticker override 只能解决显示，不会形成可聚类的数据资产；未来热点聚类需要每只股票可被多层标签聚合。
-- **回滚方案:** 仅删除 `company_concept_tags` 表，保留 `concepts` / `concept_themes`（Phase 2 概念底座复用，不重建）；同时让 classifier fallback 现有 `report_concepts.json`。不影响价格、基本面、持仓等核心表。
+- **最大风险（v4 新增）:** rule 命中 confidence=0.6 但 `needs_review=0`，60-80% 的 broad 标签靠 keyword 匹配但没有审查机制。
+  - **缓解:** v4 引入 soft-warning review CSV — 所有 confidence<0.7 的 rule/legacy 行会写入 review CSV 带 `review_reason=soft_low_confidence`，**不影响 gate** 但给 Boss 一个抽查队列；rule 误分时通过 manual override 就地覆盖，不需要改代码。
+- **最大风险（v4 新增）:** `_KEYWORD_RULES` 顺序敏感，catch-all 在 specific rule 之前会让 GPU 公司被误打成 semiconductor。
+  - **缓解:** v4 重排 rule list — 所有 subcategory rule 在前，所有 catch-all 在后；新增 4 个测试守住该顺序契约（`tests/test_company_concepts.py::test_rule_*_beats_*_catchall`）。
+- **回滚方案:** 仅删除 `company_concept_tags` 表，保留 `concepts` / `concept_themes` / `symbol_concept_edges`（Phase 2 概念底座复用，不重建）；同时让 classifier fallback 现有 `report_concepts.json`。不影响价格、基本面、持仓等核心表。
 
 ## Phase 2 Query Shape（聚类查询形态）
 
@@ -143,8 +155,11 @@ Phase 1 的 `company_concept_tags` 是给晨报和 PI 用的 materialized displa
 - [ ] `--rebuild-display` 跳过 manual override 自带的 `display_tags` 行；输出摘要打印 `manual_display_tags_preserved` 计数。
 - [ ] `POET` 即使不在 broad universe，也通过 watchlist override 进入 registry。
 - [ ] 晨报/PI 对有 registry 的 symbol 展示三层标签；没有 registry 时继续 fallback 旧 classifier，不报错。
-- [ ] Build 脚本输出覆盖率摘要，包括 `total / tagged / manual / rule / fallback / needs_review`。
-- [ ] Targeted tests pass: `tests/test_company_concepts.py`, `tests/test_market_store_concepts.py`, `tests/test_concept_classifier.py`, `tests/test_morning_report.py`, `tests/test_portfolio/test_intelligence.py`。
+- [ ] Build 脚本输出覆盖率摘要，包括 `total / tagged / manual / rule / fallback / needs_review (hard) / soft_review (low_conf)`。
+- [ ] Review CSV 包含两列队列：`review_reason=hard_needs_review`（fallback rows，gate 阻塞）与 `review_reason=soft_low_confidence`（rule/legacy confidence<0.7 rows，仅抽查不阻塞 gate）。
+- [ ] `_KEYWORD_RULES` 顺序契约：所有 subcategory rule 在 catch-all 之前；4 个测试守住该契约（GPU/AI server/optical 命中 specific rule 而非 catch-all；纯 fabless 仍命中 catch-all）。
+- [ ] `symbol_concept_edges` 表在 Phase 1 schema 已创建（Phase 2 reservation），FK 指向 `concepts(concept_id)`；Phase 1 build 脚本不写入。
+- [ ] Targeted tests pass: `tests/test_company_concepts.py`, `tests/test_market_store_concepts.py`, `tests/test_concept_classifier.py`, `tests/test_morning_report.py`, `tests/test_portfolio/test_intelligence.py`, `tests/test_build_concept_registry.py`。
 
 ---
 
@@ -567,7 +582,9 @@ Expected:
 2. **MU 展示语义确认:** 报告展示使用 `半导体 / 存储 / HBM`；数据模型中 HBM 作为 dynamic theme/display overlay，不污染 evergreen tree。
 3. **Phase 1 覆盖范围:** 直接跑 broad 全量，低置信度标 `needs_review`。
 4. **标签语言:** 采用中文主标签；保留行业标准英文缩写（HBM/DRAM/NAND/EUV/GPU/ETF/InP 等），因为这些词在交易语境里比中文翻译更短、更稳定。
-5. **架构修正:** Phase 1 schema 必须为 Phase 2 N:M concept graph 预留 `concept_id`，不能用裸字符串三标签锁死未来。
+5. **架构修正:** Phase 1 schema 必须为 Phase 2 N:M concept graph 预留 `concept_id`，不能用裸字符串三标签锁死未来。v4 进一步在 Phase 1 一次性创建 `symbol_concept_edges` 空表，Phase 2 直接写入即可。
 6. **Save gate:** 采用分层 gate。`priority_list = portfolio holdings ∪ concept_watchlist.json ∪ broad top 100 by trailing 30-day dollar volume`，必须 100% 高置信覆盖；broad 长尾 `needs_review_rate < 30%` 可 save；`--force-save` 仅在 Boss 显式批准时作为逃生口。
 7. **Display tags 优先级:** Manual override 自带 `display_tags` 时 rebuild 不覆盖（手写更准）；rule/fallback/legacy 行才走自动拼接。
-8. **回滚边界:** 仅删 `company_concept_tags`；`concepts` / `concept_themes` 是 Phase 2 复用底座，不一起删。
+8. **回滚边界:** 仅删 `company_concept_tags`；`concepts` / `concept_themes` / `symbol_concept_edges` 是 Phase 2 复用底座，不一起删。
+9. **(v4) Soft-warning review queue:** rule confidence=0.6 不进 gate denominator，但写入 review CSV 带 `review_reason=soft_low_confidence`，给 Boss 抽查 keyword-match 风险；不引入新的硬阈值。
+10. **(v4) Cron 频率：周频。** Concept registry build 不进 daily morning report 路径，避免 build 失败 block 报告；与 broad universe weekly refresh / pool refresh 同档期跑（周六 cron），新 symbol 进入 broad top 100 时最多延迟 7 天进 registry。Manual override 改动后可手动跑一次 rebuild，不必等周频。

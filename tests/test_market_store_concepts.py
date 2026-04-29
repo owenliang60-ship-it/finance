@@ -33,6 +33,51 @@ def test_concept_tables_exist_after_init(store):
     assert {r[0] for r in rows} == {"concepts", "concept_themes", "company_concept_tags"}
 
 
+def test_symbol_concept_edges_table_reserved_for_phase2(store):
+    """Phase 2 N:M graph table must be created by Phase 1 init so future
+    rollout doesn't require a schema migration. It stays empty in Phase 1."""
+    conn = store._get_conn()
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' "
+        "AND name='symbol_concept_edges'"
+    ).fetchone()
+    assert row is not None, "symbol_concept_edges should be pre-created"
+    # Empty in Phase 1.
+    assert conn.execute(
+        "SELECT COUNT(*) FROM symbol_concept_edges"
+    ).fetchone()[0] == 0
+
+
+def test_symbol_concept_edges_fk_concept_required(store):
+    """Inserting an edge with an unknown concept_id must fail FK validation,
+    proving the edges table is wired to the same concepts taxonomy that
+    company_concept_tags uses."""
+    import sqlite3
+    _seed_taxonomy(store)
+    conn = store._get_conn()
+    # Valid FK target → succeeds.
+    with conn:
+        conn.execute(
+            """INSERT INTO symbol_concept_edges
+               (symbol, concept_id, weight, edge_type, confidence, source,
+                evidence, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            ("AAPL", "semiconductor", 1.0, "business_exposure",
+             0.9, "manual", "", "2026-04-29T00:00:00Z"),
+        )
+    # Bogus FK target → IntegrityError (matches company_concept_tags behavior).
+    with pytest.raises(sqlite3.IntegrityError):
+        with conn:
+            conn.execute(
+                """INSERT INTO symbol_concept_edges
+                   (symbol, concept_id, weight, edge_type, confidence, source,
+                    evidence, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                ("AAPL", "nonexistent_concept", 1.0, "business_exposure",
+                 0.9, "manual", "", "2026-04-29T00:00:00Z"),
+            )
+
+
 def test_upsert_concepts_preserves_parent_links(store):
     rows = [
         {"concept_id": "semiconductor", "label": "半导体", "level": 1, "parent_id": None},

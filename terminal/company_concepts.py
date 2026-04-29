@@ -39,8 +39,15 @@ _LEGACY_BUCKET_TO_CONCEPT: dict[str, str] = {
 
 
 # Keyword rules: (keywords[lowercase], primary, secondary, tertiary, business_role).
-# Order matters — most specific first. Profile text is lowercased before matching.
+#
+# Ordering invariant: ALL subcategory rules (those with a non-None secondary or
+# tertiary) come BEFORE any catch-all rule whose primary they share. This
+# matters across primaries too — e.g. an AI-accelerator company's profile
+# usually says "Semiconductors", and we want it tagged as ai_compute_cloud /
+# gpu_accelerator, not as the bare semiconductor catch-all. So the catch-all
+# block sits at the bottom and only fires when no subcategory rule matched.
 _KEYWORD_RULES: list[tuple[list[str], str, str | None, str | None, str]] = [
+    # ---- semiconductor subcategories ----
     (["semiconductor equipment", "lithography", "wafer fab equipment"],
      "semiconductor", "semiconductor_equipment", None, "半导体设备"),
     (["foundry", "wafer foundry"],
@@ -49,9 +56,9 @@ _KEYWORD_RULES: list[tuple[list[str], str, str | None, str | None, str]] = [
      "semiconductor", "memory", "memory_chips", "存储芯片"),
     (["analog chip", "analog semiconductor", "power management ic"],
      "semiconductor", "analog_chips", None, "模拟芯片"),
-    (["semiconductor", "chip designer", "ic design", "fabless"],
-     "semiconductor", None, None, "半导体"),
 
+    # ---- ai_compute_cloud subcategories (precede semiconductor catch-all
+    # so GPU/accelerator profiles tagged "Semiconductors" land in AI compute) ----
     (["gpu", "ai accelerator", "graphics processor"],
      "ai_compute_cloud", "gpu_accelerator", None, "GPU/AI加速器"),
     (["ai server", "compute platform"],
@@ -59,55 +66,59 @@ _KEYWORD_RULES: list[tuple[list[str], str, str | None, str | None, str]] = [
     (["cloud computing", "cloud infrastructure", "hyperscaler", "iaas"],
      "ai_compute_cloud", "cloud_infra", None, "云基础设施"),
 
+    # ---- network_equipment subcategories ----
     (["fiber optic", "optical network", "optical communication", "photonic"],
      "network_equipment", "optical_communications", None, "光通信"),
-    (["network equipment", "telecom equipment", "communications equipment"],
-     "network_equipment", None, None, "通信/网络设备"),
 
+    # ---- data_center_power subcategories ----
     (["data center power", "rack power", "ups system", "thermal management",
       "liquid cooling"],
      "data_center_power", "power_thermal", None, "数据中心电源/散热"),
 
+    # ---- software subcategories ----
     (["enterprise software", "saas", "software—application",
       "software-application", "application software"],
      "software_saas", "enterprise_software", None, "企业软件/SaaS"),
-    (["software", "platform-as-a-service"],
-     "software_saas", None, None, "软件"),
 
-    (["internet content", "social media", "advertising", "search engine",
-      "digital advertising"],
-     "internet_ads", None, None, "互联网/广告"),
-
+    # ---- evs_robotics subcategories ----
     (["electric vehicle", "ev maker", "auto manufactur"],
      "evs_robotics", "electric_vehicles", None, "电动车"),
     (["robotic", "humanoid"],
      "evs_robotics", "robotics", None, "机器人"),
 
+    # ---- energy_materials subcategories ----
+    (["nuclear", "uranium", "smr "],
+     "energy_materials", "nuclear_power", None, "核电"),
+
+    # ---- etf_macro subcategories ----
+    (["exchange traded fund", "etf", "index fund"],
+     "etf_macro", "index_etf", None, "指数ETF"),
+
+    # ---- catch-all rules (generic primary, no secondary/tertiary) ----
+    (["semiconductor", "chip designer", "ic design", "fabless"],
+     "semiconductor", None, None, "半导体"),
+    (["network equipment", "telecom equipment", "communications equipment"],
+     "network_equipment", None, None, "通信/网络设备"),
+    (["software", "platform-as-a-service"],
+     "software_saas", None, None, "软件"),
+    (["internet content", "social media", "advertising", "search engine",
+      "digital advertising"],
+     "internet_ads", None, None, "互联网/广告"),
     (["bank", "insurance", "broker", "asset management", "fintech",
       "crypto", "exchange operator"],
      "finance_crypto", None, None, "金融/加密"),
-
     (["pharmaceutical", "biotech", "drug manufactur", "medical device",
       "life sciences"],
      "pharma_life_sci", None, None, "医药/生命科学"),
-
     (["aerospace", "defense", "industrial machinery", "diversified industrial"],
      "industrial_aerospace", None, None, "工业/航天/国防"),
-
     (["e-commerce", "ecommerce", "retail apparel", "department store",
       "consumer electronics retail"],
      "consumer_ecommerce", None, None, "消费/电商"),
-
-    (["nuclear", "uranium", "smr "],
-     "energy_materials", "nuclear_power", None, "核电"),
     (["oil & gas", "renewable energy", "solar", "specialty chemicals"],
      "energy_materials", None, None, "能源/材料"),
-
     (["reit", "real estate", "property management"],
      "realestate_infra", None, None, "地产/基础设施"),
-
-    (["exchange traded fund", "etf", "index fund"],
-     "etf_macro", "index_etf", None, "指数ETF"),
 ]
 
 

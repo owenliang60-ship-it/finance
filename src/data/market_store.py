@@ -478,6 +478,28 @@ _SCHEMA = "\n\n".join([
     "CREATE INDEX IF NOT EXISTS idx_cct_primary ON company_concept_tags(primary_concept_id);",
     "CREATE INDEX IF NOT EXISTS idx_cct_secondary ON company_concept_tags(secondary_concept_id);",
     "CREATE INDEX IF NOT EXISTS idx_cct_tertiary ON company_concept_tags(tertiary_concept_id);",
+
+    # -- Phase 2 reservation: symbol_concept_edges (N:M graph) --
+    # Pre-created in Phase 1 to keep the FK target (concepts.concept_id) and
+    # the eventual hotspot-clustering query path stable. NOT written to in
+    # Phase 1; the build script only populates company_concept_tags. The
+    # composite primary key (symbol, concept_id, edge_type) lets the same
+    # symbol carry multiple parallel exposures (e.g. TSLA = electric_vehicles
+    # + robotics + ai_compute_cloud) once Phase 2 starts emitting edges.
+    """CREATE TABLE IF NOT EXISTS symbol_concept_edges (
+    symbol TEXT NOT NULL,
+    concept_id TEXT NOT NULL REFERENCES concepts(concept_id),
+    weight REAL NOT NULL DEFAULT 1.0,
+    edge_type TEXT NOT NULL DEFAULT 'business_exposure',
+    confidence REAL NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT 'unknown',
+    evidence TEXT DEFAULT '',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (symbol, concept_id, edge_type)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_sce_symbol ON symbol_concept_edges(symbol);",
+    "CREATE INDEX IF NOT EXISTS idx_sce_concept ON symbol_concept_edges(concept_id);",
+    "CREATE INDEX IF NOT EXISTS idx_sce_edge_type ON symbol_concept_edges(edge_type);",
 ])
 
 # Pre-compute snake-case column sets per table for fast lookup
@@ -503,6 +525,7 @@ _VALID_TABLES = frozenset({
     "social_trending_sectors", "broad_scan_hits",
     "historical_market_cap",
     "concepts", "concept_themes", "company_concept_tags",
+    "symbol_concept_edges",
 })
 
 

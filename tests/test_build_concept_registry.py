@@ -432,3 +432,81 @@ def test_rebuild_display_preserves_manual_overrides(build_env):
     zzza = store.get_company_concepts(["ZZZA"])["ZZZA"]
     # rule 行用新 label 重拼
     assert "企业软件V2" in zzza["display_tags"]
+
+
+# ---------- Soft-warning review CSV ----------
+#
+# These guard the review-queue contract:
+#   - hard_needs_review: source=fallback, blocks the gate
+#   - soft_low_confidence: rule/legacy with confidence < 0.7, surfaces to
+#     Boss but does NOT block — gate stays clean if these are the only finds.
+
+def test_soft_review_includes_low_confidence_rule_rows(build_env):
+    """Rule-matched rows (confidence 0.6) must appear in CSV with
+    review_reason=soft_low_confidence, separate from hard fallback rows."""
+    from scripts.build_company_concept_registry import build_registry
+
+    tmp_path, store, registry, profiles = build_env
+    csv_path = tmp_path / "review.csv"
+    # ZZZA hits rule (Software—Application keyword) → confidence 0.6 → soft
+    # ZZZB hits no keyword → fallback "其他" → confidence 0.1 → hard
+    result = build_registry(
+        store=store, registry=registry,
+        universe_symbols=["MU", "NVDA", "ZZZA", "ZZZB"],
+        profiles=profiles,
+        portfolio_holdings=["MU", "NVDA"],
+        broad_top_symbols=["MU", "NVDA"],
+        review_csv_path=csv_path,
+        save=False, force_save=False,
+    )
+    rows = list(csv.DictReader(csv_path.open()))
+    by_sym = {r["symbol"]: r for r in rows}
+    assert by_sym["ZZZA"]["review_reason"] == "soft_low_confidence"
+    assert by_sym["ZZZB"]["review_reason"] == "hard_needs_review"
+    assert result.soft_review == 1
+    assert result.needs_review == 1
+
+
+def test_soft_review_does_not_block_gate(build_env):
+    """A universe of clean manual + rule-matched rows (no fallback) must pass
+    the gate. Soft warnings surface keyword risk but never trip BuildGateError."""
+    from scripts.build_company_concept_registry import build_registry
+
+    tmp_path, store, registry, profiles = build_env
+    # MU + NVDA = manual; ZZZA = rule (software). No fallback rows, so the
+    # gate denominator stays clean (tail_needs_review_rate=0). Save MUST work.
+    result = build_registry(
+        store=store, registry=registry,
+        universe_symbols=["MU", "NVDA", "ZZZA"],
+        profiles=profiles,
+        portfolio_holdings=["MU", "NVDA"],
+        broad_top_symbols=["MU", "NVDA"],
+        review_csv_path=tmp_path / "review.csv",
+        save=True, force_save=False,
+    )
+    assert result.saved is True
+    assert result.forced_save is False
+    assert result.soft_review >= 1     # ZZZA rule confidence 0.6
+    assert result.needs_review == 0    # no fallback
+
+
+def test_manual_overrides_never_in_review_csv(build_env):
+    """Manual override rows (confidence ≥ 0.92) must never appear in either
+    review queue, regardless of which source they came from."""
+    from scripts.build_company_concept_registry import build_registry
+
+    tmp_path, store, registry, profiles = build_env
+    csv_path = tmp_path / "review.csv"
+    build_registry(
+        store=store, registry=registry,
+        universe_symbols=["MU", "NVDA"],
+        profiles=profiles,
+        portfolio_holdings=["MU"],
+        broad_top_symbols=["MU"],
+        review_csv_path=csv_path,
+        save=False, force_save=False,
+    )
+    rows = list(csv.DictReader(csv_path.open()))
+    csv_symbols = {r["symbol"] for r in rows}
+    assert "MU" not in csv_symbols
+    assert "NVDA" not in csv_symbols
