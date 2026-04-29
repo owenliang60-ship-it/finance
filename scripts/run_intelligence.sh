@@ -4,4 +4,4 @@ set -a
 source /root/workspace/Finance/.env 2>/dev/null
 set +a
 cd /root/workspace/Finance
-python3 scripts/portfolio_intelligence.py --image-report --image-delivery document "$@"
+python3 scripts/portfolio_intelligence.py --image-report --image-delivery pdf "$@"

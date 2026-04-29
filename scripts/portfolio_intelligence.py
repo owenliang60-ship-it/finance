@@ -370,6 +370,14 @@ def _send_private_image_report(
     return image_paths
 
 
+def _send_private_pdf_report(pdf_path: Path, dry_run: bool = False) -> Path:
+    """Deliver portfolio report PDF to the private channel unless dry-run."""
+    if not dry_run:
+        caption = "Portfolio Intelligence PDF — {}".format(datetime.now().strftime("%Y-%m-%d"))
+        send_document(str(pdf_path), caption=caption, channel="private")
+    return pdf_path
+
+
 def _latest_signal_date(df: pd.DataFrame) -> str | None:
     """Extract the most recent YYYY-MM-DD date from a price frame."""
     if df is None or len(df) == 0 or "date" not in df.columns:
@@ -998,6 +1006,18 @@ def render_portfolio_report_images(
     return paths
 
 
+def render_portfolio_report_pdf(
+    image_paths: list[Path],
+    output_path: str | Path | None = None,
+) -> Path | None:
+    """Combine PI section images into a single multi-page PDF."""
+    from scripts.morning_report import render_morning_report_pdf
+
+    paths = [Path(path) for path in image_paths]
+    default_path = paths[0].parent / "portfolio_intelligence.pdf" if paths else None
+    return render_morning_report_pdf(paths, output_path or default_path)
+
+
 # ---- 主流程 ----
 
 def run_intelligence(
@@ -1005,7 +1025,7 @@ def run_intelligence(
     allow_local: bool = False,
     image_report: bool = False,
     image_output_dir: str | Path | None = None,
-    image_delivery: str = "document",
+    image_delivery: str = "pdf",
 ) -> str:
     """运行完整 Intelligence 管道, 返回格式化报告."""
     import sqlite3
@@ -1316,13 +1336,23 @@ def run_intelligence(
             output_dir=image_output_dir,
             photo_safe=(image_delivery == "photo"),
         )
-        _send_private_image_report(
-            image_paths,
-            dry_run=dry_run,
-            delivery=image_delivery,
-        )
+        pdf_path = None
+        if image_delivery == "pdf":
+            pdf_path = render_portfolio_report_pdf(image_paths)
+            if pdf_path:
+                _send_private_pdf_report(pdf_path, dry_run=dry_run)
+            else:
+                _send_private_image_report(image_paths, dry_run=dry_run)
+        else:
+            _send_private_image_report(
+                image_paths,
+                dry_run=dry_run,
+                delivery=image_delivery,
+            )
         if dry_run:
             report += "\n\nImages:\n" + "\n".join(str(path) for path in image_paths)
+            if pdf_path:
+                report += "\nPDF:\n" + str(pdf_path)
         return report
 
     return _send_private_report(report, dry_run=dry_run)
@@ -1348,9 +1378,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--image-delivery",
-        choices=["document", "photo"],
-        default="document",
-        help="Telegram image delivery mode; document preserves full resolution",
+        choices=["pdf", "document", "photo"],
+        default="pdf",
+        help="Telegram visual delivery mode; pdf sends one document, document/photo send PNGs",
     )
     args = parser.parse_args()
 

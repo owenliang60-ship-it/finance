@@ -281,6 +281,17 @@ class TestPortfolioRouting:
             channel="private",
         )
 
+    @patch("scripts.portfolio_intelligence.send_document")
+    def test_send_private_pdf_report_routes_private_document(self, mock_send, tmp_path):
+        path = tmp_path / "portfolio_intelligence.pdf"
+        path.write_bytes(b"%PDF-fake")
+
+        portfolio_intelligence._send_private_pdf_report(path, dry_run=False)
+
+        mock_send.assert_called_once()
+        assert mock_send.call_args.args[0] == str(path)
+        assert mock_send.call_args.kwargs["channel"] == "private"
+
     @patch("scripts.portfolio_intelligence._send_private_report", side_effect=lambda message, dry_run=False: message)
     @patch("portfolio.holdings.manager.PortfolioManager")
     @patch("scripts.portfolio_intelligence.get_store")
