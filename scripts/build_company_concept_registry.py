@@ -331,12 +331,25 @@ def rebuild_display_tags(
 # ---- CLI helpers ----
 
 def _load_universe(path: Path) -> list[str]:
+    """Load a universe JSON in any of the three on-disk shapes:
+
+    - raw list: ``["MU", "AAPL"]`` (legacy / fixtures)
+    - symbol list dict: ``{"symbols": [...]}`` (pool/universe.json)
+    - broad universe seeder: ``{"stocks": {symbol: {marketCap, ...}}}``
+      (data/scans/broad_universe.json)
+    """
     if not path.exists():
         return []
     data = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(data, list):
         return [str(s).upper() for s in data]
-    return [str(s).upper() for s in (data.get("symbols") or [])]
+    if isinstance(data, dict):
+        stocks = data.get("stocks")
+        if isinstance(stocks, dict):
+            return [str(s).upper() for s in stocks.keys()]
+        if isinstance(data.get("symbols"), list):
+            return [str(s).upper() for s in data["symbols"]]
+    return []
 
 
 def _load_profiles(path: Path) -> dict[str, dict]:
