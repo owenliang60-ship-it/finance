@@ -510,3 +510,75 @@ def test_manual_overrides_never_in_review_csv(build_env):
     csv_symbols = {r["symbol"] for r in rows}
     assert "MU" not in csv_symbols
     assert "NVDA" not in csv_symbols
+
+
+# ---------- _load_universe schema compatibility ----------
+#
+# broad_universe.json (broad universe seeder output) uses
+# {"updated", "stocks": {symbol: {marketCap, ...}}}.
+# pool/universe.json uses {"symbols": [...]}.
+# Some legacy fixtures use raw list. All three must work.
+
+def test_load_universe_returns_empty_when_path_missing(tmp_path):
+    from scripts.build_company_concept_registry import _load_universe
+
+    assert _load_universe(tmp_path / "missing.json") == []
+
+
+def test_load_universe_accepts_raw_list(tmp_path):
+    import json
+
+    from scripts.build_company_concept_registry import _load_universe
+
+    p = tmp_path / "u.json"
+    p.write_text(json.dumps(["mu", "AAPL"]), encoding="utf-8")
+    assert _load_universe(p) == ["MU", "AAPL"]
+
+
+def test_load_universe_accepts_symbols_list_dict(tmp_path):
+    import json
+
+    from scripts.build_company_concept_registry import _load_universe
+
+    p = tmp_path / "u.json"
+    p.write_text(
+        json.dumps({"updated": "2026-04-25", "symbols": ["mu", "nvda"]}),
+        encoding="utf-8",
+    )
+    assert _load_universe(p) == ["MU", "NVDA"]
+
+
+def test_load_universe_accepts_broad_universe_stocks_dict(tmp_path):
+    """broad_universe.json shape: {"stocks": {symbol: meta}}.
+    Without this the build script silently runs on an empty universe and
+    coverage metrics become meaningless (priority_list == universe).
+    """
+    import json
+
+    from scripts.build_company_concept_registry import _load_universe
+
+    p = tmp_path / "broad_universe.json"
+    p.write_text(
+        json.dumps({
+            "updated": "2026-04-25",
+            "market_cap_threshold": 1_000_000_000,
+            "stocks": {
+                "MU": {"marketCap": 100e9, "shortName": "MU"},
+                "nvda": {"marketCap": 3e12, "shortName": "NVDA"},
+                "AAPL": {"marketCap": 3e12, "shortName": "AAPL"},
+            },
+        }),
+        encoding="utf-8",
+    )
+    out = _load_universe(p)
+    assert sorted(out) == ["AAPL", "MU", "NVDA"]
+
+
+def test_load_universe_returns_empty_for_unknown_dict_shape(tmp_path):
+    import json
+
+    from scripts.build_company_concept_registry import _load_universe
+
+    p = tmp_path / "u.json"
+    p.write_text(json.dumps({"foo": "bar"}), encoding="utf-8")
+    assert _load_universe(p) == []
