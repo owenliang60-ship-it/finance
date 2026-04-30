@@ -263,3 +263,67 @@ def test_registry_classify_accepts_string_symbol(registry):
     by_str = registry.classify("MU")
     by_dict = registry.classify({"symbol": "MU"})
     assert by_str == by_dict
+
+
+# ---------- Keyword rule ordering invariants ----------
+#
+# These guard the contract spelled out atop _KEYWORD_RULES: subcategory rules
+# must beat catch-alls even when a profile matches both. The pre-fix bug was
+# semiconductor catch-all sitting before the GPU rule, so any AI accelerator
+# whose profile said "Semiconductors" got bucketed as plain semiconductor.
+
+def test_rule_gpu_beats_semiconductor_catchall(registry):
+    """A GPU/accelerator profile that also mentions 'Semiconductors' must
+    resolve to ai_compute_cloud / gpu_accelerator, NOT the bare semiconductor
+    catch-all. NVDA's manual override hides this; use a fake symbol."""
+    result = registry.classify({
+        "symbol": "ZZGPU",
+        "industry": "Semiconductors",
+        "description": "designs GPU and AI accelerator chips for data centers",
+    })
+    assert result["primary_concept_id"] == "ai_compute_cloud"
+    assert result["secondary_concept_id"] == "gpu_accelerator"
+    assert result["source"] == "rule"
+
+
+def test_rule_ai_server_beats_semiconductor_catchall(registry):
+    """An AI server vendor that also mentions semiconductors lands in AI compute."""
+    result = registry.classify({
+        "symbol": "ZZAIS",
+        "industry": "Semiconductors",
+        "description": "manufactures AI server compute platform with liquid cooling",
+    })
+    assert result["primary_concept_id"] == "ai_compute_cloud"
+    # Note: 'liquid cooling' would also match data_center_power, but the
+    # ai_server rule sits earlier in the list and wins. That's intentional —
+    # an AI server vendor is primarily an AI compute story.
+    assert result["secondary_concept_id"] == "ai_server"
+
+
+def test_rule_optical_beats_network_catchall(registry):
+    """An optical communications profile that also mentions network/telecom
+    equipment must resolve to optical_communications, not the catch-all."""
+    result = registry.classify({
+        "symbol": "ZZOPT",
+        "industry": "Communications Equipment",
+        "description": "fiber optic network equipment for telecom carriers",
+    })
+    assert result["primary_concept_id"] == "network_equipment"
+    assert result["secondary_concept_id"] == "optical_communications"
+
+
+def test_rule_pure_fabless_falls_to_semiconductor_catchall(registry):
+    """A profile that only matches generic semiconductor keywords (no GPU,
+    no foundry, no memory) correctly lands in the catch-all — that's the
+    legitimate use of the catch-all and must still work post-reorder."""
+    result = registry.classify({
+        "symbol": "ZZCHIP",
+        "industry": "Semiconductors",
+        "description": "fabless chip designer focused on RF analog frontends",
+    })
+    # 'analog' alone wouldn't match analog_chips (which needs 'analog chip' /
+    # 'analog semiconductor'); it falls to the semiconductor catch-all.
+    # Note: this profile contains 'fabless' — exactly the catch-all keyword.
+    assert result["primary_concept_id"] == "semiconductor"
+    assert result["secondary_concept_id"] is None
+    assert result["business_role"] == "半导体"

@@ -210,3 +210,94 @@ def test_db_unavailable_does_not_crash(tmp_path):
                                 "companyName": "NVIDIA Corporation",
                                 "industry": "Semiconductors"})
     assert display == "AI算力/云"
+
+
+# ---------- End-to-end: build → DB → classifier across all source paths ----------
+#
+# `store_with_registry` already covers manual-override symbols (MU/POET/TSM).
+# These E2E tests extend coverage to the rule and fallback paths so we know
+# the full Phase 1 contract holds: classifier renders whatever build wrote,
+# regardless of which resolution branch produced the row.
+
+@pytest.fixture
+def store_with_all_sources(tmp_path):
+    """Registry seeded with one row per source: manual / rule / fallback."""
+    from src.data.market_store import MarketStore
+    from terminal.company_concepts import ConceptRegistry
+    from scripts.build_company_concept_registry import build_registry
+
+    store = MarketStore(tmp_path / "market.db")
+    registry = ConceptRegistry(
+        taxonomy_path=TAXONOMY_PATH,
+        themes_path=THEMES_PATH,
+        overrides_path=OVERRIDES_PATH,
+        watchlist_path=WATCHLIST_PATH,
+    )
+    profiles = {
+        # manual: MU is in overrides
+        "MU": {"symbol": "MU", "industry": "Semiconductors"},
+        # rule: SaaS keyword fires on industry text
+        "RULESAAS": {"symbol": "RULESAAS",
+                     "industry": "Software—Application",
+                     "companyName": "Hypothetical Enterprise SaaS Co"},
+        # fallback: nothing matches — needs_review=1, display "其他"
+        "FBKMYS": {"symbol": "FBKMYS", "companyName": "Mystery Holdings Co"},
+    }
+    build_registry(
+        store=store, registry=registry,
+        universe_symbols=["MU", "RULESAAS", "FBKMYS"],
+        profiles=profiles,
+        portfolio_holdings=["MU"],
+        broad_top_symbols=["MU"],
+        review_csv_path=tmp_path / "review.csv",
+        save=True, force_save=True,   # FBKMYS would block gate; force here
+    )
+    return store
+
+
+def test_e2e_rule_path_renders_through_classifier(store_with_all_sources):
+    """A rule-resolved row must round-trip: build writes display_tags from
+    keyword match → DB → classifier returns the same display string."""
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH,
+                            market_store=store_with_all_sources)
+    display = clf.display_tags({"symbol": "RULESAAS"})
+    # Built from rule: software_saas/enterprise_software → "软件/SaaS / 企业软件"
+    assert "软件/SaaS" in display
+    assert "企业软件" in display
+    # business_role from rule: "企业软件/SaaS"
+    role = clf.business_role({"symbol": "RULESAAS"})
+    assert role == "企业软件/SaaS"
+
+
+def test_e2e_fallback_path_renders_through_classifier(store_with_all_sources):
+    """A fallback row written under --force-save must still render through
+    classifier (not crash, not silently revert to legacy bucket)."""
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH,
+                            market_store=store_with_all_sources)
+    display = clf.display_tags({"symbol": "FBKMYS"})
+    # Fallback display is the bare 'other' label.
+    assert display == "其他"
+    # business_role for fallback rows is the explicit placeholder.
+    role = clf.business_role({"symbol": "FBKMYS"})
+    assert role == "待补业务标签"
+
+
+def test_e2e_all_three_source_rows_persist_distinct_display_strings(store_with_all_sources):
+    """Sanity: manual / rule / fallback rows must produce three different
+    display strings — they shouldn't collapse into one another after the
+    full pipeline runs."""
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH,
+                            market_store=store_with_all_sources)
+    mu = clf.display_tags({"symbol": "MU"})
+    rule = clf.display_tags({"symbol": "RULESAAS"})
+    fallback = clf.display_tags({"symbol": "FBKMYS"})
+    assert mu != rule
+    assert rule != fallback
+    assert mu != fallback
+    # And the underlying source labels persisted correctly.
+    rows = store_with_all_sources.get_company_concepts(
+        ["MU", "RULESAAS", "FBKMYS"]
+    )
+    assert rows["MU"]["source"] == "manual"
+    assert rows["RULESAAS"]["source"] == "rule"
+    assert rows["FBKMYS"]["source"] == "fallback"
