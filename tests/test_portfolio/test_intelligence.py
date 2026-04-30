@@ -388,6 +388,27 @@ class TestPortfolioVisualReport:
         ]
         assert all(path.exists() and path.stat().st_size > 0 for path in paths)
 
+    def test_render_portfolio_pdf(self, tmp_path):
+        from scripts.portfolio_intelligence import (
+            render_portfolio_report_images,
+            render_portfolio_report_pdf,
+        )
+
+        paths = render_portfolio_report_images(
+            action_signals=[],
+            summary=self._summary(),
+            kill_conditions={"NVDA": {"dna": "S", "conditions": ["估值严重脱离基本面"]}},
+            snapshot_line="NAV 快照 ET 2026-04-28",
+            output_dir=tmp_path,
+        )
+
+        pdf_path = render_portfolio_report_pdf(paths)
+
+        assert pdf_path is not None
+        assert pdf_path.name == "portfolio_intelligence.pdf"
+        assert pdf_path.exists()
+        assert pdf_path.read_bytes().startswith(b"%PDF")
+
 
 class TestPositionsAsOf:
     def _store(self, tmp_path):
