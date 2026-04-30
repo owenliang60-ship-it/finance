@@ -157,7 +157,10 @@ def build_registry(
         profile.setdefault("symbol", sym)
         rows.append(registry.classify(profile))
 
-    # Step 5: priority_list = portfolio ∪ watchlist ∪ override seed ∪ broad_top.
+    # Step 5: priority_list = portfolio ∪ watchlist ∪ broad_top.
+    # Override seed is NOT auto-added — overrides only apply to symbols
+    # already in scope from one of the three sources above. This matches
+    # ConceptRegistry.priority_list() and the file-level docstring contract.
     priority = registry.priority_list(
         broad_top_symbols=list(broad_top_symbols or []),
         portfolio_holdings=list(portfolio_holdings or []),
