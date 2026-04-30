@@ -21,7 +21,7 @@ import sys
 # Make scripts/ importable so we can call run_pipeline directly
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
-from run_breadth_pctile_verification import run_pipeline  # noqa: E402
+from run_breadth_pctile_verification import _read_target_prices, run_pipeline  # noqa: E402
 
 
 MANIFEST_PATH = PROJECT_ROOT / "backtest/breadth_study/manifests/breadth_pctile_v1.json"
@@ -139,6 +139,38 @@ def test_critical_columns_no_nan_explosion(tmp_path, manifest, manifest_sha):
     df = pd.read_csv(paths["param_summary"])
     for col in ("event_n_short", "event_n_long", "effective_years"):
         assert df[col].notna().all(), f"{col} has NaN"
+
+
+def test_read_target_prices_falls_back_when_market_db_missing_symbol(tmp_path, monkeypatch):
+    db_path = tmp_path / "market.db"
+    import sqlite3
+
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE daily_price (symbol TEXT, date TEXT, open REAL, close REAL)")
+    conn.execute(
+        "INSERT INTO daily_price VALUES ('SPY', '2024-01-02', 100.0, 101.0)"
+    )
+    conn.commit()
+    conn.close()
+
+    fallback = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
+            "open": [200.0, 201.0],
+            "close": [202.0, 203.0],
+        }
+    )
+
+    import run_breadth_pctile_verification as cli
+
+    monkeypatch.setattr(cli, "_fetch_yfinance_target_prices", lambda sym, start: fallback)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+
+    out = _read_target_prices(db_path, ["SPY", "IWM"], "2024-01-01")
+
+    assert len(out["SPY"]) == 1
+    assert len(out["IWM"]) == 2
+    assert out["IWM"]["close"].iloc[-1] == 203.0
 
 
 def test_byte_identical_reproducibility(tmp_path, manifest, manifest_sha):

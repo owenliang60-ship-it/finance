@@ -21,10 +21,15 @@ import argparse
 import json
 import sqlite3
 import subprocess
+import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from backtest.breadth_study.percentile_clusters import detect_cluster_patterns
 from backtest.breadth_study.percentile_manifest import (
@@ -35,7 +40,6 @@ from backtest.breadth_study.percentile_report import write_report
 from backtest.breadth_study.percentile_verifier import run_verification
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = PROJECT_ROOT / "backtest/breadth_study/manifests/breadth_pctile_v1.json"
 DEFAULT_MARKET_DB = PROJECT_ROOT / "data/market.db"
 DEFAULT_DAILY_BREADTH = PROJECT_ROOT / "data/breadth_study_1b/daily_breadth.csv"
@@ -46,7 +50,12 @@ DEFAULT_REPORT = PROJECT_ROOT / "docs/research/2026-04-29-breadth-pctile-verific
 def _read_target_prices(
     market_db: Path, targets: List[str], from_date: str
 ) -> Dict[str, pd.DataFrame]:
-    """Return {symbol: DataFrame[date, open, close]} for each target."""
+    """Return {symbol: DataFrame[date, open, close]} for each target.
+
+    market.db is authoritative when present. Some ETF benchmarks are not in the
+    broad universe store, so the runner falls back to yfinance for missing
+    target-only price series without writing anything back to market.db.
+    """
     conn = sqlite3.connect(str(market_db))
     try:
         out: Dict[str, pd.DataFrame] = {}
@@ -57,10 +66,40 @@ def _read_target_prices(
                 conn, params=(sym, from_date),
             )
             df["date"] = pd.to_datetime(df["date"])
+            if df.empty:
+                df = _fetch_yfinance_target_prices(sym, from_date)
+                time.sleep(1)
+            if df.empty:
+                raise SystemExit(f"Target price data missing for {sym}")
             out[sym] = df
     finally:
         conn.close()
     return out
+
+
+def _fetch_yfinance_target_prices(symbol: str, from_date: str) -> pd.DataFrame:
+    """Fetch target ETF prices via yfinance fallback."""
+    try:
+        import yfinance as yf
+    except ImportError:
+        return pd.DataFrame(columns=["date", "open", "close"])
+
+    try:
+        df = yf.Ticker(symbol).history(start=from_date, auto_adjust=False)
+    except Exception:
+        return pd.DataFrame(columns=["date", "open", "close"])
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["date", "open", "close"])
+
+    out = df.reset_index()
+    date_col = "Date" if "Date" in out.columns else out.columns[0]
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(out[date_col]).dt.tz_localize(None),
+            "open": pd.to_numeric(out["Open"], errors="coerce"),
+            "close": pd.to_numeric(out["Close"], errors="coerce"),
+        }
+    ).dropna(subset=["date", "open", "close"])
 
 
 def _build_target_returns(
