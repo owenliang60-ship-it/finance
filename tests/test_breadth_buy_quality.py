@@ -2,14 +2,24 @@
 from __future__ import annotations
 
 import pandas as pd
+import numpy as np
 import pytest
 
 from backtest.breadth_study.buy_quality import (
+    compute_better_than_random_pct_simple,
     distance_to_future_min,
     forward_percentile_rank,
     max_drawdown_after_entry,
+    sample_dates_stratified_cooldown,
 )
-from scripts.run_breadth_buy_quality import load_event_dates
+from scripts.run_breadth_buy_quality import (
+    SAMPLE_END,
+    SAMPLE_START,
+    compute_all_days_baseline,
+    load_event_dates,
+    load_target_closes,
+    run_buy_quality_pipeline,
+)
 
 
 def test_forward_percentile_rank_signal_is_minimum():
@@ -158,3 +168,83 @@ def test_load_event_dates_s2_with_delisted_snapshot():
         pd.Timestamp("2025-11-21"),
         pd.Timestamp("2026-03-25"),
     ]
+
+
+def test_events_csv_columns_and_rows(tmp_path):
+    """events.csv keeps every raw trigger x target x window row, including NaNs."""
+    run_buy_quality_pipeline(output_dir=tmp_path)
+
+    df = pd.read_csv(tmp_path / "events.csv")
+
+    expected_cols = {
+        "signal",
+        "universe",
+        "event_date",
+        "target",
+        "window_days",
+        "signal_close",
+        "rank_pct",
+        "max_dd",
+        "dist_to_min",
+    }
+    assert expected_cols.issubset(df.columns)
+    assert 850 <= len(df) <= 1000
+    assert len(df) == (14 + 14 + 16 + 17) * 3 * 5
+
+
+def test_load_target_closes_respects_sample_window():
+    """target close is clipped to the frozen sample window."""
+    closes = load_target_closes(["SPY"])["SPY"]
+
+    assert closes.index.min() >= pd.Timestamp(SAMPLE_START)
+    assert closes.index.max() <= pd.Timestamp(SAMPLE_END)
+
+
+def test_all_days_baseline_shape():
+    baseline = compute_all_days_baseline(targets=["SPY"], windows=[60])
+
+    assert "rank_pct" in baseline.columns
+    assert 1200 <= len(baseline) <= 1300
+
+
+def test_random_sample_simple_signal_clearly_better():
+    all_days_metric = pd.Series(np.random.default_rng(42).uniform(0, 1, 1300))
+    event_metric = pd.Series([0.05, 0.08, 0.12, 0.15, 0.10] * 3)
+
+    p = compute_better_than_random_pct_simple(
+        event_metric,
+        all_days_metric,
+        n_iter=10000,
+        lower_is_better=True,
+    )
+
+    assert p >= 0.95
+
+
+def test_random_sample_stratified_respects_per_year_cooldown():
+    """Stratified sampling enforces positional cooldown within each year only."""
+    rng = np.random.default_rng(42)
+    all_days_dates = pd.DatetimeIndex(pd.date_range("2021-02-01", periods=1300, freq="B"))
+    real_event_dates = [
+        pd.Timestamp("2022-03-15"),
+        pd.Timestamp("2022-09-01"),
+        pd.Timestamp("2023-04-03"),
+        pd.Timestamp("2023-10-16"),
+    ]
+
+    sampled = sample_dates_stratified_cooldown(
+        all_days_dates,
+        real_event_dates,
+        cooldown=20,
+        rng=rng,
+    )
+
+    years = sorted({date.year for date in sampled})
+    for year in years:
+        positions = sorted(
+            all_days_dates.get_loc(date) for date in sampled if date.year == year
+        )
+        for pos_a, pos_b in zip(positions[:-1], positions[1:]):
+            assert pos_b - pos_a >= 20, (
+                f"year {year}: positional gap {pos_b - pos_a} < cooldown 20"
+            )

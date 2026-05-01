@@ -2,10 +2,19 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+from argparse import ArgumentParser
 from pathlib import Path
 
 import pandas as pd
 
+from backtest.breadth_study.buy_quality import (
+    compute_better_than_random_pct_simple,
+    compute_better_than_random_pct_stratified,
+    distance_to_future_min,
+    forward_percentile_rank,
+    max_drawdown_after_entry,
+)
 from backtest.breadth_study.percentile_events import detect_upcross_events
 from backtest.breadth_study.percentile_verifier import _build_signal_for_manifest
 
@@ -27,6 +36,7 @@ SIGNALS = ["S1", "S2"]
 UNIVERSES = ["active", "with_delisted_partial"]
 TARGETS = ["SPY", "QQQ", "SOXX"]
 WINDOWS = [5, 20, 60, 120, 180]
+METRICS = ["rank_pct", "max_dd", "dist_to_min"]
 
 
 def load_event_dates(signal: str, universe: str) -> list[pd.Timestamp]:
@@ -47,3 +57,208 @@ def load_event_dates(signal: str, universe: str) -> list[pd.Timestamp]:
         cooldown_days=cooldown,
     )
     return [pd.Timestamp(ev["label"]) for ev in events]
+
+
+def load_target_closes(targets: list[str]) -> dict[str, pd.Series]:
+    """Read target closes from market.db in read-only mode, clipped to sample."""
+    conn = sqlite3.connect(
+        f"file:{PROJECT_ROOT / 'data/market.db'}?mode=ro",
+        uri=True,
+    )
+    try:
+        out: dict[str, pd.Series] = {}
+        for target in targets:
+            df = pd.read_sql(
+                "SELECT date, close FROM daily_price "
+                "WHERE symbol = ? AND date BETWEEN ? AND ? ORDER BY date",
+                conn,
+                params=(target, SAMPLE_START, SAMPLE_END),
+                parse_dates=["date"],
+            ).set_index("date")
+            out[target] = pd.to_numeric(df["close"], errors="coerce")
+        return out
+    finally:
+        conn.close()
+
+
+def _empty_metric_row(
+    signal: str,
+    universe: str,
+    event_date: pd.Timestamp,
+    target: str,
+    window: int,
+) -> dict[str, object]:
+    return {
+        "signal": signal,
+        "universe": universe,
+        "event_date": event_date,
+        "target": target,
+        "window_days": window,
+        "signal_close": float("nan"),
+        "rank_pct": float("nan"),
+        "max_dd": float("nan"),
+        "dist_to_min": float("nan"),
+    }
+
+
+def run_buy_quality_pipeline(output_dir: Path) -> pd.DataFrame:
+    """Write events.csv with every raw trigger x target x window row retained."""
+    rows: list[dict[str, object]] = []
+    target_closes = load_target_closes(TARGETS)
+
+    for signal in SIGNALS:
+        for universe in UNIVERSES:
+            events = load_event_dates(signal=signal, universe=universe)
+            for event_date in events:
+                for target in TARGETS:
+                    closes = target_closes[target]
+                    if event_date not in closes.index:
+                        for window in WINDOWS:
+                            rows.append(
+                                _empty_metric_row(
+                                    signal, universe, event_date, target, window
+                                )
+                            )
+                        continue
+
+                    signal_idx = int(closes.index.get_loc(event_date))
+                    signal_close = float(closes.iloc[signal_idx])
+                    for window in WINDOWS:
+                        rows.append({
+                            "signal": signal,
+                            "universe": universe,
+                            "event_date": event_date,
+                            "target": target,
+                            "window_days": window,
+                            "signal_close": signal_close,
+                            "rank_pct": forward_percentile_rank(closes, signal_idx, window),
+                            "max_dd": max_drawdown_after_entry(closes, signal_idx, window),
+                            "dist_to_min": distance_to_future_min(closes, signal_idx, window),
+                        })
+
+    df = pd.DataFrame(rows)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_dir / "events.csv", index=False)
+    return df
+
+
+def compute_all_days_baseline(
+    targets: list[str] | None = None,
+    windows: list[int] | None = None,
+) -> pd.DataFrame:
+    """Compute the same three metrics for every eligible target trading day."""
+    targets = targets or TARGETS
+    windows = windows or WINDOWS
+    target_closes = load_target_closes(targets)
+    rows: list[dict[str, object]] = []
+    for target, closes in target_closes.items():
+        for window in windows:
+            for idx in range(len(closes)):
+                if idx + window >= len(closes):
+                    break
+                rows.append({
+                    "target": target,
+                    "window_days": window,
+                    "date": closes.index[idx],
+                    "rank_pct": forward_percentile_rank(closes, idx, window),
+                    "max_dd": max_drawdown_after_entry(closes, idx, window),
+                    "dist_to_min": distance_to_future_min(closes, idx, window),
+                })
+    return pd.DataFrame(rows)
+
+
+def build_summary(
+    events_df: pd.DataFrame,
+    baseline_df: pd.DataFrame,
+    n_iter: int = 10000,
+) -> pd.DataFrame:
+    """Summarize event metrics against simple and stratified random baselines."""
+    rows: list[dict[str, object]] = []
+    events_df = events_df.copy()
+    events_df["event_date"] = pd.to_datetime(events_df["event_date"])
+    baseline_df = baseline_df.copy()
+    baseline_df["date"] = pd.to_datetime(baseline_df["date"])
+
+    group_cols = ["signal", "universe", "target", "window_days"]
+    for (signal, universe, target, window), group in events_df.groupby(group_cols):
+        cooldown = SIGNAL_COLUMNS[(signal, universe)][2]
+        baseline_cell = baseline_df[
+            (baseline_df["target"] == target)
+            & (baseline_df["window_days"] == window)
+        ].copy()
+        for metric in METRICS:
+            metric_values = pd.to_numeric(group[metric], errors="coerce")
+            valid_mask = metric_values.notna()
+            event_values = metric_values[valid_mask]
+            event_dates = group.loc[valid_mask, "event_date"]
+            baseline_metric = baseline_cell[["date", metric]].dropna().copy()
+            lower_is_better = metric != "max_dd"
+
+            p_simple = compute_better_than_random_pct_simple(
+                event_values,
+                baseline_metric[metric],
+                n_iter=n_iter,
+                lower_is_better=lower_is_better,
+            )
+            event_with_dates = pd.DataFrame({
+                "date": event_dates.to_numpy(),
+                "metric_value": event_values.to_numpy(),
+            })
+            baseline_with_dates = baseline_metric.rename(
+                columns={metric: "metric_value"}
+            )
+            p_stratified = compute_better_than_random_pct_stratified(
+                event_with_dates,
+                baseline_with_dates,
+                cooldown=cooldown,
+                n_iter=n_iter,
+                lower_is_better=lower_is_better,
+            )
+
+            rows.append({
+                "signal": signal,
+                "universe": universe,
+                "target": target,
+                "window_days": window,
+                "metric": metric,
+                "n_events": int(len(event_values)),
+                "event_median": float(event_values.median())
+                if len(event_values) else float("nan"),
+                "event_p25": float(event_values.quantile(0.25))
+                if len(event_values) else float("nan"),
+                "event_p75": float(event_values.quantile(0.75))
+                if len(event_values) else float("nan"),
+                "event_worst": float(event_values.max() if lower_is_better else event_values.min())
+                if len(event_values) else float("nan"),
+                "all_days_median": float(baseline_metric[metric].median())
+                if not baseline_metric.empty else float("nan"),
+                "p_simple": p_simple,
+                "p_stratified": p_stratified,
+            })
+    return pd.DataFrame(rows)
+
+
+def run_full_pipeline(output_dir: Path, n_iter: int = 10000) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    events = run_buy_quality_pipeline(output_dir)
+    baseline = compute_all_days_baseline(TARGETS, WINDOWS)
+    baseline.to_csv(output_dir / "all_days_baseline.csv", index=False)
+    summary = build_summary(events, baseline, n_iter=n_iter)
+    summary.to_csv(output_dir / "summary.csv", index=False)
+    return events, baseline, summary
+
+
+def main() -> None:
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=PROJECT_ROOT / "data/breadth_buy_quality",
+    )
+    parser.add_argument("--iterations", type=int, default=10000)
+    args = parser.parse_args()
+
+    run_full_pipeline(args.output, n_iter=args.iterations)
+
+
+if __name__ == "__main__":
+    main()
