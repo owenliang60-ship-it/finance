@@ -151,61 +151,42 @@ def compute_better_than_random_pct_stratified(
     if baseline.empty:
         return float("nan")
 
-    event_median = float(event_df["metric_value"].median())
     real_event_dates = list(event_df["date"])
+    baseline = baseline.sort_values("date").reset_index(drop=True)
     all_dates = pd.DatetimeIndex(baseline["date"])
-    metric_lookup = dict(zip(baseline["date"], baseline["metric_value"]))
+    metric_values = baseline["metric_value"].to_numpy(dtype=float)
     events_per_year = (
         pd.Series(real_event_dates).dt.year.value_counts().sort_index().to_dict()
     )
-    dates_by_year = {
-        int(year): sorted(pd.Timestamp(d) for d in dates)
-        for year, dates in pd.Series(all_dates).groupby(all_dates.year)
+    positions_by_year = {
+        int(year): np.flatnonzero(all_dates.year == year)
+        for year in sorted(set(all_dates.year))
     }
-    from backtest.breadth_study.percentile_perm import (
-        _sample_sequential,
-        _try_one_rejection_trial,
-    )
 
     rng = np.random.default_rng(seed)
-    probe_n = max(1, min(50, n_iter // 10))
-    probe_success = 0
-    for _ in range(probe_n):
-        sampled = _try_one_rejection_trial(
-            events_per_year,
-            dates_by_year,
-            cooldown,
-            rng,
-            max_attempts=50,
-        )
-        if sampled is not None:
-            probe_success += 1
-    use_rejection = (probe_success / probe_n) >= 0.30
+    event_median = float(event_df["metric_value"].median())
 
     random_medians: list[float] = []
     for _ in range(n_iter):
-        if use_rejection:
-            sampled = _try_one_rejection_trial(
-                events_per_year,
-                dates_by_year,
-                cooldown,
-                rng,
-                max_attempts=50,
-            )
-        else:
-            sampled = _sample_sequential(
-                events_per_year,
-                dates_by_year,
-                cooldown,
-                rng,
-            )
-        if not sampled:
+        sampled_positions: list[int] = []
+        feasible = True
+        for year, n_events in events_per_year.items():
+            year_positions = positions_by_year.get(int(year), np.array([], dtype=int))
+            pool_size = len(year_positions)
+            if pool_size < n_events:
+                feasible = False
+                break
+            reduced_size = pool_size - (n_events - 1) * cooldown
+            if reduced_size < n_events:
+                feasible = False
+                break
+            ys = np.sort(rng.choice(reduced_size, size=n_events, replace=False))
+            local_positions = ys + np.arange(n_events) * cooldown
+            sampled_positions.extend(year_positions[local_positions].tolist())
+        if not feasible or not sampled_positions:
             continue
-        vals = [
-            metric_lookup[d]
-            for d in sampled
-            if d in metric_lookup and not pd.isna(metric_lookup[d])
-        ]
+        vals = metric_values[np.asarray(sampled_positions, dtype=int)]
+        vals = vals[~np.isnan(vals)]
         if len(vals) >= max(1, len(real_event_dates) // 2):
             random_medians.append(float(np.median(vals)))
 
