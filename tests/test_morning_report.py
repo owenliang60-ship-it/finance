@@ -10,10 +10,13 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.morning_report import (
     build_morning_visual_sections,
+    _compute_breadth_s2_status,
+    _compute_breadth_s2_status_from_price_frames,
     format_section_broad_signal,
     format_section_layered_dv,
     format_section_layered_pmarp,
     format_section_layered_rvol,
+    format_section_market_timing_factor,
     format_section_a,
     format_section_b,
     format_section_c,
@@ -29,6 +32,54 @@ def sample_market_signals():
         "as_of": "2026-04-24",
         "symbols_scanned": 3,
         "symbols_with_data": 3,
+        "market_timing_factor": {
+            "criteria": "PMARP 上穿2% + Broad S2(MA20 breadth 上穿30%, cooldown=60)",
+            "alerts": [
+                {"kind": "pmarp_up2", "text": "PMARP 2% UPCROSS: SPY 1.5→2.4"},
+                {"kind": "breadth_s2_upcross", "text": "BREADTH S2 UPCROSS: broad MA20 participation 29.5%→31.2%"},
+            ],
+            "breadth_s2": {
+                "current": 0.312,
+                "previous": 0.295,
+                "upcross": True,
+                "as_of": "2026-04-24",
+            },
+            "rows": [
+                {
+                    "symbol": "SPY",
+                    "as_of": "2026-04-24",
+                    "pmarp_current": 2.4,
+                    "pmarp_previous": 1.5,
+                    "pmarp_up2": True,
+                    "breadth_s2_current": 0.312,
+                    "breadth_s2_previous": 0.295,
+                    "breadth_s2_upcross": True,
+                    "breadth_s2_as_of": "2026-04-24",
+                },
+                {
+                    "symbol": "QQQ",
+                    "as_of": "2026-04-24",
+                    "pmarp_current": 8.5,
+                    "pmarp_previous": 7.1,
+                    "pmarp_up2": False,
+                    "breadth_s2_current": 0.312,
+                    "breadth_s2_previous": 0.295,
+                    "breadth_s2_upcross": True,
+                    "breadth_s2_as_of": "2026-04-24",
+                },
+                {
+                    "symbol": "SOXX",
+                    "as_of": "2026-04-24",
+                    "pmarp_current": 12.0,
+                    "pmarp_previous": 10.0,
+                    "pmarp_up2": False,
+                    "breadth_s2_current": 0.312,
+                    "breadth_s2_previous": 0.295,
+                    "breadth_s2_upcross": True,
+                    "breadth_s2_as_of": "2026-04-24",
+                },
+            ],
+        },
         "broad_scan": {
             "criteria": "RVOL ≥3σ + 涨 ≥3%",
             "hits": [
@@ -267,6 +318,93 @@ class TestFormatSectionD:
 
 
 class TestLayeredSections:
+    def test_market_timing_factor_section_highlights_alerts(self):
+        result = format_section_market_timing_factor(sample_market_signals())
+        assert "大盘择时因子" in result
+        assert "SPY" in result
+        assert "QQQ" in result
+        assert "SOXX" in result
+        assert "2.4%" in result
+        assert "31.2%" in result
+        assert "PMARP 2% UPCROSS" in result
+        assert "BREADTH S2 UPCROSS" in result
+        assert "PMARP as_of 2026-04-24" in result
+        assert "S2 as_of 2026-04-24" in result
+        assert "2.4% (1.5%→2.4%)" not in result
+        assert "31.2% (29.5%→31.2%)" not in result
+        assert "1.5%→2.4%" in result
+        assert "29.5%→31.2%" in result
+        assert "🔴" in result
+
+    def test_compute_breadth_s2_status_uses_cooldown_aware_last_event(self):
+        dates = pd.date_range("2026-01-01", periods=70, freq="B")
+        breadth = [0.25] * 70
+        breadth[1] = 0.31     # raw upcross, accepted
+        breadth[68] = 0.29
+        breadth[69] = 0.32    # accepted: 68 positional days after first
+        daily = pd.DataFrame({"date": dates, "breadth_20": breadth})
+
+        result = _compute_breadth_s2_status(daily)
+
+        assert result["current"] == pytest.approx(0.32)
+        assert result["previous"] == pytest.approx(0.29)
+        assert result["upcross"] is True
+        assert result["last_event_date"] == dates[-1].date().isoformat()
+
+    def test_compute_breadth_s2_status_from_price_frames(self):
+        dates = pd.date_range("2026-01-01", periods=90, freq="B")
+        frames = {}
+        # 20 weak/flat days, then 68 days below MA20, then two-day recovery.
+        for i in range(10):
+            close = [100.0] * 20 + [90.0] * 68 + [89.0, 130.0]
+            if i < 4:
+                close[-1] = 80.0  # 6/10 above MA20 -> crosses 30%
+            frames[f"S{i}"] = pd.DataFrame({"close": close}, index=dates)
+
+        result = _compute_breadth_s2_status_from_price_frames(frames, min_symbols=5)
+
+        assert result["source"] == "live_broad_price_frames"
+        assert result["symbols_with_breadth"] == 10
+        assert result["current"] == pytest.approx(0.6)
+        assert result["previous"] == pytest.approx(0.0)
+        assert result["upcross"] is True
+
+    def test_compute_breadth_s2_status_from_price_frames_handles_nan_close(self):
+        dates = pd.date_range("2026-01-01", periods=30, freq="B")
+        close = [100.0] * 20 + [90.0] * 8 + [89.0, 130.0]
+        close[5] = None
+        frames = {"S0": pd.DataFrame({"close": close}, index=dates)}
+
+        result = _compute_breadth_s2_status_from_price_frames(
+            frames,
+            min_symbols=1,
+            allow_market_db_fallback=False,
+        )
+
+        assert result["source"] == "live_broad_price_frames"
+        assert result["symbols_with_breadth"] == 1
+        assert result["current"] == pytest.approx(1.0)
+        assert result["previous"] == pytest.approx(0.0)
+        assert result["upcross"] is True
+
+    def test_compute_breadth_s2_status_falls_back_to_market_db_frames(self, monkeypatch):
+        dates = pd.date_range("2026-01-01", periods=90, freq="B")
+        fallback_frames = {
+            f"S{i}": pd.DataFrame({"close": [100.0] * 20 + [90.0] * 68 + [89.0, 130.0]}, index=dates)
+            for i in range(5)
+        }
+        monkeypatch.setattr(
+            "scripts.morning_report._load_market_db_broad_price_frames",
+            lambda: fallback_frames,
+        )
+
+        result = _compute_breadth_s2_status_from_price_frames({}, min_symbols=5)
+
+        assert result["source"] == "market_db_broad_price_frames"
+        assert result["symbols_with_breadth"] == 5
+        assert result["current"] == pytest.approx(1.0)
+        assert result["upcross"] is True
+
     def test_broad_signal_groups_by_concept_bucket(self):
         result = format_section_broad_signal(sample_market_signals())
         assert "广扫标准" in result
@@ -373,7 +511,7 @@ class TestLayeredSections:
                     # 每行的单元格数也要匹配
                     for row in block["rows"]:
                         assert len(row["cells"]) == len(cols)
-        assert {"01_broad_signal", "02_pmarp",
+        assert {"00_market_timing_factor", "01_broad_signal", "02_pmarp",
                 "03_dv_acceleration", "04_rvol_sustained"}.issubset(slugs_seen)
 
     def test_layered_dv_missing_registry_keeps_legacy_bucket(self, monkeypatch):
@@ -471,6 +609,9 @@ class TestFormatMorningReport:
         )
 
         assert "1. 广扫标准" in result
+        assert "0. 大盘择时因子" in result
+        assert "PMARP 2% UPCROSS" in result
+        assert "BREADTH S2 UPCROSS" in result
         assert "2. PMARP 信号" in result
         assert "3. 量能加速" in result
         assert "4. RVOL 持续放量" in result
@@ -502,13 +643,23 @@ class TestMorningVisualReport:
         )
 
         assert [section["slug"] for section in sections] == [
+            "00_market_timing_factor",
             "01_broad_signal",
             "02_pmarp",
             "03_dv_acceleration",
             "04_rvol_sustained",
             "05_dollar_volume",
         ]
-        first_rows = sections[0]["blocks"][0]["rows"]
+        assert sections[0]["alerts"]
+        assert "PMARP as_of 2026-04-24" in sections[0]["subtitle"]
+        assert "S2 as_of 2026-04-24" in sections[0]["subtitle"]
+        first_timing_row = sections[0]["blocks"][0]["rows"][0]
+        assert "2.4% (1.5%→2.4%)" not in first_timing_row["cells"][1]
+        assert "1.5%→2.4%" == first_timing_row["cells"][1]
+        assert "31.2% (29.5%→31.2%)" not in first_timing_row["cells"][3]
+        assert "29.5%→31.2%" == first_timing_row["cells"][3]
+        assert sections[0]["blocks"][0]["grouped"] is False
+        first_rows = sections[1]["blocks"][0]["rows"]
         assert {row["layer"] for row in first_rows} == {"pool", "extend", "broad"}
         assert {row["bucket"] for row in first_rows} >= {"AI算力/云", "软件/SaaS", "数据中心电力"}
 
@@ -527,7 +678,7 @@ class TestMorningVisualReport:
             output_dir=tmp_path,
         )
 
-        assert len(paths) == 5
+        assert len(paths) == 6
         assert all(path.exists() for path in paths)
         assert all(path.suffix == ".png" for path in paths)
 

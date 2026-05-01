@@ -21,8 +21,11 @@ import time
 import json
 import argparse
 import logging
+import sqlite3
 from datetime import datetime
 from pathlib import Path
+
+import pandas as pd
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -31,7 +34,7 @@ from config.settings import (
     DATA_DIR, SCANS_DIR,
     DOLLAR_VOLUME_REPORT_N, DOLLAR_VOLUME_LOOKBACK,
     DV_ACCELERATION_THRESHOLD, RVOL_SUSTAINED_THRESHOLD,
-    EXTENDED_UNIVERSE_MIN_MCAP_B,
+    EXTENDED_UNIVERSE_MIN_MCAP_B, BROAD_UNIVERSE_MIN_MCAP_USD,
 )
 from src.data import get_symbols
 from src.indicators.dv_acceleration import format_dv
@@ -52,6 +55,13 @@ LAYER_LABELS = {
     "broad": "Broad ($1B-$10B)",
 }
 LAYER_TOP_N = 8
+MARKET_TIMING_TARGETS = ["SPY", "QQQ", "SOXX"]
+MARKET_TIMING_PRICE_ROWS = 260
+# S2 parameters are frozen from the buy-quality hardening study:
+# docs/plans/2026-05-01-breadth-buy-quality-hardening.md
+# docs/research/2026-05-01-breadth-buy-quality.md
+S2_BREADTH_THRESHOLD = 0.30
+S2_BREADTH_COOLDOWN_DAYS = 60
 
 from terminal.concept_classifier import get_report_concept_classifier
 
@@ -386,6 +396,323 @@ def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set) -> dict:
     return enriched
 
 
+def _load_market_timing_target_frames(
+    targets: list[str] | None = None,
+    rows_needed: int = MARKET_TIMING_PRICE_ROWS,
+) -> dict[str, object]:
+    """Load ETF close frames from market.db without mutating the database."""
+    targets = targets or MARKET_TIMING_TARGETS
+    db_path = DATA_DIR / "market.db"
+    if not db_path.exists():
+        logger.warning("market timing skipped: market.db missing at %s", db_path)
+        return {}
+
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        out = {}
+        for symbol in targets:
+            df = pd.read_sql(
+                "SELECT date, close FROM daily_price "
+                "WHERE symbol = ? ORDER BY date DESC LIMIT ?",
+                conn,
+                params=(symbol, rows_needed),
+                parse_dates=["date"],
+            )
+            if df.empty:
+                continue
+            out[symbol] = df.sort_values("date").reset_index(drop=True)
+        return out
+    except Exception as exc:
+        logger.warning("market timing target load failed: %s", exc)
+        return {}
+    finally:
+        conn.close()
+
+
+def _compute_breadth_s2_status(
+    daily_breadth: object,
+    threshold: float = S2_BREADTH_THRESHOLD,
+    cooldown_days: int = S2_BREADTH_COOLDOWN_DAYS,
+) -> dict:
+    """Compute broad S2 participation and cooldown-aware upcross status."""
+    from backtest.breadth_study.percentile_events import detect_upcross_events
+
+    df = daily_breadth.copy()
+    if "date" not in df.columns or "breadth_20" not in df.columns:
+        return {
+            "current": None,
+            "previous": None,
+            "as_of": None,
+            "threshold": threshold,
+            "cooldown_days": cooldown_days,
+            "upcross": False,
+            "error": "missing date or breadth_20",
+        }
+
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date").dropna(subset=["breadth_20"]).reset_index(drop=True)
+    if df.empty:
+        return {
+            "current": None,
+            "previous": None,
+            "as_of": None,
+            "threshold": threshold,
+            "cooldown_days": cooldown_days,
+            "upcross": False,
+            "error": "no breadth_20 data",
+        }
+
+    signal = pd.to_numeric(df["breadth_20"], errors="coerce")
+    signal.index = pd.DatetimeIndex(df["date"])
+    events = detect_upcross_events(signal, threshold=threshold, cooldown_days=cooldown_days)
+    latest_date = pd.Timestamp(df["date"].iloc[-1])
+    latest_event = pd.Timestamp(events[-1]["label"]) if events else None
+
+    return {
+        "current": float(signal.iloc[-1]),
+        "previous": float(signal.iloc[-2]) if len(signal) >= 2 else None,
+        "as_of": latest_date.date().isoformat(),
+        "threshold": threshold,
+        "cooldown_days": cooldown_days,
+        "upcross": latest_event == latest_date,
+        "last_event_date": latest_event.date().isoformat() if latest_event is not None else None,
+    }
+
+
+def _empty_breadth_s2_status(
+    error: str,
+    threshold: float = S2_BREADTH_THRESHOLD,
+    cooldown_days: int = S2_BREADTH_COOLDOWN_DAYS,
+    source: str | None = None,
+) -> dict:
+    payload = {
+        "current": None,
+        "previous": None,
+        "as_of": None,
+        "threshold": threshold,
+        "cooldown_days": cooldown_days,
+        "upcross": False,
+        "error": error,
+    }
+    if source:
+        payload["source"] = source
+    return payload
+
+
+def _load_market_db_broad_price_frames(rows_needed: int = MARKET_TIMING_PRICE_ROWS) -> dict[str, object]:
+    """Load broad-universe close frames from market.db for S2 fallback."""
+    db_path = DATA_DIR / "market.db"
+    if not db_path.exists():
+        logger.warning("breadth S2 fallback skipped: market.db missing at %s", db_path)
+        return {}
+
+    today = datetime.now().date().isoformat()
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        symbols_df = pd.read_sql(
+            """
+            WITH latest AS (
+                SELECT symbol, market_cap, date,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY symbol ORDER BY date DESC
+                       ) AS rn
+                FROM historical_market_cap
+                WHERE date <= ?
+            )
+            SELECT symbol
+            FROM latest
+            WHERE rn = 1
+              AND date >= date(?, '-90 days')
+              AND market_cap >= ?
+            ORDER BY symbol
+            """,
+            conn,
+            params=(today, today, BROAD_UNIVERSE_MIN_MCAP_USD),
+        )
+        symbols = symbols_df["symbol"].dropna().astype(str).tolist()
+        if not symbols:
+            return {}
+
+        frames = {}
+        chunk_size = 500
+        for start in range(0, len(symbols), chunk_size):
+            chunk = symbols[start:start + chunk_size]
+            placeholders = ",".join("?" for _ in chunk)
+            price_df = pd.read_sql(
+                f"""
+                SELECT symbol, date, close
+                FROM (
+                    SELECT symbol, date, close,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY symbol ORDER BY date DESC
+                           ) AS rn
+                    FROM daily_price
+                    WHERE symbol IN ({placeholders})
+                )
+                WHERE rn <= ?
+                ORDER BY symbol, date
+                """,
+                conn,
+                params=chunk + [rows_needed],
+                parse_dates=["date"],
+            )
+            if price_df.empty:
+                continue
+            price_df["close"] = pd.to_numeric(price_df["close"], errors="coerce")
+            price_df = price_df.dropna(subset=["symbol", "date", "close"])
+            for symbol, group in price_df.groupby("symbol"):
+                frame = group[["date", "close"]].sort_values("date").set_index("date")
+                if len(frame) >= 21:
+                    frames[str(symbol)] = frame
+        logger.info("breadth S2 market.db fallback loaded %d/%d symbols", len(frames), len(symbols))
+        return frames
+    except Exception as exc:
+        logger.warning("breadth S2 market.db fallback failed: %s", exc)
+        return {}
+    finally:
+        conn.close()
+
+
+def _compute_breadth_s2_status_from_price_frames(
+    price_frames: dict[str, object],
+    threshold: float = S2_BREADTH_THRESHOLD,
+    cooldown_days: int = S2_BREADTH_COOLDOWN_DAYS,
+    min_symbols: int = 50,
+    allow_market_db_fallback: bool = True,
+    source: str = "live_broad_price_frames",
+) -> dict:
+    """Compute live broad S2 participation from current broad price frames."""
+    if not price_frames:
+        if allow_market_db_fallback:
+            fallback_frames = _load_market_db_broad_price_frames()
+            return _compute_breadth_s2_status_from_price_frames(
+                fallback_frames,
+                threshold=threshold,
+                cooldown_days=cooldown_days,
+                min_symbols=min_symbols,
+                allow_market_db_fallback=False,
+                source="market_db_broad_price_frames",
+            )
+        return _empty_breadth_s2_status(
+            "no price frames",
+            threshold=threshold,
+            cooldown_days=cooldown_days,
+            source=source,
+        )
+
+    above_ma20 = {}
+    for symbol, frame in price_frames.items():
+        if frame is None or frame.empty or "close" not in frame.columns:
+            continue
+        close = pd.to_numeric(frame["close"], errors="coerce").dropna()
+        if len(close) < 21:
+            continue
+        ma20 = close.rolling(20, min_periods=20).mean()
+        signal = (close > ma20).astype(float)
+        above_ma20[symbol] = signal
+
+    if len(above_ma20) < min_symbols:
+        if allow_market_db_fallback:
+            fallback_frames = _load_market_db_broad_price_frames()
+            if fallback_frames:
+                return _compute_breadth_s2_status_from_price_frames(
+                    fallback_frames,
+                    threshold=threshold,
+                    cooldown_days=cooldown_days,
+                    min_symbols=min_symbols,
+                    allow_market_db_fallback=False,
+                    source="market_db_broad_price_frames",
+                )
+        return _empty_breadth_s2_status(
+            "insufficient breadth symbols: {}/{}".format(len(above_ma20), min_symbols),
+            threshold=threshold,
+            cooldown_days=cooldown_days,
+            source=source,
+        )
+
+    panel = pd.concat(above_ma20, axis=1).sort_index()
+    participation = panel.mean(axis=1, skipna=True).dropna()
+    daily = pd.DataFrame({
+        "date": participation.index,
+        "breadth_20": participation.values,
+    })
+    result = _compute_breadth_s2_status(
+        daily,
+        threshold=threshold,
+        cooldown_days=cooldown_days,
+    )
+    result["source"] = source
+    result["symbols_with_breadth"] = len(above_ma20)
+    return result
+
+
+def build_market_timing_factor_report(price_frames: dict[str, object] | None = None) -> dict:
+    """Build market-level timing factor payload for SPY/QQQ/SOXX + broad S2."""
+    from src.indicators.pmarp import analyze_pmarp
+
+    breadth = _compute_breadth_s2_status_from_price_frames(price_frames or {})
+    frames = _load_market_timing_target_frames(MARKET_TIMING_TARGETS)
+    rows = []
+    for symbol in MARKET_TIMING_TARGETS:
+        frame = frames.get(symbol)
+        pmarp = analyze_pmarp(frame) if frame is not None else {
+            "current": None,
+            "previous": None,
+            "crossover_2_up": False,
+            "description": "数据不足",
+        }
+        rows.append({
+            "symbol": symbol,
+            "as_of": (
+                pd.Timestamp(frame["date"].iloc[-1]).date().isoformat()
+                if frame is not None and not frame.empty else None
+            ),
+            "pmarp_current": pmarp.get("current"),
+            "pmarp_previous": pmarp.get("previous"),
+            "pmarp_up2": bool(pmarp.get("crossover_2_up")),
+            "pmarp_description": pmarp.get("description", ""),
+            "breadth_s2_current": breadth.get("current"),
+            "breadth_s2_previous": breadth.get("previous"),
+            "breadth_s2_upcross": bool(breadth.get("upcross")),
+            "breadth_s2_as_of": breadth.get("as_of"),
+        })
+
+    alerts = []
+    pmarp_alerts = [
+        row for row in rows
+        if row.get("pmarp_up2")
+    ]
+    if pmarp_alerts:
+        labels = [
+            "{} {:.1f}→{:.1f}".format(
+                row["symbol"],
+                row.get("pmarp_previous") or 0,
+                row.get("pmarp_current") or 0,
+            )
+            for row in pmarp_alerts
+        ]
+        alerts.append({
+            "kind": "pmarp_up2",
+            "text": "PMARP 2% UPCROSS: " + " / ".join(labels),
+        })
+    if breadth.get("upcross"):
+        alerts.append({
+            "kind": "breadth_s2_upcross",
+            "text": "BREADTH S2 UPCROSS: broad MA20 participation {:.1%}→{:.1%}".format(
+                breadth.get("previous") or 0,
+                breadth.get("current") or 0,
+            ),
+        })
+
+    return {
+        "criteria": "PMARP 上穿2% + Broad S2(MA20 breadth 上穿30%, cooldown=60)",
+        "targets": MARKET_TIMING_TARGETS,
+        "rows": rows,
+        "breadth_s2": breadth,
+        "alerts": alerts,
+    }
+
+
 def build_market_signal_report(symbols_override: list[str] | None = None) -> dict:
     """Build broad-universe technical signal payload for the merged morning report."""
     from datetime import date
@@ -504,6 +831,7 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         "as_of": as_of,
         "symbols_scanned": len(symbols),
         "symbols_with_data": len(price_frames),
+        "market_timing_factor": build_market_timing_factor_report(price_frames=price_frames),
         "layer_counts": {
             layer: sum(
                 1 for symbol in symbols
@@ -532,6 +860,100 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
             "hits": rvol_hits,
         },
     }
+
+
+def _fmt_pct_value(value: float | None, decimals: int = 1) -> str:
+    if value is None or pd.isna(value):
+        return "N/A"
+    return f"{value:.{decimals}f}%"
+
+
+def _fmt_participation(value: float | None) -> str:
+    if value is None or pd.isna(value):
+        return "N/A"
+    return "{:.1%}".format(value)
+
+
+def _fmt_transition(previous: float | None, current: float | None, formatter) -> str:
+    current_text = formatter(current)
+    if previous is None or pd.isna(previous):
+        return current_text
+    return "{}→{}".format(formatter(previous), current_text)
+
+
+def _format_market_timing_as_of(section: dict) -> str:
+    rows = section.get("rows", [])
+
+    def _dates(key: str) -> list[str]:
+        return sorted({str(row.get(key)) for row in rows if row.get(key)})
+
+    def _label(values: list[str]) -> str:
+        if not values:
+            return "N/A"
+        if len(values) == 1:
+            return values[0]
+        return "{}..{}".format(values[0], values[-1])
+
+    pmarp_dates = _dates("as_of")
+    breadth_dates = _dates("breadth_s2_as_of")
+    if not breadth_dates and section.get("breadth_s2", {}).get("as_of"):
+        breadth_dates = [str(section["breadth_s2"]["as_of"])]
+    return "PMARP as_of {} | S2 as_of {}".format(
+        _label(pmarp_dates),
+        _label(breadth_dates),
+    )
+
+
+def _format_timing_alerts(alerts: list[dict]) -> list[str]:
+    if not alerts:
+        return []
+    lines = ["🔴 *大盘择时触发*"]
+    for alert in alerts:
+        lines.append("🔴 *{}*".format(alert.get("text", "")))
+    return lines
+
+
+def format_section_market_timing_factor(market_signals: dict) -> str:
+    section = market_signals.get("market_timing_factor", {}) if market_signals else {}
+    lines = ["*0. 大盘择时因子*"]
+    as_of_label = _format_market_timing_as_of(section)
+    if section.get("criteria"):
+        lines.append("{} | {}".format(section["criteria"], as_of_label))
+    else:
+        lines.append(as_of_label)
+
+    lines.extend(_format_timing_alerts(section.get("alerts", [])))
+
+    rows = section.get("rows", [])
+    if not rows:
+        lines.append("数据不足")
+        return "\n".join(lines)
+
+    lines.append("指数 | PMARP | PMARP 2%上穿 | S2参与度(broad) | S2触发")
+    for row in rows:
+        pmarp_display = _fmt_transition(
+            row.get("pmarp_previous"),
+            row.get("pmarp_current"),
+            _fmt_pct_value,
+        )
+        pmarp_cross = "YES" if row.get("pmarp_up2") else "—"
+        breadth_display = _fmt_transition(
+            row.get("breadth_s2_previous"),
+            row.get("breadth_s2_current"),
+            _fmt_participation,
+        )
+        breadth_cross = "YES" if row.get("breadth_s2_upcross") else "—"
+        if row.get("pmarp_up2") or row.get("breadth_s2_upcross"):
+            pmarp_cross = "*{}*".format(pmarp_cross)
+            breadth_cross = "*{}*".format(breadth_cross)
+        lines.append("{} | {} | {} | {} | {}".format(
+            row.get("symbol", ""),
+            pmarp_display,
+            pmarp_cross,
+            breadth_display,
+            breadth_cross,
+        ))
+    return "\n".join(lines)
 
 
 def format_section_broad_signal(market_signals: dict) -> str:
@@ -790,6 +1212,48 @@ def build_morning_visual_sections(
     common_subtitle = "信号日 {} | Pool / Extend / Broad 分层，层内按题材聚类".format(as_of)
 
     if market_signals:
+        timing = market_signals.get("market_timing_factor", {})
+        if timing:
+            sections.append({
+                "slug": "00_market_timing_factor",
+                "title": "0. 大盘择时因子",
+                "subtitle": "{} | {} | 信号日 {}".format(
+                    timing.get("criteria", ""),
+                    _format_market_timing_as_of(timing),
+                    as_of,
+                ),
+                "alerts": timing.get("alerts", []),
+                "blocks": [
+                    {
+                        "title": "SPY / QQQ / SOXX",
+                        "columns": ["指数", "PMARP", "PMARP 2%上穿", "S2参与度(broad)", "S2触发"],
+                        "widths": [180, 260, 260, 330, 200],
+                        "grouped": False,
+                        "rows": [
+                            {
+                                "alert": row.get("pmarp_up2") or row.get("breadth_s2_upcross"),
+                                "cells": [
+                                    row.get("symbol", ""),
+                                    _fmt_transition(
+                                        row.get("pmarp_previous"),
+                                        row.get("pmarp_current"),
+                                        _fmt_pct_value,
+                                    ),
+                                    "YES" if row.get("pmarp_up2") else "—",
+                                    _fmt_transition(
+                                        row.get("breadth_s2_previous"),
+                                        row.get("breadth_s2_current"),
+                                        _fmt_participation,
+                                    ),
+                                    "YES" if row.get("breadth_s2_upcross") else "—",
+                                ],
+                            }
+                            for row in timing.get("rows", [])
+                        ],
+                    },
+                ],
+            })
+
         broad = market_signals.get("broad_scan", {})
         sections.append({
             "slug": "01_broad_signal",
@@ -1011,8 +1475,13 @@ def _rows_by_layer_and_bucket(rows: list[dict]) -> dict:
 
 def _estimate_visual_height(section: dict) -> int:
     height = 260
+    height += 96 * len(section.get("alerts", []))
     for block in section.get("blocks", []):
         height += 90
+        if block.get("grouped") is False:
+            rows = block.get("rows", [])
+            height += _VISUAL_TABLE_HEADER_H + _VISUAL_TABLE_ROW_H * max(1, len(rows)) + 46
+            continue
         grouped = _rows_by_layer_and_bucket(block.get("rows", []))
         for layer in LAYER_ORDER:
             layer_rows = sum(len(rows) for rows in grouped.get(layer, {}).values())
@@ -1103,11 +1572,44 @@ def render_morning_report_images(
         _draw_fit(draw, (margin + 4, y), section.get("subtitle", ""), subtitle_font, "#475569", content_w)
         y += 72
 
+        for alert in section.get("alerts", []):
+            draw.rounded_rectangle([margin, y, width - margin, y + 78], radius=18, fill="#fee2e2")
+            _draw_fit(
+                draw,
+                (margin + 28, y + 15),
+                "🔴 " + alert.get("text", ""),
+                _load_visual_font(40, bold=True),
+                "#b91c1c",
+                content_w - 56,
+            )
+            y += 96
+
         for block in section.get("blocks", []):
             draw.text((margin, y), block["title"], font=block_font, fill="#111827")
             y += 62
-            grouped = _rows_by_layer_and_bucket(block.get("rows", []))
             col_widths = _scaled_widths(block.get("widths", []), content_w)
+
+            if block.get("grouped") is False:
+                y = _draw_visual_table_header(draw, margin, y, col_widths, block["columns"], header_font)
+                rows = block.get("rows", [])
+                if not rows:
+                    draw.text((margin + 18, y), "无数据", font=small_font, fill="#64748b")
+                    y += 58
+                for row_idx, row in enumerate(rows):
+                    row_h = _VISUAL_TABLE_ROW_H
+                    fill = "#fee2e2" if row.get("alert") else ("#ffffff" if row_idx % 2 == 0 else "#f8fafc")
+                    text_fill = "#b91c1c" if row.get("alert") else "#111827"
+                    font = _load_visual_font(32, bold=True) if row.get("alert") else row_font
+                    draw.rectangle([margin, y, width - margin, y + row_h], fill=fill)
+                    cur_x = margin
+                    for col_width, cell in zip(col_widths, row["cells"]):
+                        _draw_fit(draw, (cur_x + 18, y + 13), cell, font, text_fill, col_width - 34)
+                        cur_x += col_width
+                    y += row_h
+                y += 46
+                continue
+
+            grouped = _rows_by_layer_and_bucket(block.get("rows", []))
 
             for layer in LAYER_ORDER:
                 layer_rows = sum(len(rows) for rows in grouped.get(layer, {}).values())
@@ -1416,6 +1918,9 @@ def format_morning_report(
             market_signals.get("symbols_with_data", 0),
             market_signals.get("symbols_scanned", 0),
         ))
+        lines.append("")
+
+        lines.append(format_section_market_timing_factor(market_signals))
         lines.append("")
 
         lines.append(format_section_broad_signal(market_signals))
