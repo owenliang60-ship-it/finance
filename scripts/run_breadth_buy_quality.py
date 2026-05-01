@@ -273,7 +273,7 @@ def plot_event_vs_baseline_box(
     fig, ax = plt.subplots(figsize=(7, 5))
     ax.boxplot(
         [baseline_vals, event_vals],
-        labels=["All trading days", f"{signal} events (n={len(event_vals)})"],
+        tick_labels=["All trading days", f"{signal} events (n={len(event_vals)})"],
     )
     ax.set_title(f"{signal} ({universe}) | {target} | {window}d | {metric}")
     ax.set_ylabel(metric)
