@@ -21,6 +21,10 @@ logs/
 
 # Data (可能包含大文件)
 /data/*
+!/data/breadth_buy_quality/
+data/breadth_buy_quality/*.csv
+data/breadth_buy_quality/charts/
+!data/breadth_buy_quality/.gitkeep
 
 # Portfolio holdings (real positions, cost basis, trade history)
 portfolio/holdings/holdings.json
