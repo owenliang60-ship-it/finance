@@ -110,3 +110,41 @@ def test_long_horizon_diff_does_not_affect_passes(verification_outputs):
     for _, row in primary.iterrows():
         s = sum(int(bool(row[c])) for c in bool_cols)
         assert row["passes_count_param"] == s
+
+
+def test_absolute_signal_mode_uses_raw_breadth_without_percentile_warmup(
+    manifest, synthetic_inputs
+):
+    daily_breadth, target_prices_dict, target_returns = synthetic_inputs
+    absolute_manifest = {
+        **manifest,
+        "version": "absolute_test",
+        "signal_mode": "absolute",
+        "thresholds": {
+            "low_recovery": [0.20, 0.25, 0.30],
+            "high_strength": [0.70, 0.75, 0.80],
+        },
+        "percentile_lookback": 0,
+        "signal_smoother": "RAW",
+        "targets": ["SPY", "QQQ", "SOXX"],
+        "hurdle_thresholds": {
+            **manifest["hurdle_thresholds"],
+            "h3_target_same_sign_min": 3,
+        },
+        "permutation": {**manifest["permutation"], "trials": 10},
+        "strategy_bootstrap": {**manifest["strategy_bootstrap"], "trials": 10},
+    }
+
+    primary, sensitivity, table = run_verification(
+        absolute_manifest, daily_breadth, target_prices_dict, target_returns,
+    )
+
+    assert len(primary) == 12
+    assert len(sensitivity) == 12
+    assert len(table) == 144
+    assert primary["first_valid_date"].min() == daily_breadth["date"].iloc[0].strftime(
+        "%Y-%m-%d"
+    )
+    assert primary["effective_years"].min() == pytest.approx(
+        len(daily_breadth) / 252.0, abs=0.01
+    )

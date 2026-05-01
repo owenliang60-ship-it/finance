@@ -15,6 +15,9 @@ from backtest.breadth_study.percentile_manifest import (
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / (
     "backtest/breadth_study/manifests/breadth_pctile_v1.json"
 )
+ABSOLUTE_MANIFEST_PATH = Path(__file__).resolve().parents[1] / (
+    "backtest/breadth_study/manifests/breadth_absolute_v1.json"
+)
 
 
 def test_manifest_loads_with_required_keys():
@@ -47,6 +50,16 @@ def test_sha256_stable():
     assert h1 == h2 and len(h1) == 64
     # All hex chars
     int(h1, 16)
+
+
+def test_absolute_manifest_loads_requested_scope():
+    m = load_manifest(ABSOLUTE_MANIFEST_PATH)
+    assert m["version"] == "absolute_v1"
+    assert m["signal_mode"] == "absolute"
+    assert m["targets"] == ["SPY", "QQQ", "SOXX"]
+    assert m["thresholds"]["low_recovery"] == [0.20, 0.25, 0.30]
+    assert m["thresholds"]["high_strength"] == [0.70, 0.75, 0.80]
+    assert m["hurdle_thresholds"]["h3_target_same_sign_min"] == 3
 
 
 def test_manifest_rejects_missing_keys(tmp_path):

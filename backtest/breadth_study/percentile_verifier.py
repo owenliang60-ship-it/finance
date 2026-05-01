@@ -119,6 +119,29 @@ def _expected_sign_for(event_type: str) -> int:
     raise ValueError(f"Unknown event_type: {event_type}")
 
 
+def _build_signal_for_manifest(
+    manifest: Dict[str, Any],
+    daily_breadth: pd.DataFrame,
+    breadth_col: str,
+) -> pd.Series:
+    """Build the event-detection signal requested by the manifest.
+
+    ``percentile`` is the frozen v1.2 path. ``absolute`` reuses the same
+    upcross/hurdle machinery but applies thresholds directly to raw breadth
+    fractions such as 0.20 or 0.75.
+    """
+    signal_mode = manifest.get("signal_mode", "percentile")
+    if signal_mode == "percentile":
+        return build_percentile_signal(
+            breadth=daily_breadth[breadth_col],
+            lookback=manifest["percentile_lookback"],
+            smoother_window=5,
+        )
+    if signal_mode == "absolute":
+        return pd.to_numeric(daily_breadth[breadth_col], errors="coerce")
+    raise ValueError(f"Unknown signal_mode: {signal_mode}")
+
+
 def _build_param_summary(
     manifest: Dict[str, Any],
     daily_breadth: pd.DataFrame,
@@ -146,11 +169,7 @@ def _build_param_summary(
                 f"daily_breadth missing column {breadth_col!r}; "
                 f"have={list(daily_breadth.columns)}"
             )
-        signal = build_percentile_signal(
-            breadth=daily_breadth[breadth_col],
-            lookback=manifest["percentile_lookback"],
-            smoother_window=5,
-        )
+        signal = _build_signal_for_manifest(manifest, daily_breadth, breadth_col)
         first_valid, last, effective_years = compute_effective_sample_years(
             signal, daily_breadth["date"]
         )

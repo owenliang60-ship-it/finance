@@ -120,7 +120,7 @@ def _render_sensitivity_comparison(
 
 
 def _render_cluster_detail(
-    clusters: List[Dict[str, Any]], summary: pd.DataFrame
+    clusters: List[Dict[str, Any]], summary: pd.DataFrame, target_count: int
 ) -> str:
     if not clusters:
         return "_No clusters found._\n"
@@ -149,7 +149,7 @@ def _render_cluster_detail(
                 f"excess_cagr_pp={r['excess_cagr_pp']:.2f} "
                 f"[{r['excess_cagr_ci_low']:.2f}, {r['excess_cagr_ci_high']:.2f}], "
                 f"share_negative={r['excess_cagr_share_negative']:.2f}, "
-                f"target_same_sign={r['target_same_sign_count']}/5, "
+                f"target_same_sign={r['target_same_sign_count']}/{target_count}, "
                 f"short_horizon_same_sign={r['short_horizon_same_sign_count']}/3, "
                 f"long_horizon_diff={r['long_horizon_diff']:.4f}"
             )
@@ -236,7 +236,7 @@ def render_report(
     # Effective-sample header value (use min/max from primary so window is honest)
     first_valid = primary_summary["first_valid_date"].min()
     last_date = primary_summary["last_date"].max()
-    effective_years = float(primary_summary["effective_years"].iloc[0])
+    effective_years = float(primary_summary["effective_years"].min())
 
     primary_target = manifest["primary_target"]
     primary_horizon = manifest["primary_horizon"]
@@ -244,12 +244,17 @@ def render_report(
     sensitivity_horizon = manifest["sensitivity_horizon"]
     one_way_bps = manifest["strategy_costs"]["one_way_bps"]
     round_trip_bps = manifest["strategy_costs"]["round_trip_bps"]
+    signal_mode = manifest.get("signal_mode", "percentile")
+    title_signal = "Absolute" if signal_mode == "absolute" else "Percentile"
+    diagnostic_rows = len(verification_table)
+    target_count = len(manifest["targets"])
 
     parts: List[str] = []
-    parts.append(f"# Breadth Percentile Upcross Verification — {manifest['version']}\n")
+    parts.append(f"# Breadth {title_signal} Upcross Verification — {manifest['version']}\n")
     parts.append(f"**Manifest version**: {manifest['version']}")
     parts.append(f"**Manifest SHA256**: `{manifest_sha256}`")
     parts.append(f"**Frozen at**: {manifest['frozen_at']}")
+    parts.append(f"**Signal mode**: {signal_mode}")
     parts.append(f"**Data sample**: {manifest['from_date']} → {last_date}")
     parts.append(
         f"**Effective sample**: {first_valid} → {last_date} "
@@ -295,10 +300,10 @@ def render_report(
     parts.append("")
 
     parts.append("## Cluster Pattern Detail — Primary\n")
-    parts.append(_render_cluster_detail(primary_clusters, primary_summary))
+    parts.append(_render_cluster_detail(primary_clusters, primary_summary, target_count))
 
     parts.append("## Cluster Pattern Detail — Sensitivity\n")
-    parts.append(_render_cluster_detail(sensitivity_clusters, sensitivity_summary))
+    parts.append(_render_cluster_detail(sensitivity_clusters, sensitivity_summary, target_count))
 
     parts.append("## Bootstrap CI for Excess CAGR (primary)\n")
     parts.append(_render_bootstrap_ci(primary_summary, h6_threshold_pp))
@@ -315,7 +320,7 @@ def render_report(
     parts.append("## Isolated Pass Detail — Primary\n")
     parts.append(_render_isolated_passes(primary_isolated))
 
-    parts.append("## Diagnostic: 240-row Verification Table\n")
+    parts.append(f"## Diagnostic: {diagnostic_rows}-row Verification Table\n")
     parts.append("<details><summary>Click to expand</summary>\n")
     parts.append(verification_table.to_markdown(index=False, floatfmt=".4f"))
     parts.append("\n</details>\n")
