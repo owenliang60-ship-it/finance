@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from backtest.breadth_study.buy_quality import (
+    distance_to_future_min,
     forward_percentile_rank,
     max_drawdown_after_entry,
 )
@@ -68,3 +69,27 @@ def test_max_drawdown_simple():
     dd = max_drawdown_after_entry(closes, signal_idx=0, window=3)
 
     assert dd == pytest.approx(-0.10)
+
+
+def test_distance_signal_is_min():
+    """信号日就是未来最低 -> 距离 = 0."""
+    closes = pd.Series(
+        [100.0, 110, 120],
+        index=pd.date_range("2025-01-01", periods=3),
+    )
+
+    distance = distance_to_future_min(closes, signal_idx=0, window=2)
+
+    assert distance == 0.0
+
+
+def test_distance_simple():
+    """信号日 100, 未来最低 90 -> 距离 = (100-90)/90 = 11.11%."""
+    closes = pd.Series(
+        [100.0, 95, 90, 105],
+        index=pd.date_range("2025-01-01", periods=4),
+    )
+
+    distance = distance_to_future_min(closes, signal_idx=0, window=3)
+
+    assert distance == pytest.approx(10 / 90)
