@@ -9,6 +9,7 @@ from backtest.breadth_study.buy_quality import (
     forward_percentile_rank,
     max_drawdown_after_entry,
 )
+from scripts.run_breadth_buy_quality import load_event_dates
 
 
 def test_forward_percentile_rank_signal_is_minimum():
@@ -93,3 +94,67 @@ def test_distance_simple():
     distance = distance_to_future_min(closes, signal_idx=0, window=3)
 
     assert distance == pytest.approx(10 / 90)
+
+
+def test_load_event_dates_s1_active_snapshot():
+    events = load_event_dates(signal="S1", universe="active")
+
+    assert len(events) == 14
+    assert events[:3] == [
+        pd.Timestamp("2021-12-02"),
+        pd.Timestamp("2022-01-24"),
+        pd.Timestamp("2022-02-25"),
+    ]
+    assert events[-3:] == [
+        pd.Timestamp("2025-03-14"),
+        pd.Timestamp("2025-04-24"),
+        pd.Timestamp("2026-03-24"),
+    ]
+
+
+def test_load_event_dates_s1_with_delisted_snapshot():
+    events = load_event_dates(signal="S1", universe="with_delisted_partial")
+
+    assert len(events) == 14
+    assert events[:3] == [
+        pd.Timestamp("2021-12-02"),
+        pd.Timestamp("2022-01-24"),
+        pd.Timestamp("2022-02-24"),
+    ]
+    assert events[-3:] == [
+        pd.Timestamp("2025-03-14"),
+        pd.Timestamp("2025-04-24"),
+        pd.Timestamp("2026-03-24"),
+    ]
+
+
+def test_load_event_dates_s2_active_snapshot():
+    events = load_event_dates(signal="S2", universe="active")
+
+    assert len(events) == 16
+    assert events[:3] == [
+        pd.Timestamp("2021-06-21"),
+        pd.Timestamp("2021-09-22"),
+        pd.Timestamp("2021-12-21"),
+    ]
+    assert events[-3:] == [
+        pd.Timestamp("2025-08-04"),
+        pd.Timestamp("2025-11-21"),
+        pd.Timestamp("2026-03-25"),
+    ]
+
+
+def test_load_event_dates_s2_with_delisted_snapshot():
+    events = load_event_dates(signal="S2", universe="with_delisted_partial")
+
+    assert len(events) == 17
+    assert events[:3] == [
+        pd.Timestamp("2021-03-10"),
+        pd.Timestamp("2021-06-21"),
+        pd.Timestamp("2021-09-22"),
+    ]
+    assert events[-3:] == [
+        pd.Timestamp("2025-08-04"),
+        pd.Timestamp("2025-11-21"),
+        pd.Timestamp("2026-03-25"),
+    ]
