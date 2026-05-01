@@ -3,10 +3,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from backtest.breadth_study.buy_quality import (
     compute_better_than_random_pct_simple,
@@ -18,7 +23,6 @@ from backtest.breadth_study.buy_quality import (
 from backtest.breadth_study.percentile_events import detect_upcross_events
 from backtest.breadth_study.percentile_verifier import _build_signal_for_manifest
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DAILY_BREADTH_PATH = PROJECT_ROOT / "data/breadth_study_1b/daily_breadth.csv"
 MANIFEST_PATH = PROJECT_ROOT / "backtest/breadth_study/manifests/breadth_absolute_v1.json"
 
