@@ -21,11 +21,6 @@ logs/
 
 # Data (可能包含大文件)
 /data/*
-!/data/breadth_study/
-!/data/breadth_study/.gitkeep
-/data/breadth_study/*.csv
-/data/breadth_study/charts/
-/data/breadth_study/sidecar/
 
 # Portfolio holdings (real positions, cost basis, trade history)
 portfolio/holdings/holdings.json
