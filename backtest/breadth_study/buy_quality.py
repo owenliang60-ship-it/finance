@@ -24,3 +24,20 @@ def forward_percentile_rank(closes: pd.Series, signal_idx: int, window: int) -> 
 
     rank = (forward_window < signal_close).sum() / window
     return float(rank)
+
+
+def max_drawdown_after_entry(closes: pd.Series, signal_idx: int, window: int) -> float:
+    """Return worst close-to-entry drawdown after the signal day."""
+    end_idx = signal_idx + window
+    if signal_idx < 0 or end_idx >= len(closes):
+        return float("nan")
+
+    signal_close = pd.to_numeric(pd.Series([closes.iloc[signal_idx]]), errors="coerce").iloc[0]
+    future = pd.to_numeric(closes.iloc[signal_idx + 1 : end_idx + 1], errors="coerce")
+    if pd.isna(signal_close) or future.isna().any() or signal_close <= 0:
+        return float("nan")
+
+    future_min = future.min()
+    if future_min >= signal_close:
+        return 0.0
+    return float(future_min / signal_close - 1.0)
