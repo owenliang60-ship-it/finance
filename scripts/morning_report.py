@@ -34,7 +34,7 @@ from config.settings import (
     DATA_DIR, SCANS_DIR,
     DOLLAR_VOLUME_REPORT_N, DOLLAR_VOLUME_LOOKBACK,
     DV_ACCELERATION_THRESHOLD, RVOL_SUSTAINED_THRESHOLD,
-    EXTENDED_UNIVERSE_MIN_MCAP_B,
+    EXTENDED_UNIVERSE_MIN_MCAP_B, BROAD_UNIVERSE_MIN_MCAP_USD,
 )
 from src.data import get_symbols
 from src.indicators.dv_acceleration import format_dv
@@ -57,9 +57,11 @@ LAYER_LABELS = {
 LAYER_TOP_N = 8
 MARKET_TIMING_TARGETS = ["SPY", "QQQ", "SOXX"]
 MARKET_TIMING_PRICE_ROWS = 260
+# S2 parameters are frozen from the buy-quality hardening study:
+# docs/plans/2026-05-01-breadth-buy-quality-hardening.md
+# docs/research/2026-05-01-breadth-buy-quality.md
 S2_BREADTH_THRESHOLD = 0.30
 S2_BREADTH_COOLDOWN_DAYS = 60
-S2_BREADTH_CSV = DATA_DIR / "breadth_study_1b" / "daily_breadth.csv"
 
 from terminal.concept_classifier import get_report_concept_classifier
 
@@ -477,32 +479,98 @@ def _compute_breadth_s2_status(
     }
 
 
-def _load_breadth_s2_status(path: Path = S2_BREADTH_CSV) -> dict:
-    if not path.exists():
-        return {
-            "current": None,
-            "previous": None,
-            "as_of": None,
-            "threshold": S2_BREADTH_THRESHOLD,
-            "cooldown_days": S2_BREADTH_COOLDOWN_DAYS,
-            "upcross": False,
-            "error": f"missing {path}",
-        }
+def _empty_breadth_s2_status(
+    error: str,
+    threshold: float = S2_BREADTH_THRESHOLD,
+    cooldown_days: int = S2_BREADTH_COOLDOWN_DAYS,
+    source: str | None = None,
+) -> dict:
+    payload = {
+        "current": None,
+        "previous": None,
+        "as_of": None,
+        "threshold": threshold,
+        "cooldown_days": cooldown_days,
+        "upcross": False,
+        "error": error,
+    }
+    if source:
+        payload["source"] = source
+    return payload
+
+
+def _load_market_db_broad_price_frames(rows_needed: int = MARKET_TIMING_PRICE_ROWS) -> dict[str, object]:
+    """Load broad-universe close frames from market.db for S2 fallback."""
+    db_path = DATA_DIR / "market.db"
+    if not db_path.exists():
+        logger.warning("breadth S2 fallback skipped: market.db missing at %s", db_path)
+        return {}
+
+    today = datetime.now().date().isoformat()
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
-        daily = pd.read_csv(path, parse_dates=["date"])
+        symbols_df = pd.read_sql(
+            """
+            WITH latest AS (
+                SELECT symbol, market_cap, date,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY symbol ORDER BY date DESC
+                       ) AS rn
+                FROM historical_market_cap
+                WHERE date <= ?
+            )
+            SELECT symbol
+            FROM latest
+            WHERE rn = 1
+              AND date >= date(?, '-90 days')
+              AND market_cap >= ?
+            ORDER BY symbol
+            """,
+            conn,
+            params=(today, today, BROAD_UNIVERSE_MIN_MCAP_USD),
+        )
+        symbols = symbols_df["symbol"].dropna().astype(str).tolist()
+        if not symbols:
+            return {}
+
+        frames = {}
+        chunk_size = 500
+        for start in range(0, len(symbols), chunk_size):
+            chunk = symbols[start:start + chunk_size]
+            placeholders = ",".join("?" for _ in chunk)
+            price_df = pd.read_sql(
+                f"""
+                SELECT symbol, date, close
+                FROM (
+                    SELECT symbol, date, close,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY symbol ORDER BY date DESC
+                           ) AS rn
+                    FROM daily_price
+                    WHERE symbol IN ({placeholders})
+                )
+                WHERE rn <= ?
+                ORDER BY symbol, date
+                """,
+                conn,
+                params=chunk + [rows_needed],
+                parse_dates=["date"],
+            )
+            if price_df.empty:
+                continue
+            price_df["close"] = pd.to_numeric(price_df["close"], errors="coerce")
+            price_df = price_df.dropna(subset=["symbol", "date", "close"])
+            for symbol, group in price_df.groupby("symbol"):
+                frame = group[["date", "close"]].sort_values("date").set_index("date")
+                if len(frame) >= 21:
+                    frames[str(symbol)] = frame
+        logger.info("breadth S2 market.db fallback loaded %d/%d symbols", len(frames), len(symbols))
+        return frames
     except Exception as exc:
-        return {
-            "current": None,
-            "previous": None,
-            "as_of": None,
-            "threshold": S2_BREADTH_THRESHOLD,
-            "cooldown_days": S2_BREADTH_COOLDOWN_DAYS,
-            "upcross": False,
-            "error": str(exc),
-        }
-    result = _compute_breadth_s2_status(daily)
-    result["source"] = "daily_breadth_csv"
-    return result
+        logger.warning("breadth S2 market.db fallback failed: %s", exc)
+        return {}
+    finally:
+        conn.close()
 
 
 def _compute_breadth_s2_status_from_price_frames(
@@ -510,10 +578,27 @@ def _compute_breadth_s2_status_from_price_frames(
     threshold: float = S2_BREADTH_THRESHOLD,
     cooldown_days: int = S2_BREADTH_COOLDOWN_DAYS,
     min_symbols: int = 50,
+    allow_market_db_fallback: bool = True,
+    source: str = "live_broad_price_frames",
 ) -> dict:
     """Compute live broad S2 participation from current broad price frames."""
     if not price_frames:
-        return _load_breadth_s2_status()
+        if allow_market_db_fallback:
+            fallback_frames = _load_market_db_broad_price_frames()
+            return _compute_breadth_s2_status_from_price_frames(
+                fallback_frames,
+                threshold=threshold,
+                cooldown_days=cooldown_days,
+                min_symbols=min_symbols,
+                allow_market_db_fallback=False,
+                source="market_db_broad_price_frames",
+            )
+        return _empty_breadth_s2_status(
+            "no price frames",
+            threshold=threshold,
+            cooldown_days=cooldown_days,
+            source=source,
+        )
 
     above_ma20 = {}
     for symbol, frame in price_frames.items():
@@ -524,11 +609,26 @@ def _compute_breadth_s2_status_from_price_frames(
             continue
         ma20 = close.rolling(20, min_periods=20).mean()
         signal = (close > ma20).astype(float)
-        signal.index = pd.DatetimeIndex(frame.index)
         above_ma20[symbol] = signal
 
     if len(above_ma20) < min_symbols:
-        return _load_breadth_s2_status()
+        if allow_market_db_fallback:
+            fallback_frames = _load_market_db_broad_price_frames()
+            if fallback_frames:
+                return _compute_breadth_s2_status_from_price_frames(
+                    fallback_frames,
+                    threshold=threshold,
+                    cooldown_days=cooldown_days,
+                    min_symbols=min_symbols,
+                    allow_market_db_fallback=False,
+                    source="market_db_broad_price_frames",
+                )
+        return _empty_breadth_s2_status(
+            "insufficient breadth symbols: {}/{}".format(len(above_ma20), min_symbols),
+            threshold=threshold,
+            cooldown_days=cooldown_days,
+            source=source,
+        )
 
     panel = pd.concat(above_ma20, axis=1).sort_index()
     participation = panel.mean(axis=1, skipna=True).dropna()
@@ -541,7 +641,7 @@ def _compute_breadth_s2_status_from_price_frames(
         threshold=threshold,
         cooldown_days=cooldown_days,
     )
-    result["source"] = "live_broad_price_frames"
+    result["source"] = source
     result["symbols_with_breadth"] = len(above_ma20)
     return result
 
@@ -570,7 +670,6 @@ def build_market_timing_factor_report(price_frames: dict[str, object] | None = N
             "pmarp_current": pmarp.get("current"),
             "pmarp_previous": pmarp.get("previous"),
             "pmarp_up2": bool(pmarp.get("crossover_2_up")),
-            "pmarp_signal": pmarp.get("signal"),
             "pmarp_description": pmarp.get("description", ""),
             "breadth_s2_current": breadth.get("current"),
             "breadth_s2_previous": breadth.get("previous"),
@@ -775,6 +874,36 @@ def _fmt_participation(value: float | None) -> str:
     return "{:.1%}".format(value)
 
 
+def _fmt_transition(previous: float | None, current: float | None, formatter) -> str:
+    current_text = formatter(current)
+    if previous is None or pd.isna(previous):
+        return current_text
+    return "{}→{}".format(formatter(previous), current_text)
+
+
+def _format_market_timing_as_of(section: dict) -> str:
+    rows = section.get("rows", [])
+
+    def _dates(key: str) -> list[str]:
+        return sorted({str(row.get(key)) for row in rows if row.get(key)})
+
+    def _label(values: list[str]) -> str:
+        if not values:
+            return "N/A"
+        if len(values) == 1:
+            return values[0]
+        return "{}..{}".format(values[0], values[-1])
+
+    pmarp_dates = _dates("as_of")
+    breadth_dates = _dates("breadth_s2_as_of")
+    if not breadth_dates and section.get("breadth_s2", {}).get("as_of"):
+        breadth_dates = [str(section["breadth_s2"]["as_of"])]
+    return "PMARP as_of {} | S2 as_of {}".format(
+        _label(pmarp_dates),
+        _label(breadth_dates),
+    )
+
+
 def _format_timing_alerts(alerts: list[dict]) -> list[str]:
     if not alerts:
         return []
@@ -787,8 +916,11 @@ def _format_timing_alerts(alerts: list[dict]) -> list[str]:
 def format_section_market_timing_factor(market_signals: dict) -> str:
     section = market_signals.get("market_timing_factor", {}) if market_signals else {}
     lines = ["*0. 大盘择时因子*"]
+    as_of_label = _format_market_timing_as_of(section)
     if section.get("criteria"):
-        lines.append(section["criteria"])
+        lines.append("{} | {}".format(section["criteria"], as_of_label))
+    else:
+        lines.append(as_of_label)
 
     lines.extend(_format_timing_alerts(section.get("alerts", [])))
 
@@ -799,24 +931,26 @@ def format_section_market_timing_factor(market_signals: dict) -> str:
 
     lines.append("指数 | PMARP | PMARP 2%上穿 | S2参与度(broad) | S2触发")
     for row in rows:
-        pmarp_now = _fmt_pct_value(row.get("pmarp_current"))
-        pmarp_prev = _fmt_pct_value(row.get("pmarp_previous"))
+        pmarp_display = _fmt_transition(
+            row.get("pmarp_previous"),
+            row.get("pmarp_current"),
+            _fmt_pct_value,
+        )
         pmarp_cross = "YES" if row.get("pmarp_up2") else "—"
-        breadth_now = _fmt_participation(row.get("breadth_s2_current"))
-        breadth_prev = _fmt_participation(row.get("breadth_s2_previous"))
+        breadth_display = _fmt_transition(
+            row.get("breadth_s2_previous"),
+            row.get("breadth_s2_current"),
+            _fmt_participation,
+        )
         breadth_cross = "YES" if row.get("breadth_s2_upcross") else "—"
         if row.get("pmarp_up2") or row.get("breadth_s2_upcross"):
             pmarp_cross = "*{}*".format(pmarp_cross)
             breadth_cross = "*{}*".format(breadth_cross)
-        lines.append("{} | {} ({}→{}) | {} | {} ({}→{}) | {}".format(
+        lines.append("{} | {} | {} | {} | {}".format(
             row.get("symbol", ""),
-            pmarp_now,
-            pmarp_prev,
-            pmarp_now,
+            pmarp_display,
             pmarp_cross,
-            breadth_now,
-            breadth_prev,
-            breadth_now,
+            breadth_display,
             breadth_cross,
         ))
     return "\n".join(lines)
@@ -1083,7 +1217,11 @@ def build_morning_visual_sections(
             sections.append({
                 "slug": "00_market_timing_factor",
                 "title": "0. 大盘择时因子",
-                "subtitle": "{} | 信号日 {}".format(timing.get("criteria", ""), as_of),
+                "subtitle": "{} | {} | 信号日 {}".format(
+                    timing.get("criteria", ""),
+                    _format_market_timing_as_of(timing),
+                    as_of,
+                ),
                 "alerts": timing.get("alerts", []),
                 "blocks": [
                     {
@@ -1096,16 +1234,16 @@ def build_morning_visual_sections(
                                 "alert": row.get("pmarp_up2") or row.get("breadth_s2_upcross"),
                                 "cells": [
                                     row.get("symbol", ""),
-                                    "{} ({}→{})".format(
-                                        _fmt_pct_value(row.get("pmarp_current")),
-                                        _fmt_pct_value(row.get("pmarp_previous")),
-                                        _fmt_pct_value(row.get("pmarp_current")),
+                                    _fmt_transition(
+                                        row.get("pmarp_previous"),
+                                        row.get("pmarp_current"),
+                                        _fmt_pct_value,
                                     ),
                                     "YES" if row.get("pmarp_up2") else "—",
-                                    "{} ({}→{})".format(
-                                        _fmt_participation(row.get("breadth_s2_current")),
-                                        _fmt_participation(row.get("breadth_s2_previous")),
-                                        _fmt_participation(row.get("breadth_s2_current")),
+                                    _fmt_transition(
+                                        row.get("breadth_s2_previous"),
+                                        row.get("breadth_s2_current"),
+                                        _fmt_participation,
                                     ),
                                     "YES" if row.get("breadth_s2_upcross") else "—",
                                 ],

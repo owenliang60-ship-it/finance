@@ -328,6 +328,12 @@ class TestLayeredSections:
         assert "31.2%" in result
         assert "PMARP 2% UPCROSS" in result
         assert "BREADTH S2 UPCROSS" in result
+        assert "PMARP as_of 2026-04-24" in result
+        assert "S2 as_of 2026-04-24" in result
+        assert "2.4% (1.5%→2.4%)" not in result
+        assert "31.2% (29.5%→31.2%)" not in result
+        assert "1.5%→2.4%" in result
+        assert "29.5%→31.2%" in result
         assert "🔴" in result
 
     def test_compute_breadth_s2_status_uses_cooldown_aware_last_event(self):
@@ -361,6 +367,42 @@ class TestLayeredSections:
         assert result["symbols_with_breadth"] == 10
         assert result["current"] == pytest.approx(0.6)
         assert result["previous"] == pytest.approx(0.0)
+        assert result["upcross"] is True
+
+    def test_compute_breadth_s2_status_from_price_frames_handles_nan_close(self):
+        dates = pd.date_range("2026-01-01", periods=30, freq="B")
+        close = [100.0] * 20 + [90.0] * 8 + [89.0, 130.0]
+        close[5] = None
+        frames = {"S0": pd.DataFrame({"close": close}, index=dates)}
+
+        result = _compute_breadth_s2_status_from_price_frames(
+            frames,
+            min_symbols=1,
+            allow_market_db_fallback=False,
+        )
+
+        assert result["source"] == "live_broad_price_frames"
+        assert result["symbols_with_breadth"] == 1
+        assert result["current"] == pytest.approx(1.0)
+        assert result["previous"] == pytest.approx(0.0)
+        assert result["upcross"] is True
+
+    def test_compute_breadth_s2_status_falls_back_to_market_db_frames(self, monkeypatch):
+        dates = pd.date_range("2026-01-01", periods=90, freq="B")
+        fallback_frames = {
+            f"S{i}": pd.DataFrame({"close": [100.0] * 20 + [90.0] * 68 + [89.0, 130.0]}, index=dates)
+            for i in range(5)
+        }
+        monkeypatch.setattr(
+            "scripts.morning_report._load_market_db_broad_price_frames",
+            lambda: fallback_frames,
+        )
+
+        result = _compute_breadth_s2_status_from_price_frames({}, min_symbols=5)
+
+        assert result["source"] == "market_db_broad_price_frames"
+        assert result["symbols_with_breadth"] == 5
+        assert result["current"] == pytest.approx(1.0)
         assert result["upcross"] is True
 
     def test_broad_signal_groups_by_concept_bucket(self):
@@ -609,6 +651,13 @@ class TestMorningVisualReport:
             "05_dollar_volume",
         ]
         assert sections[0]["alerts"]
+        assert "PMARP as_of 2026-04-24" in sections[0]["subtitle"]
+        assert "S2 as_of 2026-04-24" in sections[0]["subtitle"]
+        first_timing_row = sections[0]["blocks"][0]["rows"][0]
+        assert "2.4% (1.5%→2.4%)" not in first_timing_row["cells"][1]
+        assert "1.5%→2.4%" == first_timing_row["cells"][1]
+        assert "31.2% (29.5%→31.2%)" not in first_timing_row["cells"][3]
+        assert "29.5%→31.2%" == first_timing_row["cells"][3]
         assert sections[0]["blocks"][0]["grouped"] is False
         first_rows = sections[1]["blocks"][0]["rows"]
         assert {row["layer"] for row in first_rows} == {"pool", "extend", "broad"}
