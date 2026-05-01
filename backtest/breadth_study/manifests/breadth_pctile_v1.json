@@ -1,0 +1,53 @@
+{
+  "version": "v1.2",
+  "frozen_at": "2026-04-30",
+  "ma_windows": [20, 50],
+  "thresholds": {
+    "low_recovery": [0.05, 0.10, 0.15],
+    "high_strength": [0.80, 0.90, 0.95]
+  },
+  "percentile_lookback": 252,
+  "signal_smoother": "SMA5",
+  "cooldown_short_horizon": 20,
+  "cooldown_long_horizon": 60,
+  "targets": ["SPY", "QQQ", "SOXX", "IWM", "XLK"],
+  "primary_target": "SPY",
+  "primary_horizon": 10,
+  "sensitivity_target": "QQQ",
+  "sensitivity_horizon": 10,
+  "horizons_short": [5, 10, 20],
+  "horizons_long": [60],
+  "min_market_cap": 1000000000,
+  "max_staleness_days": 90,
+  "from_date": "2021-02-01",
+  "permutation": {
+    "trials": 1000,
+    "seed": 20260429,
+    "stratify_by": "year",
+    "respect_cooldown": true,
+    "rejection_max_attempts_per_event": 50,
+    "fallback_to_sequential_below": 0.30,
+    "warning_threshold": 0.70
+  },
+  "strategy_costs": {
+    "one_way_bps": 10,
+    "round_trip_bps": 20
+  },
+  "strategy_bootstrap": {
+    "trials": 500,
+    "seed": 20260430,
+    "ci_lower_pct": 2.5,
+    "ci_upper_pct": 97.5
+  },
+  "hurdle_thresholds": {
+    "h1_trigger_freq_min_per_year": 1.5,
+    "h1_trigger_freq_max_per_year": 4.0,
+    "h2_hit_rate_lift_pp": 15,
+    "h3_target_same_sign_min": 4,
+    "h4_short_horizon_same_sign_min": 2,
+    "h4_short_horizons": [5, 10, 20],
+    "h5_permutation_p_max": 0.05,
+    "h6_strategy_excess_cagr_pp": 5
+  },
+  "pass_threshold": 4
+}
