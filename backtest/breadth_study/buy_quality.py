@@ -155,16 +155,50 @@ def compute_better_than_random_pct_stratified(
     real_event_dates = list(event_df["date"])
     all_dates = pd.DatetimeIndex(baseline["date"])
     metric_lookup = dict(zip(baseline["date"], baseline["metric_value"]))
+    events_per_year = (
+        pd.Series(real_event_dates).dt.year.value_counts().sort_index().to_dict()
+    )
+    dates_by_year = {
+        int(year): sorted(pd.Timestamp(d) for d in dates)
+        for year, dates in pd.Series(all_dates).groupby(all_dates.year)
+    }
+    from backtest.breadth_study.percentile_perm import (
+        _sample_sequential,
+        _try_one_rejection_trial,
+    )
 
     rng = np.random.default_rng(seed)
+    probe_n = max(1, min(50, n_iter // 10))
+    probe_success = 0
+    for _ in range(probe_n):
+        sampled = _try_one_rejection_trial(
+            events_per_year,
+            dates_by_year,
+            cooldown,
+            rng,
+            max_attempts=50,
+        )
+        if sampled is not None:
+            probe_success += 1
+    use_rejection = (probe_success / probe_n) >= 0.30
+
     random_medians: list[float] = []
     for _ in range(n_iter):
-        sampled = sample_dates_stratified_cooldown(
-            all_dates,
-            real_event_dates,
-            cooldown=cooldown,
-            rng=rng,
-        )
+        if use_rejection:
+            sampled = _try_one_rejection_trial(
+                events_per_year,
+                dates_by_year,
+                cooldown,
+                rng,
+                max_attempts=50,
+            )
+        else:
+            sampled = _sample_sequential(
+                events_per_year,
+                dates_by_year,
+                cooldown,
+                rng,
+            )
         if not sampled:
             continue
         vals = [
