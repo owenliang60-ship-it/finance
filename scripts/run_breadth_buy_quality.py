@@ -238,12 +238,84 @@ def build_summary(
     return pd.DataFrame(rows)
 
 
+def plot_event_vs_baseline_box(
+    events_df: pd.DataFrame,
+    baseline_df: pd.DataFrame,
+    signal: str,
+    universe: str,
+    target: str,
+    window: int,
+    metric: str,
+    output_path: Path,
+) -> None:
+    """Save one event-vs-baseline boxplot cell."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    event_vals = events_df[
+        (events_df["signal"] == signal)
+        & (events_df["universe"] == universe)
+        & (events_df["target"] == target)
+        & (events_df["window_days"] == window)
+    ][metric].dropna()
+    baseline_vals = baseline_df[
+        (baseline_df["target"] == target)
+        & (baseline_df["window_days"] == window)
+    ][metric].dropna()
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.boxplot(
+        [baseline_vals, event_vals],
+        labels=["All trading days", f"{signal} events (n={len(event_vals)})"],
+    )
+    ax.set_title(f"{signal} ({universe}) | {target} | {window}d | {metric}")
+    ax.set_ylabel(metric)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=120)
+    plt.close(fig)
+
+
+def plot_all_charts(
+    events_df: pd.DataFrame,
+    baseline_df: pd.DataFrame,
+    output_dir: Path,
+) -> int:
+    """Write all frozen event-vs-baseline boxplots."""
+    chart_dir = output_dir / "charts"
+    count = 0
+    for signal in SIGNALS:
+        for universe in UNIVERSES:
+            for target in TARGETS:
+                for window in WINDOWS:
+                    for metric in METRICS:
+                        path = (
+                            chart_dir
+                            / f"{signal}_{universe}_{target}_{window}d_{metric}.png"
+                        )
+                        plot_event_vs_baseline_box(
+                            events_df,
+                            baseline_df,
+                            signal,
+                            universe,
+                            target,
+                            window,
+                            metric,
+                            path,
+                        )
+                        count += 1
+    return count
+
+
 def run_full_pipeline(output_dir: Path, n_iter: int = 10000) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     events = run_buy_quality_pipeline(output_dir)
     baseline = compute_all_days_baseline(TARGETS, WINDOWS)
     baseline.to_csv(output_dir / "all_days_baseline.csv", index=False)
     summary = build_summary(events, baseline, n_iter=n_iter)
     summary.to_csv(output_dir / "summary.csv", index=False)
+    plot_all_charts(events, baseline, output_dir)
     return events, baseline, summary
 
 
