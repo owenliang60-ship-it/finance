@@ -1,4 +1,4 @@
-# 010: worktree 里的空壳 market.db 会遮蔽主仓库共享数据
+# 019: worktree 里的空壳 market.db 会遮蔽主仓库共享数据
 
 **日期**: 2026-04-23
 **严重度**: HIGH
