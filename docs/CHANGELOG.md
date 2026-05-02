@@ -78,7 +78,69 @@
 |   ↳ social_attention.py: weighted_buzz + attention_zscore (20 日滚动) | | |
 |   ↳ 晨报 Section G: 社交雷达 (注意力异常 + 极端情绪 + 趋势背离) | | |
 |   ↳ 云端 cron 06:55 Tue-Sat 日频采集 | | |
-| **当前** | 2026-03-10 | **~169 files, 1232 tests** |
+| **V3 Backtest Pipeline + NAV bug fix** | 2026-03-13 | redesign |
+|   ↳ V3 focused factor validation pipeline (`backtest/pipeline/`) | | |
+|   ↳ engine 修复: forward-fill 最近价防止 NAV 归零 | | |
+| **Single-Factor Timing 全面无效结论** | 2026-03-18 | research |
+|   ↳ 10 信号 × 12 参数扫描（含 VIX 跨资产 + 优化变体） | | |
+|   ↳ 全部跑输 buy-and-hold，t-test 无显著性 → 单因子机械择时无效 | | |
+| **Broad Market RVOL Scanner** | 2026-03-20 | feature |
+|   ↳ yfinance screener ($5B+) → batch download → RVOL≥3σ 池外广扫 | | |
+|   ↳ Streak tracker + Telegram delivery | | |
+| **Adanos 市场级社交快照** | 2026-03-25 | feature |
+|   ↳ /market-sentiment + /trending + /trending/sectors 端点接入 | | |
+|   ↳ 新表: market_sentiment, social_trending, social_trending_sectors | | |
+| **Forge 策略锻造引擎** | 2026-03-26 | feature |
+|   ↳ campaign.lock → runner (claude -p agent loop) → evaluator | | |
+|   ↳ 通用合约 StrategyConfig + run_backtest, holdout 隔离 | | |
+| **BTC Dual-Engine Timing 系统** | 2026-03-26 | feature |
+|   ↳ 极简双引擎: BBWP/状态机/连续仓位 | | |
+|   ↳ Binance 4H → EMA144/PMARP/BBWP → 右侧+左侧仓位融合 | | |
+| **RS Reconstitution Bias 量化与修复** | 2026-03-30 | research |
+|   ↳ historical_market_cap 表 + `--reconstitute 10e9` flag | | |
+|   ↳ Sharpe 1.54 → 1.26 (-18%)，仍有效但需注水 | | |
+| **Regime Filter + Inverse-Vol Weighting** | 2026-03-31 | feature |
+|   ↳ engine: `--regime SPY` (cash/scale) + `--weighting inv_vol` | | |
+|   ↳ extended Sharpe 1.51 最优, regime cash MDD 降 6pp | | |
+| **Portfolio Intelligence (PI) 上线** | 2026-04-02 | feature |
+|   ↳ 每日 22:00/23:00 SGT 推送（夏令时切换） | | |
+|   ↳ MarketData live quote + holdings/option ledger 集成 | | |
+|   ↳ 北极星 CIO-A 第一阶段落地 | | |
+| **North Star: CIO 拆分** | 2026-04-05 | architecture |
+|   ↳ CIO-A (组合管理) 与 CIO-B (组合构建) 拆分 | | |
+|   ↳ 主轨/副轨并行建设路径 | | |
+| **Telegram 推送 + PDF Delivery** | 2026-04-08 | feature |
+|   ↳ Private/Group channel 拆分 | | |
+|   ↳ Morning report + PI 改 PDF + 高清图片传送 | | |
+| **Broad Universe Historical Backfill** | 2026-04-10 | infra |
+|   ↳ historical_market_cap backfill (~687k rows / 567 active symbols) | | |
+|   ↳ True survivorship 回测基础设施 | | |
+| **Backtest Pipeline V3 设计** | 2026-04-11 | architecture |
+|   ↳ Focused factor validation pipeline 分层架构 | | |
+|   ↳ specs / runner / report / types 四层职责拆分 | | |
+| **PMARP Extended Universe Hardening** | 2026-04-22 | research |
+|   ↳ explicit OOS start + extended_true universe + 2% upcross hardening | | |
+|   ↳ Delisted overlay 21 只 → true survivorship 验证 | | |
+|   ↳ 美股 166 只 60d +5.87% p-FDR=0.028 跨市场显著 | | |
+| **PI Live Intraday Snapshot** | 2026-04-22 | feature |
+|   ↳ MarketData live quote 集成 + stale-leg 可见性 + safeguards | | |
+| **Event Study 标准化** | 2026-04-23 | infra |
+|   ↳ backtest/event_study/: protocol, returns, stats, report, runner | | |
+|   ↳ universe gate + RVOL 研究统一接口 | | |
+| **/trade Skill: Atomic Option Trade Engine** | 2026-04-24 | feature |
+|   ↳ Option contract parser + ledger schema + lifecycle 强制纪律 | | |
+|   ↳ strategy_tag invariant + PI stale-leg visibility | | |
+| **Concept Registry Phase 1** | 2026-04-28 | feature |
+|   ↳ company_concepts + concept_classifier (terminal/) | | |
+|   ↳ Build script + concept-grouped 渲染 | | |
+| **Morning Report 升级** | 2026-04-28 | feature |
+|   ↳ Section images + concept-grouped layout + 高清 PDF | | |
+|   ↳ Business role labels + 紧凑表格 + 减少 unclassified | | |
+| **Broad Breadth Study** | 2026-04-28 ~ 2026-05-01 | research |
+|   ↳ QQQ/SOXX 广度 percentile upcross 验证 + buy-quality hardening | | |
+|   ↳ Effective sample years + bootstrap CI + cluster pattern detector | | |
+| **晨报 Market Timing Factor Section** | 2026-05-02 | feature |
+|   ↳ 晨报新增市场 timing factor section + 加固 | | |
 
 ---
 
