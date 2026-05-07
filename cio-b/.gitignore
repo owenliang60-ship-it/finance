@@ -1,0 +1,4 @@
+# Conviction cards contain Boss's specific holdings, sizing decisions, and
+# body tolerance numbers. Master copy lives in Obsidian (Cards/Stocks/),
+# workspace mirror is regenerated on demand. Never commit.
+cards/
