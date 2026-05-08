@@ -40,7 +40,7 @@
 | 源 | Plan | 用途 | 限流 |
 |----|------|------|------|
 | FMP | Starter | 基本面 + 价格 + 分析师 grades + 内部交易 + earnings + news | 2s |
-| yfinance | Free | Forward estimates (6 datasets) + 扩展池 batch 价格 | 1s |
+| yfinance | Free | Forward estimates (6 datasets，核心 + 扩展池 ~563) + 扩展池 batch 价格 | 1s |
 | FRED | Free | 16 宏观序列 | 120/min |
 | MarketData.app | Starter | 期权链 + IV + PI live quote（**单 IP 绑定云端**） | — |
 | Adanos | Hobby | 社交情感（Reddit + X，per-ticker + 市场级 trending） | 2s |
