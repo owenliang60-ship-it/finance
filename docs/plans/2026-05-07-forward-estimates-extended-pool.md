@@ -48,6 +48,8 @@
 | Task 1 `test_scope_core_uses_pool` / `test_scope_extended_uses_extended_only` 用 `set(result) == {...}` 比对，会忽略顺序与重复，测不到 docstring "preserve source order" 的承诺 | Important | Task 1 Step 1 把这两条断言改成精确列表比对 `result == [...]`，跟 `test_scope_all` 的 `result == sorted({...})` 对齐严格度 |
 | Task 2 verifier 用 `sqlite3.connect(db_path)` 默认读写模式；`market.db` 是 P3 cron-writer 独占资源，verifier 是只读消费者，应跟 `morning_report.py:410` 项目惯例一致用 `?mode=ro` URI 防误写 | Important | Task 2 Step 4 verifier 的 `_covered_symbols` 改为 `sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)` |
 | Task 2 `--min-date` 没格式校验；malformed 字符串如 `"2026-13-01"` 会按文本比对静默匹配零行，verifier 整个反 stale 安全网失效 | Important | Task 2 Step 4 加 `_valid_iso_date(s)` argparse type；invalid 输入触发 `argparse.ArgumentTypeError` 退出码 2 |
+| Task 3 Step 4 假设 worktree 内 `data/` 不存在，但 `.gitignore` line 24-27 反 ignore 了 `data/breadth_buy_quality/.gitkeep`，`git worktree add` 自动建出该目录；直接 `ln -s` 嵌套到已存在 `data/` 里变成 `data/data → Finance/data` 而不是替代 | P1 (实战发现) | Step 4 增加 `rm -rf data` 前置；Step 11 增加 `git checkout HEAD -- data/` 还原 tracked `.gitkeep` 后再 `git worktree remove`，避免 dirty working tree |
+| Task 3 实战验证：smoke 5 ticker (A/ABEV/ABNB/ACGL/ADM) 全部 `4 periods` 写入；core baseline 155/156（缺 SOXX，ETF 无 forward estimates）；extended_only 实际数 416 (plan 估 ~407，extended pool 自然增长) | 信息 | 不需修改 plan，记录用 |
 
 ### 关键事实补充（v4 verified 2026-05-07）
 
@@ -761,12 +763,16 @@ Expected: branch=`main`，working tree clean。**这步必须确认 main**，否
 
 - [ ] **Step 4: 创建 symlink 让 worktree 共享 production data + .env**
 
+> **⚠ Plan v4 实战修正 (2026-05-08)**：worktree 不是完全空的——`.gitignore` line 24-27 反 ignore 了 `data/breadth_buy_quality/.gitkeep`（tracked file），所以 `git worktree add` 会自动建出 `data/breadth_buy_quality/.gitkeep`。直接 `ln -s /root/workspace/Finance/data /root/workspace/Finance-feature/data` 会把 symlink **嵌套**进已存在的 `data/` 里（变成 `data/data -> Finance/data`），不是替代。**正确做法是先 `rm -rf data/`** 再 `ln -s`。`.env` 不受影响（无反 ignore，worktree 里确实不存在）。
+
 ```bash
 ssh aliyun "ls /root/workspace/Finance-feature/data /root/workspace/Finance-feature/.env 2>&1 | head -5"
 ```
-Expected: `No such file or directory`（worktree 是空的，确认无遗留）
+Expected: `data/` 已存在（含 tracked `breadth_buy_quality/.gitkeep`）；`.env` 不存在
 
 ```bash
+# 必须先 rm 才能正确 symlink（v4 修正）
+ssh aliyun "rm -rf /root/workspace/Finance-feature/data"
 ssh aliyun "ln -s /root/workspace/Finance/data /root/workspace/Finance-feature/data"
 ssh aliyun "ln -s /root/workspace/Finance/.env /root/workspace/Finance-feature/.env"
 ssh aliyun "ls -la /root/workspace/Finance-feature/data /root/workspace/Finance-feature/.env"
@@ -855,11 +861,16 @@ Expected: market.db 仍然 ~793 MB 在 production（没动）
 
 - [ ] **Step 11: 清理云端临时 worktree**
 
+> **⚠ Plan v4 实战修正 (2026-05-08)**：rm `data` symlink 后，worktree 里 tracked `data/breadth_buy_quality/.gitkeep` 缺失，`git status` 报 `D data/breadth_buy_quality/.gitkeep`。`git worktree remove` 不喜欢 dirty working tree，必须先 `git checkout HEAD -- data/` 把 tracked 内容还原（注意：此时 production `data/` 是真实目录，feature worktree `data/` 是空的；checkout 会从 git index 重建该子目录的 tracked 文件——只有 `.gitkeep` 这一个空文件，几 byte，无副作用）。
+
 ```bash
+# v4 修正：先还原 tracked data/，再 remove
+ssh aliyun "git -C /root/workspace/Finance-feature checkout HEAD -- data/"
+ssh aliyun "git -C /root/workspace/Finance-feature status --short"
 ssh aliyun "git -C /root/workspace/Finance worktree remove /root/workspace/Finance-feature"
 ssh aliyun "git -C /root/workspace/Finance worktree list"
 ```
-Expected: `worktree list` 只剩 production main
+Expected: status clean；`worktree list` 只剩 production main
 
 - [ ] **Step 12: 再次确认 production 在 main + 数据完整**
 
