@@ -23,6 +23,39 @@ from src.data.fundamental_fetcher import update_all_fundamentals
 from config.settings import ADANOS_REQUEST_DAYS, ADANOS_TRENDING_LIMIT
 
 
+def _resolve_target_symbols(scope: str, symbols):
+    """Resolve target symbols for --forward-estimates based on scope.
+
+    Args:
+        scope: "core" / "extended" / "all"
+        symbols: explicit symbol list (overrides scope) or None/empty
+
+    Returns:
+        List of unique uppercase symbols. scope='all' returns sorted for stable
+        order; other scopes preserve underlying source order.
+
+    Raises:
+        ValueError: scope not in {"core","extended","all"}
+    """
+    if symbols:
+        return list(symbols)
+
+    if scope == "core":
+        from src.data.pool_manager import get_symbols
+        return get_symbols()
+
+    if scope == "extended":
+        from src.data.extended_universe_manager import get_extended_only_symbols
+        return get_extended_only_symbols()
+
+    if scope == "all":
+        from src.data.pool_manager import get_symbols
+        from src.data.extended_universe_manager import get_extended_only_symbols
+        return sorted(set(get_symbols()) | set(get_extended_only_symbols()))
+
+    raise ValueError(f"unknown scope={scope!r} (expected core/extended/all)")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Finance 数据更新")
     parser.add_argument("--all", action="store_true", help="更新所有数据")
@@ -38,6 +71,13 @@ def main():
                         help="更新社交情感数据 (Adanos: Reddit + X)")
     parser.add_argument("--extended-prices", action="store_true",
                         help="更新扩展池价格数据 (yfinance, $10B+ stocks)")
+    parser.add_argument(
+        "--scope",
+        choices=["core", "extended", "all"],
+        default="core",
+        help="Symbol scope for --forward-estimates: core=pool 156 (default), "
+             "extended=$10B+ ex-pool ~407, all=union ~563",
+    )
     parser.add_argument("--check", action="store_true", help="仅运行数据健康检查")
 
     args = parser.parse_args()
@@ -121,7 +161,8 @@ def main():
         from src.data.market_store import get_store
 
         store = get_store()
-        target_symbols = symbols or get_symbols()
+        target_symbols = _resolve_target_symbols(args.scope, symbols)
+        print(f"Scope: {args.scope}, target {len(target_symbols)} symbols")
         success = 0
         failed = []
 
