@@ -31,11 +31,13 @@ def _resolve_target_symbols(scope: str, symbols):
         symbols: explicit symbol list (overrides scope) or None/empty
 
     Returns:
-        List of unique uppercase symbols. scope='all' returns sorted for stable
-        order; other scopes preserve underlying source order.
+        List of symbols. scope='all' returns deduped + sorted union; 'core' /
+        'extended' return the source list as-is (no dedup or normalization);
+        explicit ``symbols`` arg is returned as a shallow copy unchanged.
 
     Raises:
-        ValueError: scope not in {"core","extended","all"}
+        ValueError: scope not in {"core","extended","all"} when symbols is empty
+            (validation is bypassed when explicit symbols are supplied).
     """
     if symbols:
         return list(symbols)

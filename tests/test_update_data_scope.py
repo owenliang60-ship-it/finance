@@ -19,7 +19,7 @@ def test_scope_core_uses_pool(mock_pool, mock_ext):
     from scripts.update_data import _resolve_target_symbols
     mock_pool.return_value = ["AAPL", "NVDA"]
     result = _resolve_target_symbols(scope="core", symbols=None)
-    assert set(result) == {"AAPL", "NVDA"}
+    assert result == ["AAPL", "NVDA"]
     assert mock_pool.called
     assert not mock_ext.called
 
@@ -30,7 +30,7 @@ def test_scope_extended_uses_extended_only(mock_pool, mock_ext):
     from scripts.update_data import _resolve_target_symbols
     mock_ext.return_value = ["EXT1", "EXT2", "EXT3"]
     result = _resolve_target_symbols(scope="extended", symbols=None)
-    assert set(result) == {"EXT1", "EXT2", "EXT3"}
+    assert result == ["EXT1", "EXT2", "EXT3"]
     assert not mock_pool.called
     assert mock_ext.called
 
