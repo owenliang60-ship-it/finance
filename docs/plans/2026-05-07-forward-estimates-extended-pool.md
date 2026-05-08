@@ -40,12 +40,14 @@
 | 临时 worktree 不会自动共享 production `data/` 和 `.env`（`/data/*` 第 23 行 + `.env` 第 43 行均 gitignored，git worktree 不复制；smoke 会读不到 `data/pool/extended_universe.json`、`load_dotenv` 找不到 `.env`、write 落到 worktree 内的空 `data/market.db`） | P1 | Task 3 在 worktree 创建后显式 `ln -s /root/workspace/Finance/data data` + `ln -s /root/workspace/Finance/.env .env`，并在 `git worktree remove` 之前先 `rm` 这两个 symlink |
 | 云端无 `sqlite3` CLI（实测 `command not found`），但 python3 3.37.2 内置 `sqlite3` module 可用 | P2 | Task 3 Step 验证 DB 写入改用 `python3 -c` inline 查询，不再 ssh `sqlite3 ...` |
 
-### v4 → v4 (post-implementation cleanup) 处理 — Task 1 code-quality review 反馈
+### v4 → v4 (post-implementation cleanup) 处理 — Task 1 / Task 2 code-quality review 反馈
 
 | Review item | Severity | 处理 |
 |-------------|----------|------|
-| Helper docstring 承诺"List of unique uppercase symbols"，但 `core` / `extended` 分支只是转发上游列表，没有去重也没有大写化；只有 `all` 分支真去重 | Important | Task 1 Step 3 docstring 收紧：明确只有 `scope='all'` 去重 + 排序，其他分支按上游原样返回；并补充说明 explicit `symbols` 路径绕过 scope 校验 |
-| `test_scope_core_uses_pool` / `test_scope_extended_uses_extended_only` 用 `set(result) == {...}` 比对，会忽略顺序与重复，测不到 docstring "preserve source order" 的承诺 | Important | Task 1 Step 1 把这两条断言改成精确列表比对 `result == [...]`，跟 `test_scope_all` 的 `result == sorted({...})` 对齐严格度 |
+| Task 1 helper docstring 承诺"List of unique uppercase symbols"，但 `core` / `extended` 分支只是转发上游列表，没有去重也没有大写化；只有 `all` 分支真去重 | Important | Task 1 Step 3 docstring 收紧：明确只有 `scope='all'` 去重 + 排序，其他分支按上游原样返回；并补充说明 explicit `symbols` 路径绕过 scope 校验 |
+| Task 1 `test_scope_core_uses_pool` / `test_scope_extended_uses_extended_only` 用 `set(result) == {...}` 比对，会忽略顺序与重复，测不到 docstring "preserve source order" 的承诺 | Important | Task 1 Step 1 把这两条断言改成精确列表比对 `result == [...]`，跟 `test_scope_all` 的 `result == sorted({...})` 对齐严格度 |
+| Task 2 verifier 用 `sqlite3.connect(db_path)` 默认读写模式；`market.db` 是 P3 cron-writer 独占资源，verifier 是只读消费者，应跟 `morning_report.py:410` 项目惯例一致用 `?mode=ro` URI 防误写 | Important | Task 2 Step 4 verifier 的 `_covered_symbols` 改为 `sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)` |
+| Task 2 `--min-date` 没格式校验；malformed 字符串如 `"2026-13-01"` 会按文本比对静默匹配零行，verifier 整个反 stale 安全网失效 | Important | Task 2 Step 4 加 `_valid_iso_date(s)` argparse type；invalid 输入触发 `argparse.ArgumentTypeError` 退出码 2 |
 
 ### 关键事实补充（v4 verified 2026-05-07）
 
@@ -583,6 +585,7 @@ Exit 0 if all checked scopes meet thresholds, 1 otherwise.
 the verification of the most recent cron run.
 """
 import argparse
+import datetime
 import sqlite3
 import sys
 from pathlib import Path
@@ -596,8 +599,19 @@ from src.data.pool_manager import get_symbols as get_pool_symbols  # noqa: E402
 from src.data.extended_universe_manager import get_extended_only_symbols  # noqa: E402
 
 
-def _covered_symbols(db_path: Path, min_date: str | None) -> set:
-    con = sqlite3.connect(db_path)
+def _valid_iso_date(s: str) -> str:
+    """argparse type for --min-date: ensure ISO YYYY-MM-DD."""
+    try:
+        datetime.date.fromisoformat(s)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"--min-date must be ISO YYYY-MM-DD, got {s!r}"
+        )
+    return s
+
+
+def _covered_symbols(db_path, min_date) -> set:
+    con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         if min_date:
             rows = con.execute(
@@ -630,7 +644,7 @@ def _bucket_report(name: str, expected: list, covered: set, min_pct: float) -> d
 
 
 def run(scope: str, min_core_pct: float, min_extended_pct: float,
-        min_date: str | None) -> tuple:
+        min_date) -> tuple:
     """Run verification. Returns (exit_code, report)."""
     covered = _covered_symbols(MARKET_DB, min_date)
     report = {}
@@ -644,12 +658,12 @@ def run(scope: str, min_core_pct: float, min_extended_pct: float,
     return rc, report
 
 
-def _print_report(report: dict, min_date: str | None) -> None:
+def _print_report(report: dict, min_date) -> None:
     if min_date:
         print(f"Coverage filter: date >= {min_date}")
     for name, b in report.items():
-        marker = "✅" if b["ok"] else "❌"
-        print(f"{marker} {name}: {b['covered']}/{b['expected']} "
+        marker = "OK" if b["ok"] else "FAIL"
+        print(f"[{marker}] {name}: {b['covered']}/{b['expected']} "
               f"({b['pct']}%, threshold {b['min_pct']}%)")
         if b["missing"]:
             print(f"   missing (top 20): {b['missing'][:20]}")
@@ -664,6 +678,7 @@ def main():
     parser.add_argument("--min-extended-pct", type=float, default=95.0)
     parser.add_argument(
         "--min-date",
+        type=_valid_iso_date,
         default=None,
         help="ISO date (YYYY-MM-DD); only rows with date>=this count as covered. "
              "Without it, all-time data counts (旧数据可能误判为通过)。"

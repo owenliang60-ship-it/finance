@@ -9,6 +9,7 @@ Exit 0 if all checked scopes meet thresholds, 1 otherwise.
 the verification of the most recent cron run.
 """
 import argparse
+import datetime
 import sqlite3
 import sys
 from pathlib import Path
@@ -21,8 +22,19 @@ from src.data.pool_manager import get_symbols as get_pool_symbols  # noqa: E402
 from src.data.extended_universe_manager import get_extended_only_symbols  # noqa: E402
 
 
+def _valid_iso_date(s: str) -> str:
+    """argparse type for --min-date: ensure ISO YYYY-MM-DD."""
+    try:
+        datetime.date.fromisoformat(s)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"--min-date must be ISO YYYY-MM-DD, got {s!r}"
+        )
+    return s
+
+
 def _covered_symbols(db_path, min_date) -> set:
-    con = sqlite3.connect(db_path)
+    con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         if min_date:
             rows = con.execute(
@@ -89,6 +101,7 @@ def main():
     parser.add_argument("--min-extended-pct", type=float, default=95.0)
     parser.add_argument(
         "--min-date",
+        type=_valid_iso_date,
         default=None,
         help="ISO date (YYYY-MM-DD); only rows with date>=this count as covered. "
              "Without it, all-time data counts (旧数据可能误判为通过)。",
