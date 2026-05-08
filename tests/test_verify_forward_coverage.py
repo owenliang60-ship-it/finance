@@ -82,3 +82,25 @@ def test_scope_core_skips_extended(temp_db, monkeypatch):
     rc, report = run(scope="core", min_core_pct=99, min_extended_pct=95, min_date="2026-05-01")
     assert rc == 0
     assert "extended" not in report
+
+
+def test_empty_expected_fails_fast(temp_db, monkeypatch):
+    """Empty pool / extended loader returning [] must FAIL, not silently pass.
+
+    Triggered by missing data/pool/universe.json, broken symlink, or
+    upstream loader bug. Reporting '0/0 OK' would defeat the verifier.
+    """
+    db, con = temp_db
+    # Both loaders return []. Whether DB has rows or not is irrelevant —
+    # the bucket fails because the expected universe is empty.
+    _patch_loaders(monkeypatch, db, [], [])
+
+    from scripts.verify_forward_coverage import run
+    rc, report = run(scope="all", min_core_pct=99, min_extended_pct=95,
+                     min_date="2026-05-01")
+    assert rc == 1
+    assert report["core"]["ok"] is False
+    assert report["core"]["expected"] == 0
+    assert report["core"]["pct"] == 0.0
+    assert report["extended"]["ok"] is False
+    assert report["extended"]["expected"] == 0

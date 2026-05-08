@@ -52,9 +52,21 @@ def _covered_symbols(db_path, min_date) -> set:
 
 def _bucket_report(name: str, expected: list, covered: set, min_pct: float) -> dict:
     expected_set = set(expected)
+    if not expected_set:
+        # Empty expected universe = loader returned nothing = data path / symlink /
+        # pool file is broken. Fail fast rather than silently reporting "0/0 OK".
+        return {
+            "name": name,
+            "expected": 0,
+            "covered": 0,
+            "pct": 0.0,
+            "min_pct": min_pct,
+            "ok": False,
+            "missing": [],
+        }
     hit = expected_set & covered
     miss = sorted(expected_set - covered)
-    pct = (len(hit) / len(expected_set) * 100) if expected_set else 100.0
+    pct = len(hit) / len(expected_set) * 100
     return {
         "name": name,
         "expected": len(expected_set),

@@ -50,6 +50,7 @@
 | Task 2 `--min-date` 没格式校验；malformed 字符串如 `"2026-13-01"` 会按文本比对静默匹配零行，verifier 整个反 stale 安全网失效 | Important | Task 2 Step 4 加 `_valid_iso_date(s)` argparse type；invalid 输入触发 `argparse.ArgumentTypeError` 退出码 2 |
 | Task 3 Step 4 假设 worktree 内 `data/` 不存在，但 `.gitignore` line 24-27 反 ignore 了 `data/breadth_buy_quality/.gitkeep`，`git worktree add` 自动建出该目录；直接 `ln -s` 嵌套到已存在 `data/` 里变成 `data/data → Finance/data` 而不是替代 | P1 (实战发现) | Step 4 增加 `rm -rf data` 前置；Step 11 增加 `git checkout HEAD -- data/` 还原 tracked `.gitkeep` 后再 `git worktree remove`，避免 dirty working tree |
 | Task 3 实战验证：smoke 5 ticker (A/ABEV/ABNB/ACGL/ADM) 全部 `4 periods` 写入；core baseline 155/156（缺 SOXX，ETF 无 forward estimates）；extended_only 实际数 416 (plan 估 ~407，extended pool 自然增长) | 信息 | 不需修改 plan，记录用 |
+| Task 2 `_bucket_report` 在 `expected_set` 为空时返回 `pct=100.0, ok=True`，导致 `data/pool/universe.json` 缺失 / symlink 断了 / 上游 loader bug 时 verifier 静默通过 `0/0 OK`，整个安全网失效（Boss merge review 抓到，confidence 0.95） | P2 | Task 2 Step 4 `_bucket_report` empty-expected 分支返回 `ok=False, pct=0.0`；新增 `test_empty_expected_fails_fast` 单测覆盖 |
 
 ### 关键事实补充（v4 verified 2026-05-07）
 
@@ -631,9 +632,21 @@ def _covered_symbols(db_path, min_date) -> set:
 
 def _bucket_report(name: str, expected: list, covered: set, min_pct: float) -> dict:
     expected_set = set(expected)
+    if not expected_set:
+        # Empty expected universe = loader returned nothing = data path / symlink /
+        # pool file is broken. Fail fast rather than silently reporting "0/0 OK".
+        return {
+            "name": name,
+            "expected": 0,
+            "covered": 0,
+            "pct": 0.0,
+            "min_pct": min_pct,
+            "ok": False,
+            "missing": [],
+        }
     hit = expected_set & covered
     miss = sorted(expected_set - covered)
-    pct = (len(hit) / len(expected_set) * 100) if expected_set else 100.0
+    pct = len(hit) / len(expected_set) * 100
     return {
         "name": name,
         "expected": len(expected_set),
