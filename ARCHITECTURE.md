@@ -187,7 +187,7 @@
 | 08:30 | Sat | 股票池刷新（`run_update_data.sh --pool`） |
 | 09:00 | Sat | 扩展池周频刷新（`broad_universe_cron_wrapper.sh weekly_refresh`） |
 | 10:00 | Sat | 基本面 + metrics 计算（`run_update_data.sh --fundamental`） |
-| 10:15 | Sat | 前瞻预期更新（`run_update_data.sh --forward-estimates`） |
+| 10:15 | Sat | 前瞻预期更新（核心 + 扩展池 ~563 unique，`run_update_data.sh --forward-estimates --scope=all`，~9.4 min，日志 `cron_forward_est.log`） |
 | 22:00/23:00 SGT | Mon-Fri | Portfolio Intelligence 推送（夏令时切换） |
 
 **本地 launchd**: `com.finance.sync-pull` 每天 09:00 auto-pull 云端数据。
@@ -195,6 +195,8 @@
 **约束**:
 - PI 依赖 MarketData live quote → 单 IP 绑定云端，本地调试必须显式 `--allow-local`
 - 所有 cron 走 `cron_wrapper.sh` 标准包装（统一日志 + 错误处理 + Telegram 失败告警）
+
+> **forward_estimates 表 stale 策略**：跟随核心 + 扩展池 weekly 刷新；退池标的**不做** stale cleanup——保留 history 作研究材料。覆盖率验证用 `scripts/verify_forward_coverage.py --min-date <本次 cron 日期>`，避免旧 row 误判通过。
 
 ---
 
