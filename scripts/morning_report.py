@@ -741,11 +741,12 @@ PMARP_SIGNAL_LABELS = {
     "bullish_breakout": "上穿98%",
     "momentum_fading": "下穿98%",
 }
-# Display order: extreme-strength signals (up98 / down98) before recovery (up2)
+# Display order matches plan: bullish_breakout → oversold_recovery → momentum_fading
+# (up98 first as the strongest momentum entry, then up2 recovery, then down98 fade).
 PMARP_SIGNAL_ORDER = {
     "bullish_breakout": 0,
-    "momentum_fading": 1,
-    "oversold_recovery": 2,
+    "oversold_recovery": 1,
+    "momentum_fading": 2,
 }
 
 
@@ -1136,7 +1137,10 @@ def _normalize_dv_items(dv_result: dict) -> dict:
         item["symbol"] = symbol or item.get("symbol", "")
         if row.get("company_name") and not item.get("companyName"):
             item["companyName"] = row.get("company_name")
-        if row.get("market_cap") and not item.get("marketCap"):
+        # DV row's market_cap is freshly collected — override any stale local
+        # metadata. Without this, a name that has dropped below $10B today
+        # would still pass the broad filter based on stale universe cache.
+        if row.get("market_cap"):
             item["marketCap"] = row.get("market_cap")
         item.setdefault("concept_bucket", _concept_bucket(item))
         layer_meta = {symbol: {"marketCap": item.get("marketCap") or 0}}

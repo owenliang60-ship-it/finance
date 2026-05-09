@@ -907,6 +907,44 @@ class TestBroadDropPlanV3:
         assert "OKLO" not in result
         assert "ARM" not in result
 
+    def test_dv_filter_uses_dv_row_market_cap_over_stale_local_metadata(
+        self, monkeypatch
+    ):
+        """[v3 P1 regression] DV row's freshly-collected market_cap must override
+        stale local metadata. Otherwise a symbol that has dropped below $10B
+        per today's data would still pass the broad filter on the strength
+        of a stale broad_universe.json / company.db entry showing $20B."""
+        from scripts import morning_report as mr
+
+        def fake_merge(metadata, symbols):
+            # Local metadata has stale OKLO mcap=$20B (would pass filter).
+            for sym in symbols:
+                if sym == "OKLO":
+                    metadata.setdefault(sym, {})
+                    metadata[sym].update({
+                        "marketCap": 20e9,
+                        "shortName": "OKLO", "longName": "Oklo Inc.",
+                        "industry": "Regulated Electric",
+                    })
+
+        monkeypatch.setattr(mr, "_merge_local_metadata", fake_merge)
+        monkeypatch.setattr(mr, "get_symbols", lambda: [])
+
+        dv_result = {
+            "rankings": [
+                # Today's DV row reports market_cap=$6B (broad). Must override
+                # the stale $20B in local metadata.
+                {"rank": 17, "symbol": "OKLO", "dollar_volume": 1.2e9,
+                 "price": 45.0, "market_cap": 6e9},
+            ],
+            "new_faces": [],
+        }
+        result = format_section_d(dv_result)
+        assert "OKLO" not in result, (
+            "OKLO should be filtered out by today's $6B mcap, "
+            "regardless of stale $20B in local metadata"
+        )
+
     def test_dv_visual_block_filters_out_broad_layer(self):
         """[v3 P1] DV image-report block drops broad-layer rows."""
         dv_result = {
