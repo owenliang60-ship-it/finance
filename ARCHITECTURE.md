@@ -182,7 +182,7 @@
 |------|------|------|
 | 06:25 | 日频 | git auto-pull（代码部署） |
 | 06:30 | Tue-Sat | 量价 + DV + IV + social 一次性更新（`run_market_data_pipeline.sh`） |
-| 07:30 | Wed | 广扫池历史市值采集（`broad_universe_cron_wrapper.sh daily_hmcap`，broad $5B+） |
+| 07:30 | Wed | 广扫池历史市值采集（`broad_universe_cron_wrapper.sh daily_hmcap`，broad $1B+ final universe / $500M+ seed） |
 | 08:00 | Tue-Sat | 晨报生成与推送（`run_market_report_pipeline.sh`） |
 | 08:30 | Sat | 股票池刷新（`run_update_data.sh --pool`） |
 | 09:00 | Sat | 广扫池 + 扩展池周频刷新（`broad_universe_cron_wrapper.sh weekly_refresh`，broad 前 5 步 + extended 第 6 步追加；extended 有 MIN_COUNT_FLOOR=400 保护 cache 不被 FMP 空返回污染） |
