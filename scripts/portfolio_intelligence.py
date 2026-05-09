@@ -29,7 +29,8 @@ DNA_LOSS_THRESHOLDS = {"S": -0.30, "A": -0.20, "B": -0.15, "C": -0.10}
 USD_HKD_RATE = 7.8366
 
 # ---- Portfolio reporting constants ----
-TOTAL_CAPITAL_USD = 5_000_000.0
+# Real capital is private — read from .env (gitignored). Default is a public placeholder.
+TOTAL_CAPITAL_USD = float(os.environ.get("PORTFOLIO_TOTAL_CAPITAL_USD", "1000000"))
 
 
 def require_cloud_env(allow_local: bool = False) -> None:
