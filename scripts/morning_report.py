@@ -646,11 +646,22 @@ def _compute_breadth_s2_status_from_price_frames(
     return result
 
 
-def build_market_timing_factor_report(price_frames: dict[str, object] | None = None) -> dict:
-    """Build market-level timing factor payload for SPY/QQQ/SOXX + broad S2."""
+def build_market_timing_factor_report() -> dict:
+    """Build market-level timing factor payload for SPY/QQQ/SOXX + broad S2.
+
+    S2 breadth always sources from broad universe ($1B+) in market.db,
+    decoupled from the selection-scan universe. This guarantees the
+    historically-calibrated 30% threshold keeps its broad MA20 semantics
+    even if the report's selection scan is narrowed (e.g. to extend $10B+).
+    """
     from src.indicators.pmarp import analyze_pmarp
 
-    breadth = _compute_breadth_s2_status_from_price_frames(price_frames or {})
+    broad_frames = _load_market_db_broad_price_frames()
+    breadth = _compute_breadth_s2_status_from_price_frames(
+        broad_frames,
+        allow_market_db_fallback=False,
+        source="market_db_broad_price_frames",
+    )
     frames = _load_market_timing_target_frames(MARKET_TIMING_TARGETS)
     rows = []
     for symbol in MARKET_TIMING_TARGETS:
@@ -831,7 +842,7 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         "as_of": as_of,
         "symbols_scanned": len(symbols),
         "symbols_with_data": len(price_frames),
-        "market_timing_factor": build_market_timing_factor_report(price_frames=price_frames),
+        "market_timing_factor": build_market_timing_factor_report(),
         "layer_counts": {
             layer: sum(
                 1 for symbol in symbols
