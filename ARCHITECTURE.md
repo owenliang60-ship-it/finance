@@ -124,7 +124,7 @@
 
 **池子分层**:
 - 核心池: `data/pool/universe.json`（FMP screener，市值阈值见 `config/settings.py`）
-- 扩展池: `data/extended_universe/`（FMP screener $10B+，~533 只，yfinance batch 价格）
+- 扩展池: `data/pool/extended_universe.json`（FMP screener $10B+，~548 只，weekly 09:00 Sat 由 `broad_universe_cron_wrapper.sh weekly_refresh` 第 6 步 `refresh_extended` 刷新；MIN_COUNT_FLOOR=400 守护 cache 不被 FMP 空返回污染）
 - 池外广扫: `data/scans/broad_universe.json`（yfinance screener $5B+ RVOL 扫描）
 - 退市 overlay: `data/pool/delisted_large_caps.json`（true survivorship 用，~21 只，独立 backfill）
 
@@ -182,10 +182,10 @@
 |------|------|------|
 | 06:25 | 日频 | git auto-pull（代码部署） |
 | 06:30 | Tue-Sat | 量价 + DV + IV + social 一次性更新（`run_market_data_pipeline.sh`） |
-| 07:30 | Wed | 扩展池历史市值采集（`broad_universe_cron_wrapper.sh daily_hmcap`） |
+| 07:30 | Wed | 广扫池历史市值采集（`broad_universe_cron_wrapper.sh daily_hmcap`，broad $5B+） |
 | 08:00 | Tue-Sat | 晨报生成与推送（`run_market_report_pipeline.sh`） |
 | 08:30 | Sat | 股票池刷新（`run_update_data.sh --pool`） |
-| 09:00 | Sat | 扩展池周频刷新（`broad_universe_cron_wrapper.sh weekly_refresh`） |
+| 09:00 | Sat | 广扫池 + 扩展池周频刷新（`broad_universe_cron_wrapper.sh weekly_refresh`，broad 前 5 步 + extended 第 6 步追加；extended 有 MIN_COUNT_FLOOR=400 保护 cache 不被 FMP 空返回污染） |
 | 10:00 | Sat | 基本面 + metrics 计算（`run_update_data.sh --fundamental`） |
 | 10:15 | Sat | 前瞻预期更新（核心 + 扩展池 ~563 unique，`run_update_data.sh --forward-estimates --scope=all`，~9.4 min，日志 `cron_forward_est.log`） |
 | 22:00/23:00 SGT | Mon-Fri | Portfolio Intelligence 推送（夏令时切换） |
