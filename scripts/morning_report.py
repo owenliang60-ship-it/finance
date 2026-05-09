@@ -48,11 +48,10 @@ logger = logging.getLogger(__name__)
 
 EXTENDED_LAYER_MIN_MCAP = EXTENDED_UNIVERSE_MIN_MCAP_B * 1_000_000_000
 MORNING_SIGNAL_PRICE_ROWS = 180
-LAYER_ORDER = ["pool", "extend", "broad"]
+LAYER_ORDER = ["pool", "extend"]
 LAYER_LABELS = {
     "pool": "Pool",
     "extend": "Extend ($10B+)",
-    "broad": "Broad ($1B-$10B)",
 }
 LAYER_TOP_N = 8
 MARKET_TIMING_TARGETS = ["SPY", "QQQ", "SOXX"]
@@ -312,7 +311,13 @@ def _frame_with_date(symbol: str, frame) -> object:
 def _group_by_layer(items: list) -> dict:
     grouped = {layer: [] for layer in LAYER_ORDER}
     for item in items:
-        grouped.setdefault(item.get("layer", "broad"), []).append(item)
+        layer = item.get("layer", "broad")
+        if layer not in LAYER_ORDER:
+            logger.warning(
+                "layer leak in _group_by_layer: %r (item=%s); row will be hidden",
+                layer, item.get("symbol", "?"),
+            )
+        grouped.setdefault(layer, []).append(item)
     return grouped
 
 
@@ -391,7 +396,14 @@ def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set) -> dict:
         if meta.get(key):
             enriched[key] = meta[key]
     enriched["marketCap"] = meta.get("marketCap")
-    enriched["layer"] = _layer_for_symbol(symbol, metadata, pool_symbols)
+    layer = _layer_for_symbol(symbol, metadata, pool_symbols)
+    if layer not in {"pool", "extend"}:
+        raise ValueError(
+            f"layer leak: {symbol!r} classified as {layer!r}; "
+            f"expected pool|extend after universe post-filter "
+            f"(marketCap={meta.get('marketCap')!r})"
+        )
+    enriched["layer"] = layer
     enriched["concept_bucket"] = _concept_bucket(enriched)
     return enriched
 
@@ -724,16 +736,35 @@ def build_market_timing_factor_report() -> dict:
     }
 
 
+PMARP_SIGNAL_LABELS = {
+    "oversold_recovery": "上穿2%",
+    "bullish_breakout": "上穿98%",
+    "momentum_fading": "下穿98%",
+}
+# Display order: extreme-strength signals (up98 / down98) before recovery (up2)
+PMARP_SIGNAL_ORDER = {
+    "bullish_breakout": 0,
+    "momentum_fading": 1,
+    "oversold_recovery": 2,
+}
+
+
 def build_market_signal_report(symbols_override: list[str] | None = None) -> dict:
-    """Build broad-universe technical signal payload for the merged morning report."""
+    """Build technical signal payload for the merged morning report.
+
+    Selection scan covers pool ∪ extend ($10B+) only; broad universe is
+    no longer scanned (broad data still feeds Section 0 S2 breadth via
+    build_market_timing_factor_report's independent broad DB load).
+
+    --symbols override grants pool privilege: every override symbol is
+    treated as layer="pool", bypassing the $10B mcap filter so manual
+    debugging (e.g. OKLO at $8B) renders without fail-fast.
+    """
     from datetime import date
 
     from scripts.broad_market_scan import (
-        BROAD_SCAN_RETURN_THRESHOLD,
-        BROAD_SCAN_RVOL_THRESHOLD,
         fetch_universe_metadata,
         load_price_frames,
-        scan_candidates,
     )
     from src.data.market_store import get_store
     from src.indicators.dv_acceleration import scan_dv_acceleration
@@ -754,9 +785,27 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
             }
             for symbol in symbols
         }
+        # Override grants pool privilege — bypass mcap filter, layer always "pool".
+        pool_symbols = pool_symbols | set(symbols)
+        logger.info("override mode: %d symbols treated as pool layer", len(symbols))
     else:
-        universe_cache = fetch_universe_metadata(as_of_date=date.today().isoformat(), min_mcap_b=1.0)
-        metadata = universe_cache.get("stocks", {})
+        universe_cache = fetch_universe_metadata(
+            as_of_date=date.today().isoformat(), min_mcap_b=10.0,
+        )
+        raw_metadata = universe_cache.get("stocks", {})
+        # Post-filter: market_db source ignores min_mcap_b and uses
+        # BROAD_UNIVERSE_MIN_MCAP_USD ($1B), so we must enforce ≥$10B locally.
+        metadata = {
+            sym: meta for sym, meta in raw_metadata.items()
+            if (meta.get("marketCap") or 0) >= EXTENDED_LAYER_MIN_MCAP
+        }
+        # Pool symbols always scanned regardless of mcap.
+        for sym in pool_symbols:
+            if sym not in metadata:
+                metadata[sym] = {
+                    "marketCap": (raw_metadata.get(sym) or {}).get("marketCap"),
+                    "shortName": sym, "longName": sym, "exchange": "DB",
+                }
         symbols = sorted(metadata.keys())
 
     _merge_local_metadata(metadata, symbols)
@@ -767,26 +816,10 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         for symbol, frame in price_frames.items()
     }
 
-    broad_scan = scan_candidates(price_frames, metadata, pool_symbols)
-
-    db_rows = [
-        {
-            "symbol": item["symbol"],
-            "date": broad_scan["scan_date"],
-            "rvol": item["rvol"],
-            "return_pct": item["return_pct"],
-            "market_cap": item.get("marketCap"),
-            "in_pool": item.get("in_pool", False),
-        }
-        for item in broad_scan["all_triggered"]
-    ]
-    if db_rows:
-        get_store().save_broad_scan_hits(db_rows)
-
     pmarp_raw = []
     for symbol, frame in price_dict.items():
         result = analyze_pmarp(frame)
-        if result.get("signal") == "oversold_recovery":
+        if result.get("signal") in PMARP_SIGNAL_LABELS:
             pmarp_raw.append({
                 "symbol": symbol,
                 "value": result.get("current"),
@@ -804,25 +837,20 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
 
     signal_symbols = [
         item["symbol"]
-        for item in (
-            list(broad_scan["all_triggered"])
-            + pmarp_raw
-            + dv_raw
-            + rvol_raw
-        )
+        for item in (pmarp_raw + dv_raw + rvol_raw)
     ]
     _hydrate_signal_metadata(metadata, signal_symbols)
-
-    broad_hits = sorted(
-        [_enrich_with_layer(item, metadata, pool_symbols) for item in broad_scan["all_triggered"]],
-        key=lambda x: (-x["rvol"], -x["return_pct"], x["symbol"]),
-    )
 
     pmarp_signals = [
         _enrich_with_layer(item, metadata, pool_symbols)
         for item in pmarp_raw
     ]
-    pmarp_signals.sort(key=lambda x: (x.get("value") or 0, x["symbol"]))
+    # Group by signal kind first (up98 / down98 / up2), then by value.
+    pmarp_signals.sort(key=lambda x: (
+        PMARP_SIGNAL_ORDER.get(x.get("signal"), 99),
+        x.get("value") or 0,
+        x["symbol"],
+    ))
 
     dv_hits = [
         _enrich_with_layer(item, metadata, pool_symbols)
@@ -850,16 +878,8 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
             )
             for layer in LAYER_ORDER
         },
-        "broad_scan": {
-            "criteria": "RVOL ≥{:.0f}σ + 涨 ≥{:.0f}%".format(
-                BROAD_SCAN_RVOL_THRESHOLD,
-                BROAD_SCAN_RETURN_THRESHOLD,
-            ),
-            "hits": broad_hits,
-            "triggered_total": broad_scan["triggered_total"],
-        },
         "pmarp": {
-            "criteria": "PMARP 上穿 2%",
+            "criteria": "PMARP 上穿2% / 上穿98% / 下穿98%",
             "hits": pmarp_signals,
         },
         "dv_acceleration": {
@@ -967,36 +987,18 @@ def format_section_market_timing_factor(market_signals: dict) -> str:
     return "\n".join(lines)
 
 
-def format_section_broad_signal(market_signals: dict) -> str:
-    section = market_signals.get("broad_scan", {})
-    lines = ["*1. 广扫标准 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_bucketed_table(
-        section.get("hits", []),
-        "无广扫触发",
-        "标的 | 概念 | 业务角色 | RVOL | 涨幅 | 市值",
-        lambda item: "{} | {} | {} | {:.1f}σ | {:+.1f}% | {}".format(
-            _compact_company(item),
-            _display_concept_tags(item),
-            _display_classification(item),
-            item["rvol"],
-            item["return_pct"],
-            _format_market_cap(item.get("marketCap")),
-        ),
-    ))
-    return "\n".join(lines)
-
-
 def format_section_layered_pmarp(market_signals: dict) -> str:
     section = market_signals.get("pmarp", {})
-    lines = ["*2. PMARP 信号 ({})*".format(section.get("criteria", ""))]
+    lines = ["*1. PMARP 信号 ({})*".format(section.get("criteria", ""))]
     lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无 PMARP 信号",
-        "标的 | 概念 | 业务角色 | 当前 | 变化 | 市值",
-        lambda item: "{} | {} | {} | {:.1f}% | {:.1f}→{:.1f} | {}".format(
+        "标的 | 概念 | 业务角色 | 信号 | 当前 | 变化 | 市值",
+        lambda item: "{} | {} | {} | {} | {:.1f}% | {:.1f}→{:.1f} | {}".format(
             _compact_company(item),
             _display_concept_tags(item),
             _display_classification(item),
+            PMARP_SIGNAL_LABELS.get(item.get("signal"), "—"),
             item.get("value") or 0,
             item.get("previous") or 0,
             item.get("value") or 0,
@@ -1008,7 +1010,7 @@ def format_section_layered_pmarp(market_signals: dict) -> str:
 
 def format_section_layered_dv(market_signals: dict) -> str:
     section = market_signals.get("dv_acceleration", {})
-    lines = ["*3. 量能加速 ({})*".format(section.get("criteria", ""))]
+    lines = ["*2. 量能加速 ({})*".format(section.get("criteria", ""))]
     lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无加速信号",
@@ -1033,7 +1035,7 @@ def format_section_layered_rvol(market_signals: dict) -> str:
         "sustained_3d": "3日连续",
         "single": "单日",
     }
-    lines = ["*4. RVOL 持续放量 ({})*".format(section.get("criteria", ""))]
+    lines = ["*3. RVOL 持续放量 ({})*".format(section.get("criteria", ""))]
     lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无持续放量信号",
@@ -1127,7 +1129,7 @@ def _normalize_dv_items(dv_result: dict) -> dict:
     except Exception:
         pool_symbols = set()
 
-    def normalize(row: dict) -> dict:
+    def normalize(row: dict) -> dict | None:
         symbol = (row.get("symbol") or "").upper()
         item = dict(metadata.get(symbol) or {})
         item.update({k: v for k, v in row.items() if v not in (None, "")})
@@ -1138,12 +1140,22 @@ def _normalize_dv_items(dv_result: dict) -> dict:
             item["marketCap"] = row.get("market_cap")
         item.setdefault("concept_bucket", _concept_bucket(item))
         layer_meta = {symbol: {"marketCap": item.get("marketCap") or 0}}
-        item["layer"] = _layer_for_symbol(symbol, layer_meta, pool_symbols)
+        layer = _layer_for_symbol(symbol, layer_meta, pool_symbols)
+        if layer not in {"pool", "extend"}:
+            logger.debug(
+                "DV row dropped (layer=%s, mcap=%s): %s",
+                layer, item.get("marketCap"), symbol,
+            )
+            return None
+        item["layer"] = layer
         return item
 
+    def _filter(rows):
+        return [r for r in (normalize(row) for row in rows) if r is not None]
+
     return {
-        "rankings": [normalize(row) for row in rankings],
-        "new_faces": [normalize(row) for row in new_faces],
+        "rankings": _filter(rankings),
+        "new_faces": _filter(new_faces),
     }
 
 
@@ -1220,7 +1232,7 @@ def build_morning_visual_sections(
     """Build image-report section specs grouped by layer and concept bucket."""
     sections = []
     as_of = (market_signals or {}).get("as_of") or datetime.now().strftime("%Y-%m-%d")
-    common_subtitle = "信号日 {} | Pool / Extend / Broad 分层，层内按题材聚类".format(as_of)
+    common_subtitle = "信号日 {} | Pool / Extend 分层，层内按题材聚类".format(as_of)
 
     if market_signals:
         timing = market_signals.get("market_timing_factor", {})
@@ -1265,56 +1277,34 @@ def build_morning_visual_sections(
                 ],
             })
 
-        broad = market_signals.get("broad_scan", {})
-        sections.append({
-            "slug": "01_broad_signal",
-            "title": "1. 广扫标准",
-            "subtitle": "{} | {}".format(broad.get("criteria", ""), common_subtitle),
-            "blocks": [
-                _build_visual_block(
-                    "触发公司",
-                    ["标的", "概念", "业务角色", "RVOL", "涨幅", "市值"],
-                    broad.get("hits", []),
-                    lambda item: [
-                        _visual_company(item),
-                        _display_concept_tags(item),
-                        _display_classification(item),
-                        "{:.1f}σ".format(item.get("rvol") or 0),
-                        "{:+.1f}%".format(item.get("return_pct") or 0),
-                        _format_market_cap(item.get("marketCap")),
-                    ],
-                    [320, 360, 280, 150, 150, 160],
-                ),
-            ],
-        })
-
         pmarp = market_signals.get("pmarp", {})
         sections.append({
-            "slug": "02_pmarp",
-            "title": "2. PMARP 信号",
+            "slug": "01_pmarp",
+            "title": "1. PMARP 信号",
             "subtitle": "{} | {}".format(pmarp.get("criteria", ""), common_subtitle),
             "blocks": [
                 _build_visual_block(
                     "上穿/修复",
-                    ["标的", "概念", "业务角色", "当前", "变化", "市值"],
+                    ["标的", "概念", "业务角色", "信号", "当前", "变化", "市值"],
                     pmarp.get("hits", []),
                     lambda item: [
                         _visual_company(item),
                         _display_concept_tags(item),
                         _display_classification(item),
+                        PMARP_SIGNAL_LABELS.get(item.get("signal"), "—"),
                         "{:.1f}%".format(item.get("value") or 0),
                         "{:.1f}→{:.1f}".format(item.get("previous") or 0, item.get("value") or 0),
                         _format_market_cap(item.get("marketCap")),
                     ],
-                    [320, 360, 280, 150, 190, 160],
+                    [300, 320, 240, 140, 130, 170, 150],
                 ),
             ],
         })
 
         dv_acc = market_signals.get("dv_acceleration", {})
         sections.append({
-            "slug": "03_dv_acceleration",
-            "title": "3. 量能加速",
+            "slug": "02_dv_acceleration",
+            "title": "2. 量能加速",
             "subtitle": "{} | {}".format(dv_acc.get("criteria", ""), common_subtitle),
             "blocks": [
                 _build_visual_block(
@@ -1344,8 +1334,8 @@ def build_morning_visual_sections(
             "single": "单日",
         }
         sections.append({
-            "slug": "04_rvol_sustained",
-            "title": "4. RVOL 持续放量",
+            "slug": "03_rvol_sustained",
+            "title": "3. RVOL 持续放量",
             "subtitle": "{} | {}".format(rvol.get("criteria", ""), common_subtitle),
             "blocks": [
                 _build_visual_block(
@@ -1397,7 +1387,7 @@ def build_morning_visual_sections(
             ))
         if blocks:
             sections.append({
-                "slug": "05_dollar_volume",
+                "slug": "04_dollar_volume",
                 "title": "D. Dollar Volume",
                 "subtitle": common_subtitle,
                 "blocks": blocks,
@@ -1480,6 +1470,11 @@ def _rows_by_layer_and_bucket(rows: list[dict]) -> dict:
     for row in rows:
         layer = row.get("layer", "broad")
         bucket = row.get("bucket") or "其他"
+        if layer not in LAYER_ORDER:
+            logger.warning(
+                "layer leak in _rows_by_layer_and_bucket: %r (row=%s); row will be hidden",
+                layer, row.get("cells", ["?"])[0] if row.get("cells") else "?",
+            )
         grouped.setdefault(layer, {}).setdefault(bucket, []).append(row)
     return grouped
 
@@ -1934,8 +1929,6 @@ def format_morning_report(
         lines.append(format_section_market_timing_factor(market_signals))
         lines.append("")
 
-        lines.append(format_section_broad_signal(market_signals))
-        lines.append("")
         lines.append(format_section_layered_pmarp(market_signals))
         lines.append("")
         lines.append(format_section_layered_dv(market_signals))
@@ -2013,7 +2006,10 @@ def run_dollar_volume() -> dict:
 def main():
     parser = argparse.ArgumentParser(description="未来资本 晨报")
     parser.add_argument("--no-telegram", action="store_true", help="不推送 Telegram")
-    parser.add_argument("--symbols", type=str, help="指定股票代码，逗号分隔")
+    parser.add_argument(
+        "--symbols", type=str,
+        help="指定股票代码，逗号分隔（override 模式：所有指定标的视为 pool 层，绕过 mcap 分层）",
+    )
     parser.add_argument("--include-social", action="store_true",
                         help="启用社交情绪段（默认 skip：Adanos 采集 cron 已下线）")
     parser.add_argument("--no-social", action="store_true",
@@ -2043,7 +2039,7 @@ def main():
             symbols = get_symbols()
         logger.info("股票池: %d 只", len(symbols))
 
-        # 2. 广义市场技术信号（broad universe + market.db 价格）
+        # 2. 市场技术信号（pool ∪ extend $10B+；broad universe 已退出选股扫描，仅保留给 Section 0 S2 大盘广度）
         market_signals = build_market_signal_report(symbols_override=symbols_override)
         logger.info(
             "市场信号完成: scanned=%d data=%d",
