@@ -831,14 +831,13 @@ def build_portfolio_visual_sections(
         {
             "slug": "stock_positions",
             "title": "股票持仓",
-            "subtitle": "按晨报同口径题材/概念聚类",
+            "subtitle": "按仓位大小降序排列",
             "blocks": [
                 {
                     "title": "Stocks",
                     "columns": ["Ticker", "业务角色", "市值", "NAV", "Total", "P/L"],
                     "widths": [160, 470, 240, 180, 180, 210],
-                    "rows": stock_rows or [{"bucket": "其他", "cells": ["无", "", "", "", "", ""]}],
-                    "grouped": True,
+                    "rows": stock_rows or [{"cells": ["无", "", "", "", "", ""]}],
                 }
             ],
         },
