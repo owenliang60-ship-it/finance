@@ -33,6 +33,12 @@ except ImportError:
     EXTENDED_UNIVERSE_FILE = _PROJECT_ROOT / "data" / "pool" / "extended_universe.json"
     EXTENDED_UNIVERSE_MIN_MCAP_B = 10
 
+# Sanity floor: FMP screener API failure can return [] silently. Raise rather
+# than overwrite the cache when returned count < floor (preserves old cache for
+# next cron retry). Default 400 = 73% of current 548; tune via `min_count_floor`
+# kwarg in tests/dev paths.
+MIN_COUNT_FLOOR = 400
+
 
 def _read_cache() -> Dict:
     """Read extended universe cache file."""
@@ -51,19 +57,28 @@ def _write_cache(data: Dict) -> None:
 
 def refresh_extended_universe(
     min_mcap_b: Optional[float] = None,
+    min_count_floor: Optional[int] = None,
 ) -> List[str]:
     """Refresh extended universe from FMP screener.
 
     Args:
         min_mcap_b: Minimum market cap in billions (default from config).
+        min_count_floor: Minimum returned count to accept; below this raises
+            RuntimeError without touching the cache file. Default `MIN_COUNT_FLOOR`.
 
     Returns:
         Sorted list of symbols.
+
+    Raises:
+        RuntimeError: FMP returned < min_count_floor symbols (API failure mode);
+            existing cache is NOT overwritten.
     """
     from src.data.fmp_client import FMPClient
 
     if min_mcap_b is None:
         min_mcap_b = EXTENDED_UNIVERSE_MIN_MCAP_B
+    if min_count_floor is None:
+        min_count_floor = MIN_COUNT_FLOOR
 
     min_mcap = int(min_mcap_b * 1_000_000_000)
     logger.info("Refreshing extended universe (market cap >= $%dB)...", int(min_mcap_b))
@@ -71,6 +86,12 @@ def refresh_extended_universe(
     client = FMPClient()
     stocks = client.get_large_cap_stocks(min_mcap)
     symbols = sorted(set(s["symbol"] for s in stocks if s.get("symbol")))
+
+    if len(symbols) < min_count_floor:
+        raise RuntimeError(
+            f"Refresh aborted: FMP returned {len(symbols)} symbols, "
+            f"below floor {min_count_floor}. Old cache preserved."
+        )
 
     cache = {
         "updated": date.today().isoformat(),
@@ -123,3 +144,25 @@ def get_cache_age_days() -> Optional[int]:
     from datetime import datetime
     updated_date = datetime.strptime(updated, "%Y-%m-%d").date()
     return (date.today() - updated_date).days
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Manage extended universe ($10B+ FMP screener) cache"
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Refresh extended_universe.json from FMP screener (raises if "
+             f"returned count < {MIN_COUNT_FLOOR})",
+    )
+    args = parser.parse_args()
+
+    if args.refresh:
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+        symbols = refresh_extended_universe()
+        print(f"Extended universe refreshed: {len(symbols)} symbols")
+    else:
+        parser.print_help()

@@ -51,6 +51,7 @@ case "$MODE" in
       --universe broad --incremental-new-symbols
     run_step "price_new_final" "$PYTHON" scripts/update_extended_prices.py \
       --universe broad --incremental-new-symbols
+    run_step "refresh_extended" "$PYTHON" -m src.data.extended_universe_manager --refresh
     ;;
   *)
     echo "Unknown mode: $MODE" >&2
