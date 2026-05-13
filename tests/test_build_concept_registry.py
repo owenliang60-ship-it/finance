@@ -455,6 +455,75 @@ def test_rebuild_display_tags_v2(build_env):
     assert "云端霸主" in amzn["display_tags"]
 
 
+# ---- Phase 2: refresh_profiles ----
+
+
+def test_refresh_profiles_writes_json_for_each_symbol(tmp_path, monkeypatch):
+    """profiles.json 必须包含每个 symbol 的 description/sector/industry/companyName。"""
+    profiles_path = tmp_path / "profiles.json"
+
+    fake_fmp = {
+        "AAPL": {"symbol": "AAPL", "companyName": "Apple Inc.", "sector": "Tech",
+                 "industry": "Consumer Electronics", "description": "iPhone maker"},
+        "MSFT": {"symbol": "MSFT", "companyName": "Microsoft Corp.", "sector": "Tech",
+                 "industry": "Software", "description": "Azure + Office"},
+    }
+    monkeypatch.setattr(
+        "scripts.build_company_concept_registry._fetch_fmp_profile",
+        lambda sym: fake_fmp[sym],
+    )
+
+    from scripts.build_company_concept_registry import refresh_profiles
+    count = refresh_profiles(symbols=["AAPL", "MSFT"], profiles_path=profiles_path)
+
+    assert count == 2
+    assert profiles_path.exists()
+    data = json.loads(profiles_path.read_text(encoding="utf-8"))
+    by_sym = data if isinstance(data, dict) else {p["symbol"]: p for p in data}
+    assert by_sym["AAPL"]["description"] == "iPhone maker"
+    assert by_sym["MSFT"]["industry"] == "Software"
+    assert by_sym["AAPL"]["sector"] == "Tech"
+
+
+def test_refresh_profiles_backs_up_existing_json(tmp_path, monkeypatch):
+    """如果 profiles.json 已存在，先备份再覆盖。"""
+    profiles_path = tmp_path / "profiles.json"
+    profiles_path.write_text(json.dumps({"OLD": {"symbol": "OLD"}}), encoding="utf-8")
+
+    monkeypatch.setattr(
+        "scripts.build_company_concept_registry._fetch_fmp_profile",
+        lambda sym: {"symbol": sym, "description": "new"},
+    )
+
+    from scripts.build_company_concept_registry import refresh_profiles
+    refresh_profiles(symbols=["AAPL"], profiles_path=profiles_path)
+
+    backups = list(tmp_path.glob("profiles.json.backup-*-preprofiles"))
+    assert len(backups) == 1
+    old = json.loads(backups[0].read_text(encoding="utf-8"))
+    assert "OLD" in old
+
+
+def test_refresh_profiles_skips_symbols_with_fmp_errors(tmp_path, monkeypatch):
+    """单个 symbol FMP 调用失败不应整个 batch 中断；其他 symbol 仍写入。"""
+    profiles_path = tmp_path / "profiles.json"
+
+    def _fake(sym):
+        if sym == "BAD":
+            raise RuntimeError("FMP rate limit")
+        return {"symbol": sym, "description": "ok"}
+
+    monkeypatch.setattr(
+        "scripts.build_company_concept_registry._fetch_fmp_profile", _fake,
+    )
+
+    from scripts.build_company_concept_registry import refresh_profiles
+    count = refresh_profiles(["AAPL", "BAD", "MSFT"], profiles_path=profiles_path)
+    assert count == 2
+    data = json.loads(profiles_path.read_text(encoding="utf-8"))
+    assert set(data.keys()) == {"AAPL", "MSFT"}
+
+
 # ---- CLI helpers ----
 
 

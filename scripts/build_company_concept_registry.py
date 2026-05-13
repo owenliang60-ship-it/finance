@@ -34,6 +34,7 @@ import argparse
 import csv
 import json
 import logging
+import shutil
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -53,6 +54,10 @@ logger = logging.getLogger(__name__)
 GATE_PRIORITY_COVERAGE = 1.0
 GATE_TAIL_NEEDS_REVIEW_MAX = 0.30
 SOFT_REVIEW_CONFIDENCE_THRESHOLD = 0.7
+
+PROFILES_PATH = PROJECT_ROOT / "data" / "fundamental" / "profiles.json"
+EXTENDED_UNIVERSE_PATH = PROJECT_ROOT / "data" / "pool" / "extended_universe.json"
+COMPANY_DB_PATH = PROJECT_ROOT / "data" / "company.db"
 
 REVIEW_CSV_FIELDS: list[str] = [
     "review_reason",
@@ -118,6 +123,61 @@ class BuildResult:
             f"saved: {'yes' if self.saved else 'no'}{forced_marker}",
         ]
         return "\n".join(lines)
+
+
+def _backup_file(path: Path, label: str) -> Path | None:
+    """Backup any JSON/plain file with .backup-<ts>-<label> suffix. Returns
+    backup path or None when source doesn't exist. Used for JSON; SQLite DBs
+    must use _backup_sqlite() (WAL-safe)."""
+    if not path.exists():
+        return None
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    backup = path.with_name(f"{path.name}.backup-{ts}-{label}")
+    shutil.copy2(path, backup)
+    logger.info("Backed up %s -> %s", path, backup)
+    return backup
+
+
+def _fetch_fmp_profile(symbol: str) -> dict:
+    """Call FMP /profile/<symbol>. Returns flattened dict. Honors client rate-limit."""
+    from src.data.fmp_client import fmp_client  # existing module-level singleton
+    resp = fmp_client.get_profile(symbol)
+    if isinstance(resp, dict):
+        return dict(resp)
+    return {}
+
+
+def refresh_profiles(
+    symbols: list[str],
+    profiles_path: Path = PROFILES_PATH,
+) -> int:
+    """Phase 2: pull FMP /profile/<symbol> and write to JSON keyed by symbol.
+
+    Output schema matches the existing _load_profiles consumer:
+        {"AAPL": {"symbol": "AAPL", "companyName": "...", "sector": "...",
+                  "industry": "...", "description": "...", ...}, ...}
+
+    Backs up existing JSON first. Rate-limit handled by FMP client (2s).
+    Does NOT touch company.db — market_cap continues to flow through the
+    existing data pipeline.
+    """
+    _backup_file(profiles_path, "preprofiles")
+    profiles_path.parent.mkdir(parents=True, exist_ok=True)
+    out: dict[str, dict] = {}
+    for sym in symbols:
+        try:
+            profile = _fetch_fmp_profile(sym)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("FMP profile fetch failed for %s: %s", sym, exc)
+            continue
+        if profile:
+            out[sym.upper()] = profile
+    profiles_path.write_text(
+        json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    logger.info("Wrote %d profiles -> %s", len(out), profiles_path)
+    return len(out)
 
 
 def _classify_v2(
@@ -463,6 +523,8 @@ def main() -> int:
                         help="Bypass the layered gate.")
     parser.add_argument("--rebuild-display", action="store_true",
                         help="Recompute display_tags from current concepts.label.")
+    parser.add_argument("--refresh-profiles", action="store_true",
+                        help="Phase 2: refresh FMP profiles for extend pool (writes profiles.json), then exit.")
     parser.add_argument(
         "--review-csv",
         type=Path,
@@ -479,6 +541,12 @@ def main() -> int:
         taxonomy_path=cfg_dir / "concept_taxonomy_v2.json",
         watchlist_path=cfg_dir / "concept_watchlist.json",
     )
+
+    if args.refresh_profiles:
+        symbols = _load_universe(EXTENDED_UNIVERSE_PATH)
+        count = refresh_profiles(symbols)
+        print(f"Refreshed {count} profiles -> {PROFILES_PATH}")
+        return 0
 
     if args.rebuild_display:
         summary = rebuild_display_tags(store=store, registry=registry)
