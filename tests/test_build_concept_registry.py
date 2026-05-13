@@ -455,6 +455,130 @@ def test_rebuild_display_tags_v2(build_env):
     assert "云端霸主" in amzn["display_tags"]
 
 
+# ---- Phase 4: write_review_csv with mcap_tier + Chinese labels ----
+
+
+def _seed_company_db(tmp_path: Path, market_caps: dict[str, float]) -> Path:
+    """Bootstrap a minimal company.db mirroring the real schema columns we need."""
+    import sqlite3
+    db = tmp_path / "company.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute("""
+        CREATE TABLE companies (
+            symbol TEXT PRIMARY KEY,
+            name TEXT,
+            sector TEXT,
+            industry TEXT,
+            market_cap REAL,
+            exchange TEXT
+        )
+    """)
+    for sym, cap in market_caps.items():
+        conn.execute(
+            "INSERT INTO companies (symbol, market_cap) VALUES (?, ?)",
+            (sym, cap),
+        )
+    conn.commit()
+    conn.close()
+    return db
+
+
+def test_mcap_to_tier_boundaries():
+    from scripts.build_company_concept_registry import _mcap_to_tier
+    assert _mcap_to_tier(1_000e9) == "mega"
+    assert _mcap_to_tier(999e9) == "large"
+    assert _mcap_to_tier(300e9) == "large"
+    assert _mcap_to_tier(299e9) == "mid"
+    assert _mcap_to_tier(100e9) == "mid"
+    assert _mcap_to_tier(99e9) == "small"
+    assert _mcap_to_tier(10e9) == "small"
+    assert _mcap_to_tier(9e9) == ""
+    assert _mcap_to_tier(None) == ""
+    assert _mcap_to_tier(0) == ""
+
+
+def test_load_market_caps_from_company_db(tmp_path):
+    from scripts.build_company_concept_registry import _load_market_caps_from_company_db
+    db = _seed_company_db(tmp_path, {"AAPL": 3_500e9, "FOO": 50e9})
+    caps = _load_market_caps_from_company_db(db)
+    assert caps["AAPL"] == 3_500e9
+    assert caps["FOO"] == 50e9
+
+
+def test_load_market_caps_returns_empty_when_db_missing(tmp_path):
+    from scripts.build_company_concept_registry import _load_market_caps_from_company_db
+    assert _load_market_caps_from_company_db(tmp_path / "missing.db") == {}
+
+
+def test_write_review_csv_uses_chinese_labels_and_mcap_tier(tmp_path):
+    """v2 CSV: l1/l2/l3 列写中文 label，mcap_tier 来自 market_caps 字典。"""
+    from scripts.build_company_concept_registry import write_review_csv
+
+    rows = [
+        {"symbol": "AAPL", "l1": "consumer_retail",
+         "l2": "consumer_electronics_brand", "l3_themes": ["edge_ai"],
+         "business_role": "iPhone", "confidence": 0.95,
+         "source": "manual", "needs_review": 0, "evidence": "",
+         "display_tags": ""},
+        {"symbol": "FOO", "l1": None, "l2": None, "l3_themes": [],
+         "business_role": "", "confidence": 0.0, "source": "llm_failed",
+         "needs_review": 1, "evidence": "timeout", "display_tags": ""},
+    ]
+    profiles = {
+        "AAPL": {"symbol": "AAPL", "companyName": "Apple Inc.",
+                 "sector": "Tech", "industry": "Consumer Electronics",
+                 "description": "iPhone"},
+        "FOO": {"symbol": "FOO", "companyName": "Foo Corp.",
+                "sector": "Industrials", "industry": "Construction",
+                "description": "Builds stuff"},
+    }
+    market_caps = {"AAPL": 3_500e9, "FOO": 50e9}
+    taxonomy = json.loads(TAXONOMY_V2_PATH.read_text(encoding="utf-8"))
+
+    csv_path = tmp_path / "out.csv"
+    write_review_csv(
+        rows=rows, csv_path=csv_path,
+        taxonomy=taxonomy, profiles=profiles, market_caps=market_caps,
+    )
+
+    with csv_path.open() as fh:
+        reader = csv.DictReader(fh)
+        out = list(reader)
+        fields = reader.fieldnames
+
+    assert fields is not None
+    assert len(fields) == 16  # review_reason + 15 data columns
+    by_sym = {r["symbol"]: r for r in out}
+
+    aapl = by_sym["AAPL"]
+    assert aapl["mcap_tier"] == "mega"
+    assert aapl["l1"] == "消费与零售"       # Chinese label
+    assert aapl["l2"] == "消费电子与品牌硬件"
+    assert aapl["l3_themes"] == "端侧AI"
+    assert aapl["company_name"] == "Apple Inc."
+
+    foo = by_sym["FOO"]
+    assert foo["mcap_tier"] == "small"
+    assert foo["l1"] == ""  # failed row leaves l1 blank
+    assert foo["l2"] == ""
+    assert foo["needs_review"] == "1"
+    assert foo["review_reason"] == "hard_needs_review"
+
+
+def test_taxonomy_reference_csv_lists_all_113_concepts(tmp_path):
+    """taxonomy_reference.csv 必须含 11+60+42 = 113 行 (header 之外)。"""
+    from scripts.build_company_concept_registry import _write_taxonomy_reference_csv
+
+    taxonomy = json.loads(TAXONOMY_V2_PATH.read_text(encoding="utf-8"))
+    out = tmp_path / "taxonomy_reference.csv"
+    _write_taxonomy_reference_csv(taxonomy, out)
+
+    rows = list(csv.DictReader(out.open()))
+    assert len(rows) == 113
+    levels = {int(r["level"]) for r in rows}
+    assert levels == {1, 2, 3}
+
+
 # ---- Phase 2: refresh_profiles ----
 
 

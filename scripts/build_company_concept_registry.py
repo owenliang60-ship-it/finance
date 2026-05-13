@@ -212,8 +212,12 @@ def _classify_v2(
     return row
 
 
-def _mcap_tier(market_cap_usd: float | None) -> str:
-    """Map market cap to L4 tier enum. Returns '' when no cap available."""
+def _mcap_to_tier(market_cap_usd: float | None) -> str:
+    """Map market cap to L4 tier enum.
+
+    Boundaries (spec §3.4): >=$1T mega, >=$300B large, >=$100B mid,
+    >=$10B small, <$10B → '' (extend pool filter excludes these in practice).
+    """
     if market_cap_usd is None or market_cap_usd <= 0:
         return ""
     if market_cap_usd >= 1_000_000_000_000:
@@ -227,13 +231,78 @@ def _mcap_tier(market_cap_usd: float | None) -> str:
     return ""
 
 
+# Back-compat alias for the original Task 4b naming.
+_mcap_tier = _mcap_to_tier
+
+
+def _load_market_caps_from_company_db(
+    company_db_path: Path = COMPANY_DB_PATH,
+) -> dict[str, float]:
+    """Read-only cross-DB query: companies.market_cap. Empty when DB absent."""
+    if not company_db_path.exists():
+        return {}
+    import sqlite3
+    conn = sqlite3.connect(str(company_db_path))
+    try:
+        out: dict[str, float] = {}
+        for r in conn.execute(
+            "SELECT symbol, market_cap FROM companies "
+            "WHERE market_cap IS NOT NULL AND market_cap > 0"
+        ):
+            sym = str(r[0]).upper()
+            try:
+                out[sym] = float(r[1])
+            except (TypeError, ValueError):
+                continue
+        return out
+    finally:
+        conn.close()
+
+
+def _write_taxonomy_reference_csv(
+    taxonomy: dict,
+    out_path: Path,
+) -> None:
+    """Emit reports/concept_registry/taxonomy_reference.csv (spec §6.3).
+
+    Columns: level / id / name_cn / parent_id / typical_members(empty).
+    Boss uses this as a lookup table while editing the main review CSV.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["level", "id", "name_cn", "parent_id", "typical_members"])
+        for c in taxonomy.get("concepts", []):
+            w.writerow([
+                c.get("level", ""),
+                c.get("concept_id", ""),
+                c.get("label", ""),
+                c.get("parent_id") or "",
+                "",
+            ])
+
+
 def _row_to_csv(
     row: dict,
     profile: dict,
     review_reason: str,
     market_cap_usd: float | None = None,
+    concepts_by_id: dict[str, str] | None = None,
 ) -> dict[str, str]:
+    """Render one classify row + profile + market_cap into 16-col CSV dict.
+
+    l1/l2/l3 columns carry the Chinese label (concept.label) so Boss can read
+    and edit in his native language. Phase 5 (`read_reviewed_csv`) maps labels
+    back to concept_id via the same taxonomy. Missing l1/l2 (failure rows)
+    leave the column blank.
+    """
     cap_b = market_cap_usd / 1_000_000_000 if market_cap_usd else None
+    concepts_by_id = concepts_by_id or {}
+    l1_label = concepts_by_id.get(row.get("l1") or "", "") if row.get("l1") else ""
+    l2_label = concepts_by_id.get(row.get("l2") or "", "") if row.get("l2") else ""
+    l3_labels = [
+        concepts_by_id.get(tid, "") for tid in (row.get("l3_themes") or [])
+    ]
     return {
         "review_reason": review_reason,
         "symbol": row["symbol"],
@@ -241,17 +310,58 @@ def _row_to_csv(
         "fmp_sector": profile.get("sector", ""),
         "fmp_industry": profile.get("industry", ""),
         "market_cap_b": f"{cap_b:.2f}" if cap_b is not None else "",
-        "mcap_tier": _mcap_tier(market_cap_usd),
+        "mcap_tier": _mcap_to_tier(market_cap_usd),
         "description": (profile.get("description", "") or "")[:500],
-        "l1": row.get("l1") or "",
-        "l2": row.get("l2") or "",
-        "l3_themes": ";".join(row.get("l3_themes") or []),
+        "l1": l1_label,
+        "l2": l2_label,
+        "l3_themes": ";".join(s for s in l3_labels if s),
         "business_role": row.get("business_role", ""),
         "prefill_source": row.get("source", ""),
         "confidence": f"{row.get('confidence', 0.0):.2f}",
         "needs_review": str(int(row.get("needs_review", 0))),
         "boss_notes": "",
     }
+
+
+def write_review_csv(
+    *,
+    rows: list[dict],
+    csv_path: Path,
+    taxonomy: dict,
+    profiles: dict[str, dict] | None = None,
+    market_caps: dict[str, float] | None = None,
+) -> None:
+    """Phase 4 standalone: write the 15-col review CSV (16 with review_reason).
+
+    Sort order: needs_review=1 first, then by confidence ascending so the
+    lowest-confidence rows surface at the top of Boss's review queue.
+    """
+    profiles = profiles or {}
+    market_caps = {k.upper(): v for k, v in (market_caps or {}).items()}
+    concepts_by_id = {c["concept_id"]: c["label"] for c in taxonomy.get("concepts", [])}
+
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    sorted_rows = sorted(
+        rows,
+        key=lambda r: (-int(r.get("needs_review", 0)), float(r.get("confidence", 1.0))),
+    )
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=REVIEW_CSV_FIELDS)
+        w.writeheader()
+        for r in sorted_rows:
+            sym = r["symbol"].upper()
+            profile = dict(profiles.get(sym) or {})
+            cap = market_caps.get(sym)
+            if r.get("needs_review", 0) == 1:
+                reason = "hard_needs_review"
+            elif (
+                r.get("source") in ("rule", "llm")
+                and float(r.get("confidence", 1.0)) < SOFT_REVIEW_CONFIDENCE_THRESHOLD
+            ):
+                reason = "soft_low_confidence"
+            else:
+                reason = "ok"
+            w.writerow(_row_to_csv(r, profile, reason, cap, concepts_by_id))
 
 
 def _row_to_db(row: dict) -> dict:
@@ -304,6 +414,7 @@ def build_registry(
                 full_universe.append(up)
 
     taxonomy = registry._taxonomy  # SSOT dict used by LLM prefill
+    concepts_by_id = {c["concept_id"]: c["label"] for c in taxonomy.get("concepts", [])}
 
     rows: list[dict] = []
     csv_rows: list[dict[str, str]] = []
@@ -314,12 +425,16 @@ def build_registry(
         rows.append(row)
         cap_usd = market_caps.get(sym)
         if row["needs_review"] == 1:
-            csv_rows.append(_row_to_csv(row, profile, "hard_needs_review", cap_usd))
+            csv_rows.append(
+                _row_to_csv(row, profile, "hard_needs_review", cap_usd, concepts_by_id)
+            )
         elif (
             row["source"] in ("rule", "llm")
             and row["confidence"] < SOFT_REVIEW_CONFIDENCE_THRESHOLD
         ):
-            csv_rows.append(_row_to_csv(row, profile, "soft_low_confidence", cap_usd))
+            csv_rows.append(
+                _row_to_csv(row, profile, "soft_low_confidence", cap_usd, concepts_by_id)
+            )
 
     priority = registry.priority_list(
         broad_top_symbols=list(broad_top_symbols or []),
@@ -561,9 +676,10 @@ def main() -> int:
     else:
         universe = _load_universe(Path(args.symbols))
 
-    profiles = _load_profiles(PROJECT_ROOT / "data" / "fundamental" / "profiles.json")
+    profiles = _load_profiles(PROFILES_PATH)
     portfolio = _read_portfolio_holdings()
     broad_top = _read_broad_top(100)
+    market_caps = _load_market_caps_from_company_db()
 
     save = args.save and not args.dry_run
 
@@ -577,10 +693,17 @@ def main() -> int:
             review_csv_path=args.review_csv,
             save=save,
             force_save=args.force_save,
+            market_caps=market_caps,
         )
     except BuildGateError as exc:
         print(f"GATE FAILED: {exc}", file=sys.stderr)
         return 2
+
+    # Always emit taxonomy_reference.csv alongside the review CSV
+    _write_taxonomy_reference_csv(
+        registry._taxonomy,
+        args.review_csv.parent / "taxonomy_reference.csv",
+    )
 
     print(result.as_summary())
     return 0
