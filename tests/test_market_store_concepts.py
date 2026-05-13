@@ -388,6 +388,31 @@ def test_upsert_rejects_theme_ids_pointing_to_non_level3(tmp_path):
         store.upsert_company_concepts(bad)
 
 
+def test_upsert_concept_themes_emits_deprecation_warning(tmp_path):
+    """v2 (Task 10): upsert_concept_themes is preserved but must warn on use.
+
+    Themes now live in `concepts` table at level=3; this method's only purpose
+    is to keep the 5-row historical snapshot writable from `rebuild_concept_tree`.
+    """
+    import warnings
+
+    store = MarketStore(tmp_path / "market.db")
+    store.upsert_concepts([
+        {"concept_id": "memory", "label": "存储", "level": 2, "parent_id": None},
+    ])
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        store.upsert_concept_themes([{
+            "theme_id": "hbm", "label": "HBM", "parent_concept_id": "memory",
+            "lifecycle_state": "active",
+        }])
+    msgs = [str(w.message).lower() for w in caught
+            if issubclass(w.category, DeprecationWarning)]
+    assert any("deprecated" in m for m in msgs), (
+        f"expected a DeprecationWarning, got: {msgs}"
+    )
+
+
 def test_upsert_rejects_theme_ids_pointing_to_unknown_concept(tmp_path):
     """theme_id 不存在于 concepts 表 → 拒绝（防御 FK 漏检）。"""
     store = MarketStore(tmp_path / "market.db")

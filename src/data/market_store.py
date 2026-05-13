@@ -1613,7 +1613,25 @@ class MarketStore:
         return count
 
     def upsert_concept_themes(self, rows: List[Dict[str, Any]]) -> int:
-        """Upsert dynamic theme rows. Preserves created_at on update."""
+        """Upsert dynamic theme rows. Preserves created_at on update.
+
+        .. deprecated:: v2 (2026-05-13)
+            ``concept_themes`` is no longer the write target for themes.
+            v2 stores themes as ``concepts`` rows with ``level=3`` and
+            references them via ``company_concept_tags.theme_ids``
+            (same namespace, FK-validated). This method is retained only
+            so the 5-row historical snapshot (hbm/liquid_cooling/...) and
+            ``rebuild_concept_tree``'s FK cut-step continue to function.
+            New code MUST use ``upsert_concepts(level=3)`` + ``theme_ids``.
+        """
+        import warnings
+        warnings.warn(
+            "upsert_concept_themes is deprecated in v2 — themes live in "
+            "concepts table as level=3 and are referenced via "
+            "company_concept_tags.theme_ids",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if not rows:
             return 0
         conn = self._get_conn()
