@@ -21,28 +21,24 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 
-# Registry primary_concept_id → legacy bucket label, for grouping continuity.
-# This mirrors `terminal.company_concepts._LEGACY_BUCKET_TO_CONCEPT` (kept in
-# sync intentionally; this is the reverse direction). Without it, registry-
-# driven section grouping would diverge from the legacy bucket_order in the
-# report JSON, and POET-style registry corrections wouldn't reach the section
-# header.
+# v2 11 L1 → legacy bucket label, for grouping continuity.
+# Morning report section headers and bucket_order keep their legacy names so
+# downstream consumers (Boss's eyes, dashboards) don't see new strings on the
+# same business slice. crypto is folded into finance section; ETF stays
+# managed by the legacy path (ETF symbols don't carry v2 L1 tags).
 _CONCEPT_TO_LEGACY_BUCKET: dict[str, str] = {
     "ai_compute_cloud": "AI算力/云",
     "semiconductor": "半导体链",
-    "data_center_power": "数据中心电力",
-    "network_equipment": "通信/网络设备",
-    "internet_ads": "互联网/广告",
-    "software_saas": "软件/SaaS",
-    "evs_robotics": "自动驾驶/机器人",
-    "finance_crypto": "金融/加密",
+    "internet_software": "互联网/广告",         # software/SaaS also lands here
+    "autonomy_robotics": "自动驾驶/机器人",
     "pharma_life_sci": "医药/生命科学",
-    "industrial_aerospace": "工业/航天/国防",
-    "consumer_ecommerce": "消费/电商",
+    "finance": "金融/加密",
+    "crypto": "金融/加密",                       # crypto folds into finance section
+    "consumer_retail": "消费/电商",
     "energy_materials": "能源/材料",
-    "realestate_infra": "地产/基础设施",
-    "etf_macro": "ETF/宏观工具",
-    "other": "其他",
+    "industrial_aerospace": "工业/航天/国防",
+    "realestate_utility": "地产/基础设施",
+    # ETF / unmapped fall through to legacy classify() bucket.
 }
 
 

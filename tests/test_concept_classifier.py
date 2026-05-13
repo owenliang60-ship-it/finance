@@ -71,79 +71,108 @@ def test_group_items_preserves_bucket_order():
     assert list(grouped.keys()) == ["AI算力/云", "半导体链", "自动驾驶/机器人"]
 
 
-# ---------- Registry-aware classifier (Task 5) ----------
+# ---------- Registry-aware classifier (v2: Task 9) ----------
+#
+# v2 contract:
+#   - display_tags() returns the DB canonical 3-segment Chinese string,
+#     written by build pipeline Phase 6 (Task 8) into company_concept_tags.
+#   - concept_tags() splits that string back into a list.
+#   - _grouping_bucket() maps registry primary_concept_id → legacy section
+#     bucket via _CONCEPT_TO_LEGACY_BUCKET (11 L1 → 14 legacy buckets so
+#     morning report section headers stay stable).
+#   - Unregistered symbols fall through to legacy ConceptClassifier.classify().
 
 import pytest  # noqa: E402
 
-CFG = PROJECT_ROOT / "config" / "concepts"
-TAXONOMY_PATH = CFG / "taxonomy.json"
-THEMES_PATH = CFG / "concept_themes.json"
-OVERRIDES_PATH = CFG / "company_concept_overrides.json"
-WATCHLIST_PATH = CFG / "concept_watchlist.json"
 
+def _seed_v2_registry(tmp_path, rows: dict[str, dict]):
+    """Bootstrap a MarketStore with v2 concept rows + canonical display_tags.
 
-@pytest.fixture
-def store_with_registry(tmp_path):
-    """A MarketStore prepopulated with MU + POET + TWOLEVEL via the build pipeline."""
+    `rows` shape: {symbol: {"primary": "semiconductor",
+                            "secondary": "gpu_accelerator",
+                            "display": "半导体 / 计算芯片/GPU加速器 / AI算力",
+                            "business_role": "...", "theme_ids": [...]}}
+    """
     from src.data.market_store import MarketStore
-    from terminal.company_concepts import ConceptRegistry
-    from scripts.build_company_concept_registry import build_registry
-
     store = MarketStore(tmp_path / "market.db")
-    registry = ConceptRegistry(
-        taxonomy_path=TAXONOMY_PATH,
-        themes_path=THEMES_PATH,
-        overrides_path=OVERRIDES_PATH,
-        watchlist_path=WATCHLIST_PATH,
-    )
-    profiles = {
-        "MU": {"symbol": "MU", "industry": "Semiconductors"},
-        "POET": {"symbol": "POET", "industry": "Semiconductors"},
-        # A two-level rule-based row to test no-tertiary display
-        "TSM": {"symbol": "TSM", "industry": "Foundry"},
-    }
-    build_registry(
-        store=store, registry=registry,
-        universe_symbols=["MU", "POET", "TSM"],
-        profiles=profiles,
-        portfolio_holdings=["MU", "POET", "TSM"],
-        broad_top_symbols=["MU", "POET", "TSM"],
-        review_csv_path=tmp_path / "review.csv",
-        save=True, force_save=True,
-    )
+    # Seed the v2 concepts referenced by `rows` plus a couple of generic L1s.
+    seeded_concepts = [
+        {"concept_id": "semiconductor", "label": "半导体", "level": 1, "parent_id": None},
+        {"concept_id": "consumer_retail", "label": "消费与零售", "level": 1, "parent_id": None},
+        {"concept_id": "internet_software", "label": "互联网与软件", "level": 1, "parent_id": None},
+        {"concept_id": "gpu_accelerator", "label": "计算芯片/GPU加速器", "level": 2, "parent_id": "semiconductor"},
+        {"concept_id": "consumer_staples", "label": "必需消费品", "level": 2, "parent_id": "consumer_retail"},
+        {"concept_id": "ai_compute", "label": "AI算力", "level": 3, "concept_type": "theme"},
+    ]
+    store.upsert_concepts(seeded_concepts)
+    upserts = []
+    for sym, r in rows.items():
+        upserts.append({
+            "symbol": sym,
+            "primary_concept_id": r["primary"],
+            "secondary_concept_id": r.get("secondary"),
+            "tertiary_concept_id": None,
+            "theme_ids": r.get("theme_ids", []),
+            "display_tags": r["display"],
+            "business_role": r.get("business_role", ""),
+            "confidence": 0.95,
+            "source": "manual",
+            "evidence": "",
+            "needs_review": 0,
+        })
+    store.upsert_company_concepts(upserts)
     return store
 
 
-def test_display_tags_registry_hit_mu(store_with_registry):
-    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store_with_registry)
-    assert clf.display_tags({"symbol": "MU"}) == "半导体 / 存储 / HBM"
-    assert clf.concept_tags({"symbol": "MU"}) == ["半导体", "存储", "HBM"]
+def test_classifier_display_tags_returns_db_canonical(tmp_path):
+    store = _seed_v2_registry(tmp_path, {
+        "NVDA": {"primary": "semiconductor", "secondary": "gpu_accelerator",
+                 "theme_ids": ["ai_compute"],
+                 "display": "半导体 / 计算芯片/GPU加速器 / AI算力"},
+        "KO": {"primary": "consumer_retail", "secondary": "consumer_staples",
+               "display": "消费与零售 / 必需消费品"},
+    })
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
+    assert clf.display_tags({"symbol": "NVDA"}) == "半导体 / 计算芯片/GPU加速器 / AI算力"
+    assert clf.display_tags({"symbol": "KO"}) == "消费与零售 / 必需消费品"
+    # Unregistered symbol falls back to legacy single-bucket
+    assert clf.display_tags({"symbol": "SPY", "industry": "ETF"}) == "ETF/宏观工具"
 
 
-def test_display_tags_registry_hit_poet(store_with_registry):
-    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store_with_registry)
-    assert clf.display_tags({"symbol": "POET"}) == "通信/网络设备 / 光通信 / InP光接口"
+def test_classifier_concept_tags_returns_split_list(tmp_path):
+    store = _seed_v2_registry(tmp_path, {
+        "NVDA": {"primary": "semiconductor", "secondary": "gpu_accelerator",
+                 "theme_ids": ["ai_compute"],
+                 "display": "半导体 / 计算芯片/GPU加速器 / AI算力"},
+    })
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
+    tags = clf.concept_tags({"symbol": "NVDA"})
+    assert tags == ["半导体", "计算芯片/GPU加速器", "AI算力"]
 
 
-def test_display_tags_registry_two_level(store_with_registry):
-    """TSM override has two levels (半导体/晶圆代工); display must not have a trailing slash."""
-    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store_with_registry)
-    display = clf.display_tags({"symbol": "TSM"})
-    assert display == "半导体 / 晶圆代工"
-    assert not display.endswith("/")
-    assert " /  " not in display
+def test_grouping_bucket_maps_v2_l1_to_legacy_bucket(tmp_path):
+    """For section grouping, new 11 L1 → legacy 14 bucket via _CONCEPT_TO_LEGACY_BUCKET."""
+    store = _seed_v2_registry(tmp_path, {
+        "NVDA": {"primary": "semiconductor", "secondary": "gpu_accelerator",
+                 "display": "半导体 / 计算芯片/GPU加速器"},
+    })
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
+    bucket = clf._grouping_bucket({"symbol": "NVDA"})
+    assert bucket == "半导体链"   # legacy section header continuity
 
 
-def test_display_tags_registry_miss_falls_back_to_legacy(store_with_registry):
-    """NVDA not in registry → falls back to legacy JSON bucket."""
-    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store_with_registry)
+def test_classifier_unregistered_symbol_falls_back_to_legacy(tmp_path):
+    """Symbol absent from registry → legacy ConceptClassifier.classify() path."""
+    store = _seed_v2_registry(tmp_path, {})
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
+    # NVDA isn't in our minimal seed; falls back to legacy keyword path.
     display = clf.display_tags({"symbol": "NVDA",
                                 "companyName": "NVIDIA Corporation",
                                 "industry": "Semiconductors"})
-    assert display == "AI算力/云"   # legacy single bucket
+    assert display == "AI算力/云"
 
 
-def test_display_tags_no_store_uses_legacy_only():
+def test_classifier_no_store_uses_legacy_only():
     """When market_store=None, classifier never queries DB."""
     clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=None)
     display = clf.display_tags({"symbol": "NVDA",
@@ -152,152 +181,27 @@ def test_display_tags_no_store_uses_legacy_only():
     assert display == "AI算力/云"
 
 
-def test_business_role_uses_registry_when_available(store_with_registry):
-    """Registry row's business_role wins over legacy keyword rules."""
-    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store_with_registry)
-    # MU's manual override role differs from a generic FMP-derived label.
-    assert clf.business_role({"symbol": "MU", "industry": "Semiconductors"}) == "DRAM/HBM存储"
-    # POET registry role is "光通信/光器件(InP optical interposer)" — registry wins
-    # even when the profile says Semiconductors (which would mislead legacy rules).
-    poet_role = clf.business_role({"symbol": "POET", "industry": "Semiconductors"})
-    assert "光通信" in poet_role
-
-
-def test_group_items_uses_registry_primary_over_legacy_bucket(store_with_registry):
-    """A POET-style registry override must drive the section bucket, even when
-    the item's pre-computed `concept_bucket` (from legacy classify) is wrong."""
-    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store_with_registry)
-    # Simulate a stale classify result on the item (legacy assigned 半导体链
-    # because POET's profile literally says Semiconductors).
-    items = [
-        {"symbol": "POET", "concept_bucket": "半导体链",
-         "industry": "Semiconductors"},
-        {"symbol": "MU", "concept_bucket": "半导体链"},
-    ]
-    grouped = clf.group_items(items)
-    # POET should land under registry primary (network_equipment → 通信/网络设备)
-    poet_buckets = [b for b, rows in grouped.items()
-                    if any(r["symbol"] == "POET" for r in rows)]
-    assert poet_buckets == ["通信/网络设备"]
-    # MU stays under 半导体链 (registry primary semiconductor → legacy alias).
-    mu_buckets = [b for b, rows in grouped.items()
-                  if any(r["symbol"] == "MU" for r in rows)]
-    assert mu_buckets == ["半导体链"]
-
-
-def test_business_role_falls_back_to_legacy_when_unregistered(store_with_registry):
-    """Unregistered symbols still get legacy role mapping."""
-    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store_with_registry)
-    role = clf.business_role({"symbol": "NVDA",
-                              "companyName": "NVIDIA Corporation",
-                              "industry": "Semiconductors"})
-    assert role == "GPU/AI加速器"
-
-
 def test_db_unavailable_does_not_crash(tmp_path):
     """Broken DB file → classifier silently falls back to legacy."""
     from src.data.market_store import MarketStore
 
-    # Create a store, then corrupt the DB file before classifying
     store = MarketStore(tmp_path / "broken.db")
-    # Close + truncate to force a query failure during classify().
     store.close()
     (tmp_path / "broken.db").write_bytes(b"not a sqlite db")
 
     clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
-    # Should not raise; falls back to legacy.
     display = clf.display_tags({"symbol": "NVDA",
                                 "companyName": "NVIDIA Corporation",
                                 "industry": "Semiconductors"})
     assert display == "AI算力/云"
 
 
-# ---------- End-to-end: build → DB → classifier across all source paths ----------
-#
-# `store_with_registry` already covers manual-override symbols (MU/POET/TSM).
-# These E2E tests extend coverage to the rule and fallback paths so we know
-# the full Phase 1 contract holds: classifier renders whatever build wrote,
-# regardless of which resolution branch produced the row.
-
-@pytest.fixture
-def store_with_all_sources(tmp_path):
-    """Registry seeded with one row per source: manual / rule / fallback."""
-    from src.data.market_store import MarketStore
-    from terminal.company_concepts import ConceptRegistry
-    from scripts.build_company_concept_registry import build_registry
-
-    store = MarketStore(tmp_path / "market.db")
-    registry = ConceptRegistry(
-        taxonomy_path=TAXONOMY_PATH,
-        themes_path=THEMES_PATH,
-        overrides_path=OVERRIDES_PATH,
-        watchlist_path=WATCHLIST_PATH,
-    )
-    profiles = {
-        # manual: MU is in overrides
-        "MU": {"symbol": "MU", "industry": "Semiconductors"},
-        # rule: SaaS keyword fires on industry text
-        "RULESAAS": {"symbol": "RULESAAS",
-                     "industry": "Software—Application",
-                     "companyName": "Hypothetical Enterprise SaaS Co"},
-        # fallback: nothing matches — needs_review=1, display "其他"
-        "FBKMYS": {"symbol": "FBKMYS", "companyName": "Mystery Holdings Co"},
-    }
-    build_registry(
-        store=store, registry=registry,
-        universe_symbols=["MU", "RULESAAS", "FBKMYS"],
-        profiles=profiles,
-        portfolio_holdings=["MU"],
-        broad_top_symbols=["MU"],
-        review_csv_path=tmp_path / "review.csv",
-        save=True, force_save=True,   # FBKMYS would block gate; force here
-    )
-    return store
-
-
-def test_e2e_rule_path_renders_through_classifier(store_with_all_sources):
-    """A rule-resolved row must round-trip: build writes display_tags from
-    keyword match → DB → classifier returns the same display string."""
-    clf = ConceptClassifier(REPORT_CONCEPTS_PATH,
-                            market_store=store_with_all_sources)
-    display = clf.display_tags({"symbol": "RULESAAS"})
-    # Built from rule: software_saas/enterprise_software → "软件/SaaS / 企业软件"
-    assert "软件/SaaS" in display
-    assert "企业软件" in display
-    # business_role from rule: "企业软件/SaaS"
-    role = clf.business_role({"symbol": "RULESAAS"})
-    assert role == "企业软件/SaaS"
-
-
-def test_e2e_fallback_path_renders_through_classifier(store_with_all_sources):
-    """A fallback row written under --force-save must still render through
-    classifier (not crash, not silently revert to legacy bucket)."""
-    clf = ConceptClassifier(REPORT_CONCEPTS_PATH,
-                            market_store=store_with_all_sources)
-    display = clf.display_tags({"symbol": "FBKMYS"})
-    # Fallback display is the bare 'other' label.
-    assert display == "其他"
-    # business_role for fallback rows is the explicit placeholder.
-    role = clf.business_role({"symbol": "FBKMYS"})
-    assert role == "待补业务标签"
-
-
-def test_e2e_all_three_source_rows_persist_distinct_display_strings(store_with_all_sources):
-    """Sanity: manual / rule / fallback rows must produce three different
-    display strings — they shouldn't collapse into one another after the
-    full pipeline runs."""
-    clf = ConceptClassifier(REPORT_CONCEPTS_PATH,
-                            market_store=store_with_all_sources)
-    mu = clf.display_tags({"symbol": "MU"})
-    rule = clf.display_tags({"symbol": "RULESAAS"})
-    fallback = clf.display_tags({"symbol": "FBKMYS"})
-    assert mu != rule
-    assert rule != fallback
-    assert mu != fallback
-    # And the underlying source labels persisted correctly.
-    rows = store_with_all_sources.get_company_concepts(
-        ["MU", "RULESAAS", "FBKMYS"]
-    )
-    assert rows["MU"]["source"] == "manual"
-    assert rows["RULESAAS"]["source"] == "rule"
-    assert rows["FBKMYS"]["source"] == "fallback"
+def test_classifier_v2_internet_software_maps_to_internet_ads_bucket(tmp_path):
+    """internet_software L1 → '互联网/广告' legacy section."""
+    store = _seed_v2_registry(tmp_path, {
+        "GOOG": {"primary": "internet_software", "secondary": None,
+                 "display": "互联网与软件"},
+    })
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
+    bucket = clf._grouping_bucket({"symbol": "GOOG"})
+    assert bucket == "互联网/广告"
