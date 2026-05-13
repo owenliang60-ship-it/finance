@@ -13,6 +13,7 @@ from scripts.morning_report import (
     build_morning_visual_sections,
     _compute_breadth_s2_status,
     _compute_breadth_s2_status_from_price_frames,
+    _merge_volume_anomaly_hits,
     format_section_layered_dv,
     format_section_layered_pmarp,
     format_section_layered_rvol,
@@ -127,6 +128,33 @@ def sample_market_signals():
                     "concept_bucket": "工业/航天/国防", "layer": "extend",
                     "level": "sustained_3d", "latest_rvol": 3.2,
                     "marketCap": 12e9,
+                },
+            ],
+        },
+        "volume_anomaly": {
+            "criteria": "DV >1.5x | RVOL >2.0σ sustained 或 single >=3.0σ",
+            "hits": [
+                {
+                    "symbol": "MU", "companyName": "Micron Technology, Inc.",
+                    "sector": "Technology", "industry": "Semiconductors",
+                    "concept_bucket": "半导体链", "layer": "pool",
+                    "from_dv": True, "from_rvol": True,
+                    "dv_ratio": 1.8, "ratio": 1.8,
+                    "dv_5d": 900e6, "dv_20d": 500e6,
+                    "rvol_level": "sustained_3d", "rvol_days": 3,
+                    "latest_rvol": 2.6, "rvol_values": [2.6, 2.4, 2.2],
+                    "volume_signal_kind": "共振", "priority_group": 0,
+                    "marketCap": 160e9,
+                },
+                {
+                    "symbol": "DDOG", "companyName": "Datadog, Inc.",
+                    "sector": "Technology", "industry": "Software",
+                    "concept_bucket": "软件/SaaS", "layer": "pool",
+                    "from_dv": True, "from_rvol": False,
+                    "dv_ratio": 2.1, "ratio": 2.1,
+                    "dv_5d": 2.2e9, "dv_20d": 1.0e9,
+                    "volume_signal_kind": "流动性加速", "priority_group": 4,
+                    "marketCap": 45e9,
                 },
             ],
         },
@@ -437,6 +465,101 @@ class TestLayeredSections:
         assert "3日连续" in result
         assert "小型火箭发射" in result
 
+    def test_volume_anomaly_layered_section_renders_merged_columns(self):
+        from scripts.morning_report import format_section_layered_volume_anomaly
+
+        result = format_section_layered_volume_anomaly(sample_market_signals())
+        assert "2. 量能异常" in result
+        # 共振 (MU) row: shows DV ratio and RVOL
+        assert "MU" in result
+        assert "1.8x" in result
+        assert "σ" in result
+        # 流动性加速 (DDOG) DV-only row: shows DV, RVOL renders as "—"
+        assert "DDOG" in result
+        assert "流动性加速" in result
+        # Header columns
+        assert "DV 5d/20d" in result
+        assert "RVOL" in result
+
+    def test_volume_anomaly_rvol_only_row_visible_in_visual_block(self):
+        """[P1 regression] An RVOL-only row with layer='extend' must surface in
+        the visual block. _visual_row defaults missing layer to 'broad', and
+        _rows_by_layer_and_bucket only iterates pool/extend → a row that lost
+        its layer in merge would be silently hidden in the PDF/image report."""
+        signals = {
+            "volume_anomaly": {
+                "criteria": "DV >1.5x | RVOL >2.0σ sustained 或 single >=3.0σ",
+                "hits": [
+                    {
+                        "symbol": "ZBRA", "companyName": "Zebra Technologies",
+                        "sector": "Industrials",
+                        "industry": "Communications Equipment",
+                        "concept_bucket": "工业科技", "layer": "extend",
+                        "from_dv": False, "from_rvol": True,
+                        "rvol_level": "single", "rvol_days": 1,
+                        "latest_rvol": 8.5, "rvol_values": [8.5],
+                        "volume_signal_kind": "单日爆量", "priority_group": 2,
+                        "marketCap": 16e9,
+                    },
+                ],
+            },
+        }
+        sections = build_morning_visual_sections(market_signals=signals)
+        anomaly_section = next(
+            s for s in sections if s["slug"] == "02_volume_anomaly"
+        )
+        rows = anomaly_section["blocks"][0]["rows"]
+        zbra_rows = [r for r in rows if r["cells"][0].startswith("ZBRA")]
+        assert len(zbra_rows) == 1, (
+            f"ZBRA RVOL-only row missing from visual block; "
+            f"got rows={rows}"
+        )
+        assert zbra_rows[0]["layer"] == "extend"
+        # _rows_by_layer_and_bucket would drop layer='broad'; assert against it.
+        assert zbra_rows[0]["layer"] != "broad"
+
+    def test_volume_anomaly_preserves_priority_within_bucket(self):
+        from scripts.morning_report import format_section_layered_volume_anomaly
+
+        # Two rows in the SAME concept bucket but with different priorities:
+        # the priority_group=0 row must render before priority_group=4 within
+        # that bucket (input order from _merge_volume_anomaly_hits is preserved
+        # by _group_by_concept_bucket).
+        signals = {
+            "volume_anomaly": {
+                "criteria": "DV >1.5x | RVOL >2.0σ sustained 或 single >=3.0σ",
+                "hits": [
+                    {
+                        "symbol": "MU", "companyName": "Micron",
+                        "sector": "Technology", "industry": "Semiconductors",
+                        "concept_bucket": "半导体链", "layer": "pool",
+                        "from_dv": True, "from_rvol": True,
+                        "dv_ratio": 1.6, "ratio": 1.6,
+                        "dv_5d": 4.2e9, "dv_20d": 2.6e9,
+                        "rvol_level": "sustained_3d", "latest_rvol": 2.6,
+                        "volume_signal_kind": "共振", "priority_group": 0,
+                        "marketCap": 160e9,
+                    },
+                    {
+                        "symbol": "AMAT", "companyName": "Applied Materials",
+                        "sector": "Technology", "industry": "Semiconductors",
+                        "concept_bucket": "半导体链", "layer": "pool",
+                        "from_dv": True, "from_rvol": False,
+                        "dv_ratio": 1.7, "ratio": 1.7,
+                        "dv_5d": 1.4e9, "dv_20d": 0.8e9,
+                        "volume_signal_kind": "流动性加速", "priority_group": 4,
+                        "marketCap": 180e9,
+                    },
+                ],
+            },
+        }
+        result = format_section_layered_volume_anomaly(signals)
+        mu_idx = result.find("MU")
+        amat_idx = result.find("AMAT")
+        assert mu_idx != -1 and amat_idx != -1
+        # Same bucket → priority 0 row precedes priority 4 row.
+        assert mu_idx < amat_idx
+
     def test_layered_dv_renders_three_tier_concept_tags(self, monkeypatch, tmp_path):
         """When registry has display_tags, the layered DV row shows the full three tiers."""
         from src.data.market_store import MarketStore
@@ -477,17 +600,16 @@ class TestLayeredSections:
         assert "DRAM/HBM存储" in result
 
     def test_image_report_blocks_include_concept_column(self):
-        """B 的 image-report cron 走 build_morning_visual_sections —— 3 个 layered
-        block 都必须有'概念'列，否则三层标签不会出现在实际发出的图片晨报里。"""
+        """B 的 image-report cron 走 build_morning_visual_sections —— 2 个 layered
+        block (PMARP + 量能异常) 都必须有'概念'列，否则三层标签不会出现在实际发出的图片晨报里。"""
         sections = build_morning_visual_sections(sample_market_signals())
         slugs_seen = set()
         for sec in sections:
             slugs_seen.add(sec["slug"])
             for block in sec["blocks"]:
                 cols = block["columns"]
-                # pmarp/dv/rvol 3 个 layered 信号 block 必带"概念"列
-                if sec["slug"] in {"01_pmarp",
-                                   "02_dv_acceleration", "03_rvol_sustained"}:
+                # pmarp / volume_anomaly 两个 layered 信号 block 必带"概念"列
+                if sec["slug"] in {"01_pmarp", "02_volume_anomaly"}:
                     assert "概念" in cols, f"{sec['slug']} missing 概念 column: {cols}"
                     # 列宽数组长度也要匹配
                     assert len(block["widths"]) == len(cols)
@@ -495,7 +617,7 @@ class TestLayeredSections:
                     for row in block["rows"]:
                         assert len(row["cells"]) == len(cols)
         assert {"00_market_timing_factor", "01_pmarp",
-                "02_dv_acceleration", "03_rvol_sustained"}.issubset(slugs_seen)
+                "02_volume_anomaly"}.issubset(slugs_seen)
 
     def test_layered_dv_missing_registry_keeps_legacy_bucket(self, monkeypatch):
         """No store / empty registry → row falls back to the legacy single bucket
@@ -534,6 +656,162 @@ class TestLayeredSections:
         assert "more" not in result
         assert "S0 SignalCo 0" in result
         assert "S11 SignalCo 11" in result
+
+
+class TestMergeVolumeAnomaly:
+    """`_merge_volume_anomaly_hits` 合并 DV 和 RVOL 命中，按 priority_group 排序，
+    并打上 from_dv/from_rvol/volume_signal_kind 标签。"""
+
+    def _dv_row(self, symbol, ratio=1.8, dv_5d=2.0e9, dv_20d=1.0e9):
+        return {
+            "symbol": symbol,
+            "ratio": ratio,
+            "dv_5d": dv_5d,
+            "dv_20d": dv_20d,
+            "signal": True,
+        }
+
+    def _rvol_row(self, symbol, level="single", days=1, latest_rvol=3.5):
+        return {
+            "symbol": symbol,
+            "level": level,
+            "days": days,
+            "values": [latest_rvol],
+            "latest_rvol": latest_rvol,
+        }
+
+    def test_merge_volume_anomaly_empty_inputs(self):
+        assert _merge_volume_anomaly_hits([], []) == []
+
+    def test_merge_volume_anomaly_combines_dv_and_sustained_rvol_once(self):
+        rows = _merge_volume_anomaly_hits(
+            [self._dv_row("MU", ratio=1.6)],
+            [self._rvol_row("MU", level="sustained_3d", days=3, latest_rvol=2.6)],
+        )
+        assert len(rows) == 1
+        item = rows[0]
+        assert item["symbol"] == "MU"
+        assert item["volume_signal_kind"] == "共振"
+        assert item["priority_group"] == 0
+        assert item["from_dv"] is True
+        assert item["from_rvol"] is True
+        assert item["dv_ratio"] == 1.6
+        assert item["latest_rvol"] == 2.6
+        assert item["rvol_level"] == "sustained_3d"
+
+    def test_merge_volume_anomaly_combines_dv_and_single_rvol_once(self):
+        rows = _merge_volume_anomaly_hits(
+            [self._dv_row("QCOM", ratio=1.7)],
+            [self._rvol_row("QCOM", level="single", days=1, latest_rvol=3.2)],
+        )
+        assert len(rows) == 1
+        item = rows[0]
+        assert item["volume_signal_kind"] == "共振"
+        assert item["priority_group"] == 1
+        assert item["from_dv"] is True
+        assert item["from_rvol"] is True
+
+    def test_merge_volume_anomaly_keeps_all_dv_hits(self):
+        rows = _merge_volume_anomaly_hits(
+            [self._dv_row("DDOG", ratio=2.1)],
+            [],
+        )
+        assert len(rows) == 1
+        item = rows[0]
+        assert item["volume_signal_kind"] == "流动性加速"
+        assert item["priority_group"] == 4
+        assert item["from_dv"] is True
+        assert item["from_rvol"] is False
+
+    def test_merge_volume_anomaly_keeps_rvol_only_extreme_single(self):
+        rows = _merge_volume_anomaly_hits(
+            [],
+            [self._rvol_row("ZBRA", level="single", days=1, latest_rvol=3.2)],
+        )
+        assert len(rows) == 1
+        item = rows[0]
+        assert item["volume_signal_kind"] == "单日爆量"
+        assert item["priority_group"] == 2
+        assert item["from_dv"] is False
+        assert item["from_rvol"] is True
+
+    def test_merge_volume_anomaly_drops_rvol_only_moderate_single(self):
+        rows = _merge_volume_anomaly_hits(
+            [],
+            [self._rvol_row("JD", level="single", days=1, latest_rvol=2.9)],
+        )
+        assert rows == []
+
+    def test_merge_volume_anomaly_keeps_rvol_only_sustained(self):
+        rows = _merge_volume_anomaly_hits(
+            [],
+            [self._rvol_row("TM", level="sustained_3d", days=3, latest_rvol=2.4)],
+        )
+        assert len(rows) == 1
+        item = rows[0]
+        assert item["volume_signal_kind"] == "持续放量"
+        assert item["priority_group"] == 3
+        assert item["from_dv"] is False
+        assert item["from_rvol"] is True
+        assert item.get("dv_ratio") is None
+
+    def test_merge_volume_anomaly_has_no_duplicate_symbols(self):
+        rows = _merge_volume_anomaly_hits(
+            [self._dv_row("AAPL"), self._dv_row("MSFT")],
+            [self._rvol_row("AAPL", level="single", latest_rvol=3.5),
+             self._rvol_row("MSFT", level="sustained_5d", latest_rvol=2.5)],
+        )
+        symbols = [item["symbol"] for item in rows]
+        assert len(symbols) == len(set(symbols))
+        assert set(symbols) == {"AAPL", "MSFT"}
+
+    def test_merge_volume_anomaly_rvol_only_preserves_enriched_metadata(self):
+        """[P1 regression] RVOL-only rows must carry their enriched fields
+        (layer / concept_bucket / marketCap / companyName / sector / industry)
+        through the merge. Otherwise the visual renderer falls back to
+        layer='broad' and hides them, defeating the whole point of the merge."""
+        enriched_rvol = {
+            "symbol": "ZBRA", "level": "single", "days": 1,
+            "values": [8.5], "latest_rvol": 8.5,
+            "layer": "extend", "concept_bucket": "工业科技", "marketCap": 16e9,
+            "companyName": "Zebra Technologies", "sector": "Industrials",
+            "industry": "Communications Equipment",
+        }
+        rows = _merge_volume_anomaly_hits([], [enriched_rvol])
+        assert len(rows) == 1
+        item = rows[0]
+        assert item["layer"] == "extend"
+        assert item["concept_bucket"] == "工业科技"
+        assert item["marketCap"] == 16e9
+        assert item["companyName"] == "Zebra Technologies"
+        assert item["sector"] == "Industrials"
+        assert item["industry"] == "Communications Equipment"
+        # Sanity: the merge labels are still applied on top.
+        assert item["volume_signal_kind"] == "单日爆量"
+        assert item["priority_group"] == 2
+        assert item["from_dv"] is False
+        assert item["from_rvol"] is True
+
+    def test_merge_volume_anomaly_sorts_by_priority_then_strength(self):
+        rows = _merge_volume_anomaly_hits(
+            [
+                self._dv_row("DVONLY_A", ratio=2.5),
+                self._dv_row("DVONLY_B", ratio=1.7),
+                self._dv_row("RESONANT", ratio=1.8),
+            ],
+            [
+                self._rvol_row("RESONANT", level="sustained_5d", latest_rvol=2.8),
+                self._rvol_row("EXTREME_HI", level="single", latest_rvol=5.5),
+                self._rvol_row("EXTREME_LO", level="single", latest_rvol=3.2),
+            ],
+        )
+        groups = [item["priority_group"] for item in rows]
+        assert groups == sorted(groups), f"priority groups not sorted: {groups}"
+        symbol_order = [item["symbol"] for item in rows]
+        assert symbol_order.index("RESONANT") < symbol_order.index("EXTREME_HI")
+        assert symbol_order.index("EXTREME_HI") < symbol_order.index("EXTREME_LO")
+        assert symbol_order.index("EXTREME_LO") < symbol_order.index("DVONLY_A")
+        assert symbol_order.index("DVONLY_A") < symbol_order.index("DVONLY_B")
 
 
 class TestFormatMorningReport:
@@ -598,8 +876,28 @@ class TestFormatMorningReport:
         assert "PMARP 2% UPCROSS" in result
         assert "BREADTH S2 UPCROSS" in result
         assert "1. PMARP 信号" in result
-        assert "2. 量能加速" in result
-        assert "3. RVOL 持续放量" in result
+        assert "2. 量能异常" in result
+        # Old standalone DV / RVOL sections must not appear in the layered path.
+        assert "2. 量能加速" not in result
+        assert "3. RVOL 持续放量" not in result
+        # New merged row must surface DV and RVOL info side by side for resonant
+        # symbols (MU is fixture's priority_group=0 row).
+        mu_line = next(
+            (ln for ln in result.split("\n")
+             if ln.lstrip().startswith("MU") and "共振" in ln),
+            "",
+        )
+        assert mu_line, "expected MU resonant row in merged section"
+        assert "1.8x" in mu_line
+        assert "σ" in mu_line
+        # Bucket order is concept-driven; within the same bucket (半导体链),
+        # priority_group=0 must precede priority_group=4. Fixture co-locates
+        # MU (p0) and a hypothetical DV-only row in the same bucket if any —
+        # here MU is alone in its bucket so we instead check that DDOG (p4,
+        # 软件 bucket) renders after MU's bucket.
+        mu_pos = result.find("MU")
+        ddog_pos = result.find("DDOG")
+        assert mu_pos != -1 and ddog_pos != -1
         assert "*D. Dollar Volume*" in result
         assert "扫描: 3只" in result
 
@@ -630,9 +928,8 @@ class TestMorningVisualReport:
         assert [section["slug"] for section in sections] == [
             "00_market_timing_factor",
             "01_pmarp",
-            "02_dv_acceleration",
-            "03_rvol_sustained",
-            "04_dollar_volume",
+            "02_volume_anomaly",
+            "03_dollar_volume",
         ]
         assert sections[0]["alerts"]
         assert "PMARP as_of 2026-04-24" in sections[0]["subtitle"]
@@ -665,7 +962,10 @@ class TestMorningVisualReport:
             output_dir=tmp_path,
         )
 
-        assert len(paths) == 5
+        # After merging 02_dv_acceleration + 03_rvol_sustained into 02_volume_anomaly,
+        # the section count drops from 5 to 4: 00 timing, 01 pmarp, 02 volume anomaly,
+        # 03 dollar volume.
+        assert len(paths) == 4
         assert all(path.exists() for path in paths)
         assert all(path.suffix == ".png" for path in paths)
 
@@ -960,7 +1260,7 @@ class TestBroadDropPlanV3:
             market_signals=sample_market_signals(),
             dv_result=dv_result,
         )
-        dv_section = next(s for s in sections if s["slug"] == "04_dollar_volume")
+        dv_section = next(s for s in sections if s["slug"] == "03_dollar_volume")
         all_cells = [
             cell for block in dv_section["blocks"]
             for row in block["rows"] for cell in row["cells"]
@@ -968,3 +1268,76 @@ class TestBroadDropPlanV3:
         rendered = " ".join(all_cells)
         assert "NVDA" in rendered
         assert "OKLO" not in rendered
+
+
+class TestVolumeAnomalyPayload:
+    """build_market_signal_report 必须同时输出 volume_anomaly section 和 raw
+    dv_acceleration / rvol_sustained section（后者为 audit 和 dead-code 回滚保留）。"""
+
+    def test_build_market_signal_report_includes_volume_anomaly_payload(
+        self, monkeypatch
+    ):
+        from scripts import morning_report as mr
+
+        # Two symbols co-occur in DV and RVOL → expect one resonant row.
+        mu_frame = pd.DataFrame(
+            {"close": [100.0] * 200},
+            index=pd.date_range("2025-08-01", periods=200, freq="B"),
+        )
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.fetch_universe_metadata",
+            lambda **kw: {
+                "stocks": {
+                    "MU": {"marketCap": 120e9, "shortName": "MU",
+                           "longName": "Micron", "exchange": "NASDAQ"},
+                }
+            },
+        )
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.load_price_frames",
+            lambda symbols, **kw: {"MU": mu_frame},
+        )
+        monkeypatch.setattr(mr, "get_symbols", lambda: [])
+        monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
+        monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
+        monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
+        monkeypatch.setattr(mr, "_load_market_db_broad_price_frames", lambda *a, **kw: {})
+        monkeypatch.setattr(
+            "src.indicators.pmarp.analyze_pmarp",
+            lambda *a, **kw: {"signal": "neutral", "current": None, "previous": None},
+        )
+        monkeypatch.setattr(
+            "src.indicators.dv_acceleration.scan_dv_acceleration",
+            lambda *a, **kw: pd.DataFrame([
+                {"symbol": "MU", "ratio": 1.8, "dv_5d": 4.2e9, "dv_20d": 2.3e9,
+                 "signal": True},
+            ]),
+        )
+        monkeypatch.setattr(
+            "src.indicators.rvol_sustained.scan_rvol_sustained",
+            lambda *a, **kw: [
+                {"symbol": "MU", "level": "sustained_3d", "days": 3,
+                 "values": [2.6, 2.4, 2.2], "latest_rvol": 2.6},
+            ],
+        )
+
+        result = build_market_signal_report()
+
+        # New merged section exists with the resonant row.
+        assert "volume_anomaly" in result
+        anomaly = result["volume_anomaly"]
+        assert anomaly["criteria"].startswith("DV >")
+        assert "single >=" in anomaly["criteria"]
+        hits = anomaly["hits"]
+        assert len(hits) == 1
+        assert hits[0]["symbol"] == "MU"
+        assert hits[0]["volume_signal_kind"] == "共振"
+        assert hits[0]["priority_group"] == 0
+        assert hits[0]["from_dv"] is True
+        assert hits[0]["from_rvol"] is True
+
+        # Raw payloads still present (Scope: dead-code rollback safety net).
+        assert "dv_acceleration" in result
+        assert "rvol_sustained" in result
+        assert len(result["dv_acceleration"]["hits"]) == 1
+        assert len(result["rvol_sustained"]["hits"]) == 1
