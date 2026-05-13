@@ -983,6 +983,76 @@ def test_backup_sqlite_captures_wal_committed_writes(tmp_path):
     assert rows == [("committed_then_backup",)]
 
 
+# ---- Task 11: legacy taxonomy.json + concept_themes.json are dead code ----
+
+
+def test_legacy_taxonomy_jsons_not_imported_by_live_code():
+    """v2 production code (terminal/, scripts/, src/) MUST NOT reference the
+    legacy taxonomy.json or concept_themes.json files. Only concept_taxonomy_v2.json
+    is allowed. This is a static grep so a regression (someone re-adds an import)
+    fails loudly."""
+    import subprocess
+    roots = [PROJECT_ROOT / "terminal", PROJECT_ROOT / "scripts", PROJECT_ROOT / "src"]
+    hits: list[str] = []
+    for r in roots:
+        if not r.exists():
+            continue
+        result = subprocess.run(
+            ["grep", "-rn", "--include=*.py",
+             r"taxonomy\.json\|concept_themes\.json", str(r)],
+            capture_output=True, text=True,
+        )
+        for line in result.stdout.splitlines():
+            # Allow concept_taxonomy_v2.json reference; reject the bare names.
+            if "concept_taxonomy_v2.json" in line:
+                continue
+            hits.append(line)
+    assert not hits, (
+        "Legacy taxonomy.json / concept_themes.json references still live in "
+        "terminal/scripts/src:\n" + "\n".join(hits)
+    )
+
+
+def test_v2_builder_runs_without_legacy_jsons(tmp_path, monkeypatch):
+    """ConceptRegistry must only require concept_taxonomy_v2.json. We delete
+    the legacy taxonomy.json + concept_themes.json from a staging dir and
+    confirm build_registry still classifies + writes CSV without raising."""
+    import shutil
+    from src.data.market_store import MarketStore
+    from terminal.company_concepts import ConceptRegistry
+    from scripts.build_company_concept_registry import build_registry
+
+    cfg_src = PROJECT_ROOT / "config" / "concepts"
+    cfg_dst = tmp_path / "config" / "concepts"
+    cfg_dst.mkdir(parents=True)
+    # Copy only the files v2 actually needs.
+    shutil.copy(cfg_src / "concept_taxonomy_v2.json", cfg_dst)
+    # Intentionally do NOT copy taxonomy.json or concept_themes.json.
+    assert not (cfg_dst / "taxonomy.json").exists()
+    assert not (cfg_dst / "concept_themes.json").exists()
+
+    store = MarketStore(tmp_path / "market.db")
+    registry = ConceptRegistry(
+        taxonomy_path=cfg_dst / "concept_taxonomy_v2.json",
+        watchlist_path=None,
+    )
+    profiles = {
+        "NVDA": {"symbol": "NVDA", "industry": "Semiconductors",
+                 "description": "GPU and AI accelerator"},
+    }
+    # Must not raise FileNotFoundError on the missing legacy files.
+    build_registry(
+        store=store, registry=registry,
+        universe_symbols=["NVDA"],
+        profiles=profiles,
+        portfolio_holdings=[],
+        broad_top_symbols=["NVDA"],
+        review_csv_path=tmp_path / "review.csv",
+        save=False, force_save=False,
+    )
+    assert (tmp_path / "review.csv").exists()
+
+
 def test_read_reviewed_csv_coverage_errors_go_to_summary_not_rows(tmp_path):
     """Missing symbols (coverage-level) appear in summary.txt, NOT per-row rejected.csv."""
     csv_path = _write_csv_with_one_good_row(tmp_path, symbol="AAPL")
