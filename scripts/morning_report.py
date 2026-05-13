@@ -749,6 +749,11 @@ PMARP_SIGNAL_ORDER = {
     "momentum_fading": 2,
 }
 
+# Display threshold for surfacing RVOL-only single-day spikes in the merged
+# volume anomaly section. RVOL sustained signals use RVOL_SUSTAINED_THRESHOLD;
+# RVOL-only single below this value is treated as moderate noise.
+RVOL_ONLY_SINGLE_THRESHOLD = 3.0
+
 
 def build_market_signal_report(symbols_override: list[str] | None = None) -> dict:
     """Build technical signal payload for the merged morning report.
@@ -864,6 +869,8 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         for item in rvol_raw
     ]
 
+    volume_anomaly_hits = _merge_volume_anomaly_hits(dv_hits, rvol_hits)
+
     scan_dates = [frame.index.max() for frame in price_frames.values() if not frame.empty]
     as_of = max(scan_dates).date().isoformat() if scan_dates else date.today().isoformat()
 
@@ -882,6 +889,14 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         "pmarp": {
             "criteria": "PMARP 上穿2% / 上穿98% / 下穿98%",
             "hits": pmarp_signals,
+        },
+        "volume_anomaly": {
+            "criteria": "DV >{:.1f}x | RVOL >{:.1f}σ sustained 或 single >={:.1f}σ".format(
+                DV_ACCELERATION_THRESHOLD,
+                RVOL_SUSTAINED_THRESHOLD,
+                RVOL_ONLY_SINGLE_THRESHOLD,
+            ),
+            "hits": volume_anomaly_hits,
         },
         "dv_acceleration": {
             "criteria": "DV >{:.1f}x".format(DV_ACCELERATION_THRESHOLD),
@@ -1051,6 +1066,141 @@ def format_section_layered_rvol(market_signals: dict) -> str:
         ),
     ))
     return "\n".join(lines)
+
+
+def _volume_anomaly_priority_group(item: dict) -> int:
+    has_dv = bool(item.get("from_dv"))
+    has_rvol = bool(item.get("from_rvol"))
+    rvol_level = item.get("rvol_level")
+    if has_dv and has_rvol and rvol_level in {"sustained_3d", "sustained_5d"}:
+        return 0
+    if has_dv and has_rvol:
+        return 1
+    if has_rvol and rvol_level == "single":
+        return 2
+    if has_rvol:
+        return 3
+    return 4
+
+
+def _classify_volume_signal(item: dict) -> str:
+    has_dv = bool(item.get("from_dv"))
+    has_rvol = bool(item.get("from_rvol"))
+    if has_dv and has_rvol:
+        return "共振"
+    if has_dv:
+        return "流动性加速"
+    if item.get("rvol_level") in {"sustained_3d", "sustained_5d"}:
+        return "持续放量"
+    return "单日爆量"
+
+
+def _volume_anomaly_sort_key(item: dict) -> tuple:
+    priority = item.get("priority_group", 99)
+    latest_rvol = item.get("latest_rvol") or 0.0
+    dv_ratio = item.get("dv_ratio") or item.get("ratio") or 0.0
+    return (priority, -latest_rvol, -dv_ratio, item.get("symbol", ""))
+
+
+_VOLUME_ANOMALY_RVOL_LEVEL_LABELS = {
+    "sustained_5d": "5日",
+    "sustained_3d": "3日",
+    "single": "单日",
+}
+
+
+def _format_volume_anomaly_dv_cell(item: dict) -> str:
+    if not item.get("from_dv"):
+        return "—"
+    ratio = item.get("dv_ratio") or item.get("ratio") or 0.0
+    return "{:.1f}x ({}/{})".format(
+        ratio,
+        format_dv(item.get("dv_5d") or 0),
+        format_dv(item.get("dv_20d") or 0),
+    )
+
+
+def _format_volume_anomaly_rvol_cell(item: dict) -> str:
+    if not item.get("from_rvol"):
+        return "—"
+    level = item.get("rvol_level") or ""
+    label = _VOLUME_ANOMALY_RVOL_LEVEL_LABELS.get(level, level)
+    return "{} {:.1f}σ".format(label, item.get("latest_rvol") or 0)
+
+
+def format_section_layered_volume_anomaly(market_signals: dict) -> str:
+    section = market_signals.get("volume_anomaly", {})
+    lines = ["*2. 量能异常 ({})*".format(section.get("criteria", ""))]
+    lines.extend(_format_bucketed_table(
+        section.get("hits", []),
+        "无量能异常信号",
+        "标的 | 概念 | 业务角色 | 类型 | DV 5d/20d | RVOL | 市值",
+        lambda item: "{} | {} | {} | {} | {} | {} | {}".format(
+            _compact_company(item),
+            _display_concept_tags(item),
+            _display_classification(item),
+            item.get("volume_signal_kind") or "—",
+            _format_volume_anomaly_dv_cell(item),
+            _format_volume_anomaly_rvol_cell(item),
+            _format_market_cap(item.get("marketCap")),
+        ),
+    ))
+    return "\n".join(lines)
+
+
+def _merge_volume_anomaly_hits(dv_hits: list[dict], rvol_hits: list[dict]) -> list[dict]:
+    """Merge DV-acceleration and RVOL-sustained hits into a single anomaly list.
+
+    Keeps all DV hits. For RVOL-only rows, keeps sustained_3d/5d and any single
+    above RVOL_ONLY_SINGLE_THRESHOLD. Each output row carries from_dv/from_rvol
+    flags, a volume_signal_kind label, and a priority_group for downstream sort.
+    """
+    merged: dict[str, dict] = {}
+    for row in dv_hits:
+        symbol = row["symbol"]
+        item = dict(row)
+        item["dv_ratio"] = row.get("ratio")
+        item["from_dv"] = True
+        item["from_rvol"] = False
+        merged[symbol] = item
+
+    for row in rvol_hits:
+        symbol = row["symbol"]
+        if symbol in merged:
+            item = merged[symbol]
+        else:
+            # Copy the enriched RVOL row (carries layer / concept_bucket /
+            # marketCap / companyName / sector / industry from
+            # _enrich_with_layer). Without this, RVOL-only rows lose layer
+            # and get hidden by visual renderers that only iterate pool/extend.
+            item = dict(row)
+            item["from_dv"] = False
+            merged[symbol] = item
+        item["from_rvol"] = True
+        item["rvol_level"] = row.get("level")
+        item["rvol_days"] = row.get("days")
+        item["latest_rvol"] = row.get("latest_rvol")
+        item["rvol_values"] = row.get("values", [])
+
+    rows = []
+    for item in merged.values():
+        has_dv = bool(item.get("from_dv"))
+        rvol_level = item.get("rvol_level")
+        latest_rvol = item.get("latest_rvol") or 0
+        keep = (
+            has_dv
+            or rvol_level in {"sustained_3d", "sustained_5d"}
+            or latest_rvol >= RVOL_ONLY_SINGLE_THRESHOLD
+        )
+        if not keep:
+            continue
+        item["volume_signal_kind"] = _classify_volume_signal(item)
+        item["priority_group"] = _volume_anomaly_priority_group(item)
+        rows.append(item)
+
+    rows.sort(key=_volume_anomaly_sort_key)
+    return rows
+
 
 def format_section_a(indicator_summary: dict) -> str:
     """A. PMARP 极值 (仅保留上穿2%报警)"""
@@ -1305,56 +1455,26 @@ def build_morning_visual_sections(
             ],
         })
 
-        dv_acc = market_signals.get("dv_acceleration", {})
+        volume_anomaly = market_signals.get("volume_anomaly", {})
         sections.append({
-            "slug": "02_dv_acceleration",
-            "title": "2. 量能加速",
-            "subtitle": "{} | {}".format(dv_acc.get("criteria", ""), common_subtitle),
+            "slug": "02_volume_anomaly",
+            "title": "2. 量能异常",
+            "subtitle": "{} | {}".format(volume_anomaly.get("criteria", ""), common_subtitle),
             "blocks": [
                 _build_visual_block(
-                    "DV 加速",
-                    ["标的", "概念", "业务角色", "倍数", "5d/20d", "市值"],
-                    dv_acc.get("hits", []),
+                    "量能异常",
+                    ["标的", "概念", "业务角色", "类型", "DV 5d/20d", "RVOL", "市值"],
+                    volume_anomaly.get("hits", []),
                     lambda item: [
                         _visual_company(item),
                         _display_concept_tags(item),
                         _display_classification(item),
-                        "{:.1f}x".format(item.get("ratio") or 0),
-                        "{}/{}".format(
-                            format_dv(item.get("dv_5d") or 0),
-                            format_dv(item.get("dv_20d") or 0),
-                        ),
+                        item.get("volume_signal_kind") or "—",
+                        _format_volume_anomaly_dv_cell(item),
+                        _format_volume_anomaly_rvol_cell(item),
                         _format_market_cap(item.get("marketCap")),
                     ],
-                    [320, 360, 280, 150, 240, 160],
-                ),
-            ],
-        })
-
-        rvol = market_signals.get("rvol_sustained", {})
-        level_labels = {
-            "sustained_5d": "5日连续",
-            "sustained_3d": "3日连续",
-            "single": "单日",
-        }
-        sections.append({
-            "slug": "03_rvol_sustained",
-            "title": "3. RVOL 持续放量",
-            "subtitle": "{} | {}".format(rvol.get("criteria", ""), common_subtitle),
-            "blocks": [
-                _build_visual_block(
-                    "持续放量",
-                    ["标的", "概念", "业务角色", "形态", "最新", "市值"],
-                    rvol.get("hits", []),
-                    lambda item: [
-                        _visual_company(item),
-                        _display_concept_tags(item),
-                        _display_classification(item),
-                        level_labels.get(item.get("level"), item.get("level", "")),
-                        "{:.1f}σ".format(item.get("latest_rvol") or 0),
-                        _format_market_cap(item.get("marketCap")),
-                    ],
-                    [320, 360, 280, 170, 150, 160],
+                    [280, 320, 240, 140, 280, 180, 150],
                 ),
             ],
         })
@@ -1391,8 +1511,8 @@ def build_morning_visual_sections(
             ))
         if blocks:
             sections.append({
-                "slug": "04_dollar_volume",
-                "title": "D. Dollar Volume",
+                "slug": "03_dollar_volume",
+                "title": "3. Dollar Volume",
                 "subtitle": common_subtitle,
                 "blocks": blocks,
             })
@@ -1935,9 +2055,7 @@ def format_morning_report(
 
         lines.append(format_section_layered_pmarp(market_signals))
         lines.append("")
-        lines.append(format_section_layered_dv(market_signals))
-        lines.append("")
-        lines.append(format_section_layered_rvol(market_signals))
+        lines.append(format_section_layered_volume_anomaly(market_signals))
         lines.append("")
     else:
         # A. PMARP
