@@ -83,6 +83,10 @@ class BuildGateError(RuntimeError):
     """Raised when --save fails the layered gate without --force-save."""
 
 
+class CSVValidationError(RuntimeError):
+    """Raised when --read-reviewed-csv hits any of 10 fail-fast checks."""
+
+
 @dataclass
 class BuildResult:
     symbols: int
@@ -563,6 +567,171 @@ def rebuild_display_tags(
     return {"rebuilt": rebuilt, "updated": len(updates)}
 
 
+def read_reviewed_csv(
+    csv_path: Path,
+    *,
+    extend_pool: set[str],
+    taxonomy: dict,
+    validate_only: bool = False,
+) -> list[dict]:
+    """Phase 5: parse Boss-reviewed CSV, validate against taxonomy, return
+    upsert-ready row dicts. Raises CSVValidationError on any of the 10 checks
+    unless `validate_only=True` (then emits _rejected.csv + summary.txt and
+    returns the rows that DID pass).
+
+    The 10 fail-fast checks (spec §10.2):
+        1. missing extend pool symbols → coverage-level error
+        2. duplicate symbol → per-row error
+        3. l1 empty / whitespace → per-row
+        4. l2 empty / whitespace → per-row
+        5. l1 not in 11 L1 set → per-row
+        6. l2 not in 60 L2 set → per-row
+        7. l2.parent_id != l1.concept_id → per-row
+        8. l3 alias unresolvable → per-row
+        9. resolved l3 element level != 3 → per-row (overlap with #8 but explicit)
+       10. validate_only mode emits dual artifact (rejected.csv + summary.txt)
+    """
+    l1_label_to_id = {
+        c["label"]: c["concept_id"]
+        for c in taxonomy["concepts"] if c["level"] == 1
+    }
+    l2_label_to_id = {
+        c["label"]: (c["concept_id"], c.get("parent_id"))
+        for c in taxonomy["concepts"] if c["level"] == 2
+    }
+    l3_concepts = {
+        c["concept_id"]: c for c in taxonomy["concepts"] if c["level"] == 3
+    }
+    l3_alias_to_id: dict[str, str] = {}
+    for cid, c in l3_concepts.items():
+        l3_alias_to_id[c["label"]] = cid
+        for alias in c.get("aliases", []):
+            l3_alias_to_id[alias] = cid
+
+    rejected: list[tuple[dict, list[str]]] = []
+    coverage_errors: list[str] = []
+    parsed: list[dict] = []
+    seen_symbols: set[str] = set()
+
+    with csv_path.open(encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        raw_rows = list(reader)
+
+    for raw in raw_rows:
+        sym = raw.get("symbol", "").strip().upper()
+        l1_label = raw.get("l1", "").strip()
+        l2_label = raw.get("l2", "").strip()
+        l3_raw = raw.get("l3_themes", "").strip()
+
+        row_errors: list[str] = []
+        if not sym:
+            row_errors.append("symbol empty")
+        else:
+            if sym in seen_symbols:
+                row_errors.append(f"duplicate symbol {sym}")
+            seen_symbols.add(sym)
+
+        if not l1_label:
+            row_errors.append("l1 empty")
+        elif l1_label not in l1_label_to_id:
+            row_errors.append(f"l1 '{l1_label}' not in 11 L1")
+
+        l2_id: str | None = None
+        if not l2_label:
+            row_errors.append("l2 empty")
+        elif l2_label not in l2_label_to_id:
+            row_errors.append(f"l2 '{l2_label}' not in 60 L2")
+        else:
+            l2_id, l2_parent = l2_label_to_id[l2_label]
+            if l1_label in l1_label_to_id and l2_parent != l1_label_to_id[l1_label]:
+                row_errors.append(
+                    f"l2 parent mismatch (l2.parent={l2_parent}, "
+                    f"l1={l1_label_to_id[l1_label]})"
+                )
+
+        l3_ids: list[str] = []
+        if l3_raw:
+            for token in (t.strip() for t in l3_raw.split(";") if t.strip()):
+                tid = l3_alias_to_id.get(token)
+                if tid is None:
+                    row_errors.append(f"L3 '{token}' not in pool")
+                else:
+                    # Defense-in-depth: verify level=3
+                    if l3_concepts[tid].get("level") != 3:
+                        row_errors.append(f"L3 '{token}' resolved level != 3")
+                    else:
+                        l3_ids.append(tid)
+
+        if row_errors:
+            rejected.append((raw, row_errors))
+        else:
+            l1_id = l1_label_to_id[l1_label]
+            try:
+                conf = float(raw.get("confidence", 0) or 0)
+            except ValueError:
+                conf = 0.0
+            try:
+                nr = int(raw.get("needs_review", 0) or 0)
+            except ValueError:
+                nr = 0
+            parsed.append({
+                "symbol": sym,
+                "primary_concept_id": l1_id,
+                "secondary_concept_id": l2_id,
+                "tertiary_concept_id": None,
+                "theme_ids": l3_ids,
+                "business_role": raw.get("business_role", ""),
+                "confidence": conf,
+                "source": raw.get("prefill_source", "manual") or "manual",
+                "needs_review": nr,
+                "evidence": "csv_review",
+            })
+
+    missing = extend_pool - seen_symbols
+    if missing:
+        sample = sorted(missing)[:10]
+        suffix = "..." if len(missing) > 10 else ""
+        coverage_errors.append(
+            f"missing {len(missing)} symbols from extend pool: {sample}{suffix}"
+        )
+
+    if validate_only and (rejected or coverage_errors):
+        rejected_path = csv_path.with_name(f"{csv_path.stem}_rejected.csv")
+        with rejected_path.open("w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=REVIEW_CSV_FIELDS + ["_errors"])
+            w.writeheader()
+            for raw, errs in rejected:
+                merged = {k: raw.get(k, "") for k in REVIEW_CSV_FIELDS}
+                merged["_errors"] = " | ".join(errs)
+                w.writerow(merged)
+
+        summary_path = csv_path.with_name(f"{csv_path.stem}_rejected_summary.txt")
+        lines = [
+            f"Per-row failures: {len(rejected)}",
+            f"Total per-row error count: {sum(len(e) for _, e in rejected)}",
+            "",
+            "Coverage-level errors:",
+        ]
+        if coverage_errors:
+            lines.extend(f"  - {e}" for e in coverage_errors)
+        else:
+            lines.append("  (none)")
+        summary_path.write_text("\n".join(lines), encoding="utf-8")
+        return parsed
+
+    if rejected or coverage_errors:
+        msg_lines: list[str] = []
+        for raw, errs in rejected[:20]:
+            sym = raw.get("symbol", "?")
+            msg_lines.append(f"  {sym}: {'; '.join(errs)}")
+        if len(rejected) > 20:
+            msg_lines.append(f"  ... and {len(rejected) - 20} more rows")
+        msg_lines.extend(coverage_errors)
+        raise CSVValidationError("\n".join(msg_lines))
+
+    return parsed
+
+
 # ---- CLI helpers ----
 
 def _load_universe(path: Path) -> list[str]:
@@ -640,6 +809,10 @@ def main() -> int:
                         help="Recompute display_tags from current concepts.label.")
     parser.add_argument("--refresh-profiles", action="store_true",
                         help="Phase 2: refresh FMP profiles for extend pool (writes profiles.json), then exit.")
+    parser.add_argument("--read-reviewed-csv", type=Path,
+                        help="Phase 5: parse Boss-reviewed CSV, validate, then write to market.db (with --save).")
+    parser.add_argument("--validate-only", action="store_true",
+                        help="Run Phase 5 validation, emit _rejected.csv + summary, do not save.")
     parser.add_argument(
         "--review-csv",
         type=Path,
@@ -667,6 +840,31 @@ def main() -> int:
         summary = rebuild_display_tags(store=store, registry=registry)
         for k, v in summary.items():
             print(f"{k}: {v}")
+        return 0
+
+    if args.read_reviewed_csv:
+        extend_pool = set(_load_universe(EXTENDED_UNIVERSE_PATH))
+        try:
+            parsed_rows = read_reviewed_csv(
+                args.read_reviewed_csv,
+                extend_pool=extend_pool,
+                taxonomy=registry._taxonomy,
+                validate_only=args.validate_only,
+            )
+        except CSVValidationError as exc:
+            print(f"CSV VALIDATION FAILED:\n{exc}", file=sys.stderr)
+            return 2
+        if args.validate_only:
+            print(f"validate_only: {len(parsed_rows)} rows parsed; "
+                  f"see _rejected.csv + _rejected_summary.txt for issues")
+            return 0
+        if args.save:
+            # Phase 6 save path is added by Task 8 (save_to_market_db).
+            from scripts.build_company_concept_registry import save_to_market_db  # noqa: E402
+            save_to_market_db(rows=parsed_rows, store=store, market_db_path=store.db_path)
+            print(f"saved {len(parsed_rows)} reviewed rows")
+        else:
+            print(f"validated {len(parsed_rows)} rows (use --save to persist)")
         return 0
 
     if args.symbols == "broad":
