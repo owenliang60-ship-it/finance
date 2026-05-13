@@ -1565,6 +1565,53 @@ class MarketStore:
                 count += 1
         return count
 
+    def rebuild_concept_tree(self, rows: List[Dict[str, Any]]) -> int:
+        """Atomic rebuild of the concepts tree (v2 migration).
+
+        Order (must execute in one transaction):
+            1. PRAGMA defer_foreign_keys=ON (defer FK checks until COMMIT so
+               DELETE FROM concepts is safe even with self-FK hierarchy)
+            2. UPDATE concept_themes SET parent_concept_id=NULL (cut FK refs;
+               historical themes survive as orphan snapshots)
+            3. DELETE FROM company_concept_tags (FK references concepts)
+            4. DELETE FROM symbol_concept_edges (FK references concepts)
+            5. DELETE FROM concepts (now safe under deferred FK)
+            6. INSERT new concepts ordered by level (L1 before L2 to satisfy
+               concepts.parent_id self-FK at commit time)
+        """
+        if not rows:
+            return 0
+        # Order by level so L1 INSERT precedes L2 parent_id ref
+        ordered = sorted(rows, key=lambda r: int(r["level"]))
+        conn = self._get_conn()
+        now = self._utc_now_iso()
+        with conn:
+            conn.execute("PRAGMA defer_foreign_keys=ON")
+            conn.execute("UPDATE concept_themes SET parent_concept_id = NULL")
+            conn.execute("DELETE FROM company_concept_tags")
+            conn.execute("DELETE FROM symbol_concept_edges")
+            conn.execute("DELETE FROM concepts")
+            count = 0
+            for row in ordered:
+                conn.execute(
+                    """INSERT INTO concepts
+                    (concept_id, label, level, parent_id, concept_type, status,
+                     created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        row["concept_id"],
+                        row["label"],
+                        int(row["level"]),
+                        row.get("parent_id"),
+                        row.get("concept_type", "evergreen"),
+                        row.get("status", "active"),
+                        now,
+                        now,
+                    ),
+                )
+                count += 1
+        return count
+
     def upsert_concept_themes(self, rows: List[Dict[str, Any]]) -> int:
         """Upsert dynamic theme rows. Preserves created_at on update."""
         if not rows:
