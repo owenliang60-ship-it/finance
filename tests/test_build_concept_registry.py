@@ -747,3 +747,159 @@ def test_cli_reader_broad_top_empty_when_no_rankings(monkeypatch):
                         lambda *a, **kw: pytest.fail("should not be called"))
 
     assert mod._read_broad_top(100) == []
+
+
+# ---- Phase 5: read_reviewed_csv fail-fast validation (Task 7) ----
+
+_TAXONOMY = json.loads(TAXONOMY_V2_PATH.read_text(encoding="utf-8"))
+_EXTEND_POOL = {"NVDA"}
+
+
+def _valid_row(symbol: str = "NVDA") -> dict:
+    """One canonical valid CSV row that passes all 10 checks."""
+    return {
+        "review_reason": "ok",
+        "symbol": symbol,
+        "company_name": "NVIDIA Corp.",
+        "fmp_sector": "Technology",
+        "fmp_industry": "Semiconductors",
+        "market_cap_b": "3000.00",
+        "mcap_tier": "mega",
+        "description": "GPU + AI accelerator",
+        "l1": "半导体",                          # semiconductor
+        "l2": "计算芯片/GPU加速器",              # gpu_accelerator
+        "l3_themes": "AI算力",                   # ai_compute (label alias)
+        "business_role": "GPU",
+        "prefill_source": "manual",
+        "confidence": "0.95",
+        "needs_review": "0",
+        "boss_notes": "",
+    }
+
+
+def _write_csv(path: Path, rows: list[dict]) -> None:
+    from scripts.build_company_concept_registry import REVIEW_CSV_FIELDS
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=REVIEW_CSV_FIELDS)
+        w.writeheader()
+        for r in rows:
+            w.writerow({k: r.get(k, "") for k in REVIEW_CSV_FIELDS})
+
+
+def _read_csv(path: Path) -> list[dict]:
+    with path.open(encoding="utf-8") as fh:
+        return list(csv.DictReader(fh))
+
+
+def _write_valid_csv(tmp_path: Path) -> Path:
+    p = tmp_path / "review.csv"
+    _write_csv(p, [_valid_row()])
+    return p
+
+
+def _write_csv_with_2_bad_rows(tmp_path: Path) -> Path:
+    """Row 1 missing l1; Row 2 has l2 parent mismatch with l1."""
+    bad1 = {**_valid_row("NVDA"), "l1": ""}
+    bad2 = {**_valid_row("AMD"), "l1": "金融", "l2": "超大规模云"}  # mismatch
+    p = tmp_path / "review.csv"
+    _write_csv(p, [bad1, bad2])
+    return p
+
+
+def _write_single_row_with_three_errors(tmp_path: Path) -> Path:
+    """One row that simultaneously violates: l1 empty + l2 empty + bad L3."""
+    bad = {**_valid_row("FOO"), "l1": "", "l2": "", "l3_themes": "电商生态"}
+    p = tmp_path / "review.csv"
+    _write_csv(p, [bad])
+    return p
+
+
+def _write_csv_with_one_good_row(tmp_path: Path, symbol: str) -> Path:
+    p = tmp_path / "review.csv"
+    _write_csv(p, [_valid_row(symbol)])
+    return p
+
+
+@pytest.mark.parametrize("scenario,mutations,expected_msg", [
+    ("missing_row", lambda rows: rows[:-1], "missing"),
+    ("duplicate_row", lambda rows: rows + [rows[0]], "duplicate"),
+    ("empty_l1", lambda rows: [{**rows[0], "l1": ""}] + rows[1:], "l1 empty"),
+    ("empty_l2", lambda rows: [{**rows[0], "l2": ""}] + rows[1:], "l2 empty"),
+    ("invalid_l1", lambda rows: [{**rows[0], "l1": "无效L1"}] + rows[1:], "not in 11 l1"),
+    ("invalid_l2", lambda rows: [{**rows[0], "l2": "无效L2"}] + rows[1:], "not in 60 l2"),
+    ("l2_parent_mismatch",
+     lambda rows: [{**rows[0], "l1": "金融", "l2": "超大规模云"}] + rows[1:],
+     "parent mismatch"),
+    ("invalid_l3",
+     lambda rows: [{**rows[0], "l3_themes": "电商生态"}] + rows[1:],
+     "not in pool"),
+])
+def test_read_reviewed_csv_fail_fast(tmp_path, scenario, mutations, expected_msg):
+    csv_path = _write_valid_csv(tmp_path)
+    rows = _read_csv(csv_path)
+    mutated = mutations(rows)
+    _write_csv(csv_path, mutated)
+
+    from scripts.build_company_concept_registry import (
+        read_reviewed_csv, CSVValidationError,
+    )
+    with pytest.raises(CSVValidationError) as exc:
+        read_reviewed_csv(csv_path, extend_pool=_EXTEND_POOL, taxonomy=_TAXONOMY)
+    assert expected_msg in str(exc.value).lower(), (
+        f"scenario={scenario} expected '{expected_msg}' in message: {exc.value}"
+    )
+
+
+def test_read_reviewed_csv_validate_only_emits_per_row_report(tmp_path):
+    """rejected.csv has one row per failing symbol, errors aggregated into _errors col."""
+    csv_path = _write_csv_with_2_bad_rows(tmp_path)
+    from scripts.build_company_concept_registry import read_reviewed_csv
+    read_reviewed_csv(csv_path, extend_pool={"NVDA", "AMD"},
+                      taxonomy=_TAXONOMY, validate_only=True)
+
+    rejected_path = csv_path.parent / f"{csv_path.stem}_rejected.csv"
+    summary_path = csv_path.parent / f"{csv_path.stem}_rejected_summary.txt"
+    assert rejected_path.exists()
+    assert summary_path.exists()
+
+    rejected_rows = list(csv.DictReader(rejected_path.open()))
+    assert len(rejected_rows) == 2
+    for r in rejected_rows:
+        assert r["_errors"], "_errors must be populated"
+
+
+def test_read_reviewed_csv_one_row_can_have_multiple_errors(tmp_path):
+    """A row violating 3 checks emits ONE rejected row with all 3 in _errors (' | ' sep)."""
+    csv_path = _write_single_row_with_three_errors(tmp_path)
+    from scripts.build_company_concept_registry import read_reviewed_csv
+    read_reviewed_csv(csv_path, extend_pool={"FOO"}, taxonomy=_TAXONOMY,
+                      validate_only=True)
+    rejected = list(csv.DictReader(
+        (csv_path.parent / f"{csv_path.stem}_rejected.csv").open()
+    ))
+    assert len(rejected) == 1
+    errs = rejected[0]["_errors"].split(" | ")
+    assert len(errs) >= 3, f"expected 3+ errors, got: {errs}"
+
+
+def test_read_reviewed_csv_coverage_errors_go_to_summary_not_rows(tmp_path):
+    """Missing symbols (coverage-level) appear in summary.txt, NOT per-row rejected.csv."""
+    csv_path = _write_csv_with_one_good_row(tmp_path, symbol="AAPL")
+    # Tweak AAPL row to use a valid (consumer_retail, consumer_electronics_brand)
+    rows = _read_csv(csv_path)
+    rows[0]["l1"] = "消费与零售"
+    rows[0]["l2"] = "消费电子与品牌硬件"
+    rows[0]["l3_themes"] = ""
+    _write_csv(csv_path, rows)
+
+    from scripts.build_company_concept_registry import read_reviewed_csv
+    read_reviewed_csv(csv_path, extend_pool={"AAPL", "MSFT", "NVDA"},
+                      taxonomy=_TAXONOMY, validate_only=True)
+    rejected = list(csv.DictReader(
+        (csv_path.parent / f"{csv_path.stem}_rejected.csv").open()
+    ))
+    assert rejected == []     # no per-row failures
+    summary = (csv_path.parent / f"{csv_path.stem}_rejected_summary.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "MSFT" in summary and "NVDA" in summary
