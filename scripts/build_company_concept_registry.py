@@ -732,6 +732,77 @@ def read_reviewed_csv(
     return parsed
 
 
+# ---- Phase 6: save_to_market_db + WAL-safe backup + display_tags ----
+
+def _build_display_tags(row: dict, concepts_by_id: dict[str, str]) -> str:
+    """Build the 2- or 3-segment Chinese display string.
+
+    L1_label / L2_label              (when no theme)
+    L1_label / L2_label / L3_first   (theme present)
+
+    First L3 only — additional themes are addressable via theme_ids but not
+    visualized in this canonical string. Missing concept_ids are skipped so a
+    partially-classified row still renders what it can.
+    """
+    parts: list[str] = []
+    for cid in (row.get("primary_concept_id"), row.get("secondary_concept_id")):
+        if cid and cid in concepts_by_id:
+            parts.append(concepts_by_id[cid])
+    theme_ids = row.get("theme_ids") or []
+    if theme_ids and theme_ids[0] in concepts_by_id:
+        parts.append(concepts_by_id[theme_ids[0]])
+    return " / ".join(parts)
+
+
+def _backup_sqlite(db_path: Path, label: str) -> Path | None:
+    """WAL-safe SQLite snapshot using the official backup API.
+
+    Why not shutil.copy2: market.db (and company.db) both run journal_mode=WAL.
+    A plain file copy may miss in-flight transactions still in the -wal
+    sidecar, leaving the backup logically incomplete. sqlite3.Connection.backup()
+    coordinates with WAL and produces a consistent destination file regardless
+    of pending writes. Returns the new backup path, or None when db_path missing.
+    """
+    if not db_path.exists():
+        return None
+    import sqlite3
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    backup_path = db_path.with_name(f"{db_path.name}.backup-{ts}-{label}")
+    src = sqlite3.connect(str(db_path))
+    dst = sqlite3.connect(str(backup_path))
+    try:
+        with dst:
+            src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
+    logger.info("WAL-safe backup %s -> %s", db_path, backup_path)
+    return backup_path
+
+
+def save_to_market_db(
+    *,
+    rows: list[dict],
+    store: MarketStore,
+    market_db_path: Path,
+) -> int:
+    """Phase 6: WAL-safe backup + upsert with rebuilt 3-segment display_tags.
+
+    Builds the display_tags by joining the concepts.label values for the
+    referenced (L1, L2, L3_first) IDs. Boss-supplied display_tags (if any) are
+    overwritten — DB labels are SSOT for display.
+    """
+    _backup_sqlite(market_db_path, "phase6")
+
+    conn = store._get_conn()
+    concepts_by_id = {
+        r[0]: r[1] for r in conn.execute("SELECT concept_id, label FROM concepts")
+    }
+    for r in rows:
+        r["display_tags"] = _build_display_tags(r, concepts_by_id)
+    return store.upsert_company_concepts(rows)
+
+
 # ---- CLI helpers ----
 
 def _load_universe(path: Path) -> list[str]:

@@ -1649,10 +1649,44 @@ class MarketStore:
         return count
 
     def upsert_company_concepts(self, rows: List[Dict[str, Any]]) -> int:
-        """Upsert per-symbol display tags. theme_ids list is JSON-encoded."""
+        """Upsert per-symbol display tags. theme_ids list is JSON-encoded.
+
+        v2 invariant (Task 8): every element of `theme_ids` MUST reference a
+        ``concepts`` row with ``level=3``. concepts.theme_ids is JSON in a TEXT
+        column, so SQLite cannot enforce a FK on its elements; this guard runs
+        the level check in Python before any write. Pre-checking once for the
+        whole batch lets the write loop stay short and the error message
+        actionable (lists the offending ids in one place).
+        """
         if not rows:
             return 0
         conn = self._get_conn()
+
+        # v2 theme_ids invariant: every referenced concept_id must be level=3.
+        # Empty list → skip the query; one query covers the whole batch.
+        all_theme_ids: set[str] = set()
+        for row in rows:
+            for tid in row.get("theme_ids", []) or []:
+                if tid:
+                    all_theme_ids.add(str(tid))
+        if all_theme_ids:
+            placeholders = ",".join("?" * len(all_theme_ids))
+            level_by_id = {
+                r[0]: r[1] for r in conn.execute(
+                    f"SELECT concept_id, level FROM concepts "
+                    f"WHERE concept_id IN ({placeholders})",
+                    list(all_theme_ids),
+                )
+            }
+            bad = sorted(
+                tid for tid in all_theme_ids
+                if level_by_id.get(tid) != 3
+            )
+            if bad:
+                raise ValueError(
+                    f"theme_ids must reference level=3 concepts; offenders: {bad}"
+                )
+
         now = self._utc_now_iso()
         count = 0
         with conn:

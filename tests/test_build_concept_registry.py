@@ -882,6 +882,107 @@ def test_read_reviewed_csv_one_row_can_have_multiple_errors(tmp_path):
     assert len(errs) >= 3, f"expected 3+ errors, got: {errs}"
 
 
+# ---- Phase 6 helpers ----
+
+
+def _bootstrap_store_with_v2_taxonomy(tmp_path: Path):
+    """MarketStore seeded with the v2 concepts needed by Phase 6 tests."""
+    from src.data.market_store import MarketStore
+    store = MarketStore(tmp_path / "market.db")
+    store.upsert_concepts([
+        {"concept_id": "semiconductor", "label": "半导体",
+         "level": 1, "parent_id": None},
+        {"concept_id": "consumer_retail", "label": "消费与零售",
+         "level": 1, "parent_id": None},
+        {"concept_id": "gpu_accelerator", "label": "计算芯片/GPU加速器",
+         "level": 2, "parent_id": "semiconductor"},
+        {"concept_id": "consumer_staples", "label": "必需消费品",
+         "level": 2, "parent_id": "consumer_retail"},
+        {"concept_id": "ai_compute", "label": "AI算力", "level": 3,
+         "concept_type": "theme"},
+        {"concept_id": "hbm", "label": "HBM", "level": 3,
+         "concept_type": "theme"},
+    ])
+    # Expose the db_path so save_to_market_db can use it.
+    store.db_path = tmp_path / "market.db"
+    return store
+
+
+# ---- Task 8: Phase 6 save (backup + 3-segment display_tags + level=3 guard) ----
+
+
+def test_phase6_save_writes_three_segment_display_tags(tmp_path):
+    """display_tags = L1_label / L2_label / L3_first_label."""
+    store = _bootstrap_store_with_v2_taxonomy(tmp_path)
+    rows = [{
+        "symbol": "NVDA",
+        "primary_concept_id": "semiconductor",
+        "secondary_concept_id": "gpu_accelerator",
+        "theme_ids": ["ai_compute", "hbm"],
+        "business_role": "GPU",
+        "confidence": 0.95,
+        "source": "manual",
+        "needs_review": 0,
+    }]
+    from scripts.build_company_concept_registry import save_to_market_db
+    save_to_market_db(rows=rows, store=store, market_db_path=store.db_path)
+
+    fetched = store.get_company_concepts(["NVDA"])
+    assert fetched["NVDA"]["display_tags"] == "半导体 / 计算芯片/GPU加速器 / AI算力"
+
+
+def test_phase6_display_tags_two_segment_when_no_l3(tmp_path):
+    store = _bootstrap_store_with_v2_taxonomy(tmp_path)
+    rows = [{
+        "symbol": "KO",
+        "primary_concept_id": "consumer_retail",
+        "secondary_concept_id": "consumer_staples",
+        "theme_ids": [],
+        "business_role": "",
+        "confidence": 0.95,
+        "source": "manual",
+        "needs_review": 0,
+    }]
+    from scripts.build_company_concept_registry import save_to_market_db
+    save_to_market_db(rows=rows, store=store, market_db_path=store.db_path)
+    fetched = store.get_company_concepts(["KO"])
+    assert fetched["KO"]["display_tags"] == "消费与零售 / 必需消费品"
+
+
+def test_phase6_backs_up_market_db_before_write(tmp_path):
+    store = _bootstrap_store_with_v2_taxonomy(tmp_path)
+    from scripts.build_company_concept_registry import save_to_market_db
+    save_to_market_db(rows=[], store=store, market_db_path=store.db_path)
+    backups = list(tmp_path.glob("market.db.backup-*"))
+    assert len(backups) == 1
+
+
+def test_backup_sqlite_captures_wal_committed_writes(tmp_path):
+    """WAL invariant: committed writes must appear in the backup even without
+    an explicit checkpoint. shutil.copy2 fails this (may miss -wal sidecar);
+    sqlite3.Connection.backup() coordinates with WAL and produces a clean
+    target file.
+    """
+    import sqlite3
+    db = tmp_path / "live.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("CREATE TABLE t (k TEXT)")
+    conn.execute("INSERT INTO t VALUES ('committed_then_backup')")
+    conn.commit()
+    # Do NOT checkpoint — simulate real-world -wal still containing data.
+
+    from scripts.build_company_concept_registry import _backup_sqlite
+    backup = _backup_sqlite(db, "wal-test")
+    assert backup is not None
+
+    bconn = sqlite3.connect(str(backup))
+    rows = bconn.execute("SELECT k FROM t").fetchall()
+    bconn.close()
+    conn.close()
+    assert rows == [("committed_then_backup",)]
+
+
 def test_read_reviewed_csv_coverage_errors_go_to_summary_not_rows(tmp_path):
     """Missing symbols (coverage-level) appear in summary.txt, NOT per-row rejected.csv."""
     csv_path = _write_csv_with_one_good_row(tmp_path, symbol="AAPL")

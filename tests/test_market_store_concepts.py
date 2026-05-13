@@ -14,9 +14,14 @@ def _seed_taxonomy(store: MarketStore) -> None:
         {"concept_id": "semiconductor", "label": "半导体", "level": 1, "parent_id": None},
         {"concept_id": "memory", "label": "存储", "level": 2, "parent_id": "semiconductor"},
         {"concept_id": "memory_chips", "label": "存储芯片", "level": 3, "parent_id": "memory"},
+        # v2: themes live in concepts table as level=3 (theme_ids must reference level=3).
+        {"concept_id": "hbm", "label": "HBM", "level": 3,
+         "concept_type": "theme"},
         {"concept_id": "network_equipment", "label": "通信/网络设备", "level": 1, "parent_id": None},
         {"concept_id": "optical_communications", "label": "光通信", "level": 2, "parent_id": "network_equipment"},
     ])
+    # Legacy concept_themes table snapshot still seeded so the old
+    # test_upsert_concept_themes / rebuild tests retain meaningful fixtures.
     store.upsert_concept_themes([
         {"theme_id": "hbm", "label": "HBM", "parent_concept_id": "memory",
          "lifecycle_state": "active"},
@@ -357,3 +362,48 @@ def test_rebuild_concept_tree_rollback_on_error(tmp_path):
     conn = store._get_conn()
     rows = conn.execute("SELECT concept_id FROM concepts").fetchall()
     assert [r[0] for r in rows] == ["keep"]
+
+
+# ---- Task 8: theme_ids level=3 guard ----
+
+
+def test_upsert_rejects_theme_ids_pointing_to_non_level3(tmp_path):
+    """theme_ids 元素必须指向 concepts.level=3，指向 L1/L2 应被拒。"""
+    store = MarketStore(tmp_path / "market.db")
+    _seed_taxonomy(store)
+    bad = [{
+        "symbol": "X",
+        "primary_concept_id": "semiconductor",
+        "secondary_concept_id": "memory",
+        "tertiary_concept_id": None,
+        "theme_ids": ["semiconductor"],   # L1, not L3
+        "display_tags": "半导体 / 存储",
+        "business_role": "",
+        "confidence": 0.5,
+        "source": "manual",
+        "evidence": "",
+        "needs_review": 0,
+    }]
+    with pytest.raises(ValueError, match="theme_ids must reference level=3"):
+        store.upsert_company_concepts(bad)
+
+
+def test_upsert_rejects_theme_ids_pointing_to_unknown_concept(tmp_path):
+    """theme_id 不存在于 concepts 表 → 拒绝（防御 FK 漏检）。"""
+    store = MarketStore(tmp_path / "market.db")
+    _seed_taxonomy(store)
+    bad = [{
+        "symbol": "X",
+        "primary_concept_id": "semiconductor",
+        "secondary_concept_id": "memory",
+        "tertiary_concept_id": None,
+        "theme_ids": ["does_not_exist"],
+        "display_tags": "x",
+        "business_role": "",
+        "confidence": 0.5,
+        "source": "manual",
+        "evidence": "",
+        "needs_review": 0,
+    }]
+    with pytest.raises(ValueError, match="theme_ids must reference level=3"):
+        store.upsert_company_concepts(bad)
