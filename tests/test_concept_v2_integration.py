@@ -124,15 +124,21 @@ def test_full_v2_pipeline_3_stocks(tmp_path):
     assert cct_post_build["AMZN"]["primary_concept_id"] == "ai_compute_cloud"
     assert cct_post_build["AMZN"]["secondary_concept_id"] == "hyperscaler"
 
-    # ---- CSV review queue: only OBSCURE (anchor rows skip the queue) ----
+    # ---- CSV review manifest: ONE row per universe symbol with the routing ----
+    # ---- flag in review_reason. OBSCURE (hard) surfaces at the top so Boss   ----
+    # ---- starts at the rows that actually need attention.                    ----
     rows = list(csv.DictReader(csv_path.open()))
-    assert len(rows) == 1
+    assert {r["symbol"] for r in rows} == {"NVDA", "AMZN", "OBSCURE"}
     assert rows[0]["symbol"] == "OBSCURE"
     assert rows[0]["l1"] == ""
     assert rows[0]["l2"] == ""
     assert rows[0]["prefill_source"] == "llm_failed"
     assert rows[0]["needs_review"] == "1"
     assert rows[0]["review_reason"] == "hard_needs_review"
+    # NVDA + AMZN are auto-classified (rule + anchor) → ok rows in the manifest.
+    by_sym = {r["symbol"]: r for r in rows}
+    assert by_sym["NVDA"]["review_reason"] == "ok"
+    assert by_sym["AMZN"]["review_reason"] == "ok"
 
     # ---- Boss edits CSV: fills in OBSCURE's classification ----
     edited = dict(rows[0])
@@ -172,9 +178,18 @@ def test_full_v2_pipeline_3_stocks(tmp_path):
     )
     assert saved == 1
 
-    # WAL-safe backup created (Task 8 guarantee)
-    backups = list(tmp_path.glob("market.db.backup-*-phase6*"))
+    # WAL-safe backup is taken at the rebuild boundary (build_registry --save
+    # earlier in this test produced exactly one pre-rebuild snapshot). The
+    # standalone save_to_market_db call above does NOT make its own backup —
+    # see test_apply_reviewed_csv_backs_up_before_rebuild for the rollback
+    # contract on the apply_reviewed_csv path.
+    backups = list(tmp_path.glob("market.db.backup-*-pre-rebuild*"))
     assert len(backups) == 1
+    phase6_backups = list(tmp_path.glob("market.db.backup-*-phase6*"))
+    assert phase6_backups == [], (
+        "stale 'phase6'-labeled backup format must be gone — backups are now "
+        "labeled 'pre-rebuild' to reflect when they're actually taken"
+    )
 
     # ---- Final DB state: NVDA + AMZN from anchor write; OBSCURE from Phase 6 ----
     cct_final = {

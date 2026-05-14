@@ -645,7 +645,12 @@ def test_refresh_profiles_skips_symbols_with_fmp_errors(tmp_path, monkeypatch):
     count = refresh_profiles(["AAPL", "BAD", "MSFT"], profiles_path=profiles_path)
     assert count == 2
     data = json.loads(profiles_path.read_text(encoding="utf-8"))
-    assert set(data.keys()) == {"AAPL", "MSFT"}
+    # Successful symbols persisted; _meta tracks freshness (parity with
+    # fundamental_fetcher.update_profiles). BAD is absent because no prior
+    # cache to preserve in this test.
+    assert "AAPL" in data and "MSFT" in data
+    assert "BAD" not in data
+    assert "_meta" in data and "updated_at" in data["_meta"]
 
 
 # ---- CLI helpers ----
@@ -698,21 +703,35 @@ def test_load_universe_returns_empty_for_unknown_dict_shape(tmp_path):
     assert _load_universe(p) == []
 
 
-def test_cli_reader_portfolio_uses_correct_company_store_api(monkeypatch):
+def test_cli_reader_portfolio_uses_correct_company_store_api(monkeypatch, tmp_path):
+    """_read_portfolio_holdings must call CompanyStore(path) directly so the
+    --company-db override actually targets the requested DB. Using the
+    get_store() singleton silently ignores subsequent paths after the first
+    call (singleton cache).
+    """
     from scripts import build_company_concept_registry as mod
 
-    fake_called = {"hits": 0}
+    fake_called = {"hits": 0, "paths": []}
 
     class _FakeStore:
+        def __init__(self, db_path=None):
+            fake_called["paths"].append(db_path)
+
         def get_all_open_holdings(self):
             fake_called["hits"] += 1
             return [{"symbol": "MU"}, {"symbol": "nvda"}, {"symbol": ""}]
 
     import terminal.company_store as cs_mod
-    monkeypatch.setattr(cs_mod, "get_store", lambda *a, **kw: _FakeStore())
+    monkeypatch.setattr(cs_mod, "CompanyStore", _FakeStore)
 
-    result = mod._read_portfolio_holdings()
+    target = tmp_path / "company.db"
+    target.write_bytes(b"")  # exists() check passes
+
+    result = mod._read_portfolio_holdings(target)
     assert fake_called["hits"] == 1
+    assert fake_called["paths"] == [target], (
+        "explicit company_db_path must be passed straight to CompanyStore"
+    )
     assert result == ["MU", "NVDA"]
 
 
@@ -949,12 +968,20 @@ def test_phase6_display_tags_two_segment_when_no_l3(tmp_path):
     assert fetched["KO"]["display_tags"] == "消费与零售 / 必需消费品"
 
 
-def test_phase6_backs_up_market_db_before_write(tmp_path):
+def test_phase6_save_does_not_backup_in_isolation(tmp_path):
+    """save_to_market_db is a low-level upsert helper; it must NOT back up the
+    DB on its own. Backups belong at the rebuild boundary (see
+    ``apply_reviewed_csv`` / ``build_registry``) — backing up here would either
+    duplicate the caller's backup or, worse, capture an already-cleared DB.
+    """
     store = _bootstrap_store_with_v2_taxonomy(tmp_path)
     from scripts.build_company_concept_registry import save_to_market_db
     save_to_market_db(rows=[], store=store, market_db_path=store.db_path)
     backups = list(tmp_path.glob("market.db.backup-*"))
-    assert len(backups) == 1
+    assert backups == [], (
+        "save_to_market_db must not produce backups — callers do that "
+        "BEFORE rebuild_concept_tree clears the DB"
+    )
 
 
 def test_backup_sqlite_captures_wal_committed_writes(tmp_path):

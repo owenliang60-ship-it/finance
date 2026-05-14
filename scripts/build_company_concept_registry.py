@@ -155,19 +155,40 @@ def refresh_profiles(
     symbols: list[str],
     profiles_path: Path = PROFILES_PATH,
 ) -> int:
-    """Phase 2: pull FMP /profile/<symbol> and write to JSON keyed by symbol.
+    """Phase 2: pull FMP /profile/<symbol> and merge into JSON keyed by symbol.
 
     Output schema matches the existing _load_profiles consumer:
         {"AAPL": {"symbol": "AAPL", "companyName": "...", "sector": "...",
-                  "industry": "...", "description": "...", ...}, ...}
+                  "industry": "...", "description": "...", ...},
+         ...,
+         "_meta": {"updated_at": "YYYY-MM-DD HH:MM:SS", "count": N}}
+
+    Merge semantics (parity with fundamental_fetcher.update_profiles):
+        - Load existing JSON; failed-fetch symbols KEEP their previous entry
+          so a transient FMP outage doesn't shrink the cache.
+        - _meta.updated_at advances every run (even when every fetch failed)
+          so data_health._check_fundamental_freshness reflects the cron run.
+        - Write goes through a temp file + os.replace for atomicity.
 
     Backs up existing JSON first. Rate-limit handled by FMP client (2s).
     Does NOT touch company.db — market_cap continues to flow through the
     existing data pipeline.
+
+    Returns the count of symbols successfully fetched THIS run (not the total
+    cache size), matching the original Phase 2 contract.
     """
     _backup_file(profiles_path, "preprofiles")
     profiles_path.parent.mkdir(parents=True, exist_ok=True)
-    out: dict[str, dict] = {}
+
+    existing: dict[str, dict] = {}
+    if profiles_path.exists():
+        try:
+            existing = json.loads(profiles_path.read_text(encoding="utf-8")) or {}
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Existing profiles.json unreadable (%s); starting empty", exc)
+            existing = {}
+
+    fetched = 0
     for sym in symbols:
         try:
             profile = _fetch_fmp_profile(sym)
@@ -175,13 +196,26 @@ def refresh_profiles(
             logger.warning("FMP profile fetch failed for %s: %s", sym, exc)
             continue
         if profile:
-            out[sym.upper()] = profile
-    profiles_path.write_text(
-        json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True),
+            existing[sym.upper()] = profile
+            fetched += 1
+
+    existing["_meta"] = {
+        "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "count": sum(1 for k in existing if k != "_meta"),
+    }
+
+    tmp = profiles_path.with_suffix(profiles_path.suffix + ".tmp")
+    tmp.write_text(
+        json.dumps(existing, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    logger.info("Wrote %d profiles -> %s", len(out), profiles_path)
-    return len(out)
+    import os
+    os.replace(tmp, profiles_path)
+    logger.info(
+        "Refreshed %d profiles (%d total) -> %s",
+        fetched, existing["_meta"]["count"], profiles_path,
+    )
+    return fetched
 
 
 def _classify_v2(
@@ -428,17 +462,23 @@ def build_registry(
         row = _classify_v2(registry, profile, taxonomy)
         rows.append(row)
         cap_usd = market_caps.get(sym)
+        # Phase 4 manifest: ONE row per universe symbol. review_reason is the
+        # routing flag — hard rows surface first so Boss starts at the top of
+        # the file and can stop when he reaches "ok". Without this manifest,
+        # --read-reviewed-csv would report coverage errors for every clean
+        # symbol the dry-run skipped, breaking the dry-run → review → save loop.
         if row["needs_review"] == 1:
-            csv_rows.append(
-                _row_to_csv(row, profile, "hard_needs_review", cap_usd, concepts_by_id)
-            )
+            reason = "hard_needs_review"
         elif (
             row["source"] in ("rule", "llm")
             and row["confidence"] < SOFT_REVIEW_CONFIDENCE_THRESHOLD
         ):
-            csv_rows.append(
-                _row_to_csv(row, profile, "soft_low_confidence", cap_usd, concepts_by_id)
-            )
+            reason = "soft_low_confidence"
+        else:
+            reason = "ok"
+        csv_rows.append(
+            _row_to_csv(row, profile, reason, cap_usd, concepts_by_id)
+        )
 
     priority = registry.priority_list(
         broad_top_symbols=list(broad_top_symbols or []),
@@ -463,11 +503,32 @@ def build_registry(
         tail_rate = 0.0
 
     review_csv_path.parent.mkdir(parents=True, exist_ok=True)
+    # Sort by review_reason bucket (hard → soft → ok), then by confidence asc
+    # within each bucket so the most uncertain rows surface at the top.
+    reason_rank = {
+        "hard_needs_review": 0,
+        "soft_low_confidence": 1,
+        "ok": 2,
+    }
+    sorted_csv_rows = sorted(
+        csv_rows,
+        key=lambda r: (
+            reason_rank.get(r.get("review_reason", "ok"), 3),
+            float(r.get("confidence", "1") or 1),
+        ),
+    )
     with review_csv_path.open("w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=REVIEW_CSV_FIELDS)
         w.writeheader()
-        for r in csv_rows:
+        for r in sorted_csv_rows:
             w.writerow(r)
+
+    # Manifest sidecar: the immutable record of what dry-run intended Boss to
+    # review. apply_reviewed_csv unions this set with the caller's extend_pool
+    # so a hand edit that DROPS a row (watchlist/portfolio/broad_top symbol not
+    # in extended pool) fails validation rather than silently disappearing
+    # when rebuild_concept_tree wipes the old tags.
+    _write_review_manifest(review_csv_path, full_universe)
 
     by_source: dict[str, int] = {}
     for r in rows:
@@ -500,6 +561,11 @@ def build_registry(
 
     will_save = save and (not gate_failed or force_save)
     if will_save:
+        # Backup BEFORE rebuild_concept_tree wipes company_concept_tags. If the
+        # upsert (or anything else after) fails, this backup is the pre-mutation
+        # state Boss can restore from. Backing up after rebuild would only
+        # capture the already-cleared DB.
+        _backup_sqlite(store.db_path, "pre-rebuild")
         store.rebuild_concept_tree(registry.concepts)
         db_rows = [_row_to_db(r) for r in rows if r["needs_review"] == 0]
         if db_rows:
@@ -604,6 +670,11 @@ def read_reviewed_csv(
     }
     l3_alias_to_id: dict[str, str] = {}
     for cid, c in l3_concepts.items():
+        # cid → cid keeps the parser in lockstep with
+        # ConceptRegistry.resolve_l3_alias, which accepts label, alias, or
+        # bare concept_id (idempotent). Boss copying ai_compute from the id
+        # column of taxonomy_reference.csv must not trip "not in pool".
+        l3_alias_to_id[cid] = cid
         l3_alias_to_id[c["label"]] = cid
         for alias in c.get("aliases", []):
             l3_alias_to_id[alias] = cid
@@ -732,6 +803,47 @@ def read_reviewed_csv(
     return parsed
 
 
+def _manifest_path_for(csv_path: Path) -> Path:
+    return csv_path.with_name(f"{csv_path.stem}_manifest.json")
+
+
+def _write_review_manifest(csv_path: Path, symbols: Iterable[str]) -> Path:
+    """Snapshot the dry-run's expected review set next to the CSV. This is the
+    rollback line of defense against manual CSV edits that delete priority
+    rows — apply_reviewed_csv unions this with the caller's extend_pool so a
+    dropped row fails the coverage check.
+    """
+    payload = {
+        "symbols": sorted({str(s).upper() for s in symbols}),
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "csv": csv_path.name,
+    }
+    manifest = _manifest_path_for(csv_path)
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def _load_review_manifest(csv_path: Path) -> set[str] | None:
+    """Return the manifest's expected symbol set, or None when missing or
+    unparseable. A missing manifest is non-fatal — older CSVs without a
+    sidecar still validate against the caller-supplied extend_pool.
+    """
+    manifest = _manifest_path_for(csv_path)
+    if not manifest.exists():
+        return None
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Review manifest unreadable (%s); falling back", exc)
+        return None
+    syms = data.get("symbols") or []
+    return {str(s).upper() for s in syms}
+
+
 # ---- Phase 6: save_to_market_db + WAL-safe backup + display_tags ----
 
 def _build_display_tags(row: dict, concepts_by_id: dict[str, str]) -> str:
@@ -780,19 +892,72 @@ def _backup_sqlite(db_path: Path, label: str) -> Path | None:
     return backup_path
 
 
+def apply_reviewed_csv(
+    *,
+    store: MarketStore,
+    registry: ConceptRegistry,
+    csv_path: Path,
+    extend_pool: set[str],
+) -> int:
+    """Phase 5+6 end-to-end save for the reviewed CSV.
+
+    Order is load-bearing:
+        1. Parse + validate the CSV against ``extend_pool ∪ manifest`` (no DB
+           writes yet — fail fast on bad input or dropped rows). The manifest
+           sidecar is the dry-run's own record of expected symbols, so a hand
+           edit that deletes a row not present in extended pool still fails.
+        2. WAL-safe backup of market.db (label=pre-rebuild). This is the
+           rollback target if any later step fails.
+        3. rebuild_concept_tree — wipes company_concept_tags + symbol_concept_edges
+           as part of its FK-cascade requirement.
+        4. save_to_market_db — re-upsert the parsed rows with fresh display_tags.
+
+    Step 2 MUST precede step 3. If we backed up after rebuild, the backup would
+    capture the already-cleared tags and recovery would be impossible.
+    """
+    effective_pool = _effective_extend_pool(csv_path, extend_pool)
+    parsed_rows = read_reviewed_csv(
+        csv_path, extend_pool=effective_pool, taxonomy=registry._taxonomy,
+    )
+    _backup_sqlite(store.db_path, "pre-rebuild")
+    store.rebuild_concept_tree(registry.concepts)
+    return save_to_market_db(
+        rows=parsed_rows, store=store, market_db_path=store.db_path,
+    )
+
+
+def _effective_extend_pool(csv_path: Path, extend_pool: Iterable[str]) -> set[str]:
+    """Union the caller-supplied extend_pool with the manifest sidecar (when
+    present). The caller's pool is usually ``extended_universe`` — alone it
+    can't catch a dropped watchlist or portfolio row whose symbol isn't in
+    the extended universe.
+    """
+    base = {str(s).upper() for s in extend_pool}
+    manifest = _load_review_manifest(csv_path)
+    if manifest:
+        return base | manifest
+    return base
+
+
 def save_to_market_db(
     *,
     rows: list[dict],
     store: MarketStore,
     market_db_path: Path,
 ) -> int:
-    """Phase 6: WAL-safe backup + upsert with rebuilt 3-segment display_tags.
+    """Phase 6: upsert tags with rebuilt 3-segment display_tags.
 
-    Builds the display_tags by joining the concepts.label values for the
-    referenced (L1, L2, L3_first) IDs. Boss-supplied display_tags (if any) are
+    Builds display_tags by joining concepts.label for the referenced
+    (L1, L2, L3_first) IDs. Boss-supplied display_tags (if any) are
     overwritten — DB labels are SSOT for display.
+
+    Note: this function does NOT back up the DB. Backups belong at the
+    destructive-mutation boundary (rebuild_concept_tree) and are taken by
+    callers (apply_reviewed_csv, build_registry --save) BEFORE rebuild. Doing
+    a backup here would either be redundant (caller already backed up) or
+    too late (post-rebuild backup captures cleared state).
     """
-    _backup_sqlite(market_db_path, "phase6")
+    del market_db_path  # kept in signature for caller back-compat, unused here
 
     conn = store._get_conn()
     concepts_by_id = {
@@ -834,39 +999,95 @@ def _load_profiles(path: Path) -> dict[str, dict]:
     return out
 
 
-def _read_portfolio_holdings() -> list[str]:
+def _read_portfolio_holdings(company_db_path: Path | None = None) -> list[str]:
+    """Return open-holding symbols from the company DB at ``company_db_path``.
+
+    Critical: we instantiate ``CompanyStore(company_db_path)`` directly rather
+    than calling ``get_store()``. The singleton honors its first-call db_path
+    and silently returns the cached instance on subsequent calls with a
+    different path — which would make ``--company-db`` a footgun (worktree
+    runs would read main-workspace holdings only on cold start).
+    """
     try:
-        from terminal.company_store import get_store as _get_company_store
+        from terminal.company_store import CompanyStore
     except Exception as exc:
         logger.warning("terminal.company_store import failed: %s", exc)
         return []
     try:
-        rows = _get_company_store().get_all_open_holdings()
+        if company_db_path is not None and not company_db_path.exists():
+            logger.warning("company.db missing at %s — portfolio empty", company_db_path)
+            return []
+        rows = CompanyStore(company_db_path).get_all_open_holdings()
     except Exception as exc:
         logger.warning("get_all_open_holdings failed: %s", exc)
         return []
     return [str(r["symbol"]).upper() for r in rows if r.get("symbol")]
 
 
-def _read_broad_top(n: int = 100) -> list[str]:
+def _read_broad_top(
+    n: int = 100,
+    dollar_volume_db_path: Path | None = None,
+) -> list[str]:
+    """Return today's top-N broad-universe symbols by dollar volume.
+
+    ``dollar_volume_db_path=None`` falls back to ``src.data.dollar_volume``'s
+    module-level default (the project's ``data/dollar_volume.db``). When the
+    caller passes a path that doesn't exist yet, we skip the read entirely —
+    ``get_latest_date`` would otherwise create an empty DB file at that path
+    via ``init_db``-like side effects.
+    """
     try:
         from src.data.dollar_volume import get_latest_date, get_rankings
     except Exception as exc:
         logger.warning("src.data.dollar_volume import failed: %s", exc)
         return []
+    if dollar_volume_db_path is not None and not dollar_volume_db_path.exists():
+        logger.warning(
+            "dollar_volume DB missing at %s — broad_top empty", dollar_volume_db_path,
+        )
+        return []
     try:
-        date = get_latest_date()
+        kwargs: dict = {}
+        if dollar_volume_db_path is not None:
+            kwargs["db_path"] = dollar_volume_db_path
+        date = get_latest_date(**kwargs)
         if not date:
             logger.warning("dollar_volume DB has no rankings yet — broad_top empty")
             return []
-        rankings = get_rankings(date=date, limit=n)
+        rankings = get_rankings(date=date, limit=n, **kwargs)
     except Exception as exc:
         logger.warning("dollar_volume get_rankings failed: %s", exc)
         return []
     return [str(r["symbol"]).upper() for r in rankings if r.get("symbol")]
 
 
-def main() -> int:
+def _maybe_load_env_file(data_root: Path | None) -> None:
+    """When --data-root points at another workspace's data dir, try to load
+    that workspace's .env so FMP_API_KEY etc. are visible without manual
+    export. Only sets variables that aren't already in os.environ — explicit
+    env always wins. Silently skips when no .env is present.
+    """
+    if data_root is None:
+        return
+    env_path = data_root.parent / ".env"
+    if not env_path.exists():
+        return
+    import os
+    try:
+        for raw in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+    except OSError as exc:
+        logger.warning("Failed to read %s: %s", env_path, exc)
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbols", default="broad",
                         help="Universe source: 'broad' / 'extended' / path to JSON.")
@@ -887,79 +1108,160 @@ def main() -> int:
     parser.add_argument(
         "--review-csv",
         type=Path,
-        default=PROJECT_ROOT / "reports" / "concept_registry"
-        / f"needs_review_{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.csv",
+        default=None,
+        help="Output path for the Phase 4 review CSV (default: reports/concept_registry/needs_review_<date>.csv).",
     )
-    args = parser.parse_args()
+    # ---- Path overrides — let worktree runs target main workspace data ----
+    parser.add_argument("--data-root", type=Path, default=None,
+                        help="Root for data files. Defaults to PROJECT_ROOT/data. "
+                             "Equivalent to setting --profiles-path, "
+                             "--extended-universe-path, --market-db, --company-db all at once.")
+    parser.add_argument("--profiles-path", type=Path, default=None,
+                        help="Override fundamental/profiles.json path.")
+    parser.add_argument("--extended-universe-path", type=Path, default=None,
+                        help="Override pool/extended_universe.json path.")
+    parser.add_argument("--market-db", type=Path, default=None,
+                        help="Override market.db path.")
+    parser.add_argument("--company-db", type=Path, default=None,
+                        help="Override company.db path.")
+    parser.add_argument("--dollar-volume-db", type=Path, default=None,
+                        help="Override dollar_volume.db path (defaults to <data-root>/dollar_volume.db).")
+    args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    store = MarketStore()
+    # Resolve effective paths: --data-root provides defaults, then individual
+    # overrides win over those. Module-level constants remain the floor.
+    data_root = args.data_root if args.data_root else PROJECT_ROOT / "data"
+    profiles_path = args.profiles_path or (data_root / "fundamental" / "profiles.json")
+    extended_universe_path = args.extended_universe_path or (
+        data_root / "pool" / "extended_universe.json"
+    )
+    market_db_path = args.market_db or (data_root / "market.db")
+    company_db_path = args.company_db or (data_root / "company.db")
+    dollar_volume_db_path = args.dollar_volume_db or (data_root / "dollar_volume.db")
+    review_csv = args.review_csv or (
+        PROJECT_ROOT / "reports" / "concept_registry"
+        / f"needs_review_{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.csv"
+    )
+
+    # --data-root pointing at another workspace usually means the .env lives
+    # next to that workspace too. Load it so FMP_API_KEY checks succeed without
+    # Boss having to source/export it manually before each worktree run.
+    _maybe_load_env_file(args.data_root)
+
     cfg_dir = PROJECT_ROOT / "config" / "concepts"
     registry = ConceptRegistry(
         taxonomy_path=cfg_dir / "concept_taxonomy_v2.json",
         watchlist_path=cfg_dir / "concept_watchlist.json",
     )
 
+    # MarketStore.__init__ creates the .db file (mkdir parents + sqlite3.connect
+    # + _init_db). Don't instantiate it for commands that have no business
+    # touching market.db: --refresh-profiles (FMP only) and --validate-only
+    # (CSV parsing only). Lazy-init keeps those paths side-effect-free.
+    def _open_store() -> MarketStore:
+        return MarketStore(market_db_path)
+
     if args.refresh_profiles:
-        symbols = _load_universe(EXTENDED_UNIVERSE_PATH)
-        count = refresh_profiles(symbols)
-        print(f"Refreshed {count} profiles -> {PROFILES_PATH}")
+        # Fail-fast guards: silent no-ops on either of these have caused
+        # cron-time data loss before (profiles.json clobbered by an empty
+        # universe; 401 storms because FMP_API_KEY rotated unnoticed).
+        import os
+        if not os.environ.get("FMP_API_KEY", "").strip():
+            print(
+                "FMP_API_KEY is empty — refusing to call FMP. "
+                "Set it via .env or env var before --refresh-profiles.",
+                file=sys.stderr,
+            )
+            return 2
+        symbols = _load_universe(extended_universe_path)
+        if not symbols:
+            print(
+                f"Extended universe is empty: {extended_universe_path}. "
+                "Refusing to overwrite profiles.json with an empty cache.",
+                file=sys.stderr,
+            )
+            return 2
+        count = refresh_profiles(symbols, profiles_path=profiles_path)
+        print(f"Refreshed {count} profiles -> {profiles_path}")
         return 0
 
     if args.rebuild_display:
-        summary = rebuild_display_tags(store=store, registry=registry)
+        summary = rebuild_display_tags(store=_open_store(), registry=registry)
         for k, v in summary.items():
             print(f"{k}: {v}")
         return 0
 
     if args.read_reviewed_csv:
-        extend_pool = set(_load_universe(EXTENDED_UNIVERSE_PATH))
+        # The validate / dry-validate / save paths all reuse the manifest-aware
+        # pool so a dropped priority row fails coverage regardless of mode.
+        extend_pool = _effective_extend_pool(
+            args.read_reviewed_csv,
+            _load_universe(extended_universe_path),
+        )
+        if args.validate_only:
+            # Validation never writes — keep MarketStore unopened so a
+            # validate-only run has zero side effects on data_root.
+            try:
+                parsed_rows = read_reviewed_csv(
+                    args.read_reviewed_csv,
+                    extend_pool=extend_pool,
+                    taxonomy=registry._taxonomy,
+                    validate_only=True,
+                )
+            except CSVValidationError as exc:
+                print(f"CSV VALIDATION FAILED:\n{exc}", file=sys.stderr)
+                return 2
+            print(f"validate_only: {len(parsed_rows)} rows parsed; "
+                  f"see _rejected.csv + _rejected_summary.txt for issues")
+            return 0
+        if args.save:
+            try:
+                saved = apply_reviewed_csv(
+                    store=_open_store(), registry=registry,
+                    csv_path=args.read_reviewed_csv,
+                    extend_pool=extend_pool,
+                )
+            except CSVValidationError as exc:
+                print(f"CSV VALIDATION FAILED:\n{exc}", file=sys.stderr)
+                return 2
+            print(f"saved {saved} reviewed rows")
+            return 0
         try:
             parsed_rows = read_reviewed_csv(
                 args.read_reviewed_csv,
                 extend_pool=extend_pool,
                 taxonomy=registry._taxonomy,
-                validate_only=args.validate_only,
             )
         except CSVValidationError as exc:
             print(f"CSV VALIDATION FAILED:\n{exc}", file=sys.stderr)
             return 2
-        if args.validate_only:
-            print(f"validate_only: {len(parsed_rows)} rows parsed; "
-                  f"see _rejected.csv + _rejected_summary.txt for issues")
-            return 0
-        if args.save:
-            # Phase 6 save path is added by Task 8 (save_to_market_db).
-            from scripts.build_company_concept_registry import save_to_market_db  # noqa: E402
-            save_to_market_db(rows=parsed_rows, store=store, market_db_path=store.db_path)
-            print(f"saved {len(parsed_rows)} reviewed rows")
-        else:
-            print(f"validated {len(parsed_rows)} rows (use --save to persist)")
+        print(f"validated {len(parsed_rows)} rows (use --save to persist)")
         return 0
 
     if args.symbols == "broad":
-        universe = _load_universe(PROJECT_ROOT / "data" / "scans" / "broad_universe.json")
+        universe = _load_universe(data_root / "scans" / "broad_universe.json")
     elif args.symbols == "extended":
-        universe = _load_universe(PROJECT_ROOT / "data" / "pool" / "extended_universe.json")
+        universe = _load_universe(extended_universe_path)
     else:
         universe = _load_universe(Path(args.symbols))
 
-    profiles = _load_profiles(PROFILES_PATH)
-    portfolio = _read_portfolio_holdings()
-    broad_top = _read_broad_top(100)
-    market_caps = _load_market_caps_from_company_db()
+    profiles = _load_profiles(profiles_path)
+    portfolio = _read_portfolio_holdings(company_db_path)
+    broad_top = _read_broad_top(100, dollar_volume_db_path)
+    market_caps = _load_market_caps_from_company_db(company_db_path)
 
     save = args.save and not args.dry_run
 
     try:
         result = build_registry(
-            store=store, registry=registry,
+            store=_open_store(), registry=registry,
             universe_symbols=universe,
             profiles=profiles,
             portfolio_holdings=portfolio,
             broad_top_symbols=broad_top,
-            review_csv_path=args.review_csv,
+            review_csv_path=review_csv,
             save=save,
             force_save=args.force_save,
             market_caps=market_caps,
@@ -971,7 +1273,7 @@ def main() -> int:
     # Always emit taxonomy_reference.csv alongside the review CSV
     _write_taxonomy_reference_csv(
         registry._taxonomy,
-        args.review_csv.parent / "taxonomy_reference.csv",
+        review_csv.parent / "taxonomy_reference.csv",
     )
 
     print(result.as_summary())
