@@ -1565,8 +1565,73 @@ class MarketStore:
                 count += 1
         return count
 
+    def rebuild_concept_tree(self, rows: List[Dict[str, Any]]) -> int:
+        """Atomic rebuild of the concepts tree (v2 migration).
+
+        Order (must execute in one transaction):
+            1. PRAGMA defer_foreign_keys=ON (defer FK checks until COMMIT so
+               DELETE FROM concepts is safe even with self-FK hierarchy)
+            2. UPDATE concept_themes SET parent_concept_id=NULL (cut FK refs;
+               historical themes survive as orphan snapshots)
+            3. DELETE FROM company_concept_tags (FK references concepts)
+            4. DELETE FROM symbol_concept_edges (FK references concepts)
+            5. DELETE FROM concepts (now safe under deferred FK)
+            6. INSERT new concepts ordered by level (L1 before L2 to satisfy
+               concepts.parent_id self-FK at commit time)
+        """
+        if not rows:
+            return 0
+        # Order by level so L1 INSERT precedes L2 parent_id ref
+        ordered = sorted(rows, key=lambda r: int(r["level"]))
+        conn = self._get_conn()
+        now = self._utc_now_iso()
+        with conn:
+            conn.execute("PRAGMA defer_foreign_keys=ON")
+            conn.execute("UPDATE concept_themes SET parent_concept_id = NULL")
+            conn.execute("DELETE FROM company_concept_tags")
+            conn.execute("DELETE FROM symbol_concept_edges")
+            conn.execute("DELETE FROM concepts")
+            count = 0
+            for row in ordered:
+                conn.execute(
+                    """INSERT INTO concepts
+                    (concept_id, label, level, parent_id, concept_type, status,
+                     created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        row["concept_id"],
+                        row["label"],
+                        int(row["level"]),
+                        row.get("parent_id"),
+                        row.get("concept_type", "evergreen"),
+                        row.get("status", "active"),
+                        now,
+                        now,
+                    ),
+                )
+                count += 1
+        return count
+
     def upsert_concept_themes(self, rows: List[Dict[str, Any]]) -> int:
-        """Upsert dynamic theme rows. Preserves created_at on update."""
+        """Upsert dynamic theme rows. Preserves created_at on update.
+
+        .. deprecated:: v2 (2026-05-13)
+            ``concept_themes`` is no longer the write target for themes.
+            v2 stores themes as ``concepts`` rows with ``level=3`` and
+            references them via ``company_concept_tags.theme_ids``
+            (same namespace, FK-validated). This method is retained only
+            so the 5-row historical snapshot (hbm/liquid_cooling/...) and
+            ``rebuild_concept_tree``'s FK cut-step continue to function.
+            New code MUST use ``upsert_concepts(level=3)`` + ``theme_ids``.
+        """
+        import warnings
+        warnings.warn(
+            "upsert_concept_themes is deprecated in v2 — themes live in "
+            "concepts table as level=3 and are referenced via "
+            "company_concept_tags.theme_ids",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if not rows:
             return 0
         conn = self._get_conn()
@@ -1602,10 +1667,44 @@ class MarketStore:
         return count
 
     def upsert_company_concepts(self, rows: List[Dict[str, Any]]) -> int:
-        """Upsert per-symbol display tags. theme_ids list is JSON-encoded."""
+        """Upsert per-symbol display tags. theme_ids list is JSON-encoded.
+
+        v2 invariant (Task 8): every element of `theme_ids` MUST reference a
+        ``concepts`` row with ``level=3``. concepts.theme_ids is JSON in a TEXT
+        column, so SQLite cannot enforce a FK on its elements; this guard runs
+        the level check in Python before any write. Pre-checking once for the
+        whole batch lets the write loop stay short and the error message
+        actionable (lists the offending ids in one place).
+        """
         if not rows:
             return 0
         conn = self._get_conn()
+
+        # v2 theme_ids invariant: every referenced concept_id must be level=3.
+        # Empty list → skip the query; one query covers the whole batch.
+        all_theme_ids: set[str] = set()
+        for row in rows:
+            for tid in row.get("theme_ids", []) or []:
+                if tid:
+                    all_theme_ids.add(str(tid))
+        if all_theme_ids:
+            placeholders = ",".join("?" * len(all_theme_ids))
+            level_by_id = {
+                r[0]: r[1] for r in conn.execute(
+                    f"SELECT concept_id, level FROM concepts "
+                    f"WHERE concept_id IN ({placeholders})",
+                    list(all_theme_ids),
+                )
+            }
+            bad = sorted(
+                tid for tid in all_theme_ids
+                if level_by_id.get(tid) != 3
+            )
+            if bad:
+                raise ValueError(
+                    f"theme_ids must reference level=3 concepts; offenders: {bad}"
+                )
+
         now = self._utc_now_iso()
         count = 0
         with conn:
