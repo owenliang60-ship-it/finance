@@ -2,6 +2,8 @@
 import json
 from unittest.mock import patch
 
+import pytest
+
 from terminal.llm_concept_prefill import LLMResult, prefill_one
 
 
@@ -138,3 +140,23 @@ def test_prefill_returns_dataclass_instance():
     ):
         result = prefill_one(symbol="X", profile={}, taxonomy=_TAXONOMY)
     assert isinstance(result, LLMResult)
+
+
+def test_run_claude_cli_failure_surfaces_stdout(monkeypatch):
+    """issue 026 #1: `claude -p --output-format json` writes its real error
+    (throttle / cost limit / auth) to STDOUT, not stderr. A non-zero exit must
+    surface stdout in the RuntimeError so the failure log is actionable."""
+    import subprocess
+    import terminal.llm_concept_prefill as mod
+
+    fake = subprocess.CompletedProcess(
+        args=["claude"], returncode=1,
+        stdout='{"error":"Credit balance is too low"}',
+        stderr="",
+    )
+    monkeypatch.setattr(mod.subprocess, "run", lambda *a, **kw: fake)
+    with pytest.raises(RuntimeError) as exc:
+        mod._run_claude_cli("prompt")
+    msg = str(exc.value)
+    assert "Credit balance is too low" in msg   # stdout content reached the log
+    assert "rc=1" in msg

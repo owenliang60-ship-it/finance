@@ -565,6 +565,7 @@ class TestLayeredSections:
         from src.data.market_store import MarketStore
         from terminal.company_concepts import ConceptRegistry
         from terminal.concept_classifier import ConceptClassifier
+        from terminal.llm_concept_prefill import LLMResult
         from scripts.build_company_concept_registry import build_registry
         from terminal import concept_classifier as cc_mod
         from config.settings import REPORT_CONCEPTS_PATH
@@ -572,15 +573,26 @@ class TestLayeredSections:
         cfg = PROJECT_ROOT / "config" / "concepts"
         store = MarketStore(tmp_path / "market.db")
         registry = ConceptRegistry(
-            taxonomy_path=cfg / "taxonomy.json",
-            themes_path=cfg / "concept_themes.json",
-            overrides_path=cfg / "company_concept_overrides.json",
+            taxonomy_path=cfg / "concept_taxonomy_v2.json",
             watchlist_path=cfg / "concept_watchlist.json",
+        )
+        # MU's Semiconductors industry is ambiguous (not in industry_map) →
+        # unclassified → LLM. Mock prefill_one so the test stays offline and
+        # deterministically yields the 3-tier 半导体/存储芯片/HBM result.
+        mu_llm = LLMResult(
+            l1="semiconductor", l2="memory_chip", l3_themes=["hbm"],
+            business_role="DRAM/HBM存储", confidence=0.85,
+            source="llm", evidence="mocked", needs_review=0,
+        )
+        monkeypatch.setattr(
+            "scripts.build_company_concept_registry.prefill_one",
+            lambda **kw: mu_llm,
         )
         build_registry(
             store=store, registry=registry,
             universe_symbols=["MU"],
-            profiles={"MU": {"symbol": "MU", "industry": "Semiconductors"}},
+            profiles={"MU": {"symbol": "MU", "sector": "Technology",
+                             "industry": "Semiconductors"}},
             portfolio_holdings=["MU"],
             broad_top_symbols=["MU"],
             review_csv_path=tmp_path / "review.csv",

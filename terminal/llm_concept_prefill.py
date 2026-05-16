@@ -70,8 +70,12 @@ def _run_claude_cli(prompt: str, timeout: int = 60) -> str:
         check=False,
     )
     if completed.returncode != 0:
+        # `claude -p --output-format json` writes its real error (throttle /
+        # cost limit / auth) to STDOUT, not stderr — issue 026 #1. Record both
+        # so the failure log is actionable instead of an empty stderr blank.
         raise RuntimeError(
-            f"claude CLI failed (rc={completed.returncode}): {completed.stderr[:300]}"
+            f"claude CLI failed (rc={completed.returncode}): "
+            f"stderr={completed.stderr[:300]} | stdout={completed.stdout[:300]}"
         )
     return completed.stdout
 

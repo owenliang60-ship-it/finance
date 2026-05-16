@@ -2,12 +2,16 @@
 
 Resolution order (registry-internal only — LLM prefill lives in the builder
 orchestration layer, see Task 4 / 4b):
-    1. multi_segment_anchor → source="manual"
-    2. keyword rule         → source="rule"
-    3. otherwise            → source="unclassified" (l1=l2=None, needs_review=1)
+    1. multi_segment_anchor             → source="manual"
+    2. (sector,industry) ∈ industry_map → source="rule" (exact lookup)
+    3. otherwise                        → source="unclassified" (needs_review=1)
 
-Legacy bucket fallback is removed in v2; "unclassified" rows hand off to the
-LLM prefill orchestrator in the builder.
+The v1 substring keyword_rules were replaced (2026-05-16) by an exact FMP
+``(sector|industry) → (l1,l2)`` lookup table — see docs/issues/025 and
+docs/plans/2026-05-16-concept-rule-classifier-rebuild.md. Ambiguous industries
+(e.g. Semiconductors, where the industry signal cannot pin an L2) are
+deliberately absent from the map; "unclassified" rows hand off to the LLM
+prefill orchestrator in the builder.
 """
 from __future__ import annotations
 
@@ -34,10 +38,10 @@ class ConceptRegistry:
         legacy_classifier: Any = None,
     ) -> None:
         data = json.loads(Path(taxonomy_path).read_text(encoding="utf-8"))
-        if "keyword_rules" not in data or "multi_segment_anchors" not in data:
+        if "industry_map" not in data or "multi_segment_anchors" not in data:
             raise ValueError(
                 f"taxonomy_path={taxonomy_path} is not a v2 SSOT JSON "
-                "(missing keyword_rules / multi_segment_anchors)"
+                "(missing industry_map / multi_segment_anchors)"
             )
         self._taxonomy = data
         self._watchlist_data: dict[str, Any] = (
@@ -66,7 +70,9 @@ class ConceptRegistry:
             a["symbol"].upper(): a
             for a in data.get("multi_segment_anchors", [])
         }
-        self._keyword_rules: list[dict] = list(data.get("keyword_rules", []))
+        # industry_map: exact FMP "{sector}|{industry}" → {"l1","l2"} lookup.
+        # Keys stored as-is (case-sensitive) — see classify() / _industry_key().
+        self._industry_map: dict[str, dict] = dict(data.get("industry_map", {}))
 
         self._watchlist_symbols: set[str] = {
             s.upper() for s in self._watchlist_data.get("symbols", [])
@@ -79,8 +85,8 @@ class ConceptRegistry:
         return list(self._taxonomy.get("concepts", []))
 
     @property
-    def keyword_rules(self) -> list[dict]:
-        return list(self._keyword_rules)
+    def industry_map(self) -> dict[str, dict]:
+        return dict(self._industry_map)
 
     @property
     def anchors(self) -> list[dict]:
@@ -117,22 +123,20 @@ class ConceptRegistry:
         if symbol in self._anchors_by_symbol:
             return self._from_anchor(symbol)
 
-        text = self._text(item)
-        if text.strip():
-            for rule in self._keyword_rules:
-                hit = next((kw for kw in rule["keywords"] if kw in text), None)
-                if hit is not None:
-                    return self._build_result(
-                        symbol=symbol,
-                        l1=rule["l1"],
-                        l2=rule["l2"],
-                        l3_themes=[],
-                        business_role=rule.get("business_role", ""),
-                        confidence=float(rule.get("confidence", 0.6)),
-                        source="rule",
-                        evidence=f"keyword: {hit}",
-                        needs_review=0,
-                    )
+        key = self._industry_key(item)
+        rule = self._industry_map.get(key) if key else None
+        if rule is not None:
+            return self._build_result(
+                symbol=symbol,
+                l1=rule["l1"],
+                l2=rule["l2"],
+                l3_themes=[],
+                business_role="",
+                confidence=0.7,
+                source="rule",
+                evidence=f"industry_map: {key}",
+                needs_review=0,
+            )
 
         return self._build_result(
             symbol=symbol,
@@ -142,7 +146,7 @@ class ConceptRegistry:
             business_role="",
             confidence=0.0,
             source="unclassified",
-            evidence="override + rule both missed",
+            evidence="anchor + industry_map both missed",
             needs_review=1,
         )
 
@@ -171,14 +175,20 @@ class ConceptRegistry:
         return str(item.get("symbol") or "").upper()
 
     @staticmethod
-    def _text(item: dict | str) -> str:
+    def _industry_key(item: dict | str) -> Optional[str]:
+        """Build the industry_map lookup key from a profile dict.
+
+        Key = ``f"{sector}|{industry}"`` using FMP's raw casing. Returns None
+        when the item is a bare symbol string or is missing either field —
+        those route to "unclassified" → LLM prefill.
+        """
         if isinstance(item, str):
-            return ""
-        keys = (
-            "companyName", "shortName", "longName", "company_name",
-            "description", "sector", "industry",
-        )
-        return " ".join(str(item.get(k) or "") for k in keys).lower()
+            return None
+        sector = str(item.get("sector") or "").strip()
+        industry = str(item.get("industry") or "").strip()
+        if not sector or not industry:
+            return None
+        return f"{sector}|{industry}"
 
     def _from_anchor(self, symbol: str) -> dict[str, Any]:
         anchor = self._anchors_by_symbol[symbol]

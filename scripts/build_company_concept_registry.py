@@ -55,6 +55,18 @@ GATE_PRIORITY_COVERAGE = 1.0
 GATE_TAIL_NEEDS_REVIEW_MAX = 0.30
 SOFT_REVIEW_CONFIDENCE_THRESHOLD = 0.7
 
+# --reclassify override whitelist (plan 2026-05-16 §3.6). An old source=llm row
+# is overwritten with the new deterministic result ONLY when its FMP
+# "{sector}|{industry}" is listed here — i.e. the correct bucket was ADDED by
+# this rebuild, so run-1's LLM had no way to choose it. telecom_operator is the
+# only L2 the rebuild adds, so the whitelist has exactly one entry. Every other
+# llm↔map disagreement goes to the deterministic_conflict queue for Boss, never
+# auto-overwritten (auto-overwrite would erase correct fine-grained LLM calls
+# like DLR/EQIX datacenter REIT, COIN crypto exchange, VEEV enterprise SaaS).
+RECLASSIFY_OVERRIDE_WHITELIST: frozenset[str] = frozenset(
+    {"Communication Services|Telecommunications Services"}
+)
+
 PROFILES_PATH = PROJECT_ROOT / "data" / "fundamental" / "profiles.json"
 EXTENDED_UNIVERSE_PATH = PROJECT_ROOT / "data" / "pool" / "extended_universe.json"
 COMPANY_DB_PATH = PROJECT_ROOT / "data" / "company.db"
@@ -651,7 +663,7 @@ def read_reviewed_csv(
         3. l1 empty / whitespace → per-row
         4. l2 empty / whitespace → per-row
         5. l1 not in 11 L1 set → per-row
-        6. l2 not in 60 L2 set → per-row
+        6. l2 not in L2 pool → per-row
         7. l2.parent_id != l1.concept_id → per-row
         8. l3 alias unresolvable → per-row
         9. resolved l3 element level != 3 → per-row (overlap with #8 but explicit)
@@ -711,7 +723,9 @@ def read_reviewed_csv(
         if not l2_label:
             row_errors.append("l2 empty")
         elif l2_label not in l2_label_to_id:
-            row_errors.append(f"l2 '{l2_label}' not in 60 L2")
+            row_errors.append(
+                f"l2 '{l2_label}' not in {len(l2_label_to_id)} L2 pool"
+            )
         else:
             l2_id, l2_parent = l2_label_to_id[l2_label]
             if l1_label in l1_label_to_id and l2_parent != l1_label_to_id[l1_label]:
@@ -842,6 +856,215 @@ def _load_review_manifest(csv_path: Path) -> set[str] | None:
         return None
     syms = data.get("symbols") or []
     return {str(s).upper() for s in syms}
+
+
+# ---- --reclassify: re-run classify over a run-1 review CSV (plan 2026-05-16) ----
+
+def _classify_review_reason(
+    *, source: str, confidence: float, needs_review: int
+) -> str:
+    """Bucket a classified row into a review_reason (hard / soft / ok).
+
+    Same routing build_registry / write_review_csv apply inline; used here so
+    --reclassify labels its re-rendered rows consistently.
+    """
+    if int(needs_review) == 1:
+        return "hard_needs_review"
+    if source in ("rule", "llm") and (
+        float(confidence) < SOFT_REVIEW_CONFIDENCE_THRESHOLD
+    ):
+        return "soft_low_confidence"
+    return "ok"
+
+
+def _profile_for_reclassify(raw: dict, profiles: dict[str, dict]) -> dict:
+    """Profile fed to classify() / prefill_one() during --reclassify.
+
+    profiles.json is the SSOT run-1 itself classified from; the CSV's
+    fmp_sector / fmp_industry / description / company_name columns are the
+    fallback when a symbol is absent from (or blank in) the cache.
+    """
+    sym = (raw.get("symbol") or "").strip().upper()
+    prof = dict(profiles.get(sym) or {})
+    prof.setdefault("symbol", sym)
+    if not prof.get("sector"):
+        prof["sector"] = raw.get("fmp_sector", "")
+    if not prof.get("industry"):
+        prof["industry"] = raw.get("fmp_industry", "")
+    if not prof.get("companyName"):
+        prof["companyName"] = raw.get("company_name", "")
+    if not prof.get("description"):
+        prof["description"] = raw.get("description", "")
+    return prof
+
+
+def _render_classified_row(
+    raw: dict, new_row: dict, concepts_by_id: dict[str, str]
+) -> dict:
+    """Overlay a fresh classify/LLM result onto a run-1 CSV row.
+
+    Only classification columns change; metadata columns (company_name,
+    description, market_cap_b, mcap_tier, fmp_sector, fmp_industry,
+    boss_notes) are preserved from `raw` so a re-render never clears the
+    company-DB market caps run-1 recorded (plan §3.4 / Boss P2-2).
+    """
+    out = dict(raw)
+    l3_labels = [
+        concepts_by_id.get(tid, "") for tid in (new_row.get("l3_themes") or [])
+    ]
+    out["l1"] = concepts_by_id.get(new_row.get("l1") or "", "")
+    out["l2"] = concepts_by_id.get(new_row.get("l2") or "", "")
+    out["l3_themes"] = ";".join(s for s in l3_labels if s)
+    out["business_role"] = new_row.get("business_role", "")
+    out["prefill_source"] = new_row.get("source", "")
+    out["confidence"] = f"{float(new_row.get('confidence', 0.0)):.2f}"
+    out["needs_review"] = str(int(new_row.get("needs_review", 0)))
+    out["review_reason"] = _classify_review_reason(
+        source=new_row.get("source", ""),
+        confidence=float(new_row.get("confidence", 0.0)),
+        needs_review=int(new_row.get("needs_review", 0)),
+    )
+    return out
+
+
+def reclassify_csv(
+    *,
+    input_csv: Path,
+    output_csv: Path,
+    registry: ConceptRegistry,
+    profiles: dict[str, dict],
+    taxonomy: dict,
+) -> dict:
+    """--reclassify mode: re-run classify over a run-1 review CSV with the new
+    industry_map, routing each row by its OLD prefill_source (plan §3.6).
+
+    Per-row routing (old source → action):
+        manual                              → passthrough (anchor wins always)
+        rule  + new rule/manual             → overwrite with deterministic result
+        rule  + new unclassified            → fresh LLM (prefill_one)
+        llm   + industry ∈ whitelist        → overwrite with deterministic result
+        llm   + non-whitelist, (l1,l2) drift→ passthrough + deterministic_conflict
+        llm   + non-whitelist, consistent   → passthrough
+        other (llm_failed/fallback/...)     → passthrough
+
+    Passthrough rows keep every original CSV value (no label↔id round-trip).
+    Writes `output_csv` + its manifest, where the manifest records ALL symbols
+    (incl passthrough) so apply_reviewed_csv's coverage union does not miss them.
+    Returns a stats dict.
+    """
+    with input_csv.open(encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        raw_rows = list(reader)
+
+    concepts_by_id = {
+        c["concept_id"]: c["label"] for c in taxonomy.get("concepts", [])
+    }
+    l1_label_to_id = {
+        c["label"]: c["concept_id"]
+        for c in taxonomy["concepts"] if c["level"] == 1
+    }
+    l2_label_to_id = {
+        c["label"]: c["concept_id"]
+        for c in taxonomy["concepts"] if c["level"] == 2
+    }
+
+    out_rows: list[dict] = []
+    stats = {
+        "total": len(raw_rows),
+        "passthrough": 0,
+        "overwrite_rule": 0,
+        "overwrite_llm_whitelist": 0,
+        "fresh_llm": 0,
+        "deterministic_conflict": 0,
+    }
+    conflict_symbols: list[str] = []
+    whitelist_symbols: list[str] = []
+
+    for raw in raw_rows:
+        sym = (raw.get("symbol") or "").strip().upper()
+        old_source = (raw.get("prefill_source") or "").strip()
+        profile = _profile_for_reclassify(raw, profiles)
+        new = registry.classify(profile)
+        new_source = new.get("source")
+
+        if old_source == "manual":
+            out_rows.append(dict(raw))
+            stats["passthrough"] += 1
+            continue
+
+        if old_source == "rule":
+            if new_source in ("manual", "rule"):
+                out_rows.append(
+                    _render_classified_row(raw, new, concepts_by_id)
+                )
+                stats["overwrite_rule"] += 1
+            else:  # new unclassified — industry not in map → fresh LLM
+                llm = prefill_one(
+                    symbol=sym, profile=profile, taxonomy=taxonomy
+                )
+                llm_row = {
+                    "l1": llm.l1, "l2": llm.l2,
+                    "l3_themes": list(llm.l3_themes),
+                    "business_role": llm.business_role,
+                    "confidence": llm.confidence,
+                    "source": llm.source,
+                    "needs_review": llm.needs_review,
+                }
+                out_rows.append(
+                    _render_classified_row(raw, llm_row, concepts_by_id)
+                )
+                stats["fresh_llm"] += 1
+            continue
+
+        if old_source == "llm":
+            key = registry._industry_key(profile)
+            if key in RECLASSIFY_OVERRIDE_WHITELIST and new_source in (
+                "manual", "rule"
+            ):
+                out_rows.append(
+                    _render_classified_row(raw, new, concepts_by_id)
+                )
+                stats["overwrite_llm_whitelist"] += 1
+                whitelist_symbols.append(sym)
+                continue
+            # Non-whitelist: never auto-overwrite an LLM call. Flag a conflict
+            # when the new deterministic map disagrees with the old (l1,l2);
+            # otherwise keep the old row untouched.
+            if new_source in ("manual", "rule"):
+                old_pair = (
+                    l1_label_to_id.get((raw.get("l1") or "").strip()),
+                    l2_label_to_id.get((raw.get("l2") or "").strip()),
+                )
+                new_pair = (new.get("l1"), new.get("l2"))
+                if old_pair != new_pair:
+                    conflicted = dict(raw)
+                    conflicted["review_reason"] = "deterministic_conflict"
+                    out_rows.append(conflicted)
+                    stats["deterministic_conflict"] += 1
+                    conflict_symbols.append(sym)
+                    continue
+            out_rows.append(dict(raw))
+            stats["passthrough"] += 1
+            continue
+
+        # llm_failed / llm_fallback / unclassified / unknown → passthrough
+        out_rows.append(dict(raw))
+        stats["passthrough"] += 1
+
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    with output_csv.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(
+            fh, fieldnames=REVIEW_CSV_FIELDS, extrasaction="ignore"
+        )
+        w.writeheader()
+        for r in out_rows:
+            w.writerow({k: r.get(k, "") for k in REVIEW_CSV_FIELDS})
+
+    _write_review_manifest(output_csv, [r["symbol"] for r in out_rows])
+
+    stats["conflict_symbols"] = sorted(conflict_symbols)
+    stats["whitelist_symbols"] = sorted(whitelist_symbols)
+    return stats
 
 
 # ---- Phase 6: save_to_market_db + WAL-safe backup + display_tags ----
@@ -1103,6 +1326,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="Phase 2: refresh FMP profiles for extend pool (writes profiles.json), then exit.")
     parser.add_argument("--read-reviewed-csv", type=Path,
                         help="Phase 5: parse Boss-reviewed CSV, validate, then write to market.db (with --save).")
+    parser.add_argument("--reclassify", type=Path, default=None,
+                        help="Re-run classify over an existing review CSV with "
+                             "the current industry_map (plan 2026-05-16 §3.6). "
+                             "Reads the CSV, re-routes by old prefill_source, "
+                             "writes a new CSV to --review-csv. Never touches "
+                             "market.db. Requires --review-csv.")
     parser.add_argument("--validate-only", action="store_true",
                         help="Run Phase 5 validation, emit _rejected.csv + summary, do not save.")
     parser.add_argument(
@@ -1191,6 +1420,37 @@ def main(argv: list[str] | None = None) -> int:
         summary = rebuild_display_tags(store=_open_store(), registry=registry)
         for k, v in summary.items():
             print(f"{k}: {v}")
+        return 0
+
+    if args.reclassify:
+        # Reads old CSV → re-classifies → writes new CSV. No validate, no save
+        # (plan §3.7) — keep MarketStore unopened so the run has zero side
+        # effects on data_root, exactly like --validate-only.
+        if args.review_csv is None:
+            print(
+                "--reclassify requires --review-csv <output path>.",
+                file=sys.stderr,
+            )
+            return 2
+        stats = reclassify_csv(
+            input_csv=args.reclassify,
+            output_csv=review_csv,
+            registry=registry,
+            profiles=_load_profiles(profiles_path),
+            taxonomy=registry._taxonomy,
+        )
+        print(f"reclassify: {stats['total']} rows -> {review_csv}")
+        print(f"  passthrough            : {stats['passthrough']}")
+        print(f"  overwrite (rule)       : {stats['overwrite_rule']}")
+        print(f"  overwrite (llm/telecom): {stats['overwrite_llm_whitelist']}")
+        print(f"  fresh LLM              : {stats['fresh_llm']}")
+        print(f"  deterministic_conflict : {stats['deterministic_conflict']}")
+        if stats["whitelist_symbols"]:
+            print(f"  telecom overwritten    : "
+                  f"{', '.join(stats['whitelist_symbols'])}")
+        if stats["conflict_symbols"]:
+            print(f"  conflict queue         : "
+                  f"{', '.join(stats['conflict_symbols'])}")
         return 0
 
     if args.read_reviewed_csv:

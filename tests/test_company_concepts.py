@@ -1,4 +1,7 @@
-"""ConceptRegistry v2 runtime tests (anchor + rule + alias + unclassified)."""
+"""ConceptRegistry v2 runtime tests (anchor + industry_map rule + alias +
+unclassified). The v1 substring keyword_rules were replaced 2026-05-16 by an
+exact FMP (sector|industry) → (l1,l2) lookup — see issue 025 and
+docs/plans/2026-05-16-concept-rule-classifier-rebuild.md."""
 from pathlib import Path
 
 import pytest
@@ -20,20 +23,7 @@ def registry():
     )
 
 
-# ---- core v2 classify chain ----
-
-
-def test_v2_classify_returns_l3_list_and_business_role(registry):
-    result = registry.classify({
-        "symbol": "NVDA",
-        "industry": "Semiconductors",
-        "description": "GPU and AI accelerator",
-    })
-    assert result["l1"] == "semiconductor"
-    assert result["l2"] == "gpu_accelerator"
-    assert isinstance(result["l3_themes"], list)
-    assert result["source"] == "rule"
-    assert result["confidence"] >= 0.6
+# ---- anchor branch ----
 
 
 def test_v2_anchor_override_takes_priority(registry):
@@ -54,9 +44,70 @@ def test_v2_anchor_multi_theme_msft(registry):
     assert result["source"] == "manual"
 
 
+# ---- industry_map exact-lookup rule branch ----
+
+
+def test_v2_classify_rule_hit_via_industry_map(registry):
+    """A (sector, industry) pair in industry_map → deterministic source=rule
+    with confidence 0.7, empty L3 list and no business_role."""
+    result = registry.classify({
+        "symbol": "RTX",
+        "sector": "Industrials",
+        "industry": "Aerospace & Defense",
+    })
+    assert result["l1"] == "industrial_aerospace"
+    assert result["l2"] == "aerospace_defense"
+    assert result["l3_themes"] == []
+    assert result["business_role"] == ""
+    assert result["source"] == "rule"
+    assert result["confidence"] == 0.7
+    assert result["needs_review"] == 0
+
+
+def test_v2_classify_rule_hit_regulated_electric(registry):
+    result = registry.classify({
+        "symbol": "DUK",
+        "sector": "Utilities",
+        "industry": "Regulated Electric",
+    })
+    assert (result["l1"], result["l2"]) == ("realestate_utility", "power_utility")
+    assert result["source"] == "rule"
+
+
+def test_v2_classify_telecom_operator_l2(registry):
+    """telecom_operator 是 2026-05-16 重建新增的 L2，挂在 internet_software。"""
+    result = registry.classify({
+        "symbol": "VZ",
+        "sector": "Communication Services",
+        "industry": "Telecommunications Services",
+    })
+    assert result["l1"] == "internet_software"
+    assert result["l2"] == "telecom_operator"
+    assert result["source"] == "rule"
+
+
+# ---- unclassified branch (→ LLM prefill in the builder) ----
+
+
+def test_v2_classify_ambiguous_industry_is_unclassified(registry):
+    """Semiconductors 故意不入 industry_map —— industry 信号定不了 7 个半导体
+    L2 子桶中的哪一个 → unclassified，交 builder 的 LLM prefill。"""
+    result = registry.classify({
+        "symbol": "NVDA",
+        "sector": "Technology",
+        "industry": "Semiconductors",
+    })
+    assert result["source"] == "unclassified"
+    assert result["l1"] is None
+    assert result["l2"] is None
+    assert result["l3_themes"] == []
+    assert result["needs_review"] == 1
+    assert result["confidence"] == 0.0
+
+
 def test_v2_classify_returns_unclassified_when_override_and_rule_both_miss(registry):
     """v2 不再有 legacy bucket fallback。registry.classify 内不调用 LLM
-    (LLM 是 builder 编排层职责，Task 4b)。"""
+    (LLM 是 builder 编排层职责)。缺 sector → 无法构造 industry_map key。"""
     result = registry.classify({
         "symbol": "OBSCURE",
         "industry": "Completely Unknown Sector",
@@ -68,6 +119,37 @@ def test_v2_classify_returns_unclassified_when_override_and_rule_both_miss(regis
     assert result["l3_themes"] == []
     assert result["needs_review"] == 1
     assert result["confidence"] == 0.0
+
+
+# ---- issue 025 regressions: description text must never drive classify ----
+
+
+def test_v2_classify_no_false_hit_on_description(registry):
+    """issue 025: 财团/宽泛业务公司的 description 偶然撞上无关行业关键词。
+    A+ 只看 (sector, industry)，从不读 description —— BRK 类公司不再误分。"""
+    result = registry.classify({
+        "symbol": "TESTCO",
+        "sector": "Financial Services",
+        "industry": "Insurance - Diversified",
+        "description": "holding company with restaurants, data center, mining "
+                       "and consumer electronics subsidiaries",
+    })
+    assert result["l1"] == "finance"
+    assert result["l2"] == "insurance"
+    assert result["source"] == "rule"
+
+
+def test_v2_classify_electric_utility_not_clean_energy(registry):
+    """issue 025: ~20 家受监管电力公用被误分到「新能源」。精确映射把
+    Regulated Electric 一律送 power_utility，绝不命中 clean_energy。"""
+    result = registry.classify({
+        "symbol": "SO",
+        "sector": "Utilities",
+        "industry": "Regulated Electric",
+        "description": "electric utility investing in solar and renewable energy",
+    })
+    assert result["l2"] == "power_utility"
+    assert result["l2"] != "clean_energy"
 
 
 # ---- L3 alias resolver ----
@@ -91,52 +173,17 @@ def test_v2_resolve_l3_alias_ignores_l1_l2_ids(registry):
     assert registry.resolve_l3_alias("gpu_accelerator") is None  # L2
 
 
-# ---- keyword rule coverage ----
-
-
-def test_v2_rule_asml_semi_equipment(registry):
-    result = registry.classify({
-        "symbol": "ASML",
-        "industry": "Semiconductor Equipment & Materials",
-        "description": "lithography systems",
-    })
-    assert result["l1"] == "semiconductor"
-    assert result["l2"] == "semi_equipment"
-    assert result["source"] == "rule"
-
-
-def test_v2_rule_tsm_foundry(registry):
-    result = registry.classify({
-        "symbol": "TSM",
-        "industry": "Semiconductors",
-        "description": "wafer foundry",
-    })
-    assert result["l1"] == "semiconductor"
-    assert result["l2"] == "foundry"
-
-
-def test_v2_rule_mu_memory(registry):
-    """MU 不在 anchor，走 keyword rule (dram/nand) → memory_chip L2。"""
-    result = registry.classify({
-        "symbol": "MU",
-        "industry": "Semiconductors",
-        "description": "DRAM and NAND memory chip manufacturer",
-    })
-    assert result["l1"] == "semiconductor"
-    assert result["l2"] == "memory_chip"
-
-
 # ---- display_tags & priority_list ----
 
 
 def test_v2_display_tags_two_segments_when_no_l3(registry):
-    """无 L3 时 display_tags 只有 2 段（不带尾巴）。"""
+    """rule 命中不带 L3 → display_tags 只有 2 段（不带尾巴）。"""
     result = registry.classify({
-        "symbol": "TSM",
-        "industry": "Semiconductors",
-        "description": "wafer foundry contract manufacturer",
+        "symbol": "DUK",
+        "sector": "Utilities",
+        "industry": "Regulated Electric",
     })
-    assert result["display_tags"] == "半导体 / 晶圆代工"
+    assert result["display_tags"] == "地产与公用 / 电力与公用"
     assert not result["display_tags"].endswith("/")
 
 
@@ -165,3 +212,17 @@ def test_v2_classify_accepts_string_symbol(registry):
     by_str = registry.classify("AMZN")
     by_dict = registry.classify({"symbol": "AMZN"})
     assert by_str == by_dict
+
+
+# ---- industry_map property ----
+
+
+def test_v2_industry_map_property_exposes_82_pairs(registry):
+    im = registry.industry_map
+    assert len(im) == 82
+    assert im["Utilities|Regulated Electric"] == {
+        "l1": "realestate_utility", "l2": "power_utility",
+    }
+    # property returns a copy — mutating it must not corrupt the registry
+    im.clear()
+    assert len(registry.industry_map) == 82

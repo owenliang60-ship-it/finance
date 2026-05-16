@@ -29,8 +29,13 @@ WATCHLIST_PATH = CFG / "concept_watchlist.json"
 def build_env(tmp_path):
     """Bootstrap a v2 MarketStore + ConceptRegistry (NO watchlist).
 
-    Empty watchlist keeps Task 4b LLM wiring tests deterministic — no
-    surprise unclassified symbols pulled in from POET/OKLO/DXYZ.
+    Empty watchlist keeps the LLM wiring tests deterministic — no surprise
+    unclassified symbols pulled in from the watchlist.
+
+    NVDA / MU here are synthetic fixture handles for the two industry_map
+    rule-hit branches. Under A+ a deterministic rule hit needs a (sector,
+    industry) pair that is actually in the map — and no semiconductor industry
+    is (they are deliberately ambiguous → LLM). The symbol names are arbitrary.
     """
     from src.data.market_store import MarketStore
     from terminal.company_concepts import ConceptRegistry
@@ -43,37 +48,16 @@ def build_env(tmp_path):
     profiles = {
         # Anchor (manual): AMZN
         "AMZN": {"symbol": "AMZN", "industry": "Internet Retail"},
-        # Rule hits
-        "NVDA": {"symbol": "NVDA", "industry": "Semiconductors",
-                 "description": "GPU and AI accelerator"},
-        "MU": {"symbol": "MU", "industry": "Semiconductors",
-               "description": "DRAM and NAND memory"},
-        # rule miss → unclassified (LLM wrapper kicks in)
+        # industry_map rule hits (deterministic, no LLM call)
+        "NVDA": {"symbol": "NVDA", "sector": "Industrials",
+                 "industry": "Aerospace & Defense",
+                 "description": "aerospace & defense systems"},
+        "MU": {"symbol": "MU", "sector": "Utilities",
+               "industry": "Regulated Electric",
+               "description": "regulated electric utility"},
+        # anchor + industry_map both miss → unclassified (LLM wrapper kicks in)
         "OBSCURE": {"symbol": "OBSCURE", "industry": "Unknown",
                     "description": "Mystery"},
-    }
-    return tmp_path, store, registry, profiles
-
-
-@pytest.fixture
-def build_env_with_watchlist(tmp_path):
-    """Variant with watchlist symbols (POET/OKLO/DXYZ) auto-added."""
-    from src.data.market_store import MarketStore
-    from terminal.company_concepts import ConceptRegistry
-
-    store = MarketStore(tmp_path / "market.db")
-    registry = ConceptRegistry(
-        taxonomy_path=TAXONOMY_V2_PATH,
-        watchlist_path=WATCHLIST_PATH,
-    )
-    profiles = {
-        "AMZN": {"symbol": "AMZN", "industry": "Internet Retail"},
-        "POET": {"symbol": "POET", "industry": "Semiconductors",
-                 "description": "fiber optic photonic interface"},
-        "OKLO": {"symbol": "OKLO", "industry": "Utilities—Renewable",
-                 "description": "advanced nuclear reactors"},
-        "DXYZ": {"symbol": "DXYZ", "industry": "Asset Management",
-                 "description": "closed-end fund"},
     }
     return tmp_path, store, registry, profiles
 
@@ -247,8 +231,9 @@ def test_dry_run_does_not_write_db(build_env):
     assert conn.execute("SELECT COUNT(*) FROM company_concept_tags").fetchone()[0] == 0
 
 
-def test_save_writes_concepts_113_rows(build_env):
-    """save 后 concepts 表必须含 11 L1 + 60 L2 + 42 L3 = 113 行。"""
+def test_save_writes_concepts_114_rows(build_env):
+    """save 后 concepts 表必须含 11 L1 + 61 L2 + 42 L3 = 114 行
+    (telecom_operator L2 由 2026-05-16 重建新增)。"""
     from scripts.build_company_concept_registry import build_registry
 
     tmp_path, store, registry, profiles = build_env
@@ -266,7 +251,7 @@ def test_save_writes_concepts_113_rows(build_env):
     counts = dict(conn.execute(
         "SELECT level, COUNT(*) FROM concepts GROUP BY level"
     ).fetchall())
-    assert counts == {1: 11, 2: 60, 3: 42}
+    assert counts == {1: 11, 2: 61, 3: 42}
 
 
 def test_save_persists_amzn_anchor(build_env):
@@ -391,23 +376,26 @@ def test_csv_has_15_columns_review_reason_plus_14(build_env):
     assert required.issubset(set(header))
 
 
-def test_soft_review_includes_low_confidence_rule_rows(build_env):
-    """Rule 行 (confidence < 0.7) 进 soft_low_confidence 队列。"""
+def test_soft_review_includes_low_confidence_llm_rows(build_env):
+    """source=llm 行 (confidence < 0.7) 进 soft_low_confidence 队列。
+
+    A+ 之后 industry_map rule 行的 confidence 恒为 0.7（`0.7 < 0.7` 为假），
+    永不进 soft 队列；soft 队列只收低置信度的 LLM 行。"""
     from scripts.build_company_concept_registry import build_registry
 
     tmp_path, store, registry, profiles = build_env
     csv_path = tmp_path / "review.csv"
-    # NVDA rule confidence 0.7 → exactly threshold (not < 0.7). Use MU instead,
-    # whose memory rule confidence is 0.7 too. Let's craft a profile that hits
-    # a 0.6-confidence rule: GOOG search engine? confidence 0.7. Internet ads
-    # rule has confidence 0.6. Let's use one with confidence 0.6.
+    # SAAS hits no anchor and no industry_map key (Software - Application is a
+    # deliberately ambiguous industry) → unclassified → LLM.
     profiles_low = {
-        "SAAS": {"symbol": "SAAS", "industry": "Software—Application",
+        "SAAS": {"symbol": "SAAS", "sector": "Technology",
+                 "industry": "Software - Application",
                  "description": "enterprise SaaS"},
     }
+    low_conf_llm = _fake_llm(confidence=0.55, source="llm", needs_review=0)
     with patch(
         "scripts.build_company_concept_registry.prefill_one",
-        return_value=_fake_llm(),
+        return_value=low_conf_llm,
     ):
         result = build_registry(
             store=store, registry=registry,
@@ -418,9 +406,11 @@ def test_soft_review_includes_low_confidence_rule_rows(build_env):
             review_csv_path=csv_path,
             save=False, force_save=False,
         )
-    # enterprise SaaS rule confidence is 0.7 in our SSOT → may or may not flag.
-    # Just assert that BuildResult correctly counts source breakdown.
-    assert result.rule >= 1 or result.manual + result.llm >= 1
+    assert result.llm == 1
+    assert result.soft_review == 1
+    rows = list(csv.DictReader(csv_path.open()))
+    saas = next(r for r in rows if r["symbol"] == "SAAS")
+    assert saas["review_reason"] == "soft_low_confidence"
 
 
 # ---- rebuild_display_tags ----
@@ -565,8 +555,8 @@ def test_write_review_csv_uses_chinese_labels_and_mcap_tier(tmp_path):
     assert foo["review_reason"] == "hard_needs_review"
 
 
-def test_taxonomy_reference_csv_lists_all_113_concepts(tmp_path):
-    """taxonomy_reference.csv 必须含 11+60+42 = 113 行 (header 之外)。"""
+def test_taxonomy_reference_csv_lists_all_114_concepts(tmp_path):
+    """taxonomy_reference.csv 必须含 11+61+42 = 114 行 (header 之外)。"""
     from scripts.build_company_concept_registry import _write_taxonomy_reference_csv
 
     taxonomy = json.loads(TAXONOMY_V2_PATH.read_text(encoding="utf-8"))
@@ -574,7 +564,7 @@ def test_taxonomy_reference_csv_lists_all_113_concepts(tmp_path):
     _write_taxonomy_reference_csv(taxonomy, out)
 
     rows = list(csv.DictReader(out.open()))
-    assert len(rows) == 113
+    assert len(rows) == 114
     levels = {int(r["level"]) for r in rows}
     assert levels == {1, 2, 3}
 
@@ -845,7 +835,7 @@ def _write_csv_with_one_good_row(tmp_path: Path, symbol: str) -> Path:
     ("empty_l1", lambda rows: [{**rows[0], "l1": ""}] + rows[1:], "l1 empty"),
     ("empty_l2", lambda rows: [{**rows[0], "l2": ""}] + rows[1:], "l2 empty"),
     ("invalid_l1", lambda rows: [{**rows[0], "l1": "无效L1"}] + rows[1:], "not in 11 l1"),
-    ("invalid_l2", lambda rows: [{**rows[0], "l2": "无效L2"}] + rows[1:], "not in 60 l2"),
+    ("invalid_l2", lambda rows: [{**rows[0], "l2": "无效L2"}] + rows[1:], "l2 pool"),
     ("l2_parent_mismatch",
      lambda rows: [{**rows[0], "l1": "金融", "l2": "超大规模云"}] + rows[1:],
      "parent mismatch"),
@@ -1064,8 +1054,11 @@ def test_v2_builder_runs_without_legacy_jsons(tmp_path, monkeypatch):
         watchlist_path=None,
     )
     profiles = {
-        "NVDA": {"symbol": "NVDA", "industry": "Semiconductors",
-                 "description": "GPU and AI accelerator"},
+        # industry_map rule hit (Industrials|Aerospace & Defense) →
+        # deterministic, no LLM spawn — keeps this test offline.
+        "NVDA": {"symbol": "NVDA", "sector": "Industrials",
+                 "industry": "Aerospace & Defense",
+                 "description": "aerospace & defense systems"},
     }
     # Must not raise FileNotFoundError on the missing legacy files.
     build_registry(
@@ -1101,3 +1094,134 @@ def test_read_reviewed_csv_coverage_errors_go_to_summary_not_rows(tmp_path):
         encoding="utf-8"
     )
     assert "MSFT" in summary and "NVDA" in summary
+
+
+# ---- --reclassify: re-run classify over a run-1 review CSV (plan 2026-05-16) ----
+
+
+def _build_registry_v2():
+    from terminal.company_concepts import ConceptRegistry
+    return ConceptRegistry(taxonomy_path=TAXONOMY_V2_PATH, watchlist_path=None)
+
+
+def _reclassify_row(symbol, prefill_source, fmp_sector, fmp_industry,
+                    l1="", l2=""):
+    """One CSV row for the --reclassify input fixture (16-col schema)."""
+    return {
+        "review_reason": "ok", "symbol": symbol,
+        "company_name": f"{symbol} Corp", "fmp_sector": fmp_sector,
+        "fmp_industry": fmp_industry, "market_cap_b": "12.34",
+        "mcap_tier": "small", "description": f"{symbol} description",
+        "l1": l1, "l2": l2, "l3_themes": "", "business_role": "",
+        "prefill_source": prefill_source, "confidence": "0.70",
+        "needs_review": "0", "boss_notes": "",
+    }
+
+
+def test_reclassify_csv_routes_by_old_source(tmp_path):
+    """--reclassify routes each row by its OLD prefill_source (plan §3.6):
+    manual → passthrough; rule → overwrite or fresh-LLM; llm → whitelist
+    overwrite / deterministic_conflict / passthrough."""
+    from scripts.build_company_concept_registry import reclassify_csv
+
+    rows = [
+        # manual anchor → always passthrough
+        _reclassify_row("MANUALCO", "manual", "Financial Services",
+                        "Insurance - Diversified", l1="金融", l2="保险"),
+        # old rule, industry in map → overwrite. Old l1/l2 here is the
+        # issue-025 bug (an electric utility misrouted to 新能源).
+        _reclassify_row("RULEHIT", "rule", "Utilities", "Regulated Electric",
+                        l1="能源与材料", l2="新能源"),
+        # old rule, ambiguous industry not in map → fresh LLM
+        _reclassify_row("RULEAMBIG", "rule", "Technology", "Semiconductors",
+                        l1="半导体", l2="模拟与功率"),
+        # old llm, Telecommunications Services ∈ whitelist → overwrite
+        _reclassify_row("TELECOM", "llm", "Communication Services",
+                        "Telecommunications Services",
+                        l1="互联网与软件", l2="流媒体与内容"),
+        # old llm, non-whitelist, new map disagrees → deterministic_conflict
+        _reclassify_row("CONFLICT", "llm", "Real Estate", "REIT - Specialty",
+                        l1="地产与公用", l2="住宅与商业REIT"),
+        # old llm, non-whitelist, consistent with new map → passthrough
+        _reclassify_row("LLMOK", "llm", "Real Estate", "REIT - Office",
+                        l1="地产与公用", l2="住宅与商业REIT"),
+        # old llm_failed → passthrough
+        _reclassify_row("LLMFAIL", "llm_failed", "Unknown", "Mystery"),
+    ]
+    in_csv = tmp_path / "run1.csv"
+    _write_csv(in_csv, rows)
+    out_csv = tmp_path / "run2.csv"
+
+    registry = _build_registry_v2()
+    fresh = _fake_llm(l1="semiconductor", l2="analog_power", source="llm",
+                      confidence=0.8, needs_review=0)
+    with patch(
+        "scripts.build_company_concept_registry.prefill_one",
+        return_value=fresh,
+    ) as mocked:
+        stats = reclassify_csv(
+            input_csv=in_csv, output_csv=out_csv,
+            registry=registry, profiles={},
+            taxonomy=registry._taxonomy,
+        )
+
+    # Fresh LLM is called exactly once — only the ambiguous old-rule row.
+    assert mocked.call_count == 1
+    assert mocked.call_args_list[0].kwargs["symbol"] == "RULEAMBIG"
+
+    assert stats["total"] == 7
+    assert stats["overwrite_rule"] == 1
+    assert stats["fresh_llm"] == 1
+    assert stats["overwrite_llm_whitelist"] == 1
+    assert stats["deterministic_conflict"] == 1
+    assert stats["passthrough"] == 3        # manual + llmok + llmfail
+    assert stats["whitelist_symbols"] == ["TELECOM"]
+    assert stats["conflict_symbols"] == ["CONFLICT"]
+
+    out = {r["symbol"]: r for r in _read_csv(out_csv)}
+    assert len(out) == 7
+    # RULEHIT: the issue-025 bug row is corrected to the deterministic result.
+    assert out["RULEHIT"]["l1"] == "地产与公用"
+    assert out["RULEHIT"]["l2"] == "电力与公用"
+    assert out["RULEHIT"]["prefill_source"] == "rule"
+    # TELECOM: whitelist overwrite → the new telecom_operator L2.
+    assert out["TELECOM"]["l2"] == "电信运营商"
+    assert out["TELECOM"]["prefill_source"] == "rule"
+    # CONFLICT: old llm row kept verbatim, only flagged for Boss review.
+    assert out["CONFLICT"]["review_reason"] == "deterministic_conflict"
+    assert out["CONFLICT"]["l1"] == "地产与公用"
+    assert out["CONFLICT"]["l2"] == "住宅与商业REIT"
+    assert out["CONFLICT"]["prefill_source"] == "llm"
+    # MANUAL anchor row untouched.
+    assert out["MANUALCO"]["prefill_source"] == "manual"
+    assert out["MANUALCO"]["l2"] == "保险"
+    # RULEAMBIG: fresh LLM result rendered in.
+    assert out["RULEAMBIG"]["prefill_source"] == "llm"
+    assert out["RULEAMBIG"]["l2"] == "模拟与功率"  # analog_power label
+
+
+def test_reclassify_csv_writes_full_manifest(tmp_path):
+    """The output manifest records ALL symbols (incl passthrough) so
+    apply_reviewed_csv's coverage union does not miss them (plan §3.7)."""
+    from scripts.build_company_concept_registry import reclassify_csv
+
+    rows = [
+        _reclassify_row("MANUALCO", "manual", "Financial Services",
+                        "Insurance - Diversified", l1="金融", l2="保险"),
+        _reclassify_row("LLMFAIL", "llm_failed", "Unknown", "Mystery"),
+    ]
+    in_csv = tmp_path / "run1.csv"
+    _write_csv(in_csv, rows)
+    out_csv = tmp_path / "run2.csv"
+
+    registry = _build_registry_v2()
+    reclassify_csv(
+        input_csv=in_csv, output_csv=out_csv,
+        registry=registry, profiles={}, taxonomy=registry._taxonomy,
+    )
+    manifest = json.loads(
+        (out_csv.parent / f"{out_csv.stem}_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert set(manifest["symbols"]) == {"MANUALCO", "LLMFAIL"}

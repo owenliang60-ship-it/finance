@@ -56,10 +56,21 @@ def _llm_failed_result():
     )
 
 
+def _llm_success_nvda():
+    """Mock prefill_one success for NVDA — Semiconductors is ambiguous (not in
+    industry_map) so the registry returns unclassified → builder calls the LLM."""
+    from terminal.llm_concept_prefill import LLMResult
+    return LLMResult(
+        l1="semiconductor", l2="gpu_accelerator", l3_themes=[],
+        business_role="GPU/AI加速器", confidence=0.85,
+        source="llm", evidence="llm prefill (mocked)", needs_review=0,
+    )
+
+
 def test_cli_full_loop_dry_run_then_reviewed_save(tmp_path):
     """End-to-end CLI semantics on a fresh DB.
 
-    Universe = {NVDA (rule), AMZN (anchor), OBSCURE (llm_failed)}. We run
+    Universe = {NVDA (llm success), AMZN (anchor), OBSCURE (llm_failed)}. We run
     build_registry in dry-run mode, then simulate Boss editing OBSCURE in the
     CSV, then run the CLI's reviewed-csv save path against an empty DB. The DB
     must end up with all three symbols tagged, with concepts rebuilt fresh.
@@ -75,10 +86,14 @@ def test_cli_full_loop_dry_run_then_reviewed_save(tmp_path):
     csv_path = tmp_path / "review.csv"
     universe = ["NVDA", "AMZN", "OBSCURE"]
 
-    # ---- Phase 1+3+4: dry-run, mocked LLM for OBSCURE ----
+    # ---- Phase 1+3+4: dry-run. NVDA's Semiconductors industry is ambiguous
+    # → unclassified → LLM (mocked success); OBSCURE → LLM (mocked failure).
+    def _mock_prefill(*, symbol, profile, taxonomy):
+        return _llm_success_nvda() if symbol == "NVDA" else _llm_failed_result()
+
     with patch(
         "scripts.build_company_concept_registry.prefill_one",
-        return_value=_llm_failed_result(),
+        side_effect=_mock_prefill,
     ):
         result = build_registry(
             store=store, registry=registry,
@@ -142,7 +157,7 @@ def test_cli_full_loop_dry_run_then_reviewed_save(tmp_path):
     level_counts = dict(conn.execute(
         "SELECT level, COUNT(*) FROM concepts GROUP BY level"
     ).fetchall())
-    assert level_counts == {1: 11, 2: 60, 3: 42}
+    assert level_counts == {1: 11, 2: 61, 3: 42}
 
     # ---- Assertion #5: all three symbols are tagged with display labels ----
     tags = {row["symbol"]: dict(row) for row in conn.execute(
@@ -562,17 +577,23 @@ def test_review_manifest_blocks_dropped_watchlist_row(tmp_path):
         "description": "Optical interposer for photonic compute.",
     }
 
-    # POET's industry hits the Semiconductors keyword rule, so no LLM call is
-    # needed — keeps the test deterministic and free of prefill mocks.
-    build_registry(
-        store=store, registry=registry,
-        universe_symbols=["NVDA", "AMZN"],         # extended pool proxy
-        profiles=profiles,
-        portfolio_holdings=["NVDA", "AMZN"],
-        broad_top_symbols=["NVDA", "AMZN"],
-        review_csv_path=csv_path,
-        save=False, force_save=False,
-    )
+    # NVDA + POET both carry the ambiguous Semiconductors industry → both fall
+    # through to the LLM. Mock prefill_one so the test never spawns `claude`;
+    # the LLM result is irrelevant here — we only assert POET reaches the
+    # manifest + CSV and that dropping it fails save-time validation.
+    with patch(
+        "scripts.build_company_concept_registry.prefill_one",
+        return_value=_llm_failed_result(),
+    ):
+        build_registry(
+            store=store, registry=registry,
+            universe_symbols=["NVDA", "AMZN"],         # extended pool proxy
+            profiles=profiles,
+            portfolio_holdings=["NVDA", "AMZN"],
+            broad_top_symbols=["NVDA", "AMZN"],
+            review_csv_path=csv_path,
+            save=False, force_save=False,
+        )
 
     # Manifest sidecar must record POET so the save path can catch its drop.
     manifest = json.loads(

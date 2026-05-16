@@ -1,16 +1,16 @@
 """End-to-end v2 builder integration test (Task 12).
 
 3-stock fixture covering every classify branch:
-    NVDA   — anchor (manual override hit, no LLM call, written to DB by build)
-    AMZN   — anchor (manual override hit, no LLM call, written to DB by build)
-    OBSCURE — rule + anchor miss → LLM mock returns failure → CSV row with
-              blank l1/l2 for Boss; in this test Boss "edits" OBSCURE in the
-              CSV then we feed it through Phase 5 + Phase 6 to verify the
-              full review loop persists Boss's edits.
+    NVDA    — ambiguous industry (Technology|Semiconductors not in industry_map)
+              → unclassified → LLM mock returns a SUCCESS triple, persisted by build
+    AMZN    — anchor (manual override hit, no LLM call, written to DB by build)
+    OBSCURE — anchor + industry_map both miss → LLM mock returns FAILURE → CSV
+              row with blank l1/l2 for Boss; Boss "edits" OBSCURE then we feed
+              it through Phase 5 + Phase 6 to verify the review loop persists edits.
 
 Pipeline phases exercised end-to-end:
     Phase 1 (rebuild_concept_tree)  via build_registry --save --force-save
-    Phase 3 (classify chain)        — manual / LLM fail branches both fire
+    Phase 3 (classify chain)        — manual / LLM success / LLM fail all fire
     Phase 4 (write 15-col CSV)      — only OBSCURE lands in the review queue
     Phase 5 (read_reviewed_csv)     — Boss-edited row parses cleanly
     Phase 6 (save_to_market_db)     — WAL backup + 3-segment display_tags upsert
@@ -61,6 +61,20 @@ def _llm_failed_result():
     )
 
 
+def _llm_success_nvda():
+    """Mock prefill_one return value for NVDA — a successful LLM triple.
+
+    Semiconductors is a deliberately ambiguous industry (not in industry_map),
+    so the registry returns unclassified and the builder hands NVDA to the LLM.
+    """
+    from terminal.llm_concept_prefill import LLMResult
+    return LLMResult(
+        l1="semiconductor", l2="gpu_accelerator", l3_themes=[],
+        business_role="GPU/AI加速器", confidence=0.85,
+        source="llm", evidence="llm prefill (mocked)", needs_review=0,
+    )
+
+
 def test_full_v2_pipeline_3_stocks(tmp_path):
     """Drive the full v2 pipeline against a 3-stock fixture; verify the
     concepts taxonomy lands, anchors persist directly, and the LLM-fail
@@ -75,10 +89,14 @@ def test_full_v2_pipeline_3_stocks(tmp_path):
     registry = ConceptRegistry(taxonomy_path=TAXONOMY_V2, watchlist_path=None)
     csv_path = tmp_path / "review.csv"
 
-    # ---- Phase 1 + 3 + 4: build_registry mocked LLM for OBSCURE ----
+    # ---- Phase 1 + 3 + 4: build_registry with per-symbol mocked LLM ----
+    # NVDA (ambiguous Semiconductors) → LLM success; OBSCURE → LLM failure.
+    def _mock_prefill(*, symbol, profile, taxonomy):
+        return _llm_success_nvda() if symbol == "NVDA" else _llm_failed_result()
+
     with patch(
         "scripts.build_company_concept_registry.prefill_one",
-        return_value=_llm_failed_result(),
+        side_effect=_mock_prefill,
     ) as mocked_llm:
         result = build_registry(
             store=store, registry=registry,
@@ -91,24 +109,29 @@ def test_full_v2_pipeline_3_stocks(tmp_path):
             force_save=True,   # OBSCURE failed → bypass gate
         )
 
-    # LLM called exactly once (only OBSCURE missed rule + anchor)
-    assert mocked_llm.call_count == 1
-    assert mocked_llm.call_args_list[0].kwargs.get("symbol") == "OBSCURE"
-    # AMZN is a multi_segment_anchor (manual). NVDA hits the Semiconductors
-    # keyword rule. OBSCURE falls through to the LLM which we mocked to fail.
+    # LLM called for both unclassified symbols (NVDA + OBSCURE); AMZN anchor
+    # short-circuits before any LLM call.
+    assert mocked_llm.call_count == 2
+    assert {c.kwargs["symbol"] for c in mocked_llm.call_args_list} == {
+        "NVDA", "OBSCURE",
+    }
+    # AMZN is a multi_segment_anchor (manual). NVDA's Semiconductors industry is
+    # ambiguous → unclassified → LLM (mocked success). OBSCURE → LLM (mocked
+    # failure). Nothing in this fixture hits the industry_map rule branch.
     assert result.manual == 1          # AMZN anchor
-    assert result.rule == 1            # NVDA semiconductor rule
-    assert result.llm_failed == 1      # OBSCURE
+    assert result.rule == 0            # no industry_map hit in this fixture
+    assert result.llm == 1             # NVDA — LLM success
+    assert result.llm_failed == 1      # OBSCURE — LLM failure
     assert result.saved is True
     assert result.forced_save is True
 
-    # ---- concepts table has the full 11 + 60 + 42 = 113 taxonomy ----
+    # ---- concepts table has the full 11 + 61 + 42 = 114 taxonomy ----
     conn = sqlite3.connect(str(tmp_path / "market.db"))
     conn.row_factory = sqlite3.Row
     level_counts = dict(conn.execute(
         "SELECT level, COUNT(*) FROM concepts GROUP BY level"
     ).fetchall())
-    assert level_counts == {1: 11, 2: 60, 3: 42}
+    assert level_counts == {1: 11, 2: 61, 3: 42}
 
     # ---- company_concept_tags after build: NVDA + AMZN persisted; ----
     # ---- OBSCURE excluded because needs_review=1 (build skips it).  ----
@@ -201,12 +224,11 @@ def test_full_v2_pipeline_3_stocks(tmp_path):
     conn.close()
     assert set(cct_final.keys()) == {"NVDA", "AMZN", "OBSCURE"}
 
-    # NVDA: rule path (Semiconductors). Display string built from registry's
-    # rule resolution + concepts.label. Don't pin the exact L3 (rule may or
-    # may not append a theme); assert the 2-segment prefix is correct.
+    # NVDA: LLM path (ambiguous Semiconductors → unclassified → LLM success).
+    # Display string built from the LLM triple + concepts.label.
     assert cct_final["NVDA"]["primary_concept_id"] == "semiconductor"
     assert cct_final["NVDA"]["display_tags"].startswith("半导体 / ")
-    assert cct_final["NVDA"]["source"] == "rule"
+    assert cct_final["NVDA"]["source"] == "llm"
 
     # AMZN: anchor 3-segment (anchor declares theme_ids=[ai_compute])
     assert cct_final["AMZN"]["source"] == "manual"

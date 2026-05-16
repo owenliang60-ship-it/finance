@@ -14,13 +14,14 @@ def _load():
     return json.loads(TAXONOMY_PATH.read_text(encoding="utf-8"))
 
 
-def test_taxonomy_has_11_l1_60_l2_42_l3():
+def test_taxonomy_has_11_l1_61_l2_42_l3():
     data = _load()
     levels = {1: [], 2: [], 3: []}
     for c in data["concepts"]:
         levels[c["level"]].append(c)
     assert len(levels[1]) == 11
-    assert len(levels[2]) == 60
+    # 61 L2: telecom_operator added by the 2026-05-16 rebuild (plan §3.3).
+    assert len(levels[2]) == 61
     assert len(levels[3]) == 42
 
 
@@ -65,3 +66,35 @@ def test_anchor_l3_ids_all_in_pool():
     for anchor in data.get("multi_segment_anchors", []):
         for tid in anchor.get("theme_ids", []):
             assert tid in l3_ids, f"anchor {anchor['symbol']} references unknown L3 {tid}"
+
+
+def test_industry_map_present_and_well_formed():
+    """v1 keyword_rules were replaced by industry_map (issue 025 / plan
+    2026-05-16). Keys are FMP "sector|industry" strings; values are
+    {l1, l2} pointing at valid L1/L2 concept_ids."""
+    data = _load()
+    assert "keyword_rules" not in data, "v1 keyword_rules must be gone"
+    industry_map = data["industry_map"]
+    assert len(industry_map) == 82
+    l1_ids = {c["concept_id"] for c in data["concepts"] if c["level"] == 1}
+    l2_ids = {c["concept_id"] for c in data["concepts"] if c["level"] == 2}
+    for key, val in industry_map.items():
+        assert key.count("|") == 1, f"key '{key}' is not sector|industry"
+        sector, industry = key.split("|")
+        assert sector.strip() and industry.strip(), f"empty half in key '{key}'"
+        assert val["l1"] in l1_ids, f"{key} → unknown l1 {val['l1']}"
+        assert val["l2"] in l2_ids, f"{key} → unknown l2 {val['l2']}"
+
+
+def test_industry_map_l2_parent_consistent_with_l1():
+    """Each industry_map (l1, l2) pair must respect the taxonomy tree:
+    the mapped L2's parent_id is the mapped L1."""
+    data = _load()
+    l2_parent = {
+        c["concept_id"]: c.get("parent_id")
+        for c in data["concepts"] if c["level"] == 2
+    }
+    for key, val in data["industry_map"].items():
+        assert l2_parent[val["l2"]] == val["l1"], (
+            f"{key}: l2 {val['l2']} parent {l2_parent[val['l2']]} != l1 {val['l1']}"
+        )
