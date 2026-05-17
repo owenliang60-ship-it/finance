@@ -14,7 +14,7 @@ def _load():
     return json.loads(TAXONOMY_PATH.read_text(encoding="utf-8"))
 
 
-def test_taxonomy_has_11_l1_61_l2_42_l3():
+def test_taxonomy_has_11_l1_61_l2_34_l3():
     data = _load()
     levels = {1: [], 2: [], 3: []}
     for c in data["concepts"]:
@@ -22,7 +22,8 @@ def test_taxonomy_has_11_l1_61_l2_42_l3():
     assert len(levels[1]) == 11
     # 61 L2: telecom_operator added by the 2026-05-16 rebuild (plan §3.3).
     assert len(levels[2]) == 61
-    assert len(levels[3]) == 42
+    # 34 L3: 2026-05-17 Boss-curated closed set (42 → 34, plan relodge).
+    assert len(levels[3]) == 34
 
 
 def test_l2_parent_strictly_under_l1():

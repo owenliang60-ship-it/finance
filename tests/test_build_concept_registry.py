@@ -283,9 +283,9 @@ def test_dry_run_does_not_write_db(build_env):
     assert conn.execute("SELECT COUNT(*) FROM company_concept_tags").fetchone()[0] == 0
 
 
-def test_save_writes_concepts_114_rows(build_env):
-    """save 后 concepts 表必须含 11 L1 + 61 L2 + 42 L3 = 114 行
-    (telecom_operator L2 由 2026-05-16 重建新增)。"""
+def test_save_writes_concepts_106_rows(build_env):
+    """save 后 concepts 表必须含 11 L1 + 61 L2 + 34 L3 = 106 行
+    (L3 由 2026-05-17 Boss-curated 闭集 42 → 34)。"""
     from scripts.build_company_concept_registry import build_registry
 
     tmp_path, store, registry, profiles = build_env
@@ -303,7 +303,7 @@ def test_save_writes_concepts_114_rows(build_env):
     counts = dict(conn.execute(
         "SELECT level, COUNT(*) FROM concepts GROUP BY level"
     ).fetchall())
-    assert counts == {1: 11, 2: 61, 3: 42}
+    assert counts == {1: 11, 2: 61, 3: 34}
 
 
 def test_save_persists_amzn_anchor(build_env):
@@ -607,8 +607,8 @@ def test_write_review_csv_uses_chinese_labels_and_mcap_tier(tmp_path):
     assert foo["review_reason"] == "hard_needs_review"
 
 
-def test_taxonomy_reference_csv_lists_all_114_concepts(tmp_path):
-    """taxonomy_reference.csv 必须含 11+61+42 = 114 行 (header 之外)。"""
+def test_taxonomy_reference_csv_lists_all_106_concepts(tmp_path):
+    """taxonomy_reference.csv 必须含 11+61+34 = 106 行 (header 之外)。"""
     from scripts.build_company_concept_registry import _write_taxonomy_reference_csv
 
     taxonomy = json.loads(TAXONOMY_V2_PATH.read_text(encoding="utf-8"))
@@ -616,7 +616,7 @@ def test_taxonomy_reference_csv_lists_all_114_concepts(tmp_path):
     _write_taxonomy_reference_csv(taxonomy, out)
 
     rows = list(csv.DictReader(out.open()))
-    assert len(rows) == 114
+    assert len(rows) == 106
     levels = {int(r["level"]) for r in rows}
     assert levels == {1, 2, 3}
 

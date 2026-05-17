@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "purpose": "Symbols present in the concept registry that must be EXCLUDED when clustering / aggregating by concept. These are not single operating companies (ETFs) or are non-US instruments whose FMP profile is empty, so their LLM concept tags are unreliable. Rows are KEPT in company_concept_tags; downstream concept-clustering consumers filter against this set.",
+    "owner": "concept registry — manual curation",
+    "updated": "2026-05-17",
+    "schema": "excluded[] = {symbol, instrument_type, reason}"
+  },
+  "excluded": [
+    {
+      "symbol": "03032",
+      "instrument_type": "ETF",
+      "reason": "港股恒生科技指数 ETF（LLM business_role 自述为追踪恒生科技指数的 ETF），非单一公司。"
+    },
+    {
+      "symbol": "07709",
+      "instrument_type": "non_us_unknown",
+      "reason": "港股 5 位数字代码，FMP profile 全空、业务无法判定，LLM 分类为占位推测，不可信。"
+    },
+    {
+      "symbol": "DRAM",
+      "instrument_type": "ETF",
+      "reason": "Boss 标记为 ETF；FMP profile 空，LLM 仅凭 ticker 字符串误判为 DRAM 存储芯片制造商。"
+    }
+  ]
+}

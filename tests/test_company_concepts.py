@@ -164,7 +164,7 @@ def test_v2_resolve_l3_alias_maps_chinese_label_to_id(registry):
 def test_v2_resolve_l3_alias_accepts_concept_id_directly(registry):
     """直接传 concept_id 也能正常返回（idempotent)。"""
     assert registry.resolve_l3_alias("ai_compute") == "ai_compute"
-    assert registry.resolve_l3_alias("hbm") == "hbm"
+    assert registry.resolve_l3_alias("storage") == "storage"
 
 
 def test_v2_resolve_l3_alias_ignores_l1_l2_ids(registry):

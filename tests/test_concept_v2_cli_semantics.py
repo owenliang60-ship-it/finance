@@ -157,7 +157,7 @@ def test_cli_full_loop_dry_run_then_reviewed_save(tmp_path):
     level_counts = dict(conn.execute(
         "SELECT level, COUNT(*) FROM concepts GROUP BY level"
     ).fetchall())
-    assert level_counts == {1: 11, 2: 61, 3: 42}
+    assert level_counts == {1: 11, 2: 61, 3: 34}
 
     # ---- Assertion #5: all three symbols are tagged with display labels ----
     tags = {row["symbol"]: dict(row) for row in conn.execute(

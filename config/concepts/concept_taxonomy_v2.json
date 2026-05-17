@@ -1,240 +1,1403 @@
 {
-  "version": "v2.0",
-  "updated": "2026-05-16",
+  "version": "v2.1",
+  "updated": "2026-05-17",
   "concepts": [
-    {"concept_id": "ai_compute_cloud", "label": "AI算力与云", "level": 1, "parent_id": null, "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "semiconductor", "label": "半导体", "level": 1, "parent_id": null, "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "internet_software", "label": "互联网与软件", "level": 1, "parent_id": null, "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "autonomy_robotics", "label": "自动驾驶与机器人", "level": 1, "parent_id": null, "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "pharma_life_sci", "label": "创新药与生命科学", "level": 1, "parent_id": null, "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "finance", "label": "金融", "level": 1, "parent_id": null, "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "crypto", "label": "加密资产", "level": 1, "parent_id": null, "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "consumer_retail", "label": "消费与零售", "level": 1, "parent_id": null, "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "energy_materials", "label": "能源与材料", "level": 1, "parent_id": null, "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "industrial_aerospace", "label": "工业与航天", "level": 1, "parent_id": null, "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "realestate_utility", "label": "地产与公用", "level": 1, "parent_id": null, "concept_type": "evergreen", "status": "active"},
-
-    {"concept_id": "hyperscaler", "label": "超大规模云", "level": 2, "parent_id": "ai_compute_cloud", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "datacenter_reit", "label": "数据中心运营", "level": 2, "parent_id": "ai_compute_cloud", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "ai_platform_saas", "label": "AI平台与数据SaaS", "level": 2, "parent_id": "ai_compute_cloud", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "datacenter_power_cool", "label": "数据中心电力与冷却", "level": 2, "parent_id": "ai_compute_cloud", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "datacenter_network", "label": "数据中心网络设备", "level": 2, "parent_id": "ai_compute_cloud", "concept_type": "evergreen", "status": "active"},
-
-    {"concept_id": "gpu_accelerator", "label": "计算芯片/GPU加速器", "level": 2, "parent_id": "semiconductor", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "cpu_soc", "label": "CPU与SoC", "level": 2, "parent_id": "semiconductor", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "memory_chip", "label": "存储芯片", "level": 2, "parent_id": "semiconductor", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "foundry", "label": "晶圆代工", "level": 2, "parent_id": "semiconductor", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "semi_equipment", "label": "半导体设备", "level": 2, "parent_id": "semiconductor", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "analog_power", "label": "模拟与功率", "level": 2, "parent_id": "semiconductor", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "ip_eda_fabless", "label": "芯片IP/EDA/Fabless其他", "level": 2, "parent_id": "semiconductor", "concept_type": "evergreen", "status": "active"},
-
-    {"concept_id": "search_engine", "label": "搜索引擎", "level": 2, "parent_id": "internet_software", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "social_media", "label": "社交媒体", "level": 2, "parent_id": "internet_software", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "streaming_content", "label": "流媒体与内容", "level": 2, "parent_id": "internet_software", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "consumer_internet_platform", "label": "消费互联网平台", "level": 2, "parent_id": "internet_software", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "gaming_interactive", "label": "游戏与互动娱乐", "level": 2, "parent_id": "internet_software", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "enterprise_saas", "label": "企业SaaS", "level": 2, "parent_id": "internet_software", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "cybersecurity", "label": "信息安全", "level": 2, "parent_id": "internet_software", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "ecommerce_saas", "label": "电商SaaS", "level": 2, "parent_id": "internet_software", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "telecom_operator", "label": "电信运营商", "level": 2, "parent_id": "internet_software", "concept_type": "evergreen", "status": "active"},
-
-    {"concept_id": "ev_oem", "label": "电动车整车", "level": 2, "parent_id": "autonomy_robotics", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "autonomy_perception", "label": "自动驾驶感知系统", "level": 2, "parent_id": "autonomy_robotics", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "industrial_medical_robotics", "label": "工业/医疗机器人", "level": 2, "parent_id": "autonomy_robotics", "concept_type": "evergreen", "status": "active"},
-
-    {"concept_id": "large_pharma", "label": "大型制药", "level": 2, "parent_id": "pharma_life_sci", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "innovative_biotech", "label": "创新生物科技", "level": 2, "parent_id": "pharma_life_sci", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "medical_device", "label": "医疗器械", "level": 2, "parent_id": "pharma_life_sci", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "life_sci_tools_cro", "label": "生命科学工具与CRO", "level": 2, "parent_id": "pharma_life_sci", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "health_services", "label": "医保健康服务", "level": 2, "parent_id": "pharma_life_sci", "concept_type": "evergreen", "status": "active"},
-
-    {"concept_id": "mega_bank", "label": "大型综合银行", "level": 2, "parent_id": "finance", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "investment_bank", "label": "投资银行与交易", "level": 2, "parent_id": "finance", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "asset_management", "label": "资产管理", "level": 2, "parent_id": "finance", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "broker_exchange", "label": "经纪与交易所", "level": 2, "parent_id": "finance", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "payment_fintech", "label": "支付与金融科技", "level": 2, "parent_id": "finance", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "insurance", "label": "保险", "level": 2, "parent_id": "finance", "concept_type": "evergreen", "status": "active"},
-
-    {"concept_id": "crypto_exchange", "label": "加密交易所/经纪", "level": 2, "parent_id": "crypto", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "crypto_mining", "label": "加密挖矿", "level": 2, "parent_id": "crypto", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "crypto_treasury", "label": "加密储备/敞口", "level": 2, "parent_id": "crypto", "concept_type": "evergreen", "status": "active"},
-
-    {"concept_id": "consumer_staples", "label": "必需消费品", "level": 2, "parent_id": "consumer_retail", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "consumer_discretionary_brand", "label": "可选消费品牌", "level": 2, "parent_id": "consumer_retail", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "restaurant", "label": "餐饮", "level": 2, "parent_id": "consumer_retail", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "big_box_retail", "label": "大型零售", "level": 2, "parent_id": "consumer_retail", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "home_improvement", "label": "家居建材零售", "level": 2, "parent_id": "consumer_retail", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "oversea_ecommerce_platform", "label": "海外电商平台", "level": 2, "parent_id": "consumer_retail", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "consumer_electronics_brand", "label": "消费电子与品牌硬件", "level": 2, "parent_id": "consumer_retail", "concept_type": "evergreen", "status": "active"},
-
-    {"concept_id": "integrated_oil", "label": "综合油气", "level": 2, "parent_id": "energy_materials", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "oil_services", "label": "油服与设备", "level": 2, "parent_id": "energy_materials", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "clean_energy", "label": "新能源", "level": 2, "parent_id": "energy_materials", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "mining_metals", "label": "矿业与金属", "level": 2, "parent_id": "energy_materials", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "chemicals_gases", "label": "化工与气体", "level": 2, "parent_id": "energy_materials", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "agriculture_fertilizer", "label": "农产与化肥", "level": 2, "parent_id": "energy_materials", "concept_type": "evergreen", "status": "active"},
-
-    {"concept_id": "aerospace_defense", "label": "航空航天与国防", "level": 2, "parent_id": "industrial_aerospace", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "industrial_automation", "label": "工业自动化与机械", "level": 2, "parent_id": "industrial_aerospace", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "heavy_machinery", "label": "重型机械与农机", "level": 2, "parent_id": "industrial_aerospace", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "logistics_shipping", "label": "物流与航运", "level": 2, "parent_id": "industrial_aerospace", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "airlines", "label": "航空公司", "level": 2, "parent_id": "industrial_aerospace", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "engineering_construction", "label": "工程与建筑", "level": 2, "parent_id": "industrial_aerospace", "concept_type": "evergreen", "status": "active"},
-
-    {"concept_id": "power_utility", "label": "电力与公用", "level": 2, "parent_id": "realestate_utility", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "residential_commercial_reit", "label": "住宅与商业REIT", "level": 2, "parent_id": "realestate_utility", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "comm_infra_reit", "label": "通信基建REIT", "level": 2, "parent_id": "realestate_utility", "concept_type": "evergreen", "status": "active"},
-    {"concept_id": "industrial_materials", "label": "工业建材", "level": 2, "parent_id": "realestate_utility", "concept_type": "evergreen", "status": "active"},
-
-    {"concept_id": "ai_compute", "label": "AI算力", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["AI算力", "AI 算力"]},
-    {"concept_id": "ai_inference", "label": "AI推理", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["AI推理", "推理"]},
-    {"concept_id": "edge_ai", "label": "端侧AI", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["端侧AI", "边缘AI", "on-device AI"]},
-    {"concept_id": "inhouse_chip", "label": "自研芯片", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["自研芯片", "云厂自研"]},
-    {"concept_id": "hbm", "label": "HBM", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["HBM", "高带宽内存"]},
-    {"concept_id": "datacenter_power", "label": "数据中心电力", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["数据中心电力", "DC 电力"]},
-    {"concept_id": "datacenter_cooling", "label": "数据中心冷却", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["数据中心冷却", "液冷"]},
-    {"concept_id": "ai_model_layer", "label": "AI模型层", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["AI模型层", "大模型", "foundation model"]},
-    {"concept_id": "ai_application_layer", "label": "AI应用层", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["AI应用层", "AI 应用"]},
-    {"concept_id": "ai_infra_material", "label": "AI基建材料", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["AI基建材料", "光模块", "CPO", "PCB"]},
-
-    {"concept_id": "autonomy_fsd", "label": "自动驾驶/FSD", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["自动驾驶/FSD", "自动驾驶", "FSD"]},
-    {"concept_id": "humanoid_robotics", "label": "人形机器人", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["人形机器人", "Optimus"]},
-    {"concept_id": "quantum_computing", "label": "量子计算", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["量子计算", "quantum"]},
-    {"concept_id": "commercial_space", "label": "商业航天", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["商业航天", "商业太空"]},
-    {"concept_id": "nuclear_revival", "label": "核能复兴", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["核能复兴", "核电复兴"]},
-    {"concept_id": "energy_storage", "label": "储能", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["储能", "储能电池"]},
-    {"concept_id": "hydrogen", "label": "氢能", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["氢能", "氢燃料"]},
-    {"concept_id": "nextgen_comms", "label": "6G/卫星通信", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["6G/卫星通信", "6G", "卫星通信"]},
-
-    {"concept_id": "glp1_weightloss", "label": "GLP-1减肥", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["GLP-1减肥", "GLP-1", "减肥药"]},
-    {"concept_id": "gene_editing", "label": "基因编辑", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["基因编辑", "CRISPR"]},
-    {"concept_id": "immunotherapy", "label": "免疫疗法", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["免疫疗法", "肿瘤免疫"]},
-    {"concept_id": "alzheimers", "label": "阿尔茨海默", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["阿尔茨海默", "AD"]},
-    {"concept_id": "digital_health", "label": "数字健康", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["数字健康"]},
-    {"concept_id": "medical_ai", "label": "医疗AI", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["医疗AI", "AI 医疗"]},
-
-    {"concept_id": "btc_exposure", "label": "比特币暴露", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["比特币暴露", "BTC 敞口"]},
-    {"concept_id": "gold_proxy", "label": "黄金代理", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["黄金代理", "黄金敞口"]},
-    {"concept_id": "inflation_hedge", "label": "通胀对冲", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["通胀对冲"]},
-    {"concept_id": "rate_sensitive", "label": "利率敏感", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["利率敏感"]},
-    {"concept_id": "usd_proxy", "label": "美元代理", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["美元代理", "USD 敞口"]},
-    {"concept_id": "china_exposure", "label": "中国敞口", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["中国敞口", "China exposure"]},
-    {"concept_id": "geopolitics", "label": "地缘政治", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["地缘政治", "地缘风险"]},
-
-    {"concept_id": "semi_cycle", "label": "半导体周期", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["半导体周期"]},
-    {"concept_id": "realestate_cycle", "label": "房地产周期", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["房地产周期", "地产周期"]},
-    {"concept_id": "industrial_capex", "label": "工业资本开支", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["工业资本开支", "capex"]},
-    {"concept_id": "energy_transition", "label": "能源转型", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["energy_transition", "能源转型"]},
-    {"concept_id": "defensive_stock", "label": "防御股", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["防御股", "defensive"]},
-
-    {"concept_id": "antitrust_risk", "label": "反垄断风险", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["反垄断风险", "反垄断"]},
-    {"concept_id": "tariff_exposure", "label": "关税敞口", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["关税敞口", "关税"]},
-    {"concept_id": "ira_beneficiary", "label": "IRA受益", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["IRA受益", "IRA"]},
-    {"concept_id": "fda_catalyst", "label": "FDA审批催化", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["FDA审批催化", "FDA 催化"]},
-    {"concept_id": "crypto_regulation", "label": "加密监管", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["加密监管", "crypto regulation"]},
-    {"concept_id": "ai_export_control", "label": "AI出口管制", "level": 3, "parent_id": null, "concept_type": "theme", "status": "active", "aliases": ["AI出口管制", "出口管制"]}
+    {
+      "concept_id": "ai_compute_cloud",
+      "label": "AI算力与云",
+      "level": 1,
+      "parent_id": null,
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "semiconductor",
+      "label": "半导体",
+      "level": 1,
+      "parent_id": null,
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "internet_software",
+      "label": "互联网与软件",
+      "level": 1,
+      "parent_id": null,
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "autonomy_robotics",
+      "label": "自动驾驶与机器人",
+      "level": 1,
+      "parent_id": null,
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "pharma_life_sci",
+      "label": "创新药与生命科学",
+      "level": 1,
+      "parent_id": null,
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "finance",
+      "label": "金融",
+      "level": 1,
+      "parent_id": null,
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "crypto",
+      "label": "加密资产",
+      "level": 1,
+      "parent_id": null,
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "consumer_retail",
+      "label": "消费与零售",
+      "level": 1,
+      "parent_id": null,
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "energy_materials",
+      "label": "能源与材料",
+      "level": 1,
+      "parent_id": null,
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "industrial_aerospace",
+      "label": "工业与航天",
+      "level": 1,
+      "parent_id": null,
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "realestate_utility",
+      "label": "地产与公用",
+      "level": 1,
+      "parent_id": null,
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "hyperscaler",
+      "label": "超大规模云",
+      "level": 2,
+      "parent_id": "ai_compute_cloud",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "datacenter_reit",
+      "label": "数据中心运营",
+      "level": 2,
+      "parent_id": "ai_compute_cloud",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "ai_platform_saas",
+      "label": "AI平台与数据SaaS",
+      "level": 2,
+      "parent_id": "ai_compute_cloud",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "datacenter_power_cool",
+      "label": "数据中心电力与冷却",
+      "level": 2,
+      "parent_id": "ai_compute_cloud",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "datacenter_network",
+      "label": "数据中心网络设备",
+      "level": 2,
+      "parent_id": "ai_compute_cloud",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "gpu_accelerator",
+      "label": "计算芯片/GPU加速器",
+      "level": 2,
+      "parent_id": "semiconductor",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "cpu_soc",
+      "label": "CPU与SoC",
+      "level": 2,
+      "parent_id": "semiconductor",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "memory_chip",
+      "label": "存储芯片",
+      "level": 2,
+      "parent_id": "semiconductor",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "foundry",
+      "label": "晶圆代工",
+      "level": 2,
+      "parent_id": "semiconductor",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "semi_equipment",
+      "label": "半导体设备",
+      "level": 2,
+      "parent_id": "semiconductor",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "analog_power",
+      "label": "模拟与功率",
+      "level": 2,
+      "parent_id": "semiconductor",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "ip_eda_fabless",
+      "label": "芯片IP/EDA/Fabless其他",
+      "level": 2,
+      "parent_id": "semiconductor",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "search_engine",
+      "label": "搜索引擎",
+      "level": 2,
+      "parent_id": "internet_software",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "social_media",
+      "label": "社交媒体",
+      "level": 2,
+      "parent_id": "internet_software",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "streaming_content",
+      "label": "流媒体与内容",
+      "level": 2,
+      "parent_id": "internet_software",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "consumer_internet_platform",
+      "label": "消费互联网平台",
+      "level": 2,
+      "parent_id": "internet_software",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "gaming_interactive",
+      "label": "游戏与互动娱乐",
+      "level": 2,
+      "parent_id": "internet_software",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "enterprise_saas",
+      "label": "企业SaaS",
+      "level": 2,
+      "parent_id": "internet_software",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "cybersecurity",
+      "label": "信息安全",
+      "level": 2,
+      "parent_id": "internet_software",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "ecommerce_saas",
+      "label": "电商SaaS",
+      "level": 2,
+      "parent_id": "internet_software",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "telecom_operator",
+      "label": "电信运营商",
+      "level": 2,
+      "parent_id": "internet_software",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "ev_oem",
+      "label": "电动车整车",
+      "level": 2,
+      "parent_id": "autonomy_robotics",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "autonomy_perception",
+      "label": "自动驾驶感知系统",
+      "level": 2,
+      "parent_id": "autonomy_robotics",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "industrial_medical_robotics",
+      "label": "工业/医疗机器人",
+      "level": 2,
+      "parent_id": "autonomy_robotics",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "large_pharma",
+      "label": "大型制药",
+      "level": 2,
+      "parent_id": "pharma_life_sci",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "innovative_biotech",
+      "label": "创新生物科技",
+      "level": 2,
+      "parent_id": "pharma_life_sci",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "medical_device",
+      "label": "医疗器械",
+      "level": 2,
+      "parent_id": "pharma_life_sci",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "life_sci_tools_cro",
+      "label": "生命科学工具与CRO",
+      "level": 2,
+      "parent_id": "pharma_life_sci",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "health_services",
+      "label": "医保健康服务",
+      "level": 2,
+      "parent_id": "pharma_life_sci",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "mega_bank",
+      "label": "大型综合银行",
+      "level": 2,
+      "parent_id": "finance",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "investment_bank",
+      "label": "投资银行与交易",
+      "level": 2,
+      "parent_id": "finance",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "asset_management",
+      "label": "资产管理",
+      "level": 2,
+      "parent_id": "finance",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "broker_exchange",
+      "label": "经纪与交易所",
+      "level": 2,
+      "parent_id": "finance",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "payment_fintech",
+      "label": "支付与金融科技",
+      "level": 2,
+      "parent_id": "finance",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "insurance",
+      "label": "保险",
+      "level": 2,
+      "parent_id": "finance",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "crypto_exchange",
+      "label": "加密交易所/经纪",
+      "level": 2,
+      "parent_id": "crypto",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "crypto_mining",
+      "label": "加密挖矿",
+      "level": 2,
+      "parent_id": "crypto",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "crypto_treasury",
+      "label": "加密储备/敞口",
+      "level": 2,
+      "parent_id": "crypto",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "consumer_staples",
+      "label": "必需消费品",
+      "level": 2,
+      "parent_id": "consumer_retail",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "consumer_discretionary_brand",
+      "label": "可选消费品牌",
+      "level": 2,
+      "parent_id": "consumer_retail",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "restaurant",
+      "label": "餐饮",
+      "level": 2,
+      "parent_id": "consumer_retail",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "big_box_retail",
+      "label": "大型零售",
+      "level": 2,
+      "parent_id": "consumer_retail",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "home_improvement",
+      "label": "家居建材零售",
+      "level": 2,
+      "parent_id": "consumer_retail",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "oversea_ecommerce_platform",
+      "label": "海外电商平台",
+      "level": 2,
+      "parent_id": "consumer_retail",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "consumer_electronics_brand",
+      "label": "消费电子与品牌硬件",
+      "level": 2,
+      "parent_id": "consumer_retail",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "integrated_oil",
+      "label": "综合油气",
+      "level": 2,
+      "parent_id": "energy_materials",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "oil_services",
+      "label": "油服与设备",
+      "level": 2,
+      "parent_id": "energy_materials",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "clean_energy",
+      "label": "新能源",
+      "level": 2,
+      "parent_id": "energy_materials",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "mining_metals",
+      "label": "矿业与金属",
+      "level": 2,
+      "parent_id": "energy_materials",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "chemicals_gases",
+      "label": "化工与气体",
+      "level": 2,
+      "parent_id": "energy_materials",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "agriculture_fertilizer",
+      "label": "农产与化肥",
+      "level": 2,
+      "parent_id": "energy_materials",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "aerospace_defense",
+      "label": "航空航天与国防",
+      "level": 2,
+      "parent_id": "industrial_aerospace",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "industrial_automation",
+      "label": "工业自动化与机械",
+      "level": 2,
+      "parent_id": "industrial_aerospace",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "heavy_machinery",
+      "label": "重型机械与农机",
+      "level": 2,
+      "parent_id": "industrial_aerospace",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "logistics_shipping",
+      "label": "物流与航运",
+      "level": 2,
+      "parent_id": "industrial_aerospace",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "airlines",
+      "label": "航空公司",
+      "level": 2,
+      "parent_id": "industrial_aerospace",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "engineering_construction",
+      "label": "工程与建筑",
+      "level": 2,
+      "parent_id": "industrial_aerospace",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "power_utility",
+      "label": "电力与公用",
+      "level": 2,
+      "parent_id": "realestate_utility",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "residential_commercial_reit",
+      "label": "住宅与商业REIT",
+      "level": 2,
+      "parent_id": "realestate_utility",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "comm_infra_reit",
+      "label": "通信基建REIT",
+      "level": 2,
+      "parent_id": "realestate_utility",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "industrial_materials",
+      "label": "工业建材",
+      "level": 2,
+      "parent_id": "realestate_utility",
+      "concept_type": "evergreen",
+      "status": "active"
+    },
+    {
+      "concept_id": "ai_compute",
+      "label": "AI算力",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "AI算力",
+        "AI 算力"
+      ]
+    },
+    {
+      "concept_id": "ai_inference",
+      "label": "AI推理",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "AI推理",
+        "推理"
+      ]
+    },
+    {
+      "concept_id": "edge_ai",
+      "label": "端侧AI",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "端侧AI",
+        "边缘AI",
+        "on-device AI"
+      ]
+    },
+    {
+      "concept_id": "inhouse_chip",
+      "label": "自研芯片",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "自研芯片",
+        "云厂自研"
+      ]
+    },
+    {
+      "concept_id": "datacenter_power",
+      "label": "数据中心电力",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "数据中心电力",
+        "DC 电力"
+      ]
+    },
+    {
+      "concept_id": "datacenter_cooling",
+      "label": "数据中心冷却",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "数据中心冷却",
+        "液冷"
+      ]
+    },
+    {
+      "concept_id": "ai_application_layer",
+      "label": "AI应用层",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "AI应用层",
+        "AI 应用"
+      ]
+    },
+    {
+      "concept_id": "ai_infra_material",
+      "label": "AI基建材料",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "AI基建材料",
+        "光模块",
+        "CPO",
+        "PCB"
+      ]
+    },
+    {
+      "concept_id": "autonomy_fsd",
+      "label": "自动驾驶/FSD",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "自动驾驶/FSD",
+        "自动驾驶",
+        "FSD"
+      ]
+    },
+    {
+      "concept_id": "quantum_computing",
+      "label": "量子计算",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "量子计算",
+        "quantum"
+      ]
+    },
+    {
+      "concept_id": "commercial_space",
+      "label": "商业航天",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "商业航天",
+        "商业太空"
+      ]
+    },
+    {
+      "concept_id": "nuclear_revival",
+      "label": "核能复兴",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "核能复兴",
+        "核电复兴"
+      ]
+    },
+    {
+      "concept_id": "hydrogen",
+      "label": "氢能",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "氢能",
+        "氢燃料"
+      ]
+    },
+    {
+      "concept_id": "nextgen_comms",
+      "label": "6G/卫星通信",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "6G/卫星通信",
+        "6G",
+        "卫星通信"
+      ]
+    },
+    {
+      "concept_id": "digital_health",
+      "label": "数字健康",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "数字健康"
+      ]
+    },
+    {
+      "concept_id": "medical_ai",
+      "label": "医疗AI",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "医疗AI",
+        "AI 医疗"
+      ]
+    },
+    {
+      "concept_id": "btc_exposure",
+      "label": "比特币暴露",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "比特币暴露",
+        "BTC 敞口"
+      ]
+    },
+    {
+      "concept_id": "inflation_hedge",
+      "label": "通胀对冲",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "通胀对冲"
+      ]
+    },
+    {
+      "concept_id": "rate_sensitive",
+      "label": "利率敏感",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "利率敏感"
+      ]
+    },
+    {
+      "concept_id": "china_exposure",
+      "label": "中国敞口",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "中国敞口",
+        "China exposure"
+      ]
+    },
+    {
+      "concept_id": "geopolitics",
+      "label": "地缘政治",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "地缘政治",
+        "地缘风险"
+      ]
+    },
+    {
+      "concept_id": "semi_cycle",
+      "label": "半导体周期",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "半导体周期"
+      ]
+    },
+    {
+      "concept_id": "realestate_cycle",
+      "label": "房地产周期",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "房地产周期",
+        "地产周期"
+      ]
+    },
+    {
+      "concept_id": "industrial_capex",
+      "label": "工业资本开支",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "工业资本开支",
+        "capex"
+      ]
+    },
+    {
+      "concept_id": "energy_transition",
+      "label": "能源转型",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "energy_transition",
+        "能源转型"
+      ]
+    },
+    {
+      "concept_id": "defensive_stock",
+      "label": "防御股",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "防御股",
+        "defensive"
+      ]
+    },
+    {
+      "concept_id": "antitrust_risk",
+      "label": "反垄断风险",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "反垄断风险",
+        "反垄断"
+      ]
+    },
+    {
+      "concept_id": "tariff_exposure",
+      "label": "关税敞口",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "关税敞口",
+        "关税"
+      ]
+    },
+    {
+      "concept_id": "ira_beneficiary",
+      "label": "IRA受益",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "IRA受益",
+        "IRA"
+      ]
+    },
+    {
+      "concept_id": "crypto_regulation",
+      "label": "加密监管",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "加密监管",
+        "crypto regulation"
+      ]
+    },
+    {
+      "concept_id": "ai_export_control",
+      "label": "AI出口管制",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "AI出口管制",
+        "出口管制"
+      ]
+    },
+    {
+      "concept_id": "cpu",
+      "label": "CPU",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "CPU"
+      ]
+    },
+    {
+      "concept_id": "optical_comms",
+      "label": "光通信",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "光通信"
+      ]
+    },
+    {
+      "concept_id": "storage",
+      "label": "存储",
+      "level": 3,
+      "parent_id": null,
+      "concept_type": "theme",
+      "status": "active",
+      "aliases": [
+        "存储"
+      ]
+    }
   ],
   "industry_map": {
-    "Basic Materials|Agricultural Inputs": {"l1": "energy_materials", "l2": "agriculture_fertilizer"},
-    "Basic Materials|Chemicals": {"l1": "energy_materials", "l2": "chemicals_gases"},
-    "Basic Materials|Chemicals - Specialty": {"l1": "energy_materials", "l2": "chemicals_gases"},
-    "Basic Materials|Construction Materials": {"l1": "realestate_utility", "l2": "industrial_materials"},
-    "Basic Materials|Copper": {"l1": "energy_materials", "l2": "mining_metals"},
-    "Basic Materials|Gold": {"l1": "energy_materials", "l2": "mining_metals"},
-    "Basic Materials|Industrial Materials": {"l1": "realestate_utility", "l2": "industrial_materials"},
-    "Basic Materials|Steel": {"l1": "energy_materials", "l2": "mining_metals"},
-
-    "Communication Services|Electronic Gaming & Multimedia": {"l1": "internet_software", "l2": "gaming_interactive"},
-    "Communication Services|Entertainment": {"l1": "internet_software", "l2": "streaming_content"},
-    "Communication Services|Telecommunications Services": {"l1": "internet_software", "l2": "telecom_operator"},
-
-    "Consumer Cyclical|Apparel - Footwear & Accessories": {"l1": "consumer_retail", "l2": "consumer_discretionary_brand"},
-    "Consumer Cyclical|Apparel - Retail": {"l1": "consumer_retail", "l2": "consumer_discretionary_brand"},
-    "Consumer Cyclical|Auto - Manufacturers": {"l1": "autonomy_robotics", "l2": "ev_oem"},
-    "Consumer Cyclical|Home Improvement": {"l1": "consumer_retail", "l2": "home_improvement"},
-    "Consumer Cyclical|Luxury Goods": {"l1": "consumer_retail", "l2": "consumer_discretionary_brand"},
-    "Consumer Cyclical|Restaurants": {"l1": "consumer_retail", "l2": "restaurant"},
-
-    "Consumer Defensive|Agricultural Farm Products": {"l1": "energy_materials", "l2": "agriculture_fertilizer"},
-    "Consumer Defensive|Beverages - Alcoholic": {"l1": "consumer_retail", "l2": "consumer_staples"},
-    "Consumer Defensive|Beverages - Non-Alcoholic": {"l1": "consumer_retail", "l2": "consumer_staples"},
-    "Consumer Defensive|Beverages - Wineries & Distilleries": {"l1": "consumer_retail", "l2": "consumer_staples"},
-    "Consumer Defensive|Discount Stores": {"l1": "consumer_retail", "l2": "big_box_retail"},
-    "Consumer Defensive|Food Confectioners": {"l1": "consumer_retail", "l2": "consumer_staples"},
-    "Consumer Defensive|Food Distribution": {"l1": "consumer_retail", "l2": "consumer_staples"},
-    "Consumer Defensive|Grocery Stores": {"l1": "consumer_retail", "l2": "big_box_retail"},
-    "Consumer Defensive|Household & Personal Products": {"l1": "consumer_retail", "l2": "consumer_staples"},
-    "Consumer Defensive|Packaged Foods": {"l1": "consumer_retail", "l2": "consumer_staples"},
-    "Consumer Defensive|Tobacco": {"l1": "consumer_retail", "l2": "consumer_staples"},
-
-    "Energy|Oil & Gas Equipment & Services": {"l1": "energy_materials", "l2": "oil_services"},
-    "Energy|Oil & Gas Exploration & Production": {"l1": "energy_materials", "l2": "integrated_oil"},
-    "Energy|Oil & Gas Integrated": {"l1": "energy_materials", "l2": "integrated_oil"},
-    "Energy|Oil & Gas Midstream": {"l1": "energy_materials", "l2": "integrated_oil"},
-    "Energy|Oil & Gas Refining & Marketing": {"l1": "energy_materials", "l2": "integrated_oil"},
-
-    "Financial Services|Asset Management": {"l1": "finance", "l2": "asset_management"},
-    "Financial Services|Asset Management - Global": {"l1": "finance", "l2": "asset_management"},
-    "Financial Services|Banks - Diversified": {"l1": "finance", "l2": "mega_bank"},
-    "Financial Services|Banks - Regional": {"l1": "finance", "l2": "mega_bank"},
-    "Financial Services|Financial - Capital Markets": {"l1": "finance", "l2": "investment_bank"},
-    "Financial Services|Financial - Credit Services": {"l1": "finance", "l2": "payment_fintech"},
-    "Financial Services|Financial - Data & Stock Exchanges": {"l1": "finance", "l2": "broker_exchange"},
-    "Financial Services|Financial - Mortgages": {"l1": "finance", "l2": "mega_bank"},
-    "Financial Services|Insurance - Brokers": {"l1": "finance", "l2": "insurance"},
-    "Financial Services|Insurance - Diversified": {"l1": "finance", "l2": "insurance"},
-    "Financial Services|Insurance - Life": {"l1": "finance", "l2": "insurance"},
-    "Financial Services|Insurance - Property & Casualty": {"l1": "finance", "l2": "insurance"},
-    "Financial Services|Investment - Banking & Investment Services": {"l1": "finance", "l2": "investment_bank"},
-
-    "Healthcare|Biotechnology": {"l1": "pharma_life_sci", "l2": "innovative_biotech"},
-    "Healthcare|Drug Manufacturers - General": {"l1": "pharma_life_sci", "l2": "large_pharma"},
-    "Healthcare|Drug Manufacturers - Specialty & Generic": {"l1": "pharma_life_sci", "l2": "large_pharma"},
-    "Healthcare|Medical - Care Facilities": {"l1": "pharma_life_sci", "l2": "health_services"},
-    "Healthcare|Medical - Devices": {"l1": "pharma_life_sci", "l2": "medical_device"},
-    "Healthcare|Medical - Diagnostics & Research": {"l1": "pharma_life_sci", "l2": "life_sci_tools_cro"},
-    "Healthcare|Medical - Distribution": {"l1": "pharma_life_sci", "l2": "health_services"},
-    "Healthcare|Medical - Healthcare Information Services": {"l1": "pharma_life_sci", "l2": "health_services"},
-    "Healthcare|Medical - Healthcare Plans": {"l1": "pharma_life_sci", "l2": "health_services"},
-    "Healthcare|Medical - Instruments & Supplies": {"l1": "pharma_life_sci", "l2": "medical_device"},
-    "Healthcare|Medical - Pharmaceuticals": {"l1": "pharma_life_sci", "l2": "large_pharma"},
-
-    "Industrials|Aerospace & Defense": {"l1": "industrial_aerospace", "l2": "aerospace_defense"},
-    "Industrials|Agricultural - Machinery": {"l1": "industrial_aerospace", "l2": "heavy_machinery"},
-    "Industrials|Airlines, Airports & Air Services": {"l1": "industrial_aerospace", "l2": "airlines"},
-    "Industrials|Construction": {"l1": "industrial_aerospace", "l2": "engineering_construction"},
-    "Industrials|Engineering & Construction": {"l1": "industrial_aerospace", "l2": "engineering_construction"},
-    "Industrials|Industrial - Distribution": {"l1": "industrial_aerospace", "l2": "industrial_automation"},
-    "Industrials|Industrial - Machinery": {"l1": "industrial_aerospace", "l2": "industrial_automation"},
-    "Industrials|Integrated Freight & Logistics": {"l1": "industrial_aerospace", "l2": "logistics_shipping"},
-    "Industrials|Oil & Gas Midstream": {"l1": "energy_materials", "l2": "integrated_oil"},
-    "Industrials|Railroads": {"l1": "industrial_aerospace", "l2": "logistics_shipping"},
-    "Industrials|Trucking": {"l1": "industrial_aerospace", "l2": "logistics_shipping"},
-    "Industrials|Waste Management": {"l1": "industrial_aerospace", "l2": "industrial_automation"},
-
-    "Real Estate|REIT - Diversified": {"l1": "realestate_utility", "l2": "residential_commercial_reit"},
-    "Real Estate|REIT - Healthcare Facilities": {"l1": "realestate_utility", "l2": "residential_commercial_reit"},
-    "Real Estate|REIT - Industrial": {"l1": "realestate_utility", "l2": "residential_commercial_reit"},
-    "Real Estate|REIT - Mortgage": {"l1": "realestate_utility", "l2": "residential_commercial_reit"},
-    "Real Estate|REIT - Office": {"l1": "realestate_utility", "l2": "residential_commercial_reit"},
-    "Real Estate|REIT - Retail": {"l1": "realestate_utility", "l2": "residential_commercial_reit"},
-    "Real Estate|REIT - Specialty": {"l1": "realestate_utility", "l2": "comm_infra_reit"},
-
-    "Utilities|Diversified Utilities": {"l1": "realestate_utility", "l2": "power_utility"},
-    "Utilities|Independent Power Producers": {"l1": "realestate_utility", "l2": "power_utility"},
-    "Utilities|Regulated Electric": {"l1": "realestate_utility", "l2": "power_utility"},
-    "Utilities|Regulated Gas": {"l1": "realestate_utility", "l2": "power_utility"},
-    "Utilities|Regulated Water": {"l1": "realestate_utility", "l2": "power_utility"},
-    "Utilities|Renewable Utilities": {"l1": "energy_materials", "l2": "clean_energy"}
+    "Basic Materials|Agricultural Inputs": {
+      "l1": "energy_materials",
+      "l2": "agriculture_fertilizer"
+    },
+    "Basic Materials|Chemicals": {
+      "l1": "energy_materials",
+      "l2": "chemicals_gases"
+    },
+    "Basic Materials|Chemicals - Specialty": {
+      "l1": "energy_materials",
+      "l2": "chemicals_gases"
+    },
+    "Basic Materials|Construction Materials": {
+      "l1": "realestate_utility",
+      "l2": "industrial_materials"
+    },
+    "Basic Materials|Copper": {
+      "l1": "energy_materials",
+      "l2": "mining_metals"
+    },
+    "Basic Materials|Gold": {
+      "l1": "energy_materials",
+      "l2": "mining_metals"
+    },
+    "Basic Materials|Industrial Materials": {
+      "l1": "realestate_utility",
+      "l2": "industrial_materials"
+    },
+    "Basic Materials|Steel": {
+      "l1": "energy_materials",
+      "l2": "mining_metals"
+    },
+    "Communication Services|Electronic Gaming & Multimedia": {
+      "l1": "internet_software",
+      "l2": "gaming_interactive"
+    },
+    "Communication Services|Entertainment": {
+      "l1": "internet_software",
+      "l2": "streaming_content"
+    },
+    "Communication Services|Telecommunications Services": {
+      "l1": "internet_software",
+      "l2": "telecom_operator"
+    },
+    "Consumer Cyclical|Apparel - Footwear & Accessories": {
+      "l1": "consumer_retail",
+      "l2": "consumer_discretionary_brand"
+    },
+    "Consumer Cyclical|Apparel - Retail": {
+      "l1": "consumer_retail",
+      "l2": "consumer_discretionary_brand"
+    },
+    "Consumer Cyclical|Auto - Manufacturers": {
+      "l1": "autonomy_robotics",
+      "l2": "ev_oem"
+    },
+    "Consumer Cyclical|Home Improvement": {
+      "l1": "consumer_retail",
+      "l2": "home_improvement"
+    },
+    "Consumer Cyclical|Luxury Goods": {
+      "l1": "consumer_retail",
+      "l2": "consumer_discretionary_brand"
+    },
+    "Consumer Cyclical|Restaurants": {
+      "l1": "consumer_retail",
+      "l2": "restaurant"
+    },
+    "Consumer Defensive|Agricultural Farm Products": {
+      "l1": "energy_materials",
+      "l2": "agriculture_fertilizer"
+    },
+    "Consumer Defensive|Beverages - Alcoholic": {
+      "l1": "consumer_retail",
+      "l2": "consumer_staples"
+    },
+    "Consumer Defensive|Beverages - Non-Alcoholic": {
+      "l1": "consumer_retail",
+      "l2": "consumer_staples"
+    },
+    "Consumer Defensive|Beverages - Wineries & Distilleries": {
+      "l1": "consumer_retail",
+      "l2": "consumer_staples"
+    },
+    "Consumer Defensive|Discount Stores": {
+      "l1": "consumer_retail",
+      "l2": "big_box_retail"
+    },
+    "Consumer Defensive|Food Confectioners": {
+      "l1": "consumer_retail",
+      "l2": "consumer_staples"
+    },
+    "Consumer Defensive|Food Distribution": {
+      "l1": "consumer_retail",
+      "l2": "consumer_staples"
+    },
+    "Consumer Defensive|Grocery Stores": {
+      "l1": "consumer_retail",
+      "l2": "big_box_retail"
+    },
+    "Consumer Defensive|Household & Personal Products": {
+      "l1": "consumer_retail",
+      "l2": "consumer_staples"
+    },
+    "Consumer Defensive|Packaged Foods": {
+      "l1": "consumer_retail",
+      "l2": "consumer_staples"
+    },
+    "Consumer Defensive|Tobacco": {
+      "l1": "consumer_retail",
+      "l2": "consumer_staples"
+    },
+    "Energy|Oil & Gas Equipment & Services": {
+      "l1": "energy_materials",
+      "l2": "oil_services"
+    },
+    "Energy|Oil & Gas Exploration & Production": {
+      "l1": "energy_materials",
+      "l2": "integrated_oil"
+    },
+    "Energy|Oil & Gas Integrated": {
+      "l1": "energy_materials",
+      "l2": "integrated_oil"
+    },
+    "Energy|Oil & Gas Midstream": {
+      "l1": "energy_materials",
+      "l2": "integrated_oil"
+    },
+    "Energy|Oil & Gas Refining & Marketing": {
+      "l1": "energy_materials",
+      "l2": "integrated_oil"
+    },
+    "Financial Services|Asset Management": {
+      "l1": "finance",
+      "l2": "asset_management"
+    },
+    "Financial Services|Asset Management - Global": {
+      "l1": "finance",
+      "l2": "asset_management"
+    },
+    "Financial Services|Banks - Diversified": {
+      "l1": "finance",
+      "l2": "mega_bank"
+    },
+    "Financial Services|Banks - Regional": {
+      "l1": "finance",
+      "l2": "mega_bank"
+    },
+    "Financial Services|Financial - Capital Markets": {
+      "l1": "finance",
+      "l2": "investment_bank"
+    },
+    "Financial Services|Financial - Credit Services": {
+      "l1": "finance",
+      "l2": "payment_fintech"
+    },
+    "Financial Services|Financial - Data & Stock Exchanges": {
+      "l1": "finance",
+      "l2": "broker_exchange"
+    },
+    "Financial Services|Financial - Mortgages": {
+      "l1": "finance",
+      "l2": "mega_bank"
+    },
+    "Financial Services|Insurance - Brokers": {
+      "l1": "finance",
+      "l2": "insurance"
+    },
+    "Financial Services|Insurance - Diversified": {
+      "l1": "finance",
+      "l2": "insurance"
+    },
+    "Financial Services|Insurance - Life": {
+      "l1": "finance",
+      "l2": "insurance"
+    },
+    "Financial Services|Insurance - Property & Casualty": {
+      "l1": "finance",
+      "l2": "insurance"
+    },
+    "Financial Services|Investment - Banking & Investment Services": {
+      "l1": "finance",
+      "l2": "investment_bank"
+    },
+    "Healthcare|Biotechnology": {
+      "l1": "pharma_life_sci",
+      "l2": "innovative_biotech"
+    },
+    "Healthcare|Drug Manufacturers - General": {
+      "l1": "pharma_life_sci",
+      "l2": "large_pharma"
+    },
+    "Healthcare|Drug Manufacturers - Specialty & Generic": {
+      "l1": "pharma_life_sci",
+      "l2": "large_pharma"
+    },
+    "Healthcare|Medical - Care Facilities": {
+      "l1": "pharma_life_sci",
+      "l2": "health_services"
+    },
+    "Healthcare|Medical - Devices": {
+      "l1": "pharma_life_sci",
+      "l2": "medical_device"
+    },
+    "Healthcare|Medical - Diagnostics & Research": {
+      "l1": "pharma_life_sci",
+      "l2": "life_sci_tools_cro"
+    },
+    "Healthcare|Medical - Distribution": {
+      "l1": "pharma_life_sci",
+      "l2": "health_services"
+    },
+    "Healthcare|Medical - Healthcare Information Services": {
+      "l1": "pharma_life_sci",
+      "l2": "health_services"
+    },
+    "Healthcare|Medical - Healthcare Plans": {
+      "l1": "pharma_life_sci",
+      "l2": "health_services"
+    },
+    "Healthcare|Medical - Instruments & Supplies": {
+      "l1": "pharma_life_sci",
+      "l2": "medical_device"
+    },
+    "Healthcare|Medical - Pharmaceuticals": {
+      "l1": "pharma_life_sci",
+      "l2": "large_pharma"
+    },
+    "Industrials|Aerospace & Defense": {
+      "l1": "industrial_aerospace",
+      "l2": "aerospace_defense"
+    },
+    "Industrials|Agricultural - Machinery": {
+      "l1": "industrial_aerospace",
+      "l2": "heavy_machinery"
+    },
+    "Industrials|Airlines, Airports & Air Services": {
+      "l1": "industrial_aerospace",
+      "l2": "airlines"
+    },
+    "Industrials|Construction": {
+      "l1": "industrial_aerospace",
+      "l2": "engineering_construction"
+    },
+    "Industrials|Engineering & Construction": {
+      "l1": "industrial_aerospace",
+      "l2": "engineering_construction"
+    },
+    "Industrials|Industrial - Distribution": {
+      "l1": "industrial_aerospace",
+      "l2": "industrial_automation"
+    },
+    "Industrials|Industrial - Machinery": {
+      "l1": "industrial_aerospace",
+      "l2": "industrial_automation"
+    },
+    "Industrials|Integrated Freight & Logistics": {
+      "l1": "industrial_aerospace",
+      "l2": "logistics_shipping"
+    },
+    "Industrials|Oil & Gas Midstream": {
+      "l1": "energy_materials",
+      "l2": "integrated_oil"
+    },
+    "Industrials|Railroads": {
+      "l1": "industrial_aerospace",
+      "l2": "logistics_shipping"
+    },
+    "Industrials|Trucking": {
+      "l1": "industrial_aerospace",
+      "l2": "logistics_shipping"
+    },
+    "Industrials|Waste Management": {
+      "l1": "industrial_aerospace",
+      "l2": "industrial_automation"
+    },
+    "Real Estate|REIT - Diversified": {
+      "l1": "realestate_utility",
+      "l2": "residential_commercial_reit"
+    },
+    "Real Estate|REIT - Healthcare Facilities": {
+      "l1": "realestate_utility",
+      "l2": "residential_commercial_reit"
+    },
+    "Real Estate|REIT - Industrial": {
+      "l1": "realestate_utility",
+      "l2": "residential_commercial_reit"
+    },
+    "Real Estate|REIT - Mortgage": {
+      "l1": "realestate_utility",
+      "l2": "residential_commercial_reit"
+    },
+    "Real Estate|REIT - Office": {
+      "l1": "realestate_utility",
+      "l2": "residential_commercial_reit"
+    },
+    "Real Estate|REIT - Retail": {
+      "l1": "realestate_utility",
+      "l2": "residential_commercial_reit"
+    },
+    "Real Estate|REIT - Specialty": {
+      "l1": "realestate_utility",
+      "l2": "comm_infra_reit"
+    },
+    "Utilities|Diversified Utilities": {
+      "l1": "realestate_utility",
+      "l2": "power_utility"
+    },
+    "Utilities|Independent Power Producers": {
+      "l1": "realestate_utility",
+      "l2": "power_utility"
+    },
+    "Utilities|Regulated Electric": {
+      "l1": "realestate_utility",
+      "l2": "power_utility"
+    },
+    "Utilities|Regulated Gas": {
+      "l1": "realestate_utility",
+      "l2": "power_utility"
+    },
+    "Utilities|Regulated Water": {
+      "l1": "realestate_utility",
+      "l2": "power_utility"
+    },
+    "Utilities|Renewable Utilities": {
+      "l1": "energy_materials",
+      "l2": "clean_energy"
+    }
   },
   "multi_segment_anchors": [
-    {"symbol": "AMZN", "l1": "ai_compute_cloud", "l2": "hyperscaler", "theme_ids": ["ai_compute"], "business_role": "AWS + 零售 + 广告"},
-    {"symbol": "MSFT", "l1": "ai_compute_cloud", "l2": "hyperscaler", "theme_ids": ["ai_compute", "ai_application_layer", "edge_ai"], "business_role": "Azure + M365 + Copilot"},
-    {"symbol": "GOOGL", "l1": "internet_software", "l2": "search_engine", "theme_ids": ["ai_compute", "inhouse_chip", "antitrust_risk"], "business_role": "搜索 + YouTube + Cloud"},
-    {"symbol": "GOOG", "l1": "internet_software", "l2": "search_engine", "theme_ids": ["ai_compute", "inhouse_chip", "antitrust_risk"], "business_role": "搜索 + YouTube + Cloud"},
-    {"symbol": "AAPL", "l1": "consumer_retail", "l2": "consumer_electronics_brand", "theme_ids": ["edge_ai", "china_exposure", "antitrust_risk"], "business_role": "iPhone + Services"},
-    {"symbol": "TSLA", "l1": "autonomy_robotics", "l2": "ev_oem", "theme_ids": ["autonomy_fsd", "humanoid_robotics", "energy_storage"], "business_role": "EV + FSD + Optimus"},
-    {"symbol": "AVGO", "l1": "semiconductor", "l2": "ip_eda_fabless", "theme_ids": ["ai_compute", "ai_infra_material"], "business_role": "半导体 + VMware"},
-    {"symbol": "BRK.B", "l1": "finance", "l2": "insurance", "theme_ids": ["defensive_stock", "rate_sensitive"], "business_role": "保险 + 控股"}
+    {
+      "symbol": "AMZN",
+      "l1": "ai_compute_cloud",
+      "l2": "hyperscaler",
+      "theme_ids": [
+        "ai_compute"
+      ],
+      "business_role": "AWS + 零售 + 广告"
+    },
+    {
+      "symbol": "MSFT",
+      "l1": "ai_compute_cloud",
+      "l2": "hyperscaler",
+      "theme_ids": [
+        "ai_compute",
+        "ai_application_layer",
+        "edge_ai"
+      ],
+      "business_role": "Azure + M365 + Copilot"
+    },
+    {
+      "symbol": "GOOGL",
+      "l1": "internet_software",
+      "l2": "search_engine",
+      "theme_ids": [
+        "ai_compute",
+        "inhouse_chip",
+        "antitrust_risk"
+      ],
+      "business_role": "搜索 + YouTube + Cloud"
+    },
+    {
+      "symbol": "GOOG",
+      "l1": "internet_software",
+      "l2": "search_engine",
+      "theme_ids": [
+        "ai_compute",
+        "inhouse_chip",
+        "antitrust_risk"
+      ],
+      "business_role": "搜索 + YouTube + Cloud"
+    },
+    {
+      "symbol": "AAPL",
+      "l1": "consumer_retail",
+      "l2": "consumer_electronics_brand",
+      "theme_ids": [
+        "edge_ai",
+        "china_exposure",
+        "antitrust_risk"
+      ],
+      "business_role": "iPhone + Services"
+    },
+    {
+      "symbol": "TSLA",
+      "l1": "autonomy_robotics",
+      "l2": "ev_oem",
+      "theme_ids": [
+        "autonomy_fsd",
+        "energy_transition"
+      ],
+      "business_role": "EV + FSD + Optimus"
+    },
+    {
+      "symbol": "AVGO",
+      "l1": "semiconductor",
+      "l2": "ip_eda_fabless",
+      "theme_ids": [
+        "ai_compute",
+        "ai_infra_material"
+      ],
+      "business_role": "半导体 + VMware"
+    },
+    {
+      "symbol": "BRK.B",
+      "l1": "finance",
+      "l2": "insurance",
+      "theme_ids": [
+        "defensive_stock",
+        "rate_sensitive"
+      ],
+      "business_role": "保险 + 控股"
+    }
   ]
 }

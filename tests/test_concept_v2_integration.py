@@ -125,13 +125,13 @@ def test_full_v2_pipeline_3_stocks(tmp_path):
     assert result.saved is True
     assert result.forced_save is True
 
-    # ---- concepts table has the full 11 + 61 + 42 = 114 taxonomy ----
+    # ---- concepts table has the full 11 + 61 + 34 = 106 taxonomy ----
     conn = sqlite3.connect(str(tmp_path / "market.db"))
     conn.row_factory = sqlite3.Row
     level_counts = dict(conn.execute(
         "SELECT level, COUNT(*) FROM concepts GROUP BY level"
     ).fetchall())
-    assert level_counts == {1: 11, 2: 61, 3: 42}
+    assert level_counts == {1: 11, 2: 61, 3: 34}
 
     # ---- company_concept_tags after build: NVDA + AMZN persisted; ----
     # ---- OBSCURE excluded because needs_review=1 (build skips it).  ----
