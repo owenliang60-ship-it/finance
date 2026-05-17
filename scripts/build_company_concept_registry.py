@@ -445,18 +445,30 @@ def build_registry(
     gate_priority_coverage: float = GATE_PRIORITY_COVERAGE,
     gate_tail_needs_review_max: float = GATE_TAIL_NEEDS_REVIEW_MAX,
     market_caps: dict[str, float] | None = None,
+    symbols_only: bool = False,
 ) -> BuildResult:
     """Run the v2 build pipeline. Concepts tree + company tags persist together
     iff gate passes (or --force-save). Dry-run leaves the DB untouched.
+
+    symbols_only: when True, classify ONLY universe_symbols — skip the
+    watchlist / portfolio / broad_top union. Used for narrow targeted
+    reclassify runs (e.g. patching a handful of symbols) so the universe
+    is not silently inflated. portfolio_holdings / broad_top_symbols are
+    still honored for the priority-coverage gate calc.
     """
     portfolio_set = {s.upper() for s in (portfolio_holdings or [])}
     broad_top_set = {s.upper() for s in (broad_top_symbols or [])}
     market_caps = {k.upper(): v for k, v in (market_caps or {}).items()}
 
+    union_sources = (
+        (universe_symbols,)
+        if symbols_only
+        else (universe_symbols, registry.watchlist_symbols,
+              portfolio_set, broad_top_set)
+    )
     seen: set[str] = set()
     full_universe: list[str] = []
-    for src in (universe_symbols, registry.watchlist_symbols,
-                portfolio_set, broad_top_set):
+    for src in union_sources:
         for s in src:
             up = s.upper()
             if up not in seen:
@@ -1314,6 +1326,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbols", default="broad",
                         help="Universe source: 'broad' / 'extended' / path to JSON.")
+    parser.add_argument("--symbols-only", action="store_true",
+                        help="Classify ONLY --symbols; skip watchlist / "
+                             "portfolio / broad_top union (narrow reclassify).")
     parser.add_argument("--dry-run", action="store_true",
                         help="Compute coverage + write review CSV without writing tags.")
     parser.add_argument("--save", action="store_true",
@@ -1525,6 +1540,7 @@ def main(argv: list[str] | None = None) -> int:
             save=save,
             force_save=args.force_save,
             market_caps=market_caps,
+            symbols_only=args.symbols_only,
         )
     except BuildGateError as exc:
         print(f"GATE FAILED: {exc}", file=sys.stderr)

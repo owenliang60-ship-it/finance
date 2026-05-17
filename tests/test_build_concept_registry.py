@@ -144,6 +144,58 @@ def test_build_registry_skips_llm_when_anchor_hits(build_env):
     assert mocked.call_count == 0
 
 
+def test_symbols_only_suppresses_priority_union(build_env):
+    """--symbols-only: build_registry 只处理 universe_symbols，
+    不并入 portfolio / broad_top / watchlist。
+
+    回归保护：上次补单批 24 票时 universe 被 priority union 膨胀成 107 票、
+    实跑 71 次 LLM ≈$14（见 ongoing 2026-05-17 教训）。
+    """
+    from scripts.build_company_concept_registry import build_registry
+
+    tmp_path, store, registry, profiles = build_env
+    out = tmp_path / "out.csv"
+    with patch(
+        "scripts.build_company_concept_registry.prefill_one",
+        return_value=_fake_llm(),
+    ):
+        build_registry(
+            store=store, registry=registry,
+            universe_symbols=["NVDA"],
+            profiles=profiles,
+            portfolio_holdings=["MU"],
+            broad_top_symbols=["AMZN"],
+            review_csv_path=out,
+            save=False, force_save=False,
+            symbols_only=True,
+        )
+    syms = {r["symbol"] for r in csv.DictReader(out.open(encoding="utf-8"))}
+    assert syms == {"NVDA"}, f"symbols_only 应只产 NVDA，实得 {syms}"
+
+
+def test_default_build_unions_priority_pools(build_env):
+    """对照：默认 (symbols_only=False) 仍并入 portfolio / broad_top。"""
+    from scripts.build_company_concept_registry import build_registry
+
+    tmp_path, store, registry, profiles = build_env
+    out = tmp_path / "out.csv"
+    with patch(
+        "scripts.build_company_concept_registry.prefill_one",
+        return_value=_fake_llm(),
+    ):
+        build_registry(
+            store=store, registry=registry,
+            universe_symbols=["NVDA"],
+            profiles=profiles,
+            portfolio_holdings=["MU"],
+            broad_top_symbols=["AMZN"],
+            review_csv_path=out,
+            save=False, force_save=False,
+        )
+    syms = {r["symbol"] for r in csv.DictReader(out.open(encoding="utf-8"))}
+    assert syms == {"NVDA", "MU", "AMZN"}, f"默认应并池，实得 {syms}"
+
+
 def test_build_registry_llm_failed_keeps_row_blank_l1(build_env):
     """LLM 失败时 row 进 CSV 但 l1/l2 留空，prefill_source=llm_failed, needs_review=1。"""
     from scripts.build_company_concept_registry import build_registry
