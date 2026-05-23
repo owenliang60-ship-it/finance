@@ -35,9 +35,9 @@ except ImportError:
 
 # Sanity floor: FMP screener API failure can return [] silently. Raise rather
 # than overwrite the cache when returned count < floor (preserves old cache for
-# next cron retry). Default 400 = 73% of current 548; tune via `min_count_floor`
-# kwarg in tests/dev paths.
-MIN_COUNT_FLOOR = 400
+# next cron retry). Default 800 = ~84% of A1 刷新后预期 ~949; tune via
+# `min_count_floor` kwarg in tests/dev paths.
+MIN_COUNT_FLOOR = 800
 
 
 def _read_cache() -> Dict:

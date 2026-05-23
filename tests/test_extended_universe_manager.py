@@ -163,18 +163,18 @@ class TestRefreshFloorGuard:
         assert data["count"] == 548
 
     def test_writes_when_above_floor(self, populated_cache):
-        """FMP normal return (500 >= floor 400) -> writes new cache."""
+        """FMP normal return (900 >= floor 800) -> writes new cache."""
         mock_client = MagicMock()
         mock_client.get_large_cap_stocks.return_value = [
-            {"symbol": f"NEW{i}"} for i in range(500)
+            {"symbol": f"NEW{i}"} for i in range(900)
         ]
 
         with patch("src.data.fmp_client.FMPClient", return_value=mock_client):
             symbols = refresh_extended_universe()
 
-        assert len(symbols) == 500
+        assert len(symbols) == 900
         data = json.loads(populated_cache.read_text())
-        assert data["count"] == 500
+        assert data["count"] == 900
         assert data["symbols"][0] == "NEW0"
         assert data["updated"] != "2026-04-25"
 
@@ -191,3 +191,21 @@ class TestRefreshFloorGuard:
         assert len(symbols) == 60
         data = json.loads(populated_cache.read_text())
         assert data["count"] == 60
+
+    def test_aborts_when_below_new_floor_800(self, populated_cache):
+        """A1: MIN_COUNT_FLOOR raised from 400 to 800 to catch screener regression."""
+        from src.data.extended_universe_manager import MIN_COUNT_FLOOR
+        assert MIN_COUNT_FLOOR == 800, "A1 floor: ~84% of post-A1 ~949 baseline"
+
+        mock_client = MagicMock()
+        mock_client.get_large_cap_stocks.return_value = [
+            {"symbol": f"S{i}"} for i in range(700)
+        ]
+        with patch("src.data.fmp_client.FMPClient", return_value=mock_client):
+            with pytest.raises(RuntimeError, match="below floor 800"):
+                refresh_extended_universe()
+
+        # populated_cache fixture wrote a cache; mtime/contents untouched
+        data = json.loads(populated_cache.read_text())
+        assert data["count"] == 548
+        assert data["updated"] == "2026-04-25"
