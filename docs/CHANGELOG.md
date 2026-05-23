@@ -320,3 +320,11 @@
 - `compile_deep_report()`: 报告开头增加「0. 公司画像」section
 - Shell: Phase 0b 新增第 5 个并行 profiler agent (sonnet, ~$1, 每 ticker +3%)
 - 3 new files + 3 modified, +580 lines, 23 new tests, 921 total pass
+
+### Extended Pool Data Integrity Fix Phase A1 (DONE 2026-05-23)
+- 修复 FMP screener default limit=1000 truncation bug；扩展池 533 → **955** ($10B+ 全集恢复；隐式阈值从 ~$24B 还原到配置的 $10B)
+- `src/data/fmp_client.py`: `SCREENER_DEFAULT_LIMIT=5000` 常量 + `get_large_cap_stocks(limit=)` + 双层 sentinel (`len==limit` 截断告警 / `limit>1000 且 len==1000` 服务端 cap 告警)
+- `src/data/extended_universe_manager.py`: `MIN_COUNT_FLOOR` 400 → 800（~84% of 955 baseline）
+- `terminal/tools/fmp_tools.py`: 工具注册表透传 limit
+- 10 new tests (6 unit U1-U6 + 2 tool behavior + 2 integration I1/I2)，targeted 30/30 pass
+- Codex 2 轮复审 / 4 项 finding 全部闭环；docs/issues/029 落档；恢复 ~422 新增票（含 TTMI/AAOI/AAON/AA 等 $10B-$24B 中盘）入扩展池
