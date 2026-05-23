@@ -58,3 +58,50 @@ def test_get_large_cap_stocks_passes_default_limit():
     called_params = m.call_args[0][1]
     assert called_params["limit"] == 5000, \
         "screener call must explicitly pass limit, else FMP defaults to 1000"
+
+
+def test_get_large_cap_stocks_warns_on_exact_limit_match(caplog):
+    """Sentinel: len(data) == limit -> warning."""
+    import logging
+    from src.data.fmp_client import FMPClient
+    client = FMPClient(api_key="fake")
+    fake_data = [{"symbol": f"S{i}"} for i in range(5000)]
+    with patch.object(client, "_request", return_value=fake_data):
+        with caplog.at_level(logging.WARNING, logger="src.data.fmp_client"):
+            result = client.get_large_cap_stocks(market_cap_threshold=10_000_000_000)
+    assert len(result) == 5000
+    assert any("possible truncation" in rec.message for rec in caplog.records), \
+        "sentinel must log truncation warning when len(data) == limit"
+
+
+def test_get_large_cap_stocks_no_warn_when_below_limit(caplog):
+    """Sentinel: len(data) < limit -> no warning (noisy warnings would mask real ones)."""
+    import logging
+    from src.data.fmp_client import FMPClient
+    client = FMPClient(api_key="fake")
+    fake_data = [{"symbol": f"S{i}"} for i in range(1000)]
+    with patch.object(client, "_request", return_value=fake_data):
+        with caplog.at_level(logging.WARNING, logger="src.data.fmp_client"):
+            client.get_large_cap_stocks(market_cap_threshold=10_000_000_000)
+    assert not any("possible truncation" in rec.message for rec in caplog.records)
+
+
+def test_get_large_cap_stocks_respects_custom_limit():
+    """Caller may override limit; params must reflect it."""
+    from src.data.fmp_client import FMPClient
+    client = FMPClient(api_key="fake")
+    with patch.object(client, "_request", return_value=[]) as m:
+        client.get_large_cap_stocks(market_cap_threshold=100_000_000_000, limit=100)
+    assert m.call_args[0][1]["limit"] == 100
+
+
+def test_get_large_cap_stocks_no_warn_on_empty_response(caplog):
+    """Empty response from FMP (API down) -> return [], no sentinel branch."""
+    import logging
+    from src.data.fmp_client import FMPClient
+    client = FMPClient(api_key="fake")
+    with patch.object(client, "_request", return_value=None):
+        with caplog.at_level(logging.WARNING, logger="src.data.fmp_client"):
+            result = client.get_large_cap_stocks(market_cap_threshold=10_000_000_000)
+    assert result == []
+    assert not any("possible truncation" in rec.message for rec in caplog.records)
