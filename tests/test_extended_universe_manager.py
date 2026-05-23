@@ -210,12 +210,17 @@ class TestRefreshFloorGuard:
         assert data["count"] == 548
         assert data["updated"] == "2026-04-25"
 
-    def test_refresh_writes_cache_when_sentinel_triggers(self, tmp_cache, caplog):
-        """Sentinel is warning-only; cache MUST still write when len == limit.
+    def test_floor_guard_does_not_block_when_5000_returned(self, tmp_cache, caplog):
+        """Manager-layer test: floor_guard MUST not block when 5000 rows arrive.
 
-        Scenario: FMP returns exactly 5000 rows (limit hit). This is a soft
-        warning, not a hard failure. refresh_extended_universe must still
-        update the cache so downstream consumers see fresh symbols.
+        Scope: this test only covers the refresh_extended_universe() manager
+        layer behavior — it patches FMPClient itself, so the fmp_client
+        sentinel never executes. (For sentinel-level coverage see
+        test_fmp_client_mcap.py::test_get_large_cap_stocks_warns_on_exact_limit_match.)
+
+        Asserts: when get_large_cap_stocks returns exactly 5000 symbols, the
+        manager still writes the cache (floor guard is a hard raise, sentinel
+        is a soft warning — they must not block each other).
         """
         import logging
         mock_client = MagicMock()
@@ -227,9 +232,6 @@ class TestRefreshFloorGuard:
             with caplog.at_level(logging.WARNING):
                 symbols = refresh_extended_universe(min_count_floor=0)
 
-        assert len(symbols) == 5000, "cache must write even when sentinel fires"
-        # Note: sentinel fires inside FMPClient.get_large_cap_stocks, which is
-        # mocked here — so we don't assert on the warning text. We only assert
-        # that floor_guard logic does NOT block writes at the manager layer.
+        assert len(symbols) == 5000, "cache must write — manager floor guard != fmp sentinel"
         cache_path_data = json.loads(tmp_cache.read_text())
         assert cache_path_data["count"] == 5000

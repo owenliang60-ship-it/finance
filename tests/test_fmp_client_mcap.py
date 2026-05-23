@@ -75,15 +75,16 @@ def test_get_large_cap_stocks_warns_on_exact_limit_match(caplog):
 
 
 def test_get_large_cap_stocks_no_warn_when_below_limit(caplog):
-    """Sentinel: len(data) < limit -> no warning (noisy warnings would mask real ones)."""
+    """Sentinel: len(data) < limit AND != 1000 -> no warning (noisy warnings would mask real ones)."""
     import logging
     from src.data.fmp_client import FMPClient
     client = FMPClient(api_key="fake")
-    fake_data = [{"symbol": f"S{i}"} for i in range(1000)]
+    fake_data = [{"symbol": f"S{i}"} for i in range(500)]
     with patch.object(client, "_request", return_value=fake_data):
         with caplog.at_level(logging.WARNING, logger="src.data.fmp_client"):
             client.get_large_cap_stocks(market_cap_threshold=10_000_000_000)
     assert not any("possible truncation" in rec.message for rec in caplog.records)
+    assert not any("server may be ignoring limit" in rec.message for rec in caplog.records)
 
 
 def test_get_large_cap_stocks_respects_custom_limit():
@@ -104,4 +105,23 @@ def test_get_large_cap_stocks_no_warn_on_empty_response(caplog):
         with caplog.at_level(logging.WARNING, logger="src.data.fmp_client"):
             result = client.get_large_cap_stocks(market_cap_threshold=10_000_000_000)
     assert result == []
+    assert not any("possible truncation" in rec.message for rec in caplog.records)
+
+
+def test_get_large_cap_stocks_warns_when_server_caps_at_1000(caplog):
+    """Sentinel layer 2: limit>1000 but server returns exactly 1000 -> warn server-side cap.
+
+    Defends against FMP plan-tier limits / server-side limit-ignore that would
+    otherwise re-introduce the original truncation bug under the radar.
+    """
+    import logging
+    from src.data.fmp_client import FMPClient
+    client = FMPClient(api_key="fake")
+    fake_data = [{"symbol": f"S{i}"} for i in range(1000)]
+    with patch.object(client, "_request", return_value=fake_data):
+        with caplog.at_level(logging.WARNING, logger="src.data.fmp_client"):
+            client.get_large_cap_stocks(market_cap_threshold=10_000_000_000, limit=5000)
+    assert any("server may be ignoring limit" in rec.message for rec in caplog.records), \
+        "sentinel layer 2 must fire when caller asks limit>1000 but server returns exactly 1000"
+    # Layer 1 should NOT fire here (5000 != 1000)
     assert not any("possible truncation" in rec.message for rec in caplog.records)

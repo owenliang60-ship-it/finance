@@ -96,11 +96,19 @@ class FMPClient:
         if not data:
             return []
 
-        # Sentinel: 返回行数精确等于 limit = 大概率被 page 截断
+        # Sentinel layer 1: 返回行数精确等于 limit = 大概率被 page 截断
         if isinstance(data, list) and len(data) == limit:
             logger.warning(
                 "FMP screener returned exactly limit=%d rows for marketCapMoreThan=%d; "
                 "possible truncation, increase limit or switch to get_screener_page().",
+                limit, market_cap_threshold,
+            )
+        # Sentinel layer 2: 服务端忽略 limit 偷偷 cap 到 1000 (FMP 历史默认)
+        # 触发条件: 显式传 limit>1000，但实际只回 1000 行 — 大概率是 server-side cap
+        elif isinstance(data, list) and limit > 1000 and len(data) == 1000:
+            logger.warning(
+                "FMP screener returned exactly 1000 rows despite limit=%d (marketCapMoreThan=%d); "
+                "server may be ignoring limit param — verify plan tier or paginate via get_screener_page().",
                 limit, market_cap_threshold,
             )
 
