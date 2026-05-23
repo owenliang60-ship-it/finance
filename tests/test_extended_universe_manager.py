@@ -163,18 +163,18 @@ class TestRefreshFloorGuard:
         assert data["count"] == 548
 
     def test_writes_when_above_floor(self, populated_cache):
-        """FMP normal return (500 >= floor 400) -> writes new cache."""
+        """FMP normal return (900 >= floor 800) -> writes new cache."""
         mock_client = MagicMock()
         mock_client.get_large_cap_stocks.return_value = [
-            {"symbol": f"NEW{i}"} for i in range(500)
+            {"symbol": f"NEW{i}"} for i in range(900)
         ]
 
         with patch("src.data.fmp_client.FMPClient", return_value=mock_client):
             symbols = refresh_extended_universe()
 
-        assert len(symbols) == 500
+        assert len(symbols) == 900
         data = json.loads(populated_cache.read_text())
-        assert data["count"] == 500
+        assert data["count"] == 900
         assert data["symbols"][0] == "NEW0"
         assert data["updated"] != "2026-04-25"
 
@@ -191,3 +191,47 @@ class TestRefreshFloorGuard:
         assert len(symbols) == 60
         data = json.loads(populated_cache.read_text())
         assert data["count"] == 60
+
+    def test_aborts_when_below_new_floor_800(self, populated_cache):
+        """A1: MIN_COUNT_FLOOR raised from 400 to 800 to catch screener regression."""
+        from src.data.extended_universe_manager import MIN_COUNT_FLOOR
+        assert MIN_COUNT_FLOOR == 800, "A1 floor: ~84% of post-A1 ~949 baseline"
+
+        mock_client = MagicMock()
+        mock_client.get_large_cap_stocks.return_value = [
+            {"symbol": f"S{i}"} for i in range(700)
+        ]
+        with patch("src.data.fmp_client.FMPClient", return_value=mock_client):
+            with pytest.raises(RuntimeError, match="below floor 800"):
+                refresh_extended_universe()
+
+        # populated_cache fixture wrote a cache; mtime/contents untouched
+        data = json.loads(populated_cache.read_text())
+        assert data["count"] == 548
+        assert data["updated"] == "2026-04-25"
+
+    def test_floor_guard_does_not_block_when_5000_returned(self, tmp_cache, caplog):
+        """Manager-layer test: floor_guard MUST not block when 5000 rows arrive.
+
+        Scope: this test only covers the refresh_extended_universe() manager
+        layer behavior — it patches FMPClient itself, so the fmp_client
+        sentinel never executes. (For sentinel-level coverage see
+        test_fmp_client_mcap.py::test_get_large_cap_stocks_warns_on_exact_limit_match.)
+
+        Asserts: when get_large_cap_stocks returns exactly 5000 symbols, the
+        manager still writes the cache (floor guard is a hard raise, sentinel
+        is a soft warning — they must not block each other).
+        """
+        import logging
+        mock_client = MagicMock()
+        # FMP-style payload: 5000 rows, all valid symbols
+        mock_client.get_large_cap_stocks.return_value = [
+            {"symbol": f"S{i:04d}"} for i in range(5000)
+        ]
+        with patch("src.data.fmp_client.FMPClient", return_value=mock_client):
+            with caplog.at_level(logging.WARNING):
+                symbols = refresh_extended_universe(min_count_floor=0)
+
+        assert len(symbols) == 5000, "cache must write — manager floor guard != fmp sentinel"
+        cache_path_data = json.loads(tmp_cache.read_text())
+        assert cache_path_data["count"] == 5000

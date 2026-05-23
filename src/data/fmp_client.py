@@ -18,6 +18,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
+SCREENER_DEFAULT_LIMIT = 5000  # FMP screener page cap; ~2.8x $10B+ 全集 (1797 as of 2026-05-21)
+
+
 class FMPClient:
     """FMP API 客户端"""
 
@@ -66,17 +69,48 @@ class FMPClient:
 
     # ========== 股票池相关 ==========
 
-    def get_large_cap_stocks(self, market_cap_threshold: int) -> List[Dict]:
-        """获取大市值股票列表"""
+    def get_large_cap_stocks(
+        self,
+        market_cap_threshold: int,
+        limit: int = SCREENER_DEFAULT_LIMIT,
+    ) -> List[Dict]:
+        """获取大市值股票列表
+
+        Args:
+            market_cap_threshold: 最小市值（美元）
+            limit: FMP screener page size. Default 5000 覆盖当前 $10B+ 全 US universe.
+                FMP 默认 limit=1000，必须显式传 limit 否则按 marketCap 降序截断。
+                若未来 $10B+ 全集 > 5000，调高此 anchor 并审计 sentinel 日志。
+
+        Returns:
+            过滤掉 ETF/Fund 后的股票列表
+        """
         params = {
             "marketCapMoreThan": market_cap_threshold,
             "exchange": "NYSE,NASDAQ",
             "isActivelyTrading": "true",
+            "limit": limit,
         }
         data = self._request("company-screener", params)
 
         if not data:
             return []
+
+        # Sentinel layer 1: 返回行数精确等于 limit = 大概率被 page 截断
+        if isinstance(data, list) and len(data) == limit:
+            logger.warning(
+                "FMP screener returned exactly limit=%d rows for marketCapMoreThan=%d; "
+                "possible truncation, increase limit or switch to get_screener_page().",
+                limit, market_cap_threshold,
+            )
+        # Sentinel layer 2: 服务端忽略 limit 偷偷 cap 到 1000 (FMP 历史默认)
+        # 触发条件: 显式传 limit>1000，但实际只回 1000 行 — 大概率是 server-side cap
+        elif isinstance(data, list) and limit > 1000 and len(data) == 1000:
+            logger.warning(
+                "FMP screener returned exactly 1000 rows despite limit=%d (marketCapMoreThan=%d); "
+                "server may be ignoring limit param — verify plan tier or paginate via get_screener_page().",
+                limit, market_cap_threshold,
+            )
 
         # 过滤 ETF 和基金
         stocks = [s for s in data if not s.get("isEtf") and not s.get("isFund")]

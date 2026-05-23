@@ -1,9 +1,10 @@
 """
 Extended Universe Manager — $10B+ stock list for RS Universe Scan & backtest.
 
-Maintains a cached list of ~533 large-cap US stocks (FMP screener, $10B+ market cap).
-This is a superset of the pool (~147 stocks) and includes sectors excluded from the pool
-(Energy, Utilities, etc.) to enable full-universe RS ranking and backtesting.
+Maintains a cached list of ~949 large-cap US stocks (FMP screener, $10B+ market cap;
+post-A1 fix for screener limit truncation, see issue 029). This is a superset of the
+pool (~130 stocks) and includes sectors excluded from the pool (Energy, Utilities,
+etc.) to enable full-universe RS ranking and backtesting.
 
 Usage:
     from src.data.extended_universe_manager import (
@@ -12,8 +13,8 @@ Usage:
         get_extended_only_symbols,
     )
     symbols = refresh_extended_universe()   # Refresh from FMP screener
-    all_syms = get_extended_symbols()       # All ~533 symbols
-    ext_only = get_extended_only_symbols()  # ~386 symbols NOT in pool
+    all_syms = get_extended_symbols()       # All ~949 symbols (post-A1)
+    ext_only = get_extended_only_symbols()  # ~819 symbols NOT in pool
 """
 import json
 import logging
@@ -35,9 +36,9 @@ except ImportError:
 
 # Sanity floor: FMP screener API failure can return [] silently. Raise rather
 # than overwrite the cache when returned count < floor (preserves old cache for
-# next cron retry). Default 400 = 73% of current 548; tune via `min_count_floor`
-# kwarg in tests/dev paths.
-MIN_COUNT_FLOOR = 400
+# next cron retry). Default 800 = ~84% of A1 刷新后预期 ~949; tune via
+# `min_count_floor` kwarg in tests/dev paths.
+MIN_COUNT_FLOOR = 800
 
 
 def _read_cache() -> Dict:

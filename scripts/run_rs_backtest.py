@@ -221,7 +221,7 @@ def main():
     parser.add_argument("--sweep", action="store_true", help="参数扫描模式")
     parser.add_argument("--optimize", action="store_true", help="优化模式 (sweep + walk-forward)")
     parser.add_argument("--universe", choices=["pool", "extended"],
-                        default=None, help="股票池范围: pool (~147) / extended (~533) / 默认=全部")
+                        default=None, help="股票池范围: pool (~130) / extended (~949 post-A1) / 默认=全部")
     parser.add_argument("--reconstitute", type=float, default=None,
                         metavar="MCAP",
                         help="历史市值阈值 (e.g. 10e9)，启用 universe reconstitution")
