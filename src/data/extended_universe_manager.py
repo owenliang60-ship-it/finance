@@ -1,9 +1,10 @@
 """
 Extended Universe Manager — $10B+ stock list for RS Universe Scan & backtest.
 
-Maintains a cached list of ~533 large-cap US stocks (FMP screener, $10B+ market cap).
-This is a superset of the pool (~147 stocks) and includes sectors excluded from the pool
-(Energy, Utilities, etc.) to enable full-universe RS ranking and backtesting.
+Maintains a cached list of ~949 large-cap US stocks (FMP screener, $10B+ market cap;
+post-A1 fix for screener limit truncation, see issue 029). This is a superset of the
+pool (~130 stocks) and includes sectors excluded from the pool (Energy, Utilities,
+etc.) to enable full-universe RS ranking and backtesting.
 
 Usage:
     from src.data.extended_universe_manager import (
