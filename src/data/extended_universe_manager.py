@@ -13,8 +13,8 @@ Usage:
         get_extended_only_symbols,
     )
     symbols = refresh_extended_universe()   # Refresh from FMP screener
-    all_syms = get_extended_symbols()       # All ~533 symbols
-    ext_only = get_extended_only_symbols()  # ~386 symbols NOT in pool
+    all_syms = get_extended_symbols()       # All ~949 symbols (post-A1)
+    ext_only = get_extended_only_symbols()  # ~819 symbols NOT in pool
 """
 import json
 import logging

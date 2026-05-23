@@ -65,7 +65,7 @@ def main():
     parser.add_argument("--oos-start", type=str,
                         help="显式 OOS 起始日期 (YYYY-MM-DD)，优先于默认最后 30%% 切分")
     parser.add_argument("--universe", choices=["pool", "extended", "extended_true"], default=None,
-                        help="美股 universe 切换 (pool=~151 / extended=~533 active / extended_true=active+delisted overlay / 默认=all in db)")
+                        help="美股 universe 切换 (pool=~130 / extended=~949 active post-A1 / extended_true=active+delisted overlay / 默认=all in db)")
     parser.add_argument("--mcap-threshold", type=float, default=None,
                         help="历史市值阈值美元 (e.g. 10e9)，每个 rebalance 日 PIT 过滤")
     parser.add_argument("-v", "--verbose", action="store_true", help="详细日志")

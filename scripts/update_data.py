@@ -78,7 +78,7 @@ def main():
         choices=["core", "extended", "all"],
         default="core",
         help="Symbol scope for --forward-estimates: core=pool 156 (default), "
-             "extended=$10B+ ex-pool ~407, all=union ~563",
+             "extended=$10B+ ex-pool ~819, all=union ~949 (post-A1)",
     )
     parser.add_argument("--check", action="store_true", help="仅运行数据健康检查")
 
