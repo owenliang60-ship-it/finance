@@ -16,11 +16,12 @@ from terminal.tools.protocol import (
 
 # Import the singleton FMP client
 try:
-    from src.data.fmp_client import fmp_client
+    from src.data.fmp_client import fmp_client, SCREENER_DEFAULT_LIMIT
     FMP_CLIENT_AVAILABLE = True
 except ImportError:
     FMP_CLIENT_AVAILABLE = False
     fmp_client = None
+    SCREENER_DEFAULT_LIMIT = 5000  # fallback；fmp_client 不可用时维持常量语义
 
 logger = logging.getLogger(__name__)
 
@@ -212,18 +213,25 @@ class GetLargeCapStocksTool(BaseFMPTool):
             api_key_env_var="FMP_API_KEY",
         )
 
-    def execute(self, market_cap_threshold: int) -> List[Dict]:
+    def execute(
+        self,
+        market_cap_threshold: int,
+        limit: int = SCREENER_DEFAULT_LIMIT,
+    ) -> List[Dict]:
         """
         Execute: get large-cap stocks.
 
         Args:
             market_cap_threshold: Minimum market cap in dollars
+            limit: FMP screener page size (default 5000)
 
         Returns:
             List of stock info dicts
         """
         return self._execute_client_method(
-            "get_large_cap_stocks", market_cap_threshold=market_cap_threshold
+            "get_large_cap_stocks",
+            market_cap_threshold=market_cap_threshold,
+            limit=limit,
         )
 
 
