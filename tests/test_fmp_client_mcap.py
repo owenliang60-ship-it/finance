@@ -42,3 +42,19 @@ def test_get_historical_market_cap_calls_stable_endpoint(client):
         "historical-market-capitalization",
         {"symbol": "AAPL", "from": "2024-01-01", "to": "2024-12-31"},
     )
+
+
+# === Phase A1: screener limit truncation regression tests ===
+
+
+def test_get_large_cap_stocks_passes_default_limit():
+    """A1 regression: default limit must be 5000 to cover full $10B+ universe."""
+    from src.data.fmp_client import FMPClient, SCREENER_DEFAULT_LIMIT
+    client = FMPClient(api_key="fake")
+    with patch.object(client, "_request", return_value=[]) as m:
+        client.get_large_cap_stocks(market_cap_threshold=10_000_000_000)
+    assert SCREENER_DEFAULT_LIMIT == 5000, \
+        "anchor: 5000 covers ~2.8x of $10B+ universe (1797 as of 2026-05-21)"
+    called_params = m.call_args[0][1]
+    assert called_params["limit"] == 5000, \
+        "screener call must explicitly pass limit, else FMP defaults to 1000"
