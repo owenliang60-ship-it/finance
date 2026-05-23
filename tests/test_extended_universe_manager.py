@@ -209,3 +209,27 @@ class TestRefreshFloorGuard:
         data = json.loads(populated_cache.read_text())
         assert data["count"] == 548
         assert data["updated"] == "2026-04-25"
+
+    def test_refresh_writes_cache_when_sentinel_triggers(self, tmp_cache, caplog):
+        """Sentinel is warning-only; cache MUST still write when len == limit.
+
+        Scenario: FMP returns exactly 5000 rows (limit hit). This is a soft
+        warning, not a hard failure. refresh_extended_universe must still
+        update the cache so downstream consumers see fresh symbols.
+        """
+        import logging
+        mock_client = MagicMock()
+        # FMP-style payload: 5000 rows, all valid symbols
+        mock_client.get_large_cap_stocks.return_value = [
+            {"symbol": f"S{i:04d}"} for i in range(5000)
+        ]
+        with patch("src.data.fmp_client.FMPClient", return_value=mock_client):
+            with caplog.at_level(logging.WARNING):
+                symbols = refresh_extended_universe(min_count_floor=0)
+
+        assert len(symbols) == 5000, "cache must write even when sentinel fires"
+        # Note: sentinel fires inside FMPClient.get_large_cap_stocks, which is
+        # mocked here — so we don't assert on the warning text. We only assert
+        # that floor_guard logic does NOT block writes at the manager layer.
+        cache_path_data = json.loads(tmp_cache.read_text())
+        assert cache_path_data["count"] == 5000
