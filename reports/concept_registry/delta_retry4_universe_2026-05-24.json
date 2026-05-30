@@ -1,0 +1,11 @@
+{
+  "updated": "2026-05-24",
+  "note": "Step 4 retry-2 — 4 symbols still llm_failed after first retry (empty claude -p result).",
+  "count": 4,
+  "symbols": [
+    "U",
+    "ULS",
+    "WSE",
+    "WSM"
+  ]
+}

@@ -143,15 +143,15 @@ flowchart LR
 
 ## 实现 Checklist
 
-- [ ] **Step 1 — Delta calculation (already done 2026-05-24)**
+- [x] **Step 1 — Delta calculation (already done 2026-05-24)**
   - 已算：delta = **399**（list 见 `reports/concept_registry/delta_universe_2026-05-24.json` 输出时落地）
   - churn-out = 12（保留在 reviewed CSV，不动）
   - 起算源：5/17 reviewed CSV symbol 集（与 DB `company_concept_tags` 当前 568 等价）
 
-- [ ] **Step 2 — Write delta universe JSON**
+- [x] **Step 2 — Write delta universe JSON**
   - 输出 `reports/concept_registry/delta_universe_2026-05-24.json`（schema 同 5/17 new24/relodge7 universe JSON）
 
-- [ ] **Step 3 — `--refresh-profiles`**
+- [x] **Step 3 — `--refresh-profiles`** ✅ 2026-05-30: 399/399 found, 398/399 满字段 (WSE 空)
   - 命令：
     ```bash
     .venv/bin/python -m scripts.build_company_concept_registry \
@@ -161,7 +161,7 @@ flowchart LR
   - 仅调 FMP merge 进 `data/fundamental/profiles.json`，不碰 DB
   - 验 AC2：`profiles.json` 中 delta symbol 的 sector/industry/description 非空率 ≥ 95%
 
-- [ ] **Step 4 — Dry-run classify**
+- [x] **Step 4 — Dry-run classify** ✅ 2026-05-30: 首轮 249 rule + 135 llm + 15 llm_failed；retry x2 救回 11，剩 4 持续失败 (U/ULS/WSE/WSM `claude -p` 空 result)；最终 249 + 146 + 4
   - 命令（注意 `--review-csv` **不是** `--reviewed-csv`）：
     ```bash
     .venv/bin/python -m scripts.build_company_concept_registry \
@@ -172,7 +172,7 @@ flowchart LR
     ```
   - 验 AC3：LLM 调用计数 ≤ 399
 
-- [ ] **Step 5 — CC self-review**
+- [x] **Step 5 — CC self-review** ✅ 2026-05-30: 标 10 ⚠ (4 hard + 6 soft 错配) + 3 ? + 2 ✓ + 20 sampled OK + 364 未审 rule；CSV 按 ⚠→?→✓→ok 重排
   - (a) 抽 10-20 行 `ok` rule 命中验证（profile 与 L1/L2 自洽 → 标 ✓）
   - (b) 逐行评 `hard_needs_review`：读 FMP description，判 L1/L2/L3 是否合理
   - (c) 逐行评 `soft_low_confidence`：同上
@@ -180,11 +180,11 @@ flowchart LR
   - (e) 重排 CSV：⚠ → ? → ✓ → ok
   - (f) 输出 self-review 摘要给 Boss（✓/?/⚠ 数 + 抽 3 个有代表性案例展示）
 
-- [ ] **Step 6 — Boss 整体 review**
+- [x] **Step 6 — Boss 整体 review** ✅ 2026-05-30: Boss 拍 4 hard 行 (U=互联网软件/游戏互动, ULS=工业航天/工业自动化, WSE=金融/支付fintech 保留, WSM=消费零售/可选消费品牌) + BWA soft 改对 (自动驾驶/电动车整车 → 工业航天/工业自动化); 其余 5 soft 缺桶留 taxonomy 迭代
   - Boss 在 `reports/concept_registry/delta_tags_2026-05-24.csv` 文件里修改
   - Boss 完成后告知 CC
 
-- [ ] **Step 7 — Raw-append merge delta → 568**
+- [x] **Step 7 — Raw-append merge delta → 568** ✅ 2026-05-30: 968 行 (1 header + 967 body); head-569 byte-equal pre-merge-bak; manifest full_universe=967 (955 + 12 churn)
   - **背景**：5/17 CSV 实际 17 列 header 含 duplicate `business_role`（at index 2 + 11），与当前 `REVIEW_CSV_FIELDS` 的 16 列不一致。必须保留 5/17 header 字面量。
   - (a) `cp reports/concept_registry/extended_pool_tags_2026-05-17.csv reports/concept_registry/extended_pool_tags_2026-05-17.csv.pre-merge-bak`（备份）
   - (b) 算 5/17 CSV 真实 header：`head -1 extended_pool_tags_2026-05-17.csv` → 17 列字面量
@@ -196,7 +196,7 @@ flowchart LR
   - (e) `diff <(head -569 extended_pool_tags_2026-05-24.csv) <(head -569 extended_pool_tags_2026-05-17.csv.pre-merge-bak)` 必须 **empty**（568 行 byte-for-byte 等同）
   - (f) 同时写 `extended_pool_tags_2026-05-24_manifest.json` 记录 full_universe = current 955 + churn-out 12
 
-- [ ] **Step 8 — Local strict validation**
+- [x] **Step 8 — Local strict validation** ✅ 2026-05-30: `validated 967 rows`, EXIT_CODE=0
   - 命令（**不带** `--validate-only` / **不带** `--save`，走 line 1506-1516 strict 路径）：
     ```bash
     .venv/bin/python -m scripts.build_company_concept_registry \

@@ -1,0 +1,22 @@
+{
+  "updated": "2026-05-24",
+  "note": "Step 4 retry — 15 symbols whose claude -p call failed (likely throttle at end of 399-batch). Subset of delta_universe_2026-05-24.json.",
+  "count": 15,
+  "symbols": [
+    "TYL",
+    "U",
+    "UDR",
+    "ULS",
+    "ULTA",
+    "VIAV",
+    "VICR",
+    "VLTO",
+    "VSAT",
+    "WIT",
+    "WSE",
+    "WSM",
+    "WY",
+    "WYNN",
+    "ZBRA"
+  ]
+}

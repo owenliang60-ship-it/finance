@@ -1,0 +1,5 @@
+review_reason,symbol,company_name,fmp_sector,fmp_industry,market_cap_b,mcap_tier,description,l1,l2,l3_themes,business_role,prefill_source,confidence,needs_review,boss_notes
+hard_needs_review,U,,,,,,,,,,,llm_failed,0.00,1,
+hard_needs_review,ULS,,,,,,,,,,,llm_failed,0.00,1,
+hard_needs_review,WSE,,,,,,,,,,,llm_failed,0.00,1,
+hard_needs_review,WSM,,,,,,,,,,,llm_failed,0.00,1,
