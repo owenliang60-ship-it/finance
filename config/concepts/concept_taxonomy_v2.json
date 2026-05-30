@@ -1,6 +1,6 @@
 {
-  "version": "v2.1",
-  "updated": "2026-05-17",
+  "version": "v2.2",
+  "updated": "2026-05-30",
   "concepts": [
     {
       "concept_id": "ai_compute_cloud",
@@ -1398,6 +1398,56 @@
         "rate_sensitive"
       ],
       "business_role": "保险 + 控股"
+    },
+    {
+      "symbol": "CEG",
+      "l1": "realestate_utility",
+      "l2": "power_utility",
+      "theme_ids": [
+        "nuclear_revival",
+        "datacenter_power"
+      ],
+      "business_role": "美国最大核电运营商 + 数据中心PPA"
+    },
+    {
+      "symbol": "VST",
+      "l1": "realestate_utility",
+      "l2": "power_utility",
+      "theme_ids": [
+        "datacenter_power",
+        "nuclear_revival"
+      ],
+      "business_role": "德州商业电力 + 核电 + 数据中心负荷"
+    },
+    {
+      "symbol": "TLN",
+      "l1": "realestate_utility",
+      "l2": "power_utility",
+      "theme_ids": [
+        "nuclear_revival",
+        "datacenter_power"
+      ],
+      "business_role": "核电IPP + 亚马逊Susquehanna数据中心"
+    },
+    {
+      "symbol": "NRG",
+      "l1": "realestate_utility",
+      "l2": "power_utility",
+      "theme_ids": [
+        "datacenter_power"
+      ],
+      "business_role": "德州零售 + 商业电力 + 数据中心负荷"
+    },
+    {
+      "symbol": "GEV",
+      "l1": "energy_materials",
+      "l2": "clean_energy",
+      "theme_ids": [
+        "datacenter_power",
+        "nuclear_revival",
+        "energy_transition"
+      ],
+      "business_role": "燃气轮机 + 电网电气化 + SMR核电 + 风电"
     }
   ]
 }
