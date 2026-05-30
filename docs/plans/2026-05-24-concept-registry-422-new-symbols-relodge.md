@@ -208,13 +208,13 @@ flowchart LR
   - 失败诊断专用：再跑一次加 `--validate-only`，产 `_rejected_summary.txt` 看 per-row failures + coverage errors
   - 关于 churn-out：read_reviewed_csv 的 coverage check 只检查 "extend_pool 中有但 CSV 缺" 方向（line 787-793 `missing = extend_pool - seen_symbols`）。CSV 多出 churn-out 12 票不触发 coverage error。Step 7(f) manifest 写全 967 是双保险，让 `_effective_extend_pool` 取 union 后仍无 missing。
 
-- [ ] **Step 8.5 (v2 NEW) — Commit + push artifact 到 main**
+- [x] **Step 8.5 (v2 NEW) — Commit + push artifact 到 main** ✅ 2026-05-30: commit `5b5c631` (13 files: 7 核心 + 6 retry provenance); push origin/main (首次 TUN 代理瞬时失败, 重试成功)
   - 提前 commit + push，保证云端 `--save` 拿到的是 git 里 reproducible 版本
   - commit message: `data(concept): A2 — relodge 399 new extended-pool symbols (568 → 967 reviewed)`
   - 含：plan + delta universe JSON + delta tags CSV + manifest + merged CSV + pre-merge-bak
   - push origin/main
 
-- [ ] **Step 9 — Cloud git pull + `--save`**
+- [x] **Step 9 — Cloud git pull + `--save`** ✅ 2026-05-30: AC7 = **967** ✓。⚠ **偏离**: 云端 `extended_universe.json` 今早 Sat 09:00 周频刷新漂移到 **964**, 含 **19 个新进票不在 CSV** (AG/AVAV/BNY/BROS/DOCU/ESI/HBM/IAG/ICLR/LGN/LINE/LUMN/MAIR/MGM/OC/RIOT/SAIL/UHAL/VMI) → 直接用云端 964 会 coverage fail。按 5/17 先例, `--extended-universe-path` 改指向 manifest 的 pinned-967 集 (`/tmp/a2_pinned_universe_967.json`), `_effective_extend_pool = 967 ∪ 967 = 967`, coverage=0 通过。19 drifted-in deferred 给 A3 周频 cron。WAL-safe pre-rebuild backup 自动创建。
   - 命令（用 LAN IP workaround）：
     ```bash
     LAN_IP=$(ifconfig en0 | awk '/inet /{print $2}')
@@ -227,7 +227,7 @@ flowchart LR
     ```
   - 验 AC7：`ssh -4 -b $LAN_IP aliyun "sqlite3 /root/workspace/Finance/data/market.db 'SELECT COUNT(*) FROM company_concept_tags'"` = 967
 
-- [ ] **Step 10 — 晨报抽样验证**
+- [x] **Step 10 — 晨报抽样验证** ✅ 2026-05-30: AC8 双段过。part2 DB schema: TTMI/AAOI/AFRM llm 三段+role 齐全, AAON/AGI rule 行 L1/L2+display_tags 齐全但 L3/role 空 (A2.5 rule-path 限制, 非回归); part1 `get_report_concept_classifier().display_tags()` 全 7 抽样票均「注册表」来源, 无 fallback。改用轻量 classifier 直调代替重量级 morning_report。
   - 选 5 个新票（如 `TTMI, AAOI, AAON, AFRM, AGI`）
   - 云端命令：
     ```bash
@@ -242,7 +242,7 @@ flowchart LR
     ```
     必须 5 行齐全；`display_tags` 和 `business_role` 非空；`needs_review = 0`。**L3 (`tertiary_concept_id` / `theme_ids`) 允许空**（R3 决策）。
 
-- [ ] **Step 11 — `./sync_to_cloud.sh --pull` 回本地**
+- [x] **Step 11 — `./sync_to_cloud.sh --pull` 回本地** ✅ 2026-05-30: 脚本内部 plain `ssh aliyun` 卡 bind, 走手动 WAL-safe fallback (checkpoint cloud TRUNCATE → `rsync -az -e "ssh -4 -b 192.168.1.140"` → 清本地 stale wal/shm)。⚠ macOS rsync 2.6.9 不支持 `--info=progress2`, 去掉后成功。AC9 = local **967** ✓。
   - **不用裸 rsync**（market.db 是 WAL mode，需先 checkpoint）
   - 命令：`./sync_to_cloud.sh --pull`（脚本自带 WAL checkpoint + 大小校验）
   - 若卡 LAN IP bind：临时改 `sync_to_cloud.sh` 的 ssh 命令加 `-4 -b $LAN_IP`，或退回手动：
@@ -253,7 +253,7 @@ import sqlite3; c=sqlite3.connect('data/market.db'); c.execute('PRAGMA wal_check
     ```
   - 验 AC9：`sqlite3 data/market.db "SELECT COUNT(*) FROM company_concept_tags"` = 967
 
-- [ ] **Step 12 — Follow-up commit + ongoing**
+- [x] **Step 12 — Follow-up commit + ongoing** ✅ 2026-05-30: 删占位 plan; ongoing A2 → 最近完成 (含 19 drifted-in deferral 记入 A3); 更新 LAN IP 记忆 .119→.140
   - 若 Step 11 后 market.db 有改动需进 git（按现仓库惯例 market.db 不入 git）→ skip
   - 删占位 plan `docs/plans/2026-05-23-concept-registry-422-new-symbols-relodge-PLACEHOLDER.md`
   - 更新 `.claude/ongoing.md`：A2 → 最近完成；A3（周频 cron 接入）保持规划中
