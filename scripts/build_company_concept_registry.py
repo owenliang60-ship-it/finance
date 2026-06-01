@@ -927,8 +927,11 @@ def _normalize_review_csv(src: Path, dst: Path) -> int:
     return len(out)
 
 
-def _append_csv_atomic(csv_path: Path, new_csv_rows: list[dict]) -> None:
-    """Append rows to a review CSV atomically, normalizing to REVIEW_CSV_FIELDS."""
+def _stage_appended_csv(csv_path: Path, new_csv_rows: list[dict]) -> Path:
+    """Write existing+new rows to a temp file (normalized to REVIEW_CSV_FIELDS) and
+    return the temp path WITHOUT replacing the live file. Lets a caller stage the
+    failure-prone CSV write BEFORE an irreversible DB mutation, then commit with a
+    single atomic os.replace (two-phase commit, P1.B)."""
     existing: list[dict] = []
     if csv_path.exists():
         with csv_path.open(encoding="utf-8") as fh:
@@ -940,7 +943,12 @@ def _append_csv_atomic(csv_path: Path, new_csv_rows: list[dict]) -> None:
         w.writeheader()
         for row in combined:
             w.writerow({k: row.get(k, "") for k in REVIEW_CSV_FIELDS})
-    os.replace(tmp, csv_path)
+    return tmp
+
+
+def _append_csv_atomic(csv_path: Path, new_csv_rows: list[dict]) -> None:
+    """Append rows to a review CSV atomically (stage + os.replace)."""
+    os.replace(_stage_appended_csv(csv_path, new_csv_rows), csv_path)
 
 
 # ---- A3 weekly_sync: universe-drift concept sync (plan 2026-06-01) ----
@@ -1009,7 +1017,16 @@ def weekly_sync(
         res.drift_in = sorted(universe - base)
         res.churn_out = sorted(base - universe)   # KEEP (D3): not deleted
 
-        if res.drift_in:
+        store = store_factory() if store_factory is not None else None
+        # P1.A: lockstep preflight runs EVERY week (even no-drift weeks) so a
+        # silent CSV⇔DB divergence is caught + alerted, not only on drift weeks.
+        if store is not None:
+            csv_syms, db_syms = _read_csv_symbols(canonical_csv), _db_tag_symbols(store)
+            if csv_syms != db_syms:
+                res.error = (f"preflight lockstep broken: csv-only={sorted(csv_syms - db_syms)[:5]} "
+                             f"db-only={sorted(db_syms - csv_syms)[:5]}")
+
+        if res.error is None and res.drift_in:
             refresh_fn(res.drift_in, profiles_path=profiles_path)   # FMP, delta only
             profiles = _load_profiles(profiles_path)
             for sym in res.drift_in:
@@ -1034,11 +1051,11 @@ def weekly_sync(
             accounted = set(res.auto_saved) | set(res.queued) | set(res.failed)
             if accounted != set(res.drift_in):
                 res.error = f"coverage gap: drift_in={len(res.drift_in)} accounted={len(accounted)}"
-            elif store_factory is not None:
-                _weekly_sync_persist(                                 # defined in Task 3
-                    res, canonical_csv=canonical_csv, profiles_path=profiles_path,
+            elif store is not None:
+                _weekly_sync_persist(
+                    res, store=store, canonical_csv=canonical_csv, profiles_path=profiles_path,
                     market_db_path=market_db_path, queue_dir=queue_dir,
-                    taxonomy=taxonomy, run_date=run_date, store_factory=store_factory)
+                    taxonomy=taxonomy, run_date=run_date)
     except Exception as exc:                                          # P1.3 fatal → still notify
         logger.exception("weekly_sync fatal")
         res.error = f"weekly_sync fatal: {exc}"
@@ -1051,42 +1068,77 @@ def weekly_sync(
     return res
 
 
+def _restore_sqlite(store, backup_path) -> bool:
+    """Restore a WAL-safe backup INTO the live store connection (reverse of
+    _backup_sqlite). Used for fail-closed rollback when a multi-step mutation
+    half-completes (DB written but CSV write/replace failed). Returns True on
+    success. Copies the backup's pages over the live DB via the same connection
+    so subsequent reads see the reverted state.
+    """
+    if not backup_path or not Path(backup_path).exists():
+        return False
+    import sqlite3
+    src = sqlite3.connect(str(backup_path))
+    try:
+        src.backup(store._get_conn())   # backup pages → live connection
+        return True
+    except Exception as exc:                       # pragma: no cover - defensive
+        logger.error("DB restore from %s failed: %s", backup_path, exc)
+        return False
+    finally:
+        src.close()
+
+
 def _weekly_sync_persist(
     res: "WeeklySyncResult",
     *,
+    store,
     canonical_csv: Path,
     profiles_path: Path,
     market_db_path: Path,
     queue_dir: Path,
     taxonomy: dict,
     run_date: str,
-    store_factory,
 ) -> None:
-    """7b deterministic save (incremental, preflight/postflight) + 7c queue CSV."""
+    """7b deterministic save (incremental, fail-closed via DB restore) + 7c queue.
+
+    Lockstep preflight already ran in weekly_sync (every week). Here, if any step
+    AFTER the DB write fails (CSV write/replace, manifest, postflight), the DB is
+    restored from the pre-mutation backup so DB and canonical CSV revert together
+    — true fail-closed (P1.B), not 'alert + leave a one-sided DB mutation'.
+    """
     concepts_by_id = {c["concept_id"]: c["label"] for c in taxonomy.get("concepts", [])}
     profiles = _load_profiles(profiles_path)
 
-    store = store_factory()
-    # preflight: canonical CSV ⇔ DB lockstep before mutating
-    csv_syms, db_syms = _read_csv_symbols(canonical_csv), _db_tag_symbols(store)
-    if csv_syms != db_syms:
-        res.error = (f"preflight lockstep broken: csv-only={sorted(csv_syms - db_syms)[:5]} "
-                     f"db-only={sorted(db_syms - csv_syms)[:5]}")
-        return
-
     if res._deterministic:
-        _backup_sqlite(store.db_path, "pre-weekly-sync")
-        db_rows = [_row_to_db(row) for row, _prof in res._deterministic]
-        save_to_market_db(rows=db_rows, store=store, market_db_path=market_db_path)  # P1.1 keyword-only
         csv_rows = [
             _row_to_csv(row, dict(profiles.get(row["symbol"].upper()) or {}), "ok", None, concepts_by_id)
             for row, _prof in res._deterministic
         ]
-        _append_csv_atomic(canonical_csv, csv_rows)
-        _write_review_manifest(canonical_csv, _read_csv_symbols(canonical_csv))
-        # postflight: re-verify lockstep
-        if _read_csv_symbols(canonical_csv) != _db_tag_symbols(store):
-            res.error = "postflight lockstep broken — backup retained, manual review"
+        db_rows = [_row_to_db(row) for row, _prof in res._deterministic]
+        backup = _backup_sqlite(store.db_path, "pre-weekly-sync")
+        tmp_csv = None
+        try:
+            # Two-phase commit (P1.B): stage the failure-prone CSV write FIRST (no
+            # replace yet) so a CSV/format/disk error leaves the DB untouched; then
+            # the transactional DB upsert; then the single atomic CSV swap.
+            tmp_csv = _stage_appended_csv(canonical_csv, csv_rows)
+            save_to_market_db(rows=db_rows, store=store, market_db_path=market_db_path)  # keyword-only
+            os.replace(tmp_csv, canonical_csv)
+            tmp_csv = None
+            _write_review_manifest(canonical_csv, _read_csv_symbols(canonical_csv))
+            if _read_csv_symbols(canonical_csv) != _db_tag_symbols(store):
+                raise RuntimeError("postflight lockstep mismatch after write")
+        except Exception as exc:
+            # fail-closed: revert DB to pre-mutation state so DB⇔CSV revert together
+            restored = _restore_sqlite(store, backup)
+            if tmp_csv is not None:
+                try:
+                    Path(tmp_csv).unlink()
+                except OSError:
+                    pass
+            res.error = (f"persist failed ({exc}); DB "
+                         + ("restored from backup" if restored else "NOT restored — manual recovery"))
             return
 
     # 7c: queued + failed both get a review artifact (P1.4 — no symbol left only in a counter)

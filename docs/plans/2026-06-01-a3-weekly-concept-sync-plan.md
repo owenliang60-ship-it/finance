@@ -820,3 +820,20 @@ git commit -m "docs(concept): A3 Task8 — LLM-queue runbook + issue030/031 stat
 2. 云端 crontab 接入（weekly_refresh 已含 step 7，确认 wrapper 已部署 + 一次手动 dry 验证）。
 3. 首跑消化 5/30 的 19 deferred 票（验收用例，design §10.1）。
 4. `sync_to_cloud.sh --pull` 验证 canonical CSV 回本地。
+
+---
+
+## 修订记录
+
+### v3 — 2026-06-01 merge 前 Boss 最终 review 硬化（2×P1 + P2 + P3.3）
+
+实现后 Boss 全量 review（含故障注入验证）抓到 lockstep 语义漏洞，已修 + 加回归测试：
+
+| # | 漏洞 | 修复 | 测试 |
+|---|------|------|------|
+| P1.A | no-drift 周不查 CSV⇔DB lockstep，分叉静默通过 | preflight 提到 `weekly_sync` 顶层，**每周必跑**（store 存在即查），no-drift 也报警 | `test_weekly_sync_no_drift_still_checks_lockstep` |
+| P1.B | DB upsert 成功后 CSV 写失败 → 真分叉（只告警不回滚） | 两阶段提交：stage CSV temp（失败 DB 未动）→ DB 事务写 → `os.replace` 原子提交；任何失败 `_restore_sqlite` 从 pre-mutation backup 回滚 DB（真 fail-closed） | `test_weekly_sync_csv_commit_failure_restores_db` |
+| P2 | `sync_to_cloud.sh --pull` 先拉 DB 再拉 CSV，CSV 失败污染本地 | canonical **预取到 temp（先于 market.db）**，预取失败即 `exit 1`；DB 成功后才 `mv` 就位 | bash -n |
+| P3.3 | 同日队列 CSV 覆盖 | runbook 加"同日复跑前备份队列"备注 | — |
+
+新增 helper：`_stage_appended_csv`（两阶段提交的 stage 步）、`_restore_sqlite`（WAL-safe backup 反向恢复进 live 连接）。`_weekly_sync_persist` 签名改为接收已开的 `store`（preflight 上移后不再自开）。全量回归 **114 passed**。

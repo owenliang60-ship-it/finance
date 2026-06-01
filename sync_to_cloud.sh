@@ -125,6 +125,27 @@ conn.close()
 print('WAL checkpoint OK')
 \""
 
+    # 1b. PREFETCH canonical reviewed_current.csv + manifest 到 temp，*先于* 拉本地 market.db
+    #     (design finding P2): 若 canonical 拉取失败就中止，绝不让本地 DB 领先于 canonical
+    #     —— 正是 A3 要避免的本地 clobber。openrsync(macOS) 无 GNU --ignore-missing-args
+    #     → ssh test 守卫 + scp。
+    local _cc="reports/concept_registry"
+    local _cc_tmp=""
+    if ssh "$REMOTE_HOST" "test -f '$REMOTE_DIR/$_cc/reviewed_current.csv'"; then
+        _cc_tmp="$(mktemp -d)"
+        info "预取 concept_registry canonical CSV..."
+        if ! scp "$REMOTE/$_cc/reviewed_current.csv" "$_cc_tmp/reviewed_current.csv"; then
+            error "canonical CSV 预取失败，中止 pull（避免本地 DB 领先 canonical 的 clobber）"
+            rm -rf "$_cc_tmp"
+            exit 1
+        fi
+        scp "$REMOTE/$_cc/reviewed_current_manifest.json" \
+            "$_cc_tmp/reviewed_current_manifest.json" 2>/dev/null || \
+            warn "canonical manifest 暂缺，跳过"
+    else
+        info "canonical CSV 云端暂不存在（A3 首跑前正常），跳过"
+    fi
+
     # 2. rsync market.db 云端→本地 (+ 文件大小安全检查)
     info "拉取 market.db..."
     check_file_size "$LOCAL_DIR/data/market.db" "$REMOTE_DIR/data/market.db" "market.db" "pull"
@@ -134,18 +155,14 @@ print('WAL checkpoint OK')
     info "拉取 fundamental/..."
     rsync -avz --delete "$REMOTE/data/fundamental/" "$LOCAL_DIR/data/fundamental/"
 
-    # 3b. pull canonical reviewed_current.csv + manifest 云端→本地 (云端独占写, 仅 pull)
-    #     openrsync (macOS) 不支持 GNU --ignore-missing-args → ssh test 守卫 + scp
-    info "拉取 concept_registry canonical CSV..."
-    local _cc="reports/concept_registry"
-    if ssh "$REMOTE_HOST" "test -f '$REMOTE_DIR/$_cc/reviewed_current.csv'"; then
+    # 3b. COMMIT 预取的 canonical 到本地（只在 market.db 拉取成功后才到达，避免分叉）
+    if [ -n "$_cc_tmp" ]; then
         mkdir -p "$LOCAL_DIR/$_cc"
-        scp "$REMOTE/$_cc/reviewed_current.csv" "$LOCAL_DIR/$_cc/reviewed_current.csv"
-        scp "$REMOTE/$_cc/reviewed_current_manifest.json" \
-            "$LOCAL_DIR/$_cc/reviewed_current_manifest.json" 2>/dev/null || \
-            warn "canonical manifest 暂缺，跳过"
-    else
-        warn "canonical CSV 云端暂不存在（A3 首跑前正常），跳过"
+        mv "$_cc_tmp/reviewed_current.csv" "$LOCAL_DIR/$_cc/reviewed_current.csv"
+        [ -f "$_cc_tmp/reviewed_current_manifest.json" ] && \
+            mv "$_cc_tmp/reviewed_current_manifest.json" "$LOCAL_DIR/$_cc/reviewed_current_manifest.json"
+        rm -rf "$_cc_tmp"
+        info "canonical CSV 已就位（DB 与 canonical 同步更新）"
     fi
 
     # 4. universe.json merge: 云端→本地

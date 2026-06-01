@@ -73,6 +73,18 @@ git commit -m "data(concept): apply <date> reviewed LLM queue"
 
 ---
 
+## ⚠️ 同日复跑注意（P3.3）
+
+`needs_review_<date>.csv` 每次 `weekly_sync` 都**覆盖写**（非追加）。周 cron 每周一次不会撞，但**部署日手动 smoke / 失败重跑**时，同日第二次运行会覆盖第一次的队列 artifact（若两次间 LLM 分类有变，前一版丢失）。
+
+**同日复跑前先备份当天队列**：
+```bash
+f="reports/concept_registry/needs_review_$(date +%F).csv"
+[ -f "$f" ] && cp "$f" "$f.bak-$(date +%H%M%S)"
+```
+
+---
+
 ## 检查清单
 
 - [ ] review 的是队列 CSV（`needs_review_<date>.csv`），不是直接改 DB。
