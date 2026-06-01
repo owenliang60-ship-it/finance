@@ -1050,6 +1050,54 @@ def weekly_sync(
     return res
 
 
+def _weekly_sync_persist(
+    res: "WeeklySyncResult",
+    *,
+    canonical_csv: Path,
+    profiles_path: Path,
+    market_db_path: Path,
+    queue_dir: Path,
+    taxonomy: dict,
+    run_date: str,
+    store_factory,
+) -> None:
+    """7b deterministic save (incremental, preflight/postflight) + 7c queue CSV."""
+    concepts_by_id = {c["concept_id"]: c["label"] for c in taxonomy.get("concepts", [])}
+    profiles = _load_profiles(profiles_path)
+
+    store = store_factory()
+    # preflight: canonical CSV ⇔ DB lockstep before mutating
+    csv_syms, db_syms = _read_csv_symbols(canonical_csv), _db_tag_symbols(store)
+    if csv_syms != db_syms:
+        res.error = (f"preflight lockstep broken: csv-only={sorted(csv_syms - db_syms)[:5]} "
+                     f"db-only={sorted(db_syms - csv_syms)[:5]}")
+        return
+
+    if res._deterministic:
+        _backup_sqlite(store.db_path, "pre-weekly-sync")
+        db_rows = [_row_to_db(row) for row, _prof in res._deterministic]
+        save_to_market_db(rows=db_rows, store=store, market_db_path=market_db_path)  # P1.1 keyword-only
+        csv_rows = [
+            _row_to_csv(row, dict(profiles.get(row["symbol"].upper()) or {}), "ok", None, concepts_by_id)
+            for row, _prof in res._deterministic
+        ]
+        _append_csv_atomic(canonical_csv, csv_rows)
+        _write_review_manifest(canonical_csv, _read_csv_symbols(canonical_csv))
+        # postflight: re-verify lockstep
+        if _read_csv_symbols(canonical_csv) != _db_tag_symbols(store):
+            res.error = "postflight lockstep broken — backup retained, manual review"
+            return
+
+    # 7c: queued + failed both get a review artifact (P1.4 — no symbol left only in a counter)
+    review_rows = [row for row, _prof in res._queue] + res._failed_rows
+    if review_rows:
+        review_profiles = {r["symbol"].upper(): dict(p) for r, p in res._queue}
+        write_review_csv(
+            rows=review_rows, csv_path=queue_dir / f"needs_review_{run_date}.csv",
+            taxonomy=taxonomy, profiles=review_profiles,
+        )
+
+
 # ---- --reclassify: re-run classify over a run-1 review CSV (plan 2026-05-16) ----
 
 def _classify_review_reason(

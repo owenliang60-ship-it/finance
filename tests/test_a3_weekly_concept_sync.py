@@ -1,7 +1,8 @@
 import csv
 from pathlib import Path
 from scripts.build_company_concept_registry import (
-    _read_csv_symbols, _normalize_review_csv, _append_csv_atomic, REVIEW_CSV_FIELDS,
+    _read_csv_symbols, _db_tag_symbols, _normalize_review_csv, _append_csv_atomic,
+    REVIEW_CSV_FIELDS,
 )
 
 
@@ -105,3 +106,82 @@ def test_weekly_sync_no_drift_still_notifies(tmp_path, monkeypatch):
                   classify_fn=lambda *a: {}, sent=sent)
     assert res.drift_in == [] and res.auto_saved == []
     assert sent and "无新增" in sent[0][0] and sent[0][1] == "group"   # D2: even no-drift pushes
+
+
+# ---- Task 3: incremental save + CSV⇔DB lockstep + queue ----
+
+
+def test_weekly_sync_persists_deterministic_incrementally(tmp_path, monkeypatch):
+    """End-to-end with a real temp MarketStore seeded via rebuild_concept_tree."""
+    import json
+    from src.data.market_store import MarketStore
+    import scripts.build_company_concept_registry as b
+
+    # real taxonomy + registry
+    cfg = Path("config/concepts")
+    taxonomy = json.loads((cfg / "concept_taxonomy_v2.json").read_text(encoding="utf-8"))
+    registry = b.ConceptRegistry(taxonomy_path=cfg / "concept_taxonomy_v2.json",
+                                 watchlist_path=cfg / "concept_watchlist.json")
+
+    db = tmp_path / "market.db"
+    store = MarketStore(db)
+    store.rebuild_concept_tree(registry.concepts)           # populate concepts tree
+    # seed one existing tag so base lockstep holds
+    seed_l1 = taxonomy["concepts"][0]["concept_id"]
+    store.upsert_company_concepts([{
+        "symbol": "AAA", "primary_concept_id": seed_l1, "theme_ids": [],
+        "display_tags": "", "business_role": "", "confidence": 1.0,
+        "source": "manual", "evidence": "seed", "needs_review": 0}])
+
+    canon = tmp_path / "canon.csv"
+    # canonical CSV must match DB (lockstep): one row AAA
+    _write(canon, b.REVIEW_CSV_FIELDS, [["ok", "AAA"] + [""] * 14])
+
+    # pick a real (sector,industry) from industry_map that yields a rule hit
+    imap = taxonomy["industry_map"]; key = next(iter(imap)); sector, industry = key.split("|", 1)
+    uni = tmp_path / "uni.json"; uni.write_text(json.dumps({"symbols": ["AAA", "RULEX"]}), encoding="utf-8")
+
+    monkeypatch.setattr(b, "_load_profiles",
+        lambda p: {"RULEX": {"symbol": "RULEX", "sector": sector, "industry": industry,
+                             "companyName": "Rule Co", "description": "x"}})
+
+    sent = []
+    res = b.weekly_sync(
+        registry=registry, taxonomy=taxonomy, canonical_csv=canon,
+        extended_universe_path=uni, profiles_path=tmp_path / "prof.json",
+        market_db_path=db, queue_dir=tmp_path, run_date="2026-06-01",
+        refresh_fn=lambda syms, profiles_path: 0,
+        store_factory=lambda: store,
+        telegram_fn=lambda text, channel: sent.append((text, channel)))
+
+    assert res.error is None
+    assert "RULEX" in res.auto_saved
+    assert _db_tag_symbols(store) == {"AAA", "RULEX"}        # incremental, AAA preserved
+    assert _read_csv_symbols(canon) == {"AAA", "RULEX"}      # CSV ⇔ DB lockstep
+    assert sent and sent[0][1] == "group"                    # telegram group summary
+
+
+def test_weekly_sync_preflight_fails_closed(tmp_path, monkeypatch):
+    """CSV ⇔ DB mismatch at preflight → fail-closed, no mutation."""
+    import json
+    from src.data.market_store import MarketStore
+    import scripts.build_company_concept_registry as b
+    cfg = Path("config/concepts")
+    taxonomy = json.loads((cfg / "concept_taxonomy_v2.json").read_text(encoding="utf-8"))
+    registry = b.ConceptRegistry(taxonomy_path=cfg / "concept_taxonomy_v2.json",
+                                 watchlist_path=cfg / "concept_watchlist.json")
+    db = tmp_path / "m.db"; store = MarketStore(db); store.rebuild_concept_tree(registry.concepts)
+    # DB empty but canonical CSV has a row → lockstep broken
+    canon = tmp_path / "canon.csv"; _write(canon, b.REVIEW_CSV_FIELDS, [["ok", "ZZZ"] + [""] * 14])
+    uni = tmp_path / "uni.json"; uni.write_text(json.dumps({"symbols": ["ZZZ", "NEW"]}), encoding="utf-8")
+    monkeypatch.setattr(b, "_load_profiles",
+        lambda p: {"NEW": {"symbol": "NEW", "sector": "Tech", "industry": "Semis"}})
+    res = b.weekly_sync(
+        registry=registry, taxonomy=taxonomy, canonical_csv=canon,
+        extended_universe_path=uni, profiles_path=tmp_path / "p.json",
+        market_db_path=db, queue_dir=tmp_path, run_date="2026-06-01",
+        refresh_fn=lambda syms, profiles_path: 0, store_factory=lambda: store,
+        classify_fn=lambda r, prof, tax: {"symbol": prof["symbol"], "source": "rule",
+                                          "l1": registry.concepts[0]["concept_id"], "l2": None, "l3_themes": []})
+    assert res.error and "preflight" in res.error
+    assert _db_tag_symbols(store) == set()                   # no mutation
