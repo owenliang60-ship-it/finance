@@ -134,6 +134,20 @@ print('WAL checkpoint OK')
     info "拉取 fundamental/..."
     rsync -avz --delete "$REMOTE/data/fundamental/" "$LOCAL_DIR/data/fundamental/"
 
+    # 3b. pull canonical reviewed_current.csv + manifest 云端→本地 (云端独占写, 仅 pull)
+    #     openrsync (macOS) 不支持 GNU --ignore-missing-args → ssh test 守卫 + scp
+    info "拉取 concept_registry canonical CSV..."
+    local _cc="reports/concept_registry"
+    if ssh "$REMOTE_HOST" "test -f '$REMOTE_DIR/$_cc/reviewed_current.csv'"; then
+        mkdir -p "$LOCAL_DIR/$_cc"
+        scp "$REMOTE/$_cc/reviewed_current.csv" "$LOCAL_DIR/$_cc/reviewed_current.csv"
+        scp "$REMOTE/$_cc/reviewed_current_manifest.json" \
+            "$LOCAL_DIR/$_cc/reviewed_current_manifest.json" 2>/dev/null || \
+            warn "canonical manifest 暂缺，跳过"
+    else
+        warn "canonical CSV 云端暂不存在（A3 首跑前正常），跳过"
+    fi
+
     # 4. universe.json merge: 云端→本地
     info "合并 universe.json (云端→本地)..."
     scp "$REMOTE/data/pool/universe.json" "/tmp/universe_cloud.json"
