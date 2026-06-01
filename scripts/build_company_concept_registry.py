@@ -1589,6 +1589,9 @@ def main(argv: list[str] | None = None) -> int:
                              "deterministic auto-save, LLM queue, Telegram summary.")
     parser.add_argument("--canonical-csv", type=Path, default=None,
                         help="Canonical reviewed CSV (default: reports/concept_registry/reviewed_current.csv)")
+    parser.add_argument("--bootstrap-canonical", type=Path, default=None,
+                        help="Normalize SRC review CSV → canonical reviewed_current.csv "
+                             "(one-time seed; verify symbol set vs DB before going live).")
     # ---- Path overrides — let worktree runs target main workspace data ----
     parser.add_argument("--data-root", type=Path, default=None,
                         help="Root for data files. Defaults to PROJECT_ROOT/data. "
@@ -1640,6 +1643,17 @@ def main(argv: list[str] | None = None) -> int:
     # (CSV parsing only). Lazy-init keeps those paths side-effect-free.
     def _open_store() -> MarketStore:
         return MarketStore(market_db_path)
+
+    if args.bootstrap_canonical:
+        canonical_csv = args.canonical_csv or (
+            PROJECT_ROOT / "reports" / "concept_registry" / "reviewed_current.csv")
+        n = _normalize_review_csv(args.bootstrap_canonical, canonical_csv)
+        manifest_syms = _read_csv_symbols(canonical_csv)
+        _write_review_manifest(canonical_csv, manifest_syms)
+        print(f"bootstrap: {n} rows -> {canonical_csv} ({len(manifest_syms)} symbols)")
+        # verification hint (NOT auto-run against live DB)
+        print("VERIFY before live: symbol set must == DB company_concept_tags symbols")
+        return 0
 
     if args.weekly_sync:
         import datetime as _dt

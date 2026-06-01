@@ -198,3 +198,15 @@ def test_cli_weekly_sync_wires_and_exits(monkeypatch, tmp_path):
     assert rc == 0
     assert called["telegram_fn"] is b.send_message
     assert called["store_factory"] is not None
+
+
+def test_bootstrap_normalizes_and_writes_manifest(tmp_path):
+    import scripts.build_company_concept_registry as b
+    src = tmp_path / "legacy.csv"
+    _write(src, ["review_reason", "symbol", "business_role"] + b.REVIEW_CSV_FIELDS[2:],
+           [["ok", "AAA", "dup"] + [""] * 14])
+    out = tmp_path / "canon.csv"
+    rc = b.main(["--bootstrap-canonical", str(src), "--canonical-csv", str(out)])
+    assert rc == 0
+    assert b._read_csv_symbols(out) == {"AAA"}
+    assert b._load_review_manifest(out) == {"AAA"}
