@@ -34,6 +34,7 @@ import argparse
 import csv
 import json
 import logging
+import os
 import shutil
 import sys
 from dataclasses import dataclass
@@ -866,8 +867,79 @@ def _load_review_manifest(csv_path: Path) -> set[str] | None:
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Review manifest unreadable (%s); falling back", exc)
         return None
-    syms = data.get("symbols") or []
+    syms = data.get("symbols") or data.get("full_universe") or []
     return {str(s).upper() for s in syms}
+
+
+# ---- A3 weekly-sync helpers: CSV symbol I/O + schema normalize (plan 2026-06-01) ----
+
+def _read_csv_symbols(csv_path: Path) -> set[str]:
+    """Symbol set from a review CSV (any column order)."""
+    if not csv_path.exists():
+        return set()
+    with csv_path.open(encoding="utf-8") as fh:
+        return {
+            (r.get("symbol") or "").strip().upper()
+            for r in csv.DictReader(fh)
+            if (r.get("symbol") or "").strip()
+        }
+
+
+def _db_tag_symbols(store: "MarketStore") -> set[str]:
+    """Symbol set currently in company_concept_tags."""
+    conn = store._get_conn()
+    return {row[0].upper() for row in conn.execute("SELECT symbol FROM company_concept_tags")}
+
+
+def _normalize_review_csv(src: Path, dst: Path) -> int:
+    """Normalize any historical review CSV to the canonical 16-field schema.
+
+    Handles the legacy 17-col header with a DUPLICATE `business_role` column
+    (5/24, 5/30) by coalescing duplicates: first non-empty positional value wins.
+    Writes via temp + os.replace.
+    """
+    with src.open(encoding="utf-8") as fh:
+        rows = list(csv.reader(fh))
+    if not rows:
+        raise ValueError(f"empty CSV: {src}")
+    header, *data = rows
+    col_idx: dict[str, list[int]] = {}
+    for i, name in enumerate(header):
+        col_idx.setdefault(name.strip(), []).append(i)
+    out: list[dict[str, str]] = []
+    for raw in data:
+        rec: dict[str, str] = {}
+        for field in REVIEW_CSV_FIELDS:
+            val = ""
+            for i in col_idx.get(field, []):
+                if i < len(raw) and raw[i].strip():
+                    val = raw[i]
+                    break
+            rec[field] = val
+        out.append(rec)
+    tmp = dst.with_suffix(dst.suffix + ".tmp")
+    with tmp.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=REVIEW_CSV_FIELDS)
+        w.writeheader()
+        w.writerows(out)
+    os.replace(tmp, dst)
+    return len(out)
+
+
+def _append_csv_atomic(csv_path: Path, new_csv_rows: list[dict]) -> None:
+    """Append rows to a review CSV atomically, normalizing to REVIEW_CSV_FIELDS."""
+    existing: list[dict] = []
+    if csv_path.exists():
+        with csv_path.open(encoding="utf-8") as fh:
+            existing = list(csv.DictReader(fh))
+    combined = existing + list(new_csv_rows)
+    tmp = csv_path.with_suffix(csv_path.suffix + ".tmp")
+    with tmp.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=REVIEW_CSV_FIELDS, extrasaction="ignore")
+        w.writeheader()
+        for row in combined:
+            w.writerow({k: row.get(k, "") for k in REVIEW_CSV_FIELDS})
+    os.replace(tmp, csv_path)
 
 
 # ---- --reclassify: re-run classify over a run-1 review CSV (plan 2026-05-16) ----
