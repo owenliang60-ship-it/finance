@@ -292,6 +292,47 @@ def test_weekly_sync_manifest_failure_keeps_lockstep(tmp_path, monkeypatch):
     assert b._read_csv_symbols(canon) == {"AAA", "RULEX"}    # CSV advanced too → lockstep HELD
 
 
+def test_weekly_sync_queue_write_failure_nonfatal(tmp_path, monkeypatch):
+    """P2: the 7c queue CSV is a sidecar — its write failure after a committed DB⇔CSV
+    pair must NOT raise a fatal '周刷失败' alert."""
+    import json
+    from src.data.market_store import MarketStore
+    import scripts.build_company_concept_registry as b
+    cfg = Path("config/concepts")
+    taxonomy = json.loads((cfg / "concept_taxonomy_v2.json").read_text(encoding="utf-8"))
+    registry = b.ConceptRegistry(taxonomy_path=cfg / "concept_taxonomy_v2.json",
+                                 watchlist_path=cfg / "concept_watchlist.json")
+    db = tmp_path / "m.db"; store = MarketStore(db); store.rebuild_concept_tree(registry.concepts)
+    seed_l1 = taxonomy["concepts"][0]["concept_id"]
+    store.upsert_company_concepts([{"symbol": "AAA", "primary_concept_id": seed_l1,
+        "theme_ids": [], "display_tags": "", "business_role": "", "confidence": 1.0,
+        "source": "manual", "evidence": "seed", "needs_review": 0}])
+    canon = tmp_path / "canon.csv"; _write(canon, b.REVIEW_CSV_FIELDS, [["ok", "AAA"] + [""] * 14])
+    uni = tmp_path / "uni.json"
+    uni.write_text(json.dumps({"symbols": ["AAA", "RULEX", "LLMY"]}), encoding="utf-8")
+    monkeypatch.setattr(b, "_load_profiles",
+        lambda p: {"RULEX": {"symbol": "RULEX"}, "LLMY": {"symbol": "LLMY"}})
+    def fake_classify(reg, profile, tax):
+        sym = profile["symbol"]
+        src = "rule" if sym == "RULEX" else "llm"
+        return {"symbol": sym, "source": src, "l1": seed_l1, "l2": None,
+                "l3_themes": [], "needs_review": 0 if src == "rule" else 1}
+    monkeypatch.setattr(b, "write_review_csv",
+        lambda *a, **k: (_ for _ in ()).throw(OSError("queue write failed")))
+    sent = []
+    res = b.weekly_sync(
+        registry=registry, taxonomy=taxonomy, canonical_csv=canon,
+        extended_universe_path=uni, profiles_path=tmp_path / "prof.json",
+        market_db_path=db, queue_dir=tmp_path, run_date="2026-06-01",
+        classify_fn=fake_classify, refresh_fn=lambda syms, profiles_path: 0,
+        store_factory=lambda: store,
+        telegram_fn=lambda text, channel: sent.append((text, channel)))
+    assert res.error is None                                  # queue failure is non-fatal
+    assert "RULEX" in res.auto_saved and "LLMY" in res.queued
+    assert b._db_tag_symbols(store) == {"AAA", "RULEX"}       # lockstep pair committed
+    assert b._read_csv_symbols(canon) == {"AAA", "RULEX"}
+
+
 def test_cli_weekly_sync_wires_and_exits(monkeypatch, tmp_path):
     import scripts.build_company_concept_registry as b
     called = {}

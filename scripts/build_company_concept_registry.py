@@ -937,7 +937,9 @@ def _stage_appended_csv(csv_path: Path, new_csv_rows: list[dict]) -> Path:
         with csv_path.open(encoding="utf-8") as fh:
             existing = list(csv.DictReader(fh))
     combined = existing + list(new_csv_rows)
-    tmp = csv_path.with_suffix(csv_path.suffix + ".tmp")
+    # per-process temp name so an overlapping run (stale cron + manual re-run) can't
+    # clobber each other's staged content before the atomic os.replace.
+    tmp = csv_path.with_name(f"{csv_path.name}.{os.getpid()}.tmp")
     with tmp.open("w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=REVIEW_CSV_FIELDS, extrasaction="ignore")
         w.writeheader()
@@ -1153,14 +1155,21 @@ def _weekly_sync_persist(
         except Exception as exc:
             logger.warning("manifest write failed (DB⇔CSV intact, sidecar stale): %s", exc)
 
-    # 7c: queued + failed both get a review artifact (P1.4 — no symbol left only in a counter)
+    # 7c: queued + failed both get a review artifact (P1.4 — no symbol left only in a counter).
+    # Like the manifest, the queue CSV is a SIDECAR written AFTER the DB⇔CSV pair is
+    # committed — its failure must NOT bubble to weekly_sync's fatal handler and raise a
+    # false "周刷失败" alert while the lockstep pair actually advanced. Warn + continue.
     review_rows = [row for row, _prof in res._queue] + res._failed_rows
     if review_rows:
         review_profiles = {r["symbol"].upper(): dict(p) for r, p in res._queue}
-        write_review_csv(
-            rows=review_rows, csv_path=queue_dir / f"needs_review_{run_date}.csv",
-            taxonomy=taxonomy, profiles=review_profiles,
-        )
+        try:
+            write_review_csv(
+                rows=review_rows, csv_path=queue_dir / f"needs_review_{run_date}.csv",
+                taxonomy=taxonomy, profiles=review_profiles,
+            )
+        except Exception as exc:
+            logger.warning("7c queue CSV write failed (DB⇔CSV intact, %d rows unqueued): %s",
+                           len(review_rows), exc)
 
 
 # ---- --reclassify: re-run classify over a run-1 review CSV (plan 2026-05-16) ----
