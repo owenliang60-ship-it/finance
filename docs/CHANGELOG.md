@@ -141,6 +141,10 @@
 |   ↳ Effective sample years + bootstrap CI + cluster pattern detector | | |
 | **晨报 Market Timing Factor Section** | 2026-05-02 | feature |
 |   ↳ 晨报新增市场 timing factor section + 加固 | | |
+| **Concept Registry 周频自动对齐 (A3 weekly-sync)** | 2026-06-01 | feature |
+|   ↳ `--weekly-sync`：drift 自动落库（manual/rule 增量、不 wipe）+ LLM 进 review 队列 | | |
+|   ↳ CSV⇔DB lockstep 两阶段提交 + preflight/postflight + restore（全失败路径 fail-closed） | | |
+|   ↳ 非阻塞 cron step7 + Telegram 摘要；issue 030/031 收口；merged `dc7193f` + 云端 bootstrap | | |
 
 ---
 

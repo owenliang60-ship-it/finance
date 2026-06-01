@@ -60,7 +60,7 @@
 | `concept_classifier.py` + `company_concepts.py` | Concept Registry（公司业务标签体系） |
 | `company_db.py` + `company_store.py` | Per-ticker 知识库 + SQLite 写入抽象 |
 
-> **Concept Registry** 详见 `docs/plans/2026-04-28-company-concept-registry-phase1.md`
+> **Concept Registry** 详见 `docs/plans/2026-04-28-company-concept-registry-phase1.md`；周频自动对齐（A3 weekly-sync）见 `docs/plans/2026-06-01-a3-weekly-concept-sync-{design,plan}.md` + runbook `docs/runbooks/a3-llm-queue-review.md`
 > **Options Module** 详见 `docs/design/options_module_top_level_architecture.md`
 
 ### Knowledge Base — 投资框架（无市场数据）
@@ -144,7 +144,8 @@
 
 | 数据库/文件 | 所有权 | 主要内容 | 同步 |
 |-------------|--------|---------|------|
-| `market.db` | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, iv_daily, options_snapshots, forward_estimates/metadata, social_sentiment, market_sentiment, social_trending(*), historical_market_cap, broad_scan_hits, concepts(*) | pull 到本地 |
+| `market.db` | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, iv_daily, options_snapshots, forward_estimates/metadata, social_sentiment, market_sentiment, social_trending(*), historical_market_cap, broad_scan_hits, concepts(*), company_concept_tags | pull 到本地 |
+| `reports/concept_registry/reviewed_current.csv` (+ manifest) | 云端独占写入 | concept registry canonical 快照（与 `company_concept_tags` symbol 集锁步；A3 weekly-sync 维护） | pull 到本地（仅 pull） |
 | `company.db` | 本地独占写入 | companies, oprms_ratings, analyses, kill_conditions, holdings, transactions, portfolio_cash, option_positions, option_transactions | push 到云端 |
 | `universe.json` | 双端 | 股票池定义 | 双向 merge（并集） |
 | `data/macro/` | 准实时缓存 | FRED snapshot（4h/12h TTL） | 不同步 |
@@ -185,7 +186,7 @@
 | 07:30 | Wed | 广扫池历史市值采集（`broad_universe_cron_wrapper.sh daily_hmcap`，broad $1B+ final universe / $500M+ seed） |
 | 08:00 | Tue-Sat | 晨报生成与推送（`run_market_report_pipeline.sh`） |
 | 08:30 | Sat | 股票池刷新（`run_update_data.sh --pool`） |
-| 09:00 | Sat | 广扫池 + 扩展池周频刷新（`broad_universe_cron_wrapper.sh weekly_refresh`，broad 前 5 步 + extended 第 6 步追加；extended 有 MIN_COUNT_FLOOR=800 保护 cache 不被 FMP 空返回污染） |
+| 09:00 | Sat | 广扫池 + 扩展池 + concept registry 周频刷新（`broad_universe_cron_wrapper.sh weekly_refresh`：broad 前 5 步 + extended 第 6 步 + **concept_weekly_sync 第 7 步**非阻塞——registry 跟随 universe 漂移自动对齐：确定性增量落库 / LLM 进 review 队列 / CSV⇔DB lockstep 自检 / Telegram 摘要；extended 有 MIN_COUNT_FLOOR=800 保护 cache） |
 | 10:00 | Sat | 基本面 + metrics 计算（`run_update_data.sh --fundamental`） |
 | 10:15 | Sat | 前瞻预期更新（核心 + 扩展池 ~949 unique，`run_update_data.sh --forward-estimates --scope=all`，~15-20 min，日志 `cron_forward_est.log`） |
 | 22:00/23:00 SGT | Mon-Fri | Portfolio Intelligence 推送（夏令时切换） |
