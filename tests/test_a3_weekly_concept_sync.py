@@ -185,3 +185,16 @@ def test_weekly_sync_preflight_fails_closed(tmp_path, monkeypatch):
                                           "l1": registry.concepts[0]["concept_id"], "l2": None, "l3_themes": []})
     assert res.error and "preflight" in res.error
     assert _db_tag_symbols(store) == set()                   # no mutation
+
+
+def test_cli_weekly_sync_wires_and_exits(monkeypatch, tmp_path):
+    import scripts.build_company_concept_registry as b
+    called = {}
+    def fake_ws(**kw):
+        called.update(kw); return b.WeeklySyncResult(drift_in=[], auto_saved=[])
+    monkeypatch.setattr(b, "weekly_sync", fake_ws)
+    monkeypatch.setattr(b, "send_message", lambda *a, **k: True)
+    rc = b.main(["--weekly-sync", "--data-root", str(tmp_path)])
+    assert rc == 0
+    assert called["telegram_fn"] is b.send_message
+    assert called["store_factory"] is not None

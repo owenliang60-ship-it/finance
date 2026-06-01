@@ -47,6 +47,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.market_store import MarketStore  # noqa: E402
+from src.telegram_bot import send_message  # noqa: E402
 from terminal.company_concepts import ConceptRegistry  # noqa: E402
 from terminal.llm_concept_prefill import LLMResult, prefill_one  # noqa: E402
 
@@ -1583,6 +1584,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Output path for the Phase 4 review CSV (default: reports/concept_registry/needs_review_<date>.csv).",
     )
+    parser.add_argument("--weekly-sync", action="store_true",
+                        help="Sync registry to current extended_universe drift (A3): "
+                             "deterministic auto-save, LLM queue, Telegram summary.")
+    parser.add_argument("--canonical-csv", type=Path, default=None,
+                        help="Canonical reviewed CSV (default: reports/concept_registry/reviewed_current.csv)")
     # ---- Path overrides — let worktree runs target main workspace data ----
     parser.add_argument("--data-root", type=Path, default=None,
                         help="Root for data files. Defaults to PROJECT_ROOT/data. "
@@ -1634,6 +1640,21 @@ def main(argv: list[str] | None = None) -> int:
     # (CSV parsing only). Lazy-init keeps those paths side-effect-free.
     def _open_store() -> MarketStore:
         return MarketStore(market_db_path)
+
+    if args.weekly_sync:
+        import datetime as _dt
+        canonical_csv = args.canonical_csv or (
+            PROJECT_ROOT / "reports" / "concept_registry" / "reviewed_current.csv")
+        taxonomy = json.loads(
+            (cfg_dir / "concept_taxonomy_v2.json").read_text(encoding="utf-8"))
+        res = weekly_sync(
+            registry=registry, taxonomy=taxonomy, canonical_csv=canonical_csv,
+            extended_universe_path=extended_universe_path, profiles_path=profiles_path,
+            market_db_path=market_db_path, queue_dir=canonical_csv.parent,
+            run_date=_dt.date.today().isoformat(),
+            store_factory=_open_store, telegram_fn=send_message)
+        print(res.summary_text())
+        return 2 if res.error else 0
 
     if args.refresh_profiles:
         # Fail-fast guards: silent no-ops on either of these have caused
