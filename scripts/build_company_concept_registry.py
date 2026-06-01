@@ -910,13 +910,13 @@ def _normalize_review_csv(src: Path, dst: Path) -> int:
     out: list[dict[str, str]] = []
     for raw in data:
         rec: dict[str, str] = {}
-        for field in REVIEW_CSV_FIELDS:
+        for fname in REVIEW_CSV_FIELDS:
             val = ""
-            for i in col_idx.get(field, []):
+            for i in col_idx.get(fname, []):
                 if i < len(raw) and raw[i].strip():
                     val = raw[i]
                     break
-            rec[field] = val
+            rec[fname] = val
         out.append(rec)
     tmp = dst.with_suffix(dst.suffix + ".tmp")
     with tmp.open("w", newline="", encoding="utf-8") as fh:
