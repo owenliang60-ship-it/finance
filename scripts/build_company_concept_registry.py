@@ -37,7 +37,7 @@ import logging
 import os
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -940,6 +940,114 @@ def _append_csv_atomic(csv_path: Path, new_csv_rows: list[dict]) -> None:
         for row in combined:
             w.writerow({k: row.get(k, "") for k in REVIEW_CSV_FIELDS})
     os.replace(tmp, csv_path)
+
+
+# ---- A3 weekly_sync: universe-drift concept sync (plan 2026-06-01) ----
+
+
+@dataclass
+class WeeklySyncResult:
+    drift_in: list[str] = field(default_factory=list)
+    churn_out: list[str] = field(default_factory=list)
+    auto_saved: list[str] = field(default_factory=list)   # deterministic
+    queued: list[str] = field(default_factory=list)        # llm/needs review
+    failed: list[str] = field(default_factory=list)        # no profile / classify error
+    error: str | None = None                               # fatal (fail-closed)
+
+    def summary_text(self) -> str:
+        if self.error:
+            return f"⚠️ Concept 周刷失败: {self.error}"
+        parts = [
+            "🏷️ Concept 周刷",
+            f"自动落库 {len(self.auto_saved)} / 待审 {len(self.queued)}"
+            f" / churn-out {len(self.churn_out)} / 失败 {len(self.failed)}",
+        ]
+        if not self.drift_in:
+            parts = ["🏷️ Concept 周刷：本周无新增票"]
+        return " · ".join(parts)
+
+
+def _failed_review_row(sym: str) -> dict:
+    """Minimal review row for a drift-in symbol we couldn't classify (error)."""
+    return {"symbol": sym, "l1": None, "l2": None, "l3_themes": [],
+            "business_role": "", "confidence": 0.0, "source": "sync_failed",
+            "evidence": "weekly_sync: classify failed", "needs_review": 1}
+
+
+def weekly_sync(
+    *,
+    registry: "ConceptRegistry",
+    taxonomy: dict,
+    canonical_csv: Path,
+    extended_universe_path: Path,
+    profiles_path: Path,
+    market_db_path: Path,
+    queue_dir: Path,
+    run_date: str,
+    classify_fn=_classify_v2,
+    refresh_fn=refresh_profiles,
+    store_factory=None,
+    telegram_fn=None,
+) -> WeeklySyncResult:
+    """7a 分类 → 7b 增量落库（preflight/postflight）→ 7c 队列 + Telegram(必发).
+
+    Deterministic ({manual,rule}) auto-saved incrementally; LLM/failed queued.
+    Design §5 + D2(每周必推)/D3(churn KEEP). Single try/except/finally so the
+    Telegram summary fires on success, no-drift, AND fatal error.
+    `_load_profiles` confirmed at build:1223; `_classify_v2` hits anchor by
+    SYMBOL first (company_concepts:123) — so classify BEFORE any profile gate
+    (P1.5), else anchor drift-in would be wrongly dropped.
+    """
+    res = WeeklySyncResult()
+    res._deterministic = []   # list[(row, profile)] → persist
+    res._queue = []           # list[(row, profile)] → review CSV
+    res._failed_rows = []     # list[dict] → review CSV (failed bucket gets an artifact, P1.4)
+    try:
+        base = _read_csv_symbols(canonical_csv)
+        universe = {s.upper() for s in _load_universe(extended_universe_path)}
+        res.drift_in = sorted(universe - base)
+        res.churn_out = sorted(base - universe)   # KEEP (D3): not deleted
+
+        if res.drift_in:
+            refresh_fn(res.drift_in, profiles_path=profiles_path)   # FMP, delta only
+            profiles = _load_profiles(profiles_path)
+            for sym in res.drift_in:
+                profile = dict(profiles.get(sym) or {})
+                profile.setdefault("symbol", sym)
+                try:
+                    row = classify_fn(registry, profile, taxonomy)   # anchor-by-symbol works w/o profile
+                except Exception as exc:                              # P1.3: never bubble out
+                    logger.warning("classify failed for %s: %s", sym, exc)
+                    res.failed.append(sym)
+                    res._failed_rows.append(_failed_review_row(sym))
+                    continue
+                row["symbol"] = sym
+                if row.get("source") in ("manual", "rule"):          # deterministic (NOT needs_review gate)
+                    res._deterministic.append((row, profile))
+                    res.auto_saved.append(sym)
+                else:                                                 # llm / llm_fallback / etc → queue
+                    res._queue.append((row, profile))
+                    res.queued.append(sym)
+
+            # coverage self-check (issue 030 automated): nothing silently dropped
+            accounted = set(res.auto_saved) | set(res.queued) | set(res.failed)
+            if accounted != set(res.drift_in):
+                res.error = f"coverage gap: drift_in={len(res.drift_in)} accounted={len(accounted)}"
+            elif store_factory is not None:
+                _weekly_sync_persist(                                 # defined in Task 3
+                    res, canonical_csv=canonical_csv, profiles_path=profiles_path,
+                    market_db_path=market_db_path, queue_dir=queue_dir,
+                    taxonomy=taxonomy, run_date=run_date, store_factory=store_factory)
+    except Exception as exc:                                          # P1.3 fatal → still notify
+        logger.exception("weekly_sync fatal")
+        res.error = f"weekly_sync fatal: {exc}"
+    finally:                                                          # P1.2: always push (D2)
+        if telegram_fn is not None:
+            try:
+                telegram_fn(res.summary_text(), channel="group")
+            except Exception as exc:
+                logger.warning("weekly_sync telegram failed: %s", exc)
+    return res
 
 
 # ---- --reclassify: re-run classify over a run-1 review CSV (plan 2026-05-16) ----
