@@ -34,9 +34,10 @@ import argparse
 import csv
 import json
 import logging
+import os
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
@@ -46,6 +47,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.market_store import MarketStore  # noqa: E402
+from src.telegram_bot import send_message  # noqa: E402
 from terminal.company_concepts import ConceptRegistry  # noqa: E402
 from terminal.llm_concept_prefill import LLMResult, prefill_one  # noqa: E402
 
@@ -866,8 +868,308 @@ def _load_review_manifest(csv_path: Path) -> set[str] | None:
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Review manifest unreadable (%s); falling back", exc)
         return None
-    syms = data.get("symbols") or []
+    syms = data.get("symbols") or data.get("full_universe") or []
     return {str(s).upper() for s in syms}
+
+
+# ---- A3 weekly-sync helpers: CSV symbol I/O + schema normalize (plan 2026-06-01) ----
+
+def _read_csv_symbols(csv_path: Path) -> set[str]:
+    """Symbol set from a review CSV (any column order)."""
+    if not csv_path.exists():
+        return set()
+    with csv_path.open(encoding="utf-8") as fh:
+        return {
+            (r.get("symbol") or "").strip().upper()
+            for r in csv.DictReader(fh)
+            if (r.get("symbol") or "").strip()
+        }
+
+
+def _db_tag_symbols(store: "MarketStore") -> set[str]:
+    """Symbol set currently in company_concept_tags."""
+    conn = store._get_conn()
+    return {row[0].upper() for row in conn.execute("SELECT symbol FROM company_concept_tags")}
+
+
+def _normalize_review_csv(src: Path, dst: Path) -> int:
+    """Normalize any historical review CSV to the canonical 16-field schema.
+
+    Handles the legacy 17-col header with a DUPLICATE `business_role` column
+    (5/24, 5/30) by coalescing duplicates: first non-empty positional value wins.
+    Writes via temp + os.replace.
+    """
+    with src.open(encoding="utf-8") as fh:
+        rows = list(csv.reader(fh))
+    if not rows:
+        raise ValueError(f"empty CSV: {src}")
+    header, *data = rows
+    col_idx: dict[str, list[int]] = {}
+    for i, name in enumerate(header):
+        col_idx.setdefault(name.strip(), []).append(i)
+    out: list[dict[str, str]] = []
+    for raw in data:
+        rec: dict[str, str] = {}
+        for fname in REVIEW_CSV_FIELDS:
+            val = ""
+            for i in col_idx.get(fname, []):
+                if i < len(raw) and raw[i].strip():
+                    val = raw[i]
+                    break
+            rec[fname] = val
+        out.append(rec)
+    tmp = dst.with_suffix(dst.suffix + ".tmp")
+    with tmp.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=REVIEW_CSV_FIELDS)
+        w.writeheader()
+        w.writerows(out)
+    os.replace(tmp, dst)
+    return len(out)
+
+
+def _stage_appended_csv(csv_path: Path, new_csv_rows: list[dict]) -> Path:
+    """Write existing+new rows to a temp file (normalized to REVIEW_CSV_FIELDS) and
+    return the temp path WITHOUT replacing the live file. Lets a caller stage the
+    failure-prone CSV write BEFORE an irreversible DB mutation, then commit with a
+    single atomic os.replace (two-phase commit, P1.B)."""
+    existing: list[dict] = []
+    if csv_path.exists():
+        with csv_path.open(encoding="utf-8") as fh:
+            existing = list(csv.DictReader(fh))
+    combined = existing + list(new_csv_rows)
+    # per-process temp name so an overlapping run (stale cron + manual re-run) can't
+    # clobber each other's staged content before the atomic os.replace.
+    tmp = csv_path.with_name(f"{csv_path.name}.{os.getpid()}.tmp")
+    with tmp.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=REVIEW_CSV_FIELDS, extrasaction="ignore")
+        w.writeheader()
+        for row in combined:
+            w.writerow({k: row.get(k, "") for k in REVIEW_CSV_FIELDS})
+    return tmp
+
+
+def _append_csv_atomic(csv_path: Path, new_csv_rows: list[dict]) -> None:
+    """Append rows to a review CSV atomically (stage + os.replace)."""
+    os.replace(_stage_appended_csv(csv_path, new_csv_rows), csv_path)
+
+
+# ---- A3 weekly_sync: universe-drift concept sync (plan 2026-06-01) ----
+
+
+@dataclass
+class WeeklySyncResult:
+    drift_in: list[str] = field(default_factory=list)
+    churn_out: list[str] = field(default_factory=list)
+    auto_saved: list[str] = field(default_factory=list)   # deterministic
+    queued: list[str] = field(default_factory=list)        # llm/needs review
+    failed: list[str] = field(default_factory=list)        # no profile / classify error
+    error: str | None = None                               # fatal (fail-closed)
+
+    def summary_text(self) -> str:
+        if self.error:
+            return f"⚠️ Concept 周刷失败: {self.error}"
+        parts = [
+            "🏷️ Concept 周刷",
+            f"自动落库 {len(self.auto_saved)} / 待审 {len(self.queued)}"
+            f" / churn-out {len(self.churn_out)} / 失败 {len(self.failed)}",
+        ]
+        if not self.drift_in:
+            parts = ["🏷️ Concept 周刷：本周无新增票"]
+        return " · ".join(parts)
+
+
+def _failed_review_row(sym: str) -> dict:
+    """Minimal review row for a drift-in symbol we couldn't classify (error)."""
+    return {"symbol": sym, "l1": None, "l2": None, "l3_themes": [],
+            "business_role": "", "confidence": 0.0, "source": "sync_failed",
+            "evidence": "weekly_sync: classify failed", "needs_review": 1}
+
+
+def weekly_sync(
+    *,
+    registry: "ConceptRegistry",
+    taxonomy: dict,
+    canonical_csv: Path,
+    extended_universe_path: Path,
+    profiles_path: Path,
+    market_db_path: Path,
+    queue_dir: Path,
+    run_date: str,
+    classify_fn=_classify_v2,
+    refresh_fn=refresh_profiles,
+    store_factory=None,
+    telegram_fn=None,
+) -> WeeklySyncResult:
+    """7a 分类 → 7b 增量落库（preflight/postflight）→ 7c 队列 + Telegram(必发).
+
+    Deterministic ({manual,rule}) auto-saved incrementally; LLM/failed queued.
+    Design §5 + D2(每周必推)/D3(churn KEEP). Single try/except/finally so the
+    Telegram summary fires on success, no-drift, AND fatal error.
+    `_load_profiles` confirmed at build:1223; `_classify_v2` hits anchor by
+    SYMBOL first (company_concepts:123) — so classify BEFORE any profile gate
+    (P1.5), else anchor drift-in would be wrongly dropped.
+    """
+    res = WeeklySyncResult()
+    res._deterministic = []   # list[(row, profile)] → persist
+    res._queue = []           # list[(row, profile)] → review CSV
+    res._failed_rows = []     # list[dict] → review CSV (failed bucket gets an artifact, P1.4)
+    try:
+        base = _read_csv_symbols(canonical_csv)
+        universe = {s.upper() for s in _load_universe(extended_universe_path)}
+        res.drift_in = sorted(universe - base)
+        res.churn_out = sorted(base - universe)   # KEEP (D3): not deleted
+
+        store = store_factory() if store_factory is not None else None
+        # P1.A: lockstep preflight runs EVERY week (even no-drift weeks) so a
+        # silent CSV⇔DB divergence is caught + alerted, not only on drift weeks.
+        if store is not None:
+            csv_syms, db_syms = _read_csv_symbols(canonical_csv), _db_tag_symbols(store)
+            if csv_syms != db_syms:
+                res.error = (f"preflight lockstep broken: csv-only={sorted(csv_syms - db_syms)[:5]} "
+                             f"db-only={sorted(db_syms - csv_syms)[:5]}")
+
+        if res.error is None and res.drift_in:
+            refresh_fn(res.drift_in, profiles_path=profiles_path)   # FMP, delta only
+            profiles = _load_profiles(profiles_path)
+            for sym in res.drift_in:
+                profile = dict(profiles.get(sym) or {})
+                profile.setdefault("symbol", sym)
+                try:
+                    row = classify_fn(registry, profile, taxonomy)   # anchor-by-symbol works w/o profile
+                except Exception as exc:                              # P1.3: never bubble out
+                    logger.warning("classify failed for %s: %s", sym, exc)
+                    res.failed.append(sym)
+                    res._failed_rows.append(_failed_review_row(sym))
+                    continue
+                row["symbol"] = sym
+                if row.get("source") in ("manual", "rule"):          # deterministic (NOT needs_review gate)
+                    res._deterministic.append((row, profile))
+                    res.auto_saved.append(sym)
+                else:                                                 # llm / llm_fallback / etc → queue
+                    res._queue.append((row, profile))
+                    res.queued.append(sym)
+
+            # coverage self-check (issue 030 automated): nothing silently dropped
+            accounted = set(res.auto_saved) | set(res.queued) | set(res.failed)
+            if accounted != set(res.drift_in):
+                res.error = f"coverage gap: drift_in={len(res.drift_in)} accounted={len(accounted)}"
+            elif store is not None:
+                _weekly_sync_persist(
+                    res, store=store, canonical_csv=canonical_csv, profiles_path=profiles_path,
+                    market_db_path=market_db_path, queue_dir=queue_dir,
+                    taxonomy=taxonomy, run_date=run_date)
+    except Exception as exc:                                          # P1.3 fatal → still notify
+        logger.exception("weekly_sync fatal")
+        res.error = f"weekly_sync fatal: {exc}"
+    finally:                                                          # P1.2: always push (D2)
+        if telegram_fn is not None:
+            try:
+                telegram_fn(res.summary_text(), channel="group")
+            except Exception as exc:
+                logger.warning("weekly_sync telegram failed: %s", exc)
+    return res
+
+
+def _restore_sqlite(store, backup_path) -> bool:
+    """Restore a WAL-safe backup INTO the live store connection (reverse of
+    _backup_sqlite). Used for fail-closed rollback when a multi-step mutation
+    half-completes (DB written but CSV write/replace failed). Returns True on
+    success. Copies the backup's pages over the live DB via the same connection
+    so subsequent reads see the reverted state.
+    """
+    if not backup_path or not Path(backup_path).exists():
+        return False
+    import sqlite3
+    src = sqlite3.connect(str(backup_path))
+    try:
+        src.backup(store._get_conn())   # backup pages → live connection
+        return True
+    except Exception as exc:                       # pragma: no cover - defensive
+        logger.error("DB restore from %s failed: %s", backup_path, exc)
+        return False
+    finally:
+        src.close()
+
+
+def _weekly_sync_persist(
+    res: "WeeklySyncResult",
+    *,
+    store,
+    canonical_csv: Path,
+    profiles_path: Path,
+    market_db_path: Path,
+    queue_dir: Path,
+    taxonomy: dict,
+    run_date: str,
+) -> None:
+    """7b deterministic save (incremental, fail-closed via DB restore) + 7c queue.
+
+    Lockstep preflight already ran in weekly_sync (every week). Here, if any step
+    AFTER the DB write fails (CSV write/replace, manifest, postflight), the DB is
+    restored from the pre-mutation backup so DB and canonical CSV revert together
+    — true fail-closed (P1.B), not 'alert + leave a one-sided DB mutation'.
+    """
+    concepts_by_id = {c["concept_id"]: c["label"] for c in taxonomy.get("concepts", [])}
+    profiles = _load_profiles(profiles_path)
+
+    if res._deterministic:
+        csv_rows = [
+            _row_to_csv(row, dict(profiles.get(row["symbol"].upper()) or {}), "ok", None, concepts_by_id)
+            for row, _prof in res._deterministic
+        ]
+        db_rows = [_row_to_db(row) for row, _prof in res._deterministic]
+        backup = _backup_sqlite(store.db_path, "pre-weekly-sync")
+        tmp_csv = None
+        try:
+            # Two-phase commit (P1.B): stage the failure-prone CSV write FIRST (no
+            # replace yet) so a CSV/format/disk error leaves the DB untouched; then
+            # the transactional DB upsert; then verify lockstep on the STAGED CSV vs
+            # DB *before* the irreversible swap, so os.replace is the ONLY step that
+            # can fail after the check (nothing after it can leave CSV ahead of DB).
+            tmp_csv = _stage_appended_csv(canonical_csv, csv_rows)
+            save_to_market_db(rows=db_rows, store=store, market_db_path=market_db_path)  # keyword-only
+            if _read_csv_symbols(tmp_csv) != _db_tag_symbols(store):
+                raise RuntimeError("postflight lockstep mismatch (staged CSV vs DB)")
+            os.replace(tmp_csv, canonical_csv)   # last irreversible DB-paired step
+            tmp_csv = None
+        except Exception as exc:
+            # fail-closed: revert DB so DB⇔CSV revert together (the live canonical
+            # CSV was never replaced on this path — still the pre-sync version).
+            restored = _restore_sqlite(store, backup)
+            if tmp_csv is not None:
+                try:
+                    Path(tmp_csv).unlink()
+                except OSError:
+                    pass
+            res.error = (f"persist failed ({exc}); DB "
+                         + ("restored from backup" if restored else "NOT restored — manual recovery"))
+            return
+
+        # DB ⇔ canonical CSV are now both committed and consistent. The manifest is
+        # a SIDECAR (coverage hint), NOT part of the lockstep pair — a manifest
+        # write failure must NOT trigger a DB rollback (that would leave CSV ahead
+        # of a reverted DB, the exact P1 Boss found). Warn + continue; the next
+        # run's preflight + manifest write self-heal it.
+        try:
+            _write_review_manifest(canonical_csv, _read_csv_symbols(canonical_csv))
+        except Exception as exc:
+            logger.warning("manifest write failed (DB⇔CSV intact, sidecar stale): %s", exc)
+
+    # 7c: queued + failed both get a review artifact (P1.4 — no symbol left only in a counter).
+    # Like the manifest, the queue CSV is a SIDECAR written AFTER the DB⇔CSV pair is
+    # committed — its failure must NOT bubble to weekly_sync's fatal handler and raise a
+    # false "周刷失败" alert while the lockstep pair actually advanced. Warn + continue.
+    review_rows = [row for row, _prof in res._queue] + res._failed_rows
+    if review_rows:
+        review_profiles = {r["symbol"].upper(): dict(p) for r, p in res._queue}
+        try:
+            write_review_csv(
+                rows=review_rows, csv_path=queue_dir / f"needs_review_{run_date}.csv",
+                taxonomy=taxonomy, profiles=review_profiles,
+            )
+        except Exception as exc:
+            logger.warning("7c queue CSV write failed (DB⇔CSV intact, %d rows unqueued): %s",
+                           len(review_rows), exc)
 
 
 # ---- --reclassify: re-run classify over a run-1 review CSV (plan 2026-05-16) ----
@@ -1355,6 +1657,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Output path for the Phase 4 review CSV (default: reports/concept_registry/needs_review_<date>.csv).",
     )
+    parser.add_argument("--weekly-sync", action="store_true",
+                        help="Sync registry to current extended_universe drift (A3): "
+                             "deterministic auto-save, LLM queue, Telegram summary.")
+    parser.add_argument("--canonical-csv", type=Path, default=None,
+                        help="Canonical reviewed CSV (default: reports/concept_registry/reviewed_current.csv)")
+    parser.add_argument("--bootstrap-canonical", type=Path, default=None,
+                        help="Normalize SRC review CSV → canonical reviewed_current.csv "
+                             "(one-time seed; verify symbol set vs DB before going live).")
     # ---- Path overrides — let worktree runs target main workspace data ----
     parser.add_argument("--data-root", type=Path, default=None,
                         help="Root for data files. Defaults to PROJECT_ROOT/data. "
@@ -1406,6 +1716,32 @@ def main(argv: list[str] | None = None) -> int:
     # (CSV parsing only). Lazy-init keeps those paths side-effect-free.
     def _open_store() -> MarketStore:
         return MarketStore(market_db_path)
+
+    if args.bootstrap_canonical:
+        canonical_csv = args.canonical_csv or (
+            PROJECT_ROOT / "reports" / "concept_registry" / "reviewed_current.csv")
+        n = _normalize_review_csv(args.bootstrap_canonical, canonical_csv)
+        manifest_syms = _read_csv_symbols(canonical_csv)
+        _write_review_manifest(canonical_csv, manifest_syms)
+        print(f"bootstrap: {n} rows -> {canonical_csv} ({len(manifest_syms)} symbols)")
+        # verification hint (NOT auto-run against live DB)
+        print("VERIFY before live: symbol set must == DB company_concept_tags symbols")
+        return 0
+
+    if args.weekly_sync:
+        import datetime as _dt
+        canonical_csv = args.canonical_csv or (
+            PROJECT_ROOT / "reports" / "concept_registry" / "reviewed_current.csv")
+        taxonomy = json.loads(
+            (cfg_dir / "concept_taxonomy_v2.json").read_text(encoding="utf-8"))
+        res = weekly_sync(
+            registry=registry, taxonomy=taxonomy, canonical_csv=canonical_csv,
+            extended_universe_path=extended_universe_path, profiles_path=profiles_path,
+            market_db_path=market_db_path, queue_dir=canonical_csv.parent,
+            run_date=_dt.date.today().isoformat(),
+            store_factory=_open_store, telegram_fn=send_message)
+        print(res.summary_text())
+        return 2 if res.error else 0
 
     if args.refresh_profiles:
         # Fail-fast guards: silent no-ops on either of these have caused

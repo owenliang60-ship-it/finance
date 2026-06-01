@@ -52,7 +52,15 @@ release_lock() {
     rm -f "$LOCK_FILE"
 }
 
-trap release_lock EXIT
+# A3: canonical-CSV prefetch temp dir (script-global so the EXIT trap can clean it
+# even when `set -e` aborts pull_from_cloud before its own rm).
+_CC_TMP=""
+cleanup() {
+    release_lock
+    [ -n "$_CC_TMP" ] && rm -rf "$_CC_TMP"
+}
+
+trap cleanup EXIT
 acquire_lock
 
 # ── 健康检查 ──
@@ -125,10 +133,43 @@ conn.close()
 print('WAL checkpoint OK')
 \""
 
+    # 1b. PREFETCH canonical reviewed_current.csv + manifest 到 temp，*先于* 拉本地 market.db
+    #     (design finding P2): 若 canonical 拉取失败就中止，绝不让本地 DB 领先于 canonical
+    #     —— 正是 A3 要避免的本地 clobber。openrsync(macOS) 无 GNU --ignore-missing-args
+    #     → ssh test 守卫 + scp。
+    local _cc="reports/concept_registry"
+    _CC_TMP=""                       # script-global; EXIT trap cleans it on set -e abort
+    if ssh "$REMOTE_HOST" "test -f '$REMOTE_DIR/$_cc/reviewed_current.csv'"; then
+        _CC_TMP="$(mktemp -d)"
+        info "预取 concept_registry canonical CSV..."
+        if ! scp "$REMOTE/$_cc/reviewed_current.csv" "$_CC_TMP/reviewed_current.csv"; then
+            error "canonical CSV 预取失败，中止 pull（避免本地 DB 领先 canonical 的 clobber）"
+            exit 1                   # trap cleanup removes $_CC_TMP
+        fi
+        scp "$REMOTE/$_cc/reviewed_current_manifest.json" \
+            "$_CC_TMP/reviewed_current_manifest.json" 2>/dev/null || \
+            warn "canonical manifest 暂缺，跳过"
+    else
+        info "canonical CSV 云端暂不存在（A3 首跑前正常），跳过"
+    fi
+
     # 2. rsync market.db 云端→本地 (+ 文件大小安全检查)
     info "拉取 market.db..."
     check_file_size "$LOCAL_DIR/data/market.db" "$REMOTE_DIR/data/market.db" "market.db" "pull"
     rsync -avz "$REMOTE/data/market.db" "$LOCAL_DIR/data/market.db"
+
+    # 2b. COMMIT 预取的 canonical —— 紧跟 market.db 之后、先于其它 rsync。DB 与 canonical
+    #     背靠背更新；后续 fundamental 等步骤失败 (set -e 退出) 也不会让本地 DB 领先
+    #     canonical (design finding P2 round-2: DB 领先 canonical 的窗口)。
+    if [ -n "$_CC_TMP" ]; then
+        mkdir -p "$LOCAL_DIR/$_cc"
+        mv "$_CC_TMP/reviewed_current.csv" "$LOCAL_DIR/$_cc/reviewed_current.csv"
+        [ -f "$_CC_TMP/reviewed_current_manifest.json" ] && \
+            mv "$_CC_TMP/reviewed_current_manifest.json" "$LOCAL_DIR/$_cc/reviewed_current_manifest.json"
+        rm -rf "$_CC_TMP"
+        _CC_TMP=""               # placed successfully; nothing left for the trap to clean
+        info "canonical CSV 已就位（DB 与 canonical 同步更新）"
+    fi
 
     # 3. rsync fundamental/ 云端→本地 (--delete 清理云端已删除的过期文件)
     info "拉取 fundamental/..."

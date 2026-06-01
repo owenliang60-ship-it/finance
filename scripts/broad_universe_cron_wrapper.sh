@@ -31,6 +31,18 @@ run_step() {
   fi
 }
 
+run_step_nonblocking() {
+  local name="$1"
+  shift
+  log "BEGIN $name (nonblocking)"
+  if "$@" >> "$LOG" 2>&1; then
+    log "OK $name"
+  else
+    local rc=$?
+    log "WARN $name rc=$rc (nonblocking, continuing)"
+  fi
+}
+
 log "broad_universe cron MODE=$MODE"
 
 case "$MODE" in
@@ -52,6 +64,8 @@ case "$MODE" in
     run_step "price_new_final" "$PYTHON" scripts/update_extended_prices.py \
       --universe broad --incremental-new-symbols
     run_step "refresh_extended" "$PYTHON" -m src.data.extended_universe_manager --refresh
+    run_step_nonblocking "concept_weekly_sync" "$PYTHON" \
+      scripts/build_company_concept_registry.py --weekly-sync
     ;;
   *)
     echo "Unknown mode: $MODE" >&2
