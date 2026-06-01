@@ -151,11 +151,9 @@ print('WAL checkpoint OK')
     check_file_size "$LOCAL_DIR/data/market.db" "$REMOTE_DIR/data/market.db" "market.db" "pull"
     rsync -avz "$REMOTE/data/market.db" "$LOCAL_DIR/data/market.db"
 
-    # 3. rsync fundamental/ 云端→本地 (--delete 清理云端已删除的过期文件)
-    info "拉取 fundamental/..."
-    rsync -avz --delete "$REMOTE/data/fundamental/" "$LOCAL_DIR/data/fundamental/"
-
-    # 3b. COMMIT 预取的 canonical 到本地（只在 market.db 拉取成功后才到达，避免分叉）
+    # 2b. COMMIT 预取的 canonical —— 紧跟 market.db 之后、先于其它 rsync。DB 与 canonical
+    #     背靠背更新；后续 fundamental 等步骤失败 (set -e 退出) 也不会让本地 DB 领先
+    #     canonical (design finding P2 round-2: DB 领先 canonical 的窗口)。
     if [ -n "$_cc_tmp" ]; then
         mkdir -p "$LOCAL_DIR/$_cc"
         mv "$_cc_tmp/reviewed_current.csv" "$LOCAL_DIR/$_cc/reviewed_current.csv"
@@ -164,6 +162,10 @@ print('WAL checkpoint OK')
         rm -rf "$_cc_tmp"
         info "canonical CSV 已就位（DB 与 canonical 同步更新）"
     fi
+
+    # 3. rsync fundamental/ 云端→本地 (--delete 清理云端已删除的过期文件)
+    info "拉取 fundamental/..."
+    rsync -avz --delete "$REMOTE/data/fundamental/" "$LOCAL_DIR/data/fundamental/"
 
     # 4. universe.json merge: 云端→本地
     info "合并 universe.json (云端→本地)..."

@@ -1121,16 +1121,18 @@ def _weekly_sync_persist(
         try:
             # Two-phase commit (P1.B): stage the failure-prone CSV write FIRST (no
             # replace yet) so a CSV/format/disk error leaves the DB untouched; then
-            # the transactional DB upsert; then the single atomic CSV swap.
+            # the transactional DB upsert; then verify lockstep on the STAGED CSV vs
+            # DB *before* the irreversible swap, so os.replace is the ONLY step that
+            # can fail after the check (nothing after it can leave CSV ahead of DB).
             tmp_csv = _stage_appended_csv(canonical_csv, csv_rows)
             save_to_market_db(rows=db_rows, store=store, market_db_path=market_db_path)  # keyword-only
-            os.replace(tmp_csv, canonical_csv)
+            if _read_csv_symbols(tmp_csv) != _db_tag_symbols(store):
+                raise RuntimeError("postflight lockstep mismatch (staged CSV vs DB)")
+            os.replace(tmp_csv, canonical_csv)   # last irreversible DB-paired step
             tmp_csv = None
-            _write_review_manifest(canonical_csv, _read_csv_symbols(canonical_csv))
-            if _read_csv_symbols(canonical_csv) != _db_tag_symbols(store):
-                raise RuntimeError("postflight lockstep mismatch after write")
         except Exception as exc:
-            # fail-closed: revert DB to pre-mutation state so DB⇔CSV revert together
+            # fail-closed: revert DB so DB⇔CSV revert together (the live canonical
+            # CSV was never replaced on this path — still the pre-sync version).
             restored = _restore_sqlite(store, backup)
             if tmp_csv is not None:
                 try:
@@ -1140,6 +1142,16 @@ def _weekly_sync_persist(
             res.error = (f"persist failed ({exc}); DB "
                          + ("restored from backup" if restored else "NOT restored — manual recovery"))
             return
+
+        # DB ⇔ canonical CSV are now both committed and consistent. The manifest is
+        # a SIDECAR (coverage hint), NOT part of the lockstep pair — a manifest
+        # write failure must NOT trigger a DB rollback (that would leave CSV ahead
+        # of a reverted DB, the exact P1 Boss found). Warn + continue; the next
+        # run's preflight + manifest write self-heal it.
+        try:
+            _write_review_manifest(canonical_csv, _read_csv_symbols(canonical_csv))
+        except Exception as exc:
+            logger.warning("manifest write failed (DB⇔CSV intact, sidecar stale): %s", exc)
 
     # 7c: queued + failed both get a review artifact (P1.4 — no symbol left only in a counter)
     review_rows = [row for row, _prof in res._queue] + res._failed_rows
