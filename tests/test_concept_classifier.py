@@ -205,3 +205,43 @@ def test_classifier_v2_internet_software_maps_to_internet_ads_bucket(tmp_path):
     clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
     bucket = clf._grouping_bucket({"symbol": "GOOG"})
     assert bucket == "互联网/广告"
+
+
+def test_l2_bucket_order_uses_all_61_taxonomy_l2(tmp_path):
+    """l2_bucket_order must list ALL 61 L2 from the taxonomy SSOT (DB concepts
+    table when present), not just the L2 currently used by tagged companies —
+    else a future stock in the 61st bucket is hidden by group_items()."""
+    from src.data.market_store import MarketStore
+    import json
+    from config.settings import CONCEPT_TAXONOMY_PATH
+
+    taxonomy = json.loads(CONCEPT_TAXONOMY_PATH.read_text(encoding="utf-8"))
+    l2_concepts = [c for c in taxonomy["concepts"] if c.get("level") == 2]
+    assert len(l2_concepts) == 61  # SSOT truth (verified 2026-06-02)
+
+    store = MarketStore(tmp_path / "market.db")
+    # ⚠️ concepts.parent_id is a self-FK (`parent_id TEXT REFERENCES
+    # concepts(concept_id)`) and MarketStore opens `PRAGMA foreign_keys=ON`
+    # (market_store.py:563). The 61 L2 reference 11 distinct L1 parents, so
+    # inserting L2 rows before their L1 parents raises
+    # `IntegrityError: FOREIGN KEY constraint failed` (reproduced 2026-06-02).
+    # rebuild_concept_tree (market_store.py:1568) is the FK-safe loader: it
+    # seeds the whole tree in ONE transaction ordered L1→L2→L3 under
+    # `defer_foreign_keys=ON`. Pass the full taxonomy (L1+L2+L3), not just L2.
+    store.rebuild_concept_tree(taxonomy["concepts"])
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
+    order = clf.l2_bucket_order
+    assert len(order) == 61
+    # taxonomy order is preserved (gpu_accelerator label appears before memory_chip)
+    assert order.index("计算芯片/GPU加速器") < order.index("存储芯片")
+    # all labels are L2 labels, none from the legacy 15-bucket set
+    assert "半导体链" not in order
+
+
+def test_l2_bucket_order_falls_back_to_taxonomy_json_without_store():
+    """No market_store → l2_bucket_order reads the taxonomy JSON SSOT, still 61."""
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=None)
+    order = clf.l2_bucket_order
+    assert len(order) == 61
+    assert "计算芯片/GPU加速器" in order
+    assert "存储芯片" in order

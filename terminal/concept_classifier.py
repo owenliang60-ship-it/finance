@@ -63,6 +63,9 @@ class ConceptClassifier:
 
         self._market_store = market_store
         self._registry_cache: Optional[dict[str, dict]] = None
+        self._l2_concepts_cache: Optional[list[dict]] = None
+        self._l2_label_to_id: Optional[dict[str, str]] = None
+        self._l2_id_to_label: Optional[dict[str, str]] = None
 
     def _load_config(self) -> dict[str, Any]:
         if not self._json_path.exists():
@@ -173,6 +176,52 @@ class ConceptClassifier:
                 cache = {}
         self._registry_cache = cache
         return cache
+
+    def _load_l2_concepts(self) -> list[dict]:
+        """Load ordered level=2 concept rows. Prefer market.db `concepts`
+        (rowid preserves taxonomy insert order); fall back to the taxonomy
+        JSON SSOT. Both yield ALL 61 L2 — never just the used subset."""
+        if self._l2_concepts_cache is not None:
+            return self._l2_concepts_cache
+        rows: list[dict] = []
+        if self._market_store is not None:
+            try:
+                conn = self._market_store._get_conn()
+                db_rows = conn.execute(
+                    "SELECT concept_id, label FROM concepts "
+                    "WHERE level = 2 ORDER BY rowid"
+                ).fetchall()
+                rows = [{"concept_id": r["concept_id"], "label": r["label"]}
+                        for r in db_rows]
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("L2 concepts unavailable from DB, "
+                               "falling back to taxonomy JSON: %s", exc)
+                rows = []
+        if not rows:
+            rows = self._load_l2_from_taxonomy()
+        self._l2_concepts_cache = rows
+        return rows
+
+    def _load_l2_from_taxonomy(self) -> list[dict]:
+        try:
+            from config.settings import CONCEPT_TAXONOMY_PATH
+            data = json.loads(
+                Path(CONCEPT_TAXONOMY_PATH).read_text(encoding="utf-8")
+            )
+            return [
+                {"concept_id": c["concept_id"], "label": c["label"]}
+                for c in data.get("concepts", [])
+                if c.get("level") == 2
+            ]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Taxonomy JSON L2 load failed: %s", exc)
+            return []
+
+    @property
+    def l2_bucket_order(self) -> list[str]:
+        """Ordered L2 labels (all 61 from SSOT). Empty when DB+JSON both fail
+        (caller then keeps legacy bucket_order)."""
+        return [c["label"] for c in self._load_l2_concepts()]
 
     def _registry_row(self, symbol: str) -> dict | None:
         if not symbol:
