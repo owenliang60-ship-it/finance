@@ -391,6 +391,21 @@ def _format_bucketed_table(
     return lines
 
 
+def _format_flat_table(
+    items: list,
+    empty_text: str,
+    header: str,
+    formatter,
+) -> list[str]:
+    """Render items as a single flat table in the given order (no grouping)."""
+    if not items:
+        return [empty_text]
+    lines = [header]
+    for item in items:
+        lines.append("  " + formatter(item))
+    return lines
+
+
 def _compact_company(item: dict) -> str:
     symbol = item.get("symbol", "")
     name = _display_company(item, max_len=18)
@@ -1325,34 +1340,34 @@ def _normalize_dv_items(dv_result: dict) -> dict:
 
 
 def format_section_d(dv_result: dict) -> str:
-    """D. Dollar Volume"""
+    """D. Dollar Volume — flat ranking with L2 concept tag, original rank order."""
     lines = ["*D. Dollar Volume*"]
     normalized = _normalize_dv_items(dv_result)
 
-    # 新面孔
     if normalized["new_faces"]:
         lines.append("新面孔:")
-        lines.extend(_format_bucketed_table(
+        lines.extend(_format_flat_table(
             normalized["new_faces"],
             "无新面孔",
-            "标的 | 业务角色 | 排名 | 成交额",
-            lambda item: "{} | {} | #{} | {}".format(
+            "标的 | 概念(L2) | 业务角色 | 排名 | 成交额",
+            lambda item: "{} | {} | {} | #{} | {}".format(
                 _compact_company(item),
+                _grouping_bucket_for(item),
                 _display_classification(item),
                 item["rank"],
                 format_dv(item["dollar_volume"]),
             ),
         ))
 
-    # Full ranking payload. Telegram splitting handles long reports.
     if normalized["rankings"]:
         lines.append("成交额 Top {}:".format(len(normalized["rankings"])))
-        lines.extend(_format_bucketed_table(
+        lines.extend(_format_flat_table(
             normalized["rankings"],
             "无成交额排行",
-            "标的 | 业务角色 | 排名 | 成交额 | 价格",
-            lambda item: "{} | {} | #{} | {} | ${:.0f}".format(
+            "标的 | 概念(L2) | 业务角色 | 排名 | 成交额 | 价格",
+            lambda item: "{} | {} | {} | #{} | {} | ${:.0f}".format(
                 _compact_company(item),
+                _grouping_bucket_for(item),
                 _display_classification(item),
                 item["rank"],
                 format_dv(item["dollar_volume"]),
@@ -1494,32 +1509,48 @@ def build_morning_visual_sections(
         normalized = _normalize_dv_items(dv_result)
         blocks = []
         if normalized["new_faces"]:
-            blocks.append(_build_visual_block(
-                "新面孔",
-                ["标的", "业务角色", "排名", "成交额"],
-                normalized["new_faces"],
-                lambda item: [
-                    _visual_company(item),
-                    _display_classification(item),
-                    "#{}".format(item.get("rank", "")),
-                    format_dv(item.get("dollar_volume") or 0),
+            cols = ["标的", "概念", "业务角色", "排名", "成交额"]
+            widths = [380, 320, 430, 150, 230]
+            blocks.append({
+                "title": "新面孔",
+                "columns": cols,
+                "widths": widths,
+                "grouped": False,
+                "rows": [
+                    {"layer": item.get("layer", "broad"),
+                     "bucket": _grouping_bucket_for(item),
+                     "cells": [
+                         _visual_company(item),
+                         _grouping_bucket_for(item),
+                         _display_classification(item),
+                         "#{}".format(item.get("rank", "")),
+                         format_dv(item.get("dollar_volume") or 0),
+                     ]}
+                    for item in normalized["new_faces"]
                 ],
-                [420, 470, 160, 230],
-            ))
+            })
         if normalized["rankings"]:
-            blocks.append(_build_visual_block(
-                "成交额 Top {}".format(len(normalized["rankings"])),
-                ["标的", "业务角色", "排名", "成交额", "价格"],
-                normalized["rankings"],
-                lambda item: [
-                    _visual_company(item),
-                    _display_classification(item),
-                    "#{}".format(item.get("rank", "")),
-                    format_dv(item.get("dollar_volume") or 0),
-                    "${:.0f}".format(item.get("price") or 0),
+            cols = ["标的", "概念", "业务角色", "排名", "成交额", "价格"]
+            widths = [340, 300, 400, 130, 210, 140]
+            blocks.append({
+                "title": "成交额 Top {}".format(len(normalized["rankings"])),
+                "columns": cols,
+                "widths": widths,
+                "grouped": False,
+                "rows": [
+                    {"layer": item.get("layer", "broad"),
+                     "bucket": _grouping_bucket_for(item),
+                     "cells": [
+                         _visual_company(item),
+                         _grouping_bucket_for(item),
+                         _display_classification(item),
+                         "#{}".format(item.get("rank", "")),
+                         format_dv(item.get("dollar_volume") or 0),
+                         "${:.0f}".format(item.get("price") or 0),
+                     ]}
+                    for item in normalized["rankings"]
                 ],
-                [380, 430, 150, 230, 150],
-            ))
+            })
         if blocks:
             sections.append({
                 "slug": "03_dollar_volume",

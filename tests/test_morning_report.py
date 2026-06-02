@@ -339,6 +339,45 @@ class TestFormatSectionD:
         assert "AI算力/云" in result
         assert "其他" in result
 
+    def test_dv_section_is_flat_with_l2_column_in_rank_order(self):
+        """DV section renders a flat ranking with a 概念(L2) column and no
+        pool/extend or L2 grouping headers. NVDA (pool/extend) keeps rank order."""
+        dv_result = {
+            "rankings": [
+                {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9,
+                 "price": 890.5, "market_cap": 3e12},
+                {"rank": 2, "symbol": "MU", "dollar_volume": 5e9,
+                 "price": 110.0, "market_cap": 160e9},
+            ],
+            "new_faces": [],
+        }
+        result = format_section_d(dv_result)
+        assert "概念" in result            # new L2 column header
+        # No layer headers, no bucket-group headers like '半导体链 (1):'
+        assert "Pool" not in result and "Extend" not in result
+        assert "半导体链 (" not in result
+        # Rank order preserved: NVDA (#1) appears before MU (#2)
+        assert result.find("NVDA") < result.find("MU")
+        # L2 label present (NVDA → 计算芯片/GPU加速器 from registry)
+        assert "计算芯片/GPU加速器" in result
+
+    def test_dv_visual_blocks_are_flat_with_concept_column(self):
+        from scripts.morning_report import build_morning_visual_sections
+        dv_result = {
+            "rankings": [
+                {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9,
+                 "price": 890.5, "market_cap": 3e12},
+            ],
+            "new_faces": [],
+        }
+        sections = build_morning_visual_sections(dv_result=dv_result)
+        dv = next(s for s in sections if s["slug"] == "03_dollar_volume")
+        for block in dv["blocks"]:
+            assert block.get("grouped") is False   # flat, not layer/L2 grouped
+            assert "概念" in block["columns"]
+            for row in block["rows"]:
+                assert len(row["cells"]) == len(block["columns"])
+
 
 class TestLayeredSections:
     def test_market_timing_factor_section_highlights_alerts(self):
