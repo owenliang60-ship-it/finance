@@ -336,7 +336,7 @@ class TestFormatSectionD:
         result = format_section_d(dv_result)
         assert "Unclassified" not in result
         assert "unclassified" not in result.lower()
-        assert "AI算力/云" in result
+        assert "计算芯片/GPU加速器" in result
         assert "其他" in result
 
     def test_dv_section_is_flat_with_l2_column_in_rank_order(self):
@@ -495,7 +495,7 @@ class TestLayeredSections:
         assert "量能加速" in result
         assert "MU" in result
         assert "1.8x" in result
-        assert "DRAM/HBM存储" in result
+        assert "存储芯片" in result
 
     def test_rvol_layered_section(self):
         result = format_section_layered_rvol(sample_market_signals())
@@ -617,9 +617,13 @@ class TestLayeredSections:
         )
         # MU's Semiconductors industry is ambiguous (not in industry_map) →
         # unclassified → LLM. Mock prefill_one so the test stays offline and
-        # deterministically yields the 3-tier 半导体/存储芯片/HBM result.
+        # deterministically yields the 3-tier 半导体/存储芯片/半导体周期 result.
+        # NOTE: l3_themes must use a real level=3 concept_id from
+        # concept_taxonomy_v2.json — "hbm" is fabricated (no level=3 entry in
+        # the taxonomy) and causes ValueError at upsert_company_concepts write time.
+        # "semi_cycle" → "半导体周期" is a verified real level=3.
         mu_llm = LLMResult(
-            l1="semiconductor", l2="memory_chip", l3_themes=["hbm"],
+            l1="semiconductor", l2="memory_chip", l3_themes=["semi_cycle"],
             business_role="DRAM/HBM存储", confidence=0.85,
             source="llm", evidence="mocked", needs_review=0,
         )
@@ -646,7 +650,7 @@ class TestLayeredSections:
         # Three-tier tags from the registry are joined into the row.
         assert "半导体" in result
         assert "存储" in result
-        assert "HBM" in result
+        assert "半导体周期" in result
         # Business role still rendered for context.
         assert "DRAM/HBM存储" in result
 
@@ -686,6 +690,16 @@ class TestLayeredSections:
         assert "DRAM/HBM存储" in result
         # Legacy bucket label still appears on the concept column.
         assert "半导体链" in result
+
+    def test_layered_dv_groups_mu_under_l2_memory_chip_not_legacy_semi(self):
+        """[P1] With the registry-wired classifier, MU's section bucket is the L2
+        '存储芯片', not the legacy L1 '半导体链'. Grounds the L2-grouping switch."""
+        from scripts.morning_report import format_section_layered_dv
+        result = format_section_layered_dv(sample_market_signals())
+        # The bucket-group header for MU is the L2 label.
+        assert "存储芯片 (" in result
+        assert "半导体链 (" not in result
+        assert "MU" in result
 
     def test_bucketed_sections_do_not_truncate_with_more(self):
         """Layered sections with >10 rows must not truncate; bucket display covers all entries."""
@@ -1316,7 +1330,10 @@ class TestBroadDropPlanV3:
 
     def test_dv_section_filters_out_broad_layer(self):
         """[v3 P1] DV text section drops rows whose mcap classifies them as broad.
-        Aligned with the selection-scan universe scope (pool ∪ extend)."""
+        Aligned with the selection-scan universe scope (pool ∪ extend).
+        NOTE: ARM was removed from the new_faces fixture because ARM joined the
+        core pool (pool-drift, not a grouping bug) — confirmed via
+        data/pool/universe.json. Replaced with ZZZBROAD (synthetic, never in pool)."""
         dv_result = {
             "rankings": [
                 # mcap 25B → extend, kept
@@ -1327,14 +1344,14 @@ class TestBroadDropPlanV3:
                  "price": 45.0, "market_cap": 6e9},
             ],
             "new_faces": [
-                # mcap 8B → broad, dropped
-                {"rank": 18, "symbol": "ARM", "dollar_volume": 1.0e9, "market_cap": 8e9},
+                # not in pool + mcap 8B → broad, dropped
+                {"rank": 18, "symbol": "ZZZBROAD", "dollar_volume": 1.0e9, "market_cap": 8e9},
             ],
         }
         result = format_section_d(dv_result)
         assert "NVDA" in result
         assert "OKLO" not in result
-        assert "ARM" not in result
+        assert "ZZZBROAD" not in result
 
     def test_dv_filter_uses_dv_row_market_cap_over_stale_local_metadata(
         self, monkeypatch
