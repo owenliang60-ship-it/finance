@@ -92,6 +92,12 @@ def _seed_v2_registry(tmp_path, rows: dict[str, dict]):
                             "secondary": "gpu_accelerator",
                             "display": "半导体 / 计算芯片/GPU加速器 / AI算力",
                             "business_role": "...", "theme_ids": [...]}}
+
+    Seeds the hardcoded L1/L2/L3 stubs plus minimal stubs for any secondary
+    concept_ids found in `rows` that are not already in the hardcoded list.
+    This satisfies the FK constraint on company_concept_tags.secondary_concept_id
+    so callers can pass symbols with arbitrary secondaries and then call
+    store.upsert_concepts([...]) afterwards to fill in proper labels/metadata.
     """
     from src.data.market_store import MarketStore
     store = MarketStore(tmp_path / "market.db")
@@ -104,6 +110,17 @@ def _seed_v2_registry(tmp_path, rows: dict[str, dict]):
         {"concept_id": "consumer_staples", "label": "必需消费品", "level": 2, "parent_id": "consumer_retail"},
         {"concept_id": "ai_compute", "label": "AI算力", "level": 3, "concept_type": "theme"},
     ]
+    hardcoded_ids = {c["concept_id"] for c in seeded_concepts}
+    # Auto-add L2 stubs for any secondary IDs in `rows` not already hardcoded,
+    # so upsert_company_concepts FK is satisfied before the caller adds full rows.
+    for r in rows.values():
+        sec = r.get("secondary")
+        if sec and sec not in hardcoded_ids:
+            seeded_concepts.append(
+                {"concept_id": sec, "label": sec, "level": 2,
+                 "parent_id": r.get("primary")}
+            )
+            hardcoded_ids.add(sec)
     store.upsert_concepts(seeded_concepts)
     upserts = []
     for sym, r in rows.items():
@@ -278,3 +295,26 @@ def test_grouping_bucket_unregistered_uses_concept_bucket_then_classify(tmp_path
     # ④ no field → legacy classify keyword/override path
     assert clf._grouping_bucket(
         {"symbol": "NVDA", "industry": "Semiconductors"}) == "AI算力/云"
+
+
+def test_group_items_orders_by_l2_when_registry_present(tmp_path):
+    """group_items must place rows under L2 buckets in taxonomy L2 order
+    and suppress empty buckets."""
+    store = _seed_v2_registry(tmp_path, {
+        "NVDA": {"primary": "semiconductor", "secondary": "gpu_accelerator",
+                 "display": "半导体 / 计算芯片/GPU加速器"},
+        "MU": {"primary": "semiconductor", "secondary": "memory_chip",
+               "display": "半导体 / 存储芯片"},
+    })
+    # _seed_v2_registry seeds gpu_accelerator + consumer_staples L2; add memory_chip.
+    store.upsert_concepts([
+        {"concept_id": "memory_chip", "label": "存储芯片", "level": 2,
+         "parent_id": "semiconductor"},
+    ])
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
+    grouped = clf.group_items([{"symbol": "MU"}, {"symbol": "NVDA"}])
+    keys = list(grouped.keys())
+    # Only the two hit buckets appear (empty suppression).
+    assert set(keys) == {"计算芯片/GPU加速器", "存储芯片"}
+    # gpu_accelerator precedes memory_chip in taxonomy order.
+    assert keys.index("计算芯片/GPU加速器") < keys.index("存储芯片")

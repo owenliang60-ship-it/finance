@@ -278,18 +278,44 @@ class ConceptClassifier:
             return item.get("concept_bucket") or self.classify(item)
         return self.classify(item)
 
+    def _active_bucket_order(self) -> list[str]:
+        """L2 order ONLY when the registry is actually usable — a market_store is
+        wired AND company_concept_tags has rows, so items can resolve to L2 labels.
+        Otherwise (no store / empty registry / DB broken) keep the legacy
+        bucket_order: unregistered items then group under the legacy 15 buckets in
+        legacy order, instead of leaking out as unordered trailing extras under an
+        all-empty L2 order. This is what makes the acceptance criterion
+        'DB-unavailable degrades to the legacy 15-bucket order' actually true.
+
+        NOTE: l2_bucket_order itself still returns 61 via the JSON fallback even
+        with no store (it is the raw SSOT order — Step 1.6/1.7). The gate here is
+        on whether there is registry DATA to group by L2, NOT on whether the order
+        list can be built. `_load_registry()` returns {} (never raises) on a broken
+        DB, so the gate degrades safely."""
+        if self._market_store is not None and self._load_registry():
+            l2 = self.l2_bucket_order
+            if l2:
+                return l2
+        return self.bucket_order
+
     def group_items(self, items: list[dict]) -> OrderedDict[str, list[dict]]:
-        """Group items by bucket in configured display order; registry wins over
-        any pre-computed legacy `concept_bucket` field on the item."""
-        grouped: dict[str, list[dict]] = {bucket: [] for bucket in self.bucket_order}
+        """Group items by bucket in active (L2-preferred) display order; empty
+        buckets are suppressed. Registry L2 wins over any pre-computed
+        concept_bucket field on the item."""
+        order = self._active_bucket_order()
+        grouped: dict[str, list[dict]] = {bucket: [] for bucket in order}
         for item in items:
             bucket = self._grouping_bucket(item)
             grouped.setdefault(bucket, []).append(item)
-        return OrderedDict(
+        ordered = OrderedDict(
             (bucket, grouped[bucket])
-            for bucket in self.bucket_order
+            for bucket in order
             if grouped.get(bucket)
         )
+        for bucket, rows in grouped.items():
+            if rows and bucket not in ordered:
+                ordered[bucket] = rows
+        return ordered
 
 
 _REPORT_CONCEPT_CLASSIFIER: ConceptClassifier | None = None

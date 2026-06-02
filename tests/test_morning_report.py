@@ -669,6 +669,84 @@ class TestLayeredSections:
         assert "S0 SignalCo 0" in result
         assert "S11 SignalCo 11" in result
 
+    def test_layered_pmarp_visual_groups_by_l2_and_suppresses_empties(self):
+        from scripts.morning_report import (
+            build_morning_visual_sections, _rows_by_layer_and_bucket,
+        )
+        sections = build_morning_visual_sections(sample_market_signals())
+        pmarp = next(s for s in sections if s["slug"] == "01_pmarp")
+        grouped = _rows_by_layer_and_bucket(pmarp["blocks"][0]["rows"])
+        # NVDA pool → 计算芯片/GPU加速器 ; no legacy 半导体链 bucket key with rows.
+        pool_nonempty = {b for b, rows in grouped["pool"].items() if rows}
+        assert "计算芯片/GPU加速器" in pool_nonempty
+        assert "半导体链" not in pool_nonempty
+        # BA extend → 航空航天与国防
+        extend_nonempty = {b for b, rows in grouped["extend"].items() if rows}
+        assert "航空航天与国防" in extend_nonempty
+
+    def test_estimate_visual_height_finite_with_l2_order(self):
+        from scripts.morning_report import (
+            build_morning_visual_sections, _estimate_visual_height,
+        )
+        sections = build_morning_visual_sections(sample_market_signals())
+        pmarp = next(s for s in sections if s["slug"] == "01_pmarp")
+        h = _estimate_visual_height(pmarp)
+        assert 640 <= h < 20000  # bounded; no per-empty-bucket inflation
+
+    def test_rows_by_layer_and_bucket_no_silent_drop_for_unregistered(self):
+        """Unregistered pool/extend symbols fall through to a legacy bucket label
+        (e.g. '其他') that is NOT in the 61-bucket L2 CONCEPT_BUCKET_ORDER.
+        The render loop and height estimator must include those rows as
+        trailing-extras — they must NOT be silently dropped from the visual."""
+        from scripts.morning_report import (
+            _rows_by_layer_and_bucket, _estimate_visual_height, CONCEPT_BUCKET_ORDER,
+        )
+        # Two rows: one that resolves to an L2 label (NVDA → 计算芯片/GPU加速器)
+        # and one that resolves to a legacy fallback label not in L2 order.
+        # We construct the row with a pre-assigned legacy bucket to isolate the
+        # render-path logic without relying on the live registry for the fallback case.
+        legacy_label = "其他"
+        assert legacy_label not in CONCEPT_BUCKET_ORDER  # precondition: truly an extra
+        rows = [
+            {"layer": "pool", "bucket": "计算芯片/GPU加速器", "cells": ["NVDA", "x"]},
+            {"layer": "pool", "bucket": legacy_label, "cells": ["DOCU", "x"]},
+        ]
+        grouped = _rows_by_layer_and_bucket(rows)
+        pool_nonempty = {b for b, r in grouped["pool"].items() if r}
+        # Both buckets must appear in the grouped dict (setdefault already handles this)
+        assert "计算芯片/GPU加速器" in pool_nonempty
+        assert legacy_label in pool_nonempty  # extra bucket present in dict
+        # Build a synthetic section with these rows to verify the height estimator
+        # counts the legacy-bucket rows (not zero).
+        section = {
+            "title": "Test", "slug": "test", "blocks": [
+                {
+                    "title": "Test block",
+                    "columns": ["标的", "x"],
+                    "widths": [200, 200],
+                    "rows": rows,
+                },
+            ],
+        }
+        h = _estimate_visual_height(section)
+        # Height must include both NVDA and DOCU rows — not just the L2-ordered one.
+        # A section with only the L2 row (1 row) would be shorter than one with 2 rows.
+        section_one_row = {
+            "title": "Test", "slug": "test", "blocks": [
+                {
+                    "title": "Test block",
+                    "columns": ["标的", "x"],
+                    "widths": [200, 200],
+                    "rows": [rows[0]],  # only the L2 row
+                },
+            ],
+        }
+        h_one = _estimate_visual_height(section_one_row)
+        assert h > h_one, (
+            "Height with 2 rows (incl. legacy-bucket) must exceed 1-row height; "
+            "legacy-bucket row was silently dropped from height estimator"
+        )
+
 
 class TestMergeVolumeAnomaly:
     """`_merge_volume_anomaly_hits` 合并 DV 和 RVOL 命中，按 priority_group 排序，

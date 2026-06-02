@@ -69,7 +69,14 @@ def _get_concept_classifier():
     return get_report_concept_classifier()
 
 
-CONCEPT_BUCKET_ORDER = _get_concept_classifier().bucket_order
+def _concept_bucket_order() -> list[str]:
+    # Delegate to the classifier's SINGLE gating rule (registry-usable → L2,
+    # else legacy) so the visual order and group_items() never diverge — they
+    # must agree, or text and image reports would group differently.
+    return _get_concept_classifier()._active_bucket_order()
+
+
+CONCEPT_BUCKET_ORDER = _concept_bucket_order()
 
 
 def _send_group_message(message: str) -> bool:
@@ -288,6 +295,10 @@ def _hydrate_signal_metadata(metadata: dict, symbols: list[str]) -> None:
 
 def _concept_bucket(item: dict) -> str:
     return _get_concept_classifier().classify(item)
+
+
+def _grouping_bucket_for(item: dict) -> str:
+    return _get_concept_classifier()._grouping_bucket(item)
 
 
 def _layer_for_symbol(symbol: str, metadata: dict, pool_symbols: set) -> str:
@@ -1355,7 +1366,7 @@ def format_section_d(dv_result: dict) -> str:
 def _visual_row(item: dict, cells: list[str]) -> dict:
     return {
         "layer": item.get("layer", "broad"),
-        "bucket": item.get("concept_bucket") or _concept_bucket(item),
+        "bucket": _grouping_bucket_for(item),
         "cells": [str(cell) for cell in cells],
     }
 
@@ -1619,9 +1630,15 @@ def _estimate_visual_height(section: dict) -> int:
             if not layer_rows:
                 height += 58
                 continue
+            layer_dict = grouped.get(layer, {})
             for bucket in CONCEPT_BUCKET_ORDER:
-                rows = grouped.get(layer, {}).get(bucket, [])
+                rows = layer_dict.get(bucket, [])
                 if rows:
+                    height += 50 + _VISUAL_TABLE_HEADER_H + _VISUAL_TABLE_ROW_H * len(rows) + 28
+            # trailing-extras: buckets emitted by _grouping_bucket that are NOT
+            # in the L2 order (e.g. legacy fallback labels for unregistered symbols)
+            for bucket, rows in layer_dict.items():
+                if rows and bucket not in CONCEPT_BUCKET_ORDER:
                     height += 50 + _VISUAL_TABLE_HEADER_H + _VISUAL_TABLE_ROW_H * len(rows) + 28
     return max(height + 260, 640)
 
@@ -1754,8 +1771,15 @@ def render_morning_report_images(
                     y += 58
                     continue
 
-                for bucket in CONCEPT_BUCKET_ORDER:
-                    rows = grouped.get(layer, {}).get(bucket, [])
+                layer_dict = grouped.get(layer, {})
+                # Build the ordered bucket sequence: L2-ordered first, then any
+                # trailing-extras (legacy fallback labels for unregistered symbols)
+                # that are NOT in CONCEPT_BUCKET_ORDER — mirrors group_items().
+                extra_buckets = [
+                    b for b in layer_dict if b not in CONCEPT_BUCKET_ORDER and layer_dict[b]
+                ]
+                for bucket in list(CONCEPT_BUCKET_ORDER) + extra_buckets:
+                    rows = layer_dict.get(bucket, [])
                     if not rows:
                         continue
                     draw.text(
