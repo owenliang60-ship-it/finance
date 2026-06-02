@@ -151,14 +151,14 @@ def test_classifier_concept_tags_returns_split_list(tmp_path):
 
 
 def test_grouping_bucket_maps_v2_l1_to_legacy_bucket(tmp_path):
-    """For section grouping, new 11 L1 → legacy 14 bucket via _CONCEPT_TO_LEGACY_BUCKET."""
+    """L1→legacy is now the FALLBACK (chain step ②), used only when secondary_concept_id is absent."""
     store = _seed_v2_registry(tmp_path, {
         "NVDA": {"primary": "semiconductor", "secondary": "gpu_accelerator",
                  "display": "半导体 / 计算芯片/GPU加速器"},
     })
     clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
     bucket = clf._grouping_bucket({"symbol": "NVDA"})
-    assert bucket == "半导体链"   # legacy section header continuity
+    assert bucket == "计算芯片/GPU加速器"   # L2 label wins (chain step ①)
 
 
 def test_classifier_unregistered_symbol_falls_back_to_legacy(tmp_path):
@@ -245,3 +245,36 @@ def test_l2_bucket_order_falls_back_to_taxonomy_json_without_store():
     assert len(order) == 61
     assert "计算芯片/GPU加速器" in order
     assert "存储芯片" in order
+
+
+def test_grouping_bucket_prefers_l2_label(tmp_path):
+    """New chain: secondary_concept_id (L2 label) beats the L1→legacy bucket.
+    NVDA's L2 is gpu_accelerator → '计算芯片/GPU加速器', NOT '半导体链'."""
+    store = _seed_v2_registry(tmp_path, {
+        "NVDA": {"primary": "semiconductor", "secondary": "gpu_accelerator",
+                 "display": "半导体 / 计算芯片/GPU加速器"},
+    })
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
+    assert clf._grouping_bucket({"symbol": "NVDA"}) == "计算芯片/GPU加速器"
+
+
+def test_grouping_bucket_falls_back_to_l1_legacy_when_no_l2(tmp_path):
+    """secondary_concept_id absent → chain falls to L1→legacy bucket."""
+    store = _seed_v2_registry(tmp_path, {
+        "GOOG": {"primary": "internet_software", "secondary": None,
+                 "display": "互联网与软件"},
+    })
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
+    assert clf._grouping_bucket({"symbol": "GOOG"}) == "互联网/广告"
+
+
+def test_grouping_bucket_unregistered_uses_concept_bucket_then_classify(tmp_path):
+    """No registry row → use item['concept_bucket'] (③), else classify() (④)."""
+    store = _seed_v2_registry(tmp_path, {})
+    clf = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
+    # ③ explicit concept_bucket field honored
+    assert clf._grouping_bucket(
+        {"symbol": "ZZZZ", "concept_bucket": "软件/SaaS"}) == "软件/SaaS"
+    # ④ no field → legacy classify keyword/override path
+    assert clf._grouping_bucket(
+        {"symbol": "NVDA", "industry": "Semiconductors"}) == "AI算力/云"

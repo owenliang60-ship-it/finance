@@ -223,6 +223,15 @@ class ConceptClassifier:
         (caller then keeps legacy bucket_order)."""
         return [c["label"] for c in self._load_l2_concepts()]
 
+    def _l2_label_for_id(self, concept_id: str | None) -> str | None:
+        if not concept_id:
+            return None
+        if self._l2_id_to_label is None:
+            self._l2_id_to_label = {
+                c["concept_id"]: c["label"] for c in self._load_l2_concepts()
+            }
+        return self._l2_id_to_label.get(concept_id)
+
     def _registry_row(self, symbol: str) -> dict | None:
         if not symbol:
             return None
@@ -248,10 +257,18 @@ class ConceptClassifier:
         return [bucket] if bucket else []
 
     def _grouping_bucket(self, item: dict | str) -> str:
-        """Resolve the section bucket for grouping, preferring registry primary."""
+        """Resolve the section bucket for grouping. Chain:
+        ① registry L2 (secondary_concept_id label)
+        ② registry L1 → legacy bucket (_CONCEPT_TO_LEGACY_BUCKET) when L2 missing
+        ③ item['concept_bucket'] field
+        ④ legacy classify()
+        """
         symbol = self._symbol(item)
         row = self._registry_row(symbol)
         if row:
+            l2_label = self._l2_label_for_id(row.get("secondary_concept_id"))
+            if l2_label:
+                return l2_label
             primary = row.get("primary_concept_id")
             if primary:
                 bucket = _CONCEPT_TO_LEGACY_BUCKET.get(primary)
