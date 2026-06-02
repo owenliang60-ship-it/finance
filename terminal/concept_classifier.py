@@ -64,7 +64,6 @@ class ConceptClassifier:
         self._market_store = market_store
         self._registry_cache: Optional[dict[str, dict]] = None
         self._l2_concepts_cache: Optional[list[dict]] = None
-        self._l2_label_to_id: Optional[dict[str, str]] = None
         self._l2_id_to_label: Optional[dict[str, str]] = None
 
     def _load_config(self) -> dict[str, Any]:

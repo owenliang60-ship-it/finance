@@ -1409,7 +1409,9 @@ def build_morning_visual_sections(
     market_signals: dict | None = None,
     dv_result: dict | None = None,
 ) -> list[dict]:
-    """Build image-report section specs grouped by layer and concept bucket."""
+    """Build image-report section specs. The layered signal sections (PMARP /
+    量能异常) group pool → extend → L2 concept; the Dollar Volume section is a
+    flat, rank-ordered table with a 概念(L2) column (not layer/concept grouped)."""
     sections = []
     as_of = (market_signals or {}).get("as_of") or datetime.now().strftime("%Y-%m-%d")
     common_subtitle = "信号日 {} | Pool / Extend 分层，层内按题材聚类".format(as_of)
@@ -1555,7 +1557,7 @@ def build_morning_visual_sections(
             sections.append({
                 "slug": "03_dollar_volume",
                 "title": "3. Dollar Volume",
-                "subtitle": common_subtitle,
+                "subtitle": "信号日 {} | 按成交额排名，附概念(L2)".format(as_of),
                 "blocks": blocks,
             })
 
@@ -2128,7 +2130,7 @@ def format_morning_report(
         lines.append(format_section_c(rvol_list))
         lines.append("")
 
-    # D. Dollar Volume — also concept-bucketed for readability.
+    # D. Dollar Volume — flat ranking with a 概念(L2) column (not concept-bucketed).
     if dv_result:
         lines.append(format_section_d(dv_result))
         lines.append("")
