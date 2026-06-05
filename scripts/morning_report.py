@@ -158,15 +158,6 @@ def _display_company(item: dict, max_len: int = 22) -> str:
     return "{} {}".format(symbol, name)
 
 
-def _business_role(item: dict) -> str:
-    """Return our own business-role label, never the raw FMP industry string."""
-    return _get_concept_classifier().business_role(item)
-
-
-def _display_classification(item: dict) -> str:
-    return _business_role(item)
-
-
 def _display_concept_tags(item: dict) -> str:
     """Return three-tier concept tags (e.g. '半导体 / 存储 / HBM') from the registry,
     or fall back to the legacy single-bucket label when the symbol is unregistered."""
@@ -1461,18 +1452,17 @@ def build_morning_visual_sections(
             "blocks": [
                 _build_visual_block(
                     "上穿/修复",
-                    ["标的", "概念", "业务角色", "信号", "当前", "变化", "市值"],
+                    ["标的", "概念", "信号", "当前", "变化", "市值"],
                     pmarp.get("hits", []),
                     lambda item: [
                         _visual_company(item),
                         _display_concept_tags(item),
-                        _display_classification(item),
                         PMARP_SIGNAL_LABELS.get(item.get("signal"), "—"),
                         "{:.1f}%".format(item.get("value") or 0),
                         "{:.1f}→{:.1f}".format(item.get("previous") or 0, item.get("value") or 0),
                         _format_market_cap(item.get("marketCap")),
                     ],
-                    [300, 320, 240, 140, 130, 170, 150],
+                    [300, 320, 140, 130, 170, 150],
                 ),
             ],
         })
@@ -1485,18 +1475,17 @@ def build_morning_visual_sections(
             "blocks": [
                 _build_visual_block(
                     "量能异常",
-                    ["标的", "概念", "业务角色", "类型", "DV 5d/20d", "RVOL", "市值"],
+                    ["标的", "概念", "类型", "DV 5d/20d", "RVOL", "市值"],
                     volume_anomaly.get("hits", []),
                     lambda item: [
                         _visual_company(item),
                         _display_concept_tags(item),
-                        _display_classification(item),
                         item.get("volume_signal_kind") or "—",
                         _format_volume_anomaly_dv_cell(item),
                         _format_volume_anomaly_rvol_cell(item),
                         _format_market_cap(item.get("marketCap")),
                     ],
-                    [280, 320, 240, 140, 280, 180, 150],
+                    [280, 320, 140, 280, 180, 150],
                 ),
             ],
         })
@@ -1505,8 +1494,8 @@ def build_morning_visual_sections(
         normalized = _normalize_dv_items(dv_result)
         blocks = []
         if normalized["new_faces"]:
-            cols = ["标的", "概念", "业务角色", "排名", "成交额"]
-            widths = [380, 320, 430, 150, 230]
+            cols = ["标的", "概念", "排名", "成交额"]
+            widths = [380, 320, 150, 230]
             blocks.append({
                 "title": "新面孔",
                 "columns": cols,
@@ -1518,7 +1507,6 @@ def build_morning_visual_sections(
                      "cells": [
                          _visual_company(item),
                          _grouping_bucket_for(item),
-                         _display_classification(item),
                          "#{}".format(item.get("rank", "")),
                          format_dv(item.get("dollar_volume") or 0),
                      ]}
@@ -1526,8 +1514,8 @@ def build_morning_visual_sections(
                 ],
             })
         if normalized["rankings"]:
-            cols = ["标的", "概念", "业务角色", "排名", "成交额", "价格"]
-            widths = [340, 300, 400, 130, 210, 140]
+            cols = ["标的", "概念", "排名", "成交额", "价格"]
+            widths = [340, 300, 130, 210, 140]
             blocks.append({
                 "title": "成交额 Top {}".format(len(normalized["rankings"])),
                 "columns": cols,
@@ -1539,7 +1527,6 @@ def build_morning_visual_sections(
                      "cells": [
                          _visual_company(item),
                          _grouping_bucket_for(item),
-                         _display_classification(item),
                          "#{}".format(item.get("rank", "")),
                          format_dv(item.get("dollar_volume") or 0),
                          "${:.0f}".format(item.get("price") or 0),

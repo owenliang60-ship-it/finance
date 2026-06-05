@@ -1523,3 +1523,13 @@ def test_no_business_role_in_text_sections():
         mr.format_section_d(dv),
     ])
     assert "业务角色" not in rendered
+
+
+def test_no_business_role_in_visual_blocks():
+    sections = mr.build_morning_visual_sections(
+        market_signals=_make_market_signals(pmarp_hits=[_make_pmarp_hit()]),
+        dv_result=_make_dv_result(rankings=[_make_dv_item()]),
+    )
+    for section in sections:                      # 每个 section 含 slug/title/blocks
+        for block in section.get("blocks", []):
+            assert "业务角色" not in block.get("columns", [])
