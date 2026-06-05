@@ -1035,11 +1035,10 @@ def format_section_layered_pmarp(market_signals: dict) -> str:
     lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无 PMARP 信号",
-        "标的 | 概念 | 业务角色 | 信号 | 当前 | 变化 | 市值",
-        lambda item: "{} | {} | {} | {} | {:.1f}% | {:.1f}→{:.1f} | {}".format(
+        "标的 | 概念 | 信号 | 当前 | 变化 | 市值",
+        lambda item: "{} | {} | {} | {:.1f}% | {:.1f}→{:.1f} | {}".format(
             _compact_company(item),
             _display_concept_tags(item),
-            _display_classification(item),
             PMARP_SIGNAL_LABELS.get(item.get("signal"), "—"),
             item.get("value") or 0,
             item.get("previous") or 0,
@@ -1056,11 +1055,10 @@ def format_section_layered_dv(market_signals: dict) -> str:
     lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无加速信号",
-        "标的 | 概念 | 业务角色 | 倍数 | 5d/20d | 市值",
-        lambda item: "{} | {} | {} | {:.1f}x | {}/{} | {}".format(
+        "标的 | 概念 | 倍数 | 5d/20d | 市值",
+        lambda item: "{} | {} | {:.1f}x | {}/{} | {}".format(
             _compact_company(item),
             _display_concept_tags(item),
-            _display_classification(item),
             item.get("ratio") or 0,
             format_dv(item.get("dv_5d") or 0),
             format_dv(item.get("dv_20d") or 0),
@@ -1081,11 +1079,10 @@ def format_section_layered_rvol(market_signals: dict) -> str:
     lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无持续放量信号",
-        "标的 | 概念 | 业务角色 | 形态 | 最新 | 市值",
-        lambda item: "{} | {} | {} | {} | {:.1f}σ | {}".format(
+        "标的 | 概念 | 形态 | 最新 | 市值",
+        lambda item: "{} | {} | {} | {:.1f}σ | {}".format(
             _compact_company(item),
             _display_concept_tags(item),
-            _display_classification(item),
             level_labels.get(item.get("level"), item.get("level", "")),
             item.get("latest_rvol") or 0,
             _format_market_cap(item.get("marketCap")),
@@ -1160,11 +1157,10 @@ def format_section_layered_volume_anomaly(market_signals: dict) -> str:
     lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无量能异常信号",
-        "标的 | 概念 | 业务角色 | 类型 | DV 5d/20d | RVOL | 市值",
-        lambda item: "{} | {} | {} | {} | {} | {} | {}".format(
+        "标的 | 概念 | 类型 | DV 5d/20d | RVOL | 市值",
+        lambda item: "{} | {} | {} | {} | {} | {}".format(
             _compact_company(item),
             _display_concept_tags(item),
-            _display_classification(item),
             item.get("volume_signal_kind") or "—",
             _format_volume_anomaly_dv_cell(item),
             _format_volume_anomaly_rvol_cell(item),
@@ -1349,11 +1345,10 @@ def format_section_d(dv_result: dict) -> str:
         lines.extend(_format_flat_table(
             normalized["new_faces"],
             "无新面孔",
-            "标的 | 概念(L2) | 业务角色 | 排名 | 成交额",
-            lambda item: "{} | {} | {} | #{} | {}".format(
+            "标的 | 概念(L2) | 排名 | 成交额",
+            lambda item: "{} | {} | #{} | {}".format(
                 _compact_company(item),
                 _grouping_bucket_for(item),
-                _display_classification(item),
                 item["rank"],
                 format_dv(item["dollar_volume"]),
             ),
@@ -1364,11 +1359,10 @@ def format_section_d(dv_result: dict) -> str:
         lines.extend(_format_flat_table(
             normalized["rankings"],
             "无成交额排行",
-            "标的 | 概念(L2) | 业务角色 | 排名 | 成交额 | 价格",
-            lambda item: "{} | {} | {} | #{} | {} | ${:.0f}".format(
+            "标的 | 概念(L2) | 排名 | 成交额 | 价格",
+            lambda item: "{} | {} | #{} | {} | ${:.0f}".format(
                 _compact_company(item),
                 _grouping_bucket_for(item),
-                _display_classification(item),
                 item["rank"],
                 format_dv(item["dollar_volume"]),
                 item["price"],

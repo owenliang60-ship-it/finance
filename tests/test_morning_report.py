@@ -529,7 +529,6 @@ class TestLayeredSections:
         assert "RVOL 持续放量" in result
         assert "RKLB" in result
         assert "3日连续" in result
-        assert "小型火箭发射" in result
 
     def test_volume_anomaly_layered_section_renders_merged_columns(self):
         from scripts.morning_report import format_section_layered_volume_anomaly
@@ -678,8 +677,6 @@ class TestLayeredSections:
         assert "半导体" in result
         assert "存储" in result
         assert "半导体周期" in result
-        # Business role still rendered for context.
-        assert "DRAM/HBM存储" in result
 
     def test_image_report_blocks_include_concept_column(self):
         """B 的 image-report cron 走 build_morning_visual_sections —— 2 个 layered
@@ -714,7 +711,6 @@ class TestLayeredSections:
         result = format_section_layered_dv(sample_market_signals())
         assert "Unclassified" not in result
         assert "MU" in result
-        assert "DRAM/HBM存储" in result
         # Legacy bucket label still appears on the concept column.
         assert "半导体链" in result
 
@@ -1514,3 +1510,16 @@ class TestVolumeAnomalyPayload:
         assert "rvol_sustained" in result
         assert len(result["dv_acceleration"]["hits"]) == 1
         assert len(result["rvol_sustained"]["hits"]) == 1
+
+
+def test_no_business_role_in_text_sections():
+    ms = _make_market_signals(anomaly_hits=[
+        {"symbol": "NVDA", "marketCap": 3e12, "layer": "pool",
+         "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
+         "ratio": 5.0, "dv_5d": 1e9, "dv_20d": 2e8}])
+    dv = _make_dv_result(rankings=[_make_dv_item()])
+    rendered = "\n".join([
+        mr.format_section_layered_volume_anomaly(ms),
+        mr.format_section_d(dv),
+    ])
+    assert "业务角色" not in rendered
