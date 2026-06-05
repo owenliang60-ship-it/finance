@@ -27,6 +27,33 @@ from scripts.morning_report import (
     render_morning_report_pdf,
 )
 
+# P1-2 修：现有测试无 `mr` 别名（文件用 `from scripts.morning_report import (...)` + 方法内 import）。
+# 新测试统一用 mr.xxx，故在此显式加别名。
+from scripts import morning_report as mr
+
+
+def _make_pmarp_hit(symbol="NVDA", signal="bullish_breakout", value=98.5,
+                    market_cap=3e12, secondary_concept_id=None):
+    return {"symbol": symbol, "signal": signal, "value": value, "previous": value - 1.0,
+            "marketCap": market_cap, "layer": "pool",
+            "secondary_concept_id": secondary_concept_id}
+
+
+def _make_market_signals(pmarp_hits=None, anomaly_hits=None):
+    return {"pmarp": {"hits": pmarp_hits or [], "criteria": "PMARP"},
+            "volume_anomaly": {"hits": anomaly_hits or [], "criteria": "VOL"}}
+
+
+def _make_dv_result(rankings=None, new_faces=None, date="2026-06-03"):
+    return {"date": date, "rankings": rankings or [], "new_faces": new_faces or []}
+
+
+def _make_dv_item(symbol="NVDA", rank=1, dollar_volume=9e9, price=100.0,
+                  rank_change_label="=", market_cap=3e12):
+    return {"symbol": symbol, "rank": rank, "dollar_volume": dollar_volume,
+            "price": price, "rank_change_label": rank_change_label,
+            "market_cap": market_cap, "marketCap": market_cap, "layer": "pool"}
+
 
 def sample_market_signals():
     return {
