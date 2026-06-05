@@ -1332,7 +1332,7 @@ def format_section_d(dv_result: dict) -> str:
     normalized = _normalize_dv_items(dv_result)
 
     if normalized["new_faces"]:
-        lines.append("新面孔:")
+        lines.append("真·新面孔（{} 日内首次进榜）:".format(DOLLAR_VOLUME_LOOKBACK))
         lines.extend(_format_flat_table(
             normalized["new_faces"],
             "无新面孔",
@@ -1350,11 +1350,12 @@ def format_section_d(dv_result: dict) -> str:
         lines.extend(_format_flat_table(
             normalized["rankings"],
             "无成交额排行",
-            "标的 | 概念(L2) | 排名 | 成交额 | 价格",
-            lambda item: "{} | {} | #{} | {} | ${:.0f}".format(
+            "标的 | 概念(L2) | 排名 | 排名变化 | 成交额 | 价格",
+            lambda item: "{} | {} | #{} | {} | {} | ${:.0f}".format(
                 _compact_company(item),
                 _grouping_bucket_for(item),
                 item["rank"],
+                item.get("rank_change_label", "—"),
                 format_dv(item["dollar_volume"]),
                 item["price"],
             ),
@@ -1514,8 +1515,8 @@ def build_morning_visual_sections(
                 ],
             })
         if normalized["rankings"]:
-            cols = ["标的", "概念", "排名", "成交额", "价格"]
-            widths = [340, 300, 130, 210, 140]
+            cols = ["标的", "概念", "排名", "排名变化", "成交额", "价格"]
+            widths = [340, 300, 130, 130, 210, 140]
             blocks.append({
                 "title": "成交额 Top {}".format(len(normalized["rankings"])),
                 "columns": cols,
@@ -1528,6 +1529,7 @@ def build_morning_visual_sections(
                          _visual_company(item),
                          _grouping_bucket_for(item),
                          "#{}".format(item.get("rank", "")),
+                         item.get("rank_change_label", "—"),
                          format_dv(item.get("dollar_volume") or 0),
                          "${:.0f}".format(item.get("price") or 0),
                      ]}
@@ -2209,6 +2211,13 @@ def main():
 
         # 3. Dollar Volume 采集
         dv_result = run_dollar_volume()
+        if dv_result and dv_result.get("rankings"):
+            from src.data.dollar_volume import get_previous_day_ranks, annotate_rank_changes
+            # P2-4 修：无 _today_iso() helper；用 inline strftime（codebase 惯例，见 :1416/:1726）
+            dv_date = dv_result.get("date") or datetime.now().strftime("%Y-%m-%d")
+            prev_ranks = get_previous_day_ranks(dv_date)
+            annotate_rank_changes(dv_result["rankings"], prev_ranks)
+            annotate_rank_changes(dv_result.get("new_faces", []), prev_ranks)
 
         # 4. 市场情绪脉搏 + 社交热门 (Adanos market-level) — opt-in 默认 skip。
         market_pulse = None

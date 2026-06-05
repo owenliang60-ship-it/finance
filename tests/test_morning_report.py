@@ -1533,3 +1533,12 @@ def test_no_business_role_in_visual_blocks():
     for section in sections:                      # 每个 section 含 slug/title/blocks
         for block in section.get("blocks", []):
             assert "业务角色" not in block.get("columns", [])
+
+
+def test_dv_section_has_rank_change_and_real_newface_title():
+    dv = _make_dv_result(
+        rankings=[_make_dv_item("NVDA", rank=1, rank_change_label="↑3")],
+        new_faces=[_make_dv_item("ABCD", rank=40, rank_change_label="NEW")])
+    out = mr.format_section_d(dv)
+    assert "排名变化" in out and "↑3" in out
+    assert "真·新面孔" in out
