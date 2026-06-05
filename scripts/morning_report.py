@@ -1479,26 +1479,39 @@ def build_morning_visual_sections(
             })
 
         pmarp = market_signals.get("pmarp", {})
+        _pmarp_cols = ["标的", "概念", "信号", "当前", "变化", "市值"]
+        _pmarp_widths = [300, 320, 140, 130, 170, 150]
+        _l2_order = {b: i for i, b in enumerate(CONCEPT_BUCKET_ORDER)}
+        _pmarp_blocks = []
+        for _signal_key in ("bullish_breakout", "oversold_recovery", "momentum_fading"):
+            _sig_hits = [h for h in pmarp.get("hits", []) if h.get("signal") == _signal_key]
+            if not _sig_hits:
+                continue
+            _sig_hits = sorted(_sig_hits, key=lambda x: (
+                PMARP_MCAP_TIER_ORDER.index(_mcap_tier(x.get("marketCap"))),
+                _l2_order.get(_grouping_bucket_for(x), 999),
+                x.get("value") or 0,
+                x.get("symbol", ""),
+            ))
+            _pmarp_blocks.append({
+                "title": PMARP_SIGNAL_LABELS[_signal_key],
+                "columns": _pmarp_cols,
+                "widths": _pmarp_widths,
+                "grouped": False,
+                "rows": [_visual_row(item, [
+                    _visual_company(item),
+                    _display_concept_tags(item),
+                    PMARP_SIGNAL_LABELS.get(item.get("signal"), "—"),
+                    "{:.1f}%".format(item.get("value") or 0),
+                    "{:.1f}→{:.1f}".format(item.get("previous") or 0, item.get("value") or 0),
+                    _format_market_cap(item.get("marketCap")),
+                ]) for item in _sig_hits],
+            })
         sections.append({
             "slug": "01_pmarp",
             "title": "1. PMARP 信号",
             "subtitle": "{} | {}".format(pmarp.get("criteria", ""), common_subtitle),
-            "blocks": [
-                _build_visual_block(
-                    "上穿/修复",
-                    ["标的", "概念", "信号", "当前", "变化", "市值"],
-                    pmarp.get("hits", []),
-                    lambda item: [
-                        _visual_company(item),
-                        _display_concept_tags(item),
-                        PMARP_SIGNAL_LABELS.get(item.get("signal"), "—"),
-                        "{:.1f}%".format(item.get("value") or 0),
-                        "{:.1f}→{:.1f}".format(item.get("previous") or 0, item.get("value") or 0),
-                        _format_market_cap(item.get("marketCap")),
-                    ],
-                    [300, 320, 140, 130, 170, 150],
-                ),
-            ],
+            "blocks": _pmarp_blocks,
         })
 
         volume_anomaly = market_signals.get("volume_anomaly", {})

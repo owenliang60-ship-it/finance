@@ -701,19 +701,18 @@ class TestLayeredSections:
         assert "MU" in result
 
     def test_layered_pmarp_visual_groups_by_l2_and_suppresses_empties(self):
-        from scripts.morning_report import (
-            build_morning_visual_sections, _rows_by_layer_and_bucket,
-        )
+        # Replaced by C3: PMARP visual now uses Method A (signal sub-blocks, grouped=False).
+        # The module-level test_pmarp_visual_three_subblocks_flat_no_business_role
+        # is the authoritative new assertion. This stub keeps the test count stable.
+        from scripts.morning_report import build_morning_visual_sections
         sections = build_morning_visual_sections(sample_market_signals())
         pmarp = next(s for s in sections if s["slug"] == "01_pmarp")
-        grouped = _rows_by_layer_and_bucket(pmarp["blocks"][0]["rows"])
-        # NVDA pool → 计算芯片/GPU加速器 ; no legacy 半导体链 bucket key with rows.
-        pool_nonempty = {b for b, rows in grouped["pool"].items() if rows}
-        assert "计算芯片/GPU加速器" in pool_nonempty
-        assert "半导体链" not in pool_nonempty
-        # BA extend → 航空航天与国防
-        extend_nonempty = {b for b, rows in grouped["extend"].items() if rows}
-        assert "航空航天与国防" in extend_nonempty
+        # With Method A each block is flat (grouped=False); at least 3 signal types present
+        # in sample_market_signals → expect 3 blocks.
+        assert len(pmarp["blocks"]) == 3
+        for block in pmarp["blocks"]:
+            assert block.get("grouped") is False
+            assert "业务角色" not in block["columns"]
 
     def test_estimate_visual_height_finite_with_l2_order(self):
         from scripts.morning_report import (
@@ -1061,9 +1060,12 @@ class TestMorningVisualReport:
         assert "31.2% (29.5%→31.2%)" not in first_timing_row["cells"][3]
         assert "29.5%→31.2%" == first_timing_row["cells"][3]
         assert sections[0]["blocks"][0]["grouped"] is False
-        # PMARP block now contains 3 signal kinds across pool/extend layers
-        pmarp_rows = sections[1]["blocks"][0]["rows"]
-        assert {row["layer"] for row in pmarp_rows} == {"pool", "extend"}
+        # PMARP section now has Method A: 3 flat sub-blocks (one per signal type, grouped=False)
+        assert len(sections[1]["blocks"]) == 3
+        for block in sections[1]["blocks"]:
+            assert block.get("grouped") is False
+        all_pmarp_rows = [r for b in sections[1]["blocks"] for r in b["rows"]]
+        assert {row["layer"] for row in all_pmarp_rows} == {"pool", "extend"}
         # Subtitle should not advertise broad layer anymore (but Section 0 still mentions S2 broad).
         assert "Pool / Extend / Broad" not in sections[1]["subtitle"]
         assert "Pool / Extend 分层" in sections[1]["subtitle"]
@@ -1523,3 +1525,16 @@ def test_pmarp_empty_groups_suppressed():
     out = mr.format_section_pmarp_by_signal_and_cap(
         _make_market_signals(pmarp_hits=[_make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12)]))
     assert "下穿98%" not in out
+
+
+def test_pmarp_visual_three_subblocks_flat_no_business_role():
+    sections = mr.build_morning_visual_sections(
+        market_signals=_make_market_signals(pmarp_hits=[
+            _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12),
+            _make_pmarp_hit("XYZ", "oversold_recovery", 2.0, 50e9)]),
+        dv_result=None)
+    pmarp = next(s for s in sections if s["slug"] == "01_pmarp")
+    assert len(pmarp["blocks"]) >= 2                   # 每信号类型一个子块
+    for block in pmarp["blocks"]:
+        assert block.get("grouped") is False           # 扁平，不走 layer×bucket
+        assert "业务角色" not in block["columns"]
