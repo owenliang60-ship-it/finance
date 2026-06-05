@@ -1549,3 +1549,22 @@ def test_mcap_tier_boundary():
     assert mr._mcap_tier(100e9) == "大盘(≥$100B)"   # 边界含
     assert mr._mcap_tier(99.9e9) == "中小盘(<$100B)"
     assert mr._mcap_tier(None) == "中小盘(<$100B)"   # 缺市值归中小盘
+
+
+def test_pmarp_layered_by_signal_then_cap():
+    hits = [
+        _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12),
+        _make_pmarp_hit("SMCI", "bullish_breakout", 98.7, 30e9),
+        _make_pmarp_hit("XYZ",  "oversold_recovery", 2.0, 50e9),
+    ]
+    out = mr.format_section_pmarp_by_signal_and_cap(_make_market_signals(pmarp_hits=hits))
+    assert "上穿98%" in out and "上穿2%" in out
+    assert out.index("上穿98%") < out.index("上穿2%")     # 信号顺序
+    assert out.index("大盘") < out.index("中小盘")          # 市值顺序
+    assert "业务角色" not in out
+
+
+def test_pmarp_empty_groups_suppressed():
+    out = mr.format_section_pmarp_by_signal_and_cap(
+        _make_market_signals(pmarp_hits=[_make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12)]))
+    assert "下穿98%" not in out

@@ -1030,6 +1030,49 @@ def format_section_market_timing_factor(market_signals: dict) -> str:
     return "\n".join(lines)
 
 
+def _pmarp_signal_cap_groups(hits: list) -> list:
+    """纯分组：返回 [(signal_label, tier_label, sorted_hits), ...]，空组已抑制。
+    供文本/视觉/HTML 三处复用——HTML renderer 消费其输出，不反向 import morning_report。"""
+    l2_order = {b: i for i, b in enumerate(CONCEPT_BUCKET_ORDER)}   # 运行时 61 桶 L2 顺序
+    groups = []
+    for signal_key in ("bullish_breakout", "oversold_recovery", "momentum_fading"):
+        sig_hits = [h for h in hits if h.get("signal") == signal_key]
+        if not sig_hits:
+            continue                                  # 空信号组抑制
+        for tier in PMARP_MCAP_TIER_ORDER:
+            tier_hits = [h for h in sig_hits if _mcap_tier(h.get("marketCap")) == tier]
+            if not tier_hits:
+                continue                              # 空市值档抑制
+            tier_hits.sort(key=lambda x: (            # 同 L2 相邻：(L2 顺序, value, symbol)
+                l2_order.get(_grouping_bucket_for(x), 999),
+                x.get("value") or 0, x["symbol"],
+            ))
+            groups.append((PMARP_SIGNAL_LABELS[signal_key], tier, tier_hits))
+    return groups
+
+
+def format_section_pmarp_by_signal_and_cap(market_signals: dict) -> str:
+    section = market_signals.get("pmarp", {})
+    lines = ["*1. PMARP 信号 ({})*".format(section.get("criteria", ""))]
+    hits = section.get("hits", [])
+    if not hits:
+        return "\n".join(lines + ["无 PMARP 信号"])
+    last_signal = None
+    for signal_label, tier, tier_hits in _pmarp_signal_cap_groups(hits):
+        if signal_label != last_signal:
+            lines.append("【{}】".format(signal_label)); last_signal = signal_label
+        lines.append("  {}".format(tier))
+        lines.append("  标的 | 概念 | 信号 | 当前 | 变化 | 市值")
+        for item in tier_hits:
+            lines.append("    {} | {} | {} | {:.1f}% | {:.1f}→{:.1f} | {}".format(
+                _compact_company(item), _display_concept_tags(item),
+                PMARP_SIGNAL_LABELS.get(item.get("signal"), "—"),
+                item.get("value") or 0, item.get("previous") or 0, item.get("value") or 0,
+                _format_market_cap(item.get("marketCap")),
+            ))
+    return "\n".join(lines)
+
+
 def format_section_layered_pmarp(market_signals: dict) -> str:
     section = market_signals.get("pmarp", {})
     lines = ["*1. PMARP 信号 ({})*".format(section.get("criteria", ""))]
@@ -2103,7 +2146,7 @@ def format_morning_report(
         lines.append(format_section_market_timing_factor(market_signals))
         lines.append("")
 
-        lines.append(format_section_layered_pmarp(market_signals))
+        lines.append(format_section_pmarp_by_signal_and_cap(market_signals))
         lines.append("")
         lines.append(format_section_layered_volume_anomaly(market_signals))
         lines.append("")
