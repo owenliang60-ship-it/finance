@@ -253,3 +253,15 @@ def is_collected(date: str, db_path: Path = DOLLAR_VOLUME_DB) -> bool:
         return row["cnt"] > 0
     finally:
         conn.close()
+
+
+def rank_change_label(today_rank: int, prev_rank: "int | None") -> str:
+    """今日 vs 昨日排名变化标签。prev_rank=None → NEW（昨日不在 top-N）。"""
+    if prev_rank is None:
+        return "NEW"
+    delta = prev_rank - today_rank  # 昨日名次大、今日名次小 = 上升
+    if delta > 0:
+        return "↑{}".format(delta)
+    if delta < 0:
+        return "↓{}".format(-delta)
+    return "="
