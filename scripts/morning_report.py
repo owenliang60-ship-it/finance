@@ -1408,7 +1408,36 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
     renderer (compile_morning_html_report) consumes this dict without
     importing morning_report back.
     """
-    blocks = [{"heading": "1. PMARP 信号"}]
+    blocks = []
+
+    # 0. 大盘择时因子 — main-path section; must match text/PNG (do NOT drop on HTML path)
+    timing = (market_signals or {}).get("market_timing_factor") or {}
+    if timing:
+        subtitle_bits = [bit for bit in (
+            timing.get("criteria"),
+            _format_market_timing_as_of(timing),
+            "信号日 {}".format(as_of),
+        ) if bit]
+        tf_rows = timing.get("rows", [])
+        if not tf_rows:
+            subtitle_bits.append("数据不足")
+        title_block = {"heading": "0. 大盘择时因子", "subtitle": " | ".join(subtitle_bits)}
+        alerts = timing.get("alerts") or []
+        if alerts:
+            title_block["alerts"] = ["🔴 大盘择时触发"] + [
+                "🔴 {}".format(a.get("text", "")) for a in alerts]
+        blocks.append(title_block)
+        if tf_rows:
+            tf_cols = ["指数", "PMARP", "PMARP 2%上穿", "S2参与度(broad)", "S2触发"]
+            blocks.append({"heading": "SPY / QQQ / SOXX", "columns": tf_cols, "rows": [
+                {"指数": row.get("symbol", ""),
+                 "PMARP": _fmt_transition(row.get("pmarp_previous"), row.get("pmarp_current"), _fmt_pct_value),
+                 "PMARP 2%上穿": "YES" if row.get("pmarp_up2") else "—",
+                 "S2参与度(broad)": _fmt_transition(row.get("breadth_s2_previous"), row.get("breadth_s2_current"), _fmt_participation),
+                 "S2触发": "YES" if row.get("breadth_s2_upcross") else "—"}
+                for row in tf_rows]})
+
+    blocks.append({"heading": "1. PMARP 信号"})
 
     # PMARP — signal -> cap-tier sub-blocks (columns one-to-one with text)
     pm_cols = ["标的", "概念", "信号", "当前", "市值"]
@@ -1540,20 +1569,12 @@ def build_morning_visual_sections(
         pmarp = market_signals.get("pmarp", {})
         _pmarp_cols = ["标的", "概念", "信号", "当前", "变化", "市值"]
         _pmarp_widths = [300, 320, 140, 130, 170, 150]
-        _l2_order = {b: i for i, b in enumerate(CONCEPT_BUCKET_ORDER)}
         _pmarp_blocks = []
-        for _signal_key in ("bullish_breakout", "oversold_recovery", "momentum_fading"):
-            _sig_hits = [h for h in pmarp.get("hits", []) if h.get("signal") == _signal_key]
-            if not _sig_hits:
-                continue
-            _sig_hits = sorted(_sig_hits, key=lambda x: (
-                PMARP_MCAP_TIER_ORDER.index(_mcap_tier(x.get("marketCap"))),
-                _l2_order.get(_grouping_bucket_for(x), 999),
-                x.get("value") or 0,
-                x.get("symbol", ""),
-            ))
+        # signal -> cap-tier sub-blocks; shared with text/HTML via _pmarp_signal_cap_groups
+        # so the 大盘/中小盘 tier is explicit on every surface (P2 review fix).
+        for _signal_label, _tier, _tier_hits in _pmarp_signal_cap_groups(pmarp.get("hits", [])):
             _pmarp_blocks.append({
-                "title": PMARP_SIGNAL_LABELS[_signal_key],
+                "title": "{} — {}".format(_signal_label, _tier),
                 "columns": _pmarp_cols,
                 "widths": _pmarp_widths,
                 "grouped": False,
@@ -1564,7 +1585,7 @@ def build_morning_visual_sections(
                     "{:.1f}%".format(item.get("value") or 0),
                     "{:.1f}→{:.1f}".format(item.get("previous") or 0, item.get("value") or 0),
                     _format_market_cap(item.get("marketCap")),
-                ]) for item in _sig_hits],
+                ]) for item in _tier_hits],
             })
         sections.append({
             "slug": "01_pmarp",

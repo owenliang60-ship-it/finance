@@ -25,3 +25,16 @@ def test_compile_full_html(tmp_path):
     assert 'class="portfolio-table"' in text and "table-wrap" in text   # CSS + EXTRA_CSS 生效
     assert "NVDA" in text and "计算芯片/GPU加速器" in text
     assert "业务角色" not in text                                        # 2c 一致
+
+
+def test_compile_html_renders_subtitle_and_alerts(tmp_path):
+    # P1 review fix: section 0 needs a subtitle (criteria/as_of) + red alert lines.
+    payload = {"as_of": "2026-04-24", "blocks": [
+        {"heading": "0. 大盘择时因子", "subtitle": "PMARP 上穿2% | 信号日 2026-04-24",
+         "alerts": ["🔴 大盘择时触发", "🔴 PMARP 2% UPCROSS: SPY 1.5→2.4"]},
+    ]}
+    out = compile_morning_html_report(payload, "2026-04-24", out_dir=tmp_path)
+    text = out.read_text(encoding="utf-8")
+    assert "PMARP 上穿2% | 信号日 2026-04-24" in text
+    assert "PMARP 2% UPCROSS: SPY 1.5→2.4" in text
+    assert 'class="alert"' in text

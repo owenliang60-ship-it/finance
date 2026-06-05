@@ -6,7 +6,11 @@ from typing import List, Dict
 from terminal.html_report import CSS, md_to_html   # CSS:23-520, md_to_html:547-659
 
 # 复用 CSS 有 overflow-x:hidden(html_report.py:56)，列多会截断 → 包一层可横向滚动容器
-EXTRA_CSS = ".table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 0 16px;}"
+EXTRA_CSS = (
+    ".table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 0 16px;}"
+    ".report-subtitle{color:#666;font-size:0.9em;margin:0 0 10px;}"
+    ".alert{color:#c0392b;font-weight:600;margin:2px 0;}"
+)
 
 RENDERED_DIR = Path("reports/rendered")
 
@@ -28,11 +32,16 @@ def compile_morning_html_report(payload: dict, date: str, out_dir: Path = None) 
              "<h1>未来资本晨报 — {}</h1>".format(html.escape(date))]
     for block in payload.get("blocks", []):
         heading = block.get("heading", "")
-        if block.get("rows") is None and not block.get("columns"):
-            parts.append("<h2>{}</h2>".format(html.escape(heading)))      # 纯 section 标题
-            continue
-        parts.append("<h3>{}</h3>".format(html.escape(heading)))
-        parts.append(dicts_to_html_table(block.get("rows", []), block.get("columns", [])))
+        is_section_title = block.get("rows") is None and not block.get("columns")
+        tag = "h2" if is_section_title else "h3"      # 纯 section 标题 → h2，带表 → h3
+        parts.append("<{0}>{1}</{0}>".format(tag, html.escape(heading)))
+        subtitle = block.get("subtitle")
+        if subtitle:
+            parts.append('<p class="report-subtitle">{}</p>'.format(html.escape(str(subtitle))))
+        for alert in block.get("alerts") or []:
+            parts.append('<p class="alert">{}</p>'.format(html.escape(str(alert))))
+        if not is_section_title:
+            parts.append(dicts_to_html_table(block.get("rows", []), block.get("columns", [])))
     parts.append("</div></body></html>")
     out_dir = out_dir or RENDERED_DIR
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -1549,6 +1549,35 @@ def test_build_html_payload_has_pmarp_blocks_no_business_role():
     assert all("业务角色" not in b.get("columns", []) for b in payload["blocks"])
 
 
+def test_build_html_payload_includes_market_timing_section_before_pmarp():
+    # P1 review fix: HTML main path must not drop section 0 (大盘择时因子).
+    ms = sample_market_signals()
+    payload = mr.build_html_payload(ms, _make_dv_result(), as_of="2026-04-24")
+    headings = [b.get("heading", "") for b in payload["blocks"]]
+    assert "0. 大盘择时因子" in headings
+    assert headings.index("0. 大盘择时因子") < headings.index("1. PMARP 信号")
+    timing_tables = [b for b in payload["blocks"] if "指数" in (b.get("columns") or [])]
+    assert timing_tables, "market-timing table block missing from HTML payload"
+    assert any(r.get("指数") == "SPY" for r in timing_tables[0]["rows"])
+    alert_text = " ".join(a for b in payload["blocks"] for a in (b.get("alerts") or []))
+    assert "PMARP 2% UPCROSS" in alert_text
+
+
+def test_pmarp_visual_blocks_include_mcap_tier_in_title():
+    # P2 review fix: PDF/PNG fallback must show the explicit 大盘/中小盘 tier,
+    # consistent with text + HTML (all three share _pmarp_signal_cap_groups).
+    sections = mr.build_morning_visual_sections(
+        market_signals=_make_market_signals(pmarp_hits=[
+            _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12),    # 大盘
+            _make_pmarp_hit("SMCI", "bullish_breakout", 98.7, 30e9)]),  # 中小盘
+        dv_result=None)
+    pmarp = next(s for s in sections if s["slug"] == "01_pmarp")
+    titles = [b["title"] for b in pmarp["blocks"]]
+    assert any("大盘" in t for t in titles)
+    assert any("中小盘" in t for t in titles)
+    assert all("上穿98%" in t for t in titles)   # both hits are bullish_breakout
+
+
 def test_html_delivery_falls_back_to_pdf_on_send_false(monkeypatch, tmp_path):
     calls, sent = [], {}
     monkeypatch.setattr(mr, "build_html_payload", lambda ms, dv, as_of: {"as_of": as_of, "blocks": []})

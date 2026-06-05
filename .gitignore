@@ -47,3 +47,6 @@ forge/logs/
 *.pdf
 *.backup.*
 trading-memo.html
+
+# Rendered morning-report HTML (generated output)
+reports/rendered/
