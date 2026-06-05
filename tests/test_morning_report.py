@@ -15,7 +15,6 @@ from scripts.morning_report import (
     _compute_breadth_s2_status_from_price_frames,
     _merge_volume_anomaly_hits,
     format_section_layered_dv,
-    format_section_layered_pmarp,
     format_section_layered_rvol,
     format_section_market_timing_factor,
     format_section_a,
@@ -494,29 +493,6 @@ class TestLayeredSections:
         assert result["current"] == pytest.approx(1.0)
         assert result["upcross"] is True
 
-    def test_pmarp_section_renders_three_signal_kinds(self):
-        result = format_section_layered_pmarp(sample_market_signals())
-        assert "1. PMARP 信号" in result
-        # Criteria string covers all 3 signal kinds
-        assert "上穿2%" in result
-        assert "上穿98%" in result
-        assert "下穿98%" in result
-        # All 3 sample symbols rendered with their signal labels
-        assert "NVDA" in result
-        assert "TSLA" in result
-        assert "BA" in result
-        # New "信号" column header
-        assert "信号" in result
-        # The 信号 column shows Chinese label per kind
-        nvda_line = [ln for ln in result.split("\n") if "NVDA" in ln][0]
-        assert "上穿98%" in nvda_line
-        tsla_line = [ln for ln in result.split("\n") if "TSLA" in ln][0]
-        assert "下穿98%" in tsla_line
-        ba_line = [ln for ln in result.split("\n") if "BA " in ln or ln.endswith("BA")][0] \
-            if any("BA" in ln for ln in result.split("\n")) else ""
-        # Ensure 上穿2% appears tied to BA's row
-        assert "1.7→2.5" in result
-
     def test_dv_layered_section(self):
         result = format_section_layered_dv(sample_market_signals())
         assert "量能加速" in result
@@ -723,27 +699,6 @@ class TestLayeredSections:
         assert "存储芯片 (" in result
         assert "半导体链 (" not in result
         assert "MU" in result
-
-    def test_bucketed_sections_do_not_truncate_with_more(self):
-        """Layered sections with >10 rows must not truncate; bucket display covers all entries."""
-        data = sample_market_signals()
-        data["pmarp"]["hits"] = [
-            {
-                "symbol": f"S{i}", "companyName": f"SignalCo {i}",
-                "sector": "Technology", "industry": "Semiconductors",
-                "concept_bucket": "半导体链", "layer": "extend",
-                "value": 95.0 + i / 10, "previous": 94.0 + i / 10,
-                "signal": "bullish_breakout", "marketCap": 12e9 + i,
-            }
-            for i in range(12)
-        ]
-
-        result = format_section_layered_pmarp(data)
-
-        assert "... +" not in result
-        assert "more" not in result
-        assert "S0 SignalCo 0" in result
-        assert "S11 SignalCo 11" in result
 
     def test_layered_pmarp_visual_groups_by_l2_and_suppresses_empties(self):
         from scripts.morning_report import (

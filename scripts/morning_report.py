@@ -1073,26 +1073,6 @@ def format_section_pmarp_by_signal_and_cap(market_signals: dict) -> str:
     return "\n".join(lines)
 
 
-def format_section_layered_pmarp(market_signals: dict) -> str:
-    section = market_signals.get("pmarp", {})
-    lines = ["*1. PMARP 信号 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_bucketed_table(
-        section.get("hits", []),
-        "无 PMARP 信号",
-        "标的 | 概念 | 信号 | 当前 | 变化 | 市值",
-        lambda item: "{} | {} | {} | {:.1f}% | {:.1f}→{:.1f} | {}".format(
-            _compact_company(item),
-            _display_concept_tags(item),
-            PMARP_SIGNAL_LABELS.get(item.get("signal"), "—"),
-            item.get("value") or 0,
-            item.get("previous") or 0,
-            item.get("value") or 0,
-            _format_market_cap(item.get("marketCap")),
-        ),
-    ))
-    return "\n".join(lines)
-
-
 def format_section_layered_dv(market_signals: dict) -> str:
     section = market_signals.get("dv_acceleration", {})
     lines = ["*2. 量能加速 ({})*".format(section.get("criteria", ""))]
