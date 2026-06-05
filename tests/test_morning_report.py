@@ -1538,3 +1538,32 @@ def test_pmarp_visual_three_subblocks_flat_no_business_role():
     for block in pmarp["blocks"]:
         assert block.get("grouped") is False           # 扁平，不走 layer×bucket
         assert "业务角色" not in block["columns"]
+
+
+def test_build_html_payload_has_pmarp_blocks_no_business_role():
+    ms = _make_market_signals(pmarp_hits=[_make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12)])
+    dv = _make_dv_result(rankings=[_make_dv_item()])
+    payload = mr.build_html_payload(ms, dv, as_of="2026-06-03")
+    headings = [b.get("heading", "") for b in payload["blocks"]]
+    assert any("PMARP" in h for h in headings)
+    assert all("业务角色" not in b.get("columns", []) for b in payload["blocks"])
+
+
+def test_html_delivery_falls_back_to_pdf_on_send_false(monkeypatch, tmp_path):
+    calls, sent = [], {}
+    monkeypatch.setattr(mr, "build_html_payload", lambda ms, dv, as_of: {"as_of": as_of, "blocks": []})
+    monkeypatch.setattr(mr, "compile_morning_html_report", lambda payload, d, **kw: tmp_path / "r.html")
+    monkeypatch.setattr(mr, "render_morning_report_images", lambda **kw: [tmp_path / "p.png"])
+    monkeypatch.setattr(mr, "render_morning_report_pdf", lambda paths: tmp_path / "r.pdf")
+    monkeypatch.setattr(mr, "send_document", lambda path, **kw: (calls.append(str(path)),
+                        not str(path).endswith(".html"))[1])      # html→False
+    monkeypatch.setattr(mr, "_send_group_pdf_report", lambda p: sent.__setitem__("pdf", str(p)) or True)
+    monkeypatch.setattr(mr, "send_message", lambda *a, **kw: True)
+
+    ok = mr._deliver_morning_report(
+        market_signals={"pmarp": {"hits": []}}, dv_result={"date": "2026-06-03", "rankings": []},
+        daily_msg="文本摘要", image_delivery="html", image_report=True,
+        image_output_dir=str(tmp_path), photo_safe=False, as_of="2026-06-03", no_telegram=False)
+    assert any(p.endswith(".html") for p in calls)   # 先试 HTML
+    assert sent.get("pdf")                            # html send=False → 回退真实 PDF helper
+    assert ok is True

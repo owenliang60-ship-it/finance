@@ -63,6 +63,7 @@ S2_BREADTH_THRESHOLD = 0.30
 S2_BREADTH_COOLDOWN_DAYS = 60
 
 from terminal.concept_classifier import get_report_concept_classifier
+from terminal.morning_html_report import compile_morning_html_report
 
 
 def _get_concept_classifier():
@@ -1397,6 +1398,64 @@ def format_section_d(dv_result: dict) -> str:
     return "\n".join(lines)
 
 
+def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dict:
+    """Assemble the HTML-report payload (heading/columns/rows blocks).
+
+    Columns and cells stay one-to-one with the text/visual sections — no
+    business-role column — so the three delivery surfaces never drift.
+    Reuses _pmarp_signal_cap_groups (C2) so PMARP grouping is shared, and
+    _normalize_dv_items so DV layering matches format_section_d. The HTML
+    renderer (compile_morning_html_report) consumes this dict without
+    importing morning_report back.
+    """
+    blocks = [{"heading": "1. PMARP 信号"}]
+
+    # PMARP — signal -> cap-tier sub-blocks (columns one-to-one with text)
+    pm_cols = ["标的", "概念", "信号", "当前", "市值"]
+    pmarp_hits = (market_signals.get("pmarp") or {}).get("hits", [])
+    for signal_label, tier, tier_hits in _pmarp_signal_cap_groups(pmarp_hits):
+        rows = [{"标的": _compact_company(h), "概念": _display_concept_tags(h),
+                 "信号": PMARP_SIGNAL_LABELS.get(h.get("signal"), "—"),
+                 "当前": "{:.1f}%".format(h.get("value") or 0),
+                 "市值": _format_market_cap(h.get("marketCap"))} for h in tier_hits]
+        blocks.append({"heading": "{} — {}".format(signal_label, tier),
+                       "columns": pm_cols, "rows": rows})
+
+    # 量能异常 — columns one-to-one with format_section_layered_volume_anomaly
+    va_cols = ["标的", "概念", "类型", "DV 5d/20d", "RVOL", "市值"]
+    va_hits = (market_signals.get("volume_anomaly") or {}).get("hits", [])
+    va_rows = [{"标的": _compact_company(h), "概念": _display_concept_tags(h),
+                "类型": h.get("volume_signal_kind") or "—",
+                "DV 5d/20d": _format_volume_anomaly_dv_cell(h),
+                "RVOL": _format_volume_anomaly_rvol_cell(h),
+                "市值": _format_market_cap(h.get("marketCap"))} for h in va_hits]
+    blocks.append({"heading": "2. 量能异常", "columns": va_cols, "rows": va_rows})
+
+    # Dollar Volume — flat ranking; columns one-to-one with format_section_d
+    if dv_result:
+        normalized = _normalize_dv_items(dv_result)
+        if normalized["new_faces"]:
+            nf_cols = ["标的", "概念(L2)", "排名", "成交额"]
+            nf_rows = [{"标的": _compact_company(item), "概念(L2)": _grouping_bucket_for(item),
+                        "排名": "#{}".format(item["rank"]),
+                        "成交额": format_dv(item["dollar_volume"])}
+                       for item in normalized["new_faces"]]
+            blocks.append({"heading": "3. Dollar Volume — 真·新面孔（{} 日内首次进榜）".format(
+                DOLLAR_VOLUME_LOOKBACK), "columns": nf_cols, "rows": nf_rows})
+        if normalized["rankings"]:
+            dv_cols = ["标的", "概念(L2)", "排名", "排名变化", "成交额", "价格"]
+            dv_rows = [{"标的": _compact_company(item), "概念(L2)": _grouping_bucket_for(item),
+                        "排名": "#{}".format(item["rank"]),
+                        "排名变化": item.get("rank_change_label", "—"),
+                        "成交额": format_dv(item["dollar_volume"]),
+                        "价格": "${:.0f}".format(item["price"])}
+                       for item in normalized["rankings"]]
+            blocks.append({"heading": "3. Dollar Volume — 成交额 Top {}".format(
+                len(normalized["rankings"])), "columns": dv_cols, "rows": dv_rows})
+
+    return {"as_of": as_of, "blocks": blocks}
+
+
 def _visual_row(item: dict, cells: list[str]) -> dict:
     return {
         "layer": item.get("layer", "broad"),
@@ -2211,6 +2270,69 @@ def run_dollar_volume() -> dict:
         return {"rankings": [], "new_faces": []}
 
 
+def _deliver_morning_report(market_signals, dv_result, daily_msg, image_delivery,
+                            image_report, image_output_dir, photo_safe, as_of,
+                            no_telegram=False):
+    """Render + deliver the morning report, preserving every legacy branch.
+
+    HTML is a new front branch (image_delivery == "html"): on any failure or
+    send_document() returning False it falls back to the original PDF/PNG path
+    by rewriting image_delivery to "pdf". The legacy path below is kept verbatim
+    — Pillow ImportError text degrade plus the pdf/document/photo/text send
+    branches via the real _send_group_* helpers.
+    """
+    # ── 新增 HTML 分支（仅 image_delivery == "html"）──
+    if image_delivery == "html":
+        try:
+            html_path = compile_morning_html_report(
+                build_html_payload(market_signals, dv_result, as_of), as_of)
+            if no_telegram:
+                print(str(html_path))
+                return True
+            if send_document(str(html_path),
+                             caption="未来资本晨报 — {}".format(as_of), channel="group"):
+                send_message("晨报 HTML — {}".format(as_of), channel="group")
+                return True
+            logger.warning("HTML send_document 返回 False → 回退 PDF")
+        except Exception as exc:
+            logger.warning("HTML 渲染/发送异常 (%s) → 回退 PDF", exc)
+        image_delivery = "pdf"        # 落空 → 走下方旧路径
+
+    # ── 旧路径（原样保留：渲染含 Pillow 缺失文本降级；发送含 pdf/document/photo/text 分支）──
+    image_paths, pdf_path = [], None
+    if image_report:
+        try:
+            image_paths = render_morning_report_images(
+                market_signals=market_signals, dv_result=dv_result,
+                output_dir=image_output_dir, photo_safe=photo_safe)
+            logger.info("晨报图片已生成: %d 张", len(image_paths))
+            if image_delivery == "pdf" and image_paths:
+                pdf_path = render_morning_report_pdf(image_paths)
+                logger.info("晨报 PDF 已生成: %s", pdf_path)
+        except ImportError as exc:
+            # Pillow 缺失 (云端 git pull 部署后未自动装新依赖) → 降级到文本模式，
+            # 不让 cron 整体异常。文本路径是 first-class fallback。
+            logger.warning("图片渲染依赖缺失 (%s)，降级到文本模式发送晨报", exc)
+            image_report = False
+            image_paths = []
+    if no_telegram:
+        if image_report and pdf_path:
+            print(str(pdf_path))
+        elif image_report and image_paths:
+            print("\n".join(str(p) for p in image_paths))
+        else:
+            print(daily_msg)
+        return True
+    if image_report and pdf_path:
+        _send_group_pdf_report(pdf_path)
+        return True
+    if image_report and image_paths:
+        _send_group_image_report(image_paths, delivery=image_delivery)
+        return True
+    _send_group_report(daily_msg)
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description="未来资本 晨报")
     parser.add_argument("--no-telegram", action="store_true", help="不推送 Telegram")
@@ -2224,9 +2346,9 @@ def main():
                         help="[DEPRECATED] no-op；社交段默认已 skip，保留兼容老 cron 命令行")
     parser.add_argument("--image-report", action="store_true",
                         help="每个晨报 section 生成一张图片；Telegram 发送图片而不是长文本")
-    parser.add_argument("--image-delivery", choices=["pdf", "document", "photo"],
+    parser.add_argument("--image-delivery", choices=["html", "pdf", "document", "photo"],
                         default="pdf",
-                        help="视觉晨报发送方式：pdf 合并为单文件；document/photo 逐张发送 PNG")
+                        help="视觉晨报发送方式：html 单文件可滚动表格；pdf 合并为单文件；document/photo 逐张发送 PNG")
     parser.add_argument("--image-output-dir", type=str,
                         help="图片输出目录（默认 data/scans/morning_images_<timestamp>）")
     args = parser.parse_args()
@@ -2328,30 +2450,6 @@ def main():
             market_pulse=market_pulse, trending_data=trending_data,
             social_scan=social_scan, elapsed=elapsed)
 
-        image_paths = []
-        pdf_path = None
-        image_report_active = args.image_report
-        if image_report_active:
-            try:
-                image_paths = render_morning_report_images(
-                    market_signals=market_signals,
-                    dv_result=dv_result,
-                    output_dir=args.image_output_dir,
-                    photo_safe=args.image_delivery == "photo",
-                )
-                logger.info("晨报图片已生成: %d 张", len(image_paths))
-                if args.image_delivery == "pdf" and image_paths:
-                    pdf_path = render_morning_report_pdf(image_paths)
-                    logger.info("晨报 PDF 已生成: %s", pdf_path)
-            except ImportError as exc:
-                # Pillow 缺失 (云端 git pull 部署后未自动装新依赖) → 降级到文本模式，
-                # 不让 cron 整体异常。文本路径是 first-class fallback。
-                logger.warning(
-                    "图片渲染依赖缺失 (%s)，降级到文本模式发送晨报", exc
-                )
-                image_report_active = False
-                image_paths = []
-
         # 7. 保存 JSON
         SCANS_DIR.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -2362,29 +2460,18 @@ def main():
             "elapsed": round(elapsed, 1),
             "market_signals": market_signals,
         }
-        if image_paths:
-            save_data["image_report_paths"] = [str(path) for path in image_paths]
-        if pdf_path:
-            save_data["pdf_report_path"] = str(pdf_path)
         with open(save_path, "w", encoding="utf-8") as f:
             json.dump(save_data, f, ensure_ascii=False, indent=2, default=str)
         logger.info("结果已保存: %s", save_path)
 
-        # 8. 发送 Telegram
-        if not args.no_telegram:
-            if image_report_active and pdf_path:
-                _send_group_pdf_report(pdf_path)
-            elif image_report_active and image_paths:
-                _send_group_image_report(image_paths, delivery=args.image_delivery)
-            else:
-                _send_group_report(daily_msg)
-        else:
-            if image_report_active and pdf_path:
-                print(str(pdf_path))
-            elif image_report_active and image_paths:
-                print("\n".join(str(path) for path in image_paths))
-            else:
-                print(daily_msg)
+        # 8. 渲染 + 投递（HTML 新分支 + 旧 pdf/document/photo/text 全保留）
+        as_of = market_signals.get("as_of") or datetime.now().strftime("%Y-%m-%d")
+        _deliver_morning_report(
+            market_signals, dv_result, daily_msg,
+            args.image_delivery, args.image_report, args.image_output_dir,
+            args.image_delivery == "photo", as_of,
+            no_telegram=args.no_telegram,
+        )
 
     except Exception as e:
         logger.error("晨报异常: %s", e)
