@@ -766,6 +766,16 @@ PMARP_SIGNAL_ORDER = {
     "momentum_fading": 2,
 }
 
+PMARP_MCAP_TIER_USD = 100e9  # 大盘/中小盘分界，可调
+PMARP_MCAP_TIER_ORDER = ["大盘(≥$100B)", "中小盘(<$100B)"]
+
+
+def _mcap_tier(market_cap: "float | None") -> str:
+    if (market_cap or 0) >= PMARP_MCAP_TIER_USD:
+        return "大盘(≥$100B)"
+    return "中小盘(<$100B)"
+
+
 # Display threshold for surfacing RVOL-only single-day spikes in the merged
 # volume anomaly section. RVOL sustained signals use RVOL_SUSTAINED_THRESHOLD;
 # RVOL-only single below this value is treated as moderate noise.

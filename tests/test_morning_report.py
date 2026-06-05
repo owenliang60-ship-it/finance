@@ -1542,3 +1542,10 @@ def test_dv_section_has_rank_change_and_real_newface_title():
     out = mr.format_section_d(dv)
     assert "排名变化" in out and "↑3" in out
     assert "真·新面孔" in out
+
+
+def test_mcap_tier_boundary():
+    assert mr._mcap_tier(120e9) == "大盘(≥$100B)"
+    assert mr._mcap_tier(100e9) == "大盘(≥$100B)"   # 边界含
+    assert mr._mcap_tier(99.9e9) == "中小盘(<$100B)"
+    assert mr._mcap_tier(None) == "中小盘(<$100B)"   # 缺市值归中小盘
