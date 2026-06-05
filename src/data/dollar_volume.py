@@ -253,3 +253,40 @@ def is_collected(date: str, db_path: Path = DOLLAR_VOLUME_DB) -> bool:
         return row["cnt"] > 0
     finally:
         conn.close()
+
+
+def rank_change_label(today_rank: int, prev_rank: "int | None") -> str:
+    """今日 vs 昨日排名变化标签。prev_rank=None → NEW（昨日不在 top-N）。"""
+    if prev_rank is None:
+        return "NEW"
+    delta = prev_rank - today_rank  # 昨日名次大、今日名次小 = 上升
+    if delta > 0:
+        return "↑{}".format(delta)
+    if delta < 0:
+        return "↓{}".format(-delta)
+    return "="
+
+
+def get_previous_day_ranks(date: str, db_path: Path = DOLLAR_VOLUME_DB) -> "Dict[str, int]":
+    """< date 的最近一个交易日的 {symbol: rank}。无历史 → {}。"""
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute(
+            "SELECT MAX(date) AS d FROM daily_rankings WHERE date < ?", (date,)
+        ).fetchone()
+        if not row or not row["d"]:
+            return {}
+        rows = conn.execute(
+            "SELECT symbol, rank FROM daily_rankings WHERE date = ?", (row["d"],)
+        ).fetchall()
+        return {r["symbol"]: r["rank"] for r in rows}
+    finally:
+        conn.close()
+
+
+def annotate_rank_changes(rankings: "List[Dict]", prev_ranks: "Dict[str, int]") -> None:
+    """原地注入 rank_change_label。"""
+    for item in rankings:
+        item["rank_change_label"] = rank_change_label(
+            item["rank"], prev_ranks.get(item.get("symbol", ""))
+        )

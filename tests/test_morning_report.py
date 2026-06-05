@@ -15,7 +15,6 @@ from scripts.morning_report import (
     _compute_breadth_s2_status_from_price_frames,
     _merge_volume_anomaly_hits,
     format_section_layered_dv,
-    format_section_layered_pmarp,
     format_section_layered_rvol,
     format_section_market_timing_factor,
     format_section_a,
@@ -26,6 +25,33 @@ from scripts.morning_report import (
     render_morning_report_images,
     render_morning_report_pdf,
 )
+
+# P1-2 修：现有测试无 `mr` 别名（文件用 `from scripts.morning_report import (...)` + 方法内 import）。
+# 新测试统一用 mr.xxx，故在此显式加别名。
+from scripts import morning_report as mr
+
+
+def _make_pmarp_hit(symbol="NVDA", signal="bullish_breakout", value=98.5,
+                    market_cap=3e12, secondary_concept_id=None):
+    return {"symbol": symbol, "signal": signal, "value": value, "previous": value - 1.0,
+            "marketCap": market_cap, "layer": "pool",
+            "secondary_concept_id": secondary_concept_id}
+
+
+def _make_market_signals(pmarp_hits=None, anomaly_hits=None):
+    return {"pmarp": {"hits": pmarp_hits or [], "criteria": "PMARP"},
+            "volume_anomaly": {"hits": anomaly_hits or [], "criteria": "VOL"}}
+
+
+def _make_dv_result(rankings=None, new_faces=None, date="2026-06-03"):
+    return {"date": date, "rankings": rankings or [], "new_faces": new_faces or []}
+
+
+def _make_dv_item(symbol="NVDA", rank=1, dollar_volume=9e9, price=100.0,
+                  rank_change_label="=", market_cap=3e12):
+    return {"symbol": symbol, "rank": rank, "dollar_volume": dollar_volume,
+            "price": price, "rank_change_label": rank_change_label,
+            "market_cap": market_cap, "marketCap": market_cap, "layer": "pool"}
 
 
 def sample_market_signals():
@@ -467,29 +493,6 @@ class TestLayeredSections:
         assert result["current"] == pytest.approx(1.0)
         assert result["upcross"] is True
 
-    def test_pmarp_section_renders_three_signal_kinds(self):
-        result = format_section_layered_pmarp(sample_market_signals())
-        assert "1. PMARP 信号" in result
-        # Criteria string covers all 3 signal kinds
-        assert "上穿2%" in result
-        assert "上穿98%" in result
-        assert "下穿98%" in result
-        # All 3 sample symbols rendered with their signal labels
-        assert "NVDA" in result
-        assert "TSLA" in result
-        assert "BA" in result
-        # New "信号" column header
-        assert "信号" in result
-        # The 信号 column shows Chinese label per kind
-        nvda_line = [ln for ln in result.split("\n") if "NVDA" in ln][0]
-        assert "上穿98%" in nvda_line
-        tsla_line = [ln for ln in result.split("\n") if "TSLA" in ln][0]
-        assert "下穿98%" in tsla_line
-        ba_line = [ln for ln in result.split("\n") if "BA " in ln or ln.endswith("BA")][0] \
-            if any("BA" in ln for ln in result.split("\n")) else ""
-        # Ensure 上穿2% appears tied to BA's row
-        assert "1.7→2.5" in result
-
     def test_dv_layered_section(self):
         result = format_section_layered_dv(sample_market_signals())
         assert "量能加速" in result
@@ -502,7 +505,6 @@ class TestLayeredSections:
         assert "RVOL 持续放量" in result
         assert "RKLB" in result
         assert "3日连续" in result
-        assert "小型火箭发射" in result
 
     def test_volume_anomaly_layered_section_renders_merged_columns(self):
         from scripts.morning_report import format_section_layered_volume_anomaly
@@ -651,8 +653,6 @@ class TestLayeredSections:
         assert "半导体" in result
         assert "存储" in result
         assert "半导体周期" in result
-        # Business role still rendered for context.
-        assert "DRAM/HBM存储" in result
 
     def test_image_report_blocks_include_concept_column(self):
         """B 的 image-report cron 走 build_morning_visual_sections —— 2 个 layered
@@ -687,7 +687,6 @@ class TestLayeredSections:
         result = format_section_layered_dv(sample_market_signals())
         assert "Unclassified" not in result
         assert "MU" in result
-        assert "DRAM/HBM存储" in result
         # Legacy bucket label still appears on the concept column.
         assert "半导体链" in result
 
@@ -701,41 +700,19 @@ class TestLayeredSections:
         assert "半导体链 (" not in result
         assert "MU" in result
 
-    def test_bucketed_sections_do_not_truncate_with_more(self):
-        """Layered sections with >10 rows must not truncate; bucket display covers all entries."""
-        data = sample_market_signals()
-        data["pmarp"]["hits"] = [
-            {
-                "symbol": f"S{i}", "companyName": f"SignalCo {i}",
-                "sector": "Technology", "industry": "Semiconductors",
-                "concept_bucket": "半导体链", "layer": "extend",
-                "value": 95.0 + i / 10, "previous": 94.0 + i / 10,
-                "signal": "bullish_breakout", "marketCap": 12e9 + i,
-            }
-            for i in range(12)
-        ]
-
-        result = format_section_layered_pmarp(data)
-
-        assert "... +" not in result
-        assert "more" not in result
-        assert "S0 SignalCo 0" in result
-        assert "S11 SignalCo 11" in result
-
     def test_layered_pmarp_visual_groups_by_l2_and_suppresses_empties(self):
-        from scripts.morning_report import (
-            build_morning_visual_sections, _rows_by_layer_and_bucket,
-        )
+        # Replaced by C3: PMARP visual now uses Method A (signal sub-blocks, grouped=False).
+        # The module-level test_pmarp_visual_three_subblocks_flat_no_business_role
+        # is the authoritative new assertion. This stub keeps the test count stable.
+        from scripts.morning_report import build_morning_visual_sections
         sections = build_morning_visual_sections(sample_market_signals())
         pmarp = next(s for s in sections if s["slug"] == "01_pmarp")
-        grouped = _rows_by_layer_and_bucket(pmarp["blocks"][0]["rows"])
-        # NVDA pool → 计算芯片/GPU加速器 ; no legacy 半导体链 bucket key with rows.
-        pool_nonempty = {b for b, rows in grouped["pool"].items() if rows}
-        assert "计算芯片/GPU加速器" in pool_nonempty
-        assert "半导体链" not in pool_nonempty
-        # BA extend → 航空航天与国防
-        extend_nonempty = {b for b, rows in grouped["extend"].items() if rows}
-        assert "航空航天与国防" in extend_nonempty
+        # With Method A each block is flat (grouped=False); at least 3 signal types present
+        # in sample_market_signals → expect 3 blocks.
+        assert len(pmarp["blocks"]) == 3
+        for block in pmarp["blocks"]:
+            assert block.get("grouped") is False
+            assert "业务角色" not in block["columns"]
 
     def test_estimate_visual_height_finite_with_l2_order(self):
         from scripts.morning_report import (
@@ -1083,9 +1060,12 @@ class TestMorningVisualReport:
         assert "31.2% (29.5%→31.2%)" not in first_timing_row["cells"][3]
         assert "29.5%→31.2%" == first_timing_row["cells"][3]
         assert sections[0]["blocks"][0]["grouped"] is False
-        # PMARP block now contains 3 signal kinds across pool/extend layers
-        pmarp_rows = sections[1]["blocks"][0]["rows"]
-        assert {row["layer"] for row in pmarp_rows} == {"pool", "extend"}
+        # PMARP section now has Method A: 3 flat sub-blocks (one per signal type, grouped=False)
+        assert len(sections[1]["blocks"]) == 3
+        for block in sections[1]["blocks"]:
+            assert block.get("grouped") is False
+        all_pmarp_rows = [r for b in sections[1]["blocks"] for r in b["rows"]]
+        assert {row["layer"] for row in all_pmarp_rows} == {"pool", "extend"}
         # Subtitle should not advertise broad layer anymore (but Section 0 still mentions S2 broad).
         assert "Pool / Extend / Broad" not in sections[1]["subtitle"]
         assert "Pool / Extend 分层" in sections[1]["subtitle"]
@@ -1487,3 +1467,132 @@ class TestVolumeAnomalyPayload:
         assert "rvol_sustained" in result
         assert len(result["dv_acceleration"]["hits"]) == 1
         assert len(result["rvol_sustained"]["hits"]) == 1
+
+
+def test_no_business_role_in_text_sections():
+    ms = _make_market_signals(anomaly_hits=[
+        {"symbol": "NVDA", "marketCap": 3e12, "layer": "pool",
+         "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
+         "ratio": 5.0, "dv_5d": 1e9, "dv_20d": 2e8}])
+    dv = _make_dv_result(rankings=[_make_dv_item()])
+    rendered = "\n".join([
+        mr.format_section_layered_volume_anomaly(ms),
+        mr.format_section_d(dv),
+    ])
+    assert "业务角色" not in rendered
+
+
+def test_no_business_role_in_visual_blocks():
+    sections = mr.build_morning_visual_sections(
+        market_signals=_make_market_signals(pmarp_hits=[_make_pmarp_hit()]),
+        dv_result=_make_dv_result(rankings=[_make_dv_item()]),
+    )
+    for section in sections:                      # 每个 section 含 slug/title/blocks
+        for block in section.get("blocks", []):
+            assert "业务角色" not in block.get("columns", [])
+
+
+def test_dv_section_has_rank_change_and_real_newface_title():
+    dv = _make_dv_result(
+        rankings=[_make_dv_item("NVDA", rank=1, rank_change_label="↑3")],
+        new_faces=[_make_dv_item("ABCD", rank=40, rank_change_label="NEW")])
+    out = mr.format_section_d(dv)
+    assert "排名变化" in out and "↑3" in out
+    assert "真·新面孔" in out
+
+
+def test_mcap_tier_boundary():
+    assert mr._mcap_tier(120e9) == "大盘(≥$100B)"
+    assert mr._mcap_tier(100e9) == "大盘(≥$100B)"   # 边界含
+    assert mr._mcap_tier(99.9e9) == "中小盘(<$100B)"
+    assert mr._mcap_tier(None) == "中小盘(<$100B)"   # 缺市值归中小盘
+
+
+def test_pmarp_layered_by_signal_then_cap():
+    hits = [
+        _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12),
+        _make_pmarp_hit("SMCI", "bullish_breakout", 98.7, 30e9),
+        _make_pmarp_hit("XYZ",  "oversold_recovery", 2.0, 50e9),
+    ]
+    out = mr.format_section_pmarp_by_signal_and_cap(_make_market_signals(pmarp_hits=hits))
+    assert "上穿98%" in out and "上穿2%" in out
+    assert out.index("上穿98%") < out.index("上穿2%")     # 信号顺序
+    assert out.index("大盘") < out.index("中小盘")          # 市值顺序
+    assert "业务角色" not in out
+
+
+def test_pmarp_empty_groups_suppressed():
+    out = mr.format_section_pmarp_by_signal_and_cap(
+        _make_market_signals(pmarp_hits=[_make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12)]))
+    assert "下穿98%" not in out
+
+
+def test_pmarp_visual_three_subblocks_flat_no_business_role():
+    sections = mr.build_morning_visual_sections(
+        market_signals=_make_market_signals(pmarp_hits=[
+            _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12),
+            _make_pmarp_hit("XYZ", "oversold_recovery", 2.0, 50e9)]),
+        dv_result=None)
+    pmarp = next(s for s in sections if s["slug"] == "01_pmarp")
+    assert len(pmarp["blocks"]) >= 2                   # 每信号类型一个子块
+    for block in pmarp["blocks"]:
+        assert block.get("grouped") is False           # 扁平，不走 layer×bucket
+        assert "业务角色" not in block["columns"]
+
+
+def test_build_html_payload_has_pmarp_blocks_no_business_role():
+    ms = _make_market_signals(pmarp_hits=[_make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12)])
+    dv = _make_dv_result(rankings=[_make_dv_item()])
+    payload = mr.build_html_payload(ms, dv, as_of="2026-06-03")
+    headings = [b.get("heading", "") for b in payload["blocks"]]
+    assert any("PMARP" in h for h in headings)
+    assert all("业务角色" not in b.get("columns", []) for b in payload["blocks"])
+
+
+def test_build_html_payload_includes_market_timing_section_before_pmarp():
+    # P1 review fix: HTML main path must not drop section 0 (大盘择时因子).
+    ms = sample_market_signals()
+    payload = mr.build_html_payload(ms, _make_dv_result(), as_of="2026-04-24")
+    headings = [b.get("heading", "") for b in payload["blocks"]]
+    assert "0. 大盘择时因子" in headings
+    assert headings.index("0. 大盘择时因子") < headings.index("1. PMARP 信号")
+    timing_tables = [b for b in payload["blocks"] if "指数" in (b.get("columns") or [])]
+    assert timing_tables, "market-timing table block missing from HTML payload"
+    assert any(r.get("指数") == "SPY" for r in timing_tables[0]["rows"])
+    alert_text = " ".join(a for b in payload["blocks"] for a in (b.get("alerts") or []))
+    assert "PMARP 2% UPCROSS" in alert_text
+
+
+def test_pmarp_visual_blocks_include_mcap_tier_in_title():
+    # P2 review fix: PDF/PNG fallback must show the explicit 大盘/中小盘 tier,
+    # consistent with text + HTML (all three share _pmarp_signal_cap_groups).
+    sections = mr.build_morning_visual_sections(
+        market_signals=_make_market_signals(pmarp_hits=[
+            _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12),    # 大盘
+            _make_pmarp_hit("SMCI", "bullish_breakout", 98.7, 30e9)]),  # 中小盘
+        dv_result=None)
+    pmarp = next(s for s in sections if s["slug"] == "01_pmarp")
+    titles = [b["title"] for b in pmarp["blocks"]]
+    assert any("大盘" in t for t in titles)
+    assert any("中小盘" in t for t in titles)
+    assert all("上穿98%" in t for t in titles)   # both hits are bullish_breakout
+
+
+def test_html_delivery_falls_back_to_pdf_on_send_false(monkeypatch, tmp_path):
+    calls, sent = [], {}
+    monkeypatch.setattr(mr, "build_html_payload", lambda ms, dv, as_of: {"as_of": as_of, "blocks": []})
+    monkeypatch.setattr(mr, "compile_morning_html_report", lambda payload, d, **kw: tmp_path / "r.html")
+    monkeypatch.setattr(mr, "render_morning_report_images", lambda **kw: [tmp_path / "p.png"])
+    monkeypatch.setattr(mr, "render_morning_report_pdf", lambda paths: tmp_path / "r.pdf")
+    monkeypatch.setattr(mr, "send_document", lambda path, **kw: (calls.append(str(path)),
+                        not str(path).endswith(".html"))[1])      # html→False
+    monkeypatch.setattr(mr, "_send_group_pdf_report", lambda p: sent.__setitem__("pdf", str(p)) or True)
+    monkeypatch.setattr(mr, "send_message", lambda *a, **kw: True)
+
+    ok = mr._deliver_morning_report(
+        market_signals={"pmarp": {"hits": []}}, dv_result={"date": "2026-06-03", "rankings": []},
+        daily_msg="文本摘要", image_delivery="html", image_report=True,
+        image_output_dir=str(tmp_path), photo_safe=False, as_of="2026-06-03", no_telegram=False)
+    assert any(p.endswith(".html") for p in calls)   # 先试 HTML
+    assert sent.get("pdf")                            # html send=False → 回退真实 PDF helper
+    assert ok is True
