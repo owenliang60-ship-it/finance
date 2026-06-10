@@ -16,7 +16,7 @@
 
 ## 已拍板决策（Boss confirmed 2026-06-10）
 
-1. 期权区块继续读 company.db（7 笔 QQQ puts 还持有，MarketData live quotes 零改动）
+1. 期权区块继续读 company.db（对冲期权仍持有，MarketData live quotes 零改动）
 2. sheet 的 `NVDA LEAPS`/`TSM LEAPS` 行保留在股票区块按 sheet 价格展示（company.db 无记录，sheet 是唯一来源）
 3. 总资产分母从 Sheet26 `total` 动态读，`.env` `PORTFOLIO_TOTAL_CAPITAL_USD` 作 fallback
 4. 报告格式/信号逻辑/推送渠道/cron 全不变；P3 纯净性（sheet 数据纯内存）；terminal/exposure/benchmark 等其他 company.db 消费者本次不动
@@ -34,7 +34,7 @@
 
 ## 风险自证
 
-最大风险 = sheet 结构漂移（Boss 改列名/挪行）。缓解：header 按列名探测、label 精确匹配、关键字段缺失即 SheetBookError → Telegram 告警 + 非零退出，无静默降级。为什么不是更简单的"继续手动维护 company.db"：5-09 以来实际偏离（现金 $1.89M vs 真实 $737.5K、还有 GOOG/INTC/MXL 幽灵仓位）证明手动双写不可持续。
+最大风险 = sheet 结构漂移（Boss 改列名/挪行）。缓解：header 按列名探测、label 精确匹配、关键字段缺失即 SheetBookError → Telegram 告警 + 非零退出，无静默降级。为什么不是更简单的"继续手动维护 company.db"：5-09 以来实际偏离（现金与持仓均已大幅偏离真实 book，多只已清仓标的仍挂 OPEN）证明手动双写不可持续。
 被否决的替代方案：sheet→company.db 同步导入（违反 P3 所有权：company.db 本地独占写入）；每 tab CSV gviz（3 个请求 + 数字格式化风险 + 与文档化读法不一致）。
 
 ---
@@ -740,11 +740,12 @@ class TestSheetFailurePath:
 class TestFormatReportDynamicCapital:
     def test_no_hardcoded_5m(self):
         from scripts.portfolio_intelligence import format_report
+        # synthetic figures (public repo — never mirror real book values here)
         summary = {
-            "total_nav": 3400000, "total_capital": 6681327,
-            "tracked_nav_total_pct": 0.509, "invested_value": 2650000,
-            "invested_pct": 0.78, "invested_total_pct": 0.397,
-            "cash": 737500, "cash_pct": 0.22, "cash_total_pct": 0.11,
+            "total_nav": 4200000, "total_capital": 8120000,
+            "tracked_nav_total_pct": 0.517, "invested_value": 3100000,
+            "invested_pct": 0.74, "invested_total_pct": 0.382,
+            "cash": 800000, "cash_pct": 0.26, "cash_total_pct": 0.099,
             "total_pnl": 200000, "total_pnl_pct": 0.08,
             "total_positions": 14, "position_details": [],
             "option_details": [], "sector_warnings": [],
@@ -752,7 +753,7 @@ class TestFormatReportDynamicCapital:
         }
         report = format_report([], summary, {})
         assert "of $5M" not in report
-        assert "$6.68M" in report
+        assert "$8.12M" in report
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -978,7 +979,7 @@ Expected（逐项人工核对，对照当日 sheet）:
 - 现金 ≈ sheet `现金合计`；total capital ≈ Sheet26 `total`（不再是 $5M/$6.6M 静态值）
 - KR 码不出现在 HK/yfinance 日志（路由 bug 已修）
 - snapshot line 含 `book(sheet) as of` 和 `sheet-priced: ...`
-- 期权区块 7 腿 QQQ puts 照旧
+- 期权区块与改前一致（company.db 期权全数展示）
 
 - [ ] **Step 2: 隐私扫描（sheet ID 前 8 位不得出现在代码/测试/日志）**
 
@@ -1008,7 +1009,7 @@ Expected: 打印版本号
 - [ ] **Step 4: 云端 dry-run 验收**
 
 Run: `ssh -4 aliyun "cd /root/workspace/Finance && set -a && source .env && set +a && python3 scripts/portfolio_intelligence.py --dry-run 2>&1 | tail -40"`
-Expected: live quotes 命中数 == US 非 LEAPS 非篮子持仓数；现金/total 与 sheet 一致；期权 7 腿照旧
+Expected: live quotes 命中数 == US 非 LEAPS 非篮子持仓数；现金/total 与 sheet 一致；期权区块与改前一致
 
 - [ ] **Step 5: 首晚 cron 观察（22:00 SGT）**：Telegram PDF 与 sheet 对账；如有坑记 `docs/issues/`
 

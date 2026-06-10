@@ -666,11 +666,12 @@ class TestSheetFailurePath:
 class TestFormatReportDynamicCapital:
     def test_no_hardcoded_5m(self):
         from scripts.portfolio_intelligence import format_report
+        # synthetic figures (public repo — never mirror real book values here)
         summary = {
-            "total_nav": 3400000, "total_capital": 6681327,
-            "tracked_nav_total_pct": 0.509, "invested_value": 2650000,
-            "invested_pct": 0.78, "invested_total_pct": 0.397,
-            "cash": 737500, "cash_pct": 0.22, "cash_total_pct": 0.11,
+            "total_nav": 4200000, "total_capital": 8120000,
+            "tracked_nav_total_pct": 0.517, "invested_value": 3100000,
+            "invested_pct": 0.74, "invested_total_pct": 0.382,
+            "cash": 800000, "cash_pct": 0.26, "cash_total_pct": 0.099,
             "total_pnl": 200000, "total_pnl_pct": 0.08,
             "total_positions": 14, "position_details": [],
             "option_details": [], "sector_warnings": [],
@@ -678,4 +679,4 @@ class TestFormatReportDynamicCapital:
         }
         report = format_report([], summary, {})
         assert "of $5M" not in report
-        assert "$6.68M" in report
+        assert "$8.12M" in report
