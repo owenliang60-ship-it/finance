@@ -139,3 +139,53 @@ class TestCashAndCapital:
     def test_missing_sheet26_tab_returns_none(self):
         book = parse_sheet_book(build_fixture(include_sheet26=False), FETCHED_AT)
         assert book.total_capital_usd is None
+
+
+class TestLoadSheetBook:
+    def test_missing_env_raises(self, monkeypatch):
+        from portfolio.holdings.sheet_book import load_sheet_book
+        monkeypatch.delenv("PORTFOLIO_SHEET_ID", raising=False)
+        with pytest.raises(SheetBookError, match="not configured"):
+            load_sheet_book()
+
+    def test_http_error_message_has_no_sheet_id(self, monkeypatch):
+        from portfolio.holdings.sheet_book import load_sheet_book
+        fake_id = "FAKE_SHEET_ID_123"
+        monkeypatch.setenv("PORTFOLIO_SHEET_ID", fake_id)
+
+        class FakeResp:
+            status_code = 404
+            content = b""
+
+        monkeypatch.setattr("requests.get", lambda url, timeout: FakeResp())
+        with pytest.raises(SheetBookError) as ei:
+            load_sheet_book()
+        assert fake_id not in str(ei.value)
+
+    def test_network_error_message_has_no_url(self, monkeypatch):
+        from portfolio.holdings.sheet_book import load_sheet_book
+        fake_id = "FAKE_SHEET_ID_123"
+        monkeypatch.setenv("PORTFOLIO_SHEET_ID", fake_id)
+
+        def boom(url, timeout):
+            raise ConnectionError("https://docs.google.com/x/" + fake_id)
+
+        monkeypatch.setattr("requests.get", boom)
+        with pytest.raises(SheetBookError) as ei:
+            load_sheet_book()
+        assert fake_id not in str(ei.value)
+        assert "docs.google.com" not in str(ei.value)
+
+    def test_success_path(self, monkeypatch):
+        from portfolio.holdings.sheet_book import load_sheet_book
+        monkeypatch.setenv("PORTFOLIO_SHEET_ID", "FAKE")
+        payload = build_fixture()
+
+        class FakeResp:
+            status_code = 200
+            content = payload
+
+        monkeypatch.setattr("requests.get", lambda url, timeout: FakeResp())
+        book = load_sheet_book()
+        assert book.cash_usd == 111000.0
+        assert {h.symbol for h in book.holdings} >= {"AAA", "BSKT"}
