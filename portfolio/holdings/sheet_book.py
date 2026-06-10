@@ -204,7 +204,8 @@ def load_sheet_book(sheet_id: Optional[str] = None,
         resp = requests.get(url, timeout=timeout)
     except Exception as e:
         # requests exception messages may embed the URL — keep class name only
-        raise SheetBookError("sheet download failed: %s" % type(e).__name__)
+        raise SheetBookError(
+            "sheet download failed: %s" % type(e).__name__) from None
     if resp.status_code != 200:
         raise SheetBookError(
             "sheet download failed: HTTP %d" % resp.status_code)

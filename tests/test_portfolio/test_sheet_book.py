@@ -176,6 +176,20 @@ class TestLoadSheetBook:
         assert fake_id not in str(ei.value)
         assert "docs.google.com" not in str(ei.value)
 
+    def test_network_error_chain_suppressed(self, monkeypatch):
+        from portfolio.holdings.sheet_book import load_sheet_book
+        fake_id = "FAKE_SHEET_ID_123"
+        monkeypatch.setenv("PORTFOLIO_SHEET_ID", fake_id)
+
+        def boom(url, timeout):
+            raise ConnectionError("https://docs.google.com/x/" + fake_id)
+
+        monkeypatch.setattr("requests.get", boom)
+        with pytest.raises(SheetBookError) as ei:
+            load_sheet_book()
+        assert ei.value.__suppress_context__ is True
+        assert ei.value.__cause__ is None
+
     def test_success_path(self, monkeypatch):
         from portfolio.holdings.sheet_book import load_sheet_book
         monkeypatch.setenv("PORTFOLIO_SHEET_ID", "FAKE")
