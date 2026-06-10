@@ -217,3 +217,4 @@ class TestLoadSheetBook:
         book = load_sheet_book()
         assert book.cash_usd == 111000.0
         assert {h.symbol for h in book.holdings} >= {"AAA", "BSKT"}
+        assert book.fetched_at.tzinfo is not None

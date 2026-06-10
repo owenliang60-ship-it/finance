@@ -647,6 +647,21 @@ class TestSheetFailurePath:
         assert "失败" in sent[0]
         assert "Summary_OSV" in sent[0]
 
+    def test_alert_failure_does_not_mask_sheet_error(self, monkeypatch):
+        import scripts.portfolio_intelligence as pi
+        from portfolio.holdings.sheet_book import SheetBookError
+
+        def fake_load():
+            raise SheetBookError("sheet tab missing: Summary_OSV")
+
+        def broken_send(msg, dry_run=False):
+            raise ConnectionError("telegram down")
+
+        monkeypatch.setattr(pi, "load_sheet_book", fake_load)
+        monkeypatch.setattr(pi, "_send_private_report", broken_send)
+        with pytest.raises(SheetBookError):
+            pi.run_intelligence(dry_run=True)
+
 
 class TestFormatReportDynamicCapital:
     def test_no_hardcoded_5m(self):

@@ -1065,7 +1065,10 @@ def run_intelligence(
             "{}\n本次报告未生成（不回退旧数据）".format(e)
         )
         logger.error("sheet book load failed: %s", e)
-        _send_private_report(err_msg, dry_run=dry_run)
+        try:
+            _send_private_report(err_msg, dry_run=dry_run)
+        except Exception as alert_err:
+            logger.warning("failed to send sheet failure alert: %s", alert_err)
         raise
 
     store = get_store()
@@ -1315,6 +1318,8 @@ def run_intelligence(
         if live is not None:
             option_pnl += (live - op["avg_premium"]) * op["quantity"] * 100
 
+    # Sheet LEAPS rows use per-share premium semantics: Shares x Last Price == Mkt Value
+    # (verified against the book), so linear unrealized_pnl is correct for them too.
     stock_pnl = sum(p.unrealized_pnl for p in positions_refreshed)
     total_pnl = stock_pnl + option_pnl
 
@@ -1344,7 +1349,8 @@ def run_intelligence(
     et_now = datetime.now(ZoneInfo("America/New_York"))
     positions_as_of = get_positions_as_of(store)
     oldest_open_option = positions_as_of["oldest_open_option"]
-    book_ts = book.fetched_at.strftime("%Y-%m-%d %H:%M")
+    book_ts = book.fetched_at.astimezone(
+        ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
     snapshot_line = (
         f"📍 NAV 快照 ET {et_now.strftime('%Y-%m-%d %H:%M')} "
         f"| book(sheet) as of {book_ts} "

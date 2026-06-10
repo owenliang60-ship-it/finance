@@ -212,4 +212,4 @@ def load_sheet_book(sheet_id: Optional[str] = None,
     if resp.status_code != 200:
         raise SheetBookError(
             "sheet download failed: HTTP %d" % resp.status_code)
-    return parse_sheet_book(resp.content, dt.datetime.now())
+    return parse_sheet_book(resp.content, dt.datetime.now(dt.timezone.utc))
