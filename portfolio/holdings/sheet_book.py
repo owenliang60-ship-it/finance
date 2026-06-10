@@ -68,6 +68,20 @@ def _to_float(value) -> float:
         return 0.0
 
 
+def _to_float_strict(value, context: str) -> float:
+    """Parse a critical numeric field; raise instead of silently coercing.
+
+    Book-of-record fields must never degrade to 0 on formula errors
+    (e.g. '#N/A') or export anomalies.
+    """
+    if value is None or (isinstance(value, str) and value.strip() == ""):
+        raise SheetBookError("missing %s" % context)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise SheetBookError("non-numeric %s" % context) from None
+
+
 def _normalize_symbol(raw: str) -> str:
     sym = str(raw).strip().upper()
     if sym.startswith("HKG:"):
@@ -105,18 +119,22 @@ def _parse_holdings(ws) -> List[SheetHolding]:
         raw_ticker = cell(row, "Stock Ticker")
         if raw_ticker is None or str(raw_ticker).strip() == "":
             continue
-        shares = _to_float(cell(row, "Shares"))
-        if shares <= 0:
-            continue  # closed position (realized-only row)
         raw = str(raw_ticker).strip()
         sym = _normalize_symbol(raw)
+        shares = _to_float_strict(
+            cell(row, "Shares"), "Shares for %s in %s" % (raw, SUMMARY_TAB))
+        if shares <= 0:
+            continue  # closed position (realized-only row, no price checks)
         h = SheetHolding(
             symbol=sym,
             raw_ticker=raw,
             market=str(cell(row, "Market") or "").strip(),
             shares=shares,
-            cost_per_share=_to_float(cell(row, "Cost (Per Share)")),
-            sheet_price=_to_float(cell(row, "Last Price")),
+            cost_per_share=_to_float_strict(
+                cell(row, "Cost (Per Share)"),
+                "Cost (Per Share) for %s" % raw),
+            sheet_price=_to_float_strict(
+                cell(row, "Last Price"), "Last Price for %s" % raw),
             market_value=_to_float(cell(row, "Mkt Value")),
             category=str(cell(row, "Category") or "").strip(),
             is_leaps=sym.endswith(" LEAPS"),
@@ -143,10 +161,12 @@ def _parse_cash(ws) -> float:
     for row in ws.iter_rows(values_only=True):
         label = str(row[0]).strip() if row and row[0] is not None else ""
         if label == CASH_LABEL:
-            value = _to_float(row[1] if len(row) > 1 else None)
-            if value > 0:
-                return value
-            raise SheetBookError("cash value invalid in %s" % CASH_TAB)
+            value = _to_float_strict(
+                row[1] if len(row) > 1 else None,
+                "cash value in %s" % CASH_TAB)
+            if value < 0:
+                raise SheetBookError("cash value invalid in %s" % CASH_TAB)
+            return value
     raise SheetBookError("label not found in %s: %s" % (CASH_TAB, CASH_LABEL))
 
 
@@ -163,8 +183,13 @@ def _parse_total_capital(ws) -> Optional[float]:
 def parse_sheet_book(xlsx_bytes: bytes, fetched_at: dt.datetime) -> SheetBook:
     import openpyxl
 
-    wb = openpyxl.load_workbook(
-        io.BytesIO(xlsx_bytes), data_only=True, read_only=True)
+    try:
+        wb = openpyxl.load_workbook(
+            io.BytesIO(xlsx_bytes), data_only=True, read_only=True)
+    except Exception as e:
+        # 200 + HTML (login/quota page) arrives here as BadZipFile etc.
+        raise SheetBookError(
+            "sheet content is not a valid xlsx: %s" % type(e).__name__) from None
     try:
         if SUMMARY_TAB not in wb.sheetnames:
             raise SheetBookError("sheet tab missing: %s" % SUMMARY_TAB)
