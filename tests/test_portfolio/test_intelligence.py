@@ -585,3 +585,43 @@ class TestQQQBetaDateAlignment:
         beta = calc_qqq_beta(["HK"], {"HK": sym_df}, qqq_df, {"HK": 1.0}, lookback=60)
         assert beta is not None
         assert beta != 0.0
+
+
+class TestPositionFromSheet:
+    def test_field_mapping_and_sector_fallback(self, tmp_path):
+        from scripts.portfolio_intelligence import _position_from_sheet
+        from portfolio.holdings.manager import PortfolioManager
+        from portfolio.holdings.sheet_book import SheetHolding
+        from terminal.company_store import CompanyStore
+
+        store = CompanyStore(db_path=tmp_path / "t.db")
+        mgr = PortfolioManager(store=store)
+        h = SheetHolding(
+            symbol="BSKT", raw_ticker="BSKT", market="US", shares=50,
+            cost_per_share=15.0, sheet_price=20.0, market_value=1000.0,
+            category="Fundamental", is_leaps=False)
+        pos = _position_from_sheet(mgr, h)
+        assert pos.symbol == "BSKT"
+        assert pos.cost_basis == 15.0
+        assert pos.shares == 50
+        assert pos.sector == "Fundamental"  # companies 表查不到 -> fallback Category
+        assert pos.status == "OPEN"
+        store.close()
+
+    def test_known_symbol_keeps_db_sector(self, tmp_path):
+        from scripts.portfolio_intelligence import _position_from_sheet
+        from portfolio.holdings.manager import PortfolioManager
+        from portfolio.holdings.sheet_book import SheetHolding
+        from terminal.company_store import CompanyStore
+
+        store = CompanyStore(db_path=tmp_path / "t.db")
+        store.upsert_company("AAA", company_name="Aaa Inc", sector="Technology")
+        mgr = PortfolioManager(store=store)
+        h = SheetHolding(
+            symbol="AAA", raw_ticker="AAA", market="US", shares=100,
+            cost_per_share=8.0, sheet_price=10.0, market_value=1000.0,
+            category="Sentiment", is_leaps=False)
+        pos = _position_from_sheet(mgr, h)
+        assert pos.sector == "Technology"  # DB sector 优先于 Category
+        assert pos.company_name == "Aaa Inc"
+        store.close()

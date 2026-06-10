@@ -434,6 +434,25 @@ def get_positions_as_of(store) -> dict:
     return {"latest": latest, "oldest_open_option": oldest_open_option}
 
 
+SHEET_PRICED_US_SYMBOLS = {"DRAM"}  # 自定义篮子等无交易所价格的 US 行，直接用 sheet 价
+
+
+def _position_from_sheet(mgr, holding):
+    """Build an enriched Position from a SheetHolding (sheet = book of record)."""
+    row = {
+        "symbol": holding.symbol,
+        "avg_cost": holding.cost_per_share,
+        "shares": holding.shares,
+        "open_date": "",
+        "position_id": None,
+        "status": "OPEN",
+    }
+    pos = mgr.enrich_holding_row(row)
+    if not pos.sector:
+        pos.sector = holding.category or "Unknown"
+    return pos
+
+
 # ---- 格式化 ----
 
 def format_report(
