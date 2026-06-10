@@ -21,6 +21,7 @@ CASH_TAB = "Portfolio Summary"
 CAPITAL_TAB = "Sheet26"
 CASH_LABEL = "现金合计"
 CAPITAL_LABEL = "total"
+MAX_HEADER_SCAN_ROWS = 15
 REQUIRED_COLUMNS = [
     "Market", "Stock Ticker", "Last Price", "Shares",
     "Cost (Per Share)", "Mkt Value", "Category",
@@ -79,7 +80,7 @@ def _parse_holdings(ws) -> List[SheetHolding]:
     data_rows = []
     for i, row in enumerate(ws.iter_rows(values_only=True)):
         if header_map is None:
-            if i >= 10:
+            if i >= MAX_HEADER_SCAN_ROWS:
                 break
             cells = [str(c).strip() if c is not None else "" for c in row]
             if "Stock Ticker" in cells:
@@ -131,6 +132,8 @@ def _parse_holdings(ws) -> List[SheetHolding]:
             prev.shares = total_shares
             prev.market_value += h.market_value
             logger.warning("duplicate ticker merged: %s", sym)
+            # sheet_price/category: keep first row's value (first-wins,
+            # warning logged above)
         else:
             merged[sym] = h
     return list(merged.values())

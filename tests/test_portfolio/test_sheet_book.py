@@ -108,6 +108,16 @@ class TestParseHoldings:
         assert h.shares == 200
         assert h.cost_per_share == pytest.approx(10.0)
         assert h.market_value == 2000.0
+        assert h.sheet_price == 10.0
+
+    def test_header_found_after_multiple_noise_rows(self):
+        book = parse_sheet_book(build_fixture(noise_rows=5), FETCHED_AT)
+        assert len(book.holdings) == 5
+
+    def test_lowercase_ticker_normalized(self):
+        rows = [_row("US", "aaa", 10.0, 100, 8.0, 1000.0, "Sentiment")]
+        book = parse_sheet_book(build_fixture(rows=rows), FETCHED_AT)
+        assert book.holdings[0].symbol == "AAA"
 
     def test_empty_holdings_raises(self):
         rows = [_row("KR", "000002", 12.0, 0, 0.0, 0.0, "Momentum")]
@@ -127,6 +137,10 @@ class TestCashAndCapital:
     def test_missing_cash_label_raises(self):
         with pytest.raises(SheetBookError, match="现金合计"):
             parse_sheet_book(build_fixture(cash_label="别的"), FETCHED_AT)
+
+    def test_zero_cash_raises(self):
+        with pytest.raises(SheetBookError, match="cash value invalid"):
+            parse_sheet_book(build_fixture(cash=0.0), FETCHED_AT)
 
     def test_total_capital_from_sheet26(self):
         book = parse_sheet_book(build_fixture(), FETCHED_AT)
