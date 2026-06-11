@@ -1118,6 +1118,7 @@ def run_intelligence(
         s for s, m in markets.items()
         if m == "US" and s not in leaps_symbols
         and s not in SHEET_PRICED_US_SYMBOLS
+        and " " not in s  # multi-word rows (e.g. "X PUT") are sheet-only labels, never quotable
     ]
     if us_symbols or option_positions:
         require_cloud_env(allow_local=allow_local)
