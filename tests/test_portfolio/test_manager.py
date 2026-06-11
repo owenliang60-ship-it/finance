@@ -453,3 +453,37 @@ class TestOptionTradeEngine:
         )
         assert pos is not None
         assert pos["quantity"] == -10
+
+
+class TestEnrichHoldingRow:
+    """Public wrapper used by sheet-sourced callers (PI)."""
+
+    def test_wraps_enrich_with_company_metadata(self, tmp_path):
+        from terminal.company_store import CompanyStore
+        from portfolio.holdings.manager import PortfolioManager
+
+        store = CompanyStore(db_path=tmp_path / "t.db")
+        store.upsert_company("NVDA", company_name="NVIDIA", sector="Technology")
+        mgr = PortfolioManager(store=store)
+        row = {"symbol": "NVDA", "avg_cost": 10.0, "shares": 100,
+               "open_date": "", "position_id": None, "status": "OPEN"}
+        pos = mgr.enrich_holding_row(row)
+        assert pos.symbol == "NVDA"
+        assert pos.company_name == "NVIDIA"
+        assert pos.sector == "Technology"
+        assert pos.cost_basis == 10.0
+        assert pos.shares == 100
+        store.close()
+
+    def test_unknown_symbol_best_effort(self, tmp_path):
+        from terminal.company_store import CompanyStore
+        from portfolio.holdings.manager import PortfolioManager
+
+        store = CompanyStore(db_path=tmp_path / "t.db")
+        mgr = PortfolioManager(store=store)
+        row = {"symbol": "0001", "avg_cost": 4.5, "shares": 200,
+               "open_date": "", "position_id": None, "status": "OPEN"}
+        pos = mgr.enrich_holding_row(row)
+        assert pos.symbol == "0001"
+        assert pos.sector == ""  # not in companies table -> empty (PI falls back to Category)
+        store.close()

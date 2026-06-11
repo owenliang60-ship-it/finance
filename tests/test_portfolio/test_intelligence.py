@@ -190,7 +190,7 @@ class TestFormatReport:
         report = format_report([], summary, {})
 
         assert "追踪NAV" in report
-        assert "of $5M" in report
+        assert "of $5.00M" in report  # dynamic capital via _format_usd_compact
         assert "持仓明细" in report
         assert "NVDA NVIDIA" in report
         assert "Semiconductors" in report
@@ -585,3 +585,98 @@ class TestQQQBetaDateAlignment:
         beta = calc_qqq_beta(["HK"], {"HK": sym_df}, qqq_df, {"HK": 1.0}, lookback=60)
         assert beta is not None
         assert beta != 0.0
+
+
+class TestPositionFromSheet:
+    def test_field_mapping_and_sector_fallback(self, tmp_path):
+        from scripts.portfolio_intelligence import _position_from_sheet
+        from portfolio.holdings.manager import PortfolioManager
+        from portfolio.holdings.sheet_book import SheetHolding
+        from terminal.company_store import CompanyStore
+
+        store = CompanyStore(db_path=tmp_path / "t.db")
+        mgr = PortfolioManager(store=store)
+        h = SheetHolding(
+            symbol="BSKT", raw_ticker="BSKT", market="US", shares=50,
+            cost_per_share=15.0, sheet_price=20.0, market_value=1000.0,
+            category="Fundamental", is_leaps=False)
+        pos = _position_from_sheet(mgr, h)
+        assert pos.symbol == "BSKT"
+        assert pos.cost_basis == 15.0
+        assert pos.shares == 50
+        assert pos.sector == "Fundamental"  # companies 表查不到 -> fallback Category
+        assert pos.status == "OPEN"
+        store.close()
+
+    def test_known_symbol_keeps_db_sector(self, tmp_path):
+        from scripts.portfolio_intelligence import _position_from_sheet
+        from portfolio.holdings.manager import PortfolioManager
+        from portfolio.holdings.sheet_book import SheetHolding
+        from terminal.company_store import CompanyStore
+
+        store = CompanyStore(db_path=tmp_path / "t.db")
+        store.upsert_company("AAA", company_name="Aaa Inc", sector="Technology")
+        mgr = PortfolioManager(store=store)
+        h = SheetHolding(
+            symbol="AAA", raw_ticker="AAA", market="US", shares=100,
+            cost_per_share=8.0, sheet_price=10.0, market_value=1000.0,
+            category="Sentiment", is_leaps=False)
+        pos = _position_from_sheet(mgr, h)
+        assert pos.sector == "Technology"  # DB sector 优先于 Category
+        assert pos.company_name == "Aaa Inc"
+        store.close()
+
+
+class TestSheetFailurePath:
+    def test_sheet_failure_sends_alert_and_raises(self, monkeypatch):
+        import scripts.portfolio_intelligence as pi
+        from portfolio.holdings.sheet_book import SheetBookError
+
+        sent = []
+
+        def fake_load():
+            raise SheetBookError("sheet tab missing: Summary_OSV")
+
+        monkeypatch.setattr(pi, "load_sheet_book", fake_load)
+        monkeypatch.setattr(
+            pi, "_send_private_report",
+            lambda msg, dry_run=False: (sent.append(msg), msg)[1])
+        with pytest.raises(SheetBookError):
+            pi.run_intelligence(dry_run=True)
+        assert len(sent) == 1
+        assert "失败" in sent[0]
+        assert "Summary_OSV" in sent[0]
+
+    def test_alert_failure_does_not_mask_sheet_error(self, monkeypatch):
+        import scripts.portfolio_intelligence as pi
+        from portfolio.holdings.sheet_book import SheetBookError
+
+        def fake_load():
+            raise SheetBookError("sheet tab missing: Summary_OSV")
+
+        def broken_send(msg, dry_run=False):
+            raise ConnectionError("telegram down")
+
+        monkeypatch.setattr(pi, "load_sheet_book", fake_load)
+        monkeypatch.setattr(pi, "_send_private_report", broken_send)
+        with pytest.raises(SheetBookError):
+            pi.run_intelligence(dry_run=True)
+
+
+class TestFormatReportDynamicCapital:
+    def test_no_hardcoded_5m(self):
+        from scripts.portfolio_intelligence import format_report
+        # synthetic figures (public repo — never mirror real book values here)
+        summary = {
+            "total_nav": 4200000, "total_capital": 8120000,
+            "tracked_nav_total_pct": 0.517, "invested_value": 3100000,
+            "invested_pct": 0.74, "invested_total_pct": 0.382,
+            "cash": 800000, "cash_pct": 0.26, "cash_total_pct": 0.099,
+            "total_pnl": 200000, "total_pnl_pct": 0.08,
+            "total_positions": 14, "position_details": [],
+            "option_details": [], "sector_warnings": [],
+            "concentration": {}, "dna_distribution": "",
+        }
+        report = format_report([], summary, {})
+        assert "of $5M" not in report
+        assert "$8.12M" in report

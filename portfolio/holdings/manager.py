@@ -623,6 +623,14 @@ class PortfolioManager:
 
     # ---- Enrichment ----
 
+    def enrich_holding_row(self, row: Dict) -> Position:
+        """Public wrapper: build an enriched Position from a raw holding-row dict.
+
+        Used by sheet-sourced callers (PI) that bypass company.db holdings.
+        Required row keys: symbol / avg_cost / shares / open_date / position_id / status.
+        """
+        return self._enrich(row)
+
     def _enrich(self, row: Dict) -> Position:
         symbol = row["symbol"]
         company = self._store.get_company(symbol) or {}

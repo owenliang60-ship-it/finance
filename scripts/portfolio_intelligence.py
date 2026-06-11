@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pandas as pd
 from config.settings import MARKET_DB_PATH
 from terminal.company_store import get_store
+from portfolio.holdings.sheet_book import SheetBookError, load_sheet_book
 from src.indicators.pmarp import analyze_pmarp
 from src.indicators.rvol import analyze_rvol
 from src.telegram_bot import send_document, send_message, send_photo, split_message
@@ -434,6 +435,25 @@ def get_positions_as_of(store) -> dict:
     return {"latest": latest, "oldest_open_option": oldest_open_option}
 
 
+SHEET_PRICED_US_SYMBOLS = {"DRAM"}  # 自定义篮子等无交易所价格的 US 行，直接用 sheet 价
+
+
+def _position_from_sheet(mgr, holding):
+    """Build an enriched Position from a SheetHolding (sheet = book of record)."""
+    row = {
+        "symbol": holding.symbol,
+        "avg_cost": holding.cost_per_share,
+        "shares": holding.shares,
+        "open_date": "",
+        "position_id": None,
+        "status": "OPEN",
+    }
+    pos = mgr.enrich_holding_row(row)
+    if not pos.sector:
+        pos.sector = holding.category or "Unknown"
+    return pos
+
+
 # ---- 格式化 ----
 
 def format_report(
@@ -462,7 +482,8 @@ def format_report(
     if total_capital:
         lines.append(
             f"追踪NAV: ${summary['total_nav']:,.0f} "
-            f"({summary.get('tracked_nav_total_pct', 0):.1%} of $5M)"
+            f"({summary.get('tracked_nav_total_pct', 0):.1%} of "
+            f"{_format_usd_compact(total_capital)})"
         )
         lines.append(
             f"已投入: {_format_usd_compact(summary.get('invested_value', 0))} | "
@@ -1036,11 +1057,29 @@ def run_intelligence(
         fetch_stock_live_quotes,
     )
 
+    try:
+        book = load_sheet_book()
+    except SheetBookError as e:
+        err_msg = (
+            "⚠️ Portfolio Intelligence: Google Sheet 持仓读取失败\n"
+            "{}\n本次报告未生成（不回退旧数据）".format(e)
+        )
+        logger.error("sheet book load failed: %s", e)
+        try:
+            _send_private_report(err_msg, dry_run=dry_run)
+        except Exception as alert_err:
+            logger.warning("failed to send sheet failure alert: %s", alert_err)
+        raise
+
     store = get_store()
     mgr = PortfolioManager(store=store)
-    positions = mgr.load_holdings()
-    option_positions = store.get_open_option_positions()
-    cash = store.get_cash_balance()
+    positions = [_position_from_sheet(mgr, h) for h in book.holdings]
+    markets = book.markets()
+    sheet_prices = book.sheet_prices()
+    leaps_symbols = {h.symbol for h in book.holdings if h.is_leaps}
+    option_positions = store.get_open_option_positions()  # 期权仍读 company.db（Boss 拍板）
+    cash = book.cash_usd
+    total_capital = book.total_capital_usd or TOTAL_CAPITAL_USD
 
     if not positions and not option_positions and cash <= 0:
         msg = "📊 Portfolio Intelligence: 无持仓"
@@ -1055,7 +1094,7 @@ def run_intelligence(
     no_price_symbols = []
     fallback_symbols = []
     signals_as_of = None
-    hk_symbols = [p.symbol for p in positions if is_hk_ticker(p.symbol)]
+    hk_symbols = [s for s, m in markets.items() if m == "HK"]
 
     for p in positions:
         rows = conn.execute(
@@ -1075,7 +1114,12 @@ def run_intelligence(
         if latest_date and (signals_as_of is None or latest_date > signals_as_of):
             signals_as_of = latest_date
 
-    us_symbols = [p.symbol for p in positions if not is_hk_ticker(p.symbol)]
+    us_symbols = [
+        s for s, m in markets.items()
+        if m == "US" and s not in leaps_symbols
+        and s not in SHEET_PRICED_US_SYMBOLS
+        and " " not in s  # multi-word rows (e.g. "X PUT") are sheet-only labels, never quotable
+    ]
     if us_symbols or option_positions:
         require_cloud_env(allow_local=allow_local)
 
@@ -1122,9 +1166,16 @@ def run_intelligence(
             if latest_date and (signals_as_of is None or latest_date > signals_as_of):
                 signals_as_of = latest_date
 
-    # Mark symbols with no price at all
+    # Price fallback: live/T-1 (already in price_latest) -> sheet price -> cost
+    sheet_priced_symbols = []
     for p in positions:
-        if p.symbol not in price_latest and p.cost_basis > 0:
+        if p.symbol in price_latest:
+            continue
+        sheet_price = sheet_prices.get(p.symbol, 0)
+        if sheet_price > 0:
+            price_latest[p.symbol] = sheet_price
+            sheet_priced_symbols.append(p.symbol)
+        elif p.cost_basis > 0:
             price_latest[p.symbol] = p.cost_basis
             no_price_symbols.append(p.symbol)
 
@@ -1149,10 +1200,16 @@ def run_intelligence(
                 option_live_result.request_count,
             )
 
-    # NAV + weights (now with HK + option prices)
-    nav = mgr.get_total_nav(price_latest, option_prices)
+    # NAV + weights — inline (mgr.get_total_nav/refresh_prices re-read company.db)
+    option_mv = mgr.get_option_market_value(option_prices)  # options stay on company.db
+    for p in positions:
+        p.current_price = price_latest.get(p.symbol, 0)
+    stock_mv = sum(p.market_value for p in positions)
+    nav = stock_mv + option_mv + cash
     invested = nav - cash
-    positions_refreshed = mgr.refresh_prices(price_latest, option_prices)
+    for p in positions:
+        p.current_weight = (p.market_value / nav) if nav > 0 else 0
+    positions_refreshed = positions
 
     weights = {p.symbol: p.current_weight for p in positions_refreshed}
 
@@ -1198,10 +1255,10 @@ def run_intelligence(
         {"sector": p.sector, "weight": p.current_weight} for p in positions_refreshed
     ])
     position_details = build_stock_position_details(
-        positions_refreshed, nav, TOTAL_CAPITAL_USD
+        positions_refreshed, nav, total_capital
     )
     option_details = build_option_position_details(
-        option_positions, option_prices, nav, TOTAL_CAPITAL_USD
+        option_positions, option_prices, nav, total_capital
     )
     sector_exposure = calc_sector_exposure(position_details)
     concentration = build_concentration_summary(position_details, sector_exposure)
@@ -1262,19 +1319,21 @@ def run_intelligence(
         if live is not None:
             option_pnl += (live - op["avg_premium"]) * op["quantity"] * 100
 
+    # Sheet LEAPS rows use per-share premium semantics: Shares x Last Price == Mkt Value
+    # (verified against the book), so linear unrealized_pnl is correct for them too.
     stock_pnl = sum(p.unrealized_pnl for p in positions_refreshed)
     total_pnl = stock_pnl + option_pnl
 
     summary = {
         "total_nav": nav,
-        "total_capital": TOTAL_CAPITAL_USD,
-        "tracked_nav_total_pct": nav / TOTAL_CAPITAL_USD if TOTAL_CAPITAL_USD else 0,
+        "total_capital": total_capital,
+        "tracked_nav_total_pct": nav / total_capital if total_capital else 0,
         "invested_value": invested,
         "invested_pct": invested / nav if nav > 0 else 0,
-        "invested_total_pct": invested / TOTAL_CAPITAL_USD if TOTAL_CAPITAL_USD else 0,
+        "invested_total_pct": invested / total_capital if total_capital else 0,
         "cash": cash,
         "cash_pct": cash / nav if nav > 0 else 0,
-        "cash_total_pct": cash / TOTAL_CAPITAL_USD if TOTAL_CAPITAL_USD else 0,
+        "cash_total_pct": cash / total_capital if total_capital else 0,
         "qqq_beta": qqq_beta,
         "total_pnl": total_pnl,
         "total_pnl_pct": total_pnl / invested if invested > 0 else 0,
@@ -1290,16 +1349,19 @@ def run_intelligence(
 
     et_now = datetime.now(ZoneInfo("America/New_York"))
     positions_as_of = get_positions_as_of(store)
-    latest = positions_as_of["latest"]
     oldest_open_option = positions_as_of["oldest_open_option"]
+    book_ts = book.fetched_at.astimezone(
+        ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
     snapshot_line = (
         f"📍 NAV 快照 ET {et_now.strftime('%Y-%m-%d %H:%M')} "
-        f"| positions as of {latest or 'unknown'} "
+        f"| book(sheet) as of {book_ts} "
         f"| live {len(stock_live_result.prices)}/{len(us_symbols)} "
         f"| signals as of {signals_as_of or 'unknown'}"
     )
-    if oldest_open_option and oldest_open_option != latest:
+    if oldest_open_option:
         snapshot_line += f" | oldest open option {oldest_open_option}"
+    if sheet_priced_symbols:
+        snapshot_line += f" | sheet-priced: {','.join(sheet_priced_symbols)}"
     if fallback_symbols:
         snapshot_line += f" | ⚠️ fallback: {','.join(fallback_symbols)}"
     if option_positions:
