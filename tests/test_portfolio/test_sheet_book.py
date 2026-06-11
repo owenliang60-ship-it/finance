@@ -154,6 +154,26 @@ class TestParseHoldings:
         syms = {h.symbol for h in book.holdings}
         assert syms == {"AAA", "000001", "0001", "BBB LEAPS", "BSKT"}
 
+    def test_lowercase_market_normalized(self):
+        rows = [_row("us", "AAA", 10.0, 100, 8.0, 1000.0, "Sentiment")]
+        book = parse_sheet_book(build_fixture(rows=rows), FETCHED_AT)
+        assert book.holdings[0].market == "US"
+
+    def test_unknown_market_raises(self):
+        rows = [_row("USA", "AAA", 10.0, 100, 8.0, 1000.0, "Sentiment")]
+        with pytest.raises(SheetBookError, match="unknown Market"):
+            parse_sheet_book(build_fixture(rows=rows), FETCHED_AT)
+
+    def test_missing_market_raises(self):
+        rows = [_row(None, "AAA", 10.0, 100, 8.0, 1000.0, "Sentiment")]
+        with pytest.raises(SheetBookError, match="missing Market"):
+            parse_sheet_book(build_fixture(rows=rows), FETCHED_AT)
+
+    def test_crypto_market_normalized(self):
+        rows = [_row("Crypto", "CCC", 5.0, 10, 4.0, 50.0, "Fundamental")]
+        book = parse_sheet_book(build_fixture(rows=rows), FETCHED_AT)
+        assert book.holdings[0].market == "CRYPTO"
+
 
 class TestCashAndCapital:
     def test_cash_parsed(self):
@@ -183,6 +203,18 @@ class TestCashAndCapital:
     def test_missing_total_returns_none(self):
         book = parse_sheet_book(build_fixture(total_label="not-total"), FETCHED_AT)
         assert book.total_capital_usd is None
+
+    def test_total_label_with_non_numeric_value_raises(self):
+        with pytest.raises(SheetBookError, match="non-numeric total value"):
+            parse_sheet_book(build_fixture(total="#N/A"), FETCHED_AT)
+
+    def test_total_label_with_blank_value_raises(self):
+        with pytest.raises(SheetBookError, match="missing total value"):
+            parse_sheet_book(build_fixture(total=None), FETCHED_AT)
+
+    def test_total_label_with_zero_value_raises(self):
+        with pytest.raises(SheetBookError, match="total value invalid"):
+            parse_sheet_book(build_fixture(total=0.0), FETCHED_AT)
 
     def test_missing_sheet26_tab_returns_none(self):
         book = parse_sheet_book(build_fixture(include_sheet26=False), FETCHED_AT)

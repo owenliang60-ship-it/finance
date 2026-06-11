@@ -22,6 +22,7 @@ CAPITAL_TAB = "Sheet26"
 CASH_LABEL = "现金合计"
 CAPITAL_LABEL = "total"
 MAX_HEADER_SCAN_ROWS = 15
+ALLOWED_MARKETS = {"US", "HK", "KR", "CRYPTO"}
 REQUIRED_COLUMNS = [
     "Market", "Stock Ticker", "Last Price", "Shares",
     "Cost (Per Share)", "Mkt Value", "Category",
@@ -36,7 +37,7 @@ class SheetBookError(Exception):
 class SheetHolding:
     symbol: str            # normalized: "HKG:0700" -> "0700", upper/strip
     raw_ticker: str        # sheet original (debug only — never logged)
-    market: str            # "US" / "KR" / "HK" / "Crypto"
+    market: str            # "US" / "KR" / "HK" / "CRYPTO"
     shares: float
     cost_per_share: float  # sheet "Cost (Per Share)"
     sheet_price: float     # sheet "Last Price" (already USD)
@@ -125,10 +126,16 @@ def _parse_holdings(ws) -> List[SheetHolding]:
             cell(row, "Shares"), "Shares for %s in %s" % (raw, SUMMARY_TAB))
         if shares <= 0:
             continue  # closed position (realized-only row, no price checks)
+        market = str(cell(row, "Market") or "").strip().upper()
+        if not market:
+            raise SheetBookError("missing Market for %s in %s" % (raw, SUMMARY_TAB))
+        if market not in ALLOWED_MARKETS:
+            raise SheetBookError(
+                "unknown Market '%s' for %s in %s" % (market, raw, SUMMARY_TAB))
         h = SheetHolding(
             symbol=sym,
             raw_ticker=raw,
-            market=str(cell(row, "Market") or "").strip(),
+            market=market,
             shares=shares,
             cost_per_share=_to_float_strict(
                 cell(row, "Cost (Per Share)"),
@@ -171,12 +178,18 @@ def _parse_cash(ws) -> float:
 
 
 def _parse_total_capital(ws) -> Optional[float]:
+    """Total capital from Sheet26. None only when the tab/label is absent
+    (PI falls back to env); a present-but-broken value must raise."""
     for row in ws.iter_rows(values_only=True):
-        if row is None or len(row) < 3 or row[1] is None:
+        if row is None or len(row) < 2 or row[1] is None:
             continue
         if str(row[1]).strip().lower() == CAPITAL_LABEL:
-            value = _to_float(row[2])
-            return value if value > 0 else None
+            value = _to_float_strict(
+                row[2] if len(row) > 2 else None,
+                "total value in %s" % CAPITAL_TAB)
+            if value <= 0:
+                raise SheetBookError("total value invalid in %s" % CAPITAL_TAB)
+            return value
     return None
 
 
