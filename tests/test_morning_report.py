@@ -1713,3 +1713,50 @@ def test_builder_injects_beta_into_signal_rows(monkeypatch):
     assert captured["symbols"] == ["MU"]               # 接线点确实被调用
     assert result["pmarp"]["hits"][0]["beta_6m"] == 2.05
     assert result["volume_anomaly"]["hits"][0]["beta_6m"] == 2.05
+
+
+# ============================================================
+# Task 3: 文本投递面 β6M 列
+# ============================================================
+
+def test_format_beta():
+    assert mr._format_beta(1.834) == "1.83"
+    assert mr._format_beta(0.4) == "0.40"
+    assert mr._format_beta(None) == "—"
+    assert mr._format_beta(float("nan")) == "—"
+
+
+def test_pmarp_text_section_has_beta_column():
+    hit = _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12)
+    hit["beta_6m"] = 1.83
+    out = mr.format_section_pmarp_by_signal_and_cap(_make_market_signals(pmarp_hits=[hit]))
+    assert "β6M" in out                      # 表头
+    assert "1.83" in out                     # 值与市值同行
+    line = next(l for l in out.splitlines() if "NVDA" in l)
+    assert "$3.0T" in line and "1.83" in line
+
+
+def test_pmarp_text_section_beta_missing_dash():
+    hit = _make_pmarp_hit("XYZ", "oversold_recovery", 2.0, 50e9)   # 无 beta_6m 键
+    out = mr.format_section_pmarp_by_signal_and_cap(_make_market_signals(pmarp_hits=[hit]))
+    line = next(l for l in out.splitlines() if "XYZ" in l)
+    assert line.rstrip().split(" | ")[-1] == "—"
+
+
+def test_volume_anomaly_text_section_has_beta_column():
+    hit = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+           "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
+           "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9, "beta_6m": 2.05}
+    out = mr.format_section_layered_volume_anomaly(_make_market_signals(anomaly_hits=[hit]))
+    assert "β6M" in out
+    line = next(l for l in out.splitlines() if "SMCI" in l)
+    assert "2.05" in line
+
+
+def test_volume_anomaly_text_section_beta_missing_dash():
+    hit = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+           "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
+           "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9}  # no beta_6m key
+    out = mr.format_section_layered_volume_anomaly(_make_market_signals(anomaly_hits=[hit]))
+    line = next(l for l in out.splitlines() if "SMCI" in l)
+    assert line.rstrip().split(" | ")[-1] == "—"

@@ -128,6 +128,12 @@ def _format_market_cap(market_cap: float | None) -> str:
     return "${:.0f}M".format(market_cap / 1e6)
 
 
+def _format_beta(beta: float | None) -> str:
+    if beta is None or pd.isna(beta):
+        return "—"
+    return "{:.2f}".format(beta)
+
+
 def _clean_company_name(name: str | None) -> str:
     if not name:
         return ""
@@ -1100,13 +1106,14 @@ def format_section_pmarp_by_signal_and_cap(market_signals: dict) -> str:
         if signal_label != last_signal:
             lines.append("【{}】".format(signal_label)); last_signal = signal_label
         lines.append("  {}".format(tier))
-        lines.append("  标的 | 概念 | 信号 | 当前 | 变化 | 市值")
+        lines.append("  标的 | 概念 | 信号 | 当前 | 变化 | 市值 | β6M")
         for item in tier_hits:
-            lines.append("    {} | {} | {} | {:.1f}% | {:.1f}→{:.1f} | {}".format(
+            lines.append("    {} | {} | {} | {:.1f}% | {:.1f}→{:.1f} | {} | {}".format(
                 _compact_company(item), _display_concept_tags(item),
                 PMARP_SIGNAL_LABELS.get(item.get("signal"), "—"),
                 item.get("value") or 0, item.get("previous") or 0, item.get("value") or 0,
                 _format_market_cap(item.get("marketCap")),
+                _format_beta(item.get("beta_6m")),
             ))
     return "\n".join(lines)
 
@@ -1219,14 +1226,15 @@ def format_section_layered_volume_anomaly(market_signals: dict) -> str:
     lines.extend(_format_bucketed_table(
         section.get("hits", []),
         "无量能异常信号",
-        "标的 | 概念 | 类型 | DV 5d/20d | RVOL | 市值",
-        lambda item: "{} | {} | {} | {} | {} | {}".format(
+        "标的 | 概念 | 类型 | DV 5d/20d | RVOL | 市值 | β6M",
+        lambda item: "{} | {} | {} | {} | {} | {} | {}".format(
             _compact_company(item),
             _display_concept_tags(item),
             item.get("volume_signal_kind") or "—",
             _format_volume_anomaly_dv_cell(item),
             _format_volume_anomaly_rvol_cell(item),
             _format_market_cap(item.get("marketCap")),
+            _format_beta(item.get("beta_6m")),
         ),
     ))
     return "\n".join(lines)
