@@ -1485,24 +1485,27 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
     blocks.append({"heading": "1. PMARP 信号"})
 
     # PMARP — signal -> cap-tier sub-blocks (columns one-to-one with text)
-    pm_cols = ["标的", "概念", "信号", "当前", "市值"]
+    pm_cols = ["标的", "概念", "信号", "当前", "变化", "市值", "β6M"]
     pmarp_hits = (market_signals.get("pmarp") or {}).get("hits", [])
     for signal_label, tier, tier_hits in _pmarp_signal_cap_groups(pmarp_hits):
         rows = [{"标的": _compact_company(h), "概念": _display_concept_tags(h),
                  "信号": PMARP_SIGNAL_LABELS.get(h.get("signal"), "—"),
                  "当前": "{:.1f}%".format(h.get("value") or 0),
-                 "市值": _format_market_cap(h.get("marketCap"))} for h in tier_hits]
+                 "变化": "{:.1f}→{:.1f}".format(h.get("previous") or 0, h.get("value") or 0),
+                 "市值": _format_market_cap(h.get("marketCap")),
+                 "β6M": _format_beta(h.get("beta_6m"))} for h in tier_hits]
         blocks.append({"heading": "{} — {}".format(signal_label, tier),
                        "columns": pm_cols, "rows": rows})
 
     # 量能异常 — columns one-to-one with format_section_layered_volume_anomaly
-    va_cols = ["标的", "概念", "类型", "DV 5d/20d", "RVOL", "市值"]
+    va_cols = ["标的", "概念", "类型", "DV 5d/20d", "RVOL", "市值", "β6M"]
     va_hits = (market_signals.get("volume_anomaly") or {}).get("hits", [])
     va_rows = [{"标的": _compact_company(h), "概念": _display_concept_tags(h),
                 "类型": h.get("volume_signal_kind") or "—",
                 "DV 5d/20d": _format_volume_anomaly_dv_cell(h),
                 "RVOL": _format_volume_anomaly_rvol_cell(h),
-                "市值": _format_market_cap(h.get("marketCap"))} for h in va_hits]
+                "市值": _format_market_cap(h.get("marketCap")),
+                "β6M": _format_beta(h.get("beta_6m"))} for h in va_hits]
     blocks.append({"heading": "2. 量能异常", "columns": va_cols, "rows": va_rows})
 
     # Dollar Volume — flat ranking; columns one-to-one with format_section_d
@@ -1612,8 +1615,8 @@ def build_morning_visual_sections(
             })
 
         pmarp = market_signals.get("pmarp", {})
-        _pmarp_cols = ["标的", "概念", "信号", "当前", "变化", "市值"]
-        _pmarp_widths = [300, 320, 140, 130, 170, 150]
+        _pmarp_cols = ["标的", "概念", "信号", "当前", "变化", "市值", "β6M"]
+        _pmarp_widths = [300, 320, 140, 130, 170, 150, 120]
         _pmarp_blocks = []
         # signal -> cap-tier sub-blocks; shared with text/HTML via _pmarp_signal_cap_groups
         # so the 大盘/中小盘 tier is explicit on every surface (P2 review fix).
@@ -1630,6 +1633,7 @@ def build_morning_visual_sections(
                     "{:.1f}%".format(item.get("value") or 0),
                     "{:.1f}→{:.1f}".format(item.get("previous") or 0, item.get("value") or 0),
                     _format_market_cap(item.get("marketCap")),
+                    _format_beta(item.get("beta_6m")),
                 ]) for item in _tier_hits],
             })
         sections.append({
@@ -1647,7 +1651,7 @@ def build_morning_visual_sections(
             "blocks": [
                 _build_visual_block(
                     "量能异常",
-                    ["标的", "概念", "类型", "DV 5d/20d", "RVOL", "市值"],
+                    ["标的", "概念", "类型", "DV 5d/20d", "RVOL", "市值", "β6M"],
                     volume_anomaly.get("hits", []),
                     lambda item: [
                         _visual_company(item),
@@ -1656,8 +1660,9 @@ def build_morning_visual_sections(
                         _format_volume_anomaly_dv_cell(item),
                         _format_volume_anomaly_rvol_cell(item),
                         _format_market_cap(item.get("marketCap")),
+                        _format_beta(item.get("beta_6m")),
                     ],
-                    [280, 320, 140, 280, 180, 150],
+                    [280, 320, 140, 280, 180, 150, 120],
                 ),
             ],
         })

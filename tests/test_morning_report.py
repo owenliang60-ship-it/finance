@@ -1760,3 +1760,73 @@ def test_volume_anomaly_text_section_beta_missing_dash():
     out = mr.format_section_layered_volume_anomaly(_make_market_signals(anomaly_hits=[hit]))
     line = next(l for l in out.splitlines() if "SMCI" in l)
     assert line.rstrip().split(" | ")[-1] == "—"
+
+
+def test_html_payload_pmarp_and_anomaly_have_beta_column():
+    pm = _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12); pm["beta_6m"] = 1.83
+    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+          "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
+          "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9, "beta_6m": None}
+    ms = _make_market_signals(pmarp_hits=[pm], anomaly_hits=[va])
+    payload = mr.build_html_payload(ms, None, as_of="2026-06-12")
+    pm_blocks = [b for b in payload["blocks"] if "信号" in (b.get("columns") or [])]
+    assert pm_blocks and all("β6M" in b["columns"] for b in pm_blocks)
+    assert pm_blocks[0]["rows"][0]["β6M"] == "1.83"
+    va_block = next(b for b in payload["blocks"] if b.get("heading") == "2. 量能异常")
+    assert "β6M" in va_block["columns"]
+    assert va_block["rows"][0]["β6M"] == "—"          # 缺失 → —
+
+
+def test_pmarp_columns_exact_parity_across_three_surfaces():
+    """[plan review P2] 文本/HTML/PNG 三面 PMARP 列 exact parity。
+    修复存量 drift：HTML 此前缺'变化'列。"""
+    expected = ["标的", "概念", "信号", "当前", "变化", "市值", "β6M"]
+    pm = _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12)
+    ms = _make_market_signals(pmarp_hits=[pm])
+    payload = mr.build_html_payload(ms, None, as_of="2026-06-12")
+    html_pm = [b for b in payload["blocks"] if "信号" in (b.get("columns") or [])]
+    assert all(b["columns"] == expected for b in html_pm)
+    sections = mr.build_morning_visual_sections(market_signals=ms, dv_result=None)
+    visual_pm = next(s for s in sections if s["slug"] == "01_pmarp")
+    assert all(b["columns"] == expected for b in visual_pm["blocks"])
+    text = mr.format_section_pmarp_by_signal_and_cap(ms)
+    assert " | ".join(expected) in text
+    data_lines = [l for l in text.splitlines() if "NVDA" in l and "|" in l]
+    assert data_lines and all(len(l.split(" | ")) == len(expected) for l in data_lines)
+
+
+def test_volume_anomaly_columns_exact_parity_across_three_surfaces():
+    expected = ["标的", "概念", "类型", "DV 5d/20d", "RVOL", "市值", "β6M"]
+    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+          "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
+          "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9, "beta_6m": 2.05}
+    ms = _make_market_signals(anomaly_hits=[va])
+    payload = mr.build_html_payload(ms, None, as_of="2026-06-12")
+    va_block = next(b for b in payload["blocks"] if b.get("heading") == "2. 量能异常")
+    assert va_block["columns"] == expected
+    sections = mr.build_morning_visual_sections(market_signals=ms, dv_result=None)
+    anomaly = next(s for s in sections if s["slug"] == "02_volume_anomaly")
+    assert all(b["columns"] == expected for b in anomaly["blocks"])
+    text = mr.format_section_layered_volume_anomaly(ms)
+    assert " | ".join(expected) in text
+    data_lines = [l for l in text.splitlines() if "SMCI" in l and "|" in l]
+    assert data_lines and all(len(l.split(" | ")) == len(expected) for l in data_lines)
+
+
+def test_visual_blocks_have_beta_column_and_width():
+    pm = _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12); pm["beta_6m"] = 1.83
+    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+          "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
+          "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9, "beta_6m": 2.05}
+    sections = mr.build_morning_visual_sections(
+        market_signals=_make_market_signals(pmarp_hits=[pm], anomaly_hits=[va]), dv_result=None)
+    pmarp = next(s for s in sections if s["slug"] == "01_pmarp")
+    for block in pmarp["blocks"]:
+        assert block["columns"][-1] == "β6M"
+        assert len(block["widths"]) == len(block["columns"])   # 防 zip 静默截断
+        assert block["rows"][0]["cells"][-1] == "1.83"
+    anomaly = next(s for s in sections if s["slug"] == "02_volume_anomaly")
+    block = anomaly["blocks"][0]
+    assert block["columns"][-1] == "β6M"
+    assert len(block["widths"]) == len(block["columns"])
+    assert block["rows"][0]["cells"][-1] == "2.05"
