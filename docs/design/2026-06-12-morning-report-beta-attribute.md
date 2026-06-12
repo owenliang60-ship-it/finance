@@ -1,6 +1,6 @@
 # 晨报个股 6 个月 Beta 属性 — 设计文档
 
-> 日期：2026-06-12 · 状态：待 Boss 审批 · 类型：小功能（无需 /architecture）
+> 日期：2026-06-12 · 状态：已批准（2026-06-12 Boss 对话确认）· 类型：小功能（无需 /architecture）
 > 北极星对齐：分析层（Terminal / 晨报）展示增强，不触碰数据层 schema 与策略层
 
 ## 1. 需求
@@ -31,11 +31,11 @@ def compute_beta(stock_closes: pd.Series, bench_closes: pd.Series,
                  window: int = 126, min_obs: int = 60) -> Optional[float]:
     """日期对齐 → 日简单收益率 → 取末尾 window 日 → cov/var。
     有效重叠样本 < min_obs 时返回 None。"""
-
-def get_beta_6m(store: MarketStore, symbol: str,
-                benchmark: str = "SPY") -> Optional[float]:
-    """从 daily_price 取两条收盘序列（store.get_daily_prices_df），调 compute_beta。"""
 ```
+
+> 本轮只做 `compute_beta` 纯函数。晨报侧复用 `build_market_signal_report` 已加载的
+> 180 行 price_frames（个股零额外查询），经 `_compute_signal_betas` helper 接线；
+> store 级便捷接口（按 symbol 查库算 beta）暂无第二消费方，YAGNI 不做（2026-06-12 plan review 修订）。
 
 - 公式：`beta = cov(r_i, r_m) / var(r_m)`，简单收益率
 - 对齐规则：按日期 inner join（个股停牌/缺日自动剔除），再截取末尾 126 个重叠交易日
