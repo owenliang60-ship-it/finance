@@ -1200,6 +1200,7 @@ class TestBroadDropPlanV3:
         monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
         # Section 0 PMARP target frames don't matter for this assertion.
         monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
+        monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
 
         result = build_market_signal_report()
         breadth = result["market_timing_factor"]["breadth_s2"]
@@ -1249,6 +1250,7 @@ class TestBroadDropPlanV3:
             "src.indicators.pmarp.analyze_pmarp",
             lambda *a, **kw: {"signal": "neutral", "current": None, "previous": None},
         )
+        monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
 
         build_market_signal_report()
         # A is dropped (8B<$10B, not pool); B/C kept; D kept (pool privilege)
@@ -1298,6 +1300,7 @@ class TestBroadDropPlanV3:
         monkeypatch.setattr(
             "src.indicators.rvol_sustained.scan_rvol_sustained", lambda *a, **kw: []
         )
+        monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
 
         result = build_market_signal_report(symbols_override=["OKLO"])
         oklo_hits = [h for h in result["pmarp"]["hits"] if h["symbol"] == "OKLO"]
@@ -1446,6 +1449,7 @@ class TestVolumeAnomalyPayload:
                  "values": [2.6, 2.4, 2.2], "latest_rvol": 2.6},
             ],
         )
+        monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
 
         result = build_market_signal_report()
 
@@ -1596,3 +1600,116 @@ def test_html_delivery_falls_back_to_pdf_on_send_false(monkeypatch, tmp_path):
     assert any(p.endswith(".html") for p in calls)   # 先试 HTML
     assert sent.get("pdf")                            # html send=False → 回退真实 PDF helper
     assert ok is True
+
+
+# ---------- 6 个月 beta（2026-06-12 plan） ----------
+
+def _make_beta_frames(beta=1.5, n=180, seed=11):
+    """与 load_price_frames 同形：date 索引、close/volume 列。"""
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    dates = pd.bdate_range("2025-09-01", periods=n)
+    bench_ret = rng.normal(0.0005, 0.01, n)
+    stock_ret = beta * bench_ret + rng.normal(0.0, 0.001, n)
+    bench = pd.DataFrame({"close": 100.0 * (1 + pd.Series(bench_ret, index=dates)).cumprod(),
+                          "volume": 1e6}, index=dates)
+    stock = pd.DataFrame({"close": 50.0 * (1 + pd.Series(stock_ret, index=dates)).cumprod(),
+                          "volume": 1e6}, index=dates)
+    return stock, bench
+
+
+def test_compute_signal_betas_uses_loaded_frames(monkeypatch):
+    stock_frame, bench_frame = _make_beta_frames(beta=1.5)
+    import scripts.broad_market_scan as bms
+    monkeypatch.setattr(bms, "load_price_frames_from_market_db",
+                        lambda symbols, rows_needed: {"SPY": bench_frame})
+    betas = mr._compute_signal_betas({"NVDA": stock_frame}, ["NVDA", "MISSING"])
+    assert abs(betas["NVDA"] - 1.5) < 0.05
+    assert betas["MISSING"] is None          # 不在 price_frames → None，不报错
+
+
+def test_compute_signal_betas_benchmark_missing(monkeypatch):
+    stock_frame, _ = _make_beta_frames()
+    import scripts.broad_market_scan as bms
+    monkeypatch.setattr(bms, "load_price_frames_from_market_db",
+                        lambda symbols, rows_needed: {})
+    betas = mr._compute_signal_betas({"NVDA": stock_frame}, ["NVDA"])
+    assert betas == {"NVDA": None}           # 基准缺失 → 全 None，报告不阻塞
+
+
+def test_compute_signal_betas_benchmark_load_raises(monkeypatch):
+    stock_frame, _ = _make_beta_frames()
+    import scripts.broad_market_scan as bms
+
+    def boom(symbols, rows_needed):
+        raise RuntimeError("db corrupted")
+
+    monkeypatch.setattr(bms, "load_price_frames_from_market_db", boom)
+    betas = mr._compute_signal_betas({"NVDA": stock_frame}, ["NVDA"])
+    assert betas == {"NVDA": None}           # 基础设施失败也退化为 None，不炸晨报
+
+
+def test_compute_signal_betas_empty_symbols():
+    assert mr._compute_signal_betas({}, []) == {}
+
+
+def test_enrich_with_layer_injects_beta():
+    item = {"symbol": "NVDA", "value": 99.0}
+    metadata = {"NVDA": {"marketCap": 3e12}}
+    enriched = mr._enrich_with_layer(item, metadata, {"NVDA"}, betas={"NVDA": 1.83})
+    assert enriched["beta_6m"] == 1.83
+
+
+def test_enrich_with_layer_beta_default_none():
+    item = {"symbol": "NVDA", "value": 99.0}
+    metadata = {"NVDA": {"marketCap": 3e12}}
+    enriched = mr._enrich_with_layer(item, metadata, {"NVDA"})
+    assert enriched["beta_6m"] is None       # betas 不传 → None（向后兼容）
+
+
+def test_builder_injects_beta_into_signal_rows(monkeypatch):
+    """[plan review P1] 集成路径：beta 必须真的从 build_market_signal_report
+    进入 pmarp / volume_anomaly rows。fixture 复制 TestVolumeAnomalyPayload
+    （tests/test_morning_report.py:1403-1450）的 MU 共振行构造，
+    并 patch _compute_signal_betas 隔离 DB。"""
+    mu_frame = pd.DataFrame(
+        {"close": [100.0] * 200},
+        index=pd.date_range("2025-08-01", periods=200, freq="B"),
+    )
+    monkeypatch.setattr(
+        "scripts.broad_market_scan.fetch_universe_metadata",
+        lambda **kw: {"stocks": {"MU": {"marketCap": 120e9, "shortName": "MU",
+                                        "longName": "Micron", "exchange": "NASDAQ"}}},
+    )
+    monkeypatch.setattr("scripts.broad_market_scan.load_price_frames",
+                        lambda symbols, **kw: {"MU": mu_frame})
+    monkeypatch.setattr(mr, "get_symbols", lambda: [])
+    monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
+    monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
+    monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
+    monkeypatch.setattr(mr, "_load_market_db_broad_price_frames", lambda *a, **kw: {})
+    monkeypatch.setattr(
+        "src.indicators.pmarp.analyze_pmarp",
+        lambda *a, **kw: {"signal": "oversold_recovery", "current": 2.5, "previous": 1.7},
+    )
+    monkeypatch.setattr(
+        "src.indicators.dv_acceleration.scan_dv_acceleration",
+        lambda *a, **kw: pd.DataFrame([
+            {"symbol": "MU", "ratio": 1.8, "dv_5d": 4.2e9, "dv_20d": 2.3e9,
+             "signal": True}]),
+    )
+    monkeypatch.setattr("src.indicators.rvol_sustained.scan_rvol_sustained",
+                        lambda *a, **kw: [])
+    captured = {}
+
+    def fake_betas(price_frames, signal_symbols):
+        captured["symbols"] = sorted(set(signal_symbols))
+        return {s: 2.05 for s in signal_symbols}
+
+    monkeypatch.setattr(mr, "_compute_signal_betas", fake_betas)
+
+    result = mr.build_market_signal_report()
+
+    assert captured["symbols"] == ["MU"]               # 接线点确实被调用
+    assert result["pmarp"]["hits"][0]["beta_6m"] == 2.05
+    assert result["volume_anomaly"]["hits"][0]["beta_6m"] == 2.05

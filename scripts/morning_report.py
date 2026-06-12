@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 
 EXTENDED_LAYER_MIN_MCAP = EXTENDED_UNIVERSE_MIN_MCAP_B * 1_000_000_000
 MORNING_SIGNAL_PRICE_ROWS = 180
+BETA_BENCHMARK = "SPY"   # 6 个月 beta 的回归基准（daily_price 始终含 SPY，price_fetcher.py:100）
 LAYER_ORDER = ["pool", "extend"]
 LAYER_LABELS = {
     "pool": "Pool",
@@ -406,7 +407,7 @@ def _compact_company(item: dict) -> str:
     return symbol
 
 
-def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set) -> dict:
+def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set, betas: dict | None = None) -> dict:
     symbol = item["symbol"]
     meta = metadata.get(symbol, {})
     enriched = dict(item)
@@ -422,8 +423,43 @@ def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set) -> dict:
             f"(marketCap={meta.get('marketCap')!r})"
         )
     enriched["layer"] = layer
+    enriched["beta_6m"] = (betas or {}).get(symbol)
     enriched["concept_bucket"] = _concept_bucket(enriched)
     return enriched
+
+
+def _compute_signal_betas(
+    price_frames: dict,
+    signal_symbols: list,
+) -> dict:
+    """信号命中股的 6 个月 beta（对 BETA_BENCHMARK）。基准序列只加载一次。
+
+    price_frames: load_price_frames 输出（date 索引 close/volume frame，180 行）。
+    基准缺失或个股不在 price_frames → None（晨报渲染为 —，不阻塞）。
+    """
+    from scripts.broad_market_scan import load_price_frames_from_market_db
+    from src.indicators.beta import compute_beta
+
+    targets = sorted(set(signal_symbols))
+    if not targets:
+        return {}
+    try:
+        bench_frames = load_price_frames_from_market_db(
+            [BETA_BENCHMARK], rows_needed=MORNING_SIGNAL_PRICE_ROWS,
+        )
+    except Exception as exc:
+        logger.warning("beta skipped: benchmark load failed (%s)", exc)
+        return {symbol: None for symbol in targets}
+    bench_frame = bench_frames.get(BETA_BENCHMARK)
+    if bench_frame is None:
+        logger.warning("beta skipped: benchmark %s missing from market.db", BETA_BENCHMARK)
+        return {symbol: None for symbol in targets}
+    bench_closes = bench_frame["close"]
+    betas = {}
+    for symbol in targets:
+        frame = price_frames.get(symbol)
+        betas[symbol] = compute_beta(frame["close"], bench_closes) if frame is not None else None
+    return betas
 
 
 def _load_market_timing_target_frames(
@@ -874,9 +910,10 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         for item in (pmarp_raw + dv_raw + rvol_raw)
     ]
     _hydrate_signal_metadata(metadata, signal_symbols)
+    betas = _compute_signal_betas(price_frames, signal_symbols)
 
     pmarp_signals = [
-        _enrich_with_layer(item, metadata, pool_symbols)
+        _enrich_with_layer(item, metadata, pool_symbols, betas)
         for item in pmarp_raw
     ]
     # Group by signal kind first (up98 / down98 / up2), then by value.
@@ -887,13 +924,13 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     ))
 
     dv_hits = [
-        _enrich_with_layer(item, metadata, pool_symbols)
+        _enrich_with_layer(item, metadata, pool_symbols, betas)
         for item in dv_raw
     ]
     dv_hits.sort(key=lambda x: (-(x.get("ratio") or 0), x["symbol"]))
 
     rvol_hits = [
-        _enrich_with_layer(item, metadata, pool_symbols)
+        _enrich_with_layer(item, metadata, pool_symbols, betas)
         for item in rvol_raw
     ]
 
