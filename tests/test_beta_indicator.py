@@ -68,6 +68,17 @@ def test_none_or_empty_inputs():
     assert compute_beta(pd.Series(dtype=float), bench) is None
 
 
+def test_zero_close_bad_data_returns_finite_or_none():
+    # 真实案例（STRF 2026-03-16 close=0.0）：0 价产生 inf 收益率，
+    # cov 变 NaN 后污染返回值。坏行必须按缺失剔除，结果保持有限且接近真值。
+    stock, bench = _make_pair(n=200, beta=1.5)
+    stock.iloc[100] = 0.0
+    result = compute_beta(stock, bench)
+    assert result is not None
+    assert np.isfinite(result)
+    assert abs(result - 1.5) < 0.1
+
+
 def test_defaults_match_spec():
     assert BETA_WINDOW == 126
     assert BETA_MIN_OBS == 60
