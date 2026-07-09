@@ -2,6 +2,7 @@
 
 > **状态**: ✅ Boss review round 1 完成，4 findings + 1 minor 已全修 → 待终审进 writing-plans
 > **Review log（2026-07-09 round 1）**: P0 报告滞后窗口 PE_blend 断供 → 存储改 `fiscal_date >= snapshot−120d`；P1 fmp_earnings 缺 fiscal_date → ingestion 派生入库 + match_method；P1 阶段① holdings 不落库破坏篮子 PIT → 新增 `fmp_etf_holdings_snapshot` 阶段①即写；P1 历史 PE_blend 未来 actual 泄露 → 强制 `announce_date <= as_of`；minor backfill 批打标 `snapshot_kind='backfill'`
+> **Review log（2026-07-09 round 2）**: P0 双股权重复计权 → share_class_groups 主类股唯一入算 + companyName 撞名 verifier；P1 key 日志泄露 → client 脱敏列为换 key 硬前置；P1 非美股成分口径 → listing_overrides 映射 + 未映射排除留审计；P2 backfill/weekly 同日顺序写死；P2 holdings 快照扩审计字段（raw_asset/name/included/filter_reason）+ weight_coverage 独立覆盖账
 > **日期**: 2026-07-09 | **前置**: brainstorm 草稿 `2026-07-09-fmp-forward-eps-valuation-brainstorm.md`（13 项决策全数拍板）+ 背景研究 `docs/research/2026-07-02-forward-eps-quarterly-data-sources.md`
 > **北极星对齐**: 数据层（新 FMP 数据线）+ 分析层（估值指标）；同时是「指数内估值转移指标体系」的 Phase 0（PIT panel 从本项目上线开始累积）
 
@@ -120,12 +121,17 @@ CREATE TABLE IF NOT EXISTS fmp_earnings (
 CREATE INDEX idx_fearn_symbol_fiscal ON fmp_earnings(symbol, fiscal_date);
 
 -- ETF 成分快照（阶段①即落库——成分周频漂移，不存则阶段②无法 PIT 重建篮子历史）
+-- 全部原始行落库（含被过滤行），included/filter_reason 留审计证据链
 CREATE TABLE IF NOT EXISTS fmp_etf_holdings_snapshot (
     basket TEXT NOT NULL,             -- 'SPY'|'QQQ'|'SOX'|'IGV'|'XLF'（MAGS 静态清单不需要）
     snapshot_date TEXT NOT NULL,
-    symbol TEXT NOT NULL,
-    weight_pct REAL, market_value REAL,
-    PRIMARY KEY (basket, snapshot_date, symbol)
+    raw_asset TEXT NOT NULL,          -- FMP 原始 asset 字段（含外股后缀/现金代码原样）
+    symbol TEXT,                      -- 规范化后的 US ticker；被排除行为 NULL
+    name TEXT, weight_pct REAL, market_value REAL,
+    updated_at TEXT,                  -- FMP updatedAt
+    included INTEGER NOT NULL,        -- 1=入算成分 0=排除
+    filter_reason TEXT,               -- 'cash_or_fund'|'swap'|'foreign_listing_unmapped'|'dual_class_secondary'|NULL
+    PRIMARY KEY (basket, snapshot_date, raw_asset)
 );
 
 -- 指数篮子估值（周频落库，见 §6.4）
@@ -137,6 +143,7 @@ CREATE TABLE IF NOT EXISTS fmp_basket_valuation (
     total_mcap REAL, ntm_net_income REAL, blend_net_income REAL,
     n_members INTEGER, n_covered_ntm INTEGER, n_covered_blend INTEGER,
     mcap_coverage_ntm REAL, mcap_coverage_blend REAL,
+    weight_coverage REAL,             -- Σ入算成分 holdings 权重 ÷ Σ股票行权重（含被排除外股/副类股的真实覆盖账）
     members_json TEXT,                -- 审计: [{symbol, mcap, ntm_ni, blend_ni}]
     PRIMARY KEY (basket, snapshot_date)
 );
@@ -147,7 +154,7 @@ CREATE TABLE IF NOT EXISTS fmp_basket_valuation (
 ### 5.3 写入规则
 
 - **fmp_estimates 周频**：每周六对每股写 **`fiscal_date >= snapshot_date − 120 天`** 的行（未来 ~10 Q + ~5 FY + 报告滞后窗口内 1-2 个已结束未报告季 ≈ 17 行/股）。120 天回看是 P0 修复：PE_blend 的"+1 预测季"常常财季已结束但未报告（如 AAPL 财季 6/28 结束、7/30 才报告），只存 `>= snapshot_date` 会把它过滤掉导致 PE_blend 财报前窗口算不出。注意存储放宽**不改变** PE_ntm 的 Rule A 计算过滤（read-time 仍取 `fiscal_date >= as_of`）。`INSERT OR REPLACE`——PK 含 snapshot_date，天然 append-only + 同日重跑幂等
-- **fmp_estimates 一次性 backfill**：接入日全量抓 `limit=100`，存 `fiscal_date >= 2021-01-01` 的全部行（含历史），`snapshot_date = backfill 日`，**`snapshot_kind='backfill'`**（backfill 批的历史行是"当时 consensus 的今日留档"，不是真 PIT 快照，打标防止未来误当历史快照消费）。约 46k 行，之后零增量
+- **fmp_estimates 一次性 backfill**：接入日全量抓 `limit=100`，存 `fiscal_date >= 2021-01-01` 的全部行（含历史），`snapshot_date = backfill 日`，**`snapshot_kind='backfill'`**（backfill 批的历史行是"当时 consensus 的今日留档"，不是真 PIT 快照，打标防止未来误当历史快照消费）。约 46k 行，之后零增量。**与 weekly 同日语义（P2）**：`snapshot_kind` 不在 PK 内，同日两批的未来行会互相覆盖——规定 backfill 为一次性手动步骤，**避开周六 cron 时段执行**；若确需同日，顺序写死"先 backfill 后 weekly"，weekly 覆盖未来行并重标 `kind='weekly'`（同源数据取更新者，无歧义）
 - **fmp_earnings**：周频 upsert 最近 8 季 + 一次性 backfill 2021 起（`limit` 放大到覆盖 2021）。约 24k 行 backfill。**写入前先删除该股 `eps_actual IS NULL` 的旧行**——未报告行的公告日是预排日会漂移，不清删会残留幽灵行，污染"最早未报告行"判定
 - **fmp_earnings 的 `fiscal_date` 在 ingestion 时派生**（P1 修复：join SSOT 入库，不留到 read-time）：同一 run 内用该股 estimates 的财季日期集合匹配——取满足 `fiscal_date < announce_date` 且 `announce_date − fiscal_date <= 120 天` 的最大 `fiscal_date`，记 `match_method='estimates_window'`；无匹配（非常规财历/数据缺口）记 `match_method='none'`，行保留但一切计算跳过并计入 verifier 统计。所有下游 join（PE_blend / YoY / 街道净利×股数）只用入库的 `fiscal_date`，可审计可复核
 - **现有 yfinance `forward_estimates` 表完全不动**，对拍期并存
@@ -169,9 +176,11 @@ CREATE TABLE IF NOT EXISTS fmp_basket_valuation (
 
 失败隔离：单股失败记日志继续批次；**若失败率 >20% 中止篮子聚合步**（快照可以残缺，篮子估值不能用残缺快照算）——estimates 写入本身可安全部分写（重跑同 snapshot_date 幂等补齐）。
 
-### 5.6 key 替换（部署步骤，非代码）
+### 5.6 key 替换（部署步骤，含代码前置）
 
-部署时把新 key 写入本地 + 云端 `.env` 的 `FMP_API_KEY`（覆盖旧值），现有全部 FMP 调用自动受益。明文绝不入 repo/文档（2026-06-10 隐私敞口教训）。`.env` 中暂存的 `FMP_UPGRADED_API_KEY` 行替换后删除。
+**前置（必须先行）：日志脱敏**。现状 `fmp_client.py` 的 `logger.error(f"Request error: {e}")` 在网络异常时会把含 `apikey` 的完整 URL 写入日志，而 `cron_wrapper.sh` 失败时 tail 40 行日志直发 Telegram——完整泄露链。修法：`_request` 的异常/错误日志统一过 `_sanitize`（正则掩码 `apikey=***`），单测断言日志文本不含 key。**脱敏 commit 部署后才允许换 key**。
+
+替换本身：新 key 写入本地 + 云端 `.env` 的 `FMP_API_KEY`（覆盖旧值），现有全部 FMP 调用自动受益。明文绝不入 repo/文档（2026-06-10 隐私敞口教训）。`.env` 中暂存的 `FMP_UPGRADED_API_KEY` 行替换后删除。
 
 ## 6. 指标层设计（`terminal/forward_valuation.py`，compute-on-read）
 
@@ -216,9 +225,15 @@ annual 行直读：FY1/FY2 EPS、FY1→FY2 隐含增速、FY1 口径 forward P/E
 
 | 篮子 | 来源 | 备注 |
 |------|------|------|
-| SPY / QQQ / IGV / XLF | `fmp_etf_holdings_snapshot` 当周快照（源头 FMP `etf/holdings` 周频刷新） | 过滤非股票行：`asset` 须匹配常规 ticker 格式（≤5 位字母，容许 `.`/`-` 类股后缀）且非现金/货基代码；无法判别的行记日志后剔除（过滤在快照写入前做，表内即净成分） |
-| SOX | **SOXX holdings 代理**（iShares 跟踪 SOX），同上走快照表 | 33 行，同样过滤 |
+| SPY / QQQ / IGV / XLF | `fmp_etf_holdings_snapshot` 当周快照（源头 FMP `etf/holdings` 周频刷新） | 全部原始行落库，规范化/过滤结果记 `included` + `filter_reason`（审计证据链）；净成分 = `included=1` |
+| SOX | **SOXX holdings 代理**（iShares 跟踪 SOX），同上走快照表 | 33 行，同样规则 |
 | MAGS | **静态硬编码 Mag 7**（AAPL/MSFT/NVDA/GOOGL/AMZN/META/TSLA） | FMP 返回 T-bill+TRS 不可用（实测） |
+
+**成分规范化与过滤规则**（parse 时执行，结果全部入快照表）：
+
+1. **现金/货基/swap 行** → `included=0, filter_reason='cash_or_fund'|'swap'`（CUSIP 型 asset、TRS 标记、已知货基代码）
+2. **非美股 listing 映射**：SOXX/IGV 实测含 `NVMI.TA`/`OTEX.TO`/`LSPD.TO` 等外市代码，但这些公司均有美股上市与 FMP estimates 覆盖 → 静态映射表 `config/baskets/listing_overrides.json`（如 `NVMI.TA→NVMI`）规范化到 US ticker；映射外的外市后缀 → `included=0, filter_reason='foreign_listing_unmapped'` + verifier 警示（提示补映射）
+3. **双股权去重（P0）**：`GOOG/GOOGL`、`FOX/FOXA`、`NWS/NWSA`、`HEI/HEI.A` 类同发行人多类股同时在池——FMP `netIncomeAvg` 与 `historical_market_cap` 均为**公司级**，逐 ticker Σ 会把该发行人权重放大一倍。静态配置 `config/baskets/share_class_groups.json` 指定发行人主类股（取 estimates 覆盖/流动性优的一类），副类股 → `included=0, filter_reason='dual_class_secondary'`；发行人以公司级市值+净利**只计一次**。verifier 对入算成分做 profile `companyName` 重复检测，撞名且不在配置表 → 警示（抓未来漂入的新双股权）
 
 ### 7.2 聚合公式
 
@@ -237,7 +252,7 @@ fwd_pe_blend = Σ成分市值 ÷ Σ成分 blend 净利润
 
 ### 7.3 缺失处理
 
-成分无 estimates/earnings 覆盖 → 该成员从分子分母**同时剔除**（绝不单边），`mcap_coverage_*` 记录真实覆盖率；coverage < 90% 照常出数但带 flag，展示端显示警示。
+成分无 estimates/earnings 覆盖 → 该成员从分子分母**同时剔除**（绝不单边），`mcap_coverage_*` 记录真实覆盖率；`weight_coverage` 用 holdings 权重独立记账（把被排除的外股/未映射行也算进分母，覆盖账不依赖我们自己的市值数据）；coverage < 90% 照常出数但带 flag，展示端显示警示。
 
 ## 8. Verifier 与数据验证
 
@@ -265,7 +280,9 @@ fwd_pe_blend = Σ成分市值 ÷ Σ成分 blend 净利润
 | earnings→estimates 财季对齐规则出错（非常规财历） | ingestion 时派生入库（`fiscal_date` + `match_method`，可审计）；无匹配行不入算 + verifier 统计；测试覆盖 1 月底/4 月底公告等边界 |
 | 历史序列泄露未来信息 | PE_blend/YoY 强制 `announce_date <= as_of` 过滤；estimates 只按 snapshot 读；`snapshot_kind='backfill'` 批不当 PIT 历史消费；各有测试断言守护 |
 | 新 plan 限额实际值未验证 | 独立可配置间隔，实施时实测调优；保守默认值兜底 |
-| 篮子序列受成分漂移影响 | universe = 扩展池 ∪ 篮子成分（决策），members_json 留档可审计 |
+| 篮子序列受成分漂移影响 | universe = 扩展池 ∪ 篮子成分（决策），members_json + holdings 快照全行留档可审计 |
+| 双股权发行人重复计权（GOOG/GOOGL 类） | share_class_groups 静态配置只计主类股 + verifier companyName 撞名检测抓漂入 |
+| API key 泄露（日志→Telegram） | client 日志脱敏为换 key 硬前置（§5.6），单测断言日志无 key |
 | GAAP/街道口径混用 | 铁律：actual 只用 fmp_earnings（街道），income 表只取股数；测试断言守护 |
 | 周六 cron 时长膨胀 | 独立间隔目标 <30 分钟；失败率 >20% 中止聚合步防脏数据 |
 
@@ -274,6 +291,7 @@ fwd_pe_blend = Σ成分市值 ÷ Σ成分 blend 净利润
 - **client**：fixture JSON（真实响应样本）解析测试 ×3 端点，含 MAGS TRS 行过滤、epsActual null
 - **store**：4 表 upsert/get/幂等重跑/PK 冲突，tmp sqlite；ingestion 派生 fiscal_date 匹配规则（正常/无匹配/非常规财历）；null 行清删
 - **指标层**：NTM 对齐边界（季末缺口窗口、缺季、thin analysts、负 EPS）、blend 分界（null actual、`match_method='none'` 跳过、**as-of 泄露断言**：历史 as_of 不得使用 `announce_date > as_of` 的 actual）、报告滞后窗口 PE_blend 可算（P0 回归测试：AAPL 6/28 财季场景）、YoY 缺 actual、as-of 双日期输出
-- **聚合层**：负净利成员、缺覆盖成员剔除对称性、coverage 计算、MAGS 静态清单、股数 fallback 链
+- **聚合层**：负净利成员、缺覆盖成员剔除对称性、coverage 计算（mcap + weight 双口径）、MAGS 静态清单、股数 fallback 链、**双股权去重**（GOOG/GOOGL 只计一次、副类股 filter_reason 正确）、**外股映射**（NVMI.TA→NVMI、未映射后缀排除+警示）
+- **安全**：`_sanitize` 日志脱敏单测（模拟 RequestException，断言日志文本不含 apikey）
 - **cron wrapper**：失败率中止逻辑、Telegram 摘要、幂等重跑
 - 全程 TDD（项目惯例），云端 Python 3.10 兼容（无 3.12 特性）
