@@ -2,6 +2,7 @@
 
 > **状态**: ✅ Boss review round 1 完成，4 findings + 1 minor 已全修 → 待终审进 writing-plans
 > **Review log（2026-07-09 round 1）**: P0 报告滞后窗口 PE_blend 断供 → 存储改 `fiscal_date >= snapshot−120d`；P1 fmp_earnings 缺 fiscal_date → ingestion 派生入库 + match_method；P1 阶段① holdings 不落库破坏篮子 PIT → 新增 `fmp_etf_holdings_snapshot` 阶段①即写；P1 历史 PE_blend 未来 actual 泄露 → 强制 `announce_date <= as_of`；minor backfill 批打标 `snapshot_kind='backfill'`
+> **Review log（2026-07-09 round 3）**: P1 holdings PK 空 raw_asset 重复丢行 → PK 改 `raw_row_index`，raw_asset 降为审计字段；P1 副类股被记 coverage loss → 加 `covered_by` 列，weight_coverage 分子计入"已由发行人代表覆盖"的副类股权重；P2 universe/verifier 分母 → 写死 `extended_pool ∪ included 规范化 symbol ∪ MAGS 静态`
 > **Review log（2026-07-09 round 2）**: P0 双股权重复计权 → share_class_groups 主类股唯一入算 + companyName 撞名 verifier；P1 key 日志泄露 → client 脱敏列为换 key 硬前置；P1 非美股成分口径 → listing_overrides 映射 + 未映射排除留审计；P2 backfill/weekly 同日顺序写死；P2 holdings 快照扩审计字段（raw_asset/name/included/filter_reason）+ weight_coverage 独立覆盖账
 > **日期**: 2026-07-09 | **前置**: brainstorm 草稿 `2026-07-09-fmp-forward-eps-valuation-brainstorm.md`（13 项决策全数拍板）+ 背景研究 `docs/research/2026-07-02-forward-eps-quarterly-data-sources.md`
 > **北极星对齐**: 数据层（新 FMP 数据线）+ 分析层（估值指标）；同时是「指数内估值转移指标体系」的 Phase 0（PIT panel 从本项目上线开始累积）
@@ -125,13 +126,15 @@ CREATE INDEX idx_fearn_symbol_fiscal ON fmp_earnings(symbol, fiscal_date);
 CREATE TABLE IF NOT EXISTS fmp_etf_holdings_snapshot (
     basket TEXT NOT NULL,             -- 'SPY'|'QQQ'|'SOX'|'IGV'|'XLF'（MAGS 静态清单不需要）
     snapshot_date TEXT NOT NULL,
-    raw_asset TEXT NOT NULL,          -- FMP 原始 asset 字段（含外股后缀/现金代码原样）
+    raw_row_index INTEGER NOT NULL,   -- FMP 响应行序；raw_asset 实测有空串重复（QQQ 5 行/SOXX 3 行等），不能当 PK
+    raw_asset TEXT,                   -- FMP 原始 asset 字段（含外股后缀/现金代码/空串原样，纯审计）
     symbol TEXT,                      -- 规范化后的 US ticker；被排除行为 NULL
     name TEXT, weight_pct REAL, market_value REAL,
     updated_at TEXT,                  -- FMP updatedAt
     included INTEGER NOT NULL,        -- 1=入算成分 0=排除
     filter_reason TEXT,               -- 'cash_or_fund'|'swap'|'foreign_listing_unmapped'|'dual_class_secondary'|NULL
-    PRIMARY KEY (basket, snapshot_date, raw_asset)
+    covered_by TEXT,                  -- 仅 dual_class_secondary 行：代表其覆盖的主类股 ticker（如 GOOG 行 → 'GOOGL'）
+    PRIMARY KEY (basket, snapshot_date, raw_row_index)
 );
 
 -- 指数篮子估值（周频落库，见 §6.4）
@@ -162,7 +165,7 @@ CREATE TABLE IF NOT EXISTS fmp_basket_valuation (
 
 ### 5.4 抓取 universe
 
-**扩展池 ∪ 6 篮子全部成分**（约 1050~1150 只）。理由：SPY 有约百余只 <$10B 成分不在扩展池，若只算池内成员，扩展池周频换血会让 SPY 序列人为跳变——序列稳定性是 PIT 时间序列的生命线。成分清单每周从 holdings 端点刷新后现场求并集。
+**`extended_pool ∪ 5 篮子 included 规范化 symbol ∪ MAGS 静态清单`**（约 1050~1150 只）。并集用的是**过滤规范化之后**的 `included=1` symbol 集（cash/swap/外股未映射/副类股均已排除），不是原始 holdings 行。理由：SPY 有约百余只 <$10B 成分不在扩展池，若只算池内成员，扩展池周频换血会让 SPY 序列人为跳变——序列稳定性是 PIT 时间序列的生命线。成分清单每周从 holdings 端点刷新落快照后求并集。
 
 ### 5.5 云端 cron 集成
 
@@ -233,7 +236,7 @@ annual 行直读：FY1/FY2 EPS、FY1→FY2 隐含增速、FY1 口径 forward P/E
 
 1. **现金/货基/swap 行** → `included=0, filter_reason='cash_or_fund'|'swap'`（CUSIP 型 asset、TRS 标记、已知货基代码）
 2. **非美股 listing 映射**：SOXX/IGV 实测含 `NVMI.TA`/`OTEX.TO`/`LSPD.TO` 等外市代码，但这些公司均有美股上市与 FMP estimates 覆盖 → 静态映射表 `config/baskets/listing_overrides.json`（如 `NVMI.TA→NVMI`）规范化到 US ticker；映射外的外市后缀 → `included=0, filter_reason='foreign_listing_unmapped'` + verifier 警示（提示补映射）
-3. **双股权去重（P0）**：`GOOG/GOOGL`、`FOX/FOXA`、`NWS/NWSA`、`HEI/HEI.A` 类同发行人多类股同时在池——FMP `netIncomeAvg` 与 `historical_market_cap` 均为**公司级**，逐 ticker Σ 会把该发行人权重放大一倍。静态配置 `config/baskets/share_class_groups.json` 指定发行人主类股（取 estimates 覆盖/流动性优的一类），副类股 → `included=0, filter_reason='dual_class_secondary'`；发行人以公司级市值+净利**只计一次**。verifier 对入算成分做 profile `companyName` 重复检测，撞名且不在配置表 → 警示（抓未来漂入的新双股权）
+3. **双股权去重（P0）**：`GOOG/GOOGL`、`FOX/FOXA`、`NWS/NWSA`、`HEI/HEI.A` 类同发行人多类股同时在池——FMP `netIncomeAvg` 与 `historical_market_cap` 均为**公司级**，逐 ticker Σ 会把该发行人权重放大一倍。静态配置 `config/baskets/share_class_groups.json` 指定发行人主类股（取 estimates 覆盖/流动性优的一类），副类股 → `included=0, filter_reason='dual_class_secondary', covered_by=<主类股 ticker>`；发行人以公司级市值+净利**只计一次**。副类股是"已由发行人代表覆盖"而非缺失——coverage 记账见 §7.3。verifier 对入算成分做 profile `companyName` 重复检测，撞名且不在配置表 → 警示（抓未来漂入的新双股权）
 
 ### 7.2 聚合公式
 
@@ -252,13 +255,22 @@ fwd_pe_blend = Σ成分市值 ÷ Σ成分 blend 净利润
 
 ### 7.3 缺失处理
 
-成分无 estimates/earnings 覆盖 → 该成员从分子分母**同时剔除**（绝不单边），`mcap_coverage_*` 记录真实覆盖率；`weight_coverage` 用 holdings 权重独立记账（把被排除的外股/未映射行也算进分母，覆盖账不依赖我们自己的市值数据）；coverage < 90% 照常出数但带 flag，展示端显示警示。
+成分无 estimates/earnings 覆盖 → 该成员从分子分母**同时剔除**（绝不单边），`mcap_coverage_*` 记录真实覆盖率；coverage < 90% 照常出数但带 flag，展示端显示警示。
+
+**weight_coverage 口径**（用 holdings 权重独立记账，不依赖我们自己的市值数据）：
+
+```
+weight_coverage = (Σ included 行权重 + Σ dual_class_secondary 行权重[其 covered_by 主类股已入算])
+                  ÷ Σ 全部股票行权重（含 foreign_listing_unmapped）
+```
+
+副类股权重计入**已覆盖**（发行人公司级市值/净利已代表全部类股，GOOG/GOOGL 不算 coverage loss）；真正的缺失只有 `foreign_listing_unmapped` 和主类股本身无 estimates 覆盖两类。现金/货基/swap 行不属于股票行，分子分母都不进。
 
 ## 8. Verifier 与数据验证
 
 新增或扩展 verify 脚本（参照 `scripts/verify_forward_coverage.py` 模式：RO URI + ISO date 校验 + empty fail-fast）：
 
-- 快照覆盖率：本次 snapshot_date 下有 ≥4 未来季的 symbol 数 ÷ universe **≥ 90%**（低于则 verifier FAIL + Telegram 警示）
+- 快照覆盖率：本次 snapshot_date 下有 ≥4 未来季的 symbol 数 ÷ universe **≥ 90%**（低于则 verifier FAIL + Telegram 警示）。分母 = §5.4 定义的 universe（included 规范化 symbol 集），**不混入原始 holdings 行**
 - 篮子完整性：6 篮子当周各 1 行、coverage 字段合理、members_json 可解析
 - fmp_earnings 新鲜度：抽样近期财报票 actual 已回填
 
@@ -289,9 +301,9 @@ fwd_pe_blend = Σ成分市值 ÷ Σ成分 blend 净利润
 ## 11. 测试策略
 
 - **client**：fixture JSON（真实响应样本）解析测试 ×3 端点，含 MAGS TRS 行过滤、epsActual null
-- **store**：4 表 upsert/get/幂等重跑/PK 冲突，tmp sqlite；ingestion 派生 fiscal_date 匹配规则（正常/无匹配/非常规财历）；null 行清删
+- **store**：4 表 upsert/get/幂等重跑/PK 冲突，tmp sqlite；ingestion 派生 fiscal_date 匹配规则（正常/无匹配/非常规财历）；null 行清删；**holdings 空 raw_asset 重复行全落库不丢**（raw_row_index PK 回归测试）
 - **指标层**：NTM 对齐边界（季末缺口窗口、缺季、thin analysts、负 EPS）、blend 分界（null actual、`match_method='none'` 跳过、**as-of 泄露断言**：历史 as_of 不得使用 `announce_date > as_of` 的 actual）、报告滞后窗口 PE_blend 可算（P0 回归测试：AAPL 6/28 财季场景）、YoY 缺 actual、as-of 双日期输出
-- **聚合层**：负净利成员、缺覆盖成员剔除对称性、coverage 计算（mcap + weight 双口径）、MAGS 静态清单、股数 fallback 链、**双股权去重**（GOOG/GOOGL 只计一次、副类股 filter_reason 正确）、**外股映射**（NVMI.TA→NVMI、未映射后缀排除+警示）
+- **聚合层**：负净利成员、缺覆盖成员剔除对称性、coverage 计算（mcap + weight 双口径）、MAGS 静态清单、股数 fallback 链、**双股权去重**（GOOG/GOOGL 只计一次、副类股 covered_by 正确、weight_coverage 不把副类股算缺失）、**外股映射**（NVMI.TA→NVMI、未映射后缀排除+警示+计入 coverage loss）
 - **安全**：`_sanitize` 日志脱敏单测（模拟 RequestException，断言日志文本不含 apikey）
 - **cron wrapper**：失败率中止逻辑、Telegram 摘要、幂等重跑
 - 全程 TDD（项目惯例），云端 Python 3.10 兼容（无 3.12 特性）
