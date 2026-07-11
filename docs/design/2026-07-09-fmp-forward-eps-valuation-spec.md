@@ -1,6 +1,7 @@
 # FMP Forward EPS 估值体系 — 设计 Spec
 
-> **状态**: ✅ Boss review round 1 完成，4 findings + 1 minor 已全修 → 待终审进 writing-plans
+> **状态**: ✅ Boss review round 1–3 + writing-plans technical hardening 完成 → 进入实施计划批注
+> **Review log（2026-07-11 writing-plans hardening）**: P0 DDL index 缺 `IF NOT EXISTS` 导致 MarketStore 二次打开失败 → 全部 index 改幂等；P1 当前 extended cache 会让历史 verifier 分母漂移 → 新增最小 `fmp_forward_runs` 审计表，writer 在请求前冻结 exact target manifest，verifier 只读该 manifest；coverage 只计 `eps_avg IS NOT NULL` 的未来季。业务表仍为原 4 张，13 项产品决策不变
 > **Review log（2026-07-09 round 1）**: P0 报告滞后窗口 PE_blend 断供 → 存储改 `fiscal_date >= snapshot−120d`；P1 fmp_earnings 缺 fiscal_date → ingestion 派生入库 + match_method；P1 阶段① holdings 不落库破坏篮子 PIT → 新增 `fmp_etf_holdings_snapshot` 阶段①即写；P1 历史 PE_blend 未来 actual 泄露 → 强制 `announce_date <= as_of`；minor backfill 批打标 `snapshot_kind='backfill'`
 > **Review log（2026-07-09 round 3）**: P1 holdings PK 空 raw_asset 重复丢行 → PK 改 `raw_row_index`，raw_asset 降为审计字段；P1 副类股被记 coverage loss → 加 `covered_by` 列，weight_coverage 分子计入"已由发行人代表覆盖"的副类股权重；P2 universe/verifier 分母 → 写死 `extended_pool ∪ included 规范化 symbol ∪ MAGS 静态`
 > **Review log（2026-07-09 round 2）**: P0 双股权重复计权 → share_class_groups 主类股唯一入算 + companyName 撞名 verifier；P1 key 日志泄露 → client 脱敏列为换 key 硬前置；P1 非美股成分口径 → listing_overrides 映射 + 未映射排除留审计；P2 backfill/weekly 同日顺序写死；P2 holdings 快照扩审计字段（raw_asset/name/included/filter_reason）+ weight_coverage 独立覆盖账
@@ -34,6 +35,9 @@ flowchart TB
         E -->|append-only 周频快照<br/>存 fiscal_date >= snapshot-120d| T1[(fmp_estimates)]
         A -->|事实 upsert<br/>ingestion 派生 fiscal_date| T2[(fmp_earnings)]
         H -->|周频快照| T4[(fmp_etf_holdings_snapshot)]
+        T4 --> U[exact target universe]
+        U --> T5[(fmp_forward_runs<br/>run manifest)]
+        U -. drives per-symbol calls .-> E & A
     end
     subgraph 指标层["指标层 terminal/forward_valuation.py（compute-on-read）"]
         T1 & T2 --> PE1[PE_blend 3A+1E]
@@ -52,7 +56,7 @@ flowchart TB
     SEQ --> R
 ```
 
-数据流向单向：FMP → 4 张新表 → 指标层现算 → 晨报/CLI。指标层不反向写库（唯一例外：聚合层的篮子估值由 cron 落库，理由见 §6.4）。
+数据流向单向：FMP → 4 张业务表 + 1 张 run-manifest 审计表 → 指标层现算 → 晨报/CLI。指标层不反向写库（唯一例外：聚合层的篮子估值由 cron 落库，理由见 §6.4）。
 
 ## 4. 已拍板决策索引（13 项）
 
@@ -105,8 +109,8 @@ CREATE TABLE IF NOT EXISTS fmp_estimates (
     num_analysts_eps INTEGER, num_analysts_rev INTEGER,
     PRIMARY KEY (symbol, snapshot_date, fiscal_date, period_type)
 );
-CREATE INDEX idx_fest_symbol_snap ON fmp_estimates(symbol, snapshot_date);
-CREATE INDEX idx_fest_snap ON fmp_estimates(snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_fest_symbol_snap ON fmp_estimates(symbol, snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_fest_snap ON fmp_estimates(snapshot_date);
 
 -- 街道口径财报事实（非快照制：actual 不变，无 PIT 需求；历史计算须 as-of 过滤，见 §6.1）
 CREATE TABLE IF NOT EXISTS fmp_earnings (
@@ -119,7 +123,7 @@ CREATE TABLE IF NOT EXISTS fmp_earnings (
     last_updated TEXT,
     PRIMARY KEY (symbol, announce_date)
 );
-CREATE INDEX idx_fearn_symbol_fiscal ON fmp_earnings(symbol, fiscal_date);
+CREATE INDEX IF NOT EXISTS idx_fearn_symbol_fiscal ON fmp_earnings(symbol, fiscal_date);
 
 -- ETF 成分快照（阶段①即落库——成分周频漂移，不存则阶段②无法 PIT 重建篮子历史）
 -- 全部原始行落库（含被过滤行），included/filter_reason 留审计证据链
@@ -150,6 +154,24 @@ CREATE TABLE IF NOT EXISTS fmp_basket_valuation (
     members_json TEXT,                -- 审计: [{symbol, mcap, ntm_ni, blend_ni}]
     PRIMARY KEY (basket, snapshot_date)
 );
+
+-- Run manifest（审计元数据，不是第五个业务数据集）
+-- 冻结 writer 当时的 exact denominator，避免 extended_universe.json 后续刷新
+-- 令历史 verifier 分母漂移。
+CREATE TABLE IF NOT EXISTS fmp_forward_runs (
+    snapshot_date TEXT NOT NULL,
+    run_kind TEXT NOT NULL CHECK(run_kind IN ('weekly','backfill')),
+    status TEXT NOT NULL CHECK(status IN ('planned','running','complete','failed')),
+    target_universe_json TEXT NOT NULL,
+    target_count INTEGER NOT NULL,
+    quarter_success INTEGER NOT NULL DEFAULT 0,
+    quarter_failure_count INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    summary_json TEXT,
+    PRIMARY KEY (snapshot_date, run_kind)
+);
+CREATE INDEX IF NOT EXISTS idx_ffr_status ON fmp_forward_runs(status, snapshot_date);
 ```
 
 `market_store.py` 新增 upsert/get 方法，风格对齐现有 `upsert_forward_estimates` / `get_latest_forward_estimates`（含 `_validate_table` 白名单登记）。
@@ -169,13 +191,15 @@ CREATE TABLE IF NOT EXISTS fmp_basket_valuation (
 
 ### 5.5 云端 cron 集成
 
-挂在周六 `finance_forward` job（现 10:15）末尾追加 FMP 步骤，与现有 yfinance 步骤串行：
+挂在周六 `finance_forward` job 末尾追加 FMP 步骤，与现有 yfinance 步骤串行。writing-plans 生产审计发现 10:00 `finance_fundamental` 实测运行到 10:26，而 forward 现为 10:15，存在并发写 `market.db`；落地时 forward 推荐移到 10:45（若近期 fundamental >35min 则 11:00），且 fundamental/forward 共用 `market_db_writer` 资源锁，时钟只作缓冲、资源锁才是不并发保证：
 
 1. 刷新 5 个 ETF holdings（5 调用）→ **落库 `fmp_etf_holdings_snapshot`**（阶段①即写入，保证篮子成分 PIT 从第一周开始累积）→ 解析成分 → 求 universe 并集
 2. 逐股抓 quarter estimates + annual estimates + earnings（3 调用/股）
 3. 写 fmp_estimates（未来行）+ fmp_earnings（upsert）
 4. 计算 6 篮子两种 P/E → 写 fmp_basket_valuation（**此步阶段②才接入**，阶段①只跑 1-3+5）
 5. verifier 自检（见 §8，篮子检查项随阶段②扩展）+ Telegram 摘要（复用现有 cron 报告模式）
+
+Run-manifest 状态机：先以 exact full universe 写 `running`；writer gate 失败 → `failed`；writer 通过仍保持 `running`；weekly/backfill 各自只由同 `run_kind` verifier PASS → `complete`，verifier FAIL/exception → `failed`。`--symbols` 非 dry-run 只允许作为 resume：必须是既有 full manifest 的子集且不得改变历史分母；同日 full rerun 在任何 DB 写入前先核对 manifest 相等。Resume 后 run-wide success/failure 从完整 snapshot 重算，subset attempt 统计不得覆盖 full-run 字段。
 
 失败隔离：单股失败记日志继续批次；**若失败率 >20% 中止篮子聚合步**（快照可以残缺，篮子估值不能用残缺快照算）——estimates 写入本身可安全部分写（重跑同 snapshot_date 幂等补齐）。
 
@@ -270,7 +294,7 @@ weight_coverage = (Σ included 行权重 + Σ dual_class_secondary 行权重[其
 
 新增或扩展 verify 脚本（参照 `scripts/verify_forward_coverage.py` 模式：RO URI + ISO date 校验 + empty fail-fast）：
 
-- 快照覆盖率：本次 snapshot_date 下有 ≥4 未来季的 symbol 数 ÷ universe **≥ 90%**（低于则 verifier FAIL + Telegram 警示）。分母 = §5.4 定义的 universe（included 规范化 symbol 集），**不混入原始 holdings 行**
+- 快照覆盖率：本次 snapshot_date 下有 ≥4 个 `eps_avg IS NOT NULL` 未来季的 symbol 数 ÷ universe **≥ 90%**（低于则 verifier FAIL + Telegram 警示）。writer 在发起逐股请求前把 §5.4 的 exact sorted universe 写入 `fmp_forward_runs`；verifier 只读该 snapshot manifest，**不使用当前 extended cache 重建历史分母，也不混入原始 holdings 行**
 - 篮子完整性：6 篮子当周各 1 行、coverage 字段合理、members_json 可解析
 - fmp_earnings 新鲜度：抽样近期财报票 actual 已回填
 
@@ -278,7 +302,7 @@ weight_coverage = (Σ included 行权重 + Σ dual_class_secondary 行权重[其
 
 | 阶段 | 内容 | 验收 |
 |------|------|------|
-| **① 数据层** | client 3 方法 + **4 表**（estimates / earnings / holdings snapshot / basket 建表预留）+ backfill（estimates 2021+ / earnings 2021+）+ 周频 cron 步骤 + key 替换 | 云端首跑：universe 全量快照 + holdings 快照落库，verifier 全绿；backfill 行数对账 |
+| **① 数据层** | client 3 方法 + **4 业务表 + 1 run-manifest 审计表**（estimates / earnings / holdings snapshot / basket 建表预留 / exact denominator）+ backfill（estimates 2021+ / earnings 2021+）+ 周频 cron 步骤 + key 替换 | 云端首跑：universe manifest + 全量快照 + holdings 快照落库，verifier 全绿；backfill 行数对账 |
 | **② 指标层 + 聚合层** | forward_valuation.py（两种 P/E + 逐季 + YoY + FY）+ 6 篮子聚合 + basket 落库接入 cron + 查询 CLI；**用①期间累积的 holdings 快照回算①各周篮子估值**（basket 历史从①首跑周起完整） | 抽样对拍（AAPL/MU/ONTO/GLW）人工核对；篮子数与公开数据源横比 sanity |
 | **③ 晨报集成 + 对拍** | 晨报接入（形态届时另定小 plan）；FMP vs yfinance 4 周对拍报告 | 对拍报告过 Boss review 后，yfinance 线下线另行决策 |
 
