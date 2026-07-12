@@ -500,6 +500,82 @@ _SCHEMA = "\n\n".join([
     "CREATE INDEX IF NOT EXISTS idx_sce_symbol ON symbol_concept_edges(symbol);",
     "CREATE INDEX IF NOT EXISTS idx_sce_concept ON symbol_concept_edges(concept_id);",
     "CREATE INDEX IF NOT EXISTS idx_sce_edge_type ON symbol_concept_edges(edge_type);",
+
+    # -- FMP forward EPS 数据线（Spec 2026-07-09 §5.2，4 业务表 + 1 run-manifest）--
+    # 周频 PIT 快照（append-only）
+    """CREATE TABLE IF NOT EXISTS fmp_estimates (
+    symbol TEXT NOT NULL,
+    snapshot_date TEXT NOT NULL,
+    fiscal_date TEXT NOT NULL,
+    period_type TEXT NOT NULL CHECK(period_type IN ('Q','FY')),
+    snapshot_kind TEXT NOT NULL DEFAULT 'weekly'
+        CHECK(snapshot_kind IN ('weekly','backfill')),
+    eps_avg REAL, eps_high REAL, eps_low REAL,
+    rev_avg REAL, rev_high REAL, rev_low REAL,
+    net_income_avg REAL, ebitda_avg REAL,
+    num_analysts_eps INTEGER, num_analysts_rev INTEGER,
+    PRIMARY KEY (symbol, snapshot_date, fiscal_date, period_type)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_fest_symbol_snap ON fmp_estimates(symbol, snapshot_date);",
+    "CREATE INDEX IF NOT EXISTS idx_fest_snap ON fmp_estimates(snapshot_date);",
+
+    # 街道口径财报事实（非快照制；历史计算须 as-of 过滤）
+    """CREATE TABLE IF NOT EXISTS fmp_earnings (
+    symbol TEXT NOT NULL,
+    announce_date TEXT NOT NULL,
+    fiscal_date TEXT,
+    match_method TEXT,
+    eps_actual REAL, eps_estimated REAL,
+    revenue_actual REAL, revenue_estimated REAL,
+    last_updated TEXT,
+    PRIMARY KEY (symbol, announce_date)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_fearn_symbol_fiscal ON fmp_earnings(symbol, fiscal_date);",
+
+    # ETF 成分快照（全部原始行落库，included/filter_reason 审计证据链）
+    """CREATE TABLE IF NOT EXISTS fmp_etf_holdings_snapshot (
+    basket TEXT NOT NULL,
+    snapshot_date TEXT NOT NULL,
+    raw_row_index INTEGER NOT NULL,
+    raw_asset TEXT,
+    symbol TEXT,
+    name TEXT, weight_pct REAL, market_value REAL,
+    updated_at TEXT,
+    included INTEGER NOT NULL,
+    filter_reason TEXT,
+    covered_by TEXT,
+    PRIMARY KEY (basket, snapshot_date, raw_row_index)
+);""",
+
+    # 指数篮子估值（Phase 2 才写入，本期只建表锁契约）
+    """CREATE TABLE IF NOT EXISTS fmp_basket_valuation (
+    basket TEXT NOT NULL,
+    snapshot_date TEXT NOT NULL,
+    fwd_pe_blend REAL,
+    fwd_pe_ntm REAL,
+    total_mcap REAL, ntm_net_income REAL, blend_net_income REAL,
+    n_members INTEGER, n_covered_ntm INTEGER, n_covered_blend INTEGER,
+    mcap_coverage_ntm REAL, mcap_coverage_blend REAL,
+    weight_coverage REAL,
+    members_json TEXT,
+    PRIMARY KEY (basket, snapshot_date)
+);""",
+
+    # Run manifest（审计元数据：冻结 writer 当时的 exact denominator）
+    """CREATE TABLE IF NOT EXISTS fmp_forward_runs (
+    snapshot_date TEXT NOT NULL,
+    run_kind TEXT NOT NULL CHECK(run_kind IN ('weekly','backfill')),
+    status TEXT NOT NULL CHECK(status IN ('planned','running','complete','failed')),
+    target_universe_json TEXT NOT NULL,
+    target_count INTEGER NOT NULL,
+    quarter_success INTEGER NOT NULL DEFAULT 0,
+    quarter_failure_count INTEGER NOT NULL DEFAULT 0,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    summary_json TEXT,
+    PRIMARY KEY (snapshot_date, run_kind)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_ffr_status ON fmp_forward_runs(status, snapshot_date);",
 ])
 
 # Pre-compute snake-case column sets per table for fast lookup
@@ -526,6 +602,8 @@ _VALID_TABLES = frozenset({
     "historical_market_cap",
     "concepts", "concept_themes", "company_concept_tags",
     "symbol_concept_edges",
+    "fmp_estimates", "fmp_earnings", "fmp_etf_holdings_snapshot",
+    "fmp_basket_valuation", "fmp_forward_runs",
 })
 
 
@@ -850,6 +928,260 @@ class MarketStore:
         """Get the most recent forward metadata row for a symbol."""
         rows = self._get_rows("forward_metadata", symbol, limit=1)
         return rows[0] if rows else None
+
+    # ---- FMP forward EPS 数据线（Spec 2026-07-09 §5.2/§5.3）----
+    # 输入行均为 ingestion 层产出的 snake_case 规范化行，不做 camelCase 转换。
+
+    _FMP_KINDS = frozenset({"weekly", "backfill"})
+    _FMP_PERIODS = frozenset({"Q", "FY"})
+    _FMP_RUN_STATUS = frozenset({"planned", "running", "complete", "failed"})
+
+    def _insert_validated(self, conn, table: str, data: Dict[str, Any]) -> None:
+        valid_cols = _get_table_columns(table, conn)
+        cols = [c for c in data if c in valid_cols]
+        conn.execute(
+            f"INSERT OR REPLACE INTO {table} ({', '.join(cols)}) "
+            f"VALUES ({', '.join(['?'] * len(cols))})",
+            [data[c] for c in cols],
+        )
+
+    def upsert_fmp_estimates(self, symbol: str, rows: List[Dict]) -> int:
+        """周频/backfill estimates 快照。PK 同键替换、异 snapshot 追加。"""
+        _validate_table("fmp_estimates")
+        sym = symbol.upper()
+        # 事务前全量校验：坏行直接拒绝整批
+        for row in rows:
+            if not row.get("snapshot_date") or not row.get("fiscal_date"):
+                raise ValueError(f"fmp_estimates row missing required dates: {sym}")
+            if row.get("period_type") not in self._FMP_PERIODS:
+                raise ValueError(f"invalid period_type: {row.get('period_type')!r}")
+            if row.get("snapshot_kind") not in self._FMP_KINDS:
+                raise ValueError(f"invalid snapshot_kind: {row.get('snapshot_kind')!r}")
+        conn = self._get_conn()
+        with conn:
+            for row in rows:
+                self._insert_validated(conn, "fmp_estimates",
+                                       {**row, "symbol": sym})
+        return len(rows)
+
+    def get_fmp_estimates(self, symbol: str, snapshot_date: Optional[str] = None,
+                          period_type: Optional[str] = None,
+                          snapshot_kind: Optional[str] = "weekly") -> List[Dict]:
+        """默认 weekly 口径；snapshot_date 缺省时只取最新 weekly 快照。
+
+        snapshot_kind=None 仅供显式审计调用方：跨 kind 全量返回。
+        backfill 永远不能成为隐式"最新 PIT 快照"。
+        """
+        if period_type is not None and period_type not in self._FMP_PERIODS:
+            raise ValueError(f"invalid period_type: {period_type!r}")
+        if snapshot_kind is not None and snapshot_kind not in self._FMP_KINDS:
+            raise ValueError(f"invalid snapshot_kind: {snapshot_kind!r}")
+        conn = self._get_conn()
+        sym = symbol.upper()
+        query = "SELECT * FROM fmp_estimates WHERE symbol = ?"
+        params: list = [sym]
+        if snapshot_kind is not None:
+            query += " AND snapshot_kind = ?"
+            params.append(snapshot_kind)
+            if snapshot_date is None:
+                row = conn.execute(
+                    "SELECT MAX(snapshot_date) AS d FROM fmp_estimates "
+                    "WHERE symbol = ? AND snapshot_kind = ?",
+                    [sym, snapshot_kind],
+                ).fetchone()
+                if not row or not row["d"]:
+                    return []
+                snapshot_date = row["d"]
+        if snapshot_date is not None:
+            query += " AND snapshot_date = ?"
+            params.append(snapshot_date)
+        if period_type is not None:
+            query += " AND period_type = ?"
+            params.append(period_type)
+        query += " ORDER BY snapshot_date, period_type, fiscal_date"
+        return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    def replace_fmp_earnings(self, symbol: str, rows: List[Dict]) -> int:
+        """先清删该股 eps_actual IS NULL 的预排幽灵行，再 upsert，同一事务。
+
+        同 PK 且新行映射更弱（fiscal_date=NULL）时保留既有非空 fiscal 映射，
+        只更新 actual 值（Task 5 冻结行为：weekly 重跑不得把已匹配行降级为 none）。
+        """
+        _validate_table("fmp_earnings")
+        sym = symbol.upper()
+        for row in rows:
+            if not row.get("announce_date"):
+                raise ValueError(f"fmp_earnings row missing announce_date: {sym}")
+        conn = self._get_conn()
+        with conn:
+            conn.execute(
+                "DELETE FROM fmp_earnings WHERE symbol = ? AND eps_actual IS NULL",
+                [sym],
+            )
+            for row in rows:
+                data = {**row, "symbol": sym}
+                if data.get("fiscal_date") is None:
+                    existing = conn.execute(
+                        "SELECT fiscal_date, match_method FROM fmp_earnings "
+                        "WHERE symbol = ? AND announce_date = ?",
+                        [sym, data["announce_date"]],
+                    ).fetchone()
+                    if existing and existing["fiscal_date"] is not None:
+                        data["fiscal_date"] = existing["fiscal_date"]
+                        data["match_method"] = existing["match_method"]
+                self._insert_validated(conn, "fmp_earnings", data)
+        return len(rows)
+
+    def get_fmp_earnings(self, symbol: str,
+                         as_of: Optional[str] = None) -> List[Dict]:
+        """财报事实。as_of: 只取 announce_date <= as_of（历史计算防泄露）。"""
+        conn = self._get_conn()
+        query = "SELECT * FROM fmp_earnings WHERE symbol = ?"
+        params: list = [symbol.upper()]
+        if as_of:
+            query += " AND announce_date <= ?"
+            params.append(as_of)
+        query += " ORDER BY announce_date"
+        return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    def replace_fmp_etf_holdings(self, basket: str, snapshot_date: str,
+                                 rows: List[Dict]) -> int:
+        """整批替换 (basket, snapshot_date) 快照，坏行整批拒绝。"""
+        _validate_table("fmp_etf_holdings_snapshot")
+        bk = basket.upper()
+        if not snapshot_date:
+            raise ValueError("snapshot_date required")
+        for row in rows:
+            if row.get("raw_row_index") is None or row.get("included") is None:
+                raise ValueError(
+                    f"holdings row missing raw_row_index/included: {bk}")
+        conn = self._get_conn()
+        with conn:
+            conn.execute(
+                "DELETE FROM fmp_etf_holdings_snapshot "
+                "WHERE basket = ? AND snapshot_date = ?",
+                [bk, snapshot_date],
+            )
+            for row in rows:
+                self._insert_validated(
+                    conn, "fmp_etf_holdings_snapshot",
+                    {**row, "basket": bk, "snapshot_date": snapshot_date})
+        return len(rows)
+
+    def get_fmp_etf_holdings(self, basket: str, snapshot_date: str,
+                             included_only: bool = False) -> List[Dict]:
+        conn = self._get_conn()
+        query = ("SELECT * FROM fmp_etf_holdings_snapshot "
+                 "WHERE basket = ? AND snapshot_date = ?")
+        params: list = [basket.upper(), snapshot_date]
+        if included_only:
+            query += " AND included = 1"
+        query += " ORDER BY raw_row_index"
+        return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    def upsert_fmp_basket_valuation(self, row: Dict) -> int:
+        """Phase 2 写入；本期只锁契约。PK: (basket, snapshot_date)。"""
+        _validate_table("fmp_basket_valuation")
+        if not row.get("basket") or not row.get("snapshot_date"):
+            raise ValueError("basket and snapshot_date required")
+        conn = self._get_conn()
+        with conn:
+            self._insert_validated(conn, "fmp_basket_valuation",
+                                   {**row, "basket": row["basket"].upper()})
+        return 1
+
+    def get_fmp_basket_valuation(self, basket: str,
+                                 snapshot_date: Optional[str] = None) -> List[Dict]:
+        conn = self._get_conn()
+        query = "SELECT * FROM fmp_basket_valuation WHERE basket = ?"
+        params: list = [basket.upper()]
+        if snapshot_date:
+            query += " AND snapshot_date = ?"
+            params.append(snapshot_date)
+        query += " ORDER BY snapshot_date DESC"
+        return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    def upsert_fmp_forward_run(self, row: Dict) -> int:
+        """Run manifest。同 PK 只允许更新执行统计；universe 不可变。
+
+        插入时 target_universe（list）排序去重后 JSON 序列化冻结；
+        更新时若传入 universe 与既存不一致 → ValueError（禁止改写历史分母）。
+        """
+        _validate_table("fmp_forward_runs")
+        snapshot_date = row.get("snapshot_date")
+        run_kind = row.get("run_kind")
+        status = row.get("status")
+        if not snapshot_date:
+            raise ValueError("snapshot_date required")
+        if run_kind not in self._FMP_KINDS:
+            raise ValueError(f"invalid run_kind: {run_kind!r}")
+        if status not in self._FMP_RUN_STATUS:
+            raise ValueError(f"invalid status: {status!r}")
+
+        universe = row.get("target_universe")
+        universe_json = None
+        if universe is not None:
+            normalized = sorted({str(s).upper() for s in universe})
+            universe_json = json.dumps(normalized)
+
+        conn = self._get_conn()
+        with conn:
+            existing = conn.execute(
+                "SELECT target_universe_json, started_at FROM fmp_forward_runs "
+                "WHERE snapshot_date = ? AND run_kind = ?",
+                [snapshot_date, run_kind],
+            ).fetchone()
+            if existing:
+                if (universe_json is not None
+                        and universe_json != existing["target_universe_json"]):
+                    raise ValueError(
+                        "target universe mismatch for existing run manifest "
+                        f"({snapshot_date}, {run_kind}); history is immutable")
+                conn.execute(
+                    "UPDATE fmp_forward_runs SET status = ?, "
+                    "quarter_success = ?, quarter_failure_count = ?, "
+                    "completed_at = ?, summary_json = ? "
+                    "WHERE snapshot_date = ? AND run_kind = ?",
+                    [status,
+                     int(row.get("quarter_success", 0)),
+                     int(row.get("quarter_failure_count", 0)),
+                     row.get("completed_at"),
+                     row.get("summary_json"),
+                     snapshot_date, run_kind],
+                )
+            else:
+                if universe_json is None:
+                    raise ValueError("target_universe required on first insert")
+                if not row.get("started_at"):
+                    raise ValueError("started_at required on first insert")
+                conn.execute(
+                    "INSERT INTO fmp_forward_runs (snapshot_date, run_kind, "
+                    "status, target_universe_json, target_count, "
+                    "quarter_success, quarter_failure_count, started_at, "
+                    "completed_at, summary_json) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    [snapshot_date, run_kind, status, universe_json,
+                     len(json.loads(universe_json)),
+                     int(row.get("quarter_success", 0)),
+                     int(row.get("quarter_failure_count", 0)),
+                     row["started_at"],
+                     row.get("completed_at"),
+                     row.get("summary_json")],
+                )
+        return 1
+
+    def get_fmp_forward_run(self, snapshot_date: str,
+                            run_kind: str = "weekly") -> Optional[Dict]:
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM fmp_forward_runs "
+            "WHERE snapshot_date = ? AND run_kind = ?",
+            [snapshot_date, run_kind],
+        ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        result["target_universe"] = json.loads(result["target_universe_json"])
+        return result
 
     # ---- Social Sentiment ----
 
