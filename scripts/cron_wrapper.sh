@@ -64,12 +64,35 @@ send_alert() {
     --data-urlencode "text=${message}" >/dev/null 2>&1 || true
 }
 
+# 关键任务锁语义（可选，默认保持旧行为 SKIP+exit 0）：
+#   FINANCE_CRON_LOCK_BUSY_RC=75  → lock busy 时告警并以 75 退出（PIT 任务不可静默跳过）
+#   FINANCE_CRON_RESOURCE_KEY=x   → 额外获取共享资源锁（如 market_db_writer），
+#                                    不同 job 名共享同一资源时互斥
+LOCK_BUSY_RC="${FINANCE_CRON_LOCK_BUSY_RC:-0}"
+RESOURCE_KEY="${FINANCE_CRON_RESOURCE_KEY:-}"
+
+lock_busy() {
+  local busy_lock="$1"
+  log_line "SKIP locked lock=$busy_lock rc=$LOCK_BUSY_RC"
+  if [ "$LOCK_BUSY_RC" -ne 0 ]; then
+    send_alert "$LOCK_BUSY_RC"
+  fi
+  exit "$LOCK_BUSY_RC"
+}
+
 LOCK_FILE="$LOCK_DIR/${JOB_NAME}.lock"
 exec 9>"$LOCK_FILE"
 
 if ! flock -n 9; then
-  log_line "SKIP locked lock=$LOCK_FILE"
-  exit 0
+  lock_busy "$LOCK_FILE"
+fi
+
+if [ -n "$RESOURCE_KEY" ]; then
+  RESOURCE_LOCK_FILE="$LOCK_DIR/resource-${RESOURCE_KEY}.lock"
+  exec 8>"$RESOURCE_LOCK_FILE"
+  if ! flock -n 8; then
+    lock_busy "$RESOURCE_LOCK_FILE"
+  fi
 fi
 
 START_TS="$(date +%s)"

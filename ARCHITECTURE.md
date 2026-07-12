@@ -144,7 +144,7 @@
 
 | 数据库/文件 | 所有权 | 主要内容 | 同步 |
 |-------------|--------|---------|------|
-| `market.db` | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, iv_daily, options_snapshots, forward_estimates/metadata, social_sentiment, market_sentiment, social_trending(*), historical_market_cap, broad_scan_hits, concepts(*), company_concept_tags | pull 到本地 |
+| `market.db` | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, iv_daily, options_snapshots, forward_estimates/metadata, fmp_estimates, fmp_earnings, fmp_etf_holdings_snapshot, fmp_basket_valuation（Phase 2 才写）, fmp_forward_runs（run manifest 审计）, social_sentiment, market_sentiment, social_trending(*), historical_market_cap, broad_scan_hits, concepts(*), company_concept_tags | pull 到本地 |
 | `reports/concept_registry/reviewed_current.csv` (+ manifest) | 云端独占写入 | concept registry canonical 快照（与 `company_concept_tags` symbol 集锁步；A3 weekly-sync 维护） | pull 到本地（仅 pull） |
 | `company.db` | 本地独占写入 | companies, oprms_ratings, analyses, kill_conditions, holdings, transactions, portfolio_cash, option_positions, option_transactions | push 到云端 |
 | `universe.json` | 双端 | 股票池定义 | 双向 merge（并集） |
@@ -187,8 +187,8 @@
 | 08:00 | Tue-Sat | 晨报生成与推送，HTML 附件投递（渲染/发送失败回退 PDF）（`run_market_report_pipeline.sh`） |
 | 08:30 | Sat | 股票池刷新（`run_update_data.sh --pool`） |
 | 09:00 | Sat | 广扫池 + 扩展池 + concept registry 周频刷新（`broad_universe_cron_wrapper.sh weekly_refresh`：broad 前 5 步 + extended 第 6 步 + **concept_weekly_sync 第 7 步**非阻塞——registry 跟随 universe 漂移自动对齐：确定性增量落库 / LLM 进 review 队列 / CSV⇔DB lockstep 自检 / Telegram 摘要；extended 有 MIN_COUNT_FLOOR=800 保护 cache） |
-| 10:00 | Sat | 基本面 + metrics 计算（`run_update_data.sh --fundamental`） |
-| 10:15 | Sat | 前瞻预期更新（核心 + 扩展池 ~949 unique，`run_update_data.sh --forward-estimates --scope=all`，~15-20 min，日志 `cron_forward_est.log`） |
+| 10:00 | Sat | 基本面 + metrics 计算（`run_update_data.sh --fundamental`，加 `market_db_writer` 资源锁） |
+| 10:45 | Sat | 前瞻预期更新（`run_forward_data.sh`：先 yfinance 旧线 `--forward-estimates --scope=all` ~15-22 min，再 FMP forward 新线 `update_fmp_forward.py --mode weekly` 目标 <30 min；日志 `cron_forward_est.log`）。原 10:15 与 fundamental 并发写 market.db（2026-07-11 实测 fundamental 跑到 10:26）→ 移 10:45 留 19 min 缓冲；若 fundamental >35 min 则移 11:00 |
 | 22:00/23:00 SGT | Mon-Fri | Portfolio Intelligence 推送（夏令时切换） |
 
 **本地 launchd**: `com.finance.sync-pull` 每天 09:00 auto-pull 云端数据。
@@ -196,8 +196,11 @@
 **约束**:
 - PI 依赖 MarketData live quote → 单 IP 绑定云端，本地调试必须显式 `--allow-local`
 - 所有 cron 走 `cron_wrapper.sh` 标准包装（统一日志 + 错误处理 + Telegram 失败告警）
+- `finance_fundamental` 与 `finance_forward` 共用 `FINANCE_CRON_RESOURCE_KEY=market_db_writer` 资源锁——不并发写 market.db 的保证是锁，时钟只是缓冲；forward 另设 `FINANCE_CRON_LOCK_BUSY_RC=75`：PIT 任务锁忙即告警 + 非零退出，绝不静默跳过（漏掉的周快照补不回来）
 
 > **forward_estimates 表 stale 策略**：跟随核心 + 扩展池 weekly 刷新；退池标的**不做** stale cleanup——保留 history 作研究材料。覆盖率验证用 `scripts/verify_forward_coverage.py --min-date <本次 cron 日期>`，避免旧 row 误判通过。
+
+> **FMP forward 数据线（Phase 1，2026-07 上线）**：周六顺序 = yfinance 旧线 → 5 ETF holdings 快照 → FMP estimates/earnings → 只读 verifier（`scripts/verify_fmp_forward.py`）。周频 universe = `core_pool ∪ extended_pool ∪ 5 篮子 included 规范化 symbol ∪ MAGS 静态 7`（约 1075–1175 只）；writer 在逐股请求前把 exact sorted universe 冻结进 `fmp_forward_runs`，verifier 只读该 manifest 作分母（≥90% 各有 ≥4 个未来非空 eps_avg 季度）。`fmp_basket_valuation` schema 已建、Phase 2 才写入。yfinance 线保持并行对拍，四周 review 通过前不下线。
 
 ---
 
