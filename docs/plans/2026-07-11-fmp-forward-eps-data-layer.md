@@ -2,17 +2,18 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Status:** Round-4 plan review complete (2026-07-12); Boss 已拍板 P1 方案 A（universe 并入核心池），批注已全部落入正文。Ready for final Boss approval; do not implement before approval.
+**Status:** Round-5 annotation reconciliation complete (2026-07-12); Boss 已拍板 P1 方案 A（universe 并入核心池），round-4 的事实错误与契约遗漏已修正。Ready for final Boss approval; do not implement before approval.
 
 **Confidence: 94%**
 
-> **Review Round-4 批注（2026-07-12，代码引用三路核对 + live 数据验证，Boss 已拍板）**
+> **Review Round-4/5 批注（2026-07-12，Boss 已拍板方案 A；Codex round-5 复核）**
 >
 > - **P1 universe 覆盖缺口 → 方案 A 已采纳**：实测核心池 198 只中 25 只不在扩展池 cache（`refresh_extended_universe()` 是纯 $10B+ screener，从不 union 核心池），含 QS/CRSP/DOCU/PSTG/TEM/FROG 等 ~16 只真股票。旧 yfinance 线（`get_symbols() ∪ get_extended_only_symbols()`）覆盖它们，原公式会在替代 yfinance 后造成核心票 forward EPS 永久断供。**修正**：universe 公式并入核心池全量（Spec §5.4 已同步改），`resolve_fmp_forward_universe()` 增加 `core_symbols` 参数，成本约 +75 调用/周。核心池不做基金/ETF 类型过滤（pool 元数据无可靠类型字段）；~9 只基金/ETF 类成员无 estimates，预期常驻 verifier missing 名单，由 90% gate 容差吸收（<1%，同旧线 SOXX 阈值容差先例，不建静态排除清单）。
-> - **P2 升级 key 尚未 staged**：实测本地 `.env` 只有 `FMP_API_KEY`，没有 `FMP_UPGRADED_API_KEY`。Task 11 硬前置改为显式：Boss 完成 FMP 升级购买并人工写入 staging 变量后才能开始 Task 11。
-> - **P2 >20% gate 语义升格（知情确认）**：Spec 原文是"失败率 >20% 中止篮子聚合步"，本 plan 升格为"整个 weekly run 非零退出 + 告警"。Phase 1 无篮子聚合步，升格合理且更严格，Boss 已知情。
-> - **P2 `ssh aliyun` 直连**：本机已知需 `ssh -4 -b <本机LAN IP> aliyun` workaround（2026-05-17 记录）。所有云端命令执行前先验证连通方式（见 Execution Rules 第 9 条）。
-> - 事实核对结论：plan 引用的全部代码符号、签名、文件存在性经三路 subagent 逐条 grep 核实属实；Spec 13 项决策与 4 表 DDL 与 plan 无硬冲突；`fmp_estimates` PK 不含 `snapshot_kind`，同日 backfill→weekly 改标说法成立。
+> - **P2 key staging 事实纠正**：round-4 检查错了路径；根工作区 `.env` 自 2026-07-09 起已有非空 `FMP_UPGRADED_API_KEY`，且与当前 `FMP_API_KEY` 不同（只验证布尔/相等性，未输出值）。Task 11 改为动态非空 preflight，不再虚假阻塞购买/staging。
+> - **P2 >20% gate 语义升格（知情确认）**：Phase 1 `>20%` 立即 fail/alert；Phase 2 同时禁止篮子聚合。Spec §5.5/风险表已同步，90% verifier 是更严格的最终成功门，>20% 是提前熔断门。
+> - **P2 SSH 事实纠正**：2026-05 有过 `Can't assign requested address`，但 2026-07-12 plain `ssh aliyun` 实测可用。执行时 plain 优先；仅失败时动态发现当前 LAN IP 并 fallback `ssh -4 -b "$LAN_IP" aliyun`，禁止固化旧 DHCP 地址。
+> - **P2 missing 可解释性**：denominator 不变、不建静态排除清单；verifier 将 missing 动态拆成 `known_structural_missing` / `structural_candidates` / `unexpected_missing`，结构性集合漂移也告警。
+> - 事实核对结论：round-5 补齐 `run_update(..., core_loader, extended_loader, ...)` 后，剩余代码符号、签名与文件存在性核对通过；Spec 13 项业务决策不变；`fmp_estimates` PK 不含 `snapshot_kind`，同日 backfill→weekly 改标说法成立。
 
 **不确定点:** 新 FMP plan 的真实持续限速尚未用批量请求测量；当前 holdings 原始行中除 Spec 已识别样本外，可能还有新的外股映射与双股权组。二者都被收敛为实施期的只读 contract probe + fail-closed 配置审计，不需要在代码里猜。
 
@@ -57,6 +58,9 @@ flowchart TB
     end
 
     subgraph Pure["纯转换层"]
+        C["core_pool"]
+        X["extended_pool"]
+        M["MAGS static 7"]
         NH["normalize_holdings"]
         NE["normalize_estimates"]
         NA["match_earnings_fiscal_date"]
@@ -72,6 +76,7 @@ flowchart TB
     end
 
     H --> NH --> T3 --> U
+    C & X & M --> U
     U --> T5
     U --> E --> NE --> T1
     U --> A --> NA --> T2
@@ -180,9 +185,9 @@ PIT 面板的不可逆成本是时间：本周不落快照，就永远无法补�
 4. 新增 shell 文件后立即 `chmod +x` 并用 `bash -n`。
 5. 不调用真实 API，除非该 Step 明确标注 `LIVE CONTRACT` 或 `CLOUD SMOKE`。
 6. `merge`、`push`、云端代码部署、`.env` key 轮换、backfill、crontab 改动是六个独立审批门，不可串成自动流水线。
-7. 任何真实 key 只通过本地 `.env` 的 `FMP_UPGRADED_API_KEY` staging 变量和人工安全写入传递；命令、文档、commit message 不出现值。**round-4 实测该变量尚未写入 `.env`——Boss 完成 FMP 升级购买并人工 staged 后，Task 11 才能开始。**
+7. 任何真实 key 只通过根工作区 `.env` 的 `FMP_UPGRADED_API_KEY` staging 变量和人工安全写入传递；命令、文档、commit message 不出现值。Round-5 已确认该变量非空且与当前 key 不同，但 Task 11 开始时仍必须动态重验；存在性不能替代可用性 contract probe。
 8. 生产 DB 变更前先 WAL checkpoint + 备份；禁止从本地向云端 push `market.db`。
-9. 本机直连 `ssh aliyun` 已知报 `Can't assign requested address`（2026-05-17 记录），需 `ssh -4 -b <本机LAN IP> aliyun`。执行 Task 0/12/13 任何云端命令前先验证连通方式，plan 中的 `ssh aliyun` 均按此解释。
+9. 云端连接先试 plain `ssh aliyun`（2026-07-12 实测可用）。只有出现 `Can't assign requested address` 时才动态获取当前 LAN IP，并 fallback `ssh -4 -b "$LAN_IP" aliyun`；禁止固化 2026-05 的旧 DHCP 地址。
 
 ---
 
@@ -241,9 +246,17 @@ Expected: implementation occurs on a `codex/` branch under `.worktrees/`; `.work
 Run read-only commands:
 
 ```bash
-ssh aliyun 'cd /root/workspace/Finance && crontab -l | grep finance_forward'
-ssh aliyun 'cd /root/workspace/Finance && tail -80 logs/cron_forward_est.log'
-ssh aliyun 'cd /root/workspace/Finance && python3 scripts/verify_forward_coverage.py --scope all --min-date 2026-07-11'
+if ssh -o BatchMode=yes -o ConnectTimeout=5 aliyun true 2>/dev/null; then
+  SSH_CMD=(ssh aliyun)
+else
+  LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)"
+  test -n "$LAN_IP" || { echo "No active LAN IP for SSH fallback" >&2; exit 1; }
+  SSH_CMD=(ssh -4 -b "$LAN_IP" aliyun)
+  "${SSH_CMD[@]}" true
+fi
+"${SSH_CMD[@]}" 'cd /root/workspace/Finance && crontab -l | grep finance_forward'
+"${SSH_CMD[@]}" 'cd /root/workspace/Finance && tail -80 logs/cron_forward_est.log'
+"${SSH_CMD[@]}" 'cd /root/workspace/Finance && python3 scripts/verify_forward_coverage.py --scope all --min-date 2026-07-11'
 ```
 
 Expected: cron still uses `run_update_data.sh --forward-estimates --scope=all`; wrapper OK; record actual core/extended counts in the plan execution notes.
@@ -944,6 +957,7 @@ class ForwardRunSummary:
     holdings_rows: int = 0
     quarter_success: int = 0
     quarter_failed: List[str] = field(default_factory=list)
+    quarter_empty: List[str] = field(default_factory=list)  # valid [] response, not transport error
     annual_failed: List[str] = field(default_factory=list)
     earnings_failed: List[str] = field(default_factory=list)
     estimate_rows: int = 0
@@ -952,10 +966,12 @@ class ForwardRunSummary:
     duration_seconds: float = 0.0
 
 
-def run_update(args, *, client, store, extended_loader,
+def run_update(args, *, client, store, core_loader, extended_loader,
                send_message_fn) -> Tuple[int, ForwardRunSummary]:
     ...
 ```
+
+Both loaders are injected—never import `get_symbols()` inside `run_update()`—so unit tests can independently assert empty-core and empty-extended fail-fast behavior.
 
 Implementation sequence:
 
@@ -969,9 +985,9 @@ Implementation sequence:
 8. per symbol fetch quarter → annual → earnings;
 9. derive fiscal matching dates from the full validated raw quarter payload, then separately filter estimate rows for storage;
 10. normalize first; only then write nonempty estimate/earnings rows;
-11. catch sanitized `FMPResponseError`/exceptions per endpoint and continue; empty critical payloads are failures, never destructive replaces;
+11. catch sanitized `FMPResponseError`/exceptions per endpoint and continue; empty critical payloads are failures, never destructive replaces, and are recorded separately in `quarter_empty` for dynamic structural-missing analysis;
 12. compute attempt failure rate against this attempt's targets: writer failure sets manifest `failed`; writer pass leaves it `running` for Task 8 verifier;
-13. format one secret-free attempt summary; do not overwrite run-wide success/failure counts with subset resume counts;
+13. persist secret-free cumulative evidence plus attempt history. Full run sets `summary_json.run_state.quarter_empty = current_attempt_empty`. Resume computes `current_run_empty = (prior_run_empty - resumed_symbols) ∪ current_attempt_empty`, writes it back to `run_state`, and appends the subset detail to `summary_json.attempts[]`; never replace snapshot-wide evidence with subset-only data;
 14. return 1 if writer critical gate fails, otherwise 0 (verifier is wired in Task 8).
 
 Instantiate `FMPClient(call_interval=FMP_FORWARD_API_CALL_INTERVAL)` only after arguments and data paths validate. Instantiate `MarketStore` lazily only when not dry-run.
@@ -1041,7 +1057,12 @@ Stable report shape:
   "ok": bool,
   "snapshot_date": "YYYY-MM-DD",
   "run_kind": "weekly|backfill",
-  "universe": {"expected": n, "covered_4q": n, "pct": x, "missing": [...]},
+  "universe": {
+    "expected": n, "covered_4q": n, "pct": x, "missing": [...],
+    "known_structural_missing": [...],
+    "structural_candidates": [...],
+    "unexpected_missing": [...]
+  },
   "holdings": {"SPY": {...}, "QQQ": {...}, "SOX": {...}, "IGV": {...}, "XLF": {...}},
   "earnings": {"rows": n, "matched": n, "unmatched": n, "recent_actual": n},
   "estimates": {"weekly_rows": n, "backfill_rows": n},
@@ -1067,6 +1088,8 @@ Required cases:
 - duplicate `raw_row_index` is impossible by schema, but blank raw assets are reported not dropped;
 - `foreign_listing_unmapped` and `unrecognized_asset` become warnings;
 - normalized issuer-name collisions among included rows that are absent from `share_class_groups.json` become warnings (strip only explicit class suffixes; do not fuzzy-merge unrelated companies);
+- missing classification is dynamic, not a static exclusion list: current `summary_json.run_state.quarter_empty` intersect previous completed weekly run's run-state set → `known_structural_missing`; new valid-empty names → `structural_candidates`; all remaining missing → `unexpected_missing`; denominator and 90% gate still include every category;
+- first run has no known structural set, so valid-empty names are candidates and remain visible; later structural-set count/membership drift emits a warning;
 - earnings `match_method='none'` is counted;
 - `--stage data` does not require basket valuation;
 - `--stage full` requires six basket rows and valid JSON (future Phase 2 contract).
@@ -1083,7 +1106,7 @@ Load the exact sorted target universe from `fmp_forward_runs(snapshot_date, run_
 
 The shared `resolve_fmp_forward_universe()` remains the writer's denominator builder and is used by verifier only for dry-run/planning diagnostics where no persisted run exists; it is never authoritative for a completed historical snapshot.
 
-Known-noise contract (round-4): ~9 core-pool fund/ETF members (ABALX/SOXX/SPCX/DXYZ 等) have no analyst estimates and will permanently appear in the coverage `missing` list. This is expected — they consume part of the 10% slack (<1%), mirroring how the old yfinance verifier absorbs SOXX via threshold slack. Do NOT add a static exclusion list; do NOT lower the 90% gate.
+Known-noise contract (round-5): ~9 core-pool fund/ETF/private-like members (ABALX/SOXX/SPCX/DXYZ 等) are expected to return valid-empty estimates and consume <1% of the 10% slack. Do NOT add a static exclusion list and do NOT lower the 90% gate. Instead, derive the reporting split from consecutive completed-run `quarter_empty` evidence as defined above; a new/missing structural name remains visible and alerts on drift.
 
 Do not use “date >= target” because a later snapshot must never mask a failed earlier run.
 
@@ -1124,10 +1147,11 @@ Required cases:
 4. critical failure >20% skips verifier, returns 1 and persists `failed`;
 5. backfill writer PASS calls verifier with `run_kind='backfill'` and can transition to complete;
 6. resume success recomputes run-wide `quarter_success/failure_count` from the full manifest snapshot; subset attempt counts live only in `summary_json` and never overwrite full-run fields;
-7. success Telegram includes snapshot, target/covered, rows, unmatched, duration and no member-level sensitive data;
-8. failure Telegram includes failure reasons and top 20 missing symbols only;
-9. Telegram send failure logs warning but does not turn a data PASS into job failure;
-10. dry-run reports “verifier skipped (no writes)” and never falsely says PASS.
+7. resume of a subset preserves non-resumed symbols in `summary_json.run_state.quarter_empty`, removes successfully repaired resumed symbols, adds still-valid-empty resumed symbols, and appends rather than replaces `attempts[]`;
+8. success Telegram includes snapshot, target/covered, rows, unmatched, duration and no member-level sensitive data;
+9. failure Telegram includes failure reasons and top 20 missing symbols only;
+10. Telegram send failure logs warning but does not turn a data PASS into job failure;
+11. dry-run reports “verifier skipped (no writes)” and never falsely says PASS.
 
 **Step 2: Run RED**
 
@@ -1154,7 +1178,7 @@ manifest running
          └─ verifier FAIL/exception ─> failed
 ```
 
-The final exit code is nonzero if either writer critical gate or verifier fails. No code path may mark `complete` before verifier success is persisted. On verifier completion (normal or resume), persist run-wide counts from the full report: `quarter_success = covered_4q` and `quarter_failure_count = expected - covered_4q`; keep subset attempt counts only inside `summary_json.attempt`.
+The final exit code is nonzero if either writer critical gate or verifier fails. No code path may mark `complete` before verifier success is persisted. On verifier completion (normal or resume), persist run-wide counts from the full report: `quarter_success = covered_4q` and `quarter_failure_count = expected - covered_4q`; keep snapshot-wide empty evidence in `summary_json.run_state.quarter_empty` and append subset attempt details only to `summary_json.attempts[]`.
 
 **Step 4: Use existing Telegram module**
 
@@ -1399,7 +1423,7 @@ git commit -m "fix(data): harden FMP forward rollout gates"
 
 > **LIVE CONTRACT / PAUSE:** This task consumes the upgraded FMP plan and requires Boss approval before using the staged key. It still performs no production DB writes.
 >
-> **硬前置（round-4 实测）：** 本地 `.env` 尚无 `FMP_UPGRADED_API_KEY`。Boss 需先完成 FMP 升级购买并人工写入该 staging 变量，本 Task 才能开始；开始前用 `grep -c '^FMP_UPGRADED_API_KEY=' .env` 只验证存在性、不打印值。
+> **硬前置（round-5 动态检查）：** 根工作区 `.env` 当前已有非空 `FMP_UPGRADED_API_KEY`；开始时仍必须 source 后检查非空，只输出 `configured=yes/no`，不打印值。若为空则暂停 Task 11。
 
 **Files:**
 
@@ -1409,7 +1433,19 @@ git commit -m "fix(data): harden FMP forward rollout gates"
 
 **Step 1: Confirm sanitizer code is deployed nowhere yet but tested locally**
 
-Run the Task 1 canary test again. Do not echo environment variables.
+Run the Task 1 canary test again, then verify the staged key is nonempty without printing it:
+
+```bash
+set -a
+source '/Users/owen/CC workspace/Finance/.env'
+set +a
+if [ -n "${FMP_UPGRADED_API_KEY:-}" ]; then
+  echo 'FMP_UPGRADED_API_KEY configured=yes'
+else
+  echo 'FMP_UPGRADED_API_KEY configured=no' >&2
+  exit 1
+fi
+```
 
 **Step 2: Run a five-symbol dry-run with staged upgraded key**
 
@@ -1579,7 +1615,7 @@ python3 scripts/update_fmp_forward.py \
   --resume --symbols AAPL,MU
 ```
 
-The subset must already belong to the full backfill manifest; the resume cannot change `target_universe_json` or `target_count`. After repair, the backfill verifier recomputes full-manifest `quarter_success/failure_count`; subset attempt counts remain only in `summary_json.attempt`.
+The subset must already belong to the full backfill manifest; the resume cannot change `target_universe_json` or `target_count`. After repair, the backfill verifier recomputes full-manifest `quarter_success/failure_count`; cumulative empty evidence stays in `summary_json.run_state`, and subset attempt details append to `summary_json.attempts[]`.
 
 **Step 3: Run a full weekly FMP smoke before cron cutover**
 

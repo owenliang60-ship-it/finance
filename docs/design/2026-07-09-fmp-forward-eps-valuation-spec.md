@@ -1,6 +1,7 @@
 # FMP Forward EPS 估值体系 — 设计 Spec
 
-> **状态**: ✅ Boss review round 1–3 + writing-plans technical hardening + plan review round 4 完成 → 进入实施计划批注
+> **状态**: ✅ Boss review round 1–3 + writing-plans technical hardening + plan review round 4/5 完成 → 进入最终审批
+> **Review log（2026-07-12 round 5）**: round-4 universe 方案 A 保留；修复 `run_update` 遗漏 core_loader 注入；`>20%` 契约同步为 Phase 1 fail/alert、Phase 2 同时禁聚合；key staging 与 SSH 改为动态事实检查；missing 报告动态拆 `known_structural_missing` / `structural_candidates` / `unexpected_missing`，但 denominator 与 90% gate 不变
 > **Review log（2026-07-12 plan review round 4，Boss 拍板方案 A）**: P1 universe 公式漏核心池 → 实测核心池 198 只中 25 只不在扩展池 cache（extended 刷新是纯 $10B+ screener，从不 union 核心池；QS/CRSP/DOCU/PSTG/TEM/FROG 等 ~16 只真股票 + ~9 只基金/ETF 类），旧 yfinance 线（核心 ∪ 扩展）覆盖而新线丢失，替代 yfinance 后核心票 forward EPS 永久断供 → §5.4 公式并入核心池全量；不做基金/ETF 类型过滤（pool 元数据无可靠类型字段），无 estimates 的基金/ETF 类成员由 90% coverage gate 容差吸收（沿用旧 verifier SOXX 阈值容差先例，不建静态排除清单）
 > **Review log（2026-07-11 writing-plans hardening）**: P0 DDL index 缺 `IF NOT EXISTS` 导致 MarketStore 二次打开失败 → 全部 index 改幂等；P1 当前 extended cache 会让历史 verifier 分母漂移 → 新增最小 `fmp_forward_runs` 审计表，writer 在请求前冻结 exact target manifest，verifier 只读该 manifest；coverage 只计 `eps_avg IS NOT NULL` 的未来季。业务表仍为原 4 张，13 项产品决策不变
 > **Review log（2026-07-09 round 1）**: P0 报告滞后窗口 PE_blend 断供 → 存储改 `fiscal_date >= snapshot−120d`；P1 fmp_earnings 缺 fiscal_date → ingestion 派生入库 + match_method；P1 阶段① holdings 不落库破坏篮子 PIT → 新增 `fmp_etf_holdings_snapshot` 阶段①即写；P1 历史 PE_blend 未来 actual 泄露 → 强制 `announce_date <= as_of`；minor backfill 批打标 `snapshot_kind='backfill'`
@@ -32,11 +33,15 @@ flowchart TB
         H[etf/holdings ×5<br/>SPY QQQ SOXX IGV XLF]
         E[analyst-estimates<br/>quarter + annual]
         A[earnings<br/>街道口径 actual]
+        C[core_pool]
+        X[extended_pool]
+        M[MAGS static 7]
         FMP --> H & E & A
         E -->|append-only 周频快照<br/>存 fiscal_date >= snapshot-120d| T1[(fmp_estimates)]
         A -->|事实 upsert<br/>ingestion 派生 fiscal_date| T2[(fmp_earnings)]
         H -->|周频快照| T4[(fmp_etf_holdings_snapshot)]
         T4 --> U[exact target universe]
+        C & X & M --> U
         U --> T5[(fmp_forward_runs<br/>run manifest)]
         U -. drives per-symbol calls .-> E & A
     end
@@ -190,7 +195,7 @@ CREATE INDEX IF NOT EXISTS idx_ffr_status ON fmp_forward_runs(status, snapshot_d
 
 **`core_pool ∪ extended_pool ∪ 5 篮子 included 规范化 symbol ∪ MAGS 静态清单`**（约 1075~1175 只）。并集用的是**过滤规范化之后**的 `included=1` symbol 集（cash/swap/外股未映射/副类股均已排除），不是原始 holdings 行。理由：SPY 有约百余只 <$10B 成分不在扩展池，若只算池内成员，扩展池周频换血会让 SPY 序列人为跳变——序列稳定性是 PIT 时间序列的生命线。成分清单每周从 holdings 端点刷新落快照后求并集。
 
-**核心池必须显式并入（2026-07-12 round-4 实测）**：`refresh_extended_universe()` 是纯 FMP $10B+ screener，从不 union 核心池；核心池含手动加入的 <$10B 深度分析票（QS/CRSP/DOCU/PSTG/TEM 等），实测 25 只不在扩展池 cache。漏并会让这些核心票在替代 yfinance 后失去 forward EPS 线。核心池全量并入、不做基金/ETF 类型过滤（pool 元数据无可靠类型字段，静态排除清单会漂移）；已知 ~9 只基金/ETF 类核心成员（ABALX/SOXX/SPCX/DXYZ 等）无 analyst estimates，预期常驻 verifier missing 名单、由 90% coverage gate 容差吸收（<1%，同旧线 SOXX 先例）。
+**核心池必须显式并入（2026-07-12 round-4 实测）**：`refresh_extended_universe()` 是纯 FMP $10B+ screener，从不 union 核心池；核心池含手动加入的 <$10B 深度分析票（QS/CRSP/DOCU/PSTG/TEM 等），实测 25 只不在扩展池 cache。漏并会让这些核心票在替代 yfinance 后失去 forward EPS 线。核心池全量并入、不做基金/ETF 类型过滤（pool 元数据无可靠类型字段，静态排除清单会漂移）；预期约 9 个基金/ETF/private-like 成员无 analyst estimates，仍计入 denominator 并由 90% gate 容差吸收（<1%）。报告不建静态排除表：用连续完成 run 的 valid-empty 证据动态拆分结构性/候选/异常 missing，集合漂移必须告警。
 
 ### 5.5 云端 cron 集成
 
@@ -204,7 +209,7 @@ CREATE INDEX IF NOT EXISTS idx_ffr_status ON fmp_forward_runs(status, snapshot_d
 
 Run-manifest 状态机：先以 exact full universe 写 `running`；writer gate 失败 → `failed`；writer 通过仍保持 `running`；weekly/backfill 各自只由同 `run_kind` verifier PASS → `complete`，verifier FAIL/exception → `failed`。`--symbols` 非 dry-run 只允许作为 resume：必须是既有 full manifest 的子集且不得改变历史分母；同日 full rerun 在任何 DB 写入前先核对 manifest 相等。Resume 后 run-wide success/failure 从完整 snapshot 重算，subset attempt 统计不得覆盖 full-run 字段。
 
-失败隔离：单股失败记日志继续批次；**若失败率 >20% 中止篮子聚合步**（快照可以残缺，篮子估值不能用残缺快照算）——estimates 写入本身可安全部分写（重跑同 snapshot_date 幂等补齐）。
+失败隔离：单股失败记日志继续批次；**quarter 关键失败率 >20% 是提前熔断门：Phase 1 整个 run 非零退出 + 告警，Phase 2 同时禁止篮子聚合**。estimates 部分写可保留并用同 snapshot resume 幂等补齐，但 manifest 状态为 `failed`。最终成功仍以更严格的 verifier ≥90% 覆盖门裁决。
 
 ### 5.6 key 替换（部署步骤，含代码前置）
 
@@ -298,6 +303,7 @@ weight_coverage = (Σ included 行权重 + Σ dual_class_secondary 行权重[其
 新增或扩展 verify 脚本（参照 `scripts/verify_forward_coverage.py` 模式：RO URI + ISO date 校验 + empty fail-fast）：
 
 - 快照覆盖率：本次 snapshot_date 下有 ≥4 个 `eps_avg IS NOT NULL` 未来季的 symbol 数 ÷ universe **≥ 90%**（低于则 verifier FAIL + Telegram 警示）。writer 在发起逐股请求前把 §5.4 的 exact sorted universe 写入 `fmp_forward_runs`；verifier 只读该 snapshot manifest，**不使用当前 extended cache 重建历史分母，也不混入原始 holdings 行**
+- missing 可解释性：valid-empty quarter response 累计写入 `summary_json.run_state.quarter_empty`；resume 用 `(prior - resumed) ∪ current_attempt_empty` 更新，attempt 明细 append 到 `attempts[]`。与上一 completed run 连续 valid-empty 的交集标 `known_structural_missing`，新 valid-empty 标 `structural_candidates`，其余标 `unexpected_missing`。三类都留在 denominator/90% gate 内，结构性集合漂移告警
 - 篮子完整性：6 篮子当周各 1 行、coverage 字段合理、members_json 可解析
 - fmp_earnings 新鲜度：抽样近期财报票 actual 已回填
 
@@ -323,14 +329,15 @@ weight_coverage = (Σ included 行权重 + Σ dual_class_secondary 行权重[其
 | 双股权发行人重复计权（GOOG/GOOGL 类） | share_class_groups 静态配置只计主类股 + verifier companyName 撞名检测抓漂入 |
 | API key 泄露（日志→Telegram） | client 日志脱敏为换 key 硬前置（§5.6），单测断言日志无 key |
 | GAAP/街道口径混用 | 铁律：actual 只用 fmp_earnings（街道），income 表只取股数；测试断言守护 |
-| 周六 cron 时长膨胀 | 独立间隔目标 <30 分钟；失败率 >20% 中止聚合步防脏数据 |
+| 周六 cron 时长膨胀/批量失败 | 独立间隔目标 <30 分钟；quarter 失败率 >20% 提前 fail/alert，Phase 2 同时禁止聚合；最终仍需 ≥90% verifier PASS |
 
 ## 11. 测试策略
 
 - **client**：fixture JSON（真实响应样本）解析测试 ×3 端点，含 MAGS TRS 行过滤、epsActual null
-- **store**：4 表 upsert/get/幂等重跑/PK 冲突，tmp sqlite；ingestion 派生 fiscal_date 匹配规则（正常/无匹配/非常规财历）；null 行清删；**holdings 空 raw_asset 重复行全落库不丢**（raw_row_index PK 回归测试）
+- **store**：4 业务表 + 1 run-manifest 表 upsert/get/幂等重跑/PK 冲突，tmp sqlite；ingestion 派生 fiscal_date 匹配规则（正常/无匹配/非常规财历）；null 行清删；**holdings 空 raw_asset 重复行全落库不丢**（raw_row_index PK 回归测试）
 - **指标层**：NTM 对齐边界（季末缺口窗口、缺季、thin analysts、负 EPS）、blend 分界（null actual、`match_method='none'` 跳过、**as-of 泄露断言**：历史 as_of 不得使用 `announce_date > as_of` 的 actual）、报告滞后窗口 PE_blend 可算（P0 回归测试：AAPL 6/28 财季场景）、YoY 缺 actual、as-of 双日期输出
 - **聚合层**：负净利成员、缺覆盖成员剔除对称性、coverage 计算（mcap + weight 双口径）、MAGS 静态清单、股数 fallback 链、**双股权去重**（GOOG/GOOGL 只计一次、副类股 covered_by 正确、weight_coverage 不把副类股算缺失）、**外股映射**（NVMI.TA→NVMI、未映射后缀排除+警示+计入 coverage loss）
 - **安全**：`_sanitize` 日志脱敏单测（模拟 RequestException，断言日志文本不含 apikey）
+- **writer/verifier**：core/extended loader 独立注入与空池 fail-fast；>20% 提前熔断；≥90% 最终门；valid-empty missing 动态分类与集合漂移告警
 - **cron wrapper**：失败率中止逻辑、Telegram 摘要、幂等重跑
 - 全程 TDD（项目惯例），云端 Python 3.10 兼容（无 3.12 特性）
