@@ -504,6 +504,206 @@ def test_telegram_private_channel_and_suppression():  # case 19
     assert not send2.called
 
 
+# ========== Task 8: verifier 接线 + 状态机 ==========
+
+def _verify_pass(covered=None, expected=None, missing=None):
+    def fn(snapshot_date, run_kind):
+        exp = expected if expected is not None else 8
+        cov = covered if covered is not None else exp
+        return 0, {
+            "ok": True, "snapshot_date": snapshot_date, "run_kind": run_kind,
+            "universe": {"expected": exp, "covered_4q": cov, "pct": 100.0,
+                         "missing": missing or []},
+            "failures": [], "warnings": [],
+        }
+    return fn
+
+
+def _verify_fail(missing=None, failures=None):
+    def fn(snapshot_date, run_kind):
+        return 1, {
+            "ok": False, "snapshot_date": snapshot_date, "run_kind": run_kind,
+            "universe": {"expected": 10, "covered_4q": 5, "pct": 50.0,
+                         "missing": missing or ["M%02d" % i for i in range(30)]},
+            "failures": failures or ["4Q coverage 50.0% < 90.0%"],
+            "warnings": [],
+        }
+    return fn
+
+
+def test_writer_pass_verifier_pass_returns_0_and_completes():  # case 1+2
+    store = FakeStore()
+    seen_status_during_verify = []
+
+    def verify(snapshot_date, run_kind):
+        seen_status_during_verify.append(
+            store.runs[(snapshot_date, run_kind)]["status"])
+        return _verify_pass()(snapshot_date, run_kind)
+
+    rc, _ = run_update(
+        _args(), client=FakeClient(), store=store,
+        core_loader=lambda: ["QS", "AAPL"],
+        extended_loader=lambda: ["AAPL", "MSFT", "NVDA"],
+        send_message_fn=Mock(), verify_fn=verify,
+    )
+    assert rc == 0
+    assert seen_status_during_verify == ["running"]  # verifier 前保持 running
+    run = store.runs[(SNAP, "weekly")]
+    assert run["status"] == "complete"               # 只有 verifier PASS 才 complete
+    assert run["completed_at"]
+
+
+def test_verifier_fail_returns_1_and_persists_failed():  # case 3
+    store = FakeStore()
+    rc, _ = run_update(
+        _args(), client=FakeClient(), store=store,
+        core_loader=lambda: ["QS", "AAPL"],
+        extended_loader=lambda: ["AAPL", "MSFT", "NVDA"],
+        send_message_fn=Mock(), verify_fn=_verify_fail(),
+    )
+    assert rc == 1
+    assert store.runs[(SNAP, "weekly")]["status"] == "failed"
+
+
+def test_critical_gate_failure_skips_verifier():  # case 4
+    from src.data.fmp_client import FMPResponseError
+
+    verify_calls = []
+
+    def verify(snapshot_date, run_kind):
+        verify_calls.append(snapshot_date)
+        return 0, {}
+
+    client = FakeClient(quarter={"AAPL": FMPResponseError("x"), "MSFT": []})
+    store = FakeStore()
+    rc, _ = run_update(
+        _args(), client=client, store=store,
+        core_loader=lambda: ["AAPL", "MSFT", "NVDA", "QS", "TSLA"],
+        extended_loader=lambda: ["MSFT"],
+        send_message_fn=Mock(), verify_fn=verify,
+    )
+    assert rc == 1
+    assert verify_calls == []
+    assert store.runs[(SNAP, "weekly")]["status"] == "failed"
+
+
+def test_backfill_verifier_called_with_backfill_kind():  # case 5
+    kinds = []
+
+    def verify(snapshot_date, run_kind):
+        kinds.append(run_kind)
+        return _verify_pass()(snapshot_date, run_kind)
+
+    store = FakeStore()
+    rc, _ = run_update(
+        _args(mode="backfill"), client=FakeClient(), store=store,
+        core_loader=lambda: ["QS", "AAPL"],
+        extended_loader=lambda: ["AAPL", "MSFT", "NVDA"],
+        send_message_fn=Mock(), verify_fn=verify,
+    )
+    assert rc == 0
+    assert kinds == ["backfill"]
+    assert store.runs[(SNAP, "backfill")]["status"] == "complete"
+
+
+def test_resume_recomputes_runwide_counts_from_verifier():  # case 6+7
+    store = FakeStore()
+    client = FakeClient(quarter={"AAPL": [], "MSFT": []})
+    core10 = ["AAPL", "MSFT", "NVDA", "QS", "TSLA",
+              "META", "AMZN", "GOOGL", "NFLX", "CRM"]
+    rc, _ = run_update(
+        _args(), client=client, store=store,
+        core_loader=lambda: core10, extended_loader=lambda: ["MSFT"],
+        send_message_fn=Mock(),
+        verify_fn=_verify_fail(),   # 首跑 verifier FAIL → failed
+    )
+    assert rc == 1
+
+    # resume 修复 AAPL；verifier 现在 PASS，run-wide 计数来自 full report
+    expected_total = store.runs[(SNAP, "weekly")]["target_count"]
+    rc2, _ = run_update(
+        _args(resume=True, symbols=["AAPL"]), client=FakeClient(), store=store,
+        core_loader=lambda: core10, extended_loader=lambda: ["MSFT"],
+        send_message_fn=Mock(),
+        verify_fn=_verify_pass(covered=expected_total - 1,
+                               expected=expected_total),
+    )
+    assert rc2 == 0
+    run = store.runs[(SNAP, "weekly")]
+    assert run["status"] == "complete"
+    assert run["quarter_success"] == expected_total - 1      # covered_4q
+    assert run["quarter_failure_count"] == 1                 # expected - covered
+    state = json.loads(run["summary_json"])
+    assert set(state["run_state"]["quarter_empty"]) == {"MSFT"}  # case 7
+    assert len(state["attempts"]) == 2
+
+
+def test_success_telegram_content_and_no_member_lists():  # case 8
+    sent = []
+    store = FakeStore()
+    rc, summary = run_update(
+        _args(no_telegram=False), client=FakeClient(), store=store,
+        core_loader=lambda: ["QS", "AAPL"],
+        extended_loader=lambda: ["AAPL", "MSFT", "NVDA"],
+        send_message_fn=lambda msg, channel="private": sent.append(msg),
+        verify_fn=_verify_pass(),
+    )
+    assert rc == 0 and sent
+    msg = sent[-1]
+    assert SNAP in msg
+    for token in ("covered", "rows", "unmatched"):
+        assert token in msg
+    assert "duration" in msg or "s" in msg
+
+
+def test_failure_telegram_top20_missing_only():  # case 9
+    sent = []
+    store = FakeStore()
+    rc, _ = run_update(
+        _args(no_telegram=False), client=FakeClient(), store=store,
+        core_loader=lambda: ["QS", "AAPL"],
+        extended_loader=lambda: ["AAPL", "MSFT", "NVDA"],
+        send_message_fn=lambda msg, channel="private": sent.append(msg),
+        verify_fn=_verify_fail(),  # 30 个 missing
+    )
+    assert rc == 1 and sent
+    msg = sent[-1]
+    assert "M00" in msg and "M19" in msg
+    assert "M20" not in msg          # 只展示 top 20
+    assert "coverage" in msg.lower() or "fail" in msg.lower()
+
+
+def test_telegram_send_failure_does_not_fail_data_pass():  # case 10
+    def broken_send(msg, channel="private"):
+        raise RuntimeError("telegram down")
+
+    store = FakeStore()
+    rc, _ = run_update(
+        _args(no_telegram=False), client=FakeClient(), store=store,
+        core_loader=lambda: ["QS", "AAPL"],
+        extended_loader=lambda: ["AAPL", "MSFT", "NVDA"],
+        send_message_fn=broken_send, verify_fn=_verify_pass(),
+    )
+    assert rc == 0
+    assert store.runs[(SNAP, "weekly")]["status"] == "complete"
+
+
+def test_dry_run_reports_verifier_skipped(capsys=None):  # case 11
+    verify_calls = []
+
+    def verify(snapshot_date, run_kind):
+        verify_calls.append(snapshot_date)
+        return 0, {}
+
+    rc, summary = run_update(
+        _args(dry_run=True, symbols=["AAPL"]), client=FakeClient(), store=None,
+        core_loader=lambda: ["AAPL"], extended_loader=lambda: ["MSFT"],
+        send_message_fn=Mock(), verify_fn=verify,
+    )
+    assert rc == 0
+    assert verify_calls == []        # dry-run 绝不调 verifier，也绝不假报 PASS
+
+
 def test_run_state_quarter_empty_persisted_and_resume_merges():  # round-5 证据链
     client = FakeClient(quarter={"AAPL": [], "MSFT": []})
     store = FakeStore()

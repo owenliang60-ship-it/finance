@@ -229,7 +229,14 @@ def _attempt_detail(summary: ForwardRunSummary, targets: List[str]) -> Dict:
 def run_update(args, *, client, store,
                core_loader: Callable[[], List[str]],
                extended_loader: Callable[[], List[str]],
-               send_message_fn) -> Tuple[int, ForwardRunSummary]:
+               send_message_fn,
+               verify_fn: Optional[Callable] = None) -> Tuple[int, ForwardRunSummary]:
+    """verify_fn(snapshot_date, run_kind) -> (rc, report)。
+
+    状态机（冻结）: manifest running → writer gate FAIL → failed；
+    writer PASS 保持 running → verifier PASS → complete / FAIL·异常 → failed。
+    verify_fn 为 None 时（未接线场景）writer PASS 后保持 running。
+    """
     t0 = time.time()
     summary = ForwardRunSummary(mode=args.mode,
                                 snapshot_date=args.snapshot_date,
@@ -376,15 +383,58 @@ def run_update(args, *, client, store,
             f"{failure_rate:.0%} > {CRITICAL_FAILURE_RATE:.0%} "
             f"(failed={len(summary.quarter_failed)}, "
             f"empty={len(summary.quarter_empty)}, targets={len(targets)}); "
-            f"partial snapshot preserved for resume")
+            f"partial snapshot preserved for resume; verifier skipped")
 
+    if verify_fn is None:
+        # 未接线场景：writer PASS 保持 running，绝不自行 complete
+        notify(
+            f"✅ FMP forward {args.mode} {args.snapshot_date} writer pass "
+            f"(verifier not wired): {summary.quarter_success}/{len(targets)} "
+            f"quarter ok, {summary.estimate_rows} estimate rows, "
+            f"{summary.earnings_rows} earnings rows, "
+            f"{summary.unmatched_earnings} unmatched, "
+            f"duration {summary.duration_seconds:.0f}s")
+        return 0, summary
+
+    def _persist_final(status: str, qs: int, qf: int) -> None:
+        store.upsert_fmp_forward_run({
+            "snapshot_date": args.snapshot_date,
+            "run_kind": args.mode,
+            "status": status,
+            "target_universe": None,
+            "quarter_success": qs,
+            "quarter_failure_count": qf,
+            "completed_at": _utc_now(),
+            "summary_json": summary_json,
+            "started_at": manifest["started_at"] if manifest else None,
+        })
+
+    try:
+        v_rc, v_report = verify_fn(args.snapshot_date, args.mode)
+    except Exception as exc:
+        _persist_final("failed", quarter_success, quarter_failure_count)
+        return fail(f"verifier exception: {exc}")
+
+    universe_report = (v_report or {}).get("universe") or {}
+    covered = int(universe_report.get("covered_4q") or 0)
+    expected = int(universe_report.get("expected") or 0)
+
+    if v_rc != 0:
+        # run-wide 计数以 full report 为准；subset attempt 只留在 summary_json
+        _persist_final("failed", covered, max(expected - covered, 0))
+        missing = universe_report.get("missing") or []
+        reasons = "; ".join((v_report or {}).get("failures") or ["verifier FAIL"])
+        return fail(f"verifier FAIL: {reasons}; "
+                    f"missing (top 20): {missing[:20]}")
+
+    _persist_final("complete", covered, max(expected - covered, 0))
     notify(
-        f"✅ FMP forward {args.mode} {args.snapshot_date} writer pass: "
-        f"{summary.quarter_success}/{len(targets)} quarter ok, "
-        f"{summary.estimate_rows} estimate rows, "
-        f"{summary.earnings_rows} earnings rows, "
-        f"{summary.unmatched_earnings} unmatched, "
-        f"{summary.duration_seconds:.0f}s")
+        f"✅ FMP forward {args.mode} {args.snapshot_date} PASS: "
+        f"covered {covered}/{expected}, "
+        f"estimate rows {summary.estimate_rows}, "
+        f"earnings rows {summary.earnings_rows}, "
+        f"unmatched {summary.unmatched_earnings}, "
+        f"duration {summary.duration_seconds:.0f}s")
     return 0, summary
 
 
@@ -410,11 +460,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     from src.data.pool_manager import get_symbols
     from src.telegram_bot import send_message
 
+    verify_fn = None
+    if not args.dry_run:
+        from scripts.verify_fmp_forward import verify_run as _verify_run
+        db_path = store.db_path
+        data_root = db_path.parent
+
+        def verify_fn(snapshot_date, run_kind):
+            return _verify_run(db_path, data_root, snapshot_date,
+                               run_kind=run_kind, stage="data")
+
     rc, summary = run_update(
         args, client=client, store=store,
         core_loader=get_symbols,
         extended_loader=get_extended_symbols,
         send_message_fn=send_message,
+        verify_fn=verify_fn,
     )
     print(f"[{summary.mode}] snapshot={summary.snapshot_date} "
           f"targets={summary.target_count} "
