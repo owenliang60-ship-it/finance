@@ -1169,6 +1169,16 @@ class MarketStore:
                 )
         return 1
 
+    def has_fmp_weekly_estimates(self, snapshot_date: str) -> bool:
+        """只读检查：该 snapshot_date 是否已有 weekly 行（backfill 同日守卫）。"""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT 1 FROM fmp_estimates "
+            "WHERE snapshot_date = ? AND snapshot_kind = 'weekly' LIMIT 1",
+            [snapshot_date],
+        ).fetchone()
+        return row is not None
+
     def get_fmp_forward_run(self, snapshot_date: str,
                             run_kind: str = "weekly") -> Optional[Dict]:
         conn = self._get_conn()
