@@ -1,6 +1,7 @@
 # FMP Forward EPS 估值体系 — 设计 Spec
 
-> **状态**: ✅ Boss review round 1–3 + writing-plans technical hardening 完成 → 进入实施计划批注
+> **状态**: ✅ Boss review round 1–3 + writing-plans technical hardening + plan review round 4 完成 → 进入实施计划批注
+> **Review log（2026-07-12 plan review round 4，Boss 拍板方案 A）**: P1 universe 公式漏核心池 → 实测核心池 198 只中 25 只不在扩展池 cache（extended 刷新是纯 $10B+ screener，从不 union 核心池；QS/CRSP/DOCU/PSTG/TEM/FROG 等 ~16 只真股票 + ~9 只基金/ETF 类），旧 yfinance 线（核心 ∪ 扩展）覆盖而新线丢失，替代 yfinance 后核心票 forward EPS 永久断供 → §5.4 公式并入核心池全量；不做基金/ETF 类型过滤（pool 元数据无可靠类型字段），无 estimates 的基金/ETF 类成员由 90% coverage gate 容差吸收（沿用旧 verifier SOXX 阈值容差先例，不建静态排除清单）
 > **Review log（2026-07-11 writing-plans hardening）**: P0 DDL index 缺 `IF NOT EXISTS` 导致 MarketStore 二次打开失败 → 全部 index 改幂等；P1 当前 extended cache 会让历史 verifier 分母漂移 → 新增最小 `fmp_forward_runs` 审计表，writer 在请求前冻结 exact target manifest，verifier 只读该 manifest；coverage 只计 `eps_avg IS NOT NULL` 的未来季。业务表仍为原 4 张，13 项产品决策不变
 > **Review log（2026-07-09 round 1）**: P0 报告滞后窗口 PE_blend 断供 → 存储改 `fiscal_date >= snapshot−120d`；P1 fmp_earnings 缺 fiscal_date → ingestion 派生入库 + match_method；P1 阶段① holdings 不落库破坏篮子 PIT → 新增 `fmp_etf_holdings_snapshot` 阶段①即写；P1 历史 PE_blend 未来 actual 泄露 → 强制 `announce_date <= as_of`；minor backfill 批打标 `snapshot_kind='backfill'`
 > **Review log（2026-07-09 round 3）**: P1 holdings PK 空 raw_asset 重复丢行 → PK 改 `raw_row_index`，raw_asset 降为审计字段；P1 副类股被记 coverage loss → 加 `covered_by` 列，weight_coverage 分子计入"已由发行人代表覆盖"的副类股权重；P2 universe/verifier 分母 → 写死 `extended_pool ∪ included 规范化 symbol ∪ MAGS 静态`
@@ -12,7 +13,7 @@
 
 ## 1. 一句话目标
 
-升级 FMP 订阅拿季度颗粒度 forward EPS consensus，为扩展池 ~949 只个股与 6 个指数篮子（SPY/QQQ/SOX/MAGS/IGV/XLF）计算**两种 forward P/E**（PE_blend = 3 实际+1 预测 / PE_ntm = 4 预测），周频快照 append-only 自建 PIT 库，指数级估值落库，最终替代 yfinance forward estimates 线。
+升级 FMP 订阅拿季度颗粒度 forward EPS consensus，为核心池 ∪ 扩展池个股（~1,000 只量级）与 6 个指数篮子（SPY/QQQ/SOX/MAGS/IGV/XLF）计算**两种 forward P/E**（PE_blend = 3 实际+1 预测 / PE_ntm = 4 预测），周频快照 append-only 自建 PIT 库，指数级估值落库，最终替代 yfinance forward estimates 线。
 
 ## 2. 非目标（YAGNI）
 
@@ -187,7 +188,9 @@ CREATE INDEX IF NOT EXISTS idx_ffr_status ON fmp_forward_runs(status, snapshot_d
 
 ### 5.4 抓取 universe
 
-**`extended_pool ∪ 5 篮子 included 规范化 symbol ∪ MAGS 静态清单`**（约 1050~1150 只）。并集用的是**过滤规范化之后**的 `included=1` symbol 集（cash/swap/外股未映射/副类股均已排除），不是原始 holdings 行。理由：SPY 有约百余只 <$10B 成分不在扩展池，若只算池内成员，扩展池周频换血会让 SPY 序列人为跳变——序列稳定性是 PIT 时间序列的生命线。成分清单每周从 holdings 端点刷新落快照后求并集。
+**`core_pool ∪ extended_pool ∪ 5 篮子 included 规范化 symbol ∪ MAGS 静态清单`**（约 1075~1175 只）。并集用的是**过滤规范化之后**的 `included=1` symbol 集（cash/swap/外股未映射/副类股均已排除），不是原始 holdings 行。理由：SPY 有约百余只 <$10B 成分不在扩展池，若只算池内成员，扩展池周频换血会让 SPY 序列人为跳变——序列稳定性是 PIT 时间序列的生命线。成分清单每周从 holdings 端点刷新落快照后求并集。
+
+**核心池必须显式并入（2026-07-12 round-4 实测）**：`refresh_extended_universe()` 是纯 FMP $10B+ screener，从不 union 核心池；核心池含手动加入的 <$10B 深度分析票（QS/CRSP/DOCU/PSTG/TEM 等），实测 25 只不在扩展池 cache。漏并会让这些核心票在替代 yfinance 后失去 forward EPS 线。核心池全量并入、不做基金/ETF 类型过滤（pool 元数据无可靠类型字段，静态排除清单会漂移）；已知 ~9 只基金/ETF 类核心成员（ABALX/SOXX/SPCX/DXYZ 等）无 analyst estimates，预期常驻 verifier missing 名单、由 90% coverage gate 容差吸收（<1%，同旧线 SOXX 先例）。
 
 ### 5.5 云端 cron 集成
 
@@ -316,7 +319,7 @@ weight_coverage = (Σ included 行权重 + Σ dual_class_secondary 行权重[其
 | earnings→estimates 财季对齐规则出错（非常规财历） | ingestion 时派生入库（`fiscal_date` + `match_method`，可审计）；无匹配行不入算 + verifier 统计；测试覆盖 1 月底/4 月底公告等边界 |
 | 历史序列泄露未来信息 | PE_blend/YoY 强制 `announce_date <= as_of` 过滤；estimates 只按 snapshot 读；`snapshot_kind='backfill'` 批不当 PIT 历史消费；各有测试断言守护 |
 | 新 plan 限额实际值未验证 | 独立可配置间隔，实施时实测调优；保守默认值兜底 |
-| 篮子序列受成分漂移影响 | universe = 扩展池 ∪ 篮子成分（决策），members_json + holdings 快照全行留档可审计 |
+| 篮子序列受成分漂移影响 | universe = 核心池 ∪ 扩展池 ∪ 篮子成分（决策），members_json + holdings 快照全行留档可审计 |
 | 双股权发行人重复计权（GOOG/GOOGL 类） | share_class_groups 静态配置只计主类股 + verifier companyName 撞名检测抓漂入 |
 | API key 泄露（日志→Telegram） | client 日志脱敏为换 key 硬前置（§5.6），单测断言日志无 key |
 | GAAP/街道口径混用 | 铁律：actual 只用 fmp_earnings（街道），income 表只取股数；测试断言守护 |
