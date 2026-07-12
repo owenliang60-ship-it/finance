@@ -11,7 +11,8 @@
     --symbols --dry-run   自由 smoke：不落库、无 manifest，但完整验证 holdings 契约
     --resume --symbols    子集修复：要求既有同日同 kind full manifest，子集 ⊆ manifest，
                           不刷新 holdings、不改 universe/target_count
-    非 dry-run --symbols 且无 --resume / --resume 无 --symbols / resume+dry-run → exit 2
+    非 dry-run --symbols 且无 --resume / --resume 无 --symbols / resume+dry-run
+    / 裸 --dry-run 无 --symbols（防全 universe 真实 API 扫描）→ exit 2
 
 Spec: docs/design/2026-07-09-fmp-forward-eps-valuation-spec.md §5.3–§5.5
 """
@@ -114,6 +115,9 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         parser.error("--resume requires --symbols")
     if args.symbols and not (args.dry_run or args.resume):
         parser.error("non-dry-run --symbols requires --resume")
+    if args.dry_run and not args.symbols:
+        # 裸 dry-run 会对全 universe 发起真实 API 扫描却零落库（P1 review finding）
+        parser.error("--dry-run requires --symbols (explicit smoke subset)")
 
     if args.snapshot_date is None:
         args.snapshot_date = date.today().isoformat()

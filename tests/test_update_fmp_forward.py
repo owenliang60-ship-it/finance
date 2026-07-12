@@ -170,6 +170,7 @@ def _run(args=None, client=None, store=None, core=None, extended=None,
     ["--mode", "weekly", "--resume", "--symbols", "A", "--dry-run"],  # resume+dry-run
     ["--mode", "weekly", "--backfill-start", "2021-01-01"],       # backfill-start 用于 weekly
     ["--mode", "weekly", "--snapshot-date", "07/12/2026"],        # 非 ISO 日期
+    ["--mode", "weekly", "--dry-run"],                            # 裸 dry-run：防全 universe 真实 API 扫描
 ])
 def test_invalid_cli_combinations_exit_2(argv):
     with pytest.raises(SystemExit) as ei:
