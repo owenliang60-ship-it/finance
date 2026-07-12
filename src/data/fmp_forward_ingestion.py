@@ -1,12 +1,13 @@
-"""FMP forward EPS 纯转换层：holdings 规范化 / 配置加载 / universe resolver。
+"""FMP forward EPS 纯转换层：holdings/estimates/earnings 规范化 + universe resolver。
 
 本模块绝不调用 API 或 DB（纯函数，全部可单测）。
-Spec: docs/design/2026-07-09-fmp-forward-eps-valuation-spec.md §5.4 / §7.1
+Spec: docs/design/2026-07-09-fmp-forward-eps-valuation-spec.md §5.3 / §5.4 / §7.1
 """
 import json
 import re
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 # API-to-basket 映射（SOX 篮子刻意用 SOXX holdings 代理；MAGS 静态清单无 holdings）
 ETF_HOLDING_SOURCES = {
@@ -165,6 +166,157 @@ def normalize_holdings(
             "covered_by": covered_by,
         })
     return out
+
+
+# ---------------------------------------------------------------------------
+# Estimates 规范化（Spec §5.3：weekly 120d 回看窗口 / backfill 2021+ 打标）
+# ---------------------------------------------------------------------------
+
+# vendor camelCase → Spec 字段的唯一映射；不在表内的 vendor 字段一律丢弃
+_ESTIMATE_FIELD_MAP = {
+    "epsAvg": "eps_avg", "epsHigh": "eps_high", "epsLow": "eps_low",
+    "revenueAvg": "rev_avg", "revenueHigh": "rev_high", "revenueLow": "rev_low",
+    "netIncomeAvg": "net_income_avg", "ebitdaAvg": "ebitda_avg",
+    "numAnalystsEps": "num_analysts_eps", "numAnalystsRevenue": "num_analysts_rev",
+}
+
+_EARNINGS_FIELD_MAP = {
+    "epsActual": "eps_actual", "epsEstimated": "eps_estimated",
+    "revenueActual": "revenue_actual", "revenueEstimated": "revenue_estimated",
+}
+
+ESTIMATE_LOOKBACK_DAYS = 120  # 报告滞后窗口（P0：PE_blend 的 +1 预测季常已结束未报告）
+EARNINGS_MATCH_WINDOW_DAYS = 120
+
+
+def _parse_iso_date(value: Any) -> Optional[date]:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value[:10])
+    except ValueError:
+        return None
+
+
+def normalize_estimates(
+    symbol: str,
+    raw_rows: Sequence[Mapping[str, Any]],
+    snapshot_date: str,
+    period_type: str,
+    mode: str,
+    backfill_start: str = "2021-01-01",
+) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    """vendor estimates → fmp_estimates 行 + 数据损耗计数器。
+
+    weekly: 保留 fiscal_date >= snapshot - 120d；backfill: >= backfill_start。
+    同 period 重复 fiscal_date 确定性保留首行；坏日期跳过计数，绝不产出 null PK。
+    """
+    if period_type not in ("Q", "FY"):
+        raise ValueError(f"period_type must be 'Q' or 'FY': {period_type!r}")
+    snapshot = date.fromisoformat(snapshot_date)
+    if mode == "weekly":
+        cutoff = snapshot - timedelta(days=ESTIMATE_LOOKBACK_DAYS)
+        snapshot_kind = "weekly"
+    elif mode == "backfill":
+        cutoff = date.fromisoformat(backfill_start)
+        snapshot_kind = "backfill"
+    else:
+        raise ValueError(f"mode must be 'weekly' or 'backfill': {mode!r}")
+
+    counters = {"input": len(raw_rows), "kept": 0, "malformed": 0, "duplicate": 0}
+    rows: List[Dict[str, Any]] = []
+    seen_dates: set = set()
+    for raw in raw_rows:
+        fiscal = _parse_iso_date(raw.get("date"))
+        if fiscal is None:
+            counters["malformed"] += 1
+            continue
+        if fiscal < cutoff:
+            continue
+        if fiscal in seen_dates:
+            counters["duplicate"] += 1
+            continue
+        seen_dates.add(fiscal)
+        row: Dict[str, Any] = {
+            "symbol": symbol.upper(),
+            "snapshot_date": snapshot_date,
+            "fiscal_date": fiscal.isoformat(),
+            "period_type": period_type,
+            "snapshot_kind": snapshot_kind,
+        }
+        for vendor_key, spec_key in _ESTIMATE_FIELD_MAP.items():
+            row[spec_key] = raw.get(vendor_key)
+        rows.append(row)
+        counters["kept"] += 1
+    return rows, counters
+
+
+def extract_valid_quarter_fiscal_dates(
+    raw_rows: Sequence[Mapping[str, Any]],
+) -> List[str]:
+    """全量 raw quarter payload 的有效去重财季日期集。
+
+    earnings fiscal join 必须用这个 pre-filter 全集——120 天规则只约束
+    写入 fmp_estimates 的行，绝不约束 fiscal 匹配的查找空间。
+    """
+    dates = {_parse_iso_date(r.get("date")) for r in raw_rows}
+    return sorted(d.isoformat() for d in dates if d is not None)
+
+
+# ---------------------------------------------------------------------------
+# Earnings fiscal 匹配 + 规范化（Spec §5.3：join SSOT 入库）
+# ---------------------------------------------------------------------------
+
+def match_fiscal_date(announce_date: str,
+                      estimate_fiscal_dates: Iterable[str]) -> Optional[str]:
+    """取满足 fiscal < announce 且间隔 <= 120 天的最大 fiscal_date。"""
+    announce = _parse_iso_date(announce_date)
+    if announce is None:
+        return None
+    parsed = (_parse_iso_date(d) for d in estimate_fiscal_dates)
+    candidates = [d for d in parsed
+                  if d is not None and d < announce
+                  and (announce - d).days <= EARNINGS_MATCH_WINDOW_DAYS]
+    return max(candidates).isoformat() if candidates else None
+
+
+def normalize_earnings(
+    symbol: str,
+    raw_rows: Sequence[Mapping[str, Any]],
+    quarter_fiscal_dates: Iterable[str],
+) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    """vendor earnings → fmp_earnings 行。绝不用日历季推断 fiscal date。
+
+    epsActual=null 的预排行保留（当前批口径）；无匹配记 match_method='none'，
+    行保留但下游计算跳过。
+    """
+    fiscal_dates = list(quarter_fiscal_dates)
+    counters = {"input": len(raw_rows), "kept": 0, "malformed": 0,
+                "matched": 0, "unmatched": 0}
+    last_updated = datetime.now(timezone.utc).isoformat()
+    rows: List[Dict[str, Any]] = []
+    for raw in raw_rows:
+        announce = _parse_iso_date(raw.get("date"))
+        if announce is None:
+            counters["malformed"] += 1
+            continue
+        fiscal = match_fiscal_date(announce.isoformat(), fiscal_dates)
+        if fiscal is None:
+            counters["unmatched"] += 1
+        else:
+            counters["matched"] += 1
+        row: Dict[str, Any] = {
+            "symbol": symbol.upper(),
+            "announce_date": announce.isoformat(),
+            "fiscal_date": fiscal,
+            "match_method": "estimates_window" if fiscal else "none",
+            "last_updated": last_updated,
+        }
+        for vendor_key, spec_key in _EARNINGS_FIELD_MAP.items():
+            row[spec_key] = raw.get(vendor_key)
+        rows.append(row)
+        counters["kept"] += 1
+    return rows, counters
 
 
 # ---------------------------------------------------------------------------

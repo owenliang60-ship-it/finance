@@ -29,6 +29,20 @@
   },
   {
     "symbol": "TESTCO",
+    "date": "2026-06-30",
+    "epsAvg": 1.28,
+    "epsHigh": 1.45,
+    "epsLow": 1.15,
+    "revenueAvg": 1080000000,
+    "revenueHigh": 1160000000,
+    "revenueLow": 1000000000,
+    "netIncomeAvg": 270000000,
+    "ebitdaAvg": 420000000,
+    "numAnalystsEps": 10,
+    "numAnalystsRevenue": 9
+  },
+  {
+    "symbol": "TESTCO",
     "date": "2026-09-30",
     "epsAvg": 1.35,
     "epsHigh": 1.5,
