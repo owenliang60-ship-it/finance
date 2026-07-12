@@ -290,10 +290,12 @@ git commit -m "docs(plan): record forward EPS implementation baseline"
 
 ### Task 0 checklist
 
-- [ ] Worktree ignored and isolated.
-- [ ] Current cron/log/coverage recorded.
-- [ ] Targeted baseline green.
-- [ ] Known full-suite failures recorded, not “fixed” in this scope.
+- [x] Worktree ignored and isolated.
+- [x] Current cron/log/coverage recorded.
+- [x] Targeted baseline green.
+- [x] Known full-suite failures recorded, not “fixed” in this scope.
+
+> **Execution baseline（2026-07-12）**: branch `codex/forward-eps-valuation-plan` @ `4c63e52`；`.worktrees/` ignored（.gitignore:39）。SSH plain `ssh aliyun` 可用。云端 cron 原行确认：`0 10 * * 6 … finance_fundamental … --fundamental` / `15 10 * * 6 … finance_forward … --forward-estimates --scope=all`；最近 run `[2026-07-11 10:36:40 CST] [finance_forward] OK duration=1299s`；coverage `--min-date 2026-07-11`：core 156/157（99.36%，missing SOXX）、extended 829/829（100%）。本地 targeted baseline：83 passed in 0.98s。Full-suite 已知失败沿用 plan 冻结记录（14 failed：gitignored breadth/registry 数据 + `PORTFOLIO_SHEET_ID`）。
 
 ---
 
