@@ -71,3 +71,92 @@ def test_forward_interval_env_override():
     assert hasattr(settings, "FMP_FORWARD_API_CALL_INTERVAL")
     client = FMPClient(api_key="x", call_interval=settings.FMP_FORWARD_API_CALL_INTERVAL)
     assert client.call_interval == settings.FMP_FORWARD_API_CALL_INTERVAL
+
+
+# ========== Task 2: three endpoint contracts ==========
+
+import json
+from pathlib import Path
+from unittest.mock import patch
+
+from src.data.fmp_client import FMPResponseError
+
+FIXTURES = Path(__file__).parent / "fixtures" / "fmp_forward"
+
+
+@pytest.fixture
+def client():
+    return FMPClient(api_key="test_key", call_interval=0)
+
+
+def _fixture(name):
+    return json.loads((FIXTURES / name).read_text())
+
+
+def test_get_analyst_estimates_passes_period_and_limit(client):
+    data = _fixture("analyst_estimates_quarter.json")
+    with patch.object(client, "_request", return_value=data) as req:
+        result = client.get_analyst_estimates("aapl", period="quarter", limit=100)
+    req.assert_called_once_with(
+        "analyst-estimates", {"symbol": "AAPL", "period": "quarter", "limit": 100}
+    )
+    assert result == data
+
+
+def test_get_analyst_estimates_annual_period(client):
+    data = _fixture("analyst_estimates_annual.json")
+    with patch.object(client, "_request", return_value=data) as req:
+        result = client.get_analyst_estimates("AAPL", period="annual")
+    req.assert_called_once_with(
+        "analyst-estimates", {"symbol": "AAPL", "period": "annual", "limit": 100}
+    )
+    assert result == data
+
+
+def test_get_analyst_estimates_rejects_bad_period(client):
+    with pytest.raises(ValueError):
+        client.get_analyst_estimates("AAPL", period="monthly")
+
+
+def test_get_earnings_passes_symbol_and_limit(client):
+    data = _fixture("earnings.json")
+    with patch.object(client, "_request", return_value=data) as req:
+        result = client.get_earnings("aapl", limit=8)
+    req.assert_called_once_with("earnings", {"symbol": "AAPL", "limit": 8})
+    assert result == data
+    assert result[1]["epsActual"] is None  # 未报告季保留 null
+
+
+def test_get_etf_holdings_returns_list(client):
+    data = _fixture("etf_holdings.json")
+    with patch.object(client, "_request", return_value=data) as req:
+        result = client.get_etf_holdings("spy")
+    req.assert_called_once_with("etf/holdings", {"symbol": "SPY"})
+    assert isinstance(result, list)
+    assert len(result) == 8  # 全部原始行，含 2 行空 asset
+
+
+def test_new_methods_raise_sanitized_error_for_none_or_non_list_payload(client):
+    for method, args in [
+        (client.get_analyst_estimates, ("AAPL",)),
+        (client.get_earnings, ("AAPL",)),
+        (client.get_etf_holdings, ("SPY",)),
+    ]:
+        for bad in (None, {"error": "x"}):
+            with patch.object(client, "_request", return_value=bad):
+                with pytest.raises(FMPResponseError) as ei:
+                    method(*args)
+            text = str(ei.value)
+            assert "test_key" not in text
+            assert "http" not in text.lower()
+            assert "apikey" not in text.lower()
+
+
+def test_new_methods_allow_valid_empty_list_for_orchestrator_to_classify(client):
+    for method, args in [
+        (client.get_analyst_estimates, ("AAPL",)),
+        (client.get_earnings, ("AAPL",)),
+        (client.get_etf_holdings, ("SPY",)),
+    ]:
+        with patch.object(client, "_request", return_value=[]):
+            assert method(*args) == []

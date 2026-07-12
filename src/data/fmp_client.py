@@ -31,6 +31,10 @@ def _sanitize_log_text(value: object, api_key: str = "") -> str:
     return text.replace(api_key, "***") if api_key else text
 
 
+class FMPResponseError(Exception):
+    """FMP 响应形状/传输失败。message 绝不含 URL、params、响应体或 key。"""
+
+
 class FMPClient:
     """FMP API 客户端"""
 
@@ -82,6 +86,34 @@ class FMPClient:
 
         logger.error(f"Failed after {API_RETRY_TIMES} attempts: {self._safe(endpoint)}")
         return None
+
+    # ========== Forward EPS 数据线（估值 PIT 快照）==========
+
+    def get_analyst_estimates(self, symbol: str, period: str = "quarter",
+                              limit: int = 100) -> List[Dict]:
+        """分析师预期（季度/年度）。原始 vendor 字段原样返回，不做规范化。"""
+        if period not in {"quarter", "annual"}:
+            raise ValueError("period must be 'quarter' or 'annual'")
+        data = self._request("analyst-estimates", {
+            "symbol": symbol.upper(), "period": period, "limit": limit,
+        })
+        if not isinstance(data, list):
+            raise FMPResponseError("analyst-estimates returned no valid list payload")
+        return data
+
+    def get_earnings(self, symbol: str, limit: int = 8) -> List[Dict]:
+        """财报事实（街道口径 actual；未报告季 epsActual=null 原样保留）。"""
+        data = self._request("earnings", {"symbol": symbol.upper(), "limit": limit})
+        if not isinstance(data, list):
+            raise FMPResponseError("earnings returned no valid list payload")
+        return data
+
+    def get_etf_holdings(self, symbol: str) -> List[Dict]:
+        """ETF 成分（全部原始行，含现金/swap/空 asset 行）。"""
+        data = self._request("etf/holdings", {"symbol": symbol.upper()})
+        if not isinstance(data, list):
+            raise FMPResponseError("etf/holdings returned no valid list payload")
+        return data
 
     # ========== 股票池相关 ==========
 

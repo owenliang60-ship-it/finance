@@ -1,0 +1,30 @@
+[
+  {
+    "symbol": "TESTCO",
+    "date": "2026-12-31",
+    "epsAvg": 5.4,
+    "epsHigh": 5.8,
+    "epsLow": 5.0,
+    "revenueAvg": 4500000000,
+    "revenueHigh": 4800000000,
+    "revenueLow": 4200000000,
+    "netIncomeAvg": 1100000000,
+    "ebitdaAvg": 1700000000,
+    "numAnalystsEps": 14,
+    "numAnalystsRevenue": 13
+  },
+  {
+    "symbol": "TESTCO",
+    "date": "2027-12-31",
+    "epsAvg": 6.2,
+    "epsHigh": 6.9,
+    "epsLow": 5.6,
+    "revenueAvg": 5000000000,
+    "revenueHigh": 5400000000,
+    "revenueLow": 4600000000,
+    "netIncomeAvg": 1250000000,
+    "ebitdaAvg": 1900000000,
+    "numAnalystsEps": 12,
+    "numAnalystsRevenue": 12
+  }
+]
