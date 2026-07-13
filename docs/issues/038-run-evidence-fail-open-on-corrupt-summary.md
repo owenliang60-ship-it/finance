@@ -1,4 +1,4 @@
-# Issue 034: Run evidence 解码降级为空状态会让 partial resume 错误完成
+# Issue 038: Run evidence 解码降级为空状态会让 partial resume 错误完成
 
 **Status**: 已修复（FMP forward EPS review round 9）
 **Date**: 2026-07-13
