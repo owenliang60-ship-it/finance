@@ -2,7 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Status:** Round-9 merge-review 全修 complete (2026-07-13)。Tasks 0–10 已实现；round-6 至 round-9 findings 已全修 + 回归测试。等 Boss 复审后进入 Task 11+ 审批门。
+**Status:** Tasks 0–13 当日执行 complete (2026-07-13)：live contract、key rotation、production backfill、full weekly smoke、cron cutover 均已完成；等待 2026-07-18 自然周六 gate，Phase 1 尚未标记 LIVE。
+
+> **Rollout 实测（2026-07-13）**：backfill 与 weekly 的 4Q coverage 都是 `1,009/1,074 = 93.95%`，旧 yfinance 38,932 rows + deterministic hash 不变。原 FMP `<30min` 目标被实测否决：backfill 79.9min、weekly 79.5min；1,074 targets × 3 endpoints × 1.5s 串行限速决定约 80min 下限。10:45 cron 已安装并双重回读 exact；完整证据见 `docs/audit/2026-07-13-fmp-forward-eps-phase1-rollout.md`。同日 weekly 按冻结 Spec 重标未来 backfill rows，导致 backfill verifier 事后不可重跑，见 Issue 042。
 
 > **Review Round-9 批注（2026-07-13，Boss merge review 3×P1 全修——证据 fail-closed）**
 >
@@ -1746,13 +1748,13 @@ stateDiagram-v2
 
 ## Definition of Done
 
-- [ ] Tasks 0–10 implemented and reviewed in an isolated worktree.
-- [ ] Task 11 live contract/config audit completed without secret leakage.
-- [ ] Merge, push, deploy, key rotation, backfill and crontab each received separate Boss approval.
-- [ ] Cloud backfill verified and old yfinance data untouched.
+- [x] Tasks 0–10 implemented and reviewed in an isolated worktree.
+- [x] Task 11 live contract/config audit completed without secret leakage.
+- [x] Merge, push, deploy, key rotation, backfill and crontab each received separate Boss approval.
+- [x] Cloud backfill verified and old yfinance data untouched.
 - [ ] At least one natural Saturday run green; second snapshot scheduled/observed.
-- [ ] `.claude/ongoing.md`, `ARCHITECTURE.md`, `CLAUDE.md`, session digest and issue record (if any pitfall occurred) updated.
-- [ ] Phase 2 remains a separate plan; yfinance remains live pending four-week comparison.
+- [x] `.claude/ongoing.md`, `ARCHITECTURE.md`, `CLAUDE.md`, session digest and issue record (if any pitfall occurred) updated.
+- [x] Phase 2 remains a separate plan; yfinance remains live pending four-week comparison.
 
 ---
 
