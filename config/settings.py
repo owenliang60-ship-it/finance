@@ -130,6 +130,12 @@ API_CALL_INTERVAL = 2  # 秒，每次 API 调用间隔
 API_RETRY_TIMES = 3
 API_TIMEOUT = 30
 
+# FMP forward 数据线独立限速（升级 plan 限额更高；仅 forward CLI 显式传入，
+# 其余 FMP 调用方保持全局默认。部署时按 Task 11 实测值写云端 .env）
+FMP_FORWARD_API_CALL_INTERVAL = float(
+    os.environ.get("FMP_FORWARD_API_CALL_INTERVAL", str(API_CALL_INTERVAL))
+)
+
 # 数据保留配置
 PRICE_HISTORY_YEARS = 5  # 保留5年量价数据
 

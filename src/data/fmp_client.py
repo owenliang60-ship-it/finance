@@ -5,6 +5,7 @@ FMP API 客户端
 - 错误重试
 - 统一日志
 """
+import re
 import requests
 import time
 import logging
@@ -20,20 +21,39 @@ logger = logging.getLogger(__name__)
 
 SCREENER_DEFAULT_LIMIT = 5000  # FMP screener page cap; ~2.8x $10B+ 全集 (1797 as of 2026-05-21)
 
+# query-string / dict-repr 两种形态的 apikey 值都掩码
+_APIKEY_RE = re.compile(r"(apikey(?:=|['\"]?\s*:\s*['\"]?))[^&\s,'\"}]+", re.IGNORECASE)
+
+
+def _sanitize_log_text(value: object, api_key: str = "") -> str:
+    """日志脱敏：正则掩码 apikey= 形态 + 字面 key 替换双层防线。"""
+    text = _APIKEY_RE.sub(r"\1***", str(value))
+    return text.replace(api_key, "***") if api_key else text
+
+
+class FMPResponseError(Exception):
+    """FMP 响应形状/传输失败。message 绝不含 URL、params、响应体或 key。"""
+
 
 class FMPClient:
     """FMP API 客户端"""
 
-    def __init__(self, api_key: str = FMP_API_KEY):
+    def __init__(self, api_key: str = FMP_API_KEY,
+                 call_interval: Optional[float] = None):
         self.api_key = api_key
         self.base_url = FMP_BASE_URL
+        # None → 全局默认（现有调用方行为不变）；forward CLI 显式传入独立间隔
+        self.call_interval = API_CALL_INTERVAL if call_interval is None else call_interval
         self._last_call_time = 0
+
+    def _safe(self, value: object) -> str:
+        return _sanitize_log_text(value, self.api_key)
 
     def _rate_limit(self):
         """API 限流控制"""
         elapsed = time.time() - self._last_call_time
-        if elapsed < API_CALL_INTERVAL:
-            time.sleep(API_CALL_INTERVAL - elapsed)
+        if elapsed < self.call_interval:
+            time.sleep(self.call_interval - elapsed)
         self._last_call_time = time.time()
 
     def _request(self, endpoint: str, params: Optional[Dict] = None) -> Any:
@@ -56,16 +76,44 @@ class FMPClient:
                     logger.warning(f"Rate limited, waiting {wait_time}s...")
                     time.sleep(wait_time)
                 else:
-                    logger.error(f"API error {resp.status_code}: {resp.text[:200]}")
+                    logger.error(f"API error {resp.status_code}: {self._safe(resp.text[:200])}")
                     return None
 
             except requests.exceptions.Timeout:
                 logger.warning(f"Timeout on attempt {attempt + 1}/{API_RETRY_TIMES}")
             except requests.exceptions.RequestException as e:
-                logger.error(f"Request error: {e}")
+                logger.error(f"Request error: {self._safe(e)}")
 
-        logger.error(f"Failed after {API_RETRY_TIMES} attempts: {endpoint}")
+        logger.error(f"Failed after {API_RETRY_TIMES} attempts: {self._safe(endpoint)}")
         return None
+
+    # ========== Forward EPS 数据线（估值 PIT 快照）==========
+
+    def get_analyst_estimates(self, symbol: str, period: str = "quarter",
+                              limit: int = 100) -> List[Dict]:
+        """分析师预期（季度/年度）。原始 vendor 字段原样返回，不做规范化。"""
+        if period not in {"quarter", "annual"}:
+            raise ValueError("period must be 'quarter' or 'annual'")
+        data = self._request("analyst-estimates", {
+            "symbol": symbol.upper(), "period": period, "limit": limit,
+        })
+        if not isinstance(data, list):
+            raise FMPResponseError("analyst-estimates returned no valid list payload")
+        return data
+
+    def get_earnings(self, symbol: str, limit: int = 8) -> List[Dict]:
+        """财报事实（街道口径 actual；未报告季 epsActual=null 原样保留）。"""
+        data = self._request("earnings", {"symbol": symbol.upper(), "limit": limit})
+        if not isinstance(data, list):
+            raise FMPResponseError("earnings returned no valid list payload")
+        return data
+
+    def get_etf_holdings(self, symbol: str) -> List[Dict]:
+        """ETF 成分（全部原始行，含现金/swap/空 asset 行）。"""
+        data = self._request("etf/holdings", {"symbol": symbol.upper()})
+        if not isinstance(data, list):
+            raise FMPResponseError("etf/holdings returned no valid list payload")
+        return data
 
     # ========== 股票池相关 ==========
 

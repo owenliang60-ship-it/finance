@@ -1,0 +1,18 @@
+[
+  {
+    "symbol": "TESTCO",
+    "date": "2026-04-24",
+    "epsActual": 1.15,
+    "epsEstimated": 1.1,
+    "revenueActual": 1020000000,
+    "revenueEstimated": 1000000000
+  },
+  {
+    "symbol": "TESTCO",
+    "date": "2026-07-24",
+    "epsActual": null,
+    "epsEstimated": 1.32,
+    "revenueActual": null,
+    "revenueEstimated": 1110000000
+  }
+]

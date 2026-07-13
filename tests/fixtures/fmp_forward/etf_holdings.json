@@ -1,0 +1,58 @@
+[
+  {
+    "asset": "AAPL",
+    "name": "APPLE INC",
+    "weightPercentage": 6.5,
+    "marketValue": 65000000000,
+    "updatedAt": "2026-07-10"
+  },
+  {
+    "asset": "NVMI.TA",
+    "name": "NOVA LTD",
+    "weightPercentage": 1.2,
+    "marketValue": 1200000000,
+    "updatedAt": "2026-07-10"
+  },
+  {
+    "asset": "XTSLA",
+    "name": "BLK CSH FND TREASURY SL AGENCY",
+    "weightPercentage": 0.3,
+    "marketValue": 300000000,
+    "updatedAt": "2026-07-10"
+  },
+  {
+    "asset": "SWP001",
+    "name": "TOTAL RETURN SWAP USD",
+    "weightPercentage": 0.2,
+    "marketValue": 200000000,
+    "updatedAt": "2026-07-10"
+  },
+  {
+    "asset": "",
+    "name": "CASH COLLATERAL",
+    "weightPercentage": 0.05,
+    "marketValue": 50000000,
+    "updatedAt": "2026-07-10"
+  },
+  {
+    "asset": "",
+    "name": "",
+    "weightPercentage": 0.01,
+    "marketValue": 10000000,
+    "updatedAt": "2026-07-10"
+  },
+  {
+    "asset": "GOOGL",
+    "name": "ALPHABET INC CLASS A",
+    "weightPercentage": 2.1,
+    "marketValue": 21000000000,
+    "updatedAt": "2026-07-10"
+  },
+  {
+    "asset": "GOOG",
+    "name": "ALPHABET INC CLASS C",
+    "weightPercentage": 1.9,
+    "marketValue": 19000000000,
+    "updatedAt": "2026-07-10"
+  }
+]
