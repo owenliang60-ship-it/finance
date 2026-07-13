@@ -41,6 +41,9 @@ def test_etf_holding_sources_frozen():
 def test_load_basket_configs_from_repo():
     listing, groups, mags = load_basket_configs(CONFIG_DIR)
     assert listing["NVMI.TA"] == "NVMI"
+    assert listing["0EDE.L"] == "NXPI"
+    assert listing["DSG.TO"] == "DSGX"
+    assert listing["BB.TO"] == "BB"
     assert groups["GOOGL"] == ["GOOG"]
     assert mags == ["AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "TSLA"]
 
