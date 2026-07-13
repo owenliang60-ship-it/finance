@@ -24,7 +24,10 @@ def _seed(db_path, symbols, covered, snapshot=SNAP, kind="weekly",
           extra_manifest=None):
     store = MarketStore(db_path)
     summary_json = json.dumps({
-        "run_state": {"quarter_empty": sorted(quarter_empty)},
+        "run_state": {
+            "quarter_empty": sorted(quarter_empty),
+            "earnings_failed": [],
+        },
         "attempts": [],
     })
     store.upsert_fmp_forward_run({
@@ -230,7 +233,12 @@ def test_dynamic_missing_three_way_classification(db, tmp_path):
     # 当前 run：S08 仍 empty（结构性），S09 新 empty（候选）
     store = MarketStore(db)
     summary_json = json.dumps({
-        "run_state": {"quarter_empty": ["S08", "S09"]}, "attempts": []})
+        "run_state": {
+            "quarter_empty": ["S08", "S09"],
+            "earnings_failed": [],
+        },
+        "attempts": [],
+    })
     store.upsert_fmp_forward_run({
         "snapshot_date": SNAP, "run_kind": "weekly", "status": "running",
         "target_universe": SYMS10, "started_at": "2026-07-12T02:45:00Z",

@@ -2,12 +2,19 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Status:** Round-8 merge-review 全修 complete (2026-07-13)。Tasks 0–10 已实现；round-6 5×P1 + round-7 2×P1/2×P2 + round-8 3×P1 已全修 + 回归测试。等 Boss 复审后进入 Task 11+ 审批门。
+**Status:** Round-9 merge-review 全修 complete (2026-07-13)。Tasks 0–10 已实现；round-6 至 round-9 findings 已全修 + 回归测试。等 Boss 复审后进入 Task 11+ 审批门。
+
+> **Review Round-9 批注（2026-07-13，Boss merge review 3×P1 全修——证据 fail-closed）**
+>
+> - **P1 resume 对坏 `summary_json` fail-open** → 新增 `parse_forward_run_evidence()` schema SSOT；缺失/坏 JSON/非 object/缺 `run_state.quarter_empty` 或 `earnings_failed`/坏 `attempts` 一律在 API 与写库前拒绝。
+> - **P1 finalizer 读库失败仍会清空证据** → normal finalize 与异常 finalizer 共用 `_build_run_evidence()`；异常收尾直接合并函数入口已验证的历史状态与本轮内存 attempt，不再依赖脆弱的二次读库。首跑与 partial resume 的瞬时写失败均保留 unresolved、success、attempt、error 全证据。
+> - **P1 verifier 只验 JSON 语法不验 schema** → verifier 复用同一 parser；`{}`、错类型、缺字段、重复/空 symbol 等均结构化 FAIL，不再 `AttributeError` 或误 PASS。
+> - 回归：专属套件 151 passed；相邻 FMP/store 回归 80 passed。
 
 > **Review Round-8 批注（2026-07-13，Boss merge review 3×P1 全修——异常路径）**
 >
 > - **P1 dry-run 不执行 earnings gate** → dry-run 退出码同时裁决 quarter 与本轮 earnings 失败率（>20% → rc 1），Task 11 live probe 在 earnings endpoint 失效时不再误报成功。
-> - **P1 异常 finalizer 抹掉累计状态** → `_mark_failed_best_effort` 改为：重读 manifest 现状 → 既有 `summary_json` 可解码则保留全结构只 append `errors[]`；不可解码则原字符串原样回写（fail closed 不破坏现场）；读不到 manifest 才写 error-only 骨架；统计字段同样保留既有值。Boss 复现链（8/8 断供 → resume 中瞬时写异常 → 证据被清 → 下次 1 票 resume 错误 complete）已被三段回归测试冻结。
+> - **P1 异常 finalizer 抹掉累计状态** → Round-8 先采用二次读 manifest 的保护；Round-9 进一步移除该脆弱依赖，改为入口证据 + 本轮内存 attempt 确定性合并。
 > - **P1 独立 verifier 可对 failed run 返回 PASS** → verifier 新增三道裁决：manifest status 必须 ∈ {running, complete}（failed/planned 直接 FAIL）；`summary_json` 缺失/不可解码一律 fail closed；镜像 writer 的 run-wide earnings gate（unresolved ÷ target_count > 20% → FAIL），报告新增 `earnings.unresolved_run_wide` 字段。
 > - 回归：6 个新测试；专属套件 143 passed、相邻 97 passed。
 

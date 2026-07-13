@@ -27,6 +27,61 @@ _SWAP_NAME_RE = re.compile(r"\b(SWAP|TRS)\b", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
+# Run evidence schema
+# ---------------------------------------------------------------------------
+
+def parse_forward_run_evidence(raw: Any) -> Dict[str, Any]:
+    """Parse and validate the persisted run-wide evidence envelope.
+
+    Resume and verification both depend on this payload to remember unresolved
+    symbols.  Treating a missing field as an empty collection would therefore
+    turn corrupt evidence into a false success, so the schema is intentionally
+    strict and fail-closed.
+    """
+    if raw is None or raw == "":
+        raise ValueError("evidence missing")
+    if isinstance(raw, str):
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("evidence JSON unparseable") from exc
+    else:
+        payload = raw
+
+    if not isinstance(payload, dict):
+        raise ValueError("evidence must be a JSON object")
+    run_state = payload.get("run_state")
+    if not isinstance(run_state, dict):
+        raise ValueError("run_state must be an object")
+
+    for field_name in ("quarter_empty", "earnings_failed"):
+        symbols = run_state.get(field_name)
+        if not isinstance(symbols, list):
+            raise ValueError(f"run_state.{field_name} must be a list")
+        if any(not isinstance(symbol, str) or not symbol.strip()
+               for symbol in symbols):
+            raise ValueError(
+                f"run_state.{field_name} must contain non-empty strings")
+        if len({symbol.upper() for symbol in symbols}) != len(symbols):
+            raise ValueError(f"run_state.{field_name} contains duplicates")
+
+    attempts = payload.get("attempts")
+    if not isinstance(attempts, list):
+        raise ValueError("attempts must be a list")
+    if any(not isinstance(attempt, dict) for attempt in attempts):
+        raise ValueError("attempts must contain objects")
+
+    errors = payload.get("errors")
+    if errors is not None:
+        if not isinstance(errors, list):
+            raise ValueError("errors must be a list when present")
+        if any(not isinstance(error, dict) for error in errors):
+            raise ValueError("errors must contain objects")
+
+    return payload
+
+
+# ---------------------------------------------------------------------------
 # 配置加载 + fail-fast 校验
 # ---------------------------------------------------------------------------
 

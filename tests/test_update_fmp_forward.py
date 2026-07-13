@@ -1042,7 +1042,9 @@ def test_failure_finalizer_preserves_run_state():  # P1-2（Boss 复现场景）
     run = store.runs[(SNAP, "weekly")]
     assert run["status"] == "failed"
     state2 = json.loads(run["summary_json"])
-    assert len(state2["run_state"]["earnings_failed"]) == total  # 证据保留
+    assert len(state2["run_state"]["earnings_failed"]) == total - 1
+    assert "AAPL" not in state2["run_state"]["earnings_failed"]
+    assert state2["attempts"][-1]["earnings_success"] == ["AAPL"]
     assert state2["errors"]                                       # error 附加
 
     # 再只 resume 一票 → 仍必须 failed，不得错误 complete
@@ -1131,6 +1133,135 @@ def test_verifier_mirrors_runwide_earnings_gate(tmp_path):  # P1-3
                             earnings_failed=["AAPL", "MSFT"])
     rc2, _ = verify_run(db2, tmp_path / "b", SNAP)
     assert rc2 == 0
+
+
+# ========== Review round-9: evidence schema + finalizer source priority ==========
+
+@pytest.mark.parametrize("bad_summary", [
+    None,
+    "not-json{",
+    json.dumps({}),
+    json.dumps({"run_state": {}, "attempts": []}),
+    json.dumps({
+        "run_state": {"quarter_empty": "AAPL", "earnings_failed": []},
+        "attempts": [],
+    }),
+    json.dumps({
+        "run_state": {"quarter_empty": [], "earnings_failed": []},
+        "attempts": {},
+    }),
+])
+def test_resume_rejects_invalid_prior_evidence_before_api(bad_summary):
+    store = FakeStore()
+    _run(store=store)
+    run = store.runs[(SNAP, "weekly")]
+    run["status"] = "failed"
+    run["summary_json"] = bad_summary
+    client = FakeClient()
+
+    rc, _ = _run(
+        _args(resume=True, symbols=["AAPL"]), client=client, store=store)
+
+    assert rc == 1
+    assert client.calls == []
+    assert store.runs[(SNAP, "weekly")]["summary_json"] == bad_summary
+
+
+class FlakyFinalizerReadStore(FlakyManifestStore):
+    """Manifest state write fails once, then finalizer reread fails once."""
+
+    def __init__(self):
+        super().__init__()
+        self.fail_next_read = False
+
+    def upsert_fmp_forward_run(self, row):
+        if self.raise_next_upsert:
+            self.raise_next_upsert = False
+            self.fail_next_read = True
+            raise RuntimeError("transient manifest write failure")
+        return super().upsert_fmp_forward_run(row)
+
+    def get_fmp_forward_run(self, snapshot_date, run_kind="weekly"):
+        if self.fail_next_read:
+            self.fail_next_read = False
+            raise RuntimeError("transient manifest read failure")
+        return super().get_fmp_forward_run(snapshot_date, run_kind)
+
+
+def test_failure_finalizer_uses_entry_evidence_when_reread_fails():
+    all_syms = UNIVERSE10 + ["NVMI", "GOOG"]
+    store = FlakyFinalizerReadStore()
+    rc, _ = run_update(
+        _args(), client=FakeClient(earnings={s: [] for s in all_syms}),
+        store=store, core_loader=lambda: UNIVERSE10,
+        extended_loader=lambda: ["MSFT"], send_message_fn=Mock(),
+    )
+    assert rc == 1
+    total = store.runs[(SNAP, "weekly")]["target_count"]
+
+    store.raise_next_upsert = True
+    rc2, _ = run_update(
+        _args(resume=True, symbols=["AAPL"]), client=FakeClient(),
+        store=store, core_loader=lambda: UNIVERSE10,
+        extended_loader=lambda: ["MSFT"], send_message_fn=Mock(),
+    )
+
+    assert rc2 == 1
+    state = json.loads(store.runs[(SNAP, "weekly")]["summary_json"])
+    assert len(state["run_state"]["earnings_failed"]) == total - 1
+    assert "AAPL" not in state["run_state"]["earnings_failed"]
+    assert state["errors"]
+    assert state["attempts"][-1]["earnings_success"] == ["AAPL"]
+
+
+def test_first_full_run_finalizer_preserves_in_memory_failures():
+    all_syms = UNIVERSE10 + ["NVMI", "GOOG"]
+    store = FlakyManifestStore()
+    # First manifest insert succeeds; the post-attempt state write fails once.
+    original = store.upsert_fmp_forward_run
+    calls = {"n": 0}
+
+    def fail_second_upsert(row):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("transient final state write failure")
+        return original(row)
+
+    store.upsert_fmp_forward_run = fail_second_upsert
+    rc, _ = run_update(
+        _args(), client=FakeClient(earnings={s: [] for s in all_syms}),
+        store=store, core_loader=lambda: UNIVERSE10,
+        extended_loader=lambda: ["MSFT"], send_message_fn=Mock(),
+    )
+
+    assert rc == 1
+    run = store.runs[(SNAP, "weekly")]
+    state = json.loads(run["summary_json"])
+    assert run["status"] == "failed"
+    assert len(state["run_state"]["earnings_failed"]) == run["target_count"]
+    assert state["attempts"][0]["earnings_failed"]
+    assert state["errors"]
+
+
+@pytest.mark.parametrize("bad_summary", [
+    json.dumps({}),
+    json.dumps({"run_state": {}}),
+    json.dumps([]),
+    json.dumps({"run_state": "bad", "attempts": []}),
+    json.dumps({
+        "run_state": {"quarter_empty": [], "earnings_failed": "AAPL"},
+        "attempts": [],
+    }),
+])
+def test_verifier_rejects_schema_invalid_summary_json(tmp_path, bad_summary):
+    from scripts.verify_fmp_forward import verify_run
+
+    db = _seed_verifier_db(tmp_path, summary_json_override=bad_summary)
+    rc, report = verify_run(db, tmp_path, SNAP)
+
+    assert rc == 1
+    assert report["ok"] is False
+    assert any("summary_json" in failure for failure in report["failures"])
 
 
 def test_run_state_quarter_empty_persisted_and_resume_merges():  # round-5 证据链

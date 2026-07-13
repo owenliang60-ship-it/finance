@@ -37,6 +37,7 @@ from src.data.fmp_forward_ingestion import (
     normalize_earnings,
     normalize_estimates,
     normalize_holdings,
+    parse_forward_run_evidence,
     resolve_fmp_forward_universe,
 )
 
@@ -258,6 +259,37 @@ def _attempt_detail(summary: ForwardRunSummary, targets: List[str]) -> Dict:
     }
 
 
+def _build_run_evidence(summary: ForwardRunSummary, targets: List[str],
+                        processed: List[str], *, prior_state: Optional[Dict],
+                        resume: bool, error_entry: Optional[Dict] = None) -> Dict:
+    """Merge entry evidence with this attempt; never reconstruct from the DB."""
+    payload = dict(prior_state or {})
+    attempt = _attempt_detail(summary, targets)
+    if resume:
+        prior_run_state = payload["run_state"]
+        prior_empty = set(prior_run_state["quarter_empty"])
+        run_empty = sorted(
+            (prior_empty - set(processed)) | set(summary.quarter_empty))
+        prior_earnings_failed = set(prior_run_state["earnings_failed"])
+        run_earnings_failed = sorted(
+            (prior_earnings_failed - set(summary.earnings_success))
+            | set(summary.earnings_failed))
+        attempts = list(payload["attempts"]) + [attempt]
+    else:
+        run_empty = sorted(summary.quarter_empty)
+        run_earnings_failed = sorted(summary.earnings_failed)
+        attempts = [attempt]
+
+    payload["run_state"] = {
+        "quarter_empty": run_empty,
+        "earnings_failed": run_earnings_failed,
+    }
+    payload["attempts"] = attempts
+    if error_entry is not None:
+        payload["errors"] = list(payload.get("errors") or []) + [error_entry]
+    return payload
+
+
 def run_update(args, *, client, store,
                core_loader: Callable[[], List[str]],
                extended_loader: Callable[[], List[str]],
@@ -335,9 +367,12 @@ def run_update(args, *, client, store,
         if outside:
             return fail(f"resume symbols not in manifest: {outside}")
         try:
-            prior_state = json.loads(manifest.get("summary_json") or "{}")
-        except (TypeError, ValueError):
-            prior_state = {}
+            prior_state = parse_forward_run_evidence(
+                manifest.get("summary_json"))
+        except ValueError as exc:
+            return fail(
+                f"resume requires valid run evidence: {exc}; "
+                "refusing API calls and writes")
         targets = requested
         summary.target_count = manifest["target_count"]
     else:
@@ -391,47 +426,32 @@ def run_update(args, *, client, store,
     manifest_live = not args.dry_run
 
     def _mark_failed_best_effort(reason: str) -> None:
-        """异常收尾：只附加 error，绝不抹掉既有 run_state/attempts 证据链。
-
-        round-8 P1：finalizer 覆盖 summary_json 会清空 run-wide earnings/quarter
-        失败状态，让下一次 partial resume 错误地 complete。规则：
-        - 既有 summary_json 可解码 → 原结构保留 + append errors[]
-        - 无法解码 → 原字符串原样回写（fail closed，不破坏现场）
-        - manifest 读不到 → 才允许写 error-only 骨架
-        """
+        """Persist entry + in-memory attempt evidence without a fragile reread."""
         try:
-            try:
-                current = store.get_fmp_forward_run(args.snapshot_date, args.mode)
-            except Exception:
-                current = None
-            prior_json = (current or {}).get("summary_json")
+            if len(processed) < len(targets):
+                pending = [symbol for symbol in targets if symbol not in processed]
+                summary.unprocessed = list(dict.fromkeys(
+                    list(summary.unprocessed) + pending))
             error_entry = {"at": _utc_now(), "error": _safe(reason)[:500]}
-            if prior_json:
-                try:
-                    payload = json.loads(prior_json)
-                    payload["errors"] = list(payload.get("errors") or []) + [error_entry]
-                    summary_json_out = json.dumps(payload)
-                except (TypeError, ValueError):
-                    summary_json_out = prior_json  # 不可解码：原样保留
+            payload = _build_run_evidence(
+                summary, targets, processed, prior_state=prior_state,
+                resume=args.resume, error_entry=error_entry)
+            if args.resume:
+                quarter_success = manifest["quarter_success"]
+                quarter_failure_count = manifest["quarter_failure_count"]
             else:
-                summary_json_out = json.dumps({
-                    "run_state": {"quarter_empty": [], "earnings_failed": []},
-                    "attempts": [],
-                    "errors": [error_entry],
-                })
-            # 统计字段同样保留 manifest 既有值，不用本次 partial attempt 覆盖
+                quarter_success = summary.quarter_success
+                quarter_failure_count = (
+                    len(summary.quarter_failed) + len(summary.quarter_empty))
             store.upsert_fmp_forward_run({
                 "snapshot_date": args.snapshot_date,
                 "run_kind": args.mode,
                 "status": "failed",
                 "target_universe": None,
-                "quarter_success": (current or {}).get(
-                    "quarter_success", summary.quarter_success),
-                "quarter_failure_count": (current or {}).get(
-                    "quarter_failure_count",
-                    len(summary.quarter_failed) + len(summary.quarter_empty)),
+                "quarter_success": quarter_success,
+                "quarter_failure_count": quarter_failure_count,
                 "completed_at": _utc_now(),
-                "summary_json": summary_json_out,
+                "summary_json": json.dumps(payload),
                 "started_at": manifest["started_at"] if manifest else None,
             })
         except Exception as persist_exc:
@@ -492,36 +512,22 @@ def _run_symbols_and_finalize(args, *, client, store, targets, processed,
                     failure_rate * 100, dry_earnings_rate * 100)
         return (1 if dry_failed else 0), summary
 
-    # run_state 证据链（round-5/7）：full run 重置；resume 按 processed 合并。
-    # earnings_failed 与 quarter_empty 一样是 run-wide 状态——resume 只修一票
-    # 不能让其余未修复的 earnings 失败被遗忘（round-7 P1）。
-    attempt = _attempt_detail(summary, targets)
+    # run_state 证据链：normal finalize 与异常 finalizer 共用同一合并函数。
+    payload = _build_run_evidence(
+        summary, targets, processed, prior_state=prior_state,
+        resume=args.resume)
+    run_state = payload["run_state"]
+    run_empty = run_state["quarter_empty"]
+    run_earnings_failed = run_state["earnings_failed"]
     if args.resume:
-        prior_run_state = prior_state.get("run_state") or {}
-        prior_empty = set(prior_run_state.get("quarter_empty") or [])
-        # 只从既有 empty 集扣掉真正处理过的 symbol；熔断余量不算已修复
-        run_empty = sorted((prior_empty - set(processed))
-                           | set(summary.quarter_empty))
-        prior_earn_failed = set(prior_run_state.get("earnings_failed") or [])
-        run_earnings_failed = sorted(
-            (prior_earn_failed - set(summary.earnings_success))
-            | set(summary.earnings_failed))
-        attempts = list(prior_state.get("attempts") or []) + [attempt]
         # 子集统计绝不覆盖 full-run 字段
         quarter_success = manifest["quarter_success"]
         quarter_failure_count = manifest["quarter_failure_count"]
     else:
-        run_empty = sorted(summary.quarter_empty)
-        run_earnings_failed = sorted(summary.earnings_failed)
-        attempts = [attempt]
         quarter_success = summary.quarter_success
         quarter_failure_count = critical_failures
 
-    summary_json = json.dumps({
-        "run_state": {"quarter_empty": run_empty,
-                      "earnings_failed": run_earnings_failed},
-        "attempts": attempts,
-    })
+    summary_json = json.dumps(payload)
     # earnings 覆盖门槛（round-6/7 P1）：run-wide unresolved 集 ÷ 完整 manifest
     # 分母裁决——quarter 达标但 earnings 大面积断供同样不允许标 complete
     denominator = summary.target_count or len(targets) or 1

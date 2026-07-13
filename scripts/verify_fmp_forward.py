@@ -23,6 +23,8 @@ from typing import Dict, List, Optional, Tuple
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.data.fmp_forward_ingestion import parse_forward_run_evidence
+
 BASKETS = ("SPY", "QQQ", "SOX", "IGV", "XLF")
 FULL_BASKETS = ("SPY", "QQQ", "SOX", "MAGS", "IGV", "XLF")
 REQUIRED_FUTURE_QUARTERS = 4
@@ -79,8 +81,8 @@ def _previous_completed_weekly_empty(conn, snapshot_date: str) -> Tuple[bool, se
     if not row:
         return False, set()
     try:
-        state = json.loads(row["summary_json"] or "{}")
-        return True, set((state.get("run_state") or {}).get("quarter_empty") or [])
+        state = parse_forward_run_evidence(row["summary_json"])
+        return True, set(state["run_state"]["quarter_empty"])
     except ValueError:
         return True, set()
 
@@ -146,22 +148,19 @@ def verify_run(db_path: Path, data_root: Path, snapshot_date: str,
                 "a failed/planned run cannot PASS verification")
             return 1, report
 
-        # summary_json 是 run-wide 证据链，缺失/不可解码一律 fail closed
-        if not run["summary_json"]:
-            failures.append("manifest summary_json missing; "
-                            "run-wide evidence unavailable — fail closed")
-            return 1, report
+        # summary_json 是 run-wide 证据链；JSON 与 schema 共用 writer 的 SSOT。
         try:
-            run_state = json.loads(run["summary_json"])
-        except (TypeError, ValueError):
-            failures.append("manifest summary_json unparseable — fail closed")
+            run_state = parse_forward_run_evidence(run["summary_json"])
+        except ValueError as exc:
+            failures.append(
+                f"manifest summary_json invalid: {exc} — fail closed")
             return 1, report
-        inner_state = run_state.get("run_state") or {}
-        current_empty = set(inner_state.get("quarter_empty") or [])
+        inner_state = run_state["run_state"]
+        current_empty = set(inner_state["quarter_empty"])
 
         # 镜像 writer 的 run-wide earnings gate（round-8 P1）：unresolved
         # earnings 超阈值的 run 不允许 PASS
-        unresolved_earnings = sorted(inner_state.get("earnings_failed") or [])
+        unresolved_earnings = sorted(inner_state["earnings_failed"])
         earnings_unresolved_rate = (len(unresolved_earnings)
                                     / run["target_count"]
                                     if run["target_count"] else 1.0)
