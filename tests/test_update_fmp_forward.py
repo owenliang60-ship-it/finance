@@ -144,7 +144,7 @@ class FakeStore:
 def _args(**overrides):
     base = dict(mode="weekly", snapshot_date=SNAP, backfill_start="2021-01-01",
                 symbols=None, resume=False, dry_run=False, no_telegram=True,
-                data_root=None, config_dir=CONFIG_DIR)
+                data_root=None, config_dir=CONFIG_DIR, today_override=SNAP)
     base.update(overrides)
     return SimpleNamespace(**base)
 
@@ -703,6 +703,155 @@ def test_dry_run_reports_verifier_skipped(capsys=None):  # case 11
     )
     assert rc == 0
     assert verify_calls == []        # dry-run 绝不调 verifier，也绝不假报 PASS
+
+
+# ========== Review round-6: 5×P1 回归 ==========
+
+def test_resume_rejected_on_complete_manifest():  # P1-1
+    store = FakeStore()
+    _run(store=store, send=Mock())
+    store.runs[(SNAP, "weekly")]["status"] = "complete"  # 模拟 verifier 已裁决
+    client = FakeClient()
+    rc, _ = _run(_args(resume=True, symbols=["AAPL"]), client=client,
+                 store=store)
+    assert rc != 0
+    assert not client.calls                       # 零 API 调用
+    assert store.runs[(SNAP, "weekly")]["status"] == "complete"  # 未被改写
+
+
+def test_full_rerun_rejected_on_complete_manifest():  # P1-1
+    store = FakeStore()
+    _run(store=store)
+    store.runs[(SNAP, "weekly")]["status"] = "complete"
+    calls_before = len(store.calls)
+    client = FakeClient()
+    rc, _ = _run(client=client, store=store)
+    assert rc != 0
+    writes = [c for c in store.calls[calls_before:]
+              if c[0] in ("upsert_estimates", "replace_earnings",
+                          "replace_holdings", "upsert_run")]
+    assert writes == []
+    assert not [c for c in client.calls if c[0].startswith("estimates")]
+
+
+def test_stale_or_future_snapshot_date_writes_frozen():  # P1-1
+    for bad_snap in ("2026-06-01", "2026-08-01"):  # 过老 / 未来
+        client = FakeClient()
+        store = FakeStore()
+        rc, _ = _run(_args(snapshot_date=bad_snap, today_override="2026-07-12"),
+                     client=client, store=store)
+        assert rc != 0
+        assert not client.calls                   # API 调用前拒绝
+        assert not store.runs and not store.holdings
+
+
+def test_repair_within_week_window_allowed():  # P1-1 边界：6 天内修复放行
+    store = FakeStore()
+    rc, _ = _run(_args(snapshot_date="2026-07-12",
+                       today_override="2026-07-18"), store=store)
+    assert rc == 0
+
+
+def test_earnings_total_outage_fails_run():  # P1-2
+    universe = ["AAPL", "MSFT", "NVDA", "QS", "TSLA"]
+    client = FakeClient(earnings={s: [] for s in
+                                  universe + ["AMZN", "GOOGL", "META",
+                                              "NVMI", "GOOG"]})
+    store = FakeStore()
+    verify_calls = []
+    rc, summary = run_update(
+        _args(), client=client, store=store,
+        core_loader=lambda: universe, extended_loader=lambda: ["MSFT"],
+        send_message_fn=Mock(),
+        verify_fn=lambda s, k: verify_calls.append(s) or (0, {}),
+    )
+    assert rc == 1
+    assert store.runs[(SNAP, "weekly")]["status"] == "failed"
+    assert verify_calls == []                     # 不允许带病进 verifier
+    assert len(summary.earnings_failed) == summary.target_count
+
+
+def test_none_row_payload_counted_failed_not_crash():  # P1-3 行级校验
+    client = FakeClient(quarter={"AAPL": [None]})
+    store = FakeStore()
+    rc, summary = _run(client=client, store=store)
+    assert "AAPL" in summary.quarter_failed
+    assert ("upsert_estimates", "AAPL") not in store.calls
+    # 后续 symbol 正常继续
+    assert any(c == ("upsert_estimates", "MSFT") for c in store.calls)
+
+
+def test_post_manifest_exception_marks_failed_not_stuck_running():  # P1-3 外层收尾
+    class BrokenStore(FakeStore):
+        def replace_fmp_etf_holdings(self, basket, snapshot_date, rows):
+            if basket == "SOX":
+                raise RuntimeError("disk full")
+            return super().replace_fmp_etf_holdings(basket, snapshot_date, rows)
+
+    store = BrokenStore()
+    rc, _ = _run(store=store)
+    assert rc == 1
+    run = store.runs[(SNAP, "weekly")]
+    assert run["status"] == "failed"              # 绝不遗留永久 running
+    assert run["completed_at"]
+    assert run["summary_json"]
+
+
+def test_circuit_breaker_stops_early_and_records_unprocessed():  # P1-5
+    from src.data.fmp_client import FMPResponseError
+
+    universe = ["A%02d" % i for i in range(20)]   # 全局故障场景
+    client = FakeClient(quarter={s: FMPResponseError("outage")
+                                 for s in universe})
+    store = FakeStore()
+    rc, summary = run_update(
+        _args(), client=client, store=store,
+        core_loader=lambda: universe, extended_loader=lambda: universe[:1],
+        send_message_fn=Mock(),
+    )
+    assert rc == 1
+    assert store.runs[(SNAP, "weekly")]["status"] == "failed"
+    quarter_calls = [c for c in client.calls if c[0] == "estimates:quarter"]
+    # 分母含 MAGS/included ≈ 28；阈值 floor(0.2n)，越线即停：
+    # 请求数远小于全 universe，余量记 unprocessed
+    total = store.runs[(SNAP, "weekly")]["target_count"]
+    assert len(quarter_calls) < total * 0.5
+    assert summary.unprocessed
+    assert len(quarter_calls) + len(summary.unprocessed) == total
+    state = json.loads(store.runs[(SNAP, "weekly")]["summary_json"])
+    assert state["attempts"][0]["unprocessed"] == sorted(summary.unprocessed)
+
+
+def test_exactly_at_threshold_does_not_trip_breaker():  # P1-5 边界
+    from src.data.fmp_client import FMPResponseError
+
+    client = FakeClient(quarter={"AAPL": FMPResponseError("x")})
+    store = FakeStore()
+    rc, summary = _run(client=client, store=store,
+                       core=lambda: ["AAPL", "MSFT", "NVDA", "QS", "TSLA"],
+                       extended=lambda: ["MSFT"])
+    assert summary.unprocessed == []              # 未越线不熔断
+
+
+def test_build_pool_loaders_from_data_root(tmp_path):  # P1-4
+    from scripts.update_fmp_forward import build_pool_loaders
+
+    pool_dir = tmp_path / "pool"
+    pool_dir.mkdir()
+    (pool_dir / "universe.json").write_text(json.dumps(
+        [{"symbol": "QS"}, {"symbol": "aapl"}]))
+    (pool_dir / "extended_universe.json").write_text(json.dumps(
+        {"symbols": ["MSFT", "NVDA"], "count": 2}))
+    core_loader, extended_loader = build_pool_loaders(tmp_path)
+    assert core_loader() == ["AAPL", "QS"]
+    assert extended_loader() == ["MSFT", "NVDA"]
+
+    # data_root=None → 模块默认 loaders（生产路径）
+    default_core, default_ext = build_pool_loaders(None)
+    from src.data.pool_manager import get_symbols
+    from src.data.extended_universe_manager import get_extended_symbols
+    assert default_core is get_symbols
+    assert default_ext is get_extended_symbols
 
 
 def test_run_state_quarter_empty_persisted_and_resume_merges():  # round-5 证据链

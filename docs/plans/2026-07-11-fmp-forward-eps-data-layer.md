@@ -2,7 +2,16 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Status:** Round-5 annotation reconciliation complete (2026-07-12); Boss 已拍板 P1 方案 A（universe 并入核心池），round-4 的事实错误与契约遗漏已修正。Ready for final Boss approval; do not implement before approval.
+**Status:** Round-6 merge-review 全修 complete (2026-07-13)。Tasks 0–10 已实现；Boss merge review 抓 5×P1 已全修 + 回归测试。等 Boss 复审后进入 Task 11+ 审批门。
+
+> **Review Round-6 批注（2026-07-13，Boss merge review 5×P1 全修）**
+>
+> - **P1 历史 PIT 可改写** → `complete` 设为终态（resume 与 full rerun 都拒绝）；新增 PIT 冻结守卫：非 dry-run 只允许写 `[today-6d, today]` 窗口内的 snapshot_date（同自然周修复失败 run），更早/未来日期零写入拒绝。`--today-override` 隐藏参数供测试注入。
+> - **P1 earnings 断供仍可 complete** → writer 层新增 earnings 覆盖门槛：本轮 `earnings_failed/targets > 20%` → manifest failed + 非零退出，不进 verifier；estimates 快照保留供 resume 修复。
+> - **P1 异常遗留永久 running** → 三层收尾：① 转换层行级校验（`[None]`/非 dict 元素按 malformed 跳过，holdings 坏行照样留档）；② `_process_symbol` 内规范化/落库异常按该股失败记账继续批次（全 malformed → quarter_failed）；③ manifest 开启后全部工作包进外层 try，未预期异常 best-effort 持久化 `failed` + `completed_at`（holdings 落库也移入保护段）。
+> - **P1 `--data-root` 契约不完整** → 新增 `build_pool_loaders(data_root)`：非 None 时 core/extended 均从 `data_root/pool/` 读取，绝不回落 worktree 默认目录；main 接线 + 单测。
+> - **P1 20% gate 是 post-hoc** → 改为真熔断：累计关键失败 `> floor(0.2×n)` 立即停止逐股循环，余量记 `summary.unprocessed`（入 `attempts[].unprocessed`）供 resume；恰好等于阈值不触发。resume 的 `run_state.quarter_empty` 合并改用实际 processed 集（熔断余量不算已修复）。
+> - 回归：10 个新测试（终态拒绝×2 / 日期冻结×2 / earnings 断供 / `[None]` payload / post-manifest 异常收尾 / 熔断早停+边界 / data-root loaders）；专属套件 133 passed、相邻回归 97 passed、Python 3.10 AST 通过。
 
 **Confidence: 94%**
 

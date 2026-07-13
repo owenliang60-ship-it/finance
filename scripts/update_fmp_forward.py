@@ -47,6 +47,9 @@ DEFAULT_BACKFILL_START = "2021-01-01"
 ESTIMATES_LIMIT = 100
 EARNINGS_LIMIT_WEEKLY = 8
 EARNINGS_LIMIT_BACKFILL = 100
+# PIT 冻结（review P1）：非 dry-run 只允许写 [today-6d, today] 内的 snapshot_date。
+# 6 天 = 同一自然周内修复失败 run；更早的历史快照是不可改写的 PIT 事实。
+SNAPSHOT_WRITE_WINDOW_DAYS = 6
 
 
 @dataclass
@@ -63,6 +66,7 @@ class ForwardRunSummary:
     estimate_rows: int = 0
     earnings_rows: int = 0
     unmatched_earnings: int = 0
+    unprocessed: List[str] = field(default_factory=list)  # 熔断后未请求的余量
     duration_seconds: float = 0.0
 
 
@@ -101,9 +105,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                         help="call/normalize/report; no DB writes")
     parser.add_argument("--no-telegram", action="store_true")
     parser.add_argument("--data-root", type=Path, default=None,
-                        help="derive market.db location for worktrees")
+                        help="derive market.db + pool cache locations for worktrees")
     parser.add_argument("--config-dir", type=Path, default=None,
                         help=argparse.SUPPRESS)
+    parser.add_argument("--today-override", type=_iso_date, default=None,
+                        help=argparse.SUPPRESS)  # 测试/replay 注入"今天"
     args = parser.parse_args(argv)
 
     # 无效组合在任何 API/DB 初始化前 exit 2
@@ -169,48 +175,57 @@ def _process_symbol(client, store, symbol, args, summary, dry_run):
         summary.quarter_empty.append(symbol)
         return False
 
-    # fiscal 匹配用全量 raw quarter 日期集；120d 窗口只约束落库行
-    fiscal_dates = extract_valid_quarter_fiscal_dates(quarter_raw)
-    q_rows, _ = normalize_estimates(
-        symbol, quarter_raw, args.snapshot_date, "Q", args.mode,
-        args.backfill_start)
-
-    a_rows: List[Dict] = []
+    # 规范化/落库异常按该股 quarter 失败记账，绝不逃逸留下 running manifest
     try:
-        annual_raw = client.get_analyst_estimates(
-            symbol, period="annual", limit=ESTIMATES_LIMIT)
-        if annual_raw:
-            a_rows, _ = normalize_estimates(
-                symbol, annual_raw, args.snapshot_date, "FY", args.mode,
-                args.backfill_start)
-        else:
-            summary.annual_failed.append(symbol)
-    except Exception:
-        summary.annual_failed.append(symbol)
+        # fiscal 匹配用全量 raw quarter 日期集；120d 窗口只约束落库行
+        fiscal_dates = extract_valid_quarter_fiscal_dates(quarter_raw)
+        q_rows, _ = normalize_estimates(
+            symbol, quarter_raw, args.snapshot_date, "Q", args.mode,
+            args.backfill_start)
+        if not q_rows:
+            # 全部行 malformed（如 [None] payload）→ 与传输失败同等对待
+            summary.quarter_failed.append(symbol)
+            return False
 
-    est_rows = q_rows + a_rows
-    if est_rows:
+        a_rows: List[Dict] = []
+        try:
+            annual_raw = client.get_analyst_estimates(
+                symbol, period="annual", limit=ESTIMATES_LIMIT)
+            if annual_raw:
+                a_rows, _ = normalize_estimates(
+                    symbol, annual_raw, args.snapshot_date, "FY", args.mode,
+                    args.backfill_start)
+            else:
+                summary.annual_failed.append(symbol)
+        except Exception:
+            summary.annual_failed.append(symbol)
+
+        est_rows = q_rows + a_rows
         if not dry_run:
             store.upsert_fmp_estimates(symbol, est_rows)
         summary.estimate_rows += len(est_rows)
-    summary.quarter_success += 1
+        summary.quarter_success += 1
+    except Exception as exc:
+        logger.error("quarter processing failed for %s: %s", symbol, exc)
+        summary.quarter_failed.append(symbol)
+        return False
 
     earn_limit = (EARNINGS_LIMIT_WEEKLY if args.mode == "weekly"
                   else EARNINGS_LIMIT_BACKFILL)
     try:
         earn_raw = client.get_earnings(symbol, limit=earn_limit)
-    except Exception:
+        if not earn_raw:
+            summary.earnings_failed.append(symbol)
+            return True
+        e_rows, e_counters = normalize_earnings(symbol, earn_raw, fiscal_dates)
+        summary.unmatched_earnings += e_counters["unmatched"]
+        if e_rows:
+            if not dry_run:
+                store.replace_fmp_earnings(symbol, e_rows)
+            summary.earnings_rows += len(e_rows)
+    except Exception as exc:
+        logger.error("earnings processing failed for %s: %s", symbol, exc)
         summary.earnings_failed.append(symbol)
-        return True
-    if not earn_raw:
-        summary.earnings_failed.append(symbol)
-        return True
-    e_rows, e_counters = normalize_earnings(symbol, earn_raw, fiscal_dates)
-    summary.unmatched_earnings += e_counters["unmatched"]
-    if e_rows:
-        if not dry_run:
-            store.replace_fmp_earnings(symbol, e_rows)
-        summary.earnings_rows += len(e_rows)
     return True
 
 
@@ -227,6 +242,7 @@ def _attempt_detail(summary: ForwardRunSummary, targets: List[str]) -> Dict:
         "estimate_rows": summary.estimate_rows,
         "earnings_rows": summary.earnings_rows,
         "unmatched_earnings": summary.unmatched_earnings,
+        "unprocessed": sorted(summary.unprocessed),
     }
 
 
@@ -269,6 +285,19 @@ def run_update(args, *, client, store,
     except Exception as exc:
         return fail(f"basket config invalid: {exc}")
 
+    # PIT 冻结守卫（review P1）：历史/未来 snapshot_date 的非 dry-run 写入一律拒绝。
+    # 今天抓到的 consensus 只能盖"今天附近"的戳；改写更早日期 = 伪造 PIT 历史。
+    if not args.dry_run:
+        today = (date.fromisoformat(args.today_override)
+                 if getattr(args, "today_override", None) else date.today())
+        snap = date.fromisoformat(args.snapshot_date)
+        age_days = (today - snap).days
+        if snap > today or age_days > SNAPSHOT_WRITE_WINDOW_DAYS:
+            return fail(
+                f"snapshot_date {args.snapshot_date} outside writable window "
+                f"[today-{SNAPSHOT_WRITE_WINDOW_DAYS}d, today={today}]; "
+                "historical PIT snapshots are frozen — zero writes performed")
+
     # backfill 同日守卫：weekly 行已存在则在任何 API 调用前拒绝
     if args.mode == "backfill" and not args.dry_run:
         if store.has_fmp_weekly_estimates(args.snapshot_date):
@@ -284,6 +313,10 @@ def run_update(args, *, client, store,
         manifest = store.get_fmp_forward_run(args.snapshot_date, args.mode)
         if not manifest:
             return fail("resume requires an existing full manifest; none found")
+        if manifest["status"] == "complete":
+            # complete 是终态（review P1）：已裁决合格的历史快照不可被改写
+            return fail("manifest status is complete (terminal); "
+                        "refusing to rewrite a verified snapshot")
         manifest_universe = manifest["target_universe"]
         requested = list(args.symbols)
         outside = sorted(set(requested) - set(manifest_universe))
@@ -317,8 +350,12 @@ def run_update(args, *, client, store,
             summary.target_count = len(universe)
 
             if not args.dry_run:
-                # 同日 full rerun：任何 DB 写入前核对 manifest 相等
+                # 同日 full rerun：任何 DB 写入前核对 manifest 相等 + 终态检查
                 existing = store.get_fmp_forward_run(args.snapshot_date, args.mode)
+                if existing and existing["status"] == "complete":
+                    return fail(
+                        "manifest status is complete (terminal); "
+                        "refusing full rerun over a verified snapshot")
                 if existing and existing["target_universe"] != universe:
                     return fail(
                         "resolved universe differs from immutable manifest for "
@@ -331,13 +368,68 @@ def run_update(args, *, client, store,
                     "target_universe": universe,
                     "started_at": _utc_now(),
                 })
-                # manifest 规则通过后才允许落 holdings 快照
-                for basket, rows in holdings_by_basket.items():
-                    store.replace_fmp_etf_holdings(
-                        basket, args.snapshot_date, rows)
 
-    for symbol in targets:
+    # 提前熔断（review P1）：累计关键失败一旦不可逆越过 20% 立即停，
+    # 余量记 unprocessed 供 resume——全局故障时不再烧掉剩余 ~80% 配额。
+    breaker_threshold = int(CRITICAL_FAILURE_RATE * len(targets))
+    processed: List[str] = []
+    manifest_live = not args.dry_run
+
+    def _mark_failed_best_effort(reason: str) -> None:
+        try:
+            store.upsert_fmp_forward_run({
+                "snapshot_date": args.snapshot_date,
+                "run_kind": args.mode,
+                "status": "failed",
+                "target_universe": None,
+                "quarter_success": summary.quarter_success,
+                "quarter_failure_count": (len(summary.quarter_failed)
+                                          + len(summary.quarter_empty)),
+                "completed_at": _utc_now(),
+                "summary_json": json.dumps({"error": _safe(reason)[:500]}),
+                "started_at": manifest["started_at"] if manifest else None,
+            })
+        except Exception as persist_exc:
+            logger.error("failed to persist failure state: %s",
+                         _safe(persist_exc))
+
+    try:
+        return _run_symbols_and_finalize(
+            args, client=client, store=store, targets=targets,
+            processed=processed, breaker_threshold=breaker_threshold,
+            summary=summary, manifest=manifest, prior_state=prior_state,
+            holdings_by_basket=holdings_by_basket,
+            t0=t0, verify_fn=verify_fn, notify=notify, fail=fail)
+    except Exception as exc:
+        # manifest 已开（running）后任何未预期异常都必须收尾成 failed，
+        # 绝不遗留永久 running（review P1）
+        if manifest_live:
+            _mark_failed_best_effort(str(exc))
+        return fail(f"unexpected exception after manifest open: {exc}")
+
+
+def _run_symbols_and_finalize(args, *, client, store, targets, processed,
+                              breaker_threshold, summary, manifest,
+                              prior_state, holdings_by_basket, t0, verify_fn,
+                              notify, fail) -> Tuple[int, ForwardRunSummary]:
+    # manifest 规则通过后才允许落 holdings 快照（在外层异常收尾保护之内）
+    if not args.dry_run and not args.resume:
+        for basket, rows in holdings_by_basket.items():
+            store.replace_fmp_etf_holdings(basket, args.snapshot_date, rows)
+
+    for i, symbol in enumerate(targets):
         _process_symbol(client, store, symbol, args, summary, args.dry_run)
+        processed.append(symbol)
+        critical_so_far = (len(summary.quarter_failed)
+                           + len(summary.quarter_empty))
+        if critical_so_far > breaker_threshold:
+            summary.unprocessed = list(targets[i + 1:])
+            logger.error(
+                "circuit breaker tripped: %d critical failures > %d threshold "
+                "after %d/%d symbols; %d left unprocessed for resume",
+                critical_so_far, breaker_threshold, len(processed),
+                len(targets), len(summary.unprocessed))
+            break
 
     summary.duration_seconds = time.time() - t0
     critical_failures = len(summary.quarter_failed) + len(summary.quarter_empty)
@@ -352,7 +444,8 @@ def run_update(args, *, client, store,
     if args.resume:
         prior_empty = set((prior_state.get("run_state") or {})
                           .get("quarter_empty") or [])
-        run_empty = sorted((prior_empty - set(targets))
+        # 只从既有 empty 集扣掉真正处理过的 symbol；熔断余量不算已修复
+        run_empty = sorted((prior_empty - set(processed))
                            | set(summary.quarter_empty))
         attempts = list(prior_state.get("attempts") or []) + [attempt]
         # 子集统计绝不覆盖 full-run 字段
@@ -368,7 +461,14 @@ def run_update(args, *, client, store,
         "run_state": {"quarter_empty": run_empty},
         "attempts": attempts,
     })
+    # earnings 覆盖门槛（review P1）：quarter 达标但 earnings 大面积断供
+    # 同样不允许标 complete——YoY/PE_blend 的分母事实缺失
+    earnings_failure_rate = (len(summary.earnings_failed) / len(targets)
+                             if targets else 1.0)
     writer_failed = failure_rate > CRITICAL_FAILURE_RATE
+    earnings_gate_failed = (not writer_failed
+                            and earnings_failure_rate > CRITICAL_FAILURE_RATE)
+    writer_failed = writer_failed or earnings_gate_failed
     store.upsert_fmp_forward_run({
         "snapshot_date": args.snapshot_date,
         "run_kind": args.mode,
@@ -381,12 +481,20 @@ def run_update(args, *, client, store,
         "started_at": manifest["started_at"] if manifest else None,
     })
 
+    if earnings_gate_failed:
+        return fail(
+            f"earnings failure rate {earnings_failure_rate:.0%} > "
+            f"{CRITICAL_FAILURE_RATE:.0%} "
+            f"(failed={len(summary.earnings_failed)}, targets={len(targets)}); "
+            f"estimates snapshot preserved; repair earnings via resume")
+
     if writer_failed:
         return fail(
             f"critical quarter failure rate "
             f"{failure_rate:.0%} > {CRITICAL_FAILURE_RATE:.0%} "
             f"(failed={len(summary.quarter_failed)}, "
-            f"empty={len(summary.quarter_empty)}, targets={len(targets)}); "
+            f"empty={len(summary.quarter_empty)}, targets={len(targets)}, "
+            f"unprocessed={len(summary.unprocessed)}); "
             f"partial snapshot preserved for resume; verifier skipped")
 
     if verify_fn is None:
@@ -446,6 +554,33 @@ def run_update(args, *, client, store,
 # main（真实依赖仅在参数校验通过后构建）
 # ---------------------------------------------------------------------------
 
+def build_pool_loaders(data_root: Optional[Path]):
+    """--data-root 完整契约（review P1）：同时派生 market.db 与 pool cache。
+
+    data_root 为 None → 模块默认 loaders（生产路径）；
+    否则 core/extended 都从 data_root/pool/ 读取，绝不回落 worktree 默认目录。
+    """
+    if data_root is None:
+        from src.data.extended_universe_manager import get_extended_symbols
+        from src.data.pool_manager import get_symbols
+        return get_symbols, get_extended_symbols
+
+    pool_dir = Path(data_root) / "pool"
+
+    def core_loader() -> List[str]:
+        with open(pool_dir / "universe.json", encoding="utf-8") as f:
+            entries = json.load(f)
+        return sorted({(e["symbol"] if isinstance(e, dict) else str(e)).upper()
+                       for e in entries})
+
+    def extended_loader() -> List[str]:
+        with open(pool_dir / "extended_universe.json", encoding="utf-8") as f:
+            cache = json.load(f)
+        return list(cache.get("symbols", []))
+
+    return core_loader, extended_loader
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
 
@@ -460,8 +595,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         db_path = (args.data_root / "market.db") if args.data_root else None
         store = MarketStore(db_path)
 
-    from src.data.extended_universe_manager import get_extended_symbols
-    from src.data.pool_manager import get_symbols
+    get_symbols, get_extended_symbols = build_pool_loaders(args.data_root)
     from src.telegram_bot import send_message
 
     verify_fn = None

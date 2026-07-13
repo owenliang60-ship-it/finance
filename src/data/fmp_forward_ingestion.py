@@ -116,6 +116,8 @@ def normalize_holdings(
 
     out: List[Dict[str, Any]] = []
     for idx, raw in enumerate(raw_rows):
+        if not isinstance(raw, Mapping):
+            raw = {}  # 坏行照样留档一行（fail-closed unrecognized_asset）
         asset = str(raw.get("asset") or "").strip().upper()
         name = str(raw.get("name") or "").strip()
 
@@ -198,6 +200,13 @@ def _parse_iso_date(value: Any) -> Optional[date]:
         return None
 
 
+def _row_date(raw: Any) -> Optional[date]:
+    """行级校验：vendor list 里混入 None/非 dict 元素时按 malformed 跳过。"""
+    if not isinstance(raw, Mapping):
+        return None
+    return _parse_iso_date(raw.get("date"))
+
+
 def normalize_estimates(
     symbol: str,
     raw_rows: Sequence[Mapping[str, Any]],
@@ -227,7 +236,7 @@ def normalize_estimates(
     rows: List[Dict[str, Any]] = []
     seen_dates: set = set()
     for raw in raw_rows:
-        fiscal = _parse_iso_date(raw.get("date"))
+        fiscal = _row_date(raw)
         if fiscal is None:
             counters["malformed"] += 1
             continue
@@ -259,7 +268,7 @@ def extract_valid_quarter_fiscal_dates(
     earnings fiscal join 必须用这个 pre-filter 全集——120 天规则只约束
     写入 fmp_estimates 的行，绝不约束 fiscal 匹配的查找空间。
     """
-    dates = {_parse_iso_date(r.get("date")) for r in raw_rows}
+    dates = {_row_date(r) for r in raw_rows}
     return sorted(d.isoformat() for d in dates if d is not None)
 
 
@@ -296,7 +305,7 @@ def normalize_earnings(
     last_updated = datetime.now(timezone.utc).isoformat()
     rows: List[Dict[str, Any]] = []
     for raw in raw_rows:
-        announce = _parse_iso_date(raw.get("date"))
+        announce = _row_date(raw)
         if announce is None:
             counters["malformed"] += 1
             continue
