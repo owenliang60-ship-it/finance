@@ -214,6 +214,11 @@ def verify_run(db_path: Path, data_root: Path, snapshot_date: str,
                 failures.append(
                     f"holdings snapshot empty for basket {basket} "
                     f"@ {snapshot_date}")
+            elif not any(r["included"] == 1 for r in h_rows):
+                # 全 malformed payload 也会留下非零审计行；有效性看 included
+                failures.append(
+                    f"holdings snapshot for basket {basket} has zero valid "
+                    f"included rows @ {snapshot_date}")
             for reason in ("foreign_listing_unmapped", "unrecognized_asset"):
                 if reasons.get(reason):
                     warnings.append(

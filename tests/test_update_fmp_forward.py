@@ -11,11 +11,23 @@ from unittest.mock import Mock
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from datetime import date  # noqa: E402
+
 from scripts.update_fmp_forward import (  # noqa: E402
     ForwardRunSummary,
     parse_args,
-    run_update,
 )
+from scripts.update_fmp_forward import run_update as _real_run_update  # noqa: E402
+
+
+def _today_fn():
+    return date.fromisoformat("2026-07-12")
+
+
+def run_update(*args, **kwargs):
+    """测试包装：默认注入冻结 clock（生产 clock 不可经 CLI 注入，round-7 P2）。"""
+    kwargs.setdefault("today_fn", _today_fn)
+    return _real_run_update(*args, **kwargs)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "fmp_forward"
 SNAP = "2026-07-12"
@@ -144,13 +156,13 @@ class FakeStore:
 def _args(**overrides):
     base = dict(mode="weekly", snapshot_date=SNAP, backfill_start="2021-01-01",
                 symbols=None, resume=False, dry_run=False, no_telegram=True,
-                data_root=None, config_dir=CONFIG_DIR, today_override=SNAP)
+                data_root=None, config_dir=CONFIG_DIR)
     base.update(overrides)
     return SimpleNamespace(**base)
 
 
 def _run(args=None, client=None, store=None, core=None, extended=None,
-         send=None):
+         send=None, today=None):
     return run_update(
         args or _args(),
         client=client or FakeClient(),
@@ -158,6 +170,7 @@ def _run(args=None, client=None, store=None, core=None, extended=None,
         core_loader=core or (lambda: ["QS", "AAPL"]),
         extended_loader=extended or (lambda: ["AAPL", "MSFT", "NVDA"]),
         send_message_fn=send or Mock(),
+        today_fn=(lambda: date.fromisoformat(today)) if today else _today_fn,
     )
 
 
@@ -732,14 +745,15 @@ def test_full_rerun_rejected_on_complete_manifest():  # P1-1
                           "replace_holdings", "upsert_run")]
     assert writes == []
     assert not [c for c in client.calls if c[0].startswith("estimates")]
+    assert not [c for c in client.calls if c[0] == "holdings"]  # API 调用前拒绝
 
 
 def test_stale_or_future_snapshot_date_writes_frozen():  # P1-1
     for bad_snap in ("2026-06-01", "2026-08-01"):  # 过老 / 未来
         client = FakeClient()
         store = FakeStore()
-        rc, _ = _run(_args(snapshot_date=bad_snap, today_override="2026-07-12"),
-                     client=client, store=store)
+        rc, _ = _run(_args(snapshot_date=bad_snap), client=client, store=store,
+                     today="2026-07-12")
         assert rc != 0
         assert not client.calls                   # API 调用前拒绝
         assert not store.runs and not store.holdings
@@ -747,8 +761,8 @@ def test_stale_or_future_snapshot_date_writes_frozen():  # P1-1
 
 def test_repair_within_week_window_allowed():  # P1-1 边界：6 天内修复放行
     store = FakeStore()
-    rc, _ = _run(_args(snapshot_date="2026-07-12",
-                       today_override="2026-07-18"), store=store)
+    rc, _ = _run(_args(snapshot_date="2026-07-12"), store=store,
+                 today="2026-07-18")
     assert rc == 0
 
 
@@ -852,6 +866,117 @@ def test_build_pool_loaders_from_data_root(tmp_path):  # P1-4
     from src.data.extended_universe_manager import get_extended_symbols
     assert default_core is get_symbols
     assert default_ext is get_extended_symbols
+
+
+# ========== Review round-7: 2×P1 + 2×P2 回归 ==========
+
+UNIVERSE10 = ["AAPL", "MSFT", "NVDA", "QS", "TSLA",
+              "META", "AMZN", "GOOGL", "NFLX", "CRM"]
+
+
+def test_resume_does_not_forget_unresolved_earnings():  # P1-1
+    # 首跑：全部 earnings 失败 → failed（earnings gate）
+    all_syms = UNIVERSE10 + ["NVMI", "GOOG"]
+    store = FakeStore()
+    rc, _ = run_update(
+        _args(), client=FakeClient(earnings={s: [] for s in all_syms}),
+        store=store, core_loader=lambda: UNIVERSE10,
+        extended_loader=lambda: ["MSFT"], send_message_fn=Mock(),
+        verify_fn=_verify_pass(),
+    )
+    assert rc == 1
+    run = store.runs[(SNAP, "weekly")]
+    assert run["status"] == "failed"
+    total = run["target_count"]
+    state = json.loads(run["summary_json"])
+    assert len(state["run_state"]["earnings_failed"]) == total
+
+    # 只 resume AAPL 且成功 → 其余 earnings 失败必须仍被记账，不得 complete
+    rc2, _ = run_update(
+        _args(resume=True, symbols=["AAPL"]), client=FakeClient(),
+        store=store, core_loader=lambda: UNIVERSE10,
+        extended_loader=lambda: ["MSFT"], send_message_fn=Mock(),
+        verify_fn=_verify_pass(covered=total, expected=total),
+    )
+    assert rc2 == 1
+    run2 = store.runs[(SNAP, "weekly")]
+    assert run2["status"] == "failed"          # Boss 复现场景：不得被标 complete
+    state2 = json.loads(run2["summary_json"])
+    unresolved = set(state2["run_state"]["earnings_failed"])
+    assert "AAPL" not in unresolved            # 已修复的移出
+    assert len(unresolved) == total - 1        # 其余全部保留
+
+    # 修完全部 → run-wide earnings 清零 → 可 complete
+    rc3, _ = run_update(
+        _args(resume=True, symbols=sorted(unresolved)), client=FakeClient(),
+        store=store, core_loader=lambda: UNIVERSE10,
+        extended_loader=lambda: ["MSFT"], send_message_fn=Mock(),
+        verify_fn=_verify_pass(covered=total, expected=total),
+    )
+    assert rc3 == 0
+    run3 = store.runs[(SNAP, "weekly")]
+    assert run3["status"] == "complete"
+    state3 = json.loads(run3["summary_json"])
+    assert state3["run_state"]["earnings_failed"] == []
+
+
+def test_malformed_earnings_payload_counts_as_failure():  # P1-2a
+    client = FakeClient(earnings={"AAPL": [None]})
+    store = FakeStore()
+    rc, summary = _run(client=client, store=store)
+    assert "AAPL" in summary.earnings_failed
+    assert "AAPL" not in summary.earnings_success
+    assert ("replace_earnings", "AAPL") not in store.calls
+
+
+def test_all_malformed_holdings_is_endpoint_failure():  # P1-2b
+    client = FakeClient(holdings={"IGV": [None, None, None]})
+    store = FakeStore()
+    rc, _ = _run(client=client, store=store)
+    assert rc != 0
+    assert not store.runs and not store.holdings   # 零写入
+    assert not [c for c in client.calls if c[0].startswith("estimates")]
+
+
+def test_verifier_rejects_zero_included_basket(tmp_path):  # P1-2b defense-in-depth
+    import scripts.verify_fmp_forward as vf
+    from src.data.market_store import MarketStore
+
+    db = tmp_path / "market.db"
+    store = MarketStore(db)
+    store.upsert_fmp_forward_run({
+        "snapshot_date": SNAP, "run_kind": "weekly", "status": "running",
+        "target_universe": ["AAA"], "started_at": "2026-07-12T02:45:00Z",
+        "summary_json": json.dumps({"run_state": {"quarter_empty": [],
+                                                  "earnings_failed": []},
+                                    "attempts": []}),
+    })
+    store.upsert_fmp_estimates("AAA", [{
+        "snapshot_date": SNAP, "fiscal_date": fd, "period_type": "Q",
+        "snapshot_kind": "weekly", "eps_avg": 1.0,
+    } for fd in ("2026-09-30", "2026-12-31", "2027-03-31", "2027-06-30")])
+    for basket in ("SPY", "QQQ", "SOX", "IGV", "XLF"):
+        rows = [{"raw_row_index": 0, "raw_asset": "", "symbol": None,
+                 "name": None, "weight_pct": None, "market_value": None,
+                 "updated_at": SNAP, "included": 0,
+                 "filter_reason": "unrecognized_asset", "covered_by": None}]
+        if basket != "IGV":  # IGV 全 malformed，其余正常
+            rows = [{"raw_row_index": 0, "raw_asset": "AAPL", "symbol": "AAPL",
+                     "name": "APPLE INC", "weight_pct": 5.0,
+                     "market_value": 1e9, "updated_at": SNAP, "included": 1,
+                     "filter_reason": None, "covered_by": None}]
+        store.replace_fmp_etf_holdings(basket, SNAP, rows)
+    store.close()
+    rc, report = vf.verify_run(db, tmp_path, SNAP)
+    assert rc == 1
+    assert any("IGV" in f and "included" in f for f in report["failures"])
+
+
+def test_today_override_cli_flag_removed():  # P2-1
+    with pytest.raises(SystemExit) as ei:
+        parse_args(["--mode", "weekly", "--snapshot-date", SNAP,
+                    "--today-override", "2020-01-01"])
+    assert ei.value.code == 2                 # 未知参数：clock 只能代码注入
 
 
 def test_run_state_quarter_empty_persisted_and_resume_merges():  # round-5 证据链

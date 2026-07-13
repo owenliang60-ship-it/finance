@@ -63,6 +63,7 @@ class ForwardRunSummary:
     quarter_empty: List[str] = field(default_factory=list)  # valid []，非传输错误
     annual_failed: List[str] = field(default_factory=list)
     earnings_failed: List[str] = field(default_factory=list)
+    earnings_success: List[str] = field(default_factory=list)  # resume 合并用
     estimate_rows: int = 0
     earnings_rows: int = 0
     unmatched_earnings: int = 0
@@ -108,8 +109,6 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                         help="derive market.db + pool cache locations for worktrees")
     parser.add_argument("--config-dir", type=Path, default=None,
                         help=argparse.SUPPRESS)
-    parser.add_argument("--today-override", type=_iso_date, default=None,
-                        help=argparse.SUPPRESS)  # 测试/replay 注入"今天"
     args = parser.parse_args(argv)
 
     # 无效组合在任何 API/DB 初始化前 exit 2
@@ -158,8 +157,15 @@ def _fetch_and_normalize_holdings(client, snapshot_date, listing, groups):
         if not raw:
             raise _FatalRunError(
                 f"holdings valid-empty for {basket}; refusing to continue")
-        holdings_by_basket[basket] = normalize_holdings(
-            basket, snapshot_date, raw, listing, groups)
+        normalized = normalize_holdings(basket, snapshot_date, raw,
+                                        listing, groups)
+        # 全 malformed payload（如 [None]×k）规范化后一行 included 都没有 =
+        # endpoint failure；坏行审计留档不等于快照有效（review round-7 P1）
+        if not any(r["included"] == 1 for r in normalized):
+            raise _FatalRunError(
+                f"holdings for {basket} contain zero valid included rows; "
+                "treating as endpoint failure")
+        holdings_by_basket[basket] = normalized
     return holdings_by_basket
 
 
@@ -219,10 +225,15 @@ def _process_symbol(client, store, symbol, args, summary, dry_run):
             return True
         e_rows, e_counters = normalize_earnings(symbol, earn_raw, fiscal_dates)
         summary.unmatched_earnings += e_counters["unmatched"]
-        if e_rows:
-            if not dry_run:
-                store.replace_fmp_earnings(symbol, e_rows)
-            summary.earnings_rows += len(e_rows)
+        if not e_rows:
+            # 非空 payload 规范化后零有效行（如 [None]）= endpoint failure，
+            # 绝不能静默算成功（review round-7 P1）
+            summary.earnings_failed.append(symbol)
+            return True
+        if not dry_run:
+            store.replace_fmp_earnings(symbol, e_rows)
+        summary.earnings_rows += len(e_rows)
+        summary.earnings_success.append(symbol)
     except Exception as exc:
         logger.error("earnings processing failed for %s: %s", symbol, exc)
         summary.earnings_failed.append(symbol)
@@ -239,6 +250,7 @@ def _attempt_detail(summary: ForwardRunSummary, targets: List[str]) -> Dict:
         "quarter_empty": sorted(summary.quarter_empty),
         "annual_failed": sorted(summary.annual_failed),
         "earnings_failed": sorted(summary.earnings_failed),
+        "earnings_success": sorted(summary.earnings_success),
         "estimate_rows": summary.estimate_rows,
         "earnings_rows": summary.earnings_rows,
         "unmatched_earnings": summary.unmatched_earnings,
@@ -250,7 +262,8 @@ def run_update(args, *, client, store,
                core_loader: Callable[[], List[str]],
                extended_loader: Callable[[], List[str]],
                send_message_fn,
-               verify_fn: Optional[Callable] = None) -> Tuple[int, ForwardRunSummary]:
+               verify_fn: Optional[Callable] = None,
+               today_fn: Callable[[], date] = date.today) -> Tuple[int, ForwardRunSummary]:
     """verify_fn(snapshot_date, run_kind) -> (rc, report)。
 
     状态机（冻结）: manifest running → writer gate FAIL → failed；
@@ -288,8 +301,7 @@ def run_update(args, *, client, store,
     # PIT 冻结守卫（review P1）：历史/未来 snapshot_date 的非 dry-run 写入一律拒绝。
     # 今天抓到的 consensus 只能盖"今天附近"的戳；改写更早日期 = 伪造 PIT 历史。
     if not args.dry_run:
-        today = (date.fromisoformat(args.today_override)
-                 if getattr(args, "today_override", None) else date.today())
+        today = today_fn()  # clock 只能由代码注入，不暴露 CLI 后门（round-7 P2）
         snap = date.fromisoformat(args.snapshot_date)
         age_days = (today - snap).days
         if snap > today or age_days > SNAPSHOT_WRITE_WINDOW_DAYS:
@@ -329,6 +341,14 @@ def run_update(args, *, client, store,
         targets = requested
         summary.target_count = manifest["target_count"]
     else:
+        existing = None
+        if not args.dry_run:
+            # 终态检查必须在 5 次 holdings API 调用之前（round-7 P2）
+            existing = store.get_fmp_forward_run(args.snapshot_date, args.mode)
+            if existing and existing["status"] == "complete":
+                return fail(
+                    "manifest status is complete (terminal); "
+                    "refusing full rerun over a verified snapshot")
         try:
             holdings_by_basket = _fetch_and_normalize_holdings(
                 client, args.snapshot_date, listing, groups)
@@ -350,12 +370,7 @@ def run_update(args, *, client, store,
             summary.target_count = len(universe)
 
             if not args.dry_run:
-                # 同日 full rerun：任何 DB 写入前核对 manifest 相等 + 终态检查
-                existing = store.get_fmp_forward_run(args.snapshot_date, args.mode)
-                if existing and existing["status"] == "complete":
-                    return fail(
-                        "manifest status is complete (terminal); "
-                        "refusing full rerun over a verified snapshot")
+                # 同日 full rerun：任何 DB 写入前核对 manifest 相等
                 if existing and existing["target_universe"] != universe:
                     return fail(
                         "resolved universe differs from immutable manifest for "
@@ -439,32 +454,40 @@ def _run_symbols_and_finalize(args, *, client, store, targets, processed,
         logger.info("dry-run complete; verifier skipped (no writes)")
         return (1 if failure_rate > CRITICAL_FAILURE_RATE else 0), summary
 
-    # run_state 证据链（round-5）：full run 重置；resume 合并
+    # run_state 证据链（round-5/7）：full run 重置；resume 按 processed 合并。
+    # earnings_failed 与 quarter_empty 一样是 run-wide 状态——resume 只修一票
+    # 不能让其余未修复的 earnings 失败被遗忘（round-7 P1）。
     attempt = _attempt_detail(summary, targets)
     if args.resume:
-        prior_empty = set((prior_state.get("run_state") or {})
-                          .get("quarter_empty") or [])
+        prior_run_state = prior_state.get("run_state") or {}
+        prior_empty = set(prior_run_state.get("quarter_empty") or [])
         # 只从既有 empty 集扣掉真正处理过的 symbol；熔断余量不算已修复
         run_empty = sorted((prior_empty - set(processed))
                            | set(summary.quarter_empty))
+        prior_earn_failed = set(prior_run_state.get("earnings_failed") or [])
+        run_earnings_failed = sorted(
+            (prior_earn_failed - set(summary.earnings_success))
+            | set(summary.earnings_failed))
         attempts = list(prior_state.get("attempts") or []) + [attempt]
         # 子集统计绝不覆盖 full-run 字段
         quarter_success = manifest["quarter_success"]
         quarter_failure_count = manifest["quarter_failure_count"]
     else:
         run_empty = sorted(summary.quarter_empty)
+        run_earnings_failed = sorted(summary.earnings_failed)
         attempts = [attempt]
         quarter_success = summary.quarter_success
         quarter_failure_count = critical_failures
 
     summary_json = json.dumps({
-        "run_state": {"quarter_empty": run_empty},
+        "run_state": {"quarter_empty": run_empty,
+                      "earnings_failed": run_earnings_failed},
         "attempts": attempts,
     })
-    # earnings 覆盖门槛（review P1）：quarter 达标但 earnings 大面积断供
-    # 同样不允许标 complete——YoY/PE_blend 的分母事实缺失
-    earnings_failure_rate = (len(summary.earnings_failed) / len(targets)
-                             if targets else 1.0)
+    # earnings 覆盖门槛（round-6/7 P1）：run-wide unresolved 集 ÷ 完整 manifest
+    # 分母裁决——quarter 达标但 earnings 大面积断供同样不允许标 complete
+    denominator = summary.target_count or len(targets) or 1
+    earnings_failure_rate = len(run_earnings_failed) / denominator
     writer_failed = failure_rate > CRITICAL_FAILURE_RATE
     earnings_gate_failed = (not writer_failed
                             and earnings_failure_rate > CRITICAL_FAILURE_RATE)
@@ -483,9 +506,10 @@ def _run_symbols_and_finalize(args, *, client, store, targets, processed,
 
     if earnings_gate_failed:
         return fail(
-            f"earnings failure rate {earnings_failure_rate:.0%} > "
+            f"run-wide earnings failure rate {earnings_failure_rate:.0%} > "
             f"{CRITICAL_FAILURE_RATE:.0%} "
-            f"(failed={len(summary.earnings_failed)}, targets={len(targets)}); "
+            f"(unresolved={len(run_earnings_failed)}, "
+            f"denominator={denominator}); "
             f"estimates snapshot preserved; repair earnings via resume")
 
     if writer_failed:

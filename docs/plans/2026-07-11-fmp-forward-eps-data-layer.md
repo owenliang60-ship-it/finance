@@ -2,7 +2,15 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Status:** Round-6 merge-review 全修 complete (2026-07-13)。Tasks 0–10 已实现；Boss merge review 抓 5×P1 已全修 + 回归测试。等 Boss 复审后进入 Task 11+ 审批门。
+**Status:** Round-7 merge-review 全修 complete (2026-07-13)。Tasks 0–10 已实现；round-6 5×P1 + round-7 2×P1/2×P2 已全修 + 回归测试。等 Boss 复审后进入 Task 11+ 审批门。
+
+> **Review Round-7 批注（2026-07-13，Boss merge review 2×P1 + 2×P2 全修）**
+>
+> - **P1 resume 遗忘 run-wide earnings 失败** → `run_state` 新增 `earnings_failed` 持久化集；resume 按 `(prior_failed − 本次 earnings_success) ∪ current_failed` 合并；earnings gate 改用 run-wide unresolved 集 ÷ 完整 manifest 分母裁决。Boss 复现场景（8/8 断供 → 只修 1 票 → 曾被标 complete）已被回归测试冻结：修 1 票仍 failed，修完全部才 complete。
+> - **P1 全 malformed payload 错误完成** → earnings 非空 payload 规范化后零有效行 = endpoint failure（计入 `earnings_failed`）；holdings 每篮子规范化后必须 ≥1 行 `included=1`，否则 `_FatalRunError` 零写入；verifier 同步加 defense-in-depth：非零行但零 included 的篮子直接 FAIL。
+> - **P2 `--today-override` 生产后门** → CLI 参数删除；clock 只能通过 `run_update(..., today_fn=)` 代码注入，测试断言该 flag 已不可用（exit 2）。
+> - **P2 complete rerun 先烧 5 次 holdings API** → 终态检查提前到 holdings 抓取之前，零 API 调用拒绝。
+> - 回归：5 个新测试；专属套件 138 passed、相邻 97 passed。
 
 > **Review Round-6 批注（2026-07-13，Boss merge review 5×P1 全修）**
 >
