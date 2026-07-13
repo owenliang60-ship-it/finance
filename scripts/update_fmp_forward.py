@@ -391,17 +391,47 @@ def run_update(args, *, client, store,
     manifest_live = not args.dry_run
 
     def _mark_failed_best_effort(reason: str) -> None:
+        """异常收尾：只附加 error，绝不抹掉既有 run_state/attempts 证据链。
+
+        round-8 P1：finalizer 覆盖 summary_json 会清空 run-wide earnings/quarter
+        失败状态，让下一次 partial resume 错误地 complete。规则：
+        - 既有 summary_json 可解码 → 原结构保留 + append errors[]
+        - 无法解码 → 原字符串原样回写（fail closed，不破坏现场）
+        - manifest 读不到 → 才允许写 error-only 骨架
+        """
         try:
+            try:
+                current = store.get_fmp_forward_run(args.snapshot_date, args.mode)
+            except Exception:
+                current = None
+            prior_json = (current or {}).get("summary_json")
+            error_entry = {"at": _utc_now(), "error": _safe(reason)[:500]}
+            if prior_json:
+                try:
+                    payload = json.loads(prior_json)
+                    payload["errors"] = list(payload.get("errors") or []) + [error_entry]
+                    summary_json_out = json.dumps(payload)
+                except (TypeError, ValueError):
+                    summary_json_out = prior_json  # 不可解码：原样保留
+            else:
+                summary_json_out = json.dumps({
+                    "run_state": {"quarter_empty": [], "earnings_failed": []},
+                    "attempts": [],
+                    "errors": [error_entry],
+                })
+            # 统计字段同样保留 manifest 既有值，不用本次 partial attempt 覆盖
             store.upsert_fmp_forward_run({
                 "snapshot_date": args.snapshot_date,
                 "run_kind": args.mode,
                 "status": "failed",
                 "target_universe": None,
-                "quarter_success": summary.quarter_success,
-                "quarter_failure_count": (len(summary.quarter_failed)
-                                          + len(summary.quarter_empty)),
+                "quarter_success": (current or {}).get(
+                    "quarter_success", summary.quarter_success),
+                "quarter_failure_count": (current or {}).get(
+                    "quarter_failure_count",
+                    len(summary.quarter_failed) + len(summary.quarter_empty)),
                 "completed_at": _utc_now(),
-                "summary_json": json.dumps({"error": _safe(reason)[:500]}),
+                "summary_json": summary_json_out,
                 "started_at": manifest["started_at"] if manifest else None,
             })
         except Exception as persist_exc:
@@ -451,8 +481,16 @@ def _run_symbols_and_finalize(args, *, client, store, targets, processed,
     failure_rate = critical_failures / len(targets) if targets else 1.0
 
     if args.dry_run:
-        logger.info("dry-run complete; verifier skipped (no writes)")
-        return (1 if failure_rate > CRITICAL_FAILURE_RATE else 0), summary
+        # dry-run 同样执行两道 gate（round-8 P1）：earnings endpoint 失效时
+        # Task 11 live contract probe 绝不能误报成功
+        dry_earnings_rate = (len(summary.earnings_failed) / len(targets)
+                             if targets else 1.0)
+        dry_failed = (failure_rate > CRITICAL_FAILURE_RATE
+                      or dry_earnings_rate > CRITICAL_FAILURE_RATE)
+        logger.info("dry-run complete; verifier skipped (no writes); "
+                    "quarter_fail=%.0f%% earnings_fail=%.0f%%",
+                    failure_rate * 100, dry_earnings_rate * 100)
+        return (1 if dry_failed else 0), summary
 
     # run_state 证据链（round-5/7）：full run 重置；resume 按 processed 合并。
     # earnings_failed 与 quarter_empty 一样是 run-wide 状态——resume 只修一票

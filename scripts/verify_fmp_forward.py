@@ -27,6 +27,7 @@ BASKETS = ("SPY", "QQQ", "SOX", "IGV", "XLF")
 FULL_BASKETS = ("SPY", "QQQ", "SOX", "MAGS", "IGV", "XLF")
 REQUIRED_FUTURE_QUARTERS = 4
 RECENT_ACTUAL_WINDOW_DAYS = 120
+CRITICAL_FAILURE_RATE = 0.20  # 镜像 writer 的 run-wide earnings gate（round-8）
 
 # 只剥离显式类别后缀；绝不模糊合并无关公司
 _CLASS_SUFFIX_RE = re.compile(r"\s+(?:CLASS|CL)\s+[A-Z]$", re.IGNORECASE)
@@ -137,12 +138,39 @@ def verify_run(db_path: Path, data_root: Path, snapshot_date: str,
                 f"universe json length={len(universe)}")
             return 1, report
 
+        # 状态裁决（round-8 P1）：failed/planned run 不可被独立 verifier 洗白；
+        # 只有 running（编排器接线路径）与 complete（事后复核）可验
+        if run["status"] not in ("running", "complete"):
+            failures.append(
+                f"manifest status={run['status']!r} is not verifiable; "
+                "a failed/planned run cannot PASS verification")
+            return 1, report
+
+        # summary_json 是 run-wide 证据链，缺失/不可解码一律 fail closed
+        if not run["summary_json"]:
+            failures.append("manifest summary_json missing; "
+                            "run-wide evidence unavailable — fail closed")
+            return 1, report
         try:
-            run_state = json.loads(run["summary_json"] or "{}")
-        except ValueError:
-            run_state = {}
-        current_empty = set((run_state.get("run_state") or {})
-                            .get("quarter_empty") or [])
+            run_state = json.loads(run["summary_json"])
+        except (TypeError, ValueError):
+            failures.append("manifest summary_json unparseable — fail closed")
+            return 1, report
+        inner_state = run_state.get("run_state") or {}
+        current_empty = set(inner_state.get("quarter_empty") or [])
+
+        # 镜像 writer 的 run-wide earnings gate（round-8 P1）：unresolved
+        # earnings 超阈值的 run 不允许 PASS
+        unresolved_earnings = sorted(inner_state.get("earnings_failed") or [])
+        earnings_unresolved_rate = (len(unresolved_earnings)
+                                    / run["target_count"]
+                                    if run["target_count"] else 1.0)
+        if earnings_unresolved_rate > CRITICAL_FAILURE_RATE:
+            failures.append(
+                f"run-wide unresolved earnings failures "
+                f"{len(unresolved_earnings)}/{run['target_count']} "
+                f"({earnings_unresolved_rate:.0%}) > "
+                f"{CRITICAL_FAILURE_RATE:.0%} — mirrors writer gate")
 
         # ---- 4Q coverage（只计本 kind、本 snapshot、未来季、非空 eps_avg）----
         rows = conn.execute(
@@ -262,6 +290,7 @@ def verify_run(db_path: Path, data_root: Path, snapshot_date: str,
             "rows": e["rows"] or 0, "matched": e["matched"] or 0,
             "unmatched": e["unmatched"] or 0,
             "recent_actual": e["recent_actual"] or 0,
+            "unresolved_run_wide": unresolved_earnings,
         }
 
         # ---- Estimates 体量 + backfill 深度 ----

@@ -2,7 +2,14 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Status:** Round-7 merge-review 全修 complete (2026-07-13)。Tasks 0–10 已实现；round-6 5×P1 + round-7 2×P1/2×P2 已全修 + 回归测试。等 Boss 复审后进入 Task 11+ 审批门。
+**Status:** Round-8 merge-review 全修 complete (2026-07-13)。Tasks 0–10 已实现；round-6 5×P1 + round-7 2×P1/2×P2 + round-8 3×P1 已全修 + 回归测试。等 Boss 复审后进入 Task 11+ 审批门。
+
+> **Review Round-8 批注（2026-07-13，Boss merge review 3×P1 全修——异常路径）**
+>
+> - **P1 dry-run 不执行 earnings gate** → dry-run 退出码同时裁决 quarter 与本轮 earnings 失败率（>20% → rc 1），Task 11 live probe 在 earnings endpoint 失效时不再误报成功。
+> - **P1 异常 finalizer 抹掉累计状态** → `_mark_failed_best_effort` 改为：重读 manifest 现状 → 既有 `summary_json` 可解码则保留全结构只 append `errors[]`；不可解码则原字符串原样回写（fail closed 不破坏现场）；读不到 manifest 才写 error-only 骨架；统计字段同样保留既有值。Boss 复现链（8/8 断供 → resume 中瞬时写异常 → 证据被清 → 下次 1 票 resume 错误 complete）已被三段回归测试冻结。
+> - **P1 独立 verifier 可对 failed run 返回 PASS** → verifier 新增三道裁决：manifest status 必须 ∈ {running, complete}（failed/planned 直接 FAIL）；`summary_json` 缺失/不可解码一律 fail closed；镜像 writer 的 run-wide earnings gate（unresolved ÷ target_count > 20% → FAIL），报告新增 `earnings.unresolved_run_wide` 字段。
+> - 回归：6 个新测试；专属套件 143 passed、相邻 97 passed。
 
 > **Review Round-7 批注（2026-07-13，Boss merge review 2×P1 + 2×P2 全修）**
 >

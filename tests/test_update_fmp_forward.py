@@ -979,6 +979,160 @@ def test_today_override_cli_flag_removed():  # P2-1
     assert ei.value.code == 2                 # 未知参数：clock 只能代码注入
 
 
+# ========== Review round-8: 3×P1 回归 ==========
+
+def test_dry_run_applies_earnings_gate():  # P1-1
+    # earnings endpoint 全失效（malformed）→ dry-run 必须非零退出
+    client = FakeClient(earnings={"AAPL": [None], "MU": []})
+    rc, summary = run_update(
+        _args(dry_run=True, symbols=["AAPL", "MU"]),
+        client=client, store=None,
+        core_loader=lambda: ["AAPL"], extended_loader=lambda: ["MSFT"],
+        send_message_fn=Mock(),
+    )
+    assert rc == 1                                # Task 11 probe 不得误报成功
+    assert set(summary.earnings_failed) == {"AAPL", "MU"}
+
+    # earnings 正常时 dry-run 仍然 rc 0
+    rc2, _ = run_update(
+        _args(dry_run=True, symbols=["AAPL", "MU"]),
+        client=FakeClient(), store=None,
+        core_loader=lambda: ["AAPL"], extended_loader=lambda: ["MSFT"],
+        send_message_fn=Mock(),
+    )
+    assert rc2 == 0
+
+
+class FlakyManifestStore(FakeStore):
+    """下一次 upsert_fmp_forward_run 抛一次瞬时异常。"""
+
+    def __init__(self):
+        super().__init__()
+        self.raise_next_upsert = False
+
+    def upsert_fmp_forward_run(self, row):
+        if self.raise_next_upsert:
+            self.raise_next_upsert = False
+            raise RuntimeError("transient manifest write failure")
+        return super().upsert_fmp_forward_run(row)
+
+
+def test_failure_finalizer_preserves_run_state():  # P1-2（Boss 复现场景）
+    all_syms = UNIVERSE10 + ["NVMI", "GOOG"]
+    store = FlakyManifestStore()
+    # 首跑：全部 earnings 失败 → failed，run_state.earnings_failed = 全集
+    rc, _ = run_update(
+        _args(), client=FakeClient(earnings={s: [] for s in all_syms}),
+        store=store, core_loader=lambda: UNIVERSE10,
+        extended_loader=lambda: ["MSFT"], send_message_fn=Mock(),
+    )
+    assert rc == 1
+    total = store.runs[(SNAP, "weekly")]["target_count"]
+    state = json.loads(store.runs[(SNAP, "weekly")]["summary_json"])
+    assert len(state["run_state"]["earnings_failed"]) == total
+
+    # partial resume 中 manifest 写入瞬时异常 → finalizer 不得抹掉证据链
+    store.raise_next_upsert = True
+    rc2, _ = run_update(
+        _args(resume=True, symbols=["AAPL"]), client=FakeClient(),
+        store=store, core_loader=lambda: UNIVERSE10,
+        extended_loader=lambda: ["MSFT"], send_message_fn=Mock(),
+    )
+    assert rc2 == 1
+    run = store.runs[(SNAP, "weekly")]
+    assert run["status"] == "failed"
+    state2 = json.loads(run["summary_json"])
+    assert len(state2["run_state"]["earnings_failed"]) == total  # 证据保留
+    assert state2["errors"]                                       # error 附加
+
+    # 再只 resume 一票 → 仍必须 failed，不得错误 complete
+    rc3, _ = run_update(
+        _args(resume=True, symbols=["AAPL"]), client=FakeClient(),
+        store=store, core_loader=lambda: UNIVERSE10,
+        extended_loader=lambda: ["MSFT"], send_message_fn=Mock(),
+        verify_fn=_verify_pass(covered=total, expected=total),
+    )
+    assert rc3 == 1
+    assert store.runs[(SNAP, "weekly")]["status"] == "failed"
+
+
+def _seed_verifier_db(tmp_path, status="running", quarter_empty=(),
+                      earnings_failed=(), summary_json_override="__use__"):
+    from src.data.market_store import MarketStore
+
+    db = tmp_path / "market.db"
+    store = MarketStore(db)
+    if summary_json_override == "__use__":
+        summary_json = json.dumps({
+            "run_state": {"quarter_empty": sorted(quarter_empty),
+                          "earnings_failed": sorted(earnings_failed)},
+            "attempts": [],
+        })
+    else:
+        summary_json = summary_json_override
+    store.upsert_fmp_forward_run({
+        "snapshot_date": SNAP, "run_kind": "weekly", "status": status,
+        "target_universe": UNIVERSE10, "started_at": "2026-07-12T02:45:00Z",
+        "summary_json": summary_json,
+    })
+    for sym in UNIVERSE10:
+        store.upsert_fmp_estimates(sym, [{
+            "snapshot_date": SNAP, "fiscal_date": fd, "period_type": "Q",
+            "snapshot_kind": "weekly", "eps_avg": 1.0,
+        } for fd in ("2026-09-30", "2026-12-31", "2027-03-31", "2027-06-30")])
+    for basket in ("SPY", "QQQ", "SOX", "IGV", "XLF"):
+        store.replace_fmp_etf_holdings(basket, SNAP, [{
+            "raw_row_index": 0, "raw_asset": "AAPL", "symbol": "AAPL",
+            "name": "APPLE INC", "weight_pct": 5.0, "market_value": 1e9,
+            "updated_at": SNAP, "included": 1, "filter_reason": None,
+            "covered_by": None,
+        }])
+    store.close()
+    return db
+
+
+def test_verifier_rejects_failed_and_planned_manifest(tmp_path):  # P1-3
+    from scripts.verify_fmp_forward import verify_run
+
+    db = _seed_verifier_db(tmp_path, status="failed")
+    rc, report = verify_run(db, tmp_path, SNAP)
+    assert rc == 1
+    assert any("status" in f for f in report["failures"])
+
+
+def test_verifier_fail_closed_on_bad_summary_json(tmp_path):  # P1-3
+    from scripts.verify_fmp_forward import verify_run
+
+    db = _seed_verifier_db(tmp_path, summary_json_override=None)
+    rc, report = verify_run(db, tmp_path, SNAP)
+    assert rc == 1
+    assert any("summary_json" in f for f in report["failures"])
+
+    db2 = _seed_verifier_db(tmp_path / "b", summary_json_override="not-json{")
+    rc2, report2 = verify_run(db2, tmp_path / "b", SNAP)
+    assert rc2 == 1
+    assert any("unparseable" in f for f in report2["failures"])
+
+
+def test_verifier_mirrors_runwide_earnings_gate(tmp_path):  # P1-3
+    from scripts.verify_fmp_forward import verify_run
+
+    # 4Q 覆盖 100% 但 3/10 earnings unresolved（30% > 20%）→ 必须 FAIL
+    db = _seed_verifier_db(tmp_path,
+                           earnings_failed=["AAPL", "MSFT", "NVDA"])
+    rc, report = verify_run(db, tmp_path, SNAP)
+    assert rc == 1
+    assert any("earnings" in f and "unresolved" in f
+               for f in report["failures"])
+    assert report["earnings"]["unresolved_run_wide"] == ["AAPL", "MSFT", "NVDA"]
+
+    # 2/10（20%，不超阈值）→ PASS
+    db2 = _seed_verifier_db(tmp_path / "b",
+                            earnings_failed=["AAPL", "MSFT"])
+    rc2, _ = verify_run(db2, tmp_path / "b", SNAP)
+    assert rc2 == 0
+
+
 def test_run_state_quarter_empty_persisted_and_resume_merges():  # round-5 证据链
     client = FakeClient(quarter={"AAPL": [], "MSFT": []})
     store = FakeStore()
