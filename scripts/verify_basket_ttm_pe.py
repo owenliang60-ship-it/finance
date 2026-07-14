@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent read-only verification for historical basket GAAP TTM PE."""
+"""Read-only source recomputation and evidence checks for basket GAAP TTM PE."""
 import argparse
 import json
 import math
@@ -28,6 +28,7 @@ from terminal.historical_market_cap_sanity import (
 EXPECTED_DISCLOSURES = 19
 MIN_PUBLISHABLE_COVERAGE = 0.95
 MIN_WEIGHT_COVERAGE = 0.90
+EXPECTED_METHODOLOGY_VERSION = "1.0"
 KNOWN_ANCHORS = {
     "KLAC": ("2026-06-10", "2026-06-23"),
     "MCHP": ("2026-02-02", "2026-02-06"),
@@ -84,8 +85,9 @@ _BASE_SANITY_FIELDS = (
     "raw_symbol", "symbol", "date", "market_cap", "close", "mcap_return",
     "price_return", "implied_shares", "implied_share_ratio", "expected_shares",
     "split_ratio", "split_source_dates", "split_adjustment_applied",
-    "split_adjustment_mode", "candidate", "candidate_reason", "status",
-    "normalization_recovery",
+    "split_adjustment_mode", "economic_price_return",
+    "split_economically_continuous", "candidate", "candidate_reason",
+    "status", "normalization_recovery",
 )
 
 
@@ -95,9 +97,58 @@ def _canonical_json(value: Any) -> str:
 
 
 def _project_sanity(events: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    # Repair-only clean padding depends on a pre-refresh manifest that the
+    # post-refresh raw tables cannot reproduce. Compare only current raw
+    # candidates/invalid rows; validate repair metadata internally below.
+    reproducible = [
+        event for event in events
+        if event.get("candidate")
+        or not accepted_market_cap_status(str(event.get("status")))
+    ]
     projected = [{field: event.get(field) for field in _BASE_SANITY_FIELDS}
-                 for event in events]
+                 for event in reproducible]
     return sorted(projected, key=_canonical_json)
+
+
+def _repair_evidence_errors(
+    valuation_date: str, events: Sequence[Mapping[str, Any]],
+) -> List[str]:
+    errors = []
+    for event in events:
+        has_repair_claim = bool(
+            event.get("forced_refresh_planned")
+            or event.get("forced_refresh_attempted")
+            or event.get("refresh_succeeded")
+            or event.get("refresh_windows"))
+        if not has_repair_claim:
+            continue
+        prefix = (f"{valuation_date}:{event.get('symbol')}:"
+                  f"{event.get('date')}")
+        if event.get("forced_refresh_planned") is not True:
+            errors.append(f"{prefix}:repair_claim_without_plan")
+        elif event.get("forced_refresh_attempted") is not True:
+            # Dry-run evidence is never persisted. In a write-mode output the
+            # mcap-sanity stage always owns a client, so every planned window
+            # must have reached the request boundary even if the response was
+            # empty and refresh_succeeded remains false.
+            errors.append(f"{prefix}:planned_refresh_not_attempted")
+        windows = event.get("refresh_windows")
+        if not isinstance(windows, list) or not windows:
+            errors.append(f"{prefix}:refresh_windows_missing")
+            continue
+        event_date = str(event.get("date") or "")
+        if not any(str(window.get("from_date") or "") <= event_date
+                   <= str(window.get("to_date") or "")
+                   for window in windows if isinstance(window, Mapping)):
+            errors.append(f"{prefix}:outside_refresh_windows")
+        if (event.get("refresh_succeeded") is True
+                and event.get("forced_refresh_attempted") is not True):
+            errors.append(f"{prefix}:refresh_succeeded_without_attempt")
+        expected_quarantine = not accepted_market_cap_status(
+            str(event.get("status")))
+        if bool(event.get("quarantined")) != expected_quarantine:
+            errors.append(f"{prefix}:quarantine_status_mismatch")
+    return errors
 
 
 def _latest_rebalance_effective(
@@ -359,6 +410,7 @@ def _recompute_row(
         "rebalance_weighted_ttm_pe_gaap_proxy": primary,
         "uncapped_mcap_basket_pe_gaap": secondary,
         "covered_market_cap": total_mcap, "ttm_net_income_usd": total_income,
+        "member_count": len(weights["weights"]) + len(weights["orphan_targets"]),
         "covered_count": len(metric_members),
         "mcap_weight_coverage": mcap_weight / eligible_weight,
         "income_weight_coverage": income_weight / eligible_weight,
@@ -429,6 +481,11 @@ def verify_database(
     source = _load_sources(conn, basket, outputs)
     holdings = source["holdings"]
     checks = [_check("read_only_connection", True, "mode=ro + query_only")]
+    versions = sorted({str(row.get("methodology_version") or "")
+                       for row in outputs})
+    checks.append(_check(
+        "methodology_version", versions == [EXPECTED_METHODOLOGY_VERSION],
+        {"expected": EXPECTED_METHODOLOGY_VERSION, "observed": versions}))
     groups = _holding_groups(holdings)
 
     disclosure_dates = sorted({row["holding_date"] for row in holdings
@@ -519,7 +576,8 @@ def verify_database(
         "eligible_weight", "covered_weight", "weight_coverage",
         "weighted_earnings_yield", "rebalance_weighted_ttm_pe_gaap_proxy",
         "uncapped_mcap_basket_pe_gaap", "covered_market_cap",
-        "ttm_net_income_usd", "covered_count", "mcap_weight_coverage",
+        "ttm_net_income_usd", "member_count", "covered_count",
+        "mcap_weight_coverage",
         "income_weight_coverage", "fx_weight_coverage",
     )
     for row in outputs:
@@ -576,6 +634,8 @@ def verify_database(
                 _canonical_json(_project_sanity(
                     recalculated["mcap_sanity_json"])):
             evidence_errors.append(f"{row['valuation_date']}:mcap_sanity_json")
+        evidence_errors.extend(_repair_evidence_errors(
+            row["valuation_date"], row["mcap_sanity_json"]))
         if row.get("rebalance_weighted_ttm_pe_gaap_proxy") is not None:
             # Check the source dates claimed by the published row against a
             # fresh scan of raw HMC/price/split tables. Recalculation itself

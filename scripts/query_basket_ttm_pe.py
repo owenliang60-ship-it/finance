@@ -10,8 +10,12 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-
 PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from terminal.historical_market_cap_sanity import accepted_market_cap_status
+
+
 BANNER = (
     "SOXX rebalance-weighted GAAP TTM PE proxy; fixed retrospective "
     "snapshot weights; not official SOXX PE or historical forward PE."
@@ -20,6 +24,7 @@ PE_FIELDS = (
     "rebalance_weighted_ttm_pe_gaap_proxy",
     "uncapped_mcap_basket_pe_gaap",
 )
+EXPECTED_METHODOLOGY_VERSION = "1.0"
 CSV_FIELDS = (
     "basket_symbol", "valuation_date", "holding_date",
     "composition_effective_date", "composition_available_date",
@@ -27,7 +32,8 @@ CSV_FIELDS = (
     "is_observed_weight_date", "rebalance_weighted_ttm_pe_gaap_proxy",
     "uncapped_mcap_basket_pe_gaap", "weight_coverage",
     "mcap_weight_coverage", "income_weight_coverage", "fx_weight_coverage",
-    "member_count", "covered_count", "warnings_json", "mcap_sanity_json",
+    "member_count", "covered_count", "methodology_version", "warnings_json",
+    "mcap_sanity_json",
 )
 
 
@@ -130,6 +136,12 @@ def build_result(rows: Sequence[Mapping[str, Any]], basket: str) -> Dict[str, An
                 raise ValueError(
                     f"invalid {field} on {item.get('valuation_date')}") from exc
         decoded.append(item)
+    versions = sorted({str(row.get("methodology_version") or "")
+                       for row in decoded})
+    if versions != [EXPECTED_METHODOLOGY_VERSION]:
+        raise ValueError(
+            "methodology_version must be a single allowlisted value: "
+            f"expected {EXPECTED_METHODOLOGY_VERSION}, got {versions}")
     current = decoded[-1]
     gaps = [row["valuation_date"] for row in decoded
             if row.get("rebalance_weighted_ttm_pe_gaap_proxy") is None]
@@ -143,8 +155,7 @@ def build_result(rows: Sequence[Mapping[str, Any]], basket: str) -> Dict[str, An
     ordered_sanity = [sanity_events[key] for key in sorted(
         sanity_events, key=lambda item: tuple(str(value or "") for value in item))]
     quarantines = [event for event in ordered_sanity
-                   if event.get("quarantined") or event.get("status") in {
-                       "invalid_mcap", "unresolved"}]
+                   if not accepted_market_cap_status(str(event.get("status")))]
     live_dates = [row["valuation_date"] for row in decoded
                   if "live" in str(row["data_quality_tier"])]
     anchors = [{
@@ -160,6 +171,7 @@ def build_result(rows: Sequence[Mapping[str, Any]], basket: str) -> Dict[str, An
         "basket": basket.upper(),
         "date_range": [decoded[0]["valuation_date"], decoded[-1]["valuation_date"]],
         "row_count": len(decoded),
+        "methodology_version": versions[0],
         "current": {
             "valuation_date": current["valuation_date"],
             "holding_date": current["holding_date"],
@@ -186,6 +198,7 @@ def build_result(rows: Sequence[Mapping[str, Any]], basket: str) -> Dict[str, An
             "Historical disclosure weights are fixed retrospective proxies, not official daily index weights.",
             "FMP financial statements are filtered by accepted date but may contain later restatements; this is not a vintage fundamentals database.",
             "Live-tail weights are fetch-date drifted snapshots and carry weaker evidence.",
+            "Percentile is inclusive: count(values <= current) / N.",
         ],
     }
 

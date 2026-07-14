@@ -28,7 +28,7 @@ def _quarter_rows(symbol="TEST"):
     ]
 
 
-def _make_green_db(tmp_path):
+def _make_green_db(tmp_path, *, forced_refresh_evidence=False):
     path = tmp_path / "market.db"
     store = MarketStore(path)
     conn = store._get_conn()
@@ -80,6 +80,18 @@ def _make_green_db(tmp_path):
          {"symbol": "TEST", "date": "2026-02-02", "market_cap": 1500.0}],
         [{"symbol": "TEST", "date": "2026-01-30", "close": 10.0},
          {"symbol": "TEST", "date": "2026-02-02", "close": 15.0}], [])
+    if forced_refresh_evidence:
+        sanity[0].update({
+            "pre_refresh_status": "invalid_mcap",
+            "forced_refresh_planned": True,
+            "forced_refresh_attempted": True,
+            "refresh_succeeded": True,
+            "refresh_windows": [{
+                "from_date": "2026-01-30", "to_date": "2026-02-02",
+                "trigger_dates": ["2026-01-30"],
+            }],
+            "quarantined": False,
+        })
     output = compute_daily_basket_valuation(
         valuation_date="2026-02-02",
         holding_rows=live_rows,
@@ -124,6 +136,14 @@ def test_all_green_fixture_recomputes_every_output_from_sources(tmp_path):
     assert set(anchors) == {"KLAC", "MCHP"}
 
 
+def test_repaired_clean_padding_is_not_compared_as_raw_reproducible_evidence(
+    tmp_path,
+):
+    result = _report(_make_green_db(tmp_path, forced_refresh_evidence=True))
+    assert _check(result, "persisted_member_and_sanity_evidence")["passed"] is True
+    assert result["passed"] is True
+
+
 def test_connection_is_mode_ro_not_immutable(monkeypatch, tmp_path):
     path = _make_green_db(tmp_path)
     seen = {}
@@ -161,6 +181,10 @@ def test_min_date_is_required_to_make_leading_boundary_explicit():
          "source_recompute_all_rows"),
         ("UPDATE basket_ttm_valuation SET data_quality_tier = 'fake'",
          "source_recompute_all_rows"),
+        ("UPDATE basket_ttm_valuation SET member_count = 999",
+         "source_recompute_all_rows"),
+        ("UPDATE basket_ttm_valuation SET methodology_version = 'fake'",
+         "methodology_version"),
     ],
 )
 def test_failure_classifications_are_distinct(tmp_path, mutation, failed_check):
@@ -278,6 +302,65 @@ def test_tampered_member_and_sanity_evidence_are_blocking(tmp_path):
     assert any("members_json" in error for error in check["detail"])
     assert any("mcap_sanity_json" in error for error in check["detail"])
     assert result["passed"] is False
+
+
+def test_internally_inconsistent_repair_evidence_is_blocking(tmp_path):
+    path = _make_green_db(tmp_path, forced_refresh_evidence=True)
+    conn = sqlite3.connect(path)
+    events = json.loads(conn.execute(
+        "SELECT mcap_sanity_json FROM basket_ttm_valuation").fetchone()[0])
+    repair = next(event for event in events
+                  if event.get("forced_refresh_planned"))
+    repair["forced_refresh_planned"] = False
+    repair["forced_refresh_attempted"] = False
+    repair["refresh_succeeded"] = True
+    conn.execute("UPDATE basket_ttm_valuation SET mcap_sanity_json = ?",
+                 [json.dumps(events)])
+    conn.commit()
+    conn.close()
+    result = _report(path)
+    check = _check(result, "persisted_member_and_sanity_evidence")
+    assert check["passed"] is False
+    assert any("refresh_succeeded_without_attempt" in error
+               for error in check["detail"])
+    assert any("repair_claim_without_plan" in error
+               for error in check["detail"])
+
+
+def test_persisted_planned_refresh_must_have_been_attempted(tmp_path):
+    path = _make_green_db(tmp_path, forced_refresh_evidence=True)
+    conn = sqlite3.connect(path)
+    events = json.loads(conn.execute(
+        "SELECT mcap_sanity_json FROM basket_ttm_valuation").fetchone()[0])
+    repair = next(event for event in events
+                  if event.get("forced_refresh_planned"))
+    repair["forced_refresh_attempted"] = False
+    repair["refresh_succeeded"] = False
+    conn.execute("UPDATE basket_ttm_valuation SET mcap_sanity_json = ?",
+                 [json.dumps(events)])
+    conn.commit()
+    conn.close()
+    result = _report(path)
+    check = _check(result, "persisted_member_and_sanity_evidence")
+    assert check["passed"] is False
+    assert any("planned_refresh_not_attempted" in error
+               for error in check["detail"])
+
+
+def test_clean_candidate_pre_refresh_status_is_not_a_repair_claim():
+    event = {
+        "symbol": "TEST",
+        "date": "2026-02-02",
+        "status": "split_consistent",
+        "candidate": True,
+        "pre_refresh_status": "split_consistent",
+        "forced_refresh_planned": False,
+        "forced_refresh_attempted": False,
+        "refresh_succeeded": False,
+        "refresh_windows": [],
+        "quarantined": False,
+    }
+    assert verifier._repair_evidence_errors("2026-02-02", [event]) == []
 
 
 def test_published_invalid_market_cap_is_detected_from_raw_sources(tmp_path):

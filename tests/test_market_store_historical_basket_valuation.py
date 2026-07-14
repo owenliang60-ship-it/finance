@@ -153,6 +153,20 @@ def test_fx_upsert_is_idempotent_and_asof_returns_observation_date(store):
     assert got["usd_per_unit"] == 1.15
 
 
+@pytest.mark.parametrize("rate,source_symbol", [
+    (30.0, "TWDUSD"),
+    (0.03, "USDTWD"),
+])
+def test_fx_upsert_rejects_reverse_or_implausible_quote(
+    store, rate, source_symbol,
+):
+    with pytest.raises(ValueError, match="USD-per-unit"):
+        store.upsert_fx_daily([{
+            "currency": "TWD", "date": "2026-07-03",
+            "usd_per_unit": rate, "source_symbol": source_symbol,
+        }])
+
+
 def test_split_history_replace_handles_vendor_ratio_revision_and_empty(store):
     store.replace_stock_splits("KLAC", [{
         "date": "2026-06-12", "numerator": 10, "denominator": 1,
@@ -203,4 +217,15 @@ def test_valuation_bad_batch_rolls_back_complete_prior_range(store):
             [{**_valuation(pe=99.0), "weight_coverage": 1.5}],
         )
     got = store.get_basket_ttm_valuations("SOXX")
+    assert got[0]["rebalance_weighted_ttm_pe_gaap_proxy"] == 24.5
+
+
+def test_empty_valuation_replace_fails_closed_and_preserves_prior_range(store):
+    store.replace_basket_ttm_valuation_range(
+        "SOXX", "2026-07-10", "2026-07-10", [_valuation()])
+    with pytest.raises(ValueError, match="non-empty"):
+        store.replace_basket_ttm_valuation_range(
+            "SOXX", "2026-07-10", "2026-07-10", [])
+    got = store.get_basket_ttm_valuations("SOXX")
+    assert len(got) == 1
     assert got[0]["rebalance_weighted_ttm_pe_gaap_proxy"] == 24.5

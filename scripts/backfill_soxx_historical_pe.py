@@ -23,6 +23,10 @@ from src.data.fmp_forward_ingestion import (
     load_soxx_symbol_aliases,
     normalize_fund_disclosure_snapshot,
 )
+from src.data.fx_validation import (
+    is_plausible_usd_per_unit,
+    validate_usd_per_unit,
+)
 from src.data.market_store import MarketStore
 from terminal.historical_basket_valuation import (
     compute_daily_basket_valuation,
@@ -599,6 +603,10 @@ def _fx_complete(
     rows: Sequence[Mapping[str, Any]], trading_dates: Sequence[str],
     from_date: str, to_date: str,
 ) -> bool:
+    if not rows or any(not is_plausible_usd_per_unit(
+            str(row.get("currency") or ""), row.get("usd_per_unit"),
+            row.get("source_symbol")) for row in rows):
+        return False
     proxy = [{"date": row["date"], "market_cap": row.get("usd_per_unit")}
              for row in rows]
     return market_cap_complete(proxy, trading_dates, from_date, to_date)
@@ -625,11 +633,21 @@ def _run_fx(
     for currency in missing:
         raw = client.get_historical_fx(
             f"{currency}USD", fetch_from, args.to_date)
-        normalized = [{
-            "currency": currency, "date": row["date"],
-            "usd_per_unit": row["close"], "source_symbol": f"{currency}USD",
-            "source": "fmp",
-        } for row in raw if row.get("date") and row.get("close")]
+        normalized = []
+        try:
+            for row in raw:
+                if not row.get("date") or row.get("close") is None:
+                    continue
+                source_symbol = f"{currency}USD"
+                normalized.append({
+                    "currency": currency, "date": row["date"],
+                    "usd_per_unit": validate_usd_per_unit(
+                        currency, row["close"], source_symbol),
+                    "source_symbol": source_symbol,
+                    "source": "fmp",
+                })
+        except ValueError:
+            normalized = []
         if not normalized:
             failures.append(currency)
             continue

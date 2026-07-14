@@ -138,7 +138,7 @@
 
 **SOXX 历史 GAAP TTM PE（一次性研究管线，未接 cron）**:
 
-`backfill_soxx_historical_pe.py` 依次冻结 FMP disclosure/live holdings、补齐季度净利润/历史市值/拆股/FX、运行 `historical_market_cap_sanity.py`，再由 `historical_basket_valuation.py` 生成固定调仓权重的逐日 proxy。每个 source snapshot 必须先通过 25–31 个 eligible equity rows 与 99.5%–100.5% raw weight 的阻塞门；主指标是成分权重加权 earnings yield 的倒数，`weight_coverage < 90%`、TTM earnings yield 非正或市值 sanity 未通过时不发布。查询与 verifier 均使用 SQLite `mode=ro`；verifier 从原始 source tables 逐日重算全部结果，并独立检查 KLAC/MCHP 的 jump/split/implied-shares 污染。
+`backfill_soxx_historical_pe.py` 依次冻结 FMP disclosure/live holdings、补齐季度净利润/历史市值/拆股/FX、运行 `historical_market_cap_sanity.py`，再由 `historical_basket_valuation.py` 生成固定调仓权重的逐日 proxy。每个 source snapshot 必须先通过 25–31 个 eligible equity rows 与 99.5%–100.5% raw weight 的阻塞门；主指标是成分权重加权 earnings yield 的倒数，`weight_coverage < 90%`、TTM earnings yield 非正或市值 sanity 未通过时不发布。查询与 verifier 均使用 SQLite `mode=ro`；verifier 从原始 source tables 逐日重算全部结果并检查 KLAC/MCHP 的 jump/split/implied-shares 污染。它复用生产者的纯计算内核，定位是只读 source recomputation/tamper detector，不是独立方法学实现；forced refresh 的历史事实需 immutable run manifest 才能独立证明。
 
 该序列不是 SOXX 官方 PE，也不是历史 forward PE；历史 disclosure 权重在调仓区间内固定回映，2026Q2 以后 live tail 使用抓取日漂移权重且明确标为 `live_snapshot_backcast_proxy`。证券身份映射分为 raw-first `fallback`（如 CREE→WOLF）和 CUSIP/ISIN 精确约束的 `authoritative` vendor correction（TERN→TER），两类证据都随 source/output 持久化。当前只支持 SOXX；QQQ/SMH 可复用表和纯计算层，但必须另行定义 disclosure/调仓日期语义。
 

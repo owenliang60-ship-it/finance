@@ -74,6 +74,32 @@ def test_missing_middle_quarter_and_malformed_acceptance_fail_closed():
         malformed, "2026-02-02", _calendar()) is None
 
 
+def test_ancient_malformed_quarter_does_not_poison_current_ttm():
+    ancient = {
+        "symbol": "TEST", "date": "2008-03-31", "period": "Q1",
+        "accepted_date": None, "reported_currency": "USD", "net_income": None,
+    }
+    selected = select_four_continuous_asof_quarters(
+        [ancient, *_quarters()], "2026-02-02", _calendar("2008-01-01"))
+    assert selected is not None
+    assert [row["date"] for row in selected] == [
+        "2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31"]
+
+
+def test_recent_malformed_quarter_cannot_fallback_to_stale_ttm():
+    older = {
+        "symbol": "TEST", "date": "2024-12-31", "period": "Q4",
+        "accepted_date": "2025-01-20 16:00:00", "reported_currency": "USD",
+        "net_income": 25.0,
+    }
+    malformed = {
+        "symbol": "TEST", "date": "2025-12-31", "period": "Q4",
+        "accepted_date": None, "reported_currency": "USD", "net_income": None,
+    }
+    assert select_four_continuous_asof_quarters(
+        [older, *_quarters()[:-1], malformed], "2026-02-02", _calendar()) is None
+
+
 def test_non_quarter_period_is_not_shifted_into_ttm():
     rows = _quarters() + [{
         **_quarters()[-1], "date": "2026-01-01", "period": "FY",
@@ -109,8 +135,10 @@ def test_invalid_latest_market_cap_does_not_fallback_to_previous_clean_row():
 
 
 def test_fx_asof_and_mixed_currency_conversion_are_per_quarter():
-    eur = [{"currency": "EUR", "date": "2026-01-30", "usd_per_unit": 1.2}]
-    twd = [{"currency": "TWD", "date": "2026-01-30", "usd_per_unit": 0.03}]
+    eur = [{"currency": "EUR", "date": "2026-01-30", "usd_per_unit": 1.2,
+            "source_symbol": "EURUSD"}]
+    twd = [{"currency": "TWD", "date": "2026-01-30", "usd_per_unit": 0.03,
+            "source_symbol": "TWDUSD"}]
     assert select_asof_fx("USD", [], "2026-02-02")["usd_per_unit"] == 1.0
     assert select_asof_fx("EUR", eur, "2026-02-02")["date"] == "2026-01-30"
     quarters = _quarters()
@@ -125,6 +153,16 @@ def test_fx_asof_and_mixed_currency_conversion_are_per_quarter():
     assert result["ttm_net_income_usd"] == pytest.approx(25.0)
     assert {item["currency"] for item in result["quarters"]} == {
         "EUR", "TWD", "USD"}
+
+
+@pytest.mark.parametrize("rate,source_symbol", [
+    (30.0, "TWDUSD"),
+    (0.03, "USDTWD"),
+])
+def test_fx_asof_rejects_reverse_or_implausible_twd_quote(rate, source_symbol):
+    rows = [{"currency": "TWD", "date": "2026-01-30",
+             "usd_per_unit": rate, "source_symbol": source_symbol}]
+    assert select_asof_fx("TWD", rows, "2026-02-02") is None
 
 
 def test_negative_income_is_included_in_both_metrics():

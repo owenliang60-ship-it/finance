@@ -157,6 +157,33 @@ def test_live_snapshot_uses_fetch_semantics_and_weaker_quality_tier():
     assert meta["data_quality_tier"] == "live_tail_weaker"
 
 
+def test_live_authoritative_alias_requires_security_identity():
+    aliases = load_soxx_symbol_aliases(ROOT / "config" / "soxx_symbol_aliases.json")
+    raw = [{"asset": "TERN", "name": "Teradyne Inc",
+            "weightPercentage": 2.0, "marketValue": 100}]
+    with pytest.raises(ValueError, match="CIK mismatch"):
+        normalize_fund_disclosure_snapshot(
+            "SOXX", raw, "live", "2026-07-14T02:00:00Z", _calendar(),
+            LISTING, GROUPS, aliases)
+
+
+def test_live_authoritative_alias_records_exact_identity_evidence():
+    aliases = load_soxx_symbol_aliases(ROOT / "config" / "soxx_symbol_aliases.json")
+    raw = [{
+        "asset": "TERN", "name": "Teradyne Inc",
+        "weightPercentage": 2.0, "marketValue": 100,
+        "cik": "0001100663", "cusip": "880770102",
+        "isin": "US8807701029",
+    }]
+    rows, _ = normalize_fund_disclosure_snapshot(
+        "SOXX", raw, "live", "2026-07-14T02:00:00Z", _calendar(),
+        LISTING, GROUPS, aliases)
+    assert rows[0]["raw_symbol"] == "TERN"
+    assert rows[0]["symbol"] == "TERN"
+    assert rows[0]["alias_symbol"] == "TER"
+    assert rows[0]["alias_mode"] == "authoritative"
+
+
 def test_non_september_membership_delta_warns_but_retains_snapshot():
     raw = [{"asset": "NVDA", "name": "NVIDIA", "weightPercentage": 9.0,
             "marketValue": 100, "updatedAt": "2026-07-13"}]

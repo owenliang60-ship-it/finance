@@ -3,6 +3,7 @@ from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set
 
 from src.data.fmp_forward_ingestion import next_trading_date
+from src.data.fx_validation import is_plausible_usd_per_unit
 from terminal.historical_market_cap_sanity import accepted_market_cap_status
 
 
@@ -75,6 +76,7 @@ def select_four_continuous_asof_quarters(
     target = date.fromisoformat(valuation_date)
     candidates: Dict[str, Dict[str, Any]] = {}
     accepted_by_fiscal: Dict[str, datetime] = {}
+    malformed_fiscal_dates = set()
     for raw in rows:
         period = str(raw.get("period") or "").upper()
         if not period.startswith("Q"):
@@ -85,7 +87,8 @@ def select_four_continuous_asof_quarters(
         accepted = _parse_timestamp(
             raw.get("accepted_date", raw.get("acceptedDate")))
         if accepted is None:
-            return None
+            malformed_fiscal_dates.add(fiscal.isoformat())
+            continue
         try:
             visible = next_trading_date(accepted.date().isoformat(), trading_dates)
         except ValueError:
@@ -94,11 +97,13 @@ def select_four_continuous_asof_quarters(
             continue
         income = raw.get("net_income", raw.get("netIncome"))
         if income is None:
-            return None
+            malformed_fiscal_dates.add(fiscal.isoformat())
+            continue
         try:
             numeric_income = float(income)
         except (TypeError, ValueError):
-            return None
+            malformed_fiscal_dates.add(fiscal.isoformat())
+            continue
         fiscal_text = fiscal.isoformat()
         if (fiscal_text not in candidates
                 or accepted > accepted_by_fiscal[fiscal_text]):
@@ -116,6 +121,8 @@ def select_four_continuous_asof_quarters(
     if len(candidates) < 4:
         return None
     selected = [candidates[key] for key in sorted(candidates)[-4:]]
+    if any(value >= selected[0]["date"] for value in malformed_fiscal_dates):
+        return None
     fiscal_dates = [date.fromisoformat(row["date"]) for row in selected]
     if any(not 60 <= (later - earlier).days <= 120
            for earlier, later in zip(fiscal_dates, fiscal_dates[1:])):
@@ -146,7 +153,9 @@ def select_asof_fx(
         return None
     selected_date, selected_row, rate = max(eligible, key=lambda item: item[0])
     staleness = (target - selected_date).days
-    if rate <= 0 or staleness > max_staleness_days:
+    if (not is_plausible_usd_per_unit(
+            normalized, rate, selected_row.get("source_symbol"))
+            or staleness > max_staleness_days):
         return None
     return {
         **dict(selected_row), "currency": normalized,

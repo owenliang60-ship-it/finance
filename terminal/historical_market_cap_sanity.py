@@ -28,11 +28,15 @@ def classify_market_cap_candidate(
     implied_shares: Optional[float],
     expected_shares: Optional[float],
     split_event: bool,
+    split_economically_continuous: bool,
     market_cap_jump: bool,
     price_aligned: bool,
     share_tolerance: float = 0.20,
 ) -> Dict[str, Any]:
     """Classify one row against the last clean, split-adjusted share regime."""
+    if split_event and not split_economically_continuous:
+        return {"status": "invalid_mcap", "anomaly_open": True,
+                "normalization_recovery": False}
     if implied_shares is None or expected_shares is None:
         return {"status": "unresolved", "anomaly_open": True,
                 "normalization_recovery": False}
@@ -159,12 +163,15 @@ def scan_market_cap_candidates(
             implied_shares / previous_observed_shares
             if implied_shares is not None and previous_observed_shares is not None
             else None)
+        jump = mcap_return is not None and abs(mcap_return) > jump_threshold
 
         # Weekend/holiday vendor events take effect on the first following
         # market-cap observation, not only on an exact date match.
         split_ratio = effective_splits.get(row_date)
         split_adjustment_applied = False
         split_adjustment_mode = None
+        economic_price_return = None
+        split_economically_continuous = split_ratio is None
         if split_ratio is not None and expected_shares is not None:
             # FMP daily prices and historical market caps may both be
             # back-adjusted across the entire history. Apply the corporate
@@ -177,13 +184,34 @@ def scan_market_cap_candidates(
                 expected_shares *= split_ratio
                 split_adjustment_applied = True
                 split_adjustment_mode = "observed_share_change"
+                if price_return is not None:
+                    economic_price_return = (
+                        (1.0 + price_return) * split_ratio - 1.0)
             elif (implied_share_ratio is not None
                   and abs(implied_share_ratio - 1.0) <= share_tolerance):
                 split_adjustment_mode = "already_back_adjusted"
+                economic_price_return = price_return
             else:
                 split_adjustment_mode = "unconfirmed"
+            split_economically_continuous = bool(
+                mcap_return is not None
+                and economic_price_return is not None
+                and abs(mcap_return) <= jump_threshold
+                and abs(economic_price_return) <= jump_threshold
+                and abs(mcap_return - economic_price_return)
+                <= return_alignment_tolerance
+            )
+            if (split_adjustment_mode == "already_back_adjusted"
+                    and not split_economically_continuous):
+                # A synchronous price+mcap divide can mimic an already
+                # back-adjusted split while destroying economic continuity.
+                # Hold the post-split share regime until mcap recovers so the
+                # bad window cannot close on the next equally polluted row.
+                expected_shares *= split_ratio
+                split_adjustment_applied = True
+                split_adjustment_mode = (
+                    "mcap_discontinuity_requires_share_change")
         expected_for_evidence = expected_shares
-        jump = mcap_return is not None and abs(mcap_return) > jump_threshold
         adjacent = row_date in split_adjacent
         price_aligned = (
             mcap_return is not None
@@ -205,6 +233,7 @@ def scan_market_cap_candidates(
                 implied_shares=implied_shares,
                 expected_shares=expected_shares,
                 split_event=split_ratio is not None,
+                split_economically_continuous=split_economically_continuous,
                 market_cap_jump=jump,
                 price_aligned=price_aligned,
                 share_tolerance=share_tolerance,
@@ -242,6 +271,8 @@ def scan_market_cap_candidates(
             "split_source_dates": effective_split_sources.get(row_date, []),
             "split_adjustment_applied": split_adjustment_applied,
             "split_adjustment_mode": split_adjustment_mode,
+            "economic_price_return": economic_price_return,
+            "split_economically_continuous": split_economically_continuous,
             "candidate": bool(jump or adjacent or was_open or anomaly_open),
             "candidate_reason": reason,
             "status": status,

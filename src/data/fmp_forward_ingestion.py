@@ -423,6 +423,9 @@ def normalize_fund_disclosure_snapshot(
             })
         else:
             raw_symbol = str(raw.get("asset") or "").strip().upper()
+            _, alias_evidence = resolve_disclosure_symbol(
+                raw_symbol, raw.get("cik"), symbol_aliases,
+                cusip=raw.get("cusip"), isin=raw.get("isin"))
             adapted.append(dict(raw))
             identity.append({
                 "raw_symbol": raw_symbol,
@@ -430,9 +433,12 @@ def normalize_fund_disclosure_snapshot(
                 "cusip": raw.get("cusip"),
                 "isin": raw.get("isin"),
                 "row_accepted_at": None,
-                "alias_symbol": None,
-                "alias_mode": None,
-                "alias_reason": None,
+                "alias_symbol": (
+                    alias_evidence["symbol"] if alias_evidence else None),
+                "alias_mode": (
+                    alias_evidence["mode"] if alias_evidence else None),
+                "alias_reason": (
+                    alias_evidence["reason"] if alias_evidence else None),
             })
 
     if source_kind == "disclosure":

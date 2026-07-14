@@ -207,6 +207,10 @@ Candidate trigger: `abs(mcap_return) > 40%` **or** the date is within one tradin
 
 An unsupported implied-share discontinuity opens an anomaly interval. That state persists through later low-volatility rows until a reverse discontinuity or split-consistent normalization closes it. The complete bad interval—not only the opening trigger date—is classified and repaired/quarantined; the normalization row is separately revalidated rather than automatically quarantined. This is required to cover all KLAC 2026-06-10..2026-06-23 and MCHP 2026-02-02..2026-02-06 observations.
 
+Split acceptance also requires economic continuity. For an observed share-count change, compare market-cap return with `(1 + raw_price_return) × split_ratio - 1`; for an already back-adjusted series, compare with raw price return. Both returns must stay within the 40% jump threshold and align within 15 percentage points. A synchronous price+mcap divide therefore cannot masquerade as an already-adjusted split; the post-split expected-share regime remains open until mcap recovers.
+
+Known one-time-study boundaries remain documented in `docs/issues/046-market-cap-sanity-gradual-drift-and-bootstrap-anchor.md`: a sub-threshold multi-day implied-share drift may re-anchor gradually, and a symbol's first row has no prior observation for validation. A recurring pipeline must add rolling-anchor and multi-row bootstrap evidence before promotion.
+
 Repair policy:
 
 1. Clean existing rows remain idempotently skipped.
@@ -229,6 +233,8 @@ For each resolved member/date:
 
 This prevents announcement-date look-ahead. It does not claim protection against later vendor restatements.
 
+Malformed rows older than the provisional four-quarter TTM window are ignored; a malformed row inside or after that window fails closed and cannot silently force fallback to a stale TTM. Cross-run restatement vintages are not preserved by the current `(symbol,date)` source-table key; see `docs/issues/047-income-quarterly-overwrite-loses-restatement-vintages.md`.
+
 KLAC's 2024-03-31 split-basis residue affects EPS/shares, not total `net_income`; this pipeline deliberately uses net income and is immune to that row's per-share mismatch. MU FY2026 Q2/Q3 extreme net income is verified ground truth (`docs/issues/037-mu-income-quarterly-last-two-quarters-corrupted.md` is `RESOLVED — FALSE ALARM`) and receives no special exclusion.
 
 ### 4.8 FX as-of
@@ -238,6 +244,7 @@ KLAC's 2024-03-31 split-basis residue affects EPS/shares, not total `net_income`
 - `accepted_date` only controls statement visibility. Convert all visible TTM income using the latest FX date `<= valuation_date`, maximum staleness 7 calendar days.
 - When all four quarters share one reported currency, the same valuation-date FX rate applies to the complete local-currency TTM sum.
 - If direct pair is unavailable, fail that member closed; do not silently invert or triangulate without an explicit tested rule.
+- Direct-pair direction and magnitude are validated at read/fetch/write boundaries: EURUSD must be within 0.50–2.00 USD/EUR and TWDUSD within 0.02–0.05 USD/TWD. Unknown non-USD currencies fail closed until explicitly allowlisted.
 - Persist `currency`, `fx_date`, `usd_per_unit`, and `source_symbol`.
 
 ### 4.9 Alias resolution
@@ -352,7 +359,7 @@ Do not overload `fmp_etf_holdings_snapshot` or `fmp_basket_valuation`:
 - Primary PE is null if weighted earnings yield is zero/negative, `weight_coverage < 0.90`, or no covered members exist. The secondary uncapped basket PE is null if aggregate covered TTM income is zero/negative.
 - Publish threshold: `weight_coverage >= 0.90`. Source-specific market-cap/income/FX weight coverage remains diagnostic and must be reported.
 - `>20%` constituent failure in any required backfill stage trips a batch fuse before valuation publication.
-- All source writes are transaction-scoped; dry-run writes nothing.
+- Each snapshot, symbol, currency batch, or output range write is individually atomic; there is no whole-backfill transaction. The post-stage `>20%` completion gate blocks downstream valuation publication but retains earlier successful idempotent source writes. Dry-run writes nothing.
 - Production run must acquire the existing `market_db_writer` resource lock and make a WAL-safe backup before the first write.
 - Never log API key-bearing URLs or response objects containing keys.
 - No `.env`, database, backup or generated bulk CSV is committed unless explicitly approved.
@@ -702,7 +709,7 @@ python -m scripts.backfill_soxx_historical_pe \
 
 **Commit:** `feat(valuation): query and export basket TTM PE history`
 
-### Task 8: Add independent read-only verifier
+### Task 8: Add read-only source recomputation verifier
 
 **Files:**
 
@@ -718,7 +725,7 @@ python -m scripts.backfill_soxx_historical_pe \
 5. output date continuity and `>=95%` publishable coverage;
 6. all published rows satisfy the 90% weight-coverage gate and source-specific coverage fields are consistent;
 7. evidence proves mcap/income/FX as-of constraints;
-8. independently sample at least one date per rebalance interval and recompute weights, continuous quarters, FX and both PE metrics from disclosure/income/HMC/FX source tables—not only from output `members_json`;
+8. recompute every output date's weights, continuous quarters, FX and both PE metrics from disclosure/income/HMC/FX source tables—not only from output `members_json`;
 9. duplicate PK and invalid JSON are zero;
 10. drift warnings distinguish source, live-tail quality, non-September membership delta, market-cap sanity, fundamentals, FX and computation gaps;
 11. rerun jump/split/implied-shares detection directly from `historical_market_cap`, `daily_price` and `fmp_stock_splits`; fail if any published member-date is invalid/unresolved, with explicit KLAC/MCHP anchors.
@@ -811,7 +818,7 @@ This task starts only after Boss approves merge/deploy.
 
 ```bash
 python3 -m scripts.backfill_soxx_historical_pe \
-  --stage all --from-date 2021-09-01 --dry-run --allow-network
+  --stage all --from-date 2021-09-20 --dry-run --allow-network
 ```
 
 Review expected disclosure count, constituent union, request count, currencies, 7-day coverage, live-tail quality tier, all market-cap jump classifications, KLAC/MCHP forced-refresh windows and estimated duration before writes. The dry-run must prove that no known invalid market-cap row is planned for valuation reuse.
@@ -825,7 +832,7 @@ scripts/cron_wrapper.sh \
   soxx_historical_pe \
   soxx_historical_pe_20260714.log \
   python3 -m scripts.backfill_soxx_historical_pe \
-    --stage all --from-date 2021-09-01
+    --stage all --from-date 2021-09-20
 ```
 
 **Verify and export:**
@@ -861,7 +868,7 @@ No cron is added. Recurring quarterly refresh is a separate decision after Boss 
 - forced HMC repair and valuation output both use atomic range replacement so stale rows cannot survive a rerun;
 - a market-cap date missing from the local price calendar remains in the quarantine/refresh plan instead of crashing or disappearing;
 - query and verifier never construct `MarketStore`; both open `mode=ro` + `query_only`, while verifier deliberately avoids `immutable=1` so live WAL pages remain visible;
-- verifier recomputes every daily output from source tables and independently re-runs raw HMC/price/split sanity, rather than sampling or trusting `members_json`.
+- verifier recomputes every daily output from source tables and re-runs raw HMC/price/split sanity through the shared pure kernels, rather than sampling or trusting `members_json`; it is a read-only recomputation/tamper detector, not an independent methodology oracle (`docs/issues/048-basket-verifier-shared-kernel-and-repair-provenance.md`).
 - every snapshot must contain 25–31 eligible equity rows and 99.5%–100.5% raw source weight before normalization or publication; verifier repeats the same blocking gate;
 - official disclosure supersedes a temporary live snapshot for the same effective rebalance, and verifier checks full leading/trailing trading-calendar continuity;
 - alias semantics are split into raw-first `fallback` (CREE→WOLF) and CUSIP/ISIN-backed `authoritative` vendor correction (TERN→TER), preventing data from the unrelated Terns Pharmaceuticals ticker entering SOXX;

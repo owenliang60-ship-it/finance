@@ -111,6 +111,30 @@ def test_back_adjusted_price_and_mcap_series_do_not_apply_split_twice():
     assert split_day["split_adjustment_mode"] == "already_back_adjusted"
 
 
+def test_split_day_synchronous_price_and_mcap_divide_stays_invalid_until_recovery():
+    result = scan_market_cap_candidates(
+        _rows("TEST", [
+            ("2026-01-02", 100e9),
+            ("2026-01-05", 10.2e9),
+            ("2026-01-06", 10.5e9),
+            ("2026-01-07", 105e9),
+        ], "market_cap"),
+        _rows("TEST", [
+            ("2026-01-02", 100.0),
+            ("2026-01-05", 10.2),
+            ("2026-01-06", 10.5),
+            ("2026-01-07", 10.5),
+        ], "close"),
+        [{"symbol": "TEST", "date": "2026-01-05",
+          "numerator": 10, "denominator": 1}],
+    )
+    status = {row["date"]: row["status"] for row in result}
+    assert status["2026-01-05"] == "invalid_mcap"
+    assert status["2026-01-06"] == "invalid_mcap"
+    assert status["2026-01-07"] == "clean"
+    assert result[-1]["normalization_recovery"] is True
+
+
 def test_split_adjacent_rows_are_inspected_even_without_large_mcap_jump():
     result = scan_market_cap_candidates(
         _rows("TEST", [("2026-01-02", 100e9),

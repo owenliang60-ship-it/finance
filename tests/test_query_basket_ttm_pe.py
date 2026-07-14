@@ -81,7 +81,45 @@ def test_summary_excludes_null_pe_and_separates_anchors(tmp_path):
     assert result["quality"]["gap_dates"] == ["2026-01-07"]
     assert result["quality"]["warnings"] == ["notice"]
     assert result["quality"]["quarantine_gaps"][0]["symbol"] == "KLAC"
+    assert result["methodology_version"] == "1.0"
     assert "restatements" in result["methodology_caveats"][1]
+
+
+def test_quarantine_is_derived_from_status_not_producer_boolean(tmp_path):
+    db = _database(tmp_path)
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "UPDATE basket_ttm_valuation SET mcap_sanity_json = ? "
+        "WHERE valuation_date = '2026-01-05'",
+        [json.dumps([
+            {"symbol": "CLEAN", "date": "2026-01-05", "status": "clean",
+             "quarantined": True},
+            {"symbol": "BAD", "date": "2026-01-05",
+             "status": "invalid_mcap", "quarantined": False},
+            {"symbol": "UNKNOWN", "date": "2026-01-05",
+             "status": "mystery", "quarantined": False},
+        ])])
+    conn.commit()
+    conn.close()
+    ro = query.connect_readonly(db)
+    result = query.build_result(query.load_rows(ro, "SOXX"), "SOXX")
+    ro.close()
+    assert [row["symbol"] for row in result["quality"]["quarantine_gaps"]] == [
+        "BAD", "UNKNOWN"]
+
+
+def test_mixed_or_unknown_methodology_version_fails_closed(tmp_path):
+    db = _database(tmp_path)
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "UPDATE basket_ttm_valuation SET methodology_version = 'fake' "
+        "WHERE valuation_date = '2026-01-06'")
+    conn.commit()
+    conn.close()
+    ro = query.connect_readonly(db)
+    with pytest.raises(ValueError, match="methodology_version"):
+        query.build_result(query.load_rows(ro, "SOXX"), "SOXX")
+    ro.close()
 
 
 def test_connection_uses_read_only_uri(monkeypatch, tmp_path):
@@ -122,8 +160,10 @@ def test_csv_and_markdown_are_deterministic(tmp_path):
     assert csv_path.read_bytes() == first_csv
     assert md_path.read_bytes() == first_md
     with csv_path.open(newline="", encoding="utf-8") as handle:
-        assert [row["valuation_date"] for row in csv.DictReader(handle)] == [
+        csv_rows = list(csv.DictReader(handle))
+        assert [row["valuation_date"] for row in csv_rows] == [
             "2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07"]
+        assert {row["methodology_version"] for row in csv_rows} == {"1.0"}
     assert "not official SOXX PE" in md_path.read_text(encoding="utf-8")
     assert "Quarantine gaps: 1" in md_path.read_text(encoding="utf-8")
     assert "Last publishable primary: 20.00 on 2026-01-06" in md_path.read_text(

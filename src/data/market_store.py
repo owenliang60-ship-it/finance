@@ -23,6 +23,8 @@ from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 
+from src.data.fx_validation import validate_usd_per_unit
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -1171,11 +1173,10 @@ class MarketStore:
                 raise ValueError("currency/source_symbol required")
             row_date = self._require_iso_date(row.get("date"), "FX date")
             try:
-                rate = float(row["usd_per_unit"])
-            except (KeyError, TypeError, ValueError) as exc:
-                raise ValueError("usd_per_unit must be positive") from exc
-            if rate <= 0:
-                raise ValueError("usd_per_unit must be positive")
+                rate = validate_usd_per_unit(
+                    currency, row["usd_per_unit"], source_symbol)
+            except KeyError as exc:
+                raise ValueError("USD-per-unit rate required") from exc
             prepared.append({
                 "currency": currency,
                 "date": row_date,
@@ -1269,6 +1270,8 @@ class MarketStore:
         end = self._require_iso_date(to_date, "to_date")
         if not basket or start > end:
             raise ValueError("valid basket_symbol and date range required")
+        if not rows:
+            raise ValueError("non-empty basket valuation range required")
         created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         prepared = []
         seen_dates = set()

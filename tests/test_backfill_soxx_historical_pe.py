@@ -139,6 +139,49 @@ def test_nonempty_but_still_incomplete_responses_trip_failure_fuse(stage):
         run_backfill(args, state, client=client)
 
 
+def test_stage_fuse_preserves_prior_per_symbol_writes_but_blocks_publication():
+    state = _state()
+    incomplete = sorted(state.income_by_symbol)[:7]
+    for symbol in incomplete:
+        state.income_by_symbol[symbol] = []
+    client = Mock()
+    client.get_income_statement.side_effect = lambda symbol, **kwargs: (
+        [{**row, "symbol": symbol} for row in _state().income_by_symbol["TEST"]]
+        if symbol == incomplete[0] else [{
+            "symbol": symbol, "date": "2025-12-31", "period": "Q4",
+            "accepted_date": "2026-01-20 16:00:00",
+            "reported_currency": "USD", "net_income": 25.0,
+        }])
+    store = Mock()
+    args = parse_args([
+        "--stage", "fundamentals", "--from-date", "2026-01-20",
+        "--to-date", "2026-01-23",
+    ])
+    with pytest.raises(RuntimeError, match="failure fuse"):
+        run_backfill(args, state, client=client, store=store)
+    assert store.upsert_income.called
+    store.replace_basket_ttm_valuation_range.assert_not_called()
+
+
+def test_implausible_fx_response_trips_fuse_without_writing():
+    state = _state()
+    for row in state.income_by_symbol["TEST"]:
+        row["reported_currency"] = "TWD"
+    client = Mock()
+    client.get_historical_fx.return_value = [
+        {"date": "2026-01-20", "close": 30.0},
+        {"date": "2026-01-23", "close": 30.0},
+    ]
+    store = Mock()
+    args = parse_args([
+        "--stage", "fx", "--from-date", "2026-01-20",
+        "--to-date", "2026-01-23",
+    ])
+    with pytest.raises(RuntimeError, match="fx failure fuse"):
+        run_backfill(args, state, client=client, store=store)
+    store.upsert_fx_daily.assert_not_called()
+
+
 def test_snapshot_quality_blocks_truncated_members_or_weights():
     rows = _state().snapshots
     assert validate_snapshot_quality(rows) == {
