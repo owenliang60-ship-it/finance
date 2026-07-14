@@ -151,12 +151,14 @@ def test_non_september_membership_delta_warns_but_retains_snapshot():
 
 def test_corporate_alias_requires_matching_cik_and_never_fuzzy_matches():
     aliases = load_soxx_symbol_aliases(ROOT / "config" / "soxx_symbol_aliases.json")
-    symbol, evidence = resolve_disclosure_symbol("CREE", "0000895419", aliases)
+    # This is the FMP fund-disclosure identifier observed on both CREE and
+    # WOLF rows. It is deliberately not treated as an authoritative SEC CIK.
+    symbol, evidence = resolve_disclosure_symbol("CREE", "0001100663", aliases)
     assert symbol == "WOLF"
     assert evidence["raw_symbol"] == "CREE"
     assert evidence["reason"]
     with pytest.raises(ValueError):
         resolve_disclosure_symbol("CREE", "WRONG", aliases)
-    symbol, evidence = resolve_disclosure_symbol("CREE INC", "0000895419", aliases)
+    symbol, evidence = resolve_disclosure_symbol("CREE INC", "0001100663", aliases)
     assert symbol == "CREE INC"
     assert evidence is None

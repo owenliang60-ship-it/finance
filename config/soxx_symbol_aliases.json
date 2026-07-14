@@ -1,7 +1,7 @@
 {
   "CREE": {
     "symbol": "WOLF",
-    "cik": "0000895419",
-    "reason": "Cree renamed Wolfspeed in 2021; FMP quarterly history shares the same CIK"
+    "cik": "0001100663",
+    "reason": "Cree renamed Wolfspeed in 2021; FMP fund-disclosure rows use this same vendor CIK before and after the rename"
   }
 }
