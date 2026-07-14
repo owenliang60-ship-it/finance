@@ -101,10 +101,13 @@ mtime=1783982579 size=882147328
 
 No backup was created because no database write occurred. The persisted-table verifier was intentionally not run: dry-run computed results exist only in memory and `/tmp/soxx_postreview_dry_run_20260714.json`, not in `basket_ttm_valuation`. Production acceptance still requires a separately approved locked write/backfill followed by the independent `mode=ro` verifier and export. No cron is proposed in this phase.
 
+Runtime provenance: the final network dry-run was executed after all valuation, fuse, identity, sanity, and database-safety fixes. The subsequent commit only added explicit `empty_responses` / `incomplete` report fields, the query command's last-publishable Markdown line, documentation, and tests; it did not change the computed valuation, fuse decision, or read-only behavior. Consequently, the retained JSON is functionally representative of the final implementation but is not a byte-for-byte artifact from the branch's final documentation commit.
+
 ## Limitations
 
 - Historical holdings are fixed retrospective quarter-end fund snapshots mapped to inferred rebalance intervals, not official daily index weights.
 - Disclosure availability is retained; rows before `composition_available_date` are ex-post composition proxies.
 - FMP financial history can contain later restatements and is not a complete vintage database.
 - The current live tail uses fetch-date drifted weights because the next historical disclosure is not yet available.
+- The verifier independently recomputes persisted membership evidence and the final/base market-cap sanity classification. After a forced range refresh replaces source rows, however, it cannot reconstruct the historical fact that the refetch occurred; `pre_refresh_status`, refresh-window, and refresh-attempt fields remain producer-side audit evidence in this one-time pipeline. A recurring production pipeline would need an immutable run manifest for independent repair-event attestation.
 - This is trailing GAAP valuation. It must not be labeled or combined with the forward-EPS history that only begins with auditable snapshots in July 2026.
