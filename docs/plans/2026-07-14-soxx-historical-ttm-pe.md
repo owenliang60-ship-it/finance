@@ -853,6 +853,16 @@ python3 -m scripts.query_basket_ttm_pe --basket SOXX \
 
 No cron is added. Recurring quarterly refresh is a separate decision after Boss sees the result.
 
+### Implementation hardening recorded during Tasks 0–8
+
+- source rows retain both disclosure `acceptedDate` and ingestion `fetched_at`; accepted-date timezone is conservatively visible only from the next SOXX trading day;
+- live holdings are frozen per inferred rebalance unless `--refresh-live` is explicit;
+- split history is replaced as a complete per-symbol set (including authoritative empty history), keyed by `(symbol,date)`;
+- forced HMC repair and valuation output both use atomic range replacement so stale rows cannot survive a rerun;
+- a market-cap date missing from the local price calendar remains in the quarantine/refresh plan instead of crashing or disappearing;
+- query and verifier never construct `MarketStore`; both open `mode=ro` + `query_only`, while verifier deliberately avoids `immutable=1` so live WAL pages remain visible;
+- verifier recomputes every daily output from source tables and independently re-runs raw HMC/price/split sanity, rather than sampling or trusting `members_json`.
+
 ## 10. Estimated Cost and Duration
 
 Based on live probes:
