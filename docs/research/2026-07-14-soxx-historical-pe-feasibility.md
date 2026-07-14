@@ -54,12 +54,31 @@ iShares 官方材料说明 SOXX：
 
 - 原始 ticker 并集：41；
 - ticker × snapshot 共 564 个组合；
-- 在持仓日向前 10 天内能找到历史市值：539 个，覆盖率 95.57%；
+- 在持仓日向前 10 天内能找到历史市值：539 个，覆盖率 95.57%；该数字只是可行性预检，不等于实施门槛；
 - 12 个 snapshot 存在少量缺口，单期最多 3 个 ticker。
 
 生产库中 SOXX 本身已有 1,308 个交易日价格，范围 2021-04-26 至 2026-07-10，可作为日频估值序列的交易日历。
 
-### 4. 历史利润需要回填
+实施计划采用 7 个日历日的 staleness 上限，因此 production dry-run 必须按 **7 天口径**重新计算 snapshot 与逐日权重覆盖，不能用上述 10 天/95.57% 直接证明“95% 交易日可发布”。若 7 天实测达不到 95%，应报告真实覆盖并调整产品结论，而不是放宽数据门槛。
+
+### 4. 历史市值存在“有值但错误”的污染
+
+`historical_market_cap` 的非空与 freshness 检查不足以保证正确。2026-07-14 对候选历史成分股复核确认：
+
+- `KLAC`：2026-06-10 至 2026-06-23 市值从约 $280B 降到 $28B–$35B，2026-06-24 恢复到 $315B；FMP split endpoint 确认 2026-06-12 有 10:1 split。该窗口是已知拆股后股数更新滞后，属于真实污染；本地 issue 记录为 `docs/issues/035-klac-split-cross-table-adjustment-inconsistency.md`（当前仍 OPEN）。
+- `MCHP`：2026-02-02 市值约 $41B→$82B，2026-02-09 又回到 $40B；同期股价没有对应翻倍，FMP split history 也没有 2026 年事件，形态符合 shares-outstanding 数据错误。
+- `SLAB`：2026-02-04 市值约 +48.9%，但股价同期也从 $136.62 上涨到 $203.41，implied shares 保持稳定，属于可解释的真实价格变化候选，不能只凭市值跳变自动删除。
+
+因此 sanity 检查必须同时使用：
+
+1. 日间市值变化；
+2. 同日价格变化；
+3. `market_cap / close` 的 implied-shares 变化；
+4. FMP `/stable/splits?symbol=...` 的拆股日期与比例。
+
+已存在但未通过 sanity 的市值行不得被“幂等跳过”。系统应强制重拉并覆盖异常窗口；若重拉后仍异常，则 quarantine 对应 symbol-date，使其不进入 PE，并通过权重覆盖率和 warnings 显式暴露。
+
+### 5. 历史利润需要回填
 
 现有 `income_quarterly` 对主要成分股通常只有最近 9–10 个季度，约从 2024 年开始。按严格的 `accepted_date <= valuation_date` 口径：
 
@@ -69,7 +88,12 @@ iShares 官方材料说明 SOXX：
 
 FMP `income-statement?period=quarter&limit=40` 实测可返回足够长的季度历史，因此需为历史成分股并集回填约 40 个季度，并复用现有 `income_quarterly` schema/upsert，不另建重复利润表。
 
-### 5. 币种是阻塞性正确性约束
+两个已知陷阱的处理边界：
+
+- `KLAC` 2024-03-31 的拆股前残留行只污染 EPS/股数口径；本计划聚合 `net_income` 总额，不使用 EPS，因此不受该行拆股口径影响。
+- `MU` FY2026 Q2/Q3 的约 $28B 净利润已经 SEC/公司材料核实为真实超级周期数字；本地 `docs/issues/037-mu-income-quarterly-last-two-quarters-corrupted.md` 已标记 `RESOLVED — FALSE ALARM`，不得添加 MU 特例或剔除规则。
+
+### 6. 币种是阻塞性正确性约束
 
 `historical_market_cap` 是美元，但 `income_quarterly.net_income` 可能是本币：
 
@@ -79,7 +103,7 @@ FMP `income-statement?period=quarter&limit=40` 实测可返回足够长的季度
 
 把本币净利润直接和美元市值相除会制造数量级错误。FMP 历史 FX endpoint 实测支持 `EURUSD`、`TWDUSD` 等直接货币对。`accepted_date` 只决定一份财报在估值日是否可见；通过可见性门控后的本币 TTM 净利润应按最新 `fx_date <= valuation_date` 的即期汇率换算，才能与同日美元市值匹配。实际使用的 FX 日期和汇率必须写入审计证据。
 
-### 6. ticker 变更需要证据化 alias
+### 7. ticker 变更需要证据化 alias
 
 历史样本含 CREE/WOLF 等更名情形。FMP 对两者均返回历史季度利润且 CIK 相同。处理原则：
 
@@ -100,6 +124,8 @@ FMP `income-statement?period=quarter&limit=40` 实测可返回足够长的季度
 
 在 `holding_date` 上计算的季度点使用当天实际观察到的 `pctVal`，解释最直接。把该权重固定回映到 `composition_effective_date` 并持有到下一次调仓的日频曲线是 **ex-post fixed-rebalance-weight descriptive proxy**，不是官方指数历史，也不是可直接回测的实时信号。若将来要做可交易回测，应单独构建“截至当日已知的 composition”序列，不能把晚于调仓日披露的完整成员表提前使用。
 
+2026Q2 disclosure 尚未出现。2026-06-19 收盘后至下一次 disclosure 之间使用最新 live `etf/holdings(SOXX)`：`holding_date` 与 `composition_available_date` 均取实际抓取日，`rebalance_close_date=2026-06-19`，`composition_effective_date` 取下一 SOXX 交易日。把抓取日已经漂移的 live 权重回映到 6 月调仓后区间，必须单独标记为 `live_snapshot_backcast_proxy`；其证据强度低于历史 quarter-end disclosure，不得和历史段静默混为同一质量层。
+
 利润时间约束：每个估值日只允许使用 `accepted_date <= valuation_date` 的季度记录。此约束消除公告日 look-ahead，但 FMP 当前返回的历史财报可能包含后续重述，并不等同于完整 vintage database；结果必须标注这一限制。
 
 ## 推荐实现边界
@@ -107,7 +133,8 @@ FMP `income-statement?period=quarter&limit=40` 实测可返回足够长的季度
 本轮做：
 
 - 保存 19 期历史 disclosure + 当前 live snapshot；
-- 回填历史成分股的季度利润与必要 FX；
+- 回填历史成分股的季度利润、必要 FX 与 split 事件；
+- 对候选成分股历史市值做 price/implied-shares/split 交叉 sanity，强制修复或 quarantine KLAC/MCHP 等异常窗口；
 - 生成 19 个 `holding_date` 的观察权重 PE，并生成从 2021-09-20 起的 SOXX 日频 fixed-rebalance-weight TTM PE proxy；
 - 提供查询/export、只读 verifier 和实际结果报告；
 - 一次性生产 backfill，带 dry-run、资源锁、备份、可恢复和审计证据。
