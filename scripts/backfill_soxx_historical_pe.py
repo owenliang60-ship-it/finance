@@ -3,18 +3,19 @@
 import argparse
 import json
 import sqlite3
+import statistics
 import sys
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.build_company_concept_registry import _backup_sqlite
-from src.data.fmp_client import FMPClient
+from src.data.fmp_client import FMPClient, FMPResponseError
 from src.data.fmp_forward_ingestion import (
     anchor_trading_date,
     infer_soxx_rebalance_close,
@@ -28,6 +29,7 @@ from terminal.historical_basket_valuation import (
     select_four_continuous_asof_quarters,
 )
 from terminal.historical_market_cap_sanity import (
+    accepted_market_cap_status,
     build_forced_refresh_windows,
     scan_market_cap_candidates,
 )
@@ -149,10 +151,82 @@ def _snapshot_universe(snapshots: Sequence[Mapping[str, Any]]) -> List[str]:
     symbols = set()
     for row in snapshots:
         if row.get("included") == 1 and row.get("symbol"):
+            if row.get("alias_mode") == "authoritative" and row.get("alias_symbol"):
+                symbols.add(str(row["alias_symbol"]).upper())
+            else:
+                symbols.add(str(row["symbol"]).upper())
+        if row.get("covered_by"):
+            symbols.add(str(row["covered_by"]).upper())
+        if (row.get("alias_symbol")
+                and row.get("alias_mode") != "authoritative"):
+            symbols.add(str(row["alias_symbol"]).upper())
+    return sorted(symbols)
+
+
+def _snapshot_member_universe(
+    snapshots: Sequence[Mapping[str, Any]],
+) -> List[str]:
+    """Return disclosed economic members, excluding alias-only support symbols."""
+    symbols = set()
+    for row in snapshots:
+        if row.get("included") == 1 and row.get("symbol"):
             symbols.add(str(row["symbol"]).upper())
         if row.get("covered_by"):
             symbols.add(str(row["covered_by"]).upper())
     return sorted(symbols)
+
+
+def validate_snapshot_quality(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    minimum_members: int = 25,
+    maximum_members: int = 31,
+    minimum_weight: float = 99.5,
+    maximum_weight: float = 100.5,
+) -> Dict[str, Any]:
+    """Block truncated/partial snapshots before weights can be renormalized."""
+    weights = []
+    for row in rows:
+        try:
+            weights.append(float(row.get("weight_pct")))
+        except (TypeError, ValueError):
+            raise ValueError("snapshot contains non-numeric source weight") from None
+    members = sum(bool(row.get("included") == 1 or row.get("covered_by"))
+                  for row in rows)
+    weight_sum = sum(weights)
+    detail = {"members": members, "raw_weight_sum": weight_sum}
+    if not minimum_members <= members <= maximum_members:
+        raise ValueError(
+            f"snapshot member count outside {minimum_members}-{maximum_members}: "
+            f"{members}")
+    if not minimum_weight <= weight_sum <= maximum_weight:
+        raise ValueError(
+            f"snapshot raw weight outside {minimum_weight}-{maximum_weight}: "
+            f"{weight_sum:.6f}")
+    return detail
+
+
+def _previous_snapshot_symbols(
+    snapshots: Sequence[Mapping[str, Any]], holding_date: str,
+) -> Optional[Set[str]]:
+    prior_dates = sorted({
+        str(row["holding_date"]) for row in snapshots
+        if row.get("source_kind") == "disclosure"
+        and str(row.get("holding_date")) < holding_date
+    })
+    if not prior_dates:
+        return None
+    previous_date = prior_dates[-1]
+    return {
+        str(row.get("raw_symbol") or row.get("symbol")
+            or row.get("covered_by")).upper()
+        for row in snapshots
+        if row.get("source_kind") == "disclosure"
+        and row.get("holding_date") == previous_date
+        and (row.get("included") == 1 or row.get("covered_by"))
+        and (row.get("raw_symbol") or row.get("symbol")
+             or row.get("covered_by"))
+    }
 
 
 def _hydrate_symbols(
@@ -254,6 +328,7 @@ def _fetch_sources(
         raise ValueError("FMP disclosure-date source is empty")
     added = 0
     skipped = 0
+    quality = []
     for item in sorted(dates, key=lambda value: value["date"]):
         holding_date = str(item["date"])
         if (holding_date, "disclosure") in existing:
@@ -261,9 +336,16 @@ def _fetch_sources(
             continue
         raw = client.get_fund_disclosure(
             "SOXX", int(item["year"]), int(item["quarter"]))
+        previous_symbols = _previous_snapshot_symbols(
+            state.snapshots, holding_date)
         normalized, metadata = normalize_fund_disclosure_snapshot(
             "SOXX", raw, "disclosure", fetched_at, state.trading_dates,
-            listing, groups, aliases)
+            listing, groups, aliases, previous_symbols=previous_symbols)
+        quality.append({"holding_date": holding_date,
+                        "source_kind": metadata["source_kind"],
+                        "data_quality_tier": metadata["data_quality_tier"],
+                        "warnings": metadata["warnings"],
+                        **validate_snapshot_quality(normalized)})
         if store is not None:
             store.replace_fund_disclosure_snapshot(
                 "SOXX", metadata["holding_date"], "disclosure", normalized,
@@ -284,7 +366,14 @@ def _fetch_sources(
         raw_live = client.get_etf_holdings("SOXX")
         normalized, metadata = normalize_fund_disclosure_snapshot(
             "SOXX", raw_live, "live", fetched_at, state.trading_dates,
-            listing, groups, aliases)
+            listing, groups, aliases,
+            previous_symbols=_previous_snapshot_symbols(
+                state.snapshots, fetch_date) or None)
+        quality.append({"holding_date": metadata["holding_date"],
+                        "source_kind": metadata["source_kind"],
+                        "data_quality_tier": metadata["data_quality_tier"],
+                        "warnings": metadata["warnings"],
+                        **validate_snapshot_quality(normalized)})
         if store is not None:
             store.replace_fund_disclosure_snapshot(
                 "SOXX", metadata["holding_date"], "live", normalized,
@@ -297,7 +386,8 @@ def _fetch_sources(
         added += 1
     else:
         skipped += 1
-    report["stages"]["source"] = {"added": added, "skipped": skipped}
+    report["stages"]["source"] = {
+        "added": added, "skipped": skipped, "snapshot_quality": quality}
 
 
 def _check_fuse(stage: str, failures: List[str], total: int) -> None:
@@ -331,8 +421,14 @@ def _run_fundamentals(
             store.upsert_income(symbol, list(rows))
         fetched += 1
     _check_fuse("fundamentals", failures, len(symbols))
+    final_complete = sum(fundamentals_complete(
+        state.income_by_symbol.get(symbol, []), args.from_date, args.to_date,
+        state.trading_dates) for symbol in symbols)
     report["stages"]["fundamentals"] = {
-        "complete": len(symbols) - len(missing), "fetched": fetched,
+        "preexisting_complete": len(symbols) - len(missing),
+        "complete": final_complete, "fetched": fetched,
+        "rows_available": sum(bool(state.income_by_symbol.get(symbol))
+                              for symbol in symbols),
         "failed": failures}
 
 
@@ -377,8 +473,14 @@ def _run_mcap(
                 symbol, fetch_from, args.to_date, list(rows))
         fetched += 1
     _check_fuse("mcap", failures, len(symbols))
+    final_complete = sum(market_cap_complete(
+        state.market_cap_by_symbol.get(symbol, []), state.trading_dates,
+        args.from_date, args.to_date) for symbol in symbols)
     report["stages"]["mcap"] = {
-        "complete": len(symbols) - len(missing), "fetched": fetched,
+        "preexisting_complete": len(symbols) - len(missing),
+        "complete": final_complete, "fetched": fetched,
+        "rows_available": sum(bool(state.market_cap_by_symbol.get(symbol))
+                              for symbol in symbols),
         "failed": failures}
 
 
@@ -409,6 +511,8 @@ def _run_sanity(
             state.market_cap_by_symbol.get(symbol, []),
             state.price_by_symbol.get(symbol, []),
             state.splits_by_symbol.get(symbol, []))
+        pre_status = {str(row["date"]): str(row["status"])
+                      for row in classifications}
         relevant = [row for row in classifications
                     if args.from_date <= row["date"] <= args.to_date]
         # A vendor can publish a market-cap row on a date missing from the
@@ -419,7 +523,7 @@ def _run_sanity(
             *[str(row["date"]) for row in relevant],
         })
         windows = build_forced_refresh_windows(relevant, trading, pad=5) if trading else []
-        refreshed = 0
+        refreshed_windows: List[Dict[str, str]] = []
         if windows and client is not None:
             for window in windows:
                 rows = client.get_historical_market_cap(
@@ -432,7 +536,7 @@ def _run_sanity(
                 if store is not None:
                     store.replace_historical_market_cap_range(
                         symbol, window["from_date"], window["to_date"], list(rows))
-                refreshed += 1
+                refreshed_windows.append(dict(window))
             classifications = scan_market_cap_candidates(
                 state.market_cap_by_symbol.get(symbol, []),
                 state.price_by_symbol.get(symbol, []),
@@ -444,12 +548,31 @@ def _run_sanity(
                 {"stage": "mcap_sanity", "symbol": symbol, **window}
                 for window in windows)
         state.sanity_by_symbol[symbol] = classifications
+        enriched = []
+        for row in classifications:
+            matching = [window for window in windows
+                        if window["from_date"] <= row["date"] <= window["to_date"]]
+            enriched.append({
+                **row,
+                "pre_refresh_status": pre_status.get(str(row["date"])),
+                "forced_refresh_planned": bool(matching),
+                "forced_refresh_attempted": bool(matching and client is not None),
+                "refresh_succeeded": any(
+                    window["from_date"] <= row["date"] <= window["to_date"]
+                    for window in refreshed_windows
+                ),
+                "refresh_windows": matching,
+                "quarantined": not accepted_market_cap_status(str(row["status"])),
+            })
+        classifications = enriched
+        state.sanity_by_symbol[symbol] = classifications
         quarantined = [row["date"] for row in relevant
                        if row["status"] in {"invalid_mcap", "unresolved"}]
         summary[symbol] = {
             "flagged": sum(row["candidate"] for row in relevant),
             "refresh_windows": windows,
-            "refreshed": refreshed,
+            "refreshed": len(refreshed_windows),
+            "refreshed_windows": refreshed_windows,
             "quarantined": quarantined,
         }
     report["stages"]["mcap_sanity"] = summary
@@ -523,6 +646,12 @@ def _snapshot_groups(
     result = []
     for (_, source_kind), rows in grouped.items():
         first = rows[0]
+        raw_warnings = first.get("snapshot_warnings_json", [])
+        if isinstance(raw_warnings, str):
+            try:
+                raw_warnings = json.loads(raw_warnings)
+            except ValueError as exc:
+                raise ValueError("invalid snapshot_warnings_json") from exc
         composition = {
             "holding_date": first["holding_date"],
             "anchor_trading_date": anchor_trading_date(
@@ -535,10 +664,88 @@ def _snapshot_groups(
             "data_quality_tier": (
                 "live_tail_weaker" if source_kind == "live"
                 else "historical_disclosure_fixed_proxy"),
+            "snapshot_warnings": list(raw_warnings),
+            "source_kind": source_kind,
         }
         result.append((composition, sorted(rows, key=lambda row: row["raw_row_index"])))
+    # For the same rebalance/effective date, a later official disclosure
+    # supersedes the temporary live-tail proxy regardless of holding_date.
+    priority = {"live": 0, "disclosure": 1}
     return sorted(result, key=lambda item: (
-        item[0]["composition_effective_date"], item[0]["holding_date"]))
+        item[0]["composition_effective_date"],
+        priority[item[0]["source_kind"]], item[0]["holding_date"]))
+
+
+def _preview_metric(
+    outputs: Sequence[Mapping[str, Any]], field: str,
+) -> Dict[str, Any]:
+    rows = [row for row in outputs if row.get(field) is not None]
+    if not rows:
+        return {
+            "current": None, "percentile": None, "minimum": None,
+            "minimum_date": None, "median": None, "maximum": None,
+            "maximum_date": None, "observations": 0,
+        }
+    current = outputs[-1].get(field)
+    values = [float(row[field]) for row in rows]
+    minimum = min(rows, key=lambda row: (float(row[field]), row["valuation_date"]))
+    maximum = max(rows, key=lambda row: (float(row[field]), row["valuation_date"]))
+    percentile = (sum(value <= float(current) for value in values) / len(values) * 100
+                  if current is not None else None)
+    return {
+        "current": current,
+        "percentile": percentile,
+        "minimum": minimum[field],
+        "minimum_date": minimum["valuation_date"],
+        "median": statistics.median(values),
+        "maximum": maximum[field],
+        "maximum_date": maximum["valuation_date"],
+        "observations": len(values),
+    }
+
+
+def _valuation_preview(outputs: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+    if not outputs:
+        return {}
+    current = outputs[-1]
+    coverages = [float(row["weight_coverage"]) for row in outputs]
+    anchors = [{
+        "holding_date": row["holding_date"],
+        "valuation_date": row["valuation_date"],
+        "primary_pe": row["rebalance_weighted_ttm_pe_gaap_proxy"],
+        "secondary_pe": row["uncapped_mcap_basket_pe_gaap"],
+        "weight_coverage": row["weight_coverage"],
+        "data_quality_tier": row["data_quality_tier"],
+    } for row in outputs if row["is_observed_weight_date"] == 1]
+    missing = [{
+        "raw_symbol": member.get("raw_symbol"),
+        "resolved_symbol": member.get("resolved_symbol"),
+        "weight_pct": member.get("weight_pct"),
+        "reason": member.get("exclusion_reason"),
+    } for member in current["members_json"] if member.get("exclusion_reason")]
+    return {
+        "date_range": [outputs[0]["valuation_date"], current["valuation_date"]],
+        "current": {
+            "valuation_date": current["valuation_date"],
+            "holding_date": current["holding_date"],
+            "composition_effective_date": current["composition_effective_date"],
+            "composition_available_date": current["composition_available_date"],
+            "data_quality_tier": current["data_quality_tier"],
+            "weight_coverage": current["weight_coverage"],
+            "primary_pe": current["rebalance_weighted_ttm_pe_gaap_proxy"],
+            "secondary_pe": current["uncapped_mcap_basket_pe_gaap"],
+            "missing_members": missing,
+        },
+        "primary": _preview_metric(
+            outputs, "rebalance_weighted_ttm_pe_gaap_proxy"),
+        "secondary": _preview_metric(outputs, "uncapped_mcap_basket_pe_gaap"),
+        "weight_coverage": {
+            "minimum": min(coverages),
+            "median": statistics.median(coverages),
+            "maximum": max(coverages),
+        },
+        "observed_weight_anchors": anchors,
+    }
 
 
 def _run_compute(
@@ -552,6 +759,8 @@ def _run_compute(
                 state.price_by_symbol.get(symbol, []),
                 state.splits_by_symbol.get(symbol, []))
     groups = _snapshot_groups(state.snapshots, state.trading_dates)
+    for _, holding_rows in groups:
+        validate_snapshot_quality(holding_rows)
     dates = [value for value in state.trading_dates
              if args.from_date <= value <= args.to_date]
     outputs = []
@@ -571,9 +780,6 @@ def _run_compute(
             trading_dates=state.trading_dates,
             composition=composition,
         ))
-    if store is not None:
-        store.replace_basket_ttm_valuation_range(
-            "SOXX", args.from_date, args.to_date, outputs)
     publishable = sum(
         row["rebalance_weighted_ttm_pe_gaap_proxy"] is not None for row in outputs)
     report["coverage_7d"] = {
@@ -585,6 +791,14 @@ def _run_compute(
     }
     report["stages"]["compute"] = {
         "rows": len(outputs), "publishable": publishable}
+    report["valuation_preview"] = _valuation_preview(outputs)
+    if store is not None and not report["coverage_7d"]["target_passed"]:
+        raise RuntimeError(
+            "compute publishable coverage missed required 95% target; "
+            "valuation range was not written")
+    if store is not None:
+        store.replace_basket_ttm_valuation_range(
+            "SOXX", args.from_date, args.to_date, outputs)
 
 
 def run_backfill(
@@ -612,11 +826,19 @@ def run_backfill(
         else:
             _fetch_sources(args, state, client, store, report)
 
+    member_symbols = _snapshot_member_universe(state.snapshots)
     symbols = _snapshot_universe(state.snapshots)
     if not symbols:
         raise ValueError("historical basket universe is empty")
     if conn is not None:
         _hydrate_symbols(state, conn, symbols)
+    report["member_universe_count"] = len(member_symbols)
+    report["evaluation_universe_count"] = len(symbols)
+    report["alias_support_symbols"] = sorted({
+        str(row["alias_symbol"]).upper() for row in state.snapshots
+        if row.get("alias_symbol")
+    })
+    # Backward-compatible report field; this is the full evaluation universe.
     report["universe_count"] = len(symbols)
 
     if "fundamentals" in stages:
@@ -657,8 +879,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             conn=conn if conn is not None else store._get_conn() if store else None)
         report["backup_path"] = str(backup_path) if backup_path else None
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
-        return 0
-    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return (0 if report.get("coverage_7d", {}).get(
+            "target_passed", True) else 1)
+    except (FileNotFoundError, FMPResponseError, RuntimeError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     finally:

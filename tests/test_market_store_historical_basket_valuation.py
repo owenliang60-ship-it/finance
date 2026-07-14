@@ -27,6 +27,9 @@ def _holding(index=0, symbol="NVDA", weight=8.5):
         "raw_row_index": index,
         "raw_symbol": symbol,
         "symbol": symbol,
+        "alias_symbol": "TER",
+        "alias_mode": "authoritative",
+        "alias_reason": "vendor symbol error",
         "name": symbol,
         "weight_pct": weight,
         "market_value": 100.0,
@@ -37,6 +40,7 @@ def _holding(index=0, symbol="NVDA", weight=8.5):
         "filter_reason": None,
         "covered_by": None,
         "row_accepted_at": "2025-11-26 12:01:37",
+        "snapshot_warnings_json": ["non_reconstitution_membership_delta"],
     }
 
 
@@ -109,6 +113,9 @@ def test_replace_disclosure_snapshot_is_atomic(store):
         "SOXX", holding_date="2025-09-30", source_kind="disclosure")
     assert len(rows) == 1
     assert rows[0]["symbol"] == "NVDA"
+    assert rows[0]["alias_mode"] == "authoritative"
+    assert json.loads(rows[0]["snapshot_warnings_json"]) == [
+        "non_reconstitution_membership_delta"]
 
 
 def test_live_snapshot_is_frozen_per_rebalance_unless_explicit_refresh(store):

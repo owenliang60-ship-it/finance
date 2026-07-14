@@ -202,3 +202,115 @@ def test_daily_engine_evidence_coverage_weekend_anchor_and_expost_label():
     assert evidence["market_cap_date"] == "2026-01-30"
     assert len(evidence["fiscal_dates"]) == 4
     assert len(evidence["accepted_dates"]) == 4
+
+
+def test_forced_refresh_evidence_survives_when_post_refresh_row_is_clean():
+    result = compute_daily_basket_valuation(
+        valuation_date="2026-02-02",
+        holding_rows=[{"symbol": "TEST", "included": 1,
+                       "covered_by": None, "weight_pct": 100.0}],
+        income_by_symbol={"TEST": _quarters()},
+        market_cap_by_symbol={"TEST": [
+            {"date": "2026-01-30", "market_cap": 1_000.0}]},
+        fx_by_currency={},
+        sanity_by_symbol={"TEST": [{
+            "date": "2026-01-30", "status": "clean", "candidate": False,
+            "pre_refresh_status": "invalid_mcap",
+            "forced_refresh_planned": True,
+            "forced_refresh_attempted": True,
+            "refresh_succeeded": True,
+            "refresh_windows": [{
+                "from_date": "2026-01-23", "to_date": "2026-02-02"}],
+            "quarantined": False,
+        }]},
+        trading_dates=_calendar(),
+        composition={
+            "holding_date": "2025-12-31",
+            "anchor_trading_date": "2025-12-31",
+            "composition_effective_date": "2025-12-22",
+            "composition_available_date": "2026-02-10",
+            "weight_basis": "fixed_rebalance_weight_proxy",
+            "data_quality_tier": "historical_disclosure_fixed_proxy",
+        },
+    )
+    assert result["mcap_sanity_json"] == [{
+        "raw_symbol": "TEST", "symbol": "TEST",
+        "date": "2026-01-30", "status": "clean", "candidate": False,
+        "pre_refresh_status": "invalid_mcap",
+        "forced_refresh_planned": True,
+        "forced_refresh_attempted": True,
+        "refresh_succeeded": True,
+        "refresh_windows": [{
+            "from_date": "2026-01-23", "to_date": "2026-02-02"}],
+        "quarantined": False,
+    }]
+
+
+def test_raw_symbol_is_preferred_and_alias_is_only_complete_data_fallback():
+    holdings = [{
+        "symbol": "CREE", "raw_symbol": "CREE", "alias_symbol": "WOLF",
+        "alias_reason": "rename", "included": 1, "covered_by": None,
+        "weight_pct": 100.0,
+    }]
+    common = dict(
+        valuation_date="2026-02-02", holding_rows=holdings,
+        fx_by_currency={}, trading_dates=_calendar(),
+        composition={
+            "holding_date": "2025-12-31", "anchor_trading_date": "2025-12-31",
+            "composition_effective_date": "2025-12-22",
+            "composition_available_date": "2026-02-10",
+            "weight_basis": "fixed_rebalance_weight_proxy",
+            "data_quality_tier": "historical_disclosure_fixed_proxy",
+        })
+    full_income = {"CREE": _quarters("CREE"), "WOLF": _quarters("WOLF")}
+    full_mcap = {"CREE": [{"date": "2026-01-30", "market_cap": 1000.0}],
+                 "WOLF": [{"date": "2026-01-30", "market_cap": 2000.0}]}
+    sanity = {symbol: [{"date": "2026-01-30", "status": "clean"}]
+              for symbol in ("CREE", "WOLF")}
+    direct = compute_daily_basket_valuation(
+        income_by_symbol=full_income, market_cap_by_symbol=full_mcap,
+        sanity_by_symbol=sanity, **common)
+    assert direct["members_json"][0]["resolved_symbol"] == "CREE"
+    assert direct["members_json"][0]["alias_reason"] is None
+
+    fallback = compute_daily_basket_valuation(
+        income_by_symbol={"CREE": [], "WOLF": _quarters("WOLF")},
+        market_cap_by_symbol=full_mcap, sanity_by_symbol=sanity, **common)
+    assert fallback["members_json"][0]["raw_symbol"] == "CREE"
+    assert fallback["members_json"][0]["resolved_symbol"] == "WOLF"
+    assert fallback["members_json"][0]["alias_reason"] == "rename"
+
+
+def test_authoritative_alias_never_uses_complete_wrong_company_data():
+    result = compute_daily_basket_valuation(
+        valuation_date="2026-02-02",
+        holding_rows=[{
+            "symbol": "TERN", "raw_symbol": "TERN", "alias_symbol": "TER",
+            "alias_mode": "authoritative", "alias_reason": "vendor symbol error",
+            "included": 1, "covered_by": None, "weight_pct": 100.0,
+        }],
+        income_by_symbol={
+            "TERN": _quarters("TERN", income=999.0),
+            "TER": _quarters("TER", income=25.0),
+        },
+        market_cap_by_symbol={
+            "TERN": [{"date": "2026-01-30", "market_cap": 999_000.0}],
+            "TER": [{"date": "2026-01-30", "market_cap": 1_000.0}],
+        },
+        fx_by_currency={},
+        sanity_by_symbol={symbol: [{"date": "2026-01-30", "status": "clean"}]
+                          for symbol in ("TERN", "TER")},
+        trading_dates=_calendar(),
+        composition={
+            "holding_date": "2025-12-31", "anchor_trading_date": "2025-12-31",
+            "composition_effective_date": "2025-12-22",
+            "composition_available_date": "2026-02-10",
+            "weight_basis": "fixed_rebalance_weight_proxy",
+            "data_quality_tier": "historical_disclosure_fixed_proxy",
+        },
+    )
+    evidence = result["members_json"][0]
+    assert evidence["raw_symbol"] == "TERN"
+    assert evidence["resolved_symbol"] == "TER"
+    assert evidence["alias_mode"] == "authoritative"
+    assert result["rebalance_weighted_ttm_pe_gaap_proxy"] == pytest.approx(10.0)

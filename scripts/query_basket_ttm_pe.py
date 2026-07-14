@@ -27,7 +27,7 @@ CSV_FIELDS = (
     "is_observed_weight_date", "rebalance_weighted_ttm_pe_gaap_proxy",
     "uncapped_mcap_basket_pe_gaap", "weight_coverage",
     "mcap_weight_coverage", "income_weight_coverage", "fx_weight_coverage",
-    "member_count", "covered_count", "warnings_json",
+    "member_count", "covered_count", "warnings_json", "mcap_sanity_json",
 )
 
 
@@ -127,6 +127,18 @@ def build_result(rows: Sequence[Mapping[str, Any]], basket: str) -> Dict[str, An
             if row.get("rebalance_weighted_ttm_pe_gaap_proxy") is None]
     warnings = sorted({str(warning) for row in decoded
                        for warning in row["warnings_json"]})
+    sanity_events: Dict[tuple, Dict[str, Any]] = {}
+    for row in decoded:
+        for event in row["mcap_sanity_json"]:
+            key = (event.get("symbol"), event.get("date"), event.get("status"))
+            sanity_events[key] = dict(event)
+    ordered_sanity = [sanity_events[key] for key in sorted(
+        sanity_events, key=lambda item: tuple(str(value or "") for value in item))]
+    quarantines = [event for event in ordered_sanity
+                   if event.get("quarantined") or event.get("status") in {
+                       "invalid_mcap", "unresolved"}]
+    live_dates = [row["valuation_date"] for row in decoded
+                  if "live" in str(row["data_quality_tier"])]
     anchors = [{
         "valuation_date": row["valuation_date"],
         "holding_date": row["holding_date"],
@@ -157,7 +169,16 @@ def build_result(rows: Sequence[Mapping[str, Any]], basket: str) -> Dict[str, An
             "gap_dates": gaps,
             "warnings": warnings,
             "quality_tiers": sorted({row["data_quality_tier"] for row in decoded}),
+            "live_tail_range": ([min(live_dates), max(live_dates)]
+                                if live_dates else None),
+            "market_cap_sanity_events": ordered_sanity,
+            "quarantine_gaps": quarantines,
         },
+        "methodology_caveats": [
+            "Historical disclosure weights are fixed retrospective proxies, not official daily index weights.",
+            "FMP financial statements are filtered by accepted date but may contain later restatements; this is not a vintage fundamentals database.",
+            "Live-tail weights are fetch-date drifted snapshots and carry weaker evidence.",
+        ],
     }
 
 
@@ -183,6 +204,7 @@ def write_markdown(path: Path, result: Mapping[str, Any]) -> None:
         f"- Range: {result['date_range'][0]} to {result['date_range'][1]}",
         f"- Rows: {result['row_count']}",
         f"- Publishable: {result['quality']['publishable_pct']:.2f}%",
+        f"- Live-tail range: {result['quality']['live_tail_range'] or 'None'}",
         "",
         "| Metric | Current | Percentile | Min | Median | Max |",
         "|---|---:|---:|---:|---:|---:|",
@@ -203,6 +225,11 @@ def write_markdown(path: Path, result: Mapping[str, Any]) -> None:
             f"| {row['holding_date']} | {row['valuation_date']} | "
             f"{_fmt(row['primary_pe'])} | {row['weight_coverage']:.2%} | "
             f"{row['data_quality_tier']} |")
+    lines.extend(["", "## Market-cap sanity", "",
+                  f"- Flagged events: {len(result['quality']['market_cap_sanity_events'])}",
+                  f"- Quarantine gaps: {len(result['quality']['quarantine_gaps'])}",
+                  "", "## Methodology caveats", ""])
+    lines.extend(f"- {value}" for value in result["methodology_caveats"])
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

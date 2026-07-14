@@ -862,6 +862,12 @@ No cron is added. Recurring quarterly refresh is a separate decision after Boss 
 - a market-cap date missing from the local price calendar remains in the quarantine/refresh plan instead of crashing or disappearing;
 - query and verifier never construct `MarketStore`; both open `mode=ro` + `query_only`, while verifier deliberately avoids `immutable=1` so live WAL pages remain visible;
 - verifier recomputes every daily output from source tables and independently re-runs raw HMC/price/split sanity, rather than sampling or trusting `members_json`.
+- every snapshot must contain 25–31 eligible equity rows and 99.5%–100.5% raw source weight before normalization or publication; verifier repeats the same blocking gate;
+- official disclosure supersedes a temporary live snapshot for the same effective rebalance, and verifier checks full leading/trailing trading-calendar continuity;
+- alias semantics are split into raw-first `fallback` (CREE→WOLF) and CUSIP/ISIN-backed `authoritative` vendor correction (TERN→TER), preventing data from the unrelated Terns Pharmaceuticals ticker entering SOXX;
+- split ratios update the implied-shares anchor only when the observed share count changes by that ratio; already back-adjusted price/HMC histories are not adjusted twice;
+- write-mode computation stops before output replacement when publishable coverage misses 95%; dry-run returns rc=1 while preserving the measured report;
+- dry-run includes current/min/median/max/percentile previews, weight-coverage distribution, observed-weight anchors and current missing-member evidence without writing the database.
 
 ## 10. Estimated Cost and Duration
 

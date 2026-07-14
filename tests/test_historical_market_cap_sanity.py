@@ -95,6 +95,22 @@ def test_correct_split_is_anchored_and_accepted():
     assert result[-1]["expected_shares"] == pytest.approx(10e9)
 
 
+def test_back_adjusted_price_and_mcap_series_do_not_apply_split_twice():
+    result = scan_market_cap_candidates(
+        _rows("MCHP", [("2021-10-12", 39.12e9),
+                       ("2021-10-13", 38.98e9)], "market_cap"),
+        _rows("MCHP", [("2021-10-12", 70.50),
+                       ("2021-10-13", 70.25)], "close"),
+        [{"symbol": "MCHP", "date": "2021-10-13",
+          "numerator": 2, "denominator": 1}],
+    )
+    split_day = result[-1]
+    assert split_day["status"] == "split_consistent"
+    assert split_day["split_ratio"] == 2.0
+    assert split_day["split_adjustment_applied"] is False
+    assert split_day["split_adjustment_mode"] == "already_back_adjusted"
+
+
 def test_split_adjacent_rows_are_inspected_even_without_large_mcap_jump():
     result = scan_market_cap_candidates(
         _rows("TEST", [("2026-01-02", 100e9),
@@ -108,6 +124,21 @@ def test_split_adjacent_rows_are_inspected_even_without_large_mcap_jump():
     )
     assert result[-1]["candidate"] is True
     assert result[-1]["candidate_reason"] == "split_adjacent"
+
+
+def test_non_trading_split_is_applied_to_first_following_observation():
+    result = scan_market_cap_candidates(
+        _rows("TEST", [("2026-01-02", 1000.0),
+                       ("2026-01-05", 1000.0)], "market_cap"),
+        _rows("TEST", [("2026-01-02", 10.0),
+                       ("2026-01-05", 5.0)], "close"),
+        [{"symbol": "TEST", "date": "2026-01-04",
+          "numerator": 2, "denominator": 1}],
+    )
+    monday = result[-1]
+    assert monday["status"] == "split_consistent"
+    assert monday["split_ratio"] == 2.0
+    assert monday["split_source_dates"] == ["2026-01-04"]
 
 
 def test_missing_price_on_trigger_is_unresolved_and_fail_closed():

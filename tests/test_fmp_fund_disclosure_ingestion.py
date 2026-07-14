@@ -78,6 +78,25 @@ def test_adapter_reuses_cash_foreign_and_dual_class_rules():
     assert rows[2]["weight_pct"] == 0.5
 
 
+def test_disclosure_cash_fund_title_is_used_for_fail_closed_filtering():
+    raw = [{
+        "date": "2021-09-30", "acceptedDate": "2021-11-24 11:18:19",
+        "symbol": "BISXX", "name": "BlackRock Funds III",
+        "title": "BlackRock Cash Funds: Institutional, SL Agency Shares",
+        "assetCat": "STIV", "isCashCollateral": "Y",
+        "pctVal": 0.75, "valUsd": 54_421_973.41,
+    }]
+    rows, _ = normalize_fund_disclosure_snapshot(
+        "SOXX", raw, "disclosure", "2026-07-14T02:00:00Z",
+        ["2021-09-17", "2021-09-20", "2021-09-30"],
+        LISTING, GROUPS, {},
+    )
+    assert rows[0]["raw_symbol"] == "BISXX"
+    assert rows[0]["symbol"] is None
+    assert rows[0]["included"] == 0
+    assert rows[0]["filter_reason"] == "cash_or_fund"
+
+
 @pytest.mark.parametrize(
     "reference,expected",
     [
@@ -149,6 +168,21 @@ def test_non_september_membership_delta_warns_but_retains_snapshot():
     assert "non_reconstitution_membership_delta" in meta["warnings"]
 
 
+def test_membership_drift_ignores_filtered_cash_but_keeps_raw_share_classes():
+    raw = [
+        {"asset": "GOOG", "name": "ALPHABET C", "weightPercentage": 4.0,
+         "marketValue": 100, "updatedAt": "2026-07-13"},
+        {"asset": "", "name": "USD CASH", "weightPercentage": 0.1,
+         "marketValue": 1, "updatedAt": "2026-07-13"},
+    ]
+    rows, meta = normalize_fund_disclosure_snapshot(
+        "SOXX", raw, "live", "2026-07-14T02:00:00Z", _calendar(),
+        LISTING, GROUPS, {}, previous_symbols={"GOOG"},
+    )
+    assert rows[0]["covered_by"] == "GOOGL"
+    assert "non_reconstitution_membership_delta" not in meta["warnings"]
+
+
 def test_corporate_alias_requires_matching_cik_and_never_fuzzy_matches():
     aliases = load_soxx_symbol_aliases(ROOT / "config" / "soxx_symbol_aliases.json")
     # This is the FMP fund-disclosure identifier observed on both CREE and
@@ -156,9 +190,57 @@ def test_corporate_alias_requires_matching_cik_and_never_fuzzy_matches():
     symbol, evidence = resolve_disclosure_symbol("CREE", "0001100663", aliases)
     assert symbol == "WOLF"
     assert evidence["raw_symbol"] == "CREE"
+    assert evidence["mode"] == "fallback"
     assert evidence["reason"]
     with pytest.raises(ValueError):
         resolve_disclosure_symbol("CREE", "WRONG", aliases)
     symbol, evidence = resolve_disclosure_symbol("CREE INC", "0001100663", aliases)
     assert symbol == "CREE INC"
     assert evidence is None
+
+
+def test_authoritative_vendor_symbol_correction_requires_security_identity():
+    aliases = load_soxx_symbol_aliases(ROOT / "config" / "soxx_symbol_aliases.json")
+    symbol, evidence = resolve_disclosure_symbol(
+        "TERN", "0001100663", aliases,
+        cusip="880770102", isin="US8807701029")
+    assert symbol == "TER"
+    assert evidence["mode"] == "authoritative"
+    with pytest.raises(ValueError, match="CUSIP mismatch"):
+        resolve_disclosure_symbol(
+            "TERN", "0001100663", aliases,
+            cusip="WRONG", isin="US8807701029")
+
+
+def test_teradyne_disclosure_records_authoritative_tern_to_ter_correction():
+    aliases = load_soxx_symbol_aliases(ROOT / "config" / "soxx_symbol_aliases.json")
+    raw = [{
+        "date": "2022-06-30", "acceptedDate": "2022-08-25 14:39:49",
+        "symbol": "TERN", "name": "Teradyne Inc", "title": "Teradyne Inc",
+        "pctVal": 2.07, "valUsd": 133_259_175.9, "cik": "0001100663",
+        "cusip": "880770102", "isin": "US8807701029",
+    }]
+    rows, _ = normalize_fund_disclosure_snapshot(
+        "SOXX", raw, "disclosure", "2026-07-14T02:00:00Z",
+        ["2022-06-17", "2022-06-21", "2022-06-30"],
+        LISTING, GROUPS, aliases)
+    assert rows[0]["symbol"] == "TERN"
+    assert rows[0]["alias_symbol"] == "TER"
+    assert rows[0]["alias_mode"] == "authoritative"
+
+
+def test_disclosure_normalization_keeps_raw_symbol_and_records_alias_candidate():
+    aliases = load_soxx_symbol_aliases(ROOT / "config" / "soxx_symbol_aliases.json")
+    raw = [{
+        "date": "2021-09-30", "acceptedDate": "2021-11-19 12:00:00",
+        "symbol": "CREE", "name": "Cree Inc", "pctVal": 2.5,
+        "valUsd": 100, "cik": "0001100663",
+    }]
+    rows, _ = normalize_fund_disclosure_snapshot(
+        "SOXX", raw, "disclosure", "2026-07-14T02:00:00Z",
+        ["2021-09-17", "2021-09-20", "2021-09-30"],
+        LISTING, GROUPS, aliases)
+    assert rows[0]["symbol"] == "CREE"
+    assert rows[0]["raw_symbol"] == "CREE"
+    assert rows[0]["alias_symbol"] == "WOLF"
+    assert "renamed" in rows[0]["alias_reason"]

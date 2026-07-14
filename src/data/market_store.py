@@ -512,6 +512,9 @@ _SCHEMA = "\n\n".join([
     composition_available_date TEXT NOT NULL,
     raw_symbol TEXT,
     symbol TEXT,
+    alias_symbol TEXT,
+    alias_mode TEXT,
+    alias_reason TEXT,
     name TEXT,
     weight_pct REAL,
     market_value REAL,
@@ -522,6 +525,7 @@ _SCHEMA = "\n\n".join([
     filter_reason TEXT,
     covered_by TEXT,
     row_accepted_at TEXT,
+    snapshot_warnings_json TEXT NOT NULL,
     fetched_at TEXT NOT NULL,
     created_at TEXT NOT NULL,
     PRIMARY KEY (basket_symbol, holding_date, source_kind, raw_row_index)
@@ -1125,6 +1129,9 @@ class MarketStore:
                         "rebalance_close_date": rebalance_close_date,
                         "composition_effective_date": composition_effective_date,
                         "composition_available_date": composition_available_date,
+                        "snapshot_warnings_json": self._json_text(
+                            row.get("snapshot_warnings_json", []),
+                            "snapshot_warnings_json"),
                         "fetched_at": fetched_at,
                         "created_at": created_at,
                     },

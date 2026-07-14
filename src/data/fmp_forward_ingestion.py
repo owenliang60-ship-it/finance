@@ -295,12 +295,25 @@ def load_soxx_symbol_aliases(path: Path) -> Dict[str, Dict[str, str]]:
         target = item.get("symbol")
         cik = item.get("cik")
         reason = item.get("reason")
+        mode = item.get("mode", "fallback")
+        cusip = item.get("cusip")
+        isin = item.get("isin")
         if (not isinstance(target, str) or target != target.upper()
                 or not isinstance(cik, str) or not cik
-                or not isinstance(reason, str) or not reason.strip()):
+                or not isinstance(reason, str) or not reason.strip()
+                or mode not in {"fallback", "authoritative"}):
             raise ValueError(f"invalid SOXX alias: {raw_symbol}")
+        if mode == "authoritative" and (
+                not isinstance(cusip, str) or not cusip
+                or not isinstance(isin, str) or not isin):
+            raise ValueError(
+                f"authoritative SOXX alias requires CUSIP and ISIN: {raw_symbol}")
         normalized[raw_symbol] = {
-            "symbol": target, "cik": cik, "reason": reason.strip()}
+            "symbol": target, "cik": cik, "mode": mode,
+            "reason": reason.strip(),
+            **({"cusip": cusip} if cusip else {}),
+            **({"isin": isin} if isin else {}),
+        }
     return normalized
 
 
@@ -308,6 +321,9 @@ def resolve_disclosure_symbol(
     raw_symbol: str,
     cik: Optional[str],
     aliases: Mapping[str, Mapping[str, str]],
+    *,
+    cusip: Optional[str] = None,
+    isin: Optional[str] = None,
 ) -> Tuple[str, Optional[Dict[str, str]]]:
     """Resolve only exact, CIK-backed corporate aliases; never fuzzy-match."""
     symbol = str(raw_symbol or "").strip().upper()
@@ -316,11 +332,16 @@ def resolve_disclosure_symbol(
         return symbol, None
     if str(cik or "") != str(alias.get("cik") or ""):
         raise ValueError(f"CIK mismatch for configured alias {symbol}")
+    if alias.get("cusip") and str(cusip or "") != str(alias["cusip"]):
+        raise ValueError(f"CUSIP mismatch for configured alias {symbol}")
+    if alias.get("isin") and str(isin or "") != str(alias["isin"]):
+        raise ValueError(f"ISIN mismatch for configured alias {symbol}")
     target = str(alias["symbol"]).upper()
     return target, {
         "raw_symbol": symbol,
         "symbol": target,
         "cik": str(cik),
+        "mode": str(alias.get("mode", "fallback")),
         "reason": str(alias["reason"]),
     }
 
@@ -371,11 +392,18 @@ def normalize_fund_disclosure_snapshot(
                 raw.get("acceptedDate"), "acceptedDate")
             accepted_values.append(accepted)
             raw_symbol = str(raw.get("symbol") or "").strip().upper()
-            resolved_symbol, alias_evidence = resolve_disclosure_symbol(
-                raw_symbol, raw.get("cik"), symbol_aliases)
+            _, alias_evidence = resolve_disclosure_symbol(
+                raw_symbol, raw.get("cik"), symbol_aliases,
+                cusip=raw.get("cusip"), isin=raw.get("isin"))
             adapted.append({
-                "asset": resolved_symbol,
-                "name": raw.get("name"),
+                # Raw-first contract: an alias is evidence for a later
+                # source-data fallback, never an unconditional ticker rewrite.
+                "asset": raw_symbol,
+                # Disclosure `name` can be only the issuer (for example
+                # "BlackRock Funds III") while `title` carries the security
+                # identity ("BlackRock Cash Funds..."). Prefer title so the
+                # existing cash/fund rule can fail closed on BISXX/STIV rows.
+                "name": raw.get("title") or raw.get("name"),
                 "weightPercentage": raw.get("pctVal"),
                 "marketValue": raw.get("valUsd"),
                 "updatedAt": raw.get("acceptedDate"),
@@ -386,7 +414,12 @@ def normalize_fund_disclosure_snapshot(
                 "cusip": raw.get("cusip"),
                 "isin": raw.get("isin"),
                 "row_accepted_at": raw.get("acceptedDate"),
-                "alias_evidence": alias_evidence,
+                "alias_symbol": (
+                    alias_evidence["symbol"] if alias_evidence else None),
+                "alias_mode": (
+                    alias_evidence["mode"] if alias_evidence else None),
+                "alias_reason": (
+                    alias_evidence["reason"] if alias_evidence else None),
             })
         else:
             raw_symbol = str(raw.get("asset") or "").strip().upper()
@@ -397,7 +430,9 @@ def normalize_fund_disclosure_snapshot(
                 "cusip": raw.get("cusip"),
                 "isin": raw.get("isin"),
                 "row_accepted_at": None,
-                "alias_evidence": None,
+                "alias_symbol": None,
+                "alias_mode": None,
+                "alias_reason": None,
             })
 
     if source_kind == "disclosure":
@@ -426,16 +461,23 @@ def normalize_fund_disclosure_snapshot(
     for row, evidence in zip(normalized, identity):
         row.update(evidence)
 
+    # Membership drift is about source constituents, not filtered cash rows
+    # or the economic target used to merge dual share-class weights.
     current_symbols = {
-        row["symbol"] if row.get("included") else row.get("covered_by")
+        str(row.get("raw_symbol") or row.get("symbol")
+            or row.get("covered_by")).upper()
         for row in normalized
-        if row.get("symbol") or row.get("covered_by")
+        if (row.get("included") == 1 or row.get("covered_by"))
+        and (row.get("raw_symbol") or row.get("symbol")
+             or row.get("covered_by"))
     }
     if previous_symbols is not None:
         previous = {str(symbol).upper() for symbol in previous_symbols}
         if current_symbols != previous and date.fromisoformat(
                 rebalance_close_date).month != 9:
             warnings.append("non_reconstitution_membership_delta")
+    for row in normalized:
+        row["snapshot_warnings_json"] = list(warnings)
 
     metadata = {
         "basket_symbol": basket_symbol.upper(),

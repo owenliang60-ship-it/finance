@@ -2,6 +2,15 @@
   "CREE": {
     "symbol": "WOLF",
     "cik": "0001100663",
+    "mode": "fallback",
     "reason": "Cree renamed Wolfspeed in 2021; FMP fund-disclosure rows use this same vendor CIK before and after the rename"
+  },
+  "TERN": {
+    "symbol": "TER",
+    "cik": "0001100663",
+    "cusip": "880770102",
+    "isin": "US8807701029",
+    "mode": "authoritative",
+    "reason": "FMP SOXX disclosure rows label Teradyne Inc (CUSIP 880770102, ISIN US8807701029) as TERN; authoritative ticker is TER, while TERN market data belongs to Terns Pharmaceuticals"
   }
 }

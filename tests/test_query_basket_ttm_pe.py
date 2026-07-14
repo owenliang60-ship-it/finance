@@ -47,6 +47,15 @@ def _database(tmp_path):
              1000.0, 50.0, 30, 28, 0.95, 0.96, 0.97, 0.98,
              "[]", warnings, "[]", "1.0", "2026-07-14T00:00:00Z"])
     conn.commit()
+    conn.execute(
+        "UPDATE basket_ttm_valuation SET mcap_sanity_json = ? "
+        "WHERE valuation_date = '2026-01-05'",
+        [json.dumps([{
+            "symbol": "KLAC", "date": "2026-01-05",
+            "status": "invalid_mcap", "quarantined": True,
+            "forced_refresh_attempted": True,
+        }])])
+    conn.commit()
     conn.close()
     return path
 
@@ -68,6 +77,8 @@ def test_summary_excludes_null_pe_and_separates_anchors(tmp_path):
     assert len(result["observed_weight_anchors"]) == 1
     assert result["quality"]["gap_dates"] == ["2026-01-07"]
     assert result["quality"]["warnings"] == ["notice"]
+    assert result["quality"]["quarantine_gaps"][0]["symbol"] == "KLAC"
+    assert "restatements" in result["methodology_caveats"][1]
 
 
 def test_connection_uses_read_only_uri(monkeypatch, tmp_path):
@@ -111,6 +122,7 @@ def test_csv_and_markdown_are_deterministic(tmp_path):
         assert [row["valuation_date"] for row in csv.DictReader(handle)] == [
             "2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07"]
     assert "not official SOXX PE" in md_path.read_text(encoding="utf-8")
+    assert "Quarantine gaps: 1" in md_path.read_text(encoding="utf-8")
 
 
 def test_invalid_json_fails_closed(tmp_path):

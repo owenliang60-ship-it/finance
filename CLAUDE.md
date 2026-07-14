@@ -72,7 +72,7 @@ API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`�
 
 `data_health.py`（11 项检查） + `data_guardian.py`（快照） + `data_validator.py`（一致性）。
 
-历史篮子估值另有 `verify_basket_ttm_pe.py`：只读逐日复算 disclosure → GAAP TTM income → FX → sanity-clean HMC → 两种 PE。`basket_ttm_valuation` 是固定调仓权重 retrospective proxy，不是官方 SOXX PE/历史 forward PE；当前一次性运行，**没有 cron**。
+历史篮子估值另有 `verify_basket_ttm_pe.py`：只读逐日复算 disclosure → GAAP TTM income → FX → sanity-clean HMC → 两种 PE。source snapshot 先过 25–31 个 eligible equity rows 与 99.5%–100.5% raw weight 阻塞门，证券 alias 区分 raw-first fallback 与 CUSIP/ISIN-backed authoritative correction。`basket_ttm_valuation` 是固定调仓权重 retrospective proxy，不是官方 SOXX PE/历史 forward PE；当前一次性运行，**没有 cron**。
 
 ### 云端定时任务
 

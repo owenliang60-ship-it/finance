@@ -327,32 +327,82 @@ def compute_daily_basket_valuation(
     fx_weight = 0.0
     sanity_evidence = []
     warnings = list(weight_info["warnings"])
+    warnings.extend(str(value) for value in composition.get(
+        "snapshot_warnings", []))
+    alias_by_symbol = {
+        str(row["symbol"]).upper(): {
+            "symbol": str(row["alias_symbol"]).upper(),
+            "mode": str(row.get("alias_mode") or "fallback"),
+            "reason": str(row.get("alias_reason") or "configured corporate alias"),
+        }
+        for row in holding_rows
+        if row.get("included") == 1 and row.get("symbol")
+        and row.get("alias_symbol")
+    }
 
-    for symbol, weight in sorted(weight_info["weights"].items()):
-        classifications = sanity_by_symbol.get(symbol, [])
-        status_by_date = {
-            str(row["date"]): str(row.get("status"))
-            for row in classifications
-        }
-        quarantine = {
-            value for value, status in status_by_date.items()
-            if not accepted_market_cap_status(status)
-        }
-        market_cap = select_asof_market_cap(
-            market_cap_by_symbol.get(symbol, []), valuation_date,
-            status_by_date, quarantine)
-        quarters = select_four_continuous_asof_quarters(
-            income_by_symbol.get(symbol, []), valuation_date, trading_dates)
-        income_result = (
-            compute_member_ttm_income_usd(
-                quarters, fx_by_currency, valuation_date)
-            if quarters is not None else None)
+    for raw_symbol, weight in sorted(weight_info["weights"].items()):
+        alias = alias_by_symbol.get(raw_symbol)
+        if alias and alias["mode"] == "authoritative":
+            candidates = [alias["symbol"]]
+        else:
+            candidates = [raw_symbol]
+        if (alias and alias["mode"] != "authoritative"
+                and alias["symbol"] != raw_symbol):
+            candidates.append(alias["symbol"])
+        evaluated = []
+        for candidate in candidates:
+            classifications = sanity_by_symbol.get(candidate, [])
+            status_by_date = {
+                str(row["date"]): str(row.get("status"))
+                for row in classifications
+            }
+            quarantine = {
+                value for value, status in status_by_date.items()
+                if not accepted_market_cap_status(status)
+            }
+            candidate_mcap = select_asof_market_cap(
+                market_cap_by_symbol.get(candidate, []), valuation_date,
+                status_by_date, quarantine)
+            candidate_quarters = select_four_continuous_asof_quarters(
+                income_by_symbol.get(candidate, []), valuation_date, trading_dates)
+            candidate_income = (
+                compute_member_ttm_income_usd(
+                    candidate_quarters, fx_by_currency, valuation_date)
+                if candidate_quarters is not None else None)
+            evaluated.append({
+                "symbol": candidate, "market_cap": candidate_mcap,
+                "quarters": candidate_quarters, "income": candidate_income,
+            })
+        # Raw data is authoritative whenever complete. Alias is a fallback for
+        # the whole member data key, never an unconditional ticker rewrite or
+        # a source-by-source splice.
+        selected = next((item for item in evaluated
+                         if item["market_cap"] is not None
+                         and item["income"] is not None), evaluated[0])
+        symbol = selected["symbol"]
+        market_cap = selected["market_cap"]
+        quarters = selected["quarters"]
+        income_result = selected["income"]
+        alias_used = symbol != raw_symbol
+        selected_classifications = sanity_by_symbol.get(symbol, [])
+        status_by_date = {str(row["date"]): str(row.get("status"))
+                          for row in selected_classifications}
+        latest_observation = max((
+            row for row in market_cap_by_symbol.get(symbol, [])
+            if str(row.get("date") or "") <= valuation_date
+        ), key=lambda row: str(row["date"]), default=None)
+        for classification in selected_classifications:
+            if (str(classification["date"]) <= valuation_date
+                    and (classification.get("candidate")
+                         or classification.get("forced_refresh_planned")
+                         or not accepted_market_cap_status(
+                             str(classification.get("status"))))):
+                sanity_evidence.append({
+                    "raw_symbol": raw_symbol, "symbol": symbol,
+                    **dict(classification),
+                })
         if market_cap is not None:
             mcap_weight += weight
-            sanity_evidence.append({
-                "symbol": symbol, "date": market_cap["date"],
-                "status": market_cap["sanity_status"],
-            })
         if quarters is not None:
             income_weight += weight
         if income_result is not None:
@@ -368,11 +418,21 @@ def compute_daily_basket_valuation(
 
         evidence = {
             "symbol": symbol,
+            "raw_symbol": raw_symbol,
+            "resolved_symbol": symbol,
+            "alias_mode": alias["mode"] if alias_used and alias else None,
+            "alias_reason": alias["reason"] if alias_used and alias else None,
             "weight_pct": weight,
             "market_cap": market_cap["market_cap"] if market_cap else None,
             "market_cap_date": market_cap["date"] if market_cap else None,
             "market_cap_sanity_status": (
                 market_cap["sanity_status"] if market_cap else None),
+            "market_cap_exclusion_date": (
+                latest_observation.get("date")
+                if market_cap is None and latest_observation else None),
+            "market_cap_exclusion_status": (
+                status_by_date.get(str(latest_observation.get("date")))
+                if market_cap is None and latest_observation else None),
             "fiscal_dates": [row["date"] for row in quarters] if quarters else [],
             "accepted_dates": (
                 [row["accepted_date"] for row in quarters] if quarters else []),
@@ -387,7 +447,9 @@ def compute_daily_basket_valuation(
 
     for target, weight in sorted(weight_info["orphan_targets"].items()):
         members.append({
-            "symbol": target, "weight_pct": weight,
+            "symbol": target, "raw_symbol": target,
+            "resolved_symbol": target, "alias_mode": None, "alias_reason": None,
+            "weight_pct": weight,
             "market_cap": None, "ttm_net_income_usd": None,
             "fiscal_dates": [], "accepted_dates": [], "fx_evidence": [],
             "exclusion_reason": "covered_by_target_missing",

@@ -54,11 +54,11 @@ def _make_green_db(tmp_path):
         holding_dates.append(holding)
         store.replace_fund_disclosure_snapshot(
             "SOXX", holding, "disclosure", [{
-                "raw_row_index": 0, "raw_symbol": "TEST", "symbol": "TEST",
-                "name": "TEST", "weight_pct": 100.0, "market_value": 1000.0,
+                "raw_row_index": member, "raw_symbol": "TEST", "symbol": "TEST",
+                "name": "TEST", "weight_pct": 4.0, "market_value": 40.0,
                 "included": 1, "filter_reason": None, "covered_by": None,
                 "row_accepted_at": "2025-11-20 16:00:00",
-            }],
+            } for member in range(25)],
             rebalance_close_date=holding,
             composition_effective_date=holding,
             composition_available_date=holding,
@@ -71,7 +71,8 @@ def _make_green_db(tmp_path):
     output = compute_daily_basket_valuation(
         valuation_date="2026-02-02",
         holding_rows=[{"symbol": "TEST", "included": 1,
-                       "covered_by": None, "weight_pct": 100.0}],
+                       "covered_by": None, "weight_pct": 4.0}
+                      for _ in range(25)],
         income_by_symbol={"TEST": _quarter_rows()},
         market_cap_by_symbol={"TEST": [
             {"date": day, "market_cap": 1000.0} for day in trading_dates]},
@@ -139,6 +140,8 @@ def test_connection_is_mode_ro_not_immutable(monkeypatch, tmp_path):
          "source_recompute_all_rows"),
         ("UPDATE basket_ttm_valuation SET members_json = 'bad'",
          "duplicates_and_json"),
+        ("UPDATE basket_ttm_valuation SET warnings_json = '[\"fake\"]'",
+         "source_recompute_all_rows"),
     ],
 )
 def test_failure_classifications_are_distinct(tmp_path, mutation, failed_check):
@@ -172,6 +175,38 @@ def test_missing_output_trading_date_fails_denominator_and_coverage(tmp_path):
     conn.close()
     result = _report(path)
     assert _check(result, "trading_calendar_denominator")["passed"] is False
+
+
+def test_verifier_detects_leading_and_trailing_output_gaps(tmp_path):
+    path = _make_green_db(tmp_path)
+    conn = sqlite3.connect(path)
+    conn.execute("INSERT INTO daily_price (symbol,date,close) "
+                 "VALUES ('SOXX','2026-02-03',500)")
+    conn.commit()
+    conn.close()
+    trailing = _report(path)
+    assert _check(trailing, "trading_calendar_denominator")["passed"] is False
+
+    conn = verifier.connect_readonly(path)
+    leading = verifier.verify_database(conn, min_date="2026-01-30")
+    conn.close()
+    assert _check(leading, "trading_calendar_denominator")["passed"] is False
+
+
+def test_truncated_snapshot_with_date_still_present_is_blocking(tmp_path):
+    path = _make_green_db(tmp_path)
+    conn = sqlite3.connect(path)
+    holding = conn.execute(
+        "SELECT MIN(holding_date) FROM fmp_fund_disclosure_holdings").fetchone()[0]
+    conn.execute(
+        "DELETE FROM fmp_fund_disclosure_holdings "
+        "WHERE holding_date = ? AND raw_row_index >= 5", [holding])
+    conn.commit()
+    conn.close()
+    result = _report(path)
+    assert _check(result, "source_snapshots")["passed"] is True
+    assert _check(result, "snapshot_plausibility")["passed"] is False
+    assert result["passed"] is False
 
 
 def test_published_invalid_market_cap_is_detected_from_raw_sources(tmp_path):

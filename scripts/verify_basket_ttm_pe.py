@@ -98,7 +98,6 @@ def _decode_outputs(rows: Sequence[Mapping[str, Any]]) -> Tuple[List[Dict[str, A
 def _load_sources(
     conn: sqlite3.Connection, basket: str, output_rows: Sequence[Mapping[str, Any]],
 ) -> Dict[str, Any]:
-    maximum = str(output_rows[-1]["valuation_date"])
     holdings = _rows(
         conn, "SELECT * FROM fmp_fund_disclosure_holdings "
         "WHERE basket_symbol = ? ORDER BY holding_date, source_kind, raw_row_index",
@@ -108,12 +107,15 @@ def _load_sources(
         if row.get("included") == 1 and row.get("symbol")
     } | {
         str(row["covered_by"]).upper() for row in holdings if row.get("covered_by")
+    } | {
+        str(row["alias_symbol"]).upper() for row in holdings
+        if row.get("alias_symbol")
     })
     source: Dict[str, Any] = {
         "holdings": holdings,
         "trading_dates": [row["date"] for row in _rows(
-            conn, "SELECT date FROM daily_price WHERE symbol = ? AND date <= ? "
-            "ORDER BY date", [basket, maximum])],
+            conn, "SELECT date FROM daily_price WHERE symbol = ? ORDER BY date",
+            [basket])],
         "income": {}, "mcap": {}, "price": {}, "splits": {}, "sanity": {},
         "fx": {},
     }
@@ -151,9 +153,10 @@ def _holding_groups(holdings: Sequence[Mapping[str, Any]]) -> List[Tuple[Dict[st
             "composition_available_date": first["composition_available_date"],
             "source_kind": first["source_kind"],
         }, sorted(rows, key=lambda row: row["raw_row_index"])))
+    priority = {"live": 0, "disclosure": 1}
     return sorted(result, key=lambda item: (
-        item[0]["composition_effective_date"], item[0]["holding_date"],
-        item[0]["source_kind"]))
+        item[0]["composition_effective_date"],
+        priority[item[0]["source_kind"]], item[0]["holding_date"]))
 
 
 def _recompute_row(
@@ -164,18 +167,56 @@ def _recompute_row(
     metric_members = []
     mcap_weight = income_weight = fx_weight = 0.0
     used_mcap_dates: Dict[str, str] = {}
-    for symbol, weight in sorted(weights["weights"].items()):
-        statuses = {str(row["date"]): str(row["status"])
-                    for row in source["sanity"].get(symbol, [])}
-        quarantine = {day for day, status in statuses.items()
-                      if not accepted_market_cap_status(status)}
-        market_cap = select_asof_market_cap(
-            source["mcap"].get(symbol, []), valuation_date, statuses, quarantine)
-        quarters = select_four_continuous_asof_quarters(
-            source["income"].get(symbol, []), valuation_date,
-            source["trading_dates"])
-        income = (compute_member_ttm_income_usd(
-            quarters, source["fx"], valuation_date) if quarters is not None else None)
+    aliases = {
+        str(row["symbol"]).upper(): {
+            "symbol": str(row["alias_symbol"]).upper(),
+            "mode": str(row.get("alias_mode") or "fallback"),
+            "reason": str(row.get("alias_reason") or "configured corporate alias"),
+        }
+        for row in holding_rows
+        if row.get("included") == 1 and row.get("symbol")
+        and row.get("alias_symbol")
+    }
+    raw_snapshot_warnings = holding_rows[0].get("snapshot_warnings_json", "[]")
+    if isinstance(raw_snapshot_warnings, str):
+        raw_snapshot_warnings = json.loads(raw_snapshot_warnings)
+    expected_warnings = sorted(str(value) for value in (
+        list(weights["warnings"]) + list(raw_snapshot_warnings)))
+    resolutions: Dict[str, Dict[str, Any]] = {}
+    for raw_symbol, weight in sorted(weights["weights"].items()):
+        alias = aliases.get(raw_symbol)
+        if alias and alias["mode"] == "authoritative":
+            candidates = [alias["symbol"]]
+        else:
+            candidates = [raw_symbol]
+        if (alias and alias["mode"] != "authoritative"
+                and alias["symbol"] != raw_symbol):
+            candidates.append(alias["symbol"])
+        evaluated = []
+        for candidate in candidates:
+            statuses = {str(row["date"]): str(row["status"])
+                        for row in source["sanity"].get(candidate, [])}
+            quarantine = {day for day, status in statuses.items()
+                          if not accepted_market_cap_status(status)}
+            candidate_mcap = select_asof_market_cap(
+                source["mcap"].get(candidate, []), valuation_date,
+                statuses, quarantine)
+            candidate_quarters = select_four_continuous_asof_quarters(
+                source["income"].get(candidate, []), valuation_date,
+                source["trading_dates"])
+            candidate_income = (compute_member_ttm_income_usd(
+                candidate_quarters, source["fx"], valuation_date)
+                if candidate_quarters is not None else None)
+            evaluated.append((candidate, candidate_mcap,
+                              candidate_quarters, candidate_income))
+        symbol, market_cap, quarters, income = next((
+            item for item in evaluated if item[1] is not None and item[3] is not None
+        ), evaluated[0])
+        resolutions[raw_symbol] = {
+            "resolved_symbol": symbol,
+            "alias_mode": alias["mode"] if alias and symbol != raw_symbol else None,
+            "alias_reason": alias["reason"] if alias and symbol != raw_symbol else None,
+        }
         if market_cap is not None:
             mcap_weight += weight
             used_mcap_dates[symbol] = market_cap["date"]
@@ -210,6 +251,8 @@ def _recompute_row(
         "income_weight_coverage": income_weight / eligible_weight,
         "fx_weight_coverage": fx_weight / eligible_weight,
         "used_mcap_dates": used_mcap_dates,
+        "warnings_json": expected_warnings,
+        "resolutions": resolutions,
     }
 
 
@@ -278,10 +321,11 @@ def verify_database(
     for metadata, rows in _holding_groups(holdings):
         eligible = [row for row in rows if row.get("included") == 1
                     or row.get("covered_by")]
-        weight = sum(float(row.get("weight_pct") or 0) for row in eligible)
+        weight = sum(float(row.get("weight_pct") or 0) for row in rows)
         snapshot_quality.append({
             "holding_date": metadata["holding_date"], "members": len(eligible),
-            "weight": weight, "plausible": bool(eligible and 80 <= weight <= 120),
+            "weight": weight,
+            "plausible": 25 <= len(eligible) <= 31 and 99.5 <= weight <= 100.5,
         })
     checks.append(_check("snapshot_plausibility",
                          all(row["plausible"] for row in snapshot_quality),
@@ -289,10 +333,14 @@ def verify_database(
 
     first = outputs[0]["valuation_date"]
     last = outputs[-1]["valuation_date"]
-    calendar = [day for day in source["trading_dates"] if first <= day <= last]
+    expected_start = min_date or first
+    expected_end = source["trading_dates"][-1]
+    calendar = [day for day in source["trading_dates"]
+                if expected_start <= day <= expected_end]
     output_dates = [row["valuation_date"] for row in outputs]
     checks.append(_check("trading_calendar_denominator", output_dates == calendar,
-                         {"calendar": len(calendar), "outputs": len(output_dates),
+                         {"expected_range": [expected_start, expected_end],
+                          "calendar": len(calendar), "outputs": len(output_dates),
                           "missing": sorted(set(calendar) - set(output_dates)),
                           "extra": sorted(set(output_dates) - set(calendar))}))
 
@@ -342,6 +390,21 @@ def verify_database(
         for field in compare_fields:
             if not _close(row.get(field), recalculated.get(field)):
                 recompute_errors.append(f"{row['valuation_date']}:{field}")
+        if sorted(str(value) for value in row["warnings_json"]) != \
+                recalculated["warnings_json"]:
+            recompute_errors.append(f"{row['valuation_date']}:warnings_json")
+        output_members = {
+            str(member.get("raw_symbol") or "").upper(): member
+            for member in row["members_json"] if member.get("raw_symbol")
+        }
+        for raw_symbol, expected in recalculated["resolutions"].items():
+            observed = output_members.get(raw_symbol)
+            if (observed is None
+                    or observed.get("resolved_symbol") != expected["resolved_symbol"]
+                    or observed.get("alias_mode") != expected["alias_mode"]
+                    or observed.get("alias_reason") != expected["alias_reason"]):
+                recompute_errors.append(
+                    f"{row['valuation_date']}:{raw_symbol}:alias_evidence")
         if row.get("rebalance_weighted_ttm_pe_gaap_proxy") is not None:
             # Check the source dates claimed by the published row against a
             # fresh scan of raw HMC/price/split tables. Recalculation itself
