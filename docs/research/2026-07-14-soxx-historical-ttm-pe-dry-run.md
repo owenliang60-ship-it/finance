@@ -18,9 +18,9 @@ The final network-enabled dry-run produced a complete 1,207-trading-day series a
 | Computed rows | 1,207 |
 | Publishable rows | 1,207 |
 | Publishable coverage | 100.00% |
-| Current primary PE proxy | 51.06x |
+| Current primary PE proxy | 51.07x |
 | Primary historical percentile | 79.20% |
-| Current secondary uncapped basket PE | 40.79x |
+| Current secondary uncapped basket PE | 40.80x |
 | Secondary historical percentile | 52.20% |
 
 The result is a **SOXX rebalance-weighted GAAP TTM PE proxy using fixed retrospective snapshot weights**. It is neither official SOXX P/E nor historical forward P/E.
@@ -31,8 +31,8 @@ The current row uses the live snapshot fetched on 2026-07-14, applied from the i
 
 | Series | Current | Percentile | Median | Minimum | Maximum | Observations |
 |---|---:|---:|---:|---:|---:|---:|
-| Primary: fixed-weight earnings-yield inverse | 51.06x | 79.20% | 40.60x | 13.40x on 2022-10-14 | 72.78x on 2025-11-06 | 1,207 |
-| Secondary: uncapped aggregate basket PE | 40.79x | 52.20% | 39.22x | 14.05x on 2022-10-14 | 63.03x on 2024-11-07 | 1,207 |
+| Primary: fixed-weight earnings-yield inverse | 51.07x | 79.20% | 40.60x | 13.40x on 2022-10-14 | 72.78x on 2025-11-06 | 1,207 |
+| Secondary: uncapped aggregate basket PE | 40.80x | 52.20% | 39.22x | 14.05x on 2022-10-14 | 63.03x on 2024-11-07 | 1,207 |
 
 Current primary weight coverage is effectively 100%, with no missing current member. Across all daily rows, weight coverage was 95.34% minimum, 99.43% median, and 100.00% maximum.
 
@@ -61,7 +61,7 @@ These are actual quarter-end disclosure observations when the date exists in the
 | 2025-09-30 | 2025-09-30 | 62.64x | 52.31x | 100.00% | disclosure |
 | 2025-12-31 | 2025-12-31 | 43.96x | 44.49x | 100.00% | disclosure |
 | 2026-03-31 | 2026-03-31 | 42.68x | 38.72x | 100.00% | disclosure |
-| 2026-07-14 | 2026-07-13 | 51.06x | 40.79x | 100.00% | live tail, weaker |
+| 2026-07-14 | 2026-07-13 | 51.07x | 40.80x | 100.00% | live tail, weaker |
 
 ## Source and identity evidence
 
@@ -71,6 +71,7 @@ These are actual quarter-end disclosure observations when the date exists in the
 - FMP disclosure identifies Teradyne as `TERN`, but FMP market/fundamental data for `TERN` belongs to Terns Pharmaceuticals. Exact CUSIP `880770102`, ISIN `US8807701029`, vendor CIK, and raw-symbol matching therefore trigger an authoritative `TERN → TER` correction. The wrong `TERN` series is not requested or evaluated.
 - `CREE → WOLF` remains a raw-first fallback: a member uses one complete source key, never a splice of market cap from one ticker and income from another.
 - Cash-fund rows such as BISXX are retained as raw evidence but excluded before the equity snapshot gate and valuation universe.
+- Full-range completeness finished at 39/41 symbols for fundamentals (`ALAB`, `ARM` incomplete relative to the 2021 start) and 35/41 for HMC (`ALAB`, `ARM`, `CRDO`, `CREE`, `WOLF`, `XLNX`). Both rates remained below the strict `>20%` fuse; empty API responses were zero. These are mainly pre-listing/corporate-history gaps, not current-row gaps: current member coverage remained 100% and every trading date still published.
 - Non-September membership deltas are retained and warned rather than silently attributed to the scheduled rebalance. Observed warnings occurred on 2021-12-31, 2022-03-31, 2023-06-30, 2025-06-30, and the 2026-07-14 live snapshot.
 
 ## Market-cap sanity outcome
@@ -86,7 +87,7 @@ The dry-run re-ran jump, price alignment, split, and implied-shares checks on al
 
 ## Comparison with official fund characteristic
 
-The [official iShares SOXX page](https://www.ishares.com/us/products/239705/SOXX) reported a P/E ratio of 71.35 as of 2026-07-09. The dry-run primary proxy is 51.06x, 20.29 turns or approximately 28.4% lower.
+The [official iShares SOXX page](https://www.ishares.com/us/products/239705/ishares-semiconductor-etf) reported a P/E ratio of 72.88 as of 2026-07-10. The dry-run primary proxy is 51.07x, 21.81 turns or approximately 29.9% lower.
 
 This difference is non-blocking and should not be read as an error by itself. The official characteristic uses BlackRock's portfolio methodology, while this reconstruction explicitly uses GAAP TTM net income, fixed retrospective snapshot weights, a defined treatment of losses/missing data, seven-day HMC staleness, and a 2026Q2 live-tail proxy. The official value is a useful magnitude check, not an equality target.
 
@@ -98,7 +99,7 @@ The dry-run opened `/Users/owen/CC workspace/Finance/data/market.db` read-only. 
 mtime=1783982579 size=882147328
 ```
 
-No backup was created because no database write occurred. The persisted-table verifier was intentionally not run: dry-run computed results exist only in memory and `/tmp/soxx_final_dry_run_20260714.json`, not in `basket_ttm_valuation`. Production acceptance still requires a separately approved locked write/backfill followed by the independent `mode=ro` verifier and export. No cron is proposed in this phase.
+No backup was created because no database write occurred. The persisted-table verifier was intentionally not run: dry-run computed results exist only in memory and `/tmp/soxx_postreview_dry_run_20260714.json`, not in `basket_ttm_valuation`. Production acceptance still requires a separately approved locked write/backfill followed by the independent `mode=ro` verifier and export. No cron is proposed in this phase.
 
 ## Limitations
 

@@ -70,18 +70,26 @@ def percentile_at_or_below(values: Sequence[float], current: float) -> float:
 def _stats(rows: Sequence[Mapping[str, Any]], field: str) -> Dict[str, Any]:
     observed = [(str(row["valuation_date"]), float(row[field]))
                 for row in rows if row.get(field) is not None]
+    current_date = str(rows[-1]["valuation_date"]) if rows else None
+    raw_current = rows[-1].get(field) if rows else None
+    current = float(raw_current) if raw_current is not None else None
     if not observed:
         return {"count": 0, "current": None, "percentile": None,
                 "min": None, "median": None, "max": None,
-                "min_date": None, "max_date": None}
+                "min_date": None, "max_date": None,
+                "current_date": current_date,
+                "last_publishable": None, "last_publishable_date": None}
     values = [value for _, value in observed]
-    current_date, current = observed[-1]
+    last_publishable_date, last_publishable = observed[-1]
     min_date, minimum = min(observed, key=lambda item: (item[1], item[0]))
     max_date, maximum = max(observed, key=lambda item: (item[1], item[0]))
     return {
         "count": len(values), "current": current,
         "current_date": current_date,
-        "percentile": percentile_at_or_below(values, current),
+        "percentile": (percentile_at_or_below(values, current)
+                       if current is not None else None),
+        "last_publishable": last_publishable,
+        "last_publishable_date": last_publishable_date,
         "min": minimum, "min_date": min_date,
         "median": statistics.median(values),
         "max": maximum, "max_date": max_date,
@@ -205,6 +213,10 @@ def write_markdown(path: Path, result: Mapping[str, Any]) -> None:
         f"- Rows: {result['row_count']}",
         f"- Publishable: {result['quality']['publishable_pct']:.2f}%",
         f"- Live-tail range: {result['quality']['live_tail_range'] or 'None'}",
+        (f"- Last publishable primary: {_fmt(primary['last_publishable'])} "
+         f"on {primary['last_publishable_date']}"
+         if primary["current"] is None else
+         f"- Current primary date: {primary['current_date']}"),
         "",
         "| Metric | Current | Percentile | Min | Median | Max |",
         "|---|---:|---:|---:|---:|---:|",

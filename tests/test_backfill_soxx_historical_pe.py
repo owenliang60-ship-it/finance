@@ -111,6 +111,34 @@ def test_batch_fuse_is_strictly_greater_than_twenty_percent():
     assert failure_rate_exceeded(1, 0)
 
 
+@pytest.mark.parametrize("stage", ["fundamentals", "mcap"])
+def test_nonempty_but_still_incomplete_responses_trip_failure_fuse(stage):
+    state = _state()
+    incomplete = sorted(state.income_by_symbol)[:6]
+    if stage == "fundamentals":
+        for symbol in incomplete:
+            state.income_by_symbol[symbol] = []
+        client = Mock()
+        client.get_income_statement.side_effect = lambda symbol, **kwargs: [{
+            "symbol": symbol, "date": "2025-12-31", "period": "Q4",
+            "accepted_date": "2026-01-20 16:00:00",
+            "reported_currency": "USD", "net_income": 25.0,
+        }]
+    else:
+        for symbol in incomplete:
+            state.market_cap_by_symbol[symbol] = []
+        client = Mock()
+        client.get_historical_market_cap.side_effect = lambda symbol, **kwargs: [{
+            "symbol": symbol, "date": "2026-01-01", "market_cap": 1000.0,
+        }]
+    args = parse_args([
+        "--stage", stage, "--from-date", "2026-01-20",
+        "--to-date", "2026-01-23", "--dry-run", "--allow-network",
+    ])
+    with pytest.raises(RuntimeError, match="failure fuse"):
+        run_backfill(args, state, client=client)
+
+
 def test_snapshot_quality_blocks_truncated_members_or_weights():
     rows = _state().snapshots
     assert validate_snapshot_quality(rows) == {

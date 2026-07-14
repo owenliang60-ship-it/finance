@@ -420,16 +420,19 @@ def _run_fundamentals(
         if store is not None:
             store.upsert_income(symbol, list(rows))
         fetched += 1
-    _check_fuse("fundamentals", failures, len(symbols))
-    final_complete = sum(fundamentals_complete(
+    final_incomplete = [symbol for symbol in symbols if not fundamentals_complete(
         state.income_by_symbol.get(symbol, []), args.from_date, args.to_date,
-        state.trading_dates) for symbol in symbols)
+        state.trading_dates)]
+    _check_fuse("fundamentals", final_incomplete, len(symbols))
+    final_complete = len(symbols) - len(final_incomplete)
     report["stages"]["fundamentals"] = {
         "preexisting_complete": len(symbols) - len(missing),
         "complete": final_complete, "fetched": fetched,
         "rows_available": sum(bool(state.income_by_symbol.get(symbol))
                               for symbol in symbols),
-        "failed": failures}
+        "empty_responses": failures,
+        "incomplete": final_incomplete,
+        "failed": final_incomplete}
 
 
 def _replace_rows_in_memory(
@@ -472,16 +475,19 @@ def _run_mcap(
             store.replace_historical_market_cap_range(
                 symbol, fetch_from, args.to_date, list(rows))
         fetched += 1
-    _check_fuse("mcap", failures, len(symbols))
-    final_complete = sum(market_cap_complete(
+    final_incomplete = [symbol for symbol in symbols if not market_cap_complete(
         state.market_cap_by_symbol.get(symbol, []), state.trading_dates,
-        args.from_date, args.to_date) for symbol in symbols)
+        args.from_date, args.to_date)]
+    _check_fuse("mcap", final_incomplete, len(symbols))
+    final_complete = len(symbols) - len(final_incomplete)
     report["stages"]["mcap"] = {
         "preexisting_complete": len(symbols) - len(missing),
         "complete": final_complete, "fetched": fetched,
         "rows_available": sum(bool(state.market_cap_by_symbol.get(symbol))
                               for symbol in symbols),
-        "failed": failures}
+        "empty_responses": failures,
+        "incomplete": final_incomplete,
+        "failed": final_incomplete}
 
 
 def _run_splits(

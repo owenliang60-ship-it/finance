@@ -5,7 +5,7 @@ import json
 import math
 import sqlite3
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
@@ -45,7 +45,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Read-only verification of historical basket TTM PE")
     parser.add_argument("--basket", default="SOXX")
-    parser.add_argument("--min-date", type=_iso_date)
+    parser.add_argument("--min-date", type=_iso_date, required=True)
     parser.add_argument("--db", type=Path,
                         default=PROJECT_ROOT / "data" / "market.db")
     return parser.parse_args(argv)
@@ -78,6 +78,43 @@ def _close(left: Any, right: Any, tolerance: float = 1e-9) -> bool:
         return left is None and right is None
     return math.isclose(float(left), float(right), rel_tol=tolerance,
                         abs_tol=tolerance)
+
+
+_BASE_SANITY_FIELDS = (
+    "raw_symbol", "symbol", "date", "market_cap", "close", "mcap_return",
+    "price_return", "implied_shares", "implied_share_ratio", "expected_shares",
+    "split_ratio", "split_source_dates", "split_adjustment_applied",
+    "split_adjustment_mode", "candidate", "candidate_reason", "status",
+    "normalization_recovery",
+)
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"),
+                      allow_nan=False)
+
+
+def _project_sanity(events: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    projected = [{field: event.get(field) for field in _BASE_SANITY_FIELDS}
+                 for event in events]
+    return sorted(projected, key=_canonical_json)
+
+
+def _latest_rebalance_effective(
+    as_of: str, trading_dates: Sequence[str],
+) -> Optional[str]:
+    cutoff = date.fromisoformat(as_of)
+    candidates = []
+    for year in range(cutoff.year - 1, cutoff.year + 1):
+        for month in (3, 6, 9, 12):
+            first = date(year, month, 1)
+            third_friday = first + timedelta(
+                days=(4 - first.weekday()) % 7 + 14)
+            effective = next((day for day in trading_dates
+                              if day > third_friday.isoformat()), None)
+            if effective is not None and effective <= as_of:
+                candidates.append(effective)
+    return max(candidates) if candidates else None
 
 
 def _decode_outputs(rows: Sequence[Mapping[str, Any]]) -> Tuple[List[Dict[str, Any]], List[str]]:
@@ -164,7 +201,9 @@ def _recompute_row(
 ) -> Dict[str, Any]:
     weights = merge_covered_weights(holding_rows)
     eligible_weight = float(weights["eligible_weight"])
+    members = []
     metric_members = []
+    sanity_evidence = []
     mcap_weight = income_weight = fx_weight = 0.0
     used_mcap_dates: Dict[str, str] = {}
     aliases = {
@@ -207,11 +246,21 @@ def _recompute_row(
             candidate_income = (compute_member_ttm_income_usd(
                 candidate_quarters, source["fx"], valuation_date)
                 if candidate_quarters is not None else None)
-            evaluated.append((candidate, candidate_mcap,
-                              candidate_quarters, candidate_income))
-        symbol, market_cap, quarters, income = next((
-            item for item in evaluated if item[1] is not None and item[3] is not None
+            evaluated.append({
+                "symbol": candidate,
+                "market_cap": candidate_mcap,
+                "quarters": candidate_quarters,
+                "income": candidate_income,
+                "classifications": source["sanity"].get(candidate, []),
+            })
+        selected = next((
+            item for item in evaluated
+            if item["market_cap"] is not None and item["income"] is not None
         ), evaluated[0])
+        symbol = selected["symbol"]
+        market_cap = selected["market_cap"]
+        quarters = selected["quarters"]
+        income = selected["income"]
         resolutions[raw_symbol] = {
             "resolved_symbol": symbol,
             "alias_mode": alias["mode"] if alias and symbol != raw_symbol else None,
@@ -224,12 +273,76 @@ def _recompute_row(
             income_weight += weight
         if income is not None:
             fx_weight += weight
+        status_by_date = {
+            str(item["date"]): str(item.get("status"))
+            for item in selected["classifications"]
+        }
+        latest_observation = max((
+            item for item in source["mcap"].get(symbol, [])
+            if str(item.get("date") or "") <= valuation_date
+        ), key=lambda item: str(item["date"]), default=None)
+        for candidate in evaluated:
+            for classification in candidate["classifications"]:
+                if (str(classification["date"]) <= valuation_date
+                        and (classification.get("candidate")
+                             or classification.get("forced_refresh_planned")
+                             or not accepted_market_cap_status(
+                                 str(classification.get("status"))))):
+                    sanity_evidence.append({
+                        "raw_symbol": raw_symbol,
+                        "symbol": candidate["symbol"],
+                        **dict(classification),
+                    })
+        if market_cap is None:
+            exclusion_reason = "market_cap_missing_stale_or_quarantined"
+        elif quarters is None:
+            exclusion_reason = "four_visible_continuous_quarters_missing"
+        elif income is None:
+            exclusion_reason = "fx_missing_or_stale"
+        else:
+            exclusion_reason = None
+        evidence = {
+            "symbol": symbol,
+            "raw_symbol": raw_symbol,
+            "resolved_symbol": symbol,
+            "alias_mode": (alias["mode"]
+                           if alias and symbol != raw_symbol else None),
+            "alias_reason": (alias["reason"]
+                             if alias and symbol != raw_symbol else None),
+            "weight_pct": float(weight),
+            "market_cap": market_cap["market_cap"] if market_cap else None,
+            "market_cap_date": market_cap["date"] if market_cap else None,
+            "market_cap_sanity_status": (
+                market_cap["sanity_status"] if market_cap else None),
+            "market_cap_exclusion_date": (
+                latest_observation.get("date")
+                if market_cap is None and latest_observation else None),
+            "market_cap_exclusion_status": (
+                status_by_date.get(str(latest_observation.get("date")))
+                if market_cap is None and latest_observation else None),
+            "fiscal_dates": [item["date"] for item in quarters] if quarters else [],
+            "accepted_dates": ([item["accepted_date"] for item in quarters]
+                               if quarters else []),
+            "fx_evidence": income["quarters"] if income else [],
+            "ttm_net_income_usd": income["ttm_net_income_usd"] if income else None,
+            "exclusion_reason": exclusion_reason,
+        }
+        members.append(evidence)
         if market_cap is not None and income is not None:
             metric_members.append({
                 "symbol": symbol, "weight": float(weight),
                 "market_cap": float(market_cap["market_cap"]),
                 "net_income": float(income["ttm_net_income_usd"]),
             })
+    for target, weight in sorted(weights["orphan_targets"].items()):
+        members.append({
+            "symbol": target, "raw_symbol": target,
+            "resolved_symbol": target, "alias_mode": None, "alias_reason": None,
+            "weight_pct": weight,
+            "market_cap": None, "ttm_net_income_usd": None,
+            "fiscal_dates": [], "accepted_dates": [], "fx_evidence": [],
+            "exclusion_reason": "covered_by_target_missing",
+        })
     covered_weight = sum(row["weight"] for row in metric_members)
     coverage = covered_weight / eligible_weight if eligible_weight else 0.0
     weighted_yield = (sum(
@@ -253,6 +366,8 @@ def _recompute_row(
         "used_mcap_dates": used_mcap_dates,
         "warnings_json": expected_warnings,
         "resolutions": resolutions,
+        "members_json": members,
+        "mcap_sanity_json": sanity_evidence,
     }
 
 
@@ -263,7 +378,12 @@ def _asof_evidence_errors(rows: Sequence[Mapping[str, Any]]) -> List[str]:
         for member in row["members_json"]:
             mcap_date = member.get("market_cap_date")
             if mcap_date:
-                observed = date.fromisoformat(str(mcap_date))
+                try:
+                    observed = date.fromisoformat(str(mcap_date))
+                except (TypeError, ValueError):
+                    errors.append(
+                        f"{row['valuation_date']}:{member.get('symbol')}:mcap_shape")
+                    continue
                 if observed > valuation or (valuation - observed).days > 7:
                     errors.append(f"{row['valuation_date']}:{member.get('symbol')}:mcap")
             for accepted in member.get("accepted_dates", []):
@@ -271,7 +391,12 @@ def _asof_evidence_errors(rows: Sequence[Mapping[str, Any]]) -> List[str]:
                     errors.append(
                         f"{row['valuation_date']}:{member.get('symbol')}:accepted")
             for fx in member.get("fx_evidence", []):
-                fx_date = date.fromisoformat(str(fx["fx_date"]))
+                try:
+                    fx_date = date.fromisoformat(str(fx["fx_date"]))
+                except (KeyError, TypeError, ValueError):
+                    errors.append(
+                        f"{row['valuation_date']}:{member.get('symbol')}:fx_shape")
+                    continue
                 if fx_date > valuation or (valuation - fx_date).days > 7:
                     errors.append(f"{row['valuation_date']}:{member.get('symbol')}:fx")
     return errors
@@ -280,6 +405,8 @@ def _asof_evidence_errors(rows: Sequence[Mapping[str, Any]]) -> List[str]:
 def verify_database(
     conn: sqlite3.Connection, basket: str = "SOXX", min_date: Optional[str] = None,
 ) -> Dict[str, Any]:
+    if min_date is None:
+        raise ValueError("--min-date is required for a complete leading boundary")
     basket = basket.upper()
     required = {
         "fmp_fund_disclosure_holdings", "fx_daily", "fmp_stock_splits",
@@ -302,9 +429,24 @@ def verify_database(
     source = _load_sources(conn, basket, outputs)
     holdings = source["holdings"]
     checks = [_check("read_only_connection", True, "mode=ro + query_only")]
+    groups = _holding_groups(holdings)
 
     disclosure_dates = sorted({row["holding_date"] for row in holdings
                                if row["source_kind"] == "disclosure"})
+    live_dates = sorted({row["holding_date"] for row in holdings
+                         if row["source_kind"] == "live"})
+    latest_trading_date = source["trading_dates"][-1]
+    latest_rebalance = _latest_rebalance_effective(
+        latest_trading_date, source["trading_dates"])
+    current_groups = [item for item in groups
+                      if item[0]["composition_effective_date"] <= latest_trading_date]
+    current_metadata = current_groups[-1][0] if current_groups else None
+    current_tail_valid = bool(
+        current_metadata is not None
+        and latest_rebalance is not None
+        and current_metadata["composition_effective_date"] == latest_rebalance
+        and current_metadata["source_kind"] in {"live", "disclosure"}
+    )
     raw_duplicates = _rows(
         conn, "SELECT basket_symbol, holding_date, source_kind, raw_row_index, COUNT(*) n "
         "FROM fmp_fund_disclosure_holdings WHERE basket_symbol = ? "
@@ -312,10 +454,14 @@ def verify_database(
         [basket])
     checks.append(_check(
         "source_snapshots", len(disclosure_dates) >= EXPECTED_DISCLOSURES
-        and not raw_duplicates,
+        and not raw_duplicates and current_tail_valid,
         {"disclosure_count": len(disclosure_dates),
+         "live_count": len(live_dates),
          "range": [disclosure_dates[0], disclosure_dates[-1]] if disclosure_dates else [],
-         "raw_duplicates": len(raw_duplicates)}))
+         "raw_duplicates": len(raw_duplicates),
+         "latest_rebalance_effective": latest_rebalance,
+         "current_composition": current_metadata,
+         "current_tail_valid": current_tail_valid}))
 
     snapshot_quality = []
     for metadata, rows in _holding_groups(holdings):
@@ -333,7 +479,7 @@ def verify_database(
 
     first = outputs[0]["valuation_date"]
     last = outputs[-1]["valuation_date"]
-    expected_start = min_date or first
+    expected_start = min_date
     expected_end = source["trading_dates"][-1]
     calendar = [day for day in source["trading_dates"]
                 if expected_start <= day <= expected_end]
@@ -366,8 +512,8 @@ def verify_database(
     asof_errors = _asof_evidence_errors(outputs)
     checks.append(_check("asof_evidence", not asof_errors, asof_errors))
 
-    groups = _holding_groups(holdings)
     recompute_errors = []
+    evidence_errors = []
     published_bad_mcap = []
     compare_fields = (
         "eligible_weight", "covered_weight", "weight_coverage",
@@ -386,6 +532,24 @@ def verify_database(
         if metadata["holding_date"] != row["holding_date"]:
             recompute_errors.append(f"{row['valuation_date']}:holding_date")
             continue
+        anchor = max((day for day in source["trading_dates"]
+                      if day <= metadata["holding_date"]), default=None)
+        expected_composition = {
+            "composition_effective_date": metadata["composition_effective_date"],
+            "composition_available_date": metadata["composition_available_date"],
+            "weight_basis": ("live_snapshot_backcast_proxy"
+                             if metadata["source_kind"] == "live"
+                             else "fixed_rebalance_weight_proxy"),
+            "data_quality_tier": ("live_tail_weaker"
+                                  if metadata["source_kind"] == "live"
+                                  else "historical_disclosure_fixed_proxy"),
+            "is_ex_post_composition": int(
+                row["valuation_date"] < metadata["composition_available_date"]),
+            "is_observed_weight_date": int(row["valuation_date"] == anchor),
+        }
+        for field, expected_value in expected_composition.items():
+            if row.get(field) != expected_value:
+                recompute_errors.append(f"{row['valuation_date']}:{field}")
         recalculated = _recompute_row(row["valuation_date"], holding_rows, source)
         for field in compare_fields:
             if not _close(row.get(field), recalculated.get(field)):
@@ -405,6 +569,13 @@ def verify_database(
                     or observed.get("alias_reason") != expected["alias_reason"]):
                 recompute_errors.append(
                     f"{row['valuation_date']}:{raw_symbol}:alias_evidence")
+        if _canonical_json(row["members_json"]) != _canonical_json(
+                recalculated["members_json"]):
+            evidence_errors.append(f"{row['valuation_date']}:members_json")
+        if _canonical_json(_project_sanity(row["mcap_sanity_json"])) != \
+                _canonical_json(_project_sanity(
+                    recalculated["mcap_sanity_json"])):
+            evidence_errors.append(f"{row['valuation_date']}:mcap_sanity_json")
         if row.get("rebalance_weighted_ttm_pe_gaap_proxy") is not None:
             # Check the source dates claimed by the published row against a
             # fresh scan of raw HMC/price/split tables. Recalculation itself
@@ -422,6 +593,8 @@ def verify_database(
                         f"{row['valuation_date']}:{symbol}:{mcap_date}:{status}")
     checks.append(_check("source_recompute_all_rows", not recompute_errors,
                          {"rows_recomputed": len(outputs), "errors": recompute_errors}))
+    checks.append(_check("persisted_member_and_sanity_evidence",
+                         not evidence_errors, evidence_errors))
 
     output_duplicates = _rows(
         conn, "SELECT basket_symbol, valuation_date, COUNT(*) n "

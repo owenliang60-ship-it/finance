@@ -72,8 +72,11 @@ def test_summary_excludes_null_pe_and_separates_anchors(tmp_path):
     result = query.build_result(rows, "SOXX")
     conn.close()
     assert result["primary"]["count"] == 3
-    assert result["primary"]["current"] == 20.0
-    assert result["primary"]["percentile"] == 100.0
+    assert result["primary"]["current"] is None
+    assert result["primary"]["current_date"] == "2026-01-07"
+    assert result["primary"]["percentile"] is None
+    assert result["primary"]["last_publishable"] == 20.0
+    assert result["primary"]["last_publishable_date"] == "2026-01-06"
     assert len(result["observed_weight_anchors"]) == 1
     assert result["quality"]["gap_dates"] == ["2026-01-07"]
     assert result["quality"]["warnings"] == ["notice"]
@@ -123,6 +126,8 @@ def test_csv_and_markdown_are_deterministic(tmp_path):
             "2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07"]
     assert "not official SOXX PE" in md_path.read_text(encoding="utf-8")
     assert "Quarantine gaps: 1" in md_path.read_text(encoding="utf-8")
+    assert "Last publishable primary: 20.00 on 2026-01-06" in md_path.read_text(
+        encoding="utf-8")
 
 
 def test_invalid_json_fails_closed(tmp_path):

@@ -372,6 +372,7 @@ def compute_daily_basket_valuation(
             evaluated.append({
                 "symbol": candidate, "market_cap": candidate_mcap,
                 "quarters": candidate_quarters, "income": candidate_income,
+                "classifications": classifications,
             })
         # Raw data is authoritative whenever complete. Alias is a fallback for
         # the whole member data key, never an unconditional ticker rewrite or
@@ -384,23 +385,28 @@ def compute_daily_basket_valuation(
         quarters = selected["quarters"]
         income_result = selected["income"]
         alias_used = symbol != raw_symbol
-        selected_classifications = sanity_by_symbol.get(symbol, [])
+        selected_classifications = selected["classifications"]
         status_by_date = {str(row["date"]): str(row.get("status"))
                           for row in selected_classifications}
         latest_observation = max((
             row for row in market_cap_by_symbol.get(symbol, [])
             if str(row.get("date") or "") <= valuation_date
         ), key=lambda row: str(row["date"]), default=None)
-        for classification in selected_classifications:
-            if (str(classification["date"]) <= valuation_date
-                    and (classification.get("candidate")
-                         or classification.get("forced_refresh_planned")
-                         or not accepted_market_cap_status(
-                             str(classification.get("status"))))):
-                sanity_evidence.append({
-                    "raw_symbol": raw_symbol, "symbol": symbol,
-                    **dict(classification),
-                })
+        # Persist anomalies for every evaluated data key. When raw CREE is
+        # rejected and WOLF is selected, the raw quarantine is still part of
+        # the audit trail rather than disappearing behind the fallback.
+        for candidate in evaluated:
+            for classification in candidate["classifications"]:
+                if (str(classification["date"]) <= valuation_date
+                        and (classification.get("candidate")
+                             or classification.get("forced_refresh_planned")
+                             or not accepted_market_cap_status(
+                                 str(classification.get("status"))))):
+                    sanity_evidence.append({
+                        "raw_symbol": raw_symbol,
+                        "symbol": candidate["symbol"],
+                        **dict(classification),
+                    })
         if market_cap is not None:
             mcap_weight += weight
         if quarters is not None:

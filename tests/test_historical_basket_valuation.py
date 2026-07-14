@@ -265,20 +265,34 @@ def test_raw_symbol_is_preferred_and_alias_is_only_complete_data_fallback():
     full_income = {"CREE": _quarters("CREE"), "WOLF": _quarters("WOLF")}
     full_mcap = {"CREE": [{"date": "2026-01-30", "market_cap": 1000.0}],
                  "WOLF": [{"date": "2026-01-30", "market_cap": 2000.0}]}
-    sanity = {symbol: [{"date": "2026-01-30", "status": "clean"}]
-              for symbol in ("CREE", "WOLF")}
+    clean_sanity = {
+        "CREE": [{"date": "2026-01-30", "status": "clean"}],
+        "WOLF": [{"date": "2026-01-30", "status": "clean"}],
+    }
+    fallback_sanity = {
+        "CREE": [{
+            "date": "2026-01-30", "status": "invalid_mcap",
+            "candidate": True, "quarantined": True,
+        }],
+        "WOLF": [{"date": "2026-01-30", "status": "clean"}],
+    }
     direct = compute_daily_basket_valuation(
         income_by_symbol=full_income, market_cap_by_symbol=full_mcap,
-        sanity_by_symbol=sanity, **common)
+        sanity_by_symbol=clean_sanity, **common)
     assert direct["members_json"][0]["resolved_symbol"] == "CREE"
     assert direct["members_json"][0]["alias_reason"] is None
 
     fallback = compute_daily_basket_valuation(
         income_by_symbol={"CREE": [], "WOLF": _quarters("WOLF")},
-        market_cap_by_symbol=full_mcap, sanity_by_symbol=sanity, **common)
+        market_cap_by_symbol=full_mcap, sanity_by_symbol=fallback_sanity, **common)
     assert fallback["members_json"][0]["raw_symbol"] == "CREE"
     assert fallback["members_json"][0]["resolved_symbol"] == "WOLF"
     assert fallback["members_json"][0]["alias_reason"] == "rename"
+    assert fallback["mcap_sanity_json"] == [{
+        "raw_symbol": "CREE", "symbol": "CREE",
+        "date": "2026-01-30", "status": "invalid_mcap",
+        "candidate": True, "quarantined": True,
+    }]
 
 
 def test_authoritative_alias_never_uses_complete_wrong_company_data():
