@@ -2204,6 +2204,67 @@ class MarketStore:
         conn.commit()
         return len(data)
 
+    def replace_historical_market_cap_range(
+        self,
+        symbol: str,
+        from_date: str,
+        to_date: str,
+        rows: List[Dict[str, Any]],
+    ) -> int:
+        """Atomically replace an authoritative vendor range.
+
+        Unlike ordinary upsert, deleting the complete range first guarantees
+        that a stale bad date cannot survive merely because the refresh
+        response omitted that date. Validation happens before the transaction;
+        an empty or malformed response preserves the prior range.
+        """
+        normalized_symbol = str(symbol).upper().strip()
+        start = self._require_iso_date(from_date, "from_date")
+        end = self._require_iso_date(to_date, "to_date")
+        if not normalized_symbol or start > end or not rows:
+            raise ValueError("non-empty authoritative market-cap range required")
+        prepared = []
+        seen_dates = set()
+        for row in rows:
+            row_symbol = str(row.get("symbol", normalized_symbol)).upper()
+            row_date = self._require_iso_date(row.get("date"), "market-cap date")
+            if (row_symbol != normalized_symbol or not start <= row_date <= end
+                    or row_date in seen_dates):
+                raise ValueError("market-cap row symbol/date outside range")
+            seen_dates.add(row_date)
+            try:
+                market_cap = float(row["market_cap"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("market_cap must be positive") from exc
+            if market_cap <= 0:
+                raise ValueError("market_cap must be positive")
+            prepared.append((normalized_symbol, row_date, market_cap))
+
+        conn = self._get_conn()
+        with conn:
+            conn.execute(
+                "DELETE FROM historical_market_cap "
+                "WHERE symbol = ? AND date BETWEEN ? AND ?",
+                [normalized_symbol, start, end],
+            )
+            conn.executemany(
+                "INSERT INTO historical_market_cap "
+                "(symbol, date, market_cap) VALUES (?, ?, ?)",
+                prepared,
+            )
+        return len(prepared)
+
+    def get_historical_market_cap_range(
+        self, symbol: str, from_date: str, to_date: str,
+    ) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT symbol, date, market_cap FROM historical_market_cap "
+            "WHERE symbol = ? AND date BETWEEN ? AND ? ORDER BY date",
+            [symbol.upper(), from_date, to_date],
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def get_market_cap_at(self, symbol: str, date: str) -> Optional[float]:
         """查询 symbol 在 date（或之前最近交易日）的市值。无数据返回 None。"""
         sql = """SELECT market_cap FROM historical_market_cap
