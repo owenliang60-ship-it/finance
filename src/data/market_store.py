@@ -17,7 +17,7 @@ import logging
 import re
 import sqlite3
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -501,6 +501,95 @@ _SCHEMA = "\n\n".join([
     "CREATE INDEX IF NOT EXISTS idx_sce_concept ON symbol_concept_edges(concept_id);",
     "CREATE INDEX IF NOT EXISTS idx_sce_edge_type ON symbol_concept_edges(edge_type);",
 
+    # -- Historical basket GAAP TTM valuation source and output tables --
+    """CREATE TABLE IF NOT EXISTS fmp_fund_disclosure_holdings (
+    basket_symbol TEXT NOT NULL,
+    holding_date TEXT NOT NULL,
+    source_kind TEXT NOT NULL CHECK(source_kind IN ('disclosure','live')),
+    raw_row_index INTEGER NOT NULL,
+    rebalance_close_date TEXT NOT NULL,
+    composition_effective_date TEXT NOT NULL,
+    composition_available_date TEXT NOT NULL,
+    raw_symbol TEXT,
+    symbol TEXT,
+    name TEXT,
+    weight_pct REAL,
+    market_value REAL,
+    cik TEXT,
+    cusip TEXT,
+    isin TEXT,
+    included INTEGER NOT NULL CHECK(included IN (0,1)),
+    filter_reason TEXT,
+    covered_by TEXT,
+    row_accepted_at TEXT,
+    fetched_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (basket_symbol, holding_date, source_kind, raw_row_index)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_ffdh_basket_effective "
+    "ON fmp_fund_disclosure_holdings(basket_symbol, composition_effective_date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_ffdh_live_rebalance "
+    "ON fmp_fund_disclosure_holdings"
+    "(basket_symbol, rebalance_close_date, source_kind, raw_row_index) "
+    "WHERE source_kind = 'live';",
+
+    """CREATE TABLE IF NOT EXISTS fx_daily (
+    currency TEXT NOT NULL,
+    date TEXT NOT NULL,
+    usd_per_unit REAL NOT NULL CHECK(usd_per_unit > 0),
+    source_symbol TEXT NOT NULL,
+    source TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (currency, date)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_fx_daily_date ON fx_daily(date);",
+
+    """CREATE TABLE IF NOT EXISTS fmp_stock_splits (
+    symbol TEXT NOT NULL,
+    date TEXT NOT NULL,
+    numerator REAL NOT NULL CHECK(numerator > 0),
+    denominator REAL NOT NULL CHECK(denominator > 0),
+    split_type TEXT NOT NULL,
+    source TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (symbol, date)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_fss_symbol_date "
+    "ON fmp_stock_splits(symbol, date);",
+
+    """CREATE TABLE IF NOT EXISTS basket_ttm_valuation (
+    basket_symbol TEXT NOT NULL,
+    valuation_date TEXT NOT NULL,
+    holding_date TEXT NOT NULL,
+    composition_effective_date TEXT NOT NULL,
+    composition_available_date TEXT NOT NULL,
+    is_ex_post_composition INTEGER NOT NULL CHECK(is_ex_post_composition IN (0,1)),
+    weight_basis TEXT NOT NULL,
+    data_quality_tier TEXT NOT NULL,
+    is_observed_weight_date INTEGER NOT NULL CHECK(is_observed_weight_date IN (0,1)),
+    eligible_weight REAL NOT NULL,
+    covered_weight REAL NOT NULL,
+    rebalance_weighted_ttm_pe_gaap_proxy REAL,
+    weighted_earnings_yield REAL,
+    uncapped_mcap_basket_pe_gaap REAL,
+    covered_market_cap REAL,
+    ttm_net_income_usd REAL,
+    member_count INTEGER NOT NULL,
+    covered_count INTEGER NOT NULL,
+    weight_coverage REAL NOT NULL CHECK(weight_coverage >= 0 AND weight_coverage <= 1),
+    mcap_weight_coverage REAL NOT NULL CHECK(mcap_weight_coverage >= 0 AND mcap_weight_coverage <= 1),
+    income_weight_coverage REAL NOT NULL CHECK(income_weight_coverage >= 0 AND income_weight_coverage <= 1),
+    fx_weight_coverage REAL NOT NULL CHECK(fx_weight_coverage >= 0 AND fx_weight_coverage <= 1),
+    members_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    mcap_sanity_json TEXT NOT NULL,
+    methodology_version TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (basket_symbol, valuation_date)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_btv_basket_date "
+    "ON basket_ttm_valuation(basket_symbol, valuation_date);",
+
     # -- FMP forward EPS 数据线（Spec 2026-07-09 §5.2，4 业务表 + 1 run-manifest）--
     # 周频 PIT 快照（append-only）
     """CREATE TABLE IF NOT EXISTS fmp_estimates (
@@ -602,6 +691,8 @@ _VALID_TABLES = frozenset({
     "historical_market_cap",
     "concepts", "concept_themes", "company_concept_tags",
     "symbol_concept_edges",
+    "fmp_fund_disclosure_holdings", "fx_daily", "fmp_stock_splits",
+    "basket_ttm_valuation",
     "fmp_estimates", "fmp_earnings", "fmp_etf_holdings_snapshot",
     "fmp_basket_valuation", "fmp_forward_runs",
 })
@@ -928,6 +1019,305 @@ class MarketStore:
         """Get the most recent forward metadata row for a symbol."""
         rows = self._get_rows("forward_metadata", symbol, limit=1)
         return rows[0] if rows else None
+
+    # ---- Historical basket GAAP TTM valuation ----
+
+    @staticmethod
+    def _require_iso_date(value: str, field_name: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError(f"{field_name} must be YYYY-MM-DD")
+        try:
+            return date.fromisoformat(value).isoformat()
+        except ValueError as exc:
+            raise ValueError(f"{field_name} must be YYYY-MM-DD") from exc
+
+    @staticmethod
+    def _json_text(value: Any, field_name: str) -> str:
+        try:
+            payload = json.loads(value) if isinstance(value, str) else value
+            return json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                              separators=(",", ":"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field_name} must be valid JSON") from exc
+
+    def replace_fund_disclosure_snapshot(
+        self,
+        basket_symbol: str,
+        holding_date: str,
+        source_kind: str,
+        rows: List[Dict[str, Any]],
+        *,
+        rebalance_close_date: str,
+        composition_effective_date: str,
+        composition_available_date: str,
+        fetched_at: str,
+        refresh_live: bool = False,
+    ) -> int:
+        """Atomically replace one disclosure snapshot.
+
+        A live snapshot is frozen per scheduled rebalance. A later run is a
+        no-op unless ``refresh_live`` is explicit, preventing drifting live
+        weights from rewriting an already published backcast.
+        """
+        _validate_table("fmp_fund_disclosure_holdings")
+        basket = str(basket_symbol).upper().strip()
+        if not basket:
+            raise ValueError("basket_symbol required")
+        holding_date = self._require_iso_date(holding_date, "holding_date")
+        rebalance_close_date = self._require_iso_date(
+            rebalance_close_date, "rebalance_close_date")
+        composition_effective_date = self._require_iso_date(
+            composition_effective_date, "composition_effective_date")
+        composition_available_date = self._require_iso_date(
+            composition_available_date, "composition_available_date")
+        if source_kind not in {"disclosure", "live"}:
+            raise ValueError("source_kind must be disclosure or live")
+        if not fetched_at:
+            raise ValueError("fetched_at required")
+        if not rows:
+            raise ValueError("complete disclosure snapshot cannot be empty")
+
+        indexes = set()
+        for row in rows:
+            index = row.get("raw_row_index")
+            if not isinstance(index, int) or index < 0 or index in indexes:
+                raise ValueError("raw_row_index must be unique non-negative integers")
+            indexes.add(index)
+            if row.get("included") not in {0, 1}:
+                raise ValueError("included must be 0 or 1")
+
+        conn = self._get_conn()
+        if source_kind == "live" and not refresh_live:
+            frozen = conn.execute(
+                "SELECT COUNT(*) FROM fmp_fund_disclosure_holdings "
+                "WHERE basket_symbol = ? AND source_kind = 'live' "
+                "AND rebalance_close_date = ?",
+                [basket, rebalance_close_date],
+            ).fetchone()[0]
+            if frozen:
+                return 0
+
+        created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with conn:
+            if source_kind == "live" and refresh_live:
+                conn.execute(
+                    "DELETE FROM fmp_fund_disclosure_holdings "
+                    "WHERE basket_symbol = ? AND source_kind = 'live' "
+                    "AND rebalance_close_date = ?",
+                    [basket, rebalance_close_date],
+                )
+            else:
+                conn.execute(
+                    "DELETE FROM fmp_fund_disclosure_holdings "
+                    "WHERE basket_symbol = ? AND holding_date = ? "
+                    "AND source_kind = ?",
+                    [basket, holding_date, source_kind],
+                )
+            for row in rows:
+                self._insert_validated(
+                    conn,
+                    "fmp_fund_disclosure_holdings",
+                    {
+                        **row,
+                        "basket_symbol": basket,
+                        "holding_date": holding_date,
+                        "source_kind": source_kind,
+                        "rebalance_close_date": rebalance_close_date,
+                        "composition_effective_date": composition_effective_date,
+                        "composition_available_date": composition_available_date,
+                        "fetched_at": fetched_at,
+                        "created_at": created_at,
+                    },
+                )
+        return len(rows)
+
+    def get_fund_disclosure_snapshots(
+        self,
+        basket_symbol: str,
+        holding_date: Optional[str] = None,
+        source_kind: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        query = (
+            "SELECT * FROM fmp_fund_disclosure_holdings "
+            "WHERE basket_symbol = ?")
+        params: List[Any] = [basket_symbol.upper()]
+        if holding_date is not None:
+            query += " AND holding_date = ?"
+            params.append(holding_date)
+        if source_kind is not None:
+            if source_kind not in {"disclosure", "live"}:
+                raise ValueError("source_kind must be disclosure or live")
+            query += " AND source_kind = ?"
+            params.append(source_kind)
+        query += " ORDER BY holding_date, source_kind, raw_row_index"
+        return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+    def upsert_fx_daily(self, rows: List[Dict[str, Any]]) -> int:
+        _validate_table("fx_daily")
+        prepared = []
+        created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        for row in rows:
+            currency = str(row.get("currency", "")).upper().strip()
+            source_symbol = str(row.get("source_symbol", "")).upper().strip()
+            if len(currency) != 3 or not source_symbol:
+                raise ValueError("currency/source_symbol required")
+            row_date = self._require_iso_date(row.get("date"), "FX date")
+            try:
+                rate = float(row["usd_per_unit"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("usd_per_unit must be positive") from exc
+            if rate <= 0:
+                raise ValueError("usd_per_unit must be positive")
+            prepared.append({
+                "currency": currency,
+                "date": row_date,
+                "usd_per_unit": rate,
+                "source_symbol": source_symbol,
+                "source": row.get("source", "fmp"),
+                "created_at": created_at,
+            })
+        conn = self._get_conn()
+        with conn:
+            for row in prepared:
+                self._insert_validated(conn, "fx_daily", row)
+        return len(prepared)
+
+    def get_fx_at_or_before(
+        self, currency: str, valuation_date: str,
+    ) -> Optional[Dict[str, Any]]:
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM fx_daily WHERE currency = ? AND date <= ? "
+            "ORDER BY date DESC LIMIT 1",
+            [currency.upper(), valuation_date],
+        ).fetchone()
+        return dict(row) if row else None
+
+    def replace_stock_splits(
+        self, symbol: str, rows: List[Dict[str, Any]],
+    ) -> int:
+        """Replace complete split history for a symbol, including empty history."""
+        _validate_table("fmp_stock_splits")
+        normalized_symbol = str(symbol).upper().strip()
+        if not normalized_symbol:
+            raise ValueError("symbol required")
+        fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        prepared = []
+        seen_dates = set()
+        for row in rows:
+            row_symbol = str(row.get("symbol", normalized_symbol)).upper()
+            if row_symbol != normalized_symbol:
+                raise ValueError("split row symbol mismatch")
+            split_date = self._require_iso_date(row.get("date"), "split date")
+            if split_date in seen_dates:
+                raise ValueError("duplicate split date")
+            seen_dates.add(split_date)
+            try:
+                numerator = float(row["numerator"])
+                denominator = float(row["denominator"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("split ratio must be positive") from exc
+            split_type = row.get("split_type", row.get("splitType"))
+            if numerator <= 0 or denominator <= 0 or not split_type:
+                raise ValueError("split ratio/type must be valid")
+            prepared.append({
+                "symbol": normalized_symbol,
+                "date": split_date,
+                "numerator": numerator,
+                "denominator": denominator,
+                "split_type": split_type,
+                "source": row.get("source", "fmp"),
+                "fetched_at": fetched_at,
+            })
+        conn = self._get_conn()
+        with conn:
+            conn.execute(
+                "DELETE FROM fmp_stock_splits WHERE symbol = ?",
+                [normalized_symbol],
+            )
+            for row in prepared:
+                self._insert_validated(conn, "fmp_stock_splits", row)
+        return len(prepared)
+
+    def get_stock_splits(self, symbol: str) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM fmp_stock_splits WHERE symbol = ? ORDER BY date",
+            [symbol.upper()],
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def replace_basket_ttm_valuation_range(
+        self,
+        basket_symbol: str,
+        from_date: str,
+        to_date: str,
+        rows: List[Dict[str, Any]],
+    ) -> int:
+        """Atomically replace one output range so stale prior rows cannot survive."""
+        _validate_table("basket_ttm_valuation")
+        basket = str(basket_symbol).upper().strip()
+        start = self._require_iso_date(from_date, "from_date")
+        end = self._require_iso_date(to_date, "to_date")
+        if not basket or start > end:
+            raise ValueError("valid basket_symbol and date range required")
+        created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        prepared = []
+        seen_dates = set()
+        for row in rows:
+            valuation_date = self._require_iso_date(
+                row.get("valuation_date"), "valuation_date")
+            if not start <= valuation_date <= end or valuation_date in seen_dates:
+                raise ValueError("valuation dates must be unique and inside range")
+            seen_dates.add(valuation_date)
+            for field_name in (
+                "weight_coverage", "mcap_weight_coverage",
+                "income_weight_coverage", "fx_weight_coverage",
+            ):
+                value = row.get(field_name)
+                if value is None or not 0 <= float(value) <= 1:
+                    raise ValueError(f"{field_name} must be between 0 and 1")
+            prepared.append({
+                **row,
+                "basket_symbol": basket,
+                "valuation_date": valuation_date,
+                "members_json": self._json_text(
+                    row.get("members_json", []), "members_json"),
+                "warnings_json": self._json_text(
+                    row.get("warnings_json", []), "warnings_json"),
+                "mcap_sanity_json": self._json_text(
+                    row.get("mcap_sanity_json", []), "mcap_sanity_json"),
+                "created_at": created_at,
+            })
+        conn = self._get_conn()
+        with conn:
+            conn.execute(
+                "DELETE FROM basket_ttm_valuation "
+                "WHERE basket_symbol = ? AND valuation_date BETWEEN ? AND ?",
+                [basket, start, end],
+            )
+            for row in prepared:
+                self._insert_validated(conn, "basket_ttm_valuation", row)
+        return len(prepared)
+
+    def get_basket_ttm_valuations(
+        self,
+        basket_symbol: str,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        query = "SELECT * FROM basket_ttm_valuation WHERE basket_symbol = ?"
+        params: List[Any] = [basket_symbol.upper()]
+        if from_date is not None:
+            query += " AND valuation_date >= ?"
+            params.append(from_date)
+        if to_date is not None:
+            query += " AND valuation_date <= ?"
+            params.append(to_date)
+        query += " ORDER BY valuation_date"
+        return [dict(row) for row in conn.execute(query, params).fetchall()]
 
     # ---- FMP forward EPS 数据线（Spec 2026-07-09 §5.2/§5.3）----
     # 输入行均为 ingestion 层产出的 snake_case 规范化行，不做 camelCase 转换。
