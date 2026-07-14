@@ -3,6 +3,7 @@
 本模块绝不调用 API 或 DB（纯函数，全部可单测）。
 Spec: docs/design/2026-07-09-fmp-forward-eps-valuation-spec.md §5.3 / §5.4 / §7.1
 """
+import calendar as calendar_module
 import json
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -223,6 +224,233 @@ def normalize_holdings(
             "covered_by": covered_by,
         })
     return out
+
+
+# ---------------------------------------------------------------------------
+# Historical fund disclosure adapter + SOXX calendar semantics
+# ---------------------------------------------------------------------------
+
+_SOXX_REBALANCE_MONTHS = (3, 6, 9, 12)
+
+
+def _third_friday(year: int, month: int) -> date:
+    fridays = [week[calendar_module.FRIDAY]
+               for week in calendar_module.monthcalendar(year, month)
+               if week[calendar_module.FRIDAY]]
+    return date(year, month, fridays[2])
+
+
+def infer_soxx_rebalance_close(reference_date: str) -> str:
+    """Most recent scheduled SOXX quarterly third-Friday close."""
+    reference = date.fromisoformat(reference_date)
+    candidates = [
+        _third_friday(year, month)
+        for year in (reference.year - 1, reference.year)
+        for month in _SOXX_REBALANCE_MONTHS
+    ]
+    eligible = [candidate for candidate in candidates if candidate <= reference]
+    if not eligible:  # pragma: no cover - previous year always supplies one
+        raise ValueError("no SOXX rebalance close on or before reference date")
+    return max(eligible).isoformat()
+
+
+def _normalized_trading_dates(trading_dates: Iterable[str]) -> List[date]:
+    try:
+        normalized = sorted({date.fromisoformat(value) for value in trading_dates})
+    except (TypeError, ValueError) as exc:
+        raise ValueError("trading calendar contains a non-ISO date") from exc
+    if not normalized:
+        raise ValueError("trading calendar is empty")
+    return normalized
+
+
+def next_trading_date(after_date: str, trading_dates: Iterable[str]) -> str:
+    anchor = date.fromisoformat(after_date)
+    later = [value for value in _normalized_trading_dates(trading_dates)
+             if value > anchor]
+    if not later:
+        raise ValueError(f"no trading date after {after_date}")
+    return min(later).isoformat()
+
+
+def anchor_trading_date(holding_date: str, trading_dates: Iterable[str]) -> str:
+    """Map a vendor holding date to the latest SOXX trading date on/before it."""
+    anchor = date.fromisoformat(holding_date)
+    earlier = [value for value in _normalized_trading_dates(trading_dates)
+               if value <= anchor]
+    if not earlier:
+        raise ValueError(f"no trading date on or before {holding_date}")
+    return max(earlier).isoformat()
+
+
+def load_soxx_symbol_aliases(path: Path) -> Dict[str, Dict[str, str]]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("SOXX aliases must be an object")
+    normalized: Dict[str, Dict[str, str]] = {}
+    for raw_symbol, item in payload.items():
+        if (not isinstance(raw_symbol, str) or raw_symbol != raw_symbol.upper()
+                or not isinstance(item, dict)):
+            raise ValueError("SOXX alias keys must be uppercase symbols")
+        target = item.get("symbol")
+        cik = item.get("cik")
+        reason = item.get("reason")
+        if (not isinstance(target, str) or target != target.upper()
+                or not isinstance(cik, str) or not cik
+                or not isinstance(reason, str) or not reason.strip()):
+            raise ValueError(f"invalid SOXX alias: {raw_symbol}")
+        normalized[raw_symbol] = {
+            "symbol": target, "cik": cik, "reason": reason.strip()}
+    return normalized
+
+
+def resolve_disclosure_symbol(
+    raw_symbol: str,
+    cik: Optional[str],
+    aliases: Mapping[str, Mapping[str, str]],
+) -> Tuple[str, Optional[Dict[str, str]]]:
+    """Resolve only exact, CIK-backed corporate aliases; never fuzzy-match."""
+    symbol = str(raw_symbol or "").strip().upper()
+    alias = aliases.get(symbol)
+    if alias is None:
+        return symbol, None
+    if str(cik or "") != str(alias.get("cik") or ""):
+        raise ValueError(f"CIK mismatch for configured alias {symbol}")
+    target = str(alias["symbol"]).upper()
+    return target, {
+        "raw_symbol": symbol,
+        "symbol": target,
+        "cik": str(cik),
+        "reason": str(alias["reason"]),
+    }
+
+
+def _vendor_timestamp(value: Any, field_name: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} missing or malformed")
+    text = value.strip().replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} missing or malformed") from exc
+
+
+def normalize_fund_disclosure_snapshot(
+    basket_symbol: str,
+    raw_rows: Sequence[Mapping[str, Any]],
+    source_kind: str,
+    fetched_at: str,
+    trading_dates: Iterable[str],
+    listing_overrides: Mapping[str, str],
+    share_class_groups: Mapping[str, Sequence[str]],
+    symbol_aliases: Mapping[str, Mapping[str, str]],
+    previous_symbols: Optional[Iterable[str]] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Adapt disclosure/live rows, then reuse the proven holdings normalizer."""
+    if source_kind not in {"disclosure", "live"}:
+        raise ValueError("source_kind must be disclosure or live")
+    if not raw_rows:
+        raise ValueError("fund snapshot cannot be empty")
+    fetched = _vendor_timestamp(fetched_at, "fetched_at")
+    warnings: List[str] = []
+    accepted_values: List[datetime] = []
+    holding_dates = set()
+    adapted: List[Dict[str, Any]] = []
+    identity: List[Dict[str, Any]] = []
+
+    for raw_value in raw_rows:
+        if not isinstance(raw_value, Mapping):
+            raise ValueError("fund snapshot rows must be objects")
+        raw = dict(raw_value)
+        if source_kind == "disclosure":
+            raw_date = _parse_iso_date(raw.get("date"))
+            if raw_date is None:
+                raise ValueError("disclosure row date missing or malformed")
+            holding_dates.add(raw_date.isoformat())
+            accepted = _vendor_timestamp(
+                raw.get("acceptedDate"), "acceptedDate")
+            accepted_values.append(accepted)
+            raw_symbol = str(raw.get("symbol") or "").strip().upper()
+            resolved_symbol, alias_evidence = resolve_disclosure_symbol(
+                raw_symbol, raw.get("cik"), symbol_aliases)
+            adapted.append({
+                "asset": resolved_symbol,
+                "name": raw.get("name"),
+                "weightPercentage": raw.get("pctVal"),
+                "marketValue": raw.get("valUsd"),
+                "updatedAt": raw.get("acceptedDate"),
+            })
+            identity.append({
+                "raw_symbol": raw_symbol,
+                "cik": raw.get("cik"),
+                "cusip": raw.get("cusip"),
+                "isin": raw.get("isin"),
+                "row_accepted_at": raw.get("acceptedDate"),
+                "alias_evidence": alias_evidence,
+            })
+        else:
+            raw_symbol = str(raw.get("asset") or "").strip().upper()
+            adapted.append(dict(raw))
+            identity.append({
+                "raw_symbol": raw_symbol,
+                "cik": raw.get("cik"),
+                "cusip": raw.get("cusip"),
+                "isin": raw.get("isin"),
+                "row_accepted_at": None,
+                "alias_evidence": None,
+            })
+
+    if source_kind == "disclosure":
+        if len(holding_dates) != 1:
+            raise ValueError("disclosure snapshot contains mixed holding dates")
+        holding_date = next(iter(holding_dates))
+        accepted_text = {value.isoformat(sep=" ") for value in accepted_values}
+        if len(accepted_text) > 1:
+            warnings.append("inconsistent_row_accepted_at")
+        composition_available_date = max(accepted_values).date().isoformat()
+        weight_basis = "fixed_rebalance_weight_proxy"
+        quality = "historical_disclosure_fixed_proxy"
+    else:
+        holding_date = fetched.date().isoformat()
+        composition_available_date = holding_date
+        weight_basis = "live_snapshot_backcast_proxy"
+        quality = "live_tail_weaker"
+
+    rebalance_close_date = infer_soxx_rebalance_close(holding_date)
+    composition_effective_date = next_trading_date(
+        rebalance_close_date, trading_dates)
+    anchor_date = anchor_trading_date(holding_date, trading_dates)
+    normalized = normalize_holdings(
+        basket_symbol, holding_date, adapted,
+        listing_overrides, share_class_groups)
+    for row, evidence in zip(normalized, identity):
+        row.update(evidence)
+
+    current_symbols = {
+        row["symbol"] if row.get("included") else row.get("covered_by")
+        for row in normalized
+        if row.get("symbol") or row.get("covered_by")
+    }
+    if previous_symbols is not None:
+        previous = {str(symbol).upper() for symbol in previous_symbols}
+        if current_symbols != previous and date.fromisoformat(
+                rebalance_close_date).month != 9:
+            warnings.append("non_reconstitution_membership_delta")
+
+    metadata = {
+        "basket_symbol": basket_symbol.upper(),
+        "holding_date": holding_date,
+        "anchor_trading_date": anchor_date,
+        "source_kind": source_kind,
+        "rebalance_close_date": rebalance_close_date,
+        "composition_effective_date": composition_effective_date,
+        "composition_available_date": composition_available_date,
+        "fetched_at": fetched_at,
+        "weight_basis": weight_basis,
+        "data_quality_tier": quality,
+        "warnings": warnings,
+    }
+    return normalized, metadata
 
 
 # ---------------------------------------------------------------------------
