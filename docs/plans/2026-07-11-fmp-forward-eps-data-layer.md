@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Status:** Tasks 0–13 当日执行 complete (2026-07-13)：live contract、key rotation、production backfill、full weekly smoke、cron cutover 均已完成；等待 2026-07-18 自然周六 gate，Phase 1 尚未标记 LIVE。
+**Status:** Phase 1 LIVE (2026-07-18)：live contract、key rotation、production backfill、full weekly smoke、cron cutover 与自然周六 gate 均已通过；yfinance 继续四周并行对拍。
 
 > **Rollout 实测（2026-07-13）**：backfill 与 weekly 的 4Q coverage 都是 `1,009/1,074 = 93.95%`，旧 yfinance 38,932 rows + deterministic hash 不变。原 FMP `<30min` 目标被实测否决：backfill 79.9min、weekly 79.5min；1,074 targets × 3 endpoints × 1.5s 串行限速决定约 80min 下限。10:45 cron 已安装并双重回读 exact；完整证据见 `docs/audit/2026-07-13-fmp-forward-eps-phase1-rollout.md`。同日 weekly 按冻结 Spec 重标未来 backfill rows，导致 backfill verifier 事后不可重跑，见 Issue 042。
 
@@ -1752,7 +1752,7 @@ stateDiagram-v2
 - [x] Task 11 live contract/config audit completed without secret leakage.
 - [x] Merge, push, deploy, key rotation, backfill and crontab each received separate Boss approval.
 - [x] Cloud backfill verified and old yfinance data untouched.
-- [ ] At least one natural Saturday run green; second snapshot scheduled/observed.
+- [x] At least one natural Saturday run green (2026-07-18: yfinance 99.34%/100%, FMP 94.3%, wrapper 101.2min); second natural snapshot remains scheduled for observation.
 - [x] `.claude/ongoing.md`, `ARCHITECTURE.md`, `CLAUDE.md`, session digest and issue record (if any pitfall occurred) updated.
 - [x] Phase 2 remains a separate plan; yfinance remains live pending four-week comparison.
 

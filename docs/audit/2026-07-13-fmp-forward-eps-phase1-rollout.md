@@ -3,7 +3,7 @@
 **Date**: 2026-07-13
 **Plan**: `docs/plans/2026-07-11-fmp-forward-eps-data-layer.md`
 **Scope**: Tasks 11–13（live contract probe、key rotation、cloud backfill、weekly smoke、cron cutover）
-**Status**: Tasks 11–13 当日 rollout 已完成；等待 2026-07-18 自然周六验收，尚未标记 LIVE
+**Status**: Phase 1 LIVE（2026-07-18 natural Saturday acceptance passed）；yfinance continues its four-week parallel comparison.
 
 ## 结论
 
@@ -11,7 +11,7 @@
 
 唯一明确未达标项是原计划的 FMP `<30min` 时延目标：backfill 79.9min、weekly 79.5min。1,074 symbols × 3 个串行 endpoint × 1.5s 安全间隔决定理论下限约 80min，这属于计划估算错误，不是偶发性能回归。10:45 槽位没有后续 writer 冲突，并继续由 `market_db_writer` 资源锁保护。
 
-Phase 1 仍不能标记 LIVE：必须等 2026-07-18 自然周六真实运行 `run_forward_data.sh`，证明 yfinance → FMP 顺序、双 verifier、日志与告警链路全部通过。本报告不会把同日 smoke 冒充自然周运行。
+2026-07-18 的自然周六运行已通过 Phase 1 LIVE 门。`run_forward_data.sh` 真实顺序为 yfinance → FMP；两个只读 verifier 均通过，wrapper 正常结束，日志未发现 key/API URL 泄漏或失败告警。yfinance 仍保持四周并行对拍，不在本阶段下线。
 
 ## Task 11 — Live Contract 与 holdings 配置审计
 
@@ -77,11 +77,14 @@ Spec 明确规定 `snapshot_kind` 不进入 PK；同日 weekly 会覆盖 17,592 
 - 生效 schedule：fundamental Saturday 10:00（持有 `market_db_writer`）→ forward Saturday 10:45（同锁、busy rc=75、运行 `run_forward_data.sh`）。
 - 安装后发现关联注释仍写 10:15；另做一份精确 backup + 单行 candidate，把注释改为 10:45，安装回读仍为 `exact`（backup：`crontab.pre-forward-comment-fix.20260713_204602`）。
 
-## 尚未满足的自然时间门
+## Natural Saturday Acceptance — 2026-07-18
 
-- 下一次自然周六（2026-07-18）需验证真实 `run_forward_data.sh` 顺序为 yfinance → FMP、两个 verifier 通过、日志无 key/URL 泄漏，并确认总 duration 约 95–105min 的新预算。
-- Codex automation `fmp-forward` 已安排在当日 13:30 CST 自动执行只读验收；绿则在隔离 worktree 完成 LIVE 状态收尾，红则保留 pending 并报告 blocker。
-- 一次 smoke + 一次自然周六是 Phase 1 LIVE 的最低条件；四周并行对拍完成前，yfinance 不下线。
+- Cron 从 10:45 CST 自然触发，`finance_forward` wrapper 于 12:26:13 CST 以 `OK duration=6072s` 结束；总耗时 **101.2min**，落在修正后的 95–105min SLO 内。日志显示 yfinance 完成后才启动 FMP；FMP writer 耗时 4,775s，并以 `rc=0` 收尾。
+- yfinance verifier：core `151/152 = 99.34%`（唯一缺口 SOXX）与 extended `832/832 = 100%`，均超过 99% / 95% 门槛。旧线当前快照为 2026-07-18，983 symbols / 3,932 rows；全表 42,864 rows、PK duplicate groups=0。
+- FMP verifier：weekly manifest `complete`，`1,010/1,071 = 94.3%` 4Q coverage（≥90%）；writer 记录 5 个 quarter failures、20 个 valid-empty。五个 holdings 篮子均有有效 included 行（SPY 505/501、QQQ 108/101、SOX 33/30、IGV 111/107、XLF 80/77）。valid-empty 集合漂移与 holdings 的已知 unrecognized-asset/name-collision 仅作 warning，不触发 gate。
+- 数据库：`PRAGMA quick_check=ok`；`fmp_estimates`、`fmp_earnings`、`fmp_etf_holdings_snapshot`、`fmp_basket_valuation` 四表的 PK duplicate groups 均为 0。
+- 安全与告警：2026-07-18 run section 的 key/API URL leakage scan=0、failure/alert scan=0；日志记录一条 private success summary，未出现失败 Telegram。
+- 一次 smoke + 一次自然周六的最低 LIVE 条件已满足。四周并行对拍完成前，yfinance 不下线。
 
 ## Rollback
 
