@@ -2233,3 +2233,190 @@ class TestComputeVolumeConcentrationPayload:
 
         result_none = mr._compute_volume_concentration_payload(None, empty_members, empty_spy)
         assert result_none == {"available": False, "reason": "历史数据不足"}
+
+
+# ============================================================
+# Task 3 — 接线 build_market_signal_report + 文本渲染
+# Plan: docs/.superpowers/sdd/task-3-brief.md
+# ============================================================
+
+
+def _stub_scan_deps_for_volconc_wiring(monkeypatch, mr):
+    """Stub every build_market_signal_report scan dependency (selection scan +
+    Section 0 market timing) so wiring tests can isolate the volume_concentration
+    path via mr._load_volume_concentration_frames alone. Mirrors the mock
+    recipe used by TestBroadDropPlanV3 / TestVolumeAnomalyPayload above."""
+    monkeypatch.setattr(
+        "scripts.broad_market_scan.fetch_universe_metadata",
+        lambda **kw: {"stocks": {}},
+    )
+    monkeypatch.setattr(
+        "scripts.broad_market_scan.load_price_frames",
+        lambda symbols, **kw: {},
+    )
+    monkeypatch.setattr(mr, "get_symbols", lambda: [])
+    monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
+    monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
+    monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
+    monkeypatch.setattr(mr, "_load_market_db_broad_price_frames", lambda *a, **kw: {})
+    monkeypatch.setattr(
+        "src.indicators.pmarp.analyze_pmarp",
+        lambda *a, **kw: {"signal": "neutral", "current": None, "previous": None},
+    )
+    monkeypatch.setattr(
+        "src.indicators.dv_acceleration.scan_dv_acceleration",
+        lambda *a, **kw: pd.DataFrame(),
+    )
+    monkeypatch.setattr(
+        "src.indicators.rvol_sustained.scan_rvol_sustained", lambda *a, **kw: []
+    )
+    monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
+
+
+class TestVolumeConcentrationWiring:
+    """build_market_signal_report must inject a `volume_concentration` key
+    without ever letting a loader/compute exception escape (不炸整报 promise)."""
+
+    def test_payload_injected_when_loader_available(self, monkeypatch):
+        _stub_scan_deps_for_volconc_wiring(monkeypatch, mr)
+        share_df, members_df, spy_close = _volconc_synthetic_frames(
+            300, member_shift_period=1,
+        )
+        monkeypatch.setattr(
+            mr, "_load_volume_concentration_frames",
+            lambda *a, **kw: {
+                "available": True,
+                "share_df": share_df,
+                "members": members_df,
+                "spy_close": spy_close,
+            },
+        )
+
+        result = build_market_signal_report()
+
+        assert "volume_concentration" in result
+        volconc = result["volume_concentration"]
+        assert volconc["available"] is True
+        assert volconc["regime"] == "高集中+上行（拥挤）"
+
+    def test_loader_degrade_passes_through_unchanged(self, monkeypatch):
+        _stub_scan_deps_for_volconc_wiring(monkeypatch, mr)
+        monkeypatch.setattr(
+            mr, "_load_volume_concentration_frames",
+            lambda *a, **kw: {"available": False, "reason": "数据库读取失败"},
+        )
+
+        result = build_market_signal_report()
+
+        assert result["volume_concentration"] == {
+            "available": False, "reason": "数据库读取失败",
+        }
+
+    def test_loader_exception_degrades_without_bubbling(self, monkeypatch):
+        _stub_scan_deps_for_volconc_wiring(monkeypatch, mr)
+
+        def _raise(*a, **kw):
+            raise RuntimeError("boom: simulated loader crash")
+
+        monkeypatch.setattr(mr, "_load_volume_concentration_frames", _raise)
+
+        result = build_market_signal_report()  # must not raise
+
+        assert result["volume_concentration"] == {
+            "available": False, "reason": "计算异常",
+        }
+
+
+def _volconc_available_payload(**overrides):
+    payload = {
+        "available": True,
+        "as_of": "2026-07-17",
+        "share_sm_pct": 47.8,
+        "share_pctile_1y": 91.6335,   # non-trivial rounding -> 92
+        "churn_sm_pct": 25.3,
+        "churn_pctile_1y": 0.0,       # -> 0
+        "spy_ret20_pct": 3.2,
+        "regime": "高集中+上行（拥挤）",
+    }
+    payload.update(overrides)
+    return payload
+
+
+class TestFormatSectionVolumeConcentration:
+    """Text-face renderer — labels must be byte-identical to the brief's
+    sample, and spy_ret20_pct (direction-only helper) must never be shown."""
+
+    def test_available_renders_exact_sample_text(self):
+        payload = _volconc_available_payload()
+
+        result = mr.format_section_volume_concentration(payload)
+
+        lines = result.split("\n")
+        assert lines[0] == "*0b. 成交集中度*（截至 2026-07-17）"
+        assert lines[1] == "Top50 成交额占比(20日平滑)   47.8%   1年分位 92"
+        assert lines[2] == "Top50 名单20日换手率(平滑)   25.3%   1年分位 0"
+        assert lines[3] == "状态: 高集中+上行（拥挤）"
+        assert "3.2" not in result  # spy_ret20_pct is direction-only, never shown
+
+    def test_unavailable_renders_two_lines_with_reason_and_no_path(self):
+        payload = {"available": False, "reason": "数据库读取失败"}
+
+        result = mr.format_section_volume_concentration(payload)
+
+        lines = result.split("\n")
+        assert lines[0] == "*0b. 成交集中度*"
+        assert lines[1] == "成交集中度: 数据不足（数据库读取失败）"
+        assert "/" not in result
+        assert "Traceback" not in result
+
+    def test_direction_missing_regime_still_shows_both_metric_lines(self):
+        payload = _volconc_available_payload(
+            spy_ret20_pct=None, regime="方向数据缺失",
+        )
+
+        result = mr.format_section_volume_concentration(payload)
+
+        assert "Top50 成交额占比(20日平滑)   47.8%   1年分位 92" in result
+        assert "Top50 名单20日换手率(平滑)   25.3%   1年分位 0" in result
+        assert "状态: 方向数据缺失" in result
+
+
+class TestFormatMorningReportVolumeConcentrationSection:
+    """Section 0b must sit between Section 0 (大盘择时因子) and Section 1
+    (PMARP 信号), for both available and degraded payloads, and must never
+    carry advisory/predictive language."""
+
+    def test_section_order_when_available(self):
+        ms = sample_market_signals()
+        ms["volume_concentration"] = _volconc_available_payload()
+
+        result = format_morning_report(market_signals=ms, elapsed=5)
+
+        i0 = result.index("0. 大盘择时因子")
+        i0b = result.index("0b. 成交集中度")
+        i1 = result.index("1. PMARP 信号")
+        assert i0 < i0b < i1
+
+    def test_section_order_when_unavailable(self):
+        ms = sample_market_signals()
+        ms["volume_concentration"] = {"available": False, "reason": "历史数据不足"}
+
+        result = format_morning_report(market_signals=ms, elapsed=5)
+
+        i0 = result.index("0. 大盘择时因子")
+        i0b = result.index("0b. 成交集中度")
+        i1 = result.index("1. PMARP 信号")
+        assert i0 < i0b < i1
+
+    def test_no_advisory_or_predictive_language_in_0b_block(self):
+        ms = sample_market_signals()
+        ms["volume_concentration"] = _volconc_available_payload()
+
+        result = format_morning_report(market_signals=ms, elapsed=5)
+
+        start = result.index("*0b. 成交集中度*")
+        end = result.index("*1. PMARP", start)
+        block = result[start:end]
+
+        for banned in ["预计", "概率", "风险升高", "建议", "减仓", "仓位", "Timing"]:
+            assert banned not in block

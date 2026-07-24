@@ -1196,11 +1196,25 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     scan_dates = [frame.index.max() for frame in price_frames.values() if not frame.empty]
     as_of = max(scan_dates).date().isoformat() if scan_dates else date.today().isoformat()
 
+    try:
+        volconc_frames = _load_volume_concentration_frames()
+        if volconc_frames.get("available"):
+            volconc = _compute_volume_concentration_payload(
+                volconc_frames["share_df"],
+                volconc_frames["members"],
+                volconc_frames["spy_close"],
+            )
+        else:
+            volconc = volconc_frames  # loader 已给 {"available": False, "reason": ...}
+    except Exception:
+        volconc = {"available": False, "reason": "计算异常"}
+
     return {
         "as_of": as_of,
         "symbols_scanned": len(symbols),
         "symbols_with_data": len(price_frames),
         "market_timing_factor": build_market_timing_factor_report(),
+        "volume_concentration": volconc,
         "layer_counts": {
             layer: sum(
                 1 for symbol in symbols
@@ -1322,6 +1336,25 @@ def format_section_market_timing_factor(market_signals: dict) -> str:
             breadth_display,
             breadth_cross,
         ))
+    return "\n".join(lines)
+
+
+def format_section_volume_concentration(payload: dict) -> str:
+    """Section 0b text face — Top50 成交额占比 / 名单换手率 + regime label
+    only. No directional/predictive language: spy_ret20_pct is regime-only
+    input and is never rendered (see docs/.superpowers/sdd/task-3-brief.md
+    禁词表)."""
+    payload = payload or {}
+    if not payload.get("available"):
+        reason = payload.get("reason", "N/A")
+        return "*0b. 成交集中度*\n成交集中度: 数据不足（{}）".format(reason)
+
+    lines = ["*0b. 成交集中度*（截至 {}）".format(payload.get("as_of"))]
+    lines.append("Top50 成交额占比(20日平滑)   {:.1f}%   1年分位 {}".format(
+        payload.get("share_sm_pct"), round(payload.get("share_pctile_1y"))))
+    lines.append("Top50 名单20日换手率(平滑)   {:.1f}%   1年分位 {}".format(
+        payload.get("churn_sm_pct"), round(payload.get("churn_pctile_1y"))))
+    lines.append("状态: {}".format(payload.get("regime")))
     return "\n".join(lines)
 
 
@@ -2518,6 +2551,10 @@ def format_morning_report(
         lines.append("")
 
         lines.append(format_section_market_timing_factor(market_signals))
+        lines.append("")
+
+        lines.append(format_section_volume_concentration(
+            market_signals.get("volume_concentration", {})))
         lines.append("")
 
         lines.append(format_section_pmarp_by_signal_and_cap(market_signals))
