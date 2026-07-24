@@ -2112,6 +2112,35 @@ class TestVolconcRegime:
         assert mr._volconc_regime(85.0, None) == "方向数据缺失"
 
 
+class TestVolconcRollPctile:
+    def test_short_window_hand_computed_with_tie_and_strict_gt(self):
+        # win=4 (denominator = win - 1 = 3 prior values). Non-monotonic
+        # series with two exact ties (value 3 at idx 1 & 3; value 2 at
+        # idx 2 & 5) so a strict `>` vs. a would-be `>=` comparison diverge,
+        # and a win-1 vs. a would-be win denominator diverge.
+        s = pd.Series([1, 3, 2, 3, 5, 2], dtype=float)
+
+        result = mr._volconc_roll_pctile(s, window=4)
+
+        assert result.iloc[:3].isna().all()
+
+        # idx3: window=[1,3,2,3], last=3, preceding=[1,3,2].
+        # strict >: 3>1 True, 3>3 False (tie), 3>2 True -> 2/3 * 100.
+        # A would-be >= comparison scores the tie True -> 3/3*100 = 100.0;
+        # a would-be win(4)-sized denominator gives 2/4*100 = 50.0 —
+        # both differ from the correct value asserted below.
+        assert result.iloc[3] == pytest.approx(2 / 3 * 100)
+
+        # idx4: window=[3,2,3,5], last=5, preceding=[3,2,3].
+        # 5 beats all three preceding values -> 3/3 * 100 = 100.0.
+        assert result.iloc[4] == pytest.approx(100.0)
+
+        # idx5: window=[2,3,5,2], last=2, preceding=[2,3,5].
+        # strict >: 2>2 False (tie), 2>3 False, 2>5 False -> 0/3 * 100 = 0.0.
+        # A would-be >= comparison scores the tie True -> 1/3*100 = 33.33.
+        assert result.iloc[5] == pytest.approx(0.0)
+
+
 class TestComputeVolumeConcentrationPayload:
     def test_normal_payload_matches_hand_computed_values(self):
         n_rows = 300
@@ -2249,7 +2278,7 @@ class TestComputeVolumeConcentrationPayload:
 
 # ============================================================
 # Task 3 — 接线 build_market_signal_report + 文本渲染
-# Plan: docs/.superpowers/sdd/task-3-brief.md
+# Plan: docs/plans/2026-07-24-morning-report-volume-concentration-context.md
 # ============================================================
 
 

@@ -674,7 +674,7 @@ def _compute_volume_concentration_payload(
     """Pure computation over _load_volume_concentration_frames' output ->
     volume-concentration payload. No IO, no global state.
 
-    Order matters (see docs/.superpowers/sdd/task-2-brief.md):
+    Order matters (see docs/plans/2026-07-24-morning-report-volume-concentration-context.md):
       1. empty/short-input guard
       2. as_of completeness guard (dual condition, up to
          VOLCONC_MAX_STALE_STEPS rollback days over the *untruncated* frame)
@@ -1344,14 +1344,15 @@ def _volconc_display_rows(payload: dict) -> dict:
 
     Each face renders its own markup from this dict's labels/values/status,
     so the three surfaces are guaranteed to match by construction rather
-    than by keeping three hand-written format strings in sync (see Task 4
-    brief). Labels are byte-identical to the text face's original sample;
+    than by keeping three hand-written format strings in sync (see
+    docs/plans/2026-07-24-morning-report-volume-concentration-context.md).
+    Labels are byte-identical to the text face's original sample;
     values are pre-formatted (1 decimal + %; percentile rounded to int) so
     no face re-derives rounding independently.
 
     available=False payloads return only {"available": False, "reason": ...}.
     spy_ret20_pct is never surfaced here — it is a regime-only input, never
-    rendered on any face (see docs/.superpowers/sdd/task-3-brief.md 禁词表)."""
+    rendered on any face (see docs/plans/2026-07-24-morning-report-volume-concentration-context.md 禁词表)."""
     payload = payload or {}
     if not payload.get("available"):
         return {"available": False, "reason": payload.get("reason", "N/A")}
@@ -1378,8 +1379,8 @@ def _volconc_display_rows(payload: dict) -> dict:
 def format_section_volume_concentration(payload: dict) -> str:
     """Section 0b text face — Top50 成交额占比 / 名单换手率 + regime label
     only. No directional/predictive language: spy_ret20_pct is regime-only
-    input and is never rendered (see docs/.superpowers/sdd/task-3-brief.md
-    禁词表)."""
+    input and is never rendered (see
+    docs/plans/2026-07-24-morning-report-volume-concentration-context.md 禁词表)."""
     display = _volconc_display_rows(payload)
     if not display["available"]:
         return "*0b. 成交集中度*\n成交集中度: 数据不足（{}）".format(display["reason"])
