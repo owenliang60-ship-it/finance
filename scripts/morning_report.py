@@ -63,6 +63,18 @@ MARKET_TIMING_PRICE_ROWS = 260
 S2_BREADTH_THRESHOLD = 0.30
 S2_BREADTH_COOLDOWN_DAYS = 60
 
+# 成交集中度 context（校准依据: docs/research/2026-07-24-volume-concentration-signal-stat-study.md）
+VOLCONC_TOP_N = 50
+VOLCONC_SMOOTH_DAYS = 20
+VOLCONC_PCTILE_WINDOW = 252          # 分位分母 = 窗口内前 251 个值
+VOLCONC_HIGH_PCTILE = 80.0
+VOLCONC_DIR_LOOKBACK = 20
+VOLCONC_ETF_EXCLUDE = ("SPY", "QQQ", "SOXX")
+VOLCONC_LOOKBACK_TRADING_DAYS = 320  # 252 分位窗 + 20 平滑 + 20 churn lag + 余量
+VOLCONC_MIN_ROWS = 292               # 有效截面日下限，低于此降级
+VOLCONC_COMPLETENESS_RATIO = 0.95    # 末日截面完整性 guard
+VOLCONC_MAX_STALE_STEPS = 3          # 末日不完整时最多回退天数
+
 from terminal.concept_classifier import get_report_concept_classifier
 from terminal.morning_html_report import compile_morning_html_report
 
@@ -499,6 +511,122 @@ def _load_market_timing_target_frames(
         return {}
     finally:
         conn.close()
+
+
+def _load_volume_concentration_frames(db_path: Path | None = None, as_of: str | None = None) -> dict:
+    """Load market-level dollar-volume concentration frames from market.db.
+
+    Read-only, single-pass CTE over daily_price; excludes VOLCONC_ETF_EXCLUDE
+    from both the Top-N ranking and the total_dv denominator. db_path/as_of
+    are test-injection hooks only (not exposed via CLI); default is
+    DATA_DIR/market.db with no upper date bound (latest data).
+
+    Never writes to market.db (P3 ownership — read-only connection only).
+    Any failure (missing db/table, duplicate (date,symbol) rows, parse
+    errors) degrades to {"available": False, "reason": <short phrase>}
+    instead of raising; reason never contains a path or SQL fragment.
+
+    Returns on success:
+        {"available": True,
+         "share_df": DataFrame indexed by ascending DatetimeIndex with
+             columns "share" (top-N dv / total dv, float) and "n_symbols"
+             (valid non-ETF symbol count that day, int),
+         "members": Series aligned to share_df.index, values = frozenset of
+             that day's Top-N symbols,
+         "spy_close": Series indexed by ascending DatetimeIndex of SPY close}
+    """
+    start = time.time()
+    db_path = Path(db_path) if db_path is not None else DATA_DIR / "market.db"
+    if not db_path.exists():
+        logger.warning("volconc loader: db missing")
+        return {"available": False, "reason": "数据库读取失败"}
+
+    etf_placeholders = ",".join("?" for _ in VOLCONC_ETF_EXCLUDE)
+    as_of_clause = " AND date <= ?" if as_of else ""
+
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        cutoff_sql = (
+            "SELECT DISTINCT date FROM daily_price "
+            "WHERE close > 0 AND volume > 0 "
+            f"AND symbol NOT IN ({etf_placeholders})" + as_of_clause + " "
+            "ORDER BY date DESC LIMIT ?"
+        )
+        cutoff_params = list(VOLCONC_ETF_EXCLUDE)
+        if as_of:
+            cutoff_params.append(as_of)
+        cutoff_params.append(VOLCONC_LOOKBACK_TRADING_DAYS)
+        cutoff_dates = pd.read_sql(cutoff_sql, conn, params=cutoff_params)["date"]
+        if cutoff_dates.empty:
+            return {"available": False, "reason": "历史数据不足"}
+        start_date = cutoff_dates.min()
+
+        rank_sql = (
+            "WITH ranked AS ("
+            " SELECT date, symbol, close*volume AS dv,"
+            "        ROW_NUMBER() OVER (PARTITION BY date ORDER BY close*volume DESC) AS rn,"
+            "        SUM(close*volume) OVER (PARTITION BY date) AS total_dv,"
+            "        COUNT(*) OVER (PARTITION BY date) AS n_symbols"
+            " FROM daily_price"
+            f" WHERE date >= ?{as_of_clause} AND close > 0 AND volume > 0"
+            f"   AND symbol NOT IN ({etf_placeholders}))"
+            " SELECT date, symbol, dv, total_dv, n_symbols FROM ranked WHERE rn <= ?"
+        )
+        rank_params = [start_date]
+        if as_of:
+            rank_params.append(as_of)
+        rank_params.extend(VOLCONC_ETF_EXCLUDE)
+        rank_params.append(VOLCONC_TOP_N)
+        ranked_df = pd.read_sql(rank_sql, conn, params=rank_params)
+
+        spy_sql = (
+            "SELECT date, close FROM daily_price "
+            "WHERE symbol = 'SPY' AND date >= ?" + as_of_clause
+        )
+        spy_params = [start_date]
+        if as_of:
+            spy_params.append(as_of)
+        spy_df = pd.read_sql(spy_sql, conn, params=spy_params)
+    except (sqlite3.Error, pd.errors.DatabaseError) as exc:
+        logger.warning("volconc loader: query failed (%s)", exc)
+        return {"available": False, "reason": "数据库读取失败"}
+    finally:
+        conn.close()
+
+    try:
+        ranked_df["date"] = pd.to_datetime(ranked_df["date"])
+        if ranked_df.duplicated(subset=["date", "symbol"]).any():
+            return {"available": False, "reason": "数据重复"}
+
+        per_date = ranked_df.groupby("date").agg(
+            top_dv=("dv", "sum"),
+            total_dv=("total_dv", "first"),
+            n_symbols=("n_symbols", "first"),
+        )
+        per_date["share"] = (per_date["top_dv"] / per_date["total_dv"]).astype(float)
+        share_df = per_date[["share", "n_symbols"]].sort_index()
+        share_df.index = pd.DatetimeIndex(share_df.index)
+        share_df["n_symbols"] = share_df["n_symbols"].astype(int)
+
+        members = ranked_df.groupby("date")["symbol"].apply(frozenset).sort_index()
+        members.index = pd.DatetimeIndex(members.index)
+        members = members.reindex(share_df.index)
+
+        spy_df["date"] = pd.to_datetime(spy_df["date"])
+        spy_close = spy_df.set_index("date")["close"].astype(float).sort_index()
+        spy_close.index = pd.DatetimeIndex(spy_close.index)
+    except (KeyError, ValueError, TypeError) as exc:
+        logger.warning("volconc loader: parse failed (%s)", exc)
+        return {"available": False, "reason": "数据库读取失败"}
+
+    elapsed = time.time() - start
+    logger.info("volconc loader: %d rows in %.2fs", len(ranked_df), elapsed)
+    return {
+        "available": True,
+        "share_df": share_df,
+        "members": members,
+        "spy_close": spy_close,
+    }
 
 
 def _compute_breadth_s2_status(

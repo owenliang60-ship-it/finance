@@ -1,4 +1,6 @@
 """Tests for scripts/morning_report.py — 格式化函数单元测试"""
+import os
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -1830,3 +1832,161 @@ def test_visual_blocks_have_beta_column_and_width():
     assert block["columns"][-1] == "β6M"
     assert len(block["widths"]) == len(block["columns"])
     assert block["rows"][0]["cells"][-1] == "2.05"
+
+
+# ---------------------------------------------------------------------------
+# _load_volume_concentration_frames — 临时 SQLite 集成测试 (T4)
+# ---------------------------------------------------------------------------
+
+def _write_daily_price_rows(db_path, rows, unique_pk=True):
+    """Create a minimal daily_price table and insert rows.
+
+    rows: iterable of (symbol, date, close, volume) tuples.
+    unique_pk=False omits the PRIMARY KEY so duplicate (symbol, date) rows
+    can be inserted — production market.db always enforces the PK, but the
+    loader must still degrade defensively if it ever sees duplicates.
+    """
+    conn = sqlite3.connect(str(db_path))
+    pk_clause = ", PRIMARY KEY (symbol, date)" if unique_pk else ""
+    conn.execute(
+        f"CREATE TABLE daily_price (symbol TEXT, date TEXT, close REAL, volume REAL{pk_clause})"
+    )
+    conn.executemany("INSERT INTO daily_price VALUES (?, ?, ?, ?)", rows)
+    conn.commit()
+    conn.close()
+
+
+def _volconc_stock_rows(date, n_symbols, prefix="S"):
+    """n_symbols rows with distinct increasing dollar volume (close=1.0 so dv=volume)."""
+    return [(f"{prefix}{i:04d}", date, 1.0, float((i + 1) * 1000)) for i in range(n_symbols)]
+
+
+class TestLoadVolumeConcentrationFrames:
+    def test_etf_excluded_from_members_and_denominator(self, tmp_path):
+        date = "2026-01-02"
+        rows = _volconc_stock_rows(date, 60) + [
+            ("SPY", date, 500.0, 1e8),
+            ("QQQ", date, 400.0, 1e8),
+            ("SOXX", date, 200.0, 1e8),
+        ]
+        db_path = tmp_path / "market.db"
+        _write_daily_price_rows(db_path, rows)
+
+        result = mr._load_volume_concentration_frames(db_path=db_path)
+
+        assert result["available"] is True
+        ts = pd.Timestamp(date)
+        assert "SPY" not in result["members"][ts]
+        assert "QQQ" not in result["members"][ts]
+        assert "SOXX" not in result["members"][ts]
+        assert result["share_df"].loc[ts, "n_symbols"] == 60
+        assert ts in result["spy_close"].index
+        assert result["spy_close"][ts] == 500.0
+
+    def test_top50_share_and_denominator(self, tmp_path):
+        date = "2026-01-02"
+        rows = _volconc_stock_rows(date, 60)
+        db_path = tmp_path / "market.db"
+        _write_daily_price_rows(db_path, rows)
+
+        result = mr._load_volume_concentration_frames(db_path=db_path)
+
+        dv_values = sorted((r[3] for r in rows), reverse=True)
+        expected_share = sum(dv_values[:50]) / sum(dv_values)
+        ts = pd.Timestamp(date)
+        assert result["share_df"].loc[ts, "n_symbols"] == 60
+        assert result["share_df"].loc[ts, "share"] == pytest.approx(expected_share)
+
+    def test_member_sets_are_exact_top50_symbols(self, tmp_path):
+        date = "2026-01-02"
+        n = 60
+        rows = _volconc_stock_rows(date, n)
+        db_path = tmp_path / "market.db"
+        _write_daily_price_rows(db_path, rows)
+
+        result = mr._load_volume_concentration_frames(db_path=db_path)
+
+        expected_members = frozenset(f"S{i:04d}" for i in range(n - 50, n))
+        ts = pd.Timestamp(date)
+        assert result["members"][ts] == expected_members
+
+    def test_read_only_db_file_loads_successfully(self, tmp_path):
+        date = "2026-01-02"
+        rows = _volconc_stock_rows(date, 55)
+        db_path = tmp_path / "market.db"
+        _write_daily_price_rows(db_path, rows)
+        os.chmod(db_path, 0o444)
+        try:
+            result = mr._load_volume_concentration_frames(db_path=db_path)
+        finally:
+            os.chmod(db_path, 0o644)
+
+        assert result["available"] is True
+        assert not result["share_df"].empty
+
+    def test_missing_db_path_degrades_without_path_in_reason(self, tmp_path):
+        missing_path = tmp_path / "does_not_exist.db"
+
+        result = mr._load_volume_concentration_frames(db_path=missing_path)
+
+        assert result["available"] is False
+        assert str(missing_path) not in result["reason"]
+        assert ".db" not in result["reason"]
+
+    def test_missing_daily_price_table_degrades(self, tmp_path):
+        db_path = tmp_path / "market.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE other_table (id INTEGER)")
+        conn.commit()
+        conn.close()
+
+        result = mr._load_volume_concentration_frames(db_path=db_path)
+
+        assert result["available"] is False
+        assert str(db_path) not in result["reason"]
+
+    def test_duplicate_date_symbol_degrades(self, tmp_path):
+        date = "2026-01-02"
+        rows = _volconc_stock_rows(date, 55)
+        # Duplicate the highest-dv row (rows[-1]) so it's guaranteed to land
+        # inside the Top-50 cutoff (rows[0] has the lowest dv and would be
+        # ranked outside Top-50 among 55 symbols, so a duplicate there would
+        # never reach ranked_df — not a valid probe of the dedup check).
+        rows.append(rows[-1])  # duplicate (symbol, date)
+        db_path = tmp_path / "market.db"
+        _write_daily_price_rows(db_path, rows, unique_pk=False)
+
+        result = mr._load_volume_concentration_frames(db_path=db_path)
+
+        assert result["available"] is False
+        assert "reason" in result
+
+    def test_dates_returned_in_ascending_order_regardless_of_insert_order(self, tmp_path):
+        dates = ["2026-01-02", "2026-01-05", "2026-01-06"]
+        rows_by_date = {d: _volconc_stock_rows(d, 55) for d in dates}
+
+        sorted_db = tmp_path / "sorted.db"
+        _write_daily_price_rows(sorted_db, [r for d in dates for r in rows_by_date[d]])
+
+        shuffled_db = tmp_path / "shuffled.db"
+        shuffled_order = [dates[2], dates[0], dates[1]]
+        _write_daily_price_rows(shuffled_db, [r for d in shuffled_order for r in rows_by_date[d]])
+
+        sorted_result = mr._load_volume_concentration_frames(db_path=sorted_db)
+        shuffled_result = mr._load_volume_concentration_frames(db_path=shuffled_db)
+
+        assert sorted_result["share_df"].index.is_monotonic_increasing
+        assert shuffled_result["share_df"].index.is_monotonic_increasing
+        pd.testing.assert_frame_equal(sorted_result["share_df"], shuffled_result["share_df"])
+        assert sorted_result["members"].tolist() == shuffled_result["members"].tolist()
+
+    def test_as_of_truncates_to_cutoff_date(self, tmp_path):
+        dates = ["2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07"]
+        rows = [r for d in dates for r in _volconc_stock_rows(d, 55)]
+        db_path = tmp_path / "market.db"
+        _write_daily_price_rows(db_path, rows)
+
+        result = mr._load_volume_concentration_frames(db_path=db_path, as_of="2026-01-05")
+
+        assert result["available"] is True
+        assert list(result["share_df"].index) == [pd.Timestamp("2026-01-02"), pd.Timestamp("2026-01-05")]
