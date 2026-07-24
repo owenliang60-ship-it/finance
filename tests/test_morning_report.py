@@ -2631,3 +2631,103 @@ class TestVolumeConcentrationBannedWordsHtmlAndPng:
 
         for banned in _VOLCONC_BANNED_WORDS:
             assert banned not in section_text
+
+
+# ---------------------------------------------------------------------------
+# Task 5 — 冻结对拍验收测试 (plan T7 / 验收标准 1)
+#
+# Proves the production chain (_load_volume_concentration_frames ->
+# _compute_volume_concentration_payload) reproduces the research study's
+# frozen-date (2026-07-17) numbers off the real market.db. This test is a
+# deliberate exception to the "tests never touch the real DB" rule — the
+# loader is read-only (mode=ro) and this is exactly the parity check the
+# plan's acceptance criterion 1 calls for.
+# ---------------------------------------------------------------------------
+
+_VOLCONC_RESEARCH_CSV = (
+    PROJECT_ROOT / "backtest" / "new" / "vol_concentration_signal_stats_20260724"
+    / "series_daily.csv"
+)
+_VOLCONC_REAL_DB = PROJECT_ROOT / "data" / "market.db"
+_VOLCONC_FREEZE_DATE = "2026-07-17"
+
+
+class TestVolumeConcentrationFreezeDateParity:
+    """冻结对拍：as_of=2026-07-17 生产链路 vs 研究 series_daily.csv 六字段逐项比对。"""
+
+    def test_frozen_date_matches_research_csv_across_six_fields(self):
+        if not _VOLCONC_RESEARCH_CSV.exists():
+            pytest.skip("research CSV not present in this checkout")
+        if not _VOLCONC_REAL_DB.exists():
+            pytest.skip("data/market.db not present in this checkout")
+
+        # ---- reference values, derived entirely from the research CSV ----
+        csv_df = pd.read_csv(_VOLCONC_RESEARCH_CSV, parse_dates=["date"]).set_index("date")
+        csv_df = csv_df.sort_index()
+        target = pd.Timestamp(_VOLCONC_FREEZE_DATE)
+        assert csv_df.index.max() == target, (
+            f"research CSV max date {csv_df.index.max()} != frozen date {target}; "
+            "brief assumes 2026-07-17 is the CSV's last row"
+        )
+
+        top50_sm_ref = float(csv_df.loc[target, "top50_sm"]) * 100
+        pctile_252_ref = float(csv_df.loc[target, "pctile_252"])
+        spy_up20_ref = bool(csv_df.loc[target, "spy_up20"])
+
+        # churn_sm/churn_pctile are NOT CSV columns — recomputed independently
+        # from raw churn50_20d per research run_study.py:261-264 / roll_pctile
+        # at :65-66 (rolling(20).mean() then roll_pctile(...,252)).
+        def _roll_pctile(s, win):
+            return s.rolling(win).apply(lambda w: (w[-1] > w[:-1]).mean() * 100, raw=True)
+
+        churn_sm_series = csv_df["churn50_20d"].rolling(20).mean()
+        churn_pctile_series = _roll_pctile(churn_sm_series, 252)
+        churn_sm_ref = float(churn_sm_series.loc[target]) * 100
+        churn_pctile_252_ref = float(churn_pctile_series.loc[target])
+
+        # regime_ref: independent if/else (NOT a call to mr._volconc_regime,
+        # to avoid a same-source circular argument against production code).
+        if pctile_252_ref > 80.0 and spy_up20_ref:
+            regime_ref = "高集中+上行（拥挤）"
+        elif pctile_252_ref > 80.0 and not spy_up20_ref:
+            regime_ref = "高集中+下行（恐慌）"
+        else:
+            regime_ref = "常态"
+
+        # Sanity check against the brief's known reference anchors (research-
+        # verified; if these fail the CSV itself changed, not just the parity).
+        assert top50_sm_ref == pytest.approx(47.8039, abs=1e-3)
+        assert pctile_252_ref == pytest.approx(91.6335, abs=1e-3)
+        assert churn_sm_ref == pytest.approx(25.3, abs=1e-1)
+        assert churn_pctile_252_ref == pytest.approx(0.0, abs=1e-6)
+        assert spy_up20_ref is True
+        assert regime_ref == "高集中+上行（拥挤）"
+
+        # ---- production chain over the real, read-only market.db ----
+        frames = mr._load_volume_concentration_frames(
+            db_path=_VOLCONC_REAL_DB, as_of=_VOLCONC_FREEZE_DATE,
+        )
+        assert frames["available"] is True, frames.get("reason")
+
+        payload = mr._compute_volume_concentration_payload(
+            frames["share_df"], frames["members"], frames["spy_close"],
+        )
+        assert payload["available"] is True, payload.get("reason")
+        assert payload["as_of"] == _VOLCONC_FREEZE_DATE
+
+        # ---- six-field parity, plan tolerance ceiling ±0.1pp ----
+        tol = 1e-6
+        assert payload["share_sm_pct"] == pytest.approx(top50_sm_ref, abs=tol), (
+            payload["share_sm_pct"], top50_sm_ref,
+        )
+        assert payload["share_pctile_1y"] == pytest.approx(pctile_252_ref, abs=tol), (
+            payload["share_pctile_1y"], pctile_252_ref,
+        )
+        assert payload["churn_sm_pct"] == pytest.approx(churn_sm_ref, abs=tol), (
+            payload["churn_sm_pct"], churn_sm_ref,
+        )
+        assert payload["churn_pctile_1y"] == pytest.approx(churn_pctile_252_ref, abs=tol), (
+            payload["churn_pctile_1y"], churn_pctile_252_ref,
+        )
+        assert (payload["spy_ret20_pct"] > 0) == spy_up20_ref
+        assert payload["regime"] == regime_ref
