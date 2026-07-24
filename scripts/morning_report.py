@@ -629,6 +629,129 @@ def _load_volume_concentration_frames(db_path: Path | None = None, as_of: str | 
     }
 
 
+def _volconc_regime(share_pctile: float | None, spy_ret20: float | None) -> str:
+    """Classify the volume-concentration regime from a share percentile and
+    SPY 20d direction. Pure lookup, no rolling math — kept separate from
+    _compute_volume_concentration_payload for isolated boundary testing.
+
+    Labels mirror docs/research/2026-07-24-volume-concentration-signal-stat-study.md;
+    spy_ret20 == 0 counts as non-positive (matches the research script's
+    strict `> 0` boolean convention for direction).
+    """
+    if share_pctile is None:
+        return "数据不足"
+    if spy_ret20 is None:
+        return "方向数据缺失"
+    if share_pctile > VOLCONC_HIGH_PCTILE:
+        return "高集中+上行（拥挤）" if spy_ret20 > 0 else "高集中+下行（恐慌）"
+    return "常态"
+
+
+def _volconc_roll_pctile(s: pd.Series, window: int) -> pd.Series:
+    """Rolling percentile rank of the window's last value vs. its preceding
+    values (denominator = window - 1). Matches research run_study.py
+    roll_pctile() line-for-line."""
+    return s.rolling(window).apply(lambda w: (w[-1] > w[:-1]).mean() * 100, raw=True)
+
+
+def _volconc_section_complete(share_df: pd.DataFrame, idx: int) -> bool:
+    """Dual-condition completeness check for the as_of candidate at position
+    idx: n_symbols must clear both the absolute Top-N floor and
+    VOLCONC_COMPLETENESS_RATIO x the trailing-20-row median (fewer than 20
+    prior rows -> use what's available; zero prior rows -> incomplete)."""
+    n = share_df["n_symbols"].iloc[idx]
+    if n < VOLCONC_TOP_N:
+        return False
+    prior = share_df["n_symbols"].iloc[max(0, idx - 20):idx]
+    if len(prior) == 0:
+        return False
+    return n >= VOLCONC_COMPLETENESS_RATIO * prior.median()
+
+
+def _compute_volume_concentration_payload(
+    share_df: pd.DataFrame, members_df: pd.Series, spy_close: pd.Series,
+) -> dict:
+    """Pure computation over _load_volume_concentration_frames' output ->
+    volume-concentration payload. No IO, no global state.
+
+    Order matters (see docs/.superpowers/sdd/task-2-brief.md):
+      1. empty/short-input guard
+      2. as_of completeness guard (dual condition, up to
+         VOLCONC_MAX_STALE_STEPS rollback days over the *untruncated* frame)
+      3. truncate share_df/members_df/spy_close to index <= as_of BEFORE any
+         rolling computation, so a partially-written latest session can
+         never pollute a rolling window
+      4. min-rows guard on the truncated frame
+      5. SPY 20d direction (reindexed to share_df's own trading-day axis)
+      6. share smoothing + rolling percentile
+      7. churn (Top-N set turnover, 20-session lag) + smoothing + percentile
+      8. NaN fallback if any as_of-row metric is still NaN
+      9. payload assembly
+    """
+    if share_df is None or share_df.empty:
+        return {"available": False, "reason": "历史数据不足"}
+
+    n_rows = len(share_df)
+    as_of_idx = None
+    for step in range(VOLCONC_MAX_STALE_STEPS + 1):
+        idx = n_rows - 1 - step
+        if idx < 0:
+            break
+        if _volconc_section_complete(share_df, idx):
+            as_of_idx = idx
+            break
+    if as_of_idx is None:
+        return {"available": False, "reason": "最新截面不完整"}
+
+    as_of = share_df.index[as_of_idx]
+    share_df = share_df.iloc[:as_of_idx + 1]
+    members_df = members_df.iloc[:as_of_idx + 1]
+    spy_close = spy_close.loc[spy_close.index <= as_of]
+
+    if len(share_df) < VOLCONC_MIN_ROWS:
+        return {"available": False, "reason": "历史数据不足"}
+
+    spy_aligned = spy_close.reindex(share_df.index)
+    ret20 = spy_aligned.pct_change(VOLCONC_DIR_LOOKBACK, fill_method=None)
+    spy_ret20_raw = ret20.iloc[-1]
+    spy_ret20 = None if pd.isna(spy_ret20_raw) else float(spy_ret20_raw)
+
+    share_sm = share_df["share"].rolling(VOLCONC_SMOOTH_DAYS).mean()
+    share_pctile = _volconc_roll_pctile(share_sm, VOLCONC_PCTILE_WINDOW)
+
+    churn_lag = 20  # session-index lag; research run_study.py L59-62/261-264 (literal 20)
+    member_values = members_df.to_list()
+    churn_values = [float("nan")] * len(member_values)
+    for i in range(churn_lag, len(member_values)):
+        overlap = len(member_values[i - churn_lag] & member_values[i])
+        churn_values[i] = 1 - overlap / VOLCONC_TOP_N
+    churn = pd.Series(churn_values, index=share_df.index, dtype=float)
+    churn_sm = churn.rolling(VOLCONC_SMOOTH_DAYS).mean()
+    churn_pctile = _volconc_roll_pctile(churn_sm, VOLCONC_PCTILE_WINDOW)
+
+    share_sm_last = share_sm.iloc[-1]
+    share_pctile_last = share_pctile.iloc[-1]
+    churn_sm_last = churn_sm.iloc[-1]
+    churn_pctile_last = churn_pctile.iloc[-1]
+    if (
+        pd.isna(share_sm_last) or pd.isna(share_pctile_last)
+        or pd.isna(churn_sm_last) or pd.isna(churn_pctile_last)
+    ):
+        return {"available": False, "reason": "历史数据不足"}
+
+    regime = _volconc_regime(float(share_pctile_last), spy_ret20)
+    return {
+        "available": True,
+        "as_of": as_of.date().isoformat(),
+        "share_sm_pct": float(share_sm_last) * 100,
+        "share_pctile_1y": float(share_pctile_last),
+        "churn_sm_pct": float(churn_sm_last) * 100,
+        "churn_pctile_1y": float(churn_pctile_last),
+        "spy_ret20_pct": None if spy_ret20 is None else spy_ret20 * 100,
+        "regime": regime,
+    }
+
+
 def _compute_breadth_s2_status(
     daily_breadth: object,
     threshold: float = S2_BREADTH_THRESHOLD,

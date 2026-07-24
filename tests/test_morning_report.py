@@ -2005,3 +2005,231 @@ class TestLoadVolumeConcentrationFrames:
         assert list(result["share_df"].index) == [pd.Timestamp("2026-01-02"), pd.Timestamp("2026-01-05")]
         assert list(result["spy_close"].index) == [pd.Timestamp("2026-01-02"), pd.Timestamp("2026-01-05")]
         assert result["spy_close"][pd.Timestamp("2026-01-05")] == 505.0
+
+
+# ---------------------------------------------------------------------------
+# _volconc_regime + _compute_volume_concentration_payload — pure-function
+# unit tests (T2/T3). Synthetic frames only; no DB access.
+# ---------------------------------------------------------------------------
+
+def _volconc_synthetic_frames(
+    n_rows,
+    start="2020-01-01",
+    share_base=0.30,
+    share_slope=0.0001,
+    n_symbols=60,
+    member_shift_period=1,
+    spy_base=500.0,
+    spy_slope=1.0,
+    spy_nan_last=False,
+):
+    """Build a (share_df, members_df, spy_close) triple with closed-form,
+    hand-derivable rolling statistics:
+
+    - share[t] = share_base + share_slope * t (strictly increasing) so the
+      20d smoothed mean has a known average-of-window closed form, and its
+      252-window percentile is always exactly 100.0 (current value is the
+      window max whenever slope > 0, no ties).
+    - Top-N member set at row t = {M<start>..M<start+49>} where
+      start = t // member_shift_period. Two rows 20 apart share
+      (VOLCONC_TOP_N - 20 // member_shift_period) symbols exactly (integer
+      floor division is exact here because 20 is chosen to divide evenly
+      for the shift periods used in tests), so churn is a known constant
+      for every row with i >= 20.
+    - spy_close[t] = spy_base + spy_slope * t (linear), giving a closed-form
+      pct_change(20) at any row.
+
+    n_symbols may be a scalar (constant every row) or a list/tuple of
+    per-row overrides (len == n_rows).
+    """
+    dates = pd.date_range(start=start, periods=n_rows, freq="D")
+    share_values = [share_base + share_slope * t for t in range(n_rows)]
+    if isinstance(n_symbols, (list, tuple)):
+        assert len(n_symbols) == n_rows
+        n_symbols_values = list(n_symbols)
+    else:
+        n_symbols_values = [n_symbols] * n_rows
+    share_df = pd.DataFrame(
+        {"share": share_values, "n_symbols": n_symbols_values}, index=dates
+    )
+
+    member_sets = []
+    for t in range(n_rows):
+        m_start = t // member_shift_period
+        member_sets.append(frozenset(
+            f"M{i:05d}" for i in range(m_start, m_start + mr.VOLCONC_TOP_N)
+        ))
+    members_df = pd.Series(member_sets, index=dates)
+
+    spy_values = [spy_base + spy_slope * t for t in range(n_rows)]
+    if spy_nan_last:
+        spy_values[-1] = float("nan")
+    spy_close = pd.Series(spy_values, index=dates)
+
+    return share_df, members_df, spy_close
+
+
+class TestVolconcRegime:
+    def test_boundary_exactly_80_is_normal_not_crowded(self):
+        # 严格大于 80.0 才算高集中；80.0 本身落入常态。
+        assert mr._volconc_regime(80.0, 0.05) == "常态"
+
+    def test_pctile_grid_nearest_achievable_values(self):
+        # 真实 rolling 分位网格步长 100/251；80.0 不可达，取两侧最近可达值。
+        assert mr._volconc_regime(79.68, 0.05) == "常态"
+        assert mr._volconc_regime(80.08, 0.05) == "高集中+上行（拥挤）"
+
+    def test_high_concentration_up_is_crowded(self):
+        assert mr._volconc_regime(85.0, 0.05) == "高集中+上行（拥挤）"
+
+    def test_high_concentration_down_is_panic(self):
+        assert mr._volconc_regime(85.0, -0.02) == "高集中+下行（恐慌）"
+
+    def test_high_concentration_flat_ret_counts_as_down_panic(self):
+        # spy_ret20 == 0 归入下行（与研究 `> 0` 布尔口径一致）
+        assert mr._volconc_regime(85.0, 0.0) == "高集中+下行（恐慌）"
+
+    def test_low_concentration_is_normal_regardless_of_direction(self):
+        assert mr._volconc_regime(50.0, 0.05) == "常态"
+        assert mr._volconc_regime(50.0, -0.05) == "常态"
+
+    def test_share_pctile_none_degrades_to_insufficient_data(self):
+        assert mr._volconc_regime(None, 0.05) == "数据不足"
+
+    def test_spy_ret20_none_degrades_to_direction_missing(self):
+        assert mr._volconc_regime(85.0, None) == "方向数据缺失"
+
+
+class TestComputeVolumeConcentrationPayload:
+    def test_normal_payload_matches_hand_computed_values(self):
+        n_rows = 300
+        share_df, members_df, spy_close = _volconc_synthetic_frames(
+            n_rows, member_shift_period=1,
+        )
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result["available"] is True
+        assert result["as_of"] == share_df.index[-1].date().isoformat()
+
+        # share_sm[299] = mean(share[280..299]) = base + slope * avg(280..299)
+        expected_share_sm = 0.30 + 0.0001 * ((280 + 299) / 2)
+        assert result["share_sm_pct"] == pytest.approx(expected_share_sm * 100, rel=1e-9)
+        # strictly increasing share_sm -> current value is always the window max
+        assert result["share_pctile_1y"] == pytest.approx(100.0)
+
+        # member window advances by 1 symbol/day; 20d-apart windows overlap
+        # in (50 - 20) = 30 symbols -> churn = 1 - 30/50 = 0.4 for every
+        # row with i >= 20, so the 20d mean is also exactly 0.4.
+        assert result["churn_sm_pct"] == pytest.approx(40.0)
+        # churn_sm is constant -> nothing in the window is strictly greater
+        assert result["churn_pctile_1y"] == pytest.approx(0.0)
+
+        # spy_close[t] = 500 + t; ret20 at t=299 = (799-779)/779 = 20/779
+        expected_ret20 = 20 / 779
+        assert result["spy_ret20_pct"] == pytest.approx(expected_ret20 * 100, rel=1e-9)
+
+        assert result["regime"] == "高集中+上行（拥挤）"
+
+    def test_churn_matches_hand_computed_40_of_50_overlap(self):
+        # member window advances by 1 symbol every 2 days; 20d-apart windows
+        # overlap in (50 - 20//2) = 40 symbols -> churn = 1 - 40/50 = 0.2
+        n_rows = 300
+        share_df, members_df, spy_close = _volconc_synthetic_frames(
+            n_rows, member_shift_period=2,
+        )
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result["available"] is True
+        assert result["churn_sm_pct"] == pytest.approx(20.0)
+        assert result["churn_pctile_1y"] == pytest.approx(0.0)
+
+    def test_completeness_guard_minor_dip_still_uses_last_day(self):
+        n_rows = 300
+        n_symbols = [60] * n_rows
+        n_symbols[-1] = 59  # ~1.7% below the trailing-20 median of 60; passes both conditions
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows, n_symbols=n_symbols)
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result["available"] is True
+        assert result["as_of"] == share_df.index[-1].date().isoformat()
+
+    def test_completeness_guard_severe_dip_rolls_back_one_day(self):
+        n_rows = 300
+        n_symbols = [60] * n_rows
+        n_symbols[-1] = 36  # 60% of median(60); fails both n>=50 and n>=0.95*median
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows, n_symbols=n_symbols)
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result["available"] is True
+        assert result["as_of"] == share_df.index[-2].date().isoformat()
+
+    def test_completeness_guard_four_consecutive_incomplete_days_degrades(self):
+        n_rows = 300
+        n_symbols = [60] * n_rows
+        for i in range(1, 5):  # last 4 candidate days all incomplete
+            n_symbols[-i] = 30
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows, n_symbols=n_symbols)
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result == {"available": False, "reason": "最新截面不完整"}
+
+    def test_rollback_result_equals_directly_truncated_input(self):
+        # 末日不完整回退 1 天的结果，必须与直接把输入截到该日再算的结果逐键相等——
+        # 证明回退后的截断发生在任何滚动计算之前，末日未污染滚动值。
+        n_rows = 301
+        n_symbols = [60] * n_rows
+        n_symbols[-1] = 36  # forces rollback to dates[-2]
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows, n_symbols=n_symbols)
+
+        result_with_bad_tail = mr._compute_volume_concentration_payload(
+            share_df, members_df, spy_close
+        )
+
+        cutoff = share_df.index[-2]
+        truncated_share_df = share_df.loc[:cutoff]
+        truncated_members_df = members_df.loc[:cutoff]
+        truncated_spy_close = spy_close.loc[:cutoff]
+        result_pretruncated = mr._compute_volume_concentration_payload(
+            truncated_share_df, truncated_members_df, truncated_spy_close
+        )
+
+        assert result_with_bad_tail == pytest.approx(result_pretruncated)
+
+    def test_spy_missing_at_as_of_degrades_direction_only(self):
+        n_rows = 300
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows, spy_nan_last=True)
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result["available"] is True
+        assert result["spy_ret20_pct"] is None
+        assert result["regime"] == "方向数据缺失"
+        # 两项指标照常输出，不因方向缺失而降级
+        assert result["share_sm_pct"] is not None
+        assert result["share_pctile_1y"] is not None
+        assert result["churn_sm_pct"] is not None
+        assert result["churn_pctile_1y"] is not None
+
+    def test_insufficient_history_below_min_rows_degrades(self):
+        n_rows = mr.VOLCONC_MIN_ROWS - 1
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows)
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result == {"available": False, "reason": "历史数据不足"}
+
+    def test_empty_input_degrades_without_raising(self):
+        empty_share_df = pd.DataFrame(columns=["share", "n_symbols"])
+        empty_members = pd.Series(dtype=object)
+        empty_spy = pd.Series(dtype=float)
+
+        result = mr._compute_volume_concentration_payload(empty_share_df, empty_members, empty_spy)
+        assert result == {"available": False, "reason": "历史数据不足"}
+
+        result_none = mr._compute_volume_concentration_payload(None, empty_members, empty_spy)
+        assert result_none == {"available": False, "reason": "历史数据不足"}
