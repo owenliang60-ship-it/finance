@@ -109,6 +109,16 @@ def sample_market_signals():
                 },
             ],
         },
+        "volume_concentration": {
+            "available": True,
+            "as_of": "2026-04-24",
+            "share_sm_pct": 47.8,
+            "share_pctile_1y": 91.6335,   # non-trivial rounding -> 92
+            "churn_sm_pct": 25.3,
+            "churn_pctile_1y": 0.0,       # -> 0
+            "spy_ret20_pct": 3.2,
+            "regime": "高集中+上行（拥挤）",
+        },
         "pmarp": {
             "criteria": "PMARP 上穿2% / 上穿98% / 下穿98%",
             "hits": [
@@ -1049,6 +1059,7 @@ class TestMorningVisualReport:
 
         assert [section["slug"] for section in sections] == [
             "00_market_timing_factor",
+            "00b_volume_concentration",   # Task 4: 0b 成交集中度 spec
             "01_pmarp",
             "02_volume_anomaly",
             "03_dollar_volume",
@@ -1063,14 +1074,15 @@ class TestMorningVisualReport:
         assert "29.5%→31.2%" == first_timing_row["cells"][3]
         assert sections[0]["blocks"][0]["grouped"] is False
         # PMARP section now has Method A: 3 flat sub-blocks (one per signal type, grouped=False)
-        assert len(sections[1]["blocks"]) == 3
-        for block in sections[1]["blocks"]:
+        # index 2 (not 1): Task 4 inserted 00b_volume_concentration at index 1.
+        assert len(sections[2]["blocks"]) == 3
+        for block in sections[2]["blocks"]:
             assert block.get("grouped") is False
-        all_pmarp_rows = [r for b in sections[1]["blocks"] for r in b["rows"]]
+        all_pmarp_rows = [r for b in sections[2]["blocks"] for r in b["rows"]]
         assert {row["layer"] for row in all_pmarp_rows} == {"pool", "extend"}
         # Subtitle should not advertise broad layer anymore (but Section 0 still mentions S2 broad).
-        assert "Pool / Extend / Broad" not in sections[1]["subtitle"]
-        assert "Pool / Extend 分层" in sections[1]["subtitle"]
+        assert "Pool / Extend / Broad" not in sections[2]["subtitle"]
+        assert "Pool / Extend 分层" in sections[2]["subtitle"]
 
     def test_render_visual_report_creates_one_png_per_section(self, tmp_path):
         pytest.importorskip("PIL")
@@ -1088,9 +1100,9 @@ class TestMorningVisualReport:
         )
 
         # After merging 02_dv_acceleration + 03_rvol_sustained into 02_volume_anomaly,
-        # the section count drops from 5 to 4: 00 timing, 01 pmarp, 02 volume anomaly,
-        # 03 dollar volume.
-        assert len(paths) == 4
+        # the section count was 4: 00 timing, 01 pmarp, 02 volume anomaly,
+        # 03 dollar volume. Task 4 adds a 00b 成交集中度 section -> 5.
+        assert len(paths) == 5
         assert all(path.exists() for path in paths)
         assert all(path.suffix == ".png" for path in paths)
 
@@ -2420,3 +2432,202 @@ class TestFormatMorningReportVolumeConcentrationSection:
 
         for banned in ["预计", "概率", "风险升高", "建议", "减仓", "仓位", "Timing"]:
             assert banned not in block
+
+
+# ============================================================
+# Task 4: HTML 块 + PNG spec + 三面 parity (plan T6)
+# ============================================================
+#
+# 三面（text/HTML/PNG）共享 _volconc_display_rows() 组装的标签/数值/状态，
+# 保证 parity 是"由构造保证"而非人工同步三份格式化代码。
+
+class TestBuildHtmlPayloadVolumeConcentration:
+    """0b 成交集中度 HTML 块 — build_html_payload() 输出。"""
+
+    def test_available_block_has_title_as_of_rows_and_status(self):
+        ms = _make_market_signals()
+        ms["volume_concentration"] = _volconc_available_payload()
+
+        payload = mr.build_html_payload(ms, None, as_of="2026-07-17")
+
+        block = next(b for b in payload["blocks"] if b.get("heading") == "0b. 成交集中度")
+        assert "2026-07-17" in (block.get("subtitle") or "")
+        rows = block["rows"]
+        assert rows[0]["指标"] == "Top50 成交额占比(20日平滑)"
+        assert rows[0]["数值"] == "47.8%"
+        assert rows[0]["1年分位"] == "92"          # 91.6335 -> 92 non-trivial rounding
+        assert rows[1]["指标"] == "Top50 名单20日换手率(平滑)"
+        assert rows[1]["数值"] == "25.3%"
+        assert rows[1]["1年分位"] == "0"
+        assert "高集中+上行（拥挤）" in (block.get("subtitle") or "")
+
+    def test_unavailable_block_shows_degraded_reason_and_no_table(self):
+        ms = _make_market_signals()
+        ms["volume_concentration"] = {"available": False, "reason": "历史数据不足"}
+
+        payload = mr.build_html_payload(ms, None, as_of="2026-07-17")
+
+        block = next(b for b in payload["blocks"] if b.get("heading") == "0b. 成交集中度")
+        assert block.get("subtitle") == "成交集中度: 数据不足（历史数据不足）"
+        assert not block.get("rows")
+        assert not block.get("columns")
+
+    def test_section_order_0_then_0b_then_1_when_available(self):
+        ms = sample_market_signals()
+
+        payload = mr.build_html_payload(ms, None, as_of="2026-04-24")
+
+        headings = [b.get("heading", "") for b in payload["blocks"]]
+        assert (headings.index("0. 大盘择时因子")
+                < headings.index("0b. 成交集中度")
+                < headings.index("1. PMARP 信号"))
+
+    def test_section_order_0_then_0b_then_1_when_unavailable(self):
+        ms = sample_market_signals()
+        ms["volume_concentration"] = {"available": False, "reason": "历史数据不足"}
+
+        payload = mr.build_html_payload(ms, None, as_of="2026-04-24")
+
+        headings = [b.get("heading", "") for b in payload["blocks"]]
+        assert (headings.index("0. 大盘择时因子")
+                < headings.index("0b. 成交集中度")
+                < headings.index("1. PMARP 信号"))
+
+
+class TestBuildMorningVisualSectionsVolumeConcentration:
+    """0b 成交集中度 PNG spec — build_morning_visual_sections() 输出。只加
+    spec，不改渲染引擎：沿用现有 grouped=False 表格 block schema。"""
+
+    def test_available_section_between_timing_and_pmarp(self):
+        ms = sample_market_signals()
+
+        sections = mr.build_morning_visual_sections(market_signals=ms, dv_result=None)
+
+        slugs = [s["slug"] for s in sections]
+        assert (slugs.index("00_market_timing_factor")
+                < slugs.index("00b_volume_concentration")
+                < slugs.index("01_pmarp"))
+
+        volconc = next(s for s in sections if s["slug"] == "00b_volume_concentration")
+        assert volconc["title"] == "0b. 成交集中度"
+        assert "2026-04-24" in volconc.get("subtitle", "")
+        assert "高集中+上行（拥挤）" in volconc.get("subtitle", "")
+        cells = [row["cells"] for block in volconc["blocks"] for row in block["rows"]]
+        assert cells[0] == ["Top50 成交额占比(20日平滑)", "47.8%", "92"]
+        assert cells[1] == ["Top50 名单20日换手率(平滑)", "25.3%", "0"]
+
+    def test_unavailable_section_shows_degraded_reason_and_no_blocks(self):
+        ms = sample_market_signals()
+        ms["volume_concentration"] = {"available": False, "reason": "历史数据不足"}
+
+        sections = mr.build_morning_visual_sections(market_signals=ms, dv_result=None)
+
+        slugs = [s["slug"] for s in sections]
+        assert (slugs.index("00_market_timing_factor")
+                < slugs.index("00b_volume_concentration")
+                < slugs.index("01_pmarp"))
+
+        volconc = next(s for s in sections if s["slug"] == "00b_volume_concentration")
+        assert volconc["subtitle"] == "成交集中度: 数据不足（历史数据不足）"
+        assert volconc["blocks"] == []
+
+
+class TestVolumeConcentrationThreeFaceParity:
+    """同一 payload 经 text / HTML / PNG 三面，标题/标签/数值/状态行/降级原因
+    必须逐项一致 —— 由共享 _volconc_display_rows 构造保证，而非人工同步。"""
+
+    def test_available_payload_parity_across_three_faces(self):
+        payload = _volconc_available_payload()
+        ms = _make_market_signals()
+        ms["volume_concentration"] = payload
+
+        text = mr.format_section_volume_concentration(payload)
+        html_payload = mr.build_html_payload(ms, None, as_of="2026-07-17")
+        html_block = next(b for b in html_payload["blocks"] if b.get("heading") == "0b. 成交集中度")
+        sections = mr.build_morning_visual_sections(market_signals=ms, dv_result=None)
+        png_section = next(s for s in sections if s["slug"] == "00b_volume_concentration")
+        png_rows = png_section["blocks"][0]["rows"]
+
+        # 标题
+        assert "0b. 成交集中度" in text
+        assert html_block["heading"] == "0b. 成交集中度"
+        assert png_section["title"] == "0b. 成交集中度"
+
+        # as_of
+        assert "2026-07-17" in text
+        assert "2026-07-17" in html_block["subtitle"]
+        assert "2026-07-17" in png_section["subtitle"]
+
+        # 两行指标：标签逐字一致 + 数值字符串一致（1 位小数+% ；分位四舍五入取整）
+        expected_rows = [
+            ("Top50 成交额占比(20日平滑)", "47.8%", "92"),
+            ("Top50 名单20日换手率(平滑)", "25.3%", "0"),
+        ]
+        for label, value, pctile in expected_rows:
+            assert "{}   {}   1年分位 {}".format(label, value, pctile) in text
+            html_row = next(r for r in html_block["rows"] if r["指标"] == label)
+            assert html_row["数值"] == value
+            assert html_row["1年分位"] == pctile
+            png_row = next(r for r in png_rows if r["cells"][0] == label)
+            assert png_row["cells"][1] == value
+            assert png_row["cells"][2] == pctile
+
+        # 状态行 regime 原文
+        assert "状态: 高集中+上行（拥挤）" in text
+        assert "高集中+上行（拥挤）" in html_block["subtitle"]
+        assert "高集中+上行（拥挤）" in png_section["subtitle"]
+
+    def test_unavailable_payload_parity_across_three_faces(self):
+        payload = {"available": False, "reason": "历史数据不足"}
+        ms = _make_market_signals()
+        ms["volume_concentration"] = payload
+
+        text = mr.format_section_volume_concentration(payload)
+        html_payload = mr.build_html_payload(ms, None, as_of="2026-07-17")
+        html_block = next(b for b in html_payload["blocks"] if b.get("heading") == "0b. 成交集中度")
+        sections = mr.build_morning_visual_sections(market_signals=ms, dv_result=None)
+        png_section = next(s for s in sections if s["slug"] == "00b_volume_concentration")
+
+        degraded_text = "成交集中度: 数据不足（历史数据不足）"
+        assert degraded_text in text
+        assert html_block["subtitle"] == degraded_text
+        assert png_section["subtitle"] == degraded_text
+
+
+_VOLCONC_BANNED_WORDS = ["预计", "概率", "风险升高", "建议", "减仓", "仓位", "Timing"]
+
+
+class TestVolumeConcentrationBannedWordsHtmlAndPng:
+    """0b 块（HTML + PNG 面，仅扫 0b 块）不得包含预测/建议类措辞 —— 与文本面
+    (Task 3, TestFormatMorningReportVolumeConcentrationSection) 对齐。"""
+
+    def test_html_block_has_no_advisory_language(self):
+        ms = _make_market_signals()
+        ms["volume_concentration"] = _volconc_available_payload()
+
+        payload = mr.build_html_payload(ms, None, as_of="2026-07-17")
+        block = next(b for b in payload["blocks"] if b.get("heading") == "0b. 成交集中度")
+        block_text = " ".join(str(v) for v in [
+            block.get("heading", ""),
+            block.get("subtitle", ""),
+            *[cell for row in block.get("rows", []) for cell in row.values()],
+        ])
+
+        for banned in _VOLCONC_BANNED_WORDS:
+            assert banned not in block_text
+
+    def test_png_section_has_no_advisory_language(self):
+        ms = _make_market_signals()
+        ms["volume_concentration"] = _volconc_available_payload()
+
+        sections = mr.build_morning_visual_sections(market_signals=ms, dv_result=None)
+        section = next(s for s in sections if s["slug"] == "00b_volume_concentration")
+        section_text = " ".join(str(v) for v in [
+            section.get("title", ""),
+            section.get("subtitle", ""),
+            *[cell for block in section.get("blocks", [])
+              for row in block.get("rows", []) for cell in row["cells"]],
+        ])
+
+        for banned in _VOLCONC_BANNED_WORDS:
+            assert banned not in section_text

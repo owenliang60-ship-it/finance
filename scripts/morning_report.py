@@ -1339,22 +1339,55 @@ def format_section_market_timing_factor(market_signals: dict) -> str:
     return "\n".join(lines)
 
 
+def _volconc_display_rows(payload: dict) -> dict:
+    """Shared 0b 成交集中度 display-data assembly for text/HTML/PNG faces.
+
+    Each face renders its own markup from this dict's labels/values/status,
+    so the three surfaces are guaranteed to match by construction rather
+    than by keeping three hand-written format strings in sync (see Task 4
+    brief). Labels are byte-identical to the text face's original sample;
+    values are pre-formatted (1 decimal + %; percentile rounded to int) so
+    no face re-derives rounding independently.
+
+    available=False payloads return only {"available": False, "reason": ...}.
+    spy_ret20_pct is never surfaced here — it is a regime-only input, never
+    rendered on any face (see docs/.superpowers/sdd/task-3-brief.md 禁词表)."""
+    payload = payload or {}
+    if not payload.get("available"):
+        return {"available": False, "reason": payload.get("reason", "N/A")}
+
+    return {
+        "available": True,
+        "as_of": payload.get("as_of"),
+        "rows": [
+            {
+                "label": "Top50 成交额占比(20日平滑)",
+                "value": "{:.1f}%".format(payload.get("share_sm_pct")),
+                "pctile": str(round(payload.get("share_pctile_1y"))),
+            },
+            {
+                "label": "Top50 名单20日换手率(平滑)",
+                "value": "{:.1f}%".format(payload.get("churn_sm_pct")),
+                "pctile": str(round(payload.get("churn_pctile_1y"))),
+            },
+        ],
+        "status": payload.get("regime"),
+    }
+
+
 def format_section_volume_concentration(payload: dict) -> str:
     """Section 0b text face — Top50 成交额占比 / 名单换手率 + regime label
     only. No directional/predictive language: spy_ret20_pct is regime-only
     input and is never rendered (see docs/.superpowers/sdd/task-3-brief.md
     禁词表)."""
-    payload = payload or {}
-    if not payload.get("available"):
-        reason = payload.get("reason", "N/A")
-        return "*0b. 成交集中度*\n成交集中度: 数据不足（{}）".format(reason)
+    display = _volconc_display_rows(payload)
+    if not display["available"]:
+        return "*0b. 成交集中度*\n成交集中度: 数据不足（{}）".format(display["reason"])
 
-    lines = ["*0b. 成交集中度*（截至 {}）".format(payload.get("as_of"))]
-    lines.append("Top50 成交额占比(20日平滑)   {:.1f}%   1年分位 {}".format(
-        payload.get("share_sm_pct"), round(payload.get("share_pctile_1y"))))
-    lines.append("Top50 名单20日换手率(平滑)   {:.1f}%   1年分位 {}".format(
-        payload.get("churn_sm_pct"), round(payload.get("churn_pctile_1y"))))
-    lines.append("状态: {}".format(payload.get("regime")))
+    lines = ["*0b. 成交集中度*（截至 {}）".format(display["as_of"])]
+    for row in display["rows"]:
+        lines.append("{}   {}   1年分位 {}".format(row["label"], row["value"], row["pctile"]))
+    lines.append("状态: {}".format(display["status"]))
     return "\n".join(lines)
 
 
@@ -1766,6 +1799,26 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
                  "S2触发": "YES" if row.get("breadth_s2_upcross") else "—"}
                 for row in tf_rows]})
 
+    # 0b. 成交集中度 — shares _volconc_display_rows with text/PNG faces so
+    # labels/values/status match by construction (Task 4).
+    volconc_display = _volconc_display_rows((market_signals or {}).get("volume_concentration"))
+    if volconc_display["available"]:
+        blocks.append({
+            "heading": "0b. 成交集中度",
+            "subtitle": "截至 {} | 状态: {}".format(
+                volconc_display["as_of"], volconc_display["status"]),
+            "columns": ["指标", "数值", "1年分位"],
+            "rows": [
+                {"指标": row["label"], "数值": row["value"], "1年分位": row["pctile"]}
+                for row in volconc_display["rows"]
+            ],
+        })
+    else:
+        blocks.append({
+            "heading": "0b. 成交集中度",
+            "subtitle": "成交集中度: 数据不足（{}）".format(volconc_display["reason"]),
+        })
+
     blocks.append({"heading": "1. PMARP 信号"})
 
     # PMARP — signal -> cap-tier sub-blocks (columns one-to-one with text)
@@ -1896,6 +1949,37 @@ def build_morning_visual_sections(
                         ],
                     },
                 ],
+            })
+
+        # 0b. 成交集中度 — shares _volconc_display_rows with text/HTML faces so
+        # labels/values/status match by construction (Task 4). Only adds a
+        # spec entry; the existing grouped=False table renderer draws it.
+        volconc_display = _volconc_display_rows(market_signals.get("volume_concentration"))
+        if volconc_display["available"]:
+            sections.append({
+                "slug": "00b_volume_concentration",
+                "title": "0b. 成交集中度",
+                "subtitle": "截至 {} | 状态: {}".format(
+                    volconc_display["as_of"], volconc_display["status"]),
+                "blocks": [
+                    {
+                        "title": "Top50 成交集中度指标",
+                        "columns": ["指标", "数值", "1年分位"],
+                        "widths": [420, 220, 220],
+                        "grouped": False,
+                        "rows": [
+                            {"cells": [row["label"], row["value"], row["pctile"]]}
+                            for row in volconc_display["rows"]
+                        ],
+                    },
+                ],
+            })
+        else:
+            sections.append({
+                "slug": "00b_volume_concentration",
+                "title": "0b. 成交集中度",
+                "subtitle": "成交集中度: 数据不足（{}）".format(volconc_display["reason"]),
+                "blocks": [],
             })
 
         pmarp = market_signals.get("pmarp", {})
