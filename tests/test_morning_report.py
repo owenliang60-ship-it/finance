@@ -1963,7 +1963,11 @@ class TestLoadVolumeConcentrationFrames:
 
     def test_dates_returned_in_ascending_order_regardless_of_insert_order(self, tmp_path):
         dates = ["2026-01-02", "2026-01-05", "2026-01-06"]
-        rows_by_date = {d: _volconc_stock_rows(d, 55) for d in dates}
+        spy_close_by_date = {"2026-01-02": 500.0, "2026-01-05": 505.0, "2026-01-06": 510.0}
+        rows_by_date = {
+            d: _volconc_stock_rows(d, 55) + [("SPY", d, spy_close_by_date[d], 1e8)]
+            for d in dates
+        }
 
         sorted_db = tmp_path / "sorted.db"
         _write_daily_price_rows(sorted_db, [r for d in dates for r in rows_by_date[d]])
@@ -1977,12 +1981,21 @@ class TestLoadVolumeConcentrationFrames:
 
         assert sorted_result["share_df"].index.is_monotonic_increasing
         assert shuffled_result["share_df"].index.is_monotonic_increasing
+        assert sorted_result["spy_close"].index.is_monotonic_increasing
+        assert shuffled_result["spy_close"].index.is_monotonic_increasing
         pd.testing.assert_frame_equal(sorted_result["share_df"], shuffled_result["share_df"])
         assert sorted_result["members"].tolist() == shuffled_result["members"].tolist()
+        pd.testing.assert_series_equal(sorted_result["spy_close"], shuffled_result["spy_close"])
 
     def test_as_of_truncates_to_cutoff_date(self, tmp_path):
         dates = ["2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07"]
-        rows = [r for d in dates for r in _volconc_stock_rows(d, 55)]
+        spy_close_by_date = {
+            "2026-01-02": 500.0, "2026-01-05": 505.0, "2026-01-06": 510.0, "2026-01-07": 515.0,
+        }
+        rows = [
+            r for d in dates
+            for r in _volconc_stock_rows(d, 55) + [("SPY", d, spy_close_by_date[d], 1e8)]
+        ]
         db_path = tmp_path / "market.db"
         _write_daily_price_rows(db_path, rows)
 
@@ -1990,3 +2003,5 @@ class TestLoadVolumeConcentrationFrames:
 
         assert result["available"] is True
         assert list(result["share_df"].index) == [pd.Timestamp("2026-01-02"), pd.Timestamp("2026-01-05")]
+        assert list(result["spy_close"].index) == [pd.Timestamp("2026-01-02"), pd.Timestamp("2026-01-05")]
+        assert result["spy_close"][pd.Timestamp("2026-01-05")] == 505.0
