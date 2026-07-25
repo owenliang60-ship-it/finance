@@ -1,4 +1,7 @@
 """Tests for scripts/morning_report.py — 格式化函数单元测试"""
+import json
+import os
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -106,6 +109,16 @@ def sample_market_signals():
                     "breadth_s2_as_of": "2026-04-24",
                 },
             ],
+        },
+        "volume_concentration": {
+            "available": True,
+            "as_of": "2026-04-24",
+            "share_sm_pct": 47.8,
+            "share_pctile_1y": 91.6335,   # non-trivial rounding -> 92
+            "churn_sm_pct": 25.3,
+            "churn_pctile_1y": 0.0,       # -> 0
+            "spy_ret20_pct": 3.2,
+            "regime": "高集中+上行（拥挤）",
         },
         "pmarp": {
             "criteria": "PMARP 上穿2% / 上穿98% / 下穿98%",
@@ -1047,6 +1060,7 @@ class TestMorningVisualReport:
 
         assert [section["slug"] for section in sections] == [
             "00_market_timing_factor",
+            "00b_volume_concentration",   # Task 4: 0b 成交集中度 spec
             "01_pmarp",
             "02_volume_anomaly",
             "03_dollar_volume",
@@ -1061,14 +1075,15 @@ class TestMorningVisualReport:
         assert "29.5%→31.2%" == first_timing_row["cells"][3]
         assert sections[0]["blocks"][0]["grouped"] is False
         # PMARP section now has Method A: 3 flat sub-blocks (one per signal type, grouped=False)
-        assert len(sections[1]["blocks"]) == 3
-        for block in sections[1]["blocks"]:
+        # index 2 (not 1): Task 4 inserted 00b_volume_concentration at index 1.
+        assert len(sections[2]["blocks"]) == 3
+        for block in sections[2]["blocks"]:
             assert block.get("grouped") is False
-        all_pmarp_rows = [r for b in sections[1]["blocks"] for r in b["rows"]]
+        all_pmarp_rows = [r for b in sections[2]["blocks"] for r in b["rows"]]
         assert {row["layer"] for row in all_pmarp_rows} == {"pool", "extend"}
         # Subtitle should not advertise broad layer anymore (but Section 0 still mentions S2 broad).
-        assert "Pool / Extend / Broad" not in sections[1]["subtitle"]
-        assert "Pool / Extend 分层" in sections[1]["subtitle"]
+        assert "Pool / Extend / Broad" not in sections[2]["subtitle"]
+        assert "Pool / Extend 分层" in sections[2]["subtitle"]
 
     def test_render_visual_report_creates_one_png_per_section(self, tmp_path):
         pytest.importorskip("PIL")
@@ -1086,9 +1101,9 @@ class TestMorningVisualReport:
         )
 
         # After merging 02_dv_acceleration + 03_rvol_sustained into 02_volume_anomaly,
-        # the section count drops from 5 to 4: 00 timing, 01 pmarp, 02 volume anomaly,
-        # 03 dollar volume.
-        assert len(paths) == 4
+        # the section count was 4: 00 timing, 01 pmarp, 02 volume anomaly,
+        # 03 dollar volume. Task 4 adds a 00b 成交集中度 section -> 5.
+        assert len(paths) == 5
         assert all(path.exists() for path in paths)
         assert all(path.suffix == ".png" for path in paths)
 
@@ -1830,3 +1845,1054 @@ def test_visual_blocks_have_beta_column_and_width():
     assert block["columns"][-1] == "β6M"
     assert len(block["widths"]) == len(block["columns"])
     assert block["rows"][0]["cells"][-1] == "2.05"
+
+
+# ---------------------------------------------------------------------------
+# _load_volume_concentration_frames — 临时 SQLite 集成测试 (T4)
+# ---------------------------------------------------------------------------
+
+def _write_daily_price_rows(db_path, rows, unique_pk=True):
+    """Create a minimal daily_price table and insert rows.
+
+    rows: iterable of (symbol, date, close, volume) tuples.
+    unique_pk=False omits the PRIMARY KEY so duplicate (symbol, date) rows
+    can be inserted — production market.db always enforces the PK, but the
+    loader must still degrade defensively if it ever sees duplicates.
+    """
+    conn = sqlite3.connect(str(db_path))
+    pk_clause = ", PRIMARY KEY (symbol, date)" if unique_pk else ""
+    conn.execute(
+        f"CREATE TABLE daily_price (symbol TEXT, date TEXT, close REAL, volume REAL{pk_clause})"
+    )
+    conn.executemany("INSERT INTO daily_price VALUES (?, ?, ?, ?)", rows)
+    conn.commit()
+    conn.close()
+
+
+def _volconc_stock_rows(date, n_symbols, prefix="S"):
+    """n_symbols rows with distinct increasing dollar volume (close=1.0 so dv=volume)."""
+    return [(f"{prefix}{i:04d}", date, 1.0, float((i + 1) * 1000)) for i in range(n_symbols)]
+
+
+class TestLoadVolumeConcentrationFrames:
+    def test_etf_excluded_from_members_and_denominator(self, tmp_path):
+        date = "2026-01-02"
+        rows = _volconc_stock_rows(date, 60) + [
+            ("SPY", date, 500.0, 1e8),
+            ("QQQ", date, 400.0, 1e8),
+            ("SOXX", date, 200.0, 1e8),
+        ]
+        db_path = tmp_path / "market.db"
+        _write_daily_price_rows(db_path, rows)
+
+        result = mr._load_volume_concentration_frames(db_path=db_path)
+
+        assert result["available"] is True
+        ts = pd.Timestamp(date)
+        assert "SPY" not in result["members"][ts]
+        assert "QQQ" not in result["members"][ts]
+        assert "SOXX" not in result["members"][ts]
+        assert result["share_df"].loc[ts, "n_symbols"] == 60
+        assert ts in result["spy_close"].index
+        assert result["spy_close"][ts] == 500.0
+
+    def test_top50_share_and_denominator(self, tmp_path):
+        date = "2026-01-02"
+        rows = _volconc_stock_rows(date, 60)
+        db_path = tmp_path / "market.db"
+        _write_daily_price_rows(db_path, rows)
+
+        result = mr._load_volume_concentration_frames(db_path=db_path)
+
+        dv_values = sorted((r[3] for r in rows), reverse=True)
+        expected_share = sum(dv_values[:50]) / sum(dv_values)
+        ts = pd.Timestamp(date)
+        assert result["share_df"].loc[ts, "n_symbols"] == 60
+        assert result["share_df"].loc[ts, "share"] == pytest.approx(expected_share)
+
+    def test_member_sets_are_exact_top50_symbols(self, tmp_path):
+        date = "2026-01-02"
+        n = 60
+        rows = _volconc_stock_rows(date, n)
+        db_path = tmp_path / "market.db"
+        _write_daily_price_rows(db_path, rows)
+
+        result = mr._load_volume_concentration_frames(db_path=db_path)
+
+        expected_members = frozenset(f"S{i:04d}" for i in range(n - 50, n))
+        ts = pd.Timestamp(date)
+        assert result["members"][ts] == expected_members
+
+    def test_read_only_db_file_loads_successfully(self, tmp_path):
+        date = "2026-01-02"
+        rows = _volconc_stock_rows(date, 55)
+        db_path = tmp_path / "market.db"
+        _write_daily_price_rows(db_path, rows)
+        os.chmod(db_path, 0o444)
+        try:
+            result = mr._load_volume_concentration_frames(db_path=db_path)
+        finally:
+            os.chmod(db_path, 0o644)
+
+        assert result["available"] is True
+        assert not result["share_df"].empty
+
+    def test_missing_db_path_degrades_without_path_in_reason(self, tmp_path):
+        missing_path = tmp_path / "does_not_exist.db"
+
+        result = mr._load_volume_concentration_frames(db_path=missing_path)
+
+        assert result["available"] is False
+        assert str(missing_path) not in result["reason"]
+        assert ".db" not in result["reason"]
+
+    def test_missing_daily_price_table_degrades(self, tmp_path):
+        db_path = tmp_path / "market.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE other_table (id INTEGER)")
+        conn.commit()
+        conn.close()
+
+        result = mr._load_volume_concentration_frames(db_path=db_path)
+
+        assert result["available"] is False
+        assert str(db_path) not in result["reason"]
+
+    def test_duplicate_date_symbol_degrades(self, tmp_path):
+        date = "2026-01-02"
+        rows = _volconc_stock_rows(date, 55)
+        # Duplicate the highest-dv row (rows[-1]) so it's guaranteed to land
+        # inside the Top-50 cutoff (rows[0] has the lowest dv and would be
+        # ranked outside Top-50 among 55 symbols, so a duplicate there would
+        # never reach ranked_df — not a valid probe of the dedup check).
+        rows.append(rows[-1])  # duplicate (symbol, date)
+        db_path = tmp_path / "market.db"
+        _write_daily_price_rows(db_path, rows, unique_pk=False)
+
+        result = mr._load_volume_concentration_frames(db_path=db_path)
+
+        assert result["available"] is False
+        assert "reason" in result
+
+    def test_dates_returned_in_ascending_order_regardless_of_insert_order(self, tmp_path):
+        dates = ["2026-01-02", "2026-01-05", "2026-01-06"]
+        spy_close_by_date = {"2026-01-02": 500.0, "2026-01-05": 505.0, "2026-01-06": 510.0}
+        rows_by_date = {
+            d: _volconc_stock_rows(d, 55) + [("SPY", d, spy_close_by_date[d], 1e8)]
+            for d in dates
+        }
+
+        sorted_db = tmp_path / "sorted.db"
+        _write_daily_price_rows(sorted_db, [r for d in dates for r in rows_by_date[d]])
+
+        shuffled_db = tmp_path / "shuffled.db"
+        shuffled_order = [dates[2], dates[0], dates[1]]
+        _write_daily_price_rows(shuffled_db, [r for d in shuffled_order for r in rows_by_date[d]])
+
+        sorted_result = mr._load_volume_concentration_frames(db_path=sorted_db)
+        shuffled_result = mr._load_volume_concentration_frames(db_path=shuffled_db)
+
+        assert sorted_result["share_df"].index.is_monotonic_increasing
+        assert shuffled_result["share_df"].index.is_monotonic_increasing
+        assert sorted_result["spy_close"].index.is_monotonic_increasing
+        assert shuffled_result["spy_close"].index.is_monotonic_increasing
+        pd.testing.assert_frame_equal(sorted_result["share_df"], shuffled_result["share_df"])
+        assert sorted_result["members"].tolist() == shuffled_result["members"].tolist()
+        pd.testing.assert_series_equal(sorted_result["spy_close"], shuffled_result["spy_close"])
+
+    def test_directory_path_degrades_without_raising(self, tmp_path):
+        # An existing-but-invalid path (a directory, not a file) must not
+        # escape the loader's documented "never raises" contract — connect()
+        # itself raises sqlite3.OperationalError for a directory target, so
+        # the connect call must live inside the guarded try/except.
+        result = mr._load_volume_concentration_frames(db_path=tmp_path)
+
+        assert result == {"available": False, "reason": "数据库读取失败"}
+        assert str(tmp_path) not in result["reason"]
+
+    def test_as_of_truncates_to_cutoff_date(self, tmp_path):
+        dates = ["2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07"]
+        spy_close_by_date = {
+            "2026-01-02": 500.0, "2026-01-05": 505.0, "2026-01-06": 510.0, "2026-01-07": 515.0,
+        }
+        rows = [
+            r for d in dates
+            for r in _volconc_stock_rows(d, 55) + [("SPY", d, spy_close_by_date[d], 1e8)]
+        ]
+        db_path = tmp_path / "market.db"
+        _write_daily_price_rows(db_path, rows)
+
+        result = mr._load_volume_concentration_frames(db_path=db_path, as_of="2026-01-05")
+
+        assert result["available"] is True
+        assert list(result["share_df"].index) == [pd.Timestamp("2026-01-02"), pd.Timestamp("2026-01-05")]
+        assert list(result["spy_close"].index) == [pd.Timestamp("2026-01-02"), pd.Timestamp("2026-01-05")]
+        assert result["spy_close"][pd.Timestamp("2026-01-05")] == 505.0
+
+
+# ---------------------------------------------------------------------------
+# _volconc_regime + _compute_volume_concentration_payload — pure-function
+# unit tests (T2/T3). Synthetic frames only; no DB access.
+# ---------------------------------------------------------------------------
+
+def _volconc_synthetic_frames(
+    n_rows,
+    start="2020-01-01",
+    share_base=0.30,
+    share_slope=0.0001,
+    n_symbols=60,
+    member_shift_period=1,
+    spy_base=500.0,
+    spy_slope=1.0,
+    spy_nan_last=False,
+):
+    """Build a (share_df, members_df, spy_close) triple with closed-form,
+    hand-derivable rolling statistics:
+
+    - share[t] = share_base + share_slope * t (strictly increasing) so the
+      20d smoothed mean has a known average-of-window closed form, and its
+      252-window percentile is always exactly 100.0 (current value is the
+      window max whenever slope > 0, no ties).
+    - Top-N member set at row t = {M<start>..M<start+49>} where
+      start = t // member_shift_period. Two rows 20 apart share
+      (VOLCONC_TOP_N - 20 // member_shift_period) symbols exactly (integer
+      floor division is exact here because 20 is chosen to divide evenly
+      for the shift periods used in tests), so churn is a known constant
+      for every row with i >= 20.
+    - spy_close[t] = spy_base + spy_slope * t (linear), giving a closed-form
+      pct_change(20) at any row.
+
+    n_symbols may be a scalar (constant every row) or a list/tuple of
+    per-row overrides (len == n_rows).
+    """
+    dates = pd.date_range(start=start, periods=n_rows, freq="D")
+    share_values = [share_base + share_slope * t for t in range(n_rows)]
+    if isinstance(n_symbols, (list, tuple)):
+        assert len(n_symbols) == n_rows
+        n_symbols_values = list(n_symbols)
+    else:
+        n_symbols_values = [n_symbols] * n_rows
+    share_df = pd.DataFrame(
+        {"share": share_values, "n_symbols": n_symbols_values}, index=dates
+    )
+
+    member_sets = []
+    for t in range(n_rows):
+        m_start = t // member_shift_period
+        member_sets.append(frozenset(
+            f"M{i:05d}" for i in range(m_start, m_start + mr.VOLCONC_TOP_N)
+        ))
+    members_df = pd.Series(member_sets, index=dates)
+
+    spy_values = [spy_base + spy_slope * t for t in range(n_rows)]
+    if spy_nan_last:
+        spy_values[-1] = float("nan")
+    spy_close = pd.Series(spy_values, index=dates)
+
+    return share_df, members_df, spy_close
+
+
+class TestVolconcRegime:
+    def test_boundary_exactly_80_is_normal_not_crowded(self):
+        # 严格大于 80.0 才算高集中；80.0 本身落入常态。
+        assert mr._volconc_regime(80.0, 0.05) == "常态"
+
+    def test_pctile_grid_nearest_achievable_values(self):
+        # 真实 rolling 分位网格步长 100/251；80.0 不可达，取两侧最近可达值。
+        assert mr._volconc_regime(79.68, 0.05) == "常态"
+        assert mr._volconc_regime(80.08, 0.05) == "高集中+上行（拥挤）"
+
+    def test_high_concentration_up_is_crowded(self):
+        assert mr._volconc_regime(85.0, 0.05) == "高集中+上行（拥挤）"
+
+    def test_high_concentration_down_is_panic(self):
+        assert mr._volconc_regime(85.0, -0.02) == "高集中+下行（恐慌）"
+
+    def test_high_concentration_flat_ret_counts_as_down_panic(self):
+        # spy_ret20 == 0 归入下行（与研究 `> 0` 布尔口径一致）
+        assert mr._volconc_regime(85.0, 0.0) == "高集中+下行（恐慌）"
+
+    def test_low_concentration_is_normal_regardless_of_direction(self):
+        assert mr._volconc_regime(50.0, 0.05) == "常态"
+        assert mr._volconc_regime(50.0, -0.05) == "常态"
+
+    def test_share_pctile_none_degrades_to_insufficient_data(self):
+        assert mr._volconc_regime(None, 0.05) == "数据不足"
+
+    def test_spy_ret20_none_degrades_to_direction_missing(self):
+        assert mr._volconc_regime(85.0, None) == "方向数据缺失"
+
+
+class TestVolconcRollPctile:
+    def test_short_window_hand_computed_with_tie_and_strict_gt(self):
+        # win=4 (denominator = win - 1 = 3 prior values). Non-monotonic
+        # series with two exact ties (value 3 at idx 1 & 3; value 2 at
+        # idx 2 & 5) so a strict `>` vs. a would-be `>=` comparison diverge,
+        # and a win-1 vs. a would-be win denominator diverge.
+        s = pd.Series([1, 3, 2, 3, 5, 2], dtype=float)
+
+        result = mr._volconc_roll_pctile(s, window=4)
+
+        assert result.iloc[:3].isna().all()
+
+        # idx3: window=[1,3,2,3], last=3, preceding=[1,3,2].
+        # strict >: 3>1 True, 3>3 False (tie), 3>2 True -> 2/3 * 100.
+        # A would-be >= comparison scores the tie True -> 3/3*100 = 100.0;
+        # a would-be win(4)-sized denominator gives 2/4*100 = 50.0 —
+        # both differ from the correct value asserted below.
+        assert result.iloc[3] == pytest.approx(2 / 3 * 100)
+
+        # idx4: window=[3,2,3,5], last=5, preceding=[3,2,3].
+        # 5 beats all three preceding values -> 3/3 * 100 = 100.0.
+        assert result.iloc[4] == pytest.approx(100.0)
+
+        # idx5: window=[2,3,5,2], last=2, preceding=[2,3,5].
+        # strict >: 2>2 False (tie), 2>3 False, 2>5 False -> 0/3 * 100 = 0.0.
+        # A would-be >= comparison scores the tie True -> 1/3*100 = 33.33.
+        assert result.iloc[5] == pytest.approx(0.0)
+
+
+class TestComputeVolumeConcentrationPayload:
+    def test_normal_payload_matches_hand_computed_values(self):
+        n_rows = 300
+        share_df, members_df, spy_close = _volconc_synthetic_frames(
+            n_rows, member_shift_period=1,
+        )
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result["available"] is True
+        assert result["as_of"] == share_df.index[-1].date().isoformat()
+
+        # share_sm[299] = mean(share[280..299]) = base + slope * avg(280..299)
+        expected_share_sm = 0.30 + 0.0001 * ((280 + 299) / 2)
+        assert result["share_sm_pct"] == pytest.approx(expected_share_sm * 100, rel=1e-9)
+        # strictly increasing share_sm -> current value is always the window max
+        assert result["share_pctile_1y"] == pytest.approx(100.0)
+
+        # member window advances by 1 symbol/day; 20d-apart windows overlap
+        # in (50 - 20) = 30 symbols -> churn = 1 - 30/50 = 0.4 for every
+        # row with i >= 20, so the 20d mean is also exactly 0.4.
+        assert result["churn_sm_pct"] == pytest.approx(40.0)
+        # churn_sm is constant -> nothing in the window is strictly greater
+        assert result["churn_pctile_1y"] == pytest.approx(0.0)
+
+        # spy_close[t] = 500 + t; ret20 at t=299 = (799-779)/779 = 20/779
+        expected_ret20 = 20 / 779
+        assert result["spy_ret20_pct"] == pytest.approx(expected_ret20 * 100, rel=1e-9)
+
+        assert result["regime"] == "高集中+上行（拥挤）"
+
+    def test_churn_matches_hand_computed_40_of_50_overlap(self):
+        # member window advances by 1 symbol every 2 days; 20d-apart windows
+        # overlap in (50 - 20//2) = 40 symbols -> churn = 1 - 40/50 = 0.2
+        n_rows = 300
+        share_df, members_df, spy_close = _volconc_synthetic_frames(
+            n_rows, member_shift_period=2,
+        )
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result["available"] is True
+        assert result["churn_sm_pct"] == pytest.approx(20.0)
+        assert result["churn_pctile_1y"] == pytest.approx(0.0)
+
+    def test_completeness_guard_minor_dip_still_uses_last_day(self):
+        n_rows = 300
+        n_symbols = [60] * n_rows
+        n_symbols[-1] = 59  # ~1.7% below the trailing-20 median of 60; passes both conditions
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows, n_symbols=n_symbols)
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result["available"] is True
+        assert result["as_of"] == share_df.index[-1].date().isoformat()
+
+    def test_completeness_guard_severe_dip_rolls_back_one_day(self):
+        n_rows = 300
+        n_symbols = [60] * n_rows
+        n_symbols[-1] = 36  # 60% of median(60); fails both n>=50 and n>=0.95*median
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows, n_symbols=n_symbols)
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result["available"] is True
+        assert result["as_of"] == share_df.index[-2].date().isoformat()
+
+    def test_completeness_guard_four_consecutive_incomplete_days_degrades(self):
+        n_rows = 300
+        n_symbols = [60] * n_rows
+        for i in range(1, 5):  # last 4 candidate days all incomplete
+            n_symbols[-i] = 30
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows, n_symbols=n_symbols)
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result == {"available": False, "reason": "最新截面不完整"}
+
+    def test_trailing_sessions_entirely_absent_degrades_stale(self):
+        # 若 broad ingestion 对末尾若干整个交易日都没写入 daily_price，
+        # share_df/members 里根本不存在这些日期，只靠 share_df 自身日期游走的
+        # completeness guard 永远发现不了——必须用 spy_close（未截断的市场
+        # 日历参照）来检测"缺失的整session"，而非仅缺失的截面字段。
+        n_rows = 300
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows)
+        extra_dates = pd.date_range(
+            spy_close.index[-1] + pd.Timedelta(days=1), periods=4, freq="D",
+        )
+        extra_spy = pd.Series([600.0, 601.0, 602.0, 603.0], index=extra_dates)
+        stale_spy_close = pd.concat([spy_close, extra_spy])
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, stale_spy_close)
+
+        assert result == {"available": False, "reason": "截面数据陈旧"}
+
+    def test_trailing_sessions_absent_at_boundary_still_available(self):
+        # 恰好 VOLCONC_MAX_STALE_STEPS(3) 个 session 缺失时，仍在既有回退容忍
+        # 范围内——staleness gate 不应比原有 rollback 容忍度更严格。
+        n_rows = 300
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows)
+        extra_dates = pd.date_range(
+            spy_close.index[-1] + pd.Timedelta(days=1), periods=3, freq="D",
+        )
+        extra_spy = pd.Series([600.0, 601.0, 602.0], index=extra_dates)
+        boundary_spy_close = pd.concat([spy_close, extra_spy])
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, boundary_spy_close)
+
+        assert result["available"] is True
+        assert result["as_of"] == share_df.index[-1].date().isoformat()
+
+    def test_rollback_result_equals_directly_truncated_input(self):
+        # 末日不完整回退 1 天的结果，必须与直接把输入截到该日再算的结果逐键相等——
+        # 证明回退后的截断发生在任何滚动计算之前，末日未污染滚动值。
+        n_rows = 301
+        n_symbols = [60] * n_rows
+        n_symbols[-1] = 36  # forces rollback to dates[-2]
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows, n_symbols=n_symbols)
+
+        result_with_bad_tail = mr._compute_volume_concentration_payload(
+            share_df, members_df, spy_close
+        )
+
+        cutoff = share_df.index[-2]
+        truncated_share_df = share_df.loc[:cutoff]
+        truncated_members_df = members_df.loc[:cutoff]
+        truncated_spy_close = spy_close.loc[:cutoff]
+        result_pretruncated = mr._compute_volume_concentration_payload(
+            truncated_share_df, truncated_members_df, truncated_spy_close
+        )
+
+        assert result_with_bad_tail == pytest.approx(result_pretruncated)
+
+    def test_spy_missing_at_as_of_degrades_direction_only(self):
+        n_rows = 300
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows, spy_nan_last=True)
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result["available"] is True
+        assert result["spy_ret20_pct"] is None
+        assert result["regime"] == "方向数据缺失"
+        # 两项指标照常输出，不因方向缺失而降级
+        assert result["share_sm_pct"] is not None
+        assert result["share_pctile_1y"] is not None
+        assert result["churn_sm_pct"] is not None
+        assert result["churn_pctile_1y"] is not None
+
+    def test_insufficient_history_below_min_rows_degrades(self):
+        n_rows = mr.VOLCONC_MIN_ROWS - 1
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows)
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
+
+        assert result == {"available": False, "reason": "历史数据不足"}
+
+    def test_empty_input_degrades_without_raising(self):
+        empty_share_df = pd.DataFrame(columns=["share", "n_symbols"])
+        empty_members = pd.Series(dtype=object)
+        empty_spy = pd.Series(dtype=float)
+
+        result = mr._compute_volume_concentration_payload(empty_share_df, empty_members, empty_spy)
+        assert result == {"available": False, "reason": "历史数据不足"}
+
+        result_none = mr._compute_volume_concentration_payload(None, empty_members, empty_spy)
+        assert result_none == {"available": False, "reason": "历史数据不足"}
+
+
+# ============================================================
+# Task 3 — 接线 build_market_signal_report + 文本渲染
+# Plan: docs/plans/2026-07-24-morning-report-volume-concentration-context.md
+# ============================================================
+
+
+def _stub_scan_deps_for_volconc_wiring(monkeypatch, mr):
+    """Stub every build_market_signal_report scan dependency (selection scan +
+    Section 0 market timing) so wiring tests can isolate the volume_concentration
+    path via mr._load_volume_concentration_frames alone. Mirrors the mock
+    recipe used by TestBroadDropPlanV3 / TestVolumeAnomalyPayload above."""
+    monkeypatch.setattr(
+        "scripts.broad_market_scan.fetch_universe_metadata",
+        lambda **kw: {"stocks": {}},
+    )
+    monkeypatch.setattr(
+        "scripts.broad_market_scan.load_price_frames",
+        lambda symbols, **kw: {},
+    )
+    monkeypatch.setattr(mr, "get_symbols", lambda: [])
+    monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
+    monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
+    monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
+    monkeypatch.setattr(mr, "_load_market_db_broad_price_frames", lambda *a, **kw: {})
+    monkeypatch.setattr(
+        "src.indicators.pmarp.analyze_pmarp",
+        lambda *a, **kw: {"signal": "neutral", "current": None, "previous": None},
+    )
+    monkeypatch.setattr(
+        "src.indicators.dv_acceleration.scan_dv_acceleration",
+        lambda *a, **kw: pd.DataFrame(),
+    )
+    monkeypatch.setattr(
+        "src.indicators.rvol_sustained.scan_rvol_sustained", lambda *a, **kw: []
+    )
+    monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
+
+
+class TestVolumeConcentrationWiring:
+    """build_market_signal_report must inject a `volume_concentration` key
+    without ever letting a loader/compute exception escape (不炸整报 promise)."""
+
+    def test_payload_injected_when_loader_available(self, monkeypatch):
+        _stub_scan_deps_for_volconc_wiring(monkeypatch, mr)
+        share_df, members_df, spy_close = _volconc_synthetic_frames(
+            300, member_shift_period=1,
+        )
+        monkeypatch.setattr(
+            mr, "_load_volume_concentration_frames",
+            lambda *a, **kw: {
+                "available": True,
+                "share_df": share_df,
+                "members": members_df,
+                "spy_close": spy_close,
+            },
+        )
+
+        result = build_market_signal_report()
+
+        assert "volume_concentration" in result
+        volconc = result["volume_concentration"]
+        assert volconc["available"] is True
+        assert volconc["regime"] == "高集中+上行（拥挤）"
+
+    def test_loader_degrade_passes_through_unchanged(self, monkeypatch):
+        _stub_scan_deps_for_volconc_wiring(monkeypatch, mr)
+        monkeypatch.setattr(
+            mr, "_load_volume_concentration_frames",
+            lambda *a, **kw: {"available": False, "reason": "数据库读取失败"},
+        )
+
+        result = build_market_signal_report()
+
+        assert result["volume_concentration"] == {
+            "available": False, "reason": "数据库读取失败",
+        }
+
+    def test_loader_exception_degrades_without_bubbling(self, monkeypatch):
+        _stub_scan_deps_for_volconc_wiring(monkeypatch, mr)
+
+        def _raise(*a, **kw):
+            raise RuntimeError("boom: simulated loader crash")
+
+        monkeypatch.setattr(mr, "_load_volume_concentration_frames", _raise)
+
+        result = build_market_signal_report()  # must not raise
+
+        assert result["volume_concentration"] == {
+            "available": False, "reason": "计算异常",
+        }
+
+
+def _volconc_available_payload(**overrides):
+    payload = {
+        "available": True,
+        "as_of": "2026-07-17",
+        "share_sm_pct": 47.8,
+        "share_pctile_1y": 91.6335,   # non-trivial rounding -> 92
+        "churn_sm_pct": 25.3,
+        "churn_pctile_1y": 0.0,       # -> 0
+        "spy_ret20_pct": 3.2,
+        "regime": "高集中+上行（拥挤）",
+    }
+    payload.update(overrides)
+    return payload
+
+
+class TestFormatSectionVolumeConcentration:
+    """Text-face renderer — labels must be byte-identical to the brief's
+    sample, and spy_ret20_pct (direction-only helper) must never be shown."""
+
+    def test_available_renders_exact_sample_text(self):
+        payload = _volconc_available_payload()
+
+        result = mr.format_section_volume_concentration(payload)
+
+        lines = result.split("\n")
+        assert lines[0] == "*0b. 成交集中度*（截至 2026-07-17）"
+        assert lines[1] == "Top50 成交额占比(20日平滑)   47.8%   1年分位 92"
+        assert lines[2] == "Top50 名单20日换手率(平滑)   25.3%   1年分位 0"
+        assert lines[3] == "状态: 高集中+上行（拥挤）"
+        assert "3.2" not in result  # spy_ret20_pct is direction-only, never shown
+
+    def test_unavailable_renders_two_lines_with_reason_and_no_path(self):
+        payload = {"available": False, "reason": "数据库读取失败"}
+
+        result = mr.format_section_volume_concentration(payload)
+
+        lines = result.split("\n")
+        assert lines[0] == "*0b. 成交集中度*"
+        assert lines[1] == "成交集中度: 数据不足（数据库读取失败）"
+        assert "/" not in result
+        assert "Traceback" not in result
+
+    def test_direction_missing_regime_still_shows_both_metric_lines(self):
+        payload = _volconc_available_payload(
+            spy_ret20_pct=None, regime="方向数据缺失",
+        )
+
+        result = mr.format_section_volume_concentration(payload)
+
+        assert "Top50 成交额占比(20日平滑)   47.8%   1年分位 92" in result
+        assert "Top50 名单20日换手率(平滑)   25.3%   1年分位 0" in result
+        assert "状态: 方向数据缺失" in result
+
+
+class TestFormatMorningReportVolumeConcentrationSection:
+    """Section 0b must sit between Section 0 (大盘择时因子) and Section 1
+    (PMARP 信号), for both available and degraded payloads, and must never
+    carry advisory/predictive language."""
+
+    def test_section_order_when_available(self):
+        ms = sample_market_signals()
+        ms["volume_concentration"] = _volconc_available_payload()
+
+        result = format_morning_report(market_signals=ms, elapsed=5)
+
+        i0 = result.index("0. 大盘择时因子")
+        i0b = result.index("0b. 成交集中度")
+        i1 = result.index("1. PMARP 信号")
+        assert i0 < i0b < i1
+
+    def test_section_order_when_unavailable(self):
+        ms = sample_market_signals()
+        ms["volume_concentration"] = {"available": False, "reason": "历史数据不足"}
+
+        result = format_morning_report(market_signals=ms, elapsed=5)
+
+        i0 = result.index("0. 大盘择时因子")
+        i0b = result.index("0b. 成交集中度")
+        i1 = result.index("1. PMARP 信号")
+        assert i0 < i0b < i1
+
+    def test_no_advisory_or_predictive_language_in_0b_block(self):
+        ms = sample_market_signals()
+        ms["volume_concentration"] = _volconc_available_payload()
+
+        result = format_morning_report(market_signals=ms, elapsed=5)
+
+        start = result.index("*0b. 成交集中度*")
+        end = result.index("*1. PMARP", start)
+        block = result[start:end]
+
+        for banned in ["预计", "概率", "风险升高", "建议", "减仓", "仓位", "Timing"]:
+            assert banned not in block
+
+
+# ============================================================
+# Task 4: HTML 块 + PNG spec + 三面 parity (plan T6)
+# ============================================================
+#
+# 三面（text/HTML/PNG）共享 _volconc_display_rows() 组装的标签/数值/状态，
+# 保证 parity 是"由构造保证"而非人工同步三份格式化代码。
+
+class TestBuildHtmlPayloadVolumeConcentration:
+    """0b 成交集中度 HTML 块 — build_html_payload() 输出。"""
+
+    def test_available_block_has_title_as_of_rows_and_status(self):
+        ms = _make_market_signals()
+        ms["volume_concentration"] = _volconc_available_payload()
+
+        payload = mr.build_html_payload(ms, None, as_of="2026-07-17")
+
+        block = next(b for b in payload["blocks"] if b.get("heading") == "0b. 成交集中度")
+        assert "2026-07-17" in (block.get("subtitle") or "")
+        rows = block["rows"]
+        assert rows[0]["指标"] == "Top50 成交额占比(20日平滑)"
+        assert rows[0]["数值"] == "47.8%"
+        assert rows[0]["1年分位"] == "92"          # 91.6335 -> 92 non-trivial rounding
+        assert rows[1]["指标"] == "Top50 名单20日换手率(平滑)"
+        assert rows[1]["数值"] == "25.3%"
+        assert rows[1]["1年分位"] == "0"
+        assert "高集中+上行（拥挤）" in (block.get("subtitle") or "")
+
+    def test_unavailable_block_shows_degraded_reason_and_no_table(self):
+        ms = _make_market_signals()
+        ms["volume_concentration"] = {"available": False, "reason": "历史数据不足"}
+
+        payload = mr.build_html_payload(ms, None, as_of="2026-07-17")
+
+        block = next(b for b in payload["blocks"] if b.get("heading") == "0b. 成交集中度")
+        assert block.get("subtitle") == "成交集中度: 数据不足（历史数据不足）"
+        assert not block.get("rows")
+        assert not block.get("columns")
+
+    def test_section_order_0_then_0b_then_1_when_available(self):
+        ms = sample_market_signals()
+
+        payload = mr.build_html_payload(ms, None, as_of="2026-04-24")
+
+        headings = [b.get("heading", "") for b in payload["blocks"]]
+        assert (headings.index("0. 大盘择时因子")
+                < headings.index("0b. 成交集中度")
+                < headings.index("1. PMARP 信号"))
+
+    def test_section_order_0_then_0b_then_1_when_unavailable(self):
+        ms = sample_market_signals()
+        ms["volume_concentration"] = {"available": False, "reason": "历史数据不足"}
+
+        payload = mr.build_html_payload(ms, None, as_of="2026-04-24")
+
+        headings = [b.get("heading", "") for b in payload["blocks"]]
+        assert (headings.index("0. 大盘择时因子")
+                < headings.index("0b. 成交集中度")
+                < headings.index("1. PMARP 信号"))
+
+
+class TestBuildMorningVisualSectionsVolumeConcentration:
+    """0b 成交集中度 PNG spec — build_morning_visual_sections() 输出。只加
+    spec，不改渲染引擎：沿用现有 grouped=False 表格 block schema。"""
+
+    def test_available_section_between_timing_and_pmarp(self):
+        ms = sample_market_signals()
+
+        sections = mr.build_morning_visual_sections(market_signals=ms, dv_result=None)
+
+        slugs = [s["slug"] for s in sections]
+        assert (slugs.index("00_market_timing_factor")
+                < slugs.index("00b_volume_concentration")
+                < slugs.index("01_pmarp"))
+
+        volconc = next(s for s in sections if s["slug"] == "00b_volume_concentration")
+        assert volconc["title"] == "0b. 成交集中度"
+        assert "2026-04-24" in volconc.get("subtitle", "")
+        assert "高集中+上行（拥挤）" in volconc.get("subtitle", "")
+        cells = [row["cells"] for block in volconc["blocks"] for row in block["rows"]]
+        assert cells[0] == ["Top50 成交额占比(20日平滑)", "47.8%", "92"]
+        assert cells[1] == ["Top50 名单20日换手率(平滑)", "25.3%", "0"]
+
+    def test_unavailable_section_shows_degraded_reason_and_no_blocks(self):
+        ms = sample_market_signals()
+        ms["volume_concentration"] = {"available": False, "reason": "历史数据不足"}
+
+        sections = mr.build_morning_visual_sections(market_signals=ms, dv_result=None)
+
+        slugs = [s["slug"] for s in sections]
+        assert (slugs.index("00_market_timing_factor")
+                < slugs.index("00b_volume_concentration")
+                < slugs.index("01_pmarp"))
+
+        volconc = next(s for s in sections if s["slug"] == "00b_volume_concentration")
+        assert volconc["subtitle"] == "成交集中度: 数据不足（历史数据不足）"
+        assert volconc["blocks"] == []
+
+
+class TestVolumeConcentrationThreeFaceParity:
+    """同一 payload 经 text / HTML / PNG 三面，标题/标签/数值/状态行/降级原因
+    必须逐项一致 —— 由共享 _volconc_display_rows 构造保证，而非人工同步。"""
+
+    def test_available_payload_parity_across_three_faces(self):
+        payload = _volconc_available_payload()
+        ms = _make_market_signals()
+        ms["volume_concentration"] = payload
+
+        text = mr.format_section_volume_concentration(payload)
+        html_payload = mr.build_html_payload(ms, None, as_of="2026-07-17")
+        html_block = next(b for b in html_payload["blocks"] if b.get("heading") == "0b. 成交集中度")
+        sections = mr.build_morning_visual_sections(market_signals=ms, dv_result=None)
+        png_section = next(s for s in sections if s["slug"] == "00b_volume_concentration")
+        png_rows = png_section["blocks"][0]["rows"]
+
+        # 标题
+        assert "0b. 成交集中度" in text
+        assert html_block["heading"] == "0b. 成交集中度"
+        assert png_section["title"] == "0b. 成交集中度"
+
+        # as_of
+        assert "2026-07-17" in text
+        assert "2026-07-17" in html_block["subtitle"]
+        assert "2026-07-17" in png_section["subtitle"]
+
+        # 两行指标：标签逐字一致 + 数值字符串一致（1 位小数+% ；分位四舍五入取整）
+        expected_rows = [
+            ("Top50 成交额占比(20日平滑)", "47.8%", "92"),
+            ("Top50 名单20日换手率(平滑)", "25.3%", "0"),
+        ]
+        for label, value, pctile in expected_rows:
+            assert "{}   {}   1年分位 {}".format(label, value, pctile) in text
+            html_row = next(r for r in html_block["rows"] if r["指标"] == label)
+            assert html_row["数值"] == value
+            assert html_row["1年分位"] == pctile
+            png_row = next(r for r in png_rows if r["cells"][0] == label)
+            assert png_row["cells"][1] == value
+            assert png_row["cells"][2] == pctile
+
+        # 状态行 regime 原文
+        assert "状态: 高集中+上行（拥挤）" in text
+        assert "高集中+上行（拥挤）" in html_block["subtitle"]
+        assert "高集中+上行（拥挤）" in png_section["subtitle"]
+
+    def test_unavailable_payload_parity_across_three_faces(self):
+        payload = {"available": False, "reason": "历史数据不足"}
+        ms = _make_market_signals()
+        ms["volume_concentration"] = payload
+
+        text = mr.format_section_volume_concentration(payload)
+        html_payload = mr.build_html_payload(ms, None, as_of="2026-07-17")
+        html_block = next(b for b in html_payload["blocks"] if b.get("heading") == "0b. 成交集中度")
+        sections = mr.build_morning_visual_sections(market_signals=ms, dv_result=None)
+        png_section = next(s for s in sections if s["slug"] == "00b_volume_concentration")
+
+        degraded_text = "成交集中度: 数据不足（历史数据不足）"
+        assert degraded_text in text
+        assert html_block["subtitle"] == degraded_text
+        assert png_section["subtitle"] == degraded_text
+
+
+_VOLCONC_BANNED_WORDS = ["预计", "概率", "风险升高", "建议", "减仓", "仓位", "Timing"]
+
+
+class TestVolumeConcentrationBannedWordsHtmlAndPng:
+    """0b 块（HTML + PNG 面，仅扫 0b 块）不得包含预测/建议类措辞 —— 与文本面
+    (Task 3, TestFormatMorningReportVolumeConcentrationSection) 对齐。"""
+
+    def test_html_block_has_no_advisory_language(self):
+        ms = _make_market_signals()
+        ms["volume_concentration"] = _volconc_available_payload()
+
+        payload = mr.build_html_payload(ms, None, as_of="2026-07-17")
+        block = next(b for b in payload["blocks"] if b.get("heading") == "0b. 成交集中度")
+        block_text = " ".join(str(v) for v in [
+            block.get("heading", ""),
+            block.get("subtitle", ""),
+            *[cell for row in block.get("rows", []) for cell in row.values()],
+        ])
+
+        for banned in _VOLCONC_BANNED_WORDS:
+            assert banned not in block_text
+
+    def test_png_section_has_no_advisory_language(self):
+        ms = _make_market_signals()
+        ms["volume_concentration"] = _volconc_available_payload()
+
+        sections = mr.build_morning_visual_sections(market_signals=ms, dv_result=None)
+        section = next(s for s in sections if s["slug"] == "00b_volume_concentration")
+        section_text = " ".join(str(v) for v in [
+            section.get("title", ""),
+            section.get("subtitle", ""),
+            *[cell for block in section.get("blocks", [])
+              for row in block.get("rows", []) for cell in row["cells"]],
+        ])
+
+        for banned in _VOLCONC_BANNED_WORDS:
+            assert banned not in section_text
+
+
+# ---------------------------------------------------------------------------
+# Task 5 — 冻结对拍验收测试 (plan T7 / 验收标准 1)
+#
+# Proves the production chain (_load_volume_concentration_frames ->
+# _compute_volume_concentration_payload) reproduces the research study's
+# frozen-date (2026-07-17) numbers off the real market.db. This test is a
+# deliberate exception to the "tests never touch the real DB" rule — the
+# loader is read-only (mode=ro) and this is exactly the parity check the
+# plan's acceptance criterion 1 calls for.
+# ---------------------------------------------------------------------------
+
+_VOLCONC_RESEARCH_CSV = (
+    PROJECT_ROOT / "backtest" / "new" / "vol_concentration_signal_stats_20260724"
+    / "series_daily.csv"
+)
+_VOLCONC_REAL_DB = PROJECT_ROOT / "data" / "market.db"
+_VOLCONC_FREEZE_DATE = "2026-07-17"
+
+
+class TestVolumeConcentrationFreezeDateParity:
+    """冻结对拍：as_of=2026-07-17 生产链路 vs 研究 series_daily.csv 六字段逐项比对。"""
+
+    def test_frozen_date_matches_research_csv_across_six_fields(self):
+        if not _VOLCONC_RESEARCH_CSV.exists():
+            pytest.skip("research CSV not present in this checkout")
+        if not _VOLCONC_REAL_DB.exists():
+            pytest.skip("data/market.db not present in this checkout")
+
+        # ---- reference values, derived entirely from the research CSV ----
+        csv_df = pd.read_csv(_VOLCONC_RESEARCH_CSV, parse_dates=["date"]).set_index("date")
+        csv_df = csv_df.sort_index()
+        target = pd.Timestamp(_VOLCONC_FREEZE_DATE)
+        assert csv_df.index.max() == target, (
+            f"research CSV max date {csv_df.index.max()} != frozen date {target}; "
+            "brief assumes 2026-07-17 is the CSV's last row"
+        )
+
+        top50_sm_ref = float(csv_df.loc[target, "top50_sm"]) * 100
+        pctile_252_ref = float(csv_df.loc[target, "pctile_252"])
+        spy_up20_ref = bool(csv_df.loc[target, "spy_up20"])
+
+        # churn_sm/churn_pctile are NOT CSV columns — recomputed independently
+        # from raw churn50_20d per research run_study.py:261-264 / roll_pctile
+        # at :65-66 (rolling(20).mean() then roll_pctile(...,252)).
+        def _roll_pctile(s, win):
+            return s.rolling(win).apply(lambda w: (w[-1] > w[:-1]).mean() * 100, raw=True)
+
+        churn_sm_series = csv_df["churn50_20d"].rolling(20).mean()
+        churn_pctile_series = _roll_pctile(churn_sm_series, 252)
+        churn_sm_ref = float(churn_sm_series.loc[target]) * 100
+        churn_pctile_252_ref = float(churn_pctile_series.loc[target])
+
+        # regime_ref: independent if/else (NOT a call to mr._volconc_regime,
+        # to avoid a same-source circular argument against production code).
+        if pctile_252_ref > 80.0 and spy_up20_ref:
+            regime_ref = "高集中+上行（拥挤）"
+        elif pctile_252_ref > 80.0 and not spy_up20_ref:
+            regime_ref = "高集中+下行（恐慌）"
+        else:
+            regime_ref = "常态"
+
+        # Sanity check against the brief's known reference anchors (research-
+        # verified; if these fail the CSV itself changed, not just the parity).
+        assert top50_sm_ref == pytest.approx(47.8039, abs=1e-3)
+        assert pctile_252_ref == pytest.approx(91.6335, abs=1e-3)
+        assert churn_sm_ref == pytest.approx(25.3, abs=1e-1)
+        assert churn_pctile_252_ref == pytest.approx(0.0, abs=1e-6)
+        assert spy_up20_ref is True
+        assert regime_ref == "高集中+上行（拥挤）"
+
+        # ---- production chain over the real, read-only market.db ----
+        frames = mr._load_volume_concentration_frames(
+            db_path=_VOLCONC_REAL_DB, as_of=_VOLCONC_FREEZE_DATE,
+        )
+        assert frames["available"] is True, frames.get("reason")
+
+        payload = mr._compute_volume_concentration_payload(
+            frames["share_df"], frames["members"], frames["spy_close"],
+        )
+        assert payload["available"] is True, payload.get("reason")
+        assert payload["as_of"] == _VOLCONC_FREEZE_DATE
+
+        # ---- six-field parity, plan tolerance ceiling ±0.1pp ----
+        tol = 1e-6
+        assert payload["share_sm_pct"] == pytest.approx(top50_sm_ref, abs=tol), (
+            payload["share_sm_pct"], top50_sm_ref,
+        )
+        assert payload["share_pctile_1y"] == pytest.approx(pctile_252_ref, abs=tol), (
+            payload["share_pctile_1y"], pctile_252_ref,
+        )
+        assert payload["churn_sm_pct"] == pytest.approx(churn_sm_ref, abs=tol), (
+            payload["churn_sm_pct"], churn_sm_ref,
+        )
+        assert payload["churn_pctile_1y"] == pytest.approx(churn_pctile_252_ref, abs=tol), (
+            payload["churn_pctile_1y"], churn_pctile_252_ref,
+        )
+        assert (payload["spy_ret20_pct"] > 0) == spy_up20_ref
+        assert payload["regime"] == regime_ref
+
+
+# ---------------------------------------------------------------------------
+# Checked-in frozen fixture — always-run companion to
+# TestVolumeConcentrationFreezeDateParity above. That test opportunistically
+# gates against the untracked research CSV + live market.db and SKIPS when
+# either is absent (the normal state of a clean checkout / CI), so the
+# research-parity contract it encodes never actually runs there. This test
+# instead replays a small CHECKED-IN JSON snapshot of the exact
+# _load_volume_concentration_frames(as_of="2026-07-17") output through the
+# pure _compute_volume_concentration_payload and asserts the same six
+# fields against hardcoded reference constants — no skip conditions, so it
+# exercises the contract on every run including a clean checkout.
+# ---------------------------------------------------------------------------
+
+_VOLCONC_FROZEN_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "volconc_frozen_frames_2026-07-17.json"
+)
+
+
+class TestVolumeConcentrationFrozenFixtureParity:
+    """Always-run companion to TestVolumeConcentrationFreezeDateParity (no
+    skip conditions — the fixture is checked in).
+
+    Fixture generation recipe (one-off; deliberately NOT checked in as a
+    script — this docstring is the record of how
+    tests/fixtures/volconc_frozen_frames_2026-07-17.json was produced, run
+    from the morning-volconc worktree root where data/market.db symlinks
+    the live, cloud-synced db with data through 2026-07-17):
+
+        import json
+        from pathlib import Path
+        from scripts.morning_report import _load_volume_concentration_frames
+
+        frames = _load_volume_concentration_frames(
+            db_path=Path("data/market.db"), as_of="2026-07-17",
+        )
+        share_df, members = frames["share_df"], frames["members"]
+        spy_close = frames["spy_close"]
+        fixture = {
+            "as_of": "2026-07-17",
+            "dates": [ts.date().isoformat() for ts in share_df.index],
+            "share": [float(x) for x in share_df["share"].tolist()],
+            "n_symbols": [int(x) for x in share_df["n_symbols"].tolist()],
+            "members": [sorted(s) for s in members.tolist()],
+            "spy_dates": [ts.date().isoformat() for ts in spy_close.index],
+            "spy_close": [float(x) for x in spy_close.tolist()],
+        }
+        Path("tests/fixtures/volconc_frozen_frames_2026-07-17.json").write_text(
+            json.dumps(fixture)
+        )
+
+    The hardcoded reference constants below were sanity-checked to be
+    reproduced EXACTLY by this fixture (via
+    _compute_volume_concentration_payload) before being hardcoded, and
+    independently trace back to the research study's series_daily.csv —
+    see TestVolumeConcentrationFreezeDateParity above, which cross-checks
+    the same six fields against that CSV over the live db
+    (docs/research/2026-07-24-volume-concentration-signal-stat-study.md).
+    """
+
+    def test_frozen_fixture_matches_hardcoded_reference_six_fields(self):
+        fixture = json.loads(_VOLCONC_FROZEN_FIXTURE.read_text())
+
+        share_df = pd.DataFrame(
+            {"share": fixture["share"], "n_symbols": fixture["n_symbols"]},
+            index=pd.DatetimeIndex([pd.Timestamp(d) for d in fixture["dates"]]),
+        )
+        members = pd.Series(
+            [frozenset(m) for m in fixture["members"]], index=share_df.index,
+        )
+        spy_close = pd.Series(
+            fixture["spy_close"],
+            index=pd.DatetimeIndex([pd.Timestamp(d) for d in fixture["spy_dates"]]),
+        )
+
+        payload = mr._compute_volume_concentration_payload(share_df, members, spy_close)
+
+        assert payload["available"] is True, payload.get("reason")
+        assert payload["as_of"] == "2026-07-17"
+
+        # Reference constants, derived from the research study's
+        # series_daily.csv (docs/research/2026-07-24-volume-concentration-
+        # signal-stat-study.md) via the same six-field derivation as
+        # TestVolumeConcentrationFreezeDateParity above; tolerance 1e-6.
+        tol = 1e-6
+        assert payload["share_sm_pct"] == pytest.approx(47.803916922001655, abs=tol)
+        assert payload["share_pctile_1y"] == pytest.approx(91.63346613545816, abs=tol)
+        assert payload["churn_sm_pct"] == pytest.approx(25.299999999999994, abs=tol)
+        assert payload["churn_pctile_1y"] == pytest.approx(0.0, abs=tol)
+        assert payload["spy_ret20_pct"] > 0
+        assert payload["regime"] == "高集中+上行（拥挤）"
