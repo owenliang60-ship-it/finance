@@ -544,8 +544,9 @@ def _load_volume_concentration_frames(db_path: Path | None = None, as_of: str | 
     etf_placeholders = ",".join("?" for _ in VOLCONC_ETF_EXCLUDE)
     as_of_clause = " AND date <= ?" if as_of else ""
 
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn = None
     try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         cutoff_sql = (
             "SELECT DISTINCT date FROM daily_price "
             "WHERE close > 0 AND volume > 0 "
@@ -591,7 +592,8 @@ def _load_volume_concentration_frames(db_path: Path | None = None, as_of: str | 
         logger.warning("volconc loader: query failed (%s)", exc)
         return {"available": False, "reason": "数据库读取失败"}
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
     try:
         ranked_df["date"] = pd.to_datetime(ranked_df["date"])
@@ -678,15 +680,20 @@ def _compute_volume_concentration_payload(
       1. empty/short-input guard
       2. as_of completeness guard (dual condition, up to
          VOLCONC_MAX_STALE_STEPS rollback days over the *untruncated* frame)
-      3. truncate share_df/members_df/spy_close to index <= as_of BEFORE any
+      3. staleness gate: if the *untruncated* spy_close (the market-calendar
+         reference) has more than VOLCONC_MAX_STALE_STEPS sessions strictly
+         after as_of, degrade — broad ingestion wrote zero rows for those
+         trailing sessions, so share_df never saw them and the completeness
+         guard above could never catch them by walking share_df's own dates
+      4. truncate share_df/members_df/spy_close to index <= as_of BEFORE any
          rolling computation, so a partially-written latest session can
          never pollute a rolling window
-      4. min-rows guard on the truncated frame
-      5. SPY 20d direction (reindexed to share_df's own trading-day axis)
-      6. share smoothing + rolling percentile
-      7. churn (Top-N set turnover, 20-session lag) + smoothing + percentile
-      8. NaN fallback if any as_of-row metric is still NaN
-      9. payload assembly
+      5. min-rows guard on the truncated frame
+      6. SPY 20d direction (reindexed to share_df's own trading-day axis)
+      7. share smoothing + rolling percentile
+      8. churn (Top-N set turnover, 20-session lag) + smoothing + percentile
+      9. NaN fallback if any as_of-row metric is still NaN
+      10. payload assembly
     """
     if share_df is None or share_df.empty:
         return {"available": False, "reason": "历史数据不足"}
@@ -704,6 +711,11 @@ def _compute_volume_concentration_payload(
         return {"available": False, "reason": "最新截面不完整"}
 
     as_of = share_df.index[as_of_idx]
+
+    if spy_close is not None and not spy_close.empty:
+        if int((spy_close.index > as_of).sum()) > VOLCONC_MAX_STALE_STEPS:
+            return {"available": False, "reason": "截面数据陈旧"}
+
     share_df = share_df.iloc[:as_of_idx + 1]
     members_df = members_df.iloc[:as_of_idx + 1]
     spy_close = spy_close.loc[spy_close.index <= as_of]

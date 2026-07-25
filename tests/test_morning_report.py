@@ -1999,6 +1999,16 @@ class TestLoadVolumeConcentrationFrames:
         assert sorted_result["members"].tolist() == shuffled_result["members"].tolist()
         pd.testing.assert_series_equal(sorted_result["spy_close"], shuffled_result["spy_close"])
 
+    def test_directory_path_degrades_without_raising(self, tmp_path):
+        # An existing-but-invalid path (a directory, not a file) must not
+        # escape the loader's documented "never raises" contract — connect()
+        # itself raises sqlite3.OperationalError for a directory target, so
+        # the connect call must live inside the guarded try/except.
+        result = mr._load_volume_concentration_frames(db_path=tmp_path)
+
+        assert result == {"available": False, "reason": "数据库读取失败"}
+        assert str(tmp_path) not in result["reason"]
+
     def test_as_of_truncates_to_cutoff_date(self, tmp_path):
         dates = ["2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07"]
         spy_close_by_date = {
@@ -2218,6 +2228,39 @@ class TestComputeVolumeConcentrationPayload:
         result = mr._compute_volume_concentration_payload(share_df, members_df, spy_close)
 
         assert result == {"available": False, "reason": "最新截面不完整"}
+
+    def test_trailing_sessions_entirely_absent_degrades_stale(self):
+        # 若 broad ingestion 对末尾若干整个交易日都没写入 daily_price，
+        # share_df/members 里根本不存在这些日期，只靠 share_df 自身日期游走的
+        # completeness guard 永远发现不了——必须用 spy_close（未截断的市场
+        # 日历参照）来检测"缺失的整session"，而非仅缺失的截面字段。
+        n_rows = 300
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows)
+        extra_dates = pd.date_range(
+            spy_close.index[-1] + pd.Timedelta(days=1), periods=4, freq="D",
+        )
+        extra_spy = pd.Series([600.0, 601.0, 602.0, 603.0], index=extra_dates)
+        stale_spy_close = pd.concat([spy_close, extra_spy])
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, stale_spy_close)
+
+        assert result == {"available": False, "reason": "截面数据陈旧"}
+
+    def test_trailing_sessions_absent_at_boundary_still_available(self):
+        # 恰好 VOLCONC_MAX_STALE_STEPS(3) 个 session 缺失时，仍在既有回退容忍
+        # 范围内——staleness gate 不应比原有 rollback 容忍度更严格。
+        n_rows = 300
+        share_df, members_df, spy_close = _volconc_synthetic_frames(n_rows)
+        extra_dates = pd.date_range(
+            spy_close.index[-1] + pd.Timedelta(days=1), periods=3, freq="D",
+        )
+        extra_spy = pd.Series([600.0, 601.0, 602.0], index=extra_dates)
+        boundary_spy_close = pd.concat([spy_close, extra_spy])
+
+        result = mr._compute_volume_concentration_payload(share_df, members_df, boundary_spy_close)
+
+        assert result["available"] is True
+        assert result["as_of"] == share_df.index[-1].date().isoformat()
 
     def test_rollback_result_equals_directly_truncated_input(self):
         # 末日不完整回退 1 天的结果，必须与直接把输入截到该日再算的结果逐键相等——
