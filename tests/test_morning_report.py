@@ -1,4 +1,5 @@
 """Tests for scripts/morning_report.py — 格式化函数单元测试"""
+import json
 import os
 import sqlite3
 import sys
@@ -2803,3 +2804,95 @@ class TestVolumeConcentrationFreezeDateParity:
         )
         assert (payload["spy_ret20_pct"] > 0) == spy_up20_ref
         assert payload["regime"] == regime_ref
+
+
+# ---------------------------------------------------------------------------
+# Checked-in frozen fixture — always-run companion to
+# TestVolumeConcentrationFreezeDateParity above. That test opportunistically
+# gates against the untracked research CSV + live market.db and SKIPS when
+# either is absent (the normal state of a clean checkout / CI), so the
+# research-parity contract it encodes never actually runs there. This test
+# instead replays a small CHECKED-IN JSON snapshot of the exact
+# _load_volume_concentration_frames(as_of="2026-07-17") output through the
+# pure _compute_volume_concentration_payload and asserts the same six
+# fields against hardcoded reference constants — no skip conditions, so it
+# exercises the contract on every run including a clean checkout.
+# ---------------------------------------------------------------------------
+
+_VOLCONC_FROZEN_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "volconc_frozen_frames_2026-07-17.json"
+)
+
+
+class TestVolumeConcentrationFrozenFixtureParity:
+    """Always-run companion to TestVolumeConcentrationFreezeDateParity (no
+    skip conditions — the fixture is checked in).
+
+    Fixture generation recipe (one-off; deliberately NOT checked in as a
+    script — this docstring is the record of how
+    tests/fixtures/volconc_frozen_frames_2026-07-17.json was produced, run
+    from the morning-volconc worktree root where data/market.db symlinks
+    the live, cloud-synced db with data through 2026-07-17):
+
+        import json
+        from pathlib import Path
+        from scripts.morning_report import _load_volume_concentration_frames
+
+        frames = _load_volume_concentration_frames(
+            db_path=Path("data/market.db"), as_of="2026-07-17",
+        )
+        share_df, members = frames["share_df"], frames["members"]
+        spy_close = frames["spy_close"]
+        fixture = {
+            "as_of": "2026-07-17",
+            "dates": [ts.date().isoformat() for ts in share_df.index],
+            "share": [float(x) for x in share_df["share"].tolist()],
+            "n_symbols": [int(x) for x in share_df["n_symbols"].tolist()],
+            "members": [sorted(s) for s in members.tolist()],
+            "spy_dates": [ts.date().isoformat() for ts in spy_close.index],
+            "spy_close": [float(x) for x in spy_close.tolist()],
+        }
+        Path("tests/fixtures/volconc_frozen_frames_2026-07-17.json").write_text(
+            json.dumps(fixture)
+        )
+
+    The hardcoded reference constants below were sanity-checked to be
+    reproduced EXACTLY by this fixture (via
+    _compute_volume_concentration_payload) before being hardcoded, and
+    independently trace back to the research study's series_daily.csv —
+    see TestVolumeConcentrationFreezeDateParity above, which cross-checks
+    the same six fields against that CSV over the live db
+    (docs/research/2026-07-24-volume-concentration-signal-stat-study.md).
+    """
+
+    def test_frozen_fixture_matches_hardcoded_reference_six_fields(self):
+        fixture = json.loads(_VOLCONC_FROZEN_FIXTURE.read_text())
+
+        share_df = pd.DataFrame(
+            {"share": fixture["share"], "n_symbols": fixture["n_symbols"]},
+            index=pd.DatetimeIndex([pd.Timestamp(d) for d in fixture["dates"]]),
+        )
+        members = pd.Series(
+            [frozenset(m) for m in fixture["members"]], index=share_df.index,
+        )
+        spy_close = pd.Series(
+            fixture["spy_close"],
+            index=pd.DatetimeIndex([pd.Timestamp(d) for d in fixture["spy_dates"]]),
+        )
+
+        payload = mr._compute_volume_concentration_payload(share_df, members, spy_close)
+
+        assert payload["available"] is True, payload.get("reason")
+        assert payload["as_of"] == "2026-07-17"
+
+        # Reference constants, derived from the research study's
+        # series_daily.csv (docs/research/2026-07-24-volume-concentration-
+        # signal-stat-study.md) via the same six-field derivation as
+        # TestVolumeConcentrationFreezeDateParity above; tolerance 1e-6.
+        tol = 1e-6
+        assert payload["share_sm_pct"] == pytest.approx(47.803916922001655, abs=tol)
+        assert payload["share_pctile_1y"] == pytest.approx(91.63346613545816, abs=tol)
+        assert payload["churn_sm_pct"] == pytest.approx(25.299999999999994, abs=tol)
+        assert payload["churn_pctile_1y"] == pytest.approx(0.0, abs=tol)
+        assert payload["spy_ret20_pct"] > 0
+        assert payload["regime"] == "高集中+上行（拥挤）"
