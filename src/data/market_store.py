@@ -637,6 +637,32 @@ _SCHEMA = "\n\n".join([
     "CREATE INDEX IF NOT EXISTS idx_bwph_basket_date "
     "ON basket_weekly_pe_history(basket, valuation_date);",
 
+    # 三指数周频 backfill 的 append-only run manifest（Plan 2026-07-19 Task 4 /
+    # issue048 recurring 关闭条件）。每次 run 只追加事件，从不改写：
+    # run_started 冻结 writer 当时的 target universe 与 expected date range
+    # （防止后续用较晚 --min-date 只验证 suffix），forced_refresh 保留被覆盖
+    # 区间的 pre/post row hash（refresh 后源表已无法自证），run_completed /
+    # run_failed 记终局。verifier 以本表为分母 SSOT，不用当前 universe 重建。
+    """CREATE TABLE IF NOT EXISTS basket_pe_backfill_runs (
+    run_id TEXT NOT NULL,
+    basket TEXT NOT NULL,
+    event_seq INTEGER NOT NULL CHECK(event_seq >= 0),
+    event_kind TEXT NOT NULL CHECK(event_kind IN
+        ('run_started','forced_refresh','run_completed','run_failed')),
+    frequency TEXT NOT NULL,
+    expected_from_date TEXT NOT NULL,
+    expected_to_date TEXT NOT NULL,
+    methodology_version TEXT NOT NULL,
+    target_count INTEGER NOT NULL CHECK(target_count >= 0),
+    target_universe_json TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (run_id, basket, event_seq),
+    CHECK (expected_from_date <= expected_to_date)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_bpbr_basket_run "
+    "ON basket_pe_backfill_runs(basket, run_id, event_seq);",
+
     # -- FMP forward EPS 数据线（Spec 2026-07-09 §5.2，4 业务表 + 1 run-manifest）--
     # 周频 PIT 快照（append-only）
     """CREATE TABLE IF NOT EXISTS fmp_estimates (
@@ -740,6 +766,7 @@ _VALID_TABLES = frozenset({
     "symbol_concept_edges",
     "fmp_fund_disclosure_holdings", "fx_daily", "fmp_stock_splits",
     "basket_ttm_valuation", "basket_weekly_pe_history",
+    "basket_pe_backfill_runs",
     "fmp_estimates", "fmp_earnings", "fmp_etf_holdings_snapshot",
     "fmp_basket_valuation", "fmp_forward_runs",
 })
@@ -1528,6 +1555,116 @@ class MarketStore:
             params.append(to_date)
         query += " ORDER BY valuation_date"
         return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+    # ---- 三指数 backfill run manifest（Plan 2026-07-19 Task 4 / issue048）----
+
+    _BPBR_EVENT_KINDS = frozenset({
+        "run_started", "forced_refresh", "run_completed", "run_failed",
+    })
+
+    def _validate_bpbr_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        run_id = str(row.get("run_id") or "").strip()
+        basket = str(row.get("basket") or "").upper().strip()
+        if not run_id or not basket:
+            raise ValueError("run_id and basket required")
+        event_seq = row.get("event_seq")
+        if not isinstance(event_seq, int) or isinstance(event_seq, bool) \
+                or event_seq < 0:
+            raise ValueError("event_seq must be a non-negative integer")
+        event_kind = row.get("event_kind")
+        if event_kind not in self._BPBR_EVENT_KINDS:
+            raise ValueError(f"invalid event_kind: {event_kind!r}")
+        frequency = str(row.get("frequency") or "").strip()
+        if not frequency:
+            raise ValueError("frequency required")
+        expected_from = self._require_iso_date(
+            row.get("expected_from_date"), "expected_from_date")
+        expected_to = self._require_iso_date(
+            row.get("expected_to_date"), "expected_to_date")
+        if expected_from > expected_to:
+            raise ValueError(
+                "expected_from_date must be on or before expected_to_date")
+        methodology_version = row.get("methodology_version")
+        if not methodology_version:
+            raise ValueError("methodology_version required")
+        target_count = row.get("target_count")
+        if not isinstance(target_count, int) or isinstance(target_count, bool) \
+                or target_count < 0:
+            raise ValueError("target_count must be a non-negative integer")
+        return {
+            "run_id": run_id,
+            "basket": basket,
+            "event_seq": event_seq,
+            "event_kind": event_kind,
+            "frequency": frequency,
+            "expected_from_date": expected_from,
+            "expected_to_date": expected_to,
+            "methodology_version": str(methodology_version),
+            "target_count": target_count,
+            "target_universe_json": self._json_text(
+                row.get("target_universe_json", []), "target_universe_json"),
+            "payload_json": self._json_text(
+                row.get("payload_json", {}), "payload_json"),
+        }
+
+    def append_basket_pe_run_events(self, rows: List[Dict[str, Any]]) -> int:
+        """Append run-manifest events. Never rewrites an existing event.
+
+        The manifest is the verifier's denominator SSOT and its only evidence
+        for repairs that the source tables can no longer show, so a plain
+        INSERT is deliberate: re-appending an existing (run_id, basket,
+        event_seq) raises instead of quietly replacing history. The whole
+        batch is one transaction.
+        """
+        _validate_table("basket_pe_backfill_runs")
+        if not rows:
+            raise ValueError("non-empty batch required")
+        prepared = [self._validate_bpbr_row(row) for row in rows]
+        seen = set()
+        for row in prepared:
+            key = (row["run_id"], row["basket"], row["event_seq"])
+            if key in seen:
+                raise ValueError(f"duplicate manifest event within batch: {key}")
+            seen.add(key)
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        conn = self._get_conn()
+        try:
+            with conn:
+                for row in prepared:
+                    conn.execute(
+                        "INSERT INTO basket_pe_backfill_runs "
+                        "(run_id, basket, event_seq, event_kind, frequency, "
+                        "expected_from_date, expected_to_date, "
+                        "methodology_version, target_count, "
+                        "target_universe_json, payload_json, created_at) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                        [row["run_id"], row["basket"], row["event_seq"],
+                         row["event_kind"], row["frequency"],
+                         row["expected_from_date"], row["expected_to_date"],
+                         row["methodology_version"], row["target_count"],
+                         row["target_universe_json"], row["payload_json"], now])
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(
+                f"refusing to rewrite an existing manifest event: {exc}") from exc
+        return len(prepared)
+
+    def get_basket_pe_run_events(
+        self,
+        basket: Optional[str] = None,
+        run_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Read-only manifest query. Never writes."""
+        query = "SELECT * FROM basket_pe_backfill_runs WHERE 1=1"
+        params: List[Any] = []
+        if basket is not None:
+            query += " AND basket = ?"
+            params.append(basket.upper())
+        if run_id is not None:
+            query += " AND run_id = ?"
+            params.append(run_id)
+        query += " ORDER BY run_id, basket, event_seq"
+        return [dict(row)
+                for row in self._get_conn().execute(query, params).fetchall()]
 
     # ---- FMP forward EPS 数据线（Spec 2026-07-09 §5.2/§5.3）----
     # 输入行均为 ingestion 层产出的 snake_case 规范化行，不做 camelCase 转换。

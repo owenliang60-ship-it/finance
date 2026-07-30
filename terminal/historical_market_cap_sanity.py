@@ -1,4 +1,6 @@
 """Pure historical market-cap sanity plus a narrow forced-refresh adapter."""
+import hashlib
+import json
 import logging
 from bisect import bisect_left
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set
@@ -339,11 +341,38 @@ def build_forced_refresh_windows(
     return expanded
 
 
+def market_cap_row_hash(rows: Sequence[Mapping[str, Any]]) -> str:
+    """Content hash of a market-cap range, independent of row order.
+
+    A forced refresh destroys the rows that justified it, so a run manifest
+    that only names the window proves nothing about what changed. Hashing the
+    (date, market_cap) pairs on both sides of the replacement lets a later
+    read-only verifier tell a real repair from a claimed one (issue 048).
+    """
+    payload = sorted(
+        (str(row.get("date") or ""),
+         None if row.get("market_cap", row.get("marketCap")) is None
+         else float(row.get("market_cap", row.get("marketCap"))))
+        for row in rows
+    )
+    return hashlib.sha256(
+        json.dumps(payload, separators=(",", ":"), sort_keys=True,
+                   allow_nan=False).encode("utf-8")
+    ).hexdigest()
+
+
+def _rows_in_range(
+    rows: Sequence[Mapping[str, Any]], start: str, end: str,
+) -> List[Mapping[str, Any]]:
+    return [row for row in rows if start <= str(row.get("date") or "") <= end]
+
+
 def refresh_market_cap_windows(
     symbol: str,
     windows: Sequence[Mapping[str, str]],
     client: Any,
     store: Any,
+    existing_rows: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """Refetch using the existing client and authoritative range-replace CRUD.
 
@@ -354,11 +383,19 @@ def refresh_market_cap_windows(
     scripts/backfill_soxx_historical_pe.py, which now delegates here.
     `store` may be `None` (e.g. a network-enabled dry run) — the fetch and
     per-window bookkeeping still happen, but nothing is persisted.
+
+    `existing_rows` is the caller's pre-refresh copy of the symbol's whole
+    market-cap history. It is only read, to hash the range about to be
+    replaced; a skipped window hashes the preserved range on both sides so a
+    no-op is provably a no-op.
     """
+    prior = list(existing_rows or [])
     results = []
     for window in windows:
         start = window["from_date"]
         end = window["to_date"]
+        replaced = _rows_in_range(prior, start, end)
+        pre_hash = market_cap_row_hash(replaced)
         rows = client.get_historical_market_cap(
             symbol, from_date=start, to_date=end)
         if not rows:
@@ -369,6 +406,9 @@ def refresh_market_cap_windows(
             results.append({
                 "from_date": start, "to_date": end, "rows": 0,
                 "skipped": True, "row_data": [],
+                "pre_row_hash": pre_hash, "post_row_hash": pre_hash,
+                "pre_row_count": len(replaced),
+                "post_row_count": len(replaced),
             })
             continue
         if store is not None:
@@ -376,5 +416,9 @@ def refresh_market_cap_windows(
         results.append({
             "from_date": start, "to_date": end, "rows": len(rows),
             "skipped": False, "row_data": list(rows),
+            "pre_row_hash": pre_hash,
+            "post_row_hash": market_cap_row_hash(rows),
+            "pre_row_count": len(replaced),
+            "post_row_count": len(rows),
         })
     return results

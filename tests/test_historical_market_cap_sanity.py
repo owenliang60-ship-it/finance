@@ -8,6 +8,7 @@ from src.data.market_store import MarketStore
 from terminal.historical_market_cap_sanity import (
     accepted_market_cap_status,
     build_forced_refresh_windows,
+    market_cap_row_hash,
     quarantine_market_cap_dates,
     refresh_market_cap_windows,
     scan_market_cap_candidates,
@@ -280,3 +281,62 @@ def test_refresh_adapter_skips_empty_response_without_range_replace(caplog):
         "KLAC" in record.message and "2026-06-10" in record.message
         for record in caplog.records
     ), "expected a warning naming the symbol and skipped window"
+
+
+# ---------------------------------------------------------------------------
+# Task 4 (R3 / issue048): forced-refresh provenance the source tables destroy
+# ---------------------------------------------------------------------------
+
+def test_refresh_adapter_records_pre_and_post_row_hashes():
+    """A forced refresh overwrites the rows that prove it was needed.
+
+    Post-refresh source tables cannot reconstruct the pre-refresh anomaly, so
+    the adapter hands the manifest a hash of both sides of the replacement.
+    """
+    client = Mock()
+    store = Mock()
+    client.get_historical_market_cap.return_value = [
+        {"symbol": "KLAC", "date": "2026-06-10", "market_cap": 280e9},
+        {"symbol": "KLAC", "date": "2026-06-11", "market_cap": 281e9},
+    ]
+    existing = [
+        {"symbol": "KLAC", "date": "2026-06-09", "market_cap": 279e9},
+        {"symbol": "KLAC", "date": "2026-06-10", "market_cap": 28e9},
+        {"symbol": "KLAC", "date": "2026-06-11", "market_cap": 28.1e9},
+    ]
+    result = refresh_market_cap_windows(
+        "KLAC", [{"from_date": "2026-06-10", "to_date": "2026-06-12"}],
+        client, store, existing_rows=existing)
+    window = result[0]
+    # Only the replaced range is hashed; the untouched 06-09 row is not.
+    assert window["pre_row_count"] == 2
+    assert window["post_row_count"] == 2
+    assert window["pre_row_hash"] != window["post_row_hash"]
+    assert len(window["pre_row_hash"]) == 64
+
+
+def test_row_hash_is_order_independent_and_value_sensitive():
+    left = market_cap_row_hash([
+        {"date": "2026-06-11", "market_cap": 281e9},
+        {"date": "2026-06-10", "market_cap": 280e9}])
+    right = market_cap_row_hash([
+        {"date": "2026-06-10", "market_cap": 280e9},
+        {"date": "2026-06-11", "market_cap": 281e9}])
+    assert left == right
+    assert left != market_cap_row_hash([
+        {"date": "2026-06-10", "market_cap": 280e9},
+        {"date": "2026-06-11", "market_cap": 281.5e9}])
+    assert market_cap_row_hash([]) == market_cap_row_hash([])
+
+
+def test_skipped_refresh_reports_the_preserved_range_on_both_sides():
+    client = Mock()
+    client.get_historical_market_cap.return_value = []
+    existing = [{"symbol": "KLAC", "date": "2026-06-10", "market_cap": 28e9}]
+    result = refresh_market_cap_windows(
+        "KLAC", [{"from_date": "2026-06-10", "to_date": "2026-06-12"}],
+        client, None, existing_rows=existing)
+    window = result[0]
+    assert window["skipped"] is True
+    assert window["pre_row_hash"] == window["post_row_hash"]
+    assert window["post_row_count"] == 1

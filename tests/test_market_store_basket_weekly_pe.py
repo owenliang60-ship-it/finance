@@ -6,6 +6,7 @@ evolution contract (estimate -> actual upgrade legal / downgrade rejected),
 read-only query side-effect freedom, and table-whitelist registration.
 """
 import datetime as dt_module
+import json
 import logging
 import sqlite3
 
@@ -14,7 +15,7 @@ import pytest
 from src.data import market_store
 from src.data.market_store import MarketStore, _validate_table
 
-EXPECTED_TABLES = {"basket_weekly_pe_history"}
+EXPECTED_TABLES = {"basket_weekly_pe_history", "basket_pe_backfill_runs"}
 
 
 @pytest.fixture
@@ -257,3 +258,89 @@ def test_table_is_whitelisted_and_unknown_table_fails_fast():
     _validate_table("basket_weekly_pe_history")  # must not raise
     with pytest.raises(ValueError):
         _validate_table("basket_weekly_pe_history_typo")
+
+
+# ---------------------------------------------------------------------------
+# Task 4 (R3 / issue048): append-only backfill run manifest
+# ---------------------------------------------------------------------------
+
+def _event(run_id="run-1", basket="SPY", event_seq=0, event_kind="run_started",
+           **overrides):
+    row = {
+        "run_id": run_id,
+        "basket": basket,
+        "event_seq": event_seq,
+        "event_kind": event_kind,
+        "frequency": "weekly",
+        "expected_from_date": "2021-07-30",
+        "expected_to_date": "2026-07-30",
+        "methodology_version": "1.0",
+        "target_count": 3,
+        "target_universe_json": ["AAA", "BBB", "CCC"],
+        "payload_json": {"stage": "source"},
+    }
+    row.update(overrides)
+    return row
+
+
+def test_manifest_table_is_registered_and_bootstrapped(store):
+    _validate_table("basket_pe_backfill_runs")
+    names = {row[0] for row in store._get_conn().execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert "basket_pe_backfill_runs" in names
+
+
+def test_manifest_events_append_and_read_back_in_order(store):
+    assert store.append_basket_pe_run_events([
+        _event(event_seq=0),
+        _event(event_seq=1, event_kind="forced_refresh",
+               payload_json={"symbol": "AAA", "pre_row_hash": "a" * 64,
+                             "post_row_hash": "b" * 64}),
+    ]) == 2
+    assert store.append_basket_pe_run_events([
+        _event(event_seq=2, event_kind="run_completed",
+               payload_json={"weekly_rows": 12})]) == 1
+    events = store.get_basket_pe_run_events(basket="SPY")
+    assert [row["event_seq"] for row in events] == [0, 1, 2]
+    assert events[0]["target_universe_json"] == '["AAA","BBB","CCC"]'
+    assert json.loads(events[1]["payload_json"])["symbol"] == "AAA"
+
+
+def test_manifest_is_append_only_and_rejects_rewriting_an_event(store):
+    store.append_basket_pe_run_events([_event(event_seq=0)])
+    with pytest.raises(ValueError):
+        store.append_basket_pe_run_events([
+            _event(event_seq=0, payload_json={"stage": "tampered"})])
+    events = store.get_basket_pe_run_events(run_id="run-1")
+    assert len(events) == 1
+    assert json.loads(events[0]["payload_json"]) == {"stage": "source"}
+
+
+def test_manifest_batch_is_atomic(store):
+    with pytest.raises(ValueError):
+        store.append_basket_pe_run_events([
+            _event(event_seq=0),
+            _event(event_seq=1, event_kind="not_a_kind"),
+        ])
+    assert store.get_basket_pe_run_events(run_id="run-1") == []
+
+
+def test_manifest_requires_an_expected_date_range(store):
+    with pytest.raises(ValueError):
+        store.append_basket_pe_run_events([_event(expected_from_date=None)])
+    with pytest.raises(ValueError):
+        store.append_basket_pe_run_events([
+            _event(expected_from_date="2026-07-30",
+                   expected_to_date="2021-07-30")])
+
+
+def test_manifest_reads_are_scoped_by_basket_and_run(store):
+    store.append_basket_pe_run_events([
+        _event(basket="SPY", event_seq=0),
+        _event(basket="QQQ", event_seq=0),
+        _event(run_id="run-2", basket="SPY", event_seq=0),
+    ])
+    assert len(store.get_basket_pe_run_events(basket="SPY")) == 2
+    assert len(store.get_basket_pe_run_events(run_id="run-2")) == 1
+    assert len(store.get_basket_pe_run_events(
+        basket="SPY", run_id="run-1")) == 1
