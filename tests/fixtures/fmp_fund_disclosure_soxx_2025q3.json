@@ -1,0 +1,32 @@
+[
+  {
+    "cik": "0001100663",
+    "date": "2025-09-30",
+    "acceptedDate": "2025-11-26 12:01:37",
+    "symbol": "ARM",
+    "name": "ARM Holdings plc",
+    "cusip": "042068205",
+    "isin": "US0420682058",
+    "balance": 621332,
+    "units": "NS",
+    "cur_cd": "USD",
+    "valUsd": 87912264.68,
+    "pctVal": 0.5868699758357775,
+    "assetCat": "EC"
+  },
+  {
+    "cik": "0001100663",
+    "date": "2025-09-30",
+    "acceptedDate": "2025-11-26 12:01:37",
+    "symbol": "MPWR",
+    "name": "Monolithic Power Systems, Inc.",
+    "cusip": "609839105",
+    "isin": "US6098391054",
+    "balance": 623857,
+    "units": "NS",
+    "cur_cd": "USD",
+    "valUsd": 574347708.48,
+    "pctVal": 3.8341342590128322,
+    "assetCat": "EC"
+  }
+]

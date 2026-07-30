@@ -136,6 +136,23 @@
 | L2 | `data_guardian.py` | 快照/恢复（tar.gz, max 10） |
 | L3 | `data_validator.py` | 完整性 + 一致性报告 |
 
+**SOXX 历史 GAAP TTM PE（一次性研究管线，未接 cron）**:
+
+`backfill_soxx_historical_pe.py` 依次冻结 FMP disclosure/live holdings、补齐季度净利润/历史市值/拆股/FX、运行 `historical_market_cap_sanity.py`，再由 `historical_basket_valuation.py` 生成固定调仓权重的逐日 proxy。每个 source snapshot 必须先通过 25–31 个 eligible equity rows 与 99.5%–100.5% raw weight 的阻塞门；主指标是成分权重加权 earnings yield 的倒数，`weight_coverage < 90%`、TTM earnings yield 非正或市值 sanity 未通过时不发布。查询与 verifier 均使用 SQLite `mode=ro`；verifier 从原始 source tables 逐日重算全部结果并检查 KLAC/MCHP 的 jump/split/implied-shares 污染。它复用生产者的纯计算内核，定位是只读 source recomputation/tamper detector，不是独立方法学实现；forced refresh 的历史事实需 immutable run manifest 才能独立证明。
+
+该序列不是 SOXX 官方 PE，也不是历史 forward PE；历史 disclosure 权重在调仓区间内固定回映，2026Q2 以后 live tail 使用抓取日漂移权重且明确标为 `live_snapshot_backcast_proxy`。证券身份映射分为 raw-first `fallback`（如 CREE→WOLF）和 CUSIP/ISIN 精确约束的 `authoritative` vendor correction（TERN→TER），两类证据都随 source/output 持久化。当前只支持 SOXX；QQQ/SMH 可复用表和纯计算层，但必须另行定义 disclosure/调仓日期语义。
+
+```bash
+# 只读计划；只有显式 --allow-network 才调用 FMP。若 7-day
+# publishable coverage <95%，仍输出完整 JSON 证据，但退出码为 1。
+python -m scripts.backfill_soxx_historical_pe \
+  --stage all --from-date 2021-09-01 --dry-run --allow-network
+
+# 写入必须在云端通过 market_db_writer 锁执行；上线前另行审批
+python -m scripts.verify_basket_ttm_pe --basket SOXX --min-date 2021-09-20
+python -m scripts.query_basket_ttm_pe --basket SOXX --from-date 2021-09-20
+```
+
 ---
 
 ## Storage
@@ -144,7 +161,7 @@
 
 | 数据库/文件 | 所有权 | 主要内容 | 同步 |
 |-------------|--------|---------|------|
-| `market.db` | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, iv_daily, options_snapshots, forward_estimates/metadata, fmp_estimates, fmp_earnings, fmp_etf_holdings_snapshot, fmp_basket_valuation（Phase 2 才写）, fmp_forward_runs（run manifest 审计）, social_sentiment, market_sentiment, social_trending(*), historical_market_cap, broad_scan_hits, concepts(*), company_concept_tags | pull 到本地 |
+| `market.db` | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, historical_market_cap, iv_daily, options_snapshots, forward_estimates/metadata；FMP forward 的 fmp_estimates/fmp_earnings/fmp_etf_holdings_snapshot/fmp_basket_valuation/fmp_forward_runs；历史篮子估值的 fmp_fund_disclosure_holdings/fx_daily/fmp_stock_splits/basket_ttm_valuation；social_sentiment, market_sentiment, social_trending(*), broad_scan_hits, concepts(*), company_concept_tags | pull 到本地 |
 | `reports/concept_registry/reviewed_current.csv` (+ manifest) | 云端独占写入 | concept registry canonical 快照（与 `company_concept_tags` symbol 集锁步；A3 weekly-sync 维护） | pull 到本地（仅 pull） |
 | `company.db` | 本地独占写入 | companies, oprms_ratings, analyses, kill_conditions, holdings, transactions, portfolio_cash, option_positions, option_transactions | push 到云端 |
 | `universe.json` | 双端 | 股票池定义 | 双向 merge（并集） |
@@ -203,6 +220,8 @@
 > **FMP forward 数据线（Phase 1，2026-07 上线）**：周六顺序 = yfinance 旧线 → 5 ETF holdings 快照 → FMP estimates/earnings → 只读 verifier（`scripts/verify_fmp_forward.py`）。周频 universe = `core_pool ∪ extended_pool ∪ 5 篮子 included 规范化 symbol ∪ MAGS 静态 7`（约 1075–1175 只）；writer 在逐股请求前把 exact sorted universe 冻结进 `fmp_forward_runs`，verifier 只读该 manifest 作分母（≥90% 各有 ≥4 个未来非空 eps_avg 季度）。`fmp_basket_valuation` schema 已建、Phase 2 才写入。yfinance 线保持并行对拍，四周 review 通过前不下线。
 
 > **晨报「0b 成交集中度」context 小节**：市场级 Top50 成交额占比 + 名单换手率的平滑值与 1 年分位 + regime 标签，报告时现算（`market.db` 只读），定位为纯 context 展示、不进策略层；研究依据见 `docs/research/2026-07-24-volume-concentration-signal-stat-study.md`。
+
+> **SOXX historical TTM PE** 不属于上述周频 forward cron：它使用 GAAP `net_income`、历史 disclosure 固定权重与历史市值 sanity gate，是一次性研究序列；未增加或修改任何 crontab 行。
 
 ---
 
