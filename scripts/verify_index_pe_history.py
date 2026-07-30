@@ -170,6 +170,35 @@ def _sample_indexes(count: int, sample: int) -> List[int]:
 # manifest (denominator SSOT)
 # ---------------------------------------------------------------------------
 
+# A run accounts for itself by reaching one of these. Anything else means the
+# process died between committing the weekly batch and appending its outcome.
+TERMINAL_EVENT_KINDS = frozenset({"run_completed", "run_failed"})
+
+
+def _unfinished_runs(events: Sequence[Mapping[str, Any]]) -> List[str]:
+    """Runs that never recorded an outcome.
+
+    The producer commits the weekly batch and *then* appends run_completed, so
+    a run killed in that gap leaves rows behind that no manifest accounts for.
+    Picking the newest completed run would hand those rows the previous run's
+    frozen universe and expected range to be verified against -- certifying
+    data the certified run never produced.
+
+    Rejecting here rather than widening the producer's transaction is
+    deliberate: making run_completed share a transaction with the data rows
+    would put manifest writes inside the same commit as the thing they
+    describe, and the manifest's value comes from being appended before the
+    work (run_started) and from being a plain INSERT that can never be
+    rewritten. Fail-closed reading costs nothing and keeps both properties.
+    """
+    kinds_by_run: Dict[str, set] = {}
+    for row in events:
+        kinds_by_run.setdefault(str(row["run_id"]), set()).add(
+            str(row["event_kind"]))
+    return sorted(run_id for run_id, kinds in kinds_by_run.items()
+                  if not (kinds & TERMINAL_EVENT_KINDS))
+
+
 def _latest_run(events: Sequence[Mapping[str, Any]]) -> Optional[str]:
     """The newest run that reached run_completed for this basket."""
     completed = [row["run_id"] for row in events
@@ -185,8 +214,12 @@ def _manifest_errors(
     requested: Tuple[str, str],
 ) -> List[str]:
     errors: List[str] = []
+    for unfinished in _unfinished_runs(events):
+        errors.append(
+            f"{basket}:{unfinished}:unfinished_run_with_no_terminal_event")
     if run_id is None:
-        return [f"{basket}:no_completed_run_manifest"]
+        errors.append(f"{basket}:no_completed_run_manifest")
+        return errors
     run_events = [row for row in events if row["run_id"] == run_id]
     sequences = [int(row["event_seq"]) for row in run_events]
     if sequences != list(range(len(sequences))):

@@ -428,6 +428,7 @@ def config_dir(tmp_path):
     """
     target = tmp_path / "baskets"
     shutil.copytree(REPO_CONFIG_DIR, target)
+    shutil.copy(REPO_CONFIG_DIR.parent / "soxx_symbol_aliases.json", target)
     payload = json.loads((target / "index_pe_baskets.json").read_text())
     for entry in payload.values():
         entry["snapshot_quality"] = {
@@ -696,4 +697,79 @@ def test_manifest_records_forced_refresh_row_hashes(tmp_path, config_dir):
     assert payload["symbol"] == "AAA"
     assert len(payload["pre_row_hash"]) == 64
     assert payload["pre_row_hash"] != payload["post_row_hash"]
+    store.close()
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 / Important 2: one config root for both merge layers
+# ---------------------------------------------------------------------------
+
+def _disclosure_row(symbol, weight, holding_date="2026-01-05"):
+    return {
+        "date": holding_date, "acceptedDate": "2026-01-06 16:00:00",
+        "symbol": symbol, "title": symbol, "name": symbol,
+        "pctVal": weight, "valUsd": weight * 100.0, "cik": None,
+    }
+
+
+def test_both_merge_layers_read_share_classes_from_one_config_root(
+        tmp_path, config_dir):
+    """Upstream weight merging and the product market-cap merge must agree.
+
+    The disclosure normalizer decides which ticker is a secondary class (whose
+    weight folds into the primary); the weekly layer decides how that company's
+    market cap is composed. Reading those from two different config roots is
+    exactly the double-count / halving the convention mechanism exists to stop.
+    """
+    payload = json.loads((config_dir / "share_class_groups.json").read_text())
+    payload["AAA"] = {"secondaries": ["AAA.B"],
+                      "market_cap_convention": "split_across_classes"}
+    (config_dir / "share_class_groups.json").write_text(json.dumps(payload))
+
+    store = _fixture_db(tmp_path)
+    conn = store._get_conn()
+    with conn:
+        conn.execute("DELETE FROM fmp_fund_disclosure_holdings")
+        conn.executemany(
+            "INSERT OR REPLACE INTO daily_price (symbol, date, close) "
+            "VALUES (?,?,?)", [("AAA.B", day, 10.0) for day in TRADING_DATES])
+        conn.executemany(
+            "INSERT OR REPLACE INTO historical_market_cap "
+            "(symbol, date, market_cap) VALUES (?,?,?)",
+            [("AAA.B", day, 400.0) for day in TRADING_DATES])
+    _insert_live_snapshot(store, "SPY")
+
+    client = Mock()
+    client.get_fund_disclosure_dates.return_value = [
+        {"date": "2026-01-05", "year": 2026, "quarter": 1}]
+    client.get_fund_disclosure.return_value = [
+        _disclosure_row("AAA", 60.0), _disclosure_row("AAA.B", 0.0),
+        _disclosure_row("BBB", 40.0)]
+    client.get_income_statement.side_effect = (
+        lambda symbol, **k: _quarters(symbol, TTM_FISCAL + NTM_FISCAL, 25.0))
+    client.get_historical_market_cap.side_effect = (
+        lambda symbol, from_date=None, to_date=None: [
+            {"symbol": symbol, "date": day, "market_cap": 1000.0}
+            for day in TRADING_DATES
+            if (from_date or "") <= day <= (to_date or "9999")])
+    client.get_stock_splits.return_value = []
+    args = _args(tmp_path, config_dir, dry_run=False, allow_network=True)
+    result = backfill_basket(args, "SPY", client=client, store=store, conn=conn)
+
+    # Upstream: AAA.B was recognised as a class of AAA, not an unmapped
+    # foreign listing, so its weight folded into AAA.
+    stored = [dict(row) for row in conn.execute(
+        "SELECT raw_symbol, symbol, included, filter_reason, covered_by "
+        "FROM fmp_fund_disclosure_holdings WHERE basket_symbol = 'SPY' "
+        "AND source_kind = 'disclosure' AND raw_symbol = 'AAA.B'").fetchall()]
+    assert stored and stored[0]["covered_by"] == "AAA"
+    assert stored[0]["filter_reason"] == "dual_class_secondary"
+
+    # Product layer: the same group, with the convention this config declares.
+    members = {member["symbol"]: member
+               for member in result["rows"][-1]["members_json"]["members"]}
+    assert members["AAA"]["share_class"] == {
+        "convention": "split_across_classes", "components": ["AAA.B"]}
+    assert members["AAA"]["market_cap"] == pytest.approx(1400.0)
+    assert "AAA.B" in result["share_class_secondary_symbols"]
     store.close()

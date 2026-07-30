@@ -280,8 +280,11 @@ def backfill_basket(
                  "endpoint": "fund disclosures/live holdings"})
             report["stages"]["source"] = {"planned": True}
         else:
+            # One config root for this run: the same share_class_groups.json
+            # drives the upstream weight merge and the product market-cap merge.
             _fetch_sources(stage_args, state, client, store, report,
-                           basket_symbol=basket, basket_config=basket_config)
+                           basket_symbol=basket, basket_config=basket_config,
+                           config_dir=config_dir)
 
         member_symbols = _snapshot_member_universe(state.snapshots)
         income_symbols = _snapshot_universe(state.snapshots)

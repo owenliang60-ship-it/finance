@@ -616,3 +616,62 @@ def test_cli_defaults_to_read_only_mode_and_five_years(tmp_path):
     assert args.mode == "ro"
     assert args.years == 5
     assert args.baskets == ["SPY", "QQQ", "SOXX"]
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 / Important 3: rows written by a run that never certified itself
+# ---------------------------------------------------------------------------
+
+def test_a_run_that_wrote_rows_but_never_certified_them_fails(
+        tmp_path, config_dir):
+    """The weekly batch commits before run_completed is appended.
+
+    A run killed in that gap leaves rows behind with no manifest saying which
+    universe or which window produced them. Without this check the previous
+    run's frozen manifest would certify them.
+    """
+    db_path = _build(tmp_path)
+    store = MarketStore(db_path)
+    try:
+        store.append_basket_pe_run_events([{
+            "run_id": "run-2", "basket": "SPY", "event_seq": 0,
+            "event_kind": "run_started", "frequency": "weekly",
+            "expected_from_date": EXPECTED_FROM, "expected_to_date": AS_OF,
+            "methodology_version": WEEKLY_METHODOLOGY_VERSION,
+            "target_count": 2, "target_universe_json": ["AAA", "BBB"],
+            "payload_json": {"started_at": "2026-01-17T00:00:00Z"},
+        }])
+    finally:
+        store.close()
+    failures = _failed(_verify(db_path, config_dir))
+    assert "manifest_denominator" in failures
+    assert any("unfinished_run" in str(item) and "run-2" in str(item)
+               for item in failures["manifest_denominator"]), \
+        failures["manifest_denominator"]
+
+
+def test_a_run_that_failed_and_said_so_does_not_block_verification(
+        tmp_path, config_dir):
+    """A recorded failure is accounted for; only silence is not."""
+    db_path = _build(tmp_path)
+    store = MarketStore(db_path)
+    try:
+        store.append_basket_pe_run_events([
+            {"run_id": "run-0", "basket": "SPY", "event_seq": 0,
+             "event_kind": "run_started", "frequency": "weekly",
+             "expected_from_date": EXPECTED_FROM, "expected_to_date": AS_OF,
+             "methodology_version": WEEKLY_METHODOLOGY_VERSION,
+             "target_count": 2, "target_universe_json": ["AAA", "BBB"],
+             "payload_json": {}},
+            {"run_id": "run-0", "basket": "SPY", "event_seq": 1,
+             "event_kind": "run_failed", "frequency": "weekly",
+             "expected_from_date": EXPECTED_FROM, "expected_to_date": AS_OF,
+             "methodology_version": WEEKLY_METHODOLOGY_VERSION,
+             "target_count": 2, "target_universe_json": ["AAA", "BBB"],
+             "payload_json": {"error": "ValueError: boom"}},
+        ])
+    finally:
+        store.close()
+    report = _verify(db_path, config_dir)
+    assert report["passed"], _failed(report)
+    assert report["baskets"]["SPY"]["manifest_run_id"] == "run-1"

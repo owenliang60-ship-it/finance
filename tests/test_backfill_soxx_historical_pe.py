@@ -370,3 +370,91 @@ def test_sanity_stage_skips_empty_refresh_response_via_shared_adapter(caplog):
     assert [row for row in state.market_cap_by_symbol["TEST"]
             if row["date"] != "2026-01-24"] == original_mcap
     assert any("TEST" in record.message for record in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 / Important 1: the empty-response fuse must not be diluted by
+# members that were never fetched.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("stage", ["fundamentals", "mcap"])
+def test_empty_response_fuse_denominator_is_attempted_not_universe(stage):
+    """Every fetched member came back empty: that is a 100% vendor failure.
+
+    Measured against the whole universe instead of the members actually
+    attempted, a total vendor outage over a minority of the basket reads as a
+    small failure rate and the run publishes anyway.
+    """
+    state = _state()
+    universe = sorted(state.income_by_symbol)
+    attempted = universe[:4]  # 4/25 = 16% of the universe, 100% of the fetches
+    client = Mock()
+    if stage == "fundamentals":
+        for symbol in attempted:
+            state.income_by_symbol[symbol] = []
+        client.get_income_statement.return_value = []
+        runner = backfill._run_fundamentals
+    else:
+        for symbol in attempted:
+            state.market_cap_by_symbol[symbol] = []
+        client.get_historical_market_cap.return_value = []
+        runner = backfill._run_mcap
+    args = Namespace(from_date="2026-01-20", to_date="2026-01-23")
+    report = {"stages": {}, "planned_network_calls": []}
+    with pytest.raises(RuntimeError, match="failure fuse"):
+        runner(args, state, universe, client, None, report,
+               fuse_on_incompleteness=False)
+
+
+@pytest.mark.parametrize("stage", ["fundamentals", "mcap"])
+def test_empty_response_fuse_tolerates_a_minority_of_failed_fetches(stage):
+    """One bad response out of ten fetches is not an outage."""
+    state = _state()
+    universe = sorted(state.income_by_symbol)
+    attempted = universe[:10]
+    failing = attempted[0]
+    client = Mock()
+    if stage == "fundamentals":
+        for symbol in attempted:
+            state.income_by_symbol[symbol] = []
+        client.get_income_statement.side_effect = lambda symbol, **kwargs: (
+            [] if symbol == failing else [{
+                "symbol": symbol, "date": "2025-12-31", "period": "Q4",
+                "accepted_date": "2026-01-20 16:00:00",
+                "reported_currency": "USD", "net_income": 25.0}])
+        runner = backfill._run_fundamentals
+    else:
+        for symbol in attempted:
+            state.market_cap_by_symbol[symbol] = []
+        client.get_historical_market_cap.side_effect = (
+            lambda symbol, **kwargs: [] if symbol == failing else [{
+                "symbol": symbol, "date": "2026-01-20", "market_cap": 1000.0}])
+        runner = backfill._run_mcap
+    args = Namespace(from_date="2026-01-20", to_date="2026-01-23")
+    report = {"stages": {}, "planned_network_calls": []}
+    runner(args, state, universe, client, None, report,
+           fuse_on_incompleteness=False)
+    assert report["stages"][stage]["empty_responses"] == [failing]
+
+
+@pytest.mark.parametrize("stage", ["fundamentals", "mcap"])
+def test_soxx_incompleteness_fuse_keeps_the_universe_denominator(stage):
+    """The SOXX contract is unchanged: incompleteness is measured basket-wide."""
+    state = _state()
+    universe = sorted(state.income_by_symbol)
+    broken = universe[:4]  # 16% of the basket, below the 20% fuse
+    client = Mock()
+    if stage == "fundamentals":
+        for symbol in broken:
+            state.income_by_symbol[symbol] = []
+        client.get_income_statement.return_value = []
+        runner = backfill._run_fundamentals
+    else:
+        for symbol in broken:
+            state.market_cap_by_symbol[symbol] = []
+        client.get_historical_market_cap.return_value = []
+        runner = backfill._run_mcap
+    args = Namespace(from_date="2026-01-20", to_date="2026-01-23")
+    report = {"stages": {}, "planned_network_calls": []}
+    runner(args, state, universe, client, None, report)
+    assert report["stages"][stage]["incomplete"] == broken

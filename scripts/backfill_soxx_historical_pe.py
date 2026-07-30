@@ -354,6 +354,28 @@ def basket_snapshot_rules(
     }
 
 
+def resolve_config_paths(config_dir: Optional[Path] = None) -> Dict[str, Path]:
+    """Locate the basket config root and the symbol-alias file under it.
+
+    One root per run. The share-class groups read here decide which ticker is a
+    secondary class whose weight folds into its primary; the weekly product
+    layer reads the same file to decide how that company's market cap is
+    composed. Two roots in one run could merge weights for one set of pairs and
+    market caps for another -- the exact double-count the convention mechanism
+    exists to prevent.
+
+    The alias file sits beside the config root in the repo
+    (`config/soxx_symbol_aliases.json` next to `config/baskets/`), so a
+    self-contained root may also carry its own copy inside.
+    """
+    root = Path(config_dir) if config_dir is not None \
+        else PROJECT_ROOT / "config" / "baskets"
+    aliases = root / "soxx_symbol_aliases.json"
+    if not aliases.exists():
+        aliases = root.parent / "soxx_symbol_aliases.json"
+    return {"baskets": root, "aliases": aliases}
+
+
 def _fetch_sources(
     args: argparse.Namespace,
     state: BackfillState,
@@ -362,13 +384,15 @@ def _fetch_sources(
     report: Dict[str, Any],
     basket_symbol: str = "SOXX",
     basket_config: Optional[Mapping[str, Any]] = None,
+    config_dir: Optional[Path] = None,
 ) -> None:
     basket = basket_symbol.upper()
     if not state.trading_dates:
         raise ValueError(f"{basket} trading calendar is empty")
     rules = basket_snapshot_rules(basket_config)
-    listing, groups, _ = load_basket_configs(PROJECT_ROOT / "config" / "baskets")
-    aliases = load_soxx_symbol_aliases(PROJECT_ROOT / "config" / "soxx_symbol_aliases.json")
+    paths = resolve_config_paths(config_dir)
+    listing, groups, _ = load_basket_configs(paths["baskets"])
+    aliases = load_soxx_symbol_aliases(paths["aliases"])
     fetched_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
         "+00:00", "Z")
     existing = {
@@ -464,11 +488,17 @@ def _run_fundamentals(
 
     `fuse_on_incompleteness` is the SOXX contract: over a window chosen so the
     data exists, a member still missing four visible quarters at either end is
-    a failure. It does not transfer to a five-year, several-hundred-member
-    window, where a 2023 IPO is legitimately incomplete at the window start and
-    no amount of refetching will change that. The three-index weekly backfill
-    therefore fuses on empty vendor responses only and lets the per-point
-    coverage gates decide which early dates are publishable.
+    a failure, measured against the whole basket. It does not transfer to a
+    five-year, several-hundred-member window, where a 2023 IPO is legitimately
+    incomplete at the window start and no amount of refetching will change
+    that. The three-index weekly backfill therefore fuses on empty vendor
+    responses only and lets the per-point coverage gates decide which early
+    dates are publishable.
+
+    That second fuse is measured against the members actually **attempted**,
+    not the universe. A vendor outage only shows up in the responses to the
+    requests a run made: 60 empty responses to 60 requests is a total outage,
+    and dividing it by 500 untouched members would report 12% and publish.
     """
     missing = [symbol for symbol in symbols if not fundamentals_complete(
         state.income_by_symbol.get(symbol, []), args.from_date, args.to_date,
@@ -493,9 +523,10 @@ def _run_fundamentals(
     final_incomplete = [symbol for symbol in symbols if not fundamentals_complete(
         state.income_by_symbol.get(symbol, []), args.from_date, args.to_date,
         state.trading_dates)]
-    _check_fuse("fundamentals",
-                final_incomplete if fuse_on_incompleteness else failures,
-                len(symbols))
+    if fuse_on_incompleteness:
+        _check_fuse("fundamentals", final_incomplete, len(symbols))
+    else:
+        _check_fuse("fundamentals empty-response", failures, len(missing))
     final_complete = len(symbols) - len(final_incomplete)
     report["stages"]["fundamentals"] = {
         "preexisting_complete": len(symbols) - len(missing),
@@ -525,8 +556,9 @@ def _run_mcap(
     """Refetch every member whose as-of market-cap chain has a gap.
 
     See `_run_fundamentals` for why the three-index weekly backfill fuses on
-    empty vendor responses instead of residual incompleteness: a member listed
-    part-way through the window cannot be made complete at its start.
+    empty vendor responses instead of residual incompleteness -- a member
+    listed part-way through the window cannot be made complete at its start --
+    and why that fuse counts the members attempted rather than the universe.
     """
     missing = [symbol for symbol in symbols if not market_cap_complete(
         state.market_cap_by_symbol.get(symbol, []), state.trading_dates,
@@ -557,9 +589,10 @@ def _run_mcap(
     final_incomplete = [symbol for symbol in symbols if not market_cap_complete(
         state.market_cap_by_symbol.get(symbol, []), state.trading_dates,
         args.from_date, args.to_date)]
-    _check_fuse("mcap",
-                final_incomplete if fuse_on_incompleteness else failures,
-                len(symbols))
+    if fuse_on_incompleteness:
+        _check_fuse("mcap", final_incomplete, len(symbols))
+    else:
+        _check_fuse("mcap empty-response", failures, len(missing))
     final_complete = len(symbols) - len(final_incomplete)
     report["stages"]["mcap"] = {
         "preexisting_complete": len(symbols) - len(missing),
