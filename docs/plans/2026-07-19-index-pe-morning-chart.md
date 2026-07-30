@@ -267,8 +267,7 @@ GREEN：统一为单一实现——库函数空响应 fail-closed，backfill 内
 ### Task 1：把 SOXX disclosure pipeline 泛化为三 basket
 
 **Files:**
-- Modify: `config/soxx_historical_pe.json`（重命名为通用配置或新建通用 SSOT，迁移保留兼容）
-- Modify: `terminal/soxx_holdings_normalizer.py`（提炼通用 basket normalizer，保留 wrapper）
+- Modify: `src/data/fmp_forward_ingestion.py`（**post-merge 实况修正**：历史 disclosure normalizer 实际在此，无独立 `terminal/soxx_holdings_normalizer.py`；SOXX 配置实为 `config/soxx_symbol_aliases.json`，无 `config/soxx_historical_pe.json`）
 - Modify: `scripts/backfill_soxx_historical_pe.py`（提炼通用 orchestrator，保留旧 CLI alias）
 - Create: `config/baskets/index_pe_baskets.json`（进 `config/baskets/` 目录，遵循 `load_basket_configs` 惯例（`scripts/update_fmp_forward.py:133`），不在 `config/` 根另起平行文件）
 - Create: `tests/test_index_pe_basket_config.py`
@@ -294,7 +293,7 @@ GREEN：统一为单一实现——库函数空响应 fail-closed，backfill 内
 
 ```bash
 python -m pytest tests/test_index_pe_basket_config.py tests/test_index_holdings_normalizer.py \
-  tests/test_soxx_holdings_normalizer.py -q
+  tests/test_fmp_fund_disclosure_ingestion.py -q
 ```
 
 **Commit:** `refactor(valuation): generalize historical basket disclosures`
