@@ -189,7 +189,13 @@ def validate_snapshot_quality(
     minimum_weight: float = 99.5,
     maximum_weight: float = 100.5,
 ) -> Dict[str, Any]:
-    """Block truncated/partial snapshots before weights can be renormalized."""
+    """Block truncated/partial snapshots before weights can be renormalized.
+
+    Defaults are SOXX's audited bounds (~25-31 holdings). Any other basket
+    (SPY has ~500+ rows, QQQ ~100+) must pass its own bounds explicitly --
+    see the ``snapshot_quality`` block per basket in
+    ``config/baskets/index_pe_baskets.json``, the SSOT for those numbers.
+    """
     weights = []
     for row in rows:
         try:

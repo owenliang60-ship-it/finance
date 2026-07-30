@@ -147,6 +147,132 @@ def load_basket_configs(config_dir: Path) -> Tuple[Dict[str, str],
 
 
 # ---------------------------------------------------------------------------
+# Three-index (SPY/QQQ/SOXX) historical basket disclosure config
+# ---------------------------------------------------------------------------
+
+def validate_index_pe_basket_entry(
+    basket_symbol: str, entry: Mapping[str, Any],
+) -> None:
+    """Fail-closed schema check for one basket entry in index_pe_baskets.json."""
+    if basket_symbol != basket_symbol.upper():
+        raise ValueError(f"basket key must be uppercase: {basket_symbol!r}")
+    source_basket = entry.get("source_basket")
+    if (not isinstance(source_basket, str) or not source_basket
+            or source_basket != source_basket.upper()):
+        raise ValueError(
+            f"{basket_symbol}: source_basket must be a nonempty uppercase string")
+    display_order = entry.get("display_order")
+    if (not isinstance(display_order, int) or isinstance(display_order, bool)
+            or display_order < 1):
+        raise ValueError(f"{basket_symbol}: display_order must be a positive int")
+    window_years = entry.get("five_year_window_years")
+    if window_years != 5:
+        raise ValueError(
+            f"{basket_symbol}: five_year_window_years must be 5 (frozen scope)")
+    months = entry.get("rebalance_months")
+    if (not isinstance(months, list) or not months
+            or any(not isinstance(m, int) or isinstance(m, bool) or not 1 <= m <= 12
+                   for m in months)
+            or len(set(months)) != len(months)):
+        raise ValueError(
+            f"{basket_symbol}: rebalance_months must be unique ints in 1-12")
+    recon_month = entry.get("expected_reconstitution_month")
+    if recon_month is not None and (
+            not isinstance(recon_month, int) or isinstance(recon_month, bool)
+            or recon_month not in months):
+        raise ValueError(
+            f"{basket_symbol}: expected_reconstitution_month must be null "
+            "or one of rebalance_months")
+    staleness = entry.get("market_cap_staleness_days")
+    if (not isinstance(staleness, int) or isinstance(staleness, bool)
+            or staleness <= 0):
+        raise ValueError(
+            f"{basket_symbol}: market_cap_staleness_days must be a positive int")
+    quality = entry.get("snapshot_quality")
+    if not isinstance(quality, Mapping):
+        raise ValueError(f"{basket_symbol}: snapshot_quality must be an object")
+    min_members, max_members = quality.get("minimum_members"), quality.get("maximum_members")
+    min_weight, max_weight = quality.get("minimum_weight"), quality.get("maximum_weight")
+    if (not isinstance(min_members, int) or isinstance(min_members, bool)
+            or not isinstance(max_members, int) or isinstance(max_members, bool)
+            or not 0 < min_members <= max_members):
+        raise ValueError(
+            f"{basket_symbol}: snapshot_quality member bounds must satisfy "
+            "0 < minimum_members <= maximum_members")
+    if (not isinstance(min_weight, (int, float)) or isinstance(min_weight, bool)
+            or not isinstance(max_weight, (int, float)) or isinstance(max_weight, bool)
+            or not 0 < min_weight <= max_weight):
+        raise ValueError(
+            f"{basket_symbol}: snapshot_quality weight bounds must satisfy "
+            "0 < minimum_weight <= maximum_weight")
+    gap_start = entry.get("history_available_from")
+    if gap_start is not None:
+        try:
+            date.fromisoformat(gap_start)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{basket_symbol}: history_available_from must be null or "
+                "an ISO date") from exc
+
+
+def load_index_pe_basket_configs(config_dir: Path) -> Dict[str, Dict[str, Any]]:
+    """Load + validate config/baskets/index_pe_baskets.json.
+
+    SSOT for the SPY/QQQ/SOXX historical disclosure pipeline: each basket's
+    FMP-forward source identity (`source_basket`, must agree with
+    `ETF_HOLDING_SOURCES`), the frozen five-year window, its quarterly
+    rebalance-close schedule and (basket-specific, possibly absent) expected
+    reconstitution month, disclosure snapshot coverage/staleness bounds, the
+    morning-report display order, and any audited pre-history gap boundary.
+    """
+    path = Path(config_dir) / "index_pe_baskets.json"
+    with open(path, encoding="utf-8") as f:
+        payload = json.load(f)
+    if not isinstance(payload, dict) or not payload:
+        raise ValueError("index PE basket config must be a nonempty object")
+    seen_source_baskets: Dict[str, str] = {}
+    seen_display_orders: Dict[int, str] = {}
+    for basket_symbol, entry in payload.items():
+        if not isinstance(entry, Mapping):
+            raise ValueError(f"{basket_symbol}: basket config entry must be an object")
+        validate_index_pe_basket_entry(basket_symbol, entry)
+        source_basket = entry["source_basket"]
+        if source_basket in seen_source_baskets:
+            raise ValueError(
+                f"duplicate source_basket {source_basket!r}: "
+                f"{seen_source_baskets[source_basket]} and {basket_symbol}")
+        seen_source_baskets[source_basket] = basket_symbol
+        display_order = entry["display_order"]
+        if display_order in seen_display_orders:
+            raise ValueError(
+                f"duplicate display_order {display_order!r}: "
+                f"{seen_display_orders[display_order]} and {basket_symbol}")
+        seen_display_orders[display_order] = basket_symbol
+    return {symbol: dict(entry) for symbol, entry in payload.items()}
+
+
+def basket_history_gap(
+    basket_symbol: str, reference_date: str,
+    basket_configs: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    """True if reference_date predates this basket's audited disclosure history.
+
+    A basket with no declared `history_available_from` boundary has no known
+    gap *yet* -- that is an empirical finding to make against real vendor
+    responses (see SOXX's 2021-09-01 boundary, established in
+    docs/plans/2026-07-14-soxx-historical-ttm-pe.md), not an assumption to
+    make on baskets that have not been audited.
+    """
+    symbol = basket_symbol.upper()
+    if symbol not in basket_configs:
+        raise ValueError(f"unknown basket: {basket_symbol}")
+    gap_start = basket_configs[symbol].get("history_available_from")
+    if gap_start is None:
+        return False
+    return date.fromisoformat(reference_date) < date.fromisoformat(gap_start)
+
+
+# ---------------------------------------------------------------------------
 # Holdings 规范化
 # ---------------------------------------------------------------------------
 
@@ -240,18 +366,34 @@ def _third_friday(year: int, month: int) -> date:
     return date(year, month, fridays[2])
 
 
-def infer_soxx_rebalance_close(reference_date: str) -> str:
-    """Most recent scheduled SOXX quarterly third-Friday close."""
+def infer_basket_rebalance_close(
+    reference_date: str, rebalance_months: Sequence[int] = _SOXX_REBALANCE_MONTHS,
+) -> str:
+    """Most recent scheduled quarterly third-Friday close on/before reference_date.
+
+    `rebalance_months` is basket-configured (see `load_index_pe_basket_configs`)
+    rather than hardcoded, because published quarterly weight-adjustment /
+    reconstitution effective dates are set by each index's own methodology,
+    not by SOXX's.
+    """
     reference = date.fromisoformat(reference_date)
+    months = sorted(set(rebalance_months))
+    if not months:
+        raise ValueError("rebalance_months must be nonempty")
     candidates = [
         _third_friday(year, month)
         for year in (reference.year - 1, reference.year)
-        for month in _SOXX_REBALANCE_MONTHS
+        for month in months
     ]
     eligible = [candidate for candidate in candidates if candidate <= reference]
     if not eligible:  # pragma: no cover - previous year always supplies one
-        raise ValueError("no SOXX rebalance close on or before reference date")
+        raise ValueError("no rebalance close on or before reference date")
     return max(eligible).isoformat()
+
+
+def infer_soxx_rebalance_close(reference_date: str) -> str:
+    """Backward-compatible SOXX wrapper; delegates to the general basket helper."""
+    return infer_basket_rebalance_close(reference_date, _SOXX_REBALANCE_MONTHS)
 
 
 def _normalized_trading_dates(trading_dates: Iterable[str]) -> List[date]:
@@ -366,8 +508,19 @@ def normalize_fund_disclosure_snapshot(
     share_class_groups: Mapping[str, Sequence[str]],
     symbol_aliases: Mapping[str, Mapping[str, str]],
     previous_symbols: Optional[Iterable[str]] = None,
+    *,
+    rebalance_months: Sequence[int] = _SOXX_REBALANCE_MONTHS,
+    expected_reconstitution_month: Optional[int] = 9,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """Adapt disclosure/live rows, then reuse the proven holdings normalizer."""
+    """Adapt disclosure/live rows, then reuse the proven holdings normalizer.
+
+    `rebalance_months` / `expected_reconstitution_month` default to SOXX's
+    already-audited values so every existing SOXX call site (production
+    script and tests) is unaffected; other baskets pass their own values
+    from `load_index_pe_basket_configs`. `expected_reconstitution_month =
+    None` means the basket has no documented month where membership changes
+    are the expected/scheduled outcome, so every observed delta warns.
+    """
     if source_kind not in {"disclosure", "live"}:
         raise ValueError("source_kind must be disclosure or live")
     if not raw_rows:
@@ -457,7 +610,8 @@ def normalize_fund_disclosure_snapshot(
         weight_basis = "live_snapshot_backcast_proxy"
         quality = "live_tail_weaker"
 
-    rebalance_close_date = infer_soxx_rebalance_close(holding_date)
+    rebalance_close_date = infer_basket_rebalance_close(
+        holding_date, rebalance_months)
     composition_effective_date = next_trading_date(
         rebalance_close_date, trading_dates)
     anchor_date = anchor_trading_date(holding_date, trading_dates)
@@ -479,8 +633,11 @@ def normalize_fund_disclosure_snapshot(
     }
     if previous_symbols is not None:
         previous = {str(symbol).upper() for symbol in previous_symbols}
-        if current_symbols != previous and date.fromisoformat(
-                rebalance_close_date).month != 9:
+        is_expected_reconstitution = (
+            expected_reconstitution_month is not None
+            and date.fromisoformat(rebalance_close_date).month
+            == expected_reconstitution_month)
+        if current_symbols != previous and not is_expected_reconstitution:
             warnings.append("non_reconstitution_membership_delta")
     for row in normalized:
         row["snapshot_warnings_json"] = list(warnings)
