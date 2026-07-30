@@ -1,0 +1,699 @@
+"""Three-index weekly PE backfill: routing, gates, provenance and atomicity.
+
+Covers the orchestration contract of `scripts/backfill_index_pe_history.py`
+and the weekly point kernel in `terminal/index_pe_weekly.py`:
+
+* CLI routing over SPY/QQQ/SOXX at weekly frequency across a five-year window;
+* the run manifest landing before the first per-symbol remote call;
+* weekly sampling (last publishable trading day of each ISO week, no
+  forward-fill across a gap);
+* the R1 caliber -- the published TTM number is the aggregate `Sigma mcap /
+  Sigma NI` with the 90% gate applied to that aggregate, never the holding
+  weighted proxy;
+* share-class market caps merged upstream of the engines, per the convention
+  declared in `config/baskets/share_class_groups.json`;
+* fail-closed behaviour: >20% member failure, contaminated split windows,
+  dry-run write freedom, per-basket transaction isolation.
+
+Network is never touched: every client here is a `Mock`, and no test opens the
+live `data/market.db`.
+"""
+import json
+import shutil
+from argparse import Namespace
+from datetime import date
+from pathlib import Path
+from unittest.mock import Mock
+
+import pytest
+
+import scripts.backfill_index_pe_history as backfill
+import scripts.verify_index_pe_history as verifier
+from scripts.backfill_index_pe_history import (
+    backfill_basket,
+    parse_args,
+    resolve_window,
+)
+from src.data.fmp_forward_ingestion import infer_basket_rebalance_close
+from src.data.market_store import MarketStore
+from terminal.index_pe_weekly import (
+    WEEKLY_METHODOLOGY_VERSION,
+    compute_weekly_point,
+    group_trading_dates_by_week,
+    resolve_company_market_cap,
+    select_weekly_rows,
+)
+
+
+# ---------------------------------------------------------------------------
+# fixtures: one tiny two-member basket with a full quarterly history
+# ---------------------------------------------------------------------------
+
+TRADING_DATES = [
+    # 2026-01-05..09 is one ISO week, 2026-01-12..16 the next.
+    "2025-12-29", "2025-12-30", "2025-12-31",
+    "2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08",
+    "2026-01-09", "2026-01-12", "2026-01-13", "2026-01-14", "2026-01-15",
+    "2026-01-16",
+]
+
+COMPOSITION = {
+    "holding_date": "2025-12-31",
+    "anchor_trading_date": "2025-12-31",
+    "composition_effective_date": "2025-12-22",
+    "composition_available_date": "2026-01-02",
+    "weight_basis": "fixed_rebalance_weight_proxy",
+    "data_quality_tier": "historical_disclosure_fixed_proxy",
+    "snapshot_warnings": [],
+    "source_kind": "disclosure",
+}
+
+
+def _holding(symbol, weight, index, covered_by=None):
+    return {
+        "basket_symbol": "SPY", "holding_date": "2025-12-31",
+        "source_kind": "disclosure", "raw_row_index": index,
+        "rebalance_close_date": "2025-12-19",
+        "composition_effective_date": "2025-12-22",
+        "composition_available_date": "2026-01-02",
+        "raw_symbol": symbol,
+        "symbol": None if covered_by else symbol,
+        "name": symbol, "weight_pct": weight, "market_value": weight * 10,
+        "included": 0 if covered_by else 1,
+        "filter_reason": "dual_class_secondary" if covered_by else None,
+        "covered_by": covered_by,
+        "snapshot_warnings_json": "[]",
+        "alias_symbol": None, "alias_mode": None, "alias_reason": None,
+    }
+
+
+def _quarters(symbol, dates, income, currency="USD"):
+    return [
+        {"symbol": symbol, "date": day, "period": f"Q{index % 4 + 1}",
+         "accepted_date": f"{day[:8]}{int(day[8:]):02d} 16:00:00"
+         if False else _accepted_for(day),
+         "reported_currency": currency, "net_income": income}
+        for index, day in enumerate(dates)
+    ]
+
+
+def _accepted_for(fiscal_date):
+    """A filing lands ~20 days after the fiscal period end."""
+    from datetime import date, timedelta
+    return (date.fromisoformat(fiscal_date)
+            + timedelta(days=20)).isoformat() + " 16:00:00"
+
+
+TTM_FISCAL = ["2024-12-31", "2025-03-31", "2025-06-30", "2025-09-30"]
+NTM_FISCAL = ["2026-03-31", "2026-06-30", "2026-09-30", "2026-12-31"]
+
+
+def _sources(members=("AAA", "BBB"), income=25.0, market_cap=1000.0):
+    income_by_symbol = {
+        symbol: _quarters(symbol, TTM_FISCAL + NTM_FISCAL, income)
+        for symbol in members
+    }
+    market_cap_by_symbol = {
+        symbol: [{"symbol": symbol, "date": day, "market_cap": market_cap}
+                 for day in TRADING_DATES]
+        for symbol in members
+    }
+    sanity_by_symbol = {
+        symbol: [{"symbol": symbol, "date": day, "status": "clean",
+                  "candidate": False}
+                 for day in TRADING_DATES]
+        for symbol in members
+    }
+    return {
+        "income_by_symbol": income_by_symbol,
+        "market_cap_by_symbol": market_cap_by_symbol,
+        "sanity_by_symbol": sanity_by_symbol,
+        "estimates_by_symbol": {},
+        "fx_by_currency": {},
+    }
+
+
+def _point(valuation_date="2026-01-09", holding_rows=None, sources=None,
+           **overrides):
+    holding_rows = holding_rows or [
+        _holding("AAA", 60.0, 0), _holding("BBB", 40.0, 1)]
+    payload = dict(sources or _sources())
+    payload.update(overrides)
+    return compute_weekly_point(
+        basket_symbol="SPY", valuation_date=valuation_date,
+        holding_rows=holding_rows, composition=COMPOSITION,
+        trading_dates=TRADING_DATES, **payload)
+
+
+# ---------------------------------------------------------------------------
+# RED 1: CLI routing
+# ---------------------------------------------------------------------------
+
+def test_cli_routes_three_baskets_at_weekly_frequency_over_five_years(tmp_path):
+    args = parse_args([
+        "--baskets", "SPY,QQQ,SOXX", "--frequency", "weekly", "--years", "5",
+        "--dry-run", "--as-of", "2026-07-30", "--db", str(tmp_path / "x.db"),
+    ])
+    assert args.baskets == ["SPY", "QQQ", "SOXX"]
+    assert args.frequency == "weekly"
+    assert args.dry_run is True
+    assert args.allow_network is False
+    assert resolve_window(args) == ("2021-07-30", "2026-07-30")
+
+
+def test_cli_rejects_an_unconfigured_basket(tmp_path):
+    with pytest.raises(SystemExit):
+        parse_args(["--baskets", "SPY,IWM", "--dry-run",
+                    "--db", str(tmp_path / "x.db")])
+
+
+def test_cli_rejects_a_non_weekly_frequency(tmp_path):
+    with pytest.raises(SystemExit):
+        parse_args(["--baskets", "SPY", "--frequency", "daily", "--dry-run",
+                    "--db", str(tmp_path / "x.db")])
+
+
+# ---------------------------------------------------------------------------
+# RED 3/4: weekly sampling
+# ---------------------------------------------------------------------------
+
+def test_trading_dates_group_into_iso_weeks_inside_the_window():
+    weeks = group_trading_dates_by_week(
+        TRADING_DATES, "2026-01-02", "2026-01-16")
+    assert weeks[0] == ["2026-01-02"]
+    assert weeks[1] == ["2026-01-05", "2026-01-06", "2026-01-07",
+                        "2026-01-08", "2026-01-09"]
+    assert weeks[-1][-1] == "2026-01-16"
+    assert all(day >= "2026-01-02" for week in weeks for day in week)
+
+
+def test_weekly_selection_takes_the_last_publishable_day_of_the_week():
+    published = {"2026-01-05", "2026-01-06", "2026-01-07"}
+
+    def compute(day):
+        return {"valuation_date": day,
+                "ttm_pe_gaap": 20.0 if day in published else None,
+                "hindsight_ntm_pe_gaap": None}
+
+    rows = select_weekly_rows(
+        [["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08",
+          "2026-01-09"]], compute)
+    assert [row["valuation_date"] for row in rows] == ["2026-01-07"]
+
+
+def test_weekly_selection_stops_early_once_a_day_publishes_both_lines():
+    seen = []
+
+    def compute(day):
+        seen.append(day)
+        return {"valuation_date": day, "ttm_pe_gaap": 20.0,
+                "hindsight_ntm_pe_gaap": 18.0}
+
+    rows = select_weekly_rows(
+        [["2026-01-05", "2026-01-06", "2026-01-09"]], compute)
+    assert [row["valuation_date"] for row in rows] == ["2026-01-09"]
+    assert seen == ["2026-01-09"], "must not evaluate the rest of the week"
+
+
+def test_a_week_with_no_publishable_day_keeps_a_null_row_not_a_carry_forward():
+    def compute(day):
+        return {"valuation_date": day, "ttm_pe_gaap": None,
+                "hindsight_ntm_pe_gaap": None}
+
+    rows = select_weekly_rows(
+        [["2026-01-05", "2026-01-06"], ["2026-01-12", "2026-01-13"]], compute)
+    assert [row["valuation_date"] for row in rows] == [
+        "2026-01-06", "2026-01-13"]
+    assert all(row["ttm_pe_gaap"] is None for row in rows)
+
+
+def test_a_week_with_no_composition_at_all_produces_no_row():
+    def compute(day):
+        return None
+
+    assert select_weekly_rows([["2026-01-05", "2026-01-06"]], compute) == []
+
+
+# ---------------------------------------------------------------------------
+# RED 12: the R1 caliber
+# ---------------------------------------------------------------------------
+
+def test_weekly_ttm_is_the_aggregate_caliber_not_the_holding_weighted_proxy():
+    sources = _sources()
+    # AAA is 10x the market cap of BBB but carries the smaller disclosure
+    # weight, so a holding-weighted proxy and the aggregate cannot agree.
+    sources["market_cap_by_symbol"]["AAA"] = [
+        {"symbol": "AAA", "date": day, "market_cap": 10000.0}
+        for day in TRADING_DATES]
+    row = _point(sources=sources)
+    assert row["ttm_pe_gaap"] == pytest.approx(11000.0 / 200.0)
+    assert "rebalance_weighted_ttm_pe_gaap_proxy" not in row
+    assert "uncapped_mcap_basket_pe_gaap" not in row
+    assert "weighted_earnings_yield" not in row
+
+
+def test_ttm_gate_applies_to_the_aggregate_metric_itself():
+    sources = _sources()
+    # BBB holds 10.01% of the observable market cap and has no usable income,
+    # so aggregate mcap coverage is 89.99% -- just under the gate. Its
+    # disclosure weight is small enough that the weight gate still passes, so
+    # the mcap gate is the only thing under test.
+    sources["market_cap_by_symbol"]["AAA"] = [
+        {"symbol": "AAA", "date": day, "market_cap": 8999.0}
+        for day in TRADING_DATES]
+    sources["market_cap_by_symbol"]["BBB"] = [
+        {"symbol": "BBB", "date": day, "market_cap": 1001.0}
+        for day in TRADING_DATES]
+    sources["income_by_symbol"]["BBB"] = []
+    row = _point(holding_rows=[_holding("AAA", 95.0, 0), _holding("BBB", 5.0, 1)],
+                 sources=sources)
+    assert row["mcap_coverage_ttm"] == pytest.approx(0.8999)
+    assert row["ttm_pe_gaap"] is None
+    assert any("mcap_coverage_ttm_below_gate" in warning
+               for warning in row["warnings_json"])
+
+
+def test_ttm_publishes_at_exactly_ninety_percent_coverage():
+    sources = _sources()
+    sources["market_cap_by_symbol"]["AAA"] = [
+        {"symbol": "AAA", "date": day, "market_cap": 9000.0}
+        for day in TRADING_DATES]
+    sources["market_cap_by_symbol"]["BBB"] = [
+        {"symbol": "BBB", "date": day, "market_cap": 1000.0}
+        for day in TRADING_DATES]
+    sources["income_by_symbol"]["BBB"] = []
+    row = _point(holding_rows=[_holding("AAA", 95.0, 0), _holding("BBB", 5.0, 1)],
+                 sources=sources)
+    assert row["mcap_coverage_ttm"] == pytest.approx(0.90)
+    assert row["ttm_pe_gaap"] == pytest.approx(9000.0 / 100.0)
+
+
+def test_quarantining_a_heavy_member_blocks_publication_via_the_weight_gate():
+    """The mcap gate cannot see a member that has no market cap at all.
+
+    AAA is 60% of the disclosed weight. Quarantine its market cap and the
+    remaining 40% of the basket divides cleanly -- 100% mcap coverage of a
+    minority of the index. Disclosure weight is the measure that exposes it.
+    """
+    sources = _sources()
+    sources["sanity_by_symbol"]["AAA"] = [
+        {"symbol": "AAA", "date": day, "status": "invalid_mcap",
+         "candidate": True}
+        for day in TRADING_DATES]
+    row = _point(sources=sources)
+    assert row["mcap_coverage_ttm"] == pytest.approx(1.0)
+    assert row["ttm_pe_gaap"] is None
+    assert row["hindsight_ntm_pe_gaap"] is None
+    assert row["quality_tier"] == "unpublishable"
+    assert any("weight_coverage_ttm_below_gate" in warning
+               for warning in row["warnings_json"])
+    assert any("weight_coverage_hindsight_below_gate" in warning
+               for warning in row["warnings_json"])
+
+
+def test_non_positive_aggregate_earnings_are_not_published():
+    sources = _sources()
+    sources["income_by_symbol"]["AAA"] = _quarters(
+        "AAA", TTM_FISCAL + NTM_FISCAL, -30.0)
+    row = _point(sources=sources)
+    assert row["ttm_pe_gaap"] is None
+    assert any("ttm_net_income_not_positive" in warning
+               for warning in row["warnings_json"])
+
+
+def test_weekly_row_carries_both_weight_coverages_for_the_verifier():
+    row = _point()
+    members = json.loads(json.dumps(row["members_json"]))
+    assert members["weight_coverage_ttm"] == pytest.approx(1.0)
+    assert members["weight_coverage_hindsight"] == pytest.approx(1.0)
+    # The store's column filter drops these top-level keys, so the consensus
+    # vintage has to survive inside members_json.
+    assert "consensus_snapshot_date" in members
+    assert members["is_ex_post"] == 1
+
+
+# ---------------------------------------------------------------------------
+# share classes merged upstream of the engines
+# ---------------------------------------------------------------------------
+
+def test_identical_market_cap_share_classes_are_counted_once():
+    """GOOGL/GOOG both carry the full-company figure; summing doubles it."""
+    holdings = [_holding("GOOGL", 60.0, 0), _holding("GOOG", 0.0, 1,
+                                                     covered_by="GOOGL"),
+                _holding("BBB", 40.0, 2)]
+    sources = _sources(members=("GOOGL", "GOOG", "BBB"))
+    row = _point(holding_rows=holdings, sources=sources)
+    assert row["ttm_total_mcap"] == pytest.approx(2000.0)
+    assert row["n_members"] == 2
+    assert row["ttm_pe_gaap"] == pytest.approx(2000.0 / 200.0)
+
+
+def test_split_market_cap_share_classes_are_summed_into_one_company():
+    """FOXA/FOX split the company between the classes; the company is the sum."""
+    holdings = [_holding("FOXA", 60.0, 0), _holding("FOX", 0.0, 1,
+                                                    covered_by="FOXA"),
+                _holding("BBB", 40.0, 2)]
+    sources = _sources(members=("FOXA", "FOX", "BBB"))
+    sources["market_cap_by_symbol"]["FOX"] = [
+        {"symbol": "FOX", "date": day, "market_cap": 400.0}
+        for day in TRADING_DATES]
+    row = _point(holding_rows=holdings, sources=sources)
+    assert row["ttm_total_mcap"] == pytest.approx(1000.0 + 400.0 + 1000.0)
+    assert row["n_members"] == 2
+
+
+def test_split_convention_fails_closed_when_a_class_market_cap_is_missing():
+    holdings = [_holding("FOXA", 60.0, 0), _holding("FOX", 0.0, 1,
+                                                    covered_by="FOXA"),
+                _holding("BBB", 40.0, 2)]
+    sources = _sources(members=("FOXA", "BBB"))
+    row = _point(holding_rows=holdings, sources=sources)
+    assert row["ttm_total_mcap"] == pytest.approx(1000.0)
+    assert any("share_class_market_cap_incomplete" in warning
+               for warning in row["warnings_json"])
+
+
+def test_undeclared_share_class_convention_excludes_the_company():
+    resolved = resolve_company_market_cap(
+        primary="AAA", base_market_cap=1000.0, secondaries=["AAA.B"],
+        convention=None, valuation_date="2026-01-09",
+        market_cap_by_symbol={"AAA.B": [
+            {"symbol": "AAA.B", "date": "2026-01-09", "market_cap": 500.0}]},
+        sanity_by_symbol={})
+    assert resolved["market_cap"] is None
+    assert resolved["exclusion_reason"] == "share_class_convention_undeclared"
+
+
+def test_full_company_convention_warns_when_the_classes_disagree():
+    resolved = resolve_company_market_cap(
+        primary="AAA", base_market_cap=1000.0, secondaries=["AAA.B"],
+        convention="full_company_per_class", valuation_date="2026-01-09",
+        market_cap_by_symbol={"AAA.B": [
+            {"symbol": "AAA.B", "date": "2026-01-09", "market_cap": 400.0}]},
+        sanity_by_symbol={"AAA.B": [
+            {"symbol": "AAA.B", "date": "2026-01-09", "status": "clean"}]})
+    assert resolved["market_cap"] == pytest.approx(1000.0)
+    assert any("share_class_convention_mismatch" in warning
+               for warning in resolved["warnings"])
+
+
+# ---------------------------------------------------------------------------
+# RED 13: one aggregation kernel for producer and verifier
+# ---------------------------------------------------------------------------
+
+def test_producer_and_verifier_aggregate_through_the_same_function():
+    from terminal.basket_pe_aggregate import compute_aggregate_basket_pe
+    import terminal.index_pe_weekly as weekly
+
+    assert weekly.compute_aggregate_basket_pe is compute_aggregate_basket_pe
+    assert verifier.compute_aggregate_basket_pe is compute_aggregate_basket_pe
+    assert (weekly.MINIMUM_MCAP_COVERAGE
+            is verifier.MINIMUM_MCAP_COVERAGE)
+
+
+# ---------------------------------------------------------------------------
+# orchestration: manifest ordering, fuses, dry-run and transactions
+# ---------------------------------------------------------------------------
+
+REPO_CONFIG_DIR = Path(__file__).parent.parent / "config" / "baskets"
+
+
+@pytest.fixture
+def config_dir(tmp_path):
+    """A copy of the repo basket config with this fixture's member bounds.
+
+    The snapshot-plausibility bounds are per-basket production numbers (SPY
+    480-520 holdings); a two-member fixture has to declare its own rather than
+    weaken the real ones.
+    """
+    target = tmp_path / "baskets"
+    shutil.copytree(REPO_CONFIG_DIR, target)
+    payload = json.loads((target / "index_pe_baskets.json").read_text())
+    for entry in payload.values():
+        entry["snapshot_quality"] = {
+            "minimum_members": 1, "maximum_members": 5,
+            "minimum_weight": 99.0, "maximum_weight": 101.0,
+        }
+    (target / "index_pe_baskets.json").write_text(json.dumps(payload))
+    return target
+
+
+def _insert_live_snapshot(store, basket):
+    """A current live-tail snapshot, so the source stage has nothing to fetch."""
+    close = infer_basket_rebalance_close(date.today().isoformat())
+    conn = store._get_conn()
+    with conn:
+        for index, (symbol, weight) in enumerate((("AAA", 60.0), ("BBB", 40.0))):
+            conn.execute(
+                "INSERT OR REPLACE INTO fmp_fund_disclosure_holdings "
+                "(basket_symbol, holding_date, source_kind, raw_row_index, "
+                "rebalance_close_date, composition_effective_date, "
+                "composition_available_date, raw_symbol, symbol, name, "
+                "weight_pct, market_value, included, filter_reason, "
+                "covered_by, snapshot_warnings_json, fetched_at, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                [basket, date.today().isoformat(), "live", index, close,
+                 "2026-07-01", "2026-07-01", symbol, symbol, symbol,
+                 weight, weight * 10, 1, None, None, "[]",
+                 "2026-07-30T00:00:00Z", "2026-07-30T00:00:00Z"])
+
+
+def _fixture_db(tmp_path, baskets=("SPY",)):
+    store = MarketStore(tmp_path / "market.db")
+    conn = store._get_conn()
+    with conn:
+        for basket in baskets:
+            conn.executemany(
+                "INSERT OR REPLACE INTO daily_price "
+                "(symbol, date, open, high, low, close, volume) "
+                "VALUES (?,?,?,?,?,?,?)",
+                [(basket, day, 1.0, 1.0, 1.0, 1.0, 1) for day in TRADING_DATES])
+        for symbol in ("AAA", "BBB"):
+            conn.executemany(
+                "INSERT OR REPLACE INTO daily_price "
+                "(symbol, date, open, high, low, close, volume) "
+                "VALUES (?,?,?,?,?,?,?)",
+                [(symbol, day, 10.0, 10.0, 10.0, 10.0, 1)
+                 for day in TRADING_DATES])
+            conn.executemany(
+                "INSERT OR REPLACE INTO historical_market_cap "
+                "(symbol, date, market_cap) VALUES (?,?,?)",
+                [(symbol, day, 1000.0) for day in TRADING_DATES])
+            for row in _quarters(symbol, TTM_FISCAL + NTM_FISCAL, 25.0):
+                conn.execute(
+                    "INSERT OR REPLACE INTO income_quarterly "
+                    "(symbol, date, period, accepted_date, reported_currency, "
+                    "net_income) VALUES (?,?,?,?,?,?)",
+                    [row["symbol"], row["date"], row["period"],
+                     row["accepted_date"], row["reported_currency"],
+                     row["net_income"]])
+        for basket in baskets:
+            for index, (symbol, weight) in enumerate(
+                    (("AAA", 60.0), ("BBB", 40.0))):
+                conn.execute(
+                    "INSERT OR REPLACE INTO fmp_fund_disclosure_holdings "
+                    "(basket_symbol, holding_date, source_kind, raw_row_index, "
+                    "rebalance_close_date, composition_effective_date, "
+                    "composition_available_date, raw_symbol, symbol, name, "
+                    "weight_pct, market_value, included, filter_reason, "
+                    "covered_by, snapshot_warnings_json, fetched_at, "
+                    "created_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    [basket, "2025-12-31", "disclosure", index, "2025-12-19",
+                     "2025-12-22", "2026-01-02", symbol, symbol, symbol,
+                     weight, weight * 10, 1, None, None, "[]",
+                     "2026-01-20T00:00:00Z", "2026-01-20T00:00:00Z"])
+    return store
+
+
+def _args(tmp_path, config_dir, **overrides):
+    values = {
+        "baskets": ["SPY"], "frequency": "weekly", "years": 5,
+        "as_of": "2026-01-16", "dry_run": True, "allow_network": False,
+        "db": tmp_path / "market.db", "refresh_live": False,
+        "run_id": "run-test", "config_dir": config_dir,
+    }
+    values.update(overrides)
+    return Namespace(**values)
+
+
+def test_manifest_lands_before_the_first_per_symbol_remote_call(
+        tmp_path, config_dir):
+    store = _fixture_db(tmp_path)
+    _insert_live_snapshot(store, "SPY")
+    calls = []
+    client = Mock()
+    # The disclosure the fixture already holds, so the source stage fetches
+    # nothing per symbol and the ordering under test is the real one.
+    client.get_fund_disclosure_dates.side_effect = (
+        lambda *a, **k: calls.append("disclosure_dates") or [
+            {"date": "2025-12-31", "year": 2025, "quarter": 4}])
+    client.get_income_statement.side_effect = (
+        lambda symbol, **k: calls.append("income") or _quarters(
+            symbol, TTM_FISCAL + NTM_FISCAL, 25.0))
+    client.get_historical_market_cap.side_effect = (
+        lambda symbol, **k: calls.append("mcap") or [
+            {"symbol": symbol, "date": day, "market_cap": 1000.0}
+            for day in TRADING_DATES])
+    client.get_stock_splits.side_effect = lambda *a, **k: calls.append("splits") or []
+    recording = Mock(wraps=store)
+    recording.append_basket_pe_run_events.side_effect = (
+        lambda rows: calls.append("manifest") or store.append_basket_pe_run_events(rows))
+    args = _args(tmp_path, config_dir, dry_run=False, allow_network=True)
+    backfill_basket(args, "SPY", client=client, store=recording,
+                    conn=store._get_conn())
+    assert "manifest" in calls, "no manifest event was ever written"
+    per_symbol = [index for index, name in enumerate(calls)
+                  if name in {"income", "mcap", "splits"}]
+    assert per_symbol, "expected the per-symbol stages to reach the client"
+    assert calls.index("manifest") < per_symbol[0]
+    assert calls.index("disclosure_dates") < calls.index("manifest"), (
+        "the manifest freezes the universe the disclosure fetch just defined")
+    store.close()
+
+
+def test_dry_run_writes_no_valuation_rows(tmp_path, config_dir):
+    store = _fixture_db(tmp_path)
+    args = _args(tmp_path, config_dir)
+    result = backfill_basket(args, "SPY", client=None, store=None,
+                             conn=store._get_conn())
+    assert result["weekly_rows"] > 0
+    assert store.get_basket_weekly_pe_history("SPY") == []
+    assert store.get_basket_pe_run_events(basket="SPY") == []
+    assert result["planned_network_calls"] == [] or all(
+        "symbol" in call or "stage" in call
+        for call in result["planned_network_calls"])
+    store.close()
+
+
+def test_write_mode_persists_one_row_per_week_and_a_manifest(tmp_path, config_dir):
+    store = _fixture_db(tmp_path)
+    args = _args(tmp_path, config_dir, dry_run=False)
+    result = backfill_basket(args, "SPY", client=None, store=store,
+                             conn=store._get_conn())
+    rows = store.get_basket_weekly_pe_history("SPY")
+    assert len(rows) == result["weekly_rows"]
+    assert rows[-1]["valuation_date"] == "2026-01-16"
+    assert rows[0]["methodology_version"] == WEEKLY_METHODOLOGY_VERSION
+    events = store.get_basket_pe_run_events(basket="SPY")
+    assert [row["event_kind"] for row in events][0] == "run_started"
+    assert events[-1]["event_kind"] == "run_completed"
+    assert events[0]["expected_from_date"] == "2021-01-16"
+    assert events[0]["expected_to_date"] == "2026-01-16"
+    store.close()
+
+
+def test_member_failure_above_twenty_percent_publishes_nothing(tmp_path, config_dir):
+    store = _fixture_db(tmp_path)
+    _insert_live_snapshot(store, "SPY")
+    client = Mock()
+    client.get_fund_disclosure_dates.return_value = [
+        {"date": "2025-12-31", "year": 2025, "quarter": 4}]
+    client.get_income_statement.return_value = []
+    client.get_historical_market_cap.return_value = []
+    client.get_stock_splits.return_value = []
+    conn = store._get_conn()
+    # Both members lose their income history, so the fundamentals stage cannot
+    # complete for 100% of the universe.
+    with conn:
+        conn.execute("DELETE FROM income_quarterly")
+    args = _args(tmp_path, config_dir, dry_run=False, allow_network=True)
+    with pytest.raises(RuntimeError, match="fuse"):
+        backfill_basket(args, "SPY", client=client, store=store, conn=conn)
+    assert store.get_basket_weekly_pe_history("SPY") == []
+    store.close()
+
+
+def test_one_basket_failing_leaves_the_others_committed(tmp_path, config_dir):
+    store = _fixture_db(tmp_path, baskets=("SPY", "QQQ"))
+    conn = store._get_conn()
+    with conn:
+        # QQQ keeps a calendar but loses its composition entirely.
+        conn.execute(
+            "DELETE FROM fmp_fund_disclosure_holdings WHERE basket_symbol='QQQ'")
+    args = _args(tmp_path, config_dir, baskets=["SPY", "QQQ"], dry_run=False)
+    report = backfill.run_backfill(args, client=None, store=store, conn=conn)
+    assert report["baskets"]["SPY"]["status"] == "complete"
+    assert report["baskets"]["QQQ"]["status"] == "failed"
+    assert store.get_basket_weekly_pe_history("SPY")
+    assert store.get_basket_weekly_pe_history("QQQ") == []
+    failed = [row for row in store.get_basket_pe_run_events(basket="QQQ")
+              if row["event_kind"] == "run_failed"]
+    assert failed, "a failed basket still owes the manifest an explanation"
+    store.close()
+
+
+def test_rerun_rescans_jump_sanity_even_with_complete_market_cap_rows(tmp_path, config_dir):
+    """issue035: a complete market-cap range is not evidence of a clean one."""
+    store = _fixture_db(tmp_path)
+    conn = store._get_conn()
+    with conn:
+        # A KLAC-shaped 10:1 cliff inside an otherwise complete AAA history.
+        for day in ("2026-01-12", "2026-01-13", "2026-01-14", "2026-01-15",
+                    "2026-01-16"):
+            conn.execute(
+                "UPDATE historical_market_cap SET market_cap = 100.0 "
+                "WHERE symbol = 'AAA' AND date = ?", [day])
+    args = _args(tmp_path, config_dir)
+    result = backfill_basket(args, "SPY", client=None, store=None, conn=conn)
+    flagged = result["stages"]["mcap_sanity"]["AAA"]
+    assert flagged["flagged"] > 0
+    assert flagged["quarantined"], "the polluted window must be quarantined"
+    contaminated = [row for row in result["rows"]
+                    if row["valuation_date"] >= "2026-01-12"]
+    assert contaminated, "the contaminated week still owes a row"
+    assert all(row["ttm_pe_gaap"] is None for row in contaminated), (
+        "a quarantined market cap must not reach a published PE")
+    assert all(row["hindsight_ntm_pe_gaap"] is None for row in contaminated)
+    # An earlier, clean week is unaffected: the quarantine is not global.
+    clean = [row for row in result["rows"] if row["valuation_date"] < "2026-01-12"]
+    assert clean and all(row["ttm_pe_gaap"] is not None for row in clean)
+    store.close()
+
+
+def test_contaminated_window_is_replanned_for_refresh_in_dry_run(tmp_path, config_dir):
+    store = _fixture_db(tmp_path)
+    conn = store._get_conn()
+    with conn:
+        for day in ("2026-01-13", "2026-01-14", "2026-01-15", "2026-01-16"):
+            conn.execute(
+                "UPDATE historical_market_cap SET market_cap = 100.0 "
+                "WHERE symbol = 'AAA' AND date = ?", [day])
+    args = _args(tmp_path, config_dir)
+    result = backfill_basket(args, "SPY", client=None, store=None, conn=conn)
+    planned = [call for call in result["planned_network_calls"]
+               if call.get("stage") == "mcap_sanity" and call.get("symbol") == "AAA"]
+    assert planned, "a quarantined window must be planned for a forced refresh"
+    store.close()
+
+
+def test_manifest_records_forced_refresh_row_hashes(tmp_path, config_dir):
+    store = _fixture_db(tmp_path)
+    conn = store._get_conn()
+    with conn:
+        for day in ("2026-01-13", "2026-01-14", "2026-01-15", "2026-01-16"):
+            conn.execute(
+                "UPDATE historical_market_cap SET market_cap = 100.0 "
+                "WHERE symbol = 'AAA' AND date = ?", [day])
+    _insert_live_snapshot(store, "SPY")
+    client = Mock()
+    client.get_fund_disclosure_dates.return_value = [
+        {"date": "2025-12-31", "year": 2025, "quarter": 4}]
+    client.get_income_statement.side_effect = (
+        lambda symbol, **k: _quarters(symbol, TTM_FISCAL + NTM_FISCAL, 25.0))
+    client.get_historical_market_cap.side_effect = (
+        lambda symbol, from_date=None, to_date=None: [
+            {"symbol": symbol, "date": day, "market_cap": 1000.0}
+            for day in TRADING_DATES
+            if (from_date or "") <= day <= (to_date or "9999")])
+    client.get_stock_splits.return_value = []
+    args = _args(tmp_path, config_dir, dry_run=False, allow_network=True)
+    backfill_basket(args, "SPY", client=client, store=store, conn=conn)
+    refreshes = [row for row in store.get_basket_pe_run_events(basket="SPY")
+                 if row["event_kind"] == "forced_refresh"]
+    assert refreshes
+    payload = json.loads(refreshes[0]["payload_json"])
+    assert payload["symbol"] == "AAA"
+    assert len(payload["pre_row_hash"]) == 64
+    assert payload["pre_row_hash"] != payload["post_row_hash"]
+    store.close()

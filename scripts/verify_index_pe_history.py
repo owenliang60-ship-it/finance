@@ -1,0 +1,842 @@
+#!/usr/bin/env python3
+"""Read-only verification of the three-index weekly P/E history.
+
+Positioned per issue 048: this is an evidence and tamper checker, not a second
+methodology. It shares the producer's aggregation kernel deliberately -- a
+verifier that re-types the formula only proves two transcriptions agree -- and
+buys its independence three other ways:
+
+* the **denominator** comes from the append-only run manifest, never from the
+  current universe, so a shrunken basket or a later ``--as-of`` cannot make an
+  incomplete series look complete;
+* a **heterogeneous spot check** recomputes sampled points with plain
+  arithmetic and reconciles both sides of the ratio against the raw
+  ``historical_market_cap`` and ``income_quarterly`` rows by direct SQL;
+* **repair provenance** (pre/post row hashes of every forced-refresh window)
+  is checked against the manifest, because the refreshed source tables can no
+  longer show what was replaced.
+
+    python -m scripts.verify_index_pe_history \\
+        --baskets SPY,QQQ,SOXX --years 5 --mode ro
+
+The database is opened ``mode=ro`` with ``query_only=ON`` and read inside one
+transaction, so every check sees the same snapshot even if a writer is active.
+"""
+import argparse
+import json
+import math
+import sqlite3
+import sys
+from datetime import date
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+
+
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.data.fmp_forward_ingestion import (  # noqa: E402
+    load_index_pe_basket_configs,
+)
+from src.data.fx_validation import USD_PER_UNIT_BOUNDS  # noqa: E402
+from terminal.basket_pe_aggregate import (  # noqa: E402
+    MINIMUM_MCAP_COVERAGE,
+    compute_aggregate_basket_pe,
+)
+from terminal.historical_market_cap_sanity import (  # noqa: E402
+    accepted_market_cap_status,
+    scan_market_cap_candidates,
+)
+from terminal.index_pe_weekly import (  # noqa: E402
+    MINIMUM_WEIGHT_COVERAGE,
+    WEEKLY_METHODOLOGY_VERSION,
+    default_share_class_config,
+    group_trading_dates_by_week,
+)
+
+
+CONFIG_DIR = PROJECT_ROOT / "config" / "baskets"
+REQUIRED_TABLES = (
+    "basket_weekly_pe_history", "basket_pe_backfill_runs", "daily_price",
+    "income_quarterly", "historical_market_cap",
+    "fmp_fund_disclosure_holdings",
+)
+# Columns that would mean the holding-weighted proxy leaked into the product
+# table (R1). The weekly panel compares three aggregate lines; a weighted
+# average of member P/Es is a different question.
+FORBIDDEN_COLUMNS = (
+    "rebalance_weighted_ttm_pe_gaap_proxy", "weighted_earnings_yield",
+    "uncapped_mcap_basket_pe_gaap",
+)
+DEFAULT_SAMPLE = 8
+MAX_MARKET_CAP_STALENESS_DAYS = 7
+
+
+def _iso_date(value: str) -> str:
+    try:
+        return date.fromisoformat(value).isoformat()
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(f"not an ISO date: {value!r}") from exc
+
+
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Read-only verification of weekly index PE history")
+    parser.add_argument("--baskets", default="SPY,QQQ,SOXX")
+    parser.add_argument("--years", type=int, default=5)
+    parser.add_argument("--as-of", dest="as_of", type=_iso_date,
+                        default=date.today().isoformat())
+    parser.add_argument("--mode", choices=("ro",), default="ro",
+                        help="read-only is the only supported mode")
+    parser.add_argument("--sample", type=int, default=DEFAULT_SAMPLE)
+    parser.add_argument("--config-dir", type=Path, default=CONFIG_DIR,
+                        help="basket + share-class config root (SSOT)")
+    parser.add_argument("--db", type=Path,
+                        default=PROJECT_ROOT / "data" / "market.db")
+    args = parser.parse_args(argv)
+    args.baskets = [item.strip().upper() for item in args.baskets.split(",")
+                    if item.strip()]
+    if not args.baskets:
+        parser.error("--baskets must name at least one basket")
+    if args.years <= 0:
+        parser.error("--years must be positive")
+    return args
+
+
+def connect_readonly(db_path: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA query_only=ON")
+    return conn
+
+
+def _rows(conn: sqlite3.Connection, query: str,
+          params: Sequence[Any] = ()) -> List[Dict[str, Any]]:
+    return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?", [table]
+    ).fetchone() is not None
+
+
+def _check(name: str, passed: bool, detail: Any) -> Dict[str, Any]:
+    return {"name": name, "passed": bool(passed), "detail": detail}
+
+
+def _connection_is_read_only(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """Prove the connection cannot write, rather than claim it.
+
+    A verifier that reports "mode=ro" from a string is checking its own
+    intentions. This attempts the smallest possible write and requires it to be
+    refused.
+    """
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS _verifier_write_probe (x INTEGER)")
+    except sqlite3.Error as exc:
+        return {"refused": True, "error": str(exc)}
+    return {"refused": False, "error": None}
+
+
+def _close(left: Any, right: Any, tolerance: float = 1e-6) -> bool:
+    if left is None or right is None:
+        return left is None and right is None
+    return math.isclose(float(left), float(right), rel_tol=tolerance,
+                        abs_tol=tolerance)
+
+
+def _window(as_of: str, years: int) -> Tuple[str, str]:
+    target = date.fromisoformat(as_of)
+    try:
+        start = target.replace(year=target.year - years)
+    except ValueError:
+        start = target.replace(year=target.year - years, day=28)
+    return start.isoformat(), target.isoformat()
+
+
+def _sample_indexes(count: int, sample: int) -> List[int]:
+    """Evenly spaced sample positions -- deterministic, no RNG seed to record."""
+    if count <= 0 or sample <= 0:
+        return []
+    if sample >= count:
+        return list(range(count))
+    step = (count - 1) / (sample - 1) if sample > 1 else 0
+    return sorted({int(round(index * step)) for index in range(sample)})
+
+
+# ---------------------------------------------------------------------------
+# manifest (denominator SSOT)
+# ---------------------------------------------------------------------------
+
+def _latest_run(events: Sequence[Mapping[str, Any]]) -> Optional[str]:
+    """The newest run that reached run_completed for this basket."""
+    completed = [row["run_id"] for row in events
+                 if row["event_kind"] == "run_completed"]
+    if not completed:
+        return None
+    order = {row["run_id"]: row["created_at"] for row in events}
+    return max(completed, key=lambda run_id: (order.get(run_id, ""), run_id))
+
+
+def _manifest_errors(
+    basket: str, events: Sequence[Mapping[str, Any]], run_id: Optional[str],
+    requested: Tuple[str, str],
+) -> List[str]:
+    errors: List[str] = []
+    if run_id is None:
+        return [f"{basket}:no_completed_run_manifest"]
+    run_events = [row for row in events if row["run_id"] == run_id]
+    sequences = [int(row["event_seq"]) for row in run_events]
+    if sequences != list(range(len(sequences))):
+        errors.append(f"{basket}:manifest_event_seq_not_append_only:{sequences}")
+    kinds = [row["event_kind"] for row in run_events]
+    if not kinds or kinds[0] != "run_started":
+        errors.append(f"{basket}:manifest_missing_run_started")
+    if "run_failed" in kinds:
+        errors.append(f"{basket}:manifest_records_a_failed_run")
+    started = next((row for row in run_events
+                    if row["event_kind"] == "run_started"), None)
+    if started is None:
+        return errors
+    if (started["expected_from_date"] > requested[0]
+            or started["expected_to_date"] < requested[1]):
+        # The point of an expected range in the manifest: a caller asking for a
+        # narrower window must not be able to certify a suffix as complete.
+        errors.append(
+            f"{basket}:manifest_range_narrower_than_requested:"
+            f"{started['expected_from_date']}..{started['expected_to_date']}"
+            f" vs {requested[0]}..{requested[1]}")
+    if int(started["target_count"]) <= 0:
+        errors.append(f"{basket}:manifest_empty_target_universe")
+    try:
+        universe = json.loads(started["target_universe_json"])
+    except (TypeError, ValueError):
+        errors.append(f"{basket}:manifest_universe_unparseable")
+        universe = []
+    if len(universe) != int(started["target_count"]):
+        errors.append(f"{basket}:manifest_target_count_mismatch")
+    if started["methodology_version"] != WEEKLY_METHODOLOGY_VERSION:
+        errors.append(
+            f"{basket}:manifest_methodology_version:"
+            f"{started['methodology_version']}")
+    return errors
+
+
+def _refresh_provenance_errors(
+    basket: str, events: Sequence[Mapping[str, Any]], run_id: Optional[str],
+) -> List[str]:
+    errors: List[str] = []
+    for row in events:
+        if row["run_id"] != run_id or row["event_kind"] != "forced_refresh":
+            continue
+        try:
+            payload = json.loads(row["payload_json"])
+        except (TypeError, ValueError):
+            errors.append(f"{basket}:{row['event_seq']}:payload_unparseable")
+            continue
+        prefix = f"{basket}:{payload.get('symbol')}:{payload.get('from_date')}"
+        for field in ("symbol", "from_date", "to_date"):
+            if not payload.get(field):
+                errors.append(f"{prefix}:missing_{field}")
+        for field in ("pre_row_hash", "post_row_hash"):
+            value = str(payload.get(field) or "")
+            if len(value) != 64:
+                errors.append(f"{prefix}:{field}_not_a_sha256")
+        if str(payload.get("from_date") or "") > str(payload.get("to_date") or ""):
+            errors.append(f"{prefix}:window_inverted")
+        triggers = payload.get("trigger_dates") or []
+        if not triggers:
+            errors.append(f"{prefix}:no_trigger_dates")
+        for trigger in triggers:
+            if not (str(payload.get("from_date")) <= str(trigger)
+                    <= str(payload.get("to_date"))):
+                errors.append(f"{prefix}:trigger_outside_window:{trigger}")
+        if payload.get("skipped") is False and _close(
+                payload.get("pre_row_count"), 0) and _close(
+                    payload.get("post_row_count"), 0):
+            errors.append(f"{prefix}:refresh_claims_no_rows_on_either_side")
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# row-level consistency
+# ---------------------------------------------------------------------------
+
+def _decode_rows(
+    raw_rows: Sequence[Mapping[str, Any]],
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    decoded = []
+    errors = []
+    for raw in raw_rows:
+        row = dict(raw)
+        for field in ("members_json", "warnings_json"):
+            try:
+                row[field] = json.loads(str(row[field]))
+            except (TypeError, ValueError):
+                errors.append(f"{row.get('valuation_date')}:{field}")
+                row[field] = {} if field == "members_json" else []
+        decoded.append(row)
+    return decoded, errors
+
+
+def _gate_warning_present(row: Mapping[str, Any], prefixes: Sequence[str]) -> bool:
+    return any(str(warning).startswith(prefix)
+               for warning in row["warnings_json"]
+               for prefix in prefixes)
+
+
+def _tier_consistency_errors(rows: Sequence[Mapping[str, Any]]) -> List[str]:
+    """quality_tier, the two P/Es and the quarter counts are one statement.
+
+    The store enforces none of this: it accepts an ``actual_only`` row with a
+    NULL P/E, and a NULL-P/E row that claims four actual quarters.
+    """
+    errors = []
+    for row in rows:
+        prefix = f"{row['basket']}:{row['valuation_date']}"
+        tier = row["quality_tier"]
+        hindsight_pe = row["hindsight_ntm_pe_gaap"]
+        if tier == "unpublishable" and hindsight_pe is not None:
+            errors.append(f"{prefix}:unpublishable_with_a_hindsight_pe")
+        if tier != "unpublishable":
+            if hindsight_pe is None:
+                errors.append(f"{prefix}:publishable_tier_without_a_hindsight_pe")
+            if (int(row["hindsight_actual_quarters"])
+                    + int(row["hindsight_estimate_quarters"])) != 4:
+                errors.append(f"{prefix}:quarters_do_not_sum_to_four")
+            if float(row["mcap_coverage_hindsight"]) < MINIMUM_MCAP_COVERAGE:
+                errors.append(f"{prefix}:hindsight_published_below_mcap_gate")
+        if tier == "actual_only" and int(row["hindsight_estimate_quarters"]) != 0:
+            errors.append(f"{prefix}:actual_only_with_consensus_quarters")
+        if tier == "latest_consensus_tail" \
+                and int(row["hindsight_estimate_quarters"]) == 0:
+            errors.append(f"{prefix}:consensus_tail_without_consensus_quarters")
+        if row["ttm_pe_gaap"] is None:
+            if not _gate_warning_present(row, (
+                    "mcap_coverage_ttm_below_gate",
+                    "weight_coverage_ttm_below_gate",
+                    "ttm_net_income_not_positive", "ttm_no_covered_member")):
+                errors.append(f"{prefix}:ttm_null_without_a_recorded_reason")
+        elif float(row["mcap_coverage_ttm"]) < MINIMUM_MCAP_COVERAGE:
+            errors.append(f"{prefix}:ttm_published_below_mcap_gate")
+    return errors
+
+
+def _member_list(row: Mapping[str, Any]) -> List[Mapping[str, Any]]:
+    members = row["members_json"]
+    if isinstance(members, Mapping):
+        return list(members.get("members") or [])
+    return list(members or [])
+
+
+def _weight_coverage(members: Sequence[Mapping[str, Any]], income_key: str) -> float:
+    total = sum(float(member["weight_pct"]) for member in members
+                if member.get("weight_pct") is not None
+                and float(member["weight_pct"]) > 0)
+    covered = sum(
+        float(member["weight_pct"]) for member in members
+        if member.get("weight_pct") is not None
+        and float(member["weight_pct"]) > 0
+        and member.get("market_cap") is not None
+        and member.get(income_key) is not None)
+    return covered / total if total > 0 else 0.0
+
+
+def _evidence_errors(rows: Sequence[Mapping[str, Any]]) -> List[str]:
+    """Recompute both coverages and both member sets from members_json.
+
+    Plain arithmetic, not the producer's kernel: this is the heterogeneous
+    half of the reconciliation.
+    """
+    errors = []
+    for row in rows:
+        prefix = f"{row['basket']}:{row['valuation_date']}"
+        payload = row["members_json"]
+        if not isinstance(payload, Mapping):
+            errors.append(f"{prefix}:members_json_not_an_object")
+            continue
+        members = _member_list(row)
+        if not members:
+            errors.append(f"{prefix}:members_json_empty")
+            continue
+        if len(members) != int(row["n_members"]):
+            errors.append(f"{prefix}:n_members_mismatch")
+        if payload.get("is_ex_post") != 1:
+            errors.append(f"{prefix}:hindsight_not_flagged_ex_post")
+        if "consensus_snapshot_date" not in payload:
+            errors.append(f"{prefix}:consensus_vintage_missing")
+        if (row["quality_tier"] == "latest_consensus_tail"
+                and not payload.get("consensus_snapshot_date")):
+            errors.append(f"{prefix}:consensus_tail_without_a_vintage")
+        for key, income_key in (
+                ("weight_coverage_ttm", "ttm_net_income_usd"),
+                ("weight_coverage_hindsight", "hindsight_ntm_net_income_usd")):
+            if payload.get(key) is None:
+                errors.append(f"{prefix}:{key}_missing")
+                continue
+            if not _close(payload[key], _weight_coverage(members, income_key),
+                          tolerance=1e-6):
+                errors.append(f"{prefix}:{key}_not_reproducible")
+        published_pairs = (
+            ("ttm_pe_gaap", "weight_coverage_ttm"),
+            ("hindsight_ntm_pe_gaap", "weight_coverage_hindsight"),
+        )
+        for pe_field, coverage_key in published_pairs:
+            if row[pe_field] is None:
+                continue
+            if float(payload.get(coverage_key) or 0.0) < MINIMUM_WEIGHT_COVERAGE:
+                errors.append(f"{prefix}:{pe_field}_published_below_weight_gate")
+        # Symmetric member sets: a covered member has both sides, and the
+        # stored totals are exactly the sum over those members.
+        ttm_covered = [member for member in members
+                       if member.get("market_cap") is not None
+                       and member.get("ttm_net_income_usd") is not None]
+        if len(ttm_covered) != int(row["n_covered_ttm"]):
+            errors.append(f"{prefix}:n_covered_ttm_mismatch")
+        if not _close(row["ttm_total_mcap"],
+                      sum(float(m["market_cap"]) for m in ttm_covered)):
+            errors.append(f"{prefix}:ttm_total_mcap_not_reproducible")
+        if not _close(row["ttm_net_income"],
+                      sum(float(m["ttm_net_income_usd"]) for m in ttm_covered)):
+            errors.append(f"{prefix}:ttm_net_income_not_reproducible")
+        hindsight_covered = [
+            member for member in members
+            if member.get("market_cap") is not None
+            and member.get("hindsight_ntm_net_income_usd") is not None]
+        if len(hindsight_covered) != int(row["n_covered_hindsight"]):
+            errors.append(f"{prefix}:n_covered_hindsight_mismatch")
+        for member in hindsight_covered:
+            quarters = (int(member.get("hindsight_actual_quarters") or 0)
+                        + int(member.get("hindsight_estimate_quarters") or 0))
+            if quarters != 4:
+                errors.append(
+                    f"{prefix}:{member.get('symbol')}:member_quarters_not_four")
+        # Date crossing: no observation may be dated after the valuation date,
+        # and none may be staler than the as-of rule allows.
+        valuation = date.fromisoformat(str(row["valuation_date"]))
+        if str(row["valuation_date"]) < str(row["composition_effective_date"]):
+            errors.append(f"{prefix}:valuation_before_composition_effective")
+        for member in members:
+            observed = member.get("market_cap_date")
+            if not observed:
+                continue
+            try:
+                observed_date = date.fromisoformat(str(observed))
+            except ValueError:
+                errors.append(f"{prefix}:{member.get('symbol')}:mcap_date_shape")
+                continue
+            if observed_date > valuation:
+                errors.append(f"{prefix}:{member.get('symbol')}:mcap_date_crossing")
+            elif (valuation - observed_date).days > MAX_MARKET_CAP_STALENESS_DAYS:
+                errors.append(f"{prefix}:{member.get('symbol')}:mcap_date_stale")
+    return errors
+
+
+def _kernel_reconciliation_errors(rows: Sequence[Mapping[str, Any]]) -> List[str]:
+    """Shared kernel vs plain arithmetic on the same materialised members.
+
+    The kernel is imported, not re-implemented (R3), so this compares the
+    stored number against both: the kernel replayed over members_json, and a
+    direct ratio of the two sums.
+    """
+    errors = []
+    for row in rows:
+        prefix = f"{row['basket']}:{row['valuation_date']}"
+        members = _member_list(row)
+        for income_key, pe_field, coverage_field in (
+                ("ttm_net_income_usd", "ttm_pe_gaap", "mcap_coverage_ttm"),
+                ("hindsight_ntm_net_income_usd", "hindsight_ntm_pe_gaap",
+                 "mcap_coverage_hindsight")):
+            replay = compute_aggregate_basket_pe(members, income_key=income_key)
+            if not _close(replay["mcap_coverage"], row[coverage_field]):
+                errors.append(f"{prefix}:{coverage_field}_kernel_mismatch")
+            if row[pe_field] is None:
+                continue
+            covered = [member for member in members
+                       if member.get("market_cap") is not None
+                       and member.get(income_key) is not None]
+            numerator = sum(float(member["market_cap"]) for member in covered)
+            denominator = sum(float(member[income_key]) for member in covered)
+            if denominator <= 0:
+                errors.append(f"{prefix}:{pe_field}_published_on_a_bad_denominator")
+                continue
+            if not _close(row[pe_field], numerator / denominator):
+                errors.append(f"{prefix}:{pe_field}_not_reproducible")
+            if not _close(replay["pe"], numerator / denominator):
+                errors.append(f"{prefix}:{pe_field}_kernel_disagrees_with_arithmetic")
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# raw-source spot checks (direct SQL, no producer code path)
+# ---------------------------------------------------------------------------
+
+def _market_cap_asof_sql(
+    conn: sqlite3.Connection, symbol: str, valuation_date: str,
+) -> Optional[Dict[str, Any]]:
+    row = conn.execute(
+        "SELECT date, market_cap FROM historical_market_cap "
+        "WHERE symbol = ? AND date <= ? ORDER BY date DESC LIMIT 1",
+        [symbol, valuation_date]).fetchone()
+    return dict(row) if row else None
+
+
+def _sanity_status_sql(
+    conn: sqlite3.Connection, symbol: str, observed_date: str,
+    cache: Optional[Dict[str, Dict[str, str]]] = None,
+) -> Optional[str]:
+    """Rescan the raw tables; never trust a status the producer recorded.
+
+    Cached per symbol because the scan is over that symbol's whole history and
+    a sample hits the same members on every sampled date.
+    """
+    store = cache if cache is not None else {}
+    if symbol not in store:
+        classifications = scan_market_cap_candidates(
+            _rows(conn, "SELECT * FROM historical_market_cap WHERE symbol = ? "
+                        "ORDER BY date", [symbol]),
+            _rows(conn, "SELECT * FROM daily_price WHERE symbol = ? "
+                        "ORDER BY date", [symbol]),
+            _rows(conn, "SELECT * FROM fmp_stock_splits WHERE symbol = ? "
+                        "ORDER BY date", [symbol])
+            if _table_exists(conn, "fmp_stock_splits") else [])
+        store[symbol] = {str(item["date"]): str(item["status"])
+                         for item in classifications}
+    return store[symbol].get(observed_date)
+
+
+def _ttm_income_sql(
+    conn: sqlite3.Connection, symbol: str, valuation_date: str,
+) -> Optional[float]:
+    """Sum four visible USD quarters straight out of SQL, or decline.
+
+    Deliberately simple: it only reconciles the easy majority (a USD reporter
+    with four clean, continuous, already-accepted quarters) and returns None
+    rather than guessing on restatements, malformed rows or FX. A mismatch on
+    a case it does accept is a real finding.
+    """
+    rows = _rows(
+        conn,
+        "SELECT date, period, accepted_date, reported_currency, net_income "
+        "FROM income_quarterly WHERE symbol = ? AND date <= ? "
+        "AND period LIKE 'Q%' AND net_income IS NOT NULL "
+        "AND accepted_date IS NOT NULL AND substr(accepted_date,1,10) < ? "
+        "ORDER BY date DESC LIMIT 5",
+        [symbol, valuation_date, valuation_date])
+    if len({str(row["date"]) for row in rows}) < 4:
+        return None
+    selected = rows[:4]
+    if any(str(row["reported_currency"] or "").upper() != "USD"
+           for row in selected):
+        return None
+    fiscal = sorted(date.fromisoformat(str(row["date"])) for row in selected)
+    if any(not 60 <= (later - earlier).days <= 120
+           for earlier, later in zip(fiscal, fiscal[1:])):
+        return None
+    return sum(float(row["net_income"]) for row in selected)
+
+
+def _raw_source_reconciliation(
+    conn: sqlite3.Connection,
+    rows: Sequence[Mapping[str, Any]],
+    conventions: Mapping[str, Optional[str]],
+    groups: Mapping[str, Sequence[str]],
+) -> Dict[str, Any]:
+    errors: List[str] = []
+    reconciled_mcap = 0
+    reconciled_income = 0
+    declined_income = 0
+    sanity_cache: Dict[str, Dict[str, str]] = {}
+    for row in rows:
+        valuation_date = str(row["valuation_date"])
+        prefix = f"{row['basket']}:{valuation_date}"
+        for member in _member_list(row):
+            symbol = str(member.get("symbol") or "").upper()
+            if member.get("market_cap") is None:
+                continue
+            secondaries = [str(value).upper()
+                           for value in groups.get(symbol, [])]
+            observation = _market_cap_asof_sql(conn, symbol, valuation_date)
+            if observation is None:
+                errors.append(f"{prefix}:{symbol}:no_raw_market_cap_at_or_before")
+                continue
+            expected = float(observation["market_cap"])
+            if secondaries and conventions.get(symbol) == "split_across_classes":
+                for secondary in secondaries:
+                    part = _market_cap_asof_sql(conn, secondary, valuation_date)
+                    if part is None:
+                        expected = None
+                        break
+                    expected += float(part["market_cap"])
+            if expected is None:
+                errors.append(
+                    f"{prefix}:{symbol}:share_class_component_missing_in_raw")
+                continue
+            if not _close(member["market_cap"], expected, tolerance=1e-6):
+                errors.append(
+                    f"{prefix}:{symbol}:market_cap_disagrees_with_raw_source")
+                continue
+            status = _sanity_status_sql(conn, symbol, str(observation["date"]),
+                                        sanity_cache)
+            if status is not None and not accepted_market_cap_status(status):
+                errors.append(f"{prefix}:{symbol}:published_on_{status}_market_cap")
+                continue
+            reconciled_mcap += 1
+            if member.get("ttm_net_income_usd") is None:
+                continue
+            recomputed = _ttm_income_sql(conn, symbol, valuation_date)
+            if recomputed is None:
+                declined_income += 1
+                continue
+            if not _close(member["ttm_net_income_usd"], recomputed,
+                          tolerance=1e-6):
+                errors.append(
+                    f"{prefix}:{symbol}:ttm_income_disagrees_with_raw_source")
+                continue
+            reconciled_income += 1
+    return {
+        "errors": errors,
+        "reconciled_market_caps": reconciled_mcap,
+        "reconciled_ttm_incomes": reconciled_income,
+        "declined_ttm_incomes": declined_income,
+    }
+
+
+# ---------------------------------------------------------------------------
+# expected weekly denominator
+# ---------------------------------------------------------------------------
+
+def _expected_weeks(
+    conn: sqlite3.Connection, basket: str, expected_from: str, expected_to: str,
+) -> Dict[str, Any]:
+    """Weeks the run was supposed to publish, from materialised evidence.
+
+    The calendar is the basket ETF's own price history and the earliest
+    composition is the first ``composition_effective_date`` on record, so a
+    basket whose disclosure history starts late (SOXX) is not charged for the
+    weeks before it.
+    """
+    trading_dates = [row["date"] for row in _rows(
+        conn, "SELECT date FROM daily_price WHERE symbol = ? "
+              "AND date BETWEEN ? AND ? ORDER BY date",
+        [basket, expected_from, expected_to])]
+    first_composition = conn.execute(
+        "SELECT MIN(composition_effective_date) AS first "
+        "FROM fmp_fund_disclosure_holdings WHERE basket_symbol = ?",
+        [basket]).fetchone()
+    floor = str(first_composition["first"]) if first_composition \
+        and first_composition["first"] else None
+    weeks = group_trading_dates_by_week(trading_dates, expected_from, expected_to)
+    if floor is not None:
+        weeks = [week for week in weeks if week[-1] >= floor]
+    else:
+        weeks = []
+    return {"weeks": weeks, "first_composition_effective_date": floor,
+            "trading_days": len(trading_dates)}
+
+
+def _week_key(day: str) -> Tuple[int, int]:
+    return date.fromisoformat(day).isocalendar()[:2]
+
+
+def _denominator_errors(
+    basket: str, expected: Mapping[str, Any], rows: Sequence[Mapping[str, Any]],
+    history_available_from: Optional[str],
+) -> List[str]:
+    errors: List[str] = []
+    expected_keys = {_week_key(week[-1]): week for week in expected["weeks"]}
+    observed: Dict[Tuple[int, int], List[str]] = {}
+    for row in rows:
+        observed.setdefault(
+            _week_key(str(row["valuation_date"])), []).append(
+                str(row["valuation_date"]))
+    for key, days in sorted(observed.items()):
+        if len(days) > 1:
+            errors.append(f"{basket}:{key}:more_than_one_row_in_one_week")
+        if key not in expected_keys:
+            errors.append(f"{basket}:{key}:row_outside_the_expected_range")
+            continue
+        if days[0] not in expected_keys[key]:
+            errors.append(f"{basket}:{days[0]}:not_a_trading_day_of_its_week")
+    for key, week in sorted(expected_keys.items()):
+        if key in observed:
+            continue
+        if history_available_from is not None \
+                and week[-1] < history_available_from:
+            # SOXX's leading gap is documented in the basket config, not a
+            # verification failure.
+            continue
+        errors.append(f"{basket}:{week[-1]}:expected_week_has_no_row")
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# top level
+# ---------------------------------------------------------------------------
+
+def verify_database(
+    conn: sqlite3.Connection,
+    baskets: Sequence[str] = ("SPY", "QQQ", "SOXX"),
+    as_of: Optional[str] = None,
+    years: int = 5,
+    sample: int = DEFAULT_SAMPLE,
+    config_dir: Optional[Path] = None,
+) -> Dict[str, Any]:
+    if as_of is None:
+        raise ValueError("--as-of is required to pin the expected window")
+    requested = _window(as_of, years)
+    missing = sorted(table for table in REQUIRED_TABLES
+                     if not _table_exists(conn, table))
+    if missing:
+        raise ValueError(f"required tables missing: {', '.join(missing)}")
+    columns = {row["name"] for row in _rows(
+        conn, "SELECT name FROM pragma_table_info('basket_weekly_pe_history')")}
+    config_root = Path(config_dir or CONFIG_DIR)
+    share_config = default_share_class_config(config_root)
+    basket_configs = load_index_pe_basket_configs(config_root)
+
+    probe = _connection_is_read_only(conn)
+    checks = [
+        _check("read_only_connection", probe["refused"],
+               {"write_probe_refused": probe["refused"],
+                "sqlite_error": probe["error"],
+                "mode": "ro + query_only + single read transaction"}),
+        _check("no_holding_weighted_columns",
+               not (columns & set(FORBIDDEN_COLUMNS)),
+               {"forbidden_present": sorted(columns & set(FORBIDDEN_COLUMNS))}),
+        _check("fx_allowlist_covers_basket_currencies",
+               {"EUR", "TWD", "CNY"} <= set(USD_PER_UNIT_BOUNDS),
+               sorted(USD_PER_UNIT_BOUNDS)),
+    ]
+
+    manifest_errors: List[str] = []
+    provenance_errors: List[str] = []
+    denominator_errors: List[str] = []
+    tier_errors: List[str] = []
+    evidence_errors: List[str] = []
+    kernel_errors: List[str] = []
+    json_errors: List[str] = []
+    version_errors: List[str] = []
+    per_basket: Dict[str, Any] = {}
+    reconciliation = {"errors": [], "reconciled_market_caps": 0,
+                      "reconciled_ttm_incomes": 0, "declined_ttm_incomes": 0}
+
+    for basket in baskets:
+        if basket not in basket_configs:
+            manifest_errors.append(f"{basket}:not_a_configured_basket")
+            continue
+        events = _rows(
+            conn, "SELECT * FROM basket_pe_backfill_runs WHERE basket = ? "
+                  "ORDER BY run_id, event_seq", [basket])
+        run_id = _latest_run(events)
+        manifest_errors.extend(
+            _manifest_errors(basket, events, run_id, requested))
+        provenance_errors.extend(
+            _refresh_provenance_errors(basket, events, run_id))
+        started = next((row for row in events
+                        if row["run_id"] == run_id
+                        and row["event_kind"] == "run_started"), None)
+        window = ((started["expected_from_date"], started["expected_to_date"])
+                  if started else requested)
+        raw_rows = _rows(
+            conn, "SELECT * FROM basket_weekly_pe_history WHERE basket = ? "
+                  "AND valuation_date BETWEEN ? AND ? ORDER BY valuation_date",
+            [basket, window[0], window[1]])
+        rows, decode_errors = _decode_rows(raw_rows)
+        json_errors.extend(decode_errors)
+        versions = sorted({str(row["methodology_version"]) for row in rows})
+        if versions not in ([], [WEEKLY_METHODOLOGY_VERSION]):
+            version_errors.append(f"{basket}:{versions}")
+        expected = _expected_weeks(conn, basket, window[0], window[1])
+        denominator_errors.extend(_denominator_errors(
+            basket, expected, rows,
+            basket_configs[basket].get("history_available_from")))
+        tier_errors.extend(_tier_consistency_errors(rows))
+        evidence_errors.extend(_evidence_errors(rows))
+        sampled = [rows[index] for index in _sample_indexes(len(rows), sample)]
+        kernel_errors.extend(_kernel_reconciliation_errors(sampled))
+        outcome = _raw_source_reconciliation(
+            conn, sampled, share_config["conventions"], share_config["groups"])
+        reconciliation["errors"].extend(outcome["errors"])
+        for key in ("reconciled_market_caps", "reconciled_ttm_incomes",
+                    "declined_ttm_incomes"):
+            reconciliation[key] += outcome[key]
+        per_basket[basket] = {
+            "manifest_run_id": run_id,
+            "manifest_window": list(window),
+            "expected_weeks": len(expected["weeks"]),
+            "first_composition_effective_date":
+                expected["first_composition_effective_date"],
+            "history_available_from":
+                basket_configs[basket].get("history_available_from"),
+            "rows": len(rows),
+            "date_range": [rows[0]["valuation_date"], rows[-1]["valuation_date"]]
+                          if rows else [],
+            "published_ttm": sum(row["ttm_pe_gaap"] is not None for row in rows),
+            "published_hindsight": sum(
+                row["hindsight_ntm_pe_gaap"] is not None for row in rows),
+            "quality_tiers": sorted({str(row["quality_tier"]) for row in rows}),
+            "sampled": [row["valuation_date"] for row in sampled],
+        }
+
+    duplicates = _rows(
+        conn, "SELECT basket, valuation_date, COUNT(*) n "
+              "FROM basket_weekly_pe_history GROUP BY basket, valuation_date "
+              "HAVING n > 1")
+
+    checks.extend([
+        _check("manifest_denominator", not manifest_errors, manifest_errors),
+        _check("forced_refresh_provenance", not provenance_errors,
+               provenance_errors),
+        _check("expected_weekly_denominator", not denominator_errors,
+               denominator_errors),
+        _check("quality_tier_and_gate_consistency", not tier_errors, tier_errors),
+        _check("materialised_evidence", not evidence_errors, evidence_errors),
+        _check("aggregate_reconciliation", not kernel_errors, kernel_errors),
+        _check("raw_source_spot_check",
+               not reconciliation["errors"]
+               and (reconciliation["reconciled_market_caps"] > 0
+                    or not any(item["rows"] for item in per_basket.values())),
+               {key: value for key, value in reconciliation.items()}),
+        _check("methodology_version", not version_errors,
+               {"expected": WEEKLY_METHODOLOGY_VERSION,
+                "errors": version_errors}),
+        _check("duplicates_and_json", not duplicates and not json_errors,
+               {"duplicate_pk": len(duplicates), "invalid_json": json_errors}),
+    ])
+
+    return {
+        "as_of": as_of,
+        "requested_window": list(requested),
+        "baskets": per_basket,
+        "checks": checks,
+        "passed": all(check["passed"] for check in checks),
+    }
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = parse_args(argv)
+    conn: Optional[sqlite3.Connection] = None
+    try:
+        conn = connect_readonly(args.db)
+        # One read transaction for every check, so an active writer cannot make
+        # two stages disagree about what the database contained.
+        conn.execute("BEGIN")
+        report = verify_database(conn, args.baskets, args.as_of, args.years,
+                                 args.sample, args.config_dir)
+        conn.rollback()
+        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True,
+                         default=str))
+        return 0 if report["passed"] else 1
+    except (FileNotFoundError, sqlite3.Error, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
