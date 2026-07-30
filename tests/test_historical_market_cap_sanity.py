@@ -1,4 +1,5 @@
 """Historical market-cap anomaly state machine and repair contracts."""
+import logging
 from unittest.mock import Mock
 
 import pytest
@@ -255,3 +256,27 @@ def test_refresh_adapter_uses_existing_client_and_atomic_store_path():
         "KLAC", from_date="2026-06-10", to_date="2026-06-12")
     store.replace_historical_market_cap_range.assert_called_once()
     assert result[0]["rows"] == 1
+    assert result[0]["skipped"] is False
+
+
+def test_refresh_adapter_skips_empty_response_without_range_replace(caplog):
+    """R2: an empty vendor response must not reach the destructive
+    range-replace CRUD at all — it must be skipped fail-closed, with a
+    warning, leaving whatever the store already has untouched."""
+    client = Mock()
+    store = Mock()
+    client.get_historical_market_cap.return_value = []
+    with caplog.at_level(
+            logging.WARNING, logger="terminal.historical_market_cap_sanity"):
+        result = refresh_market_cap_windows(
+            "KLAC", [{"from_date": "2026-06-10", "to_date": "2026-06-12"}],
+            client, store)
+    client.get_historical_market_cap.assert_called_once_with(
+        "KLAC", from_date="2026-06-10", to_date="2026-06-12")
+    store.replace_historical_market_cap_range.assert_not_called()
+    assert result[0]["rows"] == 0
+    assert result[0]["skipped"] is True
+    assert any(
+        "KLAC" in record.message and "2026-06-10" in record.message
+        for record in caplog.records
+    ), "expected a warning naming the symbol and skipped window"

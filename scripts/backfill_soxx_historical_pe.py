@@ -35,6 +35,7 @@ from terminal.historical_basket_valuation import (
 from terminal.historical_market_cap_sanity import (
     accepted_market_cap_status,
     build_forced_refresh_windows,
+    refresh_market_cap_windows,
     scan_market_cap_candidates,
 )
 
@@ -535,17 +536,14 @@ def _run_sanity(
         windows = build_forced_refresh_windows(relevant, trading, pad=5) if trading else []
         refreshed_windows: List[Dict[str, str]] = []
         if windows and client is not None:
-            for window in windows:
-                rows = client.get_historical_market_cap(
-                    symbol, from_date=window["from_date"], to_date=window["to_date"])
-                if not rows:
+            refresh_results = refresh_market_cap_windows(
+                symbol, windows, client, store)
+            for window, outcome in zip(windows, refresh_results):
+                if outcome["skipped"]:
                     continue
                 state.market_cap_by_symbol[symbol] = _replace_rows_in_memory(
                     state.market_cap_by_symbol.get(symbol, []),
-                    window["from_date"], window["to_date"], rows)
-                if store is not None:
-                    store.replace_historical_market_cap_range(
-                        symbol, window["from_date"], window["to_date"], list(rows))
+                    window["from_date"], window["to_date"], outcome["row_data"])
                 refreshed_windows.append(dict(window))
             classifications = scan_market_cap_candidates(
                 state.market_cap_by_symbol.get(symbol, []),

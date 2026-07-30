@@ -1,6 +1,9 @@
 """Pure historical market-cap sanity plus a narrow forced-refresh adapter."""
+import logging
 from bisect import bisect_left
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set
+
+logger = logging.getLogger(__name__)
 
 
 ACCEPTED_MARKET_CAP_STATUSES = frozenset({
@@ -342,13 +345,36 @@ def refresh_market_cap_windows(
     client: Any,
     store: Any,
 ) -> List[Dict[str, Any]]:
-    """Refetch using the existing client and authoritative range-replace CRUD."""
+    """Refetch using the existing client and authoritative range-replace CRUD.
+
+    An empty vendor response for a window is skipped fail-closed: the prior
+    range is left untouched and a warning is logged, instead of handing an
+    empty list to the destructive range-replace CRUD. This mirrors the safe
+    pattern previously duplicated inline in
+    scripts/backfill_soxx_historical_pe.py, which now delegates here.
+    `store` may be `None` (e.g. a network-enabled dry run) — the fetch and
+    per-window bookkeeping still happen, but nothing is persisted.
+    """
     results = []
     for window in windows:
         start = window["from_date"]
         end = window["to_date"]
         rows = client.get_historical_market_cap(
             symbol, from_date=start, to_date=end)
-        store.replace_historical_market_cap_range(symbol, start, end, rows)
-        results.append({"from_date": start, "to_date": end, "rows": len(rows)})
+        if not rows:
+            logger.warning(
+                "empty market-cap refresh response for %s %s..%s; "
+                "skipping range replace, prior range preserved",
+                symbol, start, end)
+            results.append({
+                "from_date": start, "to_date": end, "rows": 0,
+                "skipped": True, "row_data": [],
+            })
+            continue
+        if store is not None:
+            store.replace_historical_market_cap_range(symbol, start, end, rows)
+        results.append({
+            "from_date": start, "to_date": end, "rows": len(rows),
+            "skipped": False, "row_data": list(rows),
+        })
     return results

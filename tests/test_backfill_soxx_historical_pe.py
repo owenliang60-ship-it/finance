@@ -1,4 +1,5 @@
 """Backfill orchestration safety and idempotency contracts."""
+import logging
 from argparse import Namespace
 from pathlib import Path
 from unittest.mock import Mock
@@ -335,3 +336,37 @@ def test_sanity_planner_keeps_mcap_date_missing_from_price_calendar():
                if row["stage"] == "mcap_sanity"]
     assert planned
     assert "2026-01-24" in planned[0]["trigger_dates"]
+
+
+def test_sanity_stage_skips_empty_refresh_response_via_shared_adapter(caplog):
+    """R2: _run_sanity must delegate window refresh to the shared,
+    fail-closed refresh_market_cap_windows adapter instead of its own
+    inline loop. An empty vendor response must not touch the store and
+    must not corrupt in-memory state, matching the previous safe inline
+    behavior (skip) plus a warning."""
+    state = _state()
+    original_mcap = [dict(row) for row in state.market_cap_by_symbol["TEST"]]
+    state.market_cap_by_symbol["TEST"].append({
+        "symbol": "TEST", "date": "2026-01-24", "market_cap": 10000.0,
+    })
+    args = parse_args([
+        "--stage", "mcap_sanity", "--from-date", "2026-01-20",
+        "--to-date", "2026-01-24",
+    ])
+    client = Mock()
+    client.get_historical_market_cap.return_value = []
+    store = Mock()
+
+    with caplog.at_level(
+            logging.WARNING, logger="terminal.historical_market_cap_sanity"):
+        report = run_backfill(args, state, client=client, store=store)
+
+    store.replace_historical_market_cap_range.assert_not_called()
+    summary = report["stages"]["mcap_sanity"]["TEST"]
+    assert summary["refreshed"] == 0
+    assert summary["refreshed_windows"] == []
+    # In-memory state for the un-refreshed window must be untouched aside
+    # from the anomalous row appended above by the test itself.
+    assert [row for row in state.market_cap_by_symbol["TEST"]
+            if row["date"] != "2026-01-24"] == original_mcap
+    assert any("TEST" in record.message for record in caplog.records)
