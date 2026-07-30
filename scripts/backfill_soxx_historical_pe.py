@@ -17,8 +17,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from scripts.build_company_concept_registry import _backup_sqlite
 from src.data.fmp_client import FMPClient, FMPResponseError
 from src.data.fmp_forward_ingestion import (
+    _SOXX_REBALANCE_MONTHS,
     anchor_trading_date,
-    infer_soxx_rebalance_close,
+    infer_basket_rebalance_close,
     load_basket_configs,
     load_soxx_symbol_aliases,
     normalize_fund_disclosure_snapshot,
@@ -57,6 +58,10 @@ class BackfillState:
     splits_by_symbol: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
     fx_by_currency: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
     sanity_by_symbol: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
+    # Consensus rows for the hindsight tail. Only the three-index weekly
+    # backfill populates this; the SOXX TTM line never reads it.
+    estimates_by_symbol: Dict[str, List[Dict[str, Any]]] = field(
+        default_factory=dict)
 
 
 def _iso_date(value: str) -> str:
@@ -261,17 +266,23 @@ def _hydrate_symbols(
             state.splits_by_symbol[symbol] = []
 
 
-def load_state(conn: sqlite3.Connection, to_date: str) -> BackfillState:
+def load_state(
+    conn: sqlite3.Connection, to_date: str, basket_symbol: str = "SOXX",
+) -> BackfillState:
+    """Hydrate one basket's source state. The ETF's own price series is the
+    trading calendar, so every basket carries its own listing history."""
+    basket = basket_symbol.upper()
     state = BackfillState()
     state.trading_dates = [row["date"] for row in _rows(
         conn,
-        "SELECT date FROM daily_price WHERE symbol = 'SOXX' AND date <= ? ORDER BY date",
-        [to_date],
+        "SELECT date FROM daily_price WHERE symbol = ? AND date <= ? ORDER BY date",
+        [basket, to_date],
     )]
     if _table_exists(conn, "fmp_fund_disclosure_holdings"):
         state.snapshots = _rows(
             conn, "SELECT * FROM fmp_fund_disclosure_holdings "
-            "WHERE basket_symbol = 'SOXX' ORDER BY holding_date, raw_row_index")
+            "WHERE basket_symbol = ? ORDER BY holding_date, raw_row_index",
+            [basket])
     symbols = _snapshot_universe(state.snapshots)
     _hydrate_symbols(state, conn, symbols)
     if _table_exists(conn, "fx_daily"):
@@ -317,15 +328,45 @@ def _replace_snapshot_in_state(
     state.snapshots.extend(_attach_metadata(rows, metadata))
 
 
+def basket_snapshot_rules(
+    basket_config: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Calendar + snapshot-plausibility rules for one basket.
+
+    Defaults are SOXX's audited values, so every pre-existing SOXX call site
+    behaves exactly as before; SPY/QQQ pass their own entry from
+    ``config/baskets/index_pe_baskets.json``.
+    """
+    config = dict(basket_config or {})
+    quality = dict(config.get("snapshot_quality") or {})
+    return {
+        "rebalance_months": tuple(
+            config.get("rebalance_months") or _SOXX_REBALANCE_MONTHS),
+        "expected_reconstitution_month": (
+            config.get("expected_reconstitution_month", 9)
+            if basket_config is not None else 9),
+        "snapshot_quality": {
+            "minimum_members": quality.get("minimum_members", 25),
+            "maximum_members": quality.get("maximum_members", 31),
+            "minimum_weight": quality.get("minimum_weight", 99.5),
+            "maximum_weight": quality.get("maximum_weight", 100.5),
+        },
+    }
+
+
 def _fetch_sources(
     args: argparse.Namespace,
     state: BackfillState,
     client: FMPClient,
     store: Optional[MarketStore],
     report: Dict[str, Any],
+    basket_symbol: str = "SOXX",
+    basket_config: Optional[Mapping[str, Any]] = None,
 ) -> None:
+    basket = basket_symbol.upper()
     if not state.trading_dates:
-        raise ValueError("SOXX trading calendar is empty")
+        raise ValueError(f"{basket} trading calendar is empty")
+    rules = basket_snapshot_rules(basket_config)
     listing, groups, _ = load_basket_configs(PROJECT_ROOT / "config" / "baskets")
     aliases = load_soxx_symbol_aliases(PROJECT_ROOT / "config" / "soxx_symbol_aliases.json")
     fetched_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
@@ -334,7 +375,7 @@ def _fetch_sources(
         (row["holding_date"], row["source_kind"])
         for row in state.snapshots
     }
-    dates = client.get_fund_disclosure_dates("SOXX")
+    dates = client.get_fund_disclosure_dates(basket)
     if not dates:
         raise ValueError("FMP disclosure-date source is empty")
     added = 0
@@ -346,20 +387,23 @@ def _fetch_sources(
             skipped += 1
             continue
         raw = client.get_fund_disclosure(
-            "SOXX", int(item["year"]), int(item["quarter"]))
+            basket, int(item["year"]), int(item["quarter"]))
         previous_symbols = _previous_snapshot_symbols(
             state.snapshots, holding_date)
         normalized, metadata = normalize_fund_disclosure_snapshot(
-            "SOXX", raw, "disclosure", fetched_at, state.trading_dates,
-            listing, groups, aliases, previous_symbols=previous_symbols)
+            basket, raw, "disclosure", fetched_at, state.trading_dates,
+            listing, groups, aliases, previous_symbols=previous_symbols,
+            rebalance_months=rules["rebalance_months"],
+            expected_reconstitution_month=rules["expected_reconstitution_month"])
         quality.append({"holding_date": holding_date,
                         "source_kind": metadata["source_kind"],
                         "data_quality_tier": metadata["data_quality_tier"],
                         "warnings": metadata["warnings"],
-                        **validate_snapshot_quality(normalized)})
+                        **validate_snapshot_quality(
+                            normalized, **rules["snapshot_quality"])})
         if store is not None:
             store.replace_fund_disclosure_snapshot(
-                "SOXX", metadata["holding_date"], "disclosure", normalized,
+                basket, metadata["holding_date"], "disclosure", normalized,
                 rebalance_close_date=metadata["rebalance_close_date"],
                 composition_effective_date=metadata["composition_effective_date"],
                 composition_available_date=metadata["composition_available_date"],
@@ -368,26 +412,30 @@ def _fetch_sources(
         added += 1
 
     fetch_date = fetched_at[:10]
-    live_rebalance = infer_soxx_rebalance_close(fetch_date)
+    live_rebalance = infer_basket_rebalance_close(
+        fetch_date, rules["rebalance_months"])
     live_exists = any(
         row.get("source_kind") == "live"
         and row.get("rebalance_close_date") == live_rebalance
         for row in state.snapshots)
     if not live_exists or args.refresh_live:
-        raw_live = client.get_etf_holdings("SOXX")
+        raw_live = client.get_etf_holdings(basket)
         normalized, metadata = normalize_fund_disclosure_snapshot(
-            "SOXX", raw_live, "live", fetched_at, state.trading_dates,
+            basket, raw_live, "live", fetched_at, state.trading_dates,
             listing, groups, aliases,
             previous_symbols=_previous_snapshot_symbols(
-                state.snapshots, fetch_date) or None)
+                state.snapshots, fetch_date) or None,
+            rebalance_months=rules["rebalance_months"],
+            expected_reconstitution_month=rules["expected_reconstitution_month"])
         quality.append({"holding_date": metadata["holding_date"],
                         "source_kind": metadata["source_kind"],
                         "data_quality_tier": metadata["data_quality_tier"],
                         "warnings": metadata["warnings"],
-                        **validate_snapshot_quality(normalized)})
+                        **validate_snapshot_quality(
+                            normalized, **rules["snapshot_quality"])})
         if store is not None:
             store.replace_fund_disclosure_snapshot(
-                "SOXX", metadata["holding_date"], "live", normalized,
+                basket, metadata["holding_date"], "live", normalized,
                 rebalance_close_date=metadata["rebalance_close_date"],
                 composition_effective_date=metadata["composition_effective_date"],
                 composition_available_date=metadata["composition_available_date"],
@@ -410,7 +458,18 @@ def _check_fuse(stage: str, failures: List[str], total: int) -> None:
 def _run_fundamentals(
     args: argparse.Namespace, state: BackfillState, symbols: Sequence[str],
     client: Optional[FMPClient], store: Optional[MarketStore], report: Dict[str, Any],
+    fuse_on_incompleteness: bool = True,
 ) -> None:
+    """Fetch every member whose visible quarterly history has a hole.
+
+    `fuse_on_incompleteness` is the SOXX contract: over a window chosen so the
+    data exists, a member still missing four visible quarters at either end is
+    a failure. It does not transfer to a five-year, several-hundred-member
+    window, where a 2023 IPO is legitimately incomplete at the window start and
+    no amount of refetching will change that. The three-index weekly backfill
+    therefore fuses on empty vendor responses only and lets the per-point
+    coverage gates decide which early dates are publishable.
+    """
     missing = [symbol for symbol in symbols if not fundamentals_complete(
         state.income_by_symbol.get(symbol, []), args.from_date, args.to_date,
         state.trading_dates)]
@@ -434,7 +493,9 @@ def _run_fundamentals(
     final_incomplete = [symbol for symbol in symbols if not fundamentals_complete(
         state.income_by_symbol.get(symbol, []), args.from_date, args.to_date,
         state.trading_dates)]
-    _check_fuse("fundamentals", final_incomplete, len(symbols))
+    _check_fuse("fundamentals",
+                final_incomplete if fuse_on_incompleteness else failures,
+                len(symbols))
     final_complete = len(symbols) - len(final_incomplete)
     report["stages"]["fundamentals"] = {
         "preexisting_complete": len(symbols) - len(missing),
@@ -459,7 +520,14 @@ def _replace_rows_in_memory(
 def _run_mcap(
     args: argparse.Namespace, state: BackfillState, symbols: Sequence[str],
     client: Optional[FMPClient], store: Optional[MarketStore], report: Dict[str, Any],
+    fuse_on_incompleteness: bool = True,
 ) -> None:
+    """Refetch every member whose as-of market-cap chain has a gap.
+
+    See `_run_fundamentals` for why the three-index weekly backfill fuses on
+    empty vendor responses instead of residual incompleteness: a member listed
+    part-way through the window cannot be made complete at its start.
+    """
     missing = [symbol for symbol in symbols if not market_cap_complete(
         state.market_cap_by_symbol.get(symbol, []), state.trading_dates,
         args.from_date, args.to_date)]
@@ -489,7 +557,9 @@ def _run_mcap(
     final_incomplete = [symbol for symbol in symbols if not market_cap_complete(
         state.market_cap_by_symbol.get(symbol, []), state.trading_dates,
         args.from_date, args.to_date)]
-    _check_fuse("mcap", final_incomplete, len(symbols))
+    _check_fuse("mcap",
+                final_incomplete if fuse_on_incompleteness else failures,
+                len(symbols))
     final_complete = len(symbols) - len(final_incomplete)
     report["stages"]["mcap"] = {
         "preexisting_complete": len(symbols) - len(missing),
@@ -540,17 +610,32 @@ def _run_sanity(
             *[str(row["date"]) for row in relevant],
         })
         windows = build_forced_refresh_windows(relevant, trading, pad=5) if trading else []
-        refreshed_windows: List[Dict[str, str]] = []
+        refreshed_windows: List[Dict[str, Any]] = []
         if windows and client is not None:
             refresh_results = refresh_market_cap_windows(
-                symbol, windows, client, store)
+                symbol, windows, client, store,
+                existing_rows=state.market_cap_by_symbol.get(symbol, []))
             for window, outcome in zip(windows, refresh_results):
+                # Provenance is recorded for skipped windows too: a refresh
+                # that changed nothing is evidence, not absence of evidence.
+                provenance = {
+                    **dict(window),
+                    "symbol": symbol,
+                    "skipped": outcome["skipped"],
+                    "response_rows": outcome["rows"],
+                    "pre_row_hash": outcome["pre_row_hash"],
+                    "post_row_hash": outcome["post_row_hash"],
+                    "pre_row_count": outcome["pre_row_count"],
+                    "post_row_count": outcome["post_row_count"],
+                }
+                report.setdefault("forced_refresh_provenance", []).append(
+                    provenance)
                 if outcome["skipped"]:
                     continue
                 state.market_cap_by_symbol[symbol] = _replace_rows_in_memory(
                     state.market_cap_by_symbol.get(symbol, []),
                     window["from_date"], window["to_date"], outcome["row_data"])
-                refreshed_windows.append(dict(window))
+                refreshed_windows.append(provenance)
             classifications = scan_market_cap_candidates(
                 state.market_cap_by_symbol.get(symbol, []),
                 state.price_by_symbol.get(symbol, []),
