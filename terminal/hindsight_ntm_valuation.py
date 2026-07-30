@@ -25,6 +25,7 @@ arithmetic and :func:`terminal.historical_basket_valuation.select_asof_fx` at
 the valuation date, so TTM and hindsight NTM stay comparable.
 """
 from datetime import date, datetime, timezone
+from statistics import median
 from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence
 
 from terminal.historical_basket_valuation import select_asof_fx
@@ -55,6 +56,16 @@ SAME_FISCAL_QUARTER_MAX_DRIFT_DAYS = 45
 MIN_CONTINUOUS_QUARTER_GAP_DAYS = 60
 MAX_CONTINUOUS_QUARTER_GAP_DAYS = 120
 
+# Internal continuity is not enough: four mutually continuous quarters can sit
+# anywhere on the calendar. The window's first quarter must also end within one
+# quarter of the valuation date, otherwise a hole in the source data slides the
+# whole window forward and the basket's market cap at ``t`` gets divided by
+# earnings from a later period. This is not hypothetical — income_quarterly
+# begins in 2024 for 207 of its 216 symbols, so without this gate every
+# valuation date in the first years of a five-year backfill would quietly
+# borrow 2024 earnings.
+MAX_WINDOW_START_LAG_DAYS = MAX_CONTINUOUS_QUARTER_GAP_DAYS
+
 # ``fmp_estimates`` carries no currency column, so an estimate quarter inherits
 # the member's reported currency. That inference is right for every non-USD
 # basket member checked against market.db (ASML EUR, TSM/ASX/UMC TWD, PDD CNY)
@@ -62,9 +73,22 @@ MAX_CONTINUOUS_QUARTER_GAP_DAYS = 120
 # local-currency filings (PAYP in JPY, SKHY in KRW). Converting such a row
 # would be a 150x-1400x error, so a consensus whose magnitude cannot be
 # reconciled with the member's own reporting scale excludes the member instead.
-# The factor sits far above observed consensus misses (worst seen ~3.9x) and
-# far below the smallest offending FX rate (JPY ~150).
+#
+# The guard is deliberately narrow in two ways:
+#
+# * it never applies to a USD reporter, which cannot have a currency mismatch
+#   in the first place — 42 of market.db's 193 USD reporters swing more than
+#   25x internally (BA 2055x, AXP 666x, UNH 629x, CRDO 395x, INTC 132x, the
+#   last two SOXX members), so applying it there is all false positives;
+# * it anchors on the median of recent quarters rather than the all-time peak,
+#   so one extraordinary quarter cannot set the scale for years afterwards.
+#
+# The factor sits far above genuine consensus misses (worst observed ~3.9x, and
+# the non-USD members' recent quarters stay inside 2.1x of their own median)
+# and below the offending FX rates (TWD ~32x, JPY ~150x, KRW ~1400x). EUR and
+# CNY mismatches are inherently invisible to a scale test and are not claimed.
 ESTIMATE_SCALE_GUARD_FACTOR = 25.0
+ESTIMATE_SCALE_ANCHOR_QUARTERS = 8
 
 # A backfill snapshot must never become the implicit "latest" consensus
 # vintage; this mirrors ``MarketStore.get_fmp_estimates``.
@@ -168,7 +192,7 @@ def _actual_candidates(
     malformed = set()
     currency_timeline: List[Any] = []
     all_fiscal_keys = set()
-    scale_anchor = 0.0
+    scale_samples: List[Any] = []
     for raw in income_rows:
         period = str(raw.get("period") or "").upper()
         if not period.startswith("Q"):
@@ -189,7 +213,7 @@ def _actual_candidates(
         if currency:
             currency_timeline.append((fiscal.isoformat(), currency))
         if numeric_income is not None:
-            scale_anchor = max(scale_anchor, abs(numeric_income))
+            scale_samples.append((fiscal.isoformat(), abs(numeric_income)))
         # Every reported fiscal quarter is remembered, including those at or
         # before the valuation date. A consensus row a day or two past the
         # valuation date can otherwise re-import the quarter that already
@@ -218,12 +242,14 @@ def _actual_candidates(
     for fiscal_text, rows in usable.items():
         resolved[fiscal_text] = max(
             rows, key=lambda row: _accepted_sort_key(row["accepted_date"]))
+    recent = [value for _, value in
+              sorted(scale_samples, reverse=True)[:ESTIMATE_SCALE_ANCHOR_QUARTERS]]
     return {
         "quarters": resolved,
         "malformed": malformed,
         "all_fiscal_keys": all_fiscal_keys,
         "currency_timeline": sorted(currency_timeline),
-        "scale_anchor": scale_anchor,
+        "scale_anchor": median(recent) if recent else 0.0,
     }
 
 
@@ -352,9 +378,12 @@ def select_next_four_hindsight_quarters(
         # A consensus quoted in a different currency than the filings is a
         # silent order-of-magnitude error; reject the member rather than pick
         # around the suspect rows. Only the quarters that actually enter the
-        # window are judged, so a far-dated estimate cannot veto a member.
+        # window are judged, so a far-dated estimate cannot veto a member, and
+        # only non-USD reporters are judged at all.
         if scale_anchor > 0:
             for row in tail:
+                if str(row["reported_currency"]).upper() == "USD":
+                    continue
                 magnitude = abs(float(row["net_income"]))
                 if magnitude == 0:
                     continue
@@ -366,6 +395,11 @@ def select_next_four_hindsight_quarters(
     quarters = selected + tail
     if len(quarters) != HINDSIGHT_QUARTERS:
         return _failure("hindsight_quarters_insufficient",
+                        len(selected), len(tail), warnings)
+    # Anchor the window to the valuation date before judging it internally.
+    window_start_lag = (date.fromisoformat(quarters[0]["date"]) - target).days
+    if not 0 < window_start_lag <= MAX_WINDOW_START_LAG_DAYS:
+        return _failure("hindsight_window_not_anchored",
                         len(selected), len(tail), warnings)
     # Two rows labelling one fiscal quarter under different period ends are a
     # real FMP pattern for 52/53-week filers (market.db: HD 2025-01-31 and
@@ -452,10 +486,22 @@ def compute_hindsight_basket_aggregate(
     exactly the same members, so a member missing either side is dropped from
     both. ``mcap_coverage`` measures how much of the observable basket market
     cap that set represents, and gates publication.
+
+    ``weight_coverage`` is reported alongside but does **not** gate. A member
+    with no market cap at all enters neither side of the mcap ratio, so a
+    sparse market-cap history can clear the 90% gate on a small slice of the
+    basket; disclosure weight is the independent measure that exposes it, and
+    the backfill verifier asserts on it.
     """
     observed_market_cap = 0.0
+    total_weight = 0.0
+    covered_weight = 0.0
     covered = []
     for member in members:
+        weight = member.get("weight_pct")
+        weight = float(weight) if weight is not None else 0.0
+        if weight > 0:
+            total_weight += weight
         market_cap = member.get("market_cap")
         if market_cap is None:
             continue
@@ -466,6 +512,8 @@ def compute_hindsight_basket_aggregate(
         income = member.get("hindsight_ntm_net_income_usd")
         if income is None:
             continue
+        if weight > 0:
+            covered_weight += weight
         covered.append({
             **dict(member),
             "market_cap": market_cap,
@@ -484,6 +532,10 @@ def compute_hindsight_basket_aggregate(
         "observed_market_cap": observed_market_cap,
         "hindsight_ntm_net_income_usd": income_total,
         "mcap_coverage": coverage,
+        "weight_coverage": (covered_weight / total_weight
+                            if total_weight > 0 else 0.0),
+        "covered_weight": covered_weight,
+        "eligible_weight": total_weight,
         "covered_members": covered,
     }
 
@@ -499,6 +551,7 @@ def compute_hindsight_ntm_valuation(
     basket_symbol: str = "SOXX",
     consensus_snapshot_date: Optional[str] = None,
     max_snapshot_date: Optional[str] = None,
+    share_class_groups: Optional[Mapping[str, Sequence[str]]] = None,
     minimum_mcap_coverage: float = MINIMUM_MCAP_COVERAGE,
     methodology_version: str = HINDSIGHT_METHODOLOGY_VERSION,
 ) -> Dict[str, Any]:
@@ -508,6 +561,22 @@ def compute_hindsight_ntm_valuation(
     (the data key, after any alias resolution), ``weight_pct`` and the
     valuation-date ``market_cap``. This engine touches no database and no
     network; it is pure computation over the rows handed to it.
+
+    ``share_class_groups`` maps a primary ticker to its secondary listings, in
+    the shape of ``config/baskets/share_class_groups.json``. It exists so one
+    company cannot be aggregated twice: FMP files full-company net income under
+    **every** class (market.db carries GOOGL for 10 quarters and GOOG for 8),
+    so counting both entries divides one company's market cap by twice its
+    earnings.
+
+    Such a pair is excluded rather than merged, deliberately. FMP's market-cap
+    convention is not consistent across pairs — GOOGL and GOOG report an
+    identical full-company figure, while FOXA/FOX and NWSA/NWS are split across
+    the classes — so summing the two market caps would be right for Fox and
+    double Alphabet, and taking one would be right for Alphabet and halve Fox.
+    A pure engine cannot pick correctly, so it refuses and says so. Merging
+    belongs upstream in the holdings normalizer, where the convention is known
+    per source.
     """
     snapshot = consensus_snapshot_date or select_latest_allowed_snapshot(
         estimates_by_symbol, max_snapshot_date=max_snapshot_date)
@@ -515,9 +584,25 @@ def compute_hindsight_ntm_valuation(
         str(value) for value in composition.get("snapshot_warnings", [])]
     member_evidence: List[Dict[str, Any]] = []
 
+    secondary_to_primary = {
+        str(secondary).upper(): str(primary).upper()
+        for primary, secondaries in (share_class_groups or {}).items()
+        for secondary in secondaries
+    }
+    company_counts: Dict[str, int] = {}
+    for member in members:
+        symbol = str(member.get("symbol") or "").upper()
+        company = secondary_to_primary.get(symbol, symbol)
+        company_counts[company] = company_counts.get(company, 0) + 1
+    duplicate_companies = {company for company, count in company_counts.items()
+                           if count > 1}
+    for company in sorted(duplicate_companies):
+        warnings.append(f"duplicate_company_share_class:{company}")
+
     for member in sorted(members, key=lambda row: str(row.get("symbol"))):
         symbol = str(member.get("symbol") or "").upper()
         raw_symbol = str(member.get("raw_symbol") or symbol).upper()
+        company = secondary_to_primary.get(symbol, symbol)
         market_cap = member.get("market_cap")
         weight_pct = member.get("weight_pct")
         estimate_rows = estimates_by_symbol.get(symbol, [])
@@ -531,7 +616,9 @@ def compute_hindsight_ntm_valuation(
             if window["quarters"] is not None else None)
 
         exclusion_reason = None
-        if market_cap is None:
+        if company in duplicate_companies:
+            exclusion_reason = "duplicate_company_share_class"
+        elif market_cap is None:
             exclusion_reason = "market_cap_missing_stale_or_quarantined"
         elif window["quarters"] is None:
             exclusion_reason = window["exclusion_reason"]
@@ -609,6 +696,7 @@ def compute_hindsight_ntm_valuation(
         "n_members": len(member_evidence),
         "n_covered_hindsight": len(covered),
         "mcap_coverage_hindsight": aggregate["mcap_coverage"],
+        "weight_coverage_hindsight": aggregate["weight_coverage"],
         "hindsight_actual_quarters": actual_quarters,
         "hindsight_estimate_quarters": estimate_quarters,
         "composition_effective_date": str(

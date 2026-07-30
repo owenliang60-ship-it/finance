@@ -492,6 +492,235 @@ def test_member_without_reported_income_history_cannot_be_built_from_consensus()
     assert bare["exclusion_reason"] == "income_history_missing"
 
 
+# ---------------------------------------------------------------------------
+# Review fix 1 (Critical): the window must be anchored to the valuation date
+# ---------------------------------------------------------------------------
+
+def test_hole_immediately_after_valuation_date_cannot_slide_the_window():
+    # 2026-03-31 is absent from income_quarterly entirely (not malformed, just
+    # never ingested). The remaining four quarters are mutually continuous, so
+    # nothing downstream notices that the window now starts 181 days after the
+    # valuation date and is priced against a market cap from half a year
+    # earlier.
+    income = [
+        _actual("2026-06-30", 25.0, period="Q2"),
+        _actual("2026-09-30", 25.0, period="Q3"),
+        _actual("2026-12-31", 25.0, period="Q4"),
+        _actual("2027-03-31", 25.0, period="Q1"),
+    ]
+    window = select_next_four_hindsight_quarters(
+        income, [], "2025-12-31", consensus_snapshot_date=None)
+    assert window["quarters"] is None
+    assert window["exclusion_reason"] == "hindsight_window_not_anchored"
+
+
+def test_five_year_backfill_left_edge_cannot_borrow_future_earnings():
+    # income_quarterly starts in 2024 for 207 of its 216 symbols, so a 2021
+    # valuation date must not silently pull 2024 earnings against a 2021
+    # market cap — the failure mode that would corrupt the left half of the
+    # five-year weekly series.
+    income = _actual_year(income=25.0, year=2024)
+    valuation = compute_hindsight_ntm_valuation(
+        valuation_date="2021-06-30",
+        members=[_member("AAA")],
+        income_by_symbol={"AAA": income},
+        estimates_by_symbol={},
+        fx_by_currency=_fx("USD", 1.0),
+        composition=COMPOSITION,
+    )
+    assert valuation["hindsight_ntm_pe_gaap"] is None
+    assert valuation["quality_tier"] == QUALITY_TIER_UNPUBLISHABLE
+    evidence = valuation["members_json"][0]
+    assert evidence["exclusion_reason"] == "hindsight_window_not_anchored"
+
+
+def test_window_starting_one_normal_quarter_after_the_valuation_date_is_kept():
+    # The anchor gate must not reject the ordinary case: the next period end
+    # is up to one quarter away, including a filer whose quarter ends the day
+    # after the valuation date.
+    income = _actual_year(income=25.0, year=2026)
+    just_after = select_next_four_hindsight_quarters(
+        income, [], "2026-03-30", consensus_snapshot_date=None)
+    assert just_after["exclusion_reason"] is None
+    assert just_after["quarters"][0]["date"] == "2026-03-31"
+
+    full_quarter = select_next_four_hindsight_quarters(
+        income, [], "2025-12-31", consensus_snapshot_date=None)
+    assert full_quarter["exclusion_reason"] is None
+    assert full_quarter["quarters"][0]["date"] == "2026-03-31"
+
+
+def test_estimate_only_window_is_also_anchored_to_the_valuation_date():
+    income = _actual_year(income=25.0, year=2025)
+    estimates = [
+        _estimate("2026-09-30", 10.0), _estimate("2026-12-31", 20.0),
+        _estimate("2027-03-31", 30.0), _estimate("2027-06-30", 40.0),
+    ]   # first consensus quarter is 273 days after the valuation date
+    window = select_next_four_hindsight_quarters(
+        income, estimates, "2025-12-31",
+        consensus_snapshot_date=LATEST_SNAPSHOT)
+    assert window["quarters"] is None
+    assert window["exclusion_reason"] == "hindsight_window_not_anchored"
+
+
+# ---------------------------------------------------------------------------
+# Review fix 2 (Important): one company must never be counted twice
+# ---------------------------------------------------------------------------
+
+def test_dual_share_class_members_do_not_double_count_net_income():
+    # FMP carries full-company net income under BOTH tickers (GOOGL 10
+    # quarters, GOOG 8) while the disclosure splits the market cap across the
+    # classes. Summing each entry once would divide a single company's market
+    # cap by twice its earnings.
+    income = {
+        "AAA": _actual_year(income=225.0, year=2026),
+        "GOOGL": _actual_year(symbol="GOOGL", income=25.0, year=2026),
+        "GOOG": _actual_year(symbol="GOOG", income=25.0, year=2026),
+    }
+    valuation = compute_hindsight_ntm_valuation(
+        valuation_date="2025-12-31",
+        members=[_member("AAA", market_cap=9000.0, weight_pct=90.0),
+                 _member("GOOGL", market_cap=500.0, weight_pct=5.0),
+                 _member("GOOG", market_cap=500.0, weight_pct=5.0)],
+        income_by_symbol=income,
+        estimates_by_symbol={},
+        fx_by_currency=_fx("USD", 1.0),
+        composition=COMPOSITION,
+        share_class_groups={"GOOGL": ["GOOG"]},
+    )
+    evidence = {row["symbol"]: row for row in valuation["members_json"]}
+    for symbol in ("GOOGL", "GOOG"):
+        assert evidence[symbol]["exclusion_reason"] == (
+            "duplicate_company_share_class")
+    # Alphabet's 100 of net income is never added twice: the basket is AAA
+    # alone, and its P/E is undistorted.
+    assert valuation["hindsight_ntm_net_income"] == pytest.approx(900.0)
+    assert valuation["hindsight_total_mcap"] == pytest.approx(9000.0)
+    assert valuation["hindsight_ntm_pe_gaap"] == pytest.approx(10.0)
+    assert any(warning.startswith("duplicate_company_share_class:GOOGL")
+               for warning in valuation["warnings_json"])
+
+
+def test_repeated_resolved_symbol_is_rejected_without_share_class_config():
+    income = {"AAA": _actual_year(income=25.0, year=2026)}
+    valuation = compute_hindsight_ntm_valuation(
+        valuation_date="2025-12-31",
+        members=[_member("AAA", market_cap=500.0),
+                 _member("AAA", market_cap=500.0)],
+        income_by_symbol=income,
+        estimates_by_symbol={},
+        fx_by_currency=_fx("USD", 1.0),
+        composition=COMPOSITION,
+    )
+    assert valuation["n_covered_hindsight"] == 0
+    assert valuation["quality_tier"] == QUALITY_TIER_UNPUBLISHABLE
+    assert all(row["exclusion_reason"] == "duplicate_company_share_class"
+               for row in valuation["members_json"])
+
+
+def test_single_share_class_member_is_unaffected_by_the_group_config():
+    income = {"GOOGL": _actual_year(symbol="GOOGL", income=25.0, year=2026)}
+    valuation = compute_hindsight_ntm_valuation(
+        valuation_date="2025-12-31",
+        members=[_member("GOOGL", market_cap=1000.0)],
+        income_by_symbol=income,
+        estimates_by_symbol={},
+        fx_by_currency=_fx("USD", 1.0),
+        composition=COMPOSITION,
+        share_class_groups={"GOOGL": ["GOOG"]},
+    )
+    assert valuation["hindsight_ntm_pe_gaap"] == pytest.approx(10.0)
+    assert valuation["n_covered_hindsight"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Review fix 3 (Important): the scale guard must not shoot volatile USD filers
+# ---------------------------------------------------------------------------
+
+def test_volatile_usd_reporter_is_not_killed_by_the_scale_guard():
+    # 42 of 193 USD reporters in market.db swing more than 25x internally
+    # (BA 2055x, AXP 666x, UNH 629x, CRDO 395x — CRDO and INTC are SOXX
+    # members). A USD filer cannot have a currency mismatch, so the guard must
+    # not apply to it at all.
+    income = [
+        _actual("2026-03-31", 4_000_000.0, period="Q1"),      # trough quarter
+        _actual("2026-06-30", 8_220_000_000.0, period="Q2"),  # peak quarter
+    ]
+    estimates = [
+        _estimate("2026-09-30", 120_000_000.0),
+        _estimate("2026-12-31", 150_000_000.0),
+    ]
+    window = select_next_four_hindsight_quarters(
+        income, estimates, "2025-12-31",
+        consensus_snapshot_date=LATEST_SNAPSHOT)
+    assert window["exclusion_reason"] is None
+    assert window["estimate_count"] == 2
+
+
+def test_scale_guard_anchors_on_recent_quarters_not_the_all_time_peak():
+    # A foreign filer whose distant past contains a one-off peak must still be
+    # judged against its current reporting scale.
+    income = [
+        _actual("2024-03-31", 900_000_000_000.0, period="Q1", currency="TWD"),
+        _actual("2026-03-31", 20_000_000_000.0, period="Q1", currency="TWD"),
+        _actual("2026-06-30", 21_000_000_000.0, period="Q2", currency="TWD"),
+    ]
+    estimates = [
+        _estimate("2026-09-30", 22_000_000_000.0),
+        _estimate("2026-12-31", 23_000_000_000.0),
+    ]
+    window = select_next_four_hindsight_quarters(
+        income, estimates, "2025-12-31",
+        consensus_snapshot_date=LATEST_SNAPSHOT)
+    assert window["exclusion_reason"] is None
+    assert window["estimate_count"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Review fix 4 (Important): disclosure-weight coverage is a data contract
+# ---------------------------------------------------------------------------
+
+def test_weight_coverage_exposes_members_the_mcap_gate_cannot_see():
+    # A member with no market cap enters neither side of the mcap ratio, so a
+    # sparse historical_market_cap can pass the 90% gate on a small slice of
+    # the basket. Weight coverage makes that visible to the verifier.
+    income = {"AAA": _actual_year(income=90.0, year=2026)}
+    valuation = compute_hindsight_ntm_valuation(
+        valuation_date="2025-12-31",
+        members=[_member("AAA", market_cap=900.0, weight_pct=30.0),
+                 _member("BBB", market_cap=100.0, weight_pct=10.0),
+                 {"symbol": "CCC", "market_cap": None, "weight_pct": 60.0}],
+        income_by_symbol=income,
+        estimates_by_symbol={},
+        fx_by_currency=_fx("USD", 1.0),
+        composition=COMPOSITION,
+    )
+    # The published gate is unchanged: mcap coverage still sees only 900/1000.
+    assert valuation["mcap_coverage_hindsight"] == pytest.approx(0.90)
+    assert valuation["hindsight_ntm_pe_gaap"] == pytest.approx(2.5)
+    # But only 30% of the disclosure weight is actually behind that number.
+    assert valuation["weight_coverage_hindsight"] == pytest.approx(0.30)
+    assert 0.0 <= valuation["weight_coverage_hindsight"] <= 1.0
+
+
+def test_weight_coverage_is_one_when_every_member_is_covered():
+    income = {
+        "AAA": _actual_year(income=25.0, year=2026),
+        "BBB": _actual_year(symbol="BBB", income=25.0, year=2026),
+    }
+    valuation = compute_hindsight_ntm_valuation(
+        valuation_date="2025-12-31",
+        members=[_member("AAA", market_cap=500.0, weight_pct=40.0),
+                 _member("BBB", market_cap=500.0, weight_pct=60.0)],
+        income_by_symbol=income,
+        estimates_by_symbol={},
+        fx_by_currency=_fx("USD", 1.0),
+        composition=COMPOSITION,
+    )
+    assert valuation["weight_coverage_hindsight"] == pytest.approx(1.0)
+    assert valuation["mcap_coverage_hindsight"] == pytest.approx(1.0)
+
+
 def test_missing_tail_without_consensus_snapshot_is_unpublishable():
     income = _actual_year(income=25.0, year=2026)[:2]
     window = select_next_four_hindsight_quarters(
