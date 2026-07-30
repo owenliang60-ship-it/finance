@@ -16,6 +16,20 @@
 
 **Approved design:** [`2026-07-19-index-pe-morning-chart-design.md`](2026-07-19-index-pe-morning-chart-design.md)
 
+**2026-07-30 修订（Boss 批准）**：按 CC 审核 [`docs/audit/2026-07-30-three-index-pe-cc-review.md`](../audit/2026-07-30-three-index-pe-cc-review.md) 完成 7 处修订，编号 R1–R7：
+
+| 编号 | 修订 | 落点 |
+|---|---|---|
+| R1 | 主 PE 口径契约：aggregate 唯一，gate 作用于 aggregate 本身 | §3.1、Task 4 |
+| R2 | `refresh_market_cap_windows` 空响应 fail-closed 修复 | Task 0 Step 4 |
+| R3 | producer/verifier 聚合共享纯函数 + issue048 manifest 对齐 | Task 4 |
+| R4 | Task 0 数字修正（18 commits）、先合 main、冲突面预期仅 ARCHITECTURE.md | Task 0 |
+| R5 | hindsight tail 演化契约（quality_tier 单向升级、percentile 仅 actual_only） | §3.3、Task 2、Task 6 |
+| R6 | 晨报位置冻结为 `0c`（0b 之后）、split_marker 约束、typed image dispatch | Task 7 |
+| R7 | 测试基线在 Task 0 合并后重新冻结，废弃 2026-07-19 旧基线 | Task 0、Task 9 |
+
+执行拆为三个审批停点：**停点 1** = Task 0–4（离线历史数据产品 + dry-run 验收）；**停点 2** = Task 5（打开 `fmp_basket_valuation` 生产写入路径）；**停点 3** = Task 6–9（图表 + 晨报 + 运维 + 部署审批）。每个停点须 Boss 批准后才进入下一段。
+
 ## 1. 建成后的架构
 
 ```mermaid
@@ -113,6 +127,8 @@ fwd_pe_ntm(snapshot)
 - 最近尾部按 fiscal quarter key 去重：actual 优先，缺少的 quarter 才使用 latest consensus；恰好四个连续季度才可发布；
 - 外币净利润沿用历史引擎的估值日 FX 口径，保持 TTM/NTM 横向一致。
 
+**口径契约（R1）**：三条指标全部且仅使用 aggregate 口径 `Σmcap / ΣNI`，同一面板三线可比。SOXX 历史引擎的主字段 `rebalance_weighted_ttm_pe_gaap_proxy`（holding-weighted，`terminal/historical_basket_valuation.py:269-298`）**不是**本产品指标，仅作为 `basket_ttm_valuation` 诊断证据保留，不进 weekly 表、不进图、不进 percentile。该引擎的 aggregate 次级字段 `uncapped_mcap_basket_pe_gaap` 当前**不过 90% coverage gate**（`:473-475` 中 primary 为 None 时 secondary 仍写值），因此 weekly 表的 `ttm_pe_gaap` 不得直接提升该字段——必须对 aggregate 指标本身重新施加 `mcap_coverage_ttm >= 0.90` 门控后写入。
+
 ### 3.2 周频取样
 
 - 目标频率：每个自然周最后一个可发布交易日；
@@ -139,7 +155,13 @@ fwd_pe_ntm(snapshot)
 | `members_json`, `warnings_json` | 审计证据 |
 | `methodology_version` | 固定版本，不允许静默覆写旧口径 |
 
-窄 CRUD：atomic whole-batch upsert、按 basket/date 只读查询、禁止 generic delete/update。
+窄 CRUD：atomic whole-batch upsert、按 basket/date 只读查询、禁止 generic delete/update。新表必须显式注册进 `market_store.py` 的表白名单机制（现 `:606` 附近），未注册 fail-fast。
+
+**Tail 演化契约（R5）**：`quality_tier` 从 `latest_consensus_tail` 升级为 `actual_only` 是**同一 methodology 下的合法周频数据更新**，不 bump `methodology_version`。规则：
+
+1. 每次 weekly run 重算所有 hindsight tail 未满四个 actual 季度的点（约最近 12 个月）；
+2. `quality_tier` 只允许单向升级（estimate → actual）；降级（actual → estimate）必须拒绝写入并记录 warning；
+3. 五年 percentile 只对 `quality_tier = actual_only` 的点计算，consensus tail 点展示数值但不参与分位（查询层与 renderer 同契约，见 Task 6）。
 
 ## 4. 替代方案与取舍
 
@@ -182,34 +204,35 @@ fwd_pe_ntm(snapshot)
 
 ## 6. 实施任务
 
-### Task 0：合并已审计历史证据层
+### Task 0：合并已审计历史证据层（R2 / R4 / R7 修订）
 
 **Files:**
-- Merge: `codex/soxx-historical-ttm-pe`
-- Resolve: `src/data/fmp_client.py`
-- Resolve: `src/data/fmp_forward_ingestion.py`
-- Resolve: `src/data/market_store.py`
-- Resolve: `ARCHITECTURE.md`
-- Resolve: `CLAUDE.md`
+- Merge: `main`（先，消化 14 behind，含 volconc 晨报线）
+- Merge: `codex/soxx-historical-ttm-pe`（后）
+- Resolve: `ARCHITECTURE.md`（预期唯一冲突文件）
+- Modify: `terminal/historical_market_cap_sanity.py`（R2 修复）
+- Modify: `scripts/backfill_soxx_historical_pe.py`（R2 修复）
+- Modify: `tests/test_historical_market_cap_sanity.py`（R2 测试）
 
-**Step 1 — 记录双分支基线**
+**Step 1 — 记录双分支基线（R4）**
 
 ```bash
 git log --oneline main..codex/soxx-historical-ttm-pe
 git diff --stat main...codex/soxx-historical-ttm-pe
 ```
 
-验收：15 个历史分支 commits 与 audit handoff 一致；当前 feature worktree clean。
+验收：**18** 个历史分支 commits（audit 基准 `d47f6a9` 的 17 个 + 审计修复 `4b96d47`）；`38 files, +7829/-3`；当前 feature worktree clean。
 
-**Step 2 — 合并，不改写审计分支历史**
+**Step 2 — 先合 main，再合审计分支，不改写任一历史（R4）**
 
 ```bash
+git merge main
 git merge --no-ff codex/soxx-historical-ttm-pe
 ```
 
-冲突原则：保留 main 的 FMP forward Phase 1 契约，同时保留 historical 分支的 disclosure/FX/split endpoint 与表；不为了消冲突删除任一侧测试。
+冲突预期：merge-base `db86d75` 之后 main 侧改动 11 个文件、SOXX 侧 38 个，交集**仅 `ARCHITECTURE.md`**（`src/data/fmp_client.py` / `fmp_forward_ingestion.py` / `market_store.py` / `CLAUDE.md` 只有分支侧改动，应干净合入）。出现预期外冲突立即停下 re-plan。冲突原则不变：保留 main 的 FMP forward Phase 1 契约与 volconc 晨报线，同时保留 historical 分支的 disclosure/FX/split endpoint 与表；不为了消冲突删除任一侧测试。
 
-**Step 3 — 运行组合基线**
+**Step 3 — 运行组合基线并重新冻结全量基线（R7）**
 
 ```bash
 python -m pytest \
@@ -217,12 +240,27 @@ python -m pytest \
   tests/test_fmp_forward_ingestion.py \
   tests/test_market_store_fmp_forward.py \
   tests/test_historical_basket_valuation.py \
-  tests/test_historical_market_cap_sanity.py -q
+  tests/test_historical_market_cap_sanity.py \
+  tests/test_morning_report.py \
+  tests/test_morning_html_report.py -q
+python -m pytest tests/ -q
 ```
 
-验收：目标测试全绿；若出现非冲突型回归，立即停下 re-plan，不继续叠功能。
+验收：目标测试全绿（含 volconc frozen-fixture parity 零变化）；full-suite 的 pre-existing failures 清单落盘 `docs/plans/2026-07-19-index-pe-morning-chart-baseline.md`，作为 Task 9 的唯一比较基线——**废弃 2026-07-19 旧基线与 SOXX audit 的 14-failed 数字**。若出现非冲突型回归，立即停下 re-plan，不继续叠功能。
 
-**Commit:** merge commit 保留 provenance；必要的冲突修复包含在该 merge commit。
+**Step 4 — 修复 refresh 空响应数据丢失隐患（R2）**
+
+现状：`terminal/historical_market_cap_sanity.py:339-354` 的 `refresh_market_cap_windows` 在 API 空响应时无条件 `replace_historical_market_cap_range(..., [])`，会删掉整个 range 的 HMC 行；生产实际跑的是 `scripts/backfill_soxx_historical_pe.py:539-548` 的内联安全版（`if not rows: continue`），被测试覆盖的却是危险的库函数版。
+
+RED tests：
+
+1. 库函数版空响应不得触发 range replace（fail-closed，记 warning）；
+2. backfill 改为调用统一后的库函数，行为与原内联版一致（空响应 skip + warning）；
+3. 非空响应路径回归不变。
+
+GREEN：统一为单一实现——库函数空响应 fail-closed，backfill 内联版删除、改调库函数。
+
+**Commit:** merge main 与 merge SOXX 各保留 provenance，冲突修复包含在各自 merge commit；R2 修复独立 commit `fix(valuation): fail-closed empty refresh window replacement`。
 
 ---
 
@@ -232,9 +270,9 @@ python -m pytest \
 - Modify: `config/soxx_historical_pe.json`（重命名为通用配置或新建通用 SSOT，迁移保留兼容）
 - Modify: `terminal/soxx_holdings_normalizer.py`（提炼通用 basket normalizer，保留 wrapper）
 - Modify: `scripts/backfill_soxx_historical_pe.py`（提炼通用 orchestrator，保留旧 CLI alias）
-- Create: `config/index_pe_baskets.json`
+- Create: `config/baskets/index_pe_baskets.json`（进 `config/baskets/` 目录，遵循 `load_basket_configs` 惯例（`scripts/update_fmp_forward.py:133`），不在 `config/` 根另起平行文件）
 - Create: `tests/test_index_pe_basket_config.py`
-- Create: `tests/test_index_holdings_normalizer.py`
+- Create: `tests/test_index_holdings_normalizer.py`（覆盖**历史 disclosure** normalizer；与既有 `tests/test_fmp_forward_ingestion.py` 覆盖的 live snapshot `normalize_holdings` 是两个不同 normalizer，测试文件 docstring 需写明边界）
 
 **RED tests:**
 
@@ -277,7 +315,10 @@ python -m pytest tests/test_index_pe_basket_config.py tests/test_index_holdings_
 4. coverage、quarter count、quality tier CHECK/fail-fast；
 5. `(basket, valuation_date)` 幂等更新同 methodology version；
 6. methodology version 不同且已有 complete row 时拒绝静默覆盖；
-7. read-only range query 不创建 DB、不写 last_updated。
+7. read-only range query 不创建 DB、不写 last_updated；
+8. （R5）同 methodology 下 `latest_consensus_tail` 行被新一周 actual 数据升级为 `actual_only` 成功且留审计痕迹；
+9. （R5）`quality_tier` 降级（actual → estimate）被拒绝并写 warning；
+10. 新表已注册 `market_store.py` 表白名单，未注册路径 fail-fast。
 
 **GREEN implementation:**
 
@@ -356,11 +397,16 @@ python -m pytest tests/test_hindsight_ntm_valuation.py \
 8. dry-run 不写 valuation 表；
 9. verifier `mode=ro`，独立重算抽样源行；
 10. verifier 检查 jump、coverage、连续季度、成员对称、日期穿越、tail quality、methodology version、三篮子日期范围；
-11. SOXX 开头 gap 属于 expected，不报假失败。
+11. SOXX 开头 gap 属于 expected，不报假失败；
+12. （R1）weekly `ttm_pe_gaap` 为 aggregate 口径 `Σmcap/ΣNI` 且 90% gate 作用于该指标本身（coverage 89.99% → NULL）；holding-weighted 字段不出现在 weekly 表；
+13. （R3）producer 与 verifier 的 basket 聚合走同一纯函数（import 同源断言），另有异构抽样 reconciliation（抽样点用独立 SQL/纯 Python 重算对账）；
+14. （R3）run manifest 为 append-only，含 forced-refresh 窗口的 pre/post row hash，manifest 声明 expected date range（防止较晚 `--min-date` 只验证 suffix）。
 
 **GREEN implementation:**
 
-- wrapper 复用原 audited backfill，不重写 FMP/sanity/FX 逻辑；
+- wrapper 复用原 audited backfill 的 FMP/sanity/FX 逻辑，但 weekly `ttm_pe_gaap` 按 R1 契约（§3.1）对 aggregate 指标重新施加 coverage gate，不直接提升 `uncapped_mcap_basket_pe_gaap`；
+- （R3）聚合公式提炼为共享纯函数，消灭现状的手抄双份（`scripts/verify_basket_ttm_pe.py:397-406` vs `terminal/historical_basket_valuation.py:278-290`，含各存一份的 90% 阈值）；verifier 独立性由异构抽样 reconciliation 补足，定位遵循 issue048（tamper/evidence 检查器而非独立方法学 oracle）；
+- （R3）manifest 逐条对齐 issue048 的四个 recurring 关闭条件；
 - 一次性计算日频 TTM 证据，再选周频点；
 - 后视镜 NTM 与同一 valuation date、同一 composition 组合；
 - 每个 basket batch 独立事务，任一 basket 失败不让该 basket partial rows 可见；
@@ -404,7 +450,8 @@ python -m scripts.verify_index_pe_history \
 7. SOX → display SOXX 映射仅在消费层，不改源 basket identity；
 8. resume 不重复覆盖坏的 snapshot state；
 9. cron writer lock 内顺序为 ingestion → PIT valuation → history-tail refresh → verifier；
-10. 任一步 non-zero 退出码上抛。
+10. 任一步 non-zero 退出码上抛；
+11. 既有 reader `scripts/verify_fmp_forward.py:320`（`SELECT basket, members_json FROM fmp_basket_valuation`）在表从 0 行变为有数据后行为正确（空路径 → 逐行校验），不产生假绿。
 
 **GREEN implementation:**
 
@@ -449,7 +496,7 @@ python -m pytest tests/test_forward_valuation.py tests/test_update_fmp_forward.p
 - 用 Pillow `ImageDraw.line` 绘制原始周频折线，不新增 matplotlib；
 - 颜色：TTM teal、hindsight purple、PIT coral；
 - 用分段绘制实现虚线与 gap；
-- percentile 复用项目公式 `count(values <= current) / total`；
+- percentile 复用项目公式 `count(values <= current) / total`，且（R5）只对 `quality_tier = actual_only` 的点计算——consensus tail 点与 PIT 序列不参与分位；
 - 所有坐标/格式函数保持纯函数，便于单测。
 
 **Visual verify:**
@@ -479,7 +526,7 @@ python -m terminal.index_valuation_chart \
 1. HTML payload 支持 typed `image` block；
 2. PNG 转 data URI，自包含 HTML 不引用本地绝对路径；
 3. image alt/caption HTML escape；
-4. 图插在大盘择时之后、PMARP 之前；
+4. （R6）图作为 `0c. 三指数估值` 插在 `0b. 成交集中度` 之后、`1. PMARP` 之前；既有 section 零重排，volconc frozen-fixture parity 测试零变化；`*D. Dollar Volume*` split_marker（`scripts/morning_report.py:104`）逐字不变；
 5. HTML 成功仍只发送一个 document；
 6. HTML 失败时 valuation PNG 进入 PDF page list；
 7. 不额外调用 `send_photo`；
@@ -488,7 +535,7 @@ python -m terminal.index_valuation_chart \
 
 **GREEN implementation:**
 
-- `morning_html_report` 增加最小 `block.type == image` 分支；
+- （R6）`morning_html_report` 现状**没有** block type 概念（`terminal/morning_html_report.py:33-44`，靠 `rows is None and not columns` 推断表格/标题）——引入最小 typed dispatch：dict 含 `type == "image"` 时优先分派，其余保留现有推断路径向后兼容；这是新增一个分派机制而非往 switch 加 case，`tests/test_morning_html_report.py`（现仅 89 行）需同步扩覆盖；
 - `morning_report` 在 delivery 前生成一次 valuation PNG，HTML 与 PDF 共用；
 - 不把 chart 逻辑写进 HTML renderer；
 - HTML CSS 只加响应式宽度，无阴影/渐变。
@@ -569,7 +616,7 @@ bash -n scripts/run_forward_data.sh scripts/cron_wrapper.sh
 git diff --check
 ```
 
-冻结基线中的 5 个 Concept Registry 环境失败必须与变更前完全一致；零新增失败。不能顺手修改它们。
+（R7）比较基线是 Task 0 Step 3 重新冻结并落盘到 `docs/plans/2026-07-19-index-pe-morning-chart-baseline.md` 的 pre-existing failures 清单——不引用 2026-07-19 旧基线或 SOXX audit 的 14-failed 数字。零新增失败；pre-existing failures 不能顺手修改。
 
 **Step 3 — Security / write-boundary audit**
 

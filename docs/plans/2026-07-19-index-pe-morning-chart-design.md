@@ -6,6 +6,12 @@
 
 **北极星对齐**：数据层（PIT 基本面与成分快照）→ 分析层（指数估值聚合）→ 晨报消费层
 
+**2026-07-30 修订**（CC 审核 [`docs/audit/2026-07-30-three-index-pe-cc-review.md`](../audit/2026-07-30-three-index-pe-cc-review.md)，Boss 批准）：
+
+1. **§2.1 口径澄清**：aggregate `Σmcap/ΣNI` 是唯一的图表与 percentile 指标。SOXX 历史引擎的 holding-weighted 主字段（`rebalance_weighted_ttm_pe_gaap_proxy`）仅作日频诊断证据保留，不进 weekly 表、不进图；其 aggregate 次级字段现状不过 90% gate，weekly 产品须对 aggregate 指标重新施加门控。
+2. **§4 percentile 澄清**：五年分位只对 `quality_tier = actual_only` 的点计算；consensus tail 点展示数值但不参与分位；PIT 序列不给分位。
+3. **§5 位置冻结**：图表作为 `0c. 三指数估值` 插入 `0b. 成交集中度` 之后、`1. PMARP` 之前；既有 section 不重排，`*D. Dollar Volume*` Telegram split_marker 不变。
+
 ## 1. 目标
 
 在每日晨报中加入一张自包含 PNG，展示 SPY、QQQ、SOXX 过去五年的周频估值。每个指数一个纵向面板，每个面板同时展示：
