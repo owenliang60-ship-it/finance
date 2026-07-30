@@ -359,6 +359,10 @@ def backfill_basket(
         manifest.append("run_failed", {"error": report["error"],
                                        "failed_at": _now()})
         report["manifest"] = manifest.events
+        # Carry the partial report out with the exception. Which stages ran,
+        # what the manifest recorded and which window was in flight are what an
+        # operator debugs from; the caller would otherwise have only the message.
+        setattr(exc, "backfill_report", report)
         raise
     report["manifest"] = manifest.events
     return report
@@ -450,9 +454,12 @@ def run_backfill(
             result = backfill_basket(args, basket, client=client, store=store,
                                      conn=conn)
         except Exception as exc:  # per-basket isolation is the point
-            result = {"basket": basket, "status": "failed",
-                      "error": f"{type(exc).__name__}: {exc}",
-                      "weekly_rows": 0}
+            partial = getattr(exc, "backfill_report", None)
+            result = dict(partial) if isinstance(partial, dict) else {}
+            result.update({
+                "basket": basket, "status": "failed",
+                "error": f"{type(exc).__name__}: {exc}",
+                "weekly_rows": result.get("weekly_rows", 0)})
         report["baskets"][basket] = {
             key: value for key, value in result.items() if key != "rows"}
     report["failed_baskets"] = sorted(

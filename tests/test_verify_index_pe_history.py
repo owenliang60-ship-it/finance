@@ -144,7 +144,8 @@ def _manifest_events(basket, run_id="run-1", expected_from=EXPECTED_FROM,
 
 def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
            row_dates=None, manifest_extra=(), expected_from=EXPECTED_FROM,
-           market_caps=(("AAA", 900.0), ("BBB", 100.0))):
+           market_caps=(("AAA", 900.0), ("BBB", 100.0)), ciks=None,
+           market_cap_dates=None):
     """A consistent database: calendar, raw sources, weekly rows, manifest."""
     store = MarketStore(tmp_path / "market.db")
     conn = store._get_conn()
@@ -169,16 +170,22 @@ def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
                 "net_income) VALUES (?,?,?,?,?,?)",
                 [(symbol, day, "Q1", _accepted(day), "USD", 6.25)
                  for day in fiscal])
-        conn.execute(
+        identities = dict(ciks or {
+            symbol: f"000000000{index + 1}"
+            for index, (symbol, _) in enumerate(market_caps)})
+        conn.executemany(
             "INSERT OR REPLACE INTO fmp_fund_disclosure_holdings "
             "(basket_symbol, holding_date, source_kind, raw_row_index, "
             "rebalance_close_date, composition_effective_date, "
-            "composition_available_date, raw_symbol, symbol, weight_pct, "
+            "composition_available_date, raw_symbol, symbol, cik, weight_pct, "
             "included, snapshot_warnings_json, fetched_at, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            [basket, "2021-01-15", "disclosure", 0, "2021-01-15",
-             "2021-01-18", "2021-01-25", "AAA", "AAA", 60.0, 1, "[]",
-             "2021-01-25T00:00:00Z", "2021-01-25T00:00:00Z"])
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [(basket, "2021-01-15", "disclosure", index, "2021-01-15",
+              "2021-01-18", "2021-01-25", symbol, symbol,
+              identities.get(symbol), weight, 1, "[]",
+              "2021-01-25T00:00:00Z", "2021-01-25T00:00:00Z")
+             for index, ((symbol, _), weight)
+             in enumerate(zip(market_caps, (60.0, 40.0)))])
     dates = list(row_dates if row_dates is not None
                  else ("2026-01-09", "2026-01-16"))
     members = [_member(symbol, weight, market_cap, None)
@@ -186,8 +193,10 @@ def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
                in zip(market_caps, (60.0, 40.0))]
     rows = []
     for valuation_date in dates:
-        row_members = [dict(member, market_cap_date=valuation_date)
-                       for member in members]
+        row_members = [
+            dict(member, market_cap_date=(market_cap_dates or {}).get(
+                valuation_date, valuation_date))
+            for member in members]
         rows.append(_weekly_row(basket, valuation_date, row_members))
     if rows:
         store.upsert_basket_weekly_pe_batch(rows)
@@ -675,3 +684,73 @@ def test_a_run_that_failed_and_said_so_does_not_block_verification(
     report = _verify(db_path, config_dir)
     assert report["passed"], _failed(report)
     assert report["baskets"]["SPY"]["manifest_run_id"] == "run-1"
+
+
+# ---------------------------------------------------------------------------
+# Final review / I1: two tickers of one company that the config never covered
+# ---------------------------------------------------------------------------
+
+def test_two_covered_members_sharing_a_cik_fail_closed(tmp_path, config_dir):
+    """The historical dual-class gap, caught structurally rather than by list.
+
+    share_class_groups.json covers today's members. Over five years SPY held
+    pairs that are gone now (DISCA/DISCK until 2022-04), and FMP files the full
+    company's net income under both classes, so an uncovered pair divides one
+    company's market cap by twice its earnings. The TTM aggregate has no
+    duplicate-company backstop at all, so the verifier keys on the company
+    identity the disclosure itself carries.
+    """
+    db_path = _build(tmp_path, ciks={"AAA": "0001437107", "BBB": "0001437107"})
+    failures = _failed(_verify(db_path, config_dir))
+    assert "company_identity_uniqueness" in failures, failures
+    errors = failures["company_identity_uniqueness"]["errors"]
+    assert any("duplicate_company_cik" in str(item) and "0001437107" in str(item)
+               for item in errors), errors
+
+
+def test_distinct_ciks_pass_and_are_counted(tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    report = _verify(db_path, config_dir)
+    assert report["passed"], _failed(report)
+    detail = {check["name"]: check["detail"] for check in report["checks"]}
+    assert detail["company_identity_uniqueness"]["members_with_cik"] > 0
+    assert detail["company_identity_uniqueness"]["members_without_cik"] == 0
+
+
+def test_missing_company_identity_fails_rather_than_skipping(tmp_path, config_dir):
+    """A check that cannot see company identity has to say so, not pass."""
+    db_path = _build(tmp_path)
+    _mutate(db_path, "UPDATE fmp_fund_disclosure_holdings SET cik = NULL")
+    failures = _failed(_verify(db_path, config_dir))
+    errors = failures["company_identity_uniqueness"]["errors"]
+    assert any("company_identity_unavailable" in str(item) for item in errors)
+
+
+# ---------------------------------------------------------------------------
+# Final review / Minor 2: staleness comes from the basket config
+# ---------------------------------------------------------------------------
+
+def test_market_cap_staleness_tolerance_comes_from_the_basket_config(
+        tmp_path, config_dir):
+    """The producer reads market_cap_staleness_days per basket; so must this.
+
+    A 7-day-old observation is fine under SPY's configured 7 and stale under a
+    basket configured for 3. A hardcoded 7 in the verifier would bless data the
+    producer's own gate would have rejected.
+    """
+    payload = json.loads((config_dir / "index_pe_baskets.json").read_text())
+    payload["SPY"]["market_cap_staleness_days"] = 3
+    (config_dir / "index_pe_baskets.json").write_text(json.dumps(payload))
+    db_path = _build(tmp_path,
+                     market_cap_dates={"2026-01-16": "2026-01-09"})
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("mcap_date_stale" in str(item)
+               for item in failures["materialised_evidence"]), failures
+
+
+def test_seven_day_observation_is_fine_under_the_configured_seven(
+        tmp_path, config_dir):
+    db_path = _build(tmp_path,
+                     market_cap_dates={"2026-01-16": "2026-01-09"})
+    report = _verify(db_path, config_dir)
+    assert report["passed"], _failed(report)

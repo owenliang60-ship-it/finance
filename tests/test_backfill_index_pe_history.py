@@ -621,6 +621,16 @@ def test_one_basket_failing_leaves_the_others_committed(tmp_path, config_dir):
     failed = [row for row in store.get_basket_pe_run_events(basket="QQQ")
               if row["event_kind"] == "run_failed"]
     assert failed, "a failed basket still owes the manifest an explanation"
+    # A failed basket keeps its diagnostics: which stages ran, what the
+    # manifest recorded, which window it was working on. Replacing that with a
+    # four-key stub leaves an operator nothing to debug from.
+    diagnostics = report["baskets"]["QQQ"]
+    assert "ValueError" in diagnostics["error"]
+    assert [event["event_kind"] for event in diagnostics["manifest"]] == [
+        "run_failed"]
+    assert diagnostics["from_date"] == "2021-01-16"
+    assert diagnostics["to_date"] == "2026-01-16"
+    assert "stages" in diagnostics
     store.close()
 
 

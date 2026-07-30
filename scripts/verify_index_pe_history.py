@@ -69,7 +69,10 @@ FORBIDDEN_COLUMNS = (
     "uncapped_mcap_basket_pe_gaap",
 )
 DEFAULT_SAMPLE = 8
-MAX_MARKET_CAP_STALENESS_DAYS = 7
+# Fallback only; every basket declares market_cap_staleness_days and the
+# producer gates on that per-basket value, so the verifier reads the same
+# config rather than blessing data the producer would have rejected.
+DEFAULT_MARKET_CAP_STALENESS_DAYS = 7
 
 
 def _iso_date(value: str) -> str:
@@ -377,7 +380,10 @@ def _weight_coverage(members: Sequence[Mapping[str, Any]], income_key: str) -> f
     return covered / total if total > 0 else 0.0
 
 
-def _evidence_errors(rows: Sequence[Mapping[str, Any]]) -> List[str]:
+def _evidence_errors(
+    rows: Sequence[Mapping[str, Any]],
+    max_staleness_days: int = DEFAULT_MARKET_CAP_STALENESS_DAYS,
+) -> List[str]:
     """Recompute both coverages and both member sets from members_json.
 
     Plain arithmetic, not the producer's kernel: this is the heterogeneous
@@ -462,7 +468,7 @@ def _evidence_errors(rows: Sequence[Mapping[str, Any]]) -> List[str]:
                 continue
             if observed_date > valuation:
                 errors.append(f"{prefix}:{member.get('symbol')}:mcap_date_crossing")
-            elif (valuation - observed_date).days > MAX_MARKET_CAP_STALENESS_DAYS:
+            elif (valuation - observed_date).days > max_staleness_days:
                 errors.append(f"{prefix}:{member.get('symbol')}:mcap_date_stale")
     return errors
 
@@ -500,6 +506,83 @@ def _kernel_reconciliation_errors(rows: Sequence[Mapping[str, Any]]) -> List[str
             if not _close(replay["pe"], numerator / denominator):
                 errors.append(f"{prefix}:{pe_field}_kernel_disagrees_with_arithmetic")
     return errors
+
+
+def _company_identities(
+    conn: sqlite3.Connection, basket: str,
+) -> Dict[str, Dict[str, str]]:
+    """ticker -> CIK, per composition, straight from the disclosure rows.
+
+    Keyed by composition_effective_date because a ticker can change hands over
+    five years (FB/META), so the identity that matters is the one the snapshot
+    behind this row actually carried.
+    """
+    identities: Dict[str, Dict[str, str]] = {}
+    for row in _rows(
+            conn,
+            "SELECT composition_effective_date, raw_symbol, symbol, covered_by, "
+            "cik FROM fmp_fund_disclosure_holdings WHERE basket_symbol = ?",
+            [basket]):
+        cik = str(row["cik"] or "").strip()
+        if not cik:
+            continue
+        effective = str(row["composition_effective_date"])
+        for ticker in (row["raw_symbol"], row["symbol"], row["covered_by"]):
+            if ticker:
+                identities.setdefault(effective, {})[
+                    str(ticker).upper()] = cik
+    return identities
+
+
+def _company_identity_check(
+    basket: str,
+    rows: Sequence[Mapping[str, Any]],
+    identities: Mapping[str, Mapping[str, str]],
+) -> Dict[str, Any]:
+    """Two covered members of one company on one date is a double count.
+
+    ``share_class_groups.json`` can only cover the pairs someone has looked at.
+    A five-year history contains pairs that no longer exist -- SPY held
+    DISCA/DISCK until 2022-04 -- and FMP files the whole company's net income
+    under every class, so an uncovered pair divides one company's market cap by
+    twice its earnings. The hindsight engine rejects a duplicate company key,
+    but the TTM aggregate has no such backstop, and neither knows about a pair
+    absent from the config. The disclosure's own CIK is the identity that does
+    not depend on the config being complete.
+
+    A row whose members carry no resolvable CIK fails: a uniqueness check that
+    cannot see identity is not a passing check.
+    """
+    errors: List[str] = []
+    with_cik = 0
+    without_cik = 0
+    for row in rows:
+        effective = str(row["composition_effective_date"])
+        mapping = identities.get(effective, {})
+        seen: Dict[str, List[str]] = {}
+        for member in _member_list(row):
+            if member.get("market_cap") is None:
+                continue
+            if (member.get("ttm_net_income_usd") is None
+                    and member.get("hindsight_ntm_net_income_usd") is None):
+                continue
+            symbol = str(member.get("symbol") or "").upper()
+            raw_symbol = str(member.get("raw_symbol") or symbol).upper()
+            cik = mapping.get(raw_symbol) or mapping.get(symbol)
+            if not cik:
+                without_cik += 1
+                continue
+            with_cik += 1
+            seen.setdefault(cik, []).append(symbol)
+        for cik, tickers in sorted(seen.items()):
+            if len(tickers) > 1:
+                errors.append(
+                    f"{basket}:{row['valuation_date']}:duplicate_company_cik:"
+                    f"{cik}:{'+'.join(sorted(tickers))}")
+    if rows and with_cik == 0:
+        errors.append(f"{basket}:company_identity_unavailable")
+    return {"errors": errors, "members_with_cik": with_cik,
+            "members_without_cik": without_cik}
 
 
 # ---------------------------------------------------------------------------
@@ -752,6 +835,8 @@ def verify_database(
     kernel_errors: List[str] = []
     json_errors: List[str] = []
     version_errors: List[str] = []
+    identity_errors: List[str] = []
+    identity_totals = {"members_with_cik": 0, "members_without_cik": 0}
     per_basket: Dict[str, Any] = {}
     reconciliation = {"errors": [], "reconciled_market_caps": 0,
                       "reconciled_ttm_incomes": 0, "declined_ttm_incomes": 0}
@@ -787,7 +872,14 @@ def verify_database(
             basket, expected, rows,
             basket_configs[basket].get("history_available_from")))
         tier_errors.extend(_tier_consistency_errors(rows))
-        evidence_errors.extend(_evidence_errors(rows))
+        staleness = int(basket_configs[basket].get(
+            "market_cap_staleness_days", DEFAULT_MARKET_CAP_STALENESS_DAYS))
+        evidence_errors.extend(_evidence_errors(rows, staleness))
+        identity = _company_identity_check(
+            basket, rows, _company_identities(conn, basket))
+        identity_errors.extend(identity["errors"])
+        for key in identity_totals:
+            identity_totals[key] += identity[key]
         sampled = [rows[index] for index in _sample_indexes(len(rows), sample)]
         kernel_errors.extend(_kernel_reconciliation_errors(sampled))
         outcome = _raw_source_reconciliation(
@@ -811,6 +903,7 @@ def verify_database(
             "published_hindsight": sum(
                 row["hindsight_ntm_pe_gaap"] is not None for row in rows),
             "quality_tiers": sorted({str(row["quality_tier"]) for row in rows}),
+            "market_cap_staleness_days": staleness,
             "sampled": [row["valuation_date"] for row in sampled],
         }
 
@@ -826,6 +919,8 @@ def verify_database(
         _check("expected_weekly_denominator", not denominator_errors,
                denominator_errors),
         _check("quality_tier_and_gate_consistency", not tier_errors, tier_errors),
+        _check("company_identity_uniqueness", not identity_errors,
+               {**identity_totals, "errors": identity_errors}),
         _check("materialised_evidence", not evidence_errors, evidence_errors),
         _check("aggregate_reconciliation", not kernel_errors, kernel_errors),
         _check("raw_source_spot_check",
