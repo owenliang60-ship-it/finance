@@ -101,8 +101,15 @@ def test_soxx_snapshot_quality_matches_audited_backfill_defaults():
 
 
 def test_soxx_history_gap_boundary_is_frozen():
+    # 2021-09-20 is SOXX's first trading day after its first verifiable
+    # rebalance close (docs/plans/2026-07-14-soxx-historical-ttm-pe.md:182),
+    # and the same floor already used by scripts/verify_basket_ttm_pe.py and
+    # scripts/query_basket_ttm_pe.py's --min-date/--from-date in
+    # ARCHITECTURE.md:152-153. Not 2021-09-01, which only appears once, as
+    # the backfill fetch-window start (a buffer before the first rebalance
+    # close), not the first computable observation date.
     configs = load_index_pe_basket_configs(CONFIG_DIR)
-    assert configs["SOXX"]["history_available_from"] == "2021-09-01"
+    assert configs["SOXX"]["history_available_from"] == "2021-09-20"
     assert configs["SPY"]["history_available_from"] is None
     assert configs["QQQ"]["history_available_from"] is None
 

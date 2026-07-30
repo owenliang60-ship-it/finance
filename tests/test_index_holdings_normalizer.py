@@ -83,13 +83,17 @@ def test_empty_disclosure_fails_closed_for_any_basket(basket):
 
 
 # ---------------------------------------------------------------------------
-# RED 4: SOXX pre-2021-09 returns a gap, never fabricated data
+# RED 4: SOXX pre-2021-09-20 returns a gap, never fabricated data
 # ---------------------------------------------------------------------------
 
-def test_soxx_pre_2021_09_reports_history_gap():
+def test_soxx_pre_2021_09_20_reports_history_gap():
+    # 2021-09-20 is the first trading day after SOXX's first verifiable
+    # rebalance close (docs/plans/2026-07-14-soxx-historical-ttm-pe.md:182),
+    # the same floor used by verify/query --min-date/--from-date in
+    # ARCHITECTURE.md:152-153.
     configs = _configs()
-    assert basket_history_gap("SOXX", "2021-08-31", configs) is True
-    assert basket_history_gap("SOXX", "2021-09-01", configs) is False
+    assert basket_history_gap("SOXX", "2021-09-19", configs) is True
+    assert basket_history_gap("SOXX", "2021-09-20", configs) is False
     assert basket_history_gap("SOXX", "2025-01-01", configs) is False
 
 

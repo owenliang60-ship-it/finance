@@ -259,9 +259,12 @@ def basket_history_gap(
 
     A basket with no declared `history_available_from` boundary has no known
     gap *yet* -- that is an empirical finding to make against real vendor
-    responses (see SOXX's 2021-09-01 boundary, established in
-    docs/plans/2026-07-14-soxx-historical-ttm-pe.md), not an assumption to
-    make on baskets that have not been audited.
+    responses (see SOXX's 2021-09-20 boundary -- the first trading day after
+    SOXX's first verifiable rebalance close, established in
+    docs/plans/2026-07-14-soxx-historical-ttm-pe.md:182 and reused as the
+    `--min-date`/`--from-date` floor throughout ARCHITECTURE.md:152-153 and
+    docs/research/2026-07-14-soxx-historical-pe-feasibility.md:138), not an
+    assumption to make on baskets that have not been audited.
     """
     symbol = basket_symbol.upper()
     if symbol not in basket_configs:
