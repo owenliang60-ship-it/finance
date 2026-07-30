@@ -129,7 +129,10 @@ def test_idempotent_update_same_methodology_version(store):
     assert second["created_at"] == first["created_at"]
 
 
-# 6. methodology version 不同且已有 complete row 时拒绝静默覆盖
+# 6. methodology version 不同且已有 row 时一律拒绝静默覆盖（team-lead 裁定：
+# 不区分 quality_tier — 跨版本覆盖 tail/unpublishable 行同样会让历史序列在
+# 版本边界静默混口径，必须走显式版本迁移：先按 methodology_version 精确删除
+# 旧行，再重新 backfill）。三个 tier 各测一次。
 def test_different_methodology_over_complete_row_rejected(store):
     store.upsert_basket_weekly_pe_batch([
         _row(quality_tier="actual_only", methodology_version="v1"),
@@ -138,6 +141,42 @@ def test_different_methodology_over_complete_row_rejected(store):
         store.upsert_basket_weekly_pe_batch([
             _row(quality_tier="actual_only", methodology_version="v2",
                  ttm_pe_gaap=99.0),
+        ])
+    got = store.get_basket_weekly_pe_history("SPY")
+    assert len(got) == 1
+    assert got[0]["methodology_version"] == "v1"
+    assert got[0]["ttm_pe_gaap"] == 22.0
+
+
+def test_different_methodology_over_tail_row_rejected(store):
+    store.upsert_basket_weekly_pe_batch([
+        _row(quality_tier="latest_consensus_tail",
+             hindsight_actual_quarters=2, hindsight_estimate_quarters=2,
+             methodology_version="v1"),
+    ])
+    with pytest.raises(ValueError):
+        store.upsert_basket_weekly_pe_batch([
+            _row(quality_tier="latest_consensus_tail",
+                 hindsight_actual_quarters=2, hindsight_estimate_quarters=2,
+                 methodology_version="v2", ttm_pe_gaap=99.0),
+        ])
+    got = store.get_basket_weekly_pe_history("SPY")
+    assert len(got) == 1
+    assert got[0]["methodology_version"] == "v1"
+    assert got[0]["ttm_pe_gaap"] == 22.0
+
+
+def test_different_methodology_over_unpublishable_row_rejected(store):
+    store.upsert_basket_weekly_pe_batch([
+        _row(quality_tier="unpublishable",
+             hindsight_actual_quarters=1, hindsight_estimate_quarters=1,
+             methodology_version="v1"),
+    ])
+    with pytest.raises(ValueError):
+        store.upsert_basket_weekly_pe_batch([
+            _row(quality_tier="unpublishable",
+                 hindsight_actual_quarters=1, hindsight_estimate_quarters=1,
+                 methodology_version="v2", ttm_pe_gaap=99.0),
         ])
     got = store.get_basket_weekly_pe_history("SPY")
     assert len(got) == 1

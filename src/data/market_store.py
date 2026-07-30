@@ -1440,12 +1440,17 @@ class MarketStore:
         latest_consensus_tail -> actual_only (or repeat unchanged) as the
         weekly hindsight tail fills in with real earnings. Downgrading away
         from actual_only is rejected and logged as a warning — it should
-        never happen under a stable methodology. A different
-        methodology_version is rejected once the existing row is already
-        actual_only (complete): that is exactly the silent-overwrite R5
-        exists to prevent. A non-complete (still-tail or unpublishable)
-        existing row may be recomputed under a new methodology_version,
-        since it is not yet finalized.
+        never happen under a stable methodology.
+
+        A different methodology_version is rejected for ANY existing row,
+        regardless of quality_tier — not just actual_only/complete ones.
+        Allowing a cross-version overwrite of a still-tail or unpublishable
+        row would let the historical series silently mix methodologies
+        across a version boundary, exactly what a fixed methodology_version
+        exists to prevent. A genuine methodology change must go through an
+        explicit version migration (delete the old version's rows, then
+        backfill under the new version) rather than an implicit overwrite
+        through this upsert path.
 
         Whole batch is one transaction: any row rejected — whether by
         row-intrinsic validation or by the DB-state-dependent checks above —
@@ -1475,15 +1480,18 @@ class MarketStore:
                 created_at = now
                 if existing is not None:
                     created_at = existing["created_at"]
-                    if existing["quality_tier"] == self._BWPH_COMPLETE_TIER \
-                            and existing["methodology_version"] != \
+                    if existing["methodology_version"] != \
                             row["methodology_version"]:
                         raise ValueError(
-                            "refusing silent methodology_version overwrite "
-                            f"of complete row {row['basket']}/"
-                            f"{row['valuation_date']}: "
+                            "refusing cross-methodology_version overwrite "
+                            f"of existing row {row['basket']}/"
+                            f"{row['valuation_date']} (quality_tier="
+                            f"{existing['quality_tier']!r}): "
                             f"{existing['methodology_version']!r} -> "
-                            f"{row['methodology_version']!r}")
+                            f"{row['methodology_version']!r}. Use an "
+                            "explicit version migration instead: delete "
+                            "rows for the old methodology_version first, "
+                            "then backfill under the new version.")
                     if existing["quality_tier"] == self._BWPH_COMPLETE_TIER \
                             and row["quality_tier"] != self._BWPH_COMPLETE_TIER:
                         logger.warning(
