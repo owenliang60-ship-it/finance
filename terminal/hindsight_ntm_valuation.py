@@ -24,11 +24,18 @@ Numerically this engine reuses the audited historical engine: plain ``float``
 arithmetic and :func:`terminal.historical_basket_valuation.select_asof_fx` at
 the valuation date, so TTM and hindsight NTM stay comparable.
 """
-from datetime import date, datetime, timezone
+from datetime import date
 from statistics import median
 from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence
 
-from terminal.historical_basket_valuation import select_asof_fx
+from terminal.basket_pe_aggregate import (
+    MINIMUM_MCAP_COVERAGE,
+    compute_aggregate_basket_pe,
+)
+from terminal.historical_basket_valuation import (
+    accepted_sort_key as _accepted_sort_key,
+    select_asof_fx,
+)
 
 
 HINDSIGHT_METHODOLOGY_VERSION = "1.0"
@@ -94,8 +101,6 @@ ESTIMATE_SCALE_ANCHOR_QUARTERS = 8
 # vintage; this mirrors ``MarketStore.get_fmp_estimates``.
 ALLOWED_SNAPSHOT_KINDS = frozenset({"weekly"})
 
-MINIMUM_MCAP_COVERAGE = 0.90
-
 
 def _parse_date(value: Any) -> Optional[date]:
     if not isinstance(value, str):
@@ -104,32 +109,6 @@ def _parse_date(value: Any) -> Optional[date]:
         return date.fromisoformat(value[:10])
     except ValueError:
         return None
-
-
-def _parse_timestamp(value: Any) -> Optional[datetime]:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    try:
-        return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
-    except ValueError:
-        return None
-
-
-def _accepted_sort_key(value: Any) -> Any:
-    """Order restatements of one fiscal quarter deterministically.
-
-    FMP emits naive acceptance timestamps (``2026-05-20 16:35:52``) but
-    ``_parse_timestamp`` also accepts Z-suffixed ones, and comparing an aware
-    value against a naive one raises. Aware values are therefore normalised to
-    naive UTC, and rows with no usable timestamp sort first so a dated
-    restatement always wins.
-    """
-    parsed = _parse_timestamp(value)
-    if parsed is None:
-        return (0, datetime.min, "")
-    if parsed.tzinfo is not None:
-        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
-    return (1, parsed, str(value))
 
 
 def is_same_fiscal_quarter(left: str, right: str) -> bool:
@@ -480,63 +459,20 @@ def compute_hindsight_basket_aggregate(
     *,
     minimum_mcap_coverage: float = MINIMUM_MCAP_COVERAGE,
 ) -> Dict[str, Any]:
-    """Aggregate ``Σmcap / ΣNI`` over one symmetric member set (R1).
+    """Hindsight NTM view of the shared aggregate kernel (R1/R3).
 
-    ``covered_market_cap`` and ``hindsight_ntm_net_income_usd`` are summed over
-    exactly the same members, so a member missing either side is dropped from
-    both. ``mcap_coverage`` measures how much of the observable basket market
-    cap that set represents, and gates publication.
-
-    ``weight_coverage`` is reported alongside but does **not** gate. A member
-    with no market cap at all enters neither side of the mcap ratio, so a
-    sparse market-cap history can clear the 90% gate on a small slice of the
-    basket; disclosure weight is the independent measure that exposes it, and
-    the backfill verifier asserts on it.
+    The formula, the symmetric member set and the 90% gate all live in
+    :func:`terminal.basket_pe_aggregate.compute_aggregate_basket_pe`, which
+    the historical TTM line and the backfill verifier import as well. Only the
+    income key and the metric-specific field name are hindsight's.
     """
-    observed_market_cap = 0.0
-    total_weight = 0.0
-    covered_weight = 0.0
-    covered = []
-    for member in members:
-        weight = member.get("weight_pct")
-        weight = float(weight) if weight is not None else 0.0
-        if weight > 0:
-            total_weight += weight
-        market_cap = member.get("market_cap")
-        if market_cap is None:
-            continue
-        market_cap = float(market_cap)
-        if market_cap <= 0:
-            continue
-        observed_market_cap += market_cap
-        income = member.get("hindsight_ntm_net_income_usd")
-        if income is None:
-            continue
-        if weight > 0:
-            covered_weight += weight
-        covered.append({
-            **dict(member),
-            "market_cap": market_cap,
-            "hindsight_ntm_net_income_usd": float(income),
-        })
-    covered_market_cap = sum(row["market_cap"] for row in covered)
-    income_total = sum(row["hindsight_ntm_net_income_usd"] for row in covered)
-    coverage = (covered_market_cap / observed_market_cap
-                if observed_market_cap > 0 else 0.0)
-    is_publishable = bool(
-        covered and coverage >= minimum_mcap_coverage and income_total > 0)
+    aggregate = compute_aggregate_basket_pe(
+        members, income_key="hindsight_ntm_net_income_usd",
+        minimum_mcap_coverage=minimum_mcap_coverage)
     return {
-        "pe": covered_market_cap / income_total if is_publishable else None,
-        "is_publishable": is_publishable,
-        "covered_market_cap": covered_market_cap,
-        "observed_market_cap": observed_market_cap,
-        "hindsight_ntm_net_income_usd": income_total,
-        "mcap_coverage": coverage,
-        "weight_coverage": (covered_weight / total_weight
-                            if total_weight > 0 else 0.0),
-        "covered_weight": covered_weight,
-        "eligible_weight": total_weight,
-        "covered_members": covered,
+        **{key: value for key, value in aggregate.items()
+           if key != "net_income_total"},
+        "hindsight_ntm_net_income_usd": aggregate["net_income_total"],
     }
 
 

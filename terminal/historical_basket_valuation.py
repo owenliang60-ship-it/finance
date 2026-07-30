@@ -1,5 +1,5 @@
 """Pure as-of GAAP TTM valuation for fixed-weight historical baskets."""
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set
 
 from src.data.fmp_forward_ingestion import next_trading_date
@@ -23,6 +23,24 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
         return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def accepted_sort_key(value: Any) -> Any:
+    """Order restatements of one fiscal quarter deterministically.
+
+    FMP emits naive acceptance timestamps (``2026-05-20 16:35:52``) but
+    ``_parse_timestamp`` also accepts Z-suffixed ones, and comparing an aware
+    value against a naive one raises. Aware values are therefore normalised to
+    naive UTC, and rows with no usable timestamp sort first so a dated
+    restatement always wins. Shared with the hindsight NTM engine so both
+    metrics resolve a restated quarter to the same vintage.
+    """
+    parsed = _parse_timestamp(value)
+    if parsed is None:
+        return (0, datetime.min, "")
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return (1, parsed, str(value))
 
 
 def select_asof_market_cap(
@@ -75,7 +93,7 @@ def select_four_continuous_asof_quarters(
     """
     target = date.fromisoformat(valuation_date)
     candidates: Dict[str, Dict[str, Any]] = {}
-    accepted_by_fiscal: Dict[str, datetime] = {}
+    accepted_by_fiscal: Dict[str, Any] = {}
     malformed_fiscal_dates = set()
     for raw in rows:
         period = str(raw.get("period") or "").upper()
@@ -105,8 +123,10 @@ def select_four_continuous_asof_quarters(
             malformed_fiscal_dates.add(fiscal.isoformat())
             continue
         fiscal_text = fiscal.isoformat()
+        accepted_key = accepted_sort_key(
+            raw.get("accepted_date", raw.get("acceptedDate")))
         if (fiscal_text not in candidates
-                or accepted > accepted_by_fiscal[fiscal_text]):
+                or accepted_key > accepted_by_fiscal[fiscal_text]):
             candidates[fiscal_text] = {
                 **dict(raw),
                 "date": fiscal_text,
@@ -117,7 +137,7 @@ def select_four_continuous_asof_quarters(
                     "reported_currency", raw.get("reportedCurrency", ""))).upper(),
                 "visibility_date": visible,
             }
-            accepted_by_fiscal[fiscal_text] = accepted
+            accepted_by_fiscal[fiscal_text] = accepted_key
     if len(candidates) < 4:
         return None
     selected = [candidates[key] for key in sorted(candidates)[-4:]]

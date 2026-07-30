@@ -366,3 +366,56 @@ def test_authoritative_alias_never_uses_complete_wrong_company_data():
     assert evidence["resolved_symbol"] == "TER"
     assert evidence["alias_mode"] == "authoritative"
     assert result["rebalance_weighted_ttm_pe_gaap_proxy"] == pytest.approx(10.0)
+
+
+# ---------------------------------------------------------------------------
+# Task 4 carry-forward: pre-existing tz crash on the TTM execution path
+# ---------------------------------------------------------------------------
+
+def test_mixed_tz_restatements_of_one_quarter_do_not_crash():
+    """FMP mixes naive and Z-suffixed acceptance stamps within one symbol.
+
+    Comparing an aware against a naive datetime raises TypeError, which took
+    down the whole backfill rather than one member. Mirrors
+    ``terminal.hindsight_ntm_valuation._accepted_sort_key``: aware values are
+    normalised to naive UTC and the later acceptance wins.
+    """
+    rows = _quarters() + [{
+        **_quarters()[-1], "accepted_date": "2026-01-25T12:00:00Z",
+        "net_income": 30.0,
+    }]
+    selected = select_four_continuous_asof_quarters(
+        rows, "2026-02-02", _calendar())
+    assert selected is not None
+    assert selected[-1]["net_income"] == 30.0
+
+
+def test_tz_aware_restatement_loses_to_a_later_naive_acceptance():
+    rows = _quarters() + [{
+        **_quarters()[-1], "accepted_date": "2026-01-19T23:00:00Z",
+        "net_income": 30.0,
+    }]
+    selected = select_four_continuous_asof_quarters(
+        rows, "2026-02-02", _calendar())
+    assert selected is not None
+    assert selected[-1]["net_income"] == 25.0
+
+
+def test_cny_reporter_is_allowlisted_for_fx_conversion():
+    """PDD (QQQ) reports in CNY; without an allowlist entry it failed closed."""
+    cny = [{"currency": "CNY", "date": "2026-01-30", "usd_per_unit": 0.1395,
+            "source_symbol": "CNYUSD"}]
+    assert select_asof_fx("CNY", cny, "2026-02-02")["usd_per_unit"] == 0.1395
+    quarters = _quarters(currency="CNY", income=100.0)
+    result = compute_member_ttm_income_usd(quarters, {"CNY": cny}, "2026-02-02")
+    assert result["ttm_net_income_usd"] == pytest.approx(55.8)
+
+
+@pytest.mark.parametrize("rate,source_symbol", [
+    (7.17, "CNYUSD"),
+    (0.1395, "USDCNY"),
+])
+def test_cny_reverse_or_implausible_quote_still_fails_closed(rate, source_symbol):
+    rows = [{"currency": "CNY", "date": "2026-01-30",
+             "usd_per_unit": rate, "source_symbol": source_symbol}]
+    assert select_asof_fx("CNY", rows, "2026-02-02") is None

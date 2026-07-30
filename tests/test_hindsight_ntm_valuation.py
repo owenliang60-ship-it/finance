@@ -870,17 +870,29 @@ def test_eur_and_twd_conversion_reuses_the_historical_engine_fx():
 
 
 def test_unallowlisted_currency_fails_closed():
-    # CNY has no reviewed USD-per-unit band yet, so a CNY reporter must be
+    # KRW has no reviewed USD-per-unit band, so a KRW reporter must be
     # excluded rather than converted with an unvalidated rate.
-    income = _actual_year(symbol="PDD", currency="CNY", income=100.0)
+    income = _actual_year(symbol="SKHY", currency="KRW", income=100.0)
     window = select_next_four_hindsight_quarters(
         income, [], "2025-12-31", consensus_snapshot_date=None)
     assert window["quarters"] is not None
     assert compute_member_hindsight_ntm_income_usd(
         window["quarters"],
+        {"KRW": [{"date": "2025-12-30", "usd_per_unit": 0.00072,
+                  "source_symbol": "KRWUSD"}]},
+        "2025-12-31") is None
+
+
+def test_cny_reporter_converts_after_task4_allowlist_extension():
+    income = _actual_year(symbol="PDD", currency="CNY", income=100.0)
+    window = select_next_four_hindsight_quarters(
+        income, [], "2025-12-31", consensus_snapshot_date=None)
+    result = compute_member_hindsight_ntm_income_usd(
+        window["quarters"],
         {"CNY": [{"date": "2025-12-30", "usd_per_unit": 0.14,
                   "source_symbol": "CNYUSD"}]},
-        "2025-12-31") is None
+        "2025-12-31")
+    assert result["hindsight_ntm_net_income_usd"] == pytest.approx(4 * 14.0)
 
 
 # ---------------------------------------------------------------------------

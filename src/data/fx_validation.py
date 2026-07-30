@@ -2,9 +2,15 @@
 from typing import Any, Optional
 
 
+# Each band is roughly a 1.5-2x envelope around the currency's realised range
+# over the backfill window, wide enough to survive a devaluation and narrow
+# enough that an inverted quote (1/rate) can never land inside it.
 USD_PER_UNIT_BOUNDS = {
     "EUR": (0.50, 2.00),
     "TWD": (0.02, 0.05),
+    # PDD (QQQ) files in CNY. CNYUSD has traded 0.1366-0.1580 since 2021;
+    # the inverse quote is ~7, three decades away from the upper bound.
+    "CNY": (0.10, 0.20),
 }
 
 

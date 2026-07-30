@@ -15,6 +15,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from terminal.historical_basket_valuation import (
     compute_member_ttm_income_usd,
+    compute_uncapped_mcap_basket_pe,
+    compute_weighted_ttm_pe_proxy,
     merge_covered_weights,
     select_asof_market_cap,
     select_four_continuous_asof_quarters,
@@ -381,9 +383,9 @@ def _recompute_row(
         members.append(evidence)
         if market_cap is not None and income is not None:
             metric_members.append({
-                "symbol": symbol, "weight": float(weight),
+                "symbol": symbol, "weight_pct": float(weight),
                 "market_cap": float(market_cap["market_cap"]),
-                "net_income": float(income["ttm_net_income_usd"]),
+                "ttm_net_income_usd": float(income["ttm_net_income_usd"]),
             })
     for target, weight in sorted(weights["orphan_targets"].items()):
         members.append({
@@ -394,16 +396,31 @@ def _recompute_row(
             "fiscal_dates": [], "accepted_dates": [], "fx_evidence": [],
             "exclusion_reason": "covered_by_target_missing",
         })
-    covered_weight = sum(row["weight"] for row in metric_members)
-    coverage = covered_weight / eligible_weight if eligible_weight else 0.0
-    weighted_yield = (sum(
-        row["weight"] * row["net_income"] / row["market_cap"]
-        for row in metric_members) / covered_weight if covered_weight else None)
-    primary = (1.0 / weighted_yield if coverage >= MIN_WEIGHT_COVERAGE
-               and weighted_yield is not None and weighted_yield > 0 else None)
-    total_mcap = sum(row["market_cap"] for row in metric_members)
-    total_income = sum(row["net_income"] for row in metric_members)
-    secondary = total_mcap / total_income if total_mcap > 0 and total_income > 0 else None
+    # R3 / issue048: the weighted proxy and its uncapped aggregate come from
+    # the producer's own pure functions rather than a second hand-written copy
+    # of the arithmetic. A verifier that re-types the formula only proves that
+    # two transcriptions agree; independence here comes from recomputing the
+    # *inputs* out of the raw source tables.
+    if eligible_weight > 0:
+        weighted = compute_weighted_ttm_pe_proxy(
+            metric_members, eligible_weight=eligible_weight,
+            minimum_weight_coverage=MIN_WEIGHT_COVERAGE)
+        covered_weight = weighted["covered_weight"]
+        coverage = weighted["weight_coverage"]
+        weighted_yield = weighted["weighted_earnings_yield"]
+        primary = weighted["pe"]
+        aggregate = compute_uncapped_mcap_basket_pe(metric_members)
+        total_mcap = aggregate["covered_market_cap"]
+        total_income = aggregate["ttm_net_income_usd"]
+        secondary = aggregate["pe"]
+    else:
+        covered_weight = sum(row["weight_pct"] for row in metric_members)
+        coverage = 0.0
+        weighted_yield = None
+        primary = None
+        total_mcap = sum(row["market_cap"] for row in metric_members)
+        total_income = sum(row["ttm_net_income_usd"] for row in metric_members)
+        secondary = None
     return {
         "eligible_weight": eligible_weight, "covered_weight": covered_weight,
         "weight_coverage": coverage, "weighted_earnings_yield": weighted_yield,
