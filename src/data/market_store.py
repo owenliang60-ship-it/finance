@@ -596,6 +596,47 @@ _SCHEMA = "\n\n".join([
     "CREATE INDEX IF NOT EXISTS idx_btv_basket_date "
     "ON basket_ttm_valuation(basket_symbol, valuation_date);",
 
+    # 周频估值 SSOT（Plan 2026-07-19 §3.3）：hindsight NTM actual/estimate 引擎
+    # 的落库目标表。quality_tier 承载 R5 tail 演化契约（见
+    # upsert_basket_weekly_pe_batch 的 docstring）。
+    """CREATE TABLE IF NOT EXISTS basket_weekly_pe_history (
+    basket TEXT NOT NULL,
+    valuation_date TEXT NOT NULL,
+    ttm_pe_gaap REAL,
+    hindsight_ntm_pe_gaap REAL,
+    ttm_total_mcap REAL,
+    ttm_net_income REAL,
+    hindsight_total_mcap REAL,
+    hindsight_ntm_net_income REAL,
+    n_members INTEGER NOT NULL CHECK(n_members >= 0),
+    n_covered_ttm INTEGER NOT NULL CHECK(n_covered_ttm >= 0),
+    n_covered_hindsight INTEGER NOT NULL CHECK(n_covered_hindsight >= 0),
+    mcap_coverage_ttm REAL NOT NULL
+        CHECK(mcap_coverage_ttm >= 0 AND mcap_coverage_ttm <= 1),
+    mcap_coverage_hindsight REAL NOT NULL
+        CHECK(mcap_coverage_hindsight >= 0 AND mcap_coverage_hindsight <= 1),
+    hindsight_actual_quarters INTEGER NOT NULL
+        CHECK(hindsight_actual_quarters >= 0 AND hindsight_actual_quarters <= 4),
+    hindsight_estimate_quarters INTEGER NOT NULL
+        CHECK(hindsight_estimate_quarters >= 0 AND hindsight_estimate_quarters <= 4),
+    composition_effective_date TEXT NOT NULL,
+    composition_available_date TEXT NOT NULL,
+    quality_tier TEXT NOT NULL
+        CHECK(quality_tier IN ('actual_only','latest_consensus_tail','unpublishable')),
+    members_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    methodology_version TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_updated TEXT NOT NULL,
+    PRIMARY KEY (basket, valuation_date),
+    CHECK (
+        quality_tier = 'unpublishable'
+        OR hindsight_actual_quarters + hindsight_estimate_quarters = 4
+    )
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_bwph_basket_date "
+    "ON basket_weekly_pe_history(basket, valuation_date);",
+
     # -- FMP forward EPS 数据线（Spec 2026-07-09 §5.2，4 业务表 + 1 run-manifest）--
     # 周频 PIT 快照（append-only）
     """CREATE TABLE IF NOT EXISTS fmp_estimates (
@@ -698,7 +739,7 @@ _VALID_TABLES = frozenset({
     "concepts", "concept_themes", "company_concept_tags",
     "symbol_concept_edges",
     "fmp_fund_disclosure_holdings", "fx_daily", "fmp_stock_splits",
-    "basket_ttm_valuation",
+    "basket_ttm_valuation", "basket_weekly_pe_history",
     "fmp_estimates", "fmp_earnings", "fmp_etf_holdings_snapshot",
     "fmp_basket_valuation", "fmp_forward_runs",
 })
@@ -1320,6 +1361,157 @@ class MarketStore:
         conn = self._get_conn()
         query = "SELECT * FROM basket_ttm_valuation WHERE basket_symbol = ?"
         params: List[Any] = [basket_symbol.upper()]
+        if from_date is not None:
+            query += " AND valuation_date >= ?"
+            params.append(from_date)
+        if to_date is not None:
+            query += " AND valuation_date <= ?"
+            params.append(to_date)
+        query += " ORDER BY valuation_date"
+        return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+    # ---- Weekly basket PE valuation SSOT (Plan 2026-07-19 §3.3 — Task 2) ----
+
+    _BWPH_QUALITY_TIERS = frozenset({
+        "actual_only", "latest_consensus_tail", "unpublishable",
+    })
+    _BWPH_COMPLETE_TIER = "actual_only"
+
+    def _validate_bwph_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        """Row-intrinsic validation only; does not touch the DB.
+
+        Mirrors the DDL CHECK constraints in Python so a bad row fails fast
+        with a clear ValueError before any row in the batch is written.
+        """
+        basket = str(row.get("basket") or "").upper().strip()
+        if not basket:
+            raise ValueError("basket required")
+        valuation_date = self._require_iso_date(
+            row.get("valuation_date"), "valuation_date")
+        composition_effective_date = self._require_iso_date(
+            row.get("composition_effective_date"), "composition_effective_date")
+        composition_available_date = self._require_iso_date(
+            row.get("composition_available_date"), "composition_available_date")
+        methodology_version = row.get("methodology_version")
+        if not methodology_version:
+            raise ValueError("methodology_version required")
+        quality_tier = row.get("quality_tier")
+        if quality_tier not in self._BWPH_QUALITY_TIERS:
+            raise ValueError(f"invalid quality_tier: {quality_tier!r}")
+        for field_name in ("n_members", "n_covered_ttm", "n_covered_hindsight"):
+            value = row.get(field_name)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for field_name in ("mcap_coverage_ttm", "mcap_coverage_hindsight"):
+            value = row.get(field_name)
+            if value is None or not 0 <= float(value) <= 1:
+                raise ValueError(f"{field_name} must be between 0 and 1")
+        actual_q = row.get("hindsight_actual_quarters")
+        estimate_q = row.get("hindsight_estimate_quarters")
+        for field_name, value in (
+            ("hindsight_actual_quarters", actual_q),
+            ("hindsight_estimate_quarters", estimate_q),
+        ):
+            if not isinstance(value, int) or isinstance(value, bool) \
+                    or not 0 <= value <= 4:
+                raise ValueError(
+                    f"{field_name} must be an integer between 0 and 4")
+        if quality_tier != "unpublishable" and actual_q + estimate_q != 4:
+            raise ValueError(
+                "hindsight_actual_quarters + hindsight_estimate_quarters "
+                "must equal 4 for publishable quality_tier rows")
+        return {
+            **row,
+            "basket": basket,
+            "valuation_date": valuation_date,
+            "composition_effective_date": composition_effective_date,
+            "composition_available_date": composition_available_date,
+            "members_json": self._json_text(
+                row.get("members_json", []), "members_json"),
+            "warnings_json": self._json_text(
+                row.get("warnings_json", []), "warnings_json"),
+        }
+
+    def upsert_basket_weekly_pe_batch(self, rows: List[Dict[str, Any]]) -> int:
+        """Atomic whole-batch upsert for basket_weekly_pe_history.
+
+        R5 tail evolution contract: for the same (basket, valuation_date,
+        methodology_version), quality_tier may only move
+        latest_consensus_tail -> actual_only (or repeat unchanged) as the
+        weekly hindsight tail fills in with real earnings. Downgrading away
+        from actual_only is rejected and logged as a warning — it should
+        never happen under a stable methodology. A different
+        methodology_version is rejected once the existing row is already
+        actual_only (complete): that is exactly the silent-overwrite R5
+        exists to prevent. A non-complete (still-tail or unpublishable)
+        existing row may be recomputed under a new methodology_version,
+        since it is not yet finalized.
+
+        Whole batch is one transaction: any row rejected — whether by
+        row-intrinsic validation or by the DB-state-dependent checks above —
+        rolls back every write already made earlier in the same batch call.
+        """
+        _validate_table("basket_weekly_pe_history")
+        if not rows:
+            raise ValueError("non-empty batch required")
+        prepared = [self._validate_bwph_row(row) for row in rows]
+        seen = set()
+        for row in prepared:
+            key = (row["basket"], row["valuation_date"])
+            if key in seen:
+                raise ValueError(f"duplicate row for {key} within batch")
+            seen.add(key)
+
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        conn = self._get_conn()
+        with conn:
+            for row in prepared:
+                existing = conn.execute(
+                    "SELECT quality_tier, methodology_version, created_at "
+                    "FROM basket_weekly_pe_history "
+                    "WHERE basket = ? AND valuation_date = ?",
+                    [row["basket"], row["valuation_date"]],
+                ).fetchone()
+                created_at = now
+                if existing is not None:
+                    created_at = existing["created_at"]
+                    if existing["quality_tier"] == self._BWPH_COMPLETE_TIER \
+                            and existing["methodology_version"] != \
+                            row["methodology_version"]:
+                        raise ValueError(
+                            "refusing silent methodology_version overwrite "
+                            f"of complete row {row['basket']}/"
+                            f"{row['valuation_date']}: "
+                            f"{existing['methodology_version']!r} -> "
+                            f"{row['methodology_version']!r}")
+                    if existing["quality_tier"] == self._BWPH_COMPLETE_TIER \
+                            and row["quality_tier"] != self._BWPH_COMPLETE_TIER:
+                        logger.warning(
+                            "Rejected quality_tier downgrade for %s/%s: "
+                            "%s -> %s", row["basket"], row["valuation_date"],
+                            existing["quality_tier"], row["quality_tier"])
+                        raise ValueError(
+                            "refusing quality_tier downgrade for "
+                            f"{row['basket']}/{row['valuation_date']}: "
+                            f"{existing['quality_tier']!r} -> "
+                            f"{row['quality_tier']!r}")
+                self._insert_validated(conn, "basket_weekly_pe_history", {
+                    **row,
+                    "created_at": created_at,
+                    "last_updated": now,
+                })
+        return len(prepared)
+
+    def get_basket_weekly_pe_history(
+        self,
+        basket: str,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Read-only range query. Never writes (including last_updated)."""
+        conn = self._get_conn()
+        query = "SELECT * FROM basket_weekly_pe_history WHERE basket = ?"
+        params: List[Any] = [basket.upper()]
         if from_date is not None:
             query += " AND valuation_date >= ?"
             params.append(from_date)
