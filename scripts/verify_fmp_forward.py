@@ -23,7 +23,10 @@ from typing import Dict, List, Optional, Tuple
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.data.fmp_forward_ingestion import parse_forward_run_evidence
+from src.data.fmp_forward_ingestion import (
+    parse_forward_run_evidence,
+    parse_share_class_groups,
+)
 
 BASKETS = ("SPY", "QQQ", "SOX", "IGV", "XLF")
 FULL_BASKETS = ("SPY", "QQQ", "SOX", "MAGS", "IGV", "XLF")
@@ -62,10 +65,11 @@ def _connect_ro(db_path: Path) -> sqlite3.Connection:
 
 
 def _load_share_class_groups() -> Dict[str, List[str]]:
+    """Membership only; the market-cap convention is not this check's business."""
     path = PROJECT_ROOT / "config" / "baskets" / "share_class_groups.json"
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            return parse_share_class_groups(json.load(f))[0]
     except (OSError, ValueError):
         return {}
 

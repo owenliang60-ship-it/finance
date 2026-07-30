@@ -16,7 +16,9 @@ import pytest
 
 from src.data.fmp_forward_ingestion import (
     ETF_HOLDING_SOURCES,
+    load_basket_configs,
     load_index_pe_basket_configs,
+    parse_share_class_groups,
 )
 
 
@@ -172,3 +174,51 @@ def test_empty_config_fails_closed(tmp_path):
     config_dir = _write_config(tmp_path, {})
     with pytest.raises(ValueError):
         load_index_pe_basket_configs(config_dir)
+
+
+# ---------------------------------------------------------------------------
+# Task 4: share-class market-cap convention (config/baskets/share_class_groups)
+# ---------------------------------------------------------------------------
+
+def test_repo_share_class_groups_declare_a_market_cap_convention():
+    """Every configured pair must say how FMP quotes its market cap.
+
+    The two conventions are not interchangeable: market.db shows GOOGL and
+    GOOG carrying an identical full-company figure, while FOXA/FOX and
+    NWSA/NWS are split across the classes. Summing would double Alphabet;
+    taking the primary alone would halve Fox.
+    """
+    secondaries, conventions = parse_share_class_groups(
+        json.loads((CONFIG_DIR / "share_class_groups.json").read_text()))
+    assert secondaries["GOOGL"] == ["GOOG"]
+    assert conventions["GOOGL"] == "full_company_per_class"
+    assert conventions["FOXA"] == "split_across_classes"
+    assert conventions["NWSA"] == "split_across_classes"
+    assert set(conventions) == set(secondaries)
+
+
+def test_legacy_list_shape_parses_with_no_declared_convention():
+    secondaries, conventions = parse_share_class_groups({"AAA": ["AAA.B"]})
+    assert secondaries == {"AAA": ["AAA.B"]}
+    assert conventions == {"AAA": None}
+
+
+def test_unknown_market_cap_convention_fails_closed():
+    with pytest.raises(ValueError):
+        parse_share_class_groups({
+            "AAA": {"secondaries": ["AAA.B"], "market_cap_convention": "guess"}})
+
+
+def test_share_class_group_without_secondaries_fails_closed():
+    with pytest.raises(ValueError):
+        parse_share_class_groups({
+            "AAA": {"secondaries": [],
+                    "market_cap_convention": "split_across_classes"}})
+
+
+def test_load_basket_configs_still_yields_plain_secondary_lists():
+    listing, groups, mags = load_basket_configs(CONFIG_DIR)
+    assert groups["GOOGL"] == ["GOOG"]
+    assert groups["FOXA"] == ["FOX"]
+    assert listing["NVMI.TA"] == "NVMI"
+    assert "GOOGL" in mags

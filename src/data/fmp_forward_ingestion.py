@@ -117,6 +117,62 @@ def validate_share_class_groups(groups: Mapping[str, Sequence[str]]) -> None:
         raise ValueError(f"primary also listed as secondary: {sorted(overlap)}")
 
 
+# How FMP quotes market cap for the classes of one dual-class company. The
+# choice is empirical, per pair, and cannot be inferred by a pure valuation
+# engine: market.db has GOOGL and GOOG both carrying the identical
+# full-company figure, while FOXA/FOX and NWSA/NWS split it across classes.
+# Summing the first pair doubles Alphabet; taking the primary alone halves Fox.
+SHARE_CLASS_MARKET_CAP_CONVENTIONS = frozenset({
+    "full_company_per_class",   # each class already quotes the whole company
+    "split_across_classes",     # the company is the sum of its classes
+})
+
+
+def parse_share_class_groups(
+    payload: Mapping[str, Any],
+) -> Tuple[Dict[str, List[str]], Dict[str, Optional[str]]]:
+    """Split share_class_groups.json into membership and market-cap convention.
+
+    Two value shapes are accepted. The legacy plain list keeps every existing
+    consumer (weight merging, holdings normalisation, forward verification)
+    working unchanged and declares no convention. The object shape adds
+    ``market_cap_convention``; a group without one is not merged into a single
+    company market cap, it is excluded, so an unreviewed pair can never be
+    silently double counted or halved.
+    """
+    secondaries: Dict[str, List[str]] = {}
+    conventions: Dict[str, Optional[str]] = {}
+    for primary, entry in payload.items():
+        if isinstance(entry, Mapping):
+            raw_secondaries = entry.get("secondaries")
+            convention = entry.get("market_cap_convention")
+            if convention not in SHARE_CLASS_MARKET_CAP_CONVENTIONS:
+                raise ValueError(
+                    f"share_class market_cap_convention for {primary!r} must "
+                    f"be one of {sorted(SHARE_CLASS_MARKET_CAP_CONVENTIONS)}: "
+                    f"{convention!r}")
+        else:
+            raw_secondaries = entry
+            convention = None
+        if (not isinstance(raw_secondaries, (list, tuple))
+                or not raw_secondaries
+                or any(not isinstance(value, str) or not value
+                       for value in raw_secondaries)):
+            raise ValueError(
+                f"share_class group {primary!r} needs a nonempty list of "
+                "secondary tickers")
+        secondaries[str(primary)] = [str(value) for value in raw_secondaries]
+        conventions[str(primary)] = convention
+    validate_share_class_groups(secondaries)
+    return secondaries, conventions
+
+
+def load_share_class_conventions(config_dir: Path) -> Dict[str, Optional[str]]:
+    """Per-company market-cap convention from config/baskets."""
+    with open(Path(config_dir) / "share_class_groups.json", encoding="utf-8") as f:
+        return parse_share_class_groups(json.load(f))[1]
+
+
 def validate_mags_members(config: Mapping[str, Any]) -> List[str]:
     if config.get("basket") != "MAGS":
         raise ValueError(f"mags config basket must be 'MAGS': {config.get('basket')!r}")
@@ -137,11 +193,10 @@ def load_basket_configs(config_dir: Path) -> Tuple[Dict[str, str],
     with open(config_dir / "listing_overrides.json", encoding="utf-8") as f:
         listing = json.load(f)
     with open(config_dir / "share_class_groups.json", encoding="utf-8") as f:
-        groups = json.load(f)
+        groups, _ = parse_share_class_groups(json.load(f))
     with open(config_dir / "mags_members.json", encoding="utf-8") as f:
         mags_config = json.load(f)
     validate_listing_overrides(listing)
-    validate_share_class_groups(groups)
     mags = validate_mags_members(mags_config)
     return listing, groups, mags
 
