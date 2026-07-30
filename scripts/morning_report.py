@@ -63,6 +63,18 @@ MARKET_TIMING_PRICE_ROWS = 260
 S2_BREADTH_THRESHOLD = 0.30
 S2_BREADTH_COOLDOWN_DAYS = 60
 
+# 成交集中度 context（校准依据: docs/research/2026-07-24-volume-concentration-signal-stat-study.md）
+VOLCONC_TOP_N = 50
+VOLCONC_SMOOTH_DAYS = 20
+VOLCONC_PCTILE_WINDOW = 252          # 分位分母 = 窗口内前 251 个值
+VOLCONC_HIGH_PCTILE = 80.0
+VOLCONC_DIR_LOOKBACK = 20
+VOLCONC_ETF_EXCLUDE = ("SPY", "QQQ", "SOXX")
+VOLCONC_LOOKBACK_TRADING_DAYS = 320  # 252 分位窗 + 20 平滑 + 20 churn lag + 余量
+VOLCONC_MIN_ROWS = 292               # 有效截面日下限，低于此降级
+VOLCONC_COMPLETENESS_RATIO = 0.95    # 末日截面完整性 guard
+VOLCONC_MAX_STALE_STEPS = 3          # 末日不完整时最多回退天数
+
 from terminal.concept_classifier import get_report_concept_classifier
 from terminal.morning_html_report import compile_morning_html_report
 
@@ -499,6 +511,257 @@ def _load_market_timing_target_frames(
         return {}
     finally:
         conn.close()
+
+
+def _load_volume_concentration_frames(db_path: Path | None = None, as_of: str | None = None) -> dict:
+    """Load market-level dollar-volume concentration frames from market.db.
+
+    Read-only, single-pass CTE over daily_price; excludes VOLCONC_ETF_EXCLUDE
+    from both the Top-N ranking and the total_dv denominator. db_path/as_of
+    are test-injection hooks only (not exposed via CLI); default is
+    DATA_DIR/market.db with no upper date bound (latest data).
+
+    Never writes to market.db (P3 ownership — read-only connection only).
+    Any failure (missing db/table, duplicate (date,symbol) rows, parse
+    errors) degrades to {"available": False, "reason": <short phrase>}
+    instead of raising; reason never contains a path or SQL fragment.
+
+    Returns on success:
+        {"available": True,
+         "share_df": DataFrame indexed by ascending DatetimeIndex with
+             columns "share" (top-N dv / total dv, float) and "n_symbols"
+             (valid non-ETF symbol count that day, int),
+         "members": Series aligned to share_df.index, values = frozenset of
+             that day's Top-N symbols,
+         "spy_close": Series indexed by ascending DatetimeIndex of SPY close}
+    """
+    start = time.time()
+    db_path = Path(db_path) if db_path is not None else DATA_DIR / "market.db"
+    if not db_path.exists():
+        logger.warning("volconc loader: db missing")
+        return {"available": False, "reason": "数据库读取失败"}
+
+    etf_placeholders = ",".join("?" for _ in VOLCONC_ETF_EXCLUDE)
+    as_of_clause = " AND date <= ?" if as_of else ""
+
+    conn = None
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        cutoff_sql = (
+            "SELECT DISTINCT date FROM daily_price "
+            "WHERE close > 0 AND volume > 0 "
+            f"AND symbol NOT IN ({etf_placeholders})" + as_of_clause + " "
+            "ORDER BY date DESC LIMIT ?"
+        )
+        cutoff_params = list(VOLCONC_ETF_EXCLUDE)
+        if as_of:
+            cutoff_params.append(as_of)
+        cutoff_params.append(VOLCONC_LOOKBACK_TRADING_DAYS)
+        cutoff_dates = pd.read_sql(cutoff_sql, conn, params=cutoff_params)["date"]
+        if cutoff_dates.empty:
+            return {"available": False, "reason": "历史数据不足"}
+        start_date = cutoff_dates.min()
+
+        rank_sql = (
+            "WITH ranked AS ("
+            " SELECT date, symbol, close*volume AS dv,"
+            "        ROW_NUMBER() OVER (PARTITION BY date ORDER BY close*volume DESC) AS rn,"
+            "        SUM(close*volume) OVER (PARTITION BY date) AS total_dv,"
+            "        COUNT(*) OVER (PARTITION BY date) AS n_symbols"
+            " FROM daily_price"
+            f" WHERE date >= ?{as_of_clause} AND close > 0 AND volume > 0"
+            f"   AND symbol NOT IN ({etf_placeholders}))"
+            " SELECT date, symbol, dv, total_dv, n_symbols FROM ranked WHERE rn <= ?"
+        )
+        rank_params = [start_date]
+        if as_of:
+            rank_params.append(as_of)
+        rank_params.extend(VOLCONC_ETF_EXCLUDE)
+        rank_params.append(VOLCONC_TOP_N)
+        ranked_df = pd.read_sql(rank_sql, conn, params=rank_params)
+
+        spy_sql = (
+            "SELECT date, close FROM daily_price "
+            "WHERE symbol = 'SPY' AND date >= ?" + as_of_clause
+        )
+        spy_params = [start_date]
+        if as_of:
+            spy_params.append(as_of)
+        spy_df = pd.read_sql(spy_sql, conn, params=spy_params)
+    except (sqlite3.Error, pd.errors.DatabaseError) as exc:
+        logger.warning("volconc loader: query failed (%s)", exc)
+        return {"available": False, "reason": "数据库读取失败"}
+    finally:
+        if conn is not None:
+            conn.close()
+
+    try:
+        ranked_df["date"] = pd.to_datetime(ranked_df["date"])
+        if ranked_df.duplicated(subset=["date", "symbol"]).any():
+            return {"available": False, "reason": "数据重复"}
+
+        per_date = ranked_df.groupby("date").agg(
+            top_dv=("dv", "sum"),
+            total_dv=("total_dv", "first"),
+            n_symbols=("n_symbols", "first"),
+        )
+        per_date["share"] = (per_date["top_dv"] / per_date["total_dv"]).astype(float)
+        share_df = per_date[["share", "n_symbols"]].sort_index()
+        share_df.index = pd.DatetimeIndex(share_df.index)
+        share_df["n_symbols"] = share_df["n_symbols"].astype(int)
+
+        members = ranked_df.groupby("date")["symbol"].apply(frozenset).sort_index()
+        members.index = pd.DatetimeIndex(members.index)
+        members = members.reindex(share_df.index)
+
+        spy_df["date"] = pd.to_datetime(spy_df["date"])
+        spy_close = spy_df.set_index("date")["close"].astype(float).sort_index()
+        spy_close.index = pd.DatetimeIndex(spy_close.index)
+    except (KeyError, ValueError, TypeError) as exc:
+        logger.warning("volconc loader: parse failed (%s)", exc)
+        return {"available": False, "reason": "数据库读取失败"}
+
+    elapsed = time.time() - start
+    logger.info("volconc loader: %d rows in %.2fs", len(ranked_df), elapsed)
+    return {
+        "available": True,
+        "share_df": share_df,
+        "members": members,
+        "spy_close": spy_close,
+    }
+
+
+def _volconc_regime(share_pctile: float | None, spy_ret20: float | None) -> str:
+    """Classify the volume-concentration regime from a share percentile and
+    SPY 20d direction. Pure lookup, no rolling math — kept separate from
+    _compute_volume_concentration_payload for isolated boundary testing.
+
+    Labels mirror docs/research/2026-07-24-volume-concentration-signal-stat-study.md;
+    spy_ret20 == 0 counts as non-positive (matches the research script's
+    strict `> 0` boolean convention for direction).
+    """
+    if share_pctile is None:
+        return "数据不足"
+    if spy_ret20 is None:
+        return "方向数据缺失"
+    if share_pctile > VOLCONC_HIGH_PCTILE:
+        return "高集中+上行（拥挤）" if spy_ret20 > 0 else "高集中+下行（恐慌）"
+    return "常态"
+
+
+def _volconc_roll_pctile(s: pd.Series, window: int) -> pd.Series:
+    """Rolling percentile rank of the window's last value vs. its preceding
+    values (denominator = window - 1). Matches research run_study.py
+    roll_pctile() line-for-line."""
+    return s.rolling(window).apply(lambda w: (w[-1] > w[:-1]).mean() * 100, raw=True)
+
+
+def _volconc_section_complete(share_df: pd.DataFrame, idx: int) -> bool:
+    """Dual-condition completeness check for the as_of candidate at position
+    idx: n_symbols must clear both the absolute Top-N floor and
+    VOLCONC_COMPLETENESS_RATIO x the trailing-20-row median (fewer than 20
+    prior rows -> use what's available; zero prior rows -> incomplete)."""
+    n = share_df["n_symbols"].iloc[idx]
+    if n < VOLCONC_TOP_N:
+        return False
+    prior = share_df["n_symbols"].iloc[max(0, idx - 20):idx]
+    if len(prior) == 0:
+        return False
+    return n >= VOLCONC_COMPLETENESS_RATIO * prior.median()
+
+
+def _compute_volume_concentration_payload(
+    share_df: pd.DataFrame, members_df: pd.Series, spy_close: pd.Series,
+) -> dict:
+    """Pure computation over _load_volume_concentration_frames' output ->
+    volume-concentration payload. No IO, no global state.
+
+    Order matters (see docs/plans/2026-07-24-morning-report-volume-concentration-context.md):
+      1. empty/short-input guard
+      2. as_of completeness guard (dual condition, up to
+         VOLCONC_MAX_STALE_STEPS rollback days over the *untruncated* frame)
+      3. staleness gate: if the *untruncated* spy_close (the market-calendar
+         reference) has more than VOLCONC_MAX_STALE_STEPS sessions strictly
+         after as_of, degrade — broad ingestion wrote zero rows for those
+         trailing sessions, so share_df never saw them and the completeness
+         guard above could never catch them by walking share_df's own dates
+      4. truncate share_df/members_df/spy_close to index <= as_of BEFORE any
+         rolling computation, so a partially-written latest session can
+         never pollute a rolling window
+      5. min-rows guard on the truncated frame
+      6. SPY 20d direction (reindexed to share_df's own trading-day axis)
+      7. share smoothing + rolling percentile
+      8. churn (Top-N set turnover, 20-session lag) + smoothing + percentile
+      9. NaN fallback if any as_of-row metric is still NaN
+      10. payload assembly
+    """
+    if share_df is None or share_df.empty:
+        return {"available": False, "reason": "历史数据不足"}
+
+    n_rows = len(share_df)
+    as_of_idx = None
+    for step in range(VOLCONC_MAX_STALE_STEPS + 1):
+        idx = n_rows - 1 - step
+        if idx < 0:
+            break
+        if _volconc_section_complete(share_df, idx):
+            as_of_idx = idx
+            break
+    if as_of_idx is None:
+        return {"available": False, "reason": "最新截面不完整"}
+
+    as_of = share_df.index[as_of_idx]
+
+    if spy_close is not None and not spy_close.empty:
+        if int((spy_close.index > as_of).sum()) > VOLCONC_MAX_STALE_STEPS:
+            return {"available": False, "reason": "截面数据陈旧"}
+
+    share_df = share_df.iloc[:as_of_idx + 1]
+    members_df = members_df.iloc[:as_of_idx + 1]
+    spy_close = spy_close.loc[spy_close.index <= as_of]
+
+    if len(share_df) < VOLCONC_MIN_ROWS:
+        return {"available": False, "reason": "历史数据不足"}
+
+    spy_aligned = spy_close.reindex(share_df.index)
+    ret20 = spy_aligned.pct_change(VOLCONC_DIR_LOOKBACK, fill_method=None)
+    spy_ret20_raw = ret20.iloc[-1]
+    spy_ret20 = None if pd.isna(spy_ret20_raw) else float(spy_ret20_raw)
+
+    share_sm = share_df["share"].rolling(VOLCONC_SMOOTH_DAYS).mean()
+    share_pctile = _volconc_roll_pctile(share_sm, VOLCONC_PCTILE_WINDOW)
+
+    churn_lag = 20  # session-index lag; research run_study.py L59-62/261-264 (literal 20)
+    member_values = members_df.to_list()
+    churn_values = [float("nan")] * len(member_values)
+    for i in range(churn_lag, len(member_values)):
+        overlap = len(member_values[i - churn_lag] & member_values[i])
+        churn_values[i] = 1 - overlap / VOLCONC_TOP_N
+    churn = pd.Series(churn_values, index=share_df.index, dtype=float)
+    churn_sm = churn.rolling(VOLCONC_SMOOTH_DAYS).mean()
+    churn_pctile = _volconc_roll_pctile(churn_sm, VOLCONC_PCTILE_WINDOW)
+
+    share_sm_last = share_sm.iloc[-1]
+    share_pctile_last = share_pctile.iloc[-1]
+    churn_sm_last = churn_sm.iloc[-1]
+    churn_pctile_last = churn_pctile.iloc[-1]
+    if (
+        pd.isna(share_sm_last) or pd.isna(share_pctile_last)
+        or pd.isna(churn_sm_last) or pd.isna(churn_pctile_last)
+    ):
+        return {"available": False, "reason": "历史数据不足"}
+
+    regime = _volconc_regime(float(share_pctile_last), spy_ret20)
+    return {
+        "available": True,
+        "as_of": as_of.date().isoformat(),
+        "share_sm_pct": float(share_sm_last) * 100,
+        "share_pctile_1y": float(share_pctile_last),
+        "churn_sm_pct": float(churn_sm_last) * 100,
+        "churn_pctile_1y": float(churn_pctile_last),
+        "spy_ret20_pct": None if spy_ret20 is None else spy_ret20 * 100,
+        "regime": regime,
+    }
 
 
 def _compute_breadth_s2_status(
@@ -945,11 +1208,25 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     scan_dates = [frame.index.max() for frame in price_frames.values() if not frame.empty]
     as_of = max(scan_dates).date().isoformat() if scan_dates else date.today().isoformat()
 
+    try:
+        volconc_frames = _load_volume_concentration_frames()
+        if volconc_frames.get("available"):
+            volconc = _compute_volume_concentration_payload(
+                volconc_frames["share_df"],
+                volconc_frames["members"],
+                volconc_frames["spy_close"],
+            )
+        else:
+            volconc = volconc_frames  # loader 已给 {"available": False, "reason": ...}
+    except Exception:
+        volconc = {"available": False, "reason": "计算异常"}
+
     return {
         "as_of": as_of,
         "symbols_scanned": len(symbols),
         "symbols_with_data": len(price_frames),
         "market_timing_factor": build_market_timing_factor_report(),
+        "volume_concentration": volconc,
         "layer_counts": {
             layer: sum(
                 1 for symbol in symbols
@@ -1071,6 +1348,59 @@ def format_section_market_timing_factor(market_signals: dict) -> str:
             breadth_display,
             breadth_cross,
         ))
+    return "\n".join(lines)
+
+
+def _volconc_display_rows(payload: dict) -> dict:
+    """Shared 0b 成交集中度 display-data assembly for text/HTML/PNG faces.
+
+    Each face renders its own markup from this dict's labels/values/status,
+    so the three surfaces are guaranteed to match by construction rather
+    than by keeping three hand-written format strings in sync (see
+    docs/plans/2026-07-24-morning-report-volume-concentration-context.md).
+    Labels are byte-identical to the text face's original sample;
+    values are pre-formatted (1 decimal + %; percentile rounded to int) so
+    no face re-derives rounding independently.
+
+    available=False payloads return only {"available": False, "reason": ...}.
+    spy_ret20_pct is never surfaced here — it is a regime-only input, never
+    rendered on any face (see docs/plans/2026-07-24-morning-report-volume-concentration-context.md 禁词表)."""
+    payload = payload or {}
+    if not payload.get("available"):
+        return {"available": False, "reason": payload.get("reason", "N/A")}
+
+    return {
+        "available": True,
+        "as_of": payload.get("as_of"),
+        "rows": [
+            {
+                "label": "Top50 成交额占比(20日平滑)",
+                "value": "{:.1f}%".format(payload.get("share_sm_pct")),
+                "pctile": str(round(payload.get("share_pctile_1y"))),
+            },
+            {
+                "label": "Top50 名单20日换手率(平滑)",
+                "value": "{:.1f}%".format(payload.get("churn_sm_pct")),
+                "pctile": str(round(payload.get("churn_pctile_1y"))),
+            },
+        ],
+        "status": payload.get("regime"),
+    }
+
+
+def format_section_volume_concentration(payload: dict) -> str:
+    """Section 0b text face — Top50 成交额占比 / 名单换手率 + regime label
+    only. No directional/predictive language: spy_ret20_pct is regime-only
+    input and is never rendered (see
+    docs/plans/2026-07-24-morning-report-volume-concentration-context.md 禁词表)."""
+    display = _volconc_display_rows(payload)
+    if not display["available"]:
+        return "*0b. 成交集中度*\n成交集中度: 数据不足（{}）".format(display["reason"])
+
+    lines = ["*0b. 成交集中度*（截至 {}）".format(display["as_of"])]
+    for row in display["rows"]:
+        lines.append("{}   {}   1年分位 {}".format(row["label"], row["value"], row["pctile"]))
+    lines.append("状态: {}".format(display["status"]))
     return "\n".join(lines)
 
 
@@ -1482,6 +1812,26 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
                  "S2触发": "YES" if row.get("breadth_s2_upcross") else "—"}
                 for row in tf_rows]})
 
+    # 0b. 成交集中度 — shares _volconc_display_rows with text/PNG faces so
+    # labels/values/status match by construction (Task 4).
+    volconc_display = _volconc_display_rows((market_signals or {}).get("volume_concentration"))
+    if volconc_display["available"]:
+        blocks.append({
+            "heading": "0b. 成交集中度",
+            "subtitle": "截至 {} | 状态: {}".format(
+                volconc_display["as_of"], volconc_display["status"]),
+            "columns": ["指标", "数值", "1年分位"],
+            "rows": [
+                {"指标": row["label"], "数值": row["value"], "1年分位": row["pctile"]}
+                for row in volconc_display["rows"]
+            ],
+        })
+    else:
+        blocks.append({
+            "heading": "0b. 成交集中度",
+            "subtitle": "成交集中度: 数据不足（{}）".format(volconc_display["reason"]),
+        })
+
     blocks.append({"heading": "1. PMARP 信号"})
 
     # PMARP — signal -> cap-tier sub-blocks (columns one-to-one with text)
@@ -1612,6 +1962,37 @@ def build_morning_visual_sections(
                         ],
                     },
                 ],
+            })
+
+        # 0b. 成交集中度 — shares _volconc_display_rows with text/HTML faces so
+        # labels/values/status match by construction (Task 4). Only adds a
+        # spec entry; the existing grouped=False table renderer draws it.
+        volconc_display = _volconc_display_rows(market_signals.get("volume_concentration"))
+        if volconc_display["available"]:
+            sections.append({
+                "slug": "00b_volume_concentration",
+                "title": "0b. 成交集中度",
+                "subtitle": "截至 {} | 状态: {}".format(
+                    volconc_display["as_of"], volconc_display["status"]),
+                "blocks": [
+                    {
+                        "title": "Top50 成交集中度指标",
+                        "columns": ["指标", "数值", "1年分位"],
+                        "widths": [420, 220, 220],
+                        "grouped": False,
+                        "rows": [
+                            {"cells": [row["label"], row["value"], row["pctile"]]}
+                            for row in volconc_display["rows"]
+                        ],
+                    },
+                ],
+            })
+        else:
+            sections.append({
+                "slug": "00b_volume_concentration",
+                "title": "0b. 成交集中度",
+                "subtitle": "成交集中度: 数据不足（{}）".format(volconc_display["reason"]),
+                "blocks": [],
             })
 
         pmarp = market_signals.get("pmarp", {})
@@ -2267,6 +2648,10 @@ def format_morning_report(
         lines.append("")
 
         lines.append(format_section_market_timing_factor(market_signals))
+        lines.append("")
+
+        lines.append(format_section_volume_concentration(
+            market_signals.get("volume_concentration", {})))
         lines.append("")
 
         lines.append(format_section_pmarp_by_signal_and_cap(market_signals))

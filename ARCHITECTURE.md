@@ -202,6 +202,8 @@
 
 > **FMP forward 数据线（Phase 1，2026-07 上线）**：周六顺序 = yfinance 旧线 → 5 ETF holdings 快照 → FMP estimates/earnings → 只读 verifier（`scripts/verify_fmp_forward.py`）。周频 universe = `core_pool ∪ extended_pool ∪ 5 篮子 included 规范化 symbol ∪ MAGS 静态 7`（约 1075–1175 只）；writer 在逐股请求前把 exact sorted universe 冻结进 `fmp_forward_runs`，verifier 只读该 manifest 作分母（≥90% 各有 ≥4 个未来非空 eps_avg 季度）。`fmp_basket_valuation` schema 已建、Phase 2 才写入。yfinance 线保持并行对拍，四周 review 通过前不下线。
 
+> **晨报「0b 成交集中度」context 小节**：市场级 Top50 成交额占比 + 名单换手率的平滑值与 1 年分位 + regime 标签，报告时现算（`market.db` 只读），定位为纯 context 展示、不进策略层；研究依据见 `docs/research/2026-07-24-volume-concentration-signal-stat-study.md`。
+
 ---
 
 ## Data Flow Example: `analyze_ticker("NVDA")`
