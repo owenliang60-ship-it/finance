@@ -986,3 +986,94 @@ def test_a_tampered_hindsight_income_is_caught(tmp_path, config_dir):
     assert detail is not None, "the tamper went unnoticed"
     assert any("hindsight_income_disagrees_with_raw_source" in str(item)
                for item in detail["errors"]), detail["errors"]
+
+
+# ---------------------------------------------------------------------------
+# Frozen denominator, both directions: missing rows AND surplus rows
+# ---------------------------------------------------------------------------
+
+def _orphan_row(db_path, basket, valuation_date):
+    """A row of the shape a failed run leaves behind, written directly."""
+    conn = sqlite3.connect(db_path)
+    with conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO basket_weekly_pe_history "
+            "(basket, valuation_date, ttm_pe_gaap, hindsight_ntm_pe_gaap, "
+            "ttm_total_mcap, ttm_net_income, hindsight_total_mcap, "
+            "hindsight_ntm_net_income, n_members, n_covered_ttm, "
+            "n_covered_hindsight, mcap_coverage_ttm, mcap_coverage_hindsight, "
+            "hindsight_actual_quarters, hindsight_estimate_quarters, "
+            "composition_effective_date, composition_available_date, "
+            "quality_tier, members_json, warnings_json, methodology_version, "
+            "created_at, last_updated) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [basket, valuation_date, 20.0, 18.0, 1000.0, 50.0, 1000.0, 55.0,
+             2, 2, 2, 1.0, 1.0, 4, 0, "2021-01-18", "2021-01-25",
+             "actual_only", json.dumps({"members": []}), "[]",
+             WEEKLY_METHODOLOGY_VERSION, "2026-01-16T00:00:00Z",
+             "2026-01-16T00:00:00Z"])
+    conn.close()
+
+
+def _failed_run_events(store, basket, run_id, expected_from, expected_to):
+    base = {
+        "run_id": run_id, "basket": basket, "frequency": "weekly",
+        "expected_from_date": expected_from, "expected_to_date": expected_to,
+        "methodology_version": WEEKLY_METHODOLOGY_VERSION,
+        "target_count": 2, "target_universe_json": ["AAA", "BBB"],
+    }
+    store.append_basket_pe_run_events([
+        {**base, "event_seq": 0, "event_kind": "run_started",
+         "payload_json": {}},
+        {**base, "event_seq": 1, "event_kind": "run_failed",
+         "payload_json": {"error": "RuntimeError: boom", "rows_written": True}},
+    ])
+
+
+def test_rows_a_failed_run_left_outside_the_rerun_window_are_caught(
+        tmp_path, config_dir):
+    """A surplus row must not escape by sitting outside the expected set.
+
+    The certifying run's window is the five years back from as-of. A failed
+    run that wrote 2019 rows leaves them certified by nothing at all -- and
+    they are invisible to a denominator that only ever looks inside the
+    window it was handed.
+    """
+    db_path = _build(tmp_path)
+    _orphan_row(db_path, "SPY", "2019-06-28")
+    store = MarketStore(db_path)
+    try:
+        _failed_run_events(store, "SPY", "run-2", "2014-06-28", "2019-06-28")
+    finally:
+        store.close()
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("row_outside_every_certified_window" in str(item)
+               and "2019-06-28" in str(item)
+               for item in failures["expected_weekly_denominator"]), failures
+
+
+def test_a_surplus_row_inside_the_window_is_caught(tmp_path, config_dir):
+    """Same rule inside the window: a week the run never claimed is surplus."""
+    db_path = _build(tmp_path)
+    _orphan_row(db_path, "SPY", "2025-11-14")
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("row_outside_the_expected_range" in str(item)
+               for item in failures["expected_weekly_denominator"]), failures
+
+
+def test_rows_of_an_older_completed_run_are_not_treated_as_surplus(
+        tmp_path, config_dir):
+    """An earlier run that certified its own window is not an orphan."""
+    db_path = _build(tmp_path)
+    _orphan_row(db_path, "SPY", "2019-06-28")
+    store = MarketStore(db_path)
+    try:
+        store.append_basket_pe_run_events(_manifest_events(
+            "SPY", run_id="run-0", expected_from="2014-06-28",
+            expected_to="2019-06-28", trading=["2019-06-28"], rows=[]))
+    finally:
+        store.close()
+    denominator = [item for item in _failed(_verify(db_path, config_dir)).get(
+        "expected_weekly_denominator", [])
+        if "row_outside_every_certified_window" in str(item)]
+    assert not denominator, denominator

@@ -955,6 +955,35 @@ def _raw_source_reconciliation(
 # expected weekly denominator
 # ---------------------------------------------------------------------------
 
+def _uncertified_row_errors(
+    basket: str, conn: sqlite3.Connection,
+    events: Sequence[Mapping[str, Any]],
+) -> List[str]:
+    """Rows no completed run ever claimed responsibility for.
+
+    The frozen week set makes the denominator immutable, but it only speaks
+    about the window it covers. A run that failed after writing may have left
+    rows *outside* that window -- an earlier `--as-of`, a longer `--years` --
+    where a check scoped to the certifying window never even loads them. Every
+    stored row must fall inside the window of some run that completed;
+    anything else is data certified by nothing.
+
+    Windows come from completed runs only, so an earlier run that finished its
+    own five years keeps its rows legitimate.
+    """
+    windows = [(str(row["expected_from_date"]), str(row["expected_to_date"]))
+               for row in events if row["event_kind"] == "run_completed"]
+    errors = []
+    for row in _rows(conn, "SELECT valuation_date FROM "
+                           "basket_weekly_pe_history WHERE basket = ? "
+                           "ORDER BY valuation_date", [basket]):
+        valuation_date = str(row["valuation_date"])
+        if not any(start <= valuation_date <= end for start, end in windows):
+            errors.append(
+                f"{basket}:{valuation_date}:row_outside_every_certified_window")
+    return errors
+
+
 def _week_key(day: str) -> Tuple[int, int]:
     return date.fromisoformat(day).isocalendar()[:2]
 
@@ -1091,6 +1120,8 @@ def verify_database(
         denominator_errors.extend(_denominator_errors(
             basket, expected_weeks, rows,
             basket_configs[basket].get("history_available_from")))
+        denominator_errors.extend(
+            _uncertified_row_errors(basket, conn, events))
         tier_errors.extend(_tier_consistency_errors(rows))
         staleness = int(basket_configs[basket].get(
             "market_cap_staleness_days", DEFAULT_MARKET_CAP_STALENESS_DAYS))
