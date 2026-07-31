@@ -159,7 +159,7 @@ fwd_pe_ntm(snapshot)
 
 **Tail 演化契约（R5）**：`quality_tier` 从 `latest_consensus_tail` 升级为 `actual_only` 是**同一 methodology 下的合法周频数据更新**，不 bump `methodology_version`。规则：
 
-1. 每次 weekly run 重算所有 hindsight tail 未满四个 actual 季度的点（约最近 12 个月）；**（2026-07-31 增补）当前强制契约为整窗重写**：F2 行级归属模型下，认证 run 必须重写并声明其窗口内全部行（增量 tail-only 刷新会被 verifier 大声拒绝，有测试钉住）。若 Task 5 需要增量刷新以控制运行成本，须由 Boss 拍板引入 supersession-chain verifier 设计，不得静默放宽归属检查；
+1. 每次 weekly run 重算所有 hindsight tail 未满四个 actual 季度的点（约最近 12 个月）；**（2026-07-31 Boss 拍板：整窗重写，不做 supersession chain）**：认证 run 在单一事务内完成——认证新五年窗口 → 写入全部窗口行 → 删除该 basket 窗口外旧行 → 提交；任一步失败整批回滚。增量 tail-only 刷新被 verifier 大声拒绝（有测试钉住）。必须有"窗口向前滑动一周"的真实回归测试（旧首周行被删除、无孤立行、验证干净通过）。周频 ~17 分钟成本已接受；
 2. `quality_tier` 只允许单向升级（estimate → actual）；降级（actual → estimate）必须拒绝写入并记录 warning；
 3. 五年 percentile **分线计算**（2026-07-31 Boss 细化）：TTM 分位用全部非空 TTM 点（TTM 无 tail 概念）；hindsight 分位仅用 `quality_tier = actual_only` 的点，consensus tail 点展示数值但不参与分位；**禁止用 hindsight tier 过滤 TTM 历史**（查询层与 renderer 同契约，见 Task 6）。
 
