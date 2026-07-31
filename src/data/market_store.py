@@ -602,6 +602,11 @@ _SCHEMA = "\n\n".join([
     """CREATE TABLE IF NOT EXISTS basket_weekly_pe_history (
     basket TEXT NOT NULL,
     valuation_date TEXT NOT NULL,
+    -- 写入本行的 run（basket_pe_backfill_runs.run_id）。verifier 以此判定
+    -- "行归属" 与 "认证 run" 是否一致：manifest 只防改写不防追加，伪造一对
+    -- run_started+run_completed 曾能重新认证被篡改的行；行自带归属后，
+    -- 认证只对该 run 名下的行生效。R5 tail 升级会把归属改到重算的那次 run。
+    run_id TEXT NOT NULL,
     ttm_pe_gaap REAL,
     hindsight_ntm_pe_gaap REAL,
     ttm_total_mcap REAL,
@@ -1425,6 +1430,10 @@ class MarketStore:
         quality_tier = row.get("quality_tier")
         if quality_tier not in self._BWPH_QUALITY_TIERS:
             raise ValueError(f"invalid quality_tier: {quality_tier!r}")
+        run_id = str(row.get("run_id") or "").strip()
+        if not run_id:
+            raise ValueError("run_id required: a published row must name the "
+                             "run accountable for it")
         for field_name in ("n_members", "n_covered_ttm", "n_covered_hindsight"):
             value = row.get(field_name)
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
@@ -1450,6 +1459,7 @@ class MarketStore:
         return {
             **row,
             "basket": basket,
+            "run_id": run_id,
             "valuation_date": valuation_date,
             "composition_effective_date": composition_effective_date,
             "composition_available_date": composition_available_date,

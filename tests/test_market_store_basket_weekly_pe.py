@@ -26,6 +26,7 @@ def store(tmp_path):
 
 
 def _row(basket="SPY", valuation_date="2026-07-10", methodology_version="v1",
+         run_id="run-fixture",
          quality_tier="actual_only", hindsight_actual_quarters=4,
          hindsight_estimate_quarters=0, ttm_pe_gaap=22.0,
          mcap_coverage_ttm=0.98, mcap_coverage_hindsight=0.97):
@@ -48,6 +49,7 @@ def _row(basket="SPY", valuation_date="2026-07-10", methodology_version="v1",
         "composition_effective_date": "2026-06-22",
         "composition_available_date": "2026-07-01",
         "quality_tier": quality_tier,
+        "run_id": run_id,
         "members_json": [{"symbol": "AAPL"}],
         "warnings_json": [],
         "methodology_version": methodology_version,
@@ -344,3 +346,38 @@ def test_manifest_reads_are_scoped_by_basket_and_run(store):
     assert len(store.get_basket_pe_run_events(run_id="run-2")) == 1
     assert len(store.get_basket_pe_run_events(
         basket="SPY", run_id="run-1")) == 1
+
+
+# ---------------------------------------------------------------------------
+# Fix round 2 / F2: rows carry the run that wrote them
+# ---------------------------------------------------------------------------
+
+def test_row_records_the_run_that_wrote_it(store):
+    store.upsert_basket_weekly_pe_batch([_row(run_id="run-1")])
+    stored = store.get_basket_weekly_pe_history("SPY")
+    assert stored[0]["run_id"] == "run-1"
+
+
+def test_a_row_without_a_run_id_is_rejected(store):
+    row = _row()
+    row.pop("run_id", None)
+    with pytest.raises(ValueError, match="run_id"):
+        store.upsert_basket_weekly_pe_batch([row])
+
+
+def test_r5_tail_upgrade_still_works_and_rebinds_the_run(store):
+    """A later run re-computing a tail point is the R5 upgrade path.
+
+    The row's ownership moves to the run that recomputed it -- that run is the
+    one now accountable for the value.
+    """
+    store.upsert_basket_weekly_pe_batch([_row(
+        run_id="run-1", quality_tier="latest_consensus_tail",
+        hindsight_actual_quarters=2, hindsight_estimate_quarters=2)])
+    store.upsert_basket_weekly_pe_batch([_row(
+        run_id="run-2", quality_tier="actual_only",
+        hindsight_actual_quarters=4, hindsight_estimate_quarters=0)])
+    stored = store.get_basket_weekly_pe_history("SPY")
+    assert len(stored) == 1
+    assert stored[0]["quality_tier"] == "actual_only"
+    assert stored[0]["run_id"] == "run-2"

@@ -392,33 +392,71 @@ def _manifest_errors(
 
 
 def _result_integrity_errors(
-    basket: str, events: Sequence[Mapping[str, Any]], run_id: Optional[str],
-    rows: Sequence[Mapping[str, Any]],
+    basket: str, conn: sqlite3.Connection,
+    events: Sequence[Mapping[str, Any]], run_id: Optional[str],
+    window: Tuple[str, str],
 ) -> List[str]:
-    """The stored rows must still be the rows the run said it wrote.
+    """Certification is per run, over the rows that run actually wrote.
 
-    Independent of the week-set check: that one catches a missing week, this
-    one also catches an edited value inside a week that is still present.
+    Freezing a result hash stopped an edit from going unnoticed, but not a
+    forgery: append a fresh run_started + run_completed whose hash is
+    recomputed over the tampered rows and the forged run became the certifying
+    one. Every hash matched, because the attacker chose them.
+
+    Rows now name the run that wrote them, which turns certification into a
+    claim about specific rows rather than about a date range. A run's declared
+    hash is checked against exactly its own rows; rows inside the certifying
+    window must belong to the certifying run; and a row naming a run that
+    never completed is certified by nobody.
     """
     if run_id is None:
         return [f"{basket}:no_completed_run_to_check_results_against"]
-    completed = next((row for row in events
-                      if row["run_id"] == run_id
-                      and row["event_kind"] == "run_completed"), None)
-    payload = _payload(completed)
-    declared = payload.get("result_hash")
-    if not declared:
-        return [f"{basket}:run_completed_declared_no_result_hash"]
-    errors = []
-    if payload.get("weekly_rows") is not None \
-            and int(payload["weekly_rows"]) != len(rows):
-        errors.append(
-            f"{basket}:row_count_differs_from_the_run:"
-            f"{payload['weekly_rows']}!={len(rows)}")
-    observed = weekly_result_hash(rows)
-    if declared != observed:
-        errors.append(
-            f"{basket}:result_hash_mismatch:{declared[:12]}!={observed[:12]}")
+    errors: List[str] = []
+    valid = set(_valid_completed_runs(events))
+    declared: Dict[str, Dict[str, Any]] = {}
+    for row in events:
+        if row["event_kind"] == "run_completed" and str(row["run_id"]) in valid:
+            declared[str(row["run_id"])] = _payload(row)
+
+    rows = _rows(conn, "SELECT * FROM basket_weekly_pe_history "
+                       "WHERE basket = ? ORDER BY valuation_date", [basket])
+    owned: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        owner = str(row["run_id"] or "").strip()
+        if not owner:
+            errors.append(
+                f"{basket}:{row['valuation_date']}:row_names_no_run")
+            continue
+        owned.setdefault(owner, []).append(row)
+
+    for owner in sorted(owned):
+        if owner not in declared:
+            errors.append(
+                f"{basket}:{owner}:rows_claim_an_uncertified_run:"
+                f"{len(owned[owner])}_rows")
+            continue
+        expected = declared[owner].get("result_hash")
+        if not expected:
+            errors.append(f"{basket}:{owner}:run_declared_no_result_hash")
+            continue
+        observed = weekly_result_hash(owned[owner])
+        if expected != observed:
+            errors.append(
+                f"{basket}:{owner}:run_result_hash_mismatch:"
+                f"{str(expected)[:12]}!={observed[:12]}")
+        rows_declared = declared[owner].get("weekly_rows")
+        if rows_declared is not None and int(rows_declared) != len(owned[owner]):
+            errors.append(
+                f"{basket}:{owner}:run_row_count_mismatch:"
+                f"{rows_declared}!={len(owned[owner])}")
+
+    for row in rows:
+        if not window[0] <= str(row["valuation_date"]) <= window[1]:
+            continue
+        if str(row["run_id"] or "").strip() != run_id:
+            errors.append(
+                f"{basket}:{row['valuation_date']}:"
+                f"not_owned_by_the_certifying_run:{row['run_id']}")
     return errors
 
 
@@ -1232,8 +1270,8 @@ def verify_database(
             [basket, window[0], window[1]])
         rows, decode_errors = _decode_rows(raw_rows)
         json_errors.extend(decode_errors)
-        integrity_errors.extend(
-            _result_integrity_errors(basket, events, run_id, rows))
+        integrity_errors.extend(_result_integrity_errors(
+            basket, conn, events, run_id, (window[0], window[1])))
         versions = sorted({str(row["methodology_version"]) for row in rows})
         if versions not in ([], [WEEKLY_METHODOLOGY_VERSION]):
             version_errors.append(f"{basket}:{versions}")

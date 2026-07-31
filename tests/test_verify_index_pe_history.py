@@ -81,7 +81,8 @@ def _member(symbol, weight, market_cap, market_cap_date, ttm=25.0,
     }
 
 
-def _weekly_row(basket, valuation_date, members, quality_tier="actual_only"):
+def _weekly_row(basket, valuation_date, members, quality_tier="actual_only",
+                run_id="run-1"):
     covered_ttm = [m for m in members
                    if m["market_cap"] is not None
                    and m["ttm_net_income_usd"] is not None]
@@ -98,6 +99,7 @@ def _weekly_row(basket, valuation_date, members, quality_tier="actual_only"):
     return {
         "basket": basket,
         "valuation_date": valuation_date,
+        "run_id": run_id,
         "ttm_pe_gaap": ttm_mcap / ttm_income,
         "hindsight_ntm_pe_gaap": hs_mcap / hs_income,
         "ttm_total_mcap": ttm_mcap,
@@ -992,13 +994,13 @@ def test_a_tampered_hindsight_income_is_caught(tmp_path, config_dir):
 # Frozen denominator, both directions: missing rows AND surplus rows
 # ---------------------------------------------------------------------------
 
-def _orphan_row(db_path, basket, valuation_date):
+def _orphan_row(db_path, basket, valuation_date, run_id="run-0"):
     """A row of the shape a failed run leaves behind, written directly."""
     conn = sqlite3.connect(db_path)
     with conn:
         conn.execute(
             "INSERT OR REPLACE INTO basket_weekly_pe_history "
-            "(basket, valuation_date, ttm_pe_gaap, hindsight_ntm_pe_gaap, "
+            "(basket, valuation_date, run_id, ttm_pe_gaap, hindsight_ntm_pe_gaap, "
             "ttm_total_mcap, ttm_net_income, hindsight_total_mcap, "
             "hindsight_ntm_net_income, n_members, n_covered_ttm, "
             "n_covered_hindsight, mcap_coverage_ttm, mcap_coverage_hindsight, "
@@ -1006,8 +1008,8 @@ def _orphan_row(db_path, basket, valuation_date):
             "composition_effective_date, composition_available_date, "
             "quality_tier, members_json, warnings_json, methodology_version, "
             "created_at, last_updated) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            [basket, valuation_date, 20.0, 18.0, 1000.0, 50.0, 1000.0, 55.0,
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [basket, valuation_date, run_id, 20.0, 18.0, 1000.0, 50.0, 1000.0, 55.0,
              2, 2, 2, 1.0, 1.0, 4, 0, "2021-01-18", "2021-01-25",
              "actual_only", json.dumps({"members": []}), "[]",
              WEEKLY_METHODOLOGY_VERSION, "2026-01-16T00:00:00Z",
@@ -1242,3 +1244,65 @@ def test_a_row_using_an_older_composition_than_available_is_caught(
     failures = _failed(_verify(db_path, config_dir))
     assert any("not_the_latest_eligible_composition" in str(item)
                for item in failures["materialised_evidence"]), failures
+
+
+# ---------------------------------------------------------------------------
+# Fix round 2 / F2: certification applies to the rows a run actually wrote
+# ---------------------------------------------------------------------------
+
+def test_a_forged_run_cannot_certify_rows_it_did_not_write(
+        tmp_path, config_dir):
+    """The manifest resisted rewriting but not appending.
+
+    Tamper a row, then append a fresh run_started + run_completed whose
+    result_hash is recomputed over the tampered data: every hash matched and
+    the forged run became the certifying one. Rows now name the run that wrote
+    them, so a run can only certify its own.
+    """
+    db_path = _build(tmp_path)
+    _mutate(db_path, "UPDATE basket_weekly_pe_history SET ttm_pe_gaap = 9.99 "
+                     "WHERE valuation_date = '2026-01-16'")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rows = [dict(row) for row in conn.execute(
+        "SELECT * FROM basket_weekly_pe_history ORDER BY valuation_date")]
+    conn.close()
+    store = MarketStore(db_path)
+    try:
+        store.append_basket_pe_run_events(_manifest_events(
+            "SPY", run_id="run-forged",
+            trading=_weekdays("2026-01-05", "2026-01-16"), rows=rows))
+    finally:
+        store.close()
+    failures = _failed(_verify(db_path, config_dir))
+    assert failures, "the forged run re-certified tampered rows"
+    assert any("not_owned_by_the_certifying_run" in str(item)
+               for item in failures.get("manifest_result_integrity", [])), \
+        failures
+
+
+def test_rows_naming_a_run_that_never_completed_are_rejected(
+        tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    _mutate(db_path, "UPDATE basket_weekly_pe_history SET run_id = 'run-ghost'")
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("rows_claim_an_uncertified_run" in str(item)
+               for item in failures["manifest_result_integrity"]), failures
+
+
+def test_a_run_hash_covers_exactly_the_rows_it_owns(tmp_path, config_dir):
+    """An older run's rows are hashed against that run's own declaration."""
+    db_path = _build(tmp_path)
+    _orphan_row(db_path, "SPY", "2019-06-28")
+    _mutate(db_path, "UPDATE basket_weekly_pe_history SET run_id = 'run-old' "
+                     "WHERE valuation_date = '2019-06-28'")
+    store = MarketStore(db_path)
+    try:
+        store.append_basket_pe_run_events(_manifest_events(
+            "SPY", run_id="run-old", expected_from="2014-06-28",
+            expected_to="2019-06-28", trading=["2019-06-28"], rows=[]))
+    finally:
+        store.close()
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("run_result_hash_mismatch" in str(item)
+               for item in failures["manifest_result_integrity"]), failures

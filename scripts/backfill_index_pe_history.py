@@ -362,10 +362,12 @@ def backfill_basket(
         report["weekly_rows"] = len(rows)
 
         if store is not None and rows:
+            # Each row names the run accountable for it, so a later manifest
+            # cannot claim rows it did not write.
             store.upsert_basket_weekly_pe_batch([
                 {key: value for key, value in row.items()
                  if not key.startswith("_")}
-                for row in rows])
+                for row in ({**row, "run_id": args.run_id} for row in rows)])
             rows_written = True
 
         report["status"] = "complete"
