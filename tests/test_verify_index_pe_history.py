@@ -82,7 +82,8 @@ def _member(symbol, weight, market_cap, market_cap_date, ttm=25.0,
 
 
 def _weekly_row(basket, valuation_date, members, quality_tier="actual_only",
-                run_id="run-1"):
+                run_id="run-1", composition_effective="2021-01-18",
+                composition_available="2021-01-25"):
     covered_ttm = [m for m in members
                    if m["market_cap"] is not None
                    and m["ttm_net_income_usd"] is not None]
@@ -113,8 +114,8 @@ def _weekly_row(basket, valuation_date, members, quality_tier="actual_only",
         "mcap_coverage_hindsight": hs_mcap / observed,
         "hindsight_actual_quarters": 4,
         "hindsight_estimate_quarters": 0,
-        "composition_effective_date": "2021-01-18",
-        "composition_available_date": "2021-01-25",
+        "composition_effective_date": composition_effective,
+        "composition_available_date": composition_available,
         "quality_tier": quality_tier,
         "members_json": {
             "consensus_snapshot_date": "2026-01-09",
@@ -168,7 +169,9 @@ def _manifest_events(basket, run_id="run-1", expected_from=EXPECTED_FROM,
 def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
            row_dates=None, manifest_extra=(), expected_from=EXPECTED_FROM,
            market_caps=(("AAA", 900.0), ("BBB", 100.0)), ciks=None,
-           market_cap_dates=None, composition_floor="2021-01-25"):
+           market_cap_dates=None, composition_floor="2021-01-25",
+           composition_effective="2021-01-18",
+           composition_available="2021-01-25"):
     """A consistent database: calendar, raw sources, weekly rows, manifest."""
     store = MarketStore(tmp_path / "market.db")
     conn = store._get_conn()
@@ -204,7 +207,7 @@ def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
             "included, snapshot_warnings_json, fetched_at, created_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [(basket, "2021-01-15", "disclosure", index, "2021-01-15",
-              "2021-01-18", "2021-01-25", symbol, symbol,
+              composition_effective, composition_available, symbol, symbol,
               identities.get(symbol), weight, 1, "[]",
               "2021-01-25T00:00:00Z", "2021-01-25T00:00:00Z")
              for index, ((symbol, _), weight)
@@ -220,7 +223,10 @@ def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
             dict(member, market_cap_date=(market_cap_dates or {}).get(
                 valuation_date, valuation_date))
             for member in members]
-        rows.append(_weekly_row(basket, valuation_date, row_members))
+        rows.append(_weekly_row(
+            basket, valuation_date, row_members,
+            composition_effective=composition_effective,
+            composition_available=composition_available))
     if rows:
         store.upsert_basket_weekly_pe_batch(rows)
     store.append_basket_pe_run_events(_manifest_events(
@@ -376,24 +382,37 @@ def test_two_rows_in_one_week_fail(tmp_path, config_dir):
                for item in failures["expected_weekly_denominator"])
 
 
-def test_soxx_leading_gap_before_the_configured_boundary_is_expected(
+def test_soxx_leading_gap_is_expressed_by_the_frozen_floor(
         tmp_path, config_dir):
-    """SOXX has no verifiable disclosure before 2021-09-20 (basket config)."""
+    """SOXX has no verifiable disclosure before 2021-09-20 (basket config).
+
+    That gap is declared once, in the run's frozen composition floor, so the
+    weeks before it are never in the expected set to begin with. There is no
+    second exemption at comparison time: everything the frozen set contains is
+    owed, and the manifest checks reject a frozen set that reaches below the
+    documented bound.
+    """
     db_path = _build(
         tmp_path, basket="SOXX", calendar=("2021-08-02", "2021-10-15"),
-        row_dates=["2021-10-08", "2021-10-15"])
+        composition_floor="2021-09-20", composition_effective="2021-09-17",
+        composition_available="2021-09-20",
+        row_dates=["2021-09-24", "2021-10-01", "2021-10-08", "2021-10-15"])
     report = _verify(db_path, config_dir, baskets=("SOXX",))
-    denominator = {check["name"]: check["detail"]
-                   for check in report["checks"]}["expected_weekly_denominator"]
-    assert not [item for item in denominator
-                if "expected_week_has_no_row" in str(item)
-                and str(item).split(":")[1] < "2021-09-20"]
-    missing_after = [item for item in denominator
-                     if "expected_week_has_no_row" in str(item)]
-    # Weeks after the boundary are still owed, so the gap allowance is narrow.
-    assert missing_after
-    assert all(str(item).split(":")[1] >= "2021-09-20"
-               for item in missing_after)
+    assert report["passed"], _failed(report)
+    assert report["baskets"]["SOXX"]["expected_weeks"] == 4
+    assert report["baskets"]["SOXX"]["composition_floor"] == "2021-09-20"
+
+
+def test_a_week_after_the_soxx_boundary_is_still_owed(tmp_path, config_dir):
+    """The gap excuses the pre-history, never a week the run claimed."""
+    db_path = _build(
+        tmp_path, basket="SOXX", calendar=("2021-08-02", "2021-10-15"),
+        composition_floor="2021-09-20", composition_effective="2021-09-17",
+        composition_available="2021-09-20",
+        row_dates=["2021-09-24", "2021-10-08", "2021-10-15"])
+    failures = _failed(_verify(db_path, config_dir, baskets=("SOXX",)))
+    assert any("2021-10-01:expected_week_has_no_row" in str(item)
+               for item in failures["expected_weekly_denominator"]), failures
 
 
 # ---------------------------------------------------------------------------
@@ -1306,3 +1325,141 @@ def test_a_run_hash_covers_exactly_the_rows_it_owns(tmp_path, config_dir):
     failures = _failed(_verify(db_path, config_dir))
     assert any("run_result_hash_mismatch" in str(item)
                for item in failures["manifest_result_integrity"]), failures
+
+
+# ---------------------------------------------------------------------------
+# Fix round 3 / D1-D3: a run gets exactly one terminal event, and it is last
+# ---------------------------------------------------------------------------
+
+def _append_events(db_path, events):
+    store = MarketStore(db_path)
+    try:
+        store.append_basket_pe_run_events(events)
+    finally:
+        store.close()
+
+
+def _run_event(run_id, event_seq, event_kind, payload, expected_from=None,
+               expected_to=None):
+    return {
+        "run_id": run_id, "basket": "SPY", "event_seq": event_seq,
+        "event_kind": event_kind, "frequency": "weekly",
+        "expected_from_date": expected_from or EXPECTED_FROM,
+        "expected_to_date": expected_to or AS_OF,
+        "methodology_version": WEEKLY_METHODOLOGY_VERSION,
+        "target_count": 2, "target_universe_json": ["AAA", "BBB"],
+        "payload_json": payload,
+    }
+
+
+def test_a_second_run_completed_cannot_recertify_tampered_rows(
+        tmp_path, config_dir):
+    """D1: re-declaring a run's own completion, with the hash recomputed.
+
+    No rewrite, no new run, no contradiction between failure and success --
+    just a second `run_completed` appended to the legitimate run. The
+    declaration map took the last one, so the tampered rows were blessed by
+    their own owner.
+    """
+    db_path = _build(tmp_path)
+    _mutate(db_path, "UPDATE basket_weekly_pe_history SET ttm_pe_gaap = 9.99 "
+                     "WHERE valuation_date = '2026-01-16'")
+    assert _failed(_verify(db_path, config_dir)), "tamper should already fail"
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rows = [dict(row) for row in conn.execute(
+        "SELECT * FROM basket_weekly_pe_history ORDER BY valuation_date")]
+    conn.close()
+    _append_events(db_path, [_run_event(
+        "run-1", 2, "run_completed",
+        {"weekly_rows": len(rows), "result_hash": weekly_result_hash(rows)})])
+    failures = _failed(_verify(db_path, config_dir))
+    assert failures, "a second run_completed re-certified tampered rows"
+    assert any("multiple_terminal_events" in str(item)
+               for item in failures["manifest_denominator"]), failures
+
+
+def test_a_second_run_completed_cannot_widen_a_window_to_adopt_orphans(
+        tmp_path, config_dir):
+    """D2: the same append, used to widen a run's window over a stray row."""
+    db_path = _build(tmp_path)
+    _orphan_row(db_path, "SPY", "2019-06-28", run_id="run-1")
+    assert _failed(_verify(db_path, config_dir))
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rows = [dict(row) for row in conn.execute(
+        "SELECT * FROM basket_weekly_pe_history ORDER BY valuation_date")]
+    conn.close()
+    _append_events(db_path, [_run_event(
+        "run-1", 2, "run_completed",
+        {"weekly_rows": len(rows), "result_hash": weekly_result_hash(rows)},
+        expected_from="2014-06-28")])
+    failures = _failed(_verify(db_path, config_dir))
+    assert failures, "a widened window adopted an orphan row"
+    assert any("multiple_terminal_events" in str(item)
+               for item in failures["manifest_denominator"]), failures
+
+
+def test_a_second_run_started_is_rejected(tmp_path, config_dir):
+    """D3: a run announces itself once."""
+    db_path = _build(tmp_path)
+    _append_events(db_path, [_run_event(
+        "run-1", 2, "run_started",
+        {"expected_weeks": ["2026-01-16"], "calendar_hash": "x" * 64,
+         "composition_floor": "2021-01-25"})])
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("started_more_than_once" in str(item)
+               for item in failures["manifest_denominator"]), failures
+
+
+def test_events_after_a_terminal_event_are_rejected(tmp_path, config_dir):
+    """A run that kept talking after it finished is not a finished run."""
+    db_path = _build(tmp_path)
+    _append_events(db_path, [_run_event(
+        "run-1", 2, "forced_refresh",
+        {"symbol": "AAA", "from_date": "2026-01-05", "to_date": "2026-01-09",
+         "trigger_dates": ["2026-01-07"], "pre_row_hash": "a" * 64,
+         "post_row_hash": "b" * 64, "skipped": False})])
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("events_after_its_terminal_event" in str(item)
+               for item in failures["manifest_denominator"]), failures
+
+
+# ---------------------------------------------------------------------------
+# Fix round 3 / C1: the full-rewrite contract, pinned loudly
+# ---------------------------------------------------------------------------
+
+def test_incremental_tail_refresh_fails_loudly_full_rewrite_contract_pending_task_5(
+        tmp_path, config_dir):
+    """A partial-ownership run is REJECTED -- full-rewrite contract, pending
+    Task 5 ruling.
+
+    Row-level ownership (F2) means the certifying run must own every row in
+    its window, which amounts to requiring a full-window rewrite. Today's
+    producer does exactly that, so nothing is broken -- but plan §R5 describes
+    a weekly tail refresh that recomputes only the last ~12 months, and such a
+    run would take ownership of just those rows and fail this check for the
+    whole basket.
+
+    That is a real design decision (supersession chain vs full rewrite), not
+    an oversight, and it belongs to Boss at Task 5. This test exists so the
+    collision is loud the moment anyone implements an incremental refresh,
+    instead of surfacing as an inexplicable basket-wide verification failure.
+    """
+    db_path = _build(tmp_path)
+    # run-2 recomputes only the tail row, as an incremental refresh would.
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    tail = [dict(row) for row in conn.execute(
+        "SELECT * FROM basket_weekly_pe_history "
+        "WHERE valuation_date = '2026-01-16'")]
+    conn.close()
+    _mutate(db_path, "UPDATE basket_weekly_pe_history SET run_id = 'run-2' "
+                     "WHERE valuation_date = '2026-01-16'")
+    _append_events(db_path, _manifest_events(
+        "SPY", run_id="run-2", trading=_weekdays("2026-01-05", "2026-01-16"),
+        rows=tail))
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("not_owned_by_the_certifying_run" in str(item)
+               for item in failures["manifest_result_integrity"]), (
+        "an incremental tail refresh must fail loudly, not quietly diverge")

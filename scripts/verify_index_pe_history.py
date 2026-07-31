@@ -180,31 +180,66 @@ def _sample_indexes(count: int, sample: int) -> List[int]:
 TERMINAL_EVENT_KINDS = frozenset({"run_completed", "run_failed"})
 
 
-def _contradictory_runs(events: Sequence[Mapping[str, Any]]) -> List[str]:
-    """Runs whose event set claims both outcomes.
+def _invalid_runs(
+    events: Sequence[Mapping[str, Any]],
+) -> Dict[str, List[str]]:
+    """Runs whose event sequence does not describe one run.
 
-    Append-only stops a rewrite, not an append. A failed run's leftovers were
-    whitewashed by appending a `run_completed` under the same run id: nothing
-    was overwritten, the store accepted it, and only the certifying run's
-    payload was ever validated. A run that says it both failed and completed
-    has told two stories and can vouch for neither -- it cannot certify, and
-    it cannot lend its window to rows written by something else.
+    Append-only stops a rewrite, not an append, and every attack since has
+    walked through that door: appending a `run_completed` to a failed run,
+    appending a *second* `run_completed` with the hash recomputed over
+    tampered rows, appending one with a wider window to adopt a stray row.
+    None of them rewrote anything, and each was accepted because the
+    declaration was read last-wins with no constraint on how many times a run
+    could declare itself finished.
+
+    A run therefore says exactly one terminal thing, once, at the end:
+
+    * exactly one `run_completed` **or** `run_failed`, never both and never
+      two of either;
+    * nothing after it -- a run that kept talking after it finished did not
+      finish;
+    * one `run_started`, not several.
+
+    A run failing any of these certifies nothing and lends its window to
+    nothing. Note this is a statement about the *manifest*, not about the
+    passage of time: a legitimate later run supersedes an earlier failure
+    without either of them being invalid.
     """
-    kinds_by_run: Dict[str, set] = {}
+    by_run: Dict[str, List[Mapping[str, Any]]] = {}
     for row in events:
-        kinds_by_run.setdefault(str(row["run_id"]), set()).add(
-            str(row["event_kind"]))
-    return sorted(run_id for run_id, kinds in kinds_by_run.items()
-                  if {"run_failed", "run_completed"} <= kinds)
+        by_run.setdefault(str(row["run_id"]), []).append(row)
+
+    invalid: Dict[str, List[str]] = {}
+    for run_id, rows in by_run.items():
+        reasons: List[str] = []
+        ordered = sorted(rows, key=lambda row: int(row["event_seq"]))
+        kinds = [str(row["event_kind"]) for row in ordered]
+        terminals = [index for index, kind in enumerate(kinds)
+                     if kind in TERMINAL_EVENT_KINDS]
+        if "run_failed" in kinds and "run_completed" in kinds:
+            reasons.append("run_both_failed_and_completed")
+        elif len(terminals) > 1:
+            reasons.append(
+                f"run_declared_multiple_terminal_events:{len(terminals)}")
+        if terminals and terminals[0] != len(ordered) - 1:
+            reasons.append(
+                f"run_events_after_its_terminal_event:{kinds[terminals[0] + 1]}")
+        if kinds.count("run_started") > 1:
+            reasons.append(
+                f"run_started_more_than_once:{kinds.count('run_started')}")
+        if reasons:
+            invalid[run_id] = reasons
+    return invalid
 
 
 def _valid_completed_runs(events: Sequence[Mapping[str, Any]]) -> List[str]:
-    """Completed runs that have not contradicted themselves."""
-    contradictory = set(_contradictory_runs(events))
+    """Completed runs whose event sequence describes exactly one run."""
+    invalid = set(_invalid_runs(events))
     completed = {str(row["run_id"]) for row in events
                  if row["event_kind"] == "run_completed"}
     return [run_id for run_id in _run_order(events)
-            if run_id in completed and run_id not in contradictory]
+            if run_id in completed and run_id not in invalid]
 
 
 def _runs_after(events: Sequence[Mapping[str, Any]],
@@ -283,8 +318,9 @@ def _manifest_errors(
     history_available_from: Optional[str] = None,
 ) -> List[str]:
     errors: List[str] = []
-    for contradictory in _contradictory_runs(events):
-        errors.append(f"{basket}:{contradictory}:run_both_failed_and_completed")
+    for invalid_run, reasons in sorted(_invalid_runs(events).items()):
+        for reason in reasons:
+            errors.append(f"{basket}:{invalid_run}:{reason}")
     later = set(_runs_after(events, run_id))
     for unfinished in _unfinished_runs(events):
         if unfinished in later or run_id is None:
@@ -404,7 +440,16 @@ def _result_integrity_errors(
     one. Every hash matched, because the attacker chose them.
 
     Rows now name the run that wrote them, which turns certification into a
-    claim about specific rows rather than about a date range. A run's declared
+    claim about specific rows rather than about a date range.
+
+    **What this does not do.** Bypassing it takes one statement --
+    ``UPDATE basket_weekly_pe_history SET run_id = '<forged run>'`` -- and
+    every check here passes again. Ownership defends the *append* path, which
+    is the one the store's own CRUD offers and the one every attack so far has
+    used; it is not a defence against an arbitrary writer holding the same
+    database file. Anything stored beside the data can be edited with the
+    data. Read these checks as tamper *evidence*, not as tamper *proof*
+    (issue 048), and put real weight on who can open market.db for writing. A run's declared
     hash is checked against exactly its own rows; rows inside the certifying
     window must belong to the certifying run; and a row naming a run that
     never completed is certified by nobody.
@@ -412,6 +457,9 @@ def _result_integrity_errors(
     if run_id is None:
         return [f"{basket}:no_completed_run_to_check_results_against"]
     errors: List[str] = []
+    # One terminal event per valid run, so there is nothing to choose between
+    # -- which is the point: reading the declaration last-wins is what let a
+    # second, appended run_completed speak for the first.
     valid = set(_valid_completed_runs(events))
     declared: Dict[str, Dict[str, Any]] = {}
     for row in events:
@@ -1141,13 +1189,24 @@ def _week_key(day: str) -> Tuple[int, int]:
 def _denominator_errors(
     basket: str, expected_weeks: Sequence[str],
     rows: Sequence[Mapping[str, Any]],
-    history_available_from: Optional[str],
 ) -> List[str]:
     """Stored rows against the week set the run froze in its manifest.
+
+    The comparison runs both ways. A missing week fails, and so does a surplus
+    row: letting one pass because it is absent from the expected set would
+    make the frozen denominator a floor instead of an equality.
 
     The expectation is never rebuilt from daily_price or the disclosure table:
     deleting a week's rows *and* that week's prices would otherwise erase both
     the data and the evidence that it was ever owed.
+
+    There is deliberately no `history_available_from` exemption here. A
+    basket's documented pre-history gap is expressed once, in the frozen
+    floor, and `_manifest_errors` rejects a frozen set that reaches below
+    either that floor or the config bound. By the time a week is in the frozen
+    set it is owed, full stop -- an exemption at comparison time would be a
+    second place for a gap to be declared, and the only thing it could still
+    excuse is a week the run itself said it would publish.
     """
     errors: List[str] = []
     expected_keys = {_week_key(week_end): week_end
@@ -1167,11 +1226,6 @@ def _denominator_errors(
             errors.append(f"{basket}:{days[0]}:after_its_weeks_last_trading_day")
     for key, week_end in sorted(expected_keys.items()):
         if key in observed:
-            continue
-        if history_available_from is not None \
-                and week_end < history_available_from:
-            # SOXX's leading gap is documented in the basket config, not a
-            # verification failure.
             continue
         errors.append(f"{basket}:{week_end}:expected_week_has_no_row")
     return errors
@@ -1276,9 +1330,8 @@ def verify_database(
         if versions not in ([], [WEEKLY_METHODOLOGY_VERSION]):
             version_errors.append(f"{basket}:{versions}")
         expected_weeks = list(_payload(started).get("expected_weeks") or [])
-        denominator_errors.extend(_denominator_errors(
-            basket, expected_weeks, rows,
-            basket_configs[basket].get("history_available_from")))
+        denominator_errors.extend(
+            _denominator_errors(basket, expected_weeks, rows))
         denominator_errors.extend(
             _uncertified_row_errors(basket, conn, events))
         tier_errors.extend(_tier_consistency_errors(rows))
