@@ -166,7 +166,7 @@ def _manifest_events(basket, run_id="run-1", expected_from=EXPECTED_FROM,
 def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
            row_dates=None, manifest_extra=(), expected_from=EXPECTED_FROM,
            market_caps=(("AAA", 900.0), ("BBB", 100.0)), ciks=None,
-           market_cap_dates=None):
+           market_cap_dates=None, composition_floor="2021-01-25"):
     """A consistent database: calendar, raw sources, weekly rows, manifest."""
     store = MarketStore(tmp_path / "market.db")
     conn = store._get_conn()
@@ -223,7 +223,7 @@ def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
         store.upsert_basket_weekly_pe_batch(rows)
     store.append_basket_pe_run_events(_manifest_events(
         basket, expected_from=expected_from, extra=manifest_extra,
-        trading=trading, rows=rows))
+        trading=trading, rows=rows, composition_floor=composition_floor))
     store.close()
     return tmp_path / "market.db"
 
@@ -1077,3 +1077,168 @@ def test_rows_of_an_older_completed_run_are_not_treated_as_surplus(
         "expected_weekly_denominator", [])
         if "row_outside_every_certified_window" in str(item)]
     assert not denominator, denominator
+
+
+# ---------------------------------------------------------------------------
+# Fix round 2 / F1: a run cannot both fail and complete
+# ---------------------------------------------------------------------------
+
+def test_a_run_completed_appended_to_a_failed_run_is_rejected(
+        tmp_path, config_dir):
+    """The append-only log stops rewrites, not appends.
+
+    A failed run's out-of-window leftovers were whitewashed by appending a
+    run_completed to that same run id -- no rewrite, no rejected write, and
+    the payload was never looked at because only the certifying run's payload
+    was validated. An event set claiming both outcomes is self-contradictory
+    and cannot vouch for anything.
+    """
+    db_path = _build(tmp_path)
+    _orphan_row(db_path, "SPY", "2019-06-28")
+    store = MarketStore(db_path)
+    base = {
+        "run_id": "run-0", "basket": "SPY", "frequency": "weekly",
+        "expected_from_date": "2014-06-28", "expected_to_date": "2019-06-28",
+        "methodology_version": WEEKLY_METHODOLOGY_VERSION,
+        "target_count": 2, "target_universe_json": ["AAA", "BBB"],
+    }
+    try:
+        store.append_basket_pe_run_events([
+            {**base, "event_seq": 0, "event_kind": "run_started",
+             "payload_json": {}},
+            {**base, "event_seq": 1, "event_kind": "run_failed",
+             "payload_json": {"error": "RuntimeError: boom",
+                              "rows_written": True}},
+        ])
+        # the attack: append a completion to the run that already failed
+        store.append_basket_pe_run_events([
+            {**base, "event_seq": 2, "event_kind": "run_completed",
+             "payload_json": {"weekly_rows": 1, "result_hash": "deadbeef"}},
+        ])
+    finally:
+        store.close()
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("run_both_failed_and_completed" in str(item)
+               for item in failures["manifest_denominator"]), failures
+    # and the whitewash must not work: the orphan is still uncertified
+    assert any("row_outside_every_certified_window" in str(item)
+               for item in failures["expected_weekly_denominator"]), failures
+
+
+def test_a_contradictory_run_cannot_become_the_certifying_run(
+        tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    store = MarketStore(db_path)
+    base = {
+        "run_id": "run-2", "basket": "SPY", "frequency": "weekly",
+        "expected_from_date": EXPECTED_FROM, "expected_to_date": AS_OF,
+        "methodology_version": WEEKLY_METHODOLOGY_VERSION,
+        "target_count": 2, "target_universe_json": ["AAA", "BBB"],
+    }
+    try:
+        store.append_basket_pe_run_events([
+            {**base, "event_seq": 0, "event_kind": "run_started",
+             "payload_json": {}},
+            {**base, "event_seq": 1, "event_kind": "run_failed",
+             "payload_json": {"rows_written": False}},
+            {**base, "event_seq": 2, "event_kind": "run_completed",
+             "payload_json": {"weekly_rows": 2, "result_hash": "deadbeef"}},
+        ])
+    finally:
+        store.close()
+    report = _verify(db_path, config_dir)
+    assert report["baskets"]["SPY"]["manifest_run_id"] != "run-2"
+    assert not report["passed"]
+
+
+# ---------------------------------------------------------------------------
+# Fix round 2 / F3: frozen values must be checked, not merely displayed
+# ---------------------------------------------------------------------------
+
+def test_a_frozen_week_set_that_the_calendar_cannot_produce_is_rejected(
+        tmp_path, config_dir):
+    """A week nobody traded cannot be an expected week.
+
+    Freezing the denominator moved the attack from the tables to the manifest:
+    inject a non-trading day into the frozen set and the calendar hash still
+    matches, because the calendar was never touched. Once the hash proves the
+    calendar is the run's own, the frozen set has to be reproducible from it.
+    """
+    db_path = _build(tmp_path)
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        "SELECT rowid, payload_json FROM basket_pe_backfill_runs "
+        "WHERE event_kind = 'run_started'").fetchone()
+    payload = json.loads(row[1])
+    payload["expected_weeks"] = payload["expected_weeks"] + ["2026-01-04"]
+    with conn:
+        conn.execute("UPDATE basket_pe_backfill_runs SET payload_json = ? "
+                     "WHERE rowid = ?", [json.dumps(payload), row[0]])
+    conn.close()
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("frozen_weeks_not_reproducible" in str(item)
+               for item in failures["manifest_denominator"]), failures
+
+
+def test_a_composition_floor_later_than_the_disclosures_is_rejected(
+        tmp_path, config_dir):
+    """Moving the floor forward shrinks what the run is accountable for."""
+    db_path = _build(tmp_path)
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        "SELECT rowid, payload_json FROM basket_pe_backfill_runs "
+        "WHERE event_kind = 'run_started'").fetchone()
+    payload = json.loads(row[1])
+    payload["composition_floor"] = "2026-01-12"
+    payload["expected_weeks"] = ["2026-01-16"]
+    with conn:
+        conn.execute("UPDATE basket_pe_backfill_runs SET payload_json = ? "
+                     "WHERE rowid = ?", [json.dumps(payload), row[0]])
+    conn.close()
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("composition_floor_later_than_disclosures" in str(item)
+               for item in failures["manifest_denominator"]), failures
+
+
+# ---------------------------------------------------------------------------
+# Fix round 2 / F4: gap semantics, and the composition actually chosen
+# ---------------------------------------------------------------------------
+
+def test_a_frozen_week_before_the_documented_history_bound_is_rejected(
+        tmp_path, config_dir):
+    """The config bound and the availability floor are different statements.
+
+    `history_available_from` is the lower bound of *disclosable* history; the
+    frozen floor is where availability actually starts. The frozen set may not
+    reach below either, and once a week is in the frozen set it is owed --
+    the config bound never excuses a missing row.
+    """
+    db_path = _build(tmp_path, basket="SOXX",
+                     calendar=("2021-08-02", "2021-10-15"),
+                     row_dates=["2021-10-08", "2021-10-15"],
+                     composition_floor="2021-08-02")
+    failures = _failed(_verify(db_path, config_dir, baskets=("SOXX",)))
+    assert any("frozen_week_before_history_bound" in str(item)
+               for item in failures["manifest_denominator"]), failures
+
+
+def test_a_row_using_an_older_composition_than_available_is_caught(
+        tmp_path, config_dir):
+    """Not the newest eligible composition means a stale membership."""
+    db_path = _build(tmp_path)
+    conn = sqlite3.connect(db_path)
+    with conn:
+        # A newer composition, in force and public before both valuation dates.
+        conn.execute(
+            "INSERT OR REPLACE INTO fmp_fund_disclosure_holdings "
+            "(basket_symbol, holding_date, source_kind, raw_row_index, "
+            "rebalance_close_date, composition_effective_date, "
+            "composition_available_date, raw_symbol, symbol, cik, weight_pct, "
+            "included, snapshot_warnings_json, fetched_at, created_at) "
+            "VALUES ('SPY','2025-12-30','disclosure',0,'2025-12-19',"
+            "'2025-12-22','2025-12-30','AAA','AAA','0000000001',60.0,1,'[]',"
+            "'2025-12-30T00:00:00Z','2025-12-30T00:00:00Z')")
+    conn.close()
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("not_the_latest_eligible_composition" in str(item)
+               for item in failures["materialised_evidence"]), failures

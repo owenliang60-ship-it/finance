@@ -431,7 +431,14 @@ def _compute_weekly_rows(
                     and item[0]["composition_available_date"] <= valuation_date]
         row: Optional[Dict[str, Any]] = None
         if eligible:
-            composition, holding_rows = eligible[-1]
+            # Newest by effective date, stated rather than inherited from the
+            # order `_snapshot_groups` happened to return. A disclosure
+            # supersedes the live-tail proxy for the same effective date.
+            composition, holding_rows = max(
+                eligible,
+                key=lambda item: (item[0]["composition_effective_date"],
+                                  0 if item[0]["source_kind"] == "live" else 1,
+                                  item[0]["holding_date"]))
             row = compute_weekly_point(
                 basket_symbol=basket,
                 valuation_date=valuation_date,

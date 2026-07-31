@@ -51,6 +51,7 @@ from terminal.index_pe_weekly import (  # noqa: E402
     MINIMUM_WEIGHT_COVERAGE,
     WEEKLY_METHODOLOGY_VERSION,
     default_share_class_config,
+    expected_week_ends,
     weekly_calendar_hash,
     weekly_result_hash,
 )
@@ -179,6 +180,33 @@ def _sample_indexes(count: int, sample: int) -> List[int]:
 TERMINAL_EVENT_KINDS = frozenset({"run_completed", "run_failed"})
 
 
+def _contradictory_runs(events: Sequence[Mapping[str, Any]]) -> List[str]:
+    """Runs whose event set claims both outcomes.
+
+    Append-only stops a rewrite, not an append. A failed run's leftovers were
+    whitewashed by appending a `run_completed` under the same run id: nothing
+    was overwritten, the store accepted it, and only the certifying run's
+    payload was ever validated. A run that says it both failed and completed
+    has told two stories and can vouch for neither -- it cannot certify, and
+    it cannot lend its window to rows written by something else.
+    """
+    kinds_by_run: Dict[str, set] = {}
+    for row in events:
+        kinds_by_run.setdefault(str(row["run_id"]), set()).add(
+            str(row["event_kind"]))
+    return sorted(run_id for run_id, kinds in kinds_by_run.items()
+                  if {"run_failed", "run_completed"} <= kinds)
+
+
+def _valid_completed_runs(events: Sequence[Mapping[str, Any]]) -> List[str]:
+    """Completed runs that have not contradicted themselves."""
+    contradictory = set(_contradictory_runs(events))
+    completed = {str(row["run_id"]) for row in events
+                 if row["event_kind"] == "run_completed"}
+    return [run_id for run_id in _run_order(events)
+            if run_id in completed and run_id not in contradictory]
+
+
 def _runs_after(events: Sequence[Mapping[str, Any]],
                 run_id: Optional[str]) -> List[str]:
     """Runs the manifest recorded after the certifying one.
@@ -232,10 +260,8 @@ def _run_order(events: Sequence[Mapping[str, Any]]) -> List[str]:
 
 
 def _latest_run(events: Sequence[Mapping[str, Any]]) -> Optional[str]:
-    """The newest run that reached run_completed for this basket."""
-    completed = {str(row["run_id"]) for row in events
-                 if row["event_kind"] == "run_completed"}
-    ordered = [run_id for run_id in _run_order(events) if run_id in completed]
+    """The newest run that completed without contradicting itself."""
+    ordered = _valid_completed_runs(events)
     return ordered[-1] if ordered else None
 
 
@@ -252,8 +278,13 @@ def _payload(row: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
 def _manifest_errors(
     basket: str, events: Sequence[Mapping[str, Any]], run_id: Optional[str],
     requested: Tuple[str, str], observed_calendar_hash: Optional[str] = None,
+    observed_calendar: Optional[Sequence[str]] = None,
+    earliest_disclosure: Optional[str] = None,
+    history_available_from: Optional[str] = None,
 ) -> List[str]:
     errors: List[str] = []
+    for contradictory in _contradictory_runs(events):
+        errors.append(f"{basket}:{contradictory}:run_both_failed_and_completed")
     later = set(_runs_after(events, run_id))
     for unfinished in _unfinished_runs(events):
         if unfinished in later or run_id is None:
@@ -313,6 +344,8 @@ def _manifest_errors(
         # from tables that can change, which is the hole this closes.
         errors.append(f"{basket}:manifest_has_no_frozen_expected_weeks")
     frozen_calendar = payload.get("calendar_hash")
+    frozen_weeks = list(payload.get("expected_weeks") or [])
+    frozen_floor = payload.get("composition_floor")
     if not frozen_calendar:
         errors.append(f"{basket}:manifest_has_no_calendar_hash")
     elif (observed_calendar_hash is not None
@@ -320,6 +353,41 @@ def _manifest_errors(
         errors.append(
             f"{basket}:calendar_changed_since_the_run:"
             f"{frozen_calendar[:12]}!={observed_calendar_hash[:12]}")
+    elif observed_calendar is not None and frozen_weeks:
+        # The hash proves this calendar is the one the run measured itself
+        # against, so the frozen week set must be reproducible from it.
+        # Without this, a week nobody traded can be inserted into the frozen
+        # set (or a real one removed) while the hash still matches, because
+        # the calendar itself was never touched.
+        reproduced = expected_week_ends(
+            observed_calendar, started["expected_from_date"],
+            started["expected_to_date"], frozen_floor)
+        if sorted(frozen_weeks) != sorted(reproduced):
+            missing = sorted(set(reproduced) - set(frozen_weeks))
+            extra = sorted(set(frozen_weeks) - set(reproduced))
+            errors.append(
+                f"{basket}:frozen_weeks_not_reproducible:"
+                f"missing={missing[:3]}:extra={extra[:3]}")
+    if not frozen_floor:
+        errors.append(f"{basket}:manifest_has_no_composition_floor")
+    else:
+        # A floor moved forward silently shrinks what the run is accountable
+        # for, so it may never postdate the earliest disclosure on record.
+        if earliest_disclosure is not None \
+                and str(frozen_floor) > str(earliest_disclosure):
+            errors.append(
+                f"{basket}:composition_floor_later_than_disclosures:"
+                f"{frozen_floor}>{earliest_disclosure}")
+        # `history_available_from` (config) and the availability floor are
+        # different statements: the first is the lower bound of disclosable
+        # history, the second is where availability actually begins. The
+        # frozen set may not reach below either of them.
+        bound = max([value for value in (history_available_from, frozen_floor)
+                     if value] or [None])
+        if bound and frozen_weeks and min(frozen_weeks) < bound:
+            errors.append(
+                f"{basket}:frozen_week_before_history_bound:"
+                f"{min(frozen_weeks)}<{bound}")
     return errors
 
 
@@ -472,6 +540,46 @@ def _weight_coverage(members: Sequence[Mapping[str, Any]], income_key: str) -> f
         and member.get("market_cap") is not None
         and member.get(income_key) is not None)
     return covered / total if total > 0 else 0.0
+
+
+def _latest_eligible_compositions(
+    conn: sqlite3.Connection, basket: str,
+) -> List[Tuple[str, str]]:
+    """(effective, available) pairs on record, newest effective first."""
+    return [(str(row["composition_effective_date"]),
+             str(row["composition_available_date"]))
+            for row in _rows(
+                conn,
+                "SELECT DISTINCT composition_effective_date, "
+                "composition_available_date FROM fmp_fund_disclosure_holdings "
+                "WHERE basket_symbol = ? "
+                "ORDER BY composition_effective_date DESC", [basket])]
+
+
+def _composition_choice_errors(
+    basket: str, rows: Sequence[Mapping[str, Any]],
+    compositions: Sequence[Tuple[str, str]],
+) -> List[str]:
+    """Each row must use the newest composition that was eligible for it.
+
+    Publishing an older one is a stale membership -- the same class of error
+    as reaching for a newer one, in the other direction, and just as invisible
+    from the row alone.
+    """
+    errors = []
+    for row in rows:
+        valuation_date = str(row["valuation_date"])
+        eligible = [effective for effective, available in compositions
+                    if effective <= valuation_date
+                    and available <= valuation_date]
+        if not eligible:
+            continue
+        expected = max(eligible)
+        if str(row["composition_effective_date"]) != expected:
+            errors.append(
+                f"{basket}:{valuation_date}:not_the_latest_eligible_composition:"
+                f"{row['composition_effective_date']}!={expected}")
+    return errors
 
 
 def _evidence_errors(
@@ -968,11 +1076,15 @@ def _uncertified_row_errors(
     stored row must fall inside the window of some run that completed;
     anything else is data certified by nothing.
 
-    Windows come from completed runs only, so an earlier run that finished its
-    own five years keeps its rows legitimate.
+    Windows come from completed runs only, and only from runs that did not
+    also record a failure, so an earlier run that finished its own five years
+    keeps its rows legitimate while a self-contradicting one lends nothing.
     """
+    valid = set(_valid_completed_runs(events))
     windows = [(str(row["expected_from_date"]), str(row["expected_to_date"]))
-               for row in events if row["event_kind"] == "run_completed"]
+               for row in events
+               if row["event_kind"] == "run_completed"
+               and str(row["run_id"]) in valid]
     errors = []
     for row in _rows(conn, "SELECT valuation_date FROM "
                            "basket_weekly_pe_history WHERE basket = ? "
@@ -1099,12 +1211,21 @@ def verify_database(
                         and row["event_kind"] == "run_started"), None)
         window = ((started["expected_from_date"], started["expected_to_date"])
                   if started else requested)
-        observed_calendar_hash = weekly_calendar_hash([row["date"] for row in _rows(
+        observed_calendar = [row["date"] for row in _rows(
             conn, "SELECT date FROM daily_price WHERE symbol = ? "
                   "AND date BETWEEN ? AND ? ORDER BY date",
-            [basket, window[0], window[1]])])
+            [basket, window[0], window[1]])]
+        earliest = conn.execute(
+            "SELECT MIN(composition_available_date) AS first "
+            "FROM fmp_fund_disclosure_holdings WHERE basket_symbol = ?",
+            [basket]).fetchone()
+        earliest_disclosure = (str(earliest["first"])
+                               if earliest and earliest["first"] else None)
         manifest_errors.extend(_manifest_errors(
-            basket, events, run_id, requested, observed_calendar_hash))
+            basket, events, run_id, requested,
+            weekly_calendar_hash(observed_calendar), observed_calendar,
+            earliest_disclosure,
+            basket_configs[basket].get("history_available_from")))
         raw_rows = _rows(
             conn, "SELECT * FROM basket_weekly_pe_history WHERE basket = ? "
                   "AND valuation_date BETWEEN ? AND ? ORDER BY valuation_date",
@@ -1126,6 +1247,8 @@ def verify_database(
         staleness = int(basket_configs[basket].get(
             "market_cap_staleness_days", DEFAULT_MARKET_CAP_STALENESS_DAYS))
         evidence_errors.extend(_evidence_errors(rows, staleness))
+        evidence_errors.extend(_composition_choice_errors(
+            basket, rows, _latest_eligible_compositions(conn, basket)))
         identity = _company_identity_check(
             basket, rows, _company_identities(conn, basket))
         identity_errors.extend(identity["errors"])
