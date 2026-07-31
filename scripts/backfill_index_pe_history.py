@@ -64,8 +64,11 @@ from terminal.index_pe_weekly import (  # noqa: E402
     WEEKLY_METHODOLOGY_VERSION,
     compute_weekly_point,
     default_share_class_config,
+    expected_week_ends,
     group_trading_dates_by_week,
     select_weekly_rows,
+    weekly_calendar_hash,
+    weekly_result_hash,
     share_class_secondary_symbols,
 )
 
@@ -267,6 +270,7 @@ def backfill_basket(
         run_id=args.run_id, basket=basket, frequency=args.frequency,
         expected_from=window[0], expected_to=window[1],
         methodology_version=WEEKLY_METHODOLOGY_VERSION, store=store)
+    rows_written = False
 
     try:
         state = load_state(conn, window[1], basket) if conn is not None \
@@ -304,8 +308,23 @@ def backfill_basket(
         report["evaluation_universe_count"] = len(income_symbols)
         report["share_class_secondary_symbols"] = secondary_symbols
 
+        # A composition is usable from the day it was disclosed, so the first
+        # such date is the floor of what this run can be held accountable for.
+        available_dates = sorted(
+            str(row["composition_available_date"]) for row in state.snapshots
+            if row.get("composition_available_date"))
+        composition_floor = available_dates[0] if available_dates else None
+        window_calendar = [day for day in state.trading_dates
+                           if window[0] <= day <= window[1]]
+        expected_weeks = expected_week_ends(
+            state.trading_dates, window[0], window[1], composition_floor)
+        report["expected_weeks"] = expected_weeks
+
         # The manifest lands before the first per-symbol remote call, with the
-        # universe that run is actually about to fetch.
+        # universe that run is actually about to fetch and the denominator it
+        # will be judged against. Freezing the week set and the calendar hash
+        # here is what stops a later verification from quietly recomputing a
+        # smaller expectation out of tables that changed since.
         manifest.append("run_started", {
             "as_of": args.as_of,
             "years": args.years,
@@ -314,6 +333,10 @@ def backfill_basket(
             "minimum_mcap_coverage": MINIMUM_MCAP_COVERAGE,
             "minimum_weight_coverage": MINIMUM_WEIGHT_COVERAGE,
             "consensus_snapshot_date": consensus_snapshot,
+            "composition_floor": composition_floor,
+            "expected_weeks": expected_weeks,
+            "trading_days": len(window_calendar),
+            "calendar_hash": weekly_calendar_hash(window_calendar),
             "started_at": _now(),
         }, universe=mcap_symbols)
 
@@ -343,6 +366,7 @@ def backfill_basket(
                 {key: value for key, value in row.items()
                  if not key.startswith("_")}
                 for row in rows])
+            rows_written = True
 
         report["status"] = "complete"
         manifest.append("run_completed", {
@@ -351,12 +375,18 @@ def backfill_basket(
             "published_hindsight": sum(
                 row["hindsight_ntm_pe_gaap"] is not None for row in rows),
             "written": bool(store is not None and rows),
+            # What this run says it produced. Recomputable from the stored
+            # rows, so a deleted week or an edited P/E stops matching.
+            "result_hash": weekly_result_hash(rows),
             "completed_at": _now(),
         })
     except Exception as exc:
         report["status"] = "failed"
         report["error"] = f"{type(exc).__name__}: {exc}"
+        # Whether the batch had already committed decides whether this run
+        # left rows behind that no completed manifest accounts for.
         manifest.append("run_failed", {"error": report["error"],
+                                       "rows_written": rows_written,
                                        "failed_at": _now()})
         report["manifest"] = manifest.events
         # Carry the partial report out with the exception. Which stages ran,
@@ -389,8 +419,16 @@ def _compute_weekly_rows(
     def compute(valuation_date: str) -> Optional[Dict[str, Any]]:
         if valuation_date in cache:
             return cache[valuation_date]
+        # A composition is usable only once it is both in force and public.
+        # Effective-date-only selection reaches back to a rebalance whose
+        # membership and weights nobody could know yet: FMP disclosed the
+        # 2025-12-22 SPY composition on 2026-02-15, and using it to value
+        # 2025-12-26 imports two months of hindsight into a point-in-time
+        # line. Until the disclosure lands, the previous public composition
+        # is the only thing that was knowable.
         eligible = [item for item in groups
-                    if item[0]["composition_effective_date"] <= valuation_date]
+                    if item[0]["composition_effective_date"] <= valuation_date
+                    and item[0]["composition_available_date"] <= valuation_date]
         row: Optional[Dict[str, Any]] = None
         if eligible:
             composition, holding_rows = eligible[-1]

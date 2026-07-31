@@ -1,10 +1,10 @@
 # SPY / QQQ / SOXX TTM + NTM P/E 晨报项目 — CC 审核交接
 
-> 日期：2026-07-30  
-> 主线：`main@8ca3da9`  
-> 三指数计划：`codex/index-pe-morning-chart@a82a446`  
-> SOXX 历史前置：`codex/soxx-historical-ttm-pe@4b96d47`  
-> 状态：FMP Phase 1 数据底座 LIVE；SOXX 历史引擎已实现但未合并；三指数设计已批准、Task 0–9 尚未执行；未进入生产晨报  
+> 日期：2026-07-30
+> 主线：`main@8ca3da9`
+> 三指数计划：`codex/index-pe-morning-chart@a82a446`
+> SOXX 历史前置：`codex/soxx-historical-ttm-pe@4b96d47`
+> 状态：FMP Phase 1 数据底座 LIVE；SOXX 历史引擎已实现但未合并；三指数设计已批准、Task 0–9 尚未执行；未进入生产晨报
 > 边界：本文只供独立审核，不授权实现、merge、push、写生产 DB 或修改 cron。
 
 ## 0. 希望 CC 输出什么
@@ -324,13 +324,13 @@ docs/plans/2026-07-19-index-pe-morning-chart-design.md
 
 三条序列：
 
-1. **GAAP TTM P/E**  
+1. **GAAP TTM P/E**
    估值日市值 ÷ 当时已经公开的最近四个连续季度 GAAP NI；硬门控 `accepted_date <= valuation_date`。
 
-2. **后视镜 NTM P/E**  
+2. **后视镜 NTM P/E**
    估值日市值 ÷ 估值日之后四个实际财政季度 GAAP NI；明确 ex-post，不得冒充历史信号。
 
-3. **真实 PIT NTM P/E**  
+3. **真实 PIT NTM P/E**
    使用每个 FMP weekly snapshot 当时可见的分析师共识；只从 2026-07-13 开始，不向过去补造。
 
 ### 4.2 尾部语义

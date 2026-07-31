@@ -22,6 +22,7 @@ Weekly sampling picks the last *publishable* trading day of each ISO week
 inheriting the previous week's number; a week with no composition at all --
 SOXX before its first verifiable disclosure -- produces no row.
 """
+import hashlib
 import json
 from datetime import date
 from pathlib import Path
@@ -83,6 +84,72 @@ def default_share_class_config(
         _SHARE_CLASS_CACHE[key] = {
             "groups": groups, "conventions": conventions}
     return _SHARE_CLASS_CACHE[key]
+
+
+# The published surface of a weekly row: everything a consumer plots or ranks.
+# members_json and warnings_json are excluded because they are reconciled
+# member by member elsewhere; created_at/last_updated are storage bookkeeping.
+RESULT_HASH_FIELDS = (
+    "valuation_date", "ttm_pe_gaap", "hindsight_ntm_pe_gaap",
+    "ttm_total_mcap", "ttm_net_income", "hindsight_total_mcap",
+    "hindsight_ntm_net_income", "n_members", "n_covered_ttm",
+    "n_covered_hindsight", "mcap_coverage_ttm", "mcap_coverage_hindsight",
+    "hindsight_actual_quarters", "hindsight_estimate_quarters",
+    "composition_effective_date", "composition_available_date",
+    "quality_tier", "methodology_version",
+)
+
+
+def _sha256(payload: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                   allow_nan=False, default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def weekly_calendar_hash(trading_dates: Sequence[str]) -> str:
+    """Content hash of the trading calendar a run measured itself against.
+
+    Frozen at run start so a later verification can tell that the calendar
+    changed underneath it, rather than silently recomputing a smaller
+    expectation from whatever the table holds now.
+    """
+    return _sha256(sorted({str(value) for value in trading_dates}))
+
+
+def weekly_result_hash(rows: Sequence[Mapping[str, Any]]) -> str:
+    """Content hash of a run's published output.
+
+    Recomputable from the stored rows by anyone, so a deleted week or an edited
+    P/E stops matching what the run said it wrote. Floats go in as Python
+    floats: SQLite stores IEEE-754 doubles and round-trips them exactly, so a
+    value that came back unchanged hashes unchanged.
+    """
+    return _sha256([
+        [None if row.get(field) is None
+         else (float(row[field]) if isinstance(row.get(field), (int, float))
+               and not isinstance(row.get(field), bool) else str(row[field]))
+         for field in RESULT_HASH_FIELDS]
+        for row in sorted(rows, key=lambda item: str(item["valuation_date"]))
+    ])
+
+
+def expected_week_ends(
+    trading_dates: Sequence[str], from_date: str, to_date: str,
+    composition_floor: Optional[str],
+) -> List[str]:
+    """The weeks a run is accountable for: one date per ISO week.
+
+    A week is expected once the basket had a composition that was already
+    public by the end of that week -- the same availability rule the producer
+    applies when it picks a composition, so the denominator and the data agree
+    by construction.
+    """
+    if composition_floor is None:
+        return []
+    return [week[-1] for week in
+            group_trading_dates_by_week(trading_dates, from_date, to_date)
+            if week[-1] >= composition_floor]
 
 
 # ---------------------------------------------------------------------------
@@ -171,11 +238,20 @@ def resolve_company_market_cap(
     primary's quoted figure when FMP repeats the full company under every
     class, and the sum of the classes when it splits them.
 
-    A group whose convention has not been reviewed, or whose classes cannot
-    all be valued, returns no market cap: the company drops out of both
-    metrics rather than entering one of them at half or double its size.
-    Secondary classes are read through the same as-of selection and sanity
-    quarantine as any other member, so a polluted class cannot sneak in.
+    A group whose convention has not been reviewed, whose classes cannot all
+    be valued, or whose data contradicts the declared convention returns no
+    market cap: the company drops out of both metrics rather than entering one
+    of them at half or double its size. Secondary classes are read through the
+    same as-of selection and sanity quarantine as any other member, so a
+    polluted class cannot sneak in.
+
+    A contradiction is not a warning to publish through. If the config says
+    both classes quote the whole company and they differ by more than
+    ``SHARE_CLASS_IDENTITY_TOLERANCE`` -- or says they split and they are
+    identical -- then one of the two is wrong and neither branch is safe.
+    Splitting a period-dependent convention (a pair that changed conventions
+    mid-history) is a config question to settle against the vendor data, not
+    something to guess at per row.
     """
     warnings: List[str] = []
     if not secondaries:
@@ -207,6 +283,7 @@ def resolve_company_market_cap(
 
     observed = [row["market_cap"] for row in components
                 if row["market_cap"] is not None]
+    conflicted = False
     if base_market_cap is not None:
         for row in components:
             if row["market_cap"] is None:
@@ -215,9 +292,15 @@ def resolve_company_market_cap(
                 row["market_cap"] / float(base_market_cap) - 1.0
             ) <= SHARE_CLASS_IDENTITY_TOLERANCE
             if looks_identical != (convention == "full_company_per_class"):
+                conflicted = True
                 warnings.append(
                     f"share_class_convention_mismatch:{primary}:{row['symbol']}"
                     f":{convention}")
+    if conflicted:
+        return {"market_cap": None, "components": components,
+                "convention": convention,
+                "exclusion_reason": "share_class_convention_conflict",
+                "warnings": warnings}
 
     if convention == "full_company_per_class":
         return {"market_cap": base_market_cap, "components": components,
@@ -310,6 +393,19 @@ def _compact_member(
             "hindsight_exclusion_reason": hindsight_member.get(
                 "exclusion_reason"),
         })
+        # Which four fiscal quarters this number covers, and the consensus
+        # vintage any of them came from. Two dates and a snapshot are enough
+        # for a verifier to rebuild the same sum out of income_quarterly and
+        # fmp_estimates without re-implementing the window selection -- and
+        # without carrying the full quarter-level evidence on every row.
+        evidence = hindsight_member.get("quarter_evidence") or []
+        if evidence:
+            row["hindsight_window"] = [str(evidence[0]["fiscal_date"]),
+                                       str(evidence[-1]["fiscal_date"])]
+            snapshots = sorted({str(item["snapshot_date"]) for item in evidence
+                                if item.get("snapshot_date")})
+            if snapshots:
+                row["hindsight_snapshot_date"] = snapshots[-1]
     return row
 
 

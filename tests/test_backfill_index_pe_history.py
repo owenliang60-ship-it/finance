@@ -384,7 +384,14 @@ def test_undeclared_share_class_convention_excludes_the_company():
     assert resolved["exclusion_reason"] == "share_class_convention_undeclared"
 
 
-def test_full_company_convention_warns_when_the_classes_disagree():
+def test_full_company_convention_conflict_excludes_the_company():
+    """Boss review P1-5: a contradicted convention must not publish anyway.
+
+    The config says both classes quote the whole company, and the data says
+    they do not. One of the two is wrong and neither is safe: taking the
+    primary halves the company if the classes really are split. Warning while
+    still publishing puts a number nobody can defend on the chart.
+    """
     resolved = resolve_company_market_cap(
         primary="AAA", base_market_cap=1000.0, secondaries=["AAA.B"],
         convention="full_company_per_class", valuation_date="2026-01-09",
@@ -392,9 +399,35 @@ def test_full_company_convention_warns_when_the_classes_disagree():
             {"symbol": "AAA.B", "date": "2026-01-09", "market_cap": 400.0}]},
         sanity_by_symbol={"AAA.B": [
             {"symbol": "AAA.B", "date": "2026-01-09", "status": "clean"}]})
-    assert resolved["market_cap"] == pytest.approx(1000.0)
+    assert resolved["market_cap"] is None
+    assert resolved["exclusion_reason"] == "share_class_convention_conflict"
     assert any("share_class_convention_mismatch" in warning
                for warning in resolved["warnings"])
+
+
+def test_split_convention_conflict_excludes_the_company():
+    """The mirror image: config says split, the two classes quote the same."""
+    resolved = resolve_company_market_cap(
+        primary="FOXA", base_market_cap=1000.0, secondaries=["FOX"],
+        convention="split_across_classes", valuation_date="2026-01-09",
+        market_cap_by_symbol={"FOX": [
+            {"symbol": "FOX", "date": "2026-01-09", "market_cap": 1000.0}]},
+        sanity_by_symbol={"FOX": [
+            {"symbol": "FOX", "date": "2026-01-09", "status": "clean"}]})
+    assert resolved["market_cap"] is None
+    assert resolved["exclusion_reason"] == "share_class_convention_conflict"
+
+
+def test_a_conflicted_share_class_company_leaves_the_metric_entirely():
+    holdings = [_holding("FOXA", 60.0, 0), _holding("FOX", 0.0, 1,
+                                                    covered_by="FOXA"),
+                _holding("BBB", 40.0, 2)]
+    sources = _sources(members=("FOXA", "FOX", "BBB"))
+    row = _point(holding_rows=holdings, sources=sources)
+    assert row["ttm_total_mcap"] == pytest.approx(1000.0)
+    assert row["hindsight_total_mcap"] == pytest.approx(1000.0)
+    assert any("share_class_convention_mismatch" in warning
+               for warning in row["warnings_json"])
 
 
 # ---------------------------------------------------------------------------
@@ -782,4 +815,88 @@ def test_both_merge_layers_read_share_classes_from_one_config_root(
         "convention": "split_across_classes", "components": ["AAA.B"]}
     assert members["AAA"]["market_cap"] == pytest.approx(1400.0)
     assert "AAA.B" in result["share_class_secondary_symbols"]
+    store.close()
+
+
+# ---------------------------------------------------------------------------
+# Boss review P1-1: a composition may not be used before it was disclosed
+# ---------------------------------------------------------------------------
+
+def _composition(effective, available, holding_date, index=0):
+    return {
+        "holding_date": holding_date,
+        "anchor_trading_date": holding_date,
+        "composition_effective_date": effective,
+        "composition_available_date": available,
+        "weight_basis": "fixed_rebalance_weight_proxy",
+        "data_quality_tier": "historical_disclosure_fixed_proxy",
+        "snapshot_warnings": [],
+        "source_kind": "disclosure",
+    }
+
+
+def test_a_composition_is_not_used_before_its_disclosure_date(
+        tmp_path, config_dir):
+    """Boss repro: a composition disclosed 2026-02-15 valuing 2025-12-26.
+
+    Effective-date-only selection reaches back to a rebalance whose membership
+    and weights nobody could know yet. The weights are only *knowable* from the
+    disclosure, so a valuation date before it must keep using the last
+    composition that was already public.
+    """
+    store = _fixture_db(tmp_path)
+    conn = store._get_conn()
+    with conn:
+        conn.execute("DELETE FROM fmp_fund_disclosure_holdings")
+        rows = []
+        # Old composition: in force and public early in the window.
+        for index, (symbol, weight) in enumerate((("AAA", 60.0), ("BBB", 40.0))):
+            rows.append(("SPY", "2025-12-30", "disclosure", index, "2025-12-19",
+                         "2025-12-22", "2026-01-02", symbol, symbol, symbol,
+                         weight, weight * 10, 1, None, None, "[]",
+                         "2026-01-02T00:00:00Z", "2026-01-02T00:00:00Z"))
+        # New composition: in force inside the window, disclosed two months
+        # later -- the shape of Boss's repro.
+        for index, (symbol, weight) in enumerate((("AAA", 10.0), ("BBB", 90.0))):
+            rows.append(("SPY", "2026-01-13", "disclosure", index + 2,
+                         "2026-01-09", "2026-01-12", "2026-02-15", symbol,
+                         symbol, symbol, weight, weight * 10, 1, None, None,
+                         "[]", "2026-02-15T00:00:00Z", "2026-02-15T00:00:00Z"))
+        conn.executemany(
+            "INSERT OR REPLACE INTO fmp_fund_disclosure_holdings "
+            "(basket_symbol, holding_date, source_kind, raw_row_index, "
+            "rebalance_close_date, composition_effective_date, "
+            "composition_available_date, raw_symbol, symbol, name, "
+            "weight_pct, market_value, included, filter_reason, covered_by, "
+            "snapshot_warnings_json, fetched_at, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+    args = _args(tmp_path, config_dir)
+    result = backfill_basket(args, "SPY", client=None, store=None, conn=conn)
+    for row in result["rows"]:
+        assert row["composition_available_date"] <= row["valuation_date"], (
+            f"{row['valuation_date']} used a composition disclosed "
+            f"{row['composition_available_date']}")
+        # Every weekly point is point-in-time by construction, so the daily
+        # engine's ex-post composition flag can never be set on one.
+        assert row["members_json"]["weight_coverage_ttm"] is not None
+    used = {row["valuation_date"]: row["composition_effective_date"]
+            for row in result["rows"]}
+    assert set(used.values()) == {"2025-12-22"}, used
+    # The later composition is in force from 2026-01-12 but only public from
+    # 2026-02-15, so no row in this window may have reached for it.
+    assert "2026-01-12" not in set(used.values())
+    assert min(used) == "2026-01-02", "no row before the first disclosure"
+    store.close()
+
+
+def test_a_week_before_any_disclosure_produces_no_row(tmp_path, config_dir):
+    store = _fixture_db(tmp_path)
+    conn = store._get_conn()
+    with conn:
+        conn.execute(
+            "UPDATE fmp_fund_disclosure_holdings "
+            "SET composition_available_date = '2026-01-13'")
+    args = _args(tmp_path, config_dir)
+    result = backfill_basket(args, "SPY", client=None, store=None, conn=conn)
+    assert [row["valuation_date"] for row in result["rows"]] == ["2026-01-16"]
     store.close()

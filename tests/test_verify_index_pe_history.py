@@ -27,7 +27,12 @@ from scripts.verify_index_pe_history import (
     verify_database,
 )
 from src.data.market_store import MarketStore
-from terminal.index_pe_weekly import WEEKLY_METHODOLOGY_VERSION
+from terminal.index_pe_weekly import (
+    WEEKLY_METHODOLOGY_VERSION,
+    expected_week_ends,
+    weekly_calendar_hash,
+    weekly_result_hash,
+)
 
 
 REPO_CONFIG_DIR = Path(__file__).parent.parent / "config" / "baskets"
@@ -124,7 +129,14 @@ def _weekly_row(basket, valuation_date, members, quality_tier="actual_only"):
 
 
 def _manifest_events(basket, run_id="run-1", expected_from=EXPECTED_FROM,
-                     expected_to=AS_OF, extra=()):
+                     expected_to=AS_OF, extra=(), trading=(), rows=(),
+                     composition_floor="2021-01-25"):
+    """What the producer freezes: the week set, the calendar and the result.
+
+    Mirrors `backfill_index_pe_history` rather than inventing a shape, so the
+    verifier is tested against manifests of the kind it will actually meet.
+    """
+    window_calendar = [day for day in trading if expected_from <= day <= expected_to]
     base = {
         "run_id": run_id, "basket": basket, "frequency": "weekly",
         "expected_from_date": expected_from, "expected_to_date": expected_to,
@@ -132,13 +144,22 @@ def _manifest_events(basket, run_id="run-1", expected_from=EXPECTED_FROM,
         "target_count": 2, "target_universe_json": ["AAA", "BBB"],
     }
     events = [{**base, "event_seq": 0, "event_kind": "run_started",
-               "payload_json": {"started_at": "2026-01-16T00:00:00Z"}}]
+               "payload_json": {
+                   "started_at": "2026-01-16T00:00:00Z",
+                   "composition_floor": composition_floor,
+                   "expected_weeks": expected_week_ends(
+                       window_calendar, expected_from, expected_to,
+                       composition_floor),
+                   "trading_days": len(window_calendar),
+                   "calendar_hash": weekly_calendar_hash(window_calendar),
+               }}]
     for offset, (kind, payload) in enumerate(extra, start=1):
         events.append({**base, "event_seq": offset, "event_kind": kind,
                        "payload_json": payload})
     events.append({**base, "event_seq": len(events),
                    "event_kind": "run_completed",
-                   "payload_json": {"weekly_rows": 2}})
+                   "payload_json": {"weekly_rows": len(rows),
+                                    "result_hash": weekly_result_hash(rows)}})
     return events
 
 
@@ -201,7 +222,8 @@ def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
     if rows:
         store.upsert_basket_weekly_pe_batch(rows)
     store.append_basket_pe_run_events(_manifest_events(
-        basket, expected_from=expected_from, extra=manifest_extra))
+        basket, expected_from=expected_from, extra=manifest_extra,
+        trading=trading, rows=rows))
     store.close()
     return tmp_path / "market.db"
 
@@ -754,3 +776,213 @@ def test_seven_day_observation_is_fine_under_the_configured_seven(
                      market_cap_dates={"2026-01-16": "2026-01-09"})
     report = _verify(db_path, config_dir)
     assert report["passed"], _failed(report)
+
+
+# ---------------------------------------------------------------------------
+# Boss review P1-1 (verifier side) and P1-4 (CIK fail-open)
+# ---------------------------------------------------------------------------
+
+def test_a_row_using_a_composition_before_its_disclosure_is_caught(
+        tmp_path, config_dir):
+    """The producer's gate and the verifier's must not share the same blind spot."""
+    db_path = _build(tmp_path)
+    _mutate(db_path, "UPDATE basket_weekly_pe_history "
+                     "SET composition_available_date = '2026-02-15' "
+                     "WHERE valuation_date = '2026-01-16'")
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("composition_not_yet_disclosed" in str(item)
+               for item in failures["materialised_evidence"]), failures
+
+
+def test_one_unresolvable_cik_fails_the_identity_check(tmp_path, config_dir):
+    """Boss review P1-4: counting the gap is not closing it.
+
+    Two members and one resolvable CIK is exactly the case the check exists
+    for -- the unresolved one is where an uncovered dual-class pair hides.
+    """
+    db_path = _build(tmp_path)
+    _mutate(db_path, "UPDATE fmp_fund_disclosure_holdings SET cik = NULL "
+                     "WHERE raw_symbol = 'BBB'")
+    failures = _failed(_verify(db_path, config_dir))
+    errors = failures["company_identity_uniqueness"]["errors"]
+    assert any("company_identity_unresolved" in str(item) and "BBB" in str(item)
+               for item in errors), errors
+
+
+# ---------------------------------------------------------------------------
+# Boss review P1-2: the manifest is the immutable denominator
+# ---------------------------------------------------------------------------
+
+def test_deleting_a_week_and_its_calendar_still_fails(tmp_path, config_dir):
+    """Boss repro: delete a week's row *and* that week's basket prices.
+
+    Recomputing the expected weeks from the live calendar lets an attacker (or
+    a bad sync) erase the evidence of the erasure. The denominator has to come
+    from what the run froze, not from tables that changed since.
+    """
+    db_path = _build(tmp_path)
+    _mutate(db_path, "DELETE FROM basket_weekly_pe_history "
+                     "WHERE valuation_date = '2026-01-09'")
+    _mutate(db_path, "DELETE FROM daily_price WHERE symbol = 'SPY' "
+                     "AND date BETWEEN '2026-01-05' AND '2026-01-09'")
+    failures = _failed(_verify(db_path, config_dir))
+    assert failures, "erasing the calendar must not erase the expectation"
+    assert ("expected_weekly_denominator" in failures
+            or "manifest_result_integrity" in failures), failures
+
+
+def test_result_hash_catches_a_deleted_row(tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    _mutate(db_path, "DELETE FROM basket_weekly_pe_history "
+                     "WHERE valuation_date = '2026-01-09'")
+    failures = _failed(_verify(db_path, config_dir))
+    assert "manifest_result_integrity" in failures, failures
+
+
+def test_result_hash_catches_a_tampered_published_value(tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    _mutate(db_path, "UPDATE basket_weekly_pe_history SET ttm_pe_gaap = 9.99 "
+                     "WHERE valuation_date = '2026-01-16'")
+    failures = _failed(_verify(db_path, config_dir))
+    assert "manifest_result_integrity" in failures, failures
+
+
+def test_calendar_drift_since_the_run_is_reported(tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    _mutate(db_path, "DELETE FROM daily_price WHERE symbol = 'SPY' "
+                     "AND date = '2026-01-07'")
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("calendar_changed_since_the_run" in str(item)
+               for item in failures["manifest_denominator"]), failures
+
+
+def test_a_run_that_failed_after_writing_rows_blocks_certification(
+        tmp_path, config_dir):
+    """No falling back to the last good manifest to bless newer writes."""
+    db_path = _build(tmp_path)
+    store = MarketStore(db_path)
+    try:
+        base = {
+            "run_id": "run-2", "basket": "SPY", "frequency": "weekly",
+            "expected_from_date": EXPECTED_FROM, "expected_to_date": AS_OF,
+            "methodology_version": WEEKLY_METHODOLOGY_VERSION,
+            "target_count": 2, "target_universe_json": ["AAA", "BBB"],
+        }
+        store.append_basket_pe_run_events([
+            {**base, "event_seq": 0, "event_kind": "run_started",
+             "payload_json": {}},
+            {**base, "event_seq": 1, "event_kind": "run_failed",
+             "payload_json": {"error": "RuntimeError: boom",
+                              "rows_written": True}},
+        ])
+    finally:
+        store.close()
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("wrote_rows_then_failed" in str(item)
+               for item in failures["manifest_denominator"]), failures
+
+
+def test_a_run_that_failed_before_writing_does_not_block(tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    store = MarketStore(db_path)
+    try:
+        base = {
+            "run_id": "run-2", "basket": "SPY", "frequency": "weekly",
+            "expected_from_date": EXPECTED_FROM, "expected_to_date": AS_OF,
+            "methodology_version": WEEKLY_METHODOLOGY_VERSION,
+            "target_count": 2, "target_universe_json": ["AAA", "BBB"],
+        }
+        store.append_basket_pe_run_events([
+            {**base, "event_seq": 0, "event_kind": "run_started",
+             "payload_json": {}},
+            {**base, "event_seq": 1, "event_kind": "run_failed",
+             "payload_json": {"error": "ValueError: universe is empty",
+                              "rows_written": False}},
+        ])
+    finally:
+        store.close()
+    report = _verify(db_path, config_dir)
+    assert report["passed"], _failed(report)
+
+
+# ---------------------------------------------------------------------------
+# Boss review P1-3: the hindsight number needs its own source reconciliation
+# ---------------------------------------------------------------------------
+
+def _future_quarters(db_path, symbol, values, currency="USD"):
+    conn = sqlite3.connect(db_path)
+    with conn:
+        conn.executemany(
+            "INSERT OR REPLACE INTO income_quarterly (symbol, date, period, "
+            "accepted_date, reported_currency, net_income) VALUES (?,?,?,?,?,?)",
+            [(symbol, fiscal, "Q1", _accepted(fiscal), currency, value)
+             for fiscal, value in values])
+    conn.close()
+
+
+HINDSIGHT_FISCAL = ["2026-03-31", "2026-06-30", "2026-09-30", "2026-12-31"]
+
+
+def _with_hindsight_sources(db_path, per_quarter=7.5):
+    """The four quarters that follow the valuation dates, 30.0 a year."""
+    for symbol in ("AAA", "BBB"):
+        _future_quarters(db_path, symbol,
+                         [(fiscal, per_quarter) for fiscal in HINDSIGHT_FISCAL])
+
+
+def _set_member_window(db_path, valuation_date="2026-01-16"):
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        "SELECT members_json FROM basket_weekly_pe_history "
+        "WHERE valuation_date = ?", [valuation_date]).fetchone()
+    payload = json.loads(row[0])
+    for member in payload["members"]:
+        member["hindsight_window"] = [HINDSIGHT_FISCAL[0], HINDSIGHT_FISCAL[-1]]
+    with conn:
+        conn.execute("UPDATE basket_weekly_pe_history SET members_json = ? "
+                     "WHERE valuation_date = ?",
+                     [json.dumps(payload), valuation_date])
+    conn.close()
+
+
+def test_hindsight_income_is_reconciled_against_raw_sources(
+        tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    _with_hindsight_sources(db_path)
+    for valuation_date in ("2026-01-09", "2026-01-16"):
+        _set_member_window(db_path, valuation_date)
+    report = _verify(db_path, config_dir)
+    detail = {check["name"]: check["detail"]
+              for check in report["checks"]}["raw_source_spot_check"]
+    assert detail["reconciled_hindsight_incomes"] > 0, detail
+    assert report["passed"], _failed(report)
+
+
+def test_a_tampered_hindsight_income_is_caught(tmp_path, config_dir):
+    """Boss repro: one member's hindsight income 30 -> 3000, totals kept
+    self-consistent. Every existing check passed; only a rebuild from
+    income_quarterly can object."""
+    db_path = _build(tmp_path)
+    _with_hindsight_sources(db_path)
+    for valuation_date in ("2026-01-09", "2026-01-16"):
+        _set_member_window(db_path, valuation_date)
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        "SELECT members_json FROM basket_weekly_pe_history "
+        "WHERE valuation_date = '2026-01-16'").fetchone()
+    payload = json.loads(row[0])
+    payload["members"][0]["hindsight_ntm_net_income_usd"] = 3000.0
+    income = sum(member["hindsight_ntm_net_income_usd"]
+                 for member in payload["members"])
+    total = sum(member["market_cap"] for member in payload["members"])
+    with conn:
+        conn.execute(
+            "UPDATE basket_weekly_pe_history SET members_json = ?, "
+            "hindsight_ntm_net_income = ?, hindsight_ntm_pe_gaap = ? "
+            "WHERE valuation_date = '2026-01-16'",
+            [json.dumps(payload), income, total / income])
+    conn.close()
+    detail = _failed(_verify(db_path, config_dir)).get("raw_source_spot_check")
+    assert detail is not None, "the tamper went unnoticed"
+    assert any("hindsight_income_disagrees_with_raw_source" in str(item)
+               for item in detail["errors"]), detail["errors"]
