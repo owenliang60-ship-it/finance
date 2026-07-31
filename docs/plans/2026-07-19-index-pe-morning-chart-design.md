@@ -12,6 +12,12 @@
 2. **§4 percentile 澄清**：五年分位只对 `quality_tier = actual_only` 的点计算；consensus tail 点展示数值但不参与分位；PIT 序列不给分位。
 3. **§5 位置冻结**：图表作为 `0c. 三指数估值` 插入 `0b. 成交集中度` 之后、`1. PMARP` 之前；既有 section 不重排，`*D. Dollar Volume*` Telegram split_marker 不变。
 
+**2026-07-31 修订**（Boss 停点 1 复审拍板）：
+
+4. **§2.4 双维发布门**：在 mcap coverage ≥90% 之外，新增披露权重覆盖率 ≥90% 为第二发布门——mcap gate 结构性看不见完全缺市值的成员（隔离 60% 权重后剩余成员仍可 100% mcap coverage）。两门均作用于最终 aggregate 指标。
+5. **percentile 分线语义**：TTM 分位用全部非空 TTM 点（TTM 无 tail 概念）；hindsight 分位仅用 `quality_tier = actual_only` 的点；禁止用 hindsight tier 过滤 TTM 历史。
+6. **R5 整篮回滚保留**，但恢复流程、显式停发状态与告警提前至 Task 5 交付（weekly tail refresh 自 Task 5 起运行，不能等 Task 8 才补运维能力）。
+
 ## 1. 目标
 
 在每日晨报中加入一张自包含 PNG，展示 SPY、QQQ、SOXX 过去五年的周频估值。每个指数一个纵向面板，每个面板同时展示：

@@ -127,7 +127,7 @@ fwd_pe_ntm(snapshot)
 - 最近尾部按 fiscal quarter key 去重：actual 优先，缺少的 quarter 才使用 latest consensus；恰好四个连续季度才可发布；
 - 外币净利润沿用历史引擎的估值日 FX 口径，保持 TTM/NTM 横向一致。
 
-**口径契约（R1）**：三条指标全部且仅使用 aggregate 口径 `Σmcap / ΣNI`，同一面板三线可比。SOXX 历史引擎的主字段 `rebalance_weighted_ttm_pe_gaap_proxy`（holding-weighted，`terminal/historical_basket_valuation.py:269-298`）**不是**本产品指标，仅作为 `basket_ttm_valuation` 诊断证据保留，不进 weekly 表、不进图、不进 percentile。该引擎的 aggregate 次级字段 `uncapped_mcap_basket_pe_gaap` 当前**不过 90% coverage gate**（`:473-475` 中 primary 为 None 时 secondary 仍写值），因此 weekly 表的 `ttm_pe_gaap` 不得直接提升该字段——必须对 aggregate 指标本身重新施加 `mcap_coverage_ttm >= 0.90` 门控后写入。
+**口径契约（R1）**：三条指标全部且仅使用 aggregate 口径 `Σmcap / ΣNI`，同一面板三线可比。SOXX 历史引擎的主字段 `rebalance_weighted_ttm_pe_gaap_proxy`（holding-weighted，`terminal/historical_basket_valuation.py:269-298`）**不是**本产品指标，仅作为 `basket_ttm_valuation` 诊断证据保留，不进 weekly 表、不进图、不进 percentile。该引擎的 aggregate 次级字段 `uncapped_mcap_basket_pe_gaap` 当前**不过 90% coverage gate**（`:473-475` 中 primary 为 None 时 secondary 仍写值），因此 weekly 表的 `ttm_pe_gaap` 不得直接提升该字段——必须对 aggregate 指标本身重新施加 `mcap_coverage_ttm >= 0.90` 门控后写入。**（2026-07-31 Boss 拍板）发布门为双维**：mcap coverage ≥ 0.90 **且**披露权重 coverage ≥ 0.90，两门均作用于最终 aggregate 指标（权重门防隔离/缺市值成员造成的"40% 篮子假 100% 覆盖"）。
 
 ### 3.2 周频取样
 
@@ -161,7 +161,7 @@ fwd_pe_ntm(snapshot)
 
 1. 每次 weekly run 重算所有 hindsight tail 未满四个 actual 季度的点（约最近 12 个月）；
 2. `quality_tier` 只允许单向升级（estimate → actual）；降级（actual → estimate）必须拒绝写入并记录 warning；
-3. 五年 percentile 只对 `quality_tier = actual_only` 的点计算，consensus tail 点展示数值但不参与分位（查询层与 renderer 同契约，见 Task 6）。
+3. 五年 percentile **分线计算**（2026-07-31 Boss 细化）：TTM 分位用全部非空 TTM 点（TTM 无 tail 概念）；hindsight 分位仅用 `quality_tier = actual_only` 的点，consensus tail 点展示数值但不参与分位；**禁止用 hindsight tier 过滤 TTM 历史**（查询层与 renderer 同契约，见 Task 6）。
 
 ## 4. 替代方案与取舍
 
@@ -450,7 +450,9 @@ python -m scripts.verify_index_pe_history \
 8. resume 不重复覆盖坏的 snapshot state；
 9. cron writer lock 内顺序为 ingestion → PIT valuation → history-tail refresh → verifier；
 10. 任一步 non-zero 退出码上抛；
-11. 既有 reader `scripts/verify_fmp_forward.py:320`（`SELECT basket, members_json FROM fmp_basket_valuation`）在表从 0 行变为有数据后行为正确（空路径 → 逐行校验），不产生假绿。
+11. 既有 reader `scripts/verify_fmp_forward.py:320`（`SELECT basket, members_json FROM fmp_basket_valuation`）在表从 0 行变为有数据后行为正确（空路径 → 逐行校验），不产生假绿；
+12. （2026-07-31 Boss 拍板，自 Task 8 提前）weekly tail refresh 触发 R5 拒绝（tier 降级/跨版本冲突）导致整篮回滚时：该 basket 的停发状态显式可查（manifest/状态表）、cron rc 非零、Telegram 告警发出；
+13. （同上）恢复路径有测试：按 runbook 命令（补记 run_failed / 按 methodology_version 精确删除后重填）操作后，该 basket 恢复发布且 verifier 通过。
 
 **GREEN implementation:**
 
@@ -495,7 +497,7 @@ python -m pytest tests/test_forward_valuation.py tests/test_update_fmp_forward.p
 - 用 Pillow `ImageDraw.line` 绘制原始周频折线，不新增 matplotlib；
 - 颜色：TTM teal、hindsight purple、PIT coral；
 - 用分段绘制实现虚线与 gap；
-- percentile 复用项目公式 `count(values <= current) / total`，且（R5）只对 `quality_tier = actual_only` 的点计算——consensus tail 点与 PIT 序列不参与分位；
+- percentile 复用项目公式 `count(values <= current) / total`，**分线语义**（2026-07-31 Boss 细化）：TTM 分位对全部非空 TTM 点；hindsight 分位仅对 `quality_tier = actual_only` 点（consensus tail 与 PIT 序列不参与分位）；禁止用 hindsight tier 过滤 TTM 历史；
 - 所有坐标/格式函数保持纯函数，便于单测。
 
 **Visual verify:**
