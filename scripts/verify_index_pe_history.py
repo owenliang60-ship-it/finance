@@ -201,10 +201,20 @@ def _invalid_runs(
       finish;
     * one `run_started`, not several.
 
+    They must also finish *in order*. A run killed between committing its
+    batch and appending its outcome is a normal operational event, and
+    "record that it finished" is cleanup an operator would reach for through
+    the sanctioned API -- producing an event set that is perfectly well formed
+    (one start, one terminal, terminal last) and that cardinality therefore
+    cannot see. What gives it away is that a sequential producer cannot close
+    run-0 after run-1 has already closed: terminal events must appear in the
+    order the runs began.
+
     A run failing any of these certifies nothing and lends its window to
     nothing. Note this is a statement about the *manifest*, not about the
     passage of time: a legitimate later run supersedes an earlier failure
-    without either of them being invalid.
+    without either of them being invalid, and a run that failed early still
+    closed before the runs that started after it.
     """
     by_run: Dict[str, List[Mapping[str, Any]]] = {}
     for row in events:
@@ -230,6 +240,30 @@ def _invalid_runs(
                 f"run_started_more_than_once:{kinds.count('run_started')}")
         if reasons:
             invalid[run_id] = reasons
+
+    # Terminal events must appear in the order the runs began. Ordering is by
+    # the manifest's own row order, not event_seq, which is a label the writer
+    # chooses, and not a timestamp, which a clock can muddle.
+    def _rowid(row: Mapping[str, Any], fallback: int) -> int:
+        value = row.get("manifest_rowid")
+        return int(value) if value is not None else fallback
+
+    terminal_at: Dict[str, int] = {}
+    for index, row in enumerate(events):
+        run_id = str(row["run_id"])
+        if str(row["event_kind"]) in TERMINAL_EVENT_KINDS \
+                and run_id not in terminal_at:
+            terminal_at[run_id] = _rowid(row, index)
+    started = [run_id for run_id in _run_order(events)
+               if run_id in terminal_at]
+    for position, run_id in enumerate(started):
+        later_closed_first = [
+            other for other in started[position + 1:]
+            if terminal_at[other] < terminal_at[run_id]]
+        if later_closed_first:
+            invalid.setdefault(run_id, []).append(
+                "run_terminal_recorded_after_a_later_run:"
+                f"{later_closed_first[0]}")
     return invalid
 
 
@@ -440,7 +474,10 @@ def _result_integrity_errors(
     one. Every hash matched, because the attacker chose them.
 
     Rows now name the run that wrote them, which turns certification into a
-    claim about specific rows rather than about a date range.
+    claim about specific rows rather than about a date range. A run's declared
+    hash is checked against exactly its own rows; rows inside the certifying
+    window must belong to the certifying run; and a row naming a run that
+    never completed is certified by nobody.
 
     **What this does not do.** Bypassing it takes one statement --
     ``UPDATE basket_weekly_pe_history SET run_id = '<forged run>'`` -- and
@@ -449,10 +486,7 @@ def _result_integrity_errors(
     used; it is not a defence against an arbitrary writer holding the same
     database file. Anything stored beside the data can be edited with the
     data. Read these checks as tamper *evidence*, not as tamper *proof*
-    (issue 048), and put real weight on who can open market.db for writing. A run's declared
-    hash is checked against exactly its own rows; rows inside the certifying
-    window must belong to the certifying run; and a row naming a run that
-    never completed is certified by nobody.
+    (issue 048), and put real weight on who can open market.db for writing.
     """
     if run_id is None:
         return [f"{basket}:no_completed_run_to_check_results_against"]
@@ -1324,16 +1358,27 @@ def verify_database(
             [basket, window[0], window[1]])
         rows, decode_errors = _decode_rows(raw_rows)
         json_errors.extend(decode_errors)
-        integrity_errors.extend(_result_integrity_errors(
-            basket, conn, events, run_id, (window[0], window[1])))
+        if run_id is None:
+            # With no certifying run every row is trivially uncertified, and
+            # listing them buries the reason under its own consequences. The
+            # root cause is already reported by manifest_denominator.
+            integrity_errors.append(
+                f"{basket}:per_row_checks_suppressed_no_certifying_run")
+        else:
+            integrity_errors.extend(_result_integrity_errors(
+                basket, conn, events, run_id, (window[0], window[1])))
         versions = sorted({str(row["methodology_version"]) for row in rows})
         if versions not in ([], [WEEKLY_METHODOLOGY_VERSION]):
             version_errors.append(f"{basket}:{versions}")
         expected_weeks = list(_payload(started).get("expected_weeks") or [])
-        denominator_errors.extend(
-            _denominator_errors(basket, expected_weeks, rows))
-        denominator_errors.extend(
-            _uncertified_row_errors(basket, conn, events))
+        if run_id is None:
+            denominator_errors.append(
+                f"{basket}:denominator_checks_suppressed_no_certifying_run")
+        else:
+            denominator_errors.extend(
+                _denominator_errors(basket, expected_weeks, rows))
+            denominator_errors.extend(
+                _uncertified_row_errors(basket, conn, events))
         tier_errors.extend(_tier_consistency_errors(rows))
         staleness = int(basket_configs[basket].get(
             "market_cap_staleness_days", DEFAULT_MARKET_CAP_STALENESS_DAYS))

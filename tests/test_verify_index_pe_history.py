@@ -1331,6 +1331,16 @@ def test_a_run_hash_covers_exactly_the_rows_it_owns(tmp_path, config_dir):
 # Fix round 3 / D1-D3: a run gets exactly one terminal event, and it is last
 # ---------------------------------------------------------------------------
 
+def _all_rows(db_path, basket="SPY"):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rows = [dict(row) for row in conn.execute(
+        "SELECT * FROM basket_weekly_pe_history WHERE basket = ? "
+        "ORDER BY valuation_date", [basket])]
+    conn.close()
+    return rows
+
+
 def _append_events(db_path, events):
     store = MarketStore(db_path)
     try:
@@ -1463,3 +1473,128 @@ def test_incremental_tail_refresh_fails_loudly_full_rewrite_contract_pending_tas
     assert any("not_owned_by_the_certifying_run" in str(item)
                for item in failures["manifest_result_integrity"]), (
         "an incremental tail refresh must fail loudly, not quietly diverge")
+
+
+# ---------------------------------------------------------------------------
+# Fix round 4 / E1: a crashed run cannot be finished after the fact
+# ---------------------------------------------------------------------------
+
+def test_a_terminal_event_appended_after_a_later_runs_terminal_is_rejected(
+        tmp_path, config_dir):
+    """E1: the operationally likely one.
+
+    A cloud run killed between committing its batch and appending its outcome
+    is a normal event, and "record that it finished" is cleanup an operator
+    would reach for through the sanctioned API. The resulting event set is
+    perfectly well formed -- one start, one terminal, terminal last -- so
+    cardinality cannot see it. Only the order gives it away: a sequential
+    producer cannot close run-0 after run-1 has already closed.
+    """
+    db_path = _build(tmp_path)
+    trading = _weekdays("2026-01-05", "2026-01-16")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    good = [dict(row) for row in conn.execute(
+        "SELECT * FROM basket_weekly_pe_history ORDER BY valuation_date")]
+    conn.close()
+    # The real chronology: run-0 starts, writes, and is killed before it can
+    # append an outcome; run-1 then runs and completes normally.
+    _mutate(db_path, "DELETE FROM basket_pe_backfill_runs")
+    _append_events(db_path, [_run_event(
+        "run-0", 0, "run_started", {}, expected_from="2014-06-28",
+        expected_to="2019-06-28")])
+    _append_events(db_path, _manifest_events(
+        "SPY", run_id="run-1", trading=trading, rows=good))
+    _orphan_row(db_path, "SPY", "2019-06-28", run_id="run-0")
+    before = _failed(_verify(db_path, config_dir))
+    assert any("rows_claim_an_uncertified_run" in str(item)
+               for item in before["manifest_result_integrity"]), before
+
+    # the cleanup: run-0 is "recorded as finished" after run-1 already closed
+    _append_events(db_path, [_run_event(
+        "run-0", 1, "run_completed",
+        {"weekly_rows": 1, "result_hash": weekly_result_hash(
+            [row for row in _all_rows(db_path)
+             if row["run_id"] == "run-0"])},
+        expected_from="2014-06-28", expected_to="2019-06-28")])
+    failures = _failed(_verify(db_path, config_dir))
+    assert failures, "a late completion adopted the orphan"
+    assert any("terminal_recorded_after_a_later_run" in str(item)
+               for item in failures["manifest_denominator"]), failures
+
+
+def test_a_failed_run_before_a_good_run_is_not_flagged_by_the_order_rule(
+        tmp_path, config_dir):
+    """E2: the ordinary sequence must stay clean.
+
+    run-0 fails and says so, then run-1 runs and completes. Terminal events in
+    run order, nothing anomalous -- the order rule must not read a normal
+    failure-then-retry as tampering.
+    """
+    db_path = _build(tmp_path)
+    _append_events(db_path, [
+        _run_event("run-0", 0, "run_started", {}),
+        _run_event("run-0", 1, "run_failed",
+                   {"error": "ValueError: boom", "rows_written": False}),
+    ])
+    # run-0's events land after run-1's in this fixture, so re-assert the rule
+    # only fires on the *relative* order of terminals between runs.
+    report = _verify(db_path, config_dir)
+    assert not any("terminal_recorded_after_a_later_run" in str(item)
+                   for item in _failed(report).get("manifest_denominator", []))
+
+
+def test_gaps_in_event_seq_do_not_matter(tmp_path, config_dir):
+    """E5: sequence numbers are labels, not evidence."""
+    db_path = _build(tmp_path)
+    _append_events(db_path, [
+        _run_event("run-2", 7, "run_started", {}),
+        _run_event("run-2", 99, "run_failed", {"rows_written": False}),
+    ])
+    report = _verify(db_path, config_dir)
+    assert not any("event_seq" in str(item)
+                   for item in _failed(report).get("manifest_denominator", []))
+
+
+def test_no_certifying_run_reports_the_cause_not_every_row(
+        tmp_path, config_dir):
+    """Operability: one root cause beats thirty derived lines.
+
+    With no certifying run every row is trivially uncertified, and listing
+    them buries the reason underneath its own consequences.
+    """
+    db_path = _build(tmp_path, calendar=("2025-06-02", "2026-01-16"),
+                     row_dates=None)
+    _mutate(db_path, "DELETE FROM basket_pe_backfill_runs "
+                     "WHERE event_kind = 'run_completed'")
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("no_completed_run_manifest" in str(item)
+               for item in failures["manifest_denominator"])
+    derived = failures.get("expected_weekly_denominator", [])
+    assert len(derived) <= 1, derived
+    assert any("suppressed" in str(item) for item in derived), derived
+
+
+def test_the_ordinary_retry_shape_verifies_clean(tmp_path, config_dir):
+    """E3, done properly: a failed attempt, then a retry that rewrites and owns.
+
+    The attack script's E3 leaves the rows owned by the original run while
+    re-appending the manifest under new ids, so its red is the ownership rule
+    working on an inconsistent fixture -- not a false positive. This is the
+    same sequence with the rows where a real retry would put them, and it must
+    verify clean, or the ownership model would be unusable in operation.
+    """
+    db_path = _build(tmp_path)
+    _mutate(db_path, "DELETE FROM basket_pe_backfill_runs")
+    _mutate(db_path, "UPDATE basket_weekly_pe_history SET run_id = 'retry-b'")
+    _append_events(db_path, [
+        _run_event("retry-a", 0, "run_started", {}),
+        _run_event("retry-a", 1, "run_failed",
+                   {"error": "RuntimeError: boom", "rows_written": False}),
+    ])
+    _append_events(db_path, _manifest_events(
+        "SPY", run_id="retry-b", trading=_weekdays("2026-01-05", "2026-01-16"),
+        rows=_all_rows(db_path)))
+    report = _verify(db_path, config_dir)
+    assert report["passed"], _failed(report)
+    assert report["baskets"]["SPY"]["manifest_run_id"] == "retry-b"
