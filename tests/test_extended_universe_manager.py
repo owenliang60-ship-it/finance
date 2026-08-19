@@ -118,6 +118,18 @@ class TestGetExtendedSymbols:
 
 
 class TestGetExtendedOnlySymbols:
+    """Deprecated forwarder (matrix #8). The extended−core formula it used to
+    own now lives in the yfinance line's pre-bootstrap fallback, so these cases
+    pin the pre-bootstrap window explicitly instead of relying on whatever
+    `extended_membership` happens to hold."""
+
+    @staticmethod
+    def _pre_bootstrap():
+        return patch(
+            "src.data.universe_resolver.current_base_universe",
+            side_effect=RuntimeError("extended_membership empty — run bootstrap first"),
+        )
+
     def test_excludes_pool_symbols(self, tmp_cache):
         tmp_cache.write_text(json.dumps({
             "updated": "2026-03-28",
@@ -125,7 +137,7 @@ class TestGetExtendedOnlySymbols:
             "symbols": ["AAPL", "NVDA", "XOM"],
         }))
 
-        with patch(
+        with self._pre_bootstrap(), patch(
             "src.data.pool_manager.get_symbols",
             return_value=["AAPL", "NVDA"],
         ):
@@ -140,7 +152,7 @@ class TestGetExtendedOnlySymbols:
             "symbols": ["XOM", "CVX"],
         }))
 
-        with patch(
+        with self._pre_bootstrap(), patch(
             "src.data.pool_manager.get_symbols",
             return_value=[],
         ):

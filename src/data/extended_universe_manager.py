@@ -15,11 +15,12 @@ Usage:
     from src.data.extended_universe_manager import (
         refresh_extended_universe,
         get_extended_symbols,
-        get_extended_only_symbols,
     )
     symbols = refresh_extended_universe()   # Refresh from FMP screener
     all_syms = get_extended_symbols()       # All ~949 symbols (post-A1)
-    ext_only = get_extended_only_symbols()  # ~819 symbols NOT in pool
+
+`get_extended_only_symbols()` is deprecated (matrix #8) — the yfinance price
+line's targets come from `extended_price_fetcher.get_yfinance_price_targets()`.
 """
 import json
 import logging
@@ -273,19 +274,28 @@ def get_extended_symbols() -> List[str]:
 
 
 def get_extended_only_symbols() -> List[str]:
-    """Return symbols in extended universe but NOT in the pool.
+    """DEPRECATED — forwards to `get_yfinance_price_targets()` (matrix #8).
 
-    These are the symbols that need yfinance price fetching
-    (pool symbols use FMP).
+    "Extended cache minus core pool" stopped being a meaningful set once the
+    base universe moved into the DB: the yfinance price line's targets are now
+    `current base universe − FMP overlay tier` (matrix #6/#7). This shim keeps
+    the remaining callers working until Stop G phase 2 deletes it.
 
     Returns:
-        Sorted list of extended-only symbols.
+        Sorted list of yfinance price targets.
     """
-    from src.data.pool_manager import get_symbols as get_pool_symbols
+    import warnings
 
-    extended = set(get_extended_symbols())
-    pool = set(get_pool_symbols())
-    return sorted(extended - pool)
+    warnings.warn(
+        "get_extended_only_symbols() is deprecated — use "
+        "src.data.extended_price_fetcher.get_yfinance_price_targets(); "
+        "removed at Stop G phase 2",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    from src.data.extended_price_fetcher import get_yfinance_price_targets
+
+    return get_yfinance_price_targets()
 
 
 def get_cache_age_days() -> Optional[int]:
