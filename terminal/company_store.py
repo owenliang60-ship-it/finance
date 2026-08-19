@@ -1389,6 +1389,70 @@ class CompanyStore:
             logger.info("Cleaned up %d old option snapshot rows (before %s)", deleted, cutoff_date)
         return deleted
 
+    # ---- Watchlist (T16, R2/R5/R13) ----
+    #
+    # LOCAL-exclusive write per the P3 ownership model: company.db is owned by
+    # the local machine and synced to cloud one-way via `sync_to_cloud.sh
+    # --push`. The `watchlist` table is created lazily here (NOT part of the
+    # base _SCHEMA) so a symbol added locally is visible to cloud-side IV /
+    # forward-estimate cron only after the next push — see
+    # src/data/overlays.py::load_watchlist for the read side, which tolerates
+    # the table being absent entirely.
+    #
+    # Sync-lag semantics: local deep-analysis writes -> next `--push` ->
+    # visible to cloud cron. Worst case lag is one push cycle. Cloud must
+    # never write here directly: a cloud write would be silently clobbered by
+    # the next local push (R3-m5/R4-P2-1), so add_to_watchlist() refuses to
+    # run under config.settings.IS_CLOUD.
+
+    def add_to_watchlist(
+        self,
+        symbol: str,
+        source: str = "",
+        added_at: Optional[str] = None,
+    ) -> None:
+        """Add a symbol to the local-owned watchlist (idempotent).
+
+        Raises:
+            RuntimeError: if called on a cloud machine (config.settings.IS_CLOUD).
+        """
+        from config import settings
+        if settings.IS_CLOUD:
+            raise RuntimeError("watchlist is local-owned; cloud write forbidden")
+
+        symbol = symbol.upper()
+        now = added_at or datetime.now().isoformat()
+        conn = self._get_conn()
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS watchlist (
+                symbol TEXT PRIMARY KEY,
+                source TEXT DEFAULT '',
+                added_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO watchlist (symbol, source, added_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(symbol) DO NOTHING
+            """,
+            (symbol, source, now),
+        )
+        conn.commit()
+
+    def get_watchlist(self) -> List[str]:
+        """Return all watchlist symbols, sorted. [] if the table doesn't exist yet."""
+        conn = self._get_conn()
+        exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='watchlist'"
+        ).fetchone()
+        if not exists:
+            return []
+        rows = conn.execute("SELECT symbol FROM watchlist ORDER BY symbol").fetchall()
+        return [r["symbol"] for r in rows]
+
     # ---- Aggregate Queries ----
 
     def get_dashboard_data(self) -> List[Dict[str, Any]]:
