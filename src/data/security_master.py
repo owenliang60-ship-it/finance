@@ -11,9 +11,15 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any, Optional
 
-# Trailing tokens stripped from a normalized company name (already lowercased
-# and stripped of punctuation) before identity comparison.
-_NAME_SUFFIX_TOKENS = {"inc", "corp", "corporation", "class", "co", "ltd", "plc"}
+# Descriptor tokens stripped from a normalized company name wherever they
+# occur (not just at the end) — real payloads embed share-class wording
+# mid-string, e.g. "CoreWeave, Inc. Class A Common Stock" or "Wise Group plc
+# Class A Ordinary Shares" (both real FMP entries in the main repo).
+_NAME_DESCRIPTOR_TOKENS = {
+    "inc", "incorporated", "corp", "corporation", "co", "company", "ltd",
+    "limited", "plc", "class", "common", "preferred", "ordinary", "shares",
+    "share", "stock", "stk",
+}
 _NAME_STRIP_TABLE = str.maketrans("", "", ".,'&")
 
 
@@ -32,13 +38,19 @@ def _field(profile: dict, *candidates: str) -> Any:
 
 
 def _normalize_name(name: Optional[str]) -> str:
-    """Normalize a company name for cross-symbol identity comparison."""
+    """Normalize a company name for cross-symbol identity comparison.
+
+    Descriptor tokens (entity suffixes + share-class wording) are dropped
+    wherever they appear, not only at the end, since real payloads embed
+    them mid-string (e.g. "... Class A Common Stock"). A leftover
+    single-letter token (the class letter itself, "a"/"b"/...) is dropped
+    too, since it never distinguishes the underlying company identity.
+    """
     if not name:
         return ""
     cleaned = name.lower().translate(_NAME_STRIP_TABLE)
-    tokens = [t for t in cleaned.split() if t]
-    while tokens and tokens[-1] in _NAME_SUFFIX_TOKENS:
-        tokens.pop()
+    tokens = [t for t in cleaned.split() if t and t not in _NAME_DESCRIPTOR_TOKENS]
+    tokens = [t for t in tokens if len(t) > 1]
     return " ".join(tokens)
 
 
@@ -87,19 +99,19 @@ def classify_security(profile: dict) -> SecurityRecord:
     return SecurityRecord(**base, eligible=True, reason="ok")
 
 
-def _pick_by_metric(members, profiles_by_symbol: dict, *candidates: str) -> Optional[str]:
-    """Return the symbol with the unique highest metric value, or None.
-
-    None is returned both when no member has the metric and when the top
-    value is tied across members — either case must fall through to the
-    next tie-break tier (or to needs_review_primary).
-    """
+def _metric_values(members, profiles_by_symbol: dict, *candidates: str) -> dict:
+    """Return {symbol: value} for members whose profile has the metric."""
     values = {}
     for m in members:
         profile = profiles_by_symbol.get(m.symbol, {})
         v = _field(profile, *candidates)
         if v is not None:
             values[m.symbol] = v
+    return values
+
+
+def _unique_max_symbol(values: dict) -> Optional[str]:
+    """Return the symbol with the unique highest value, or None if tied/empty."""
     if not values:
         return None
     max_value = max(values.values())
@@ -107,13 +119,39 @@ def _pick_by_metric(members, profiles_by_symbol: dict, *candidates: str) -> Opti
     return winners[0] if len(winners) == 1 else None
 
 
+def _pick_primary_by_metrics(members, profiles_by_symbol: dict) -> Optional[str]:
+    """mktCap -> volAvg cascade, where volAvg is NESTED inside mktCap.
+
+    volAvg only breaks a tie AMONG the mktCap leaders (the members sharing
+    the top mktCap value) — a strictly-lower-mktCap member must never win
+    primary on volAvg alone. When no member has mktCap data at all, volAvg
+    is compared across every member instead (nothing to nest under).
+    """
+    mktcap_values = _metric_values(members, profiles_by_symbol, "mktCap", "marketCap")
+    winner = _unique_max_symbol(mktcap_values)
+    if winner is not None:
+        return winner
+
+    if mktcap_values:
+        top = max(mktcap_values.values())
+        leader_symbols = {sym for sym, v in mktcap_values.items() if v == top}
+        tiebreak_members = [m for m in members if m.symbol in leader_symbols]
+    else:
+        tiebreak_members = members
+
+    volavg_values = _metric_values(tiebreak_members, profiles_by_symbol, "volAvg", "averageVolume")
+    return _unique_max_symbol(volavg_values)
+
+
 def resolve_share_classes(records, overrides: dict, profiles_by_symbol: dict) -> list:
     """Group classify_security() output by CIK and settle primary/secondary status.
 
     Only records already classified as reason=="ok" participate in grouping;
     etf/fund/missing_profile records pass through unchanged. Primary/secondary
-    resolution order: share_class_overrides.json (by CIK) -> higher mktCap ->
-    higher volAvg -> needs_review_primary for the whole group (no auto pick).
+    resolution order: share_class_overrides.json (by CIK) -> higher mktCap,
+    with higher volAvg breaking a tie among the mktCap leaders only -> if
+    everything is missing/tied throughout, needs_review_primary for the
+    whole group (no auto pick).
     """
     overrides = overrides or {}
     groupable = [r for r in records if r.reason == "ok"]
@@ -143,9 +181,7 @@ def resolve_share_classes(records, overrides: dict, profiles_by_symbol: dict) ->
         primary_symbol = override_symbol if override_symbol in member_symbols else None
 
         if primary_symbol is None:
-            primary_symbol = _pick_by_metric(members, profiles_by_symbol, "mktCap", "marketCap")
-        if primary_symbol is None:
-            primary_symbol = _pick_by_metric(members, profiles_by_symbol, "volAvg", "averageVolume")
+            primary_symbol = _pick_primary_by_metrics(members, profiles_by_symbol)
 
         if primary_symbol is None:
             for m in members:

@@ -72,3 +72,59 @@ def test_mktcap_tiebreak_picks_primary_without_override():
         profiles_by_symbol={"YY-A": a, "YY-B": b})}
     assert out["YY-A"].reason == "ok" and out["YY-A"].eligible is True
     assert out["YY-B"].reason == "secondary_share_class" and out["YY-B"].share_class_of == "YY-A"
+
+
+def test_coreweave_class_descriptor_names_normalize_equal_not_identity_conflict():
+    # Real FMP payload (main repo, symbol CRWV, cik 0001769628): companyName
+    # "CoreWeave, Inc. Class A Common Stock". The suffix descriptor sits
+    # mid-string, not at the end — a tail-only strip leaves the two classes
+    # with different normalized names and misfires into identity_conflict.
+    a = {"symbol": "CRWV", "companyName": "CoreWeave, Inc. Class A Common Stock",
+         "cik": "1769628", "exchange": "NASDAQ", "isEtf": False, "isFund": False,
+         "marketCap": 100}
+    b = {"symbol": "CRWV-B", "companyName": "CoreWeave, Inc. Class B Common Stock",
+         "cik": "1769628", "exchange": "NASDAQ", "isEtf": False, "isFund": False,
+         "marketCap": 50}
+    out = {r.symbol: r for r in resolve_share_classes(
+        [classify_security(a), classify_security(b)], overrides={},
+        profiles_by_symbol={"CRWV": a, "CRWV-B": b})}
+    assert out["CRWV"].reason == "ok" and out["CRWV"].eligible is True
+    assert out["CRWV-B"].reason == "secondary_share_class" and out["CRWV-B"].share_class_of == "CRWV"
+
+
+def test_wise_group_plc_class_descriptor_names_normalize_equal_not_identity_conflict():
+    # Real FMP payload (main repo, symbol WSE, cik 0002099039): companyName
+    # "Wise Group plc Class A Ordinary Shares".
+    a = {"symbol": "WSE", "companyName": "Wise Group plc Class A Ordinary Shares",
+         "cik": "2099039", "exchange": "NASDAQ", "isEtf": False, "isFund": False,
+         "marketCap": 100}
+    b = {"symbol": "WSE-B", "companyName": "Wise Group plc Class B Ordinary Shares",
+         "cik": "2099039", "exchange": "NASDAQ", "isEtf": False, "isFund": False,
+         "marketCap": 50}
+    out = {r.symbol: r for r in resolve_share_classes(
+        [classify_security(a), classify_security(b)], overrides={},
+        profiles_by_symbol={"WSE": a, "WSE-B": b})}
+    assert out["WSE"].reason == "ok" and out["WSE"].eligible is True
+    assert out["WSE-B"].reason == "secondary_share_class" and out["WSE-B"].share_class_of == "WSE"
+
+
+def test_volavg_tiebreak_restricted_to_mktcap_leaders():
+    # A and B are tied at the top mktCap; C has a strictly lower mktCap but
+    # the highest volAvg of all three. The brief's cascade is nested: volAvg
+    # only breaks a tie AMONG the mktCap leaders, so C (not an mktCap leader)
+    # must not win primary despite having the largest volAvg overall.
+    a = {"symbol": "ZA", "companyName": "Zz Corp.", "cik": "42",
+         "exchange": "NYSE", "isEtf": False, "isFund": False,
+         "marketCap": 100, "averageVolume": 200}
+    b = {"symbol": "ZB", "companyName": "Zz Corp.", "cik": "42",
+         "exchange": "NYSE", "isEtf": False, "isFund": False,
+         "marketCap": 100, "averageVolume": 300}
+    c = {"symbol": "ZC", "companyName": "Zz Corp.", "cik": "42",
+         "exchange": "NYSE", "isEtf": False, "isFund": False,
+         "marketCap": 50, "averageVolume": 500}
+    recs = [classify_security(a), classify_security(b), classify_security(c)]
+    out = {r.symbol: r for r in resolve_share_classes(
+        recs, overrides={}, profiles_by_symbol={"ZA": a, "ZB": b, "ZC": c})}
+    assert out["ZB"].reason == "ok" and out["ZB"].eligible is True
+    assert out["ZA"].reason == "secondary_share_class" and out["ZA"].share_class_of == "ZB"
+    assert out["ZC"].reason == "secondary_share_class" and out["ZC"].share_class_of == "ZB"
