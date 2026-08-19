@@ -2236,6 +2236,245 @@ class MarketStore:
             "needs_review": int(needs),
         }
 
+    # ---- Extended Primary Universe: Security Master (R1) ----
+
+    _SM_REASONS = frozenset({
+        "ok", "etf", "fund", "secondary_share_class", "identity_conflict",
+        "needs_review_primary", "missing_profile",
+    })
+    _SM_IDENTITY_BLOCKED_REASONS = frozenset({
+        "etf", "fund", "secondary_share_class", "identity_conflict",
+    })
+
+    def upsert_security_master(self, records: List[Dict]) -> int:
+        """SM upsert：symbol 非空 + eligible∈{0,1} + reason 白名单七值，坏行整批拒绝
+
+        （照抄 upsert_fmp_estimates 模式：事务前全量校验，事务内逐行写入）。
+        """
+        _validate_table("security_master")
+        for r in records:
+            if not r.get("symbol"):
+                raise ValueError(f"security_master row missing symbol: {r!r}")
+            if r.get("eligible") not in (0, 1):
+                raise ValueError(f"invalid eligible (must be 0/1): {r.get('eligible')!r}")
+            if r.get("reason") not in self._SM_REASONS:
+                raise ValueError(f"invalid reason: {r.get('reason')!r}")
+        conn = self._get_conn()
+        with conn:
+            for r in records:
+                self._insert_validated(conn, "security_master",
+                                       {**r, "symbol": r["symbol"].upper()})
+        return len(records)
+
+    def get_security_eligibility(self) -> Dict[str, bool]:
+        """symbol -> eligible(bool)。表为空 fail-loud（P1-2：bootstrap 前不可静默返回 {}）。"""
+        conn = self._get_conn()
+        rows = conn.execute("SELECT symbol, eligible FROM security_master").fetchall()
+        if not rows:
+            raise RuntimeError("security_master empty — run bootstrap first")
+        return {r["symbol"]: bool(r["eligible"]) for r in rows}
+
+    def get_needs_review_symbols(self) -> List[str]:
+        """reason == 'needs_review_primary' 的 symbol 列表（share-class 主类未定）。"""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT symbol FROM security_master WHERE reason = 'needs_review_primary' "
+            "ORDER BY symbol"
+        ).fetchall()
+        return [r["symbol"] for r in rows]
+
+    # ---- Extended Primary Universe: Membership (SCD-2, R4-P1-1) ----
+
+    _MEMBERSHIP_UPDATE_BATCH = 500
+
+    def record_membership_snapshot(self, symbols: List[str], as_of: str) -> Dict[str, List[str]]:
+        """SCD-2 membership 快照；幂等。
+
+        exited 在 Python 侧求差（先读 active set，与本次名单求差），再按 <=500
+        参数分批 UPDATE —— 禁止生成千参 NOT IN(...)（R2-P2-1）。
+        """
+        new_set = {s.upper() for s in symbols}
+        with self.transaction() as conn:
+            active_rows = conn.execute(
+                "SELECT symbol FROM extended_membership WHERE effective_to IS NULL"
+            ).fetchall()
+            active_set = {r["symbol"] for r in active_rows}
+
+            entered = sorted(new_set - active_set)
+            exited = sorted(active_set - new_set)
+
+            if entered:
+                entered_rows = [
+                    {"symbol": s, "effective_from": as_of, "effective_to": None,
+                     "reason": "screener"}
+                    for s in entered
+                ]
+                self._upsert_rows_in_conn(conn, "extended_membership", entered_rows)
+
+            chunk_size = self._MEMBERSHIP_UPDATE_BATCH - 1  # 留 1 位给 as_of 参数
+            for i in range(0, len(exited), chunk_size):
+                chunk = exited[i:i + chunk_size]
+                placeholders = ", ".join(["?"] * len(chunk))
+                conn.execute(
+                    f"UPDATE extended_membership SET effective_to = ? "
+                    f"WHERE effective_to IS NULL AND symbol IN ({placeholders})",
+                    [as_of, *chunk],
+                )
+
+        return {"entered": entered, "exited": exited}
+
+    def get_active_members(self) -> List[str]:
+        """当前在册（effective_to IS NULL），去重排序。T7 resolver base='extended' 默认 loader。"""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT DISTINCT symbol FROM extended_membership WHERE effective_to IS NULL "
+            "ORDER BY symbol"
+        ).fetchall()
+        return [r["symbol"] for r in rows]
+
+    def get_members_as_of(self, as_of: str) -> List[str]:
+        """严格接口：as_of 早于首条 membership 记录 -> ValueError（不静默降级）。"""
+        conn = self._get_conn()
+        earliest_row = conn.execute(
+            "SELECT MIN(effective_from) AS d FROM extended_membership"
+        ).fetchone()
+        earliest = earliest_row["d"] if earliest_row else None
+        if earliest is None or as_of < earliest:
+            raise ValueError(
+                f"as_of={as_of!r} is earlier than the first membership record "
+                f"(earliest={earliest!r})"
+            )
+        rows = conn.execute(
+            "SELECT symbol FROM extended_membership "
+            "WHERE effective_from <= ? AND (effective_to IS NULL OR effective_to > ?) "
+            "ORDER BY symbol",
+            (as_of, as_of),
+        ).fetchall()
+        return [r["symbol"] for r in rows]
+
+    def approximate_members_as_of(self, as_of: str,
+                                   min_mcap_usd: float = 1e10) -> Dict[str, Any]:
+        """近似接口（P1-6 + R2-P1-1）：historical_market_cap 中 as-of 达标全体。
+
+        不与当前 Extended membership 求交（已跌出池/已退市者必须保留）；仅剔除
+        security_master 中身份封禁者；SM 无记录的达标 symbol 保留并单列进
+        `unverified`。`approximate` 标志硬编码在返回结构里，调用方无法丢弃。
+        """
+        conn = self._get_conn()
+        qualifying_rows = conn.execute(
+            """
+            SELECT symbol FROM (
+                SELECT symbol, market_cap,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY symbol ORDER BY date DESC
+                       ) AS rn
+                FROM historical_market_cap
+                WHERE date <= ?
+            )
+            WHERE rn = 1 AND market_cap >= ?
+            """,
+            (as_of, min_mcap_usd),
+        ).fetchall()
+        qualifying = {r["symbol"] for r in qualifying_rows}
+
+        sm_rows = conn.execute("SELECT symbol, reason FROM security_master").fetchall()
+        sm_reason = {r["symbol"]: r["reason"] for r in sm_rows}
+
+        symbols_out: List[str] = []
+        unverified: List[str] = []
+        for sym in qualifying:
+            reason = sm_reason.get(sym)
+            if reason is None:
+                symbols_out.append(sym)
+                unverified.append(sym)
+            elif reason in self._SM_IDENTITY_BLOCKED_REASONS:
+                continue
+            else:
+                symbols_out.append(sym)
+
+        return {
+            "symbols": sorted(symbols_out),
+            "unverified": sorted(unverified),
+            "approximate": True,
+            "as_of": as_of,
+            "basis": "historical_market_cap",
+        }
+
+    # ---- Extended Primary Universe: Coverage status + retry bookkeeping (R2-P1-3) ----
+
+    _COVERAGE_STATUSES = frozenset({
+        "ok", "not_applicable", "provider_empty", "fetch_failed", "stale",
+        "identity_blocked",
+    })
+    _PROVIDER_EMPTY_TTL_DAYS = 30
+    _FETCH_FAILED_MAX_BACKOFF_DAYS = 16
+
+    def upsert_coverage_status(self, rows: List[Dict]) -> int:
+        """六态白名单 + 重试字段维护（见 T1 DDL 注释）：
+
+        fetch_failed -> next_retry_at = now + min(2^consecutive_failures, 16) 天；
+        provider_empty -> 负缓存 TTL，next_retry_at = now + 30 天；
+        ok -> consecutive_failures 清零、记 last_success_at、next_retry_at = NULL；
+        其余（not_applicable/stale/identity_blocked）视为不驱动重试计时器的状态更新。
+        坏 status 整批拒绝（事务前全量校验）。
+        """
+        for row in rows:
+            if row.get("status") not in self._COVERAGE_STATUSES:
+                raise ValueError(f"invalid coverage status: {row.get('status')!r}")
+        conn = self._get_conn()
+        now_dt = datetime.now(timezone.utc)
+        now_iso = now_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        with conn:
+            for row in rows:
+                sym = row["symbol"].upper()
+                dataset = row["dataset"]
+                status = row["status"]
+                existing = conn.execute(
+                    "SELECT consecutive_failures, last_success_at FROM coverage_status "
+                    "WHERE symbol = ? AND dataset = ?",
+                    (sym, dataset),
+                ).fetchone()
+                prior_failures = existing["consecutive_failures"] if existing else 0
+                last_success_at = existing["last_success_at"] if existing else None
+                consecutive_failures = prior_failures
+                next_retry_at = None
+
+                if status == "fetch_failed":
+                    consecutive_failures = prior_failures + 1
+                    delay_days = min(2 ** consecutive_failures,
+                                     self._FETCH_FAILED_MAX_BACKOFF_DAYS)
+                    next_retry_at = (now_dt + timedelta(days=delay_days)).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ")
+                elif status == "provider_empty":
+                    next_retry_at = (now_dt + timedelta(
+                        days=self._PROVIDER_EMPTY_TTL_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                elif status == "ok":
+                    consecutive_failures = 0
+                    last_success_at = now_iso
+                    next_retry_at = None
+
+                self._insert_validated(conn, "coverage_status", {
+                    "symbol": sym,
+                    "dataset": dataset,
+                    "status": status,
+                    "detail": row.get("detail"),
+                    "updated_at": row.get("updated_at") or now_iso,
+                    "last_attempt_at": now_iso,
+                    "last_success_at": last_success_at,
+                    "consecutive_failures": consecutive_failures,
+                    "next_retry_at": next_retry_at,
+                })
+        return len(rows)
+
+    def get_coverage(self, dataset: str) -> Dict[str, str]:
+        """dataset 下全部 symbol -> status 映射。"""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT symbol, status FROM coverage_status WHERE dataset = ?",
+            (dataset,),
+        ).fetchall()
+        return {r["symbol"]: r["status"] for r in rows}
+
     # ---- Stats ----
 
     def get_stats(self) -> Dict[str, int]:
