@@ -215,6 +215,31 @@ def fake_client_full():
     return _FakeClient()
 
 
+class FakeLock:
+    """Stands in for the fcntl flock wrapper: `acquire() -> bool` + `release()`
+    (same shape as backfill_extended_fundamentals.FakeLock / T10's test double).
+    """
+
+    def __init__(self, busy=False):
+        self.busy = busy
+        self.acquired = False
+        self.released = False
+
+    def acquire(self):
+        if self.busy:
+            return False
+        self.acquired = True
+        return True
+
+    def release(self):
+        self.released = True
+
+
+@pytest.fixture
+def fake_lock():
+    return FakeLock()
+
+
 class _SpyNotifier:
     def __init__(self):
         self.messages = []
@@ -243,15 +268,20 @@ def test_report_only_freezes_targets_no_fetch(tmp_store_cov, fake_client_full, s
     assert "STALECO" in targets                              # 130d-old latest quarter -> stale
 
 
-def test_repair_touches_only_frozen_targets(tmp_store_cov, fake_client_full, spy_notifier):
+def test_repair_touches_only_frozen_targets(tmp_store_cov, fake_client_full, spy_notifier,
+                                            fake_lock):
+    # Ruling #13: lock is mandatory keyword-only under repair=True (test adjustment
+    # controller-authorized — the brief's original test text predates the self-lock
+    # ruling; T10's run_backfill sets the precedent of no silent default).
     rc, targets = run_reconcile(store=tmp_store_cov, client=fake_client_full,
-                                repair=True, max_targets=1, notifier=spy_notifier, as_of=AS_OF)
+                                repair=True, max_targets=1, notifier=spy_notifier,
+                                as_of=AS_OF, lock=fake_lock)
     assert fake_client_full.symbols_fetched == sorted(targets)[:1]   # truncation holds, no full pool
 
 
-def test_max_targets_cap_and_notice(tmp_store_cov_many, fake_client_full, spy_notifier):
+def test_max_targets_cap_and_notice(tmp_store_cov_many, fake_client_full, spy_notifier, fake_lock):
     run_reconcile(store=tmp_store_cov_many, client=fake_client_full,
-                 repair=True, max_targets=2, notifier=spy_notifier, as_of=AS_OF)
+                 repair=True, max_targets=2, notifier=spy_notifier, as_of=AS_OF, lock=fake_lock)
     assert "truncated" in spy_notifier.last_message
 
 
@@ -277,10 +307,19 @@ def test_provider_empty_ttl_expired_is_retryable(tmp_store_cov_ttl_expired, fake
 
 
 def test_identity_queue_reprobes_missing_profile_beyond_eligible(tmp_store_idq, fake_client_full,
-                                                                  spy_notifier):
+                                                                  spy_notifier, fake_lock):
     # R2-P1-2: NEWCO is SM missing_profile (blocked) -> phase 0 re-probes it
     # regardless of current eligibility, not skipped for being non-eligible.
     run_reconcile(store=tmp_store_idq, client=fake_client_full,
-                 repair=True, notifier=spy_notifier, as_of=AS_OF)
+                 repair=True, notifier=spy_notifier, as_of=AS_OF, lock=fake_lock)
     assert "NEWCO" in fake_client_full.profile_symbols_fetched
     assert tmp_store_idq.get_security_eligibility().get("NEWCO") is True   # upgraded
+
+
+def test_repair_without_lock_raises(tmp_store_cov, fake_client_full, spy_notifier):
+    # Ruling #13: lock is mandatory keyword-only under repair=True — mirrors T10's
+    # run_backfill, which has no silent default either. A caller that forgets
+    # lock= must fail loud, not write against market.db unlocked.
+    with pytest.raises(ValueError):
+        run_reconcile(store=tmp_store_cov, client=fake_client_full,
+                      repair=True, notifier=spy_notifier, as_of=AS_OF)

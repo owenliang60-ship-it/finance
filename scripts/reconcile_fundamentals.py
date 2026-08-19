@@ -61,15 +61,21 @@ Four phases, always in this order:
 
 Locking (CONTROLLER RULING #13): self-locks like T10, same lock file and the
 same non-blocking flock semantics — reused directly from
-`backfill_extended_fundamentals.FileLock`/`NullLock` rather than
-reimplemented. Report-only mode is read-mostly (its only write is the stale
-annotation) and needs no lock at all. `--repair` acquires the lock FIRST,
-before Phase 0 touches anything; busy means a peer backfill/reconcile run
-owns market.db right now, so this run exits 75 having written nothing.
-`run_reconcile`'s `lock` parameter defaults to a no-op when not injected (a
-plain function default, not gated by a CLI flag) so the mandatory test suite
-never contends with a real cron/backfill process for the shared lock file;
-`main()` is the only caller that constructs a real `FileLock`.
+`backfill_extended_fundamentals.FileLock` rather than reimplemented.
+Report-only mode is read-mostly (its only write is the stale annotation) and
+needs no lock at all. `--repair` acquires the lock FIRST, before Phase 0
+touches anything; busy means a peer backfill/reconcile run owns market.db
+right now, so this run exits 75 having written nothing.
+
+`run_reconcile`'s `lock` parameter is keyword-only with NO usable default
+under `repair=True` — mirroring T10's `run_backfill`, which makes `lock` a
+mandatory parameter for exactly this reason (mandatory-no-default, not a
+convenience no-op). `repair=True` without `lock` raises `ValueError`
+immediately: a future caller that forgets to pass a lock must fail loud
+rather than write against market.db unlocked. Every `--repair` caller
+therefore makes an explicit choice — `FileLock()` in production, a fake in
+tests. Report-only calls never pass (or need) `lock` at all. `main()` is the
+only caller that constructs a real `FileLock`.
 
 CLI:
     python scripts/reconcile_fundamentals.py [--repair] [--max-targets 200] \\
@@ -90,7 +96,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.backfill_extended_fundamentals import FileLock, NullLock  # noqa: E402
+from scripts.backfill_extended_fundamentals import FileLock  # noqa: E402
 from scripts.bootstrap_security_master import resolve_identity_for_symbol  # noqa: E402
 from src.data.fundamental_collector import (  # noqa: E402
     DEFAULT_PROFILES_PATH,
@@ -347,19 +353,32 @@ def run_reconcile(*, store: MarketStore, client: Any, repair: bool = False,
     (client, notifier, lock) so tests never touch the network, the real lock
     file, or data/. Returns (exit_code, frozen_repair_targets).
 
-    `lock` defaults to a no-op (NullLock) when not injected — locking is only
-    ever meaningful during --repair, and a bare function default must never
-    reach for the real shared `/tmp/finance-cron-locks/...` file, which a
-    concurrent backfill/reconcile run may legitimately be holding. `main()`
-    is the only caller that passes a real `FileLock`.
+    `lock` is keyword-only with no usable default under `repair=True`
+    (Ruling #13, mirroring T10's `run_backfill`, which makes `lock` a
+    mandatory parameter for exactly this reason): a silent no-op default
+    would let a future caller of `run_reconcile(repair=True)` write against
+    market.db with no writer lock, which is the exact hazard Ruling #13
+    exists to prevent. Every `--repair` caller must make an explicit
+    locking decision — `FileLock()` in production, a fake in tests. Passing
+    `repair=True` without `lock` raises `ValueError` immediately, before
+    anything is touched. Report-only calls stay lock-free (`lock` is never
+    even inspected when `repair=False`). `main()` is the only caller that
+    constructs a real `FileLock`.
     """
     as_of = as_of or date.today().isoformat()
     as_of_ts = _normalize_as_of(as_of)
     overrides = overrides or {}
 
+    if repair and lock is None:
+        raise ValueError(
+            "lock is required when repair=True — pass FileLock() (production) or a "
+            "test fake (Ruling #13: no silent default may write against market.db "
+            "unlocked)"
+        )
+
     active_lock = None
     if repair:
-        active_lock = lock if lock is not None else NullLock()
+        active_lock = lock
         if not active_lock.acquire():
             print("reconcile: {} is held by another writer — skipping (exit {})".format(
                 getattr(active_lock, "path", "market_db_writer"), EXIT_LOCK_BUSY))
