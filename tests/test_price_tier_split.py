@@ -92,6 +92,33 @@ class TestYfinanceLeg:
         # Daily coverage >= status quo: the two legs together cover the base universe.
         assert set(BASE_UNIVERSE) <= set(fmp_tier) | set(yf_targets)
 
+    def test_leg_runs_inside_the_price_step_for_a_bare_price_run(self):
+        """The daily cloud pipeline calls `--price` alone; the leg has to run
+        there or the base universe loses its price source."""
+        from argparse import Namespace
+        from scripts.update_data import _should_run_price_yfinance_leg
+
+        args = Namespace(all=False, price=True, extended_prices=False)
+        assert _should_run_price_yfinance_leg(args, symbols=None) is True
+
+    def test_leg_defers_to_the_standalone_extended_prices_step(self):
+        """--all and --price --extended-prices both reach update_extended_prices
+        with the same targets later in main(); running it twice would double the
+        yfinance batch for ~950 symbols."""
+        from argparse import Namespace
+        from scripts.update_data import _should_run_price_yfinance_leg
+
+        for args in (Namespace(all=True, price=False, extended_prices=False),
+                     Namespace(all=False, price=True, extended_prices=True)):
+            assert _should_run_price_yfinance_leg(args, symbols=None) is False
+
+    def test_leg_skipped_for_explicit_symbols(self):
+        from argparse import Namespace
+        from scripts.update_data import _should_run_price_yfinance_leg
+
+        args = Namespace(all=False, price=True, extended_prices=False)
+        assert _should_run_price_yfinance_leg(args, symbols=["AAPL"]) is False
+
     def test_leg_is_empty_pre_bootstrap(self):
         """Pre-bootstrap the FMP tier is still the legacy Core pool, so the
         yfinance leg has nothing to add and must not raise."""

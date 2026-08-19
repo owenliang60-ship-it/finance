@@ -100,6 +100,20 @@ def _resolve_target_symbols(scope: str, symbols, *, store=None, as_of=None):
         f"unknown scope={scope!r} (expected one of {FUNDAMENTAL_SCOPE_CHOICES})")
 
 
+def _should_run_price_yfinance_leg(args, symbols) -> bool:
+    """`--price` 这一步内部是否要补跑 yfinance 腿（矩阵 #6）。
+
+    不跑的两种情况：
+      - 显式 `--symbols`：调用方点名了目标，不替他扩面。
+      - `--all` / `--extended-prices` 同时在跑：Step 3d 会用同一批目标
+        (`get_yfinance_price_targets()`) 再跑一次，两处都跑等于把 ~950 只的
+        yfinance batch 白抓两遍。
+    """
+    if symbols:
+        return False
+    return not (args.all or args.extended_prices)
+
+
 def _yfinance_price_leg_targets(fmp_targets, *, store=None):
     """基础池里 FMP tier 没覆盖到的部分，交给 yfinance batch（矩阵 #6, P1）。
 
@@ -294,8 +308,7 @@ def main():
         if result['failed']:
             print(f"❌ FMP 失败: {result['failed']}")
 
-        # 显式 --symbols 时不补 yfinance 腿：调用方点名了目标
-        if not symbols:
+        if _should_run_price_yfinance_leg(args, symbols):
             yf_targets = _yfinance_price_leg_targets(target_symbols)
             if yf_targets:
                 from src.data.extended_price_fetcher import update_extended_prices
