@@ -40,6 +40,7 @@ class USStocksAdapter:
         symbols: Optional[List[str]] = None,
         universe: Optional[str] = None,
         mcap_threshold: Optional[float] = None,
+        strict_mcap: bool = True,
     ):
         """
         Args:
@@ -51,11 +52,13 @@ class USStocksAdapter:
                 "eligible_extended" (current resolver base),
                 None (all in db)
             mcap_threshold: 历史市值阈值 (e.g. 10e9)。每次 slice_to_date 时过滤低于阈值的股票
+            strict_mcap: 覆盖率 <90% 时是否 fail-closed；False 时告警并剔除缺数票
         """
         self._price_cache: Dict[str, pd.DataFrame] = {}
         self._symbols = symbols
         self._universe = universe
         self._mcap_threshold = mcap_threshold
+        self._strict_mcap = strict_mcap
 
     def load_all(self) -> Dict[str, pd.DataFrame]:
         """
@@ -203,11 +206,14 @@ class USStocksAdapter:
             coverage = has_data / len(sliced) if sliced else 0
             if coverage < 0.9:
                 missing = [sym for sym in sliced if sym not in mcaps]
-                raise ValueError(
+                message = (
                     f"{date}: reconstitution 覆盖率 {coverage:.1%} < 90% "
                     f"({has_data}/{len(sliced)}). "
                     f"缺失 mcap 数据的 symbols: {missing[:20]}..."
                 )
+                if self._strict_mcap:
+                    raise ValueError(message)
+                logger.warning(message)
 
             before = len(sliced)
             missing_count = sum(1 for sym in sliced if sym not in mcaps)

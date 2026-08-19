@@ -14,8 +14,12 @@ def _make_price_df(dates, closes):
     })
 
 
-def _make_adapter(symbols, mcap_threshold=None):
-    adapter = USStocksAdapter(symbols=symbols, mcap_threshold=mcap_threshold)
+def _make_adapter(symbols, mcap_threshold=None, strict_mcap=True):
+    adapter = USStocksAdapter(
+        symbols=symbols,
+        mcap_threshold=mcap_threshold,
+        strict_mcap=strict_mcap,
+    )
     dates = [f"2024-01-{d:02d}" for d in range(2, 72)]  # 70 天
     adapter._price_cache = {
         sym: _make_price_df(dates, [100.0] * 70) for sym in symbols
@@ -60,6 +64,23 @@ def test_coverage_gate_raises_on_low_coverage():
     with patch("backtest.adapters.us_stocks._get_bulk_mcaps", return_value=mock_caps):
         with pytest.raises(ValueError, match="覆盖率"):
             adapter.slice_to_date("2024-03-01")
+
+
+def test_non_strict_mcap_warns_and_excludes_missing(caplog):
+    symbols = [f"S{i}" for i in range(10)]
+    adapter = _make_adapter(
+        symbols,
+        mcap_threshold=10_000_000_000,
+        strict_mcap=False,
+    )
+    mock_caps = {f"S{i}": 50_000_000_000 for i in range(5)}
+
+    with patch("backtest.adapters.us_stocks._get_bulk_mcaps",
+               return_value=mock_caps):
+        sliced = adapter.slice_to_date("2024-03-01")
+
+    assert set(sliced) == set(mock_caps)
+    assert "S5" in caplog.text and "50.0%" in caplog.text
 
 
 def test_coverage_gate_fires_every_rebalance():
