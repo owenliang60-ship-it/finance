@@ -17,6 +17,7 @@ from config.settings import POOL_DIR, FUNDAMENTAL_DIR
 from src.data.pool_manager import load_universe, get_symbols
 from src.data.price_fetcher import load_price_cache, validate_price_data
 from src.data.fundamental_fetcher import get_profile, get_ratios, get_income
+from src.data.universe_resolver import current_base_universe
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -37,6 +38,23 @@ def _load_json_meta(path: Path) -> Dict:
     except Exception as e:
         logger.error(f"加载 {path} 失败: {e}")
         return {}
+
+
+def _resolve_validation_symbols() -> List[str]:
+    """Resolve the symbol set for display/validation, degrading gracefully.
+
+    Mirrors scripts/morning_report.py's fallback pattern (R3 migration): these
+    are display/validation contexts, so a resolver failure (e.g. pre-bootstrap
+    RuntimeError in a fresh worktree) must fall back to the legacy pool
+    symbols with a logged warning rather than crash (matrix #1/#2).
+    """
+    try:
+        return current_base_universe()
+    except Exception as e:
+        logger.warning(
+            "current_base_universe unavailable, falling back to legacy pool symbols: %s", e
+        )
+        return get_symbols()
 
 
 def _get_market_db_freshness(table: str) -> Dict:
@@ -134,7 +152,7 @@ def check_data_freshness(max_days: int = 5) -> Dict[str, Any]:
             results["is_fresh"] = False
 
     # 3. 抽样检查量价数据
-    symbols = get_symbols()[:5]  # 取前 5 只股票抽样
+    symbols = _resolve_validation_symbols()[:5]  # 取前 5 只股票抽样（resolver eligible）
     price_samples = {}
     for symbol in symbols:
         validation = validate_price_data(symbol)
