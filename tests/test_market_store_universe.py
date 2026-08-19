@@ -174,3 +174,61 @@ def test_coverage_provider_empty_sets_ttl_retry(tmp_store):
     ).fetchone()
     assert row["next_retry_at"] is not None
     assert tmp_store.get_coverage("income_quarterly") == {"ETFX": "provider_empty"}
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 (controller ruling): not_applicable/stale must PRESERVE a pending
+# next_retry_at (pure status annotations, never touch the retry timer);
+# identity_blocked must EXPLICITLY CLEAR it (terminal, manual override per T12).
+# ---------------------------------------------------------------------------
+
+def _pending_retry_row(tmp_store, symbol="AAPL", dataset="income_quarterly"):
+    tmp_store.upsert_coverage_status([{"symbol": symbol, "dataset": dataset,
+                                       "status": "fetch_failed", "detail": "timeout",
+                                       "updated_at": "2026-08-20"}])
+    conn = tmp_store._get_conn()
+    return conn.execute(
+        "SELECT next_retry_at FROM coverage_status WHERE symbol=? AND dataset=?",
+        (symbol, dataset),
+    ).fetchone()["next_retry_at"]
+
+def test_coverage_stale_preserves_pending_next_retry_at(tmp_store):
+    pending = _pending_retry_row(tmp_store)
+    assert pending is not None
+    tmp_store.upsert_coverage_status([{"symbol": "AAPL", "dataset": "income_quarterly",
+                                       "status": "stale", "detail": None,
+                                       "updated_at": "2026-08-21"}])
+    conn = tmp_store._get_conn()
+    row = conn.execute(
+        "SELECT next_retry_at, consecutive_failures FROM coverage_status "
+        "WHERE symbol='AAPL' AND dataset='income_quarterly'"
+    ).fetchone()
+    assert row["next_retry_at"] == pending
+    assert row["consecutive_failures"] == 1
+
+def test_coverage_not_applicable_preserves_pending_next_retry_at(tmp_store):
+    pending = _pending_retry_row(tmp_store)
+    assert pending is not None
+    tmp_store.upsert_coverage_status([{"symbol": "AAPL", "dataset": "income_quarterly",
+                                       "status": "not_applicable", "detail": None,
+                                       "updated_at": "2026-08-21"}])
+    conn = tmp_store._get_conn()
+    row = conn.execute(
+        "SELECT next_retry_at FROM coverage_status "
+        "WHERE symbol='AAPL' AND dataset='income_quarterly'"
+    ).fetchone()
+    assert row["next_retry_at"] == pending
+
+def test_coverage_identity_blocked_clears_next_retry_at(tmp_store):
+    pending = _pending_retry_row(tmp_store)
+    assert pending is not None
+    tmp_store.upsert_coverage_status([{"symbol": "AAPL", "dataset": "income_quarterly",
+                                       "status": "identity_blocked", "detail": None,
+                                       "updated_at": "2026-08-21"}])
+    conn = tmp_store._get_conn()
+    row = conn.execute(
+        "SELECT next_retry_at FROM coverage_status "
+        "WHERE symbol='AAPL' AND dataset='income_quarterly'"
+    ).fetchone()
+    assert row["next_retry_at"] is None
+    assert tmp_store.get_coverage("income_quarterly") == {"AAPL": "identity_blocked"}

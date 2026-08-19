@@ -2415,8 +2415,10 @@ class MarketStore:
         fetch_failed -> next_retry_at = now + min(2^consecutive_failures, 16) 天；
         provider_empty -> 负缓存 TTL，next_retry_at = now + 30 天；
         ok -> consecutive_failures 清零、记 last_success_at、next_retry_at = NULL；
-        其余（not_applicable/stale/identity_blocked）视为不驱动重试计时器的状态更新。
-        坏 status 整批拒绝（事务前全量校验）。
+        not_applicable / stale -> 纯状态标注，**必须保留**既有 next_retry_at（不驱动
+        重试计时器——一次 stale/not_applicable 写入不能悄悄清掉一个待到期的 backoff）；
+        identity_blocked -> **显式清空** next_retry_at（终态：不自动重试，等人工 override，
+        per plan T12）。坏 status 整批拒绝（事务前全量校验）。
         """
         for row in rows:
             if row.get("status") not in self._COVERAGE_STATUSES:
@@ -2430,14 +2432,17 @@ class MarketStore:
                 dataset = row["dataset"]
                 status = row["status"]
                 existing = conn.execute(
-                    "SELECT consecutive_failures, last_success_at FROM coverage_status "
-                    "WHERE symbol = ? AND dataset = ?",
+                    "SELECT consecutive_failures, last_success_at, next_retry_at "
+                    "FROM coverage_status WHERE symbol = ? AND dataset = ?",
                     (sym, dataset),
                 ).fetchone()
                 prior_failures = existing["consecutive_failures"] if existing else 0
                 last_success_at = existing["last_success_at"] if existing else None
                 consecutive_failures = prior_failures
-                next_retry_at = None
+                # Default: preserve whatever retry timer already existed. Only
+                # fetch_failed/provider_empty/ok/identity_blocked below are allowed
+                # to change it — not_applicable/stale fall through untouched.
+                next_retry_at = existing["next_retry_at"] if existing else None
 
                 if status == "fetch_failed":
                     consecutive_failures = prior_failures + 1
@@ -2451,6 +2456,8 @@ class MarketStore:
                 elif status == "ok":
                     consecutive_failures = 0
                     last_success_at = now_iso
+                    next_retry_at = None
+                elif status == "identity_blocked":
                     next_retry_at = None
 
                 self._insert_validated(conn, "coverage_status", {
