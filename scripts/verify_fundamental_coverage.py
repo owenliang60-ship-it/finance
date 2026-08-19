@@ -21,14 +21,21 @@ Four independently-thresholded metrics, each with an EXPLICIT denominator
      coverage" — see `_forward_d1` below for the frozen classification order.
 
 Every symbol missing from a metric's numerator must carry an explicit
-attribution:
+attribution, PER MISSING TABLE — one attributed table never vouches for a
+different, unrelated gap on the same symbol:
   - Metrics 1-3: a coverage_status six-state status (ok / not_applicable /
     provider_empty / fetch_failed / stale / identity_blocked, per
-    MarketStore._COVERAGE_STATUSES) for at least one of the metric's
-    relevant dataset tables. A missing symbol with NO coverage_status row at
-    all for any relevant table is an unexplained gap — the verifier itself
-    FAILs on this (a condition distinct from, and independent of, "metric
-    percentage below threshold"; see `unattributed_gaps` in the report).
+    MarketStore._COVERAGE_STATUSES) is required for EVERY one of the
+    metric's relevant dataset tables that the symbol is actually missing
+    from (metric 1: the tables it has no row in; metric 2: conservatively
+    all three, since `has_asof_window` returns one bool and does not report
+    which table broke the window — see that metric's loop below for the
+    fallback's rationale). A symbol missing table A (attributed) and table B
+    (no coverage_status row at all) still counts as an unexplained gap for
+    B — the verifier itself FAILs on this (a condition distinct from, and
+    independent of, "metric percentage below threshold"; see
+    `unattributed_gaps` in the report, one entry per missing symbol ×
+    missing table).
   - Metric 4: the D1/D2 classification IS the attribution (`fetch_failed`
     this run vs. `insufficient_quarters` on an otherwise-successful fetch).
     coverage_status does not track the forward/fmp_estimates domain at all
@@ -36,6 +43,12 @@ attribution:
     balance_sheet_quarterly / cash_flow_quarterly / company_profile /
     identity — never fmp_estimates), so there is nothing to look up there;
     every D1 member's classification is already known by construction.
+    `excluded_other` (stale coverage — has a historical fmp_estimates row,
+    but none fresh within FORWARD_D1_FRESH_WINDOW_DAYS, and not fetch_failed
+    this run) is deliberately excluded from D1 per that same classification
+    (it is the plan's own D1 definition, not a bug), but is surfaced — count
+    in the text summary, full symbol list in --json — rather than buried,
+    since it carries no hard threshold and Boss reads the number at Stop F.
 
 Forward classification order (frozen, R3-m3 + R4-P2-3) — Step 0 recon:
 `scripts/update_fmp_forward.py`'s `ForwardRunSummary` distinguishes
@@ -262,8 +275,14 @@ def verify(store: MarketStore, *,
     for sym in missing_3t:
         missing_tables = [t for t in STATEMENT_TABLES if sym not in per_table_symbols[t]]
         attribution = {t: coverage_by_table[t].get(sym) for t in missing_tables}
-        if all(v is None for v in attribution.values()):
-            unattributed.append({"metric": "three_table", "symbol": sym})
+        # Per-missing-table, not "any one will do": a symbol missing two
+        # tables where only one carries a coverage_status row must still
+        # surface the OTHER table's gap — otherwise one attributed table
+        # silently vouches for an unrelated, unexplained one (reviewer
+        # round-1 finding).
+        for t, status in attribution.items():
+            if status is None:
+                unattributed.append({"metric": "three_table", "symbol": sym, "table": t})
         missing_3t_detail.append({
             "symbol": sym, "missing_tables": missing_tables, "attribution": attribution,
         })
@@ -286,9 +305,18 @@ def verify(store: MarketStore, *,
     missing_8q = sorted(universe_set - covered_8q)
     missing_8q_detail = []
     for sym in missing_8q:
+        # has_asof_window returns a single bool spanning all three tables
+        # and does not report which table actually broke the window, so —
+        # documented, deliberate conservative fallback — every one of the
+        # three is treated as potentially implicated. The per-missing-table
+        # attribution requirement still applies within that fallback: ANY
+        # of the three lacking a coverage_status row is its own unattributed
+        # gap, not forgiven by the other two having one (reviewer round-1
+        # finding, same fix as metric 1).
         attribution = {t: coverage_by_table[t].get(sym) for t in STATEMENT_TABLES}
-        if all(v is None for v in attribution.values()):
-            unattributed.append({"metric": "continuity_8q", "symbol": sym})
+        for t, status in attribution.items():
+            if status is None:
+                unattributed.append({"metric": "continuity_8q", "symbol": sym, "table": t})
         missing_8q_detail.append({"symbol": sym, "attribution": attribution})
     pct_8q = _pct(len(covered_8q), denominator)
     ok_8q = denominator > 0 and pct_8q >= CONTINUITY_THRESHOLD_PCT
@@ -386,10 +414,15 @@ def _print_report(report: Dict[str, Any]) -> None:
     for name, m in report.get("metrics", {}).items():
         marker = "OK" if m.get("ok") else "FAIL"
         if name == "forward":
+            # excluded_other (stale coverage, >180d, not fetch_failed this
+            # run) has no threshold of its own — the plan sets none, Boss
+            # reads the count at Stop F — but it must be visible here, not
+            # only in --json (reviewer round-1 finding).
             print(f"  [{marker}] {name}: D2/D1 {m['d2']}/{m['d1']} "
                   f"({m['pct']}%, threshold {m['threshold']}%) "
                   f"not_applicable={len(m['not_applicable'])} "
-                  f"fetch_failed={len(m['fetch_failed_bucket'])}")
+                  f"fetch_failed={len(m['fetch_failed_bucket'])} "
+                  f"excluded_other={len(m['excluded_other'])}")
         else:
             print(f"  [{marker}] {name}: {m['covered']}/{m['denominator']} "
                   f"({m['pct']}%, threshold {m['threshold']}%)")

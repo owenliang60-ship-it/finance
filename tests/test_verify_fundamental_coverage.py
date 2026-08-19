@@ -203,9 +203,9 @@ def test_verifier_fails_on_unattributed_missing_even_if_pct_clears_threshold(sto
 
 
 def test_attributed_missing_symbol_does_not_trigger_unattributed_fail(store):
-    """Positive control: a missing symbol WITH a coverage_status row (even
-    just one of the three relevant tables) is a known, explained gap and must
-    not trip the unattributed-gap fail-closed path."""
+    """Positive control: a missing symbol WITH a coverage_status row on EVERY
+    one of its relevant (missing) tables is a fully known, explained gap and
+    must not trip the unattributed-gap fail-closed path."""
     symbols = [f"S{i:03d}" for i in range(100)]
     _seed_universe(store, symbols)
     for s in symbols:
@@ -220,6 +220,59 @@ def test_attributed_missing_symbol_does_not_trigger_unattributed_fail(store):
     assert report["unattributed_gaps"] == []
     assert rc == 0
     assert report["ok"] is True
+
+
+def test_three_table_partial_attribution_still_flags_the_unattributed_table(store):
+    """Reviewer round-1 finding: a symbol missing TWO tables where only ONE
+    has a coverage_status row must still surface the OTHER table's gap — one
+    attributed table must never vouch for a different, unrelated one."""
+    symbols = [f"S{i:03d}" for i in range(100)]
+    _seed_universe(store, symbols)
+    for s in symbols[:99]:
+        _seed_statements(store, s, QUARTER_ENDS_8)
+    ghost = symbols[99]
+    # ghost HAS a cash_flow_quarterly row (so that table is not "missing"),
+    # but is missing BOTH income_quarterly and balance_sheet_quarterly.
+    # Only income_quarterly gets a coverage_status row.
+    store.upsert_cash_flow(ghost, [
+        {"date": "2026-06-30", "symbol": ghost, "period": "Q", "revenue": 1.0},
+    ])
+    _mark_coverage(store, ghost, ["income_quarterly"], "fetch_failed")
+
+    rc, report = verify(store, today_fn=_today_fn)
+    assert rc == 1
+    assert report["ok"] is False
+    three_table_gaps = [
+        g for g in report["unattributed_gaps"]
+        if g["symbol"] == ghost and g["metric"] == "three_table"
+    ]
+    assert any(g["table"] == "balance_sheet_quarterly" for g in three_table_gaps)
+    assert not any(g["table"] == "income_quarterly" for g in three_table_gaps)
+
+
+def test_continuity_8q_partial_attribution_still_flags_the_unattributed_table(store):
+    """Same fix, metric 2: a symbol failing 8Q continuity with only ONE of
+    the three (conservatively all-implicated) tables attributed must still
+    surface the other two as unattributed gaps."""
+    symbols = ["AAA", "GHOST"]
+    _seed_universe(store, symbols)
+    _seed_statements(store, "AAA", QUARTER_ENDS_8)
+    # GHOST has real rows in all three tables (so it's NOT missing from
+    # three_table) but only 3 of the required 8 quarters -> fails continuity.
+    _seed_statements(store, "GHOST", QUARTER_ENDS_8[-3:])
+    _mark_coverage(store, "GHOST", ["income_quarterly"], "fetch_failed")
+    # balance_sheet_quarterly / cash_flow_quarterly get no coverage_status
+    # row at all.
+
+    rc, report = verify(store, today_fn=_today_fn)
+    assert rc == 1
+    continuity_gaps = [
+        g for g in report["unattributed_gaps"]
+        if g["symbol"] == "GHOST" and g["metric"] == "continuity_8q"
+    ]
+    tables_flagged = {g["table"] for g in continuity_gaps}
+    assert tables_flagged == {"balance_sheet_quarterly", "cash_flow_quarterly"}
+    assert "income_quarterly" not in tables_flagged
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +324,28 @@ def test_forward_d2_requires_four_nonnull_future_quarters(store):
     assert fwd["d2"] == 0          # only 3 of 4 future quarters non-null
     missing = {m["symbol"]: m["reason"] for m in fwd["missing"]}
     assert missing["THIN"] == "insufficient_quarters"
+
+
+def test_forward_excluded_other_surfaced_in_text_output_not_just_json(store, capsys):
+    """Reviewer round-1 finding: excluded_other (stale coverage — has a
+    historical fmp_estimates row but nothing fresh within the 180d window,
+    and not fetch_failed this run) must show its count in the human-readable
+    summary, not only in --json's full symbol list."""
+    _seed_universe(store, ["STALE"])
+    store.upsert_fmp_estimates("STALE", [{
+        "snapshot_date": "2025-01-01", "fiscal_date": "2025-03-31",
+        "period_type": "Q", "snapshot_kind": "weekly", "eps_avg": 1.0,
+    }])
+
+    rc, report = verify(store, today_fn=_today_fn)
+    fwd = report["metrics"]["forward"]
+    assert fwd["excluded_other"] == ["STALE"]
+    assert fwd["not_applicable"] == []   # it DID have coverage once — not never-covered
+    assert fwd["d1"] == 0                # and it's excluded from the denominator
+
+    _print_report(report)
+    out = capsys.readouterr().out
+    assert "excluded_other=1" in out
 
 
 def test_forward_backfill_snapshot_does_not_satisfy_weekly_d2(store):
