@@ -8,6 +8,11 @@
 
 用法:
     python scripts/scan_themes.py                    # 完整周扫描
+
+输出规模变更 (矩阵 #12): 扫描面从 Core 池换成 resolver eligible 全池
+(`universe_resolver.current_base_universe()`)。指标是本地计算，扩池的边际成本
+可忽略，但报告里的动量标的数和主题命中数会明显变大 —— 冻结 fixture 上的 parity
+契约是"只增不减"：旧票不会从主题里消失，旧主题不会掉出排名。
 """
 
 import sys
@@ -35,6 +40,29 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# Step 0: 扫描面
+# ============================================================
+
+def _resolve_scan_symbols(store=None) -> List[str]:
+    """主线扫描的股票面 = resolver eligible 全池（矩阵 #12）。
+
+    bootstrap 之前（`extended_membership` 还是空的）退回 legacy Core 池并记一条
+    warning —— 这是本地指标计算，不是数据采集，扫不出东西不如按旧口径先出一份
+    报告；membership 一旦存在语义自动切换。
+    """
+    from src.data.universe_resolver import current_base_universe
+
+    try:
+        return current_base_universe(store=store)
+    except Exception as e:
+        logger.warning(
+            "current_base_universe unavailable, theme scan falls back to the "
+            "legacy Core pool: %s", e
+        )
+        return get_symbols()
 
 
 # ============================================================
@@ -211,7 +239,7 @@ def run_theme_scan() -> Dict[str, Any]:
     start_time = time.time()
 
     # Step 1: Engine A — 动量扫描
-    symbols = get_symbols()
+    symbols = _resolve_scan_symbols()
     logger.info("Step 1: 动量扫描 (%d 只)", len(symbols))
 
     indicator_results = run_all_indicators(symbols, parallel=True)
