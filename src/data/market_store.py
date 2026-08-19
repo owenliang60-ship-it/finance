@@ -2533,10 +2533,15 @@ class MarketStore:
 
         Two rows in the SAME call that share a fiscal_date would collide on
         that PK (symbol/statement/observed_at are constant for the whole
-        batch) — rejected up front with ValueError, whole batch atomically,
-        before any write happens (fix-round-1 Finding 1: a dirty upstream
-        response must surface as an error, not be silently resolved by
-        letting the later row clobber the earlier one).
+        batch). If their content DIFFERS, that's rejected up front with
+        ValueError, whole batch atomically, before any write happens
+        (fix-round-1 Finding 1: a dirty upstream response must surface as an
+        error, not be silently resolved by letting the later row clobber the
+        earlier one). If their content is BYTE-IDENTICAL (idempotent
+        upstream retry / paginated-response overlap), that's not an error —
+        it falls through to the same change-only hash-skip as a repeat
+        `record_vintage` call and is written (or skipped, if already latest)
+        once (fix-round-2 Finding 1).
         """
         if quality not in self._VINTAGE_QUALITIES:
             raise ValueError(f"invalid vintage quality: {quality!r}")
@@ -2548,27 +2553,39 @@ class MarketStore:
         _validate_table("fundamental_vintage")
         sym = symbol.upper()
 
-        # Pre-write validation pass: reject the whole batch atomically if any
-        # two rows would collide on the (symbol, statement, fiscal_date,
-        # observed_at) PK. Must run before any INSERT below.
-        seen_fiscal_dates = set()
+        # Pre-write validation pass: compute each row's fiscal_date + content
+        # hash once (reused in the write loop below, not re-hashed) and
+        # reject the whole batch atomically if two rows share a fiscal_date
+        # with DIFFERING content — that would collide on the (symbol,
+        # statement, fiscal_date, observed_at) PK with no well-defined
+        # winner. Byte-identical duplicates are left alone here; they're
+        # deduped in the write loop via the same hash-skip logic used for
+        # cross-call repeats. Must run before any INSERT below.
+        prepared = []  # (row, fiscal_date, content_hash, payload_json)
+        hash_by_fiscal_date: Dict[str, str] = {}
         for row in rows:
             fiscal_date = row.get("date")
             if not fiscal_date:
                 raise ValueError(f"fundamental_vintage row missing fiscal date: {row!r}")
-            if fiscal_date in seen_fiscal_dates:
-                raise ValueError(
-                    f"duplicate fiscal_date in same vintage batch: "
-                    f"symbol={sym} statement={statement!r} fiscal_date={fiscal_date!r} "
-                    f"(would collide on (symbol, statement, fiscal_date, observed_at) PK)"
-                )
-            seen_fiscal_dates.add(fiscal_date)
-
-        count = 0
-        for row in rows:
-            fiscal_date = row["date"]
             payload_json = json.dumps(row, sort_keys=True, separators=(",", ":"))
             content_hash = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+            prior_hash = hash_by_fiscal_date.get(fiscal_date)
+            if prior_hash is not None and prior_hash != content_hash:
+                raise ValueError(
+                    f"duplicate fiscal_date with differing content in same "
+                    f"vintage batch: symbol={sym} statement={statement!r} "
+                    f"fiscal_date={fiscal_date!r} "
+                    f"(would collide on (symbol, statement, fiscal_date, observed_at) PK)"
+                )
+            hash_by_fiscal_date[fiscal_date] = content_hash
+            prepared.append((row, fiscal_date, content_hash, payload_json))
+
+        count = 0
+        written_fiscal_dates = set()
+        for row, fiscal_date, content_hash, payload_json in prepared:
+            if fiscal_date in written_fiscal_dates:
+                continue  # byte-identical duplicate within this batch, already handled
+            written_fiscal_dates.add(fiscal_date)
 
             latest = conn.execute(
                 "SELECT content_hash FROM fundamental_vintage "

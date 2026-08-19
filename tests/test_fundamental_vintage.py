@@ -97,3 +97,17 @@ def test_pure_date_asof_boundary_includes_exact_end_of_day_timestamp(tmp_store):
     tmp_store.record_vintage("AAPL", "income", [{"date": "2026-06-30", "revenue": 100}],
                              "2026-08-24T23:59:59Z", "latest_known")
     assert tmp_store.known_as_of("AAPL", "income", "2026-08-24")[0]["revenue"] == 100
+
+
+def test_batch_identical_duplicate_rows_deduped_not_rejected(tmp_store):
+    # Fix-round-2 Finding 1: two BYTE-IDENTICAL rows for the same fiscal_date
+    # in one batch (idempotent upstream retry / paginated-response overlap)
+    # must NOT hard-fail the whole batch — they fall through to the existing
+    # change-only hash-skip and get deduped, counted once. Only a fiscal_date
+    # collision with DIFFERING content (see
+    # test_batch_duplicate_fiscal_date_rejected_atomically) is an error.
+    row = {"date": "2026-06-30", "revenue": 100}
+    n = tmp_store.record_vintage("AAPL", "income", [row, dict(row)],
+                                 "2026-08-24T10:00:00Z", "latest_known")
+    assert n == 1
+    assert tmp_store.known_as_of("AAPL", "income", "2026-08-24")[0]["revenue"] == 100
