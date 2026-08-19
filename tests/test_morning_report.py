@@ -37,7 +37,7 @@ from scripts import morning_report as mr
 def _make_pmarp_hit(symbol="NVDA", signal="bullish_breakout", value=98.5,
                     market_cap=3e12, secondary_concept_id=None):
     return {"symbol": symbol, "signal": signal, "value": value, "previous": value - 1.0,
-            "marketCap": market_cap, "layer": "pool",
+            "marketCap": market_cap, "layer": "extend",
             "secondary_concept_id": secondary_concept_id}
 
 
@@ -54,7 +54,7 @@ def _make_dv_item(symbol="NVDA", rank=1, dollar_volume=9e9, price=100.0,
                   rank_change_label="=", market_cap=3e12):
     return {"symbol": symbol, "rank": rank, "dollar_volume": dollar_volume,
             "price": price, "rank_change_label": rank_change_label,
-            "market_cap": market_cap, "marketCap": market_cap, "layer": "pool"}
+            "market_cap": market_cap, "marketCap": market_cap, "layer": "extend"}
 
 
 def sample_market_signals():
@@ -126,14 +126,14 @@ def sample_market_signals():
                 {
                     "symbol": "NVDA", "companyName": "NVIDIA Corporation",
                     "sector": "Technology", "industry": "Semiconductors",
-                    "concept_bucket": "AI算力/云", "layer": "pool",
+                    "concept_bucket": "AI算力/云", "layer": "extend",
                     "value": 98.5, "previous": 97.2, "signal": "bullish_breakout",
                     "marketCap": 3e12,
                 },
                 {
                     "symbol": "TSLA", "companyName": "Tesla Inc.",
                     "sector": "Consumer Cyclical", "industry": "Auto Manufacturers",
-                    "concept_bucket": "自动驾驶/机器人", "layer": "pool",
+                    "concept_bucket": "自动驾驶/机器人", "layer": "extend",
                     "value": 96.8, "previous": 98.4, "signal": "momentum_fading",
                     "marketCap": 800e9,
                 },
@@ -152,7 +152,7 @@ def sample_market_signals():
                 {
                     "symbol": "MU", "companyName": "Micron Technology, Inc.",
                     "sector": "Technology", "industry": "Semiconductors",
-                    "concept_bucket": "半导体链", "layer": "pool",
+                    "concept_bucket": "半导体链", "layer": "extend",
                     "ratio": 1.8, "dv_5d": 900e6, "dv_20d": 500e6,
                     "marketCap": 160e9,
                 },
@@ -176,7 +176,7 @@ def sample_market_signals():
                 {
                     "symbol": "MU", "companyName": "Micron Technology, Inc.",
                     "sector": "Technology", "industry": "Semiconductors",
-                    "concept_bucket": "半导体链", "layer": "pool",
+                    "concept_bucket": "半导体链", "layer": "extend",
                     "from_dv": True, "from_rvol": True,
                     "dv_ratio": 1.8, "ratio": 1.8,
                     "dv_5d": 900e6, "dv_20d": 500e6,
@@ -188,7 +188,7 @@ def sample_market_signals():
                 {
                     "symbol": "DDOG", "companyName": "Datadog, Inc.",
                     "sector": "Technology", "industry": "Software",
-                    "concept_bucket": "软件/SaaS", "layer": "pool",
+                    "concept_bucket": "软件/SaaS", "layer": "extend",
                     "from_dv": True, "from_rvol": False,
                     "dv_ratio": 2.1, "ratio": 2.1,
                     "dv_5d": 2.2e9, "dv_20d": 1.0e9,
@@ -586,7 +586,7 @@ class TestLayeredSections:
                     {
                         "symbol": "MU", "companyName": "Micron",
                         "sector": "Technology", "industry": "Semiconductors",
-                        "concept_bucket": "半导体链", "layer": "pool",
+                        "concept_bucket": "半导体链", "layer": "extend",
                         "from_dv": True, "from_rvol": True,
                         "dv_ratio": 1.6, "ratio": 1.6,
                         "dv_5d": 4.2e9, "dv_20d": 2.6e9,
@@ -597,7 +597,7 @@ class TestLayeredSections:
                     {
                         "symbol": "AMAT", "companyName": "Applied Materials",
                         "sector": "Technology", "industry": "Semiconductors",
-                        "concept_bucket": "半导体链", "layer": "pool",
+                        "concept_bucket": "半导体链", "layer": "extend",
                         "from_dv": True, "from_rvol": False,
                         "dv_ratio": 1.7, "ratio": 1.7,
                         "dv_5d": 1.4e9, "dv_20d": 0.8e9,
@@ -737,7 +737,7 @@ class TestLayeredSections:
         assert 640 <= h < 20000  # bounded; no per-empty-bucket inflation
 
     def test_rows_by_layer_and_bucket_no_silent_drop_for_unregistered(self):
-        """Unregistered pool/extend symbols fall through to a legacy bucket label
+        """Unregistered extend-layer symbols fall through to a legacy bucket label
         (e.g. '其他') that is NOT in the 61-bucket L2 CONCEPT_BUCKET_ORDER.
         The render loop and height estimator must include those rows as
         trailing-extras — they must NOT be silently dropped from the visual."""
@@ -751,14 +751,14 @@ class TestLayeredSections:
         legacy_label = "其他"
         assert legacy_label not in CONCEPT_BUCKET_ORDER  # precondition: truly an extra
         rows = [
-            {"layer": "pool", "bucket": "计算芯片/GPU加速器", "cells": ["NVDA", "x"]},
-            {"layer": "pool", "bucket": legacy_label, "cells": ["DOCU", "x"]},
+            {"layer": "extend", "bucket": "计算芯片/GPU加速器", "cells": ["NVDA", "x"]},
+            {"layer": "extend", "bucket": legacy_label, "cells": ["DOCU", "x"]},
         ]
         grouped = _rows_by_layer_and_bucket(rows)
-        pool_nonempty = {b for b, r in grouped["pool"].items() if r}
+        extend_nonempty = {b for b, r in grouped["extend"].items() if r}
         # Both buckets must appear in the grouped dict (setdefault already handles this)
-        assert "计算芯片/GPU加速器" in pool_nonempty
-        assert legacy_label in pool_nonempty  # extra bucket present in dict
+        assert "计算芯片/GPU加速器" in extend_nonempty
+        assert legacy_label in extend_nonempty  # extra bucket present in dict
         # Build a synthetic section with these rows to verify the height estimator
         # counts the legacy-bucket rows (not zero).
         section = {
@@ -1080,10 +1080,12 @@ class TestMorningVisualReport:
         for block in sections[2]["blocks"]:
             assert block.get("grouped") is False
         all_pmarp_rows = [r for b in sections[2]["blocks"] for r in b["rows"]]
-        assert {row["layer"] for row in all_pmarp_rows} == {"pool", "extend"}
+        # R3 (Task 15): pool/extend merged into one "extend" layer.
+        assert {row["layer"] for row in all_pmarp_rows} == {"extend"}
         # Subtitle should not advertise broad layer anymore (but Section 0 still mentions S2 broad).
         assert "Pool / Extend / Broad" not in sections[2]["subtitle"]
-        assert "Pool / Extend 分层" in sections[2]["subtitle"]
+        assert "Pool" not in sections[2]["subtitle"]
+        assert "Extend 分层" in sections[2]["subtitle"]
 
     def test_render_visual_report_creates_one_png_per_section(self, tmp_path):
         pytest.importorskip("PIL")
@@ -1267,15 +1269,20 @@ class TestBroadDropPlanV3:
         )
         monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
 
-        build_market_signal_report()
+        result = build_market_signal_report()
         # A is dropped (8B<$10B, not pool); B/C kept; D kept (pool privilege)
         assert set(captured["symbols"]) == {"B", "C", "D"}
+        # R3 (Task 15) parity: content unchanged (same 3 symbols survive the
+        # filter above) — only the layer label collapses from the old
+        # {"pool": 1, "extend": 2} split into one merged "extend" bucket.
+        assert result["layer_counts"] == {"extend": 3}
 
-    def test_build_market_signal_report_override_promotes_all_to_pool(
+    def test_build_market_signal_report_override_promotes_all_to_extend(
         self, monkeypatch
     ):
-        """[v3 P2] --symbols override: every override symbol becomes layer='pool',
-        bypassing the $10B mcap filter. Used for ad-hoc debugging of small caps."""
+        """[v3 P2, R3/Task 15] --symbols override: every override symbol becomes
+        layer='extend' (pool/extend merged into one layer), bypassing the $10B
+        mcap filter. Used for ad-hoc debugging of small caps."""
         from scripts import morning_report as mr
 
         # OKLO mcap = $8B (would normally be filtered out by $10B threshold)
@@ -1320,11 +1327,10 @@ class TestBroadDropPlanV3:
         result = build_market_signal_report(symbols_override=["OKLO"])
         oklo_hits = [h for h in result["pmarp"]["hits"] if h["symbol"] == "OKLO"]
         assert len(oklo_hits) == 1
-        # Despite mcap=8B (broad territory), override grants pool privilege
-        assert oklo_hits[0]["layer"] == "pool"
-        # layer_counts confirms classification
-        assert result["layer_counts"]["pool"] == 1
-        assert result["layer_counts"]["extend"] == 0
+        # Despite mcap=8B (broad territory), override grants extend privilege
+        assert oklo_hits[0]["layer"] == "extend"
+        # layer_counts confirms classification — "pool" key no longer exists.
+        assert result["layer_counts"] == {"extend": 1}
 
     def test_dv_section_filters_out_broad_layer(self):
         """[v3 P1] DV text section drops rows whose mcap classifies them as broad.
@@ -1490,7 +1496,7 @@ class TestVolumeAnomalyPayload:
 
 def test_no_business_role_in_text_sections():
     ms = _make_market_signals(anomaly_hits=[
-        {"symbol": "NVDA", "marketCap": 3e12, "layer": "pool",
+        {"symbol": "NVDA", "marketCap": 3e12, "layer": "extend",
          "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
          "ratio": 5.0, "dv_5d": 1e9, "dv_20d": 2e8}])
     dv = _make_dv_result(rankings=[_make_dv_item()])
@@ -1759,7 +1765,7 @@ def test_pmarp_text_section_beta_missing_dash():
 
 
 def test_volume_anomaly_text_section_has_beta_column():
-    hit = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+    hit = {"symbol": "SMCI", "marketCap": 30e9, "layer": "extend",
            "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
            "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9, "beta_6m": 2.05}
     out = mr.format_section_layered_volume_anomaly(_make_market_signals(anomaly_hits=[hit]))
@@ -1769,7 +1775,7 @@ def test_volume_anomaly_text_section_has_beta_column():
 
 
 def test_volume_anomaly_text_section_beta_missing_dash():
-    hit = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+    hit = {"symbol": "SMCI", "marketCap": 30e9, "layer": "extend",
            "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
            "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9}  # no beta_6m key
     out = mr.format_section_layered_volume_anomaly(_make_market_signals(anomaly_hits=[hit]))
@@ -1779,7 +1785,7 @@ def test_volume_anomaly_text_section_beta_missing_dash():
 
 def test_html_payload_pmarp_and_anomaly_have_beta_column():
     pm = _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12); pm["beta_6m"] = 1.83
-    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "extend",
           "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
           "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9, "beta_6m": None}
     ms = _make_market_signals(pmarp_hits=[pm], anomaly_hits=[va])
@@ -1812,7 +1818,7 @@ def test_pmarp_columns_exact_parity_across_three_surfaces():
 
 def test_volume_anomaly_columns_exact_parity_across_three_surfaces():
     expected = ["标的", "概念", "类型", "DV 5d/20d", "RVOL", "市值", "β6M"]
-    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "extend",
           "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
           "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9, "beta_6m": 2.05}
     ms = _make_market_signals(anomaly_hits=[va])
@@ -1830,7 +1836,7 @@ def test_volume_anomaly_columns_exact_parity_across_three_surfaces():
 
 def test_visual_blocks_have_beta_column_and_width():
     pm = _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12); pm["beta_6m"] = 1.83
-    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "extend",
           "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
           "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9, "beta_6m": 2.05}
     sections = mr.build_morning_visual_sections(
@@ -2896,3 +2902,118 @@ class TestVolumeConcentrationFrozenFixtureParity:
         assert payload["churn_pctile_1y"] == pytest.approx(0.0, abs=tol)
         assert payload["spy_ret20_pct"] > 0
         assert payload["regime"] == "高集中+上行（拥挤）"
+
+
+# ---------------------------------------------------------------------------
+# Task 15 (R3): 晨报标签迁移 — pool/extend layer merge, labels only.
+#
+# LAYER_ORDER (:53) and _layer_for_symbol (:315-321) used to classify a
+# symbol as either "pool" (local pool.json member) or "extend" ($10B+ market
+# cap) — two distinct, separately-labeled layers. This task merges them into
+# one "extend" layer: the underlying scan/inclusion rule is unchanged (pool
+# membership still bypasses the $10B mcap filter), only the resulting label
+# changes.
+#
+# Same frozen synthetic universe in, old-vs-new diff must be confined to the
+# layer field (pool -> extend); every other output field stays byte-
+# identical. Always-run, no live-data or skip conditions — same spirit as
+# TestVolumeConcentrationFrozenFixtureParity above (pure function + hardcoded
+# reference), adapted here to a small in-file literal fixture since the input
+# is a handful of classification rows, not a numeric DB-derived series.
+# ---------------------------------------------------------------------------
+
+class TestLayerLabelMergeFrozenFixtureParity:
+    """[Task 15 / R3] docs/plans/2026-08-16-extended-primary-universe-
+    implementation.md Task 15. `_old_layer_for_symbol` below is the frozen
+    reference: it encodes _layer_for_symbol's behavior exactly as it was
+    before this task's change (pool/extend as distinct layers). Diffing it
+    against the live `mr._layer_for_symbol` / `mr._enrich_with_layer` proves
+    the merge changed only the layer label, nothing else.
+    """
+
+    _METADATA = {
+        "NVDA": {"marketCap": 3e12, "companyName": "NVIDIA Corporation",
+                 "sector": "Technology", "industry": "Semiconductors"},
+        "OKLO": {"marketCap": 8e9, "companyName": "Oklo Inc.",
+                 "sector": "Utilities", "industry": "Utilities—Renewable"},
+        "BA": {"marketCap": 120e9, "companyName": "Boeing Company",
+               "sector": "Industrials", "industry": "Aerospace & Defense"},
+        "ZZZBROAD": {"marketCap": 2e9, "companyName": "Broad Co",
+                     "sector": "Technology", "industry": "Software"},
+    }
+    # NVDA: pool.json member that also clears $10B on its own.
+    # OKLO: pool.json member below $10B (force-included regardless of mcap —
+    #       mirrors the real OKLO override fixture used elsewhere in this file).
+    # BA: extend-only, never a pool.json member.
+    # ZZZBROAD: neither — classified "broad" both before and after the merge.
+    _POOL_SYMBOLS = {"NVDA", "OKLO"}
+    _SYMBOLS = ["NVDA", "OKLO", "BA", "ZZZBROAD"]
+
+    @staticmethod
+    def _old_layer_for_symbol(symbol, metadata, pool_symbols):
+        """Frozen reference: _layer_for_symbol before the R3 merge, when pool
+        and extend were distinct layers."""
+        if symbol in pool_symbols:
+            return "pool"
+        market_cap = metadata.get(symbol, {}).get("marketCap") or 0
+        if market_cap >= mr.EXTENDED_LAYER_MIN_MCAP:
+            return "extend"
+        return "broad"
+
+    def test_classification_diff_confined_to_pool_to_extend_relabel(self):
+        old = {s: self._old_layer_for_symbol(s, self._METADATA, self._POOL_SYMBOLS)
+               for s in self._SYMBOLS}
+        new = {s: mr._layer_for_symbol(s, self._METADATA, self._POOL_SYMBOLS)
+               for s in self._SYMBOLS}
+
+        # Sanity-check the frozen reference matches the documented pre-merge rule.
+        assert old == {"NVDA": "pool", "OKLO": "pool", "BA": "extend", "ZZZBROAD": "broad"}
+
+        diff = {s: (old[s], new[s]) for s in self._SYMBOLS if old[s] != new[s]}
+        # RED (pre-Step-3 code): _layer_for_symbol still returns "pool" for
+        # NVDA/OKLO, so `diff` is empty here and this assertion is exactly
+        # what fails to confirm RED (brief Step 2: "未改前 diff 为空 → 断言
+        # 存在且仅存在标签 diff 失败").
+        assert diff, "expected a pool->extend diff; none found (merge not applied)"
+        # GREEN: diff exists and is confined to the pool->extend relabel —
+        # nothing else moves.
+        assert diff == {"NVDA": ("pool", "extend"), "OKLO": ("pool", "extend")}
+        assert new["BA"] == old["BA"] == "extend"
+        assert new["ZZZBROAD"] == old["ZZZBROAD"] == "broad"
+
+    def test_enrich_with_layer_diff_confined_to_layer_field(self, monkeypatch):
+        # Deterministic concept_bucket, independent of live concept-registry
+        # state (this worktree's skeleton DB lacks concept-registry rows —
+        # see the ~5 pre-existing failures elsewhere in this file).
+        monkeypatch.setattr(mr, "_concept_bucket", lambda item: "测试题材")
+
+        for symbol in self._SYMBOLS:
+            old_layer = self._old_layer_for_symbol(symbol, self._METADATA, self._POOL_SYMBOLS)
+            if old_layer == "broad":
+                continue  # _enrich_with_layer fail-loud raises on broad leaks,
+                          # unchanged by this task — out of scope here.
+            item = {"symbol": symbol, "value": 1.0, "signal": "bullish_breakout"}
+            betas = {symbol: 1.23}
+
+            enriched = mr._enrich_with_layer(item, self._METADATA, self._POOL_SYMBOLS, betas=betas)
+
+            # Independently-reconstructed "old" reference: identical
+            # enrichment logic (untouched by this task), old layer rule.
+            meta = self._METADATA.get(symbol, {})
+            expected_old = dict(item)
+            for key in ["companyName", "shortName", "longName", "sector", "industry", "exchange"]:
+                if meta.get(key):
+                    expected_old[key] = meta[key]
+            expected_old["marketCap"] = meta.get("marketCap")
+            expected_old["layer"] = old_layer
+            expected_old["beta_6m"] = betas.get(symbol)
+            expected_old["concept_bucket"] = "测试题材"
+
+            all_keys = set(enriched) | set(expected_old)
+            diff_keys = {k for k in all_keys if enriched.get(k) != expected_old.get(k)}
+
+            if old_layer == "pool":
+                assert diff_keys == {"layer"}, (symbol, diff_keys, enriched, expected_old)
+                assert enriched["layer"] == "extend"
+            else:
+                assert diff_keys == set(), (symbol, diff_keys, enriched, expected_old)

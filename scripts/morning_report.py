@@ -37,6 +37,7 @@ from config.settings import (
     EXTENDED_UNIVERSE_MIN_MCAP_B, BROAD_UNIVERSE_MIN_MCAP_USD,
 )
 from src.data import get_symbols
+from src.data.universe_resolver import current_base_universe
 from src.indicators.dv_acceleration import format_dv
 from src.telegram_bot import send_document, send_message, send_photo, split_message
 
@@ -49,9 +50,8 @@ logger = logging.getLogger(__name__)
 EXTENDED_LAYER_MIN_MCAP = EXTENDED_UNIVERSE_MIN_MCAP_B * 1_000_000_000
 MORNING_SIGNAL_PRICE_ROWS = 180
 BETA_BENCHMARK = "SPY"   # 6 个月 beta 的回归基准（daily_price 始终含 SPY，price_fetcher.py:100）
-LAYER_ORDER = ["pool", "extend"]
+LAYER_ORDER = ["extend"]  # R3: pool/extend merged into one layer (Task 15)
 LAYER_LABELS = {
-    "pool": "Pool",
     "extend": "Extend ($10B+)",
 }
 LAYER_TOP_N = 8
@@ -313,8 +313,12 @@ def _grouping_bucket_for(item: dict) -> str:
 
 
 def _layer_for_symbol(symbol: str, metadata: dict, pool_symbols: set) -> str:
+    # R3 (Task 15): pool and extend used to be distinct layers; they are now
+    # one merged "extend" layer. pool_symbols membership still bypasses the
+    # $10B mcap filter (unchanged content), it just no longer gets its own
+    # label.
     if symbol in pool_symbols:
-        return "pool"
+        return "extend"
     market_cap = metadata.get(symbol, {}).get("marketCap") or 0
     if market_cap >= EXTENDED_LAYER_MIN_MCAP:
         return "extend"
@@ -434,10 +438,10 @@ def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set, betas: dic
             enriched[key] = meta[key]
     enriched["marketCap"] = meta.get("marketCap")
     layer = _layer_for_symbol(symbol, metadata, pool_symbols)
-    if layer not in {"pool", "extend"}:
+    if layer != "extend":
         raise ValueError(
             f"layer leak: {symbol!r} classified as {layer!r}; "
-            f"expected pool|extend after universe post-filter "
+            f"expected extend after universe post-filter "
             f"(marketCap={meta.get('marketCap')!r})"
         )
     enriched["layer"] = layer
@@ -1091,12 +1095,15 @@ RVOL_ONLY_SINGLE_THRESHOLD = 3.0
 def build_market_signal_report(symbols_override: list[str] | None = None) -> dict:
     """Build technical signal payload for the merged morning report.
 
-    Selection scan covers pool ∪ extend ($10B+) only; broad universe is
-    no longer scanned (broad data still feeds Section 0 S2 breadth via
-    build_market_timing_factor_report's independent broad DB load).
+    Selection scan covers pool.json members ∪ extend ($10B+) names only;
+    broad universe is no longer scanned (broad data still feeds Section 0 S2
+    breadth via build_market_timing_factor_report's independent broad DB
+    load). R3 (Task 15): the two used to render as distinct "pool"/"extend"
+    layers; they now render as one merged "extend" layer — the underlying
+    scan/inclusion logic (this docstring) is unchanged.
 
-    --symbols override grants pool privilege: every override symbol is
-    treated as layer="pool", bypassing the $10B mcap filter so manual
+    --symbols override grants extend privilege: every override symbol is
+    treated as layer="extend", bypassing the $10B mcap filter so manual
     debugging (e.g. OKLO at $8B) renders without fail-fast.
     """
     from datetime import date
@@ -1110,7 +1117,14 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     from src.indicators.pmarp import analyze_pmarp
     from src.indicators.rvol_sustained import scan_rvol_sustained
 
-    pool_symbols = set(get_symbols())
+    try:
+        pool_symbols = set(current_base_universe())
+    except Exception:
+        # R3 迁移期兼容：current_base_universe() 在 SM/extended_membership 尚未
+        # bootstrap 时 fail-loud 抛 RuntimeError（本 worktree 的骨架 DB 即此状
+        # 态；见 tests 的 real-DB 路径）；其他异常同样保守退回，晨报不能因分母
+        # 切换而崩溃。退回迁移前的 pool.json 行为（get_symbols()）。
+        pool_symbols = set(get_symbols())
     if symbols_override:
         symbols = sorted({s.strip().upper() for s in symbols_override if s.strip()})
         store = get_store()
@@ -1124,9 +1138,9 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
             }
             for symbol in symbols
         }
-        # Override grants pool privilege — bypass mcap filter, layer always "pool".
+        # Override grants extend privilege — bypass mcap filter, layer always "extend".
         pool_symbols = pool_symbols | set(symbols)
-        logger.info("override mode: %d symbols treated as pool layer", len(symbols))
+        logger.info("override mode: %d symbols treated as extend layer", len(symbols))
     else:
         universe_cache = fetch_universe_metadata(
             as_of_date=date.today().isoformat(), min_mcap_b=10.0,
@@ -1594,7 +1608,7 @@ def _merge_volume_anomaly_hits(dv_hits: list[dict], rvol_hits: list[dict]) -> li
             # Copy the enriched RVOL row (carries layer / concept_bucket /
             # marketCap / companyName / sector / industry from
             # _enrich_with_layer). Without this, RVOL-only rows lose layer
-            # and get hidden by visual renderers that only iterate pool/extend.
+            # and get hidden by visual renderers that only iterate LAYER_ORDER.
             item = dict(row)
             item["from_dv"] = False
             merged[symbol] = item
@@ -1698,9 +1712,14 @@ def _normalize_dv_items(dv_result: dict) -> dict:
         _merge_local_metadata(metadata, symbols)
 
     try:
-        pool_symbols = set(get_symbols())
+        pool_symbols = set(current_base_universe())
     except Exception:
-        pool_symbols = set()
+        # R3 迁移期兼容：见 build_market_signal_report 同类注释——
+        # current_base_universe() 预 bootstrap 时 fail-loud，退回 pool.json。
+        try:
+            pool_symbols = set(get_symbols())
+        except Exception:
+            pool_symbols = set()
 
     def normalize(row: dict) -> dict | None:
         symbol = (row.get("symbol") or "").upper()
@@ -1717,7 +1736,7 @@ def _normalize_dv_items(dv_result: dict) -> dict:
         item.setdefault("concept_bucket", _concept_bucket(item))
         layer_meta = {symbol: {"marketCap": item.get("marketCap") or 0}}
         layer = _layer_for_symbol(symbol, layer_meta, pool_symbols)
-        if layer not in {"pool", "extend"}:
+        if layer != "extend":
             logger.debug(
                 "DV row dropped (layer=%s, mcap=%s): %s",
                 layer, item.get("marketCap"), symbol,
@@ -1915,11 +1934,12 @@ def build_morning_visual_sections(
     dv_result: dict | None = None,
 ) -> list[dict]:
     """Build image-report section specs. The layered signal sections (PMARP /
-    量能异常) group pool → extend → L2 concept; the Dollar Volume section is a
-    flat, rank-ordered table with a 概念(L2) column (not layer/concept grouped)."""
+    量能异常) group extend → L2 concept (R3: pool merged into extend, Task 15);
+    the Dollar Volume section is a flat, rank-ordered table with a 概念(L2)
+    column (not layer/concept grouped)."""
     sections = []
     as_of = (market_signals or {}).get("as_of") or datetime.now().strftime("%Y-%m-%d")
-    common_subtitle = "信号日 {} | Pool / Extend 分层，层内按题材聚类".format(as_of)
+    common_subtitle = "信号日 {} | Extend 分层，层内按题材聚类".format(as_of)
 
     if market_signals:
         timing = market_signals.get("market_timing_factor", {})
@@ -2130,7 +2150,7 @@ _VISUAL_FONT_CANDIDATES = {
 }
 
 _VISUAL_LAYER_COLORS = {
-    "pool": ("#1d4ed8", "#dbeafe"),
+    # R3 (Task 15): "pool" color retired — pool/extend merged into one layer.
     "extend": ("#b45309", "#fef3c7"),
     "broad": ("#334155", "#e2e8f0"),
 }
@@ -2794,7 +2814,7 @@ def main():
     parser.add_argument("--no-telegram", action="store_true", help="不推送 Telegram")
     parser.add_argument(
         "--symbols", type=str,
-        help="指定股票代码，逗号分隔（override 模式：所有指定标的视为 pool 层，绕过 mcap 分层）",
+        help="指定股票代码，逗号分隔（override 模式：所有指定标的视为 extend 层，绕过 mcap 分层）",
     )
     parser.add_argument("--include-social", action="store_true",
                         help="启用社交情绪段（默认 skip：Adanos 采集 cron 已下线）")
@@ -2820,12 +2840,10 @@ def main():
         symbols_override = None
         if args.symbols:
             symbols_override = [s.strip().upper() for s in args.symbols.split(",")]
-            symbols = symbols_override
-        else:
-            symbols = get_symbols()
-        logger.info("股票池: %d 只", len(symbols))
 
-        # 2. 市场技术信号（pool ∪ extend $10B+；broad universe 已退出选股扫描，仅保留给 Section 0 S2 大盘广度）
+        # 2. 市场技术信号（extend $10B+ ∪ pool.json 成员；broad universe 已退出选股扫描，仅保留给 Section 0 S2 大盘广度）
+        # R3 (Task 15): 弃用的独立 get_symbols() 预取已删除——build_market_signal_report
+        # 内部经 resolver 自行解析扫描宇宙，此处不再需要重复计算 symbols 列表。
         market_signals = build_market_signal_report(symbols_override=symbols_override)
         logger.info(
             "市场信号完成: scanned=%d data=%d",
@@ -2893,7 +2911,12 @@ def main():
             try:
                 from src.indicators.social_attention import scan_social_signals
                 logger.info("开始社交情绪扫描...")
-                social_scan = scan_social_signals(symbols)
+                # R3: 只有这条已默认 skip 的分支还需要完整股票列表，惰性取用
+                # （旧的无条件 get_symbols() 预取已删除，见上方"1. 获取股票列表"注释）。
+                social_symbols = (
+                    symbols_override if symbols_override is not None else get_symbols()
+                )
+                social_scan = scan_social_signals(social_symbols)
                 logger.info("社交情绪扫描完成: %d 只有数据", social_scan.get("symbols_with_data", 0))
             except Exception as e:
                 logger.warning("社交情绪扫描失败: %s", e)
@@ -2912,7 +2935,7 @@ def main():
         save_path = SCANS_DIR / "morning_{}.json".format(timestamp)
         save_data = {
             "timestamp": timestamp,
-            "symbols_scanned": market_signals.get("symbols_scanned", len(symbols)),
+            "symbols_scanned": market_signals.get("symbols_scanned", 0),
             "elapsed": round(elapsed, 1),
             "market_signals": market_signals,
         }
