@@ -12,6 +12,7 @@ Usage:
     store.upsert_income("AAPL", rows)
     store.screen({"net_margin >": 0.25})
 """
+import hashlib
 import json
 import logging
 import re
@@ -49,6 +50,17 @@ def _camel_to_snake(name: str) -> str:
     """Convert camelCase or PascalCase to snake_case."""
     s = _CAMEL_RE1.sub(r"\1_\2", name)
     return _CAMEL_RE2.sub(r"\1_\2", s).lower()
+
+
+# ---------------------------------------------------------------------------
+# Pure-date detection (R3-m2: vintage observed_at/as_of normalization)
+# ---------------------------------------------------------------------------
+_PURE_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _is_pure_date(s: str) -> bool:
+    """True if `s` is a bare YYYY-MM-DD date with no time component."""
+    return bool(_PURE_DATE_RE.match(s))
 
 
 # ---------------------------------------------------------------------------
@@ -2481,6 +2493,154 @@ class MarketStore:
             (dataset,),
         ).fetchall()
         return {r["symbol"]: r["status"] for r in rows}
+
+    # ---- Extended Primary Universe: Fundamental Vintage (R7, R8) ----
+    #
+    # Two deliberately incompatible read interfaces (P1-6 rejects a single
+    # get_fundamentals_as_of(anchor=...) that silently mixes cognition-timeline
+    # replay with restated-current lookups):
+    #   - known_as_of: strict PIT replay over `fundamental_vintage` itself.
+    #     No hits -> [] (no fallback to current tables).
+    #   - approximate_as_reported: pre-golive substitute reading CURRENT
+    #     (latest-restated) tables, explicitly tagged approximate=True.
+
+    _VINTAGE_QUALITIES = frozenset({"latest_known", "as_reported", "revised"})
+
+    _VINTAGE_STATEMENT_TABLES = {
+        "income": "income_quarterly",
+        "balance": "balance_sheet_quarterly",
+        "cashflow": "cash_flow_quarterly",
+    }
+
+    def record_vintage_in_conn(self, conn: sqlite3.Connection, symbol: str,
+                                statement: str, rows: List[Dict],
+                                observed_at: str, quality: str) -> int:
+        """Change-only append into `fundamental_vintage` (conn-level, no own
+        transaction — caller owns the boundary; composed by T8 alongside other
+        `_in_conn` writes in a single atomic commit). Use `record_vintage` for
+        a standalone call.
+
+        content_hash = sha256(json.dumps(row, sort_keys=True, separators=(",", ":"))).
+        If it matches the latest existing version for that fiscal_date, the
+        row is skipped (not re-appended); only newly-inserted rows count
+        toward the returned total.
+
+        observed_at MUST be a full UTC timestamp (R3-m2: write side is
+        strict) — a bare date raises ValueError. This keeps `observed_at`
+        lexicographically comparable across same-day revisions (R2-P2-2: two
+        revisions on the same calendar day get distinct timestamps, so they
+        don't collide on the (symbol, statement, fiscal_date, observed_at) PK).
+        """
+        if quality not in self._VINTAGE_QUALITIES:
+            raise ValueError(f"invalid vintage quality: {quality!r}")
+        if _is_pure_date(observed_at):
+            raise ValueError(
+                f"observed_at must be a full UTC timestamp, not a pure date: "
+                f"{observed_at!r}"
+            )
+        _validate_table("fundamental_vintage")
+        sym = symbol.upper()
+        count = 0
+        for row in rows:
+            fiscal_date = row.get("date")
+            if not fiscal_date:
+                raise ValueError(f"fundamental_vintage row missing fiscal date: {row!r}")
+            payload_json = json.dumps(row, sort_keys=True, separators=(",", ":"))
+            content_hash = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+
+            latest = conn.execute(
+                "SELECT content_hash FROM fundamental_vintage "
+                "WHERE symbol = ? AND statement = ? AND fiscal_date = ? "
+                "ORDER BY observed_at DESC LIMIT 1",
+                (sym, statement, fiscal_date),
+            ).fetchone()
+            if latest is not None and latest["content_hash"] == content_hash:
+                continue  # change-only append: identical to latest version
+
+            conn.execute(
+                "INSERT OR REPLACE INTO fundamental_vintage "
+                "(symbol, statement, fiscal_date, observed_at, filing_date, "
+                "accepted_date, content_hash, vintage_quality, payload) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (sym, statement, fiscal_date, observed_at,
+                 row.get("filingDate") or row.get("filing_date"),
+                 row.get("acceptedDate") or row.get("accepted_date"),
+                 content_hash, quality, payload_json),
+            )
+            count += 1
+        return count
+
+    def record_vintage(self, symbol: str, statement: str, rows: List[Dict],
+                       observed_at: str, quality: str) -> int:
+        """Standalone convenience wrapper: opens its own transaction around
+        `record_vintage_in_conn`."""
+        with self.transaction() as conn:
+            return self.record_vintage_in_conn(conn, symbol, statement, rows,
+                                               observed_at, quality)
+
+    def known_as_of(self, symbol: str, statement: str, observed_at: str) -> List[Dict]:
+        """Strict cognition-timeline replay: per fiscal_date, the latest
+        version with `observed_at <= observed_at` param. No fallback — if
+        nothing qualifies (as-of predates the first recorded vintage), returns
+        [] rather than silently reaching into current/restated tables.
+
+        A pure-date param is normalized to `<date>T23:59:59.999999Z`
+        ("as of end of that day" semantics, R3-m2); a full timestamp is used
+        as-is. Each returned row is annotated with `_vintage_quality` and
+        `_observed_at`.
+        """
+        _validate_table("fundamental_vintage")
+        normalized = f"{observed_at}T23:59:59.999999Z" if _is_pure_date(observed_at) else observed_at
+        sym = symbol.upper()
+        conn = self._get_conn()
+        rows = conn.execute(
+            """
+            SELECT fiscal_date, payload, vintage_quality, observed_at FROM (
+                SELECT fiscal_date, payload, vintage_quality, observed_at,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY fiscal_date ORDER BY observed_at DESC
+                       ) AS rn
+                FROM fundamental_vintage
+                WHERE symbol = ? AND statement = ? AND observed_at <= ?
+            )
+            WHERE rn = 1
+            ORDER BY fiscal_date
+            """,
+            (sym, statement, normalized),
+        ).fetchall()
+        out = []
+        for r in rows:
+            payload = json.loads(r["payload"])
+            payload["_vintage_quality"] = r["vintage_quality"]
+            payload["_observed_at"] = r["observed_at"]
+            out.append(payload)
+        return out
+
+    def approximate_as_reported(self, symbol: str, statement: str, as_of: str) -> Dict[str, Any]:
+        """Pre-golive approximate read: queries the CURRENT (latest-restated)
+        table for `statement`, filtered by `accepted_date <= as_of`. Unlike
+        `known_as_of`, this reflects whatever restatements have since landed
+        in the current tables — it is a substitute for periods before vintage
+        recording went live, not a PIT replay.
+
+        The `approximate` flag lives in the return structure (not just a
+        docstring) so callers cannot silently drop it (P1-6).
+        """
+        table = self._VINTAGE_STATEMENT_TABLES.get(statement)
+        if table is None:
+            raise ValueError(f"unknown statement: {statement!r}")
+        _validate_table(table)
+        conn = self._get_conn()
+        rows = conn.execute(
+            f"SELECT * FROM {table} WHERE symbol = ? AND accepted_date <= ? "
+            f"ORDER BY date",
+            (symbol.upper(), as_of),
+        ).fetchall()
+        return {
+            "rows": [dict(r) for r in rows],
+            "approximate": True,
+            "basis": "current_tables_restated",
+        }
 
     # ---- Stats ----
 
