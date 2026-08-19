@@ -1335,15 +1335,15 @@ def test_floor_failure_writes_nothing(tmp_store, fake_client_full):
 - Modify: `ARCHITECTURE.md` + `CLAUDE.md`（Data Desk 股票池表：Extended 单文件路径修正、Broad $1B+ market.db 修正、新增 SM/membership/vintage/coverage 行）、`docs/CHANGELOG.md`（里程碑 + `--scope core` 走内核的行为新增）
 - （north-star 已在 Stop 0 完成）
 
-- [ ] **Step 1**: 修订（遵循文档刷新四原则）→ **Step 2**: 通读自检 → **Step 3**: Commit `git add ARCHITECTURE.md CLAUDE.md docs/CHANGELOG.md && git commit -m "docs(universe): architecture + data desk refresh"`
+- [x] **Step 1**: 修订（遵循文档刷新四原则）→ **Step 2**: 通读自检 → **Step 3**: Commit `git add ARCHITECTURE.md CLAUDE.md docs/CHANGELOG.md && git commit -m "docs(universe): architecture + data desk refresh"`
 
 ---
 
 ### Stop A 收尾验收
 
-- [ ] 基线 4 文件 79 passed 不回归；全量套件新增失败 = 0
-- [ ] `scripts/check_core_references.sh` 清单 == T20 已完成行 + Stop G 待删项（无计划外引用）
-- [ ] 自审对照 `feedback_plan_self_audit_blind_spots` 八类盲点
+- [x] 基线 4 文件 79 passed 不回归；全量套件新增失败 = 0（最终 gate：2700 passed / 同一 15 baseline failed / 4 skipped）
+- [x] `scripts/check_core_references.sh` 清单 == T20 已完成行 + Stop G 待删项（57 条均为兼容 fallback / intentional Core / Stop G 待删项）
+- [x] 自审对照 `feedback_plan_self_audit_blind_spots` 八类盲点（final review fix wave 补 latest-run 终态 fail-closed、真实 read-only、filing-date PIT、wrapper 行为级锁测试）
 - [ ] 交 Boss 验收 → Stop B
 
 ---
@@ -1373,9 +1373,11 @@ ssh aliyun "cd /root/workspace/Finance && \
   scripts/cron_wrapper.sh manual_bootstrap cron_bootstrap_security_master.log \
   python3 scripts/bootstrap_security_master.py"
 # 4. denominator 报告 + needs_review 清单交 Boss（override 补充后可重跑 bootstrap，幂等）
-# 5. 一次性 Core 存量迁移（T20 #22）：Core − eligible − ETF → watchlist（本地跑，company.db 本地写 + --push）
+# 5. 先把云端 bootstrap 后的 market.db 拉回本地；迁移脚本的 current_base_universe 必须读新 SSOT
+./sync_to_cloud.sh --pull
+# 6. 一次性 Core 存量迁移（T20 #22）：Core − eligible − ETF → watchlist（本地跑，company.db 本地写 + --push）
 "/Users/owen/CC workspace/Finance/.venv/bin/python" scripts/migrate_core_watchlist.py && ./sync_to_cloud.sh --push
-# 6. pre-backfill 备份（backup API）+ integrity_check
+# 7. pre-backfill 备份（backup API）+ integrity_check
 ```
 
 验收：smoke 打印 "schema ok"、7 表存在、bootstrap exit 0、eligible 数在 900-1000 合理区间、needs_review 清单 Boss 已过目、watchlist 迁移清单过目、备份 integrity ok。

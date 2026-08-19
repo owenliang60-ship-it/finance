@@ -64,7 +64,8 @@ def _sm_row(symbol, eligible=1, reason="ok"):
 
 def _seed_statements(store, symbol, fiscal_dates):
     """Give a symbol the same fiscal-date coverage in all three current tables."""
-    rows = [{"date": d, "symbol": symbol, "period": "Q", "revenue": 1.0}
+    rows = [{"date": d, "symbol": symbol, "period": "Q", "revenue": 1.0,
+             "filingDate": d}
             for d in fiscal_dates]
     store.upsert_income(symbol, rows)
     store.upsert_balance_sheet(symbol, rows)
@@ -382,6 +383,24 @@ def test_has_asof_window_rejects_oversized_quarter_gap(tmp_store_hist_scenario):
     _seed_statements(tmp_store_hist_scenario, "GAPCO", gapped)
     assert len(gapped) == 8
     assert has_asof_window(tmp_store_hist_scenario, "GAPCO", "2026-03-31") is False
+
+
+def test_has_asof_window_rejects_quarter_filed_after_asof(tmp_store_hist_scenario):
+    """A fiscal quarter not public at the ranking date cannot fill the window."""
+    dates = [
+        "2024-06-30", "2024-09-30", "2024-12-31", "2025-03-31",
+        "2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31",
+    ]
+    _seed_statements(tmp_store_hist_scenario, "LATECO", dates)
+    assert has_asof_window(tmp_store_hist_scenario, "LATECO", "2026-03-31") is True
+    conn = tmp_store_hist_scenario._get_conn()
+    for table in STATEMENT_TABLES:
+        conn.execute(
+            "UPDATE " + table + " SET filing_date = '2026-04-15' "
+            "WHERE symbol = 'LATECO' AND date = '2026-03-31'"
+        )
+    conn.commit()
+    assert has_asof_window(tmp_store_hist_scenario, "LATECO", "2026-03-31") is False
 
 
 def test_kernel_receives_full_utc_timestamp(tmp_store_sm3, fake_client_full,

@@ -14,12 +14,13 @@ def tmp_store(tmp_path):
     s.close()
 
 
-def _seed_income_current(store, symbol, fiscal, accepted, revenue):
+def _seed_income_current(store, symbol, fiscal, accepted, revenue, filing=None):
     """走真实 upsert_income 落 income_quarterly（current 表），使 approximate_as_reported
     测试读到的是货真价实的 current-table 内容而非直插桩数据。"""
     store.upsert_income(symbol, [{
         "date": fiscal,
         "acceptedDate": accepted,
+        "filingDate": filing,
         "revenue": revenue,
     }])
 
@@ -72,6 +73,15 @@ def test_approximate_reads_current_and_is_tagged(tmp_store):
     out = tmp_store.approximate_as_reported("AMAT", "income", "2026-08-20")
     assert out["approximate"] is True and out["rows"][0]["revenue"] == 7
     assert tmp_store.approximate_as_reported("AMAT", "income", "2026-08-01")["rows"] == []
+
+
+def test_approximate_uses_filing_date_when_accepted_date_missing(tmp_store):
+    _seed_income_current(tmp_store, "AMAT", fiscal="2026-06-30",
+                         accepted=None, filing="2026-08-13", revenue=7)
+    assert tmp_store.approximate_as_reported(
+        "AMAT", "income", "2026-08-20")["rows"][0]["revenue"] == 7
+    assert tmp_store.approximate_as_reported(
+        "AMAT", "income", "2026-08-01")["rows"] == []
 
 
 def test_batch_duplicate_fiscal_date_rejected_atomically(tmp_store):

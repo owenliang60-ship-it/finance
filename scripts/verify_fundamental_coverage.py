@@ -82,14 +82,8 @@ against.
     would let a persistent fetch outage silently shrink the denominator
     instead of showing up as a miss.
 
-Read-only. Zero writes: a plain `MarketStore()` handle, enforced by
-discipline (only getter methods and `has_asof_window`/`current_base_universe`
-are ever called) rather than by a DB-level read-only connection — matching
-`scripts/reconcile_fundamentals.py`'s report-only path and
-`scripts/verify_broad_data.py`; `current_base_universe`/`has_asof_window`/
-`store.get_coverage` all require a `MarketStore` instance, not a raw
-`sqlite3` connection, so verify_fmp_forward.py's stricter `mode=ro` URI
-approach isn't available here without reimplementing those helpers.
+Read-only. Zero writes are enforced by `MarketStore(read_only=True)`, which
+opens SQLite with `mode=ro`, enables `query_only`, and skips schema DDL.
 
 CLI:
     python scripts/verify_fundamental_coverage.py [--json]
@@ -157,8 +151,8 @@ def _pct(numerator: int, denominator: int) -> float:
 # ---------------------------------------------------------------------------
 
 def _forward_fetch_failed_bucket(conn) -> Tuple[Set[str], List[str]]:
-    """Union of `quarter_failed` across every attempt in the latest
-    status=complete weekly fmp_forward_runs manifest row.
+    """Union of `quarter_failed` across every attempt in the latest weekly
+    fmp_forward_runs manifest row, provided that latest run completed.
 
     Returns (bucket, structural_failures). An empty bucket with no
     structural_failures is a legitimate outcome (no complete weekly run has
@@ -169,14 +163,20 @@ def _forward_fetch_failed_bucket(conn) -> Tuple[Set[str], List[str]]:
     than silently treating it as "nobody failed".
     """
     row = conn.execute(
-        "SELECT summary_json FROM fmp_forward_runs "
-        "WHERE run_kind = 'weekly' AND status = 'complete' "
+        "SELECT snapshot_date, status, summary_json FROM fmp_forward_runs "
+        "WHERE run_kind = 'weekly' "
         "ORDER BY snapshot_date DESC LIMIT 1"
     ).fetchone()
     if row is None:
         return set(), []
+    if row["status"] != "complete":
+        return set(), [
+            f"latest weekly fmp_forward_runs manifest "
+            f"({row['snapshot_date']}) has status={row['status']} — "
+            f"refusing to reuse an older complete run"
+        ]
     try:
-        payload = parse_forward_run_evidence(row[0])
+        payload = parse_forward_run_evidence(row["summary_json"])
     except ValueError as exc:
         return set(), [
             f"latest complete weekly fmp_forward_runs manifest summary_json "
@@ -437,7 +437,7 @@ def _print_report(report: Dict[str, Any]) -> None:
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
-    store = MarketStore()
+    store = MarketStore(read_only=True)
     try:
         rc, report = verify(store)
     finally:

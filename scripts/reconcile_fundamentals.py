@@ -254,7 +254,7 @@ def _latest_fiscal_date(conn, table: str, symbol: str) -> Optional[date]:
 
 
 def _phase1_audit(store: MarketStore, symbols: List[str], as_of_ts: str,
-                  stale_after_days: int) -> Dict[str, Any]:
+                  stale_after_days: int, *, persist_stale: bool) -> Dict[str, Any]:
     conn = store._get_conn()
     as_of_date = _parse_date(as_of_ts)
 
@@ -283,11 +283,12 @@ def _phase1_audit(store: MarketStore, symbols: List[str], as_of_ts: str,
             if dataset in STALE_CAPABLE_DATASETS and has_rows:
                 latest = _latest_fiscal_date(conn, table, symbol)
                 if latest is not None and (as_of_date - latest).days > stale_after_days:
-                    store.upsert_coverage_status([{
-                        "symbol": symbol, "dataset": table, "status": "stale",
-                        "detail": str((as_of_date - latest).days),
-                        "updated_at": as_of_ts,
-                    }])
+                    if persist_stale:
+                        store.upsert_coverage_status([{
+                            "symbol": symbol, "dataset": table, "status": "stale",
+                            "detail": str((as_of_date - latest).days),
+                            "updated_at": as_of_ts,
+                        }])
                     stale_set.add(symbol)
                 continue
 
@@ -395,7 +396,9 @@ def run_reconcile(*, store: MarketStore, client: Any, repair: bool = False,
             print(f"reconcile: universe resolution failed: {exc} (exit {EXIT_EMPTY_UNIVERSE})")
             return EXIT_EMPTY_UNIVERSE, []
 
-        audit = _phase1_audit(store, symbols, as_of_ts, stale_after_days)
+        audit = _phase1_audit(
+            store, symbols, as_of_ts, stale_after_days, persist_stale=repair
+        )
 
         all_targets = sorted(audit["missing"] | audit["stale"] | audit["retryable"])
         frozen = all_targets[:max_targets]
@@ -500,7 +503,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     try:
         # MarketStore initialization executes additive schema DDL; repair mode
         # must therefore acquire the writer lock before constructing it.
-        store = MarketStore()
+        store = MarketStore(read_only=not args.repair)
         client = FMPClient()
 
         def notifier(message: str) -> None:

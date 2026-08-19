@@ -226,8 +226,12 @@ def has_asof_window(store: MarketStore, symbol: str, as_of: str,
         # Table names come from COLLECTION_DATASET_TABLES, never from input.
         rows = conn.execute(
             "SELECT date FROM " + table + " WHERE symbol = ? AND date > ? "
-            "AND date <= ? ORDER BY date DESC LIMIT ?",
-            (sym, window_start.isoformat(), as_of_date.isoformat(), quarters),
+            "AND date <= ? AND "
+            "COALESCE(NULLIF(substr(accepted_date, 1, 10), ''), "
+            "NULLIF(filing_date, '')) <= ? "
+            "ORDER BY date DESC LIMIT ?",
+            (sym, window_start.isoformat(), as_of_date.isoformat(),
+             as_of_date.isoformat(), quarters),
         ).fetchall()
         if len(rows) < quarters:
             return False

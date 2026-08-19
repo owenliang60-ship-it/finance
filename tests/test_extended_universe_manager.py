@@ -1,5 +1,7 @@
 """Tests for src/data/extended_universe_manager.py."""
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -15,6 +17,41 @@ from src.data.extended_universe_manager import (
     refresh_extended_universe,
     refresh_with_snapshot,
 )
+
+
+def test_weekly_refresh_holds_market_writer_lock_for_extended_membership_write(tmp_path):
+    """The weekly manager writes market.db, so its cron step must share the
+    same writer lock as every other market.db producer."""
+    project = tmp_path / "project"
+    fake_bin = tmp_path / "bin"
+    lock_dir = tmp_path / "locks"
+    calls = tmp_path / "python-calls.log"
+    project.mkdir()
+    fake_bin.mkdir()
+    fake_python = fake_bin / "python3"
+    fake_python.write_text('#!/bin/sh\necho "$*" >> "$CALL_LOG"\nexit 0\n')
+    fake_python.chmod(0o755)
+    fake_flock = fake_bin / "flock"
+    fake_flock.write_text("#!/bin/sh\nexit 1\n")
+    fake_flock.chmod(0o755)
+
+    env = os.environ.copy()
+    env.update({
+        "PATH": str(fake_bin) + os.pathsep + env["PATH"],
+        "FINANCE_PROJECT_DIR": str(project),
+        "FINANCE_CRON_LOCK_DIR": str(lock_dir),
+        "CALL_LOG": str(calls),
+    })
+    result = subprocess.run(
+        ["bash", str(PROJECT_ROOT / "scripts" / "broad_universe_cron_wrapper.sh"),
+         "weekly_refresh"],
+        env=env, capture_output=True, text=True,
+    )
+
+    assert result.returncode == 75
+    assert "extended_universe_manager --refresh" not in calls.read_text()
+    log = next((project / "logs").glob("cron_broad_weekly_refresh_*.log")).read_text()
+    assert "market_db_writer lock busy" in log
 
 
 class _KnowsEverything(dict):

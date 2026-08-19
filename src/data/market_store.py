@@ -732,18 +732,30 @@ def _validate_column(col: str, valid_cols: List[str]) -> None:
 class MarketStore:
     """SQLite-backed market time-series database."""
 
-    def __init__(self, db_path: Optional[Path] = None):
-        self.db_path = db_path or _DEFAULT_DB_PATH
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, db_path: Optional[Path] = None, read_only: bool = False):
+        self.db_path = Path(db_path or _DEFAULT_DB_PATH)
+        self.read_only = read_only
+        if read_only:
+            if not self.db_path.is_file():
+                raise FileNotFoundError(f"market database not found: {self.db_path}")
+        else:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
-        self._init_db()
+        if not read_only:
+            self._init_db()
 
     def _get_conn(self) -> sqlite3.Connection:
         conn = getattr(self._local, 'conn', None)
         if conn is None:
-            conn = sqlite3.connect(str(self.db_path))
+            if self.read_only:
+                uri = self.db_path.resolve().as_uri() + "?mode=ro"
+                conn = sqlite3.connect(uri, uri=True)
+                conn.execute("PRAGMA query_only=ON")
+            else:
+                conn = sqlite3.connect(str(self.db_path))
             conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA journal_mode=WAL")
+            if not self.read_only:
+                conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA foreign_keys=ON")
             self._local.conn = conn
         return conn
@@ -907,6 +919,8 @@ class MarketStore:
         `with conn:` block (e.g. `_bulk_upsert`) — nesting would commit the
         outer transaction early, defeating the rollback guarantee.
         """
+        if self.read_only:
+            raise RuntimeError("transactions are unavailable on a read-only MarketStore")
         conn = self._get_conn()
         conn.execute("BEGIN IMMEDIATE")
         try:
@@ -2825,7 +2839,8 @@ class MarketStore:
 
     def approximate_as_reported(self, symbol: str, statement: str, as_of: str) -> Dict[str, Any]:
         """Pre-golive approximate read: queries the CURRENT (latest-restated)
-        table for `statement`, filtered by `accepted_date <= as_of`. Unlike
+        table for `statement`, filtered by the first available public filing
+        timestamp (`accepted_date`, falling back to `filing_date`) <= as_of. Unlike
         `known_as_of`, this reflects whatever restatements have since landed
         in the current tables — it is a substitute for periods before vintage
         recording went live, not a PIT replay.
@@ -2839,7 +2854,9 @@ class MarketStore:
         _validate_table(table)
         conn = self._get_conn()
         rows = conn.execute(
-            f"SELECT * FROM {table} WHERE symbol = ? AND accepted_date <= ? "
+            f"SELECT * FROM {table} WHERE symbol = ? AND "
+            f"COALESCE(NULLIF(substr(accepted_date, 1, 10), ''), "
+            f"NULLIF(filing_date, '')) <= ? "
             f"ORDER BY date",
             (symbol.upper(), as_of),
         ).fetchall()

@@ -266,6 +266,11 @@ def test_report_only_freezes_targets_no_fetch(tmp_store_cov, fake_client_full, s
                                 repair=False, notifier=spy_notifier, as_of=AS_OF)
     assert rc == 0 and fake_client_full.calls == 0          # only reads, zero API
     assert "STALECO" in targets                              # 130d-old latest quarter -> stale
+    status = tmp_store_cov._get_conn().execute(
+        "SELECT status FROM coverage_status "
+        "WHERE symbol = 'STALECO' AND dataset = 'income_quarterly'"
+    ).fetchone()[0]
+    assert status == "ok"                                  # report-only means zero DB writes
 
 
 def test_repair_touches_only_frozen_targets(tmp_store_cov, fake_client_full, spy_notifier,

@@ -44,7 +44,8 @@ def _seed_universe(store, symbols, as_of="2026-01-02"):
 def _seed_statements(store, symbol, fiscal_dates):
     """Give a symbol the same fiscal-date coverage in all three current tables
     (mirrors tests/test_backfill_runner.py's fixture helper)."""
-    rows = [{"date": d, "symbol": symbol, "period": "Q", "revenue": 1.0}
+    rows = [{"date": d, "symbol": symbol, "period": "Q", "revenue": 1.0,
+             "filingDate": d}
             for d in fiscal_dates]
     store.upsert_income(symbol, rows)
     store.upsert_balance_sheet(symbol, rows)
@@ -176,6 +177,27 @@ def test_forward_fetch_failed_forces_d1_inclusion_not_not_applicable(store):
     assert fwd["d2"] == 1          # ...but not in the numerator.
     missing = {m["symbol"]: m["reason"] for m in fwd["missing"]}
     assert missing["FAILED"] == "fetch_failed"
+
+
+def test_latest_failed_weekly_run_fails_closed_instead_of_using_older_complete(store):
+    _seed_universe(store, ["AAA"])
+    _seed_forward_covered(store, "AAA")
+    store.upsert_fmp_forward_run({
+        "snapshot_date": "2026-08-15", "run_kind": "weekly", "status": "complete",
+        "target_universe": ["AAA"], "started_at": "2026-08-15T02:00:00Z",
+        "completed_at": "2026-08-15T03:00:00Z",
+        "summary_json": json.dumps({"attempts": [{"quarter_failed": []}]}),
+    })
+    store.upsert_fmp_forward_run({
+        "snapshot_date": "2026-08-18", "run_kind": "weekly", "status": "failed",
+        "target_universe": ["AAA"], "started_at": "2026-08-18T02:00:00Z",
+        "completed_at": "2026-08-18T02:05:00Z", "summary_json": None,
+    })
+
+    rc, report = verify(store, today_fn=_today_fn)
+    assert rc == 1
+    assert any("latest weekly" in msg and "status=failed" in msg
+               for msg in report["failures"])
 
 
 # ---------------------------------------------------------------------------

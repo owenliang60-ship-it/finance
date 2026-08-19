@@ -87,14 +87,20 @@ def get_expected_buckets() -> dict:
     ``Core ∪ Extended`` union as disjoint ``overlay=Core`` and
     ``base=Extended-Core`` buckets.
     """
+    from src.data.universe_resolver import current_base_universe
     try:
-        from src.data.universe_resolver import current_base_universe
         base = {s.upper() for s in current_base_universe()}
-        overlay = {s.upper() for s in load_overlay_tier()}
-    except Exception:
+    except RuntimeError as exc:
+        if str(exc) not in {
+            "extended_membership empty — run bootstrap first",
+            "security_master empty — run bootstrap first",
+        }:
+            raise
         overlay = {s.upper() for s in get_pool_symbols()}
         extended = {s.upper() for s in get_extended_symbols()}
         base = extended - overlay
+    else:
+        overlay = {s.upper() for s in load_overlay_tier()}
     return {
         "overlay": sorted(overlay),
         "base": sorted(base - overlay),

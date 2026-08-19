@@ -9,6 +9,8 @@
 > **Spec（最高权威）**: `docs/design/requirements.md`（R1–R14）
 > **执行 ledger（必读）**: `.superpowers/sdd/2026-08-16-extended-primary-universe-implementation/progress.md` — 全部 17 条裁决、每个 task 的 fix loop 记录、deferred minors 清单都在里面，本文档只做导航和压缩摘要
 
+> **Codex 完成更新（2026-08-19）**: 本文以下内容保留为历史交接现场；Codex 已完成 B2 fix loop、B3–B5、T21、Stop A final review fix wave 与收尾 gate。最终全量为 **2700 passed / 原有同一 15 failed / 4 skipped**，`check_core_references.sh` 为 57 条已解释兼容/Stop G 引用。当前状态已推进到 **等待 Boss 验收 Stop A → Stop B**；仍未 merge、push、部署或修改 crontab。
+
 ---
 
 ## 一、当前进度总览

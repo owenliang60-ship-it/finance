@@ -146,3 +146,47 @@ def test_base_and_overlay_buckets_are_disjoint_and_preserve_union(
 
     assert rc == 0
     assert report["overlay"]["expected"] + report["base"]["expected"] == 3
+
+
+def test_expected_buckets_legacy_fallback_only_for_prebootstrap(monkeypatch):
+    import scripts.verify_forward_coverage as verifier
+
+    monkeypatch.setattr(
+        "src.data.universe_resolver.current_base_universe",
+        lambda: (_ for _ in ()).throw(
+            RuntimeError("extended_membership empty — run bootstrap first")
+        ),
+    )
+    monkeypatch.setattr(verifier, "get_pool_symbols", lambda: ["AAPL"])
+    monkeypatch.setattr(verifier, "get_extended_symbols", lambda: ["AAPL", "MSFT"])
+
+    assert verifier.get_expected_buckets() == {
+        "overlay": ["AAPL"], "base": ["MSFT"]
+    }
+
+
+def test_expected_buckets_propagates_database_corruption(monkeypatch):
+    import scripts.verify_forward_coverage as verifier
+
+    monkeypatch.setattr(
+        "src.data.universe_resolver.current_base_universe",
+        lambda: (_ for _ in ()).throw(sqlite3.DatabaseError("database disk image malformed")),
+    )
+
+    with pytest.raises(sqlite3.DatabaseError):
+        verifier.get_expected_buckets()
+
+
+def test_expected_buckets_propagates_overlay_failure(monkeypatch):
+    import scripts.verify_forward_coverage as verifier
+
+    monkeypatch.setattr(
+        "src.data.universe_resolver.current_base_universe", lambda: ["MSFT"]
+    )
+    monkeypatch.setattr(
+        verifier, "load_overlay_tier",
+        lambda: (_ for _ in ()).throw(RuntimeError("watchlist store unavailable")),
+    )
+
+    with pytest.raises(RuntimeError, match="watchlist store unavailable"):
+        verifier.get_expected_buckets()

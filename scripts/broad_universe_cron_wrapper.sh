@@ -1,8 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-cd /root/workspace/Finance
-source .env 2>/dev/null || true
+PROJECT_DIR="${FINANCE_PROJECT_DIR:-/root/workspace/Finance}"
+LOCK_DIR="${FINANCE_CRON_LOCK_DIR:-/tmp/finance-cron-locks}"
+cd "$PROJECT_DIR"
+if [ -f ".env" ]; then
+  source .env
+fi
 
 if [ -x ".venv/bin/python" ]; then
   PYTHON=".venv/bin/python"
@@ -43,6 +47,21 @@ run_step_nonblocking() {
   fi
 }
 
+run_step_with_market_writer_lock() {
+  local name="$1"
+  shift
+  local lock_path="$LOCK_DIR/resource-market_db_writer.lock"
+  mkdir -p "$LOCK_DIR"
+  exec 8>"$lock_path"
+  if ! flock -n 8; then
+    log "FAIL $name rc=75 market_db_writer lock busy"
+    exit 75
+  fi
+  run_step "$name" "$@"
+  flock -u 8
+  exec 8>&-
+}
+
 log "broad_universe cron MODE=$MODE"
 
 case "$MODE" in
@@ -63,7 +82,8 @@ case "$MODE" in
       --universe broad --incremental-new-symbols
     run_step "price_new_final" "$PYTHON" scripts/update_extended_prices.py \
       --universe broad --incremental-new-symbols
-    run_step "refresh_extended" "$PYTHON" -m src.data.extended_universe_manager --refresh
+    run_step_with_market_writer_lock "refresh_extended" "$PYTHON" \
+      -m src.data.extended_universe_manager --refresh
     run_step_nonblocking "concept_weekly_sync" "$PYTHON" \
       scripts/build_company_concept_registry.py --weekly-sync
     ;;
