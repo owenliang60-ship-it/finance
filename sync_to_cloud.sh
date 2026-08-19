@@ -237,14 +237,14 @@ print(f'本地 merge 完成: 新增 {added} 个 symbol')
     # 5. 云端验证
     info "云端验证..."
     ssh "$REMOTE_HOST" "cd $REMOTE_DIR && python3 -c \"
-from src.data.pool_manager import get_symbols
 import sqlite3
-symbols = get_symbols()
 conn = sqlite3.connect('data/market.db')
+row = conn.execute('SELECT COUNT(DISTINCT symbol) FROM extended_membership WHERE effective_to IS NULL').fetchone()
+pool_count = row[0] if row else 0
 row = conn.execute('SELECT MAX(date) FROM daily_price').fetchone()
 conn.close()
 latest = row[0] if row else 'N/A'
-print(f'股票池: {len(symbols)} 只')
+print(f'股票池: {pool_count} 只')
 print(f'market.db 最新日期: {latest}')
 print('验证通过')
 \""
@@ -261,16 +261,16 @@ show_status() {
     info "--- 本地 ---"
     cd "$LOCAL_DIR"
     "$PYTHON" -c "
-from src.data.pool_manager import get_symbols
 import sqlite3, os
-symbols = get_symbols()
 conn = sqlite3.connect('data/market.db')
+row = conn.execute('SELECT COUNT(DISTINCT symbol) FROM extended_membership WHERE effective_to IS NULL').fetchone()
+pool_count = row[0] if row else 0
 row = conn.execute('SELECT MAX(date) FROM daily_price').fetchone()
 conn.close()
 latest = row[0] if row else 'N/A'
 cdb_size = os.path.getsize('data/company.db') / 1024 / 1024
 mdb_size = os.path.getsize('data/market.db') / 1024 / 1024
-print(f'  股票池: {len(symbols)} 只')
+print(f'  股票池: {pool_count} 只')
 print(f'  market.db: {mdb_size:.1f}MB, 最新日期: {latest}')
 print(f'  company.db: {cdb_size:.1f}MB')
 "
@@ -279,16 +279,16 @@ print(f'  company.db: {cdb_size:.1f}MB')
     echo ""
     info "--- 云端 ---"
     ssh "$REMOTE_HOST" "cd $REMOTE_DIR && python3 -c \"
-from src.data.pool_manager import get_symbols
 import sqlite3, os
-symbols = get_symbols()
 conn = sqlite3.connect('data/market.db')
+row = conn.execute('SELECT COUNT(DISTINCT symbol) FROM extended_membership WHERE effective_to IS NULL').fetchone()
+pool_count = row[0] if row else 0
 row = conn.execute('SELECT MAX(date) FROM daily_price').fetchone()
 conn.close()
 latest = row[0] if row else 'N/A'
 cdb_size = os.path.getsize('data/company.db') / 1024 / 1024
 mdb_size = os.path.getsize('data/market.db') / 1024 / 1024
-print(f'  股票池: {len(symbols)} 只')
+print(f'  股票池: {pool_count} 只')
 print(f'  market.db: {mdb_size:.1f}MB, 最新日期: {latest}')
 print(f'  company.db: {cdb_size:.1f}MB')
 \""
