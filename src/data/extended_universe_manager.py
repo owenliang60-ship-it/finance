@@ -81,7 +81,7 @@ def _publish_cache(data: Dict, cache_dir: Optional[Path] = None) -> bool:
             json.dump(data, f, ensure_ascii=False, indent=2)
         os.replace(tmp, path)
         return True
-    except OSError as exc:
+    except Exception as exc:
         logger.warning(
             "extended universe cache publish FAILED (%s: %s) — membership is "
             "already committed to DB, so %s stays stale until the next refresh",
@@ -89,7 +89,7 @@ def _publish_cache(data: Dict, cache_dir: Optional[Path] = None) -> bool:
         )
         try:
             tmp.unlink()
-        except OSError:
+        except Exception:
             pass
         return False
 

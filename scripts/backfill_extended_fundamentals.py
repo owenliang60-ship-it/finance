@@ -149,6 +149,8 @@ class FileLock:
         self._fd: Optional[int] = None
 
     def acquire(self) -> bool:
+        if self._fd is not None:
+            return True
         self.path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(self.path), os.O_CREAT | os.O_RDWR, 0o644)
         try:
@@ -593,15 +595,28 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     from src.data.fmp_client import FMPClient
 
-    store = MarketStore()
-    client = FMPClient()
     lock = NullLock() if args.no_lock else FileLock()
-
-    rc = run_backfill(run_id=args.run_id, store=store, client=client, lock=lock,
-                      canary=args.canary, resume=args.resume,
-                      limit_quarters=args.limit_quarters, dry_run=args.dry_run,
-                      include_historical=args.include_historical, as_of=args.as_of,
-                      profiles_mirror_path=DEFAULT_PROFILES_PATH)
+    if not lock.acquire():
+        print("backfill: {} is held by another writer — skipping (exit {})".format(
+            getattr(lock, "path", RESOURCE_KEY), EXIT_LOCK_BUSY))
+        sys.exit(EXIT_LOCK_BUSY)
+    try:
+        # MarketStore.__init__ runs CREATE TABLE IF NOT EXISTS; even the first
+        # construction is therefore a writer operation and belongs under the
+        # shared lock (T10-M2).
+        store = MarketStore()
+        client = FMPClient()
+        rc = run_backfill(
+            run_id=args.run_id, store=store, client=client, lock=lock,
+            canary=args.canary, resume=args.resume,
+            limit_quarters=args.limit_quarters, dry_run=args.dry_run,
+            include_historical=args.include_historical, as_of=args.as_of,
+            profiles_mirror_path=DEFAULT_PROFILES_PATH,
+        )
+    finally:
+        # run_backfill releases the idempotently acquired lock on normal paths;
+        # this also covers MarketStore/FMPClient construction failures.
+        lock.release()
     sys.exit(rc)
 
 
