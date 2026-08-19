@@ -113,12 +113,13 @@ class TestCheckCoreReferencesScript:
 
         output = result.stdout
         # T20 矩阵中列出、本 task（19）不负责迁移的具体行，抽样核对清单与现实一致
+        # T20 #11 迁移后 scripts/backfill_iv.py 的 pool_manager 引用已彻底删除
+        # （--symbols 必填，无回退路径），故从清单移除——这正是本 telemetry 想记录的进展
         known_unmigrated = [
-            "src/data/data_validator.py",       # T20 #1/#2
+            "src/data/data_validator.py",       # T20 #1/#2（保留 legacy 回退分支）
             "src/indicators/engine.py",         # T20 #13
             "terminal/company_store.py",        # T20 #3
             "terminal/dashboard.py",            # T20 #3
-            "scripts/backfill_iv.py",           # T20 #11
             "scripts/scan_themes.py",           # T20 #12
         ]
         for needle in known_unmigrated:
