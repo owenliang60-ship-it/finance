@@ -4,7 +4,7 @@
 > **交接原因**: Boss 指示暂停 CC session，Stop A 剩余工作移交 Codex
 > **Worktree**: `/Users/owen/CC workspace/Finance/.worktrees/extended-primary-universe`
 > **Branch**: `codex/extended-primary-universe`（base main@8ca3da9，未 merge，对主仓库零影响）
-> **HEAD**: `ddecd94`
+> **交接时 HEAD**: `ddecd94`（历史现场；Codex 完成 commit 见当前 `git log`）
 > **Plan（binding）**: `docs/plans/2026-08-16-extended-primary-universe-implementation.md`（v2.4，Boss PASS）
 > **Spec（最高权威）**: `docs/design/requirements.md`（R1–R14）
 > **执行 ledger（必读）**: `.superpowers/sdd/2026-08-16-extended-primary-universe-implementation/progress.md` — 全部 17 条裁决、每个 task 的 fix loop 记录、deferred minors 清单都在里面，本文档只做导航和压缩摘要
