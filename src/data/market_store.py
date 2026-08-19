@@ -2843,6 +2843,231 @@ class MarketStore:
             "basis": "current_tables_restated",
         }
 
+    # ---- Fundamental backfill manifest (run header + dataset jobs, T9/R6) ----
+    # (run_id, symbol, dataset)-granular job ledger the T10 runner drives.
+    # `create_backfill_run` freezes the grid once per run_id: the header's
+    # `universe_hash` is immutable (same pattern as `upsert_fmp_forward_run`'s
+    # frozen `target_universe_json` — history must not be rewritable), while
+    # a matching re-create is treated as a resume no-op rather than an error
+    # so `--resume` can safely call this every time without disturbing job
+    # progress already recorded.
+
+    _BACKFILL_JOB_TERMINAL_STATUSES = frozenset({"done", "provider_empty", "skipped"})
+    _BACKFILL_JOB_STATUSES = frozenset({
+        "pending", "in_progress", "done", "provider_empty", "fetch_failed", "skipped",
+    })
+    _BACKFILL_RUN_STATUSES = frozenset({"complete", "aborted", "rolled_back"})
+    _BACKFILL_MAX_ATTEMPTS = 3
+
+    def create_backfill_run(self, run_id: str, symbols: List[str],
+                            datasets: List[str], params: Dict) -> None:
+        """Freeze the full (run_id, symbol, dataset) grid as pending.
+
+        `universe_hash` is sha256 over the sorted, upper-cased, deduplicated
+        symbol list — the run's frozen denominator. A second call with the
+        same run_id and the SAME hash is a no-op (the `--resume` path); a
+        different hash raises, mirroring `upsert_fmp_forward_run`'s
+        immutable-history semantics (:1282-1348).
+        """
+        if not symbols:
+            raise ValueError("symbols must not be empty")
+        if not datasets:
+            raise ValueError("datasets must not be empty")
+
+        normalized_symbols = sorted({str(s).upper() for s in symbols})
+        universe_hash = hashlib.sha256(
+            ",".join(normalized_symbols).encode("utf-8")
+        ).hexdigest()
+
+        conn = self._get_conn()
+        now = self._utc_now_iso()
+        with conn:
+            existing = conn.execute(
+                "SELECT universe_hash FROM fundamental_backfill_runs WHERE run_id = ?",
+                [run_id],
+            ).fetchone()
+            if existing:
+                if existing["universe_hash"] != universe_hash:
+                    raise ValueError(
+                        f"universe mismatch for existing backfill run {run_id!r}; "
+                        "run manifests are immutable once created"
+                    )
+                return  # idempotent resume: grid already frozen, jobs untouched
+
+            conn.execute(
+                "INSERT INTO fundamental_backfill_runs "
+                "(run_id, universe_hash, params_json, status, started_at, finished_at) "
+                "VALUES (?, ?, ?, 'running', ?, NULL)",
+                [run_id, universe_hash, json.dumps(params or {}), now],
+            )
+            job_rows = [
+                (run_id, symbol, dataset)
+                for symbol in normalized_symbols
+                for dataset in datasets
+            ]
+            conn.executemany(
+                "INSERT INTO fundamental_backfill_jobs (run_id, symbol, dataset, status) "
+                "VALUES (?, ?, ?, 'pending')",
+                job_rows,
+            )
+
+    def claim_pending_jobs(self, run_id: str, symbol: str) -> List[str]:
+        """Claim this symbol's non-terminal dataset jobs: fresh `pending`, or
+        `fetch_failed` under the retry cap. Marks each claimed row
+        `in_progress` with `claimed_at` set so a second claim — or a crashed
+        runner restarted before it calls `reset_in_progress_jobs` — cannot
+        double-work the same job. Returns the claimed dataset keys.
+        """
+        sym = symbol.upper()
+        conn = self._get_conn()
+        now = self._utc_now_iso()
+        with conn:
+            rows = conn.execute(
+                "SELECT dataset FROM fundamental_backfill_jobs "
+                "WHERE run_id = ? AND symbol = ? AND "
+                "(status = 'pending' OR (status = 'fetch_failed' AND attempts < ?)) "
+                "ORDER BY rowid",
+                [run_id, sym, self._BACKFILL_MAX_ATTEMPTS],
+            ).fetchall()
+            datasets = [r["dataset"] for r in rows]
+            if datasets:
+                conn.executemany(
+                    "UPDATE fundamental_backfill_jobs SET status = 'in_progress', "
+                    "claimed_at = ? WHERE run_id = ? AND symbol = ? AND dataset = ?",
+                    [(now, run_id, sym, d) for d in datasets],
+                )
+        return datasets
+
+    def reset_in_progress_jobs(self, run_id: str) -> int:
+        """Crash-recovery: reset every `in_progress` job of this run back to
+        `pending` (attempts untouched) so a restarted runner can reclaim it.
+        Never leave a job permanently `in_progress` after a crash. Returns
+        the number of rows reset.
+        """
+        conn = self._get_conn()
+        with conn:
+            cur = conn.execute(
+                "UPDATE fundamental_backfill_jobs SET status = 'pending', "
+                "claimed_at = NULL WHERE run_id = ? AND status = 'in_progress'",
+                [run_id],
+            )
+            return cur.rowcount
+
+    def complete_job_in_conn(self, conn: sqlite3.Connection, run_id: str,
+                             symbol: str, dataset: str, status: str,
+                             error: Optional[str] = None) -> None:
+        """Record one dataset job's outcome on the caller's connection — the
+        manifest half of T8's per-dataset atomic boundary. T10 binds this as
+        the `job_writer(conn, dataset, status, detail=None)` closure the
+        collection kernel calls INSIDE its own transaction, so the manifest
+        commits or rolls back with the data it describes.
+
+        Increments `attempts` on every call. Sets `completed_at` once the job
+        reaches a terminal state: `{done, provider_empty, skipped}` always;
+        `fetch_failed` only once `attempts` has exhausted the retry cap
+        (below the cap it stays claimable via `claim_pending_jobs`).
+        """
+        if status not in self._BACKFILL_JOB_STATUSES:
+            raise ValueError(f"invalid backfill job status: {status!r}")
+        sym = symbol.upper()
+        row = conn.execute(
+            "SELECT attempts FROM fundamental_backfill_jobs "
+            "WHERE run_id = ? AND symbol = ? AND dataset = ?",
+            [run_id, sym, dataset],
+        ).fetchone()
+        if row is None:
+            raise ValueError(
+                f"no manifest job for run_id={run_id!r} symbol={sym!r} "
+                f"dataset={dataset!r}; was create_backfill_run called for this grid?"
+            )
+        attempts = row["attempts"] + 1
+        is_terminal = (status in self._BACKFILL_JOB_TERMINAL_STATUSES
+                       or (status == "fetch_failed"
+                           and attempts >= self._BACKFILL_MAX_ATTEMPTS))
+        completed_at = self._utc_now_iso() if is_terminal else None
+        conn.execute(
+            "UPDATE fundamental_backfill_jobs SET status = ?, attempts = ?, "
+            "last_error = ?, completed_at = ? "
+            "WHERE run_id = ? AND symbol = ? AND dataset = ?",
+            [status, attempts, error, completed_at, run_id, sym, dataset],
+        )
+
+    def run_progress(self, run_id: str) -> Dict[str, Any]:
+        """Per-status job counts for a run, plus `total_symbols`,
+        `total_jobs` and `is_complete` (every job terminal — `fetch_failed`
+        counts once it has exhausted the retry cap).
+
+        CONTROLLER RULING #2: raises ValueError on an unknown run_id rather
+        than returning an empty dict, so a caller that expects the manifest
+        to exist (e.g. T10's lock-busy path, which must NOT have created one)
+        gets a loud signal instead of a silently-zeroed progress report.
+        """
+        conn = self._get_conn()
+        header = conn.execute(
+            "SELECT run_id FROM fundamental_backfill_runs WHERE run_id = ?",
+            [run_id],
+        ).fetchone()
+        if header is None:
+            raise ValueError(f"unknown backfill run_id: {run_id!r}")
+
+        rows = conn.execute(
+            "SELECT symbol, status, attempts FROM fundamental_backfill_jobs "
+            "WHERE run_id = ?",
+            [run_id],
+        ).fetchall()
+
+        counts = {s: 0 for s in self._BACKFILL_JOB_STATUSES}
+        symbols = set()
+        is_complete = True
+        for r in rows:
+            counts[r["status"]] = counts.get(r["status"], 0) + 1
+            symbols.add(r["symbol"])
+            terminal = (r["status"] in self._BACKFILL_JOB_TERMINAL_STATUSES
+                        or (r["status"] == "fetch_failed"
+                            and r["attempts"] >= self._BACKFILL_MAX_ATTEMPTS))
+            if not terminal:
+                is_complete = False
+
+        result: Dict[str, Any] = dict(counts)
+        result["total_symbols"] = len(symbols)
+        result["total_jobs"] = len(rows)
+        result["is_complete"] = is_complete
+        return result
+
+    def finish_run(self, run_id: str, status: str) -> None:
+        """Close out a run header: status ∈ {complete, aborted, rolled_back},
+        `finished_at` stamped now. Raises ValueError for an invalid status or
+        an unknown run_id (nothing to finish).
+        """
+        if status not in self._BACKFILL_RUN_STATUSES:
+            raise ValueError(f"invalid backfill run status: {status!r}")
+        conn = self._get_conn()
+        now = self._utc_now_iso()
+        with conn:
+            cur = conn.execute(
+                "UPDATE fundamental_backfill_runs SET status = ?, finished_at = ? "
+                "WHERE run_id = ?",
+                [status, now, run_id],
+            )
+            if cur.rowcount == 0:
+                raise ValueError(f"unknown backfill run_id: {run_id!r}")
+
+    def get_backfill_run(self, run_id: str) -> Dict[str, Any]:
+        """Header row: run_id/universe_hash/status/started_at/finished_at
+        (plus `params`, decoded from `params_json`). Raises ValueError on an
+        unknown run_id (CONTROLLER RULING #2 — see `run_progress`).
+        """
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM fundamental_backfill_runs WHERE run_id = ?",
+            [run_id],
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"unknown backfill run_id: {run_id!r}")
+        result = dict(row)
+        result["params"] = json.loads(result["params_json"])
+        return result
+
     # ---- Stats ----
 
     def get_stats(self) -> Dict[str, int]:
