@@ -1,8 +1,10 @@
 """
-Extended Price Fetcher — yfinance batch download for $10B+ stocks.
+Extended Price Fetcher — yfinance batch download for the bulk of the universe.
 
-Downloads OHLCV daily prices for stocks in the extended universe that are
-NOT in the pool (pool stocks use FMP). Stores in market.db daily_price table.
+Downloads OHLCV daily prices for `get_yfinance_price_targets()` (matrix #7):
+the current base universe minus the FMP overlay tier that
+`price_fetcher.get_fmp_price_targets()` covers. Stores in market.db
+daily_price table (schema unchanged by the migration).
 
 Usage:
     from src.data.extended_price_fetcher import update_extended_prices
@@ -191,29 +193,73 @@ def _yf_download_ohlcv(
     return all_frames
 
 
+def _legacy_extended_only_targets() -> List[str]:
+    """Pre-bootstrap fallback list: extended cache − core pool.
+
+    The formula is spelled out here rather than delegating to
+    `extended_universe_manager.get_extended_only_symbols()` for two reasons:
+    that function forwards to `get_yfinance_price_targets()` from matrix #8
+    onward (delegating would recurse), and Stop G phase 2 deletes it — the
+    fallback must not disappear with it.
+    """
+    from src.data.extended_universe_manager import get_extended_symbols
+    from src.data.pool_manager import get_symbols as get_pool_symbols
+
+    return sorted(set(get_extended_symbols()) - set(get_pool_symbols()))
+
+
+def get_yfinance_price_targets(store=None) -> List[str]:
+    """yfinance daily-price targets = current base universe − FMP tier (matrix #7).
+
+    The complement of `price_fetcher.get_fmp_price_targets()` (matrix #6, P1):
+    together the two legs cover the whole base universe, with FMP credits spent
+    only on the overlay tier.
+
+    Pre-bootstrap (`extended_membership` still empty between the Stop B merge
+    and the Stop C bootstrap run) the FMP leg is itself still on its legacy
+    Core targets, so this degrades to the pre-migration `extended − core` list
+    with a logged warning. Semantics switch by themselves once membership
+    exists.
+    """
+    from src.data.universe_resolver import current_base_universe
+
+    try:
+        base = current_base_universe(store=store)
+    except Exception as e:
+        logger.warning(
+            "current_base_universe unavailable, yfinance price targets stay on "
+            "the legacy extended-minus-core list: %s", e
+        )
+        return _legacy_extended_only_targets()
+
+    from src.data.price_fetcher import get_fmp_price_targets
+
+    fmp_tier = {s.upper() for s in get_fmp_price_targets(store=store)}
+    return sorted({s.upper() for s in base} - fmp_tier)
+
+
 def update_extended_prices(
     full_backfill: bool = False,
     symbols: Optional[List[str]] = None,
     start_date: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Update extended universe prices in market.db.
+    """Update yfinance-sourced daily prices in market.db.
 
     Args:
         full_backfill: Force 5-year backfill for all symbols.
-        symbols: Override symbol list (default: get_extended_only_symbols()).
+        symbols: Override symbol list (default: get_yfinance_price_targets()).
         start_date: Optional incremental start date for symbols with existing history.
 
     Returns:
         Stats dict with total, success, failed, rows_inserted.
     """
-    from src.data.extended_universe_manager import get_extended_only_symbols
     from src.data.market_store import get_store
 
     if symbols is None:
-        symbols = get_extended_only_symbols()
+        symbols = get_yfinance_price_targets()
 
     if not symbols:
-        logger.warning("No extended-only symbols to update")
+        logger.warning("No yfinance price targets to update")
         return {"total": 0, "success": 0, "failed": [], "rows_inserted": 0}
 
     store = get_store()
