@@ -71,6 +71,68 @@ class TestCompanies:
         assert len(rated) == 1
         assert rated[0]["symbol"] == "MSFT"
 
+    def test_list_in_pool_only_chunks_queries_for_large_pools(self, store, monkeypatch):
+        """Matrix #5 (company_store.py list_companies): IN (?,...) placeholders
+        chunked into batches of 500 so pool sizes beyond SQLITE_MAX_VARIABLE_NUMBER
+        (999) never bind more than 500 params in a single statement."""
+        store.upsert_company("AAPL")
+
+        pool_symbols = [f"SYM{i:04d}" for i in range(1100)]
+        pool_symbols[0] = "AAPL"  # lands in the 1st chunk (0-499)
+
+        real_conn = store._get_conn()
+        calls = []
+
+        class _ExecuteSpy:
+            def execute(self_, query, params=()):
+                if "FROM companies" in query and "symbol IN" in query:
+                    calls.append(params)
+                    assert len(params) <= 500, (
+                        f"single query bound {len(params)} params (>500 chunk size)"
+                    )
+                return real_conn.execute(query, params)
+
+            def __getattr__(self_, name):
+                return getattr(real_conn, name)
+
+        monkeypatch.setattr(store, "_get_conn", lambda: _ExecuteSpy())
+
+        with patch("src.data.pool_manager.get_symbols", return_value=pool_symbols):
+            pool = store.list_companies(in_pool_only=True)
+
+        assert len(calls) == 3  # ceil(1100 / 500)
+        assert [c["symbol"] for c in pool] == ["AAPL"]
+
+    def test_list_in_pool_only_1100_symbols_no_raise_and_equivalent(self, store):
+        """Matrix #5 test spec: 1,100-symbol input doesn't raise and result
+        is equivalent to what an unchunked query would return."""
+        store.upsert_company("AAPL")
+        store.upsert_company("ZLAST")
+        store.upsert_company("EXCLUDED")  # not in the requested pool
+
+        pool_symbols = [f"SYM{i:04d}" for i in range(1100)]
+        pool_symbols[0] = "AAPL"       # 1st chunk (0-499)
+        pool_symbols[1050] = "ZLAST"   # 3rd chunk (1000-1099)
+
+        with patch("src.data.pool_manager.get_symbols", return_value=pool_symbols):
+            pool = store.list_companies(in_pool_only=True)
+
+        assert [c["symbol"] for c in pool] == ["AAPL", "ZLAST"]  # sorted, no dupes
+
+    def test_list_in_pool_only_chunking_combines_with_has_oprms_only(self, store):
+        store.upsert_company("AAPL")
+        store.upsert_company("ZLAST")
+        store.save_oprms_rating("ZLAST", dna="S", timing="A", timing_coeff=0.9)
+
+        pool_symbols = [f"SYM{i:04d}" for i in range(1100)]
+        pool_symbols[0] = "AAPL"
+        pool_symbols[1050] = "ZLAST"
+
+        with patch("src.data.pool_manager.get_symbols", return_value=pool_symbols):
+            pool = store.list_companies(in_pool_only=True, has_oprms_only=True)
+
+        assert [c["symbol"] for c in pool] == ["ZLAST"]
+
 
 # ---------------------------------------------------------------------------
 # OPRMS Ratings

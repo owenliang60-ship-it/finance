@@ -595,25 +595,41 @@ class CompanyStore:
     ) -> List[Dict[str, Any]]:
         """List companies with optional filters."""
         conn = self._get_conn()
-        query = "SELECT * FROM companies"
-        conditions = []
-        params: list = []
+
+        base_conditions = []
+        base_params: list = []
+        if has_oprms_only:
+            base_conditions.append(
+                "symbol IN (SELECT symbol FROM oprms_ratings WHERE is_current = 1)"
+            )
+
         if in_pool_only:
             from src.data.pool_manager import get_symbols
             pool_symbols = get_symbols()
             if not pool_symbols:
                 return []
-            placeholders = ",".join("?" for _ in pool_symbols)
-            conditions.append(f"symbol IN ({placeholders})")
-            params.extend(pool_symbols)
-        if has_oprms_only:
-            conditions.append(
-                "symbol IN (SELECT symbol FROM oprms_ratings WHERE is_current = 1)"
-            )
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
+            # SQLite caps bound parameters per statement at
+            # SQLITE_MAX_VARIABLE_NUMBER (historically 999) — chunk the IN
+            # (?,...) clause into batches of 500 so pool sizes beyond ~1,000
+            # symbols (Extended Primary Universe) can't blow the cap (matrix
+            # #5). Multiple statements, results merged + re-sorted.
+            chunk_size = 500
+            rows_by_symbol: Dict[str, Dict[str, Any]] = {}
+            for i in range(0, len(pool_symbols), chunk_size):
+                chunk = pool_symbols[i:i + chunk_size]
+                placeholders = ",".join("?" for _ in chunk)
+                conditions = base_conditions + [f"symbol IN ({placeholders})"]
+                params = base_params + list(chunk)
+                query = "SELECT * FROM companies WHERE " + " AND ".join(conditions)
+                for row in conn.execute(query, params).fetchall():
+                    rows_by_symbol[row["symbol"]] = dict(row)
+            return sorted(rows_by_symbol.values(), key=lambda r: r["symbol"])
+
+        query = "SELECT * FROM companies"
+        if base_conditions:
+            query += " WHERE " + " AND ".join(base_conditions)
         query += " ORDER BY symbol"
-        rows = conn.execute(query, params).fetchall()
+        rows = conn.execute(query, base_params).fetchall()
         return [dict(r) for r in rows]
 
     # ---- OPRMS Ratings ----
