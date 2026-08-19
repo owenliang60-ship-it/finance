@@ -16,10 +16,17 @@
 #   BROAD_UNIVERSE_FILE / EXTENDED_UNIVERSE_FILE（含 "UNIVERSE_FILE" 子串但不是它）
 #   extended_universe.json / broad_universe.json（含 "universe.json" 子串但不是它）
 # 单词边界仍无法区分「同名不同 owner」的方法（如 MarketStore.get_symbols(table)），
-# 故额外用 .get_symbols( / def get_symbols(self 显式排除该方法。
+# 故额外显式排除该方法的已知实例调用/定义形状：store.get_symbols( / self.get_symbols(
+# / def get_symbols(self ——注意不能用形如 *.get_symbols(* 的无界通配排除，那会连
+# pool_manager.get_symbols( 这种真实的遗留引用也一并吞掉（本脚本自身就应该被此类
+# 调用命中，而不是被静默滤掉）。
 #
 # 用法: bash scripts/check_core_references.sh
 # 零引用 → exit 0；有引用 → 打印清单 + exit 1
+#
+# NOTE: _is_noise_line() 定义在文件级作用域、且主流程被包在 main() 里、由文件末尾的
+# BASH_SOURCE 守卫按需调用——这样测试可以 `source` 本文件后直接单测
+# _is_noise_line，而不会触发整个 grep+exit 主流程。
 
 set -u
 
@@ -28,10 +35,6 @@ SCAN_DIRS="src scripts terminal backtest"
 SELF_PATH="src/data/pool_manager.py"
 CHECKER_PATH="scripts/check_core_references.sh"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$REPO_ROOT" || exit 1
-
 # NOTE: the per-line filtering logic lives in a function (not inlined in the
 # while-loop below) because macOS's stock bash 3.2 fails to parse a bare
 # `case ... esac` when it appears textually inside a `$(...)` command
@@ -39,8 +42,9 @@ cd "$REPO_ROOT" || exit 1
 # defined outside the substitution sidesteps it.
 _is_noise_line() {
     # returns 0 (true) if the line should be excluded
-    file="$1"
-    content="$2"
+    local file="$1"
+    local content="$2"
+    local stripped
 
     case "$file" in
         "$SELF_PATH"|"$CHECKER_PATH") return 0 ;;
@@ -53,27 +57,42 @@ _is_noise_line() {
     esac
 
     # 同名不同 owner 的方法（见文件头注释），单词边界无法区分，显式排除
+    # MarketStore 的已知实例调用/定义形状；不排除 pool_manager.get_symbols( 等
+    # 真实遗留引用。
     case "$content" in
-        *.get_symbols\(*|*"def get_symbols(self"*) return 0 ;;
+        *"store.get_symbols("*|*"self.get_symbols("*|*"def get_symbols(self"*) return 0 ;;
     esac
 
     return 1
 }
 
-matches=$(grep -rEn --include='*.py' --include='*.sh' "$PATTERN" $SCAN_DIRS 2>/dev/null | \
-    while IFS=: read -r file line content; do
-        if _is_noise_line "$file" "$content"; then
-            continue
-        fi
-        printf '%s:%s:%s\n' "$file" "$line" "$content"
-    done)
+_main() {
+    local script_dir repo_root matches count
 
-if [ -z "$matches" ]; then
-    echo "check_core_references: 0 functional references found. Stop G static-check condition met."
-    exit 0
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    repo_root="$(cd "$script_dir/.." && pwd)"
+    cd "$repo_root" || return 1
+
+    matches=$(grep -rEn --include='*.py' --include='*.sh' "$PATTERN" $SCAN_DIRS 2>/dev/null | \
+        while IFS=: read -r file line content; do
+            if _is_noise_line "$file" "$content"; then
+                continue
+            fi
+            printf '%s:%s:%s\n' "$file" "$line" "$content"
+        done)
+
+    if [ -z "$matches" ]; then
+        echo "check_core_references: 0 functional references found. Stop G static-check condition met."
+        return 0
+    fi
+
+    count=$(printf '%s\n' "$matches" | wc -l | tr -d ' ')
+    echo "check_core_references: $count functional reference(s) to legacy Core pool entry point found:"
+    printf '%s\n' "$matches"
+    return 1
+}
+
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    _main
+    exit $?
 fi
-
-count=$(printf '%s\n' "$matches" | wc -l | tr -d ' ')
-echo "check_core_references: $count functional reference(s) to legacy Core pool entry point found:"
-printf '%s\n' "$matches"
-exit 1

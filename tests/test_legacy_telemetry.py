@@ -146,3 +146,37 @@ class TestCheckCoreReferencesScript:
         assert "BROAD_UNIVERSE_FILE" not in output
         assert "EXTENDED_UNIVERSE_FILE" not in output
         assert "backtest/rebalancer.py" not in output
+
+    @staticmethod
+    def _is_noise_line(file_, content):
+        """通过 `source` 脚本（不触发主流程，见脚本内 BASH_SOURCE 守卫）直接单测
+        _is_noise_line()。返回 shell 退出码：0=判定为噪声（排除），1=判定为真实引用（保留）。
+        file_/content 经参数传递而非拼进脚本字符串，避免引号/特殊字符转义问题。"""
+        script = f'source "{CHECK_SCRIPT}"; _is_noise_line "$1" "$2"'
+        result = subprocess.run(
+            ["bash", "-c", script, "check_helper", file_, content],
+            capture_output=True, text=True,
+        )
+        return result.returncode
+
+    def test_noise_filter_flags_pool_manager_dotted_call_as_real_reference(self):
+        """回归 review round-1 finding：`.get_symbols(` 排除曾用无界通配
+        `*.get_symbols\\(*`，连 pool_manager.get_symbols( 这种真实遗留引用也一并
+        滤掉了。修复后：点号限定调用只有明确的 MarketStore 实例形状
+        （store./self.get_symbols(）才被排除，pool_manager. 前缀必须仍被判定为
+        真实引用（保留，rc=1）。"""
+        rc = self._is_noise_line(
+            "some/hypothetical_future_file.py",
+            "        symbols = pool_manager.get_symbols()",
+        )
+        assert rc == 1, "pool_manager.get_symbols( must be FLAGGED, not silently excluded"
+
+    def test_noise_filter_excludes_market_store_instance_call(self):
+        """store.get_symbols( / self.get_symbols( 是 MarketStore 的实例调用/方法体
+        内调用形状，明确排除（rc=0）。"""
+        assert self._is_noise_line(
+            "src/data/market_store.py", '        return self.get_symbols("daily_price")'
+        ) == 0
+        assert self._is_noise_line(
+            "scripts/rs_universe_scan.py", '    cached_symbols = set(store.get_symbols("daily_price"))'
+        ) == 0
