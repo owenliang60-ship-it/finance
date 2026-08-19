@@ -23,9 +23,10 @@ def temp_db(tmp_path):
 
 def _patch_loaders(monkeypatch, db, pool, ext):
     monkeypatch.setattr("scripts.verify_forward_coverage.MARKET_DB", db)
-    monkeypatch.setattr("scripts.verify_forward_coverage.get_pool_symbols", lambda: pool)
-    monkeypatch.setattr("scripts.verify_forward_coverage.get_extended_only_symbols", lambda: ext)
-    monkeypatch.setattr("scripts.verify_forward_coverage.get_overlay_symbols", lambda: [])
+    monkeypatch.setattr(
+        "scripts.verify_forward_coverage.get_expected_buckets",
+        lambda: {"overlay": sorted(set(pool)), "base": sorted(set(ext))},
+    )
 
 
 def test_full_coverage_within_date_window(temp_db, monkeypatch):
@@ -38,8 +39,8 @@ def test_full_coverage_within_date_window(temp_db, monkeypatch):
     from scripts.verify_forward_coverage import run
     rc, report = run(scope="all", min_core_pct=99, min_extended_pct=95, min_date="2026-05-01")
     assert rc == 0
-    assert report["core"]["covered"] == 2
-    assert report["extended"]["covered"] == 2
+    assert report["overlay"]["covered"] == 2
+    assert report["base"]["covered"] == 2
 
 
 def test_old_data_excluded_by_min_date(temp_db, monkeypatch):
@@ -56,7 +57,7 @@ def test_old_data_excluded_by_min_date(temp_db, monkeypatch):
     from scripts.verify_forward_coverage import run
     rc, report = run(scope="core", min_core_pct=99, min_extended_pct=95, min_date="2026-05-01")
     assert rc == 1  # NVDA 在窗口内缺失
-    assert "NVDA" in report["core"]["missing"]
+    assert "NVDA" in report["overlay"]["missing"]
 
 
 def test_no_min_date_counts_all(temp_db, monkeypatch):
@@ -82,7 +83,7 @@ def test_scope_core_skips_extended(temp_db, monkeypatch):
     from scripts.verify_forward_coverage import run
     rc, report = run(scope="core", min_core_pct=99, min_extended_pct=95, min_date="2026-05-01")
     assert rc == 0
-    assert "extended" not in report
+    assert "base" not in report
 
 
 def test_empty_expected_fails_fast(temp_db, monkeypatch):
@@ -100,11 +101,11 @@ def test_empty_expected_fails_fast(temp_db, monkeypatch):
     rc, report = run(scope="all", min_core_pct=99, min_extended_pct=95,
                      min_date="2026-05-01")
     assert rc == 1
-    assert report["core"]["ok"] is False
-    assert report["core"]["expected"] == 0
-    assert report["core"]["pct"] == 0.0
-    assert report["extended"]["ok"] is False
-    assert report["extended"]["expected"] == 0
+    assert report["overlay"]["ok"] is False
+    assert report["overlay"]["expected"] == 0
+    assert report["overlay"]["pct"] == 0.0
+    assert report["base"]["ok"] is False
+    assert report["base"]["expected"] == 0
 
 
 def test_extended_bucket_keeps_noncore_overlay_symbol(temp_db, monkeypatch):
@@ -113,13 +114,35 @@ def test_extended_bucket_keeps_noncore_overlay_symbol(temp_db, monkeypatch):
     db, con = temp_db
     con.execute("INSERT INTO forward_estimates VALUES ('CVX', '2026-05-09', '0y', 1.0)")
     con.commit()
-    _patch_loaders(monkeypatch, db, ["AAPL"], [])
-    monkeypatch.setattr("scripts.verify_forward_coverage.get_overlay_symbols", lambda: ["CVX"])
+    _patch_loaders(monkeypatch, db, [], ["CVX"])
 
     from scripts.verify_forward_coverage import run
     rc, report = run(scope="extended", min_core_pct=99,
                      min_extended_pct=95, min_date="2026-05-01")
 
     assert rc == 0
-    assert report["extended"]["expected"] == 1
-    assert report["extended"]["covered"] == 1
+    assert report["base"]["expected"] == 1
+    assert report["base"]["covered"] == 1
+
+
+def test_base_and_overlay_buckets_are_disjoint_and_preserve_union(
+        temp_db, monkeypatch):
+    db, con = temp_db
+    for sym in ["AAPL", "MSFT", "CVX"]:
+        con.execute(
+            "INSERT INTO forward_estimates VALUES (?, '2026-05-09', '0y', 1.0)",
+            (sym,),
+        )
+    con.commit()
+    monkeypatch.setattr("scripts.verify_forward_coverage.MARKET_DB", db)
+    monkeypatch.setattr(
+        "scripts.verify_forward_coverage.get_expected_buckets",
+        lambda: {"overlay": ["AAPL", "CVX"], "base": ["MSFT"]},
+    )
+
+    from scripts.verify_forward_coverage import run
+    rc, report = run(scope="all", min_core_pct=99,
+                     min_extended_pct=95, min_date="2026-05-01")
+
+    assert rc == 0
+    assert report["overlay"]["expected"] + report["base"]["expected"] == 3
