@@ -57,17 +57,31 @@
 
 ### 第一层：数据层（地基）
 
-日频自动更新的原始数据，为上层分析提供输入。
+自动更新的原始数据，为上层分析提供输入。
 
-| 数据类型 | 来源 | 存储 | 更新频率 |
+**Universe 语义（2026-08 修订）**
+- 唯一默认 base universe = **Extended**（FMP NYSE/NASDAQ active、非 ETF/Fund、市值 ≥$10B、
+  经 security master 资格闸门去除重复 share class 与身份异常）
+- 持仓 / 手动关注 / 基准 ETF 通过**显式 overlay** 进入具体任务，不改变 base 定义
+- Broad（$1B+）仍为价格/市值研究底座；Core Pool 软退役中（全调用方迁移 + 对拍完成后删除）
+- 昂贵数据（IV / 期权链 / 新闻 / LLM 深度分析）**永不**随 base 扩大自动全池运行
+
+| 数据类型 | 来源 | 存储 | 更新机制 |
 |---------|------|------|---------|
-| 量价 | FMP API | market.db:daily_price | 日频 (云端 cron) |
-| 基本面 | FMP API | market.db:income/BS/CF/ratios/metrics | 周频 (云端 cron) |
-| 期权 IV | MarketData.app | market.db:iv_daily | 日频 (云端 cron) |
-| 宏观 | FRED API | macro_snapshot.json (4h/12h TTL) | 准实时 |
-| 前瞻预期 | yfinance | market.db:forward_estimates/metadata | 周频 (云端 cron) |
-| 社交情感 | Adanos (Reddit + X) | market.db:social_sentiment | 日频 (云端 cron 06:55) |
-| 新闻 | FMP API | 按需获取 | 按需 |
+| 量价 | FMP + yfinance | market.db:daily_price | 日频 (云端 cron) |
+| 基本面 current | FMP | market.db:income/BS/CF/metrics_quarterly | 财报事件驱动 + 周日全池对账 |
+| 基本面 vintage | 采集时自建 | market.db:fundamental_vintage (append-only, change-only) | 随每次采集 |
+| Universe membership | FMP screener + security master | market.db:extended_membership (SCD-2) | 周频 |
+| 覆盖率状态 | 自建 | market.db:coverage_status (六态失败语义) | 随采集 + 周对账 |
+| 期权 IV | MarketData.app | market.db:iv_daily | 日频（显式 targets：持仓∪关注∪基准，非全池） |
+| 前瞻预期 | FMP + yfinance | market.db:fmp_estimates / forward_estimates (周频 PIT) | 周频 |
+| 宏观 | FRED | macro_snapshot.json (4h/12h TTL) | 准实时 |
+| 社交情感 | Adanos (已 archive) | market.db:social_sentiment (历史) | 停更 |
+| 新闻 | FMP | 按需获取 | 按需 |
+
+**PIT 边界**：严格 PIT（`known_as_of`，认知时间轴重放）自 vintage 上线日起有效；
+上线前历史一律 approximate PIT（`approximate_as_reported`：as-of 历史市值门槛 + 最新重述值 +
+accepted_date 过滤），输出强制携带 approximate 标签，两接口不可混用。
 
 ### 第二层：分析层（三维度）
 
@@ -200,3 +214,5 @@
 | CIO 风格 | 集中型，AI 武装的传奇个人投资者 | 2026-03-03 |
 | 建设路径 | 自下而上，先补分析层再建策略层和 CIO | 2026-03-07 |
 | CIO 层拆分 | CIO-A（组合管理/诊断）与 CIO-B（组合构建）拆分，CIO-A 可独立建设；建设路径改为主轨/副轨并行 | 2026-04-05 |
+| Extended 唯一主池 | Core 软退役，Extended $10B+ 为唯一默认 base + explicit overlay | 2026-08-18 |
+| 基本面 PIT 双轨 | current 表高效查询 + fundamental_vintage 不可变版次；严格/近似 PIT 双接口 | 2026-08-18 |
