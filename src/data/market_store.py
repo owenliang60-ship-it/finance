@@ -38,6 +38,12 @@ try:
 except ImportError:
     _DEFAULT_DB_PATH = _PROJECT_ROOT / "data" / "market.db"
 
+try:
+    from config.settings import PROVIDER_EMPTY_TTL_DAYS as _CONFIGURED_PROVIDER_EMPTY_TTL_DAYS
+    _DEFAULT_PROVIDER_EMPTY_TTL_DAYS = _CONFIGURED_PROVIDER_EMPTY_TTL_DAYS
+except ImportError:
+    _DEFAULT_PROVIDER_EMPTY_TTL_DAYS = 30
+
 
 # ---------------------------------------------------------------------------
 # camelCase → snake_case helper
@@ -2466,7 +2472,7 @@ class MarketStore:
         "ok", "not_applicable", "provider_empty", "fetch_failed", "stale",
         "identity_blocked",
     })
-    _PROVIDER_EMPTY_TTL_DAYS = 30
+    _PROVIDER_EMPTY_TTL_DAYS = _DEFAULT_PROVIDER_EMPTY_TTL_DAYS
     _FETCH_FAILED_MAX_BACKOFF_DAYS = 16
 
     def _upsert_coverage_status_in_conn(self, conn: sqlite3.Connection,

@@ -367,6 +367,20 @@ EXTENDED_UNIVERSE_MIN_MCAP_B = 10             # $10B minimum market cap
 # 超过则视为财报序列断档，不算连续 8 个季度。
 FUNDAMENTAL_QUARTER_GAP_MAX_DAYS = 120
 
+# data_health._check_extended_coverage 的三表覆盖率阈值闸门。False（初始值）时
+# 低于阈值只 WARN，不 FAIL —— 防止生产回填完成前触发验收 gate 的假失败；
+# Stop F（回填完成）后翻 True，恢复 FAIL 熔断语义。
+EXTENDED_COVERAGE_ENFORCE = False
+
+# coverage_status 负缓存 TTL（provider 返回空/无覆盖后的重试冷却期，天）。
+# market_store._upsert_coverage_status_in_conn 读取（import 失败时本地兜底 30）。
+PROVIDER_EMPTY_TTL_DAYS = 30
+
+# data_health._check_pool_integrity 的股票数量硬边界（Boss 2026-08-18 拍板，
+# 解除今天已红的 209>200 旧闸门）。这是过渡期临时闸门，Stop G 阶段 2 会连同
+# 该检查一起整体删除，替换为 R3-P1-1 语义下的 Extended 覆盖率检查。
+POOL_SIZE_RANGE = (70, 260)
+
 # ============ Broad Universe ($1B+ bootstrap research universe) ============
 
 BROAD_UNIVERSE_SEED_FILE = POOL_DIR / "broad_universe_seed.json"
