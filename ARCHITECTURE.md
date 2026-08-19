@@ -122,11 +122,19 @@
 
 **BTC 择时**: `src/timing/dual_engine.py` + state_store。详见 `docs/plans/2026-03-26-dual-engine-btc-timing-system.md`。
 
-**池子分层**:
-- 核心池: `data/pool/universe.json`（FMP screener，市值阈值见 `config/settings.py`）
-- 扩展池: `data/pool/extended_universe.json`（FMP screener $10B+，~949 只，weekly 09:00 Sat 由 `broad_universe_cron_wrapper.sh weekly_refresh` 第 6 步 `refresh_extended` 刷新；MIN_COUNT_FLOOR=800 守护 cache 不被 FMP 空返回污染；A1 修复 screener limit truncation 见 issue 029）
-- 池外广扫: `data/scans/broad_universe.json`（yfinance screener $5B+ RVOL 扫描）
-- 退市 overlay: `data/pool/delisted_large_caps.json`（true survivorship 用，~21 只，独立 backfill）
+**Universe 架构**:
+- 默认 base: `market.db:extended_membership` active rows ∩ `security_master.eligible`（FMP `$10B+` Extended；唯一主池）。
+- explicit overlays: `company.db:holdings/watchlist` + benchmarks。昂贵数据只接受显式 targets。
+- `data/pool/extended_universe.json`: screener 当前名单的可重建 cache；membership DB 才是 current-base SSOT。
+- Broad: `market.db` 中 `$1B+` 历史价格/市值底座，服务广扫、因子研究和历史候选，不是默认讨论池。
+- Core: `data/pool/universe.json` 处于软退役兼容期；迁移完成后冻结归档，仅供旧研究复现。
+- 退市 overlay: `data/pool/delisted_large_caps.json`，服务 approximate historical candidates / true survivorship。
+
+**基本面双轨与更新状态**:
+- current: `income_quarterly` / `balance_sheet_quarterly` / `cash_flow_quarterly` / `metrics_quarterly`。
+- PIT: `fundamental_vintage`（UTC observed_at、change-only append）；上线前历史强制标记 approximate。
+- 采集状态: `coverage_status` 六态 + retry/TTL；backfill 使用 run header、dataset 粒度 jobs、flock、熔断和 resume。
+- 事件增量、reconciliation 与 backfill 共用 `fundamental_collector`，避免两套写入语义。
 
 **数据验证三层**:
 
@@ -144,10 +152,10 @@
 
 | 数据库/文件 | 所有权 | 主要内容 | 同步 |
 |-------------|--------|---------|------|
-| `market.db` | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, iv_daily, options_snapshots, forward_estimates/metadata, fmp_estimates, fmp_earnings, fmp_etf_holdings_snapshot, fmp_basket_valuation（Phase 2 才写）, fmp_forward_runs（run manifest 审计）, social_sentiment, market_sentiment, social_trending(*), historical_market_cap, broad_scan_hits, concepts(*), company_concept_tags | pull 到本地 |
+| `market.db` | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, security_master, extended_membership, company_profile, fundamental_vintage, coverage_status, fundamental_backfill_runs/jobs, iv_daily, options_snapshots, forward_estimates/metadata, fmp_estimates, fmp_earnings, fmp_etf_holdings_snapshot, fmp_basket_valuation（Phase 2 才写）, fmp_forward_runs, historical_market_cap, broad_scan_hits, concepts(*), company_concept_tags | pull 到本地 |
 | `reports/concept_registry/reviewed_current.csv` (+ manifest) | 云端独占写入 | concept registry canonical 快照（与 `company_concept_tags` symbol 集锁步；A3 weekly-sync 维护） | pull 到本地（仅 pull） |
-| `company.db` | 本地独占写入 | companies, oprms_ratings, analyses, kill_conditions, holdings, transactions, portfolio_cash, option_positions, option_transactions | push 到云端 |
-| `universe.json` | 双端 | 股票池定义 | 双向 merge（并集） |
+| `company.db` | 本地独占写入 | companies, oprms_ratings, analyses, kill_conditions, holdings, watchlist, transactions, portfolio_cash, option_positions, option_transactions | push 到云端 |
+| `universe.json` | 双端（退役过渡） | 冻结 Core 定义；不再承载默认 base | 双向 merge，Stop G 后归档 |
 | `data/macro/` | 准实时缓存 | FRED snapshot（4h/12h TTL） | 不同步 |
 | `data/companies/{SYM}/` | 本地 | Per-ticker JSON 存档（oprms / memos / analyses / scratchpad） | 不同步 |
 | `data/.backups/` | 本地 | Data Guardian 快照（tar.gz, max 10） | 不同步 |
@@ -198,9 +206,11 @@
 - 所有 cron 走 `cron_wrapper.sh` 标准包装（统一日志 + 错误处理 + Telegram 失败告警）
 - `finance_fundamental` 与 `finance_forward` 共用 `FINANCE_CRON_RESOURCE_KEY=market_db_writer` 资源锁——不并发写 market.db 的保证是锁，时钟只是缓冲；forward 另设 `FINANCE_CRON_LOCK_BUSY_RC=75`：PIT 任务锁忙即告警 + 非零退出，绝不静默跳过（漏掉的周快照补不回来）
 
-> **forward_estimates 表 stale 策略**：跟随核心 + 扩展池 weekly 刷新；退池标的**不做** stale cleanup——保留 history 作研究材料。覆盖率验证用 `scripts/verify_forward_coverage.py --min-date <本次 cron 日期>`，避免旧 row 误判通过。
+> **forward_estimates 表 stale 策略**：周频目标 = current base + explicit overlays；退池标的**不做** stale cleanup——保留 history 作研究材料。覆盖率 verifier 将 base 与 overlay 分桶，并支持 `--min-date` 防止旧 row 误判通过。
 
-> **FMP forward 数据线（Phase 1，2026-07 上线）**：周六顺序 = yfinance 旧线 → 5 ETF holdings 快照 → FMP estimates/earnings → 只读 verifier（`scripts/verify_fmp_forward.py`）。周频 universe = `core_pool ∪ extended_pool ∪ 5 篮子 included 规范化 symbol ∪ MAGS 静态 7`（约 1075–1175 只）；writer 在逐股请求前把 exact sorted universe 冻结进 `fmp_forward_runs`，verifier 只读该 manifest 作分母（≥90% 各有 ≥4 个未来非空 eps_avg 季度）。`fmp_basket_valuation` schema 已建、Phase 2 才写入。yfinance 线保持并行对拍，四周 review 通过前不下线。
+> **FMP forward 数据线（Phase 1，2026-07 上线）**：周六顺序 = yfinance 对拍线 → 5 ETF holdings 快照 → FMP estimates/earnings → 只读 verifier。周频 universe = `current base ∪ holdings/watchlist/benchmarks ∪ 5 篮子 included symbol ∪ MAGS`；bootstrap 前带日志回退旧 Core∪Extended。writer 在逐股请求前冻结 exact denominator 到 `fmp_forward_runs`，verifier 只读 manifest。`fmp_basket_valuation` schema 已建、Phase 2 才写入。
+
+> **价格双腿（Extended 主池迁移）**：FMP 日频额度仅用于 holdings/watchlist/benchmarks，current base 其余部分由 yfinance batch 更新；Core 退役过渡期，尚未迁入 watchlist 的 manual/analysis 票仍由 yfinance 腿兜底。06:30 pipeline 中 broad price 与该 batch 存在幂等重叠，Stop C 时结合真实耗时决定是否去重，不在代码合并阶段提前改时序。
 
 > **晨报「0b 成交集中度」context 小节**：市场级 Top50 成交额占比 + 名单换手率的平滑值与 1 年分位 + regime 标签，报告时现算（`market.db` 只读），定位为纯 context 展示、不进策略层；研究依据见 `docs/research/2026-07-24-volume-concentration-signal-stat-study.md`。
 
