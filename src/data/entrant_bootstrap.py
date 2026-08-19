@@ -22,13 +22,18 @@ Two consequences worth stating out loud:
     would mint a second eligible primary for a company already in SM
     (double-counted membership) the week a new share class lists.
     Re-grading incumbents already blocked as `identity_conflict` is
-    deliberately NOT done here — that is reconcile's (T12) job.
+    deliberately NOT done here — that is reconcile's (T12) job. An
+    incumbent is only ever demoted on evidence: when it carries no
+    market-cap data of its own the settlement is declined outright
+    (`_decline_metricless_demotions`), and any demotion that does happen
+    is logged as a warning, since the weekly caller keeps no hold of the
+    summary dict.
 """
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from src.data.security_master import SecurityRecord, resolve_share_classes
@@ -109,6 +114,84 @@ def _incumbents_sharing_cik(
     return records, profiles
 
 
+def _has_size_metric(profile: Optional[dict]) -> bool:
+    """Does this profile carry the value share-class settlement decides on?"""
+    if not profile:
+        return False
+    for key in ("mktCap", "marketCap"):
+        if profile.get(key) is not None:
+            return True
+    return False
+
+
+def _decline_metricless_demotions(
+    resolved: List[SecurityRecord],
+    prior_by_symbol: Dict[str, SecurityRecord],
+    entrant_symbols: set,
+    profiles: Dict[str, dict],
+) -> List[SecurityRecord]:
+    """Never let the ABSENCE of data demote an established primary.
+
+    `resolve_share_classes` picks the primary by mktCap, so an incumbent whose
+    `company_profile` row is missing (or carries no market cap) contributes no
+    value at all and the entrant wins the group uncontested — the incumbent
+    would lose its identity to a missing row rather than to evidence.
+
+    For those groups the verdict is declined: incumbents keep their existing
+    SM rows and the group's entrants are parked as `needs_review_primary`.
+    That is `resolve_share_classes`'s own no-data-no-verdict outcome ("if
+    everything is missing/tied throughout, needs_review_primary ... no auto
+    pick"), so the entrant stays out of membership and surfaces in
+    `get_needs_review_symbols()` until reconcile or a Boss override settles it.
+
+    `identity_conflict` verdicts are deliberately NOT declined: they are
+    decided on company_name, which every SM row carries, so no metric is
+    missing — and blocking the whole group is already the safe outcome.
+    """
+    by_symbol = {rec.symbol: rec for rec in resolved}
+
+    groups: Dict[str, List[SecurityRecord]] = {}
+    for rec in resolved:
+        if rec.cik:
+            groups.setdefault(rec.cik, []).append(rec)
+
+    for cik, members in groups.items():
+        member_symbols = {m.symbol for m in members}
+        entrants_here = sorted(member_symbols & entrant_symbols)
+        incumbents_here = sorted(member_symbols - entrant_symbols)
+        if not entrants_here or not incumbents_here:
+            continue  # nothing established to protect / nothing new to weigh
+        if any(m.reason == "identity_conflict" for m in members):
+            continue  # name-based verdict, not a metrics one
+
+        blind_losers = sorted(
+            m.symbol for m in members
+            if m.symbol in prior_by_symbol
+            and prior_by_symbol[m.symbol].eligible and not m.eligible
+            and not _has_size_metric(profiles.get(m.symbol))
+        )
+        if not blind_losers:
+            continue
+
+        for m in members:
+            if m.symbol in entrant_symbols:
+                by_symbol[m.symbol] = replace(
+                    m, eligible=False, reason="needs_review_primary", share_class_of=None
+                )
+            elif m.symbol in prior_by_symbol:
+                by_symbol[m.symbol] = prior_by_symbol[m.symbol]
+
+        logger.warning(
+            "share-class settlement DECLINED for CIK %s: incumbent(s) %s carry no "
+            "market-cap data, so the demotion would rest on an absent row, not on "
+            "evidence. Incumbent identity kept as-is; entrant(s) %s parked as "
+            "needs_review_primary.",
+            cik, ", ".join(blind_losers), ", ".join(entrants_here),
+        )
+
+    return [by_symbol[rec.symbol] for rec in resolved]
+
+
 def bootstrap_entrants(
     symbols: Iterable[str],
     *,
@@ -174,18 +257,36 @@ def bootstrap_entrants(
     )
 
     prior_by_symbol = {r.symbol: r for r in incumbents}
+    resolved = _decline_metricless_demotions(
+        resolved, prior_by_symbol, entrant_symbols, grouping_profiles
+    )
+
     now_iso = _now_iso()
     sm_rows: List[Dict[str, Any]] = []
+    demotions: List[Tuple[str, str, str]] = []
     for rec in resolved:
         prior = prior_by_symbol.get(rec.symbol)
         if prior is not None:
             if rec == prior:
                 continue  # incumbent unaffected by this batch — leave its row alone
             summary["reclassified"].append(rec.symbol)
+            if prior.eligible and not rec.eligible:
+                demotions.append((rec.symbol, prior.reason, rec.reason))
         sm_rows.append({**asdict(rec), "updated_at": now_iso})
 
     if sm_rows:
         store.upsert_security_master(sm_rows)
+
+    if demotions:
+        # The weekly cron keeps no hold of the summary dict, so an established
+        # member dropping out of the eligible universe has to be audible here.
+        detail = ", ".join([s + " (" + old + " -> " + new + ")"
+                            for s, old, new in sorted(demotions)])
+        logger.warning(
+            "entrant bootstrap demoted %d established member(s) OUT of the eligible "
+            "universe: %s — they exit extended_membership at this week's snapshot",
+            len(demotions), detail,
+        )
 
     conflicts = sorted(rec.symbol for rec in resolved if rec.reason == "identity_conflict")
     if conflicts:

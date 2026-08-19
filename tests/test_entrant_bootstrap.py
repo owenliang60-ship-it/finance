@@ -7,6 +7,7 @@ REUSES T6's per-symbol kernel, so the weekly entrant path must show exactly
 the same behavior rather than a parallel one that can drift.
 """
 import json
+import logging
 import sqlite3
 import sys
 from pathlib import Path
@@ -227,3 +228,147 @@ class TestBatchMechanics:
         assert summary["eligible"] == ["NEWCO"]
         assert summary["fetch_failed"] == ["DOWN"]
         assert sorted(summary["blocked"]) == ["GHOST"]
+
+
+class TestMetriclessIncumbentGuard:
+    """Review I1: absence of data must never flip an established primary.
+
+    `resolve_share_classes` picks the primary by mktCap, so an incumbent with
+    no usable market-cap value contributes nothing and the entrant wins the
+    group uncontested — a demotion resting on a missing row rather than on
+    evidence. Those groups are declined instead.
+    """
+
+    def _entrant_client(self, symbol="GOOG", cik="CIK-ALPHA",
+                        name="Alphabet Inc. Class C", mkt_cap=1000):
+        return _FakeClient(profiles={
+            symbol: _profile(symbol, cik=cik, name=name, mkt_cap=mkt_cap),
+        })
+
+    def test_incumbent_without_profile_row_is_not_demoted(self, tmp_store, caplog):
+        _seed_sm(tmp_store, "GOOGL", "CIK-ALPHA", "Alphabet Inc.")   # no company_profile row
+
+        with caplog.at_level(logging.WARNING):
+            summary = bootstrap_entrants(["GOOG"], client=self._entrant_client(),
+                                         store=tmp_store)
+
+        incumbent = _sm_row(tmp_store, "GOOGL")
+        assert incumbent["eligible"] == 1
+        assert incumbent["reason"] == "ok"
+        assert incumbent["share_class_of"] is None
+        # no data -> no verdict: the entrant is parked, not promoted
+        entrant = _sm_row(tmp_store, "GOOG")
+        assert entrant["reason"] == "needs_review_primary"
+        assert entrant["eligible"] == 0
+        assert entrant["share_class_of"] is None
+        assert summary["reclassified"] == []
+        assert summary["eligible"] == []
+        assert summary["blocked"]["GOOG"] == "needs_review_primary"
+        assert "GOOG" in tmp_store.get_needs_review_symbols()
+
+        messages = [r.message for r in caplog.records
+                    if r.name == "src.data.entrant_bootstrap"]
+        assert any("GOOGL" in m and "needs_review_primary" in m for m in messages)
+
+    def test_incumbent_profile_without_market_cap_is_not_demoted(self, tmp_store, caplog):
+        _seed_sm(tmp_store, "INCUM", "CIK-SHARED", "Shared Holdings")
+        payload = _profile("INCUM", cik="CIK-SHARED", name="Shared Holdings")
+        payload.pop("mktCap")
+        _seed_profile(tmp_store, "INCUM", payload)
+
+        with caplog.at_level(logging.WARNING):
+            bootstrap_entrants(
+                ["ENTRA"],
+                client=self._entrant_client(symbol="ENTRA", cik="CIK-SHARED",
+                                            name="Shared Holdings Class B", mkt_cap=5000),
+                store=tmp_store,
+            )
+
+        assert _sm_row(tmp_store, "INCUM")["eligible"] == 1
+        assert _sm_row(tmp_store, "ENTRA")["reason"] == "needs_review_primary"
+        messages = [r.message for r in caplog.records
+                    if r.name == "src.data.entrant_bootstrap"]
+        assert any("INCUM" in m and "ENTRA" in m for m in messages)
+
+    def test_metric_backed_demotion_is_still_allowed(self, tmp_store):
+        """The guard blocks demotion on ABSENT data, not on losing on the numbers."""
+        _seed_sm(tmp_store, "SMALL", "CIK-ALPHA", "Alphabet Inc.")
+        _seed_profile(tmp_store, "SMALL", _profile("SMALL", cik="CIK-ALPHA",
+                                                   name="Alphabet Inc.", mkt_cap=100))
+
+        summary = bootstrap_entrants(
+            ["BIG"],
+            client=self._entrant_client(symbol="BIG", cik="CIK-ALPHA",
+                                        name="Alphabet Inc. Class A", mkt_cap=9000),
+            store=tmp_store,
+        )
+
+        assert _sm_row(tmp_store, "BIG")["eligible"] == 1
+        assert _sm_row(tmp_store, "SMALL")["reason"] == "secondary_share_class"
+        assert summary["reclassified"] == ["SMALL"]
+
+    def test_name_conflict_still_blocks_a_metricless_incumbent(self, tmp_store):
+        """identity_conflict is decided on company_name, which every SM row
+        carries — no metrics involved, so the guard must not shield it."""
+        _seed_sm(tmp_store, "INCUM", "CIK-SHARED", "Alpha Industries")   # no profile row
+
+        bootstrap_entrants(
+            ["ENTRA"],
+            client=self._entrant_client(symbol="ENTRA", cik="CIK-SHARED",
+                                        name="Beta Corporation", mkt_cap=5000),
+            store=tmp_store,
+        )
+
+        for symbol in ("INCUM", "ENTRA"):
+            row = _sm_row(tmp_store, symbol)
+            assert row["reason"] == "identity_conflict"
+            assert row["eligible"] == 0
+            assert tmp_store.get_coverage("identity")[symbol] == "identity_blocked"
+
+    def test_entrant_only_group_settles_normally(self, tmp_store):
+        """No incumbent in the group -> nothing established to protect."""
+        client = _FakeClient(profiles={
+            "AAA": _profile("AAA", cik="CIK-NEW", name="Newco Inc.", mkt_cap=900),
+            "BBB": _profile("BBB", cik="CIK-NEW", name="Newco Inc. Class B", mkt_cap=100),
+        })
+
+        summary = bootstrap_entrants(["AAA", "BBB"], client=client, store=tmp_store)
+
+        assert _sm_row(tmp_store, "AAA")["eligible"] == 1
+        assert _sm_row(tmp_store, "BBB")["reason"] == "secondary_share_class"
+        assert summary["eligible"] == ["AAA"]
+
+
+class TestDemotionVisibility:
+    """Review I2: an established member losing eligibility must be visible in
+    the log at the point it happens — every caller inherits it, including the
+    weekly cron, which discards the summary dict.
+    """
+
+    def test_demoting_an_eligible_incumbent_logs_a_warning(self, tmp_store, caplog):
+        _seed_sm(tmp_store, "SMALL", "CIK-ALPHA", "Alphabet Inc.")
+        _seed_profile(tmp_store, "SMALL", _profile("SMALL", cik="CIK-ALPHA",
+                                                   name="Alphabet Inc.", mkt_cap=100))
+        client = _FakeClient(profiles={
+            "BIG": _profile("BIG", cik="CIK-ALPHA", name="Alphabet Inc. Class A",
+                            mkt_cap=9000),
+        })
+
+        with caplog.at_level(logging.WARNING):
+            bootstrap_entrants(["BIG"], client=client, store=tmp_store)
+
+        messages = [r.message for r in caplog.records
+                    if r.name == "src.data.entrant_bootstrap" and r.levelno >= logging.WARNING]
+        assert any("SMALL" in m and "ok" in m and "secondary_share_class" in m
+                   for m in messages), messages
+
+    def test_no_warning_when_nothing_is_reclassified(self, tmp_store, caplog):
+        _seed_sm(tmp_store, "AAPL", "CIK-AAPL", "Apple Inc.")
+
+        with caplog.at_level(logging.WARNING):
+            summary = bootstrap_entrants(["NEWCO"], client=_FakeClient(), store=tmp_store)
+
+        assert summary["reclassified"] == []
+        warnings = [r.message for r in caplog.records
+                    if r.name == "src.data.entrant_bootstrap" and r.levelno >= logging.WARNING]
+        assert warnings == []
