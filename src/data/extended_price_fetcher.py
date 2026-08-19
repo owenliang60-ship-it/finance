@@ -240,8 +240,11 @@ def get_yfinance_price_targets(store=None) -> List[str]:
 
     from src.data.price_fetcher import get_fmp_price_targets
 
-    fmp_tier = {s.upper() for s in get_fmp_price_targets(store=store)}
-    return sorted({s.upper() for s in base} - fmp_tier)
+    fmp_tier = {s.upper() for s in get_fmp_price_targets(
+        store=store, base_symbols=base)}
+    from src.data.pool_manager import get_symbols as get_pool_symbols
+    legacy_core = {s.upper() for s in get_pool_symbols()}
+    return sorted(({s.upper() for s in base} | legacy_core) - fmp_tier)
 
 
 def update_extended_prices(

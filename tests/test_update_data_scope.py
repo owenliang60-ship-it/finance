@@ -36,14 +36,33 @@ def test_scope_extended_uses_extended_only(mock_pool, mock_ext):
     assert mock_ext.called
 
 
+@patch("src.data.overlays.load_overlay_tier", return_value=[])
 @patch("src.data.extended_universe_manager.get_extended_only_symbols")
 @patch("src.data.pool_manager.get_symbols")
-def test_scope_all_returns_union_no_duplicates(mock_pool, mock_ext):
+def test_scope_all_returns_union_no_duplicates(mock_pool, mock_ext, _mock_overlay):
     from scripts.update_data import _resolve_target_symbols
     mock_pool.return_value = ["AAPL", "NVDA", "SHARED"]
     mock_ext.return_value = ["SHARED", "EXT1", "EXT2"]
     result = _resolve_target_symbols(scope="all", symbols=None)
     assert result == sorted({"AAPL", "NVDA", "SHARED", "EXT1", "EXT2"})
+
+
+@patch("src.data.overlays.load_overlay_tier")
+@patch("src.data.extended_universe_manager.get_extended_only_symbols")
+@patch("src.data.pool_manager.get_symbols")
+def test_scope_all_keeps_overlay_symbols_excluded_from_price_forwarder(
+        mock_pool, mock_ext, mock_overlay):
+    """B2 review C2: get_extended_only_symbols is a price-tier complement,
+    so scope=all must add the overlay tier back for yfinance forward estimates."""
+    from scripts.update_data import _resolve_target_symbols
+
+    mock_pool.return_value = ["AAPL"]
+    mock_ext.return_value = ["MSFT"]
+    mock_overlay.return_value = ["CVX", "SPY"]
+
+    result = _resolve_target_symbols(scope="all", symbols=None)
+
+    assert result == ["AAPL", "CVX", "MSFT", "SPY"]
 
 
 def test_invalid_scope_raises():

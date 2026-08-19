@@ -20,6 +20,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from config.settings import MARKET_DB_PATH as MARKET_DB  # noqa: E402
 from src.data.pool_manager import get_symbols as get_pool_symbols  # noqa: E402
 from src.data.extended_universe_manager import get_extended_only_symbols  # noqa: E402
+from src.data.overlays import load_overlay_tier as get_overlay_symbols  # noqa: E402
 
 
 def _valid_iso_date(s: str) -> str:
@@ -86,8 +87,11 @@ def run(scope: str, min_core_pct: float, min_extended_pct: float,
     if scope in ("core", "all"):
         report["core"] = _bucket_report("core", get_pool_symbols(), covered, min_core_pct)
     if scope in ("extended", "all"):
+        extended_expected = sorted(
+            set(get_extended_only_symbols()) | set(get_overlay_symbols())
+        )
         report["extended"] = _bucket_report(
-            "extended", get_extended_only_symbols(), covered, min_extended_pct
+            "extended", extended_expected, covered, min_extended_pct
         )
     rc = 0 if all(b["ok"] for b in report.values()) else 1
     return rc, report

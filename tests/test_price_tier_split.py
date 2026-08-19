@@ -80,6 +80,24 @@ class TestFmpPriceTargets:
 
 
 class TestYfinanceLeg:
+    def test_post_bootstrap_preserves_legacy_core_and_resolves_base_once(self):
+        """B2 review C1/I4: the two price legs share one base snapshot and
+        preserve sub-$10B legacy Core names until matrix #22 migrates them to
+        the watchlist overlay."""
+        from scripts.update_data import _resolve_price_leg_targets
+
+        with patch("src.data.universe_resolver.current_base_universe",
+                   return_value=list(BASE_UNIVERSE)) as mock_base, \
+             patch("src.data.overlays.load_holdings", return_value=list(HOLDINGS)), \
+             patch("src.data.overlays.load_watchlist", return_value=list(WATCHLIST)), \
+             patch("src.data.overlays.load_benchmarks", return_value=list(BENCHMARK_SYMBOLS)), \
+             patch("src.data.pool_manager.get_symbols", return_value=list(LEGACY_CORE)):
+            fmp_targets, yf_targets = _resolve_price_leg_targets()
+
+        assert mock_base.call_count == 1
+        assert set(LEGACY_CORE) <= set(fmp_targets) | set(yf_targets)
+        assert {"GOOG", "META"} <= set(yf_targets)
+
     def test_leg_targets_are_the_base_universe_minus_the_fmp_tier(self):
         from scripts.update_data import _yfinance_price_leg_targets
 

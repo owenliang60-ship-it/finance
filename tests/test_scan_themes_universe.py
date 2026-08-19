@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -41,42 +42,64 @@ def _ranking(theme_map):
             sorted(theme_map.items(), key=lambda kv: (-len(kv[1]), kv[0]))]
 
 
-class TestFrozenFixtureParity:
-    def test_no_old_symbol_vanishes_from_its_theme(self):
-        old = match_themes(
-            get_momentum_tickers(FROZEN_MOMENTUM, FROZEN_INDICATORS, CORE_UNIVERSE),
-            seed=SEED)
-        new = match_themes(
-            get_momentum_tickers(FROZEN_MOMENTUM, FROZEN_INDICATORS, ELIGIBLE_UNIVERSE),
-            seed=SEED)
+def _price_frame(slope):
+    days = 90
+    x = np.arange(days)
+    close = 100 * np.exp(slope * x) * (1 + 0.002 * np.sin(x / 3))
+    return pd.DataFrame({
+        "date": pd.date_range("2026-01-01", periods=days),
+        "close": close,
+        "volume": np.full(days, 1_000_000),
+    })
 
-        for theme, tickers in old.items():
-            assert theme in new, f"theme {theme} vanished"
-            assert set(tickers) <= set(new[theme]), f"symbols dropped from {theme}"
 
-    def test_widening_only_adds(self):
-        old = match_themes(
-            get_momentum_tickers(FROZEN_MOMENTUM, FROZEN_INDICATORS, CORE_UNIVERSE),
-            seed=SEED)
-        new = match_themes(
-            get_momentum_tickers(FROZEN_MOMENTUM, FROZEN_INDICATORS, ELIGIBLE_UNIVERSE),
-            seed=SEED)
+class TestRealCrossSectionParity:
+    def test_widening_recomputes_rs_and_records_the_expected_loss(self):
+        """B2 review I3: exercise the real cross-sectional ranker.
 
-        assert set(new["ai_chip"]) - set(old["ai_chip"]) == {"AVGO", "MRVL"}
-        assert "ai_software" in new and "ai_software" not in old
+        Expanding the denominator may legitimately push an old Core winner
+        below P80.  The contract is that every old symbol remains observable
+        in the new RS frame and the threshold loss is explicit, not silently
+        caused by a missing price series.
+        """
+        from src.indicators.engine import run_momentum_scan
 
-    def test_top_n_ranking_keeps_every_old_theme(self):
-        old = match_themes(
-            get_momentum_tickers(FROZEN_MOMENTUM, FROZEN_INDICATORS, CORE_UNIVERSE),
-            seed=SEED)
-        new = match_themes(
-            get_momentum_tickers(FROZEN_MOMENTUM, FROZEN_INDICATORS, ELIGIBLE_UNIVERSE),
-            seed=SEED)
+        slopes = {
+            "AAPL": 0.0030,
+            "AMD": 0.0025,
+            "MU": 0.0020,
+            "NVDA": 0.0035,
+            "KO": 0.0010,
+            "AVGO": 0.0060,
+            "MRVL": 0.0055,
+            "PLTR": 0.0050,
+        }
+        frames = {symbol: _price_frame(slope)
+                  for symbol, slope in slopes.items()}
 
-        top_n = len(_ranking(new))
-        assert set(_ranking(old)) <= set(_ranking(new)[:top_n])
-        # ai_chip led before and still leads — widening added to it, not past it
-        assert _ranking(new)[0] == _ranking(old)[0] == "ai_chip"
+        with patch("src.indicators.engine.get_price_df",
+                   side_effect=lambda symbol, max_age_days=0: frames[symbol]), \
+             patch("src.indicators.dv_acceleration.scan_dv_acceleration",
+                   return_value=pd.DataFrame()), \
+             patch("src.indicators.rvol_sustained.scan_rvol_sustained",
+                   return_value=[]):
+            old_rs = run_momentum_scan(CORE_UNIVERSE)["rs_rating_b"]
+            new_rs = run_momentum_scan(ELIGIBLE_UNIVERSE)["rs_rating_b"]
+
+        old_rank = dict(zip(old_rs["symbol"], old_rs["rs_rank"]))
+        new_rank = dict(zip(new_rs["symbol"], new_rs["rs_rank"]))
+        assert set(CORE_UNIVERSE) <= set(new_rank)
+
+        old_pass = {s for s, rank in old_rank.items() if rank >= 80}
+        new_pass = {s for s, rank in new_rank.items() if rank >= 80}
+        losses = old_pass - new_pass
+        assert losses == {"NVDA"}
+        assert (old_rank["NVDA"], new_rank["NVDA"]) == (99, 57)
+
+        old_themes = match_themes(sorted(old_pass), seed=SEED)
+        new_themes = match_themes(sorted(new_pass), seed=SEED)
+        assert old_themes == {"ai_chip": ["NVDA"]}
+        assert new_themes == {"ai_chip": ["AVGO", "MRVL"]}
 
 
 class TestScanUniverseResolution:

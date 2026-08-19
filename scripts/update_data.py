@@ -26,6 +26,7 @@
 不变，两腿合计覆盖率 ≥ 迁移前。显式 `--symbols` 只跑 FMP 腿（调用方点名了目标）。
 """
 import argparse
+import logging
 import sys
 from pathlib import Path
 from datetime import datetime, timezone
@@ -43,6 +44,7 @@ from src.data.fundamental_collector import collect_fundamentals_for_symbol
 from config.settings import ADANOS_REQUEST_DAYS, ADANOS_TRENDING_LIMIT
 
 FUNDAMENTAL_SCOPE_CHOICES = ("core", "extended", "all", "base", "events")
+logger = logging.getLogger(__name__)
 
 
 def _resolve_target_symbols(scope: str, symbols, *, store=None, as_of=None):
@@ -82,7 +84,12 @@ def _resolve_target_symbols(scope: str, symbols, *, store=None, as_of=None):
     if scope == "all":
         from src.data.pool_manager import get_symbols
         from src.data.extended_universe_manager import get_extended_only_symbols
-        return sorted(set(get_symbols()) | set(get_extended_only_symbols()))
+        from src.data.overlays import load_overlay_tier
+        return sorted(
+            set(get_symbols())
+            | set(get_extended_only_symbols())
+            | set(load_overlay_tier())
+        )
 
     if scope == "base":
         from src.data.universe_resolver import current_base_universe
@@ -114,7 +121,9 @@ def _should_run_price_yfinance_leg(args, symbols) -> bool:
     return not (args.all or args.extended_prices)
 
 
-def _yfinance_price_leg_targets(fmp_targets, *, store=None):
+def _yfinance_price_leg_targets(
+        fmp_targets, *, store=None, base_symbols=None,
+        legacy_core_symbols=None):
     """基础池里 FMP tier 没覆盖到的部分，交给 yfinance batch（矩阵 #6, P1）。
 
     Args:
@@ -129,14 +138,61 @@ def _yfinance_price_leg_targets(fmp_targets, *, store=None):
     """
     from src.data.universe_resolver import current_base_universe
 
+    if base_symbols is None:
+        try:
+            base_symbols = current_base_universe(store=store)
+        except Exception as e:
+            logger.error("yfinance price leg cannot resolve base universe: %s", e)
+            return []
+
+    if legacy_core_symbols is None:
+        legacy_core_symbols = []
+
+    covered = {s.upper() for s in fmp_targets}
+    required = (
+        {s.upper() for s in base_symbols}
+        | {s.upper() for s in legacy_core_symbols}
+    )
+    return sorted(required - covered)
+
+
+def _resolve_price_leg_targets(*, store=None, legacy_core_loader=None):
+    """Resolve both daily-price legs from one base snapshot.
+
+    Until matrix #22 migrates manual/analysis Core names to the watchlist,
+    the yfinance complement deliberately includes legacy Core.  A fail-loud
+    coverage assertion prevents the two individually-successful legs from
+    silently stranding those names.
+    """
+    from src.data.pool_manager import get_symbols as get_pool_symbols
+    from src.data.universe_resolver import current_base_universe
+    from src.data.price_fetcher import get_fmp_price_targets
+
+    load_legacy = legacy_core_loader or get_pool_symbols
+    legacy_core = sorted({s.upper() for s in load_legacy()})
+
     try:
         base = current_base_universe(store=store)
     except Exception as e:
-        print(f"  yfinance 腿跳过（基础池不可用: {e}）")
-        return []
+        logger.error(
+            "current_base_universe unavailable; daily price legs stay on "
+            "legacy Core coverage: %s", e)
+        return legacy_core, []
 
-    covered = {s.upper() for s in fmp_targets}
-    return sorted({s.upper() for s in base} - covered)
+    fmp_targets = get_fmp_price_targets(store=store, base_symbols=base)
+    yf_targets = _yfinance_price_leg_targets(
+        fmp_targets,
+        store=store,
+        base_symbols=base,
+        legacy_core_symbols=legacy_core,
+    )
+    missing_legacy = set(legacy_core) - set(fmp_targets) - set(yf_targets)
+    if missing_legacy:
+        raise RuntimeError(
+            "daily price target split strands legacy Core symbols: %s"
+            % sorted(missing_legacy)
+        )
+    return sorted(set(fmp_targets)), sorted(set(yf_targets))
 
 
 def _resolve_correlation_symbols(*, wide: bool = False, market_store=None,
@@ -294,14 +350,17 @@ def main():
         print_universe_summary()
         print()
 
+    price_yf_targets = None
+
     # 更新量价数据（矩阵 #6 P1: FMP 只跑 overlay tier，其余走 yfinance batch）
     if args.all or args.price:
         print("=" * 40)
         print("Step 2: 更新量价数据 (FMP overlay tier + yfinance batch)")
         print("=" * 40)
-        from src.data.price_fetcher import get_fmp_price_targets
-
-        target_symbols = symbols or get_fmp_price_targets()
+        if symbols:
+            target_symbols = symbols
+        else:
+            target_symbols, price_yf_targets = _resolve_price_leg_targets()
         print(f"FMP tier: {len(target_symbols)} symbols")
         result = update_all_prices(target_symbols, force_full=args.force)
         print(f"\n✅ FMP 成功: {len(result['success'])}")
@@ -309,7 +368,7 @@ def main():
             print(f"❌ FMP 失败: {result['failed']}")
 
         if _should_run_price_yfinance_leg(args, symbols):
-            yf_targets = _yfinance_price_leg_targets(target_symbols)
+            yf_targets = price_yf_targets
             if yf_targets:
                 from src.data.extended_price_fetcher import update_extended_prices
                 print(f"\nyfinance batch: {len(yf_targets)} symbols")
@@ -470,7 +529,11 @@ def main():
         print("Step 3d: 更新扩展池价格 (yfinance, $10B+ stocks)")
         print("=" * 40)
         from src.data.extended_price_fetcher import update_extended_prices
-        result = update_extended_prices(full_backfill=args.force, symbols=symbols)
+        extended_targets = symbols
+        if symbols is None and price_yf_targets is not None:
+            extended_targets = price_yf_targets
+        result = update_extended_prices(
+            full_backfill=args.force, symbols=extended_targets)
         print(
             "\n%s 成功: %d/%d, %d rows upserted"
             % (chr(9989), result["success"], result["total"], result["rows_inserted"])

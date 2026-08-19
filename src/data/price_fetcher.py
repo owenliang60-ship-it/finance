@@ -98,7 +98,10 @@ def fetch_and_update_price(symbol: str, force_full: bool = False) -> Optional[pd
     return combined_df
 
 
-def get_fmp_price_targets(store=None) -> List[str]:
+_BASE_UNRESOLVED = object()
+
+
+def get_fmp_price_targets(store=None, *, base_symbols=_BASE_UNRESOLVED) -> List[str]:
     """FMP 日频价格的目标名单 = overlay tier（矩阵 #6, Boss 拍板 P1）。
 
     Post-bootstrap: holdings ∪ watchlist ∪ benchmarks（~50 只）。基础池其余部分
@@ -115,16 +118,17 @@ def get_fmp_price_targets(store=None) -> List[str]:
             三个 loader 读的是 company.db，各自开自己的默认 CompanyStore，不受
             本参数影响 —— 别把 CompanyStore 传进来。
     """
-    from src.data.universe_resolver import current_base_universe
+    if base_symbols is _BASE_UNRESOLVED:
+        from src.data.universe_resolver import current_base_universe
 
-    try:
-        current_base_universe(store=store)
-    except Exception as e:
-        logger.warning(
-            "current_base_universe unavailable, FMP price targets stay on the "
-            "legacy Core pool: %s", e
-        )
-        return get_symbols()
+        try:
+            current_base_universe(store=store)
+        except Exception as e:
+            logger.warning(
+                "current_base_universe unavailable, FMP price targets stay on the "
+                "legacy Core pool: %s", e
+            )
+            return get_symbols()
 
     from src.data.overlays import load_overlay_tier
 

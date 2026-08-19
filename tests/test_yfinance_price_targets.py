@@ -18,16 +18,18 @@ LEGACY_CORE = ["MSFT", "NVDA", "TSLA"]
 
 
 class TestYfinancePriceTargets:
-    def test_targets_are_base_universe_minus_fmp_tier(self):
+    def test_targets_are_base_plus_legacy_core_minus_fmp_tier(self):
         from src.data.extended_price_fetcher import get_yfinance_price_targets
 
         with patch("src.data.universe_resolver.current_base_universe",
                    return_value=list(BASE_UNIVERSE)), \
              patch("src.data.price_fetcher.get_fmp_price_targets",
-                   return_value=list(FMP_TIER)):
+                   return_value=list(FMP_TIER)), \
+             patch("src.data.pool_manager.get_symbols",
+                   return_value=list(LEGACY_CORE)):
             targets = get_yfinance_price_targets()
 
-        assert set(targets) == set(BASE_UNIVERSE) - set(FMP_TIER)
+        assert set(targets) == (set(BASE_UNIVERSE) | set(LEGACY_CORE)) - set(FMP_TIER)
         assert targets == sorted(targets)
 
     def test_targets_union_fmp_tier_cover_the_base_universe(self):
@@ -36,10 +38,12 @@ class TestYfinancePriceTargets:
         with patch("src.data.universe_resolver.current_base_universe",
                    return_value=list(BASE_UNIVERSE)), \
              patch("src.data.price_fetcher.get_fmp_price_targets",
-                   return_value=list(FMP_TIER)):
+                   return_value=list(FMP_TIER)), \
+             patch("src.data.pool_manager.get_symbols",
+                   return_value=list(LEGACY_CORE)):
             targets = get_yfinance_price_targets()
 
-        assert set(BASE_UNIVERSE) <= set(targets) | set(FMP_TIER)
+        assert set(BASE_UNIVERSE) | set(LEGACY_CORE) <= set(targets) | set(FMP_TIER)
 
     def test_falls_back_to_legacy_extended_only_list_pre_bootstrap(self):
         """The daily cloud pipeline runs this before the Stop C bootstrap, so an
