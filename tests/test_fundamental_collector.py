@@ -7,6 +7,7 @@ the project's data-integrity core: one dataset = one atomic commit of
 """
 import json
 import sqlite3
+from datetime import datetime
 
 import pytest
 
@@ -394,15 +395,85 @@ def test_rebuild_profiles_json_mirrors_table(tmp_store, fake_client_full, tmp_pa
     assert list(path.parent.glob("*.tmp")) == []           # atomic replace, no debris
 
 
-def test_rebuild_profiles_json_is_a_rebuild_not_a_merge(tmp_store, fake_client_full, tmp_path):
+def test_meta_updated_at_uses_the_legacy_timestamp_format(tmp_store, fake_client_full, tmp_path):
+    """`data_health._check_fundamental_freshness` and `data_validator` both
+    strptime this with "%Y-%m-%d %H:%M:%S"; an ISO stamp permanently degrades
+    the freshness check to unparseable-WARN / is_fresh=False."""
+    collect_fundamentals_for_symbol("AAPL", client=fake_client_full,
+                                    store=tmp_store, observed_at=OBSERVED_AT)
     path = tmp_path / "profiles.json"
-    path.write_text(json.dumps({"STALE": {"symbol": "STALE"}, "_meta": {"count": 1}}),
-                    encoding="utf-8")
+    rebuild_profiles_json(tmp_store, path)
+
+    stamp = json.loads(path.read_text(encoding="utf-8"))["_meta"]["updated_at"]
+    parsed = datetime.strptime(stamp, "%Y-%m-%d %H:%M:%S")
+    assert abs((datetime.now() - parsed).total_seconds()) < 300   # naive local, like legacy
+
+
+def test_mirror_passes_the_real_data_health_freshness_check(tmp_store, fake_client_full,
+                                                            tmp_path, monkeypatch):
+    """Format assertions re-derive the reader's rules; this runs the reader."""
+    from src.data import data_health
+
+    collect_fundamentals_for_symbol("AAPL", client=fake_client_full,
+                                    store=tmp_store, observed_at=OBSERVED_AT)
+    rebuild_profiles_json(tmp_store, tmp_path / "profiles.json")
+    monkeypatch.setattr(data_health, "FUNDAMENTAL_DIR", tmp_path)
+
+    result = data_health._check_fundamental_freshness()
+    assert result.status == "PASS", result.detail
+
+
+def test_rebuild_preserves_entries_absent_from_the_table(tmp_store, fake_client_full, tmp_path):
+    """Legacy writers merge extend-pool profiles straight into the JSON
+    (`build_company_concept_registry.refresh_profiles`); those symbols never
+    reach company_profile and must survive a rebuild, or data_health's 80%
+    coverage check flips to FAIL."""
+    path = tmp_path / "profiles.json"
+    path.write_text(json.dumps({
+        "EXTONLY": {"symbol": "EXTONLY", "sector": "Industrials"},
+        "_meta": {"updated_at": "2026-01-01 00:00:00", "count": 1},
+    }), encoding="utf-8")
+
+    collect_fundamentals_for_symbol("AAPL", client=fake_client_full,
+                                    store=tmp_store, observed_at=OBSERVED_AT)
+    written = rebuild_profiles_json(tmp_store, path)
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["EXTONLY"]["sector"] == "Industrials"   # foreign entry preserved
+    assert data["AAPL"]["sector"] == "Technology"       # table-only symbol added
+    assert written == 2 and data["_meta"]["count"] == 2
+
+
+def test_rebuild_table_version_wins_for_shared_symbol(tmp_store, fake_client_full, tmp_path):
+    path = tmp_path / "profiles.json"
+    path.write_text(json.dumps({
+        "AAPL": {"symbol": "AAPL", "sector": "Stale Sector", "onlyInJson": True},
+    }), encoding="utf-8")
+
     collect_fundamentals_for_symbol("AAPL", client=fake_client_full,
                                     store=tmp_store, observed_at=OBSERVED_AT)
     rebuild_profiles_json(tmp_store, path)
-    data = json.loads(path.read_text(encoding="utf-8"))
-    assert "STALE" not in data and "AAPL" in data
+
+    entry = json.loads(path.read_text(encoding="utf-8"))["AAPL"]
+    assert entry["sector"] == "Technology"      # company_profile is SSOT per symbol
+    assert "onlyInJson" not in entry            # replaced wholesale, not deep-merged
+
+
+def test_rebuild_with_empty_table_preserves_existing_json(tmp_store, tmp_path):
+    path = tmp_path / "profiles.json"
+    path.write_text(json.dumps({"EXTONLY": {"symbol": "EXTONLY"}}), encoding="utf-8")
+    assert rebuild_profiles_json(tmp_store, path) == 1
+    assert json.loads(path.read_text(encoding="utf-8"))["EXTONLY"]["symbol"] == "EXTONLY"
+
+
+def test_rebuild_with_unparseable_existing_json_starts_empty(tmp_store, fake_client_full,
+                                                             tmp_path):
+    path = tmp_path / "profiles.json"
+    path.write_text("not valid json{{{", encoding="utf-8")
+    collect_fundamentals_for_symbol("AAPL", client=fake_client_full,
+                                    store=tmp_store, observed_at=OBSERVED_AT)
+    assert rebuild_profiles_json(tmp_store, path) == 1
+    assert "AAPL" in json.loads(path.read_text(encoding="utf-8"))
 
 
 def test_default_mirror_path_is_the_legacy_location():
@@ -410,12 +481,11 @@ def test_default_mirror_path_is_the_legacy_location():
     assert DEFAULT_PROFILES_PATH == FUNDAMENTAL_DIR / "profiles.json"
 
 
-def test_rebuild_profiles_json_refuses_to_clobber_with_empty_table(tmp_store, tmp_path):
+def test_rebuild_refuses_when_table_and_json_are_both_empty(tmp_store, tmp_path):
     path = tmp_path / "profiles.json"
-    path.write_text(json.dumps({"AAPL": {"symbol": "AAPL"}}), encoding="utf-8")
     with pytest.raises(ValueError):
         rebuild_profiles_json(tmp_store, path)
-    assert json.loads(path.read_text(encoding="utf-8")) == {"AAPL": {"symbol": "AAPL"}}
+    assert not path.exists()
 
 
 # ---------------------------------------------------------------------------

@@ -23,8 +23,8 @@ Two things this kernel deliberately does NOT do:
     row with a TTL, so "the provider has nothing" stays distinguishable from
     "we fetched zeros";
   - never write `data/fundamental/profiles.json` (R2-P2-3). `company_profile`
-    is the SSOT; `rebuild_profiles_json` regenerates the legacy mirror once at
-    the end of a batch.
+    is the SSOT; `rebuild_profiles_json` refreshes the legacy mirror once at
+    the end of a batch, merging the table over whatever the file already holds.
 
 observed_at normalization: callers hand in either a pure date ("2026-08-24")
 or a full timestamp. `record_vintage_in_conn` is strict on the write side and
@@ -45,6 +45,7 @@ timestamp, which is distinct per run.
 import json
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -259,42 +260,76 @@ def collect_fundamentals_for_symbol(symbol: str, *, client: Any, store: MarketSt
 # Legacy mirror
 # ---------------------------------------------------------------------------
 
+def _load_existing_profiles(path: Path) -> Dict[str, Any]:
+    """Existing mirror entries, `_meta` stripped. Unreadable/malformed file ->
+    empty dict plus a warning (same tolerance as
+    `build_company_concept_registry.refresh_profiles`)."""
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) or {}
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("existing %s unreadable (%s); starting from an empty mirror",
+                       path, exc)
+        return {}
+    if not isinstance(data, dict):
+        logger.warning("existing %s is not a JSON object; starting from an empty mirror",
+                       path)
+        return {}
+    return {k: v for k, v in data.items() if k != "_meta"}
+
+
 def rebuild_profiles_json(store: MarketStore, path=None) -> int:
-    """Rebuild the legacy `data/fundamental/profiles.json` mirror from the
+    """Refresh the legacy `data/fundamental/profiles.json` mirror from the
     `company_profile` table. Call ONCE at the end of a batch, never per symbol.
 
-    The table is the SSOT (R2-P2-3); this file exists only for readers that
-    still go to disk (`src/data/data_health.py` fundamental-coverage check,
-    `portfolio/exposure/analyzer.py:_load_profiles`,
-    `scripts/morning_report.py` metadata cache). Format matches what
+    MERGE with table priority, not a wholesale rebuild: existing JSON entries
+    are the base, every `company_profile` row is overlaid on top (the table is
+    SSOT per symbol, replacing that entry wholesale — not deep-merged), and an
+    entry the table has never heard of is never dropped. Legacy writers still
+    merge profiles straight into this file that never enter the table —
+    `scripts/build_company_concept_registry.refresh_profiles` does exactly that
+    for the extend pool — and dropping them would flip `data_health`'s 80%
+    fundamental-coverage check to FAIL. Those foreign entries are preserved
+    for the duration of the transition; Stop G retires them.
+
+    Readers that still go to disk: `src/data/data_health.py` (coverage +
+    freshness), `portfolio/exposure/analyzer.py:_load_profiles`,
+    `scripts/morning_report.py` metadata cache. Format matches what
     `src/data/fundamental_fetcher.update_profiles` used to write:
     `{SYMBOL: {...provider fields..., "_updated_at": ...}, "_meta": {...}}`.
+    `_meta.updated_at` MUST stay in the naive-local "%Y-%m-%d %H:%M:%S" form —
+    `data_health._check_fundamental_freshness` and `data_validator` strptime it
+    with exactly that format, and anything else (ISO, offsets) degrades them to
+    a permanent unparseable-WARN / `is_fresh=False`.
 
-    A REBUILD, not a merge: symbols absent from the table disappear from the
-    mirror. Guard against the failure mode that has bitten this repo before
-    (`build_company_concept_registry.py` refuses to overwrite profiles.json
-    from an empty cache) — an empty table raises instead of clobbering.
+    Guard kept from the incident that produced the same guard in
+    `build_company_concept_registry.py`: if the merge would leave nothing at
+    all (empty table AND no usable existing JSON), raise instead of writing an
+    empty mirror.
 
     Written tmp-then-`os.replace` so a reader never sees a half-written file.
 
     Args:
-        store: source of truth (`company_profile` table).
+        store: SSOT for per-symbol entries (`company_profile` table).
         path: mirror location; defaults to DEFAULT_PROFILES_PATH.
 
     Returns:
-        Number of profiles written.
+        Total number of profile entries in the written mirror.
     """
     path = Path(path) if path is not None else DEFAULT_PROFILES_PATH
+    profiles: Dict[str, Any] = _load_existing_profiles(path)
+    preserved = len(profiles)
+
     conn = store._get_conn()
     rows = conn.execute(
         "SELECT symbol, payload, updated_at FROM company_profile ORDER BY symbol"
     ).fetchall()
     if not rows:
-        raise ValueError(
-            f"company_profile is empty — refusing to overwrite {path} with an "
-            f"empty mirror")
+        logger.warning("company_profile is empty — %s keeps its existing %d entries",
+                       path, preserved)
 
-    profiles: Dict[str, Any] = {}
+    from_table = 0
     for row in rows:
         try:
             payload = json.loads(row["payload"])
@@ -309,14 +344,18 @@ def rebuild_profiles_json(store: MarketStore, path=None) -> int:
         payload.setdefault("symbol", row["symbol"])
         payload.setdefault("_updated_at", row["updated_at"])
         profiles[row["symbol"]] = payload
+        from_table += 1
 
     if not profiles:
         raise ValueError(
-            f"no usable company_profile payloads — refusing to overwrite {path}")
+            f"company_profile is empty and {path} has no usable entries — "
+            f"refusing to write an empty mirror")
 
     count = len(profiles)
-    profiles["_meta"] = {
-        "updated_at": store._utc_now_iso(),
+    merged = {key: profiles[key] for key in sorted(profiles)}
+    # Naive local time, legacy format — see docstring. Not ISO, not UTC-aware.
+    merged["_meta"] = {
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "count": count,
         "source": "market.db:company_profile",
     }
@@ -324,9 +363,10 @@ def rebuild_profiles_json(store: MarketStore, path=None) -> int:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(path.name + ".tmp")
     with open(tmp_path, "w", encoding="utf-8") as fh:
-        json.dump(profiles, fh, ensure_ascii=False, indent=2)
+        json.dump(merged, fh, ensure_ascii=False, indent=2)
         fh.flush()
         os.fsync(fh.fileno())
     os.replace(tmp_path, path)
-    logger.info("rebuilt %s from company_profile (%d profiles)", path, count)
+    logger.info("refreshed %s: %d entries (%d from company_profile)",
+                path, count, from_table)
     return count
