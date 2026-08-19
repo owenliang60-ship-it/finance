@@ -204,8 +204,8 @@ def validate_all_data() -> Dict[str, Any]:
         "issues": []
     }
 
-    # 加载股票池
-    symbols = get_symbols()
+    # 加载股票池（resolver eligible，见 _resolve_validation_symbols）
+    symbols = _resolve_validation_symbols()
     results["summary"]["pool_count"] = len(symbols)
 
     if not symbols:
