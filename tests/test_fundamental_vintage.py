@@ -72,3 +72,28 @@ def test_approximate_reads_current_and_is_tagged(tmp_store):
     out = tmp_store.approximate_as_reported("AMAT", "income", "2026-08-20")
     assert out["approximate"] is True and out["rows"][0]["revenue"] == 7
     assert tmp_store.approximate_as_reported("AMAT", "income", "2026-08-01")["rows"] == []
+
+
+def test_batch_duplicate_fiscal_date_rejected_atomically(tmp_store):
+    # Fix-round-1 Finding 1: two rows in the SAME call mapping to the same
+    # (symbol, statement, fiscal_date, observed_at) PK must be rejected
+    # BEFORE any write — whole batch atomically, not silently resolved by
+    # letting the second row clobber the first via INSERT OR REPLACE.
+    rows = [
+        {"date": "2026-06-30", "revenue": 100},
+        {"date": "2026-06-30", "revenue": 200},
+    ]
+    with pytest.raises(ValueError):
+        tmp_store.record_vintage("AAPL", "income", rows, "2026-08-24T10:00:00Z", "latest_known")
+    assert tmp_store.known_as_of("AAPL", "income", "2026-08-24") == []
+
+
+def test_pure_date_asof_boundary_includes_exact_end_of_day_timestamp(tmp_store):
+    # Fix-round-1 Finding 2: a vintage observed at exactly "<date>T23:59:59Z"
+    # (no fractional seconds) must still be included under a pure-date as_of.
+    # The naive inclusive comparison against "<date>T23:59:59.999999Z"
+    # excluded it (lexicographically "Z" > "."); the fix compares with an
+    # exclusive next-day bound instead.
+    tmp_store.record_vintage("AAPL", "income", [{"date": "2026-06-30", "revenue": 100}],
+                             "2026-08-24T23:59:59Z", "latest_known")
+    assert tmp_store.known_as_of("AAPL", "income", "2026-08-24")[0]["revenue"] == 100

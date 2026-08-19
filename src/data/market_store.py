@@ -2530,6 +2530,13 @@ class MarketStore:
         lexicographically comparable across same-day revisions (R2-P2-2: two
         revisions on the same calendar day get distinct timestamps, so they
         don't collide on the (symbol, statement, fiscal_date, observed_at) PK).
+
+        Two rows in the SAME call that share a fiscal_date would collide on
+        that PK (symbol/statement/observed_at are constant for the whole
+        batch) — rejected up front with ValueError, whole batch atomically,
+        before any write happens (fix-round-1 Finding 1: a dirty upstream
+        response must surface as an error, not be silently resolved by
+        letting the later row clobber the earlier one).
         """
         if quality not in self._VINTAGE_QUALITIES:
             raise ValueError(f"invalid vintage quality: {quality!r}")
@@ -2540,11 +2547,26 @@ class MarketStore:
             )
         _validate_table("fundamental_vintage")
         sym = symbol.upper()
-        count = 0
+
+        # Pre-write validation pass: reject the whole batch atomically if any
+        # two rows would collide on the (symbol, statement, fiscal_date,
+        # observed_at) PK. Must run before any INSERT below.
+        seen_fiscal_dates = set()
         for row in rows:
             fiscal_date = row.get("date")
             if not fiscal_date:
                 raise ValueError(f"fundamental_vintage row missing fiscal date: {row!r}")
+            if fiscal_date in seen_fiscal_dates:
+                raise ValueError(
+                    f"duplicate fiscal_date in same vintage batch: "
+                    f"symbol={sym} statement={statement!r} fiscal_date={fiscal_date!r} "
+                    f"(would collide on (symbol, statement, fiscal_date, observed_at) PK)"
+                )
+            seen_fiscal_dates.add(fiscal_date)
+
+        count = 0
+        for row in rows:
+            fiscal_date = row["date"]
             payload_json = json.dumps(row, sort_keys=True, separators=(",", ":"))
             content_hash = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
 
@@ -2557,8 +2579,11 @@ class MarketStore:
             if latest is not None and latest["content_hash"] == content_hash:
                 continue  # change-only append: identical to latest version
 
+            # Plain INSERT (not OR REPLACE): any unexpected PK collision past
+            # the batch-level check above raises sqlite3.IntegrityError
+            # instead of silently clobbering append-only history.
             conn.execute(
-                "INSERT OR REPLACE INTO fundamental_vintage "
+                "INSERT INTO fundamental_vintage "
                 "(symbol, statement, fiscal_date, observed_at, filing_date, "
                 "accepted_date, content_hash, vintage_quality, payload) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -2584,29 +2609,45 @@ class MarketStore:
         nothing qualifies (as-of predates the first recorded vintage), returns
         [] rather than silently reaching into current/restated tables.
 
-        A pure-date param is normalized to `<date>T23:59:59.999999Z`
-        ("as of end of that day" semantics, R3-m2); a full timestamp is used
-        as-is. Each returned row is annotated with `_vintage_quality` and
+        A pure-date param uses an EXCLUSIVE next-day bound —
+        `observed_at < <date+1>T00:00:00Z` — for "as of end of that day"
+        semantics (R3-m2). A full timestamp keeps the original INCLUSIVE
+        `observed_at <= observed_at` comparison, used as-is.
+
+        (Fix-round-1 Finding 2: an inclusive compare against the literal
+        string `<date>T23:59:59.999999Z` looks equivalent but isn't — SQLite
+        compares TEXT lexicographically, and a vintage stored as exactly
+        `<date>T23:59:59Z` (no fractional seconds) sorts AFTER that bound
+        because "Z" (0x5A) > "." (0x2E) at the first differing byte, so it
+        was silently excluded. The exclusive next-day bound sidesteps the
+        byte-comparison trap entirely.)
+
+        Each returned row is annotated with `_vintage_quality` and
         `_observed_at`.
         """
         _validate_table("fundamental_vintage")
-        normalized = f"{observed_at}T23:59:59.999999Z" if _is_pure_date(observed_at) else observed_at
+        if _is_pure_date(observed_at):
+            next_day = (datetime.strptime(observed_at, "%Y-%m-%d").date()
+                        + timedelta(days=1))
+            operator, bound = "<", f"{next_day.isoformat()}T00:00:00Z"
+        else:
+            operator, bound = "<=", observed_at
         sym = symbol.upper()
         conn = self._get_conn()
         rows = conn.execute(
-            """
+            f"""
             SELECT fiscal_date, payload, vintage_quality, observed_at FROM (
                 SELECT fiscal_date, payload, vintage_quality, observed_at,
                        ROW_NUMBER() OVER (
                            PARTITION BY fiscal_date ORDER BY observed_at DESC
                        ) AS rn
                 FROM fundamental_vintage
-                WHERE symbol = ? AND statement = ? AND observed_at <= ?
+                WHERE symbol = ? AND statement = ? AND observed_at {operator} ?
             )
             WHERE rn = 1
             ORDER BY fiscal_date
             """,
-            (sym, statement, normalized),
+            (sym, statement, bound),
         ).fetchall()
         out = []
         for r in rows:
