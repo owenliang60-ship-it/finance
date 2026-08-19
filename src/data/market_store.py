@@ -690,6 +690,29 @@ def _validate_table(table_name: str) -> None:
         raise ValueError(f"Invalid table name: {table_name!r}")
 
 
+# ---------------------------------------------------------------------------
+# Extended Primary Universe collection kernel: dataset -> destination
+# ---------------------------------------------------------------------------
+# Shared by `write_symbol_dataset_in_conn` (below) and
+# `src/data/fundamental_collector.py` (T8 kernel) so backfill / events /
+# reconcile / --scope core all resolve a dataset to the same table.
+# NOTE the two different key spaces in play:
+#   - `coverage_status.dataset` holds the CURRENT TABLE name (income_quarterly,
+#     ...), plus the non-table value "identity" written by the identity path.
+#   - `fundamental_backfill_jobs.dataset` holds the DATASET KEY (income, ...).
+COLLECTION_DATASET_TABLES = {
+    "profile": "company_profile",
+    "income": "income_quarterly",
+    "balance": "balance_sheet_quarterly",
+    "cashflow": "cash_flow_quarterly",
+    "ratios": "ratios_annual",
+}
+
+# Only the three statements get point-in-time vintage history; the dataset key
+# doubles as the `fundamental_vintage.statement` value.
+VINTAGE_DATASETS = frozenset({"income", "balance", "cashflow"})
+
+
 def _validate_column(col: str, valid_cols: List[str]) -> None:
     """Raise ValueError if column is not valid."""
     if col not in valid_cols:
@@ -803,6 +826,44 @@ class MarketStore:
 
         return count
 
+    def _prepare_upsert_rows(self, table: str, symbol: str, rows: List[Dict],
+                             convert: bool = True) -> List[Dict]:
+        """Turn provider rows into rows `_upsert_rows_in_conn` can write.
+
+        Deliberately the ONLY implementation of this prep, shared by the
+        legacy writer (`_bulk_upsert`) and the T8 collection kernel
+        (`write_symbol_dataset_in_conn`): the kernel must produce rows
+        byte-identical to the legacy path (T11 parity contract), so both get
+        the same camelCase→snake_case conversion, the same uppercase `symbol`
+        injection, and the same skip of rows carrying no fiscal date.
+
+        Args:
+            table: Target table name (must be in whitelist).
+            symbol: Stock symbol to inject into each row.
+            rows: List of dicts (camelCase or snake_case).
+            convert: If True, convert camelCase → snake_case.
+
+        Returns:
+            Prepared rows, in input order, minus any row with no `date`.
+        """
+        conn = self._get_conn()
+        valid_cols = _get_table_columns(table, conn)
+        prepared = []
+
+        for row in rows:
+            if convert:
+                data = self._convert_row(row, table)
+            else:
+                data = {k: v for k, v in row.items() if k in valid_cols}
+            data["symbol"] = symbol.upper()
+
+            if "date" not in data or not data["date"]:
+                continue
+
+            prepared.append(data)
+
+        return prepared
+
     def _bulk_upsert(self, table: str, symbol: str, rows: List[Dict],
                      convert: bool = True) -> int:
         """Insert or replace rows in a single transaction.
@@ -821,20 +882,7 @@ class MarketStore:
             return 0
 
         conn = self._get_conn()
-        valid_cols = _get_table_columns(table, conn)
-        prepared = []
-
-        for row in rows:
-            if convert:
-                data = self._convert_row(row, table)
-            else:
-                data = {k: v for k, v in row.items() if k in valid_cols}
-            data["symbol"] = symbol.upper()
-
-            if "date" not in data or not data["date"]:
-                continue
-
-            prepared.append(data)
+        prepared = self._prepare_upsert_rows(table, symbol, rows, convert)
 
         with conn:
             count = self._upsert_rows_in_conn(conn, table, prepared)
@@ -2421,8 +2469,11 @@ class MarketStore:
     _PROVIDER_EMPTY_TTL_DAYS = 30
     _FETCH_FAILED_MAX_BACKOFF_DAYS = 16
 
-    def upsert_coverage_status(self, rows: List[Dict]) -> int:
-        """六态白名单 + 重试字段维护（见 T1 DDL 注释）：
+    def _upsert_coverage_status_in_conn(self, conn: sqlite3.Connection,
+                                        rows: List[Dict]) -> int:
+        """六态白名单 + 重试字段维护（见 T1 DDL 注释），conn 级、不开自己的事务
+        —— 由调用方持有事务边界，供 T8 内核与 current 表/vintage/manifest 写入
+        合并进同一次原子提交。独立调用请用 `upsert_coverage_status`。
 
         fetch_failed -> next_retry_at = now + min(2^consecutive_failures, 16) 天；
         provider_empty -> 负缓存 TTL，next_retry_at = now + 30 天；
@@ -2430,60 +2481,64 @@ class MarketStore:
         not_applicable / stale -> 纯状态标注，**必须保留**既有 next_retry_at（不驱动
         重试计时器——一次 stale/not_applicable 写入不能悄悄清掉一个待到期的 backoff）；
         identity_blocked -> **显式清空** next_retry_at（终态：不自动重试，等人工 override，
-        per plan T12）。坏 status 整批拒绝（事务前全量校验）。
+        per plan T12）。坏 status 整批拒绝（任何写入之前全量校验）。
         """
         for row in rows:
             if row.get("status") not in self._COVERAGE_STATUSES:
                 raise ValueError(f"invalid coverage status: {row.get('status')!r}")
-        conn = self._get_conn()
         now_dt = datetime.now(timezone.utc)
         now_iso = now_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-        with conn:
-            for row in rows:
-                sym = row["symbol"].upper()
-                dataset = row["dataset"]
-                status = row["status"]
-                existing = conn.execute(
-                    "SELECT consecutive_failures, last_success_at, next_retry_at "
-                    "FROM coverage_status WHERE symbol = ? AND dataset = ?",
-                    (sym, dataset),
-                ).fetchone()
-                prior_failures = existing["consecutive_failures"] if existing else 0
-                last_success_at = existing["last_success_at"] if existing else None
-                consecutive_failures = prior_failures
-                # Default: preserve whatever retry timer already existed. Only
-                # fetch_failed/provider_empty/ok/identity_blocked below are allowed
-                # to change it — not_applicable/stale fall through untouched.
-                next_retry_at = existing["next_retry_at"] if existing else None
+        for row in rows:
+            sym = row["symbol"].upper()
+            dataset = row["dataset"]
+            status = row["status"]
+            existing = conn.execute(
+                "SELECT consecutive_failures, last_success_at, next_retry_at "
+                "FROM coverage_status WHERE symbol = ? AND dataset = ?",
+                (sym, dataset),
+            ).fetchone()
+            prior_failures = existing["consecutive_failures"] if existing else 0
+            last_success_at = existing["last_success_at"] if existing else None
+            consecutive_failures = prior_failures
+            # Default: preserve whatever retry timer already existed. Only
+            # fetch_failed/provider_empty/ok/identity_blocked below are allowed
+            # to change it — not_applicable/stale fall through untouched.
+            next_retry_at = existing["next_retry_at"] if existing else None
 
-                if status == "fetch_failed":
-                    consecutive_failures = prior_failures + 1
-                    delay_days = min(2 ** consecutive_failures,
-                                     self._FETCH_FAILED_MAX_BACKOFF_DAYS)
-                    next_retry_at = (now_dt + timedelta(days=delay_days)).strftime(
-                        "%Y-%m-%dT%H:%M:%SZ")
-                elif status == "provider_empty":
-                    next_retry_at = (now_dt + timedelta(
-                        days=self._PROVIDER_EMPTY_TTL_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-                elif status == "ok":
-                    consecutive_failures = 0
-                    last_success_at = now_iso
-                    next_retry_at = None
-                elif status == "identity_blocked":
-                    next_retry_at = None
+            if status == "fetch_failed":
+                consecutive_failures = prior_failures + 1
+                delay_days = min(2 ** consecutive_failures,
+                                 self._FETCH_FAILED_MAX_BACKOFF_DAYS)
+                next_retry_at = (now_dt + timedelta(days=delay_days)).strftime(
+                    "%Y-%m-%dT%H:%M:%SZ")
+            elif status == "provider_empty":
+                next_retry_at = (now_dt + timedelta(
+                    days=self._PROVIDER_EMPTY_TTL_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            elif status == "ok":
+                consecutive_failures = 0
+                last_success_at = now_iso
+                next_retry_at = None
+            elif status == "identity_blocked":
+                next_retry_at = None
 
-                self._insert_validated(conn, "coverage_status", {
-                    "symbol": sym,
-                    "dataset": dataset,
-                    "status": status,
-                    "detail": row.get("detail"),
-                    "updated_at": row.get("updated_at") or now_iso,
-                    "last_attempt_at": now_iso,
-                    "last_success_at": last_success_at,
-                    "consecutive_failures": consecutive_failures,
-                    "next_retry_at": next_retry_at,
-                })
+            self._insert_validated(conn, "coverage_status", {
+                "symbol": sym,
+                "dataset": dataset,
+                "status": status,
+                "detail": row.get("detail"),
+                "updated_at": row.get("updated_at") or now_iso,
+                "last_attempt_at": now_iso,
+                "last_success_at": last_success_at,
+                "consecutive_failures": consecutive_failures,
+                "next_retry_at": next_retry_at,
+            })
         return len(rows)
+
+    def upsert_coverage_status(self, rows: List[Dict]) -> int:
+        """独立调用入口：自开事务包住 `_upsert_coverage_status_in_conn`（语义见该方法）。"""
+        conn = self._get_conn()
+        with conn:
+            return self._upsert_coverage_status_in_conn(conn, rows)
 
     def get_coverage(self, dataset: str) -> Dict[str, str]:
         """dataset 下全部 symbol -> status 映射。"""
@@ -2619,6 +2674,94 @@ class MarketStore:
         with self.transaction() as conn:
             return self.record_vintage_in_conn(conn, symbol, statement, rows,
                                                observed_at, quality)
+
+    # ---- Extended Primary Universe: per-dataset composite write (T8) ----
+
+    def write_company_profile_in_conn(self, conn: sqlite3.Connection, symbol: str,
+                                      profile: Dict[str, Any],
+                                      updated_at: str) -> int:
+        """Upsert one symbol's raw profile payload into `company_profile`
+        (conn-level, no own transaction — caller owns the boundary).
+
+        `company_profile` is keyed by symbol alone and stores the provider
+        payload as one JSON blob, so it cannot go through
+        `_prepare_upsert_rows` (no `date` column). Serialization matches
+        `scripts/bootstrap_security_master.py:_write_company_profiles`
+        (`json.dumps(payload, default=str)`) so the identity path and the
+        collection kernel leave byte-identical blobs in the same table.
+        """
+        if not isinstance(profile, dict):
+            raise ValueError(
+                f"company profile payload must be a dict, got {type(profile).__name__}"
+            )
+        return self._upsert_rows_in_conn(conn, "company_profile", [{
+            "symbol": symbol.upper(),
+            "payload": json.dumps(profile, default=str),
+            "updated_at": updated_at,
+        }])
+
+    def write_symbol_dataset_in_conn(self, conn: sqlite3.Connection, symbol: str,
+                                     dataset: str, rows: List[Dict], *,
+                                     observed_at: Optional[str] = None,
+                                     quality: str = "latest_known",
+                                     updated_at: Optional[str] = None
+                                     ) -> Dict[str, int]:
+        """Write one dataset's payload — current table plus vintage where the
+        dataset has one — on the caller's connection.
+
+        This is the write half of the T8 atomic boundary (P1-4): the kernel
+        wraps this call, the coverage upsert and the manifest job write in a
+        SINGLE `transaction()`, so a symbol's dataset is either fully durable
+        or fully absent. Nothing here opens a transaction of its own.
+
+        - `income`/`balance`/`cashflow`: prepared rows into the current table
+          (see `_prepare_upsert_rows`) + the RAW provider rows appended to
+          `fundamental_vintage` under the same dataset key as statement name.
+          Raw rows on purpose: the vintage payload is the as-reported
+          snapshot, keeping vendor fields the current-table column whitelist
+          drops, and `record_vintage_in_conn` reads `filingDate`/`acceptedDate`
+          off that camelCase shape.
+        - `ratios`: current table only (annual ratios are derived, not filed).
+        - `profile`: single JSON blob into `company_profile` (SSOT). The
+          `profiles.json` mirror is NOT written here (R2-P2-3) — see
+          `fundamental_collector.rebuild_profiles_json`.
+
+        Args:
+            observed_at: full UTC timestamp; REQUIRED for vintage datasets
+                (`record_vintage_in_conn` rejects a bare date).
+            quality: vintage quality tag (`latest_known` for routine
+                collection; historical/deep pulls stay `latest_known` too).
+            updated_at: `company_profile.updated_at`; defaults to `observed_at`.
+
+        Returns:
+            {"rows": current-table rows written, "vintage_rows": vintage rows appended}
+        """
+        table = COLLECTION_DATASET_TABLES.get(dataset)
+        if table is None:
+            raise ValueError(
+                f"unknown collection dataset: {dataset!r}; expected one of "
+                f"{sorted(COLLECTION_DATASET_TABLES)}"
+            )
+        _validate_table(table)
+
+        if dataset == "profile":
+            stamp = updated_at or observed_at
+            if not stamp:
+                raise ValueError("company_profile write needs observed_at or updated_at")
+            payload = rows[0] if rows else None
+            written = self.write_company_profile_in_conn(conn, symbol, payload, stamp)
+            return {"rows": written, "vintage_rows": 0}
+
+        prepared = self._prepare_upsert_rows(table, symbol, rows)
+        written = self._upsert_rows_in_conn(conn, table, prepared)
+
+        vintage_rows = 0
+        if dataset in VINTAGE_DATASETS:
+            if not observed_at:
+                raise ValueError(f"vintage dataset {dataset!r} needs observed_at")
+            vintage_rows = self.record_vintage_in_conn(conn, symbol, dataset, rows,
+                                                       observed_at, quality)
+        return {"rows": written, "vintage_rows": vintage_rows}
 
     def known_as_of(self, symbol: str, statement: str, observed_at: str) -> List[Dict]:
         """Strict cognition-timeline replay: per fiscal_date, the latest
