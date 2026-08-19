@@ -29,17 +29,21 @@
 
 每个 task 的实现/审查/修复详情见 `.superpowers/sdd/2026-08-16-extended-primary-universe-implementation/` 下的 `task-N-brief.md` / `task-N-report.md` / `review-*.diff`。
 
-## 二、第一件事：闭环 B2 审查
+## 二、第一件事：B2 fix loop（审查已完成，发现 2 Critical + 2 Important）
 
-B2 的 review package 已生成：`.superpowers/sdd/.../review-571abaa..ddecd94.diff`（10 commits，~80KB）。CC 派出的审查 agent 未回传结果即中断，**Codex 必须自己完成这次审查**（或重新做一次独立审查），重点核查项按优先级：
+B2 独立审查（opus，diff `review-571abaa..ddecd94.diff`）在 handoff 后回传，**verdict = Needs fixes**。审查全文见 ledger 尾部「B2 REVIEW VERDICT」段。Codex 不需要重做审查——直接进 fix round 1，修复以下四项后做 scoped re-review，全清才进 B3：
 
-1. **sub-$10B Core 票的价格覆盖**（最重要）：P1 切分后 FMP 只跑 overlay tier、yfinance 跑 current base universe（$10B+）。一只低于 $10B 的 Core 票、又不在 holdings/watchlist/benchmarks 里，bootstrap 前/后它的日频价格由谁采？逐行 trace `scripts/update_data.py` + `src/data/price_fetcher.py` + `src/data/extended_price_fetcher.py` 给出带行号的结论。若存在覆盖缺口即 Important，进 fix loop。
-2. `968246b`（#6 `--all` 双跑 yfinance 的自修）正确性。
-3. #8 forwarder 在 membership 为空时的等价性。
-4. #12 scan_themes parity 测试是否真冻结了旧行为（新票可进、旧票不得消失）。
-5. B2 实现者自报的三个偏差是否可接受：#10 `--universe` required-unless-`--symbols`；#9 为去重多改了 `overlays.py`+`price_fetcher.py`；#11 编辑了 `tests/test_legacy_telemetry.py` 的 known_unmigrated 清单（记录迁移进度，非掩盖回归）。
+**Critical 1 — post-bootstrap 时 sub-$10B Core 票完全失去价格采集（行 #6 自身验收标准"覆盖 ≥ 现状"未达成）**。审查者逐行 trace 证实：bootstrap 后 FMP 腿只拿 overlay tier（`price_fetcher.py:131`），yfinance 腿 = base − tier（`update_data.py:137`），而 bootstrap 的首个 membership snapshot 只含 `raw ∩ eligible`（extended $10B+ screener，`bootstrap_security_master.py:351`）——Core 里低于 $10B 的手动票（`source ∈ {analysis,manual}`，B5 行 #22 点名的那批）两条腿都不覆盖，`daily_price` 从 bootstrap 当日起静默断流，双腿各自报成功。测试 fixture 甚至编码了这个洞（`test_price_tier_split.py:20,23` 的 LEGACY_CORE 含 base 外的票）但断言只看 BASE_UNIVERSE（`:93`）。修法（审查者给出，二选一或都做）：① `_yfinance_price_leg_targets` 在 universe.json 仍存在期间并入 legacy Core pool；② price step 顶部加显式断言 `set(legacy_core) ⊆ set(fmp_targets) ∪ set(yf_targets)`，不满足即 fail loud——后者同时给 Stop C 一个「#22 未跑先兜底」的 tripwire（#22 与 bootstrap 的先后顺序目前无任何保障）。
 
-审查发现 Critical/Important → 修复 → scoped re-review，全清后才进 B3。
+**Critical 2 — 行 #8 forwarder 静默收缩生产 cron 的 forward-estimates 目标集**。`run_forward_data.sh:25` → `--forward-estimates --scope=all` → `_resolve_target_symbols`（`update_data.py:83-85`）= `Core ∪ get_extended_only_symbols()`。迁移前 = Core ∪ extended；post-bootstrap forwarder 返回 base − overlay_tier，于是 `(base ∩ tier) ∖ Core` 掉出目标集——**在 extended 里但不在 Core 里的持仓/watchlist 票**（非科技 $10B–$100B 持仓即中招）失去周频 yfinance forward estimates。B3 行 #14 只保 FMP forward 线的 holdings overlay，本条 yfinance 线的同类暴露没有任何矩阵行覆盖，是 B2 引入的。`verify_forward_coverage.py:90` 的分母也随之漂移。修法：`--scope=all` 的 union 改为显式并入 overlay tier（或 forwarder 的替代语义补回 tier），并加测试锁定「持仓票不丢」。
+
+**Important 3 — 行 #12 的 parity 测试是同义反复**。两次运行喂同一张预制 rank 表，`old ⊆ new` 对任何实现恒真，测不出真正的回归机制：`rs_rank` 是横截面百分位（`rs_rating.py:128`），池从 ~209 扩到 ~950 会重排名，Core 票可能跌破 `THEME_RS_THRESHOLD=80` 从主题里消失。修法：fixture 改喂价格序列，`run_momentum_scan` 在两种池规模下真跑，断言旧票不消失（或有损失时显式列清单）。
+
+**Important 4 — 两条价格腿各自独立探测 bootstrap 状态**。第一腿成功、第二腿瞬时失败（DB 锁等）时：FMP 收缩到 ~50 票 + yfinance 腿返回 `[]`，全 base universe 当日无价——唯一信号是 stdout print、exit 0。修法：base universe 解析一次、两腿共用；失败路径升级为 `logger.error`。
+
+**Minors（ledger 记档，final review triage）**：#5 yfinance 腿降级用 print 非 logger.warning；#6 行 #9 commit 超出行文件清单（已自报）；#7 bootstrap 探测三次全量读（可加廉价 has_membership()）；#8 `--refresh-universe` 分支的 `symbols =` 赋值已死代码。
+
+**审查确认无误的部分**（不必重查）：pre-bootstrap 回退机制真实有效（current_base_universe 是 raise 不是返回空）；`968246b` --all 双跑修复正确；#10 conditional-required 偏差被审查者裁定优于字面 required=True；#11 的测试清单编辑有更强断言补偿。
 
 ## 三、剩余工作清单（按序）
 
