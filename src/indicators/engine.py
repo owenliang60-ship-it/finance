@@ -19,6 +19,26 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
+def _resolve_default_symbols(store=None) -> List[str]:
+    """`symbols=None` 时的默认股票面 = resolver eligible 全池（矩阵 #13）。
+
+    只影响不传 symbols 的调用；显式传参路径完全不碰这里（`[]` 也是显式的"什么都
+    不跑"，判据是 `is None`）。bootstrap 之前退回 legacy Core 池并记 warning ——
+    指标是本地计算，按旧口径先跑出结果比直接崩掉有用；membership 一旦存在语义
+    自动切换。
+    """
+    from src.data.universe_resolver import current_base_universe
+
+    try:
+        return current_base_universe(store=store)
+    except Exception as e:
+        logger.warning(
+            "current_base_universe unavailable, indicator engine falls back to "
+            "the legacy Core pool: %s", e
+        )
+        return get_symbols()
+
+
 def run_indicators(
     symbol: str,
     indicators: List[str] = None
@@ -83,7 +103,7 @@ def run_all_indicators(
     对多只股票批量运行指标分析
 
     Args:
-        symbols: 股票列表，默认使用股票池全部
+        symbols: 股票列表，默认使用 resolver eligible 全池（矩阵 #13）
         indicators: 指标列表
         parallel: 是否并行执行（默认否，避免 API 问题）
 
@@ -95,7 +115,7 @@ def run_all_indicators(
         }
     """
     if symbols is None:
-        symbols = get_symbols()
+        symbols = _resolve_default_symbols()
 
     logger.info(f"开始分析 {len(symbols)} 只股票...")
 
@@ -272,7 +292,7 @@ def run_momentum_scan(
     需要所有股票的数据同时参与。
 
     Args:
-        symbols: 股票列表，默认使用股票池全部
+        symbols: 股票列表，默认使用 resolver eligible 全池（矩阵 #13）
         max_age_days: 价格数据最大容忍天数（0=不自动刷新，依赖 cron）
 
     Returns:
@@ -290,7 +310,7 @@ def run_momentum_scan(
     from src.indicators.rvol_sustained import scan_rvol_sustained
 
     if symbols is None:
-        symbols = get_symbols()
+        symbols = _resolve_default_symbols()
 
     logger.info(f"动量扫描: 加载 {len(symbols)} 只股票价格数据...")
 
