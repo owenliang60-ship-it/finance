@@ -362,6 +362,11 @@ EXTENDED_PRICE_BACKFILL_START = "2021-02-01"  # 5-year backfill start date
 EXTENDED_PRICE_INCREMENTAL_PERIOD = "5d"      # Daily incremental period
 EXTENDED_UNIVERSE_MIN_MCAP_B = 10             # $10B minimum market cap
 
+# 相邻财季最大间隔（天）。SSOT：backfill runner 的 as-of 窗口判定
+# (`has_asof_window`) 与 T18 verifier 的季度连续性检查共用此常量——
+# 超过则视为财报序列断档，不算连续 8 个季度。
+FUNDAMENTAL_QUARTER_GAP_MAX_DAYS = 120
+
 # ============ Broad Universe ($1B+ bootstrap research universe) ============
 
 BROAD_UNIVERSE_SEED_FILE = POOL_DIR / "broad_universe_seed.json"
