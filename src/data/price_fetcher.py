@@ -121,19 +121,9 @@ def get_fmp_price_targets(store=None) -> List[str]:
         )
         return get_symbols()
 
-    from src.data.universe_resolver import resolve_universe
-    from src.data.overlays import load_holdings, load_watchlist, load_benchmarks
+    from src.data.overlays import load_overlay_tier
 
-    resolved = resolve_universe(
-        base="none",
-        overlays=("holdings", "watchlist", "benchmarks"),
-        overlay_loaders={
-            "holdings": load_holdings,
-            "watchlist": load_watchlist,
-            "benchmarks": load_benchmarks,
-        },
-    )
-    return list(resolved.symbols)
+    return load_overlay_tier()
 
 
 def update_all_prices(symbols: List[str] = None, force_full: bool = False) -> dict:

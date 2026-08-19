@@ -42,3 +42,29 @@ def load_benchmarks(store=None) -> List[str]:
     for a uniform zero-or-one-arg loader signature."""
     from config.settings import BENCHMARK_SYMBOLS
     return list(BENCHMARK_SYMBOLS)
+
+
+OVERLAY_TIER = ("holdings", "watchlist", "benchmarks")
+
+
+def load_overlay_tier(store=None) -> List[str]:
+    """The three overlays as one set: holdings ∪ watchlist ∪ benchmarks (~50).
+
+    The tier every consumer means by "the names Boss actually looks at": the
+    FMP daily-price budget (matrix #6) and the default correlation scope
+    (matrix #9) are both defined against it. Reads company.db + settings only,
+    so it resolves before `extended_membership` is ever bootstrapped — callers
+    that also need a base universe must handle that separately.
+    """
+    from src.data.universe_resolver import resolve_universe
+
+    resolved = resolve_universe(
+        base="none",
+        overlays=OVERLAY_TIER,
+        overlay_loaders={
+            "holdings": lambda: load_holdings(store=store),
+            "watchlist": lambda: load_watchlist(store=store),
+            "benchmarks": lambda: load_benchmarks(store=store),
+        },
+    )
+    return list(resolved.symbols)

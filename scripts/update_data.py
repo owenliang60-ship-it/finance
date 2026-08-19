@@ -125,6 +125,26 @@ def _yfinance_price_leg_targets(fmp_targets, *, store=None):
     return sorted({s.upper() for s in base} - covered)
 
 
+def _resolve_correlation_symbols(*, wide: bool = False, market_store=None,
+                                 company_store=None):
+    """`--correlation` 的目标名单（矩阵 #9）。
+
+    默认 = overlay tier（holdings ∪ watchlist ∪ benchmarks，~50 只）。相关性矩阵
+    是 O(n²)，按全池跑出来的东西既慢也没人读。`--wide` 显式换成 resolver
+    eligible 全池。
+
+    默认路径不碰 `extended_membership`，bootstrap 之前照常可用；`--wide` 是显式
+    开关，基础池不可用时 fail-loud 冒泡 —— 悄悄缩回 overlay tier 会把一个坏掉的
+    universe 藏起来。
+    """
+    if wide:
+        from src.data.universe_resolver import current_base_universe
+        return current_base_universe(store=market_store)
+
+    from src.data.overlays import load_overlay_tier
+    return load_overlay_tier(store=company_store)
+
+
 def run_fundamental_update(*, scope: str, symbols=None, store=None, client=None,
                            as_of=None, limit_quarters: int = 8) -> int:
     """Drive `--fundamental` for one scope, entirely through the T8 kernel (P1-3).
@@ -200,6 +220,9 @@ def main():
     parser.add_argument("--symbols", type=str, help="指定股票代码，逗号分隔")
     parser.add_argument("--force", action="store_true", help="强制全量更新")
     parser.add_argument("--correlation", action="store_true", help="计算相关性矩阵")
+    parser.add_argument("--wide", action="store_true",
+                        help="--correlation: 按 resolver eligible 全池计算，"
+                             "而非默认的 overlay tier（O(n²)，慎用）")
     parser.add_argument("--forward-estimates", action="store_true",
                         help="更新前瞻预期数据 (yfinance)")
     parser.add_argument("--social-sentiment", action="store_true",
@@ -449,7 +472,9 @@ def main():
         print("Step 4: 计算相关性矩阵")
         print("=" * 40)
         from src.analysis.correlation import get_correlation_matrix
-        corr_symbols = symbols or get_symbols()
+        corr_symbols = symbols or _resolve_correlation_symbols(wide=args.wide)
+        print(f"Scope: {'eligible (--wide)' if args.wide else 'overlay tier'}, "
+              f"{len(corr_symbols)} symbols")
         matrix = get_correlation_matrix(corr_symbols, use_cache=False)
         print(f"\n✅ 相关性矩阵: {len(matrix)} 只股票")
         print()
