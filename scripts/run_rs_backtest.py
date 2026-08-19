@@ -208,7 +208,7 @@ def run_optimize(args):
     return result
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(description="RS 动量回测引擎")
     parser.add_argument("--market", choices=["us_stocks", "crypto"], default="us_stocks")
     parser.add_argument("--method", choices=["B", "C"], default="B")
@@ -220,8 +220,13 @@ def main():
     parser.add_argument("--end-date", type=str, default=None)
     parser.add_argument("--sweep", action="store_true", help="参数扫描模式")
     parser.add_argument("--optimize", action="store_true", help="优化模式 (sweep + walk-forward)")
-    parser.add_argument("--universe", choices=["pool", "extended"],
-                        default=None, help="股票池范围: pool (~130) / extended (~949 post-A1) / 默认=全部")
+    parser.add_argument(
+        "--universe",
+        choices=["pool", "extended", "extended_true", "eligible_extended"],
+        default=None,
+        help=("股票池范围: pool / extended / extended_true / "
+              "eligible_extended / 默认=market.db 全部"),
+    )
     parser.add_argument("--reconstitute", type=float, default=None,
                         metavar="MCAP",
                         help="历史市值阈值 (e.g. 10e9)，启用 universe reconstitution")
@@ -238,7 +243,11 @@ def main():
     parser.add_argument("--html", action="store_true", help="生成 HTML 报告")
     parser.add_argument("-v", "--verbose", action="store_true")
 
-    args = parser.parse_args()
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
     setup_logging(args.verbose)
 
     if args.optimize:
