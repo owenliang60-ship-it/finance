@@ -491,24 +491,35 @@ def main(argv: Optional[List[str]] = None) -> None:
     from src.data.fmp_client import FMPClient
     from src.telegram_bot import send_message
 
-    store = MarketStore()
-    client = FMPClient()
     lock = FileLock() if args.repair else None
+    if lock is not None and not lock.acquire():
+        print("reconcile: {} is held by another writer — skipping (exit {})".format(
+            getattr(lock, "path", "market_db_writer"), EXIT_LOCK_BUSY))
+        sys.exit(EXIT_LOCK_BUSY)
 
-    def notifier(message: str) -> None:
-        try:
-            send_message(message, channel="private")
-        except Exception as exc:  # Telegram failure must not change the run's conclusion
-            logger.warning("telegram send failed: %s", exc)
+    try:
+        # MarketStore initialization executes additive schema DDL; repair mode
+        # must therefore acquire the writer lock before constructing it.
+        store = MarketStore()
+        client = FMPClient()
 
-    rc, _targets = run_reconcile(
-        store=store, client=client, repair=args.repair,
-        max_targets=args.max_targets, stale_after_days=args.stale_after_days,
-        notifier=notifier, as_of=args.as_of, lock=lock,
-        overrides=_load_overrides(),
-        profiles_mirror_path=DEFAULT_PROFILES_PATH if args.repair else None,
-        json_output=args.json,
-    )
+        def notifier(message: str) -> None:
+            try:
+                send_message(message, channel="private")
+            except Exception as exc:  # Telegram failure must not change the run's conclusion
+                logger.warning("telegram send failed: %s", exc)
+
+        rc, _targets = run_reconcile(
+            store=store, client=client, repair=args.repair,
+            max_targets=args.max_targets, stale_after_days=args.stale_after_days,
+            notifier=notifier, as_of=args.as_of, lock=lock,
+            overrides=_load_overrides(),
+            profiles_mirror_path=DEFAULT_PROFILES_PATH if args.repair else None,
+            json_output=args.json,
+        )
+    finally:
+        if lock is not None:
+            lock.release()
     sys.exit(rc)
 
 

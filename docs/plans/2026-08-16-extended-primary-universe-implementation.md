@@ -1428,7 +1428,7 @@ ssh aliyun "crontab -l > /root/cron_backup_$(date +%F)"
 # 事件增量（Tue-Sat 07:10）
 10 7 * * 2-6 cd /root/workspace/Finance && FINANCE_CRON_RESOURCE_KEY=market_db_writer FINANCE_CRON_LOCK_BUSY_RC=75 scripts/cron_wrapper.sh finance_fundamental_events cron_fundamental_events.log python3 scripts/update_data.py --fundamental --scope events
 # 周日对账+补漏（Sun 09:00）
-0 9 * * 0 cd /root/workspace/Finance && FINANCE_CRON_RESOURCE_KEY=market_db_writer FINANCE_CRON_LOCK_BUSY_RC=75 scripts/cron_wrapper.sh finance_reconcile cron_reconcile.log python3 scripts/reconcile_fundamentals.py --repair --max-targets 200
+0 9 * * 0 cd /root/workspace/Finance && FINANCE_CRON_LOCK_BUSY_RC=75 scripts/cron_wrapper.sh finance_reconcile cron_reconcile.log python3 scripts/reconcile_fundamentals.py --repair --max-targets 200
 
 # --- 删除一行 ---
 # Sat 10:00 原 finance_fundamental job（由上两行取代）
