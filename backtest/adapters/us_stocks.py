@@ -48,6 +48,7 @@ class USStocksAdapter:
                 "pool" (池内 ~147),
                 "extended" (~533 active),
                 "extended_true" (active + delisted overlay),
+                "eligible_extended" (current resolver base),
                 None (all in db)
             mcap_threshold: 历史市值阈值 (e.g. 10e9)。每次 slice_to_date 时过滤低于阈值的股票
         """
@@ -287,6 +288,10 @@ class USStocksAdapter:
                 from src.data.delisted_universe_manager import get_extended_true_symbols
 
                 return get_extended_true_symbols()
+            elif self._universe == "eligible_extended":
+                from src.data.universe_resolver import current_base_universe
+
+                return current_base_universe()
             else:
                 # Default: all symbols in market.db
                 store = _get_market_store()
