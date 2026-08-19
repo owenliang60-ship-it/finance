@@ -17,6 +17,7 @@ import logging
 import re
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -576,6 +577,67 @@ _SCHEMA = "\n\n".join([
     PRIMARY KEY (snapshot_date, run_kind)
 );""",
     "CREATE INDEX IF NOT EXISTS idx_ffr_status ON fmp_forward_runs(status, snapshot_date);",
+
+    # -- Extended Primary Universe storage foundation (north-star.md 数据层) --
+
+    # -- Security master: identity + eligibility (ETF/fund/ADR exclusion) --
+    """CREATE TABLE IF NOT EXISTS security_master (
+    symbol TEXT PRIMARY KEY, cik TEXT, company_name TEXT, exchange TEXT,
+    is_etf INTEGER NOT NULL DEFAULT 0, is_fund INTEGER NOT NULL DEFAULT 0,
+    is_adr INTEGER NOT NULL DEFAULT 0, share_class_of TEXT,
+    eligible INTEGER NOT NULL, reason TEXT NOT NULL, updated_at TEXT NOT NULL
+);""",
+
+    # -- Extended universe membership windows (as-of reconstitution) --
+    """CREATE TABLE IF NOT EXISTS extended_membership (
+    symbol TEXT NOT NULL, effective_from TEXT NOT NULL, effective_to TEXT,
+    reason TEXT NOT NULL DEFAULT 'screener',
+    PRIMARY KEY (symbol, effective_from)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_membership_window ON extended_membership(effective_from, effective_to);",
+
+    # -- Per-symbol per-dataset fetch/coverage status + retry bookkeeping.
+    # Retry semantics (R2-P1-3): fetch_failed -> next_retry_at = now + min(2^consecutive_failures, 16) days;
+    # provider_empty -> negative-cache with TTL, next_retry_at = now + 30 days (settings.PROVIDER_EMPTY_TTL_DAYS);
+    # ok -> consecutive_failures reset to 0, last_success_at set, next_retry_at = NULL.
+    # dataset also takes the value "identity" (identity backfill queue, see T12/T17).
+    """CREATE TABLE IF NOT EXISTS coverage_status (
+    symbol TEXT NOT NULL, dataset TEXT NOT NULL, status TEXT NOT NULL,
+    detail TEXT, updated_at TEXT NOT NULL,
+    last_attempt_at TEXT, last_success_at TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    next_retry_at TEXT,
+    PRIMARY KEY (symbol, dataset)
+);""",
+
+    # -- Company profile payload cache (raw JSON blob keyed by symbol) --
+    """CREATE TABLE IF NOT EXISTS company_profile (
+    symbol TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL
+);""",
+
+    # -- Fundamental vintage: point-in-time snapshots per statement/fiscal period --
+    """CREATE TABLE IF NOT EXISTS fundamental_vintage (
+    symbol TEXT NOT NULL, statement TEXT NOT NULL, fiscal_date TEXT NOT NULL,
+    observed_at TEXT NOT NULL, filing_date TEXT, accepted_date TEXT,
+    content_hash TEXT NOT NULL, vintage_quality TEXT NOT NULL, payload TEXT NOT NULL,
+    PRIMARY KEY (symbol, statement, fiscal_date, observed_at)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_fv_symbol_stmt ON fundamental_vintage(symbol, statement, fiscal_date);",
+
+    # -- Fundamental backfill run manifest --
+    """CREATE TABLE IF NOT EXISTS fundamental_backfill_runs (
+    run_id TEXT PRIMARY KEY, universe_hash TEXT NOT NULL, params_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running', started_at TEXT NOT NULL, finished_at TEXT
+);""",
+
+    # -- Fundamental backfill per-symbol/dataset job queue --
+    """CREATE TABLE IF NOT EXISTS fundamental_backfill_jobs (
+    run_id TEXT NOT NULL, symbol TEXT NOT NULL, dataset TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT,
+    claimed_at TEXT, completed_at TEXT,
+    PRIMARY KEY (run_id, symbol, dataset)
+);""",
 ])
 
 # Pre-compute snake-case column sets per table for fast lookup
@@ -604,6 +666,9 @@ _VALID_TABLES = frozenset({
     "symbol_concept_edges",
     "fmp_estimates", "fmp_earnings", "fmp_etf_holdings_snapshot",
     "fmp_basket_valuation", "fmp_forward_runs",
+    "security_master", "extended_membership", "coverage_status",
+    "company_profile", "fundamental_vintage",
+    "fundamental_backfill_runs", "fundamental_backfill_jobs",
 })
 
 
@@ -688,6 +753,44 @@ class MarketStore:
                 result[snake] = value
         return result
 
+    def _upsert_rows_in_conn(self, conn: sqlite3.Connection, table: str,
+                              rows: List[Dict]) -> int:
+        """Insert or replace already-prepared rows into `table` using `conn`.
+
+        Does not open its own transaction (no `with conn:`) — the caller owns
+        the transaction boundary. Only call this from within `transaction()`
+        or from a method that already holds `with conn:` itself (e.g.
+        `_bulk_upsert`); calling it outside of any open transaction leaves
+        each INSERT auto-committed individually.
+
+        Args:
+            conn: Connection with an already-open transaction.
+            table: Target table name (must be in whitelist).
+            rows: List of dicts already filtered/converted to final column
+                names (e.g. output of `_convert_row` plus injected keys).
+
+        Returns:
+            Number of rows upserted.
+        """
+        _validate_table(table)
+        valid_cols = _get_table_columns(table, conn)
+        count = 0
+        for row in rows:
+            cols = [c for c in row if c in valid_cols]
+            if not cols:
+                continue
+            placeholders = ", ".join(["?"] * len(cols))
+            col_names = ", ".join(cols)
+            values = [row[c] for c in cols]
+
+            conn.execute(
+                f"INSERT OR REPLACE INTO {table} ({col_names}) VALUES ({placeholders})",
+                values,
+            )
+            count += 1
+
+        return count
+
     def _bulk_upsert(self, table: str, symbol: str, rows: List[Dict],
                      convert: bool = True) -> int:
         """Insert or replace rows in a single transaction.
@@ -707,31 +810,46 @@ class MarketStore:
 
         conn = self._get_conn()
         valid_cols = _get_table_columns(table, conn)
-        count = 0
+        prepared = []
+
+        for row in rows:
+            if convert:
+                data = self._convert_row(row, table)
+            else:
+                data = {k: v for k, v in row.items() if k in valid_cols}
+            data["symbol"] = symbol.upper()
+
+            if "date" not in data or not data["date"]:
+                continue
+
+            prepared.append(data)
 
         with conn:
-            for row in rows:
-                if convert:
-                    data = self._convert_row(row, table)
-                else:
-                    data = {k: v for k, v in row.items() if k in valid_cols}
-                data["symbol"] = symbol.upper()
-
-                if "date" not in data or not data["date"]:
-                    continue
-
-                cols = [c for c in data if c in valid_cols]
-                placeholders = ", ".join(["?"] * len(cols))
-                col_names = ", ".join(cols)
-                values = [data[c] for c in cols]
-
-                conn.execute(
-                    f"INSERT OR REPLACE INTO {table} ({col_names}) VALUES ({placeholders})",
-                    values,
-                )
-                count += 1
+            count = self._upsert_rows_in_conn(conn, table, prepared)
 
         return count
+
+    @contextmanager
+    def transaction(self):
+        """Explicit multi-statement transaction boundary.
+
+        Opens the thread-local connection with `BEGIN IMMEDIATE`, yields it,
+        commits on clean exit, and rolls back on any exception (re-raised).
+
+        Only call `_in_conn`-suffixed helpers (e.g. `_upsert_rows_in_conn`)
+        inside this block. Do not call public methods that open their own
+        `with conn:` block (e.g. `_bulk_upsert`) — nesting would commit the
+        outer transaction early, defeating the rollback guarantee.
+        """
+        conn = self._get_conn()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            raise
+        else:
+            conn.commit()
 
     def _get_rows(self, table: str, symbol: str,
                   start_date: Optional[str] = None,
