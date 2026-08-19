@@ -1486,8 +1486,18 @@ class CompanyStore:
         """Get database statistics."""
         conn = self._get_conn()
         total = conn.execute("SELECT COUNT(*) FROM companies").fetchone()[0]
+        from src.data.universe_resolver import current_base_universe
         from src.data.pool_manager import get_symbols
-        in_pool = len(get_symbols())
+        try:
+            in_pool = len(current_base_universe())
+        except Exception as e:
+            # Display context (matrix #3): must never crash. Falls back to
+            # legacy pool.json semantics when the resolver isn't bootstrapped
+            # yet (e.g. fresh worktree), matching morning_report.py's pattern.
+            logger.warning(
+                "current_base_universe unavailable, falling back to legacy pool symbols: %s", e
+            )
+            in_pool = len(get_symbols())
         rated = conn.execute(
             "SELECT COUNT(DISTINCT symbol) FROM oprms_ratings WHERE is_current = 1"
         ).fetchone()[0]

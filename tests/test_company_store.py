@@ -275,7 +275,10 @@ class TestDashboardAndStats:
         store.save_oprms_rating("MSFT", dna="A", timing="B", timing_coeff=0.5)
         store.save_analysis("AAPL", {"analysis_date": "2026-02-13"})
 
-        with patch("src.data.pool_manager.get_symbols", return_value=["AAPL", "MSFT"]):
+        with patch(
+            "src.data.universe_resolver.current_base_universe",
+            return_value=["AAPL", "MSFT"],
+        ):
             stats = store.get_stats()
         assert stats["total_companies"] == 3
         assert stats["in_pool"] == 2
@@ -285,11 +288,31 @@ class TestDashboardAndStats:
         assert stats["dna_distribution"]["A"] == 1
 
     def test_empty_stats(self, store):
-        with patch("src.data.pool_manager.get_symbols", return_value=[]):
+        with patch(
+            "src.data.universe_resolver.current_base_universe", return_value=[]
+        ):
             stats = store.get_stats()
         assert stats["total_companies"] == 0
         assert stats["in_pool"] == 0
         assert stats["rated"] == 0
+
+    def test_stats_falls_back_to_legacy_pool_when_resolver_raises(self, store, caplog):
+        """Matrix #3 (company_store.py get_stats): display context must never
+        crash — resolver failure (e.g. pre-bootstrap) falls back to
+        pool_manager.get_symbols() with a logged warning."""
+        import logging
+
+        def boom():
+            raise RuntimeError("extended_membership empty — run bootstrap first")
+
+        with patch("src.data.universe_resolver.current_base_universe", boom), \
+             patch("src.data.pool_manager.get_symbols", return_value=["AAPL", "MSFT", "GOOG"]):
+            with caplog.at_level(logging.WARNING, logger="terminal.company_store"):
+                stats = store.get_stats()
+        assert stats["in_pool"] == 3
+        assert any(
+            "current_base_universe unavailable" in rec.message for rec in caplog.records
+        )
 
 
 # ---------------------------------------------------------------------------
