@@ -220,6 +220,12 @@ def get_yfinance_price_targets(store=None) -> List[str]:
     Core targets, so this degrades to the pre-migration `extended − core` list
     with a logged warning. Semantics switch by themselves once membership
     exists.
+
+    Args:
+        store: **MarketStore** — forwarded to the resolver and to
+            `get_fmp_price_targets()`. The overlay loaders behind the FMP tier
+            read company.db through their own default store; do not pass a
+            CompanyStore here.
     """
     from src.data.universe_resolver import current_base_universe
 

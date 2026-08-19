@@ -109,6 +109,11 @@ def get_fmp_price_targets(store=None) -> List[str]:
     `extended_membership` 仍是空的 —— 此时 yfinance 那条腿没有基础池可跑，把 FMP
     收窄到 ~50 只会让 Core 池当天完全没有价格来源。所以窗口内记一条 warning 并
     保持 legacy Core 名单，membership 一旦存在语义自动切换。
+
+    Args:
+        store: **MarketStore**（只用于探测 membership 是否已 bootstrap）。overlay
+            三个 loader 读的是 company.db，各自开自己的默认 CompanyStore，不受
+            本参数影响 —— 别把 CompanyStore 传进来。
     """
     from src.data.universe_resolver import current_base_universe
 
