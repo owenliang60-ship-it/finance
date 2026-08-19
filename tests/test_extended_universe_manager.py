@@ -13,16 +13,51 @@ from src.data.extended_universe_manager import (
     get_extended_only_symbols,
     get_extended_symbols,
     refresh_extended_universe,
+    refresh_with_snapshot,
 )
+
+
+class _KnowsEverything(dict):
+    """security_master stand-in that already knows every screener symbol.
+
+    T17 routed `refresh_extended_universe` through the DB commit flow; the
+    screener/floor/cache tests below predate that and assert only on the
+    cache file. Reporting every symbol as known+eligible makes the entrant
+    loop empty, so those tests keep exercising exactly what they always did
+    (no DB, no profile client). The DB semantics get their own coverage in
+    `TestRefreshWithSnapshot`.
+    """
+
+    def __contains__(self, key):
+        return True
+
+    def get(self, key, default=None):
+        return True
+
+
+class _StubStore:
+    def __init__(self):
+        self.snapshots = []
+
+    def get_security_eligibility(self):
+        return _KnowsEverything()
+
+    def record_membership_snapshot(self, symbols, as_of):
+        self.snapshots.append((list(symbols), as_of))
+        return {"entered": list(symbols), "exited": []}
 
 
 @pytest.fixture
 def tmp_cache(tmp_path, monkeypatch):
-    """Redirect EXTENDED_UNIVERSE_FILE to tmp_path."""
+    """Redirect EXTENDED_UNIVERSE_FILE to tmp_path (+ stub the SSOT store)."""
     cache_file = tmp_path / "extended_universe.json"
     monkeypatch.setattr(
         "src.data.extended_universe_manager.EXTENDED_UNIVERSE_FILE",
         cache_file,
+    )
+    monkeypatch.setattr(
+        "src.data.extended_universe_manager._resolve_store",
+        lambda: _StubStore(),
     )
     return cache_file
 
@@ -235,3 +270,294 @@ class TestRefreshFloorGuard:
         assert len(symbols) == 5000, "cache must write — manager floor guard != fmp sentinel"
         cache_path_data = json.loads(tmp_cache.read_text())
         assert cache_path_data["count"] == 5000
+
+
+# ---------------------------------------------------------------------------
+# T17: 周频 membership 快照接线 (R2-P1-2 / R3-P1-4 / R4-P1-1)
+#
+# DB membership is the SSOT commit point; extended_universe.json is a
+# rebuildable cache published only AFTER that commit succeeds.
+# ---------------------------------------------------------------------------
+
+AS_OF = "2026-08-22"
+
+
+class _FakeProfileClient:
+    """Stand-in for FMPClient.get_dataset_with_status("profile", sym)."""
+
+    def __init__(self, fetch_failed=()):
+        self.fetch_failed = set(fetch_failed)
+        self.symbols_fetched = []
+
+    def get_dataset_with_status(self, kind, symbol, limit=8):
+        assert kind == "profile"
+        self.symbols_fetched.append(symbol)
+        if symbol in self.fetch_failed:
+            return [], "fetch_failed"
+        return [{
+            "symbol": symbol, "cik": "CIK-" + symbol,
+            "companyName": symbol + " Inc.", "exchangeShortName": "NASDAQ",
+            "isEtf": False, "isFund": False, "isAdr": False, "mktCap": 1000,
+        }], "ok"
+
+
+@pytest.fixture
+def tmp_store(tmp_path):
+    from src.data.market_store import MarketStore
+    store = MarketStore(db_path=tmp_path / "test_market.db")
+    yield store
+    store.close()
+
+
+@pytest.fixture
+def fake_client_full():
+    return _FakeProfileClient()
+
+
+@pytest.fixture
+def fake_client_newco_500():
+    return _FakeProfileClient(fetch_failed=["NEWCO"])
+
+
+def _bootstrap_minimal_sm(store, symbols):
+    """Seed security_master as a prior T6 bootstrap would have left it."""
+    store.upsert_security_master([{
+        "symbol": s, "cik": "CIK-" + s, "company_name": s + " Inc.",
+        "exchange": "NASDAQ", "is_etf": 0, "is_fund": 0, "is_adr": 0,
+        "share_class_of": None, "eligible": 1, "reason": "ok",
+        "updated_at": "2026-08-01T00:00:00Z",
+    } for s in symbols])
+
+
+def _write_old_cache(cache_dir, symbols):
+    path = Path(cache_dir) / "extended_universe.json"
+    path.write_text(json.dumps({
+        "updated": "2026-08-15", "min_mcap_b": 10,
+        "count": len(symbols), "symbols": list(symbols),
+    }), encoding="utf-8")
+    return path
+
+
+def _read_cache_symbols(cache_dir):
+    path = Path(cache_dir) / "extended_universe.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))["symbols"]
+
+
+def _table_count(store, table):
+    import sqlite3
+    conn = sqlite3.connect(str(store.db_path))
+    try:
+        return conn.execute("SELECT count(*) FROM " + table).fetchone()[0]
+    finally:
+        conn.close()
+
+
+class TestRefreshWithSnapshot:
+    def test_entrants_bootstrapped_before_membership(
+        self, tmp_store, fake_client_full, tmp_path
+    ):
+        _bootstrap_minimal_sm(tmp_store, ["AAPL"])
+
+        refresh_with_snapshot(["AAPL", "NEWCO"], store=tmp_store,
+                              client=fake_client_full, cache_dir=tmp_path,
+                              min_count_floor=0, as_of=AS_OF)
+
+        # identity resolved first...
+        assert tmp_store.get_security_eligibility().get("NEWCO") is True
+        # ...only then can it be in the membership snapshot
+        assert "NEWCO" in tmp_store.get_members_as_of(AS_OF)
+        # already-mastered symbols are not re-fetched (weekly call budget)
+        assert fake_client_full.symbols_fetched == ["NEWCO"]
+
+    def test_failed_entrant_queued_not_membered(
+        self, tmp_store, fake_client_newco_500, tmp_path
+    ):
+        _bootstrap_minimal_sm(tmp_store, ["AAPL"])
+
+        refresh_with_snapshot(["AAPL", "NEWCO"], store=tmp_store,
+                              client=fake_client_newco_500, cache_dir=tmp_path,
+                              min_count_floor=0, as_of=AS_OF)
+
+        members = tmp_store.get_members_as_of(AS_OF)
+        assert "NEWCO" not in members
+        assert members == ["AAPL"]
+        # in the identity repair queue (T12 phase 0 retries it), not in SM
+        assert tmp_store.get_coverage("identity").get("NEWCO") == "fetch_failed"
+        assert "NEWCO" not in tmp_store.get_security_eligibility()
+        # cache is the RAW screener list — membership is the eligible subset
+        assert _read_cache_symbols(tmp_path) == ["AAPL", "NEWCO"]
+
+    def test_json_not_rebuilt_when_db_hooks_fail(
+        self, tmp_store, fake_client_full, monkeypatch, tmp_path
+    ):
+        """R3-P1-4: membership commit fails -> JSON bytes unchanged, no tmp residue."""
+        _bootstrap_minimal_sm(tmp_store, ["AAPL"])
+        _write_old_cache(tmp_path, ["AAPL"])
+
+        def _boom(*a, **k):
+            raise RuntimeError("db down")
+
+        monkeypatch.setattr(tmp_store, "record_membership_snapshot", _boom)
+
+        with pytest.raises(RuntimeError, match="db down"):
+            refresh_with_snapshot(["AAPL", "NEWCO"], store=tmp_store,
+                                  client=fake_client_full, cache_dir=tmp_path,
+                                  min_count_floor=0, as_of=AS_OF)
+
+        assert _read_cache_symbols(tmp_path) == ["AAPL"]
+        assert not (tmp_path / "extended_universe.json.tmp").exists()
+        assert _table_count(tmp_store, "extended_membership") == 0
+
+    def test_membership_committed_even_if_json_publish_fails(
+        self, tmp_store, fake_client_full, monkeypatch, tmp_path, caplog
+    ):
+        """R4-P1-1: DB commit lands, os.replace fails -> warn only, never raise."""
+        import logging
+
+        _bootstrap_minimal_sm(tmp_store, ["AAPL"])
+        _write_old_cache(tmp_path, ["AAPL"])
+
+        def _disk_full(*a, **k):
+            raise OSError("disk full")
+
+        monkeypatch.setattr("os.replace", _disk_full)
+
+        with caplog.at_level(logging.WARNING):
+            result = refresh_with_snapshot(["AAPL", "NEWCO"], store=tmp_store,
+                                           client=fake_client_full, cache_dir=tmp_path,
+                                           min_count_floor=0, as_of=AS_OF)
+
+        assert "NEWCO" in tmp_store.get_members_as_of(AS_OF)   # DB is the truth
+        assert _read_cache_symbols(tmp_path) == ["AAPL"]       # stale but harmless
+        assert result["cache_published"] is False
+        assert any("cache" in r.message.lower() for r in caplog.records)
+        assert not (tmp_path / "extended_universe.json.tmp").exists()
+
+    def test_current_base_universe_reads_db_not_json(self, tmp_store, tmp_path):
+        """SSOT assertion: when JSON and DB disagree, DB wins."""
+        _bootstrap_minimal_sm(tmp_store, ["AAPL", "NEWCO"])
+        tmp_store.record_membership_snapshot(["AAPL", "NEWCO"], as_of=AS_OF)
+        _write_old_cache(tmp_path, ["AAPL"])
+
+        from src.data.universe_resolver import current_base_universe
+        assert set(current_base_universe(store=tmp_store)) == {"AAPL", "NEWCO"}
+
+    def test_floor_failure_writes_nothing(self, tmp_store, fake_client_full, tmp_path):
+        """Floor guard (T1) still fires ahead of every write, DB included."""
+        with pytest.raises(RuntimeError, match="below floor"):
+            refresh_with_snapshot(["ONLY1"], store=tmp_store, client=fake_client_full,
+                                  cache_dir=tmp_path, min_count_floor=800, as_of=AS_OF)
+
+        assert _table_count(tmp_store, "extended_membership") == 0
+        assert _table_count(tmp_store, "security_master") == 0
+        assert fake_client_full.symbols_fetched == []
+        assert _read_cache_symbols(tmp_path) is None
+
+    def test_dropouts_exit_membership(self, tmp_store, fake_client_full, tmp_path):
+        """SCD-2: a name the screener no longer returns closes its window."""
+        _bootstrap_minimal_sm(tmp_store, ["AAPL", "GONE"])
+        tmp_store.record_membership_snapshot(["AAPL", "GONE"], as_of="2026-08-15")
+
+        result = refresh_with_snapshot(["AAPL"], store=tmp_store,
+                                       client=fake_client_full, cache_dir=tmp_path,
+                                       min_count_floor=0, as_of=AS_OF)
+
+        assert tmp_store.get_active_members() == ["AAPL"]
+        assert result["membership"]["exited"] == ["GONE"]
+        assert "GONE" in tmp_store.get_members_as_of("2026-08-15")   # history intact
+
+    def test_ineligible_symbols_never_enter_membership(
+        self, tmp_store, fake_client_full, tmp_path
+    ):
+        """An ETF/fund already blocked in SM stays out even though the screener
+        keeps returning it (JSON cache keeps it, DB membership does not)."""
+        _bootstrap_minimal_sm(tmp_store, ["AAPL"])
+        tmp_store.upsert_security_master([{
+            "symbol": "SOXX", "cik": "CIK-SOXX", "company_name": "iShares Semi",
+            "exchange": "NASDAQ", "is_etf": 1, "is_fund": 0, "is_adr": 0,
+            "share_class_of": None, "eligible": 0, "reason": "etf",
+            "updated_at": "2026-08-01T00:00:00Z",
+        }])
+
+        refresh_with_snapshot(["AAPL", "SOXX"], store=tmp_store,
+                              client=fake_client_full, cache_dir=tmp_path,
+                              min_count_floor=0, as_of=AS_OF)
+
+        assert tmp_store.get_active_members() == ["AAPL"]
+        assert fake_client_full.symbols_fetched == []   # SOXX is known, not an entrant
+        assert _read_cache_symbols(tmp_path) == ["AAPL", "SOXX"]
+
+    def test_default_as_of_is_today(self, tmp_store, fake_client_full, tmp_path):
+        from datetime import date
+
+        _bootstrap_minimal_sm(tmp_store, ["AAPL"])
+        result = refresh_with_snapshot(["AAPL"], store=tmp_store,
+                                       client=fake_client_full, cache_dir=tmp_path,
+                                       min_count_floor=0)
+
+        today = date.today().isoformat()
+        assert result["as_of"] == today
+        assert tmp_store.get_members_as_of(today) == ["AAPL"]
+
+    def test_zero_eligible_refuses_to_empty_membership(
+        self, tmp_store, fake_client_full, tmp_path
+    ):
+        """SM says nothing is eligible -> that is a broken SM, not an empty
+        universe; committing it would exit every member at once."""
+        _bootstrap_minimal_sm(tmp_store, ["AAPL"])
+        tmp_store.record_membership_snapshot(["AAPL"], as_of="2026-08-15")
+        tmp_store.upsert_security_master([{
+            "symbol": "AAPL", "cik": "CIK-AAPL", "company_name": "Apple Inc.",
+            "exchange": "NASDAQ", "is_etf": 0, "is_fund": 0, "is_adr": 0,
+            "share_class_of": None, "eligible": 0, "reason": "identity_conflict",
+            "updated_at": "2026-08-18T00:00:00Z",
+        }])
+
+        with pytest.raises(RuntimeError, match="Refusing to empty"):
+            refresh_with_snapshot(["AAPL"], store=tmp_store, client=fake_client_full,
+                                  cache_dir=tmp_path, min_count_floor=0, as_of=AS_OF)
+
+        assert tmp_store.get_active_members() == ["AAPL"]   # old window still open
+        assert _read_cache_symbols(tmp_path) is None
+
+    def test_empty_security_master_fails_loud_before_any_write(
+        self, tmp_store, fake_client_full, tmp_path
+    ):
+        """No T6 bootstrap yet -> refuse (a weekly-only cold start would bake
+        survivorship bias into SM); membership and cache both stay put."""
+        with pytest.raises(RuntimeError, match="security_master empty"):
+            refresh_with_snapshot(["AAPL"], store=tmp_store, client=fake_client_full,
+                                  cache_dir=tmp_path, min_count_floor=0, as_of=AS_OF)
+
+        assert _table_count(tmp_store, "extended_membership") == 0
+        assert _read_cache_symbols(tmp_path) is None
+
+
+class TestRefreshExtendedUniverseWiring:
+    """The weekly cron entry (scripts/update_extended_prices.py) must get the
+    whole flow, not just the cache write."""
+
+    def test_refresh_delegates_to_snapshot_flow(self, tmp_store, tmp_path, monkeypatch):
+        _bootstrap_minimal_sm(tmp_store, ["AAPL"])
+        monkeypatch.setattr(
+            "src.data.extended_universe_manager.EXTENDED_UNIVERSE_FILE",
+            tmp_path / "extended_universe.json",
+        )
+        mock_client = MagicMock()
+        mock_client.get_large_cap_stocks.return_value = [
+            {"symbol": "AAPL"}, {"symbol": "NEWCO"},
+        ]
+        mock_client.get_dataset_with_status.side_effect = (
+            lambda kind, symbol, limit=8: _FakeProfileClient().get_dataset_with_status(
+                kind, symbol, limit)
+        )
+
+        with patch("src.data.fmp_client.FMPClient", return_value=mock_client):
+            symbols = refresh_extended_universe(min_count_floor=0, store=tmp_store,
+                                                as_of=AS_OF)
+
+        assert symbols == ["AAPL", "NEWCO"]
+        assert tmp_store.get_members_as_of(AS_OF) == ["AAPL", "NEWCO"]
+        assert _read_cache_symbols(tmp_path) == ["AAPL", "NEWCO"]
