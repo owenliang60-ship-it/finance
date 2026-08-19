@@ -1119,11 +1119,17 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
 
     try:
         pool_symbols = set(current_base_universe())
-    except Exception:
+    except Exception as e:
         # R3 迁移期兼容：current_base_universe() 在 SM/extended_membership 尚未
         # bootstrap 时 fail-loud 抛 RuntimeError（本 worktree 的骨架 DB 即此状
         # 态；见 tests 的 real-DB 路径）；其他异常同样保守退回，晨报不能因分母
-        # 切换而崩溃。退回迁移前的 pool.json 行为（get_symbols()）。
+        # 切换而崩溃。退回迁移前的 pool.json 行为（get_symbols()）。broad except
+        # 故意保留（缺失 resolver 也不能让晨报挂掉），但必须留痕——否则 bootstrap
+        # 之后如果 resolver 接线出 bug（TypeError/sqlite3 error 等），会永久静默
+        # 退回旧语义而无人发现 R3 切换实际上没生效。
+        logger.warning(
+            "current_base_universe unavailable, falling back to legacy pool symbols: %s", e
+        )
         pool_symbols = set(get_symbols())
     if symbols_override:
         symbols = sorted({s.strip().upper() for s in symbols_override if s.strip()})
@@ -1713,9 +1719,14 @@ def _normalize_dv_items(dv_result: dict) -> dict:
 
     try:
         pool_symbols = set(current_base_universe())
-    except Exception:
+    except Exception as e:
         # R3 迁移期兼容：见 build_market_signal_report 同类注释——
-        # current_base_universe() 预 bootstrap 时 fail-loud，退回 pool.json。
+        # current_base_universe() 预 bootstrap 时 fail-loud，退回 pool.json；
+        # broad except 故意保留但必须留痕，防止 bootstrap 之后 resolver 接线
+        # 出 bug 时永久静默退回旧语义。
+        logger.warning(
+            "current_base_universe unavailable, falling back to legacy pool symbols: %s", e
+        )
         try:
             pool_symbols = set(get_symbols())
         except Exception:

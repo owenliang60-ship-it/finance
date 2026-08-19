@@ -1,5 +1,6 @@
 """Tests for scripts/morning_report.py — 格式化函数单元测试"""
 import json
+import logging
 import os
 import sqlite3
 import sys
@@ -3017,3 +3018,73 @@ class TestLayerLabelMergeFrozenFixtureParity:
                 assert enriched["layer"] == "extend"
             else:
                 assert diff_keys == set(), (symbol, diff_keys, enriched, expected_old)
+
+
+# ---------------------------------------------------------------------------
+# Task 15 fix round 1: both pool_symbols resolver call sites intentionally
+# keep a broad `except Exception` (the morning report must never crash), but
+# that fallback must leave a trace. Without a log line, a post-bootstrap
+# resolver wiring bug (TypeError, sqlite3.OperationalError, ...) would
+# silently and permanently fall back to legacy pool.json semantics with no
+# way to notice the R3 switchover isn't actually happening in production.
+# ---------------------------------------------------------------------------
+
+class TestResolverFallbackLogging:
+    """Both scripts/morning_report.py:~1120 (build_market_signal_report) and
+    :~1720 (_normalize_dv_items) must emit
+    logger.warning("current_base_universe unavailable, falling back to
+    legacy pool symbols: %s", e) when current_base_universe() raises."""
+
+    @staticmethod
+    def _raise_resolver_failure():
+        raise RuntimeError("boom: simulated resolver failure")
+
+    def test_build_market_signal_report_logs_fallback_warning(self, monkeypatch, caplog):
+        from scripts import morning_report as mr
+
+        monkeypatch.setattr(mr, "current_base_universe", self._raise_resolver_failure)
+        monkeypatch.setattr(mr, "get_symbols", lambda: [])
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.fetch_universe_metadata",
+            lambda **kw: {"stocks": {}},
+        )
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.load_price_frames", lambda symbols, **kw: {}
+        )
+        monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
+        monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
+        monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
+        monkeypatch.setattr(mr, "_load_market_db_broad_price_frames", lambda *a, **kw: {})
+        monkeypatch.setattr(
+            "src.indicators.dv_acceleration.scan_dv_acceleration",
+            lambda *a, **kw: pd.DataFrame(),
+        )
+        monkeypatch.setattr(
+            "src.indicators.rvol_sustained.scan_rvol_sustained", lambda *a, **kw: []
+        )
+        monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
+
+        with caplog.at_level(logging.WARNING, logger="scripts.morning_report"):
+            mr.build_market_signal_report()
+
+        assert any(
+            "current_base_universe unavailable" in rec.message
+            and "boom: simulated resolver failure" in rec.message
+            for rec in caplog.records
+        ), caplog.text
+
+    def test_normalize_dv_items_logs_fallback_warning(self, monkeypatch, caplog):
+        from scripts import morning_report as mr
+
+        monkeypatch.setattr(mr, "current_base_universe", self._raise_resolver_failure)
+        monkeypatch.setattr(mr, "get_symbols", lambda: [])
+
+        dv_result = {"rankings": [], "new_faces": []}
+        with caplog.at_level(logging.WARNING, logger="scripts.morning_report"):
+            mr._normalize_dv_items(dv_result)
+
+        assert any(
+            "current_base_universe unavailable" in rec.message
+            and "boom: simulated resolver failure" in rec.message
+            for rec in caplog.records
+        ), caplog.text
