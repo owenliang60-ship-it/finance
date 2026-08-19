@@ -98,13 +98,51 @@ def fetch_and_update_price(symbol: str, force_full: bool = False) -> Optional[pd
     return combined_df
 
 
+def get_fmp_price_targets(store=None) -> List[str]:
+    """FMP 日频价格的目标名单 = overlay tier（矩阵 #6, Boss 拍板 P1）。
+
+    Post-bootstrap: holdings ∪ watchlist ∪ benchmarks（~50 只）。基础池其余部分
+    由 yfinance batch 覆盖（`extended_price_fetcher.get_yfinance_price_targets`），
+    daily_price 表 schema 不变。
+
+    Pre-bootstrap: 代码合并（Stop B）早于 bootstrap 落地（Stop C），这段窗口内
+    `extended_membership` 仍是空的 —— 此时 yfinance 那条腿没有基础池可跑，把 FMP
+    收窄到 ~50 只会让 Core 池当天完全没有价格来源。所以窗口内记一条 warning 并
+    保持 legacy Core 名单，membership 一旦存在语义自动切换。
+    """
+    from src.data.universe_resolver import current_base_universe
+
+    try:
+        current_base_universe(store=store)
+    except Exception as e:
+        logger.warning(
+            "current_base_universe unavailable, FMP price targets stay on the "
+            "legacy Core pool: %s", e
+        )
+        return get_symbols()
+
+    from src.data.universe_resolver import resolve_universe
+    from src.data.overlays import load_holdings, load_watchlist, load_benchmarks
+
+    resolved = resolve_universe(
+        base="none",
+        overlays=("holdings", "watchlist", "benchmarks"),
+        overlay_loaders={
+            "holdings": load_holdings,
+            "watchlist": load_watchlist,
+            "benchmarks": load_benchmarks,
+        },
+    )
+    return list(resolved.symbols)
+
+
 def update_all_prices(symbols: List[str] = None, force_full: bool = False) -> dict:
     """
-    批量更新所有股票的量价数据
+    批量更新所有股票的量价数据（默认目标 = FMP overlay tier，矩阵 #6）
     返回: {"success": [...], "failed": [...]}
     """
     if symbols is None:
-        symbols = get_symbols()
+        symbols = get_fmp_price_targets()
 
     # Always include benchmark + auxiliary symbols
     from config.settings import BENCHMARK_SYMBOLS, AUX_SYMBOLS

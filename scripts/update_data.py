@@ -3,7 +3,7 @@
 用法:
     python scripts/update_data.py --all          # 更新所有数据
     python scripts/update_data.py --pool         # 只更新股票池
-    python scripts/update_data.py --price        # 只更新量价数据
+    python scripts/update_data.py --price        # 只更新量价数据（FMP tier + yfinance batch）
     python scripts/update_data.py --fundamental  # 只更新基本面数据
     python scripts/update_data.py --price --symbols AAPL,NVDA  # 指定股票
     python scripts/update_data.py --check        # 仅运行健康检查
@@ -19,6 +19,11 @@
 增的两个 scope：`base` 仅供手动/维修用（cron 不用它，P1-5），`events` 由
 `src.data.fundamental_events.detect_earnings_targets` 驱动，0 个目标是正常
 结果（exit 0），不是失败。
+
+行为变更 (矩阵 #6, Boss 拍板 P1): `--price` 的 FMP 腿只覆盖 overlay tier
+（holdings ∪ watchlist ∪ benchmarks，`price_fetcher.get_fmp_price_targets()`），
+基础池其余部分由同一步内新增的 yfinance batch 腿覆盖；`daily_price` 表 schema
+不变，两腿合计覆盖率 ≥ 迁移前。显式 `--symbols` 只跑 FMP 腿（调用方点名了目标）。
 """
 import argparse
 import sys
@@ -93,6 +98,31 @@ def _resolve_target_symbols(scope: str, symbols, *, store=None, as_of=None):
 
     raise ValueError(
         f"unknown scope={scope!r} (expected one of {FUNDAMENTAL_SCOPE_CHOICES})")
+
+
+def _yfinance_price_leg_targets(fmp_targets, *, store=None):
+    """基础池里 FMP tier 没覆盖到的部分，交给 yfinance batch（矩阵 #6, P1）。
+
+    Args:
+        fmp_targets: 本次 FMP 腿实际抓取的名单（`get_fmp_price_targets()` 或
+            显式 --symbols）。
+        store: MarketStore，省略时 resolver 自行打开默认 store。
+
+    Returns:
+        排序去重后的 yfinance 目标列表。基础池尚不可用（bootstrap 之前）时返回
+        `[]` —— 那个窗口里 FMP tier 本身还停在 legacy Core 名单上，当天覆盖率
+        与现状一致，不该再补一条无源可跑的腿。
+    """
+    from src.data.universe_resolver import current_base_universe
+
+    try:
+        base = current_base_universe(store=store)
+    except Exception as e:
+        print(f"  yfinance 腿跳过（基础池不可用: {e}）")
+        return []
+
+    covered = {s.upper() for s in fmp_targets}
+    return sorted({s.upper() for s in base} - covered)
 
 
 def run_fundamental_update(*, scope: str, symbols=None, store=None, client=None,
@@ -227,16 +257,33 @@ def main():
         print_universe_summary()
         print()
 
-    # 更新量价数据
+    # 更新量价数据（矩阵 #6 P1: FMP 只跑 overlay tier，其余走 yfinance batch）
     if args.all or args.price:
         print("=" * 40)
-        print("Step 2: 更新量价数据 (含基准: SPY, QQQ)")
+        print("Step 2: 更新量价数据 (FMP overlay tier + yfinance batch)")
         print("=" * 40)
-        target_symbols = symbols or get_symbols()
+        from src.data.price_fetcher import get_fmp_price_targets
+
+        target_symbols = symbols or get_fmp_price_targets()
+        print(f"FMP tier: {len(target_symbols)} symbols")
         result = update_all_prices(target_symbols, force_full=args.force)
-        print(f"\n✅ 成功: {len(result['success'])}")
+        print(f"\n✅ FMP 成功: {len(result['success'])}")
         if result['failed']:
-            print(f"❌ 失败: {result['failed']}")
+            print(f"❌ FMP 失败: {result['failed']}")
+
+        # 显式 --symbols 时不补 yfinance 腿：调用方点名了目标
+        if not symbols:
+            yf_targets = _yfinance_price_leg_targets(target_symbols)
+            if yf_targets:
+                from src.data.extended_price_fetcher import update_extended_prices
+                print(f"\nyfinance batch: {len(yf_targets)} symbols")
+                yf_result = update_extended_prices(
+                    full_backfill=args.force, symbols=yf_targets)
+                print("✅ yfinance 成功: %d/%d, %d rows upserted"
+                      % (yf_result["success"], yf_result["total"],
+                         yf_result["rows_inserted"]))
+                if yf_result["failed"]:
+                    print("❌ yfinance 失败: %s" % (yf_result["failed"][:20],))
         print()
 
     # 更新基本面数据（全走内核 T8：额外产出 vintage + coverage — 行为新增, R6）
