@@ -17,7 +17,7 @@ import json
 
 import pytest
 
-from scripts.reconcile_fundamentals import parse_args, run_reconcile
+from scripts.reconcile_fundamentals import _run_identity_phase, parse_args, run_reconcile
 from src.data.market_store import MarketStore
 
 AS_OF = "2026-08-24"
@@ -319,6 +319,48 @@ def test_identity_queue_reprobes_missing_profile_beyond_eligible(tmp_store_idq, 
                  repair=True, notifier=spy_notifier, as_of=AS_OF, lock=fake_lock)
     assert "NEWCO" in fake_client_full.profile_symbols_fetched
     assert tmp_store_idq.get_security_eligibility().get("NEWCO") is True   # upgraded
+
+
+def test_identity_retry_settles_against_existing_same_cik_primary(tmp_store):
+    """A recovered profile is not a singleton when SM already has its issuer.
+
+    OLD is the established larger primary. NEW's retry must be classified as
+    its secondary share class, never become a second eligible primary.
+    """
+    tmp_store.upsert_security_master([{
+        "symbol": "OLD", "cik": "CIK-SAME", "company_name": "Same Co",
+        "exchange": "NASDAQ", "is_etf": 0, "is_fund": 0, "is_adr": 0,
+        "share_class_of": None, "eligible": 1, "reason": "ok",
+        "updated_at": "2026-08-01T00:00:00Z",
+    }])
+    with tmp_store.transaction() as conn:
+        tmp_store.write_company_profile_in_conn(
+            conn, "OLD", {"symbol": "OLD", "cik": "CIK-SAME",
+                           "companyName": "Same Co", "mktCap": 100},
+            "2026-08-01T00:00:00Z")
+    _seed_coverage(tmp_store, "NEW", "identity", "provider_empty",
+                   next_retry_at="2026-08-01T00:00:00Z")
+
+    class SameIssuerClient(_FakeClient):
+        def get_dataset_with_status(self, kind, symbol, limit=None):
+            self.calls += 1
+            self.profile_symbols_fetched.append(symbol)
+            return [{"symbol": symbol, "cik": "CIK-SAME",
+                     "companyName": "Same Co", "exchangeShortName": "NASDAQ",
+                     "mktCap": 90}], "ok"
+
+    report = _run_identity_phase(
+        tmp_store, SameIssuerClient(), "2026-08-24T00:00:00Z", {})
+    rows = tmp_store._get_conn().execute(
+        "SELECT symbol, eligible, reason, share_class_of FROM security_master "
+        "WHERE cik = 'CIK-SAME' ORDER BY symbol"
+    ).fetchall()
+
+    assert report["upgraded"] == []
+    assert [tuple(row) for row in rows] == [
+        ("NEW", 0, "secondary_share_class", "OLD"),
+        ("OLD", 1, "ok", None),
+    ]
 
 
 def test_repair_without_lock_raises(tmp_store_cov, fake_client_full, spy_notifier):

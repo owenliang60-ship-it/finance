@@ -22,7 +22,7 @@ Four phases, always in this order:
   `resolve_share_classes` (same as a full bootstrap) and written to SM, so it
   can enter Phase 1's denominator this same run.
 
-  Phase 1 (always, read-only except for stale annotations). For every symbol
+  Phase 1 (always; strictly read-only unless --repair is set). For every symbol
   in `current_base_universe()` (active Extended membership ∩ SM eligible —
   the SAME frozen-denominator resolver T10 uses, never the SM full set) times
   {income, balance, cashflow, profile}:
@@ -38,9 +38,8 @@ Four phases, always in this order:
     - HAS rows, for the three statement datasets only (profile has no fiscal
       calendar to go stale against): latest `date` older than
       `--stale-after-days` (default 120) from `as_of` -> `stale`, and the
-      ONLY write this script makes in report-only mode — a `coverage_status`
-      row with `detail` set to the day count (R10: the ranking consumer's
-      staleness exclusion reads this same coverage row).
+      repair mode persists a `coverage_status` row with `detail` set to the
+      day count; report-only only returns the stale target in memory.
 
   Freeze: `repair_targets = missing ∪ stale ∪ retryable` (deduped SYMBOLS,
   never symbol×dataset pairs — a repair re-runs the WHOLE kernel for a
@@ -62,8 +61,8 @@ Four phases, always in this order:
 Locking (CONTROLLER RULING #13): self-locks like T10, same lock file and the
 same non-blocking flock semantics — reused directly from
 `backfill_extended_fundamentals.FileLock` rather than reimplemented.
-Report-only mode is read-mostly (its only write is the stale annotation) and
-needs no lock at all. `--repair` acquires the lock FIRST, before Phase 0
+Report-only mode opens SQLite read-only and performs zero writes, so it needs
+no lock. `--repair` acquires the lock FIRST, before Phase 0
 touches anything; busy means a peer backfill/reconcile run owns market.db
 right now, so this run exits 75 having written nothing.
 
@@ -87,7 +86,6 @@ import argparse
 import json
 import logging
 import sys
-from dataclasses import asdict
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -97,14 +95,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.backfill_extended_fundamentals import FileLock  # noqa: E402
-from scripts.bootstrap_security_master import resolve_identity_for_symbol  # noqa: E402
+from src.data.entrant_bootstrap import bootstrap_entrants  # noqa: E402
 from src.data.fundamental_collector import (  # noqa: E402
     DEFAULT_PROFILES_PATH,
     collect_fundamentals_for_symbol,
     rebuild_profiles_json,
 )
 from src.data.market_store import COLLECTION_DATASET_TABLES, MarketStore, _is_pure_date  # noqa: E402
-from src.data.security_master import resolve_share_classes  # noqa: E402
 from src.data.universe_resolver import current_base_universe  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -180,51 +177,20 @@ def _identity_queue_symbols(store: MarketStore, as_of_ts: str) -> List[str]:
     return [r["symbol"] for r in rows]
 
 
-def _write_profiles(store: MarketStore, profiles_by_symbol: Dict[str, dict],
-                    updated_at: str) -> None:
-    with store.transaction() as conn:
-        for symbol, profile in profiles_by_symbol.items():
-            store.write_company_profile_in_conn(conn, symbol, profile, updated_at)
-
-
 def _run_identity_phase(store: MarketStore, client: Any, as_of_ts: str,
                         overrides: Dict[str, str]) -> Dict[str, Any]:
-    """Reuse T6's per-symbol identity kernel over exactly the queued symbols
-    (not limited to eligible). Mirrors run_bootstrap's batch-grouping shape,
-    scoped to this small incremental set instead of the full raw union."""
+    """Retry exactly the queued symbols through the closed-group entrant path.
+
+    `bootstrap_entrants` adds existing same-CIK SM incumbents before resolving
+    share classes, so a recovered profile cannot become a second eligible
+    primary merely because its sibling was outside this retry batch.
+    """
     queue = _identity_queue_symbols(store, as_of_ts)
     if not queue:
         return {"queued": 0, "upgraded": []}
-
-    ok_results: List[Dict[str, Any]] = []
-    profiles_by_symbol: Dict[str, dict] = {}
-    for symbol in queue:
-        outcome = resolve_identity_for_symbol(symbol, client=client, store=store, dry_run=False)
-        if outcome["fetch_status"] == "ok":
-            ok_results.append(outcome)
-            profiles_by_symbol[symbol] = outcome["profile"]
-
-    records = [r["record"] for r in ok_results]
-    resolved = resolve_share_classes(records, overrides, profiles_by_symbol)
-
-    if resolved:
-        now_iso = _now_iso()
-        sm_rows = [{**asdict(rec), "updated_at": now_iso} for rec in resolved]
-        store.upsert_security_master(sm_rows)
-
-        conflict_symbols = [rec.symbol for rec in resolved if rec.reason == "identity_conflict"]
-        if conflict_symbols:
-            store.upsert_coverage_status([
-                {"symbol": s, "dataset": "identity", "status": "identity_blocked",
-                 "detail": "same CIK, different company name across share classes",
-                 "updated_at": now_iso}
-                for s in conflict_symbols
-            ])
-
-    if profiles_by_symbol:
-        _write_profiles(store, profiles_by_symbol, _now_iso())
-
-    return {"queued": len(queue), "upgraded": sorted(rec.symbol for rec in resolved if rec.eligible)}
+    summary = bootstrap_entrants(
+        queue, client=client, store=store, overrides=overrides)
+    return {"queued": len(queue), "upgraded": list(summary["eligible"])}
 
 
 # ---------------------------------------------------------------------------
@@ -462,7 +428,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--repair", action="store_true",
                         help="Run the identity re-probe queue plus a bounded repair over "
                              "the frozen target list. Omit for a report-only audit "
-                             "(zero writes except stale annotations).")
+                             "(read-only, zero database writes).")
     parser.add_argument("--max-targets", type=int, default=DEFAULT_MAX_TARGETS,
                         help="Cap on repair targets per run (lexicographic truncation).")
     parser.add_argument("--stale-after-days", type=int, default=DEFAULT_STALE_AFTER_DAYS,

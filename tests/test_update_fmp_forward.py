@@ -876,7 +876,8 @@ def test_build_pool_loaders_prebootstrap_preserves_legacy_union():
     from scripts.update_fmp_forward import build_pool_loaders
 
     with patch("src.data.universe_resolver.current_base_universe",
-               side_effect=RuntimeError("bootstrap first")), \
+               side_effect=RuntimeError(
+                   "extended_membership empty — run bootstrap first")), \
          patch("src.data.pool_manager.get_symbols",
                return_value=["AAPL", "QS"]), \
          patch("src.data.extended_universe_manager.get_extended_symbols",
@@ -884,6 +885,30 @@ def test_build_pool_loaders_prebootstrap_preserves_legacy_union():
         extras_loader, base_loader = build_pool_loaders(None)
         assert extras_loader() == ["AAPL", "QS"]
         assert base_loader() == ["AAPL", "MSFT"]
+
+
+def test_build_pool_loaders_propagates_database_corruption():
+    import sqlite3
+    from scripts.update_fmp_forward import build_pool_loaders
+
+    with patch("src.data.universe_resolver.current_base_universe",
+               side_effect=sqlite3.DatabaseError("database disk image malformed")), \
+         patch("src.data.overlays.load_overlay_tier", return_value=["SPY"]):
+        extras_loader, _ = build_pool_loaders(None)
+        with pytest.raises(sqlite3.DatabaseError):
+            extras_loader()
+
+
+def test_build_pool_loaders_propagates_overlay_failure():
+    from scripts.update_fmp_forward import build_pool_loaders
+
+    with patch("src.data.universe_resolver.current_base_universe",
+               return_value=["AAPL"]), \
+         patch("src.data.overlays.load_overlay_tier",
+               side_effect=RuntimeError("company.db unavailable")):
+        extras_loader, _ = build_pool_loaders(None)
+        with pytest.raises(RuntimeError, match="company.db unavailable"):
+            extras_loader()
 
 
 # ========== Review round-7: 2×P1 + 2×P2 回归 ==========

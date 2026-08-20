@@ -11,8 +11,8 @@
 
 输出规模变更 (矩阵 #12): 扫描面从 Core 池换成 resolver eligible 全池
 (`universe_resolver.current_base_universe()`)。指标是本地计算，扩池的边际成本
-可忽略，但报告里的动量标的数和主题命中数会明显变大 —— 冻结 fixture 上的 parity
-契约是"只增不减"：旧票不会从主题里消失，旧主题不会掉出排名。
+可忽略，但横截面 percentile 会随分母变化而重排。parity 契约是旧票必须继续出现在
+新 RS frame 中；跨越信号阈值的增减必须在测试里显式列出，不承诺主题只增不减。
 """
 
 import sys

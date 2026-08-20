@@ -192,6 +192,38 @@ def _decline_metricless_demotions(
     return [by_symbol[rec.symbol] for rec in resolved]
 
 
+def resolve_share_classes_with_incumbents(
+    candidate_records: List[SecurityRecord],
+    candidate_profiles: Dict[str, dict],
+    *,
+    store,
+    overrides: Optional[Dict[str, str]] = None,
+) -> Tuple[List[SecurityRecord], Dict[str, SecurityRecord]]:
+    """Settle a fetched identity batch over complete same-CIK groups.
+
+    A retry/rebootstrap batch is not necessarily identity-complete: one share
+    class can fetch while its sibling fails. Pull existing SM incumbents that
+    share a candidate CIK into the decision so a partial batch can never mint
+    a second eligible primary. Returns the resolved closed group plus the
+    incumbent rows as they existed before settlement (used for change logs).
+    """
+    overrides = overrides or {}
+    candidate_symbols = {record.symbol for record in candidate_records}
+    incumbents, incumbent_profiles = _incumbents_sharing_cik(
+        store, candidate_records, candidate_symbols
+    )
+    grouping_profiles = dict(incumbent_profiles)
+    grouping_profiles.update(candidate_profiles)
+    resolved = resolve_share_classes(
+        candidate_records + incumbents, overrides, grouping_profiles
+    )
+    prior_by_symbol = {record.symbol: record for record in incumbents}
+    resolved = _decline_metricless_demotions(
+        resolved, prior_by_symbol, candidate_symbols, grouping_profiles
+    )
+    return resolved, prior_by_symbol
+
+
 def bootstrap_entrants(
     symbols: Iterable[str],
     *,
@@ -246,19 +278,8 @@ def bootstrap_entrants(
         return summary
 
     entrant_symbols = {r.symbol for r in entrant_records}
-    incumbents, incumbent_profiles = _incumbents_sharing_cik(
-        store, entrant_records, entrant_symbols
-    )
-
-    grouping_profiles = dict(incumbent_profiles)
-    grouping_profiles.update(entrant_profiles)
-    resolved = resolve_share_classes(
-        entrant_records + incumbents, overrides, grouping_profiles
-    )
-
-    prior_by_symbol = {r.symbol: r for r in incumbents}
-    resolved = _decline_metricless_demotions(
-        resolved, prior_by_symbol, entrant_symbols, grouping_profiles
+    resolved, prior_by_symbol = resolve_share_classes_with_incumbents(
+        entrant_records, entrant_profiles, store=store, overrides=overrides
     )
 
     now_iso = _now_iso()

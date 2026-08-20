@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from terminal.company_store import CompanyStore
-from terminal.pipeline import ensure_tracked
+from terminal.pipeline import _ensure_analysis_data, ensure_tracked
 
 
 @pytest.fixture
@@ -49,3 +49,13 @@ class TestEnsureTracked:
         assert result is False
         monkeypatch.setattr("config.settings.IS_CLOUD", False)
         assert tmp_company_store.get_watchlist() == []
+
+    def test_cache_fetch_runs_even_when_cloud_tracking_is_forbidden(self):
+        with patch("terminal.pipeline.ensure_tracked", return_value=False), \
+             patch("src.data.fundamental_fetcher.ensure_fundamentals_cached",
+                   return_value=True) as cache:
+            tracked, cached = _ensure_analysis_data("NEWCO")
+
+        assert tracked is False
+        assert cached is True
+        cache.assert_called_once_with("NEWCO")

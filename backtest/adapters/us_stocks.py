@@ -343,6 +343,8 @@ class USStocksAdapter:
         except ValueError:
             raise
         except Exception as e:
+            if self._universe == "eligible_extended":
+                raise
             logger.warning("market.db 发现股票失败: %s", e)
             return []
 

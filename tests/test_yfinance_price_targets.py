@@ -4,8 +4,11 @@ Replaces the old `get_extended_only_symbols()` (extended cache − core pool)
 default. Acceptance: `targets ∪ FMP tier ⊇ current base universe`.
 """
 import sys
+import sqlite3
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -69,6 +72,14 @@ class TestYfinancePriceTargets:
 
         assert mock_targets.called
         assert result["total"] == 0
+
+    def test_database_corruption_does_not_fall_back_to_legacy_files(self):
+        from src.data.extended_price_fetcher import get_yfinance_price_targets
+
+        with patch("src.data.universe_resolver.current_base_universe",
+                   side_effect=sqlite3.DatabaseError("database disk image malformed")):
+            with pytest.raises(sqlite3.DatabaseError):
+                get_yfinance_price_targets()
 
 
 class TestUpdateExtendedPricesScript:

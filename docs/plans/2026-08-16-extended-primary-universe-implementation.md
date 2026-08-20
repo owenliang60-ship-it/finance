@@ -1341,10 +1341,15 @@ def test_floor_failure_writes_nothing(tmp_store, fake_client_full):
 
 ### Stop A 收尾验收
 
-- [x] 基线 4 文件 79 passed 不回归；全量套件新增失败 = 0（最终 gate：2700 passed / 同一 15 baseline failed / 4 skipped）
+- [x] 基线 4 文件 79 passed 不回归；全量套件新增失败 = 0（第二轮 self-review fix 后最终 gate：2710 passed / 同一 15 baseline failed / 4 skipped）
 - [x] `scripts/check_core_references.sh` 清单 == T20 已完成行 + Stop G 待删项（57 条均为兼容 fallback / intentional Core / Stop G 待删项）
 - [x] 自审对照 `feedback_plan_self_audit_blind_spots` 八类盲点（final review fix wave 补 latest-run 终态 fail-closed、真实 read-only、filing-date PIT、wrapper 行为级锁测试）
 - [ ] 交 Boss 验收 → Stop B
+
+**2026-08-20 Boss 要求完整自审后的 fix wave**：修复 identity retry/rebootstrap 未对
+same-CIK incumbents 闭包、forward/price producer broad fallback 吞真实 DB 故障、
+pre-bootstrap combined price 丢 Extended complement、cloud tracking 失败连带跳过基本面缓存、
+以及 `eligible_extended` 回测空集 fail-open；同步修正文档契约。相关模式记录为 issue 044/045。
 
 ---
 

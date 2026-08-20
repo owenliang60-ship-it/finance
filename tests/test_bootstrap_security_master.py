@@ -108,6 +108,42 @@ def fake_client_full():
     return _FakeClient()
 
 
+def test_bootstrap_rerun_partial_fetch_preserves_same_cik_primary(tmp_store):
+    """A rerun where OLD fails but NEW succeeds must still close the CIK group
+    over the incumbent SM row instead of minting a second eligible primary."""
+    tmp_store.upsert_security_master([{
+        "symbol": "OLD", "cik": "CIK-SAME", "company_name": "Same Co",
+        "exchange": "NASDAQ", "is_etf": 0, "is_fund": 0, "is_adr": 0,
+        "share_class_of": None, "eligible": 1, "reason": "ok",
+        "updated_at": "2026-08-01T00:00:00Z",
+    }])
+    with tmp_store.transaction() as conn:
+        tmp_store.write_company_profile_in_conn(
+            conn, "OLD", {"symbol": "OLD", "cik": "CIK-SAME",
+                           "companyName": "Same Co", "mktCap": 100},
+            "2026-08-01T00:00:00Z")
+    client = _FakeClient(
+        profiles={"NEW": {"symbol": "NEW", "cik": "CIK-SAME",
+                           "companyName": "Same Co", "exchangeShortName": "NASDAQ",
+                           "mktCap": 90}},
+        fetch_failed={"OLD"},
+    )
+
+    rc = run_bootstrap(
+        store=tmp_store, client=client, raw_loader=lambda: ["OLD", "NEW"],
+        current_only=True, as_of="2026-08-24")
+    rows = tmp_store._get_conn().execute(
+        "SELECT symbol, eligible, reason, share_class_of FROM security_master "
+        "WHERE cik = 'CIK-SAME' ORDER BY symbol"
+    ).fetchall()
+
+    assert rc == 0
+    assert [tuple(row) for row in rows] == [
+        ("NEW", 0, "secondary_share_class", "OLD"),
+        ("OLD", 1, "ok", None),
+    ]
+
+
 @pytest.fixture
 def fake_client_deadco_empty():
     return _FakeClient(provider_empty={"DEADCO"})

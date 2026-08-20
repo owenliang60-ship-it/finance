@@ -142,7 +142,10 @@ def _yfinance_price_leg_targets(
         try:
             base_symbols = current_base_universe(store=store)
         except Exception as e:
-            logger.error("yfinance price leg cannot resolve base universe: %s", e)
+            from src.data.universe_resolver import is_prebootstrap_universe_error
+            if not is_prebootstrap_universe_error(e):
+                raise
+            logger.warning("yfinance price leg is pre-bootstrap: %s", e)
             return []
 
     if legacy_core_symbols is None:
@@ -156,7 +159,8 @@ def _yfinance_price_leg_targets(
     return sorted(required - covered)
 
 
-def _resolve_price_leg_targets(*, store=None, legacy_core_loader=None):
+def _resolve_price_leg_targets(*, store=None, legacy_core_loader=None,
+                               legacy_extended_loader=None):
     """Resolve both daily-price legs from one base snapshot.
 
     Until matrix #22 migrates manual/analysis Core names to the watchlist,
@@ -165,19 +169,25 @@ def _resolve_price_leg_targets(*, store=None, legacy_core_loader=None):
     silently stranding those names.
     """
     from src.data.pool_manager import get_symbols as get_pool_symbols
+    from src.data.extended_universe_manager import get_extended_symbols
     from src.data.universe_resolver import current_base_universe
+    from src.data.universe_resolver import is_prebootstrap_universe_error
     from src.data.price_fetcher import get_fmp_price_targets
 
     load_legacy = legacy_core_loader or get_pool_symbols
     legacy_core = sorted({s.upper() for s in load_legacy()})
+    load_legacy_extended = legacy_extended_loader or get_extended_symbols
 
     try:
         base = current_base_universe(store=store)
     except Exception as e:
-        logger.error(
-            "current_base_universe unavailable; daily price legs stay on "
-            "legacy Core coverage: %s", e)
-        return legacy_core, []
+        if not is_prebootstrap_universe_error(e):
+            raise
+        legacy_extended = {s.upper() for s in load_legacy_extended()}
+        logger.warning(
+            "current_base_universe is pre-bootstrap; daily price legs preserve "
+            "legacy Core + Extended coverage: %s", e)
+        return legacy_core, sorted(legacy_extended - set(legacy_core))
 
     fmp_targets = get_fmp_price_targets(store=store, base_symbols=base)
     yf_targets = _yfinance_price_leg_targets(

@@ -6,10 +6,12 @@ universe is priced by the yfinance batch. `daily_price` schema is unchanged,
 and the day's combined coverage must never fall below the status quo.
 """
 import sys
+import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+import pytest
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -57,6 +59,14 @@ class TestFmpPriceTargets:
             targets = get_fmp_price_targets()
 
         assert targets == LEGACY_CORE
+
+    def test_database_corruption_does_not_fall_back_to_core(self):
+        from src.data.price_fetcher import get_fmp_price_targets
+
+        with patch("src.data.universe_resolver.current_base_universe",
+                   side_effect=sqlite3.DatabaseError("database disk image malformed")):
+            with pytest.raises(sqlite3.DatabaseError):
+                get_fmp_price_targets()
 
     def test_update_all_prices_default_only_calls_fmp_for_the_tier(self):
         from src.data.price_fetcher import update_all_prices
@@ -145,3 +155,27 @@ class TestYfinanceLeg:
         with patch("src.data.universe_resolver.current_base_universe",
                    side_effect=RuntimeError("extended_membership empty — run bootstrap first")):
             assert _yfinance_price_leg_targets(LEGACY_CORE) == []
+
+    def test_combined_targets_preserve_legacy_extended_pre_bootstrap(self):
+        from scripts.update_data import _resolve_price_leg_targets
+
+        legacy_extended = LEGACY_CORE + ["EXT1", "EXT2"]
+        with patch("src.data.universe_resolver.current_base_universe",
+                   side_effect=RuntimeError(
+                       "extended_membership empty — run bootstrap first")), \
+             patch("src.data.pool_manager.get_symbols", return_value=list(LEGACY_CORE)), \
+             patch("src.data.extended_universe_manager.get_extended_symbols",
+                   return_value=legacy_extended):
+            fmp_targets, yf_targets = _resolve_price_leg_targets()
+
+        assert set(fmp_targets) == set(LEGACY_CORE)
+        assert set(yf_targets) == {"EXT1", "EXT2"}
+
+    def test_combined_targets_propagate_database_corruption(self):
+        from scripts.update_data import _resolve_price_leg_targets
+
+        with patch("src.data.universe_resolver.current_base_universe",
+                   side_effect=sqlite3.DatabaseError("database disk image malformed")), \
+             patch("src.data.pool_manager.get_symbols", return_value=list(LEGACY_CORE)):
+            with pytest.raises(sqlite3.DatabaseError):
+                _resolve_price_leg_targets()

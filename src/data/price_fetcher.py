@@ -109,9 +109,9 @@ def get_fmp_price_targets(store=None, *, base_symbols=_BASE_UNRESOLVED) -> List[
     daily_price 表 schema 不变。
 
     Pre-bootstrap: 代码合并（Stop B）早于 bootstrap 落地（Stop C），这段窗口内
-    `extended_membership` 仍是空的 —— 此时 yfinance 那条腿没有基础池可跑，把 FMP
-    收窄到 ~50 只会让 Core 池当天完全没有价格来源。所以窗口内记一条 warning 并
-    保持 legacy Core 名单，membership 一旦存在语义自动切换。
+    `extended_membership` 仍是空的 —— 所以窗口内本函数保持 legacy Core 名单，
+    combined resolver 同时把 legacy Extended−Core 交给 yfinance；membership 一旦
+    存在语义自动切换。只有这两个明确 cold-start 状态允许降级，数据库错误会冒泡。
 
     Args:
         store: **MarketStore**（只用于探测 membership 是否已 bootstrap）。overlay
@@ -124,6 +124,9 @@ def get_fmp_price_targets(store=None, *, base_symbols=_BASE_UNRESOLVED) -> List[
         try:
             current_base_universe(store=store)
         except Exception as e:
+            from src.data.universe_resolver import is_prebootstrap_universe_error
+            if not is_prebootstrap_universe_error(e):
+                raise
             logger.warning(
                 "current_base_universe unavailable, FMP price targets stay on the "
                 "legacy Core pool: %s", e

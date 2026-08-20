@@ -655,9 +655,14 @@ def build_pool_loaders(data_root: Optional[Path]):
     def data_root_pair() -> Tuple[List[str], List[str]]:
         market_db = root / "market.db"
         if not market_db.exists():
-            raise RuntimeError("market.db missing")
+            raise RuntimeError("market.db missing — pre-bootstrap fixture")
         conn = sqlite3.connect(f"file:{market_db}?mode=ro", uri=True)
         try:
+            tables = {row[0] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            required = {"extended_membership", "security_master"}
+            if not required <= tables:
+                raise RuntimeError("universe schema missing — run bootstrap first")
             rows = conn.execute(
                 "SELECT DISTINCT m.symbol FROM extended_membership m "
                 "JOIN security_master s ON s.symbol = m.symbol "
@@ -694,13 +699,27 @@ def build_pool_loaders(data_root: Optional[Path]):
                 if root is None:
                     from src.data.overlays import load_overlay_tier
                     from src.data.universe_resolver import current_base_universe
-                    extras = load_overlay_tier()
                     base = current_base_universe()
+                    extras = load_overlay_tier()
                 else:
                     extras, base = data_root_pair()
                 if not base:
                     raise RuntimeError("active eligible membership empty")
             except Exception as exc:
+                if root is None:
+                    from src.data.universe_resolver import is_prebootstrap_universe_error
+                    fallback_allowed = is_prebootstrap_universe_error(exc)
+                else:
+                    fallback_allowed = (
+                        isinstance(exc, RuntimeError)
+                        and str(exc) in {
+                            "market.db missing — pre-bootstrap fixture",
+                            "universe schema missing — run bootstrap first",
+                            "active eligible membership empty",
+                        }
+                    )
+                if not fallback_allowed:
+                    raise
                 logger.warning(
                     "forward resolver unavailable; using legacy Core + Extended: %s",
                     exc,

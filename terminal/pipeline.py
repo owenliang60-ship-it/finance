@@ -386,6 +386,24 @@ def ensure_tracked(symbol: str, source: str = "analysis") -> bool:
         return False
 
 
+def _ensure_analysis_data(symbol: str) -> tuple[bool, bool]:
+    """Track locally when allowed, but always run the explicit data cache step.
+
+    company.db watchlist ownership and market-data availability are separate
+    concerns: cloud deliberately refuses the former, yet is the owner allowed
+    to refresh market.db for an explicitly requested analysis ticker.
+    """
+    tracked = False
+    try:
+        tracked = ensure_tracked(symbol)
+    except Exception as exc:
+        logger.warning("analysis tracking failed for %s: %s", symbol, exc)
+
+    from src.data.fundamental_fetcher import ensure_fundamentals_cached
+    cached = ensure_fundamentals_cached(symbol)
+    return tracked, cached
+
+
 def collect_data(
     symbol: str,
     price_days: int = 60,
@@ -418,10 +436,8 @@ def collect_data(
     # write path is now exclusively owned by the screener pool-refresh cron
     # (R2/R5/R13; see ensure_tracked() below).
     try:
-        from src.data.fundamental_fetcher import ensure_fundamentals_cached
-        tracked = ensure_tracked(symbol)
+        tracked, _cached = _ensure_analysis_data(symbol)
         if tracked:
-            ensure_fundamentals_cached(symbol)
             if scratchpad:
                 scratchpad.log_reasoning(
                     "auto_admit",
@@ -879,4 +895,3 @@ def calculate_position(
         )
 
     return output
-

@@ -57,7 +57,7 @@ from src.data import delisted_universe_manager  # noqa: E402
 from src.data.extended_universe_manager import get_extended_symbols  # noqa: E402
 from src.data.fmp_client import FMPClient  # noqa: E402
 from src.data.market_store import MarketStore  # noqa: E402
-from src.data.security_master import classify_security, resolve_share_classes  # noqa: E402
+from src.data.security_master import classify_security  # noqa: E402
 
 SHARE_CLASS_OVERRIDES_PATH = PROJECT_ROOT / "config" / "share_class_overrides.json"
 REPORT_PATH = PROJECT_ROOT / "data" / "extended_universe" / "bootstrap_report.json"
@@ -290,7 +290,12 @@ def run_bootstrap(
             profiles_by_symbol[symbol] = outcome["profile"]
 
     records = [r["record"] for r in ok_results]
-    resolved_records = resolve_share_classes(records, overrides, profiles_by_symbol)
+    # A rerun can fetch only one member of an existing share-class group. Close
+    # each candidate CIK over current SM incumbents before deciding a primary;
+    # otherwise a partial retry can create two eligible primaries.
+    from src.data.entrant_bootstrap import resolve_share_classes_with_incumbents
+    resolved_records, _ = resolve_share_classes_with_incumbents(
+        records, profiles_by_symbol, store=store, overrides=overrides)
 
     reason_for: Dict[str, str] = {s: "missing_profile" for s in provider_empty_symbols}
 

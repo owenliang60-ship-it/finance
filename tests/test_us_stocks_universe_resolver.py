@@ -1,7 +1,10 @@
 """T20 B4 — eligible_extended is opt-in; legacy defaults stay unchanged."""
 import json
+import sqlite3
 import warnings
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from backtest.adapters.us_stocks import USStocksAdapter
 
@@ -11,6 +14,14 @@ def test_eligible_extended_option_uses_current_base_universe():
     with patch("src.data.universe_resolver.current_base_universe",
                return_value=["AAPL", "MSFT"]):
         assert adapter._discover_symbols() == ["AAPL", "MSFT"]
+
+
+def test_eligible_extended_propagates_resolver_failure():
+    adapter = USStocksAdapter(universe="eligible_extended")
+    with patch("src.data.universe_resolver.current_base_universe",
+               side_effect=sqlite3.DatabaseError("database disk image malformed")):
+        with pytest.raises(sqlite3.DatabaseError):
+            adapter._discover_symbols()
 
 
 def test_bare_adapter_keeps_market_db_all_default():

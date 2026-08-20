@@ -17,4 +17,3 @@ def test_batch_entrypoints_require_explicit_symbols(name):
     with pytest.warns(DeprecationWarning), \
          pytest.raises(ValueError, match="explicit symbols required"):
         fn(None)
-

@@ -232,6 +232,9 @@ def get_yfinance_price_targets(store=None) -> List[str]:
     try:
         base = current_base_universe(store=store)
     except Exception as e:
+        from src.data.universe_resolver import is_prebootstrap_universe_error
+        if not is_prebootstrap_universe_error(e):
+            raise
         logger.warning(
             "current_base_universe unavailable, yfinance price targets stay on "
             "the legacy extended-minus-core list: %s", e

@@ -1,9 +1,9 @@
 """Matrix #12 — theme scan runs over the resolver's eligible universe.
 
 Theme scanning is local indicator maths, so widening the universe costs
-nothing but changes the output scale. The parity contract on a frozen signal
-fixture: symbols may enter a theme, but no symbol the Core-sized scan found
-may disappear, and no theme may drop out of the ranking.
+nothing but changes cross-sectional percentiles. The parity contract keeps
+old symbols observable in the RS frame while explicitly recording any legal
+threshold-driven additions or losses.
 """
 import sys
 from pathlib import Path

@@ -15,6 +15,21 @@ from typing import Callable, Dict, Iterable, Optional, Tuple
 
 VALID_BASES = ("extended", "none")
 
+_PREBOOTSTRAP_ERRORS = frozenset({
+    "extended_membership empty — run bootstrap first",
+    "security_master empty — run bootstrap first",
+})
+
+
+def is_prebootstrap_universe_error(exc: BaseException) -> bool:
+    """True only for the two deliberate resolver cold-start states.
+
+    Compatibility callers may fall back to legacy files during the Stop B→C
+    deployment window. Database corruption, lock failures and unrelated
+    RuntimeErrors are real faults and must never be disguised as cold start.
+    """
+    return isinstance(exc, RuntimeError) and str(exc) in _PREBOOTSTRAP_ERRORS
+
 
 @dataclass(frozen=True)
 class ResolvedUniverse:
