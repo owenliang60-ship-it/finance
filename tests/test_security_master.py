@@ -35,6 +35,40 @@ def test_share_class_override_wins():
     assert out["GOOGL"].reason == "secondary_share_class" and out["GOOGL"].share_class_of == "GOOG"
 
 
+def test_explicit_override_can_resolve_known_name_mismatch_group():
+    common = {"symbol": "GS", "companyName": "The Goldman Sachs Group, Inc.",
+              "cik": "886982", "exchange": "NYSE", "isEtf": False,
+              "isFund": False, "marketCap": 300}
+    preferred = {"symbol": "GS-PA", "companyName": "Goldman Sachs PFD 1/1000 C",
+                 "cik": "886982", "exchange": "NYSE", "isEtf": False,
+                 "isFund": False, "marketCap": 200}
+    out = {r.symbol: r for r in resolve_share_classes(
+        [classify_security(common), classify_security(preferred)],
+        overrides={"886982": "GS"},
+        profiles_by_symbol={"GS": common, "GS-PA": preferred})}
+
+    assert out["GS"].eligible is True and out["GS"].reason == "ok"
+    assert out["GS-PA"].reason == "secondary_share_class"
+    assert out["GS-PA"].share_class_of == "GS"
+
+
+def test_production_overrides_cover_audited_common_equity_groups():
+    overrides = json.loads((pathlib.Path(__file__).parents[1]
+                            / "config" / "share_class_overrides.json").read_text())
+    expected = {
+        "0000005513": "UNM", "0000011544": "WRB", "0000072903": "XEL",
+        "0000092122": "SO", "0000732717": "T", "0000769218": "AEG",
+        "0000798941": "FCNCA", "0000811156": "CMS", "0000874766": "HIG",
+        "0000886982": "GS", "0000936340": "DTE", "0001001085": "BN",
+        "0001050446": "MSTR", "0001137774": "PRU", "0001166691": "CMCSA",
+        "0001267238": "AIZ", "0001326160": "DUK", "0001390777": "BNY",
+        "0001404912": "KKR", "0001406234": "BIP", "0001474432": "P",
+        "0001506307": "KMI", "0001533232": "BEP", "0001560385": "FWONK",
+        "0002089271": "HONA",
+    }
+    assert expected.items() <= overrides.items()
+
+
 def test_no_override_falls_to_mktcap_then_needs_review():
     a = {"symbol": "XX-A", "companyName": "Xx Inc.", "cik": "9",
          "exchange": "NYSE", "isEtf": False, "isFund": False}
