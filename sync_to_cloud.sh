@@ -213,10 +213,43 @@ conn.close()
 print('company.db WAL checkpoint OK')
 "
 
-    # 3. rsync company.db 本地→云端 (+ 文件大小安全检查)
-    info "推送 company.db..."
+    # 3. company.db 本地→云端：上传 temp + checksum/integrity + 原子替换。
+    #    禁止直接 rsync live SQLite 主文件：远端连接/WAL 可能把旧页重新 checkpoint
+    #    回刚覆盖的 inode，出现“传输 exit 0 但内容仍是旧库”。
+    info "推送 company.db (validated atomic replace)..."
     check_file_size "$LOCAL_DIR/data/company.db" "$REMOTE_DIR/data/company.db" "company.db" "push"
-    rsync -avz "$LOCAL_DIR/data/company.db" "$REMOTE/data/company.db"
+    local remote_tmp="/tmp/finance-companydb-sync-$$.db"
+    local expected_sha
+    expected_sha=$(shasum -a 256 "$LOCAL_DIR/data/company.db" | awk '{print $1}')
+    rsync -avz "$LOCAL_DIR/data/company.db" "$REMOTE_HOST:$remote_tmp"
+    ssh "$REMOTE_HOST" "python3 - '$remote_tmp' '$expected_sha' <<'PY'
+import hashlib, sqlite3, sys
+path, expected = sys.argv[1:]
+actual = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+assert actual == expected, (actual, expected)
+conn = sqlite3.connect('file:' + path + '?mode=ro', uri=True)
+assert conn.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
+conn.close()
+print('company.db temp validated', actual)
+PY"
+    ssh "$REMOTE_HOST" "set -e
+if command -v lsof >/dev/null 2>&1 && lsof '$REMOTE_DIR/data/company.db' >/dev/null 2>&1; then
+  echo 'company.db is open on remote; refusing atomic replace' >&2
+  exit 75
+fi
+cp '$REMOTE_DIR/data/company.db' /tmp/company.db.pre-sync
+mv '$remote_tmp' '$REMOTE_DIR/data/company.db'
+rm -f '$REMOTE_DIR/data/company.db-wal' '$REMOTE_DIR/data/company.db-shm'"
+    ssh "$REMOTE_HOST" "python3 - '$REMOTE_DIR/data/company.db' '$expected_sha' <<'PY'
+import hashlib, sqlite3, sys
+path, expected = sys.argv[1:]
+actual = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+assert actual == expected, (actual, expected)
+conn = sqlite3.connect('file:' + path + '?mode=ro', uri=True)
+assert conn.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
+conn.close()
+print('company.db atomic replace verified', actual)
+PY"
 
     # 4. universe.json merge: 本地→云端
     info "合并 universe.json (本地→云端)..."
