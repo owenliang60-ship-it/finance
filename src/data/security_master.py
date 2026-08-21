@@ -166,21 +166,23 @@ def resolve_share_classes(records, overrides: dict, profiles_by_symbol: dict) ->
         if len(members) < 2:
             continue
 
-        names = {_normalize_name(m.company_name) for m in members}
-        if len(names) > 1:
-            # Same CIK, different company names: vendor CIK data is not
-            # trustworthy for this group — block all members, don't guess.
-            for m in members:
-                updates[m.symbol] = replace(
-                    m, eligible=False, reason="identity_conflict", share_class_of=None
-                )
-            continue
-
         member_symbols = {m.symbol for m in members}
         override_symbol = overrides.get(cik)
         primary_symbol = override_symbol if override_symbol in member_symbols else None
 
         if primary_symbol is None:
+            names = {_normalize_name(m.company_name) for m in members}
+            if len(names) > 1:
+                # Without a human verdict, same-CIK/different-name data is not
+                # trustworthy enough to auto-select. A valid explicit override
+                # is intentionally checked first so audited common-equity +
+                # preferred/debt groups can be resolved deterministically.
+                for m in members:
+                    updates[m.symbol] = replace(
+                        m, eligible=False, reason="identity_conflict",
+                        share_class_of=None
+                    )
+                continue
             primary_symbol = _pick_primary_by_metrics(members, profiles_by_symbol)
 
         if primary_symbol is None:
