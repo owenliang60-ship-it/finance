@@ -56,8 +56,12 @@ release_lock() {
 # even when `set -e` aborts pull_from_cloud before its own rm).
 _CC_TMP=""
 cleanup() {
-    release_lock
-    [ -n "$_CC_TMP" ] && rm -rf "$_CC_TMP"
+    local rc=$?
+    release_lock || true
+    if [ -n "$_CC_TMP" ]; then
+        rm -rf "$_CC_TMP" || true
+    fi
+    return "$rc"
 }
 
 trap cleanup EXIT

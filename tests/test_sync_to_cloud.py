@@ -82,6 +82,12 @@ class TestSyncToCloudBashSyntax:
         )
         assert result.returncode == 0, result.stderr
 
+    def test_exit_trap_preserves_original_status(self):
+        text = SCRIPT_PATH.read_text(encoding="utf-8")
+        cleanup = text[text.index("cleanup() {"):text.index("\n}\n\ntrap cleanup EXIT")]
+        assert "local rc=$?" in cleanup
+        assert 'return "$rc"' in cleanup
+
 
 class TestPoolCountDisplaysExtendedMembershipCount:
     def test_three_display_blocks_present(self):
