@@ -88,6 +88,16 @@ class TestSyncToCloudBashSyntax:
         assert "local rc=$?" in cleanup
         assert 'return "$rc"' in cleanup
 
+    def test_company_db_push_uses_validated_atomic_replace(self):
+        text = SCRIPT_PATH.read_text(encoding="utf-8")
+        push = text[text.index("push_to_cloud() {"):text.index("\n# ── Status:")]
+        assert 'remote_tmp="/tmp/finance-companydb-sync-$$.db"' in push
+        assert "PRAGMA quick_check" in push
+        assert "hashlib.sha256" in push
+        assert "lsof '$REMOTE_DIR/data/company.db'" in push
+        assert "mv '$remote_tmp' '$REMOTE_DIR/data/company.db'" in push
+        assert 'rsync -avz "$LOCAL_DIR/data/company.db" "$REMOTE/data/company.db"' not in push
+
 
 class TestPoolCountDisplaysExtendedMembershipCount:
     def test_three_display_blocks_present(self):
