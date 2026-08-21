@@ -61,13 +61,15 @@ class TestLegacyCallTelemetry:
         log_dir.mkdir()
         log_dir.chmod(0o500)  # r-x：目录存在但不可写
         monkeypatch.setattr(pool_manager, "LEGACY_CALLS_LOG_FILE", log_dir / "legacy_calls.log")
+        monkeypatch.setattr(pool_manager, "load_universe",
+                            lambda: [{"symbol": "AAPL"}])
 
         try:
             symbols = pool_manager.get_symbols()
         finally:
             log_dir.chmod(0o700)  # 恢复权限，便于 tmp_path 清理
 
-        assert symbols == []  # 正常返回值不受埋点失败影响
+        assert symbols == ["AAPL"]  # 正常返回值不受埋点失败影响
         assert not (log_dir / "legacy_calls.log").exists()
 
     def test_missing_parent_dir_is_auto_created(self, tmp_path, monkeypatch):
@@ -86,10 +88,12 @@ class TestLegacyCallTelemetry:
         blocker.write_text("not a directory")  # 占用本应是目录的路径
         log_file = blocker / "pool" / "legacy_calls.log"
         monkeypatch.setattr(pool_manager, "LEGACY_CALLS_LOG_FILE", log_file)
+        monkeypatch.setattr(pool_manager, "load_universe",
+                            lambda: [{"symbol": "AAPL"}])
 
         symbols = pool_manager.get_symbols()  # 不应抛异常
 
-        assert symbols == []
+        assert symbols == ["AAPL"]
 
 
 class TestCheckCoreReferencesScript:
