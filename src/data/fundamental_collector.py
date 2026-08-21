@@ -216,7 +216,8 @@ def _collect_one_dataset(symbol: str, dataset: str, *, client: Any,
 
 def collect_fundamentals_for_symbol(symbol: str, *, client: Any, store: MarketStore,
                                     limit_quarters: int = 8, observed_at: str,
-                                    job_writer: Optional[Callable] = None
+                                    job_writer: Optional[Callable] = None,
+                                    dataset_keys: Optional[List[str]] = None,
                                     ) -> Dict[str, str]:
     """Collect every dataset for one symbol. THE fundamentals write path.
 
@@ -237,6 +238,9 @@ def collect_fundamentals_for_symbol(symbol: str, *, client: Any, store: MarketSt
             run_id/symbol and maps status via `JOB_STATUS_MAP` in a closure.
             On rollback it is called a second time, in the recovery
             transaction, with `fetch_failed`.
+        dataset_keys: optional subset of DATASETS. Backfill resume passes only
+            the jobs it claimed; routine/event/reconcile callers omit it and
+            retain the full five-dataset collection.
 
     Returns:
         {dataset: status} for every dataset in DATASETS, status ∈
@@ -247,8 +251,18 @@ def collect_fundamentals_for_symbol(symbol: str, *, client: Any, store: MarketSt
     sym = symbol.upper()
     observed_ts = _normalize_observed_at(observed_at)
 
+    if dataset_keys is None:
+        selected = DATASETS
+    else:
+        requested = set(dataset_keys)
+        unknown = requested - set(DATASETS)
+        if unknown:
+            raise ValueError("unknown dataset key(s): {}".format(
+                ", ".join(sorted(unknown))))
+        selected = tuple(dataset for dataset in DATASETS if dataset in requested)
+
     statuses: Dict[str, str] = {}
-    for dataset in DATASETS:
+    for dataset in selected:
         statuses[dataset] = _collect_one_dataset(
             sym, dataset, client=client, store=store,
             limit_quarters=limit_quarters, observed_at=observed_ts,

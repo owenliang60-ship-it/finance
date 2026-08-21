@@ -1413,15 +1413,9 @@ RUN_ID="full-$(date +%F)"
 ssh aliyun "cd /root/workspace/Finance && nohup python3 scripts/backfill_extended_fundamentals.py --run-id $RUN_ID > logs/backfill_full.log 2>&1 &"
 # （runner 启动即自取 market_db_writer flock；锁被占则 exit 75 不动 manifest）
 # 收尾闸门（R2-P1-4 + R3-m6 + R4-P2-4）：⚠️ 这是 backfill 结束后（~3h 后，或收到完成日志/Telegram 后）
-# 才执行的独立步骤——不得紧随上面的后台启动命令立即运行。按显式 RUN_ID 查询，未 complete 则 exit 1 绝不进入 metrics
-ssh aliyun "cd /root/workspace/Finance && python3 - $RUN_ID <<'EOF'
-import sqlite3, sys
-run_id = sys.argv[1]
-c = sqlite3.connect('data/market.db')
-row = c.execute("select status from fundamental_backfill_runs where run_id = ?", (run_id,)).fetchone()
-print(run_id, row)
-sys.exit(0 if row and row[0] == 'complete' else 1)
-EOF"
+# 才执行的独立步骤——不得紧随上面的后台启动命令立即运行。按显式 RUN_ID
+# 同时检查 header + job ledger；未全终态或 fetch_failed >=5% 均 exit 1，绝不进入 metrics
+ssh aliyun "cd /root/workspace/Finance && python3 scripts/backfill_extended_fundamentals.py --run-id $RUN_ID --verify-only"
 # complete 确认后：metrics 重算，经同一 writer lock（cron_wrapper 参数序同上）
 ssh aliyun "cd /root/workspace/Finance && \
   FINANCE_CRON_RESOURCE_KEY=market_db_writer FINANCE_CRON_LOCK_BUSY_RC=75 \
