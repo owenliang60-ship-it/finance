@@ -163,6 +163,15 @@ def resolve_share_classes(records, overrides: dict, profiles_by_symbol: dict) ->
     updates: dict = {}
 
     for cik, members in groups.items():
+        # A present null override is an audited verdict that this CIK group has
+        # no eligible common-equity representative (e.g. only preferred/debt
+        # instruments remain in the screener). It must also block a singleton.
+        if cik in overrides and overrides[cik] is None:
+            for m in members:
+                updates[m.symbol] = replace(
+                    m, eligible=False, reason="identity_conflict",
+                    share_class_of=None)
+            continue
         if len(members) < 2:
             continue
 

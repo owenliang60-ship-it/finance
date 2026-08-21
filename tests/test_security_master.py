@@ -67,6 +67,21 @@ def test_production_overrides_cover_audited_common_equity_groups():
         "0002089271": "HONA",
     }
     assert expected.items() <= overrides.items()
+    assert overrides["0001527469"] is None  # Athene group has no common equity
+
+
+def test_null_override_blocks_group_without_common_equity_even_as_singleton():
+    preferred = {
+        "symbol": "ATHS", "companyName": "Athene Holding Ltd. 7.250% Fixed",
+        "cik": "1527469", "exchange": "NYSE", "isEtf": False,
+        "isFund": False, "marketCap": 20_000_000_000,
+    }
+    out = resolve_share_classes(
+        [classify_security(preferred)], overrides={"1527469": None},
+        profiles_by_symbol={"ATHS": preferred})
+
+    assert out[0].eligible is False
+    assert out[0].reason == "identity_conflict"
 
 
 def test_no_override_falls_to_mktcap_then_needs_review():

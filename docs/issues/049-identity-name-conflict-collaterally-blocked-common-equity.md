@@ -13,7 +13,7 @@
 
 - 有效 override（CIK→且 symbol 确实属于组）提升到名称冲突检查之前；无 override 时仍保持 fail-closed。
 - 根据 Bootstrap 真实 payload/mcap/volume 审计，为 25 个有明确普通股主类的 group 添加 override。
-- ATH group 当前只有 preferred/debt，无普通股，刻意不 override，继续 blocked。
+- ATH group 当前只有 preferred/debt、无普通股，使用 `CIK: null` 的显式 block override；该语义对 singleton 同样生效。
 - 测试锁定“override 可解已知名称差异”和生产 override 清单。
 
 ## 教训
