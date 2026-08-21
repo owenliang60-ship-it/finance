@@ -19,6 +19,7 @@ Spec: docs/design/2026-07-09-fmp-forward-eps-valuation-spec.md §5.3–§5.5
 import argparse
 import json
 import logging
+import sqlite3
 import sys
 import time
 from dataclasses import dataclass, field
@@ -623,30 +624,118 @@ def _run_symbols_and_finalize(args, *, client, store, targets, processed,
 # ---------------------------------------------------------------------------
 
 def build_pool_loaders(data_root: Optional[Path]):
-    """--data-root 完整契约（review P1）：同时派生 market.db 与 pool cache。
+    """Build cached ``(extras, base)`` loaders for the forward denominator.
 
-    data_root 为 None → 模块默认 loaders（生产路径）；
-    否则 core/extended 都从 data_root/pool/ 读取，绝不回落 worktree 默认目录。
+    Post-bootstrap the base is active eligible membership and extras are the
+    explicit overlay tier.  Before bootstrap (or when a fixture data-root has
+    no membership schema), the pair degrades to the legacy Core + Extended
+    files.  Both returned callables share one cached resolution so a transient
+    failure cannot make the two legs observe different universes.
     """
-    if data_root is None:
-        from src.data.extended_universe_manager import get_extended_symbols
-        from src.data.pool_manager import get_symbols
-        return get_symbols, get_extended_symbols
+    root = Path(data_root) if data_root is not None else None
+    resolved: Dict[str, List[str]] = {}
 
-    pool_dir = Path(data_root) / "pool"
-
-    def core_loader() -> List[str]:
+    def legacy_pair() -> Tuple[List[str], List[str]]:
+        if root is None:
+            from src.data.extended_universe_manager import get_extended_symbols
+            from src.data.pool_manager import get_symbols
+            return list(get_symbols()), list(get_extended_symbols())
+        pool_dir = root / "pool"
         with open(pool_dir / "universe.json", encoding="utf-8") as f:
             entries = json.load(f)
-        return sorted({(e["symbol"] if isinstance(e, dict) else str(e)).upper()
-                       for e in entries})
-
-    def extended_loader() -> List[str]:
         with open(pool_dir / "extended_universe.json", encoding="utf-8") as f:
             cache = json.load(f)
-        return list(cache.get("symbols", []))
+        extras = sorted({
+            (e["symbol"] if isinstance(e, dict) else str(e)).upper()
+            for e in entries
+        })
+        base = sorted({str(s).upper() for s in cache.get("symbols", [])})
+        return extras, base
 
-    return core_loader, extended_loader
+    def data_root_pair() -> Tuple[List[str], List[str]]:
+        market_db = root / "market.db"
+        if not market_db.exists():
+            raise RuntimeError("market.db missing — pre-bootstrap fixture")
+        conn = sqlite3.connect(f"file:{market_db}?mode=ro", uri=True)
+        try:
+            tables = {row[0] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            required = {"extended_membership", "security_master"}
+            if not required <= tables:
+                raise RuntimeError("universe schema missing — run bootstrap first")
+            rows = conn.execute(
+                "SELECT DISTINCT m.symbol FROM extended_membership m "
+                "JOIN security_master s ON s.symbol = m.symbol "
+                "WHERE m.effective_to IS NULL AND s.eligible = 1 "
+                "ORDER BY m.symbol"
+            ).fetchall()
+        finally:
+            conn.close()
+        base = [r[0] for r in rows]
+        if not base:
+            raise RuntimeError("active eligible membership empty")
+
+        from config.settings import BENCHMARK_SYMBOLS
+        extras = {s.upper() for s in BENCHMARK_SYMBOLS}
+        company_db = root / "company.db"
+        if company_db.exists():
+            cconn = sqlite3.connect(f"file:{company_db}?mode=ro", uri=True)
+            try:
+                tables = {r[0] for r in cconn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'")}
+                if "holdings" in tables:
+                    extras.update(r[0].upper() for r in cconn.execute(
+                        "SELECT symbol FROM holdings WHERE status='OPEN'"))
+                if "watchlist" in tables:
+                    extras.update(r[0].upper() for r in cconn.execute(
+                        "SELECT symbol FROM watchlist"))
+            finally:
+                cconn.close()
+        return sorted(extras), base
+
+    def resolve_once() -> Tuple[List[str], List[str]]:
+        if not resolved:
+            try:
+                if root is None:
+                    from src.data.overlays import load_overlay_tier
+                    from src.data.universe_resolver import current_base_universe
+                    base = current_base_universe()
+                    extras = load_overlay_tier()
+                else:
+                    extras, base = data_root_pair()
+                if not base:
+                    raise RuntimeError("active eligible membership empty")
+            except Exception as exc:
+                if root is None:
+                    from src.data.universe_resolver import is_prebootstrap_universe_error
+                    fallback_allowed = is_prebootstrap_universe_error(exc)
+                else:
+                    fallback_allowed = (
+                        isinstance(exc, RuntimeError)
+                        and str(exc) in {
+                            "market.db missing — pre-bootstrap fixture",
+                            "universe schema missing — run bootstrap first",
+                            "active eligible membership empty",
+                        }
+                    )
+                if not fallback_allowed:
+                    raise
+                logger.warning(
+                    "forward resolver unavailable; using legacy Core + Extended: %s",
+                    exc,
+                )
+                extras, base = legacy_pair()
+            resolved["extras"] = sorted({s.upper() for s in extras})
+            resolved["base"] = sorted({s.upper() for s in base})
+        return resolved["extras"], resolved["base"]
+
+    def extras_loader() -> List[str]:
+        return list(resolve_once()[0])
+
+    def base_loader() -> List[str]:
+        return list(resolve_once()[1])
+
+    return extras_loader, base_loader
 
 
 def main(argv: Optional[List[str]] = None) -> int:

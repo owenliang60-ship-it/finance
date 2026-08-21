@@ -21,6 +21,17 @@ logger = logging.getLogger(__name__)
 
 SCREENER_DEFAULT_LIMIT = 5000  # FMP screener page cap; ~2.8x $10B+ 全集 (1797 as of 2026-05-21)
 
+# get_dataset_with_status() kind → (endpoint, 是否带 limit, 是否带 period)
+# 映射复用现有 get_profile / get_income_statement / get_balance_sheet /
+# get_cash_flow / get_ratios 的 URL 构造，quarter period（与现有 income/balance/cashflow 默认一致）。
+_DATASET_KIND_SPECS = {
+    "profile": ("profile", False, False),
+    "income": ("income-statement", True, True),
+    "balance": ("balance-sheet-statement", True, True),
+    "cashflow": ("cash-flow-statement", True, True),
+    "ratios": ("ratios", True, False),
+}
+
 # query-string / dict-repr 两种形态的 apikey 值都掩码
 _APIKEY_RE = re.compile(r"(apikey(?:=|['\"]?\s*:\s*['\"]?))[^&\s,'\"}]+", re.IGNORECASE)
 
@@ -56,8 +67,14 @@ class FMPClient:
             time.sleep(self.call_interval - elapsed)
         self._last_call_time = time.time()
 
-    def _request(self, endpoint: str, params: Optional[Dict] = None) -> Any:
-        """发送 API 请求，带重试"""
+    def _request(self, endpoint: str, params: Optional[Dict] = None,
+                 retry_5xx: bool = False) -> Any:
+        """发送 API 请求，带重试
+
+        retry_5xx: 默认 False，保留现有调用方行为（非 429 状态码零重试，立即返回 None）。
+            仅 _request_with_status() 显式传 True 扩大重试集合到 5xx——不能把它设为默认值，
+            否则会让既有调用方在真实 5xx 时意外多等待最多 30s（无 mock 场景下是真实 sleep）。
+        """
         self._rate_limit()
 
         url = f"{self.base_url}/{endpoint}"
@@ -70,10 +87,10 @@ class FMPClient:
 
                 if resp.status_code == 200:
                     return resp.json()
-                elif resp.status_code == 429:
-                    # Rate limited, wait and retry
+                elif resp.status_code == 429 or (retry_5xx and resp.status_code >= 500):
+                    # Rate limited (or, for retry_5xx callers, server error): wait and retry
                     wait_time = (attempt + 1) * 5
-                    logger.warning(f"Rate limited, waiting {wait_time}s...")
+                    logger.warning(f"HTTP {resp.status_code}, waiting {wait_time}s before retry...")
                     time.sleep(wait_time)
                 else:
                     logger.error(f"API error {resp.status_code}: {self._safe(resp.text[:200])}")
@@ -86,6 +103,42 @@ class FMPClient:
 
         logger.error(f"Failed after {API_RETRY_TIMES} attempts: {self._safe(endpoint)}")
         return None
+
+    def _request_with_status(self, endpoint: str, params: Optional[Dict] = None) -> tuple:
+        """包装 _request，区分「provider 返回空」与「请求彻底失败」。
+
+        _request() 对二者统一返回 None/[]，调用方无法分辨。这里显式分类（返回 (data, status)）：
+        - 200 且 JSON 为非空 list → (data, "ok")
+        - 200 且 JSON 为空 list → ([], "provider_empty")
+        - None（重试耗尽/非重试状态码/异常）或非 list 形状 → ([], "fetch_failed")
+        """
+        data = self._request(endpoint, params, retry_5xx=True)
+        if isinstance(data, list):
+            return data, ("ok" if data else "provider_empty")
+        return [], "fetch_failed"
+
+    def get_dataset_with_status(self, kind: str, symbol: str, limit: int = 8) -> tuple:
+        """按 kind 取数据集，显式返回 (data, status)。
+
+        kind ∈ {"profile","income","balance","cashflow","ratios"}
+        status ∈ {"ok","provider_empty","fetch_failed"}
+
+        注意：现有 get_profile/get_income_statement/get_balance_sheet/get_cash_flow/
+        get_ratios 方法零改动，仍保留 [] 折叠语义供旧调用方使用；本方法是新增的
+        显式状态通道，供需要区分 empty vs failed 的调用方使用。
+        """
+        spec = _DATASET_KIND_SPECS.get(kind)
+        if spec is None:
+            raise ValueError(
+                f"unknown kind: {kind!r}; expected one of {sorted(_DATASET_KIND_SPECS)}"
+            )
+        endpoint, uses_limit, uses_period = spec
+        params = {"symbol": symbol}
+        if uses_limit:
+            params["limit"] = limit
+        if uses_period:
+            params["period"] = "quarter"
+        return self._request_with_status(endpoint, params)
 
     # ========== Forward EPS 数据线（估值 PIT 快照）==========
 

@@ -393,17 +393,17 @@ def resolve_fmp_forward_universe(
     normalized_holdings: Iterable[Mapping[str, Any]],
     mags_symbols: Iterable[str],
 ) -> List[str]:
-    """core_pool ∪ extended_pool ∪ included 规范化 symbol ∪ MAGS（排序去重）。
+    """explicit extras ∪ current base ∪ included holdings ∪ MAGS.
 
-    core/extended 任一为空 → fail fast：loader 返回空集意味着池文件损坏，
-    静默缩水的分母绝不能被写进 fmp_forward_runs。
+    ``core_symbols`` is retained as the compatibility parameter name, but
+    post-bootstrap its loader supplies explicit overlays.  An empty overlay
+    is valid; an empty base is not.  Pre-bootstrap callers still inject the
+    legacy Core + Extended loaders, preserving the old denominator exactly.
     """
-    core = {s.upper() for s in core_symbols}
-    extended = {s.upper() for s in extended_symbols}
-    if not core:
-        raise ValueError("core pool symbols empty — pool cache broken, refusing")
-    if not extended:
-        raise ValueError("extended symbols empty — extended cache broken, refusing")
+    extras = {s.upper() for s in core_symbols}
+    base = {s.upper() for s in extended_symbols}
+    if not base:
+        raise ValueError("forward base symbols empty — refusing to freeze denominator")
     included = {r["symbol"] for r in normalized_holdings
                 if r["included"] == 1 and r.get("symbol")}
-    return sorted(core | extended | included | {s.upper() for s in mags_symbols})
+    return sorted(extras | base | included | {s.upper() for s in mags_symbols})

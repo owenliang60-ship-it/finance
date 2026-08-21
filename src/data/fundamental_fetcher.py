@@ -8,6 +8,7 @@
 """
 import json
 import logging
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict
@@ -31,6 +32,20 @@ logger = logging.getLogger(__name__)
 
 # Profiles 仍用 JSON（静态元数据，不适合入时序库）
 PROFILES_FILE = FUNDAMENTAL_DIR / "profiles.json"
+
+
+def _require_explicit_symbols(symbols, caller: str) -> List[str]:
+    if symbols is None:
+        warnings.warn(
+            "%s no longer infers the legacy Core pool; use "
+            "fundamental_collector with an explicit universe" % caller,
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        raise ValueError(
+            "explicit symbols required; use fundamental_collector"
+        )
+    return symbols
 
 
 def _load_json(path: Path) -> Dict:
@@ -70,8 +85,7 @@ def fetch_profile(symbol: str) -> Optional[Dict]:
 
 def update_profiles(symbols: List[str] = None) -> Dict[str, Dict]:
     """批量更新公司概况"""
-    if symbols is None:
-        symbols = get_symbols()
+    symbols = _require_explicit_symbols(symbols, "update_profiles")
 
     logger.info(f"更新 {len(symbols)} 只股票的公司概况...")
 
@@ -115,8 +129,7 @@ def fetch_ratios(symbol: str, limit: int = 4) -> List[Dict]:
 
 def update_ratios(symbols: List[str] = None):
     """批量更新财务比率 → market.db"""
-    if symbols is None:
-        symbols = get_symbols()
+    symbols = _require_explicit_symbols(symbols, "update_ratios")
 
     logger.info(f"更新 {len(symbols)} 只股票的财务比率...")
 
@@ -152,8 +165,7 @@ def fetch_income(symbol: str, period: str = "quarter", limit: int = 8) -> List[D
 
 def update_income(symbols: List[str] = None):
     """批量更新收入报表 → market.db"""
-    if symbols is None:
-        symbols = get_symbols()
+    symbols = _require_explicit_symbols(symbols, "update_income")
 
     logger.info(f"更新 {len(symbols)} 只股票的收入报表...")
 
@@ -189,8 +201,7 @@ def fetch_balance_sheet(symbol: str, period: str = "quarter", limit: int = 8) ->
 
 def update_balance_sheets(symbols: List[str] = None):
     """批量更新资产负债表 → market.db"""
-    if symbols is None:
-        symbols = get_symbols()
+    symbols = _require_explicit_symbols(symbols, "update_balance_sheets")
 
     logger.info(f"更新 {len(symbols)} 只股票的资产负债表...")
 
@@ -226,8 +237,7 @@ def fetch_cash_flow(symbol: str, period: str = "quarter", limit: int = 8) -> Lis
 
 def update_cash_flows(symbols: List[str] = None):
     """批量更新现金流量表 → market.db"""
-    if symbols is None:
-        symbols = get_symbols()
+    symbols = _require_explicit_symbols(symbols, "update_cash_flows")
 
     logger.info(f"更新 {len(symbols)} 只股票的现金流量表...")
 
@@ -254,8 +264,7 @@ def get_cash_flow(symbol: str) -> List[Dict]:
 
 def update_all_fundamentals(symbols: List[str] = None):
     """更新所有基本面数据"""
-    if symbols is None:
-        symbols = get_symbols()
+    symbols = _require_explicit_symbols(symbols, "update_all_fundamentals")
 
     logger.info(f"开始更新 {len(symbols)} 只股票的所有基本面数据...")
 

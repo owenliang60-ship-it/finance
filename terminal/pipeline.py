@@ -362,6 +362,48 @@ class DataPackage:
         return "\n\n".join(sections)
 
 
+def ensure_tracked(symbol: str, source: str = "analysis") -> bool:
+    """Mark `symbol` as tracked by adding it to the local company.db watchlist.
+
+    Replaces the legacy `pool_manager.ensure_in_pool()` auto-admit call: this
+    never touches data/pool/universe.json (R2/R5/R13). Downstream consumers
+    that need an explicit-targets universe (IV collection, forward estimates)
+    pick the symbol up via the `watchlist` overlay (src/data/overlays.py).
+
+    Returns:
+        True if the watchlist write succeeded, False if it was skipped (e.g.
+        running on a cloud machine, where watchlist writes are forbidden —
+        see company_store.add_to_watchlist).
+    """
+    symbol = symbol.upper()
+    try:
+        from terminal.company_store import get_store
+        store = get_store()
+        store.add_to_watchlist(symbol, source=source)
+        return True
+    except RuntimeError as e:
+        logger.warning(f"ensure_tracked: watchlist write forbidden for {symbol}: {e}")
+        return False
+
+
+def _ensure_analysis_data(symbol: str) -> tuple[bool, bool]:
+    """Track locally when allowed, but always run the explicit data cache step.
+
+    company.db watchlist ownership and market-data availability are separate
+    concerns: cloud deliberately refuses the former, yet is the owner allowed
+    to refresh market.db for an explicitly requested analysis ticker.
+    """
+    tracked = False
+    try:
+        tracked = ensure_tracked(symbol)
+    except Exception as exc:
+        logger.warning("analysis tracking failed for %s: %s", symbol, exc)
+
+    from src.data.fundamental_fetcher import ensure_fundamentals_cached
+    cached = ensure_fundamentals_cached(symbol)
+    return tracked, cached
+
+
 def collect_data(
     symbol: str,
     price_days: int = 60,
@@ -389,23 +431,22 @@ def collect_data(
             f"Starting data collection for {symbol} ({price_days} days price history)"
         )
 
-    # Auto-admit: ensure ticker is in pool and fundamentals are cached
+    # Auto-track: add ticker to the local watchlist (company.db) and ensure
+    # fundamentals are cached. Does NOT write data/pool/universe.json — that
+    # write path is now exclusively owned by the screener pool-refresh cron
+    # (R2/R5/R13; see ensure_tracked() below).
     try:
-        from src.data.pool_manager import ensure_in_pool
-        from src.data.fundamental_fetcher import ensure_fundamentals_cached
-        pool_info = ensure_in_pool(symbol)
-        if pool_info:
-            ensure_fundamentals_cached(symbol)
+        tracked, _cached = _ensure_analysis_data(symbol)
+        if tracked:
             if scratchpad:
-                source = pool_info.get("source", "screener")
                 scratchpad.log_reasoning(
                     "auto_admit",
-                    f"{symbol} in pool (source: {source})"
+                    f"{symbol} added to watchlist (source: analysis)"
                 )
     except Exception as e:
-        logger.warning(f"Auto-admit failed for {symbol}: {e}")
+        logger.warning(f"Auto-track failed for {symbol}: {e}")
         if scratchpad:
-            scratchpad.log_reasoning("error", f"Auto-admit failed: {e}")
+            scratchpad.log_reasoning("error", f"Auto-track failed: {e}")
 
     # Data Desk: stock data
     try:
@@ -854,4 +895,3 @@ def calculate_position(
         )
 
     return output
-

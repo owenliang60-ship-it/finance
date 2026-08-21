@@ -6,14 +6,14 @@ IV 历史数据回填脚本
 支持断点续传、credits 限额、dry-run。
 
 用法:
-    python3 scripts/backfill_iv.py --start 2024-02-25 --end 2026-02-24
-    python3 scripts/backfill_iv.py --dry-run --start 2026-02-20 --end 2026-02-24
     python3 scripts/backfill_iv.py --symbols AAPL MSFT --start 2025-01-01
+    python3 scripts/backfill_iv.py --symbols AAPL --dry-run --start 2026-02-20 --end 2026-02-24
 
 约束:
     - 必须在云端跑（aliyun 固定 IP，MarketData.app 单 IP 绑定）
     - 10,000 credits/天，留 500 给当日 cron，默认上限 9500
     - 断点续传：自动跳过 DB 中已有的 (symbol, date) 对
+    - `--symbols` 必填（矩阵 #11）：手动工具没有隐式池，缺参 exit 2
 """
 import argparse
 import logging
@@ -25,7 +25,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from config.settings import BENCHMARK_SYMBOLS, MARKETDATA_API_KEY
+from config.settings import MARKETDATA_API_KEY
 from src.data.market_store import get_store
 from src.data.marketdata_client import MarketClosedError
 from terminal.options.iv_tracker import compute_hv
@@ -81,16 +81,9 @@ def backfill(args):
     """Main backfill logic."""
     store = get_store()
 
-    # Determine symbols
-    if args.symbols:
-        symbols = [s.upper() for s in args.symbols]
-    else:
-        from src.data.pool_manager import get_symbols
-        symbols = get_symbols()
-
-        for bm in BENCHMARK_SYMBOLS:
-            if bm not in symbols:
-                symbols.append(bm)
+    # Targets are always explicit (matrix #11): --symbols is required, so a
+    # multi-day credit burn can never be aimed at a pool nobody asked for.
+    symbols = [s.upper() for s in args.symbols]
 
     if not symbols:
         logger.error("No symbols to backfill")
@@ -322,8 +315,8 @@ def main():
         help="End date YYYY-MM-DD (default: yesterday)",
     )
     parser.add_argument(
-        "--symbols", nargs="+",
-        help="Specific symbols (default: pool + benchmarks)",
+        "--symbols", nargs="+", required=True,
+        help="Target symbols (required — this tool has no implicit universe)",
     )
     parser.add_argument(
         "--daily-limit", type=int, default=9500,

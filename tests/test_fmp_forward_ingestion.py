@@ -164,10 +164,10 @@ def test_resolver_unions_core_extended_included_mags():
     assert universe == sorted(set(universe))  # 排序去重
 
 
-def test_resolver_fails_fast_on_empty_core_or_extended():
+def test_resolver_allows_empty_extras_but_fails_fast_on_empty_base():
     holdings = _norm()
-    with pytest.raises(ValueError):
-        resolve_fmp_forward_universe([], ["MSFT"], holdings, ["TSLA"])
+    universe = resolve_fmp_forward_universe([], ["MSFT"], holdings, ["TSLA"])
+    assert "MSFT" in universe and "TSLA" in universe
     with pytest.raises(ValueError):
         resolve_fmp_forward_universe(["AAPL"], [], holdings, ["TSLA"])
 

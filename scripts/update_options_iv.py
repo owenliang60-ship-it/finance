@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Daily IV Update Script — 采集股票池 ATM IV 并存入 market.db
+Daily IV Update Script — 采集 IV targets 的 ATM IV 并存入 market.db
 
 用法:
-    python scripts/update_options_iv.py              # 更新全部股票池
+    python scripts/update_options_iv.py              # 更新 holdings+watchlist+benchmarks（T16 显式 targets）
     python scripts/update_options_iv.py --symbols AAPL MSFT  # 指定股票
     python scripts/update_options_iv.py --dry-run    # 干跑不存储
 
@@ -11,7 +11,8 @@ Daily IV Update Script — 采集股票池 ATM IV 并存入 market.db
     云端 cron: 周二-六 06:50 北京时间（在量价更新 06:30 之后）
     日志: logs/cron_options_iv.log
 
-Credit 预算: ~350 credits/天 (116 stocks × ~3 credits/stock)
+Targets (R2/R5/R13): holdings ∪ watchlist ∪ benchmarks — 不是全部股票池/扩展池
+（避免 credit 预算被 900+ 只无期权兴趣的股票吃掉），见 _resolve_iv_targets()。
 """
 import argparse
 import logging
@@ -23,7 +24,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from config.settings import BENCHMARK_SYMBOLS, MARKETDATA_API_KEY
+from config.settings import MARKETDATA_API_KEY
 from src.data.market_store import get_store
 from terminal.options.iv_tracker import update_daily_iv
 
@@ -34,11 +35,32 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _resolve_iv_targets() -> list:
+    """Explicit IV collection targets: holdings ∪ watchlist ∪ benchmarks
+    (R2/R5/R13). NEVER the full pool/extended universe (955/1003 symbols) —
+    IV credits are metered (~3 credits/symbol/day) and most of the pool has
+    no options interest worth tracking daily.
+    """
+    from src.data.overlays import load_benchmarks, load_holdings, load_watchlist
+    from src.data.universe_resolver import resolve_universe
+
+    resolved = resolve_universe(
+        base="none",
+        overlays=("holdings", "watchlist", "benchmarks"),
+        overlay_loaders={
+            "holdings": load_holdings,
+            "watchlist": load_watchlist,
+            "benchmarks": load_benchmarks,
+        },
+    )
+    return list(resolved.symbols)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Daily IV Update")
     parser.add_argument(
         "--symbols", nargs="+",
-        help="Specific symbols to update (default: all pool stocks)",
+        help="Specific symbols to update (default: holdings+watchlist+benchmarks)",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -58,14 +80,11 @@ def main():
         symbols = [s.upper() for s in args.symbols]
         logger.info("Updating IV for %d specified symbols", len(symbols))
     else:
-        from src.data.pool_manager import get_symbols
-        symbols = get_symbols()
-
-        # 加入 benchmark ETF（SPY/QQQ），去重
-        for bm in BENCHMARK_SYMBOLS:
-            if bm not in symbols:
-                symbols.append(bm)
-        logger.info("Updating IV for %d pool stocks + benchmarks", len(symbols))
+        symbols = _resolve_iv_targets()
+        logger.info(
+            "Updating IV for %d explicit targets (holdings + watchlist + benchmarks)",
+            len(symbols),
+        )
 
     if not symbols:
         logger.warning("No symbols to update — exiting")

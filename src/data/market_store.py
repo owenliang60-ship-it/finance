@@ -12,11 +12,13 @@ Usage:
     store.upsert_income("AAPL", rows)
     store.screen({"net_margin >": 0.25})
 """
+import hashlib
 import json
 import logging
 import re
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -36,6 +38,12 @@ try:
 except ImportError:
     _DEFAULT_DB_PATH = _PROJECT_ROOT / "data" / "market.db"
 
+try:
+    from config.settings import PROVIDER_EMPTY_TTL_DAYS as _CONFIGURED_PROVIDER_EMPTY_TTL_DAYS
+    _DEFAULT_PROVIDER_EMPTY_TTL_DAYS = _CONFIGURED_PROVIDER_EMPTY_TTL_DAYS
+except ImportError:
+    _DEFAULT_PROVIDER_EMPTY_TTL_DAYS = 30
+
 
 # ---------------------------------------------------------------------------
 # camelCase → snake_case helper
@@ -48,6 +56,17 @@ def _camel_to_snake(name: str) -> str:
     """Convert camelCase or PascalCase to snake_case."""
     s = _CAMEL_RE1.sub(r"\1_\2", name)
     return _CAMEL_RE2.sub(r"\1_\2", s).lower()
+
+
+# ---------------------------------------------------------------------------
+# Pure-date detection (R3-m2: vintage observed_at/as_of normalization)
+# ---------------------------------------------------------------------------
+_PURE_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _is_pure_date(s: str) -> bool:
+    """True if `s` is a bare YYYY-MM-DD date with no time component."""
+    return bool(_PURE_DATE_RE.match(s))
 
 
 # ---------------------------------------------------------------------------
@@ -576,6 +595,67 @@ _SCHEMA = "\n\n".join([
     PRIMARY KEY (snapshot_date, run_kind)
 );""",
     "CREATE INDEX IF NOT EXISTS idx_ffr_status ON fmp_forward_runs(status, snapshot_date);",
+
+    # -- Extended Primary Universe storage foundation (north-star.md 数据层) --
+
+    # -- Security master: identity + eligibility (ETF/fund/ADR exclusion) --
+    """CREATE TABLE IF NOT EXISTS security_master (
+    symbol TEXT PRIMARY KEY, cik TEXT, company_name TEXT, exchange TEXT,
+    is_etf INTEGER NOT NULL DEFAULT 0, is_fund INTEGER NOT NULL DEFAULT 0,
+    is_adr INTEGER NOT NULL DEFAULT 0, share_class_of TEXT,
+    eligible INTEGER NOT NULL, reason TEXT NOT NULL, updated_at TEXT NOT NULL
+);""",
+
+    # -- Extended universe membership windows (as-of reconstitution) --
+    """CREATE TABLE IF NOT EXISTS extended_membership (
+    symbol TEXT NOT NULL, effective_from TEXT NOT NULL, effective_to TEXT,
+    reason TEXT NOT NULL DEFAULT 'screener',
+    PRIMARY KEY (symbol, effective_from)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_membership_window ON extended_membership(effective_from, effective_to);",
+
+    # -- Per-symbol per-dataset fetch/coverage status + retry bookkeeping.
+    # Retry semantics (R2-P1-3): fetch_failed -> next_retry_at = now + min(2^consecutive_failures, 16) days;
+    # provider_empty -> negative-cache with TTL, next_retry_at = now + 30 days (settings.PROVIDER_EMPTY_TTL_DAYS);
+    # ok -> consecutive_failures reset to 0, last_success_at set, next_retry_at = NULL.
+    # dataset also takes the value "identity" (identity backfill queue, see T12/T17).
+    """CREATE TABLE IF NOT EXISTS coverage_status (
+    symbol TEXT NOT NULL, dataset TEXT NOT NULL, status TEXT NOT NULL,
+    detail TEXT, updated_at TEXT NOT NULL,
+    last_attempt_at TEXT, last_success_at TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    next_retry_at TEXT,
+    PRIMARY KEY (symbol, dataset)
+);""",
+
+    # -- Company profile payload cache (raw JSON blob keyed by symbol) --
+    """CREATE TABLE IF NOT EXISTS company_profile (
+    symbol TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL
+);""",
+
+    # -- Fundamental vintage: point-in-time snapshots per statement/fiscal period --
+    """CREATE TABLE IF NOT EXISTS fundamental_vintage (
+    symbol TEXT NOT NULL, statement TEXT NOT NULL, fiscal_date TEXT NOT NULL,
+    observed_at TEXT NOT NULL, filing_date TEXT, accepted_date TEXT,
+    content_hash TEXT NOT NULL, vintage_quality TEXT NOT NULL, payload TEXT NOT NULL,
+    PRIMARY KEY (symbol, statement, fiscal_date, observed_at)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_fv_symbol_stmt ON fundamental_vintage(symbol, statement, fiscal_date);",
+
+    # -- Fundamental backfill run manifest --
+    """CREATE TABLE IF NOT EXISTS fundamental_backfill_runs (
+    run_id TEXT PRIMARY KEY, universe_hash TEXT NOT NULL, params_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running', started_at TEXT NOT NULL, finished_at TEXT
+);""",
+
+    # -- Fundamental backfill per-symbol/dataset job queue --
+    """CREATE TABLE IF NOT EXISTS fundamental_backfill_jobs (
+    run_id TEXT NOT NULL, symbol TEXT NOT NULL, dataset TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT,
+    claimed_at TEXT, completed_at TEXT,
+    PRIMARY KEY (run_id, symbol, dataset)
+);""",
 ])
 
 # Pre-compute snake-case column sets per table for fast lookup
@@ -604,6 +684,9 @@ _VALID_TABLES = frozenset({
     "symbol_concept_edges",
     "fmp_estimates", "fmp_earnings", "fmp_etf_holdings_snapshot",
     "fmp_basket_valuation", "fmp_forward_runs",
+    "security_master", "extended_membership", "coverage_status",
+    "company_profile", "fundamental_vintage",
+    "fundamental_backfill_runs", "fundamental_backfill_jobs",
 })
 
 
@@ -611,6 +694,29 @@ def _validate_table(table_name: str) -> None:
     """Raise ValueError if table name is not in whitelist."""
     if table_name not in _VALID_TABLES:
         raise ValueError(f"Invalid table name: {table_name!r}")
+
+
+# ---------------------------------------------------------------------------
+# Extended Primary Universe collection kernel: dataset -> destination
+# ---------------------------------------------------------------------------
+# Shared by `write_symbol_dataset_in_conn` (below) and
+# `src/data/fundamental_collector.py` (T8 kernel) so backfill / events /
+# reconcile / --scope core all resolve a dataset to the same table.
+# NOTE the two different key spaces in play:
+#   - `coverage_status.dataset` holds the CURRENT TABLE name (income_quarterly,
+#     ...), plus the non-table value "identity" written by the identity path.
+#   - `fundamental_backfill_jobs.dataset` holds the DATASET KEY (income, ...).
+COLLECTION_DATASET_TABLES = {
+    "profile": "company_profile",
+    "income": "income_quarterly",
+    "balance": "balance_sheet_quarterly",
+    "cashflow": "cash_flow_quarterly",
+    "ratios": "ratios_annual",
+}
+
+# Only the three statements get point-in-time vintage history; the dataset key
+# doubles as the `fundamental_vintage.statement` value.
+VINTAGE_DATASETS = frozenset({"income", "balance", "cashflow"})
 
 
 def _validate_column(col: str, valid_cols: List[str]) -> None:
@@ -626,18 +732,30 @@ def _validate_column(col: str, valid_cols: List[str]) -> None:
 class MarketStore:
     """SQLite-backed market time-series database."""
 
-    def __init__(self, db_path: Optional[Path] = None):
-        self.db_path = db_path or _DEFAULT_DB_PATH
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, db_path: Optional[Path] = None, read_only: bool = False):
+        self.db_path = Path(db_path or _DEFAULT_DB_PATH)
+        self.read_only = read_only
+        if read_only:
+            if not self.db_path.is_file():
+                raise FileNotFoundError(f"market database not found: {self.db_path}")
+        else:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
-        self._init_db()
+        if not read_only:
+            self._init_db()
 
     def _get_conn(self) -> sqlite3.Connection:
         conn = getattr(self._local, 'conn', None)
         if conn is None:
-            conn = sqlite3.connect(str(self.db_path))
+            if self.read_only:
+                uri = self.db_path.resolve().as_uri() + "?mode=ro"
+                conn = sqlite3.connect(uri, uri=True)
+                conn.execute("PRAGMA query_only=ON")
+            else:
+                conn = sqlite3.connect(str(self.db_path))
             conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA journal_mode=WAL")
+            if not self.read_only:
+                conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA foreign_keys=ON")
             self._local.conn = conn
         return conn
@@ -688,6 +806,82 @@ class MarketStore:
                 result[snake] = value
         return result
 
+    def _upsert_rows_in_conn(self, conn: sqlite3.Connection, table: str,
+                              rows: List[Dict]) -> int:
+        """Insert or replace already-prepared rows into `table` using `conn`.
+
+        Does not open its own transaction (no `with conn:`) — the caller owns
+        the transaction boundary. Only call this from within `transaction()`
+        or from a method that already holds `with conn:` itself (e.g.
+        `_bulk_upsert`); calling it outside of any open transaction leaves
+        each INSERT auto-committed individually.
+
+        Args:
+            conn: Connection with an already-open transaction.
+            table: Target table name (must be in whitelist).
+            rows: List of dicts already filtered/converted to final column
+                names (e.g. output of `_convert_row` plus injected keys).
+
+        Returns:
+            Number of rows upserted.
+        """
+        _validate_table(table)
+        valid_cols = _get_table_columns(table, conn)
+        count = 0
+        for row in rows:
+            cols = [c for c in row if c in valid_cols]
+            if not cols:
+                continue
+            placeholders = ", ".join(["?"] * len(cols))
+            col_names = ", ".join(cols)
+            values = [row[c] for c in cols]
+
+            conn.execute(
+                f"INSERT OR REPLACE INTO {table} ({col_names}) VALUES ({placeholders})",
+                values,
+            )
+            count += 1
+
+        return count
+
+    def _prepare_upsert_rows(self, table: str, symbol: str, rows: List[Dict],
+                             convert: bool = True) -> List[Dict]:
+        """Turn provider rows into rows `_upsert_rows_in_conn` can write.
+
+        Deliberately the ONLY implementation of this prep, shared by the
+        legacy writer (`_bulk_upsert`) and the T8 collection kernel
+        (`write_symbol_dataset_in_conn`): the kernel must produce rows
+        byte-identical to the legacy path (T11 parity contract), so both get
+        the same camelCase→snake_case conversion, the same uppercase `symbol`
+        injection, and the same skip of rows carrying no fiscal date.
+
+        Args:
+            table: Target table name (must be in whitelist).
+            symbol: Stock symbol to inject into each row.
+            rows: List of dicts (camelCase or snake_case).
+            convert: If True, convert camelCase → snake_case.
+
+        Returns:
+            Prepared rows, in input order, minus any row with no `date`.
+        """
+        conn = self._get_conn()
+        valid_cols = _get_table_columns(table, conn)
+        prepared = []
+
+        for row in rows:
+            if convert:
+                data = self._convert_row(row, table)
+            else:
+                data = {k: v for k, v in row.items() if k in valid_cols}
+            data["symbol"] = symbol.upper()
+
+            if "date" not in data or not data["date"]:
+                continue
+
+            prepared.append(data)
+
+        return prepared
+
     def _bulk_upsert(self, table: str, symbol: str, rows: List[Dict],
                      convert: bool = True) -> int:
         """Insert or replace rows in a single transaction.
@@ -706,32 +900,36 @@ class MarketStore:
             return 0
 
         conn = self._get_conn()
-        valid_cols = _get_table_columns(table, conn)
-        count = 0
+        prepared = self._prepare_upsert_rows(table, symbol, rows, convert)
 
         with conn:
-            for row in rows:
-                if convert:
-                    data = self._convert_row(row, table)
-                else:
-                    data = {k: v for k, v in row.items() if k in valid_cols}
-                data["symbol"] = symbol.upper()
-
-                if "date" not in data or not data["date"]:
-                    continue
-
-                cols = [c for c in data if c in valid_cols]
-                placeholders = ", ".join(["?"] * len(cols))
-                col_names = ", ".join(cols)
-                values = [data[c] for c in cols]
-
-                conn.execute(
-                    f"INSERT OR REPLACE INTO {table} ({col_names}) VALUES ({placeholders})",
-                    values,
-                )
-                count += 1
+            count = self._upsert_rows_in_conn(conn, table, prepared)
 
         return count
+
+    @contextmanager
+    def transaction(self):
+        """Explicit multi-statement transaction boundary.
+
+        Opens the thread-local connection with `BEGIN IMMEDIATE`, yields it,
+        commits on clean exit, and rolls back on any exception (re-raised).
+
+        Only call `_in_conn`-suffixed helpers (e.g. `_upsert_rows_in_conn`)
+        inside this block. Do not call public methods that open their own
+        `with conn:` block (e.g. `_bulk_upsert`) — nesting would commit the
+        outer transaction early, defeating the rollback guarantee.
+        """
+        if self.read_only:
+            raise RuntimeError("transactions are unavailable on a read-only MarketStore")
+        conn = self._get_conn()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            raise
+        else:
+            conn.commit()
 
     def _get_rows(self, table: str, symbol: str,
                   start_date: Optional[str] = None,
@@ -2117,6 +2315,781 @@ class MarketStore:
             "legacy": int(src.get("legacy", 0)),
             "needs_review": int(needs),
         }
+
+    # ---- Extended Primary Universe: Security Master (R1) ----
+
+    _SM_REASONS = frozenset({
+        "ok", "etf", "fund", "secondary_share_class", "identity_conflict",
+        "needs_review_primary", "missing_profile",
+    })
+    _SM_IDENTITY_BLOCKED_REASONS = frozenset({
+        "etf", "fund", "secondary_share_class", "identity_conflict",
+    })
+
+    def upsert_security_master(self, records: List[Dict]) -> int:
+        """SM upsert：symbol 非空 + eligible∈{0,1} + reason 白名单七值，坏行整批拒绝
+
+        （照抄 upsert_fmp_estimates 模式：事务前全量校验，事务内逐行写入）。
+        """
+        _validate_table("security_master")
+        for r in records:
+            if not r.get("symbol"):
+                raise ValueError(f"security_master row missing symbol: {r!r}")
+            if r.get("eligible") not in (0, 1):
+                raise ValueError(f"invalid eligible (must be 0/1): {r.get('eligible')!r}")
+            if r.get("reason") not in self._SM_REASONS:
+                raise ValueError(f"invalid reason: {r.get('reason')!r}")
+        conn = self._get_conn()
+        with conn:
+            for r in records:
+                self._insert_validated(conn, "security_master",
+                                       {**r, "symbol": r["symbol"].upper()})
+        return len(records)
+
+    def get_security_eligibility(self) -> Dict[str, bool]:
+        """symbol -> eligible(bool)。表为空 fail-loud（P1-2：bootstrap 前不可静默返回 {}）。"""
+        conn = self._get_conn()
+        rows = conn.execute("SELECT symbol, eligible FROM security_master").fetchall()
+        if not rows:
+            raise RuntimeError("security_master empty — run bootstrap first")
+        return {r["symbol"]: bool(r["eligible"]) for r in rows}
+
+    def get_needs_review_symbols(self) -> List[str]:
+        """reason == 'needs_review_primary' 的 symbol 列表（share-class 主类未定）。"""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT symbol FROM security_master WHERE reason = 'needs_review_primary' "
+            "ORDER BY symbol"
+        ).fetchall()
+        return [r["symbol"] for r in rows]
+
+    # ---- Extended Primary Universe: Membership (SCD-2, R4-P1-1) ----
+
+    _MEMBERSHIP_UPDATE_BATCH = 500
+
+    def record_membership_snapshot(self, symbols: List[str], as_of: str) -> Dict[str, List[str]]:
+        """SCD-2 membership 快照；幂等。
+
+        exited 在 Python 侧求差（先读 active set，与本次名单求差），再按 <=500
+        参数分批 UPDATE —— 禁止生成千参 NOT IN(...)（R2-P2-1）。
+        """
+        new_set = {s.upper() for s in symbols}
+        with self.transaction() as conn:
+            active_rows = conn.execute(
+                "SELECT symbol FROM extended_membership WHERE effective_to IS NULL"
+            ).fetchall()
+            active_set = {r["symbol"] for r in active_rows}
+
+            entered = sorted(new_set - active_set)
+            exited = sorted(active_set - new_set)
+
+            if entered:
+                entered_rows = [
+                    {"symbol": s, "effective_from": as_of, "effective_to": None,
+                     "reason": "screener"}
+                    for s in entered
+                ]
+                self._upsert_rows_in_conn(conn, "extended_membership", entered_rows)
+
+            chunk_size = self._MEMBERSHIP_UPDATE_BATCH - 1  # 留 1 位给 as_of 参数
+            for i in range(0, len(exited), chunk_size):
+                chunk = exited[i:i + chunk_size]
+                placeholders = ", ".join(["?"] * len(chunk))
+                conn.execute(
+                    f"UPDATE extended_membership SET effective_to = ? "
+                    f"WHERE effective_to IS NULL AND symbol IN ({placeholders})",
+                    [as_of, *chunk],
+                )
+
+        return {"entered": entered, "exited": exited}
+
+    def get_active_members(self) -> List[str]:
+        """当前在册（effective_to IS NULL），去重排序。T7 resolver base='extended' 默认 loader。"""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT DISTINCT symbol FROM extended_membership WHERE effective_to IS NULL "
+            "ORDER BY symbol"
+        ).fetchall()
+        return [r["symbol"] for r in rows]
+
+    def get_members_as_of(self, as_of: str) -> List[str]:
+        """严格接口：as_of 早于首条 membership 记录 -> ValueError（不静默降级）。"""
+        conn = self._get_conn()
+        earliest_row = conn.execute(
+            "SELECT MIN(effective_from) AS d FROM extended_membership"
+        ).fetchone()
+        earliest = earliest_row["d"] if earliest_row else None
+        if earliest is None or as_of < earliest:
+            raise ValueError(
+                f"as_of={as_of!r} is earlier than the first membership record "
+                f"(earliest={earliest!r})"
+            )
+        rows = conn.execute(
+            "SELECT symbol FROM extended_membership "
+            "WHERE effective_from <= ? AND (effective_to IS NULL OR effective_to > ?) "
+            "ORDER BY symbol",
+            (as_of, as_of),
+        ).fetchall()
+        return [r["symbol"] for r in rows]
+
+    def approximate_members_as_of(self, as_of: str,
+                                   min_mcap_usd: float = 1e10) -> Dict[str, Any]:
+        """近似接口（P1-6 + R2-P1-1）：historical_market_cap 中 as-of 达标全体。
+
+        不与当前 Extended membership 求交（已跌出池/已退市者必须保留）；仅剔除
+        security_master 中身份封禁者；SM 无记录的达标 symbol 保留并单列进
+        `unverified`。`approximate` 标志硬编码在返回结构里，调用方无法丢弃。
+        """
+        conn = self._get_conn()
+        qualifying_rows = conn.execute(
+            """
+            SELECT symbol FROM (
+                SELECT symbol, market_cap,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY symbol ORDER BY date DESC
+                       ) AS rn
+                FROM historical_market_cap
+                WHERE date <= ?
+            )
+            WHERE rn = 1 AND market_cap >= ?
+            """,
+            (as_of, min_mcap_usd),
+        ).fetchall()
+        qualifying = {r["symbol"] for r in qualifying_rows}
+
+        sm_rows = conn.execute("SELECT symbol, reason FROM security_master").fetchall()
+        sm_reason = {r["symbol"]: r["reason"] for r in sm_rows}
+
+        symbols_out: List[str] = []
+        unverified: List[str] = []
+        for sym in qualifying:
+            reason = sm_reason.get(sym)
+            if reason is None:
+                symbols_out.append(sym)
+                unverified.append(sym)
+            elif reason in self._SM_IDENTITY_BLOCKED_REASONS:
+                continue
+            else:
+                symbols_out.append(sym)
+
+        return {
+            "symbols": sorted(symbols_out),
+            "unverified": sorted(unverified),
+            "approximate": True,
+            "as_of": as_of,
+            "basis": "historical_market_cap",
+        }
+
+    # ---- Extended Primary Universe: Coverage status + retry bookkeeping (R2-P1-3) ----
+
+    _COVERAGE_STATUSES = frozenset({
+        "ok", "not_applicable", "provider_empty", "fetch_failed", "stale",
+        "identity_blocked",
+    })
+    _PROVIDER_EMPTY_TTL_DAYS = _DEFAULT_PROVIDER_EMPTY_TTL_DAYS
+    _FETCH_FAILED_MAX_BACKOFF_DAYS = 16
+
+    def _upsert_coverage_status_in_conn(self, conn: sqlite3.Connection,
+                                        rows: List[Dict]) -> int:
+        """六态白名单 + 重试字段维护（见 T1 DDL 注释），conn 级、不开自己的事务
+        —— 由调用方持有事务边界，供 T8 内核与 current 表/vintage/manifest 写入
+        合并进同一次原子提交。独立调用请用 `upsert_coverage_status`。
+
+        fetch_failed -> next_retry_at = now + min(2^consecutive_failures, 16) 天；
+        provider_empty -> 负缓存 TTL，next_retry_at = now + 30 天；
+        ok -> consecutive_failures 清零、记 last_success_at、next_retry_at = NULL；
+        not_applicable / stale -> 纯状态标注，**必须保留**既有 next_retry_at（不驱动
+        重试计时器——一次 stale/not_applicable 写入不能悄悄清掉一个待到期的 backoff）；
+        identity_blocked -> **显式清空** next_retry_at（终态：不自动重试，等人工 override，
+        per plan T12）。坏 status 整批拒绝（任何写入之前全量校验）。
+        """
+        for row in rows:
+            if row.get("status") not in self._COVERAGE_STATUSES:
+                raise ValueError(f"invalid coverage status: {row.get('status')!r}")
+        now_dt = datetime.now(timezone.utc)
+        now_iso = now_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        for row in rows:
+            sym = row["symbol"].upper()
+            dataset = row["dataset"]
+            status = row["status"]
+            existing = conn.execute(
+                "SELECT consecutive_failures, last_success_at, next_retry_at "
+                "FROM coverage_status WHERE symbol = ? AND dataset = ?",
+                (sym, dataset),
+            ).fetchone()
+            prior_failures = existing["consecutive_failures"] if existing else 0
+            last_success_at = existing["last_success_at"] if existing else None
+            consecutive_failures = prior_failures
+            # Default: preserve whatever retry timer already existed. Only
+            # fetch_failed/provider_empty/ok/identity_blocked below are allowed
+            # to change it — not_applicable/stale fall through untouched.
+            next_retry_at = existing["next_retry_at"] if existing else None
+
+            if status == "fetch_failed":
+                consecutive_failures = prior_failures + 1
+                delay_days = min(2 ** consecutive_failures,
+                                 self._FETCH_FAILED_MAX_BACKOFF_DAYS)
+                next_retry_at = (now_dt + timedelta(days=delay_days)).strftime(
+                    "%Y-%m-%dT%H:%M:%SZ")
+            elif status == "provider_empty":
+                next_retry_at = (now_dt + timedelta(
+                    days=self._PROVIDER_EMPTY_TTL_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            elif status == "ok":
+                consecutive_failures = 0
+                last_success_at = now_iso
+                next_retry_at = None
+            elif status == "identity_blocked":
+                next_retry_at = None
+
+            self._insert_validated(conn, "coverage_status", {
+                "symbol": sym,
+                "dataset": dataset,
+                "status": status,
+                "detail": row.get("detail"),
+                "updated_at": row.get("updated_at") or now_iso,
+                "last_attempt_at": now_iso,
+                "last_success_at": last_success_at,
+                "consecutive_failures": consecutive_failures,
+                "next_retry_at": next_retry_at,
+            })
+        return len(rows)
+
+    def upsert_coverage_status(self, rows: List[Dict]) -> int:
+        """独立调用入口：自开事务包住 `_upsert_coverage_status_in_conn`（语义见该方法）。"""
+        conn = self._get_conn()
+        with conn:
+            return self._upsert_coverage_status_in_conn(conn, rows)
+
+    def get_coverage(self, dataset: str) -> Dict[str, str]:
+        """dataset 下全部 symbol -> status 映射。"""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT symbol, status FROM coverage_status WHERE dataset = ?",
+            (dataset,),
+        ).fetchall()
+        return {r["symbol"]: r["status"] for r in rows}
+
+    # ---- Extended Primary Universe: Fundamental Vintage (R7, R8) ----
+    #
+    # Two deliberately incompatible read interfaces (P1-6 rejects a single
+    # get_fundamentals_as_of(anchor=...) that silently mixes cognition-timeline
+    # replay with restated-current lookups):
+    #   - known_as_of: strict PIT replay over `fundamental_vintage` itself.
+    #     No hits -> [] (no fallback to current tables).
+    #   - approximate_as_reported: pre-golive substitute reading CURRENT
+    #     (latest-restated) tables, explicitly tagged approximate=True.
+
+    _VINTAGE_QUALITIES = frozenset({"latest_known", "as_reported", "revised"})
+
+    _VINTAGE_STATEMENT_TABLES = {
+        "income": "income_quarterly",
+        "balance": "balance_sheet_quarterly",
+        "cashflow": "cash_flow_quarterly",
+    }
+
+    def record_vintage_in_conn(self, conn: sqlite3.Connection, symbol: str,
+                                statement: str, rows: List[Dict],
+                                observed_at: str, quality: str) -> int:
+        """Change-only append into `fundamental_vintage` (conn-level, no own
+        transaction — caller owns the boundary; composed by T8 alongside other
+        `_in_conn` writes in a single atomic commit). Use `record_vintage` for
+        a standalone call.
+
+        content_hash = sha256(json.dumps(row, sort_keys=True, separators=(",", ":"))).
+        If it matches the latest existing version for that fiscal_date, the
+        row is skipped (not re-appended); only newly-inserted rows count
+        toward the returned total.
+
+        observed_at MUST be a full UTC timestamp (R3-m2: write side is
+        strict) — a bare date raises ValueError. This keeps `observed_at`
+        lexicographically comparable across same-day revisions (R2-P2-2: two
+        revisions on the same calendar day get distinct timestamps, so they
+        don't collide on the (symbol, statement, fiscal_date, observed_at) PK).
+
+        Two rows in the SAME call that share a fiscal_date would collide on
+        that PK (symbol/statement/observed_at are constant for the whole
+        batch). If their content DIFFERS, that's rejected up front with
+        ValueError, whole batch atomically, before any write happens
+        (fix-round-1 Finding 1: a dirty upstream response must surface as an
+        error, not be silently resolved by letting the later row clobber the
+        earlier one). If their content is BYTE-IDENTICAL (idempotent
+        upstream retry / paginated-response overlap), that's not an error —
+        it falls through to the same change-only hash-skip as a repeat
+        `record_vintage` call and is written (or skipped, if already latest)
+        once (fix-round-2 Finding 1).
+        """
+        if quality not in self._VINTAGE_QUALITIES:
+            raise ValueError(f"invalid vintage quality: {quality!r}")
+        if _is_pure_date(observed_at):
+            raise ValueError(
+                f"observed_at must be a full UTC timestamp, not a pure date: "
+                f"{observed_at!r}"
+            )
+        _validate_table("fundamental_vintage")
+        sym = symbol.upper()
+
+        # Pre-write validation pass: compute each row's fiscal_date + content
+        # hash once (reused in the write loop below, not re-hashed) and
+        # reject the whole batch atomically if two rows share a fiscal_date
+        # with DIFFERING content — that would collide on the (symbol,
+        # statement, fiscal_date, observed_at) PK with no well-defined
+        # winner. Byte-identical duplicates are left alone here; they're
+        # deduped in the write loop via the same hash-skip logic used for
+        # cross-call repeats. Must run before any INSERT below.
+        prepared = []  # (row, fiscal_date, content_hash, payload_json)
+        hash_by_fiscal_date: Dict[str, str] = {}
+        for row in rows:
+            fiscal_date = row.get("date")
+            if not fiscal_date:
+                raise ValueError(f"fundamental_vintage row missing fiscal date: {row!r}")
+            payload_json = json.dumps(row, sort_keys=True, separators=(",", ":"))
+            content_hash = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+            prior_hash = hash_by_fiscal_date.get(fiscal_date)
+            if prior_hash is not None and prior_hash != content_hash:
+                raise ValueError(
+                    f"duplicate fiscal_date with differing content in same "
+                    f"vintage batch: symbol={sym} statement={statement!r} "
+                    f"fiscal_date={fiscal_date!r} "
+                    f"(would collide on (symbol, statement, fiscal_date, observed_at) PK)"
+                )
+            hash_by_fiscal_date[fiscal_date] = content_hash
+            prepared.append((row, fiscal_date, content_hash, payload_json))
+
+        count = 0
+        written_fiscal_dates = set()
+        for row, fiscal_date, content_hash, payload_json in prepared:
+            if fiscal_date in written_fiscal_dates:
+                continue  # byte-identical duplicate within this batch, already handled
+            written_fiscal_dates.add(fiscal_date)
+
+            latest = conn.execute(
+                "SELECT content_hash FROM fundamental_vintage "
+                "WHERE symbol = ? AND statement = ? AND fiscal_date = ? "
+                "ORDER BY observed_at DESC LIMIT 1",
+                (sym, statement, fiscal_date),
+            ).fetchone()
+            if latest is not None and latest["content_hash"] == content_hash:
+                continue  # change-only append: identical to latest version
+
+            # Plain INSERT (not OR REPLACE): any unexpected PK collision past
+            # the batch-level check above raises sqlite3.IntegrityError
+            # instead of silently clobbering append-only history.
+            conn.execute(
+                "INSERT INTO fundamental_vintage "
+                "(symbol, statement, fiscal_date, observed_at, filing_date, "
+                "accepted_date, content_hash, vintage_quality, payload) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (sym, statement, fiscal_date, observed_at,
+                 row.get("filingDate") or row.get("filing_date"),
+                 row.get("acceptedDate") or row.get("accepted_date"),
+                 content_hash, quality, payload_json),
+            )
+            count += 1
+        return count
+
+    def record_vintage(self, symbol: str, statement: str, rows: List[Dict],
+                       observed_at: str, quality: str) -> int:
+        """Standalone convenience wrapper: opens its own transaction around
+        `record_vintage_in_conn`."""
+        with self.transaction() as conn:
+            return self.record_vintage_in_conn(conn, symbol, statement, rows,
+                                               observed_at, quality)
+
+    # ---- Extended Primary Universe: per-dataset composite write (T8) ----
+
+    def write_company_profile_in_conn(self, conn: sqlite3.Connection, symbol: str,
+                                      profile: Dict[str, Any],
+                                      updated_at: str) -> int:
+        """Upsert one symbol's raw profile payload into `company_profile`
+        (conn-level, no own transaction — caller owns the boundary).
+
+        `company_profile` is keyed by symbol alone and stores the provider
+        payload as one JSON blob, so it cannot go through
+        `_prepare_upsert_rows` (no `date` column). Serialization matches
+        `scripts/bootstrap_security_master.py:_write_company_profiles`
+        (`json.dumps(payload, default=str)`) so the identity path and the
+        collection kernel leave byte-identical blobs in the same table.
+        """
+        if not isinstance(profile, dict):
+            raise ValueError(
+                f"company profile payload must be a dict, got {type(profile).__name__}"
+            )
+        return self._upsert_rows_in_conn(conn, "company_profile", [{
+            "symbol": symbol.upper(),
+            "payload": json.dumps(profile, default=str),
+            "updated_at": updated_at,
+        }])
+
+    def write_symbol_dataset_in_conn(self, conn: sqlite3.Connection, symbol: str,
+                                     dataset: str, rows: List[Dict], *,
+                                     observed_at: Optional[str] = None,
+                                     quality: str = "latest_known",
+                                     updated_at: Optional[str] = None
+                                     ) -> Dict[str, int]:
+        """Write one dataset's payload — current table plus vintage where the
+        dataset has one — on the caller's connection.
+
+        This is the write half of the T8 atomic boundary (P1-4): the kernel
+        wraps this call, the coverage upsert and the manifest job write in a
+        SINGLE `transaction()`, so a symbol's dataset is either fully durable
+        or fully absent. Nothing here opens a transaction of its own.
+
+        - `income`/`balance`/`cashflow`: prepared rows into the current table
+          (see `_prepare_upsert_rows`) + the RAW provider rows appended to
+          `fundamental_vintage` under the same dataset key as statement name.
+          Raw rows on purpose: the vintage payload is the as-reported
+          snapshot, keeping vendor fields the current-table column whitelist
+          drops, and `record_vintage_in_conn` reads `filingDate`/`acceptedDate`
+          off that camelCase shape.
+        - `ratios`: current table only (annual ratios are derived, not filed).
+        - `profile`: single JSON blob into `company_profile` (SSOT). The
+          `profiles.json` mirror is NOT written here (R2-P2-3) — see
+          `fundamental_collector.rebuild_profiles_json`.
+
+        Args:
+            observed_at: full UTC timestamp; REQUIRED for vintage datasets
+                (`record_vintage_in_conn` rejects a bare date).
+            quality: vintage quality tag (`latest_known` for routine
+                collection; historical/deep pulls stay `latest_known` too).
+            updated_at: `company_profile.updated_at`; defaults to `observed_at`.
+
+        Returns:
+            {"rows": current-table rows written, "vintage_rows": vintage rows appended}
+        """
+        table = COLLECTION_DATASET_TABLES.get(dataset)
+        if table is None:
+            raise ValueError(
+                f"unknown collection dataset: {dataset!r}; expected one of "
+                f"{sorted(COLLECTION_DATASET_TABLES)}"
+            )
+        _validate_table(table)
+
+        if dataset == "profile":
+            stamp = updated_at or observed_at
+            if not stamp:
+                raise ValueError("company_profile write needs observed_at or updated_at")
+            payload = rows[0] if rows else None
+            written = self.write_company_profile_in_conn(conn, symbol, payload, stamp)
+            return {"rows": written, "vintage_rows": 0}
+
+        prepared = self._prepare_upsert_rows(table, symbol, rows)
+        written = self._upsert_rows_in_conn(conn, table, prepared)
+
+        vintage_rows = 0
+        if dataset in VINTAGE_DATASETS:
+            if not observed_at:
+                raise ValueError(f"vintage dataset {dataset!r} needs observed_at")
+            vintage_rows = self.record_vintage_in_conn(conn, symbol, dataset, rows,
+                                                       observed_at, quality)
+        return {"rows": written, "vintage_rows": vintage_rows}
+
+    def known_as_of(self, symbol: str, statement: str, observed_at: str) -> List[Dict]:
+        """Strict cognition-timeline replay: per fiscal_date, the latest
+        version with `observed_at <= observed_at` param. No fallback — if
+        nothing qualifies (as-of predates the first recorded vintage), returns
+        [] rather than silently reaching into current/restated tables.
+
+        A pure-date param uses an EXCLUSIVE next-day bound —
+        `observed_at < <date+1>T00:00:00Z` — for "as of end of that day"
+        semantics (R3-m2). A full timestamp keeps the original INCLUSIVE
+        `observed_at <= observed_at` comparison, used as-is.
+
+        (Fix-round-1 Finding 2: an inclusive compare against the literal
+        string `<date>T23:59:59.999999Z` looks equivalent but isn't — SQLite
+        compares TEXT lexicographically, and a vintage stored as exactly
+        `<date>T23:59:59Z` (no fractional seconds) sorts AFTER that bound
+        because "Z" (0x5A) > "." (0x2E) at the first differing byte, so it
+        was silently excluded. The exclusive next-day bound sidesteps the
+        byte-comparison trap entirely.)
+
+        Each returned row is annotated with `_vintage_quality` and
+        `_observed_at`.
+        """
+        _validate_table("fundamental_vintage")
+        if _is_pure_date(observed_at):
+            next_day = (datetime.strptime(observed_at, "%Y-%m-%d").date()
+                        + timedelta(days=1))
+            operator, bound = "<", f"{next_day.isoformat()}T00:00:00Z"
+        else:
+            operator, bound = "<=", observed_at
+        sym = symbol.upper()
+        conn = self._get_conn()
+        rows = conn.execute(
+            f"""
+            SELECT fiscal_date, payload, vintage_quality, observed_at FROM (
+                SELECT fiscal_date, payload, vintage_quality, observed_at,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY fiscal_date ORDER BY observed_at DESC
+                       ) AS rn
+                FROM fundamental_vintage
+                WHERE symbol = ? AND statement = ? AND observed_at {operator} ?
+            )
+            WHERE rn = 1
+            ORDER BY fiscal_date
+            """,
+            (sym, statement, bound),
+        ).fetchall()
+        out = []
+        for r in rows:
+            payload = json.loads(r["payload"])
+            payload["_vintage_quality"] = r["vintage_quality"]
+            payload["_observed_at"] = r["observed_at"]
+            out.append(payload)
+        return out
+
+    def approximate_as_reported(self, symbol: str, statement: str, as_of: str) -> Dict[str, Any]:
+        """Pre-golive approximate read: queries the CURRENT (latest-restated)
+        table for `statement`, filtered by the first available public filing
+        timestamp (`accepted_date`, falling back to `filing_date`) <= as_of. Unlike
+        `known_as_of`, this reflects whatever restatements have since landed
+        in the current tables — it is a substitute for periods before vintage
+        recording went live, not a PIT replay.
+
+        The `approximate` flag lives in the return structure (not just a
+        docstring) so callers cannot silently drop it (P1-6).
+        """
+        table = self._VINTAGE_STATEMENT_TABLES.get(statement)
+        if table is None:
+            raise ValueError(f"unknown statement: {statement!r}")
+        _validate_table(table)
+        conn = self._get_conn()
+        rows = conn.execute(
+            f"SELECT * FROM {table} WHERE symbol = ? AND "
+            f"COALESCE(NULLIF(substr(accepted_date, 1, 10), ''), "
+            f"NULLIF(filing_date, '')) <= ? "
+            f"ORDER BY date",
+            (symbol.upper(), as_of),
+        ).fetchall()
+        return {
+            "rows": [dict(r) for r in rows],
+            "approximate": True,
+            "basis": "current_tables_restated",
+        }
+
+    # ---- Fundamental backfill manifest (run header + dataset jobs, T9/R6) ----
+    # (run_id, symbol, dataset)-granular job ledger the T10 runner drives.
+    # `create_backfill_run` freezes the grid once per run_id: the header's
+    # `universe_hash` is immutable (same pattern as `upsert_fmp_forward_run`'s
+    # frozen `target_universe_json` — history must not be rewritable), while
+    # a matching re-create is treated as a resume no-op rather than an error
+    # so `--resume` can safely call this every time without disturbing job
+    # progress already recorded.
+
+    _BACKFILL_JOB_TERMINAL_STATUSES = frozenset({"done", "provider_empty", "skipped"})
+    _BACKFILL_JOB_STATUSES = frozenset({
+        "pending", "in_progress", "done", "provider_empty", "fetch_failed", "skipped",
+    })
+    _BACKFILL_RUN_STATUSES = frozenset({"complete", "aborted", "rolled_back"})
+    _BACKFILL_MAX_ATTEMPTS = 3
+
+    def create_backfill_run(self, run_id: str, symbols: List[str],
+                            datasets: List[str], params: Dict) -> None:
+        """Freeze the full (run_id, symbol, dataset) grid as pending.
+
+        `universe_hash` is sha256 over the sorted, upper-cased, deduplicated
+        symbol list — the run's frozen denominator. A second call with the
+        same run_id and the SAME hash is a no-op (the `--resume` path); a
+        different hash raises, mirroring `upsert_fmp_forward_run`'s
+        immutable-history semantics (:1282-1348).
+        """
+        if not symbols:
+            raise ValueError("symbols must not be empty")
+        if not datasets:
+            raise ValueError("datasets must not be empty")
+
+        normalized_symbols = sorted({str(s).upper() for s in symbols})
+        universe_hash = hashlib.sha256(
+            ",".join(normalized_symbols).encode("utf-8")
+        ).hexdigest()
+
+        conn = self._get_conn()
+        now = self._utc_now_iso()
+        with conn:
+            existing = conn.execute(
+                "SELECT universe_hash FROM fundamental_backfill_runs WHERE run_id = ?",
+                [run_id],
+            ).fetchone()
+            if existing:
+                if existing["universe_hash"] != universe_hash:
+                    raise ValueError(
+                        f"universe mismatch for existing backfill run {run_id!r}; "
+                        "run manifests are immutable once created"
+                    )
+                return  # idempotent resume: grid already frozen, jobs untouched
+
+            conn.execute(
+                "INSERT INTO fundamental_backfill_runs "
+                "(run_id, universe_hash, params_json, status, started_at, finished_at) "
+                "VALUES (?, ?, ?, 'running', ?, NULL)",
+                [run_id, universe_hash, json.dumps(params or {}), now],
+            )
+            job_rows = [
+                (run_id, symbol, dataset)
+                for symbol in normalized_symbols
+                for dataset in datasets
+            ]
+            conn.executemany(
+                "INSERT INTO fundamental_backfill_jobs (run_id, symbol, dataset, status) "
+                "VALUES (?, ?, ?, 'pending')",
+                job_rows,
+            )
+
+    def claim_pending_jobs(self, run_id: str, symbol: str) -> List[str]:
+        """Claim this symbol's non-terminal dataset jobs: fresh `pending`, or
+        `fetch_failed` under the retry cap. Marks each claimed row
+        `in_progress` with `claimed_at` set so a second claim — or a crashed
+        runner restarted before it calls `reset_in_progress_jobs` — cannot
+        double-work the same job. Returns the claimed dataset keys.
+        """
+        sym = symbol.upper()
+        conn = self._get_conn()
+        now = self._utc_now_iso()
+        with conn:
+            rows = conn.execute(
+                "SELECT dataset FROM fundamental_backfill_jobs "
+                "WHERE run_id = ? AND symbol = ? AND "
+                "(status = 'pending' OR (status = 'fetch_failed' AND attempts < ?)) "
+                "ORDER BY rowid",
+                [run_id, sym, self._BACKFILL_MAX_ATTEMPTS],
+            ).fetchall()
+            datasets = [r["dataset"] for r in rows]
+            if datasets:
+                conn.executemany(
+                    "UPDATE fundamental_backfill_jobs SET status = 'in_progress', "
+                    "claimed_at = ? WHERE run_id = ? AND symbol = ? AND dataset = ?",
+                    [(now, run_id, sym, d) for d in datasets],
+                )
+        return datasets
+
+    def reset_in_progress_jobs(self, run_id: str) -> int:
+        """Crash-recovery: reset every `in_progress` job of this run back to
+        `pending` (attempts untouched) so a restarted runner can reclaim it.
+        Never leave a job permanently `in_progress` after a crash. Returns
+        the number of rows reset.
+        """
+        conn = self._get_conn()
+        with conn:
+            cur = conn.execute(
+                "UPDATE fundamental_backfill_jobs SET status = 'pending', "
+                "claimed_at = NULL WHERE run_id = ? AND status = 'in_progress'",
+                [run_id],
+            )
+            return cur.rowcount
+
+    def complete_job_in_conn(self, conn: sqlite3.Connection, run_id: str,
+                             symbol: str, dataset: str, status: str,
+                             error: Optional[str] = None) -> None:
+        """Record one dataset job's outcome on the caller's connection — the
+        manifest half of T8's per-dataset atomic boundary. T10 binds this as
+        the `job_writer(conn, dataset, status, detail=None)` closure the
+        collection kernel calls INSIDE its own transaction, so the manifest
+        commits or rolls back with the data it describes.
+
+        Increments `attempts` on every call. Sets `completed_at` once the job
+        reaches a terminal state: `{done, provider_empty, skipped}` always;
+        `fetch_failed` only once `attempts` has exhausted the retry cap
+        (below the cap it stays claimable via `claim_pending_jobs`).
+        """
+        if status not in self._BACKFILL_JOB_STATUSES:
+            raise ValueError(f"invalid backfill job status: {status!r}")
+        sym = symbol.upper()
+        row = conn.execute(
+            "SELECT attempts FROM fundamental_backfill_jobs "
+            "WHERE run_id = ? AND symbol = ? AND dataset = ?",
+            [run_id, sym, dataset],
+        ).fetchone()
+        if row is None:
+            raise ValueError(
+                f"no manifest job for run_id={run_id!r} symbol={sym!r} "
+                f"dataset={dataset!r}; was create_backfill_run called for this grid?"
+            )
+        attempts = row["attempts"] + 1
+        is_terminal = (status in self._BACKFILL_JOB_TERMINAL_STATUSES
+                       or (status == "fetch_failed"
+                           and attempts >= self._BACKFILL_MAX_ATTEMPTS))
+        completed_at = self._utc_now_iso() if is_terminal else None
+        conn.execute(
+            "UPDATE fundamental_backfill_jobs SET status = ?, attempts = ?, "
+            "last_error = ?, completed_at = ? "
+            "WHERE run_id = ? AND symbol = ? AND dataset = ?",
+            [status, attempts, error, completed_at, run_id, sym, dataset],
+        )
+
+    def run_progress(self, run_id: str) -> Dict[str, Any]:
+        """Per-status job counts for a run, plus `total_symbols`,
+        `total_jobs` and `is_complete` (every job terminal — `fetch_failed`
+        counts once it has exhausted the retry cap).
+
+        CONTROLLER RULING #2: raises ValueError on an unknown run_id rather
+        than returning an empty dict, so a caller that expects the manifest
+        to exist (e.g. T10's lock-busy path, which must NOT have created one)
+        gets a loud signal instead of a silently-zeroed progress report.
+        """
+        conn = self._get_conn()
+        header = conn.execute(
+            "SELECT run_id FROM fundamental_backfill_runs WHERE run_id = ?",
+            [run_id],
+        ).fetchone()
+        if header is None:
+            raise ValueError(f"unknown backfill run_id: {run_id!r}")
+
+        rows = conn.execute(
+            "SELECT symbol, status, attempts FROM fundamental_backfill_jobs "
+            "WHERE run_id = ?",
+            [run_id],
+        ).fetchall()
+
+        counts = {s: 0 for s in self._BACKFILL_JOB_STATUSES}
+        symbols = set()
+        is_complete = True
+        for r in rows:
+            counts[r["status"]] = counts.get(r["status"], 0) + 1
+            symbols.add(r["symbol"])
+            terminal = (r["status"] in self._BACKFILL_JOB_TERMINAL_STATUSES
+                        or (r["status"] == "fetch_failed"
+                            and r["attempts"] >= self._BACKFILL_MAX_ATTEMPTS))
+            if not terminal:
+                is_complete = False
+
+        result: Dict[str, Any] = dict(counts)
+        result["total_symbols"] = len(symbols)
+        result["total_jobs"] = len(rows)
+        result["is_complete"] = is_complete
+        return result
+
+    def finish_run(self, run_id: str, status: str) -> None:
+        """Close out a run header: status ∈ {complete, aborted, rolled_back},
+        `finished_at` stamped now. Raises ValueError for an invalid status or
+        an unknown run_id (nothing to finish).
+        """
+        if status not in self._BACKFILL_RUN_STATUSES:
+            raise ValueError(f"invalid backfill run status: {status!r}")
+        conn = self._get_conn()
+        now = self._utc_now_iso()
+        with conn:
+            cur = conn.execute(
+                "UPDATE fundamental_backfill_runs SET status = ?, finished_at = ? "
+                "WHERE run_id = ?",
+                [status, now, run_id],
+            )
+            if cur.rowcount == 0:
+                raise ValueError(f"unknown backfill run_id: {run_id!r}")
+
+    def get_backfill_run(self, run_id: str) -> Dict[str, Any]:
+        """Header row: run_id/universe_hash/status/started_at/finished_at
+        (plus `params`, decoded from `params_json`). Raises ValueError on an
+        unknown run_id (CONTROLLER RULING #2 — see `run_progress`).
+        """
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM fundamental_backfill_runs WHERE run_id = ?",
+            [run_id],
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"unknown backfill run_id: {run_id!r}")
+        result = dict(row)
+        result["params"] = json.loads(result["params_json"])
+        return result
 
     # ---- Stats ----
 

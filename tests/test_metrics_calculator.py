@@ -2,6 +2,7 @@
 import pytest
 from pathlib import Path
 
+import src.data.metrics_calculator as mc
 from src.data.market_store import MarketStore
 from src.data.metrics_calculator import (
     compute_metrics,
@@ -592,3 +593,36 @@ class TestComputeAll:
         results = compute_all_metrics(symbols=["AAPL"], store=store)
         assert "AAPL" in results
         assert "NVDA" not in results
+
+    def test_one_bad_symbol_does_not_abort_batch(self, store, monkeypatch):
+        """A symbol whose compute_metrics call raises must not abort the batch (R6)."""
+        store.upsert_income("GOOD1", [
+            {"date": "2024-09-28", "fiscalYear": "2024", "period": "Q4",
+             "revenue": 100e6, "netIncome": 10e6},
+        ])
+        store.upsert_income("GOOD2", [
+            {"date": "2024-09-28", "fiscalYear": "2024", "period": "Q4",
+             "revenue": 200e6, "netIncome": 20e6},
+        ])
+        store.upsert_income("BAD", [
+            {"date": "2024-09-28", "fiscalYear": "2024", "period": "Q4",
+             "revenue": 50e6, "netIncome": 5e6},
+        ])
+
+        real_compute_metrics = mc.compute_metrics
+
+        def _boom(symbol, store=None):
+            if symbol == "BAD":
+                raise RuntimeError("simulated per-symbol failure")
+            return real_compute_metrics(symbol, store)
+
+        monkeypatch.setattr(mc, "compute_metrics", _boom)
+
+        failures = []
+        result = mc.compute_all_metrics(
+            ["GOOD1", "BAD", "GOOD2"], store=store, collect_failures=failures
+        )
+
+        assert set(result) == {"GOOD1", "GOOD2"}
+        assert failures == ["BAD"]
+        assert isinstance(sum(result.values()), int)  # 旧调用方 sum() 兼容

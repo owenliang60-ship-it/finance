@@ -47,14 +47,16 @@
 
 API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`。
 
-### 股票池（多层）
+### 股票池与 Overlay
 
-| 层 | 路径 | 用途 |
-|----|------|------|
-| 核心池 | `data/pool/universe.json` | 深度分析 + OPRMS（FMP screener，市值阈值见 `config/settings.py`） |
-| 扩展池 | `data/extended_universe/` | 因子研究 / true survivorship 回测（FMP $10B+，~949 只） |
-| 池外广扫 | `data/scans/broad_universe.json` | RVOL 异常检测（yfinance $5B+） |
-| 退市 overlay | `data/pool/delisted_large_caps.json` | True survivorship 修复（~21 只） |
+| 层 | SSOT / 路径 | 用途 |
+|----|-------------|------|
+| 默认主池 | `market.db:extended_membership` + `security_master` | Extended `$10B+` eligible，所有默认讨论/横截面研究的 base universe |
+| 显式 overlay | `company.db:holdings/watchlist` + benchmarks | 持仓、手动关注、ETF；不污染主池，IV/期权等昂贵调用仅跑显式 targets |
+| Extended cache | `data/pool/extended_universe.json` | FMP screener 当前名单的可重建兼容缓存，非 SSOT |
+| Broad 研究池 | `market.db` 历史市值/价格（`$1B+`） | 广扫、因子研究和历史候选集，不作为默认讨论池 |
+| Core 冻结池 | `data/pool/universe.json`（退役过渡） | 仅兼容旧调用与历史复现；调用方迁移完成后归档 |
+| 退市 overlay | `data/pool/delisted_large_caps.json` | True survivorship 修复 |
 
 ### 双数据库（P3 所有权模型）
 
@@ -63,8 +65,12 @@ API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`�
 | 数据库 | 所有权 | 同步 |
 |--------|--------|------|
 | `market.db` | 云端独占写入 | 云端 → 本地 (pull) |
-| `company.db` | 本地独占写入 | 本地 → 云端 (push) |
-| `universe.json` | 双端 | 双向 merge（并集） |
+| `company.db` | 本地独占写入（含 watchlist） | 本地 → 云端 (push) |
+| `universe.json` | 双端（Core 退役过渡） | 双向 merge；退役后冻结归档 |
+
+基本面 current 与 PIT 双轨：三张 current 表服务最新查询，`fundamental_vintage`
+按内容变化 append-only；`coverage_status` 保存显式失败/重试状态。首次扩池与补漏统一走
+共享 collector、可恢复 manifest 和 writer lock。
 
 同步: `./sync_to_cloud.sh [--pull|--push|--sync|--status]`。详细表清单见 `ARCHITECTURE.md`。
 

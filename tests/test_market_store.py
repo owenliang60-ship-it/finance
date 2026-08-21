@@ -18,6 +18,27 @@ def store(tmp_path):
     s.close()
 
 
+def test_read_only_store_reads_without_initializing_or_writing(tmp_path):
+    db_path = tmp_path / "test_market.db"
+    writer = MarketStore(db_path=db_path)
+    writer.upsert_daily_prices("AAPL", [{"date": "2026-08-19", "close": 1.0}])
+    writer.close()
+
+    reader = MarketStore(db_path=db_path, read_only=True)
+    try:
+        assert reader.get_daily_prices("AAPL")[0]["close"] == 1.0
+        with pytest.raises(RuntimeError, match="read-only"):
+            with reader.transaction():
+                pass
+    finally:
+        reader.close()
+
+
+def test_read_only_store_requires_existing_database(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        MarketStore(db_path=tmp_path / "missing.db", read_only=True)
+
+
 # ---------------------------------------------------------------------------
 # camelCase → snake_case
 # ---------------------------------------------------------------------------

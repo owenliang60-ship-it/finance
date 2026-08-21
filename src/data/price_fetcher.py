@@ -98,13 +98,53 @@ def fetch_and_update_price(symbol: str, force_full: bool = False) -> Optional[pd
     return combined_df
 
 
+_BASE_UNRESOLVED = object()
+
+
+def get_fmp_price_targets(store=None, *, base_symbols=_BASE_UNRESOLVED) -> List[str]:
+    """FMP 日频价格的目标名单 = overlay tier（矩阵 #6, Boss 拍板 P1）。
+
+    Post-bootstrap: holdings ∪ watchlist ∪ benchmarks（~50 只）。基础池其余部分
+    由 yfinance batch 覆盖（`extended_price_fetcher.get_yfinance_price_targets`），
+    daily_price 表 schema 不变。
+
+    Pre-bootstrap: 代码合并（Stop B）早于 bootstrap 落地（Stop C），这段窗口内
+    `extended_membership` 仍是空的 —— 所以窗口内本函数保持 legacy Core 名单，
+    combined resolver 同时把 legacy Extended−Core 交给 yfinance；membership 一旦
+    存在语义自动切换。只有这两个明确 cold-start 状态允许降级，数据库错误会冒泡。
+
+    Args:
+        store: **MarketStore**（只用于探测 membership 是否已 bootstrap）。overlay
+            三个 loader 读的是 company.db，各自开自己的默认 CompanyStore，不受
+            本参数影响 —— 别把 CompanyStore 传进来。
+    """
+    if base_symbols is _BASE_UNRESOLVED:
+        from src.data.universe_resolver import current_base_universe
+
+        try:
+            current_base_universe(store=store)
+        except Exception as e:
+            from src.data.universe_resolver import is_prebootstrap_universe_error
+            if not is_prebootstrap_universe_error(e):
+                raise
+            logger.warning(
+                "current_base_universe unavailable, FMP price targets stay on the "
+                "legacy Core pool: %s", e
+            )
+            return get_symbols()
+
+    from src.data.overlays import load_overlay_tier
+
+    return load_overlay_tier()
+
+
 def update_all_prices(symbols: List[str] = None, force_full: bool = False) -> dict:
     """
-    批量更新所有股票的量价数据
+    批量更新所有股票的量价数据（默认目标 = FMP overlay tier，矩阵 #6）
     返回: {"success": [...], "failed": [...]}
     """
     if symbols is None:
-        symbols = get_symbols()
+        symbols = get_fmp_price_targets()
 
     # Always include benchmark + auxiliary symbols
     from config.settings import BENCHMARK_SYMBOLS, AUX_SYMBOLS

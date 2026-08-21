@@ -18,7 +18,11 @@ from typing import List, Optional
 
 import sys
 sys.path.insert(0, str(__file__).rsplit("/src", 1)[0])
-from config.settings import DATA_DIR, POOL_DIR, FUNDAMENTAL_DIR, MARKET_DB_PATH
+from config.settings import (
+    DATA_DIR, POOL_DIR, FUNDAMENTAL_DIR, MARKET_DB_PATH,
+    POOL_SIZE_RANGE, EXTENDED_COVERAGE_ENFORCE,
+)
+from src.data.universe_resolver import current_base_universe
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +41,13 @@ MARKET_DB_EXPECTED_TABLES = {
     "iv_daily",
     "options_snapshots",
 }
+
+# "三表" = 三大财务报表的季度表，_check_extended_coverage 的覆盖率口径
+EXTENDED_COVERAGE_TABLES = (
+    "income_quarterly",
+    "balance_sheet_quarterly",
+    "cash_flow_quarterly",
+)
 
 
 @dataclass
@@ -95,18 +106,20 @@ def _business_days_ago(n: int) -> datetime:
 
 
 def _check_pool_integrity() -> CheckResult:
-    """检查池完整性: universe.json 中股票数量。"""
+    """检查池完整性: universe.json 中股票数量 vs settings.POOL_SIZE_RANGE。
+
+    临时闸门（Stop G 阶段 2 删除，届时由 Extended 覆盖率检查取代 Core 分母语义）。
+    """
     symbols = _load_universe_symbols()
     count = len(symbols)
+    low, high = POOL_SIZE_RANGE
 
     if count == 0:
         return CheckResult("池完整性", "FAIL", "股票池为空")
-    elif count < 70:
-        return CheckResult("池完整性", "FAIL", f"股票池仅 {count} 只 (<70)")
-    elif count > 200:
-        return CheckResult("池完整性", "FAIL", f"股票池 {count} 只 (>200, 异常)")
-    elif count < 90 or count > 150:
-        return CheckResult("池完整性", "WARN", f"股票池 {count} 只 (偏离正常范围 90-150)")
+    elif count < low:
+        return CheckResult("池完整性", "FAIL", f"股票池仅 {count} 只 (<{low})")
+    elif count > high:
+        return CheckResult("池完整性", "FAIL", f"股票池 {count} 只 (>{high}, 异常)")
     else:
         return CheckResult("池完整性", "PASS", f"股票池 {count} 只")
 
@@ -416,6 +429,57 @@ def _check_mdb_iv_freshness() -> CheckResult:
                            f"最新: {date_str}, ~{trading_days} 交易日前")
 
 
+def _check_extended_coverage() -> CheckResult:
+    """检查 Extended Primary Universe 三表覆盖率 (R3-P1-1)。
+
+    分母 = current_base_universe()（当前 active Extended membership ∩ SM eligible，
+    不含历史/退市身份），与 Core 分母（universe.json 股票池）是两条独立的检查线，
+    Core 分母的检查全部保留（Stop G 阶段 2 才删）。
+
+    SM/membership 尚未 bootstrap 时 current_base_universe() fail-loud 抛
+    RuntimeError（消息含 "bootstrap"）——此处捕获转 WARN，绝不向上抛异常，
+    因为健康检查必须能在部署后、bootstrap 运行前跑通。
+
+    settings.EXTENDED_COVERAGE_ENFORCE=False（初始值）时低于阈值只 WARN，不 FAIL，
+    防止生产回填完成前触发验收 gate 的假失败；Stop F 后翻 True 恢复 FAIL 熔断。
+    """
+    try:
+        symbols = current_base_universe()
+    except RuntimeError as e:
+        return CheckResult("扩展覆盖率", "WARN", str(e))
+
+    if not symbols:
+        return CheckResult("扩展覆盖率", "WARN",
+                           "current_base_universe 返回空集 — 需先运行 bootstrap")
+
+    under_threshold_status = "FAIL" if EXTENDED_COVERAGE_ENFORCE else "WARN"
+
+    if not MARKET_DB.exists():
+        return CheckResult("扩展覆盖率", under_threshold_status, "market.db 不存在")
+
+    try:
+        conn = sqlite3.connect(str(MARKET_DB))
+        cursor = conn.cursor()
+        covered = set(symbols)
+        for table in EXTENDED_COVERAGE_TABLES:
+            cursor.execute(f"SELECT DISTINCT symbol FROM {table}")
+            covered &= {row[0] for row in cursor.fetchall()}
+        conn.close()
+    except sqlite3.DatabaseError as e:
+        return CheckResult("扩展覆盖率", under_threshold_status, f"查询失败: {e}")
+
+    total = len(symbols)
+    ratio = len(covered) / total
+    detail = f"{len(covered)}/{total} ({ratio:.0%}, 三表齐全)"
+
+    if ratio >= 0.95:
+        return CheckResult("扩展覆盖率", "PASS", detail)
+    elif ratio >= 0.80:
+        return CheckResult("扩展覆盖率", "WARN", detail)
+    else:
+        return CheckResult("扩展覆盖率", under_threshold_status, detail)
+
+
 def health_check(verbose: bool = False) -> HealthReport:
     """
     一站式数据健康检查。
@@ -439,6 +503,7 @@ def health_check(verbose: bool = False) -> HealthReport:
     report.add(_check_mdb_fundamental_coverage(symbols))
     report.add(_check_mdb_iv_coverage(symbols))
     report.add(_check_mdb_iv_freshness())
+    report.add(_check_extended_coverage())
 
     if verbose:
         print(report.summary())

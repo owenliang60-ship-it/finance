@@ -344,10 +344,15 @@ def compute_metrics(symbol: str, store: Optional[MarketStore] = None) -> int:
 def compute_all_metrics(
     symbols: Optional[List[str]] = None,
     store: Optional[MarketStore] = None,
+    *,
+    collect_failures: Optional[List[str]] = None,
 ) -> Dict[str, int]:
     """Compute metrics for all symbols (or a given list).
 
-    Returns dict of {symbol: rows_written}.
+    A symbol whose computation raises is logged and skipped rather than
+    aborting the whole batch; if a `collect_failures` list is provided,
+    the failing symbol is appended to it. Return type is unchanged
+    (dict of {symbol: rows_written}) for caller compatibility (MF-3).
     """
     if store is None:
         store = get_store()
@@ -362,9 +367,15 @@ def compute_all_metrics(
 
     results = {}
     for i, symbol in enumerate(symbols, 1):
-        count = compute_metrics(symbol, store)
-        if count > 0:
-            results[symbol] = count
+        try:
+            count = compute_metrics(symbol, store)
+        except Exception as e:
+            logger.error("compute_metrics failed for %s: %s", symbol, e, exc_info=True)
+            if collect_failures is not None:
+                collect_failures.append(symbol)
+        else:
+            if count > 0:
+                results[symbol] = count
         if i % 20 == 0 or i == len(symbols):
             logger.info("[metrics] %d/%d symbols processed", i, len(symbols))
 

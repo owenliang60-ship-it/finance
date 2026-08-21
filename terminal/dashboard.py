@@ -162,8 +162,18 @@ def _build_html(
     parts.append('</div>')
 
     # Stats cards
+    from src.data.universe_resolver import current_base_universe
     from src.data.pool_manager import get_symbols
-    pool_count = len(get_symbols())
+    try:
+        pool_count = len(current_base_universe())
+    except Exception as e:
+        # Display context (matrix #3): must never crash. Falls back to
+        # legacy pool.json semantics when the resolver isn't bootstrapped
+        # yet (e.g. fresh worktree), matching morning_report.py's pattern.
+        logger.warning(
+            "current_base_universe unavailable, falling back to legacy pool symbols: %s", e
+        )
+        pool_count = len(get_symbols())
     parts.append('<div class="stats-grid">')
     parts.append(_stat_card("Total", str(stats["total_companies"]), "Companies in DB"))
     parts.append(_stat_card("Pool", str(pool_count), "Active stock pool"))
