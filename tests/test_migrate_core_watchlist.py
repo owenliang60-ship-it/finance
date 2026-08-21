@@ -1,4 +1,21 @@
 """T20 B5 — migrate manual/analysis Core exceptions into local watchlist."""
+import subprocess
+import sys
+from pathlib import Path
+
+
+def test_script_bootstraps_project_imports_outside_repo_cwd(tmp_path):
+    script = Path(__file__).resolve().parents[1] / "scripts" / "migrate_core_watchlist.py"
+    code = (
+        "import runpy; "
+        f"m=runpy.run_path({str(script)!r}, run_name='migration_module'); "
+        "r=m['migrate_core_watchlist']([], base_symbols=[], add_fn=lambda *a: None); "
+        "assert r['migrated']==[]"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], cwd=tmp_path,
+        capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_migration_is_idempotent_and_excludes_etf():
