@@ -133,7 +133,7 @@ def resolve_identity_for_symbol(
     single-symbol-decidable: no SM write on network failure; reason=
     missing_profile on a 200-empty profile. A 200 + non-empty profile is
     only *classified* here (`classify_security`), NOT written to SM yet —
-    whether it ends up eligible/etf/fund/secondary_share_class/
+    whether it ends up eligible/etf/fund/non_common_instrument/secondary_share_class/
     identity_conflict depends on cross-symbol CIK grouping
     (`resolve_share_classes`), which this function deliberately has no
     knowledge of. The caller collects every "ok" result, runs the grouping

@@ -115,10 +115,10 @@ def _incumbents_sharing_cik(
 
 
 def _has_size_metric(profile: Optional[dict]) -> bool:
-    """Does this profile carry the value share-class settlement decides on?"""
+    """Does this profile carry any share-class settlement metric?"""
     if not profile:
         return False
-    for key in ("mktCap", "marketCap"):
+    for key in ("volAvg", "averageVolume", "mktCap", "marketCap"):
         if profile.get(key) is not None:
             return True
     return False
@@ -132,10 +132,11 @@ def _decline_metricless_demotions(
 ) -> List[SecurityRecord]:
     """Never let the ABSENCE of data demote an established primary.
 
-    `resolve_share_classes` picks the primary by mktCap, so an incumbent whose
-    `company_profile` row is missing (or carries no market cap) contributes no
-    value at all and the entrant wins the group uncontested — the incumbent
-    would lose its identity to a missing row rather than to evidence.
+    `resolve_share_classes` picks the primary by volume then market-cap
+    fallback, so an incumbent whose `company_profile` row carries neither
+    metric contributes no value at all and the entrant wins the group
+    uncontested — the incumbent would lose its identity to a missing row
+    rather than to evidence.
 
     For those groups the verdict is declined: incumbents keep their existing
     SM rows and the group's entrants are parked as `needs_review_primary`.
@@ -183,7 +184,7 @@ def _decline_metricless_demotions(
 
         logger.warning(
             "share-class settlement DECLINED for CIK %s: incumbent(s) %s carry no "
-            "market-cap data, so the demotion would rest on an absent row, not on "
+            "share-class metric data, so the demotion would rest on an absent row, not on "
             "evidence. Incumbent identity kept as-is; entrant(s) %s parked as "
             "needs_review_primary.",
             cik, ", ".join(blind_losers), ", ".join(entrants_here),

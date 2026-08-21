@@ -136,6 +136,18 @@ def test_get_needs_review_symbols(tmp_store):
     ])
     assert tmp_store.get_needs_review_symbols() == ["XX-A"]
 
+
+def test_non_common_instrument_reason_is_valid_and_excluded_from_asof(tmp_store):
+    tmp_store.upsert_security_master([
+        _sm_row(symbol="MER-PK", eligible=0, reason="non_common_instrument"),
+    ])
+    tmp_store.upsert_historical_market_cap(
+        "MER-PK", [{"date": "2026-08-20", "market_cap": 50_000_000_000}],
+    )
+
+    result = tmp_store.approximate_members_as_of("2026-08-20")
+    assert "MER-PK" not in result["symbols"]
+
 def test_coverage_ok_resets_failures_and_clears_retry(tmp_store):
     tmp_store.upsert_coverage_status([{"symbol": "AAPL", "dataset": "income_quarterly",
                                        "status": "fetch_failed", "detail": "timeout",
