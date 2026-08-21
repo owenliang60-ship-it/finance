@@ -1201,6 +1201,7 @@ class TestBroadDropPlanV3:
             },
         )
         monkeypatch.setattr(mr, "get_symbols", lambda: [])
+        monkeypatch.setattr(mr, "current_base_universe", lambda: [])
         monkeypatch.setattr(
             "src.indicators.dv_acceleration.scan_dv_acceleration",
             lambda *a, **kw: pd.DataFrame(),
@@ -1253,6 +1254,7 @@ class TestBroadDropPlanV3:
         )
         # Pool has D (mcap 2B → must be kept regardless of mcap)
         monkeypatch.setattr(mr, "get_symbols", lambda: ["D"])
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["D"])
         monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
         monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
         monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
@@ -1312,6 +1314,7 @@ class TestBroadDropPlanV3:
             lambda symbols, **kw: {"OKLO": oklo_frame},
         )
         monkeypatch.setattr(mr, "get_symbols", lambda: [])
+        monkeypatch.setattr(mr, "current_base_universe", lambda: [])
         monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
         monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
         monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
@@ -1380,6 +1383,7 @@ class TestBroadDropPlanV3:
 
         monkeypatch.setattr(mr, "_merge_local_metadata", fake_merge)
         monkeypatch.setattr(mr, "get_symbols", lambda: [])
+        monkeypatch.setattr(mr, "current_base_universe", lambda: [])
 
         dv_result = {
             "rankings": [
@@ -1449,6 +1453,7 @@ class TestVolumeAnomalyPayload:
             lambda symbols, **kw: {"MU": mu_frame},
         )
         monkeypatch.setattr(mr, "get_symbols", lambda: [])
+        monkeypatch.setattr(mr, "current_base_universe", lambda: [])
         monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
         monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
         monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
@@ -1706,6 +1711,7 @@ def test_builder_injects_beta_into_signal_rows(monkeypatch):
     monkeypatch.setattr("scripts.broad_market_scan.load_price_frames",
                         lambda symbols, **kw: {"MU": mu_frame})
     monkeypatch.setattr(mr, "get_symbols", lambda: [])
+    monkeypatch.setattr(mr, "current_base_universe", lambda: [])
     monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
     monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
     monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
@@ -2347,6 +2353,7 @@ def _stub_scan_deps_for_volconc_wiring(monkeypatch, mr):
         lambda symbols, **kw: {},
     )
     monkeypatch.setattr(mr, "get_symbols", lambda: [])
+    monkeypatch.setattr(mr, "current_base_universe", lambda: [])
     monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
     monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
     monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
