@@ -188,6 +188,48 @@ class TestShareClassAgainstExistingMaster:
         assert _sm_row(tmp_store, "AAPL") == before
         assert _sm_row(tmp_store, "NEWCO")["eligible"] == 1
 
+    def test_entrant_cannot_bypass_existing_needs_review_group(self, tmp_store, caplog):
+        for symbol in ("XYZ-A", "XYZ-B"):
+            _seed_sm(
+                tmp_store, symbol, "CIK-XYZ", "XYZ Holdings",
+                eligible=False, reason="needs_review_primary")
+        client = _FakeClient(profiles={
+            "XYZ-C": _profile("XYZ-C", cik="CIK-XYZ",
+                               name="XYZ Holdings Class C", mkt_cap=1000),
+        })
+
+        with caplog.at_level(logging.WARNING):
+            summary = bootstrap_entrants(["XYZ-C"], client=client, store=tmp_store)
+
+        entrant = _sm_row(tmp_store, "XYZ-C")
+        assert entrant["eligible"] == 0
+        assert entrant["reason"] == "needs_review_primary"
+        assert summary["eligible"] == []
+        assert summary["blocked"]["XYZ-C"] == "needs_review_primary"
+        assert any("existing needs_review_primary" in rec.message
+                   for rec in caplog.records)
+
+    def test_valid_override_resolves_existing_needs_review_group(self, tmp_store):
+        for symbol in ("XYZ-A", "XYZ-B"):
+            _seed_sm(
+                tmp_store, symbol, "CIK-XYZ", "XYZ Holdings",
+                eligible=False, reason="needs_review_primary")
+        client = _FakeClient(profiles={
+            "XYZ-C": _profile("XYZ-C", cik="CIK-XYZ",
+                               name="XYZ Holdings Class C", mkt_cap=1000),
+        })
+
+        bootstrap_entrants(
+            ["XYZ-C"], client=client, store=tmp_store,
+            overrides={"CIK-XYZ": "XYZ-A"})
+
+        assert _sm_row(tmp_store, "XYZ-A")["eligible"] == 1
+        for symbol in ("XYZ-B", "XYZ-C"):
+            row = _sm_row(tmp_store, symbol)
+            assert row["eligible"] == 0
+            assert row["reason"] == "secondary_share_class"
+            assert row["share_class_of"] == "XYZ-A"
+
 
 class TestBatchMechanics:
     def test_empty_entrant_list_touches_nothing(self, tmp_store):

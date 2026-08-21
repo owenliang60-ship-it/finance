@@ -14,6 +14,7 @@ else
   PYTHON="python3"
 fi
 MODE="${1:-unknown}"
+MARKET_WRITER_WAIT_SECONDS="${FINANCE_MARKET_WRITER_WAIT_SECONDS:-1800}"
 LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/cron_broad_${MODE}_$(date +%Y%m%d).log"
@@ -48,18 +49,28 @@ run_step_nonblocking() {
 }
 
 run_step_with_market_writer_lock() {
-  local name="$1"
-  shift
+  local wait_seconds="$1"
+  local name="$2"
+  shift 2
   local lock_path="$LOCK_DIR/resource-market_db_writer.lock"
   mkdir -p "$LOCK_DIR"
   exec 8>"$lock_path"
-  if ! flock -n 8; then
-    log "FAIL $name rc=75 market_db_writer lock busy"
-    exit 75
+  if ! flock -w "$wait_seconds" 8; then
+    log "FAIL $name rc=75 market_db_writer lock busy after ${wait_seconds}s"
+    exec 8>&-
+    return 75
   fi
-  run_step "$name" "$@"
-  flock -u 8
+  local rc=0
+  log "BEGIN $name"
+  "$@" >> "$LOG" 2>&1 || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    log "OK $name"
+  else
+    log "FAIL $name rc=$rc"
+  fi
+  flock -u 8 || true
   exec 8>&-
+  return "$rc"
 }
 
 log "broad_universe cron MODE=$MODE"
@@ -82,10 +93,20 @@ case "$MODE" in
       --universe broad --incremental-new-symbols
     run_step "price_new_final" "$PYTHON" scripts/update_extended_prices.py \
       --universe broad --incremental-new-symbols
-    run_step_with_market_writer_lock "refresh_extended" "$PYTHON" \
-      -m src.data.extended_universe_manager --refresh
-    run_step_nonblocking "concept_weekly_sync" "$PYTHON" \
-      scripts/build_company_concept_registry.py --weekly-sync
+    extended_rc=0
+    run_step_with_market_writer_lock "$MARKET_WRITER_WAIT_SECONDS" \
+      "refresh_extended" "$PYTHON" \
+      -m src.data.extended_universe_manager --refresh || extended_rc=$?
+    concept_rc=0
+    run_step_with_market_writer_lock 0 "concept_weekly_sync" "$PYTHON" \
+      scripts/build_company_concept_registry.py --weekly-sync || concept_rc=$?
+    if [ "$concept_rc" -ne 0 ]; then
+      log "WARN concept_weekly_sync rc=$concept_rc (nonblocking, continuing)"
+    fi
+    if [ "$extended_rc" -ne 0 ]; then
+      log "FAIL weekly_refresh refresh_extended_rc=$extended_rc after concept sync"
+      exit "$extended_rc"
+    fi
     ;;
   *)
     echo "Unknown mode: $MODE" >&2

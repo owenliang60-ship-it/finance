@@ -194,7 +194,7 @@
 | 07:30 | Wed | 广扫池历史市值采集（`broad_universe_cron_wrapper.sh daily_hmcap`，broad $1B+ final universe / $500M+ seed） |
 | 08:00 | Tue-Sat | 晨报生成与推送，HTML 附件投递（渲染/发送失败回退 PDF）（`run_market_report_pipeline.sh`） |
 | 08:30 | Sat | 股票池刷新（`run_update_data.sh --pool`） |
-| 09:00 | Sat | 广扫池 + 扩展池 + concept registry 周频刷新（`broad_universe_cron_wrapper.sh weekly_refresh`：broad 前 5 步 + extended 第 6 步在共享 `market_db_writer` 锁内提交 membership/SM/profile/coverage + **concept_weekly_sync 第 7 步**非阻塞——registry 跟随 universe 漂移自动对齐：确定性增量落库 / LLM 进 review 队列 / CSV⇔DB lockstep 自检 / Telegram 摘要；extended 有 MIN_COUNT_FLOOR=800 保护 cache） |
+| 09:00 | Sat | 广扫池 + 扩展池 + concept registry 周频刷新（`broad_universe_cron_wrapper.sh weekly_refresh`：broad 前 5 步；extended 第 6 步对共享 `market_db_writer` 有界等锁后提交 membership/SM/profile/coverage；**concept_weekly_sync 第 7 步**不被 step 6 失败连坐，但写库前独立非阻塞取同锁，失败只 WARN；registry 做确定性增量落库 / LLM review 队列 / CSV⇔DB lockstep 自检 / Telegram 摘要；extended 有 MIN_COUNT_FLOOR=800 保护 cache） |
 | 10:00 | Sat | 基本面 + metrics 计算（`run_update_data.sh --fundamental`，加 `market_db_writer` 资源锁） |
 | 10:45 | Sat | 前瞻预期更新（`run_forward_data.sh`：先 yfinance 旧线 `--forward-estimates --scope=all` ~15-22 min，再 FMP forward 新线 `update_fmp_forward.py --mode weekly`；2026-07-18 natural run：1,071 targets，FMP 79.6 min、总计 101.2 min，符合 95-105 min 实测 SLO；日志 `cron_forward_est.log`）。原 10:15 与 fundamental 并发写 market.db（2026-07-11 实测 fundamental 跑到 10:26）→ 移 10:45 留 19 min 缓冲；不并发保证来自共享 writer lock |
 | 22:00/23:00 SGT | Mon-Fri | Portfolio Intelligence 推送（夏令时切换） |

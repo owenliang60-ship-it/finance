@@ -17,6 +17,7 @@ SM 已有 `OLD/CIK1` eligible primary；`NEW/CIK1` 之前 profile 为空，TTL �
 
 - 新增 `resolve_share_classes_with_incumbents()`：候选记录按 CIK 拉入现有 SM incumbents 与 profile，再统一结算。
 - entrant bootstrap、reconcile identity queue、full bootstrap rerun 共用该闭集路径。
+- 若同 CIK 已存在 `needs_review_primary` 且没有有效 override，新 entrant 同样停在 review gate；override 落地后 reconcile 会显式拾取整组并裁决。
 - 回归覆盖 reconcile 单票恢复和 bootstrap 部分 fetch 失败，两者均只保留一个 eligible primary。
 
 ## 教训

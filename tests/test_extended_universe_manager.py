@@ -32,7 +32,12 @@ def test_weekly_refresh_holds_market_writer_lock_for_extended_membership_write(t
     fake_python.write_text('#!/bin/sh\necho "$*" >> "$CALL_LOG"\nexit 0\n')
     fake_python.chmod(0o755)
     fake_flock = fake_bin / "flock"
-    fake_flock.write_text("#!/bin/sh\nexit 1\n")
+    fake_flock.write_text(
+        '#!/bin/sh\n'
+        'if [ "$1" = "-u" ]; then exit 0; fi\n'
+        'if [ ! -f "$FLOCK_STATE" ]; then touch "$FLOCK_STATE"; exit 1; fi\n'
+        'exit 0\n'
+    )
     fake_flock.chmod(0o755)
 
     env = os.environ.copy()
@@ -40,6 +45,8 @@ def test_weekly_refresh_holds_market_writer_lock_for_extended_membership_write(t
         "PATH": str(fake_bin) + os.pathsep + env["PATH"],
         "FINANCE_PROJECT_DIR": str(project),
         "FINANCE_CRON_LOCK_DIR": str(lock_dir),
+        "FINANCE_MARKET_WRITER_WAIT_SECONDS": "0",
+        "FLOCK_STATE": str(tmp_path / "flock-first-attempt-failed"),
         "CALL_LOG": str(calls),
     })
     result = subprocess.run(
@@ -49,9 +56,12 @@ def test_weekly_refresh_holds_market_writer_lock_for_extended_membership_write(t
     )
 
     assert result.returncode == 75
-    assert "extended_universe_manager --refresh" not in calls.read_text()
+    calls_text = calls.read_text()
+    assert "extended_universe_manager --refresh" not in calls_text
+    assert "build_company_concept_registry.py --weekly-sync" in calls_text
     log = next((project / "logs").glob("cron_broad_weekly_refresh_*.log")).read_text()
     assert "market_db_writer lock busy" in log
+    assert "BEGIN concept_weekly_sync" in log
 
 
 class _KnowsEverything(dict):

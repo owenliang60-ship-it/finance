@@ -311,6 +311,26 @@ def test_provider_empty_ttl_expired_is_retryable(tmp_store_cov_ttl_expired, fake
     assert "NOCFCO" in targets
 
 
+def test_repair_refreshes_profiles_mirror_when_target_set_is_empty(
+        tmp_store, fake_client_full, fake_lock, tmp_path):
+    tmp_store.upsert_security_master([_sm_row("OKCO")])
+    tmp_store.record_membership_snapshot(["OKCO"], as_of="2026-01-02")
+    _seed_statements(tmp_store, "OKCO", ["2026-07-31"])
+    _seed_profile(tmp_store, "OKCO")
+    for table in STATEMENT_TABLES + ("company_profile",):
+        _seed_coverage(tmp_store, "OKCO", table, "ok")
+    mirror = tmp_path / "profiles.json"
+
+    rc, targets = run_reconcile(
+        store=tmp_store, client=fake_client_full, repair=True,
+        notifier=None, as_of=AS_OF, lock=fake_lock,
+        profiles_mirror_path=mirror)
+
+    assert rc == 0
+    assert targets == []
+    assert json.loads(mirror.read_text())["_meta"]["count"] == 1
+
+
 def test_identity_queue_reprobes_missing_profile_beyond_eligible(tmp_store_idq, fake_client_full,
                                                                   spy_notifier, fake_lock):
     # R2-P1-2: NEWCO is SM missing_profile (blocked) -> phase 0 re-probes it
@@ -360,6 +380,40 @@ def test_identity_retry_settles_against_existing_same_cik_primary(tmp_store):
     assert [tuple(row) for row in rows] == [
         ("NEW", 0, "secondary_share_class", "OLD"),
         ("OLD", 1, "ok", None),
+    ]
+
+
+def test_reconcile_applies_override_to_parked_needs_review_group(tmp_store):
+    for symbol in ("XYZ-A", "XYZ-B"):
+        tmp_store.upsert_security_master([{
+            "symbol": symbol, "cik": "CIK-XYZ", "company_name": "XYZ Holdings",
+            "exchange": "NASDAQ", "is_etf": 0, "is_fund": 0, "is_adr": 0,
+            "share_class_of": None, "eligible": 0,
+            "reason": "needs_review_primary",
+            "updated_at": "2026-08-01T00:00:00Z",
+        }])
+        _seed_coverage(tmp_store, symbol, "identity", "ok")
+
+    class OverrideClient(_FakeClient):
+        def get_dataset_with_status(self, kind, symbol, limit=None):
+            self.calls += 1
+            self.profile_symbols_fetched.append(symbol)
+            return [{"symbol": symbol, "cik": "CIK-XYZ",
+                     "companyName": "XYZ Holdings", "exchangeShortName": "NASDAQ"}], "ok"
+
+    report = _run_identity_phase(
+        tmp_store, OverrideClient(), "2026-08-24T00:00:00Z",
+        {"CIK-XYZ": "XYZ-A"})
+    rows = tmp_store._get_conn().execute(
+        "SELECT symbol, eligible, reason, share_class_of FROM security_master "
+        "WHERE cik = 'CIK-XYZ' ORDER BY symbol"
+    ).fetchall()
+
+    assert report["queued"] == 2
+    assert report["upgraded"] == ["XYZ-A"]
+    assert [tuple(row) for row in rows] == [
+        ("XYZ-A", 1, "ok", None),
+        ("XYZ-B", 0, "secondary_share_class", "XYZ-A"),
     ]
 
 

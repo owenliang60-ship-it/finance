@@ -40,7 +40,11 @@ from src.data.price_fetcher import update_all_prices
 # NOTE: update_all_fundamentals stays importable (other callers may still use
 # it), but --fundamental no longer calls it (P1-3) — see run_fundamental_update.
 from src.data.fundamental_fetcher import update_all_fundamentals
-from src.data.fundamental_collector import collect_fundamentals_for_symbol
+from src.data.fundamental_collector import (
+    DEFAULT_PROFILES_PATH,
+    collect_fundamentals_for_symbol,
+    rebuild_profiles_json,
+)
 from config.settings import ADANOS_REQUEST_DAYS, ADANOS_TRENDING_LIMIT
 
 FUNDAMENTAL_SCOPE_CHOICES = ("core", "extended", "all", "base", "events")
@@ -226,7 +230,8 @@ def _resolve_correlation_symbols(*, wide: bool = False, market_store=None,
 
 
 def run_fundamental_update(*, scope: str, symbols=None, store=None, client=None,
-                           as_of=None, limit_quarters: int = 8) -> int:
+                           as_of=None, limit_quarters: int = 8,
+                           profiles_mirror_path=None) -> int:
     """Drive `--fundamental` for one scope, entirely through the T8 kernel (P1-3).
 
     Every dependency is injectable so tests never touch the network or the
@@ -261,11 +266,20 @@ def run_fundamental_update(*, scope: str, symbols=None, store=None, client=None,
 
     targets = _resolve_target_symbols(scope, symbols, store=store, as_of=as_of)
 
+    def refresh_mirror_once() -> None:
+        if profiles_mirror_path is None:
+            return
+        try:
+            rebuild_profiles_json(store, profiles_mirror_path)
+        except Exception as exc:
+            logger.warning("profiles.json mirror refresh failed: %s", exc)
+
     if not targets:
         if scope == "events":
             print("update_data --fundamental --scope events: no earnings events")
         else:
             print(f"update_data --fundamental --scope {scope}: no target symbols")
+        refresh_mirror_once()
         return 0
 
     observed_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -288,6 +302,7 @@ def run_fundamental_update(*, scope: str, symbols=None, store=None, client=None,
     if partial:
         print(f"{chr(10060)} 部分失败 (见 coverage_status): {partial}")
 
+    refresh_mirror_once()
     return 0
 
 
@@ -403,7 +418,8 @@ def main():
         target_symbols = _resolve_target_symbols(
             args.scope, symbols, store=fundamental_store, as_of=as_of_today)
         run_fundamental_update(scope=args.scope, symbols=target_symbols,
-                               store=fundamental_store)
+                               store=fundamental_store,
+                               profiles_mirror_path=DEFAULT_PROFILES_PATH)
 
         # Pre-compute metrics in market.db
         if target_symbols:

@@ -8,6 +8,8 @@ Two things under test:
     driver that now routes `--scope core/base/events` through the T8 kernel
     instead of the legacy `update_all_fundamentals` direct-write path.
 """
+import json
+import logging
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -153,3 +155,49 @@ def test_scope_core_kernel_parity_with_legacy(tmp_store, fake_client_full):
 def test_scope_events_zero_targets_exit0(tmp_store_sm3, fake_client_full):
     assert run_fundamental_update(scope="events", store=tmp_store_sm3,
                                   client=fake_client_full, as_of="2026-08-24") == 0
+
+
+def test_fundamental_update_refreshes_profiles_mirror_once(
+        tmp_store, fake_client_full, tmp_path):
+    mirror = tmp_path / "profiles.json"
+
+    rc = run_fundamental_update(
+        scope="core", symbols=["AAPL"], store=tmp_store,
+        client=fake_client_full, profiles_mirror_path=mirror)
+
+    payload = json.loads(mirror.read_text())
+    assert rc == 0
+    assert payload["AAPL"]["companyName"] == "Apple Inc."
+    assert payload["_meta"]["count"] == 1
+
+
+def test_zero_event_run_still_refreshes_profiles_mirror(
+        tmp_store_sm3, tmp_path, fake_client_full):
+    mirror = tmp_path / "profiles.json"
+    with tmp_store_sm3.transaction() as conn:
+        tmp_store_sm3.write_company_profile_in_conn(
+            conn, "AAPL", {"symbol": "AAPL", "companyName": "Apple Inc."},
+            "2026-08-01T00:00:00Z")
+
+    rc = run_fundamental_update(
+        scope="events", store=tmp_store_sm3, client=fake_client_full,
+        as_of="2026-08-24", profiles_mirror_path=mirror)
+
+    assert rc == 0
+    assert json.loads(mirror.read_text())["_meta"]["count"] == 1
+
+
+def test_profiles_mirror_failure_warns_without_failing_collection(
+        tmp_store, fake_client_full, tmp_path, monkeypatch, caplog):
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("scripts.update_data.rebuild_profiles_json", boom)
+    with caplog.at_level(logging.WARNING):
+        rc = run_fundamental_update(
+            scope="core", symbols=["AAPL"], store=tmp_store,
+            client=fake_client_full,
+            profiles_mirror_path=tmp_path / "profiles.json")
+
+    assert rc == 0
+    assert any("mirror refresh failed" in rec.message for rec in caplog.records)

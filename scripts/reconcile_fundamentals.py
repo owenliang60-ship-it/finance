@@ -14,13 +14,12 @@ Four phases, always in this order:
   — this covers BOTH a network-failure backoff expiring and a provider_empty
   TTL expiring. `identity_blocked` rows carry no `next_retry_at` (cleared
   explicitly by the identity kernel) and so never enter the queue; those wait
-  for a human override. Every queued symbol is re-run through
-  `bootstrap_security_master.resolve_identity_for_symbol` — UNCHANGED,
-  imported rather than reimplemented — regardless of whether it is currently
-  `eligible`; the whole point of this phase is upgrading symbols the SM
-  currently blocks. A successful "ok" outcome is grouped through
-  `resolve_share_classes` (same as a full bootstrap) and written to SM, so it
-  can enter Phase 1's denominator this same run.
+  for a human override. Parked `needs_review_primary` rows whose CIK now has a
+  configured override are also enqueued explicitly (their coverage status is
+  `ok`, so no retry timer would select them). Every queued symbol is re-run
+  through the shared closed-group entrant bootstrap regardless of whether it
+  is currently `eligible`; a successful verdict can enter Phase 1's
+  denominator this same run.
 
   Phase 1 (always; strictly read-only unless --repair is set). For every symbol
   in `current_base_universe()` (active Extended membership ∩ SM eligible —
@@ -167,14 +166,30 @@ def _load_overrides(path: Optional[Path] = None) -> Dict[str, str]:
 # Phase 0: identity queue (R2-P1-2 + R3-P1-2)
 # ---------------------------------------------------------------------------
 
-def _identity_queue_symbols(store: MarketStore, as_of_ts: str) -> List[str]:
+def _identity_queue_symbols(store: MarketStore, as_of_ts: str,
+                            overrides: Optional[Dict[str, str]] = None) -> List[str]:
     conn = store._get_conn()
     rows = conn.execute(
         "SELECT symbol FROM coverage_status WHERE dataset = 'identity' "
         "AND next_retry_at IS NOT NULL AND next_retry_at <= ? ORDER BY symbol",
         (as_of_ts,),
     ).fetchall()
-    return [r["symbol"] for r in rows]
+    symbols = {r["symbol"] for r in rows}
+
+    # `needs_review_primary` carries coverage(identity)=ok, so retry timers do
+    # not select it. Once Boss adds an override, explicitly enqueue every
+    # parked member of that CIK so the next reconcile can apply the verdict.
+    override_ciks = sorted((overrides or {}).keys())
+    if override_ciks:
+        placeholders = ", ".join("?" for _ in override_ciks)
+        review_rows = conn.execute(
+            "SELECT symbol FROM security_master "
+            "WHERE reason = 'needs_review_primary' "
+            f"AND cik IN ({placeholders})",
+            override_ciks,
+        ).fetchall()
+        symbols.update(row["symbol"] for row in review_rows)
+    return sorted(symbols)
 
 
 def _run_identity_phase(store: MarketStore, client: Any, as_of_ts: str,
@@ -185,7 +200,7 @@ def _run_identity_phase(store: MarketStore, client: Any, as_of_ts: str,
     share classes, so a recovered profile cannot become a second eligible
     primary merely because its sibling was outside this retry batch.
     """
-    queue = _identity_queue_symbols(store, as_of_ts)
+    queue = _identity_queue_symbols(store, as_of_ts, overrides)
     if not queue:
         return {"queued": 0, "upgraded": []}
     summary = bootstrap_entrants(
@@ -388,11 +403,11 @@ def run_reconcile(*, store: MarketStore, client: Any, repair: bool = False,
                     repair_failed += 1
                 else:
                     repair_success += 1
-            if profiles_mirror_path is not None:
-                try:
-                    rebuild_profiles_json(store, profiles_mirror_path)
-                except Exception as exc:
-                    logger.warning("profiles.json mirror refresh failed: %s", exc)
+        if repair and profiles_mirror_path is not None:
+            try:
+                rebuild_profiles_json(store, profiles_mirror_path)
+            except Exception as exc:
+                logger.warning("profiles.json mirror refresh failed: %s", exc)
 
         report = {
             "as_of": as_of, "repair": repair, "audited": len(symbols),

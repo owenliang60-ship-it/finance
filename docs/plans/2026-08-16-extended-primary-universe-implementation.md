@@ -1351,6 +1351,12 @@ same-CIK incumbents 闭包、forward/price producer broad fallback 吞真实 DB 
 pre-bootstrap combined price 丢 Extended complement、cloud tracking 失败连带跳过基本面缓存、
 以及 `eligible_extended` 回测空集 fail-open；同步修正文档契约。相关模式记录为 issue 044/045。
 
+**2026-08-20 外部 code review follow-up**：恢复 kernel writer 迁移后
+`profiles.json` mirror 的稳定刷新者（events 零 target / reconcile 零 repair 亦刷新）；
+weekly extended 有界等锁且失败 rc 延迟到 concept 独立同锁尝试之后；已有
+`needs_review_primary` CIK 对新 entrant 保持人工 gate，并在 override 落地后由 reconcile
+拾取整组裁决。记录 issue 047/048。
+
 ---
 
 # Stop C–G 运维 Runbook（每步单独 Boss 批准）
@@ -1384,6 +1390,14 @@ ssh aliyun "cd /root/workspace/Finance && \
 "/Users/owen/CC workspace/Finance/.venv/bin/python" scripts/migrate_core_watchlist.py && ./sync_to_cloud.sh --push
 # 7. pre-backfill 备份（backup API）+ integrity_check
 ```
+
+**Stop C→E 过渡期锁时序**：周六 `weekly_refresh` 的 extended step 对
+`market_db_writer` 最多等待 1800 秒（环境变量
+`FINANCE_MARKET_WRITER_WAIT_SECONDS` 可调）。等待超时/refresh 失败时，step 7
+`concept_weekly_sync` 不被控制流连坐，而是再做一次独立的同锁非阻塞尝试：锁已释放则
+执行，仍忙则 WARN；wrapper 最后以 extended 原 rc 非零退出。Stop E 删除 10:00 旧
+fundamental cron 前，首个周六必须同时核对 weekly/fundamental 两份日志；若发生锁等待
+或任一任务 skip，先手工补跑缺失任务，不把时钟错位当成成功。
 
 验收：smoke 打印 "schema ok"、7 表存在、bootstrap exit 0、eligible 数在 900-1000 合理区间、needs_review 清单 Boss 已过目、watchlist 迁移清单过目、备份 integrity ok。
 

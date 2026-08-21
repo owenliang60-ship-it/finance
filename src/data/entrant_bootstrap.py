@@ -212,15 +212,60 @@ def resolve_share_classes_with_incumbents(
     incumbents, incumbent_profiles = _incumbents_sharing_cik(
         store, candidate_records, candidate_symbols
     )
+    members_by_cik: Dict[str, set] = {}
+    for record in candidate_records + incumbents:
+        if record.cik:
+            members_by_cik.setdefault(record.cik, set()).add(record.symbol)
+    needs_review_ciks = {
+        record.cik for record in incumbents
+        if record.cik and record.reason == "needs_review_primary"
+    }
+    valid_override_ciks = {
+        cik for cik in needs_review_ciks
+        if overrides.get(cik) in members_by_cik.get(cik, set())
+    }
+
+    # A valid human override is allowed to reopen a parked group for
+    # deterministic settlement. Without one, needs_review incumbents remain a
+    # hard gate and all new members of that CIK are parked too.
+    incumbents_for_resolution = [
+        replace(record, eligible=True, reason="ok")
+        if (record.cik in valid_override_ciks
+            and record.reason == "needs_review_primary")
+        else record
+        for record in incumbents
+    ]
     grouping_profiles = dict(incumbent_profiles)
     grouping_profiles.update(candidate_profiles)
     resolved = resolve_share_classes(
-        candidate_records + incumbents, overrides, grouping_profiles
+        candidate_records + incumbents_for_resolution, overrides, grouping_profiles
     )
     prior_by_symbol = {record.symbol: record for record in incumbents}
     resolved = _decline_metricless_demotions(
         resolved, prior_by_symbol, candidate_symbols, grouping_profiles
     )
+    unresolved_review_ciks = needs_review_ciks - valid_override_ciks
+    if unresolved_review_ciks:
+        by_symbol = {record.symbol: record for record in resolved}
+        for record in resolved:
+            if record.cik not in unresolved_review_ciks:
+                continue
+            if record.symbol in candidate_symbols:
+                by_symbol[record.symbol] = replace(
+                    record, eligible=False, reason="needs_review_primary",
+                    share_class_of=None)
+            elif record.symbol in prior_by_symbol:
+                by_symbol[record.symbol] = prior_by_symbol[record.symbol]
+        for cik in sorted(unresolved_review_ciks):
+            entrants = sorted(
+                record.symbol for record in candidate_records if record.cik == cik)
+            logger.warning(
+                "share-class settlement PARKED for CIK %s: existing "
+                "needs_review_primary group requires a valid override before "
+                "entrant(s) %s may become eligible",
+                cik, ", ".join(entrants),
+            )
+        resolved = [by_symbol[record.symbol] for record in resolved]
     return resolved, prior_by_symbol
 
 
