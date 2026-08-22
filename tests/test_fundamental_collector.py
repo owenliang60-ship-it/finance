@@ -162,6 +162,25 @@ def test_happy_path_writes_all_five_targets(tmp_store, fake_client_full):
     assert tmp_store.get_coverage("income_quarterly")["AAPL"] == "ok"
 
 
+def test_dataset_subset_fetches_and_writes_only_requested_keys(
+        tmp_store, fake_client_full):
+    statuses = collect_fundamentals_for_symbol(
+        "AAPL", client=fake_client_full, store=tmp_store,
+        observed_at=OBSERVED_AT, dataset_keys=["ratios"])
+
+    assert statuses == {"ratios": "ok"}
+    assert [call["kind"] for call in fake_client_full.calls] == ["ratios"]
+    assert _count(tmp_store, "ratios_annual") > 0
+    assert _count(tmp_store, "income_quarterly") == 0
+
+
+def test_dataset_subset_rejects_unknown_key(tmp_store, fake_client_full):
+    with pytest.raises(ValueError, match="unknown dataset"):
+        collect_fundamentals_for_symbol(
+            "AAPL", client=fake_client_full, store=tmp_store,
+            observed_at=OBSERVED_AT, dataset_keys=["ratios", "made_up"])
+
+
 def test_atomic_rollback_on_midwrite_failure(tmp_store, fake_client_full, monkeypatch):
     monkeypatch.setattr(tmp_store, "record_vintage_in_conn",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("disk")))

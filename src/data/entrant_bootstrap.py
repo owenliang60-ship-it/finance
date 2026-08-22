@@ -36,7 +36,13 @@ import logging
 from dataclasses import asdict, replace
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from src.data.security_master import SecurityRecord, resolve_share_classes
+from src.data.security_master import (
+    PRIMARY_METRIC_MARKET_CAP,
+    PRIMARY_METRIC_VOLUME,
+    SecurityRecord,
+    resolve_share_classes,
+    selection_metric_for_share_classes,
+)
 
 # T6 kernel + its I/O helpers, reused verbatim (never reimplemented — the
 # Identity 状态契约 must have exactly one implementation).
@@ -114,11 +120,15 @@ def _incumbents_sharing_cik(
     return records, profiles
 
 
-def _has_size_metric(profile: Optional[dict]) -> bool:
-    """Does this profile carry the value share-class settlement decides on?"""
+def _has_deciding_metric(profile: Optional[dict], metric: Optional[str]) -> bool:
+    """Does this profile carry the metric that actually chose the winner?"""
     if not profile:
         return False
-    for key in ("mktCap", "marketCap"):
+    fields = {
+        PRIMARY_METRIC_VOLUME: ("volAvg", "averageVolume"),
+        PRIMARY_METRIC_MARKET_CAP: ("mktCap", "marketCap"),
+    }.get(metric, ())
+    for key in fields:
         if profile.get(key) is not None:
             return True
     return False
@@ -129,13 +139,15 @@ def _decline_metricless_demotions(
     prior_by_symbol: Dict[str, SecurityRecord],
     entrant_symbols: set,
     profiles: Dict[str, dict],
+    overrides: Dict[str, Optional[str]],
 ) -> List[SecurityRecord]:
     """Never let the ABSENCE of data demote an established primary.
 
-    `resolve_share_classes` picks the primary by mktCap, so an incumbent whose
-    `company_profile` row is missing (or carries no market cap) contributes no
-    value at all and the entrant wins the group uncontested — the incumbent
-    would lose its identity to a missing row rather than to evidence.
+    `resolve_share_classes` picks the primary by volume then market-cap
+    fallback. The guard must inspect the metric that ACTUALLY produced that
+    winner: an incumbent with market cap but no volume is still blind when a
+    one-sided entrant volume decided the group. A valid human override is
+    evidence of its own and bypasses this metric guard.
 
     For those groups the verdict is declined: incumbents keep their existing
     SM rows and the group's entrants are parked as `needs_review_primary`.
@@ -163,12 +175,21 @@ def _decline_metricless_demotions(
             continue  # nothing established to protect / nothing new to weigh
         if any(m.reason == "identity_conflict" for m in members):
             continue  # name-based verdict, not a metrics one
+        if overrides.get(cik) in member_symbols:
+            continue  # explicit human verdict, not a metrics one
+
+        selectable_members = [
+            m for m in members
+            if m.reason in {"ok", "secondary_share_class", "needs_review_primary"}
+        ]
+        deciding_metric = selection_metric_for_share_classes(
+            selectable_members, profiles)
 
         blind_losers = sorted(
             m.symbol for m in members
             if m.symbol in prior_by_symbol
             and prior_by_symbol[m.symbol].eligible and not m.eligible
-            and not _has_size_metric(profiles.get(m.symbol))
+            and not _has_deciding_metric(profiles.get(m.symbol), deciding_metric)
         )
         if not blind_losers:
             continue
@@ -182,11 +203,12 @@ def _decline_metricless_demotions(
                 by_symbol[m.symbol] = prior_by_symbol[m.symbol]
 
         logger.warning(
-            "share-class settlement DECLINED for CIK %s: incumbent(s) %s carry no "
-            "market-cap data, so the demotion would rest on an absent row, not on "
+            "share-class settlement DECLINED for CIK %s: deciding %s metric is absent "
+            "for incumbent(s) %s, so the demotion would rest on an absent value, not on "
             "evidence. Incumbent identity kept as-is; entrant(s) %s parked as "
             "needs_review_primary.",
-            cik, ", ".join(blind_losers), ", ".join(entrants_here),
+            cik, deciding_metric or "primary", ", ".join(blind_losers),
+            ", ".join(entrants_here),
         )
 
     return [by_symbol[rec.symbol] for rec in resolved]
@@ -242,7 +264,8 @@ def resolve_share_classes_with_incumbents(
     )
     prior_by_symbol = {record.symbol: record for record in incumbents}
     resolved = _decline_metricless_demotions(
-        resolved, prior_by_symbol, candidate_symbols, grouping_profiles
+        resolved, prior_by_symbol, candidate_symbols, grouping_profiles,
+        overrides,
     )
     unresolved_review_ciks = needs_review_ciks - valid_override_ciks
     if unresolved_review_ciks:

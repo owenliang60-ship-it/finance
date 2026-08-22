@@ -26,6 +26,7 @@ from scripts.backfill_extended_fundamentals import (
     JOB_STATUS_MAP,
     LOCK_PATH,
     FileLock,
+    check_run_gate,
     deepen_limit_quarters,
     has_asof_window,
     parse_args,
@@ -302,6 +303,71 @@ def test_e2e_happy_path_manifest_completes(tmp_store_sm3, fake_client_full):
     assert prog["done"] == prog["total_jobs"] == 3 * len(DATASETS)
     assert prog["is_complete"] is True
     assert tmp_store_sm3.get_backfill_run("r1")["status"] == "complete"
+    ok, report = check_run_gate(tmp_store_sm3, "r1")
+    assert ok is True
+    assert report["fetch_failed_ratio"] == 0.0
+
+
+def test_gate_rejects_terminal_failures_even_when_header_is_complete(
+        tmp_store_sm3, fake_client_all_500):
+    # Three passes exhaust the manifest retry cap. The run header is a
+    # processing-complete marker, but an all-failed run must never pass Stop D.
+    for attempt in range(3):
+        assert run_backfill(
+            run_id="r1", store=tmp_store_sm3, client=fake_client_all_500,
+            lock=FakeLock(), resume=attempt > 0) == 1
+
+    assert tmp_store_sm3.get_backfill_run("r1")["status"] == "complete"
+    ok, report = check_run_gate(tmp_store_sm3, "r1")
+    assert ok is False
+    assert report["fetch_failed"] == report["total_jobs"]
+    assert report["fetch_failed_ratio"] == 1.0
+    assert "fetch_failed_ratio" in report["failures"]
+
+
+@pytest.mark.parametrize("failed, expected", [(4, True), (5, False)])
+def test_gate_fetch_failed_threshold_is_strictly_below_five_percent(
+        failed, expected):
+    class GateStore:
+        def get_backfill_run(self, run_id):
+            return {"status": "complete"}
+
+        def run_progress(self, run_id):
+            return {
+                "total_jobs": 100, "done": 100 - failed,
+                "provider_empty": 0, "skipped": 0,
+                "fetch_failed": failed, "pending": 0, "in_progress": 0,
+                "is_complete": True,
+            }
+
+    ok, report = check_run_gate(GateStore(), "r1")
+    assert ok is expected
+    assert report["fetch_failed_ratio"] == failed / 100
+
+
+def test_resume_fetches_only_the_failed_dataset(tmp_store_sm3):
+    class SelectiveClient(FakeClient):
+        def __init__(self, fail_kind=None):
+            super().__init__()
+            self.fail_kind = fail_kind
+
+        def get_dataset_with_status(self, kind, symbol, limit=None):
+            self.calls.append({"kind": kind, "symbol": symbol, "limit": limit})
+            if kind == self.fail_kind:
+                return [], "fetch_failed"
+            return _rows_for(kind, symbol), "ok"
+
+    first = SelectiveClient(fail_kind="ratios")
+    assert run_backfill(
+        run_id="r1", store=tmp_store_sm3, client=first, lock=FakeLock()) == 1
+    assert {call["kind"] for call in first.calls} == set(DATASETS)
+
+    resumed = SelectiveClient()
+    assert run_backfill(
+        run_id="r1", store=tmp_store_sm3, client=resumed,
+        lock=FakeLock(), resume=True) == 0
+    # One failed job per symbol; terminal profile/statements are not fetched.
+    assert [call["kind"] for call in resumed.calls] == ["ratios"] * 3
 
 
 def test_historical_symbols_never_in_default_targets(tmp_store_sm3_plus_historical,
@@ -543,6 +609,8 @@ def test_parse_args_defaults_and_validation():
     args = parse_args(["--run-id", "r1"])
     assert args.canary is None and args.limit_quarters == 8
     assert args.resume is False and args.no_lock is False
+    verify = parse_args(["--run-id", "r1", "--verify-only"])
+    assert verify.verify_only is True
     hist = parse_args(["--run-id", "h1", "--include-historical", "--as-of", "2026-03-31"])
     assert hist.include_historical and hist.as_of == "2026-03-31"
     with pytest.raises(SystemExit):

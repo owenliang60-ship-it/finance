@@ -8,6 +8,7 @@ validates share-class groupings via CIK + normalized company name
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
 from typing import Any, Optional
 
@@ -21,6 +22,22 @@ _NAME_DESCRIPTOR_TOKENS = {
     "share", "stock", "stk",
 }
 _NAME_STRIP_TABLE = str.maketrans("", "", ".,'&")
+
+# FMP's profile endpoint does not expose a reliable security-type field.  For
+# listed preferred/debt instruments it does, however, expose an explicit
+# security title and/or the NYSE preferred suffix.  Keep this list narrow:
+# ADR "Depositary Shares" and partnership "Common Units" are valid equities
+# in this universe and must not be swept up by a broad token match.
+_PREFERRED_SYMBOL_RE = re.compile(r"-P[A-Z0-9]*$", re.IGNORECASE)
+_NON_COMMON_NAME_RE = re.compile(
+    r"(?:\bpfd\b|\bpreferred\b|\bincome\s+capital\s+obligations?\b|"
+    r"\bdebentures?\b|\bsubordinated\s+notes?\b|\bnotes?\s+20\d{2}\b|"
+    r"\d+(?:\.\d+)?\s*%)",
+    re.IGNORECASE,
+)
+
+PRIMARY_METRIC_VOLUME = "volume"
+PRIMARY_METRIC_MARKET_CAP = "market_cap"
 
 
 def _field(profile: dict, *candidates: str) -> Any:
@@ -52,6 +69,20 @@ def _normalize_name(name: Optional[str]) -> str:
     tokens = [t for t in cleaned.split() if t and t not in _NAME_DESCRIPTOR_TOKENS]
     tokens = [t for t in tokens if len(t) > 1]
     return " ".join(tokens)
+
+
+def _is_explicit_non_common_instrument(symbol: Optional[str],
+                                       company_name: Optional[str]) -> bool:
+    """Fail closed only on explicit preferred/debt evidence.
+
+    Market-cap and company-description fields are issuer-level in FMP and
+    cannot identify the listed security.  The ticker/title signals above are
+    security-level; ambiguous records continue into CIK grouping/review.
+    """
+    return bool(
+        _PREFERRED_SYMBOL_RE.search(symbol or "")
+        or _NON_COMMON_NAME_RE.search(company_name or "")
+    )
 
 
 @dataclass
@@ -95,6 +126,9 @@ def classify_security(profile: dict) -> SecurityRecord:
         return SecurityRecord(**base, eligible=False, reason="fund")
     if not company_name or not cik:
         return SecurityRecord(**base, eligible=False, reason="missing_profile")
+    if _is_explicit_non_common_instrument(symbol, company_name):
+        return SecurityRecord(
+            **base, eligible=False, reason="non_common_instrument")
 
     return SecurityRecord(**base, eligible=True, reason="ok")
 
@@ -119,39 +153,52 @@ def _unique_max_symbol(values: dict) -> Optional[str]:
     return winners[0] if len(winners) == 1 else None
 
 
-def _pick_primary_by_metrics(members, profiles_by_symbol: dict) -> Optional[str]:
-    """mktCap -> volAvg cascade, where volAvg is NESTED inside mktCap.
-
-    volAvg only breaks a tie AMONG the mktCap leaders (the members sharing
-    the top mktCap value) — a strictly-lower-mktCap member must never win
-    primary on volAvg alone. When no member has mktCap data at all, volAvg
-    is compared across every member instead (nothing to nest under).
-    """
-    mktcap_values = _metric_values(members, profiles_by_symbol, "mktCap", "marketCap")
-    winner = _unique_max_symbol(mktcap_values)
+def _pick_primary_and_metric(members, profiles_by_symbol: dict):
+    """Return `(winner, deciding_metric)` for the frozen metric cascade."""
+    volume_values = _metric_values(
+        members, profiles_by_symbol, "volAvg", "averageVolume")
+    winner = _unique_max_symbol(volume_values)
     if winner is not None:
-        return winner
+        return winner, PRIMARY_METRIC_VOLUME
 
-    if mktcap_values:
-        top = max(mktcap_values.values())
-        leader_symbols = {sym for sym, v in mktcap_values.items() if v == top}
-        tiebreak_members = [m for m in members if m.symbol in leader_symbols]
-    else:
-        tiebreak_members = members
+    market_cap_values = _metric_values(
+        members, profiles_by_symbol, "mktCap", "marketCap")
+    winner = _unique_max_symbol(market_cap_values)
+    return winner, (PRIMARY_METRIC_MARKET_CAP if winner is not None else None)
 
-    volavg_values = _metric_values(tiebreak_members, profiles_by_symbol, "volAvg", "averageVolume")
-    return _unique_max_symbol(volavg_values)
+
+def selection_metric_for_share_classes(members, profiles_by_symbol: dict) -> Optional[str]:
+    """Which metric actually decided this group, or None if neither did.
+
+    Entrant settlement reuses this result to decide whether an established
+    primary lost on evidence or merely lacked the metric that selected the
+    entrant. Keeping the ruling here prevents its safety guard from drifting
+    away from the primary-selection cascade again.
+    """
+    return _pick_primary_and_metric(members, profiles_by_symbol)[1]
+
+
+def _pick_primary_by_metrics(members, profiles_by_symbol: dict) -> Optional[str]:
+    """Choose the primary listing by liquidity, then market cap as fallback.
+
+    FMP copies issuer-level market cap onto preferred/depositary classes; it
+    therefore cannot safely outrank the common listing.  Average volume is
+    security-level and identifies the traded primary.  If volume is missing
+    or tied, a unique market-cap leader remains a useful fallback; otherwise
+    the caller parks the whole group for review.
+    """
+    return _pick_primary_and_metric(members, profiles_by_symbol)[0]
 
 
 def resolve_share_classes(records, overrides: dict, profiles_by_symbol: dict) -> list:
     """Group classify_security() output by CIK and settle primary/secondary status.
 
     Only records already classified as reason=="ok" participate in grouping;
-    etf/fund/missing_profile records pass through unchanged. Primary/secondary
-    resolution order: share_class_overrides.json (by CIK) -> higher mktCap,
-    with higher volAvg breaking a tie among the mktCap leaders only -> if
-    everything is missing/tied throughout, needs_review_primary for the
-    whole group (no auto pick).
+    etf/fund/non-common/missing_profile records pass through unchanged.
+    Primary/secondary resolution order: share_class_overrides.json (by CIK)
+    -> higher volAvg -> higher mktCap fallback -> if everything is
+    missing/tied throughout, needs_review_primary for the whole group (no
+    auto pick).
     """
     overrides = overrides or {}
     groupable = [r for r in records if r.reason == "ok"]

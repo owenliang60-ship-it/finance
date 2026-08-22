@@ -29,8 +29,9 @@ def tmp_store(tmp_path):
     s.close()
 
 
-def _profile(symbol, cik=None, name=None, mkt_cap=1000, is_etf=False, is_fund=False):
-    return {
+def _profile(symbol, cik=None, name=None, mkt_cap=1000, vol_avg=None,
+             is_etf=False, is_fund=False):
+    payload = {
         "symbol": symbol,
         "cik": cik or ("CIK-" + symbol),
         "companyName": name or (symbol + " Inc."),
@@ -40,6 +41,9 @@ def _profile(symbol, cik=None, name=None, mkt_cap=1000, is_etf=False, is_fund=Fa
         "isAdr": False,
         "mktCap": mkt_cap,
     }
+    if vol_avg is not None:
+        payload["volAvg"] = vol_avg
+    return payload
 
 
 class _FakeClient:
@@ -275,16 +279,18 @@ class TestBatchMechanics:
 class TestMetriclessIncumbentGuard:
     """Review I1: absence of data must never flip an established primary.
 
-    `resolve_share_classes` picks the primary by mktCap, so an incumbent with
-    no usable market-cap value contributes nothing and the entrant wins the
-    group uncontested — a demotion resting on a missing row rather than on
-    evidence. Those groups are declined instead.
+    The primary cascade is volume -> market cap. An incumbent missing the
+    metric that actually selected the entrant contributes nothing to that
+    decision — a demotion resting on a missing value rather than evidence.
+    Those groups are declined instead.
     """
 
     def _entrant_client(self, symbol="GOOG", cik="CIK-ALPHA",
-                        name="Alphabet Inc. Class C", mkt_cap=1000):
+                        name="Alphabet Inc. Class C", mkt_cap=1000,
+                        vol_avg=None):
         return _FakeClient(profiles={
-            symbol: _profile(symbol, cik=cik, name=name, mkt_cap=mkt_cap),
+            symbol: _profile(symbol, cik=cik, name=name, mkt_cap=mkt_cap,
+                             vol_avg=vol_avg),
         })
 
     def test_incumbent_without_profile_row_is_not_demoted(self, tmp_store, caplog):
@@ -331,6 +337,62 @@ class TestMetriclessIncumbentGuard:
         messages = [r.message for r in caplog.records
                     if r.name == "src.data.entrant_bootstrap"]
         assert any("INCUM" in m and "ENTRA" in m for m in messages)
+
+    def test_incumbent_missing_the_deciding_volume_metric_is_not_demoted(
+            self, tmp_store, caplog):
+        """Having market cap does not help when volume actually chose winner.
+
+        A one-sided entrant volume would otherwise beat an incumbent whose
+        much larger market cap is never consulted by the volume-first cascade.
+        """
+        _seed_sm(tmp_store, "INCUM", "CIK-SHARED", "Shared Holdings")
+        _seed_profile(
+            tmp_store, "INCUM",
+            _profile("INCUM", cik="CIK-SHARED", name="Shared Holdings",
+                     mkt_cap=50_000_000_000, vol_avg=None),
+        )
+
+        with caplog.at_level(logging.WARNING):
+            bootstrap_entrants(
+                ["ENTRA"],
+                client=self._entrant_client(
+                    symbol="ENTRA", cik="CIK-SHARED",
+                    name="Shared Holdings Class B", mkt_cap=1_000_000_000,
+                    vol_avg=1000),
+                store=tmp_store,
+            )
+
+        assert _sm_row(tmp_store, "INCUM")["eligible"] == 1
+        entrant = _sm_row(tmp_store, "ENTRA")
+        assert entrant["eligible"] == 0
+        assert entrant["reason"] == "needs_review_primary"
+        messages = [r.message for r in caplog.records
+                    if r.name == "src.data.entrant_bootstrap"]
+        assert any("deciding volume" in m and "INCUM" in m for m in messages)
+
+    def test_valid_override_is_not_vetoed_by_metric_guard(self, tmp_store):
+        _seed_sm(tmp_store, "INCUM", "CIK-SHARED", "Shared Holdings")
+        _seed_profile(
+            tmp_store, "INCUM",
+            _profile("INCUM", cik="CIK-SHARED", name="Shared Holdings",
+                     mkt_cap=50_000_000_000, vol_avg=None),
+        )
+
+        bootstrap_entrants(
+            ["ENTRA"],
+            client=self._entrant_client(
+                symbol="ENTRA", cik="CIK-SHARED",
+                name="Shared Holdings Class B", mkt_cap=1_000_000_000,
+                vol_avg=1000),
+            store=tmp_store,
+            overrides={"CIK-SHARED": "ENTRA"},
+        )
+
+        assert _sm_row(tmp_store, "ENTRA")["eligible"] == 1
+        incumbent = _sm_row(tmp_store, "INCUM")
+        assert incumbent["eligible"] == 0
+        assert incumbent["reason"] == "secondary_share_class"
+        assert incumbent["share_class_of"] == "ENTRA"
 
     def test_metric_backed_demotion_is_still_allowed(self, tmp_store):
         """The guard blocks demotion on ABSENT data, not on losing on the numbers."""

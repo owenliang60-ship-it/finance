@@ -54,15 +54,17 @@ CLI:
     python scripts/backfill_extended_fundamentals.py --run-id <id> \\
         [--canary N] [--resume] [--limit-quarters 8] [--dry-run] [--no-lock] \\
         [--include-historical --as-of YYYY-MM-DD]
+    python scripts/backfill_extended_fundamentals.py --run-id <id> --verify-only
 
-Exit codes: 0 success · 1 partial failure / circuit breaker · 2 empty or
-fail-loud universe · 75 lock busy (matches cron_wrapper's
+Exit codes: 0 success / verification pass · 1 partial failure / circuit
+breaker / verification failure · 2 empty or fail-loud universe · 75 lock busy (matches cron_wrapper's
 `FINANCE_CRON_LOCK_BUSY_RC=75` convention for "a peer is running").
 """
 from __future__ import annotations
 
 import argparse
 import fcntl
+import json
 import logging
 import math
 import os
@@ -113,6 +115,7 @@ JOB_STATUS_MAP = {
 # rate means anything.
 CIRCUIT_BREAKER_FAILURE_RATIO = 0.2
 CIRCUIT_BREAKER_MIN_DATASETS = 250
+MAX_GATE_FETCH_FAILED_RATIO = 0.05
 
 PROGRESS_LOG_EVERY = 25
 
@@ -482,10 +485,9 @@ def _drive(*, run_id: str, store: MarketStore, client: Any, targets: List[str],
 
         def _job_writer(conn, dataset, status, detail=None, _symbol=symbol,
                         _claimed=claimed_set):
-            # The kernel walks all five datasets; on a resume only some are
-            # ours. Writing the others would reset a terminal job's status and
-            # inflate its attempts, so they are skipped here — the data write
-            # itself is an idempotent upsert and does no harm.
+            # The kernel is scoped to this claimed subset. Keep the membership
+            # check as a defensive invariant so a future collector change can
+            # never reset a terminal job or inflate its attempts.
             if dataset not in _claimed:
                 return
             store.complete_job_in_conn(conn, run_id, _symbol, dataset,
@@ -493,7 +495,8 @@ def _drive(*, run_id: str, store: MarketStore, client: Any, targets: List[str],
 
         statuses = collect_fundamentals_for_symbol(
             symbol, client=client, store=store, limit_quarters=limit_quarters,
-            observed_at=observed_at, job_writer=_job_writer)
+            observed_at=observed_at, job_writer=_job_writer,
+            dataset_keys=claimed)
 
         collected_symbols += 1
         for dataset, status in statuses.items():
@@ -550,6 +553,59 @@ def _refresh_profiles_mirror(store: MarketStore, path: Path) -> None:
         logger.warning("profiles.json mirror refresh failed: %s", exc)
 
 
+def check_run_gate(store: MarketStore, run_id: str,
+                   max_fetch_failed_ratio: float = MAX_GATE_FETCH_FAILED_RATIO):
+    """Read-only Stop D acceptance gate over header + job manifest.
+
+    A `complete` header means every job reached a terminal state; terminal
+    `fetch_failed` rows are intentionally possible after the retry cap.  The
+    rollout gate therefore must inspect the job ledger as well as the header.
+    Returns `(ok, report)` so the CLI and tests share exactly one ruling.
+    """
+    if not 0 <= max_fetch_failed_ratio <= 1:
+        raise ValueError("max_fetch_failed_ratio must be between 0 and 1")
+
+    try:
+        header = store.get_backfill_run(run_id)
+        progress = store.run_progress(run_id)
+    except ValueError as exc:
+        return False, {
+            "run_id": run_id, "failures": ["unknown_run"], "detail": str(exc),
+        }
+
+    total = progress["total_jobs"]
+    failed = progress.get("fetch_failed", 0)
+    ratio = (failed / total) if total else 1.0
+    failures = []
+    if header["status"] != "complete":
+        failures.append("header_status")
+    if not progress["is_complete"]:
+        failures.append("jobs_not_terminal")
+    if progress.get("pending", 0) or progress.get("in_progress", 0):
+        failures.append("unfinished_jobs")
+    if total <= 0:
+        failures.append("empty_manifest")
+    if ratio >= max_fetch_failed_ratio:
+        failures.append("fetch_failed_ratio")
+
+    report = {
+        "run_id": run_id,
+        "header_status": header["status"],
+        "total_jobs": total,
+        "done": progress.get("done", 0),
+        "provider_empty": progress.get("provider_empty", 0),
+        "skipped": progress.get("skipped", 0),
+        "fetch_failed": failed,
+        "fetch_failed_ratio": ratio,
+        "max_fetch_failed_ratio_exclusive": max_fetch_failed_ratio,
+        "pending": progress.get("pending", 0),
+        "in_progress": progress.get("in_progress", 0),
+        "is_complete": progress["is_complete"],
+        "failures": failures,
+    }
+    return not failures, report
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -560,6 +616,9 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                     "collection kernel, under the market.db writer lock.")
     parser.add_argument("--run-id", required=True,
                         help="Manifest run id. Reuse it with --resume to continue.")
+    parser.add_argument("--verify-only", action="store_true",
+                        help="Read-only Stop D gate: validate this run's header "
+                             "and job ledger, then exit 0/1 without provider calls.")
     parser.add_argument("--canary", type=int, default=None,
                         help="Only the lexicographically first N targets (smoke test).")
     parser.add_argument("--resume", action="store_true",
@@ -589,6 +648,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
             parser.error("--as-of must be YYYY-MM-DD, got {!r}".format(args.as_of))
     if args.canary is not None and args.canary <= 0:
         parser.error("--canary must be a positive integer")
+    if args.verify_only and (
+            args.canary is not None or args.resume or args.dry_run
+            or args.no_lock or args.include_historical or args.as_of):
+        parser.error("--verify-only cannot be combined with collection options")
     return args
 
 
@@ -596,6 +659,15 @@ def main(argv: Optional[List[str]] = None) -> None:
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     args = parse_args(argv)
+
+    if args.verify_only:
+        store = MarketStore(read_only=True)
+        try:
+            ok, report = check_run_gate(store, args.run_id)
+            print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+        finally:
+            store.close()
+        sys.exit(EXIT_OK if ok else EXIT_PARTIAL)
 
     from src.data.fmp_client import FMPClient
 

@@ -48,8 +48,35 @@ def test_explicit_override_can_resolve_known_name_mismatch_group():
         profiles_by_symbol={"GS": common, "GS-PA": preferred})}
 
     assert out["GS"].eligible is True and out["GS"].reason == "ok"
-    assert out["GS-PA"].reason == "secondary_share_class"
-    assert out["GS-PA"].share_class_of == "GS"
+    assert out["GS-PA"].reason == "non_common_instrument"
+    assert out["GS-PA"].share_class_of is None
+
+
+@pytest.mark.parametrize("profile", [
+    {
+        "symbol": "MER-PK",
+        "companyName": (
+            "Bank of America Corp 6.45 % Notes 2018-15.12.66 "
+            "Income Capital Obligations"
+        ),
+        "cik": "1382664", "exchange": "NYSE", "isEtf": False,
+        "isFund": False, "marketCap": 189_605_812_000,
+    },
+    {
+        "symbol": "SATA", "companyName": "Strive Inc. Perp. Pfd. Series A",
+        "cik": "1920406", "exchange": "NASDAQ", "isEtf": False,
+        "isFund": False, "marketCap": 69_810_603_859,
+    },
+    {
+        "symbol": "FITB-PM", "companyName": "Fifth Third Bancorp",
+        "cik": "35527", "exchange": "NYSE", "isEtf": False,
+        "isFund": False, "marketCap": 51_408_207_397,
+    },
+])
+def test_explicit_non_common_instruments_are_blocked_before_grouping(profile):
+    rec = classify_security(profile)
+    assert rec.eligible is False
+    assert rec.reason == "non_common_instrument"
 
 
 def test_production_overrides_cover_audited_common_equity_groups():
@@ -81,7 +108,7 @@ def test_null_override_blocks_group_without_common_equity_even_as_singleton():
         profiles_by_symbol={"ATHS": preferred})
 
     assert out[0].eligible is False
-    assert out[0].reason == "identity_conflict"
+    assert out[0].reason == "non_common_instrument"
 
 
 def test_no_override_falls_to_mktcap_then_needs_review():
@@ -123,6 +150,48 @@ def test_mktcap_tiebreak_picks_primary_without_override():
     assert out["YY-B"].reason == "secondary_share_class" and out["YY-B"].share_class_of == "YY-A"
 
 
+def test_share_class_primary_uses_liquidity_before_issuer_level_market_cap():
+    """FMP copies issuer-level market cap onto preferred/depositary classes.
+
+    Production evidence: FITB-PM had a larger reported marketCap than FITB,
+    while FITB traded roughly 180x more shares. The common listing must win.
+    """
+    profiles = {
+        "FITB": {
+            "symbol": "FITB", "companyName": "Fifth Third Bancorp",
+            "cik": "35527", "exchange": "NASDAQ", "isEtf": False,
+            "isFund": False, "marketCap": 49_394_004_000,
+            "averageVolume": 6_455_520,
+        },
+        "FITB-PM": {
+            "symbol": "FITB-PM", "companyName": "Fifth Third Bancorp",
+            "cik": "35527", "exchange": "NYSE", "isEtf": False,
+            "isFund": False, "marketCap": 51_408_207_397,
+            "averageVolume": 35_709,
+        },
+        "FITBI": {
+            "symbol": "FITBI", "companyName": "Fifth Third Bancorp",
+            "cik": "35527", "exchange": "NASDAQ", "isEtf": False,
+            "isFund": False, "marketCap": 51_027_235_354,
+            "averageVolume": 34_845,
+        },
+        "FITBM": {
+            "symbol": "FITBM", "companyName": "Fifth Third Bancorp",
+            "cik": "35527", "exchange": "NASDAQ", "isEtf": False,
+            "isFund": False, "marketCap": 23_563_958_782,
+            "averageVolume": 57_582,
+        },
+    }
+    out = {r.symbol: r for r in resolve_share_classes(
+        [classify_security(p) for p in profiles.values()], overrides={},
+        profiles_by_symbol=profiles)}
+
+    assert out["FITB"].eligible is True and out["FITB"].reason == "ok"
+    assert out["FITB-PM"].reason == "non_common_instrument"
+    assert out["FITBI"].share_class_of == "FITB"
+    assert out["FITBM"].share_class_of == "FITB"
+
+
 def test_coreweave_class_descriptor_names_normalize_equal_not_identity_conflict():
     # Real FMP payload (main repo, symbol CRWV, cik 0001769628): companyName
     # "CoreWeave, Inc. Class A Common Stock". The suffix descriptor sits
@@ -157,11 +226,10 @@ def test_wise_group_plc_class_descriptor_names_normalize_equal_not_identity_conf
     assert out["WSE-B"].reason == "secondary_share_class" and out["WSE-B"].share_class_of == "WSE"
 
 
-def test_volavg_tiebreak_restricted_to_mktcap_leaders():
-    # A and B are tied at the top mktCap; C has a strictly lower mktCap but
-    # the highest volAvg of all three. The brief's cascade is nested: volAvg
-    # only breaks a tie AMONG the mktCap leaders, so C (not an mktCap leader)
-    # must not win primary despite having the largest volAvg overall.
+def test_volavg_is_primary_signal_even_when_reported_market_cap_is_lower():
+    # FMP marketCap is issuer-level and can differ nonsensically across share
+    # classes. The most liquid listing is therefore the primary signal; mktCap
+    # is only a fallback when volume is absent/tied.
     a = {"symbol": "ZA", "companyName": "Zz Corp.", "cik": "42",
          "exchange": "NYSE", "isEtf": False, "isFund": False,
          "marketCap": 100, "averageVolume": 200}
@@ -174,6 +242,6 @@ def test_volavg_tiebreak_restricted_to_mktcap_leaders():
     recs = [classify_security(a), classify_security(b), classify_security(c)]
     out = {r.symbol: r for r in resolve_share_classes(
         recs, overrides={}, profiles_by_symbol={"ZA": a, "ZB": b, "ZC": c})}
-    assert out["ZB"].reason == "ok" and out["ZB"].eligible is True
-    assert out["ZA"].reason == "secondary_share_class" and out["ZA"].share_class_of == "ZB"
-    assert out["ZC"].reason == "secondary_share_class" and out["ZC"].share_class_of == "ZB"
+    assert out["ZC"].reason == "ok" and out["ZC"].eligible is True
+    assert out["ZA"].reason == "secondary_share_class" and out["ZA"].share_class_of == "ZC"
+    assert out["ZB"].reason == "secondary_share_class" and out["ZB"].share_class_of == "ZC"

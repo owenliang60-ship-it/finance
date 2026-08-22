@@ -23,8 +23,8 @@ class TestBenchmarkConfig:
 
 class TestUpdateAllPricesIncludesBenchmarks:
     @patch("src.data.price_fetcher.fetch_and_update_price")
-    @patch("src.data.price_fetcher.get_symbols", return_value=["AAPL", "NVDA"])
-    def test_benchmarks_added_to_symbols(self, mock_get_symbols, mock_fetch):
+    @patch("src.data.price_fetcher.get_fmp_price_targets", return_value=["AAPL", "NVDA"])
+    def test_benchmarks_added_to_symbols(self, mock_targets, mock_fetch):
         """update_all_prices() should include SPY and QQQ even if not in pool."""
         import pandas as pd
         mock_fetch.return_value = pd.DataFrame({"close": [100]})
@@ -40,8 +40,8 @@ class TestUpdateAllPricesIncludesBenchmarks:
         assert "NVDA" in fetched_symbols
 
     @patch("src.data.price_fetcher.fetch_and_update_price")
-    @patch("src.data.price_fetcher.get_symbols", return_value=["AAPL", "SPY"])
-    def test_no_duplicate_when_benchmark_already_in_pool(self, mock_get_symbols, mock_fetch):
+    @patch("src.data.price_fetcher.get_fmp_price_targets", return_value=["AAPL", "SPY"])
+    def test_no_duplicate_when_benchmark_already_in_pool(self, mock_targets, mock_fetch):
         """If SPY is already in pool, it should not be fetched twice."""
         import pandas as pd
         mock_fetch.return_value = pd.DataFrame({"close": [100]})

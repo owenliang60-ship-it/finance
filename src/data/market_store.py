@@ -2320,14 +2320,15 @@ class MarketStore:
 
     _SM_REASONS = frozenset({
         "ok", "etf", "fund", "secondary_share_class", "identity_conflict",
-        "needs_review_primary", "missing_profile",
+        "needs_review_primary", "missing_profile", "non_common_instrument",
     })
     _SM_IDENTITY_BLOCKED_REASONS = frozenset({
         "etf", "fund", "secondary_share_class", "identity_conflict",
+        "non_common_instrument",
     })
 
     def upsert_security_master(self, records: List[Dict]) -> int:
-        """SM upsert：symbol 非空 + eligible∈{0,1} + reason 白名单七值，坏行整批拒绝
+        """SM upsert：symbol 非空 + eligible∈{0,1} + reason 白名单，坏行整批拒绝
 
         （照抄 upsert_fmp_estimates 模式：事务前全量校验，事务内逐行写入）。
         """
