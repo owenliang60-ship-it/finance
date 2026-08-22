@@ -1401,6 +1401,62 @@ fundamental cron 前，首个周六必须同时核对 weekly/fundamental 两份�
 
 验收：smoke 打印 "schema ok"、7 表存在、bootstrap exit 0、eligible 数在 900-1000 合理区间、needs_review 清单 Boss 已过目、watchlist 迁移清单过目、备份 integrity ok。
 
+#### Stop C.5: identity hardening 上线后的强制全量重分类（本次 rollout 必跑）
+
+> **为什么必须有这一步**：生产 Stop C 已在旧代码 `bb5da49` 上完成。旧
+> `security_master` 已把 BAC/MS/KEY/KIM/MAA/WBS/REXR/FITB 等普通股标成自家
+> preferred 的 secondary，并留下 preferred/notes 的 eligible 行。周频
+> `bootstrap_entrants` 只处理 entrant 与其 incumbent group，不会遍历并重新
+> classify 全部既有 SM 行；只部署新规则不能修复现存分母。
+
+以下步骤必须在 hardening 分支获批 merge/push/deploy **之后、任何 Stop D canary
+之前**执行；命令严禁带 `--current-only` 或 `--limit`：
+
+```bash
+# 1. 部署已批准的 hardening commit 后，全量三源 bootstrap（约 45-50 分钟）
+ssh aliyun "cd /root/workspace/Finance && \
+  FINANCE_CRON_RESOURCE_KEY=market_db_writer FINANCE_CRON_LOCK_BUSY_RC=75 \
+  scripts/cron_wrapper.sh manual_identity_rebootstrap cron_identity_rebootstrap.log \
+  python3 scripts/bootstrap_security_master.py"
+
+# 2. 旧错主类与非普通股 gate；任一 assert 失败都禁止进入 Stop D
+ssh aliyun "cd /root/workspace/Finance && python3 - <<'EOF'
+import sqlite3
+c = sqlite3.connect('file:data/market.db?mode=ro', uri=True)
+expected_common = {
+    'BAC','MS','KEY','KIM','MAA','WBS','REXR','FITB',
+    'HBAN','PPL','LEN','WSO','Z','BF-B','HEI','MKC','NWSA','BBD','AQN',
+}
+blocked_non_common = {
+    'AMH-PH','APO-PA','BAC-PL','CMS-PB','FITB-PM','KEY-PI','KIM-PL',
+    'MAA-PI','MER-PK','MS-PE','REXR-PB','RF-PC','SATA','WBS-PF','WFC-PC',
+}
+state = {r[0]: (r[1], r[2]) for r in c.execute(
+    'select symbol, eligible, reason from security_master '
+    'where symbol in (%s)' % ','.join('?' * len(expected_common)),
+    sorted(expected_common))}
+bad_common = {s: state.get(s) for s in expected_common
+              if state.get(s) != (1, 'ok')}
+still_eligible = [r[0] for r in c.execute(
+    'select symbol from security_master where eligible=1 and symbol in (%s)'
+    % ','.join('?' * len(blocked_non_common)), sorted(blocked_non_common))]
+active = c.execute(
+    'select count(*) from extended_membership where effective_to is null').fetchone()[0]
+print('active', active, 'bad_common', bad_common,
+      'still_eligible_non_common', still_eligible)
+assert not bad_common
+assert not still_eligible
+EOF"
+
+# 3. 重新生成 post-hardening pre-backfill backup + quick_check。
+#    旧 2026-08-21 backup 是 pre-hardening 状态，不得作为 Stop D rollback 基线。
+# 4. ./sync_to_cloud.sh --pull，把纠正后的 market.db 拉回本地再复核。
+```
+
+验收：全量 bootstrap exit 0；上述两组 assert 全过；新 pre-backfill backup
+`quick_check=ok`；本地/云端 `security_master`、active membership count 一致。完成前
+Stop D 保持暂停。
+
 ### Stop D: Backfill（runner 内建 flock，nohup 安全）
 
 ```bash

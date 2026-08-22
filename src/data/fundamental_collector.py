@@ -219,7 +219,9 @@ def collect_fundamentals_for_symbol(symbol: str, *, client: Any, store: MarketSt
                                     job_writer: Optional[Callable] = None,
                                     dataset_keys: Optional[List[str]] = None,
                                     ) -> Dict[str, str]:
-    """Collect every dataset for one symbol. THE fundamentals write path.
+    """Collect the requested datasets for one symbol (all five by default).
+
+    THE fundamentals write path.
 
     Args:
         symbol: ticker; upper-cased before any write.
@@ -243,7 +245,7 @@ def collect_fundamentals_for_symbol(symbol: str, *, client: Any, store: MarketSt
             retain the full five-dataset collection.
 
     Returns:
-        {dataset: status} for every dataset in DATASETS, status ∈
+        {dataset: status} for every selected dataset, status ∈
         {ok, provider_empty, fetch_failed}. Cross-dataset atomicity is
         explicitly NOT provided: partial states are the point — resume only
         re-collects what failed.

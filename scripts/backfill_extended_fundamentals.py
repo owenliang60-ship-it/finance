@@ -485,10 +485,9 @@ def _drive(*, run_id: str, store: MarketStore, client: Any, targets: List[str],
 
         def _job_writer(conn, dataset, status, detail=None, _symbol=symbol,
                         _claimed=claimed_set):
-            # The kernel walks all five datasets; on a resume only some are
-            # ours. Writing the others would reset a terminal job's status and
-            # inflate its attempts, so they are skipped here — the data write
-            # itself is an idempotent upsert and does no harm.
+            # The kernel is scoped to this claimed subset. Keep the membership
+            # check as a defensive invariant so a future collector change can
+            # never reset a terminal job or inflate its attempts.
             if dataset not in _claimed:
                 return
             store.complete_job_in_conn(conn, run_id, _symbol, dataset,

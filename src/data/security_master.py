@@ -36,6 +36,9 @@ _NON_COMMON_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 
+PRIMARY_METRIC_VOLUME = "volume"
+PRIMARY_METRIC_MARKET_CAP = "market_cap"
+
 
 def _field(profile: dict, *candidates: str) -> Any:
     """Return the first present, non-None value among candidate field names.
@@ -150,6 +153,31 @@ def _unique_max_symbol(values: dict) -> Optional[str]:
     return winners[0] if len(winners) == 1 else None
 
 
+def _pick_primary_and_metric(members, profiles_by_symbol: dict):
+    """Return `(winner, deciding_metric)` for the frozen metric cascade."""
+    volume_values = _metric_values(
+        members, profiles_by_symbol, "volAvg", "averageVolume")
+    winner = _unique_max_symbol(volume_values)
+    if winner is not None:
+        return winner, PRIMARY_METRIC_VOLUME
+
+    market_cap_values = _metric_values(
+        members, profiles_by_symbol, "mktCap", "marketCap")
+    winner = _unique_max_symbol(market_cap_values)
+    return winner, (PRIMARY_METRIC_MARKET_CAP if winner is not None else None)
+
+
+def selection_metric_for_share_classes(members, profiles_by_symbol: dict) -> Optional[str]:
+    """Which metric actually decided this group, or None if neither did.
+
+    Entrant settlement reuses this result to decide whether an established
+    primary lost on evidence or merely lacked the metric that selected the
+    entrant. Keeping the ruling here prevents its safety guard from drifting
+    away from the primary-selection cascade again.
+    """
+    return _pick_primary_and_metric(members, profiles_by_symbol)[1]
+
+
 def _pick_primary_by_metrics(members, profiles_by_symbol: dict) -> Optional[str]:
     """Choose the primary listing by liquidity, then market cap as fallback.
 
@@ -159,15 +187,7 @@ def _pick_primary_by_metrics(members, profiles_by_symbol: dict) -> Optional[str]
     or tied, a unique market-cap leader remains a useful fallback; otherwise
     the caller parks the whole group for review.
     """
-    volume_values = _metric_values(
-        members, profiles_by_symbol, "volAvg", "averageVolume")
-    winner = _unique_max_symbol(volume_values)
-    if winner is not None:
-        return winner
-
-    market_cap_values = _metric_values(
-        members, profiles_by_symbol, "mktCap", "marketCap")
-    return _unique_max_symbol(market_cap_values)
+    return _pick_primary_and_metric(members, profiles_by_symbol)[0]
 
 
 def resolve_share_classes(records, overrides: dict, profiles_by_symbol: dict) -> list:
