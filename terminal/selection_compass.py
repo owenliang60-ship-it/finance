@@ -164,6 +164,22 @@ def _raw_inputs_ready(income_rows: Any) -> Dict[str, Any]:
         if gap_days <= 0 or gap_days > FUNDAMENTAL_QUARTER_GAP_MAX_DAYS:
             return _raw_not_ready("quarter_gap")
 
+    fiscal_quarters = []
+    for _, row in first_five:
+        period = row.get("period")
+        if period not in {"Q1", "Q2", "Q3", "Q4"}:
+            return _raw_not_ready("invalid_fiscal_period")
+        try:
+            fiscal_year = int(float(row.get("fiscal_year")))
+        except (TypeError, ValueError):
+            return _raw_not_ready("invalid_fiscal_period")
+        fiscal_quarters.append(fiscal_year * 4 + int(period[1]) - 1)
+    if any(
+        newer != older + 1
+        for newer, older in zip(fiscal_quarters, fiscal_quarters[1:])
+    ):
+        return _raw_not_ready("fiscal_quarter_sequence")
+
     current = first_five[0][1]
     prior = first_five[1][1]
     base = first_five[3][1]

@@ -198,6 +198,20 @@ def test_raw_inputs_reject_quarter_gap_above_shared_maximum():
     assert _raw_inputs_ready(rows)["ready"] is False
 
 
+@pytest.mark.parametrize(
+    ("row_index", "period"),
+    [
+        (1, "Q2"),  # duplicate current label instead of prior Q1
+        (3, "Q2"),  # skip/misorder the Q-3 label instead of Q3
+    ],
+)
+def test_raw_inputs_require_sequential_fiscal_quarter_labels(row_index, period):
+    rows = _income_rows()
+    rows[row_index]["period"] = period
+
+    assert _raw_inputs_ready(rows)["ready"] is False
+
+
 def test_nonpositive_net_income_base_is_ready_but_cagr_fails_business_gate():
     rows = _income_rows()
     rows[3]["net_income"] = -10.0
