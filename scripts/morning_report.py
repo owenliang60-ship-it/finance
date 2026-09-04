@@ -484,6 +484,51 @@ def _compute_signal_betas(
     return betas
 
 
+def _load_selection_compass_market_cap_observations(
+    store,
+    symbols: list[str],
+    as_of: str,
+) -> dict[str, dict]:
+    """Load each symbol's latest dated market-cap observation at ``as_of``.
+
+    The existing bulk helper intentionally returns values only; the compass
+    freshness gate also needs the observation date, so keep this read local
+    and query the already-open MarketStore connection without mutating it.
+    """
+    universe = sorted(set(symbols))
+    if not universe:
+        return {}
+
+    conn = store._get_conn()
+    observations = {}
+    chunk_size = 500
+    for start in range(0, len(universe), chunk_size):
+        chunk = universe[start:start + chunk_size]
+        placeholders = ",".join("?" for _ in chunk)
+        rows = conn.execute(
+            f"""
+            SELECT symbol, date, market_cap
+            FROM (
+                SELECT symbol, date, market_cap,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY symbol ORDER BY date DESC
+                       ) AS rn
+                FROM historical_market_cap
+                WHERE symbol IN ({placeholders})
+                  AND date <= ?
+            )
+            WHERE rn = 1
+            """,
+            (*chunk, as_of),
+        ).fetchall()
+        for row in rows:
+            observations[row["symbol"]] = {
+                "date": row["date"],
+                "marketCap": row["market_cap"],
+            }
+    return observations
+
+
 def _load_market_timing_target_frames(
     targets: list[str] | None = None,
     rows_needed: int = MARKET_TIMING_PRICE_ROWS,
@@ -1117,8 +1162,12 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     from src.indicators.pmarp import analyze_pmarp
     from src.indicators.rvol_sustained import scan_rvol_sustained
 
+    selection_compass_reason = None
     try:
         pool_symbols = set(current_base_universe())
+        selection_compass_symbols = sorted(pool_symbols)
+        if not selection_compass_symbols:
+            selection_compass_reason = "empty_universe"
     except Exception as e:
         # R3 迁移期兼容：current_base_universe() 在 SM/extended_membership 尚未
         # bootstrap 时 fail-loud 抛 RuntimeError（本 worktree 的骨架 DB 即此状
@@ -1131,6 +1180,8 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
             "current_base_universe unavailable, falling back to legacy pool symbols: %s", e
         )
         pool_symbols = set(get_symbols())
+        selection_compass_symbols = []
+        selection_compass_reason = "universe_resolver_error"
     if symbols_override:
         symbols = sorted({s.strip().upper() for s in symbols_override if s.strip()})
         store = get_store()
@@ -1228,6 +1279,69 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     scan_dates = [frame.index.max() for frame in price_frames.values() if not frame.empty]
     as_of = max(scan_dates).date().isoformat() if scan_dates else date.today().isoformat()
 
+    if selection_compass_reason:
+        selection_compass = {
+            "available": False,
+            "reason": selection_compass_reason,
+            "coverage": {
+                "fundamental_ready": {"covered": 0, "total": 0, "ratio": 0.0},
+                "rvol_ready": {"covered": 0, "total": 0, "ratio": 0.0},
+            },
+            "hits": [],
+        }
+    else:
+        from terminal.selection_compass import scan_selection_compass
+
+        try:
+            selection_store = get_store()
+            selection_compass = scan_selection_compass(
+                store=selection_store,
+                symbols=selection_compass_symbols,
+                as_of=as_of,
+                price_frames=price_frames,
+                market_cap_observations=(
+                    _load_selection_compass_market_cap_observations(
+                        selection_store,
+                        selection_compass_symbols,
+                        as_of,
+                    )
+                ),
+            )
+            compass_hits = selection_compass.get("hits", [])
+            compass_hit_symbols = [hit["symbol"] for hit in compass_hits]
+            compass_betas = (
+                _compute_signal_betas(price_frames, compass_hit_symbols)
+                if compass_hit_symbols
+                else {}
+            )
+            selection_compass = dict(selection_compass)
+            selection_compass["hits"] = [
+                {
+                    **hit,
+                    "beta_6m": compass_betas.get(hit["symbol"]),
+                }
+                for hit in compass_hits
+            ]
+        except Exception as exc:
+            logger.warning("selection compass unavailable: %s", exc)
+            selection_compass = {
+                "available": False,
+                "reason": "selection_compass_error",
+                "coverage": {
+                    "fundamental_ready": {
+                        "covered": 0,
+                        "total": len(selection_compass_symbols),
+                        "ratio": 0.0,
+                    },
+                    "rvol_ready": {
+                        "covered": 0,
+                        "total": len(selection_compass_symbols),
+                        "ratio": 0.0,
+                    },
+                },
+                "hits": [],
+            }
+
     try:
         volconc_frames = _load_volume_concentration_frames()
         if volconc_frames.get("available"):
@@ -1247,6 +1361,7 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         "symbols_with_data": len(price_frames),
         "market_timing_factor": build_market_timing_factor_report(),
         "volume_concentration": volconc,
+        "selection_compass": selection_compass,
         "layer_counts": {
             layer: sum(
                 1 for symbol in symbols
