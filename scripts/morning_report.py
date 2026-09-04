@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 
 EXTENDED_LAYER_MIN_MCAP = EXTENDED_UNIVERSE_MIN_MCAP_B * 1_000_000_000
 MORNING_SIGNAL_PRICE_ROWS = 180
+SELECTION_COMPASS_PRICE_ROWS = 127
 BETA_BENCHMARK = "SPY"   # 6 个月 beta 的回归基准（daily_price 始终含 SPY，price_fetcher.py:100）
 LAYER_ORDER = ["extend"]  # R3: pool/extend merged into one layer (Task 15)
 LAYER_LABELS = {
@@ -1156,6 +1157,7 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     from scripts.broad_market_scan import (
         fetch_universe_metadata,
         load_price_frames,
+        load_price_frames_from_market_db,
     )
     from src.data.market_store import get_store
     from src.indicators.dv_acceleration import scan_dv_acceleration
@@ -1221,6 +1223,25 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     _merge_local_metadata(metadata, symbols)
 
     price_frames = load_price_frames(symbols, rows_needed=MORNING_SIGNAL_PRICE_ROWS)
+    selection_compass_price_frames = {
+        symbol: price_frames[symbol]
+        for symbol in selection_compass_symbols
+        if symbol in price_frames
+    }
+    if not selection_compass_reason:
+        missing_compass_symbols = sorted(
+            set(selection_compass_symbols) - set(selection_compass_price_frames)
+        )
+        if missing_compass_symbols:
+            try:
+                selection_compass_price_frames.update(
+                    load_price_frames_from_market_db(
+                        missing_compass_symbols,
+                        rows_needed=SELECTION_COMPASS_PRICE_ROWS,
+                    )
+                )
+            except Exception as exc:
+                logger.warning("selection compass DB price supplement failed: %s", exc)
     price_dict = {
         symbol: _frame_with_date(symbol, frame)
         for symbol, frame in price_frames.items()
@@ -1298,7 +1319,7 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
                 store=selection_store,
                 symbols=selection_compass_symbols,
                 as_of=as_of,
-                price_frames=price_frames,
+                price_frames=selection_compass_price_frames,
                 market_cap_observations=(
                     _load_selection_compass_market_cap_observations(
                         selection_store,
@@ -1310,7 +1331,10 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
             compass_hits = selection_compass.get("hits", [])
             compass_hit_symbols = [hit["symbol"] for hit in compass_hits]
             compass_betas = (
-                _compute_signal_betas(price_frames, compass_hit_symbols)
+                _compute_signal_betas(
+                    selection_compass_price_frames,
+                    compass_hit_symbols,
+                )
                 if compass_hit_symbols
                 else {}
             )

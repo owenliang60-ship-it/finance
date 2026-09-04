@@ -3152,6 +3152,142 @@ def _stub_compass_builder_dependencies(monkeypatch, *, frames, pmarp=None, dv=No
 
 
 class TestSelectionCompassWiring:
+    def test_compass_supplements_127_row_base_symbol_db_only_without_technical_leakage(
+        self, monkeypatch
+    ):
+        technical_frame = _compass_price_frame("2026-09-03")
+        compass_only_frame = _compass_price_frame("2026-09-03").iloc[-150:]
+        shared_calls = []
+        db_only_calls = []
+        technical_inputs = {}
+
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["BASE"])
+        monkeypatch.setattr(
+            mr,
+            "get_symbols",
+            lambda: pytest.fail("strict resolver success must not use legacy symbols"),
+        )
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.fetch_universe_metadata",
+            lambda **kw: {
+                "stocks": {
+                    "METADATA_ONLY": {
+                        "marketCap": 50e9,
+                        "shortName": "Metadata Only",
+                        "longName": "Metadata Only",
+                        "exchange": "DB",
+                    }
+                }
+            },
+        )
+
+        def fake_shared_loader(symbols, *, rows_needed):
+            shared_calls.append((list(symbols), rows_needed))
+            # BASE has 150 rows: enough for compass, not enough for the shared
+            # 180-row technical scan, so the shared loader omits it.
+            return {"METADATA_ONLY": technical_frame}
+
+        def fake_db_only_loader(symbols, *, rows_needed):
+            db_only_calls.append((list(symbols), rows_needed))
+            return {"BASE": compass_only_frame}
+
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.load_price_frames", fake_shared_loader
+        )
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.load_price_frames_from_market_db",
+            fake_db_only_loader,
+        )
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.download_price_frames",
+            lambda *a, **kw: pytest.fail("compass supplement must never call yfinance"),
+        )
+        monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
+        monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
+        monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
+        monkeypatch.setattr(mr, "_load_market_db_broad_price_frames", lambda *a, **kw: {})
+        monkeypatch.setattr(
+            "src.indicators.pmarp.analyze_pmarp",
+            lambda *a, **kw: {"signal": "neutral", "current": None, "previous": None},
+        )
+
+        def fake_dv_scan(price_dict, **kwargs):
+            technical_inputs["dv"] = set(price_dict)
+            return pd.DataFrame()
+
+        def fake_rvol_scan(price_dict, **kwargs):
+            technical_inputs["rvol"] = set(price_dict)
+            return []
+
+        monkeypatch.setattr(
+            "src.indicators.dv_acceleration.scan_dv_acceleration", fake_dv_scan
+        )
+        monkeypatch.setattr(
+            "src.indicators.rvol_sustained.scan_rvol_sustained", fake_rvol_scan
+        )
+        monkeypatch.setattr(
+            mr,
+            "_load_volume_concentration_frames",
+            lambda: {"available": False, "reason": "test"},
+        )
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "CREATE TABLE historical_market_cap "
+            "(symbol TEXT, date TEXT, market_cap REAL, PRIMARY KEY(symbol, date))"
+        )
+        conn.execute(
+            "INSERT INTO historical_market_cap VALUES (?, ?, ?)",
+            ("BASE", "2026-09-03", 42e9),
+        )
+
+        class FakeStore:
+            def _get_conn(self):
+                return conn
+
+        from src.data import market_store as ms_mod
+
+        monkeypatch.setattr(ms_mod, "get_store", lambda: FakeStore())
+        scanner_inputs = {}
+
+        def fake_scan(**kwargs):
+            scanner_inputs.update(kwargs)
+            return {
+                "available": True,
+                "reason": None,
+                "coverage": {},
+                "hits": [{"symbol": "BASE", "marketCap": 42e9}],
+            }
+
+        monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", fake_scan)
+        beta_inputs = {}
+
+        def fake_betas(frames, symbols):
+            if symbols:
+                beta_inputs["frames"] = frames
+                beta_inputs["symbols"] = list(symbols)
+            return {symbol: 1.4 for symbol in symbols}
+
+        monkeypatch.setattr(mr, "_compute_signal_betas", fake_betas)
+
+        result = mr.build_market_signal_report()
+
+        assert shared_calls == [(["BASE", "METADATA_ONLY"], 180)]
+        assert db_only_calls == [(["BASE"], 127)]
+        assert scanner_inputs["symbols"] == ["BASE"]
+        assert set(scanner_inputs["price_frames"]) == {"BASE"}
+        assert scanner_inputs["price_frames"]["BASE"] is compass_only_frame
+        assert beta_inputs == {
+            "frames": {"BASE": compass_only_frame},
+            "symbols": ["BASE"],
+        }
+        assert technical_inputs == {
+            "dv": {"METADATA_ONLY"},
+            "rvol": {"METADATA_ONLY"},
+        }
+        assert result["selection_compass"]["hits"][0]["beta_6m"] == 1.4
+
     def test_strict_universe_success_uses_exact_current_base(self, monkeypatch):
         frames = {"ACTIVE": _compass_price_frame(), "METADATA_ONLY": _compass_price_frame()}
         _stub_compass_builder_dependencies(monkeypatch, frames=frames)
