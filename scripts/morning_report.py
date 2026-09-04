@@ -1539,6 +1539,106 @@ def format_section_volume_concentration(payload: dict) -> str:
     return "\n".join(lines)
 
 
+SELECTION_COMPASS_COLUMNS = [
+    "标的", "EPS YoY", "EPS QoQ", "营收4Q CAGR", "净利4Q CAGR",
+    "成长均值", "近7日最高RVOL", "触发日", "当前市值", "β6M",
+]
+SELECTION_COMPASS_WIDTHS = [180, 150, 150, 190, 190, 160, 210, 160, 170, 120]
+
+
+def _format_compass_growth(value: float | None, turnaround: bool = False) -> str:
+    if turnaround:
+        return "扭亏"
+    if value is None or pd.isna(value):
+        return "—"
+    return "{:.1%}".format(value)
+
+
+def _selection_compass_coverage_subtitle(coverage: dict | None) -> str:
+    coverage = coverage or {}
+    fundamental = coverage.get("fundamental_ready") or {}
+    rvol = coverage.get("rvol_ready") or {}
+    return "Extended 扫描覆盖：基本面 {}/{} | RVOL {}/{}".format(
+        fundamental.get("covered", 0),
+        fundamental.get("total", 0),
+        rvol.get("covered", 0),
+        rvol.get("total", 0),
+    )
+
+
+def _selection_compass_display(payload: dict | None) -> dict:
+    """Build the shared display contract for text, HTML and visual faces."""
+    if payload is None:
+        return {
+            "state": "hidden",
+            "subtitle": "",
+            "columns": SELECTION_COMPASS_COLUMNS,
+            "rows": [],
+        }
+    payload = payload or {}
+    coverage_subtitle = _selection_compass_coverage_subtitle(payload.get("coverage"))
+    if not payload.get("available"):
+        return {
+            "state": "warning",
+            "subtitle": coverage_subtitle,
+            "warning": "⚠️ 选股罗盘不可用（{}）".format(
+                payload.get("reason") or "unknown"
+            ),
+            "columns": SELECTION_COMPASS_COLUMNS,
+            "rows": [],
+        }
+
+    hits = sorted(
+        payload.get("hits") or [],
+        key=lambda hit: (-(hit.get("marketCap") or 0), hit.get("symbol", "")),
+    )
+    if not hits:
+        return {
+            "state": "hidden",
+            "subtitle": coverage_subtitle,
+            "columns": SELECTION_COMPASS_COLUMNS,
+            "rows": [],
+        }
+
+    rows = []
+    for hit in hits:
+        rows.append([
+            hit.get("symbol", ""),
+            _format_compass_growth(
+                hit.get("eps_yoy_growth"), hit.get("eps_yoy_turnaround", False)
+            ),
+            _format_compass_growth(
+                hit.get("eps_qoq_growth"), hit.get("eps_qoq_turnaround", False)
+            ),
+            _format_compass_growth(hit.get("revenue_cagr_4q")),
+            _format_compass_growth(hit.get("net_income_cagr_4q")),
+            _format_compass_growth(hit.get("growth_avg_4q")),
+            "{:.2f}σ".format(hit.get("rvol_max_7d")),
+            hit.get("rvol_trigger_date") or "—",
+            _format_market_cap(hit.get("marketCap")),
+            _format_beta(hit.get("beta_6m")),
+        ])
+    return {
+        "state": "table",
+        "subtitle": coverage_subtitle,
+        "columns": SELECTION_COMPASS_COLUMNS,
+        "rows": rows,
+    }
+
+
+def format_section_selection_compass(payload: dict | None) -> str:
+    display = _selection_compass_display(payload)
+    if display["state"] == "hidden":
+        return ""
+    lines = ["*0c. 选股罗盘*"]
+    if display["state"] == "warning":
+        lines.extend([display["warning"], display["subtitle"]])
+        return "\n".join(lines)
+    lines.extend([display["subtitle"], " | ".join(display["columns"])])
+    lines.extend(" | ".join(row) for row in display["rows"])
+    return "\n".join(lines)
+
+
 def _pmarp_signal_cap_groups(hits: list) -> list:
     """纯分组：返回 [(signal_label, tier_label, sorted_hits), ...]，空组已抑制。
     供文本/视觉/HTML 三处复用——HTML renderer 消费其输出，不反向 import morning_report。"""
@@ -1977,6 +2077,27 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
             "subtitle": "成交集中度: 数据不足（{}）".format(volconc_display["reason"]),
         })
 
+    compass_display = _selection_compass_display(
+        (market_signals or {}).get("selection_compass")
+    )
+    if compass_display["state"] == "table":
+        blocks.append({
+            "heading": "0c. 选股罗盘",
+            "subtitle": compass_display["subtitle"],
+            "columns": compass_display["columns"],
+            "rows": [
+                dict(zip(compass_display["columns"], row))
+                for row in compass_display["rows"]
+            ],
+        })
+    elif compass_display["state"] == "warning":
+        blocks.append({
+            "heading": "0c. 选股罗盘",
+            "subtitle": "{} | {}".format(
+                compass_display["warning"], compass_display["subtitle"]
+            ),
+        })
+
     blocks.append({"heading": "1. PMARP 信号"})
 
     # PMARP — signal -> cap-tier sub-blocks (columns one-to-one with text)
@@ -2138,6 +2259,37 @@ def build_morning_visual_sections(
                 "slug": "00b_volume_concentration",
                 "title": "0b. 成交集中度",
                 "subtitle": "成交集中度: 数据不足（{}）".format(volconc_display["reason"]),
+                "blocks": [],
+            })
+
+        compass_display = _selection_compass_display(
+            market_signals.get("selection_compass")
+        )
+        if compass_display["state"] == "table":
+            sections.append({
+                "slug": "00c_selection_compass",
+                "title": "0c. 选股罗盘",
+                "subtitle": compass_display["subtitle"],
+                "blocks": [
+                    {
+                        "title": "当前命中（按市值降序）",
+                        "columns": compass_display["columns"],
+                        "widths": SELECTION_COMPASS_WIDTHS,
+                        "grouped": False,
+                        "rows": [
+                            {"cells": row}
+                            for row in compass_display["rows"]
+                        ],
+                    },
+                ],
+            })
+        elif compass_display["state"] == "warning":
+            sections.append({
+                "slug": "00c_selection_compass",
+                "title": "0c. 选股罗盘",
+                "subtitle": "{} | {}".format(
+                    compass_display["warning"], compass_display["subtitle"]
+                ),
                 "blocks": [],
             })
 
@@ -2799,6 +2951,13 @@ def format_morning_report(
         lines.append(format_section_volume_concentration(
             market_signals.get("volume_concentration", {})))
         lines.append("")
+
+        compass_text = format_section_selection_compass(
+            market_signals.get("selection_compass")
+        )
+        if compass_text:
+            lines.append(compass_text)
+            lines.append("")
 
         lines.append(format_section_pmarp_by_signal_and_cap(market_signals))
         lines.append("")

@@ -3393,3 +3393,217 @@ class TestSelectionCompassWiring:
             "hits": [],
         }
         assert loaded.get("symbols", []) == expected_legacy_symbols or expected_reason == "empty_universe"
+
+
+# ============================================================
+# Selection compass Task 3 — text / HTML / visual rendering
+# Plan: docs/plans/2026-09-04-selection-compass-morning-report.md
+# ============================================================
+
+
+_SELECTION_COMPASS_COLUMNS = [
+    "标的", "EPS YoY", "EPS QoQ", "营收4Q CAGR", "净利4Q CAGR",
+    "成长均值", "近7日最高RVOL", "触发日", "当前市值", "β6M",
+]
+_SELECTION_COMPASS_WIDTHS = [180, 150, 150, 190, 190, 160, 210, 160, 170, 120]
+
+
+def _selection_compass_payload(*, available=True, reason=None, hits=None):
+    return {
+        "available": available,
+        "reason": reason,
+        "coverage": {
+            "fundamental_ready": {"covered": 19, "total": 20, "ratio": 0.95},
+            "rvol_ready": {"covered": 20, "total": 20, "ratio": 1.0},
+        },
+        "hits": hits or [],
+    }
+
+
+def _selection_compass_hit(
+    symbol,
+    market_cap,
+    *,
+    yoy=0.25,
+    qoq=0.30,
+    yoy_turnaround=False,
+    qoq_turnaround=False,
+    beta=1.25,
+):
+    return {
+        "symbol": symbol,
+        "eps_yoy_growth": yoy,
+        "eps_yoy_turnaround": yoy_turnaround,
+        "eps_qoq_growth": qoq,
+        "eps_qoq_turnaround": qoq_turnaround,
+        "revenue_cagr_4q": 0.18,
+        "net_income_cagr_4q": 0.22,
+        "growth_avg_4q": 0.20,
+        "rvol_max_7d": 2.75,
+        "rvol_trigger_date": "2026-09-02",
+        "marketCap": market_cap,
+        "beta_6m": beta,
+    }
+
+
+class TestFormatSelectionCompassText:
+    def test_exact_columns_formats_and_market_cap_order(self):
+        payload = _selection_compass_payload(hits=[
+            _selection_compass_hit(
+                "SMALL", 20e9, yoy=None, yoy_turnaround=True, beta=None,
+            ),
+            _selection_compass_hit(
+                "BIG", 2e12, qoq=None, qoq_turnaround=True, beta=1.23,
+            ),
+        ])
+
+        text = mr.format_section_selection_compass(payload)
+
+        lines = text.splitlines()
+        assert lines[0] == "*0c. 选股罗盘*"
+        assert lines[1] == "Extended 扫描覆盖：基本面 19/20 | RVOL 20/20"
+        assert lines[2] == " | ".join(_SELECTION_COMPASS_COLUMNS)
+        rows = lines[3:]
+        assert [row.split(" | ")[0] for row in rows] == ["BIG", "SMALL"]
+        assert all(len(row.split(" | ")) == 10 for row in rows)
+        assert rows[0].split(" | ") == [
+            "BIG", "25.0%", "扭亏", "18.0%", "22.0%", "20.0%",
+            "2.75σ", "2026-09-02", "$2.0T", "1.23",
+        ]
+        assert rows[1].split(" | ") == [
+            "SMALL", "扭亏", "30.0%", "18.0%", "22.0%", "20.0%",
+            "2.75σ", "2026-09-02", "$20.0B", "—",
+        ]
+
+
+class TestBuildHtmlPayloadSelectionCompass:
+    def test_exact_block_after_0b_with_columns_rows_and_order(self):
+        ms = _make_market_signals()
+        ms["selection_compass"] = _selection_compass_payload(hits=[
+            _selection_compass_hit("SMALL", 20e9, yoy=None, yoy_turnaround=True),
+            _selection_compass_hit("BIG", 2e12, qoq=None, qoq_turnaround=True),
+        ])
+
+        payload = mr.build_html_payload(ms, None, as_of="2026-09-03")
+
+        headings = [block.get("heading") for block in payload["blocks"]]
+        assert headings.index("0b. 成交集中度") < headings.index("0c. 选股罗盘")
+        assert headings.index("0c. 选股罗盘") < headings.index("1. PMARP 信号")
+        block = next(
+            block for block in payload["blocks"]
+            if block.get("heading") == "0c. 选股罗盘"
+        )
+        assert block["subtitle"] == "Extended 扫描覆盖：基本面 19/20 | RVOL 20/20"
+        assert block["columns"] == _SELECTION_COMPASS_COLUMNS
+        assert [row["标的"] for row in block["rows"]] == ["BIG", "SMALL"]
+        assert list(block["rows"][0]) == _SELECTION_COMPASS_COLUMNS
+        assert list(block["rows"][0].values()) == [
+            "BIG", "25.0%", "扭亏", "18.0%", "22.0%", "20.0%",
+            "2.75σ", "2026-09-02", "$2.0T", "1.25",
+        ]
+
+
+class TestBuildMorningVisualSectionsSelectionCompass:
+    def test_exact_ten_column_section_before_pmarp_without_zip_truncation(self):
+        ms = _make_market_signals()
+        ms["selection_compass"] = _selection_compass_payload(hits=[
+            _selection_compass_hit("SMALL", 20e9),
+            _selection_compass_hit("BIG", 2e12, qoq=None, qoq_turnaround=True),
+        ])
+
+        sections = mr.build_morning_visual_sections(
+            market_signals=ms, dv_result=None
+        )
+
+        slugs = [section["slug"] for section in sections]
+        assert slugs.index("00b_volume_concentration") < slugs.index(
+            "00c_selection_compass"
+        )
+        assert slugs.index("00c_selection_compass") < slugs.index("01_pmarp")
+        section = next(
+            section for section in sections
+            if section["slug"] == "00c_selection_compass"
+        )
+        assert section["title"] == "0c. 选股罗盘"
+        assert section["subtitle"] == "Extended 扫描覆盖：基本面 19/20 | RVOL 20/20"
+        assert len(section["blocks"]) == 1
+        block = section["blocks"][0]
+        assert block["grouped"] is False
+        assert block["columns"] == _SELECTION_COMPASS_COLUMNS
+        assert block["widths"] == _SELECTION_COMPASS_WIDTHS
+        assert len(block["columns"]) == len(block["widths"]) == 10
+        assert [row["cells"][0] for row in block["rows"]] == ["BIG", "SMALL"]
+        assert all(len(row["cells"]) == len(block["columns"]) for row in block["rows"])
+        assert block["rows"][0]["cells"] == [
+            "BIG", "25.0%", "扭亏", "18.0%", "22.0%", "20.0%",
+            "2.75σ", "2026-09-02", "$2.0T", "1.25",
+        ]
+
+
+class TestSelectionCompassSharedVisibility:
+    def test_healthy_no_hits_hides_section_across_all_surfaces(self):
+        ms = _make_market_signals()
+        ms["selection_compass"] = _selection_compass_payload(hits=[])
+
+        text = mr.format_morning_report(market_signals=ms, elapsed=1)
+        html = mr.build_html_payload(ms, None, as_of="2026-09-03")
+        visual = mr.build_morning_visual_sections(
+            market_signals=ms, dv_result=None
+        )
+
+        assert "选股罗盘" not in text
+        assert all(block.get("heading") != "0c. 选股罗盘" for block in html["blocks"])
+        assert all(section["slug"] != "00c_selection_compass" for section in visual)
+
+    def test_unavailable_warns_and_never_renders_partial_rows_across_all_surfaces(self):
+        partial = _selection_compass_hit("MUST_NOT_RENDER", 2e12)
+        compass = _selection_compass_payload(
+            available=False,
+            reason="fundamental_coverage_below_threshold",
+            hits=[partial],
+        )
+        compass["coverage"]["fundamental_ready"] = {
+            "covered": 18, "total": 20, "ratio": 0.90,
+        }
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+
+        text = mr.format_morning_report(market_signals=ms, elapsed=1)
+        html = mr.build_html_payload(ms, None, as_of="2026-09-03")
+        visual = mr.build_morning_visual_sections(
+            market_signals=ms, dv_result=None
+        )
+
+        warning = "⚠️ 选股罗盘不可用（fundamental_coverage_below_threshold）"
+        coverage = "Extended 扫描覆盖：基本面 18/20 | RVOL 20/20"
+        assert warning in text
+        assert coverage in text
+        assert "MUST_NOT_RENDER" not in text
+
+        html_block = next(
+            block for block in html["blocks"]
+            if block.get("heading") == "0c. 选股罗盘"
+        )
+        assert html_block["subtitle"] == "{} | {}".format(warning, coverage)
+        assert not html_block.get("columns")
+        assert not html_block.get("rows")
+        assert "MUST_NOT_RENDER" not in str(html_block)
+
+        visual_section = next(
+            section for section in visual
+            if section["slug"] == "00c_selection_compass"
+        )
+        assert visual_section["subtitle"] == "{} | {}".format(warning, coverage)
+        assert visual_section["blocks"] == []
+        assert "MUST_NOT_RENDER" not in str(visual_section)
+
+    def test_table_section_order_in_full_text_report(self):
+        ms = sample_market_signals()
+        ms["selection_compass"] = _selection_compass_payload(
+            hits=[_selection_compass_hit("BIG", 2e12)]
+        )
+
+        text = mr.format_morning_report(market_signals=ms, elapsed=1)
+
+        assert text.index("0b. 成交集中度") < text.index("0c. 选股罗盘")
+        assert text.index("0c. 选股罗盘") < text.index("1. PMARP 信号")
