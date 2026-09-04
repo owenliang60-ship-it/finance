@@ -1,7 +1,7 @@
 # 056 — Extended 8Q continuity gate conflates structural reporters with missing data
 
-**Date:** 2026-09-05  
-**Status:** Open — independent follow-up required  
+**Date:** 2026-09-05
+**Status:** Open — independent follow-up required
 **Discovered during:** Selection Compass full fundamental backfill
 
 ## Symptom
