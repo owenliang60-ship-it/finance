@@ -3574,7 +3574,7 @@ class TestSelectionCompassSharedVisibility:
             market_signals=ms, dv_result=None
         )
 
-        warning = "⚠️ 选股罗盘不可用（fundamental_coverage_below_threshold）"
+        warning = "⚠️ 选股罗盘不可用（基本面覆盖不足）"
         coverage = "Extended 扫描覆盖：基本面 18/20 | RVOL 20/20"
         assert warning in text
         assert coverage in text
@@ -3607,3 +3607,48 @@ class TestSelectionCompassSharedVisibility:
 
         assert text.index("0b. 成交集中度") < text.index("0c. 选股罗盘")
         assert text.index("0c. 选股罗盘") < text.index("1. PMARP 信号")
+
+    @pytest.mark.parametrize(
+        ("reason", "label"),
+        [
+            ("fundamental_coverage_below_threshold", "基本面覆盖不足"),
+            ("rvol_coverage_below_threshold", "RVOL 覆盖不足"),
+            ("market_cap_unavailable", "当前市值数据不足"),
+            ("empty_universe", "股票池读取异常"),
+            ("universe_resolver_error", "股票池读取异常"),
+            ("fundamental_store_error", "筛选计算异常"),
+            ("selection_compass_error", "筛选计算异常"),
+            ("unexpected_new_reason", "暂时无法生成"),
+            (None, "暂时无法生成"),
+        ],
+    )
+    def test_unavailable_reason_is_localized_and_raw_code_hidden_on_all_surfaces(
+        self, reason, label
+    ):
+        ms = _make_market_signals()
+        ms["selection_compass"] = _selection_compass_payload(
+            available=False, reason=reason
+        )
+
+        text = mr.format_morning_report(market_signals=ms, elapsed=1)
+        html = mr.build_html_payload(ms, None, as_of="2026-09-03")
+        visual = mr.build_morning_visual_sections(
+            market_signals=ms, dv_result=None
+        )
+
+        warning = "⚠️ 选股罗盘不可用（{}）".format(label)
+        html_block = next(
+            block for block in html["blocks"]
+            if block.get("heading") == "0c. 选股罗盘"
+        )
+        visual_section = next(
+            section for section in visual
+            if section["slug"] == "00c_selection_compass"
+        )
+        assert warning in text
+        assert warning in html_block["subtitle"]
+        assert warning in visual_section["subtitle"]
+        if reason:
+            assert reason not in text
+            assert reason not in str(html_block)
+            assert reason not in str(visual_section)

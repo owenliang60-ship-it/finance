@@ -1544,6 +1544,17 @@ SELECTION_COMPASS_COLUMNS = [
     "成长均值", "近7日最高RVOL", "触发日", "当前市值", "β6M",
 ]
 SELECTION_COMPASS_WIDTHS = [180, 150, 150, 190, 190, 160, 210, 160, 170, 120]
+SELECTION_COMPASS_REASON_LABELS = {
+    "fundamental_coverage_below_threshold": "基本面覆盖不足",
+    "rvol_coverage_below_threshold": "RVOL 覆盖不足",
+    "market_cap_unavailable": "当前市值数据不足",
+    "empty_universe": "股票池读取异常",
+    "universe_resolver_error": "股票池读取异常",
+    "fundamental_store_error": "筛选计算异常",
+    "selection_compass_error": "筛选计算异常",
+    "scanner_error": "筛选计算异常",
+    "store_error": "筛选计算异常",
+}
 
 
 def _format_compass_growth(value: float | None, turnaround: bool = False) -> str:
@@ -1566,6 +1577,10 @@ def _selection_compass_coverage_subtitle(coverage: dict | None) -> str:
     )
 
 
+def _selection_compass_reason_label(reason: str | None) -> str:
+    return SELECTION_COMPASS_REASON_LABELS.get(reason, "暂时无法生成")
+
+
 def _selection_compass_display(payload: dict | None) -> dict:
     """Build the shared display contract for text, HTML and visual faces."""
     if payload is None:
@@ -1582,7 +1597,7 @@ def _selection_compass_display(payload: dict | None) -> dict:
             "state": "warning",
             "subtitle": coverage_subtitle,
             "warning": "⚠️ 选股罗盘不可用（{}）".format(
-                payload.get("reason") or "unknown"
+                _selection_compass_reason_label(payload.get("reason"))
             ),
             "columns": SELECTION_COMPASS_COLUMNS,
             "rows": [],
