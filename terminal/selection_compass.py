@@ -70,6 +70,32 @@ def _evaluate_cagr_growth(
     return {"passes": average >= threshold, "growth_avg_4q": average}
 
 
+def _evaluate_growth(raw: Dict[str, Any], metric: Dict[str, Any]) -> Dict[str, Any]:
+    """Choose turnaround endpoint growth or the existing CAGR gate, exclusively.
+
+    Validated quarters are newest first. Each of the four target quarters is
+    compared to its predecessor, including Q-3 against the fifth (Q-4) row.
+    """
+    incomes = [float(row["net_income"]) for row in raw["quarters"]]
+    turned = any(newer > 0 and older <= 0 for newer, older in zip(incomes, incomes[1:]))
+    if turned:
+        return {
+            "growth_route": "turnaround",
+            "passes": (
+                incomes[0] > 0
+                and incomes[0] > incomes[3]
+                and float(raw["current"]["revenue"]) > float(raw["base"]["revenue"])
+            ),
+            "growth_avg_4q": None,
+        }
+    return {
+        "growth_route": "cagr",
+        **_evaluate_cagr_growth(
+            metric.get("revenue_cagr_4q"), metric.get("net_income_cagr_4q"),
+        ),
+    }
+
+
 def _empty_rvol_result() -> Dict[str, Any]:
     return {
         "ready": False,
@@ -168,6 +194,7 @@ def _raw_not_ready(reason: str) -> Dict[str, Any]:
         "prior": None,
         "yoy": None,
         "base": None,
+        "quarters": [],
     }
 
 
@@ -242,8 +269,7 @@ def _raw_inputs_ready(income_rows: Any) -> Dict[str, Any]:
         yoy.get("eps_diluted"),
         current.get("revenue"),
         base.get("revenue"),
-        current.get("net_income"),
-        base.get("net_income"),
+        *(row.get("net_income") for _, row in first_five),
     )
     if not all(_is_present_number(value) for value in required_values):
         return _raw_not_ready("missing_raw_value")
@@ -255,6 +281,7 @@ def _raw_inputs_ready(income_rows: Any) -> Dict[str, Any]:
         "prior": prior,
         "yoy": yoy,
         "base": base,
+        "quarters": [row for _, row in first_five],
     }
 
 
@@ -413,10 +440,7 @@ def scan_selection_compass(
             prior=raw["prior"]["eps_diluted"],
             yoy=raw["yoy"]["eps_diluted"],
         )
-        growth = _evaluate_cagr_growth(
-            metric.get("revenue_cagr_4q"),
-            metric.get("net_income_cagr_4q"),
-        )
+        growth = _evaluate_growth(raw, metric)
         if not eps["passes"] or not growth["passes"]:
             continue
         hits.append(
@@ -426,8 +450,15 @@ def scan_selection_compass(
                 "eps_yoy_turnaround": eps["eps_yoy_turnaround"],
                 "eps_qoq_growth": eps["eps_qoq_growth"],
                 "eps_qoq_turnaround": eps["eps_qoq_turnaround"],
-                "revenue_cagr_4q": float(metric["revenue_cagr_4q"]),
-                "net_income_cagr_4q": float(metric["net_income_cagr_4q"]),
+                "revenue_cagr_4q": (
+                    float(metric["revenue_cagr_4q"])
+                    if _is_present_number(metric.get("revenue_cagr_4q")) else None
+                ),
+                "net_income_cagr_4q": (
+                    float(metric["net_income_cagr_4q"])
+                    if _is_present_number(metric.get("net_income_cagr_4q")) else None
+                ),
+                "growth_route": growth["growth_route"],
                 "growth_avg_4q": growth["growth_avg_4q"],
                 "rvol_max_7d": rvol["rvol_max_7d"],
                 "rvol_trigger_date": rvol["rvol_trigger_date"],

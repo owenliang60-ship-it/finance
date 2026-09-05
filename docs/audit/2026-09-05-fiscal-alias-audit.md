@@ -2,7 +2,7 @@
 
 Date: 2026-09-05
 
-Status: current-quarter repair completed in production at 09:04 CST; turnaround-rule wording remains pending user clarification.
+Status: current-quarter repair completed in production at 09:04 CST; Boss confirmed overall four-quarter growth, and the turnaround-rule implementation passed local verification at 10:18 CST (deployment pending below).
 
 ## Scope and cause
 
@@ -93,3 +93,14 @@ choice is resolved. Existing EPS, RVOL and EMA30 gates remain in force.
 - Authoritative DB pulled locally; local health check passed at 09:07. No extra group report sent.
 - A later local HMC read revealed a bad downloaded snapshot despite that narrow health check. Cloud remained healthy; immutable SQLite backup transfer and hash-verified publication restored the local snapshot (issue 059). Full read-only builder/render replay then passed with SNDK and its beta present.
 - Recomputed old-growth-rule comparison after repair: 79 fundamentals-only, 54 fundamentals+EMA30 without RVOL, six standard compass hits. BE rule still awaits clarification.
+
+## Turnaround growth — clarification and verification, 10:18 CST
+
+Boss confirmed “只要求四季整体上升”. The new route checks for net income crossing from nonpositive to positive in any of the latest four quarters, including the oldest target quarter against its predecessor. Latest revenue and net income must both exceed the oldest of those four quarters, with latest net income positive. Interior declines are allowed. No turnaround means the original average-CAGR >=15% gate; failed turnaround endpoint growth cannot fall back to CAGR. EPS, RVOL, EMA30, GAAP basis and beta remain unchanged.
+
+- TDD: 13 expected RED failures, then 233 passed / 1 skipped for the complete compass and morning-report test files. Covers middle-quarter decline, oldest-quarter turnaround, endpoint equality/decline, missing NI history, unchanged other gates and all three display contracts. The growth-summary cell reads `扭亏成长`; undefined CAGR remains `—`.
+- Real 2026-09-04 replay: fundamentals-only **79→103**; fundamentals+EMA30 without RVOL **54→69**, no removals. Added: BAX, BE, EQNR, HALO, IVZ, LYB, PKX, SITM, SKM, SMTC, SYM, TEAM, TEM, VNOM, YPF.
+- Full compass remains **6**: SNDK, SU, OKTA, BEKE, NTNX, FIVE. SNDK now displays the turnaround route; its numeric CAGR observations remain visible.
+- BE: new fundamental route passes; EPS QoQ +169.57% and YoY turnaround pass; close 252.869995 > EMA30 222.069637. RVOL max7=0.525165σ remains below 2σ, so it joins the no-RVOL list, not the full compass.
+- Current local snapshot resolves 934 active eligible members, with fundamental-ready890/934 and RVOL/EMA30-ready924/934 in the production builder. Comparing old and new raw-readiness predicates on the same current snapshot yields **zero changed stocks**: the lower denominator/coverage than the 09:07 repair snapshot is not caused by this rule change.
+- Read-only complete builder + HTML render passed, all six hits retained nonmissing beta; output `reports/rendered/turnaround-check/morning_report_2026-09-04.html` in the worktree. No market.db writes, DV recollection or Telegram send.

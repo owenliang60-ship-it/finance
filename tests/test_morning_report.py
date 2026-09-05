@@ -3677,6 +3677,23 @@ class TestBuildMorningVisualSectionsSelectionCompass:
 
 
 class TestSelectionCompassSharedVisibility:
+    def test_turnaround_route_label_and_undefined_cagr_on_all_surfaces(self):
+        hit = _selection_compass_hit("BE", 20e9)
+        hit.update(growth_route="turnaround", net_income_cagr_4q=None, growth_avg_4q=None)
+        compass = _selection_compass_payload(hits=[hit])
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+        text = mr.format_section_selection_compass(compass)
+        html = next(b for b in mr.build_html_payload(ms, None, "2026-09-03")["blocks"]
+                    if b.get("heading") == "0c. 选股罗盘")
+        visual = next(s for s in mr.build_morning_visual_sections(ms, None)
+                      if s["slug"] == "00c_selection_compass")
+        rows = [text.splitlines()[-1].split(" | "), list(html["rows"][0].values()),
+                visual["blocks"][0]["rows"][0]["cells"]]
+        for row in rows:
+            assert len(row) == 10
+            assert row[4:6] == ["—", "扭亏成长"]
+
     def test_ema30_rule_and_readiness_visible_on_all_report_surfaces(self):
         compass = _selection_compass_payload(hits=[_selection_compass_hit("BIG", 2e12)])
         compass["coverage"]["ema30_ready"] = {"covered": 20, "total": 20, "ratio": 1.0}

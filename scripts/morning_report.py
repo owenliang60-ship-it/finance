@@ -1659,7 +1659,8 @@ def _selection_compass_display(payload: dict | None) -> dict:
             ),
             _format_compass_growth(hit.get("revenue_cagr_4q")),
             _format_compass_growth(hit.get("net_income_cagr_4q")),
-            _format_compass_growth(hit.get("growth_avg_4q")),
+            ("扭亏成长" if hit.get("growth_route") == "turnaround"
+             else _format_compass_growth(hit.get("growth_avg_4q"))),
             "{:.2f}σ".format(hit.get("rvol_max_7d")),
             hit.get("rvol_trigger_date") or "—",
             _format_market_cap(hit.get("marketCap")),
