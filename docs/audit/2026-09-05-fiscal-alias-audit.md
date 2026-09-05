@@ -2,7 +2,7 @@
 
 Date: 2026-09-05
 
-Status: current-quarter repair completed in production at 09:04 CST; Boss confirmed overall four-quarter growth, and the turnaround-rule implementation passed local verification at 10:18 CST (deployment pending below).
+Status: current-quarter repair completed in production at 09:04 CST; Boss confirmed overall four-quarter growth, and the turnaround rule is deployed and production-verified at 10:20 CST (`3b68433`).
 
 ## Scope and cause
 
@@ -75,10 +75,10 @@ BE income from 2025 Q3 through 2026 Q2 (USD millions):
 | 2026 Q1 | 751.054 | 70.653 |
 | 2026 Q2 | 1065.365 | 196.290 |
 
-Net income increases every quarter, but revenue falls once. Boss has been asked
-whether “持续增加” is strict quarter-on-quarter growth or allows an intermediate
-decline with overall growth. No dependent rule change is deployed before that
-choice is resolved. Existing EPS, RVOL and EMA30 gates remain in force.
+Net income increases every quarter, but revenue falls once. The initial question
+was whether “持续增加” meant strict quarter-on-quarter growth. Boss subsequently
+confirmed overall growth with intermediate declines allowed; implementation and
+production verification are recorded below. EPS, RVOL and EMA30 remain in force.
 
 ## Production completion evidence
 
@@ -92,7 +92,7 @@ choice is resolved. Existing EPS, RVOL and EMA30 gates remain in force.
 - SNDK YoY is turnaround, EPS QoQ 94.66%, revenue 4Q compound growth 57.19%, net-income 295.01%, mean 176.10%; latest price 1740 > EMA30 1528.06 and RVOL 2.0049. Raw formula checks passed independently.
 - Authoritative DB pulled locally; local health check passed at 09:07. No extra group report sent.
 - A later local HMC read revealed a bad downloaded snapshot despite that narrow health check. Cloud remained healthy; immutable SQLite backup transfer and hash-verified publication restored the local snapshot (issue 059). Full read-only builder/render replay then passed with SNDK and its beta present.
-- Recomputed old-growth-rule comparison after repair: 79 fundamentals-only, 54 fundamentals+EMA30 without RVOL, six standard compass hits. BE rule still awaits clarification.
+- Recomputed old-growth-rule comparison after repair: 79 fundamentals-only, 54 fundamentals+EMA30 without RVOL, six standard compass hits. This was the pre-clarification baseline.
 
 ## Turnaround growth — clarification and verification, 10:18 CST
 
@@ -104,3 +104,4 @@ Boss confirmed “只要求四季整体上升”. The new route checks for net i
 - BE: new fundamental route passes; EPS QoQ +169.57% and YoY turnaround pass; close 252.869995 > EMA30 222.069637. RVOL max7=0.525165σ remains below 2σ, so it joins the no-RVOL list, not the full compass.
 - Current local snapshot resolves 934 active eligible members, with fundamental-ready890/934 and RVOL/EMA30-ready924/934 in the production builder. Comparing old and new raw-readiness predicates on the same current snapshot yields **zero changed stocks**: the lower denominator/coverage than the 09:07 repair snapshot is not caused by this rule change.
 - Read-only complete builder + HTML render passed, all six hits retained nonmissing beta; output `reports/rendered/turnaround-check/morning_report_2026-09-04.html` in the worktree. No market.db writes, DV recollection or Telegram send.
+- Deployment: implementation `28efad2`, merge `3b68433`, pushed to origin/main and fast-forwarded on aliyun. Python3 compile passed; cloud targeted tests **43 passed**. Production read-only screen + shared rendering reproduced the six names and coverage above, SNDK's `扭亏成长` label and all six betas; BE endpoint-growth/EMA passed and RVOL failed exactly as locally observed. No extra group message was sent.

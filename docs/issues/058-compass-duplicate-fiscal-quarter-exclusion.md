@@ -6,6 +6,8 @@ Status: current fiscal aliases repaired in the 2026-09-05 follow-up; financial-b
 
 Update 09:07: SNDK and the five other affected active Extended stocks were repaired using reviewed date mappings, a SQLite backup and atomic archival/metric recomputation. SNDK now qualifies in the standard six-hit compass. See `docs/audit/2026-09-05-fiscal-alias-audit.md`; the sections below preserve the initial diagnosis.
 
+Update 10:20: Boss's confirmed four-quarter overall-growth turnaround route is deployed (`3b68433`). BE now passes fundamentals+EMA30, but its max7 RVOL 0.525σ still fails the unchanged full-compass volume condition. No-RVOL list54→69; full compass remains6. GAAP basis remains unchanged.
+
 ## SNDK: duplicate representations of a fiscal quarter
 
 The production income table contains two FY2026 Q1 rows dated 2025-10-03 and

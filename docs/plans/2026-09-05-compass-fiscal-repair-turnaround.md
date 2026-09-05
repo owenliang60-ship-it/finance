@@ -54,12 +54,12 @@ Alternatives: changing the PK destructively or merely dropping duplicate rows in
 - [x] RED/GREEN repair: exact-hash mapping, idempotence, archive counts, current/metrics/vintage rollback on injected failure, full-history metrics recomputation and old-date removal.
 - [x] Resolve the turnaround continuity clarification: overall first-to-last growth, not monotonic QoQ growth.
 - [x] RED/GREEN branch routing, transition within four quarters, no-turnaround CAGR fallback, missing inputs and rendering label. 13 expected RED failures; final targeted suite 233 passed / 1 skipped. Extra positive-start/end decline case also covered.
-- [ ] Verify real BE and updated full/no-RVOL screens; deploy the rule and update task records.
+- [x] Verify real BE and updated full/no-RVOL screens; deploy the rule and update task records. Merge `3b68433`, cloud43 targeted tests passed; read-only production screen and shared display verified at 10:20 CST.
 - [x] Run relevant store/collector/metrics/compass/report suites and Python 3.10 syntax checks; broaden to full suite for shared writer change.
 - [x] Live backup under market_db_writer; freeze before rows, apply reviewed repair map; independently verify SNDK financial periods, counts and metrics; repeat full-pool alias scan.
-- [x] Merge/push/deploy data repair and read-only production screen/render verification. Do not recollect Dollar Volume or send another group report during smoke tests. Turnaround rule remains separately pending the clarification above.
+- [x] Merge/push/deploy data repair and read-only production screen/render verification. Do not recollect Dollar Volume or send another group report during smoke tests. The clarified turnaround rule was separately deployed in `3b68433`.
 - [x] Report repaired scope, unresolved stock conflicts, updated screening counts, artifacts and canonical task records.
 
 Data repair completed: merge `8895121`, 17 current source aliases removed/archived, 60 metrics rows rebuilt, 85 archive rows retained, current-base duplicate fiscal identities zero. SNDK is now in the normal six-hit compass. Post-repair no-RVOL counts are 79 fundamental passes and 54 fundamental+EMA30 passes. See `docs/audit/2026-09-05-fiscal-alias-audit.md` for source verification, backup, idempotence and tests.
 
-The BE growth-policy clarification is approved. Implementation and deployment now continue under this plan; EPS, RVOL, EMA30 and beta conventions remain unchanged.
+The BE growth-policy clarification is implemented and deployed. EPS, RVOL, EMA30 and beta conventions remain unchanged. No-RVOL fundamental+EMA hits increased 54→69; BE passes this list but still fails the full screen's RVOL gate. Full production compass remains six stocks.
