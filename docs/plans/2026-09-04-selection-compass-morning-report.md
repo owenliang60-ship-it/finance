@@ -110,8 +110,10 @@ flowchart LR
 - [x] raw EPS/CAGR 输入缺失、YoY fiscal-period 不匹配或季度间隔断裂计入 fundamental not-ready；真实存在但非正的 CAGR 基期计入 ready、业务不通过。
 - [x] Text、HTML、PNG/PDF 三面列完全一致。
 - [x] Targeted tests 全绿；全量测试相对 main 零新增失败（2811 passed / 4 skipped）。
-- [ ] 云端 Python 3.10 import/compile 通过，真实生产库 HTML dry-run 生成包含选股罗盘的 HTML；真实 PNG 与 PDF render smoke 证明 10 列未被截断且顺序一致。
-- [ ] `origin/main` 与云端 HEAD 一致，08:00 cron 命令保持原样，明早真投递后日志 exit 0。
+- [x] 云端 Python 3.10 import/compile 通过，真实生产库 HTML dry-run 生成包含选股罗盘的 HTML；真实 PNG 与 PDF render smoke 证明 10 列未被截断且顺序一致。
+- [x] `origin/main` 与云端 HEAD 一致，08:00 cron 命令保持原样，2026-09-05 08:01:22 真投递且 wrapper OK；08:03:12 补发成交额缓存更正版（issue057）。
+
+Final evidence: `docs/audit/2026-09-05-selection-compass-rollout.md`。正式报告为10只命中，基本面896/935、RVOL924/935；市值降序、Beta与所有增长/RVOL条件经过原始数据独立核算。
 
 ---
 
@@ -246,10 +248,10 @@ Exact columns:
 
 **Files:** No additional feature files unless deployment reveals a real defect.
 
-- [ ] **Step 1:** Show commit list and diff; verify only scoped files changed.
-- [ ] **Step 2:** Merge approved autonomous branch to `main`, push `origin/main` (Boss pre-authorized by “直接进入明天日报”).
-- [ ] **Step 3:** Cloud `git pull --ff-only`; Python 3.10 compile/import and targeted tests.
-- [ ] **Step 4:** Cloud production DB `--no-telegram --image-report --image-delivery html` dry-run; inspect HTML heading/rows/order/dual coverage. Separately render PNG/PDF and inspect 10-column table.
-- [ ] **Step 5:** Verify existing 08:00 cron still invokes HTML morning report and no schedule/resource collision exists.
-- [ ] **Step 6:** Wait on the exact 08:00 cron/log next morning; verify exit 0 and Telegram delivery path success.
-- [ ] **Step 7:** Update audit/ongoing/session digest and close execution state only after the real scheduled delivery is proven.
+- [x] **Step 1:** Show commit list and diff; verify only scoped files changed.
+- [x] **Step 2:** Merge approved autonomous branch to `main`, push `origin/main` (Boss pre-authorized by “直接进入明天日报”).
+- [x] **Step 3:** Cloud `git pull --ff-only`; Python 3.10 compile/import and targeted tests.
+- [x] **Step 4:** Cloud production DB `--no-telegram --image-report --image-delivery html` dry-run; inspect HTML heading/rows/order/dual coverage. Separately render PNG/PDF and inspect 10-column table.
+- [x] **Step 5:** Verify existing 08:00 cron still invokes HTML morning report and no schedule/resource collision exists.
+- [x] **Step 6:** Wait on the exact 08:00 cron/log next morning; verify exit 0 and Telegram delivery path success.
+- [x] **Step 7:** Update audit/ongoing/session digest and close execution state only after the real scheduled delivery is proven.
