@@ -626,3 +626,60 @@ class TestComputeAll:
         assert set(result) == {"GOOD1", "GOOD2"}
         assert failures == ["BAD"]
         assert isinstance(sum(result.values()), int)  # 旧调用方 sum() 兼容
+
+
+def test_fiscal_alignment_preserves_all_metrics_and_ttm_start_balances(store):
+    _seed_full_data(store)
+    compute_metrics("AAPL", store)
+    expected = store.get_metrics("AAPL")
+    # Provider tables can represent the same quarter using different end dates.
+    with store.transaction() as conn:
+        conn.execute("UPDATE balance_sheet_quarterly SET date=date(date,'+2 days')")
+        conn.execute("UPDATE cash_flow_quarterly SET date=date(date,'-1 day')")
+    before = store.get_balance_sheet("AAPL"), store.get_cash_flow("AAPL")
+    compute_metrics("AAPL", store)
+    assert store.get_metrics("AAPL") == expected  # Every metric, including TTM ROA/ROE.
+    assert (store.get_balance_sheet("AAPL"), store.get_cash_flow("AAPL")) == before
+
+
+@pytest.mark.parametrize("same_date", [True, False])
+def test_incomplete_fiscal_identity_allows_only_exact_date(store, same_date):
+    store.upsert_income("TEST", [{"date": "2025-10-03", "revenue": 100, "netIncome": 10}])
+    store.upsert_cash_flow("TEST", [{"date": "2025-10-03" if same_date else "2025-09-30",
+                                     "freeCashFlow": 15}])
+    compute_metrics("TEST", store)
+    assert store.get_metrics("TEST")[0]["fcf_margin"] == (0.15 if same_date else None)
+
+
+@pytest.mark.parametrize("defect", ["duplicate", "wrong_quarter", "currency", "distant_date"])
+def test_fiscal_match_conflicts_fail_before_metrics_write(store, defect):
+    _seed_full_data(store)
+    compute_metrics("AAPL", store)
+    before = store.get_metrics("AAPL")
+    # Bypass current-writer checks to simulate legacy/provider-conflicted data.
+    with store.transaction() as conn:
+        if defect == "duplicate":
+            duplicate = dict(store.get_balance_sheet("AAPL")[0], date="2024-09-30")
+            store._upsert_rows_in_conn(conn, "balance_sheet_quarterly", [duplicate])
+        elif defect == "wrong_quarter":
+            conn.execute("UPDATE balance_sheet_quarterly SET fiscal_year='2028' WHERE date='2024-09-28'")
+        elif defect == "currency":
+            conn.execute("UPDATE income_quarterly SET reported_currency='USD'")
+            conn.execute("UPDATE balance_sheet_quarterly SET reported_currency='EUR'")
+        else:
+            conn.execute("UPDATE balance_sheet_quarterly SET date='2025-09-28' WHERE date='2024-09-28'")
+    with pytest.raises(ValueError, match="fiscal|currency"):
+        compute_metrics("AAPL", store)
+    assert store.get_metrics("AAPL") == before
+
+
+def test_fiscal_alignment_does_not_take_same_day_row_from_another_quarter():
+    # Even if a correct different-date candidate exists, conflicting same-day
+    # identity is an inconsistency to resolve, not permission to select a winner.
+    income = [{"date": "2025-10-03", "fiscal_year": "2026", "period": "Q1"}]
+    rows = [
+        {"date": "2025-09-30", "fiscal_year": "2026", "period": "Q1"},
+        {"date": "2025-10-03", "fiscal_year": "2026", "period": "Q2"},
+    ]
+    with pytest.raises(ValueError, match="fiscal"):
+        mc._statement_by_income_date(income, rows, "balance")

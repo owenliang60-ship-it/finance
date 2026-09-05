@@ -11,8 +11,10 @@ Usage:
     compute_all_metrics()             # All stocks in DB
 """
 import logging
+from datetime import date as calendar_date
 from typing import Any, Dict, List, Optional
 
+from config.settings import FUNDAMENTAL_QUARTER_GAP_MAX_DAYS
 from src.data.market_store import get_store, MarketStore
 
 logger = logging.getLogger(__name__)
@@ -118,6 +120,51 @@ def _delta(current_val: Any, prior_val: Any) -> Optional[float]:
         return None
 
 
+def _statement_by_income_date(income: List[Dict], rows: List[Dict],
+                              statement: str) -> Dict[str, Dict]:
+    """Index validated counterpart quarters under income dates, without editing rows.
+
+    Fiscal identity handles calendar/fiscal-end aliases; incomplete identity only
+    permits the historical exact-date join. Conflicting evidence never picks an
+    arbitrary winner. Both current and TTM-start balance lookups use this index.
+    """
+    from src.data.fiscal_repair import _fiscal_key
+
+    by_date = {row["date"]: row for row in rows if row.get("date")}
+    by_fiscal = {}
+    for row in rows:
+        key = _fiscal_key(row)
+        if key is not None:
+            by_fiscal.setdefault(key, []).append(row)
+
+    aligned = {}
+    for inc in income:
+        income_date = inc.get("date")
+        if not income_date:
+            continue
+        key = _fiscal_key(inc)
+        exact = by_date.get(income_date)
+        exact_key = _fiscal_key(exact) if exact is not None else None
+        if key is not None and exact_key is not None and exact_key != key:
+            raise ValueError(f"{statement}: conflicting fiscal identity at {income_date}")
+        matches = by_fiscal.get(key, []) if key is not None else []
+        if len(matches) > 1:
+            raise ValueError(f"{statement}: ambiguous fiscal quarter {key}")
+        matched = matches[0] if matches else exact
+        if matched is None:
+            continue
+        if matched["date"] != income_date:
+            gap = abs((calendar_date.fromisoformat(matched["date"])
+                       - calendar_date.fromisoformat(income_date)).days)
+            if gap > FUNDAMENTAL_QUARTER_GAP_MAX_DAYS:
+                raise ValueError(f"{statement}: fiscal match dates too far apart for {key}")
+        currency, other_currency = inc.get("reported_currency"), matched.get("reported_currency")
+        if currency and other_currency and currency != other_currency:
+            raise ValueError(f"{statement}: currency conflict at {income_date}")
+        aligned[income_date] = matched
+    return aligned
+
+
 def compute_metrics(symbol: str, store: Optional[MarketStore] = None) -> int:
     """Compute all metrics for a single symbol and store in metrics_quarterly.
 
@@ -134,9 +181,10 @@ def compute_metrics(symbol: str, store: Optional[MarketStore] = None) -> int:
     if not income:
         return 0
 
-    # Build lookup dicts keyed by date for balance sheet and cash flow
-    bs_by_date: Dict[str, Dict] = {r["date"]: r for r in bs}
-    cf_by_date: Dict[str, Dict] = {r["date"]: r for r in cf}
+    # Keep formula lookups keyed by income date, but match sources by fiscal
+    # identity first. Raw statement dates remain untouched.
+    bs_by_date = _statement_by_income_date(income, bs, "balance")
+    cf_by_date = _statement_by_income_date(income, cf, "cashflow")
 
     results = []
 
