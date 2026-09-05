@@ -2,7 +2,9 @@
 
 Date: 2026-09-05
 
-Status: diagnosed; data normalization and business-rule changes are not part of the EMA30 increment.
+Status: current fiscal aliases repaired in the 2026-09-05 follow-up; financial-basis and turnaround-policy questions remain separate.
+
+Update 09:07: SNDK and the five other affected active Extended stocks were repaired using reviewed date mappings, a SQLite backup and atomic archival/metric recomputation. SNDK now qualifies in the standard six-hit compass. See `docs/audit/2026-09-05-fiscal-alias-audit.md`; the sections below preserve the initial diagnosis.
 
 ## SNDK: duplicate representations of a fiscal quarter
 
