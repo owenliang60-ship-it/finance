@@ -50,10 +50,14 @@ Alternatives: changing the PK destructively or merely dropping duplicate rows in
 
 ## TDD and acceptance checklist
 
-- [ ] RED/GREEN shared writer: equivalent aliases collapse, incoming conflicting fiscal keys reject, financial conflicts reject, other tables/symbols/older quarters remain intact, legacy and collector paths both covered.
-- [ ] RED/GREEN repair: exact-hash mapping, idempotence, archive counts, current/metrics/vintage rollback on injected failure, full-history metrics recomputation and old-date removal.
+- [x] RED/GREEN shared writer: equivalent aliases collapse, incoming conflicting fiscal keys reject, financial conflicts reject, other tables/symbols/older quarters remain intact, legacy and collector paths both covered.
+- [x] RED/GREEN repair: exact-hash mapping, idempotence, archive counts, current/metrics/vintage rollback on injected failure, full-history metrics recomputation and old-date removal.
 - [ ] Resolve the turnaround continuity clarification; RED/GREEN branch routing, negative-to-positive transition within four quarters, no-turnaround CAGR fallback, missing inputs and rendering label.
-- [ ] Run relevant store/collector/metrics/compass/report suites and Python 3.10 syntax checks; broaden to full suite for shared writer change.
-- [ ] Live backup under market_db_writer; freeze before rows, apply reviewed repair map; independently verify SNDK financial periods, counts and metrics; repeat full-pool alias scan.
-- [ ] Merge/push/deploy and read-only production screen/render verification. Do not recollect Dollar Volume or send another group report during smoke tests.
-- [ ] Report repaired scope, unresolved stock conflicts, updated screening counts, artifacts and canonical task records.
+- [x] Run relevant store/collector/metrics/compass/report suites and Python 3.10 syntax checks; broaden to full suite for shared writer change.
+- [x] Live backup under market_db_writer; freeze before rows, apply reviewed repair map; independently verify SNDK financial periods, counts and metrics; repeat full-pool alias scan.
+- [x] Merge/push/deploy data repair and read-only production screen/render verification. Do not recollect Dollar Volume or send another group report during smoke tests. Turnaround rule remains separately pending the clarification above.
+- [x] Report repaired scope, unresolved stock conflicts, updated screening counts, artifacts and canonical task records.
+
+Data repair completed: merge `8895121`, 17 current source aliases removed/archived, 60 metrics rows rebuilt, 85 archive rows retained, current-base duplicate fiscal identities zero. SNDK is now in the normal six-hit compass. Post-repair no-RVOL counts are 79 fundamental passes and 54 fundamental+EMA30 passes. See `docs/audit/2026-09-05-fiscal-alias-audit.md` for source verification, backup, idempotence and tests.
+
+The BE growth-policy step remains unimplemented because strict quarter-by-quarter growth conflicts with the example's revenue history; user clarification is pending. The existing growth rule remains deployed.

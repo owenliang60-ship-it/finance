@@ -2,7 +2,7 @@
 
 Date: 2026-09-05
 
-Status: reviewed mappings; production application pending verification.
+Status: current-quarter repair completed in production at 09:04 CST; turnaround-rule wording remains pending user clarification.
 
 ## Scope and cause
 
@@ -79,3 +79,17 @@ Net income increases every quarter, but revenue falls once. Boss has been asked
 whether “持续增加” is strict quarter-on-quarter growth or allows an intermediate
 decline with overall growth. No dependent rule change is deployed before that
 choice is resolved. Existing EPS, RVOL and EMA30 gates remain in force.
+
+## Production completion evidence
+
+- Data code `6ff07c7` plus prevalidation writer-lock fix `ae86757`; deployed merge `8895121`.
+- Full suite before the lock refinement: 2,864 passed, four skipped. Final affected suite: 269 passed. Cloud fiscal-repair suite: 37 passed. Both legacy and collector paths covered, including rollback and concurrent-write checks.
+- Staged DB repair: 17 groups, 17 source rows archived/removed, 60 metrics rows recomputed; idempotent replay reports 17 unchanged groups. SNDK became raw-input-ready and entered the normal EMA/RVOL compass.
+- Live SQLite backup under `market_db_writer`: `data/market.db.before-fiscal-alias-repair-20260905`, 1,015,717,888 bytes; quick_check=ok.
+- Production application at 09:04:27: 17 groups repaired, 17 source rows removed, 60 metrics rows recomputed. Archive contains 85 rows (17 source + 68 prior metrics). Prices and vintage counts unchanged; quick_check=ok; replay made zero changes.
+- Production scan as-of 2026-09-04: available=true; fundamental 898/935, RVOL and EMA30 924/935. Six hits in market-cap order: SNDK, SU, OKTA, BEKE, NTNX, FIVE.
+- Post-repair scan of all three statements and metrics: zero duplicate fiscal-key groups among active Extended members. Remaining historical/non-base duplicates: PSTG, STRC, STRF (cashflow: PSTG only).
+- SNDK YoY is turnaround, EPS QoQ 94.66%, revenue 4Q compound growth 57.19%, net-income 295.01%, mean 176.10%; latest price 1740 > EMA30 1528.06 and RVOL 2.0049. Raw formula checks passed independently.
+- Authoritative DB pulled locally; local health check passed at 09:07. No extra group report sent.
+- A later local HMC read revealed a bad downloaded snapshot despite that narrow health check. Cloud remained healthy; immutable SQLite backup transfer and hash-verified publication restored the local snapshot (issue 059). Full read-only builder/render replay then passed with SNDK and its beta present.
+- Recomputed old-growth-rule comparison after repair: 79 fundamentals-only, 54 fundamentals+EMA30 without RVOL, six standard compass hits. BE rule still awaits clarification.
