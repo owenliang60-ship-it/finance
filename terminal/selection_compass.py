@@ -10,6 +10,9 @@ import pandas as pd
 from config.settings import FUNDAMENTAL_QUARTER_GAP_MAX_DAYS
 from src.indicators.rvol import calculate_rvol_series
 
+EMA30_PERIOD = 30
+EMA30_COVERAGE_THRESHOLD = 0.95
+
 
 def _eps_leg(
     current: Any,
@@ -123,6 +126,38 @@ def _evaluate_rvol(
         "rvol_max_7d": maximum,
         "rvol_trigger_date": pd.Timestamp(trigger_date).date().isoformat(),
     }
+
+
+def _evaluate_ema30(frame: Any, *, as_of: str) -> Dict[str, Any]:
+    """Require the as-of close above its inclusive, recursive daily EMA30."""
+    unavailable = {"ready": False, "passes": False, "close": None, "ema30": None}
+    if not isinstance(frame, pd.DataFrame) or "close" not in frame.columns:
+        return unavailable
+    if "date" in frame.columns:
+        prices = frame.loc[:, ["date", "close"]].copy()
+    elif isinstance(frame.index, pd.DatetimeIndex):
+        prices = pd.DataFrame({"date": frame.index, "close": frame["close"].to_numpy(copy=True)})
+    else:
+        return unavailable
+    prices["date"] = pd.to_datetime(prices["date"], errors="coerce")
+    prices["close"] = pd.to_numeric(prices["close"], errors="coerce")
+    if (
+        len(prices) < EMA30_PERIOD
+        or prices["date"].isna().any()
+        or prices["date"].dt.normalize().duplicated().any()
+        or not prices["close"].map(_is_present_number).all()
+        or (prices["close"] <= 0).any()
+    ):
+        return unavailable
+    prices = prices.sort_values("date")
+    if prices["date"].iloc[-1].normalize() != pd.Timestamp(as_of).normalize():
+        return unavailable
+    # Same EMA convention as the existing PMARP indicator; includes today's close.
+    ema = float(prices["close"].ewm(
+        span=EMA30_PERIOD, adjust=False, min_periods=EMA30_PERIOD,
+    ).mean().iloc[-1])
+    close = float(prices["close"].iloc[-1])
+    return {"ready": True, "passes": close > ema, "close": close, "ema30": ema}
 
 
 def _raw_not_ready(reason: str) -> Dict[str, Any]:
@@ -289,6 +324,7 @@ def scan_selection_compass(
     empty_coverage = {
         "fundamental_ready": _coverage_stat(0, total),
         "rvol_ready": _coverage_stat(0, total),
+        "ema30_ready": _coverage_stat(0, total),
     }
     if not universe:
         return {
@@ -310,6 +346,7 @@ def scan_selection_compass(
 
     fundamental_results: Dict[str, Dict[str, Any]] = {}
     rvol_results: Dict[str, Dict[str, Any]] = {}
+    ema30_results: Dict[str, Dict[str, Any]] = {}
     for symbol in universe:
         try:
             income_rows = store.get_income(symbol, limit=20)
@@ -327,12 +364,14 @@ def scan_selection_compass(
             price_frames.get(symbol),
             as_of=as_of,
         )
+        ema30_results[symbol] = _evaluate_ema30(price_frames.get(symbol), as_of=as_of)
 
     fundamental_covered = sum(result["ready"] for result in fundamental_results.values())
     rvol_covered = sum(result["ready"] for result in rvol_results.values())
     coverage = {
         "fundamental_ready": _coverage_stat(fundamental_covered, total),
         "rvol_ready": _coverage_stat(rvol_covered, total),
+        "ema30_ready": _coverage_stat(sum(r["ready"] for r in ema30_results.values()), total),
     }
     if coverage["fundamental_ready"]["ratio"] < min_fundamental_coverage:
         return {
@@ -349,11 +388,23 @@ def scan_selection_compass(
             "hits": [],
         }
 
+    if coverage["ema30_ready"]["ratio"] < EMA30_COVERAGE_THRESHOLD:
+        return {
+            "available": False,
+            "reason": "ema30_coverage_below_threshold",
+            "coverage": coverage,
+            "hits": [],
+        }
+
     hits = []
     for symbol in universe:
         fundamental = fundamental_results[symbol]
         rvol = rvol_results[symbol]
-        if not fundamental["ready"] or not rvol["ready"] or not rvol["passes"]:
+        ema30 = ema30_results[symbol]
+        if (
+            not fundamental["ready"] or not rvol["ready"] or not rvol["passes"]
+            or not ema30["ready"] or not ema30["passes"]
+        ):
             continue
         raw = fundamental["raw"]
         metric = fundamental["metric"]
@@ -380,6 +431,8 @@ def scan_selection_compass(
                 "growth_avg_4q": growth["growth_avg_4q"],
                 "rvol_max_7d": rvol["rvol_max_7d"],
                 "rvol_trigger_date": rvol["rvol_trigger_date"],
+                "close": ema30["close"],
+                "ema30": ema30["ema30"],
             }
         )
 
