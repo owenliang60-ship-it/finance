@@ -1,7 +1,7 @@
 # 060 — Fiscal date alias repair loses cross-statement metrics
 
 Date: 2026-09-05
-Status: fixed in worktree; targeted tests and read-only data comparison passed. Merge/deployment pending approval.
+Status: code deployed in `c674f44` to GitHub and aliyun; historical metrics rebuild pending the active weekly writer lock.
 
 ## Cause and reproduction
 
@@ -24,3 +24,10 @@ Plan: `docs/plans/2026-09-05-fiscal-metrics-alignment.md`.
 - Affected symbols: AER, ARES, ARGX, ARMK, ATI, BIP, BSBR, CCEP, DAR, HRL, MDLN, MDT, MSTR, NMR, PFE, PGR, RVTY, SNDK, TAK, TECK, WSM. These counts describe the current snapshot/lookback, not an exhaustive all-history rebuild.
 - Example restored values: SNDK FY2025Q1 debt/assets3.4197%, FCF margin−10.5151%; MDT FY2024Q4 debt/assets27.8103%, ROA2.9073%. Restoring older beginning balances also restores downstream TTM ROA/ROE and their deltas.
 - Post-approval production follow-up: deploy code; use writer lock and the existing archive-aware transaction adapter for scoped metrics recomputation, preserving raw statements/vintages. Re-audit live affected groups before choosing exact rebuild targets.
+
+## Deployment — 2026-09-05 10:48 CST
+
+- Boss approved merge/deployment; merge `c674f44` contains only fix98fbf41. GitHub and cloud fast-forwarded, cloud181 tests passed and Python compile passed. Existing unrelated local edits were preserved.
+- Production read-only scan: available, fundamental890/934, RVOL/EMA924/934; six original hits with beta unchanged. SNDK/MDT computed previews restore the expected fields, but stored historical values are still NULL until rebuilding.
+- Historical rebuild not executed: `finance_forward` started10:45 with `FINANCE_CRON_RESOURCE_KEY=market_db_writer` and holds the lock (verified nonblocking acquire failed; wrapper PID295920 and yfinance updater PID295929 observed10:47). No writer was interrupted or bypassed; no background rebuild/follow-up was scheduled.
+- Main-checkout optional frozen-volume-concentration parity failure was reproduced on pre-merge4971734 with exactly the same numbers; independent baseline issue061, not caused by this fix.

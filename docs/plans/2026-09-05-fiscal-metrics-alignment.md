@@ -61,4 +61,8 @@ flowchart LR
 
 ## Handoff
 
-修复保留在 `codex/compass-fiscal-repair`，基于main4971734；只修改共用匹配层、测试和本计划/issue060。尚未合并、推送、部署或写入生产指标。确认上线后重新读取云端受影响对象，在writer lock和归档事务下按实际差异重算，保留原始报表/vintage。
+Boss已批准合并推送部署。修复98fbf41通过merge `c674f44` 进入main，GitHub与云端均已同步，云端181项测试及Python语法检查通过。云端只读罗盘仍为6只、beta均存在，SNDK/MDT预览恢复值与本地一致。
+
+- 合并后主目录相关测试419 passed，但多启用的可选成交集中度live-DB/旧CSV对拍失败；合并前4971734计算代码和相同数据复现完全相同差异（47.821734685 vs47.803916922），非本次回归。见issue061；隔离worktree全量2903 passed/4 skipped仍成立。
+- **生产指标补算尚未执行**：10:46写锁探测失败，10:47确认10:45启动的`finance_forward`/`run_forward_data.sh`持有同一`market_db_writer`资源锁。未绕锁、未终止定时任务、未写生产报表/指标。代码部署已完成，数据补算需要在锁释放后恢复执行；尚未安排后台重算或自动跟进。
+- 恢复步骤：重新读取云端实际差异 → writer lock → SQLite一致性备份 → 现有归档事务重算受影响指标 → 核查原始三表/vintage不变、筛选结果不变 → 记录备份和归档数量。避免直接rsync热库拉取本地（issue059）。
