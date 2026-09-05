@@ -1,5 +1,6 @@
 """Fiscal alias repair uses temporary databases and the real metrics engine."""
 import json
+import sqlite3
 
 import pytest
 
@@ -276,3 +277,30 @@ def test_same_date_restatement_keeps_current_and_both_vintages(store):
     assert read(store, "income_quarterly")[0]["revenue"] == 101
     assert store.known_as_of("TEST", "income", "2026-09-04")[0]["revenue"] == 100
     assert store.known_as_of("TEST", "income", "2026-09-05")[0]["revenue"] == 101
+
+
+@pytest.mark.parametrize("table", TABLES)
+def test_legacy_writer_locks_before_validation_and_serializes_aliases(store, monkeypatch, table):
+    """A second connection cannot race between the first validation and INSERT."""
+    _, legacy, field = TABLES[table]
+    competing = MarketStore(store.db_path)
+    competing._get_conn().execute("PRAGMA busy_timeout=0")
+    real = store._write_current_rows_in_conn
+    alternate = row("2025-10-03", **{field: 100})
+
+    def observe_ownership(conn, target_table, rows):
+        assert conn.in_transaction, "quarter validation must begin inside a transaction"
+        # An active deferred transaction would not suffice: prove write ownership
+        # by trying an actual overlapping write through another connection.
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            getattr(competing, legacy)("TEST", [alternate])
+        return real(conn, target_table, rows)
+
+    monkeypatch.setattr(store, "_write_current_rows_in_conn", observe_ownership)
+    try:
+        getattr(store, legacy)("TEST", [row(**{field: 100})])
+        # After the owner commits, retry sees its fiscal group and collapses it.
+        getattr(competing, legacy)("TEST", [alternate])
+        assert [r["date"] for r in read(store, table)] == ["2025-10-03"]
+    finally:
+        competing.close()

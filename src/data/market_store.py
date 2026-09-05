@@ -908,6 +908,14 @@ class MarketStore:
         if not rows:
             return 0
 
+        from src.data.fiscal_repair import STATEMENT_TABLES
+        if table in STATEMENT_TABLES:
+            # The alias check reads current rows before its first write. Acquire
+            # write ownership now so two legacy callers cannot both pass it.
+            with self.transaction() as conn:
+                prepared = self._prepare_upsert_rows(table, symbol, rows, convert)
+                return self._write_current_rows_in_conn(conn, table, prepared)
+
         conn = self._get_conn()
         prepared = self._prepare_upsert_rows(table, symbol, rows, convert)
 
