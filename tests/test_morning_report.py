@@ -3677,6 +3677,40 @@ class TestBuildMorningVisualSectionsSelectionCompass:
 
 
 class TestSelectionCompassSharedVisibility:
+    def test_ema30_rule_and_readiness_visible_on_all_report_surfaces(self):
+        compass = _selection_compass_payload(hits=[_selection_compass_hit("BIG", 2e12)])
+        compass["coverage"]["ema30_ready"] = {"covered": 20, "total": 20, "ratio": 1.0}
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+        text = mr.format_section_selection_compass(compass)
+        html = next(b for b in mr.build_html_payload(ms, None, "2026-09-03")["blocks"]
+                    if b.get("heading") == "0c. 选股罗盘")
+        visual = next(s for s in mr.build_morning_visual_sections(ms, None)
+                      if s["slug"] == "00c_selection_compass")
+
+        for rendered in [text, html["subtitle"], visual["subtitle"]]:
+            assert "EMA30 20/20" in rendered
+            assert "收盘价 > EMA30" in rendered
+        assert html["columns"] == visual["blocks"][0]["columns"] == _SELECTION_COMPASS_COLUMNS
+
+    def test_ema30_coverage_failure_uses_chinese_warning_and_hides_rows(self):
+        compass = _selection_compass_payload(
+            available=False, reason="ema30_coverage_below_threshold",
+            hits=[_selection_compass_hit("MUST_NOT_RENDER", 2e12)],
+        )
+        compass["coverage"]["ema30_ready"] = {"covered": 18, "total": 20, "ratio": 0.90}
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+        text = mr.format_section_selection_compass(compass)
+        html = next(b for b in mr.build_html_payload(ms, None, "2026-09-03")["blocks"]
+                    if b.get("heading") == "0c. 选股罗盘")
+        visual = next(s for s in mr.build_morning_visual_sections(ms, None)
+                      if s["slug"] == "00c_selection_compass")
+        for rendered in [text, str(html), str(visual)]:
+            assert "EMA30 价格覆盖不足" in rendered
+            assert "MUST_NOT_RENDER" not in rendered
+            assert "ema30_coverage_below_threshold" not in rendered
+
     def test_healthy_no_hits_hides_section_across_all_surfaces(self):
         ms = _make_market_signals()
         ms["selection_compass"] = _selection_compass_payload(hits=[])

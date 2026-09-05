@@ -1571,6 +1571,7 @@ SELECTION_COMPASS_WIDTHS = [180, 150, 150, 190, 190, 160, 210, 160, 170, 120]
 SELECTION_COMPASS_REASON_LABELS = {
     "fundamental_coverage_below_threshold": "基本面覆盖不足",
     "rvol_coverage_below_threshold": "RVOL 覆盖不足",
+    "ema30_coverage_below_threshold": "EMA30 价格覆盖不足",
     "market_cap_unavailable": "当前市值数据不足",
     "empty_universe": "股票池读取异常",
     "universe_resolver_error": "股票池读取异常",
@@ -1593,12 +1594,19 @@ def _selection_compass_coverage_subtitle(coverage: dict | None) -> str:
     coverage = coverage or {}
     fundamental = coverage.get("fundamental_ready") or {}
     rvol = coverage.get("rvol_ready") or {}
-    return "Extended 扫描覆盖：基本面 {}/{} | RVOL {}/{}".format(
+    subtitle = "Extended 扫描覆盖：基本面 {}/{} | RVOL {}/{}".format(
         fundamental.get("covered", 0),
         fundamental.get("total", 0),
         rvol.get("covered", 0),
         rvol.get("total", 0),
     )
+    # Legacy saved reports did not apply EMA30; do not relabel their semantics.
+    if "ema30_ready" in coverage:
+        ema30 = coverage["ema30_ready"]
+        subtitle += " | EMA30 {}/{} | 收盘价 > EMA30".format(
+            ema30.get("covered", 0), ema30.get("total", 0),
+        )
+    return subtitle
 
 
 def _selection_compass_reason_label(reason: str | None) -> str:

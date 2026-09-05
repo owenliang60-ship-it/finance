@@ -1,6 +1,69 @@
 import pytest
 import pandas as pd
 
+
+def _ema_price_frame(*, last_close=110.0, rows=40, end="2026-09-03"):
+    return pd.DataFrame({
+        "date": pd.bdate_range(end=end, periods=rows),
+        "close": [100.0] * (rows - 1) + [last_close],
+    })
+
+
+@pytest.mark.parametrize("last_close,passes", [(110.0, True), (100.0, False), (90.0, False)])
+def test_ema30_requires_current_close_strictly_above_inclusive_ema(last_close, passes):
+    from terminal.selection_compass import _evaluate_ema30
+
+    result = _evaluate_ema30(_ema_price_frame(last_close=last_close), as_of="2026-09-03")
+
+    assert result["ready"] is True
+    assert result["passes"] is passes
+    assert result["close"] == last_close
+    assert result["ema30"] == pytest.approx(100 + (2 / 31) * (last_close - 100), abs=1e-12)
+
+
+@pytest.mark.parametrize("date_index", [False, True])
+def test_ema30_sorts_dates_and_matches_independent_recursive_calculation(date_index):
+    from terminal.selection_compass import _evaluate_ema30
+
+    frame = _ema_price_frame(rows=60)
+    frame["close"] = [100 + i / 3 + (i % 4) for i in range(60)]
+    expected = frame["close"].iloc[0]
+    for close in frame["close"].iloc[1:]:
+        expected = expected + (2 / 31) * (close - expected)
+    frame = frame.iloc[::-1]
+    if date_index:
+        frame = frame.set_index("date")
+
+    result = _evaluate_ema30(frame, as_of="2026-09-03")
+
+    assert result["ready"] and result["passes"]
+    assert result["ema30"] == pytest.approx(expected, abs=1e-12)
+
+
+@pytest.mark.parametrize("defect", ["missing_close", "nan", "inf", "nonpositive", "short", "duplicate", "invalid_date", "stale", "future"])
+def test_ema30_invalid_prices_are_not_ready(defect):
+    from terminal.selection_compass import _evaluate_ema30
+
+    frame = _ema_price_frame()
+    if defect == "missing_close":
+        frame = frame.drop(columns="close")
+    elif defect in {"nan", "inf", "nonpositive"}:
+        frame.loc[10, "close"] = {"nan": float("nan"), "inf": float("inf"), "nonpositive": 0.0}[defect]
+    elif defect == "short":
+        frame = frame.tail(29)
+    elif defect == "duplicate":
+        frame.loc[0, "date"] = frame.loc[1, "date"]
+    elif defect == "invalid_date":
+        frame.loc[0, "date"] = pd.NaT
+    elif defect == "stale":
+        frame = _ema_price_frame(end="2026-09-02")
+    elif defect == "future":
+        frame = _ema_price_frame(end="2026-09-04")
+
+    assert _evaluate_ema30(frame, as_of="2026-09-03") == {
+        "ready": False, "passes": False, "close": None, "ema30": None,
+    }
+
 from config.settings import FUNDAMENTAL_QUARTER_GAP_MAX_DAYS
 from terminal.selection_compass import (
     _eps_leg,
@@ -74,7 +137,10 @@ def _price_frame(*, end="2026-09-03", rows=127, reverse=False):
     baseline = [90.0, 110.0] * 60
     tail = [100.0, 100.0, 100.0, 150.0, 100.0, 125.0, 100.0]
     volumes = (baseline + tail)[-rows:]
-    frame = pd.DataFrame({"date": dates, "volume": volumes})
+    frame = pd.DataFrame({
+        "date": dates, "volume": volumes,
+        "close": [100.0 + i / 10 for i in range(rows)],
+    })
     return frame.iloc[::-1].reset_index(drop=True) if reverse else frame
 
 
@@ -272,6 +338,7 @@ def test_coverage_uses_exact_deduplicated_extended_denominator():
     assert result["coverage"] == {
         "fundamental_ready": {"covered": 2, "total": 2, "ratio": 1.0},
         "rvol_ready": {"covered": 2, "total": 2, "ratio": 1.0},
+        "ema30_ready": {"covered": 2, "total": 2, "ratio": 1.0},
     }
     assert result["hits"] == []
 
@@ -424,3 +491,44 @@ def test_hits_sort_by_market_cap_desc_then_symbol_for_ties():
         2_000_000_000,
         1_000_000_000,
     ]
+
+
+def test_scanner_adds_strict_ema30_gate_and_keeps_rvol_gate():
+    symbols = ["ABOVE", "EQUAL", "BELOW", "NO_RVOL"]
+    prices = {symbol: _price_frame() for symbol in symbols}
+    for symbol, final in [("ABOVE", 110), ("EQUAL", 100), ("BELOW", 90)]:
+        prices[symbol]["close"] = [100.0] * 126 + [final]
+    prices["NO_RVOL"]["volume"] = [100.0] * 127
+
+    result = scan_selection_compass(
+        store=_passing_store(symbols), symbols=symbols, as_of="2026-09-03",
+        price_frames=prices,
+        market_cap_observations={s: {"date": "2026-09-03", "market_cap": 1e10} for s in symbols},
+    )
+
+    assert result["available"] is True
+    assert [hit["symbol"] for hit in result["hits"]] == ["ABOVE"]
+    assert result["hits"][0]["close"] == 110
+    assert result["hits"][0]["ema30"] == pytest.approx(100 + 20 / 31)
+    assert result["coverage"]["ema30_ready"] == {"covered": 4, "total": 4, "ratio": 1.0}
+
+
+@pytest.mark.parametrize("covered,available", [(19, True), (18, False)])
+def test_ema30_price_coverage_is_separate_and_fails_closed_below_95_percent(covered, available):
+    symbols = [f"S{i:02d}" for i in range(20)]
+    prices = {symbol: _price_frame() for symbol in symbols}
+    for symbol in symbols[covered:]:
+        prices[symbol] = prices[symbol].drop(columns="close")
+
+    result = scan_selection_compass(
+        store=_store_for(symbols), symbols=symbols, as_of="2026-09-03",
+        price_frames=prices, market_cap_observations={},
+    )
+
+    assert result["available"] is available
+    assert result["coverage"]["fundamental_ready"]["covered"] == 20
+    assert result["coverage"]["rvol_ready"]["covered"] == 20
+    assert result["coverage"]["ema30_ready"]["covered"] == covered
+    assert result["hits"] == []
+    if not available:
+        assert result["reason"] == "ema30_coverage_below_threshold"
