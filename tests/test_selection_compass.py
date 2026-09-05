@@ -428,6 +428,109 @@ def _passing_store(symbols):
     return store
 
 
+def _turnaround_store():
+    store = _passing_store(["BE"])
+    # Real BE shape (USD millions), newest first: revenue dips in the middle.
+    for row, revenue, income in zip(
+        store.incomes["BE"],
+        [1065.365, 751.054, 777.683, 519.048, 401.242],
+        [196.290, 70.653, 1.091, -23.093, -42.619],
+    ):
+        row.update(revenue=revenue, net_income=income)
+    store.incomes["BE"][0]["eps_diluted"] = 0.62
+    store.incomes["BE"][1]["eps_diluted"] = 0.23
+    store.incomes["BE"][4]["eps_diluted"] = -0.18
+    store.metrics["BE"] = [_metric(revenue_cagr=0.2708578, net_income_cagr=None)]
+    return store
+
+
+def _scan_turnaround(store, frame=None):
+    return scan_selection_compass(
+        store=store, symbols=["BE"], as_of="2026-09-03",
+        price_frames={"BE": _price_frame() if frame is None else frame},
+        market_cap_observations={"BE": {"date": "2026-09-03", "market_cap": 1e10}},
+    )
+
+
+def test_turnaround_allows_interior_decline_and_undefined_cagr():
+    result = _scan_turnaround(_turnaround_store())
+    assert result["available"] is True
+    hit, = result["hits"]
+    assert hit["growth_route"] == "turnaround"
+    assert hit["net_income_cagr_4q"] is None
+    assert hit["growth_avg_4q"] is None
+    assert hit["eps_yoy_turnaround"] is True
+    assert hit["eps_qoq_growth"] == pytest.approx(0.62 / 0.23 - 1)
+
+
+@pytest.mark.parametrize("comparison_income", [-10, 0])
+def test_turnaround_in_oldest_target_quarter_counts(comparison_income):
+    store = _turnaround_store()
+    for row, income in zip(store.incomes["BE"], [45, 35, 32, 30, comparison_income]):
+        row["net_income"] = income
+    store.metrics["BE"] = [_metric(revenue_cagr=0.01, net_income_cagr=0.01)]
+    hit, = _scan_turnaround(store)["hits"]
+    assert hit["growth_route"] == "turnaround"
+
+
+@pytest.mark.parametrize("field,latest", [
+    ("revenue", 519.048), ("revenue", 500),
+    ("net_income", -23.093), ("net_income", -25), ("net_income", -1),
+])
+def test_turnaround_requires_both_endpoints_up_and_current_profit_no_cagr_fallback(field, latest):
+    store = _turnaround_store()
+    store.incomes["BE"][0][field] = latest
+    store.metrics["BE"] = [_metric(revenue_cagr=0.50, net_income_cagr=0.50)]
+    result = _scan_turnaround(store)
+    assert result["available"] is True
+    assert result["hits"] == []
+
+
+@pytest.mark.parametrize("cagr,passes", [(0.149, False), (0.15, True)])
+def test_no_turnaround_retains_cagr_threshold(cagr, passes):
+    store = _passing_store(["BE"])
+    store.metrics["BE"] = [_metric(revenue_cagr=cagr, net_income_cagr=cagr)]
+    result = _scan_turnaround(store)
+    assert bool(result["hits"]) is passes
+    if passes:
+        assert result["hits"][0]["growth_route"] == "cagr"
+        assert result["hits"][0]["growth_avg_4q"] == pytest.approx(cagr)
+
+
+def test_turnaround_positive_latest_income_must_exceed_positive_start():
+    store = _turnaround_store()
+    for row, income in zip(store.incomes["BE"], [45, 35, -10, 50, 40]):
+        row["net_income"] = income
+    store.metrics["BE"] = [_metric(revenue_cagr=0.50, net_income_cagr=0.50)]
+    assert _scan_turnaround(store)["hits"] == []
+
+
+@pytest.mark.parametrize("index,value", [(1, None), (2, float("nan")), (4, float("inf"))])
+def test_unknown_turnaround_history_is_not_ready(index, value):
+    store = _turnaround_store()
+    store.incomes["BE"][index]["net_income"] = value
+    result = _scan_turnaround(store)
+    assert result["available"] is False
+    assert result["coverage"]["fundamental_ready"]["covered"] == 0
+
+
+@pytest.mark.parametrize("gate", ["eps_yoy", "eps_qoq", "rvol", "ema30"])
+def test_turnaround_does_not_bypass_other_gates(gate):
+    store = _turnaround_store()
+    frame = _price_frame()
+    if gate == "eps_yoy":
+        store.incomes["BE"][4]["eps_diluted"] = 0.60
+    elif gate == "eps_qoq":
+        store.incomes["BE"][1]["eps_diluted"] = 0.60
+    elif gate == "rvol":
+        frame["volume"] = [90.0, 110.0] * 63 + [100.0]
+    else:
+        frame["close"] = 100.0
+    result = _scan_turnaround(store, frame)
+    assert result["available"] is True
+    assert result["hits"] == []
+
+
 @pytest.mark.parametrize(
     "observation",
     [
