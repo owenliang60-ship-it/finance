@@ -642,6 +642,15 @@ _SCHEMA = "\n\n".join([
 );""",
     "CREATE INDEX IF NOT EXISTS idx_fv_symbol_stmt ON fundamental_vintage(symbol, statement, fiscal_date);",
 
+    # Current-row repairs are observed now, not fabricated historical vintages.
+    """CREATE TABLE IF NOT EXISTS fundamental_current_archive (
+    archive_id INTEGER PRIMARY KEY,
+    operation_id TEXT NOT NULL, archived_at TEXT NOT NULL,
+    source_table TEXT NOT NULL, symbol TEXT NOT NULL, original_date TEXT NOT NULL,
+    reason TEXT NOT NULL, context TEXT NOT NULL, payload TEXT NOT NULL
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_fca_operation ON fundamental_current_archive(operation_id);",
+
     # -- Fundamental backfill run manifest --
     """CREATE TABLE IF NOT EXISTS fundamental_backfill_runs (
     run_id TEXT PRIMARY KEY, universe_hash TEXT NOT NULL, params_json TEXT NOT NULL,
@@ -685,7 +694,7 @@ _VALID_TABLES = frozenset({
     "fmp_estimates", "fmp_earnings", "fmp_etf_holdings_snapshot",
     "fmp_basket_valuation", "fmp_forward_runs",
     "security_master", "extended_membership", "coverage_status",
-    "company_profile", "fundamental_vintage",
+    "company_profile", "fundamental_vintage", "fundamental_current_archive",
     "fundamental_backfill_runs", "fundamental_backfill_jobs",
 })
 
@@ -899,13 +908,29 @@ class MarketStore:
         if not rows:
             return 0
 
+        from src.data.fiscal_repair import STATEMENT_TABLES
+        if table in STATEMENT_TABLES:
+            # The alias check reads current rows before its first write. Acquire
+            # write ownership now so two legacy callers cannot both pass it.
+            with self.transaction() as conn:
+                prepared = self._prepare_upsert_rows(table, symbol, rows, convert)
+                return self._write_current_rows_in_conn(conn, table, prepared)
+
         conn = self._get_conn()
         prepared = self._prepare_upsert_rows(table, symbol, rows, convert)
 
         with conn:
-            count = self._upsert_rows_in_conn(conn, table, prepared)
+            count = self._write_current_rows_in_conn(conn, table, prepared)
 
         return count
+
+    def _write_current_rows_in_conn(self, conn: sqlite3.Connection, table: str,
+                                    rows: List[Dict]) -> int:
+        """Shared current writer; quarterly aliases retain archival provenance."""
+        from src.data.fiscal_repair import STATEMENT_TABLES, write_statement_in_conn
+        if table in STATEMENT_TABLES:
+            return write_statement_in_conn(self, conn, table, rows)
+        return self._upsert_rows_in_conn(conn, table, rows)
 
     @contextmanager
     def transaction(self):
@@ -2774,7 +2799,7 @@ class MarketStore:
             return {"rows": written, "vintage_rows": 0}
 
         prepared = self._prepare_upsert_rows(table, symbol, rows)
-        written = self._upsert_rows_in_conn(conn, table, prepared)
+        written = self._write_current_rows_in_conn(conn, table, prepared)
 
         vintage_rows = 0
         if dataset in VINTAGE_DATASETS:

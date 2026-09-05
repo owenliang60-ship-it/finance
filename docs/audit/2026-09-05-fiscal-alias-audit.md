@@ -1,0 +1,81 @@
+# Fiscal-quarter alias audit and reviewed repair
+
+Date: 2026-09-05
+
+Status: reviewed mappings; production application pending verification.
+
+## Scope and cause
+
+Before repair, all three raw current statement tables have 27 duplicate
+`(symbol,fiscal_year,period)` groups across nine symbols; derived metrics have
+12 duplicate groups. Current Extended contains six affected names:
+GSK, HD, LITE, MDT, SNDK, WDC. The other three are PSTG, STRC and STRF and are
+outside current base; their historical rows are not part of this repair.
+
+The current PK is `(symbol,date)`. A provider date-format/period-end correction
+adds a second row instead of superseding the old fiscal identity. Row-based
+QoQ, TTM and CAGR computations can count one quarter twice. The compass's
+sequence gate correctly detects an invalid sequence, but the invalid underlying
+current rows must be repaired rather than bypassing that gate.
+
+## Source verification and reviewed keep dates
+
+Live FMP re-fetch on 2026-09-05 returned a unique date for each audited active
+fiscal group. Most financial columns are identical; differences in SNDK income,
+LITE cash flow and WDC balance require explicit reviewed mapping, not guessing
+from calendar ordering.
+
+| Symbol | FY / quarter | Tables | Keep | Remove |
+|---|---|---|---|---|
+| GSK | 2025 Q3 | income / balance / cashflow | 2025-09-30 | 2025-10-28 |
+| HD | 2024 Q4 | income / balance / cashflow | 2025-02-02 | 2025-01-31 |
+| LITE | 2024 Q4 | income / balance / cashflow | 2024-06-29 | 2024-06-30 |
+| MDT | 2025 Q4 | income / cashflow | 2025-04-25 | 2025-04-30 |
+| SNDK | 2025 Q2 | income | 2024-12-27 | 2024-12-31 |
+| SNDK | 2025 Q3 | income | 2025-03-28 | 2025-03-31 |
+| SNDK | 2025 Q4 | income | 2025-06-27 | 2025-06-30 |
+| SNDK | 2026 Q1 | income / cashflow | 2025-10-03 | 2025-09-30 |
+| WDC | 2025 Q3 | balance | 2025-03-28 | 2025-03-31 |
+
+This is 17 source rows across 17 groups. Whole-group hashes are required before
+application; any intervening data change aborts the transaction.
+
+SNDK's actual October 3 and March 28 period ends are established by its
+[Q1 FY2026 release](https://investor.sandisk.com/news-releases/news-release-details/sandisk-reports-fiscal-first-quarter-2026-financial-results)
+and [Q3 FY2025 filing](https://www.sec.gov/Archives/edgar/data/2023554/000202355425000027/sndk-20250328.htm).
+
+WDC is a stronger vendor defect: the March 31 row has the same assets/cash as
+the following June 27 quarter ($14.002B / $2.114B). Its final
+[March 28 10-Q](https://www.sec.gov/Archives/edgar/data/106040/000010604025000026/wdc-20250328.htm)
+confirms March 28 assets $16.368B and cash $3.477B, matching the retained row.
+The automatic writer must reject any future conflicting attempt to reintroduce
+the wrong fiscal-date row; the current feed is not silently preferred over
+this primary-source evidence.
+
+## Boundaries
+
+Only reviewed duplicate current rows and derived metrics are changed. Unique
+older quarters, other symbols, prices and all fundamental_vintage records are
+preserved. Before repair, the latest-per-date vintage view has zero duplicate
+logical fiscal identities; the erroneous WDC provider snapshot still remains
+an immutable historical observation. This work does not rewrite PIT history.
+
+The repair records displaced rows and before-metrics in
+`fundamental_current_archive`, in the same transaction as deletion and metrics
+recomputation. A SQLite backup is required first under `market_db_writer`.
+
+## Turnaround-rule clarification
+
+BE income from 2025 Q3 through 2026 Q2 (USD millions):
+
+| Quarter | Revenue | Net income |
+|---|---:|---:|
+| 2025 Q3 | 519.048 | -23.093 |
+| 2025 Q4 | 777.683 | 1.091 |
+| 2026 Q1 | 751.054 | 70.653 |
+| 2026 Q2 | 1065.365 | 196.290 |
+
+Net income increases every quarter, but revenue falls once. Boss has been asked
+whether “持续增加” is strict quarter-on-quarter growth or allows an intermediate
+decline with overall growth. No dependent rule change is deployed before that
+choice is resolved. Existing EPS, RVOL and EMA30 gates remain in force.
