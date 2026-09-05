@@ -1,0 +1,138 @@
+[
+  {
+    "fiscal_year": "2025",
+    "group_hash": "148e4fb78aae79e6330756272f2dcc4fc73540e42da6011e522fcdd961b6cb71",
+    "keep_date": "2025-09-30",
+    "period": "Q3",
+    "symbol": "GSK",
+    "table": "income_quarterly"
+  },
+  {
+    "fiscal_year": "2025",
+    "group_hash": "04dc39b8827a8fbc4aab3bf4100debd0ad7bfd093252f9f8101ff6272f828d4f",
+    "keep_date": "2025-09-30",
+    "period": "Q3",
+    "symbol": "GSK",
+    "table": "balance_sheet_quarterly"
+  },
+  {
+    "fiscal_year": "2025",
+    "group_hash": "e066f9f4995c72992bf97ec8c6f634a543cfe7e0cfecc03484e0c7d10cdabb5c",
+    "keep_date": "2025-09-30",
+    "period": "Q3",
+    "symbol": "GSK",
+    "table": "cash_flow_quarterly"
+  },
+  {
+    "fiscal_year": "2024",
+    "group_hash": "110218f370b60ace80ac704959abc48480c00f831ae4bfe50456ba13d3add1ce",
+    "keep_date": "2025-02-02",
+    "period": "Q4",
+    "symbol": "HD",
+    "table": "income_quarterly"
+  },
+  {
+    "fiscal_year": "2024",
+    "group_hash": "fe510bf94f9848a69a7ccfd77fc48a23dbeea48a341c4971cd05dfa5c5079a4d",
+    "keep_date": "2025-02-02",
+    "period": "Q4",
+    "symbol": "HD",
+    "table": "balance_sheet_quarterly"
+  },
+  {
+    "fiscal_year": "2024",
+    "group_hash": "9e8711c3e9dfa83a72af31c06376ba87e1c953a641a5eca96cc6e39a82c11ccd",
+    "keep_date": "2025-02-02",
+    "period": "Q4",
+    "symbol": "HD",
+    "table": "cash_flow_quarterly"
+  },
+  {
+    "fiscal_year": "2024",
+    "group_hash": "4515e2953478d3b0d55ab62f107c295d9e64e7d74f338ac58fdb52d64ab8d20f",
+    "keep_date": "2024-06-29",
+    "period": "Q4",
+    "symbol": "LITE",
+    "table": "income_quarterly"
+  },
+  {
+    "fiscal_year": "2024",
+    "group_hash": "808f7a4edc951306365c2d166e8fc55b82befc5cb3d6f5bb095af0734b617593",
+    "keep_date": "2024-06-29",
+    "period": "Q4",
+    "symbol": "LITE",
+    "table": "balance_sheet_quarterly"
+  },
+  {
+    "fiscal_year": "2024",
+    "group_hash": "2b5c03446d9f07d455be4e3c9688e0ac96948b6becf8d139262d8c3809673ebf",
+    "keep_date": "2024-06-29",
+    "period": "Q4",
+    "symbol": "LITE",
+    "table": "cash_flow_quarterly"
+  },
+  {
+    "fiscal_year": "2025",
+    "group_hash": "e8ee2f045663d6ff737a1239b77ad90df055a20beb7228c56ccf4a6f29d5b9c6",
+    "keep_date": "2025-04-25",
+    "period": "Q4",
+    "symbol": "MDT",
+    "table": "income_quarterly"
+  },
+  {
+    "fiscal_year": "2025",
+    "group_hash": "0c4bb24540a2423d36395799eea9846eff06ca286697724ae889b199069e9684",
+    "keep_date": "2025-04-25",
+    "period": "Q4",
+    "symbol": "MDT",
+    "table": "cash_flow_quarterly"
+  },
+  {
+    "fiscal_year": "2025",
+    "group_hash": "70e649d9d39d1971e7622c225f204cbbc1e9b8897baf6b553f974329d2dcbb12",
+    "keep_date": "2024-12-27",
+    "period": "Q2",
+    "symbol": "SNDK",
+    "table": "income_quarterly"
+  },
+  {
+    "fiscal_year": "2025",
+    "group_hash": "6d4ae0275770b9f20b7955c16a0cddd7a7e9d338be5d9b5a7d162550219e5119",
+    "keep_date": "2025-03-28",
+    "period": "Q3",
+    "symbol": "SNDK",
+    "table": "income_quarterly"
+  },
+  {
+    "fiscal_year": "2025",
+    "group_hash": "1e069a82f6039f69570bfcd0c9d9c7e6fb8db7fd96200f84a733325ad886ba2f",
+    "keep_date": "2025-06-27",
+    "period": "Q4",
+    "symbol": "SNDK",
+    "table": "income_quarterly"
+  },
+  {
+    "fiscal_year": "2026",
+    "group_hash": "dfdc224715b57accf80ead2fb1a631f8181e30846a1929cdd6d8640881b8ac2b",
+    "keep_date": "2025-10-03",
+    "period": "Q1",
+    "symbol": "SNDK",
+    "table": "income_quarterly"
+  },
+  {
+    "fiscal_year": "2026",
+    "group_hash": "39094412ebc2852d92dcf62d20ae39477ebb4c4b8eedd5326c678a577ab1f625",
+    "keep_date": "2025-10-03",
+    "period": "Q1",
+    "symbol": "SNDK",
+    "table": "cash_flow_quarterly"
+  },
+  {
+    "fiscal_year": "2025",
+    "group_hash": "72f58600a6126a82de84ad29d878dbf2a8e0fc7ff9af96896e1c5def83685b77",
+    "keep_date": "2025-03-28",
+    "period": "Q3",
+    "symbol": "WDC",
+    "table": "balance_sheet_quarterly"
+  }
+]
