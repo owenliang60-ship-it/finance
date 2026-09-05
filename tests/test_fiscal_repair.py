@@ -304,3 +304,40 @@ def test_legacy_writer_locks_before_validation_and_serializes_aliases(store, mon
         assert [r["date"] for r in read(store, table)] == ["2025-10-03"]
     finally:
         competing.close()
+
+
+@pytest.mark.parametrize("entry", ["legacy", "collector", "manual"])
+@pytest.mark.parametrize("table", TABLES)
+def test_single_statement_alias_preserves_cross_statement_metrics(store, entry, table):
+    from src.data.fiscal_repair import apply_fiscal_repairs
+    from src.data.metrics_calculator import compute_metrics
+    sources = {
+        "income_quarterly": row(revenue=100, netIncome=10, operatingIncome=20,
+                                incomeBeforeTax=10, incomeTaxExpense=2),
+        "balance_sheet_quarterly": row(totalAssets=200, totalStockholdersEquity=100,
+                                       totalDebt=50, cashAndCashEquivalents=20),
+        "cash_flow_quarterly": row(freeCashFlow=15, operatingCashFlow=20),
+    }
+    for target, source in sources.items():
+        seed(store, target, [source])
+    compute_metrics("TEST", store)
+    incoming = dict(sources[table], date="2025-10-03")
+    if entry == "manual":
+        seed(store, table, [incoming])
+        apply_fiscal_repairs(store, [mapping(store, table)])
+    else:
+        result = write(store, table, [incoming], entry)
+        assert result == (1 if entry == "legacy" else {TABLES[table][0]: "ok"})
+    metrics = store.get_metrics("TEST")[0]
+    assert metrics["debt_to_assets"] == pytest.approx(0.25)
+    assert metrics["fcf_margin"] == pytest.approx(0.15)
+    assert metrics["roa"] == pytest.approx(0.20)
+    assert metrics["roic"] == pytest.approx(16 / 130)
+    for target in TABLES:
+        assert read(store, target)[0]["date"] == (
+            "2025-10-03" if target == table else "2025-09-30"
+        )
+    archives = store._get_conn().execute("SELECT count(*) FROM fundamental_current_archive").fetchone()[0]
+    compute_metrics("TEST", store)  # The ordinary update path must not undo the repair.
+    assert store.get_metrics("TEST")[0] == metrics
+    assert store._get_conn().execute("SELECT count(*) FROM fundamental_current_archive").fetchone()[0] == archives
