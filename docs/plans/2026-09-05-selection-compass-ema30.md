@@ -46,14 +46,22 @@ flowchart LR
 ## TDD checklist
 
 - [x] Read existing EMA, screen, loader and render paths; dedicated worktree and baseline suite.
-- [ ] RED/GREEN 1: strict EMA predicate tests with an independent recursive calculation, above/equal/below cases and invalid dates/prices; implement minimal helper.
-- [ ] RED/GREEN 2: scanner AND filter and coverage failure test; add helper result to scan with close/EMA evidence on hits.
-- [ ] RED/GREEN 3: shared subtitle/Chinese warning tests across text/HTML/visual; expose rule and readiness while retaining ten columns.
-- [ ] Run screen/morning/beta/broad-loader relevant tests plus Python 3.10 grammar check; inspect final scoped diff.
-- [ ] Read-only production replay for 2026-09-04: reproduce 78 fundamentals-only, 53 fundamentals+EMA, 10 old compass, 5 new compass; verify caps ordering and EMA values independently.
-- [ ] Commit, merge, push, deploy; cloud targeted tests and read-only scanner/render smoke. No extra Telegram send required.
-- [ ] Save numerical comparison, completion evidence, session digest and task records.
+- [x] RED/GREEN 1: strict EMA predicate tests with an independent recursive calculation, above/equal/below cases and invalid dates/prices; implement minimal helper.
+- [x] RED/GREEN 2: scanner AND filter and coverage failure test; add helper result to scan with close/EMA evidence on hits.
+- [x] RED/GREEN 3: shared subtitle/Chinese warning tests across text/HTML/visual; expose rule and readiness while retaining ten columns.
+- [x] Run screen/morning/beta/broad-loader relevant tests plus Python 3.10 grammar check; inspect final scoped diff.
+- [x] Read-only production replay for 2026-09-04: reproduce 78 fundamentals-only, 53 fundamentals+EMA, 10 old compass, 5 new compass; verify caps ordering and EMA values independently.
+- [x] Commit, merge, push, deploy; cloud targeted tests and read-only scanner/render smoke. No extra Telegram send required.
+- [x] Save numerical comparison, completion evidence, session digest and task records.
 
 ## Initial read-only comparison
 
 As-of 2026-09-04, 935 eligible Extended members, 896 fundamental-ready. Existing fundamental criteria alone admit 78; 53 also close above EMA30. The 08:00 report has ten RVOL-qualified hits; five also close above EMA30. All 78 have enough current close history for the EMA check.
+
+## Completion evidence
+
+- Local relevant suite: 240 passed, one legacy optional data test skipped. Python 3.10 grammar check passed.
+- RED/GREEN evidence: 14 EMA helper cases failed before implementation and then passed; three scanner cases proved strict AND filtering and EMA-only coverage failures; two renderer tests proved rule visibility and Chinese error labels.
+- Real local replay/PNG: 2026-09-04 five hits (SU, OKTA, BEKE, NTNX, FIVE); independent recursive EMA matched. No Dollar Volume collection or Telegram send was invoked.
+- Code commit `5b745d7`, merged/deployed as `e66a4cf`. Cloud tests: engine 55 passed, renderer EMA tests two passed. Read-only production scan returned the same five hits; fundamental 896/935, RVOL and EMA30 both 924/935.
+- The 53-name no-RVOL comparison is at `reports/selection_compass/2026-09-05/fundamental-ema30-without-rvol-53.md` in the main workspace. SNDK's duplicate-fiscal-quarter exclusion and the requested LITE/NVDA/BE explanations are documented in issue 058; no fundamental policy or data normalization was changed here.
