@@ -71,7 +71,7 @@ from terminal.selection_compass import (
     _evaluate_eps_pair,
     _evaluate_rvol,
     _raw_inputs_ready,
-    scan_selection_compass,
+    _legacy_scan_selection_compass as scan_selection_compass,
 )
 
 

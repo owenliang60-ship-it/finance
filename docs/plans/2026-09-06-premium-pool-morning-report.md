@@ -2,7 +2,7 @@
 
 > **For Claude:** Implement task-by-task with TDD in the existing dedicated worktree after Boss approves this plan.
 
-**Confidence: 93%**
+**Confidence: 98%**
 **不确定点**: Telegram Markdown不支持字体颜色；文本晨报采用`🔴`＋粗体，HTML与PNG/PDF使用真正红色粗体。用户已纠正“周报”为“晨报”，其余规则无歧义。
 **Goal:** 每周从Extended生成“精选Premium池”，晨报罗盘展示其中位于EMA30上的全部标的，并在晨报其他股票区块红色加粗Premium成员。
 **Tech Stack:** Python、pandas、原子JSON、Bash cron wrapper、pytest、Pillow/HTML renderer。
@@ -119,47 +119,54 @@ flowchart LR
 
 **Files:** existing `terminal/selection_compass.py`, `scripts/morning_report.py`, tests, threshold plan.
 
-- [ ] 保留提交`7d1f883`+`a6b0f76`为业务计算基线；测试20%/10%/1.35含边界。
-- [ ] 把“Premium membership计算”从当前RVOL/EMA scanner拆为纯函数，先RED再GREEN。
+- [x] 保留提交`7d1f883`+`a6b0f76`为业务计算基线；测试20%/10%/1.35含边界。
+- [x] 把“Premium membership计算”从当前RVOL/EMA scanner拆为纯函数，先RED再GREEN。
 
 ### Task 2 — Atomic Premium artifact
 
 **Files:** create `src/data/premium_pool.py`, `scripts/build_premium_pool.py`, `tests/test_premium_pool.py`.
 
-- [ ] RED：schema、criteria、唯一性、覆盖、8日时效、zero-member、写入故障保旧文件。
-- [ ] GREEN：build/validate/load/atomic publish；CLI `--dry-run`绝不写盘，默认发布。
+- [x] RED：schema、criteria、唯一性、覆盖、8日时效、zero-member、写入故障保旧文件。
+- [x] GREEN：build/validate/load/atomic publish；CLI `--dry-run`绝不写盘，默认发布。
 
 ### Task 3 — Weekly schedule
 
 **Files:** create `scripts/run_weekly_fundamentals.sh`; modify `ARCHITECTURE.md`; test shell behavior.
 
-- [ ] fundamental失败不运行builder；builder失败job非零；成功严格串行。
-- [ ] `bash -n`、可执行位、云端Python3.10。
+- [x] fundamental失败不运行builder；builder失败job非零；成功严格串行。
+- [x] 本地`bash -n`、可执行位、Python3.10 AST。
 - [ ] 部署阶段安全导出crontab备份，只改10:00行命令，写回后逐行验证；不使用管道直写。
 
 ### Task 4 — Compass becomes Premium × EMA30
 
 **Files:** modify `terminal/selection_compass.py`, `scripts/morning_report.py`, `tests/test_selection_compass.py`, `tests/test_morning_report.py`.
 
-- [ ] loader结果是唯一membership输入；scanner不调用财报/beta/RVOL。
-- [ ] EMA30覆盖以Premium成员为分母；市值缺失仍fail-closed；表格换Close/EMA30。
-- [ ] 真实9月4日回放记录Premium数量、EMA30命中数量与名单。
+- [x] loader结果是唯一生产membership输入；公开scanner不调用财报/beta/RVOL（旧端到端逻辑仅保留私有回归helper）。
+- [x] EMA30覆盖以Premium成员为分母；市值缺失仍fail-closed；表格换Close/EMA30。
+- [x] 真实9月4日回放：Premium56只、EMA30 ready56/56、罗盘26只，按市值降序；常量成交量不参与。
 
 ### Task 5 — Shared Premium emphasis
 
 **Files:** modify `scripts/morning_report.py`, `terminal/morning_html_report.py`, relevant tests.
 
-- [ ] PMARP/量能/DV数据只加`is_premium`，原排序/筛选快照逐字对拍。
-- [ ] 文本`🔴`+粗体；HTML第一格红色粗体并保持escaping；视觉第一格红色粗体、其他格正常。
-- [ ] Premium缺失/陈旧时所有行保持普通样式。
+- [x] PMARP/量能/DV数据只加`is_premium`，原排序/筛选保持；相关全套测试通过。
+- [x] 文本`🔴`+粗体；HTML第一格红色粗体并保持escaping；视觉第一格红色粗体、其他格正常。
+- [x] Premium缺失/陈旧时所有行保持普通样式。
 
 ### Task 6 — Verification and rollout stops
 
-- [ ] Targeted suites + full suite + `git diff --check` + Python3.10 AST + `bash -n`。
-- [ ] 主线程单遍review，修完Critical/Important后交Boss看branch。
+- [x] Targeted273 passed/1 skipped；full2938 passed/4 skipped；`git diff --check`、Python3.10 AST、`bash -n`通过。
+- [x] 主线程单遍review：修复损坏快照未重验EPS/成长/覆盖，以及日报异常把周频覆盖错误归零；补RED后全绿。未留Critical/Important。
 - [ ] **Stop A:** Boss批准merge/push。
 - [ ] **Stop B:** Boss批准云端部署、crontab一行替换与bootstrap发布。
 - [ ] 云端目标测试；`--dry-run`对比；发布后晨报`--no-telegram`验证文本/HTML/PNG，不采集或覆写DV缓存，不真发群。
+
+## Local Friday preview evidence
+
+- 临时原子快照 `/tmp/finance-premium-pool-20260904.json`：as_of 2026-09-04，Extended934，基本面ready890，beta ready923，Premium56。
+- 罗盘26只：TSM/MU/PLTR/DELL/SNDK/STX/ING/CVNA/BE/ALAB/UMC/SYM/ROKU/SMCI/TPG/PKX/ZBRA/MGA/JHX/SITM/SKM/IVZ/SWK/EMBJ/SMTC/TEM。
+- 周五量能异常中Premium：DELL/HPE/MDB/NVT/JHX；PNG目视确认仅第一格红色粗体，普通行不变；HTML对应`premium-row`并保持escape。该本地预览未带Dollar Volume（本地DV库停在3月），最终部署后从云端只读9月4日DV库生成完整版。
+- 预览文件：`reports/rendered/premium-preview-20260904/morning_report_2026-09-04.{html,pdf}`，以及5张section PNG。未发送Telegram、未调用DV采集器。
 
 ## Current worktree
 
