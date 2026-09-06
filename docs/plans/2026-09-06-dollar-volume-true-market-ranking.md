@@ -24,4 +24,6 @@ Acceptance:
 - [x] Premium only adds style metadata; normal rows and ranks remain unchanged.
 - [x] Six focused RED/GREEN tests cover session date, count/order, no-filter and text/HTML/visual output; existing Premium tests remain green.
 - [x] Related172 passed/1 skipped; full2939 passed/4 skipped; main-thread review无Critical/Important。
-- [ ] Cloud backup, deploy and forced9/4 rebuild produce true FridayTop50; regenerate report without Telegram.
+- [x] Cloud SQLite backup、部署和交易日迁移后，9/4为完整200行、Top50以MU/NVDA/SNDK/TSLA/AAPL开头；无9/5重复session。修正版日报不发Telegram。
+
+Rollout: merge `6efd88d`, final main/origin/cloud `94e3fcc`; backup `/root/workspace/Finance/data/dollar_volume.db.before-session-date-fix-20260906T130831Z`. Corrected HTML/PDF/PNG locally at `reports/rendered/premium-friday-20260904-corrected/`; HTML SHA256 `3062a5c6bdb8307f8812aee7adf9ac8348f1c1609587a4fc9fdd4eff03e16f9c`, PDF `ea7fa0dfa613d7d5680518295d0caa3120a6d3a6aef8ddd67f6dc0171da75321`.
