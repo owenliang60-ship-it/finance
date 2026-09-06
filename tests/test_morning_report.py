@@ -1336,32 +1336,25 @@ class TestBroadDropPlanV3:
         # layer_counts confirms classification — "pool" key no longer exists.
         assert result["layer_counts"] == {"extend": 1}
 
-    def test_dv_section_filters_out_broad_layer(self):
-        """[v3 P1] DV text section drops rows whose mcap classifies them as broad.
-        Aligned with the selection-scan universe scope (pool ∪ extend).
-        NOTE: ARM was removed from the new_faces fixture because ARM joined the
-        core pool (pool-drift, not a grouping bug) — confirmed via
-        data/pool/universe.json. Replaced with ZZZBROAD (synthetic, never in pool)."""
+    def test_dv_section_preserves_full_market_rows_and_original_ranks(self):
         dv_result = {
             "rankings": [
-                # mcap 25B → extend, kept
                 {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9,
                  "price": 890.5, "market_cap": 3e12},
-                # mcap 6B → broad, dropped
                 {"rank": 17, "symbol": "OKLO", "dollar_volume": 1.2e9,
                  "price": 45.0, "market_cap": 6e9},
             ],
             "new_faces": [
-                # not in pool + mcap 8B → broad, dropped
                 {"rank": 18, "symbol": "ZZZBROAD", "dollar_volume": 1.0e9, "market_cap": 8e9},
             ],
         }
         result = format_section_d(dv_result)
-        assert "NVDA" in result
-        assert "OKLO" not in result
-        assert "ZZZBROAD" not in result
+        assert "NVDA" in result and "#1" in result
+        assert "OKLO" in result and "#17" in result
+        assert "ZZZBROAD" in result and "#18" in result
+        assert result.index("NVDA") < result.index("OKLO")
 
-    def test_dv_filter_uses_dv_row_market_cap_over_stale_local_metadata(
+    def test_dv_total_rank_uses_row_market_cap_over_stale_local_metadata(
         self, monkeypatch
     ):
         """[v3 P1 regression] DV row's freshly-collected market_cap must override
@@ -1387,21 +1380,19 @@ class TestBroadDropPlanV3:
 
         dv_result = {
             "rankings": [
-                # Today's DV row reports market_cap=$6B (broad). Must override
-                # the stale $20B in local metadata.
+                # Today's row must remain in the total ranking and override
+                # stale local metadata without any membership filtering.
                 {"rank": 17, "symbol": "OKLO", "dollar_volume": 1.2e9,
                  "price": 45.0, "market_cap": 6e9},
             ],
             "new_faces": [],
         }
         result = format_section_d(dv_result)
-        assert "OKLO" not in result, (
-            "OKLO should be filtered out by today's $6B mcap, "
-            "regardless of stale $20B in local metadata"
-        )
+        assert "OKLO" in result
+        normalized = mr._normalize_dv_items(dv_result)
+        assert normalized["rankings"][0]["marketCap"] == 6e9
 
-    def test_dv_visual_block_filters_out_broad_layer(self):
-        """[v3 P1] DV image-report block drops broad-layer rows."""
+    def test_dv_visual_block_keeps_full_market_rows(self):
         dv_result = {
             "rankings": [
                 {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9,
@@ -1422,7 +1413,34 @@ class TestBroadDropPlanV3:
         ]
         rendered = " ".join(all_cells)
         assert "NVDA" in rendered
-        assert "OKLO" not in rendered
+        assert "OKLO" in rendered
+
+    def test_dv_html_keeps_full_market_rows(self):
+        dv_result = {
+            "rankings": [
+                {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9,
+                 "price": 890.5, "market_cap": 3e12},
+                {"rank": 17, "symbol": "OKLO", "dollar_volume": 1.2e9,
+                 "price": 45.0, "market_cap": 6e9},
+            ],
+            "new_faces": [],
+        }
+        payload = mr.build_html_payload(sample_market_signals(), dv_result, "2026-09-04")
+        block = next(b for b in payload["blocks"]
+                     if b.get("heading") == "3. Dollar Volume — 成交额 Top 2")
+        assert [row["标的"] for row in block["rows"]] == ["NVDA", "OKLO"]
+
+    def test_run_dollar_volume_uses_market_signal_session_date(self, monkeypatch):
+        captured = {}
+        monkeypatch.setattr(
+            "scripts.collect_dollar_volume.collect_daily",
+            lambda date=None: captured.update(date=date) or {
+                "date": date, "rankings": [], "new_faces": [],
+            },
+        )
+        result = mr.run_dollar_volume("2026-09-04")
+        assert captured == {"date": "2026-09-04"}
+        assert result["date"] == "2026-09-04"
 
 
 class TestVolumeAnomalyPayload:
@@ -3080,21 +3098,22 @@ class TestResolverFallbackLogging:
             for rec in caplog.records
         ), caplog.text
 
-    def test_normalize_dv_items_logs_fallback_warning(self, monkeypatch, caplog):
+    def test_normalize_dv_items_does_not_require_universe_resolver(self, monkeypatch, caplog):
         from scripts import morning_report as mr
 
         monkeypatch.setattr(mr, "current_base_universe", self._raise_resolver_failure)
         monkeypatch.setattr(mr, "get_symbols", lambda: [])
 
-        dv_result = {"rankings": [], "new_faces": []}
+        dv_result = {"rankings": [{
+            "rank": 1, "symbol": "SMALL", "dollar_volume": 1e9,
+            "price": 10, "market_cap": 1e9,
+        }], "new_faces": []}
         with caplog.at_level(logging.WARNING, logger="scripts.morning_report"):
-            mr._normalize_dv_items(dv_result)
+            result = mr._normalize_dv_items(dv_result)
 
-        assert any(
-            "current_base_universe unavailable" in rec.message
-            and "boom: simulated resolver failure" in rec.message
-            for rec in caplog.records
-        ), caplog.text
+        assert [row["symbol"] for row in result["rankings"]] == ["SMALL"]
+        assert not any("current_base_universe unavailable" in rec.message
+                       for rec in caplog.records), caplog.text
 
 
 # ============================================================
