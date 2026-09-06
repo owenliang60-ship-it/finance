@@ -12,13 +12,24 @@ from src.indicators.rvol import calculate_rvol_series
 
 EMA30_PERIOD = 30
 EMA30_COVERAGE_THRESHOLD = 0.95
+EPS_GROWTH_THRESHOLD = 0.20
+FOUR_QUARTER_GROWTH_THRESHOLD = 0.10
+BETA_MINIMUM = 1.0
+BETA_COVERAGE_THRESHOLD = 0.95
+
+
+def _passes_minimum(value: float, minimum: float) -> bool:
+    """Inclusive numeric threshold, stable at decimal business boundaries."""
+    return value >= minimum or math.isclose(
+        value, minimum, rel_tol=1e-12, abs_tol=1e-12,
+    )
 
 
 def _eps_leg(
     current: Any,
     comparison: Any,
     *,
-    threshold: float = 0.25,
+    threshold: float = EPS_GROWTH_THRESHOLD,
 ) -> Dict[str, Any]:
     """Evaluate one EPS growth leg using the frozen turnaround semantics."""
     try:
@@ -34,7 +45,7 @@ def _eps_leg(
 
     growth = (current_value - comparison_value) / abs(comparison_value)
     return {
-        "passes": growth >= threshold,
+        "passes": _passes_minimum(growth, threshold),
         "growth": growth,
         "turnaround": False,
     }
@@ -57,7 +68,7 @@ def _evaluate_cagr_growth(
     revenue_cagr_4q: Any,
     net_income_cagr_4q: Any,
     *,
-    threshold: float = 0.15,
+    threshold: float = FOUR_QUARTER_GROWTH_THRESHOLD,
 ) -> Dict[str, Any]:
     """Apply the arithmetic-average gate to the two existing 4Q CAGRs."""
     try:
@@ -67,7 +78,7 @@ def _evaluate_cagr_growth(
         return {"passes": False, "growth_avg_4q": None}
 
     average = (revenue + net_income) / 2.0
-    return {"passes": average >= threshold, "growth_avg_4q": average}
+    return {"passes": _passes_minimum(average, threshold), "growth_avg_4q": average}
 
 
 def _evaluate_growth(raw: Dict[str, Any], metric: Dict[str, Any]) -> Dict[str, Any]:
@@ -342,16 +353,22 @@ def scan_selection_compass(
     as_of: str,
     price_frames: dict,
     market_cap_observations: dict[str, dict],
+    beta_observations: dict[str, Any],
     min_fundamental_coverage: float = 0.95,
     min_rvol_coverage: float = 0.95,
 ) -> Dict[str, Any]:
-    """Return coverage-gated compass hits without mutating inputs or storage."""
+    """Return coverage-gated compass hits, including the explicit beta gate.
+
+    Beta observations are computed once by orchestration from the same price
+    frames and passed in so this rule layer stays deterministic and I/O-free.
+    """
     universe = sorted({str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()})
     total = len(universe)
     empty_coverage = {
         "fundamental_ready": _coverage_stat(0, total),
         "rvol_ready": _coverage_stat(0, total),
         "ema30_ready": _coverage_stat(0, total),
+        "beta_ready": _coverage_stat(0, total),
     }
     if not universe:
         return {
@@ -374,6 +391,7 @@ def scan_selection_compass(
     fundamental_results: Dict[str, Dict[str, Any]] = {}
     rvol_results: Dict[str, Dict[str, Any]] = {}
     ema30_results: Dict[str, Dict[str, Any]] = {}
+    beta_results: Dict[str, Dict[str, Any]] = {}
     for symbol in universe:
         try:
             income_rows = store.get_income(symbol, limit=20)
@@ -392,6 +410,13 @@ def scan_selection_compass(
             as_of=as_of,
         )
         ema30_results[symbol] = _evaluate_ema30(price_frames.get(symbol), as_of=as_of)
+        beta = beta_observations.get(symbol)
+        beta_ready = _is_present_number(beta)
+        beta_results[symbol] = {
+            "ready": beta_ready,
+            "passes": beta_ready and _passes_minimum(float(beta), BETA_MINIMUM),
+            "beta_6m": float(beta) if beta_ready else None,
+        }
 
     fundamental_covered = sum(result["ready"] for result in fundamental_results.values())
     rvol_covered = sum(result["ready"] for result in rvol_results.values())
@@ -399,6 +424,7 @@ def scan_selection_compass(
         "fundamental_ready": _coverage_stat(fundamental_covered, total),
         "rvol_ready": _coverage_stat(rvol_covered, total),
         "ema30_ready": _coverage_stat(sum(r["ready"] for r in ema30_results.values()), total),
+        "beta_ready": _coverage_stat(sum(r["ready"] for r in beta_results.values()), total),
     }
     if coverage["fundamental_ready"]["ratio"] < min_fundamental_coverage:
         return {
@@ -423,14 +449,24 @@ def scan_selection_compass(
             "hits": [],
         }
 
+    if coverage["beta_ready"]["ratio"] < BETA_COVERAGE_THRESHOLD:
+        return {
+            "available": False,
+            "reason": "beta_coverage_below_threshold",
+            "coverage": coverage,
+            "hits": [],
+        }
+
     hits = []
     for symbol in universe:
         fundamental = fundamental_results[symbol]
         rvol = rvol_results[symbol]
         ema30 = ema30_results[symbol]
+        beta = beta_results[symbol]
         if (
             not fundamental["ready"] or not rvol["ready"] or not rvol["passes"]
             or not ema30["ready"] or not ema30["passes"]
+            or not beta["ready"] or not beta["passes"]
         ):
             continue
         raw = fundamental["raw"]
@@ -464,6 +500,7 @@ def scan_selection_compass(
                 "rvol_trigger_date": rvol["rvol_trigger_date"],
                 "close": ema30["close"],
                 "ema30": ema30["ema30"],
+                "beta_6m": beta["beta_6m"],
             }
         )
 

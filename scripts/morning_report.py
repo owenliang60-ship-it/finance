@@ -455,10 +455,10 @@ def _compute_signal_betas(
     price_frames: dict,
     signal_symbols: list,
 ) -> dict:
-    """信号命中股的 6 个月 beta（对 BETA_BENCHMARK）。基准序列只加载一次。
+    """目标股票的 6 个月 beta（对 BETA_BENCHMARK）。基准序列只加载一次。
 
     price_frames: load_price_frames 输出（date 索引 close/volume frame，180 行）。
-    基准缺失或个股不在 price_frames → None（晨报渲染为 —，不阻塞）。
+    基准缺失或个股不在 price_frames → None；调用层决定展示或门控语义。
     """
     from scripts.broad_market_scan import load_price_frames_from_market_db
     from src.indicators.beta import compute_beta
@@ -1307,6 +1307,8 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
             "coverage": {
                 "fundamental_ready": {"covered": 0, "total": 0, "ratio": 0.0},
                 "rvol_ready": {"covered": 0, "total": 0, "ratio": 0.0},
+                "ema30_ready": {"covered": 0, "total": 0, "ratio": 0.0},
+                "beta_ready": {"covered": 0, "total": 0, "ratio": 0.0},
             },
             "hits": [],
         }
@@ -1315,6 +1317,10 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
 
         try:
             selection_store = get_store()
+            selection_compass_betas = _compute_signal_betas(
+                selection_compass_price_frames,
+                selection_compass_symbols,
+            )
             selection_compass = scan_selection_compass(
                 store=selection_store,
                 symbols=selection_compass_symbols,
@@ -1327,25 +1333,8 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
                         as_of,
                     )
                 ),
+                beta_observations=selection_compass_betas,
             )
-            compass_hits = selection_compass.get("hits", [])
-            compass_hit_symbols = [hit["symbol"] for hit in compass_hits]
-            compass_betas = (
-                _compute_signal_betas(
-                    selection_compass_price_frames,
-                    compass_hit_symbols,
-                )
-                if compass_hit_symbols
-                else {}
-            )
-            selection_compass = dict(selection_compass)
-            selection_compass["hits"] = [
-                {
-                    **hit,
-                    "beta_6m": compass_betas.get(hit["symbol"]),
-                }
-                for hit in compass_hits
-            ]
         except Exception as exc:
             logger.warning("selection compass unavailable: %s", exc)
             selection_compass = {
@@ -1358,6 +1347,16 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
                         "ratio": 0.0,
                     },
                     "rvol_ready": {
+                        "covered": 0,
+                        "total": len(selection_compass_symbols),
+                        "ratio": 0.0,
+                    },
+                    "ema30_ready": {
+                        "covered": 0,
+                        "total": len(selection_compass_symbols),
+                        "ratio": 0.0,
+                    },
+                    "beta_ready": {
                         "covered": 0,
                         "total": len(selection_compass_symbols),
                         "ratio": 0.0,
@@ -1572,6 +1571,7 @@ SELECTION_COMPASS_REASON_LABELS = {
     "fundamental_coverage_below_threshold": "基本面覆盖不足",
     "rvol_coverage_below_threshold": "RVOL 覆盖不足",
     "ema30_coverage_below_threshold": "EMA30 价格覆盖不足",
+    "beta_coverage_below_threshold": "Beta 数据覆盖不足",
     "market_cap_unavailable": "当前市值数据不足",
     "empty_universe": "股票池读取异常",
     "universe_resolver_error": "股票池读取异常",
@@ -1603,9 +1603,17 @@ def _selection_compass_coverage_subtitle(coverage: dict | None) -> str:
     # Legacy saved reports did not apply EMA30; do not relabel their semantics.
     if "ema30_ready" in coverage:
         ema30 = coverage["ema30_ready"]
-        subtitle += " | EMA30 {}/{} | 收盘价 > EMA30".format(
+        subtitle += " | EMA30 {}/{}".format(
             ema30.get("covered", 0), ema30.get("total", 0),
         )
+        if "beta_ready" not in coverage:
+            subtitle += " | 收盘价 > EMA30"
+    if "beta_ready" in coverage:
+        beta = coverage["beta_ready"]
+        subtitle += (
+            " | Beta {}/{} | 条件：EPS YoY/QoQ ≥20% / "
+            "成长均值 ≥10%或扭亏成长 / 收盘价 > EMA30 / β6M ≥1"
+        ).format(beta.get("covered", 0), beta.get("total", 0))
     return subtitle
 
 

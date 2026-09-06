@@ -3257,7 +3257,8 @@ class TestSelectionCompassWiring:
                 "available": True,
                 "reason": None,
                 "coverage": {},
-                "hits": [{"symbol": "BASE", "marketCap": 42e9}],
+                "hits": [{"symbol": "BASE", "marketCap": 42e9,
+                          "beta_6m": kwargs["beta_observations"]["BASE"]}],
             }
 
         monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", fake_scan)
@@ -3278,6 +3279,7 @@ class TestSelectionCompassWiring:
         assert scanner_inputs["symbols"] == ["BASE"]
         assert set(scanner_inputs["price_frames"]) == {"BASE"}
         assert scanner_inputs["price_frames"]["BASE"] is compass_only_frame
+        assert scanner_inputs["beta_observations"] == {"BASE": 1.4}
         assert beta_inputs == {
             "frames": {"BASE": compass_only_frame},
             "symbols": ["BASE"],
@@ -3363,8 +3365,9 @@ class TestSelectionCompassWiring:
         assert captured["market_cap_observations"] == {
             "ACTIVE": {"date": "2026-09-03", "marketCap": 42e9}
         }
+        assert captured["beta_observations"] == {}
 
-    def test_beta_is_computed_only_for_compass_hits_and_injected(self, monkeypatch):
+    def test_beta_is_computed_for_compass_universe_and_passed_to_scanner(self, monkeypatch):
         frames = {
             "HIT": _compass_price_frame("2026-09-03"),
             "MISS": _compass_price_frame("2026-09-03"),
@@ -3390,15 +3393,19 @@ class TestSelectionCompassWiring:
         from src.data import market_store as ms_mod
 
         monkeypatch.setattr(ms_mod, "get_store", lambda: FakeStore())
-        monkeypatch.setattr(
-            "terminal.selection_compass.scan_selection_compass",
-            lambda **kw: {
+        captured = {}
+
+        def fake_scan(**kw):
+            captured.update(kw)
+            return {
                 "available": True,
                 "reason": None,
                 "coverage": {},
-                "hits": [{"symbol": "HIT", "marketCap": 42e9}],
-            },
-        )
+                "hits": [{"symbol": "HIT", "marketCap": 42e9,
+                          "beta_6m": kw["beta_observations"]["HIT"]}],
+            }
+
+        monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", fake_scan)
         beta_calls = []
 
         def fake_betas(price_frames, symbols):
@@ -3409,7 +3416,8 @@ class TestSelectionCompassWiring:
 
         result = mr.build_market_signal_report()
 
-        assert [symbols for symbols in beta_calls if symbols] == [["HIT"]]
+        assert [symbols for symbols in beta_calls if symbols] == [["HIT", "MISS"]]
+        assert captured["beta_observations"] == {"HIT": 1.73, "MISS": 1.73}
         assert result["selection_compass"]["hits"] == [
             {"symbol": "HIT", "marketCap": 42e9, "beta_6m": 1.73}
         ]
@@ -3525,6 +3533,8 @@ class TestSelectionCompassWiring:
             "coverage": {
                 "fundamental_ready": {"covered": 0, "total": 0, "ratio": 0.0},
                 "rvol_ready": {"covered": 0, "total": 0, "ratio": 0.0},
+                "ema30_ready": {"covered": 0, "total": 0, "ratio": 0.0},
+                "beta_ready": {"covered": 0, "total": 0, "ratio": 0.0},
             },
             "hits": [],
         }
@@ -3677,6 +3687,42 @@ class TestBuildMorningVisualSectionsSelectionCompass:
 
 
 class TestSelectionCompassSharedVisibility:
+    def test_current_thresholds_and_beta_gate_visible_on_all_report_surfaces(self):
+        compass = _selection_compass_payload(hits=[_selection_compass_hit("BIG", 2e12)])
+        compass["coverage"].update({
+            "ema30_ready": {"covered": 19, "total": 20, "ratio": 0.95},
+            "beta_ready": {"covered": 20, "total": 20, "ratio": 1.0},
+        })
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+        text = mr.format_section_selection_compass(compass)
+        html = next(b for b in mr.build_html_payload(ms, None, "2026-09-03")["blocks"]
+                    if b.get("heading") == "0c. 选股罗盘")
+        visual = next(s for s in mr.build_morning_visual_sections(ms, None)
+                      if s["slug"] == "00c_selection_compass")
+        for rendered in [text, html["subtitle"], visual["subtitle"]]:
+            assert "Beta 20/20" in rendered
+            assert "EPS YoY/QoQ ≥20%" in rendered
+            assert "成长均值 ≥10%或扭亏成长" in rendered
+            assert "β6M ≥1" in rendered
+
+    def test_beta_coverage_failure_uses_chinese_warning_and_hides_rows(self):
+        compass = _selection_compass_payload(
+            available=False, reason="beta_coverage_below_threshold",
+            hits=[_selection_compass_hit("MUST_NOT_RENDER", 2e12)],
+        )
+        compass["coverage"]["beta_ready"] = {
+            "covered": 18, "total": 20, "ratio": 0.90,
+        }
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+        rendered = [mr.format_section_selection_compass(compass),
+                    str(mr.build_html_payload(ms, None, "2026-09-03")),
+                    str(mr.build_morning_visual_sections(ms, None))]
+        for output in rendered:
+            assert "Beta 数据覆盖不足" in output
+            assert "MUST_NOT_RENDER" not in output
+
     def test_turnaround_route_label_and_undefined_cagr_on_all_surfaces(self):
         hit = _selection_compass_hit("BE", 20e9)
         hit.update(growth_route="turnaround", net_income_cagr_4q=None, growth_avg_4q=None)
@@ -3800,6 +3846,7 @@ class TestSelectionCompassSharedVisibility:
         [
             ("fundamental_coverage_below_threshold", "基本面覆盖不足"),
             ("rvol_coverage_below_threshold", "RVOL 覆盖不足"),
+            ("beta_coverage_below_threshold", "Beta 数据覆盖不足"),
             ("market_cap_unavailable", "当前市值数据不足"),
             ("empty_universe", "股票池读取异常"),
             ("universe_resolver_error", "股票池读取异常"),

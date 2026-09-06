@@ -78,8 +78,8 @@ from terminal.selection_compass import (
 @pytest.mark.parametrize(
     ("current", "comparison", "passes", "growth", "turnaround"),
     [
-        (1.25, 1.00, True, 0.25, False),
-        (1.249, 1.00, False, 0.249, False),
+        (1.20, 1.00, True, 0.20, False),
+        (1.199, 1.00, False, 0.199, False),
         (0.50, -0.25, True, None, True),
         (0.50, 0.00, True, None, True),
         (-0.50, -1.00, False, None, False),
@@ -98,8 +98,8 @@ def test_eps_leg_frozen_business_rules(
 @pytest.mark.parametrize(
     ("current", "prior", "yoy", "passes"),
     [
-        (1.60, 1.20, 1.00, True),
-        (1.24, 0.90, 1.00, False),
+        (1.20, 1.00, 1.00, True),
+        (1.199, 0.90, 1.00, False),
         (1.30, 1.10, 1.00, False),
     ],
 )
@@ -114,8 +114,8 @@ def test_eps_yoy_and_qoq_must_both_pass(current, prior, yoy, passes):
 @pytest.mark.parametrize(
     ("revenue", "net_income", "passes", "average"),
     [
-        (0.10, 0.20, True, 0.15),
-        (0.299, 0.00, False, 0.1495),
+        (0.10, 0.10, True, 0.10),
+        (0.199, 0.00, False, 0.0995),
         (None, 0.30, False, None),
         (0.30, None, False, None),
     ],
@@ -305,7 +305,7 @@ class _FakeStore:
         return self.coverage
 
 
-def _metric(*, date="2026-06-30", revenue_cagr=0.10, net_income_cagr=0.10):
+def _metric(*, date="2026-06-30", revenue_cagr=0.09, net_income_cagr=0.09):
     return {
         "date": date,
         "revenue_cagr_4q": revenue_cagr,
@@ -321,6 +321,10 @@ def _store_for(symbols):
     )
 
 
+def _betas(symbols, value=1.25):
+    return {symbol: value for symbol in symbols}
+
+
 def test_coverage_uses_exact_deduplicated_extended_denominator():
     symbols = ["AAA", "BBB", "AAA"]
     store = _store_for({"AAA", "BBB"})
@@ -332,6 +336,7 @@ def test_coverage_uses_exact_deduplicated_extended_denominator():
         as_of="2026-09-03",
         price_frames=prices,
         market_cap_observations={},
+        beta_observations=_betas({"AAA", "BBB"}),
     )
 
     assert result["available"] is True
@@ -339,6 +344,7 @@ def test_coverage_uses_exact_deduplicated_extended_denominator():
         "fundamental_ready": {"covered": 2, "total": 2, "ratio": 1.0},
         "rvol_ready": {"covered": 2, "total": 2, "ratio": 1.0},
         "ema30_ready": {"covered": 2, "total": 2, "ratio": 1.0},
+        "beta_ready": {"covered": 2, "total": 2, "ratio": 1.0},
     }
     assert result["hits"] == []
 
@@ -361,6 +367,7 @@ def test_fundamental_readiness_rejects_status_staleness_and_metrics_mismatch(def
         as_of="2026-09-03",
         price_frames={"AAA": _price_frame()},
         market_cap_observations={},
+        beta_observations=_betas(["AAA"]),
     )
 
     assert result["available"] is False
@@ -380,6 +387,7 @@ def test_fundamental_and_rvol_readiness_are_measured_separately():
         as_of="2026-09-03",
         price_frames={"RVOL": _price_frame()},
         market_cap_observations={},
+        beta_observations=_betas(["FUND", "RVOL"]),
     )
 
     assert result["available"] is False
@@ -410,6 +418,7 @@ def test_coverage_threshold_is_fail_closed_below_95_percent(covered, available):
         as_of="2026-09-03",
         price_frames=prices,
         market_cap_observations={},
+        beta_observations=_betas(symbols),
     )
 
     assert result["available"] is available
@@ -449,6 +458,7 @@ def _scan_turnaround(store, frame=None):
         store=store, symbols=["BE"], as_of="2026-09-03",
         price_frames={"BE": _price_frame() if frame is None else frame},
         market_cap_observations={"BE": {"date": "2026-09-03", "market_cap": 1e10}},
+        beta_observations={"BE": 1.0},
     )
 
 
@@ -486,7 +496,7 @@ def test_turnaround_requires_both_endpoints_up_and_current_profit_no_cagr_fallba
     assert result["hits"] == []
 
 
-@pytest.mark.parametrize("cagr,passes", [(0.149, False), (0.15, True)])
+@pytest.mark.parametrize("cagr,passes", [(0.099, False), (0.10, True)])
 def test_no_turnaround_retains_cagr_threshold(cagr, passes):
     store = _passing_store(["BE"])
     store.metrics["BE"] = [_metric(revenue_cagr=cagr, net_income_cagr=cagr)]
@@ -548,6 +558,7 @@ def test_missing_stale_or_future_market_cap_for_a_hit_fails_closed(observation):
         as_of="2026-09-03",
         price_frames={"AAA": _price_frame()},
         market_cap_observations=observations,
+        beta_observations={"AAA": 1.0},
     )
 
     assert result["available"] is False
@@ -565,6 +576,7 @@ def test_market_cap_at_seven_day_freshness_boundary_is_accepted():
         market_cap_observations={
             "AAA": {"date": "2026-08-27", "marketCap": 1_000_000_000}
         },
+        beta_observations={"AAA": 1.0},
     )
 
     assert result["available"] is True
@@ -585,6 +597,7 @@ def test_hits_sort_by_market_cap_desc_then_symbol_for_ties():
         as_of="2026-09-03",
         price_frames={symbol: _price_frame() for symbol in symbols},
         market_cap_observations=observations,
+        beta_observations=_betas(symbols),
     )
 
     assert result["available"] is True
@@ -607,6 +620,7 @@ def test_scanner_adds_strict_ema30_gate_and_keeps_rvol_gate():
         store=_passing_store(symbols), symbols=symbols, as_of="2026-09-03",
         price_frames=prices,
         market_cap_observations={s: {"date": "2026-09-03", "market_cap": 1e10} for s in symbols},
+        beta_observations=_betas(symbols),
     )
 
     assert result["available"] is True
@@ -625,7 +639,7 @@ def test_ema30_price_coverage_is_separate_and_fails_closed_below_95_percent(cove
 
     result = scan_selection_compass(
         store=_store_for(symbols), symbols=symbols, as_of="2026-09-03",
-        price_frames=prices, market_cap_observations={},
+        price_frames=prices, market_cap_observations={}, beta_observations=_betas(symbols),
     )
 
     assert result["available"] is available
@@ -635,3 +649,49 @@ def test_ema30_price_coverage_is_separate_and_fails_closed_below_95_percent(cove
     assert result["hits"] == []
     if not available:
         assert result["reason"] == "ema30_coverage_below_threshold"
+
+
+def test_beta_gate_accepts_exact_one_and_rejects_below_one():
+    symbols = ["EXACT", "LOW"]
+    result = scan_selection_compass(
+        store=_passing_store(symbols), symbols=symbols, as_of="2026-09-03",
+        price_frames={s: _price_frame() for s in symbols},
+        market_cap_observations={s: {"date": "2026-09-03", "market_cap": 1e10}
+                                 for s in symbols},
+        beta_observations={"EXACT": 1.0, "LOW": 0.999},
+    )
+    assert result["available"] is True
+    assert [hit["symbol"] for hit in result["hits"]] == ["EXACT"]
+    assert result["hits"][0]["beta_6m"] == 1.0
+
+
+@pytest.mark.parametrize("invalid", [None, float("nan"), float("inf"), "bad"])
+def test_invalid_beta_excludes_symbol_but_95_percent_coverage_remains_available(invalid):
+    symbols = [f"S{i:02d}" for i in range(20)]
+    betas = _betas(symbols)
+    betas[symbols[-1]] = invalid
+    result = scan_selection_compass(
+        store=_passing_store(symbols), symbols=symbols, as_of="2026-09-03",
+        price_frames={s: _price_frame() for s in symbols},
+        market_cap_observations={s: {"date": "2026-09-03", "market_cap": 1e10}
+                                 for s in symbols},
+        beta_observations=betas,
+    )
+    assert result["available"] is True
+    assert result["coverage"]["beta_ready"] == {
+        "covered": 19, "total": 20, "ratio": 0.95,
+    }
+    assert len(result["hits"]) == 19
+    assert symbols[-1] not in {hit["symbol"] for hit in result["hits"]}
+
+
+def test_beta_coverage_below_95_percent_fails_closed():
+    symbols = [f"S{i:02d}" for i in range(20)]
+    result = scan_selection_compass(
+        store=_passing_store(symbols), symbols=symbols, as_of="2026-09-03",
+        price_frames={s: _price_frame() for s in symbols},
+        market_cap_observations={}, beta_observations=_betas(symbols[:18]),
+    )
+    assert result["available"] is False
+    assert result["reason"] == "beta_coverage_below_threshold"
+    assert result["hits"] == []
