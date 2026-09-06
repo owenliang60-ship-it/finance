@@ -157,9 +157,9 @@ flowchart LR
 
 - [x] Targeted273 passed/1 skipped；full2938 passed/4 skipped；`git diff --check`、Python3.10 AST、`bash -n`通过。
 - [x] 主线程单遍review：修复损坏快照未重验EPS/成长/覆盖，以及日报异常把周频覆盖错误归零；补RED后全绿。未留Critical/Important。
-- [ ] **Stop A:** Boss批准merge/push。
-- [ ] **Stop B:** Boss批准云端部署、crontab一行替换与bootstrap发布。
-- [ ] 云端目标测试；`--dry-run`对比；发布后晨报`--no-telegram`验证文本/HTML/PNG，不采集或覆写DV缓存，不真发群。
+- [x] **Stop A:** Boss以“现在生效”及“自己review后TDD实现并跑周五日报”批准merge/push；merge `fdc300d` 已推GitHub。
+- [x] **Stop B:** 云端部署 `fdc300d`；crontab仅替换周六10:00命令，备份 `/root/workspace/cron_backups/crontab-before-premium-20260906_204007`；bootstrap已发布。
+- [x] 云端273 passed/1 skipped、compile/bash通过；dry-run与发布均为Premium56；发布后用纯只读builder生成周五文本/HTML/6 PNG/PDF，不调用DV采集器、不覆写缓存、不真发群。
 
 ## Local Friday preview evidence
 
@@ -167,6 +167,15 @@ flowchart LR
 - 罗盘26只：TSM/MU/PLTR/DELL/SNDK/STX/ING/CVNA/BE/ALAB/UMC/SYM/ROKU/SMCI/TPG/PKX/ZBRA/MGA/JHX/SITM/SKM/IVZ/SWK/EMBJ/SMTC/TEM。
 - 周五量能异常中Premium：DELL/HPE/MDB/NVT/JHX；PNG目视确认仅第一格红色粗体，普通行不变；HTML对应`premium-row`并保持escape。该本地预览未带Dollar Volume（本地DV库停在3月），最终部署后从云端只读9月4日DV库生成完整版。
 - 预览文件：`reports/rendered/premium-preview-20260904/morning_report_2026-09-04.{html,pdf}`，以及5张section PNG。未发送Telegram、未调用DV采集器。
+
+## Production rollout evidence — 2026-09-06
+
+- Code: merge/GitHub/cloud `fdc300d`; cloud Python3 compile、bash syntax、273 tests passed/1 skipped。
+- Schedule: 10:00 Sat保留`finance_fundamental`、日志、`market_db_writer`及busy rc75，只把命令从`run_update_data.sh --fundamental`改为`run_weekly_fundamentals.sh`；整份crontab备份和写回后`cmp`通过。
+- Premium SSOT: `/root/workspace/Finance/data/pool/premium_pool.json`，as_of 2026-09-04、generated_at 2026-09-06T12:41:09Z、members56、fundamental890/934、beta923/934；逐成员β≥1.35复验通过。
+- Friday report: cloud只读加载9月4日Dollar Volume50行和前一日排名，不运行collector；罗盘26只。Premium高亮：量能异常DELL/HPE/MDB/NVT/JHX；Dollar Volume DELL/HPE/RDDT/CVNA；当天PMARP无Premium交集，因此无虚构红标。HTML共9个`premium-row`，文本9个`🔴 *`，PNG目视确认普通行不变。
+- Local deliverable: `reports/rendered/premium-friday-20260904/`（HTML、PDF、TXT、JSON、6张PNG）；HTML SHA256 `6ff679ee9530a7fb7658d680448c0b5b7303d77f20f49abf7e47a31a56e26558`，PDF SHA256 `a3a58ac7e1de02a913876ff8f62d5c158c26d902ead9f82e2bd4a1ff4a37cc58`。
+- Next Saturday's first natural cron is an operational observation only; implementation, schedule and bootstrap are live now.
 
 ## Current worktree
 
