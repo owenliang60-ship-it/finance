@@ -1985,7 +1985,7 @@ def format_section_c(rvol_list: list) -> str:
 
 
 def _normalize_dv_items(dv_result: dict, premium_symbols: set[str] | None = None) -> dict:
-    """Normalize Dollar Volume rows into the same enriched item shape as signals."""
+    """Enrich the full-market ranking without filtering or reranking rows."""
     rankings = dv_result.get("rankings", [])
     new_faces = dv_result.get("new_faces", [])
     metadata = {}
@@ -1999,44 +1999,22 @@ def _normalize_dv_items(dv_result: dict, premium_symbols: set[str] | None = None
     if symbols:
         _merge_local_metadata(metadata, symbols)
 
-    try:
-        pool_symbols = set(current_base_universe())
-    except Exception as e:
-        # R3 迁移期兼容：见 build_market_signal_report 同类注释——
-        # current_base_universe() 预 bootstrap 时 fail-loud，退回 pool.json；
-        # broad except 故意保留但必须留痕，防止 bootstrap 之后 resolver 接线
-        # 出 bug 时永久静默退回旧语义。
-        logger.warning(
-            "current_base_universe unavailable, falling back to legacy pool symbols: %s", e
-        )
-        try:
-            pool_symbols = set(get_symbols())
-        except Exception:
-            pool_symbols = set()
-
     def normalize(row: dict) -> dict | None:
         symbol = (row.get("symbol") or "").upper()
+        if not symbol:
+            return None
         item = dict(metadata.get(symbol) or {})
         item.update({k: v for k, v in row.items() if v not in (None, "")})
         item["symbol"] = symbol or item.get("symbol", "")
         item["is_premium"] = symbol in (premium_symbols or set())
         if row.get("company_name") and not item.get("companyName"):
             item["companyName"] = row.get("company_name")
-        # DV row's market_cap is freshly collected — override any stale local
-        # metadata. Without this, a name that has dropped below $10B today
-        # would still pass the broad filter based on stale universe cache.
+        # The ranking row is the as-of source for market cap; metadata adds
+        # labels only and must not change total-market inclusion or ordering.
         if row.get("market_cap"):
             item["marketCap"] = row.get("market_cap")
         item.setdefault("concept_bucket", _concept_bucket(item))
-        layer_meta = {symbol: {"marketCap": item.get("marketCap") or 0}}
-        layer = _layer_for_symbol(symbol, layer_meta, pool_symbols)
-        if layer != "extend":
-            logger.debug(
-                "DV row dropped (layer=%s, mcap=%s): %s",
-                layer, item.get("marketCap"), symbol,
-            )
-            return None
-        item["layer"] = layer
+        item["layer"] = "market"
         return item
 
     def _filter(rows):
@@ -3107,16 +3085,13 @@ def format_morning_report(
 # 主流程
 # ============================================================
 
-def run_dollar_volume() -> dict:
-    """运行 Dollar Volume 采集"""
+def run_dollar_volume(as_of: str | None = None) -> dict:
+    """Collect Dollar Volume under the actual US market signal session."""
     try:
-        scripts_dir = str(Path(__file__).parent)
-        if scripts_dir not in sys.path:
-            sys.path.insert(0, scripts_dir)
-        from collect_dollar_volume import collect_daily
+        from scripts.collect_dollar_volume import collect_daily
 
-        logger.info("开始采集 Dollar Volume...")
-        result = collect_daily()
+        logger.info("开始采集 Dollar Volume (as_of=%s)...", as_of or "auto")
+        result = collect_daily(date=as_of)
         logger.info("Dollar Volume 采集完成: %s", result.get("status"))
         return result
     except Exception as e:
@@ -3230,7 +3205,7 @@ def main():
         )
 
         # 3. Dollar Volume 采集
-        dv_result = run_dollar_volume()
+        dv_result = run_dollar_volume(market_signals.get("as_of"))
         if dv_result and dv_result.get("rankings"):
             from src.data.dollar_volume import get_previous_day_ranks, annotate_rank_changes
             # P2-4 修：无 _today_iso() helper；用 inline strftime（codebase 惯例，见 :1416/:1726）
