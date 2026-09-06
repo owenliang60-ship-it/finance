@@ -12,13 +12,24 @@ from src.indicators.rvol import calculate_rvol_series
 
 EMA30_PERIOD = 30
 EMA30_COVERAGE_THRESHOLD = 0.95
+EPS_GROWTH_THRESHOLD = 0.20
+FOUR_QUARTER_GROWTH_THRESHOLD = 0.10
+BETA_MINIMUM = 1.35
+BETA_COVERAGE_THRESHOLD = 0.95
+
+
+def _passes_minimum(value: float, minimum: float) -> bool:
+    """Inclusive numeric threshold, stable at decimal business boundaries."""
+    return value >= minimum or math.isclose(
+        value, minimum, rel_tol=1e-12, abs_tol=1e-12,
+    )
 
 
 def _eps_leg(
     current: Any,
     comparison: Any,
     *,
-    threshold: float = 0.25,
+    threshold: float = EPS_GROWTH_THRESHOLD,
 ) -> Dict[str, Any]:
     """Evaluate one EPS growth leg using the frozen turnaround semantics."""
     try:
@@ -34,7 +45,7 @@ def _eps_leg(
 
     growth = (current_value - comparison_value) / abs(comparison_value)
     return {
-        "passes": growth >= threshold,
+        "passes": _passes_minimum(growth, threshold),
         "growth": growth,
         "turnaround": False,
     }
@@ -57,7 +68,7 @@ def _evaluate_cagr_growth(
     revenue_cagr_4q: Any,
     net_income_cagr_4q: Any,
     *,
-    threshold: float = 0.15,
+    threshold: float = FOUR_QUARTER_GROWTH_THRESHOLD,
 ) -> Dict[str, Any]:
     """Apply the arithmetic-average gate to the two existing 4Q CAGRs."""
     try:
@@ -67,7 +78,7 @@ def _evaluate_cagr_growth(
         return {"passes": False, "growth_avg_4q": None}
 
     average = (revenue + net_income) / 2.0
-    return {"passes": average >= threshold, "growth_avg_4q": average}
+    return {"passes": _passes_minimum(average, threshold), "growth_avg_4q": average}
 
 
 def _evaluate_growth(raw: Dict[str, Any], metric: Dict[str, Any]) -> Dict[str, Any]:
@@ -335,23 +346,225 @@ def _evaluate_fundamental(
     return {"ready": True, "raw": raw, "metric": metric}
 
 
-def scan_selection_compass(
+def build_premium_pool(
     *,
     store: Any,
     symbols: list[str],
     as_of: str,
+    beta_observations: dict[str, Any],
+    min_fundamental_coverage: float = 0.95,
+    min_beta_coverage: float = BETA_COVERAGE_THRESHOLD,
+) -> Dict[str, Any]:
+    """Build the weekly fundamental+beta Premium membership, without price gates."""
+    universe = sorted({str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()})
+    total = len(universe)
+    empty_coverage = {
+        "fundamental_ready": _coverage_stat(0, total),
+        "beta_ready": _coverage_stat(0, total),
+    }
+    if not universe:
+        return {"available": False, "reason": "empty_universe",
+                "coverage": empty_coverage, "members": []}
+    try:
+        coverage_statuses = store.get_coverage("income_quarterly")
+    except Exception:
+        return {"available": False, "reason": "fundamental_store_error",
+                "coverage": empty_coverage, "members": []}
+
+    fundamentals = {}
+    betas = {}
+    for symbol in universe:
+        try:
+            income_rows = store.get_income(symbol, limit=20)
+            metrics = store.get_metrics(symbol, limit=8)
+        except Exception:
+            income_rows, metrics = [], []
+        fundamentals[symbol] = _evaluate_fundamental(
+            income_rows=income_rows, metrics=metrics,
+            coverage_status=coverage_statuses.get(symbol), as_of=as_of,
+        )
+        value = beta_observations.get(symbol)
+        ready = _is_present_number(value)
+        betas[symbol] = {
+            "ready": ready,
+            "passes": ready and _passes_minimum(float(value), BETA_MINIMUM),
+            "beta_6m": float(value) if ready else None,
+        }
+
+    coverage = {
+        "fundamental_ready": _coverage_stat(
+            sum(result["ready"] for result in fundamentals.values()), total,
+        ),
+        "beta_ready": _coverage_stat(sum(result["ready"] for result in betas.values()), total),
+    }
+    if coverage["fundamental_ready"]["ratio"] < min_fundamental_coverage:
+        return {"available": False, "reason": "fundamental_coverage_below_threshold",
+                "coverage": coverage, "members": []}
+    if coverage["beta_ready"]["ratio"] < min_beta_coverage:
+        return {"available": False, "reason": "beta_coverage_below_threshold",
+                "coverage": coverage, "members": []}
+
+    members = []
+    for symbol in universe:
+        fundamental, beta = fundamentals[symbol], betas[symbol]
+        if not fundamental["ready"] or not beta["passes"]:
+            continue
+        raw, metric = fundamental["raw"], fundamental["metric"]
+        eps = _evaluate_eps_pair(
+            current=raw["current"]["eps_diluted"],
+            prior=raw["prior"]["eps_diluted"],
+            yoy=raw["yoy"]["eps_diluted"],
+        )
+        growth = _evaluate_growth(raw, metric)
+        if not eps["passes"] or not growth["passes"]:
+            continue
+        members.append({
+            "symbol": symbol,
+            "quarter_date": raw["current"]["date"],
+            "eps_yoy_growth": eps["eps_yoy_growth"],
+            "eps_yoy_turnaround": eps["eps_yoy_turnaround"],
+            "eps_qoq_growth": eps["eps_qoq_growth"],
+            "eps_qoq_turnaround": eps["eps_qoq_turnaround"],
+            "revenue_cagr_4q": (
+                float(metric["revenue_cagr_4q"])
+                if _is_present_number(metric.get("revenue_cagr_4q")) else None
+            ),
+            "net_income_cagr_4q": (
+                float(metric["net_income_cagr_4q"])
+                if _is_present_number(metric.get("net_income_cagr_4q")) else None
+            ),
+            "growth_route": growth["growth_route"],
+            "growth_avg_4q": growth["growth_avg_4q"],
+            "beta_6m": beta["beta_6m"],
+        })
+    return {"available": True, "reason": None,
+            "coverage": coverage, "members": members}
+
+
+def _scan_premium_compass(
+    *, premium_pool: dict, as_of: str, price_frames: dict,
+    market_cap_observations: dict[str, dict],
+) -> Dict[str, Any]:
+    """Daily face: valid weekly Premium membership intersected with EMA30."""
+    members = premium_pool.get("members") or []
+    coverage = dict(premium_pool.get("coverage") or {})
+    if not premium_pool.get("available"):
+        coverage["ema30_ready"] = _coverage_stat(0, len(members))
+        return {
+            "available": False,
+            "reason": premium_pool.get("reason") or "premium_pool_invalid",
+            "coverage": coverage,
+            "hits": [],
+            "premium_pool_as_of": premium_pool.get("as_of"),
+        }
+
+    member_by_symbol = {}
+    for member in members:
+        symbol = str(member.get("symbol") or "").strip().upper()
+        if not symbol or symbol in member_by_symbol:
+            return {
+                "available": False, "reason": "premium_pool_invalid",
+                "coverage": coverage, "hits": [],
+                "premium_pool_as_of": premium_pool.get("as_of"),
+            }
+        member_by_symbol[symbol] = member
+    symbols = sorted(member_by_symbol)
+    ema_results = {
+        symbol: _evaluate_ema30(price_frames.get(symbol), as_of=as_of)
+        for symbol in symbols
+    }
+    coverage["ema30_ready"] = _coverage_stat(
+        sum(result["ready"] for result in ema_results.values()), len(symbols),
+    )
+    if symbols and coverage["ema30_ready"]["ratio"] < EMA30_COVERAGE_THRESHOLD:
+        return {
+            "available": False, "reason": "ema30_coverage_below_threshold",
+            "coverage": coverage, "hits": [],
+            "premium_pool_as_of": premium_pool.get("as_of"),
+        }
+
+    hits = []
+    for symbol in symbols:
+        ema = ema_results[symbol]
+        if not ema["ready"] or not ema["passes"]:
+            continue
+        hits.append({
+            **member_by_symbol[symbol],
+            "symbol": symbol,
+            "close": ema["close"],
+            "ema30": ema["ema30"],
+        })
+
+    unavailable_market_caps = []
+    as_of_date = pd.Timestamp(as_of).normalize()
+    for hit in hits:
+        symbol = hit["symbol"]
+        observation = market_cap_observations.get(symbol)
+        if not isinstance(observation, dict):
+            unavailable_market_caps.append(symbol)
+            continue
+        observation_date = pd.to_datetime(observation.get("date"), errors="coerce")
+        market_cap = observation.get("marketCap", observation.get("market_cap"))
+        try:
+            market_cap_value = float(market_cap)
+        except (TypeError, ValueError):
+            market_cap_value = math.nan
+        age_days = (
+            (as_of_date - pd.Timestamp(observation_date).normalize()).days
+            if not pd.isna(observation_date) else None
+        )
+        if (age_days is None or age_days < 0 or age_days > 7
+                or not math.isfinite(market_cap_value) or market_cap_value <= 0):
+            unavailable_market_caps.append(symbol)
+            continue
+        hit["marketCap"] = market_cap_value
+    if unavailable_market_caps:
+        return {
+            "available": False, "reason": "market_cap_unavailable",
+            "coverage": coverage, "hits": [],
+            "premium_pool_as_of": premium_pool.get("as_of"),
+            "market_cap_unavailable_symbols": sorted(unavailable_market_caps),
+        }
+    hits.sort(key=lambda hit: (-hit["marketCap"], hit["symbol"]))
+    return {
+        "available": True, "reason": None, "coverage": coverage,
+        "hits": hits, "premium_pool_as_of": premium_pool.get("as_of"),
+    }
+
+
+def _legacy_scan_selection_compass(
+    *,
+    store: Any = None,
+    symbols: list[str] | None = None,
+    as_of: str,
     price_frames: dict,
     market_cap_observations: dict[str, dict],
+    beta_observations: dict[str, Any] | None = None,
     min_fundamental_coverage: float = 0.95,
     min_rvol_coverage: float = 0.95,
+    premium_pool: dict | None = None,
 ) -> Dict[str, Any]:
-    """Return coverage-gated compass hits without mutating inputs or storage."""
+    """Return coverage-gated compass hits, including the explicit beta gate.
+
+    Beta observations are computed once by orchestration from the same price
+    frames and passed in so this rule layer stays deterministic and I/O-free.
+    """
+    if premium_pool is not None:
+        return _scan_premium_compass(
+            premium_pool=premium_pool, as_of=as_of, price_frames=price_frames,
+            market_cap_observations=market_cap_observations,
+        )
+    # Temporary compatibility for callers/tests until the Premium rollout is
+    # merged. Production orchestration always supplies ``premium_pool``.
+    symbols = symbols or []
+    beta_observations = beta_observations or {}
     universe = sorted({str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()})
     total = len(universe)
     empty_coverage = {
         "fundamental_ready": _coverage_stat(0, total),
         "rvol_ready": _coverage_stat(0, total),
         "ema30_ready": _coverage_stat(0, total),
+        "beta_ready": _coverage_stat(0, total),
     }
     if not universe:
         return {
@@ -374,6 +587,7 @@ def scan_selection_compass(
     fundamental_results: Dict[str, Dict[str, Any]] = {}
     rvol_results: Dict[str, Dict[str, Any]] = {}
     ema30_results: Dict[str, Dict[str, Any]] = {}
+    beta_results: Dict[str, Dict[str, Any]] = {}
     for symbol in universe:
         try:
             income_rows = store.get_income(symbol, limit=20)
@@ -392,6 +606,13 @@ def scan_selection_compass(
             as_of=as_of,
         )
         ema30_results[symbol] = _evaluate_ema30(price_frames.get(symbol), as_of=as_of)
+        beta = beta_observations.get(symbol)
+        beta_ready = _is_present_number(beta)
+        beta_results[symbol] = {
+            "ready": beta_ready,
+            "passes": beta_ready and _passes_minimum(float(beta), BETA_MINIMUM),
+            "beta_6m": float(beta) if beta_ready else None,
+        }
 
     fundamental_covered = sum(result["ready"] for result in fundamental_results.values())
     rvol_covered = sum(result["ready"] for result in rvol_results.values())
@@ -399,6 +620,7 @@ def scan_selection_compass(
         "fundamental_ready": _coverage_stat(fundamental_covered, total),
         "rvol_ready": _coverage_stat(rvol_covered, total),
         "ema30_ready": _coverage_stat(sum(r["ready"] for r in ema30_results.values()), total),
+        "beta_ready": _coverage_stat(sum(r["ready"] for r in beta_results.values()), total),
     }
     if coverage["fundamental_ready"]["ratio"] < min_fundamental_coverage:
         return {
@@ -423,14 +645,24 @@ def scan_selection_compass(
             "hits": [],
         }
 
+    if coverage["beta_ready"]["ratio"] < BETA_COVERAGE_THRESHOLD:
+        return {
+            "available": False,
+            "reason": "beta_coverage_below_threshold",
+            "coverage": coverage,
+            "hits": [],
+        }
+
     hits = []
     for symbol in universe:
         fundamental = fundamental_results[symbol]
         rvol = rvol_results[symbol]
         ema30 = ema30_results[symbol]
+        beta = beta_results[symbol]
         if (
             not fundamental["ready"] or not rvol["ready"] or not rvol["passes"]
             or not ema30["ready"] or not ema30["passes"]
+            or not beta["ready"] or not beta["passes"]
         ):
             continue
         raw = fundamental["raw"]
@@ -464,6 +696,7 @@ def scan_selection_compass(
                 "rvol_trigger_date": rvol["rvol_trigger_date"],
                 "close": ema30["close"],
                 "ema30": ema30["ema30"],
+                "beta_6m": beta["beta_6m"],
             }
         )
 
@@ -514,3 +747,14 @@ def scan_selection_compass(
         "coverage": coverage,
         "hits": hits,
     }
+
+
+def scan_selection_compass(
+    *, premium_pool: dict, as_of: str, price_frames: dict,
+    market_cap_observations: dict[str, dict],
+) -> Dict[str, Any]:
+    """Public daily compass contract: weekly Premium members above EMA30."""
+    return _scan_premium_compass(
+        premium_pool=premium_pool, as_of=as_of, price_frames=price_frames,
+        market_cap_observations=market_cap_observations,
+    )

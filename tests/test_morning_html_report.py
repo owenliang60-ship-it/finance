@@ -12,6 +12,18 @@ def test_dicts_to_html_table_escapes_and_wraps():
     assert "<Corp>" not in html                     # 原始尖括号不得泄漏
 
 
+def test_premium_row_styles_only_first_cell_red_bold_and_keeps_escaping():
+    output = dicts_to_html_table(
+        [{"标的": "A&B <Corp>", "市值": "$3.0T", "_premium": True},
+         {"标的": "NORMAL", "市值": "$2.0T"}],
+        columns=["标的", "市值"],
+    )
+    assert '<tr class="premium-row">' in output
+    assert "A&amp;B &lt;Corp&gt;" in output
+    assert "<Corp>" not in output
+    assert '<tr><td>NORMAL</td>' in output
+
+
 def test_compile_full_html(tmp_path):
     payload = {"as_of": "2026-06-03", "blocks": [
         {"heading": "1. PMARP 信号"},

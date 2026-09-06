@@ -3111,7 +3111,20 @@ def _compass_price_frame(as_of="2026-09-03"):
     )
 
 
+def _wiring_premium_pool(symbols):
+    return {
+        "available": True, "reason": None, "name": "精选Premium池",
+        "as_of": "2026-09-03", "generated_at": "2026-09-03T10:00:00Z",
+        "coverage": {
+            "fundamental_ready": {"covered": len(symbols), "total": len(symbols), "ratio": 1.0},
+            "beta_ready": {"covered": len(symbols), "total": len(symbols), "ratio": 1.0},
+        },
+        "members": [{"symbol": symbol, "beta_6m": 1.5} for symbol in symbols],
+    }
+
+
 def _stub_compass_builder_dependencies(monkeypatch, *, frames, pmarp=None, dv=None):
+    monkeypatch.setattr(mr, "load_premium_pool", lambda: _wiring_premium_pool(list(frames)))
     monkeypatch.setattr(
         "scripts.broad_market_scan.fetch_universe_metadata",
         lambda **kw: {
@@ -3160,6 +3173,7 @@ class TestSelectionCompassWiring:
         shared_calls = []
         db_only_calls = []
         technical_inputs = {}
+        monkeypatch.setattr(mr, "load_premium_pool", lambda: _wiring_premium_pool(["BASE"]))
 
         monkeypatch.setattr(mr, "current_base_universe", lambda: ["BASE"])
         monkeypatch.setattr(
@@ -3257,7 +3271,7 @@ class TestSelectionCompassWiring:
                 "available": True,
                 "reason": None,
                 "coverage": {},
-                "hits": [{"symbol": "BASE", "marketCap": 42e9}],
+                "hits": [{"symbol": "BASE", "marketCap": 42e9, "beta_6m": 1.5}],
             }
 
         monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", fake_scan)
@@ -3275,18 +3289,15 @@ class TestSelectionCompassWiring:
 
         assert shared_calls == [(["BASE", "METADATA_ONLY"], 180)]
         assert db_only_calls == [(["BASE"], 127)]
-        assert scanner_inputs["symbols"] == ["BASE"]
         assert set(scanner_inputs["price_frames"]) == {"BASE"}
         assert scanner_inputs["price_frames"]["BASE"] is compass_only_frame
-        assert beta_inputs == {
-            "frames": {"BASE": compass_only_frame},
-            "symbols": ["BASE"],
-        }
+        assert [m["symbol"] for m in scanner_inputs["premium_pool"]["members"]] == ["BASE"]
+        assert beta_inputs == {}
         assert technical_inputs == {
             "dv": {"METADATA_ONLY"},
             "rvol": {"METADATA_ONLY"},
         }
-        assert result["selection_compass"]["hits"][0]["beta_6m"] == 1.4
+        assert result["selection_compass"]["hits"][0]["beta_6m"] == 1.5
 
     def test_strict_universe_success_uses_exact_current_base(self, monkeypatch):
         frames = {"ACTIVE": _compass_price_frame(), "METADATA_ONLY": _compass_price_frame()}
@@ -3314,9 +3325,9 @@ class TestSelectionCompassWiring:
 
         result = mr.build_market_signal_report()
 
-        assert captured["symbols"] == ["ACTIVE"]
-        assert "METADATA_ONLY" not in captured["symbols"]
-        assert "LEGACY" not in captured["symbols"]
+        assert [m["symbol"] for m in captured["premium_pool"]["members"]] == [
+            "ACTIVE", "METADATA_ONLY",
+        ]
         assert result["selection_compass"]["available"] is True
 
     def test_scanner_receives_price_as_of_frames_and_dated_market_caps(self, monkeypatch):
@@ -3363,8 +3374,9 @@ class TestSelectionCompassWiring:
         assert captured["market_cap_observations"] == {
             "ACTIVE": {"date": "2026-09-03", "marketCap": 42e9}
         }
+        assert [m["symbol"] for m in captured["premium_pool"]["members"]] == ["ACTIVE"]
 
-    def test_beta_is_computed_only_for_compass_hits_and_injected(self, monkeypatch):
+    def test_weekly_premium_beta_is_passed_without_daily_recomputation(self, monkeypatch):
         frames = {
             "HIT": _compass_price_frame("2026-09-03"),
             "MISS": _compass_price_frame("2026-09-03"),
@@ -3390,15 +3402,18 @@ class TestSelectionCompassWiring:
         from src.data import market_store as ms_mod
 
         monkeypatch.setattr(ms_mod, "get_store", lambda: FakeStore())
-        monkeypatch.setattr(
-            "terminal.selection_compass.scan_selection_compass",
-            lambda **kw: {
+        captured = {}
+
+        def fake_scan(**kw):
+            captured.update(kw)
+            return {
                 "available": True,
                 "reason": None,
                 "coverage": {},
-                "hits": [{"symbol": "HIT", "marketCap": 42e9}],
-            },
-        )
+                "hits": [{"symbol": "HIT", "marketCap": 42e9, "beta_6m": 1.5}],
+            }
+
+        monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", fake_scan)
         beta_calls = []
 
         def fake_betas(price_frames, symbols):
@@ -3409,9 +3424,10 @@ class TestSelectionCompassWiring:
 
         result = mr.build_market_signal_report()
 
-        assert [symbols for symbols in beta_calls if symbols] == [["HIT"]]
+        assert [symbols for symbols in beta_calls if symbols] == []
+        assert [m["symbol"] for m in captured["premium_pool"]["members"]] == ["HIT", "MISS"]
         assert result["selection_compass"]["hits"] == [
-            {"symbol": "HIT", "marketCap": 42e9, "beta_6m": 1.73}
+            {"symbol": "HIT", "marketCap": 42e9, "beta_6m": 1.5}
         ]
 
     def test_payload_keeps_existing_pmarp_and_volume_outputs_unchanged(self, monkeypatch):
@@ -3494,7 +3510,7 @@ class TestSelectionCompassWiring:
             ),
         ],
     )
-    def test_strict_universe_empty_or_error_is_unavailable_without_compass_fallback(
+    def test_resolver_empty_or_error_does_not_replace_valid_premium_pool(
         self, monkeypatch, resolver, expected_reason, expected_legacy_symbols
     ):
         frames = {"LEGACY": _compass_price_frame()}
@@ -3511,23 +3527,17 @@ class TestSelectionCompassWiring:
             "scripts.broad_market_scan.load_price_frames",
             fake_load_price_frames,
         )
-        monkeypatch.setattr(
-            "terminal.selection_compass.scan_selection_compass",
-            lambda **kw: pytest.fail("strict compass must not scan a fallback universe"),
-        )
+        captured = {}
+        def fake_scan(**kwargs):
+            captured.update(kwargs)
+            return {"available": True, "reason": None, "coverage": {}, "hits": []}
+        monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", fake_scan)
         monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
 
         result = mr.build_market_signal_report()
 
-        assert result["selection_compass"] == {
-            "available": False,
-            "reason": expected_reason,
-            "coverage": {
-                "fundamental_ready": {"covered": 0, "total": 0, "ratio": 0.0},
-                "rvol_ready": {"covered": 0, "total": 0, "ratio": 0.0},
-            },
-            "hits": [],
-        }
+        assert result["selection_compass"]["available"] is True
+        assert [m["symbol"] for m in captured["premium_pool"]["members"]] == ["LEGACY"]
         assert loaded.get("symbols", []) == expected_legacy_symbols or expected_reason == "empty_universe"
 
 
@@ -3539,7 +3549,7 @@ class TestSelectionCompassWiring:
 
 _SELECTION_COMPASS_COLUMNS = [
     "标的", "EPS YoY", "EPS QoQ", "营收4Q CAGR", "净利4Q CAGR",
-    "成长均值", "近7日最高RVOL", "触发日", "当前市值", "β6M",
+    "成长均值", "收盘", "EMA30", "当前市值", "β6M",
 ]
 _SELECTION_COMPASS_WIDTHS = [180, 150, 150, 190, 190, 160, 210, 160, 170, 120]
 
@@ -3550,7 +3560,8 @@ def _selection_compass_payload(*, available=True, reason=None, hits=None):
         "reason": reason,
         "coverage": {
             "fundamental_ready": {"covered": 19, "total": 20, "ratio": 0.95},
-            "rvol_ready": {"covered": 20, "total": 20, "ratio": 1.0},
+            "beta_ready": {"covered": 20, "total": 20, "ratio": 1.0},
+            "ema30_ready": {"covered": 20, "total": 20, "ratio": 1.0},
         },
         "hits": hits or [],
     }
@@ -3575,8 +3586,8 @@ def _selection_compass_hit(
         "revenue_cagr_4q": 0.18,
         "net_income_cagr_4q": 0.22,
         "growth_avg_4q": 0.20,
-        "rvol_max_7d": 2.75,
-        "rvol_trigger_date": "2026-09-02",
+        "close": 110.0,
+        "ema30": 100.0,
         "marketCap": market_cap,
         "beta_6m": beta,
     }
@@ -3597,18 +3608,18 @@ class TestFormatSelectionCompassText:
 
         lines = text.splitlines()
         assert lines[0] == "*0c. 选股罗盘*"
-        assert lines[1] == "Extended 扫描覆盖：基本面 19/20 | RVOL 20/20"
+        assert lines[1].startswith("精选Premium池周频覆盖：基本面 19/20 | Beta 20/20 | EMA30 20/20")
         assert lines[2] == " | ".join(_SELECTION_COMPASS_COLUMNS)
         rows = lines[3:]
         assert [row.split(" | ")[0] for row in rows] == ["BIG", "SMALL"]
         assert all(len(row.split(" | ")) == 10 for row in rows)
         assert rows[0].split(" | ") == [
             "BIG", "25.0%", "扭亏", "18.0%", "22.0%", "20.0%",
-            "2.75σ", "2026-09-02", "$2.0T", "1.23",
+            "110.00", "100.00", "$2.0T", "1.23",
         ]
         assert rows[1].split(" | ") == [
             "SMALL", "扭亏", "30.0%", "18.0%", "22.0%", "20.0%",
-            "2.75σ", "2026-09-02", "$20.0B", "—",
+            "110.00", "100.00", "$20.0B", "—",
         ]
 
 
@@ -3629,13 +3640,13 @@ class TestBuildHtmlPayloadSelectionCompass:
             block for block in payload["blocks"]
             if block.get("heading") == "0c. 选股罗盘"
         )
-        assert block["subtitle"] == "Extended 扫描覆盖：基本面 19/20 | RVOL 20/20"
+        assert block["subtitle"].startswith("精选Premium池周频覆盖：基本面 19/20")
         assert block["columns"] == _SELECTION_COMPASS_COLUMNS
         assert [row["标的"] for row in block["rows"]] == ["BIG", "SMALL"]
         assert list(block["rows"][0]) == _SELECTION_COMPASS_COLUMNS
         assert list(block["rows"][0].values()) == [
             "BIG", "25.0%", "扭亏", "18.0%", "22.0%", "20.0%",
-            "2.75σ", "2026-09-02", "$2.0T", "1.25",
+            "110.00", "100.00", "$2.0T", "1.25",
         ]
 
 
@@ -3661,7 +3672,7 @@ class TestBuildMorningVisualSectionsSelectionCompass:
             if section["slug"] == "00c_selection_compass"
         )
         assert section["title"] == "0c. 选股罗盘"
-        assert section["subtitle"] == "Extended 扫描覆盖：基本面 19/20 | RVOL 20/20"
+        assert section["subtitle"].startswith("精选Premium池周频覆盖：基本面 19/20")
         assert len(section["blocks"]) == 1
         block = section["blocks"][0]
         assert block["grouped"] is False
@@ -3672,11 +3683,47 @@ class TestBuildMorningVisualSectionsSelectionCompass:
         assert all(len(row["cells"]) == len(block["columns"]) for row in block["rows"])
         assert block["rows"][0]["cells"] == [
             "BIG", "25.0%", "扭亏", "18.0%", "22.0%", "20.0%",
-            "2.75σ", "2026-09-02", "$2.0T", "1.25",
+            "110.00", "100.00", "$2.0T", "1.25",
         ]
 
 
 class TestSelectionCompassSharedVisibility:
+    def test_current_thresholds_and_beta_gate_visible_on_all_report_surfaces(self):
+        compass = _selection_compass_payload(hits=[_selection_compass_hit("BIG", 2e12)])
+        compass["coverage"].update({
+            "ema30_ready": {"covered": 19, "total": 20, "ratio": 0.95},
+            "beta_ready": {"covered": 20, "total": 20, "ratio": 1.0},
+        })
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+        text = mr.format_section_selection_compass(compass)
+        html = next(b for b in mr.build_html_payload(ms, None, "2026-09-03")["blocks"]
+                    if b.get("heading") == "0c. 选股罗盘")
+        visual = next(s for s in mr.build_morning_visual_sections(ms, None)
+                      if s["slug"] == "00c_selection_compass")
+        for rendered in [text, html["subtitle"], visual["subtitle"]]:
+            assert "Beta 20/20" in rendered
+            assert "EPS YoY/QoQ ≥20%" in rendered
+            assert "成长均值 ≥10%或扭亏成长" in rendered
+            assert "β6M ≥1.35" in rendered
+
+    def test_beta_coverage_failure_uses_chinese_warning_and_hides_rows(self):
+        compass = _selection_compass_payload(
+            available=False, reason="beta_coverage_below_threshold",
+            hits=[_selection_compass_hit("MUST_NOT_RENDER", 2e12)],
+        )
+        compass["coverage"]["beta_ready"] = {
+            "covered": 18, "total": 20, "ratio": 0.90,
+        }
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+        rendered = [mr.format_section_selection_compass(compass),
+                    str(mr.build_html_payload(ms, None, "2026-09-03")),
+                    str(mr.build_morning_visual_sections(ms, None))]
+        for output in rendered:
+            assert "Beta 数据覆盖不足" in output
+            assert "MUST_NOT_RENDER" not in output
+
     def test_turnaround_route_label_and_undefined_cagr_on_all_surfaces(self):
         hit = _selection_compass_hit("BE", 20e9)
         hit.update(growth_route="turnaround", net_income_cagr_4q=None, growth_avg_4q=None)
@@ -3762,7 +3809,7 @@ class TestSelectionCompassSharedVisibility:
         )
 
         warning = "⚠️ 选股罗盘不可用（基本面覆盖不足）"
-        coverage = "Extended 扫描覆盖：基本面 18/20 | RVOL 20/20"
+        coverage = mr._selection_compass_coverage_subtitle(compass["coverage"])
         assert warning in text
         assert coverage in text
         assert "MUST_NOT_RENDER" not in text
@@ -3800,6 +3847,7 @@ class TestSelectionCompassSharedVisibility:
         [
             ("fundamental_coverage_below_threshold", "基本面覆盖不足"),
             ("rvol_coverage_below_threshold", "RVOL 覆盖不足"),
+            ("beta_coverage_below_threshold", "Beta 数据覆盖不足"),
             ("market_cap_unavailable", "当前市值数据不足"),
             ("empty_universe", "股票池读取异常"),
             ("universe_resolver_error", "股票池读取异常"),
@@ -3839,3 +3887,99 @@ class TestSelectionCompassSharedVisibility:
             assert reason not in text
             assert reason not in str(html_block)
             assert reason not in str(visual_section)
+
+
+class TestPremiumMorningHighlight:
+    @staticmethod
+    def _signal(symbol, premium):
+        return {
+            "symbol": symbol, "signal": "bullish_breakout", "value": 99.0,
+            "previous": 97.0, "marketCap": 20e9, "beta_6m": 1.8,
+            "layer": "extend", "concept_bucket": "测试概念",
+            "is_premium": premium,
+        }
+
+    @staticmethod
+    def _volume(symbol, premium):
+        return {
+            "symbol": symbol, "marketCap": 20e9, "beta_6m": 1.8,
+            "layer": "extend", "concept_bucket": "测试概念",
+            "is_premium": premium, "from_dv": True, "from_rvol": False,
+            "volume_signal_kind": "流动性加速", "dv_ratio": 2.0,
+            "dv_5d": 2e9, "dv_20d": 1e9,
+        }
+
+    def test_text_html_visual_highlight_only_premium_rows(self, monkeypatch):
+        monkeypatch.setattr(mr, "_display_concept_tags", lambda item: "测试概念")
+        monkeypatch.setattr(mr, "_grouping_bucket_for", lambda item: "测试概念")
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["PREM", "NORMAL"])
+        premium, normal = self._signal("PREM", True), self._signal("NORMAL", False)
+        market = _make_market_signals()
+        market.update({
+            "premium_pool": {"available": True, "symbols": ["PREM"]},
+            "selection_compass": None,
+            "pmarp": {"criteria": "PMARP", "hits": [premium, normal]},
+            "volume_anomaly": {
+                "criteria": "VOL", "hits": [self._volume("PREM", True), self._volume("NORMAL", False)],
+            },
+        })
+        dv = {"rankings": [
+            {"symbol": "PREM", "rank": 1, "dollar_volume": 3e9,
+             "price": 100, "market_cap": 20e9},
+            {"symbol": "NORMAL", "rank": 2, "dollar_volume": 2e9,
+             "price": 90, "market_cap": 20e9},
+        ], "new_faces": []}
+
+        text = mr.format_morning_report(market_signals=market, dv_result=dv, elapsed=1)
+        assert "🔴 *PREM*" in text
+        assert "🔴 *NORMAL*" not in text
+
+        html = mr.build_html_payload(market, dv, as_of="2026-09-04")
+        all_rows = [row for block in html["blocks"] for row in block.get("rows", [])]
+        premium_rows = [row for row in all_rows if row.get("标的") == "PREM"]
+        normal_rows = [row for row in all_rows if row.get("标的") == "NORMAL"]
+        assert premium_rows and all(row.get("_premium") is True for row in premium_rows)
+        assert normal_rows and all(not row.get("_premium") for row in normal_rows)
+
+        visual = mr.build_morning_visual_sections(market, dv)
+        stock_rows = [row for section in visual for block in section.get("blocks", [])
+                      for row in block.get("rows", []) if row.get("cells")]
+        assert any(row["cells"][0] == "PREM" and row.get("premium") is True
+                   for row in stock_rows)
+        assert all(not row.get("premium") for row in stock_rows
+                   if row["cells"][0] == "NORMAL")
+
+    def test_invalid_premium_pool_never_marks_rows(self, monkeypatch):
+        frames = {"PREM": _compass_price_frame()}
+        _stub_compass_builder_dependencies(monkeypatch, frames=frames,
+            pmarp=lambda *a, **kw: {
+                "signal": "bullish_breakout", "current": 99.0, "previous": 97.0,
+            })
+        monkeypatch.setattr(mr, "load_premium_pool", lambda: {
+            "available": False, "reason": "premium_pool_stale", "members": [],
+        })
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["PREM"])
+        monkeypatch.setattr(mr, "_concept_bucket", lambda item: "测试概念")
+        result = mr.build_market_signal_report()
+        assert result["premium_pool"]["available"] is False
+        assert result["pmarp"]["hits"][0]["is_premium"] is False
+
+    def test_compass_exception_preserves_weekly_coverage(self, monkeypatch):
+        frames = {"PREM": _compass_price_frame()}
+        _stub_compass_builder_dependencies(monkeypatch, frames=frames)
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["PREM"])
+        monkeypatch.setattr(
+            "terminal.selection_compass.scan_selection_compass",
+            lambda **kw: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        result = mr.build_market_signal_report()["selection_compass"]
+        assert result["available"] is False
+        assert result["coverage"]["fundamental_ready"] == {
+            "covered": 1, "total": 1, "ratio": 1.0,
+        }
+        assert result["coverage"]["beta_ready"] == {
+            "covered": 1, "total": 1, "ratio": 1.0,
+        }
+        assert result["coverage"]["ema30_ready"] == {
+            "covered": 0, "total": 1, "ratio": 0.0,
+        }

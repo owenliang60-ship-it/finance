@@ -38,6 +38,7 @@ from config.settings import (
 )
 from src.data import get_symbols
 from src.data.universe_resolver import current_base_universe
+from src.data.premium_pool import load_premium_pool
 from src.indicators.dv_acceleration import format_dv
 from src.telegram_bot import send_document, send_message, send_photo, split_message
 
@@ -430,7 +431,21 @@ def _compact_company(item: dict) -> str:
     return symbol
 
 
-def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set, betas: dict | None = None) -> dict:
+def _premium_text_company(item: dict) -> str:
+    company = _compact_company(item)
+    return "🔴 *{}*".format(company) if item.get("is_premium") else company
+
+
+def _premium_symbols_from_market_signals(market_signals: dict | None) -> set[str]:
+    pool = (market_signals or {}).get("premium_pool") or {}
+    if not pool.get("available"):
+        return set()
+    return {str(symbol).upper() for symbol in pool.get("symbols") or []}
+
+
+def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set,
+                       betas: dict | None = None,
+                       premium_symbols: set[str] | None = None) -> dict:
     symbol = item["symbol"]
     meta = metadata.get(symbol, {})
     enriched = dict(item)
@@ -447,6 +462,8 @@ def _enrich_with_layer(item: dict, metadata: dict, pool_symbols: set, betas: dic
         )
     enriched["layer"] = layer
     enriched["beta_6m"] = (betas or {}).get(symbol)
+    if premium_symbols is not None:
+        enriched["is_premium"] = symbol in premium_symbols
     enriched["concept_bucket"] = _concept_bucket(enriched)
     return enriched
 
@@ -455,10 +472,10 @@ def _compute_signal_betas(
     price_frames: dict,
     signal_symbols: list,
 ) -> dict:
-    """信号命中股的 6 个月 beta（对 BETA_BENCHMARK）。基准序列只加载一次。
+    """目标股票的 6 个月 beta（对 BETA_BENCHMARK）。基准序列只加载一次。
 
     price_frames: load_price_frames 输出（date 索引 close/volume frame，180 行）。
-    基准缺失或个股不在 price_frames → None（晨报渲染为 —，不阻塞）。
+    基准缺失或个股不在 price_frames → None；调用层决定展示或门控语义。
     """
     from scripts.broad_market_scan import load_price_frames_from_market_db
     from src.indicators.beta import compute_beta
@@ -1141,12 +1158,10 @@ RVOL_ONLY_SINGLE_THRESHOLD = 3.0
 def build_market_signal_report(symbols_override: list[str] | None = None) -> dict:
     """Build technical signal payload for the merged morning report.
 
-    Selection scan covers pool.json members ∪ extend ($10B+) names only;
-    broad universe is no longer scanned (broad data still feeds Section 0 S2
-    breadth via build_market_timing_factor_report's independent broad DB
-    load). R3 (Task 15): the two used to render as distinct "pool"/"extend"
-    layers; they now render as one merged "extend" layer — the underlying
-    scan/inclusion logic (this docstring) is unchanged.
+    Technical signals scan the current Extended universe. Selection Compass
+    separately consumes the validated weekly Premium Pool and applies only
+    the daily EMA30 timing gate; Premium membership also annotates technical
+    signal rows for shared report highlighting.
 
     --symbols override grants extend privilege: every override symbol is
     treated as layer="extend", bypassing the $10B mcap filter so manual
@@ -1164,12 +1179,14 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     from src.indicators.pmarp import analyze_pmarp
     from src.indicators.rvol_sustained import scan_rvol_sustained
 
-    selection_compass_reason = None
+    premium_pool = load_premium_pool()
+    premium_symbols = {
+        row["symbol"] for row in premium_pool.get("members", [])
+        if isinstance(row, dict) and row.get("symbol")
+    } if premium_pool.get("available") else set()
+    selection_compass_symbols = sorted(premium_symbols)
     try:
         pool_symbols = set(current_base_universe())
-        selection_compass_symbols = sorted(pool_symbols)
-        if not selection_compass_symbols:
-            selection_compass_reason = "empty_universe"
     except Exception as e:
         # R3 迁移期兼容：current_base_universe() 在 SM/extended_membership 尚未
         # bootstrap 时 fail-loud 抛 RuntimeError（本 worktree 的骨架 DB 即此状
@@ -1182,8 +1199,6 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
             "current_base_universe unavailable, falling back to legacy pool symbols: %s", e
         )
         pool_symbols = set(get_symbols())
-        selection_compass_symbols = []
-        selection_compass_reason = "universe_resolver_error"
     if symbols_override:
         symbols = sorted({s.strip().upper() for s in symbols_override if s.strip()})
         store = get_store()
@@ -1228,7 +1243,7 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         for symbol in selection_compass_symbols
         if symbol in price_frames
     }
-    if not selection_compass_reason:
+    if premium_pool.get("available"):
         missing_compass_symbols = sorted(
             set(selection_compass_symbols) - set(selection_compass_price_frames)
         )
@@ -1274,7 +1289,7 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     betas = _compute_signal_betas(price_frames, signal_symbols)
 
     pmarp_signals = [
-        _enrich_with_layer(item, metadata, pool_symbols, betas)
+        _enrich_with_layer(item, metadata, pool_symbols, betas, premium_symbols)
         for item in pmarp_raw
     ]
     # Group by signal kind first (up98 / down98 / up2), then by value.
@@ -1285,13 +1300,13 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     ))
 
     dv_hits = [
-        _enrich_with_layer(item, metadata, pool_symbols, betas)
+        _enrich_with_layer(item, metadata, pool_symbols, betas, premium_symbols)
         for item in dv_raw
     ]
     dv_hits.sort(key=lambda x: (-(x.get("ratio") or 0), x["symbol"]))
 
     rvol_hits = [
-        _enrich_with_layer(item, metadata, pool_symbols, betas)
+        _enrich_with_layer(item, metadata, pool_symbols, betas, premium_symbols)
         for item in rvol_raw
     ]
 
@@ -1300,24 +1315,17 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     scan_dates = [frame.index.max() for frame in price_frames.values() if not frame.empty]
     as_of = max(scan_dates).date().isoformat() if scan_dates else date.today().isoformat()
 
-    if selection_compass_reason:
-        selection_compass = {
-            "available": False,
-            "reason": selection_compass_reason,
-            "coverage": {
-                "fundamental_ready": {"covered": 0, "total": 0, "ratio": 0.0},
-                "rvol_ready": {"covered": 0, "total": 0, "ratio": 0.0},
-            },
-            "hits": [],
-        }
+    from terminal.selection_compass import scan_selection_compass
+    if not premium_pool.get("available"):
+        selection_compass = scan_selection_compass(
+            premium_pool=premium_pool, as_of=as_of, price_frames={},
+            market_cap_observations={},
+        )
     else:
-        from terminal.selection_compass import scan_selection_compass
-
         try:
             selection_store = get_store()
             selection_compass = scan_selection_compass(
-                store=selection_store,
-                symbols=selection_compass_symbols,
+                premium_pool=premium_pool,
                 as_of=as_of,
                 price_frames=selection_compass_price_frames,
                 market_cap_observations=(
@@ -1328,41 +1336,18 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
                     )
                 ),
             )
-            compass_hits = selection_compass.get("hits", [])
-            compass_hit_symbols = [hit["symbol"] for hit in compass_hits]
-            compass_betas = (
-                _compute_signal_betas(
-                    selection_compass_price_frames,
-                    compass_hit_symbols,
-                )
-                if compass_hit_symbols
-                else {}
-            )
-            selection_compass = dict(selection_compass)
-            selection_compass["hits"] = [
-                {
-                    **hit,
-                    "beta_6m": compass_betas.get(hit["symbol"]),
-                }
-                for hit in compass_hits
-            ]
         except Exception as exc:
             logger.warning("selection compass unavailable: %s", exc)
+            failed_coverage = dict(premium_pool.get("coverage") or {})
+            failed_coverage["ema30_ready"] = {
+                "covered": 0,
+                "total": len(selection_compass_symbols),
+                "ratio": 0.0,
+            }
             selection_compass = {
                 "available": False,
                 "reason": "selection_compass_error",
-                "coverage": {
-                    "fundamental_ready": {
-                        "covered": 0,
-                        "total": len(selection_compass_symbols),
-                        "ratio": 0.0,
-                    },
-                    "rvol_ready": {
-                        "covered": 0,
-                        "total": len(selection_compass_symbols),
-                        "ratio": 0.0,
-                    },
-                },
+                "coverage": failed_coverage,
                 "hits": [],
             }
 
@@ -1386,6 +1371,15 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         "market_timing_factor": build_market_timing_factor_report(),
         "volume_concentration": volconc,
         "selection_compass": selection_compass,
+        "premium_pool": {
+            "available": premium_pool.get("available", False),
+            "reason": premium_pool.get("reason"),
+            "name": premium_pool.get("name"),
+            "as_of": premium_pool.get("as_of"),
+            "generated_at": premium_pool.get("generated_at"),
+            "member_count": len(premium_symbols),
+            "symbols": sorted(premium_symbols),
+        },
         "layer_counts": {
             layer: sum(
                 1 for symbol in symbols
@@ -1565,13 +1559,18 @@ def format_section_volume_concentration(payload: dict) -> str:
 
 SELECTION_COMPASS_COLUMNS = [
     "标的", "EPS YoY", "EPS QoQ", "营收4Q CAGR", "净利4Q CAGR",
-    "成长均值", "近7日最高RVOL", "触发日", "当前市值", "β6M",
+    "成长均值", "收盘", "EMA30", "当前市值", "β6M",
 ]
 SELECTION_COMPASS_WIDTHS = [180, 150, 150, 190, 190, 160, 210, 160, 170, 120]
 SELECTION_COMPASS_REASON_LABELS = {
     "fundamental_coverage_below_threshold": "基本面覆盖不足",
     "rvol_coverage_below_threshold": "RVOL 覆盖不足",
     "ema30_coverage_below_threshold": "EMA30 价格覆盖不足",
+    "beta_coverage_below_threshold": "Beta 数据覆盖不足",
+    "premium_pool_missing": "精选Premium池尚未生成",
+    "premium_pool_stale": "精选Premium池已过期",
+    "premium_pool_criteria_mismatch": "精选Premium池条件版本不匹配",
+    "premium_pool_invalid": "精选Premium池数据异常",
     "market_cap_unavailable": "当前市值数据不足",
     "empty_universe": "股票池读取异常",
     "universe_resolver_error": "股票池读取异常",
@@ -1593,6 +1592,18 @@ def _format_compass_growth(value: float | None, turnaround: bool = False) -> str
 def _selection_compass_coverage_subtitle(coverage: dict | None) -> str:
     coverage = coverage or {}
     fundamental = coverage.get("fundamental_ready") or {}
+    if "rvol_ready" not in coverage:
+        beta = coverage.get("beta_ready") or {}
+        ema30 = coverage.get("ema30_ready") or {}
+        return (
+            "精选Premium池周频覆盖：基本面 {}/{} | Beta {}/{} | "
+            "EMA30 {}/{} | 条件：EPS YoY/QoQ ≥20% / "
+            "成长均值 ≥10%或扭亏成长 / β6M ≥1.35 / 收盘价 > EMA30"
+        ).format(
+            fundamental.get("covered", 0), fundamental.get("total", 0),
+            beta.get("covered", 0), beta.get("total", 0),
+            ema30.get("covered", 0), ema30.get("total", 0),
+        )
     rvol = coverage.get("rvol_ready") or {}
     subtitle = "Extended 扫描覆盖：基本面 {}/{} | RVOL {}/{}".format(
         fundamental.get("covered", 0),
@@ -1603,9 +1614,17 @@ def _selection_compass_coverage_subtitle(coverage: dict | None) -> str:
     # Legacy saved reports did not apply EMA30; do not relabel their semantics.
     if "ema30_ready" in coverage:
         ema30 = coverage["ema30_ready"]
-        subtitle += " | EMA30 {}/{} | 收盘价 > EMA30".format(
+        subtitle += " | EMA30 {}/{}".format(
             ema30.get("covered", 0), ema30.get("total", 0),
         )
+        if "beta_ready" not in coverage:
+            subtitle += " | 收盘价 > EMA30"
+    if "beta_ready" in coverage:
+        beta = coverage["beta_ready"]
+        subtitle += (
+            " | Beta {}/{} | 条件：EPS YoY/QoQ ≥20% / "
+            "成长均值 ≥10%或扭亏成长 / 收盘价 > EMA30 / β6M ≥1.35"
+        ).format(beta.get("covered", 0), beta.get("total", 0))
     return subtitle
 
 
@@ -1661,8 +1680,8 @@ def _selection_compass_display(payload: dict | None) -> dict:
             _format_compass_growth(hit.get("net_income_cagr_4q")),
             ("扭亏成长" if hit.get("growth_route") == "turnaround"
              else _format_compass_growth(hit.get("growth_avg_4q"))),
-            "{:.2f}σ".format(hit.get("rvol_max_7d")),
-            hit.get("rvol_trigger_date") or "—",
+            "{:.2f}".format(hit.get("close")),
+            "{:.2f}".format(hit.get("ema30")),
             _format_market_cap(hit.get("marketCap")),
             _format_beta(hit.get("beta_6m")),
         ])
@@ -1722,7 +1741,7 @@ def format_section_pmarp_by_signal_and_cap(market_signals: dict) -> str:
         lines.append("  标的 | 概念 | 信号 | 当前 | 变化 | 市值 | β6M")
         for item in tier_hits:
             lines.append("    {} | {} | {} | {:.1f}% | {:.1f}→{:.1f} | {} | {}".format(
-                _compact_company(item), _display_concept_tags(item),
+                _premium_text_company(item), _display_concept_tags(item),
                 PMARP_SIGNAL_LABELS.get(item.get("signal"), "—"),
                 item.get("value") or 0, item.get("previous") or 0, item.get("value") or 0,
                 _format_market_cap(item.get("marketCap")),
@@ -1739,7 +1758,7 @@ def format_section_layered_dv(market_signals: dict) -> str:
         "无加速信号",
         "标的 | 概念 | 倍数 | 5d/20d | 市值",
         lambda item: "{} | {} | {:.1f}x | {}/{} | {}".format(
-            _compact_company(item),
+            _premium_text_company(item),
             _display_concept_tags(item),
             item.get("ratio") or 0,
             format_dv(item.get("dv_5d") or 0),
@@ -1763,7 +1782,7 @@ def format_section_layered_rvol(market_signals: dict) -> str:
         "无持续放量信号",
         "标的 | 概念 | 形态 | 最新 | 市值",
         lambda item: "{} | {} | {} | {:.1f}σ | {}".format(
-            _compact_company(item),
+            _premium_text_company(item),
             _display_concept_tags(item),
             level_labels.get(item.get("level"), item.get("level", "")),
             item.get("latest_rvol") or 0,
@@ -1841,7 +1860,7 @@ def format_section_layered_volume_anomaly(market_signals: dict) -> str:
         "无量能异常信号",
         "标的 | 概念 | 类型 | DV 5d/20d | RVOL | 市值 | β6M",
         lambda item: "{} | {} | {} | {} | {} | {} | {}".format(
-            _compact_company(item),
+            _premium_text_company(item),
             _display_concept_tags(item),
             item.get("volume_signal_kind") or "—",
             _format_volume_anomaly_dv_cell(item),
@@ -1965,7 +1984,7 @@ def format_section_c(rvol_list: list) -> str:
     return "\n".join(lines)
 
 
-def _normalize_dv_items(dv_result: dict) -> dict:
+def _normalize_dv_items(dv_result: dict, premium_symbols: set[str] | None = None) -> dict:
     """Normalize Dollar Volume rows into the same enriched item shape as signals."""
     rankings = dv_result.get("rankings", [])
     new_faces = dv_result.get("new_faces", [])
@@ -2000,6 +2019,7 @@ def _normalize_dv_items(dv_result: dict) -> dict:
         item = dict(metadata.get(symbol) or {})
         item.update({k: v for k, v in row.items() if v not in (None, "")})
         item["symbol"] = symbol or item.get("symbol", "")
+        item["is_premium"] = symbol in (premium_symbols or set())
         if row.get("company_name") and not item.get("companyName"):
             item["companyName"] = row.get("company_name")
         # DV row's market_cap is freshly collected — override any stale local
@@ -2028,10 +2048,10 @@ def _normalize_dv_items(dv_result: dict) -> dict:
     }
 
 
-def format_section_d(dv_result: dict) -> str:
+def format_section_d(dv_result: dict, premium_symbols: set[str] | None = None) -> str:
     """D. Dollar Volume — flat ranking with L2 concept tag, original rank order."""
     lines = ["*D. Dollar Volume*"]
-    normalized = _normalize_dv_items(dv_result)
+    normalized = _normalize_dv_items(dv_result, premium_symbols)
 
     if normalized["new_faces"]:
         lines.append("真·新面孔（{} 日内首次进榜）:".format(DOLLAR_VOLUME_LOOKBACK))
@@ -2040,7 +2060,7 @@ def format_section_d(dv_result: dict) -> str:
             "无新面孔",
             "标的 | 概念(L2) | 排名 | 成交额",
             lambda item: "{} | {} | #{} | {}".format(
-                _compact_company(item),
+                _premium_text_company(item),
                 _grouping_bucket_for(item),
                 item["rank"],
                 format_dv(item["dollar_volume"]),
@@ -2054,7 +2074,7 @@ def format_section_d(dv_result: dict) -> str:
             "无成交额排行",
             "标的 | 概念(L2) | 排名 | 排名变化 | 成交额 | 价格",
             lambda item: "{} | {} | #{} | {} | {} | ${:.0f}".format(
-                _compact_company(item),
+                _premium_text_company(item),
                 _grouping_bucket_for(item),
                 item["rank"],
                 item.get("rank_change_label", "—"),
@@ -2157,7 +2177,8 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
                  "当前": "{:.1f}%".format(h.get("value") or 0),
                  "变化": "{:.1f}→{:.1f}".format(h.get("previous") or 0, h.get("value") or 0),
                  "市值": _format_market_cap(h.get("marketCap")),
-                 "β6M": _format_beta(h.get("beta_6m"))} for h in tier_hits]
+                 "β6M": _format_beta(h.get("beta_6m")),
+                 "_premium": bool(h.get("is_premium"))} for h in tier_hits]
         blocks.append({"heading": "{} — {}".format(signal_label, tier),
                        "columns": pm_cols, "rows": rows})
 
@@ -2169,17 +2190,21 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
                 "DV 5d/20d": _format_volume_anomaly_dv_cell(h),
                 "RVOL": _format_volume_anomaly_rvol_cell(h),
                 "市值": _format_market_cap(h.get("marketCap")),
-                "β6M": _format_beta(h.get("beta_6m"))} for h in va_hits]
+                "β6M": _format_beta(h.get("beta_6m")),
+                "_premium": bool(h.get("is_premium"))} for h in va_hits]
     blocks.append({"heading": "2. 量能异常", "columns": va_cols, "rows": va_rows})
 
     # Dollar Volume — flat ranking; columns one-to-one with format_section_d
     if dv_result:
-        normalized = _normalize_dv_items(dv_result)
+        normalized = _normalize_dv_items(
+            dv_result, _premium_symbols_from_market_signals(market_signals),
+        )
         if normalized["new_faces"]:
             nf_cols = ["标的", "概念(L2)", "排名", "成交额"]
             nf_rows = [{"标的": _compact_company(item), "概念(L2)": _grouping_bucket_for(item),
                         "排名": "#{}".format(item["rank"]),
-                        "成交额": format_dv(item["dollar_volume"])}
+                        "成交额": format_dv(item["dollar_volume"]),
+                        "_premium": bool(item.get("is_premium"))}
                        for item in normalized["new_faces"]]
             blocks.append({"heading": "3. Dollar Volume — 真·新面孔（{} 日内首次进榜）".format(
                 DOLLAR_VOLUME_LOOKBACK), "columns": nf_cols, "rows": nf_rows})
@@ -2189,7 +2214,8 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
                         "排名": "#{}".format(item["rank"]),
                         "排名变化": item.get("rank_change_label", "—"),
                         "成交额": format_dv(item["dollar_volume"]),
-                        "价格": "${:.0f}".format(item["price"])}
+                        "价格": "${:.0f}".format(item["price"]),
+                        "_premium": bool(item.get("is_premium"))}
                        for item in normalized["rankings"]]
             blocks.append({"heading": "3. Dollar Volume — 成交额 Top {}".format(
                 len(normalized["rankings"])), "columns": dv_cols, "rows": dv_rows})
@@ -2201,6 +2227,7 @@ def _visual_row(item: dict, cells: list[str]) -> dict:
     return {
         "layer": item.get("layer", "broad"),
         "bucket": _grouping_bucket_for(item),
+        "premium": bool(item.get("is_premium")),
         "cells": [str(cell) for cell in cells],
     }
 
@@ -2395,7 +2422,9 @@ def build_morning_visual_sections(
         })
 
     if dv_result:
-        normalized = _normalize_dv_items(dv_result)
+        normalized = _normalize_dv_items(
+            dv_result, _premium_symbols_from_market_signals(market_signals),
+        )
         blocks = []
         if normalized["new_faces"]:
             cols = ["标的", "概念", "排名", "成交额"]
@@ -2408,6 +2437,7 @@ def build_morning_visual_sections(
                 "rows": [
                     {"layer": item.get("layer", "broad"),
                      "bucket": _grouping_bucket_for(item),
+                     "premium": bool(item.get("is_premium")),
                      "cells": [
                          _visual_company(item),
                          _grouping_bucket_for(item),
@@ -2428,6 +2458,7 @@ def build_morning_visual_sections(
                 "rows": [
                     {"layer": item.get("layer", "broad"),
                      "bucket": _grouping_bucket_for(item),
+                     "premium": bool(item.get("is_premium")),
                      "cells": [
                          _visual_company(item),
                          _grouping_bucket_for(item),
@@ -2668,8 +2699,14 @@ def render_morning_report_images(
                     font = _load_visual_font(32, bold=True) if row.get("alert") else row_font
                     draw.rectangle([margin, y, width - margin, y + row_h], fill=fill)
                     cur_x = margin
-                    for col_width, cell in zip(col_widths, row["cells"]):
-                        _draw_fit(draw, (cur_x + 18, y + 13), cell, font, text_fill, col_width - 34)
+                    for cell_idx, (col_width, cell) in enumerate(zip(col_widths, row["cells"])):
+                        cell_font = font
+                        cell_fill = text_fill
+                        if row.get("premium") and cell_idx == 0 and not row.get("alert"):
+                            cell_font = _load_visual_font(32, bold=True)
+                            cell_fill = "#b91c1c"
+                        _draw_fit(draw, (cur_x + 18, y + 13), cell,
+                                  cell_font, cell_fill, col_width - 34)
                         cur_x += col_width
                     y += row_h
                 y += 46
@@ -2714,8 +2751,14 @@ def render_morning_report_images(
                         fill = "#ffffff" if row_idx % 2 == 0 else "#f8fafc"
                         draw.rectangle([margin, y, width - margin, y + row_h], fill=fill)
                         cur_x = margin
-                        for col_width, cell in zip(col_widths, row["cells"]):
-                            _draw_fit(draw, (cur_x + 18, y + 14), cell, row_font, "#111827", col_width - 34)
+                        for cell_idx, (col_width, cell) in enumerate(zip(col_widths, row["cells"])):
+                            cell_font = row_font
+                            cell_fill = "#111827"
+                            if row.get("premium") and cell_idx == 0:
+                                cell_font = _load_visual_font(32, bold=True)
+                                cell_fill = "#b91c1c"
+                            _draw_fit(draw, (cur_x + 18, y + 14), cell,
+                                      cell_font, cell_fill, col_width - 34)
                             cur_x += col_width
                         y += row_h
                     y += 26
@@ -3029,7 +3072,9 @@ def format_morning_report(
 
     # D. Dollar Volume — flat ranking with a 概念(L2) column (not concept-bucketed).
     if dv_result:
-        lines.append(format_section_d(dv_result))
+        lines.append(format_section_d(
+            dv_result, _premium_symbols_from_market_signals(market_signals),
+        ))
         lines.append("")
 
     # E. 市场情绪脉搏
