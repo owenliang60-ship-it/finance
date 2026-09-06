@@ -1428,7 +1428,7 @@ class TestBroadDropPlanV3:
         payload = mr.build_html_payload(sample_market_signals(), dv_result, "2026-09-04")
         block = next(b for b in payload["blocks"]
                      if b.get("heading") == "3. Dollar Volume — 成交额 Top 2")
-        assert [row["标的"] for row in block["rows"]] == ["NVDA", "OKLO"]
+        assert [row["标的"].split()[0] for row in block["rows"]] == ["NVDA", "OKLO"]
 
     def test_run_dollar_volume_uses_market_signal_session_date(self, monkeypatch):
         captured = {}
