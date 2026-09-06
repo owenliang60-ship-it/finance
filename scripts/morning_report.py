@@ -1612,7 +1612,7 @@ def _selection_compass_coverage_subtitle(coverage: dict | None) -> str:
         beta = coverage["beta_ready"]
         subtitle += (
             " | Beta {}/{} | 条件：EPS YoY/QoQ ≥20% / "
-            "成长均值 ≥10%或扭亏成长 / 收盘价 > EMA30 / β6M ≥1"
+            "成长均值 ≥10%或扭亏成长 / 收盘价 > EMA30 / β6M ≥1.35"
         ).format(beta.get("covered", 0), beta.get("total", 0))
     return subtitle
 

@@ -321,7 +321,7 @@ def _store_for(symbols):
     )
 
 
-def _betas(symbols, value=1.25):
+def _betas(symbols, value=1.50):
     return {symbol: value for symbol in symbols}
 
 
@@ -458,7 +458,7 @@ def _scan_turnaround(store, frame=None):
         store=store, symbols=["BE"], as_of="2026-09-03",
         price_frames={"BE": _price_frame() if frame is None else frame},
         market_cap_observations={"BE": {"date": "2026-09-03", "market_cap": 1e10}},
-        beta_observations={"BE": 1.0},
+        beta_observations={"BE": 1.35},
     )
 
 
@@ -558,7 +558,7 @@ def test_missing_stale_or_future_market_cap_for_a_hit_fails_closed(observation):
         as_of="2026-09-03",
         price_frames={"AAA": _price_frame()},
         market_cap_observations=observations,
-        beta_observations={"AAA": 1.0},
+        beta_observations={"AAA": 1.35},
     )
 
     assert result["available"] is False
@@ -576,7 +576,7 @@ def test_market_cap_at_seven_day_freshness_boundary_is_accepted():
         market_cap_observations={
             "AAA": {"date": "2026-08-27", "marketCap": 1_000_000_000}
         },
-        beta_observations={"AAA": 1.0},
+        beta_observations={"AAA": 1.35},
     )
 
     assert result["available"] is True
@@ -651,18 +651,18 @@ def test_ema30_price_coverage_is_separate_and_fails_closed_below_95_percent(cove
         assert result["reason"] == "ema30_coverage_below_threshold"
 
 
-def test_beta_gate_accepts_exact_one_and_rejects_below_one():
+def test_beta_gate_accepts_exact_135_and_rejects_below_135():
     symbols = ["EXACT", "LOW"]
     result = scan_selection_compass(
         store=_passing_store(symbols), symbols=symbols, as_of="2026-09-03",
         price_frames={s: _price_frame() for s in symbols},
         market_cap_observations={s: {"date": "2026-09-03", "market_cap": 1e10}
                                  for s in symbols},
-        beta_observations={"EXACT": 1.0, "LOW": 0.999},
+        beta_observations={"EXACT": 1.35, "LOW": 1.349},
     )
     assert result["available"] is True
     assert [hit["symbol"] for hit in result["hits"]] == ["EXACT"]
-    assert result["hits"][0]["beta_6m"] == 1.0
+    assert result["hits"][0]["beta_6m"] == 1.35
 
 
 @pytest.mark.parametrize("invalid", [None, float("nan"), float("inf"), "bad"])

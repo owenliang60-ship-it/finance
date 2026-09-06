@@ -3,7 +3,7 @@
 > **For Claude:** Implement task-by-task with TDD in the dedicated worktree.
 
 **Confidence: 97%**
-**不确定点**: 无。Boss明确要求EPS YoY/QoQ门槛20%、四季成长门槛10%、β≥1。
+**不确定点**: 无。Boss明确要求EPS YoY/QoQ门槛20%、四季成长门槛10%，并在批注循环中把β门槛从1.00改为1.35。
 **Goal:** 调整选股罗盘基本面阈值，并将现有相对SPY的β6M升级为正式硬门槛。
 **Tech Stack:** Python、pandas、SQLite、pytest。
 **北极星对齐:** `docs/design/north-star.md` 分析层/晨报选股罗盘；复用数据层daily_price和现有beta实现，不增加数据源。
@@ -33,7 +33,7 @@ flowchart LR
     Ready -- 否 --> Warn[整段中文告警]
     Ready -- 是 --> EPS[EPS YoY与QoQ均≥20%]
     EPS --> Growth[成长均值≥10% 或既有扭亏成长]
-    Growth --> BetaGate[β6M≥1]
+    Growth --> BetaGate[β6M≥1.35]
     BetaGate --> Price[RVOL≥2且收盘>EMA30]
     Price --> Result[按市值降序展示]
 ```
@@ -58,21 +58,21 @@ flowchart LR
 
 ## Acceptance Criteria（验收标准）
 
-- [ ] EPS YoY和QoQ均以20%为含边界门槛；任一不足仍失败。
-- [ ] 非扭亏成长均值以10%为含边界门槛；扭亏成长口径不变。
-- [ ] beta恰为1通过，0.999不通过；缺失beta按不通过，整体覆盖低于95%给中文告警。
-- [ ] 报告subtitle明确显示β覆盖和`β6M ≥ 1`；表内beta与用于门控的值一致。
-- [ ] RVOL、EMA30、市值排序、GAAP口径及扭亏路线不变。
-- [ ] 同一云端快照独立重算新命中，并解释相对旧规则的增减。
+- [x] EPS YoY和QoQ均以20%为含边界门槛；任一不足仍失败。
+- [x] 非扭亏成长均值以10%为含边界门槛；扭亏成长口径不变。
+- [x] beta恰为1.35通过，1.349不通过；缺失beta按不通过，整体覆盖低于95%给中文告警。
+- [x] 报告subtitle明确显示β覆盖和`β6M ≥ 1.35`；表内beta与用于门控的值一致。
+- [x] RVOL、EMA30、市值排序、GAAP口径及扭亏路线不变。
+- [x] 同一生产快照独立重算新命中，并解释相对旧规则的增减。
 
 ---
 
 ## TDD checklist
 
 - [x] RED：39个engine失败 + 8个wiring/render失败，覆盖阈值边界、beta边界/缺失/覆盖、编排只算一次、三种报告面语义。
-- [x] GREEN：常量化20%/10%/1.0/95%，scanner接收beta观测并门控。
+- [x] GREEN：常量化20%/10%/1.35/95%，scanner接收beta观测并门控。
 - [x] GREEN：morning_report对完整罗盘池批量计算beta并传入，删除后置补beta。
 - [x] 回归：相关242 passed/1 skipped；全量2912 passed/4 skipped；Python3.10语法通过。
-- [x] 真实只读回放：9月4日934只，beta923/934；新完整命中DELL/SNDK/IX/OKTA/JHX，三种报告面语义一致。
+- [x] 真实只读回放最终批注：9月4日934只，beta923/934；基本面152只、加β≥1.35后56只；完整命中DELL/SNDK/JHX，三种报告面语义一致。β门槛1.00时的77只/五命中仅为被本批注取代的中间结果。
 - [x] 精确文件commit，交Boss确认后再merge/push/deploy。
 - [ ] 精确文件commit，交Boss确认后再merge/push/deploy。

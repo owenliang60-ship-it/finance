@@ -3704,7 +3704,7 @@ class TestSelectionCompassSharedVisibility:
             assert "Beta 20/20" in rendered
             assert "EPS YoY/QoQ ≥20%" in rendered
             assert "成长均值 ≥10%或扭亏成长" in rendered
-            assert "β6M ≥1" in rendered
+            assert "β6M ≥1.35" in rendered
 
     def test_beta_coverage_failure_uses_chinese_warning_and_hides_rows(self):
         compass = _selection_compass_payload(
