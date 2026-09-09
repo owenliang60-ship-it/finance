@@ -168,12 +168,11 @@ def _parse_cash(ws) -> float:
     for row in ws.iter_rows(values_only=True):
         label = str(row[0]).strip() if row and row[0] is not None else ""
         if label == CASH_LABEL:
-            value = _to_float_strict(
+            # Negative cash is legitimate (margin / leverage); only
+            # missing or non-numeric values are rejected by _to_float_strict.
+            return _to_float_strict(
                 row[1] if len(row) > 1 else None,
                 "cash value in %s" % CASH_TAB)
-            if value < 0:
-                raise SheetBookError("cash value invalid in %s" % CASH_TAB)
-            return value
     raise SheetBookError("label not found in %s: %s" % (CASH_TAB, CASH_LABEL))
 
 
