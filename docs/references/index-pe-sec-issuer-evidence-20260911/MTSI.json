@@ -1,0 +1,27 @@
+{
+  "equivalent_leis": [],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "MACOM Technology Solutions Holdings, Inc."
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "55405Y100",
+      "isin": "US55405Y1001",
+      "symbol": "MTSI",
+      "valid_from": "2025-09-30",
+      "valid_to": "2026-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001493594",
+    "form": "4",
+    "sec_name": "MACOM Technology Solutions Holdings, Inc.",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1493594/000090445426000312/0000904454-26-000312-index-headers.html",
+    "symbol": "MTSI"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

@@ -1,0 +1,30 @@
+{
+  "equivalent_leis": [
+    "5493006ZCRFWKF6B1K26"
+  ],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "Discovery Inc"
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "25470F104",
+      "isin": "US25470F1049",
+      "symbol": "DISCA",
+      "valid_from": "2021-06-30",
+      "valid_to": "2022-03-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001437107",
+    "form": "SC 13G/A",
+    "sec_name": "Discovery, Inc.",
+    "section": "SUBJECT COMPANY",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1348883/000134888322000006/0001348883-22-000006-index-headers.html",
+    "symbol": "DISCA"
+  },
+  "share_class_source_url": "https://www.sec.gov/divisions/corpfin/cf-noaction/14a-8/2021/steinercheveddendiscovery012521-14a8-incoming.pdf",
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

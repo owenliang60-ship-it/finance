@@ -1,0 +1,31 @@
+{
+  "equivalent_leis": [
+    "2549009GW3Z3DQCB8H87"
+  ],
+  "expected_raw_leis": [
+    "CI7MUJI4USF3V0NJ1H64"
+  ],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "Expedia Group Inc"
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "30212P303",
+      "isin": "US30212P3038",
+      "symbol": "EXPE",
+      "valid_from": "2021-06-30",
+      "valid_to": "2026-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001324424",
+    "form": "4",
+    "sec_name": "Expedia Group, Inc.",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1184237/000122520826006289/0001225208-26-006289-index-headers.html",
+    "symbol": "EXPE"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

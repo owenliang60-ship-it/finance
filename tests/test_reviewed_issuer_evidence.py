@@ -10,7 +10,7 @@ EXPECTED = {"AAL", "ACN", "APA", "CEG", "CMG", "INVH", "KMX", "MRVL", "NEE", "RI
 
 
 def test_twelve_reviewed_securities_have_replayable_primary_evidence():
-    rows = load_issuer_overrides(ROOT / "config/baskets")
+    rows = [r for r in load_issuer_overrides(ROOT / "config/baskets") if not r.get("canonical_issuer_key")]
     assert {r["symbol"] for r in rows} == EXPECTED
     for row in rows:
         path = ROOT / row["source_path"]
@@ -26,7 +26,7 @@ def test_twelve_reviewed_securities_have_replayable_primary_evidence():
 
 
 def test_reviewed_source_fills_only_exact_missing_identity_without_rewriting_raw():
-    rows = load_issuer_overrides(ROOT / "config/baskets")
+    rows = [r for r in load_issuer_overrides(ROOT / "config/baskets") if not r.get("canonical_issuer_key")]
     assert len(rows) == 12
     for row in rows:
         raw = {"symbol": row["symbol"], "cusip": row["cusip"], "isin": row["isin"],

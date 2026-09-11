@@ -1,0 +1,31 @@
+{
+  "equivalent_leis": [
+    "254900E3KHXCC2C8K272"
+  ],
+  "expected_raw_leis": [
+    "549300CZ8QS1GE53O776"
+  ],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "Jacobs Solutions Inc"
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "46982L108",
+      "isin": "US46982L1089",
+      "symbol": "J",
+      "valid_from": "2022-09-30",
+      "valid_to": "2026-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0000052988",
+    "form": "424B5",
+    "sec_name": "JACOBS SOLUTIONS INC.",
+    "section": "FILER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/52988/000119312526062600/0001193125-26-062600-index-headers.html",
+    "symbol": "J"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

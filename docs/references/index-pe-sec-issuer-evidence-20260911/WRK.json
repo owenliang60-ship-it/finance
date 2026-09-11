@@ -1,0 +1,30 @@
+{
+  "equivalent_leis": [
+    "5493004Z9TCQW68YVL89"
+  ],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "WestRock Co",
+    "Westrock Co"
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "96145D105",
+      "isin": "US96145D1054",
+      "symbol": "WRK",
+      "valid_from": "2021-06-30",
+      "valid_to": "2024-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001732845",
+    "form": "S-3ASR",
+    "sec_name": "WestRock Co",
+    "section": "FILER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1636023/000119312522028155/0001193125-22-028155-index-headers.html",
+    "symbol": "WRK"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

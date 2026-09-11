@@ -1,0 +1,28 @@
+{
+  "equivalent_leis": [],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "Lucid Group Inc.",
+    "Lucid Group, Inc."
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "549498103",
+      "isin": "US5494981039",
+      "symbol": "LCID",
+      "valid_from": "2021-12-31",
+      "valid_to": "2023-09-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001811210",
+    "form": "SCHEDULE 13G/A",
+    "sec_name": "Lucid Group, Inc.",
+    "section": "SUBJECT COMPANY",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1811210/000007085826000013/0000070858-26-000013-index-headers.html",
+    "symbol": "LCID"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

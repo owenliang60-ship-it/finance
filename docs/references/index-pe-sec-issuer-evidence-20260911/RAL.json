@@ -1,0 +1,27 @@
+{
+  "equivalent_leis": [],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "Ralliant Corp"
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "750940108",
+      "isin": "US7509401086",
+      "symbol": "RAL",
+      "valid_from": "2025-06-30",
+      "valid_to": "2025-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0002041385",
+    "form": "DEF 14A",
+    "sec_name": "Ralliant Corp",
+    "section": "FILER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/2041385/000204138526000035/0002041385-26-000035-index-headers.html",
+    "symbol": "RAL"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

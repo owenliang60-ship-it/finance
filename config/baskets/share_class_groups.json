@@ -6,6 +6,8 @@
   },
   "FOXA": ["FOX"],
   "NWSA": ["NWS"],
+  "DISCA": ["DISCK"],
+  "UAA": ["UA"],
   "HEI": {
     "secondaries": ["HEI.A"],
     "market_cap_convention": "split_across_classes",

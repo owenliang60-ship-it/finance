@@ -1,0 +1,27 @@
+{
+  "equivalent_leis": [],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "Norwegian Cruise Line Holdings Ltd"
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": null,
+      "isin": "BMG667211046",
+      "symbol": "NCLH",
+      "valid_from": "2021-06-30",
+      "valid_to": "2026-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001513761",
+    "form": "4",
+    "sec_name": "Norwegian Cruise Line Holdings Ltd.",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1513761/000110465925108845/0001104659-25-108845-index-headers.html",
+    "symbol": "NCLH"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}
