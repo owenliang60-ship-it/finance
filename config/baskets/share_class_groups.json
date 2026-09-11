@@ -4,16 +4,8 @@
     "market_cap_convention": "full_company_per_class",
     "evidence": "market.db historical_market_cap 2026-07-28: GOOGL and GOOG both 4054910209999.0, one identical full-company figure per class"
   },
-  "FOXA": {
-    "secondaries": ["FOX"],
-    "market_cap_convention": "split_across_classes",
-    "evidence": "market.db historical_market_cap 2026-07-28: FOXA 24473280000.0 vs FOX 21891120000.0, the company is the sum"
-  },
-  "NWSA": {
-    "secondaries": ["NWS"],
-    "market_cap_convention": "split_across_classes",
-    "evidence": "market.db historical_market_cap 2026-07-28: NWSA 15775164000.0 vs NWS 17807238000.0, the company is the sum"
-  },
+  "FOXA": ["FOX"],
+  "NWSA": ["NWS"],
   "HEI": {
     "secondaries": ["HEI.A"],
     "market_cap_convention": "split_across_classes",

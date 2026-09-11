@@ -351,7 +351,7 @@ def test_identical_market_cap_share_classes_are_counted_once():
 
 
 def test_split_market_cap_share_classes_are_summed_into_one_company():
-    """FOXA/FOX split the company between the classes; the company is the sum."""
+    """Synthetic split convention; not a claim about vendor FOXA/FOX data."""
     holdings = [_holding("FOXA", 60.0, 0), _holding("FOX", 0.0, 1,
                                                     covered_by="FOXA"),
                 _holding("BBB", 40.0, 2)]
@@ -359,7 +359,8 @@ def test_split_market_cap_share_classes_are_summed_into_one_company():
     sources["market_cap_by_symbol"]["FOX"] = [
         {"symbol": "FOX", "date": day, "market_cap": 400.0}
         for day in TRADING_DATES]
-    row = _point(holding_rows=holdings, sources=sources)
+    row = _point(holding_rows=holdings, sources=sources,
+                 share_class_conventions={"FOXA": "split_across_classes"})
     assert row["ttm_total_mcap"] == pytest.approx(1000.0 + 400.0 + 1000.0)
     assert row["n_members"] == 2
 
@@ -369,7 +370,8 @@ def test_split_convention_fails_closed_when_a_class_market_cap_is_missing():
                                                     covered_by="FOXA"),
                 _holding("BBB", 40.0, 2)]
     sources = _sources(members=("FOXA", "BBB"))
-    row = _point(holding_rows=holdings, sources=sources)
+    row = _point(holding_rows=holdings, sources=sources,
+                 share_class_conventions={"FOXA": "split_across_classes"})
     assert row["ttm_total_mcap"] == pytest.approx(1000.0)
     assert any("share_class_market_cap_incomplete" in warning
                for warning in row["warnings_json"])
@@ -425,7 +427,8 @@ def test_a_conflicted_share_class_company_leaves_the_metric_entirely():
                                                     covered_by="FOXA"),
                 _holding("BBB", 40.0, 2)]
     sources = _sources(members=("FOXA", "FOX", "BBB"))
-    row = _point(holding_rows=holdings, sources=sources)
+    row = _point(holding_rows=holdings, sources=sources,
+                 share_class_conventions={"FOXA": "split_across_classes"})
     assert row["ttm_total_mcap"] == pytest.approx(1000.0)
     assert row["hindsight_total_mcap"] == pytest.approx(1000.0)
     assert any("share_class_convention_mismatch" in warning

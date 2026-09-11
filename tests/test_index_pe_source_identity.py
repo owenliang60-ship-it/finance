@@ -163,6 +163,19 @@ def test_issuer_lei_does_not_turn_a_derivative_into_equity():
     assert resolve_issuer_identity(rows[0])[0] is None
 
 
+def test_fox_and_news_market_caps_are_not_summed_without_class_share_evidence():
+    from terminal.index_pe_weekly import default_share_class_config, resolve_company_market_cap
+    config = default_share_class_config(ROOT / "config/baskets")
+    for primary, secondary in (("FOXA", "FOX"), ("NWSA", "NWS")):
+        assert config["conventions"][primary] is None
+        result = resolve_company_market_cap(
+            primary=primary, base_market_cap=1000.0, secondaries=[secondary],
+            convention=config["conventions"][primary], valuation_date="2026-09-08",
+            market_cap_by_symbol={secondary: [{"date": "2026-09-08", "market_cap": 900.0}]},
+            sanity_by_symbol={secondary: [{"date": "2026-09-08", "status": "clean"}]})
+        assert result["market_cap"] is None
+
+
 def test_verifier_rebuilds_real_issuer_identity_from_specific_snapshot(tmp_path):
     from scripts.verify_index_pe_history import _company_identities, _company_identity_check
     rows, meta = normalize(["spy_AAPL", "spy_GOOG"])

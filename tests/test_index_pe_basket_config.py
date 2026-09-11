@@ -180,20 +180,21 @@ def test_empty_config_fails_closed(tmp_path):
 # Task 4: share-class market-cap convention (config/baskets/share_class_groups)
 # ---------------------------------------------------------------------------
 
-def test_repo_share_class_groups_declare_a_market_cap_convention():
-    """Every configured pair must say how FMP quotes its market cap.
+def test_repo_share_class_groups_only_declare_verified_cap_conventions():
+    """Unverified conventions must withhold valuation, not guess a sum.
 
     The two conventions are not interchangeable: market.db shows GOOGL and
-    GOOG carrying an identical full-company figure, while FOXA/FOX and
-    NWSA/NWS are split across the classes. Summing would double Alphabet;
-    taking the primary alone would halve Fox.
+    GOOG carrying an identical full-company figure. FOXA/FOX and NWSA/NWS
+    remain unverified after their implied shares matched company totals.
+    Summing would double Alphabet; no verified class-share evidence supports
+    summing Fox or News, or selecting one of their two conflicting figures.
     """
     secondaries, conventions = parse_share_class_groups(
         json.loads((CONFIG_DIR / "share_class_groups.json").read_text()))
     assert secondaries["GOOGL"] == ["GOOG"]
     assert conventions["GOOGL"] == "full_company_per_class"
-    assert conventions["FOXA"] == "split_across_classes"
-    assert conventions["NWSA"] == "split_across_classes"
+    assert conventions["FOXA"] is None
+    assert conventions["NWSA"] is None
     assert set(conventions) == set(secondaries)
 
 
