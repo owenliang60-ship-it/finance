@@ -343,7 +343,7 @@ def non_equity_holding_reason(asset: str, name: str) -> Optional[str]:
         return "swap"
     if not asset and name in {"US DOLLAR", "POUND STERLING", "USD PENDING DIVIDENDS"}:
         return "cash_or_fund"
-    if not asset and re.search(r"\b(?:INDEX FUTURE|CONTRA FUTURE)\b", name):
+    if re.search(r"\b(?:INDEX FUTURE|CONTRA FUTURE)\b", name):
         return "futures"
     return None
 
@@ -383,6 +383,9 @@ def normalize_holdings(
         non_equity_reason = non_equity_holding_reason(asset, name)
         if non_equity_reason is not None:
             filter_reason = non_equity_reason
+        elif "assetCategory" in raw and raw["assetCategory"] != "EC":
+            filter_reason = {"STIV": "cash_or_fund", "DE": "derivative"}.get(
+                raw["assetCategory"], "unrecognized_asset_category")
         elif "." in asset and asset not in class_vocabulary:
             mapped = listing_overrides.get(asset)
             if mapped:
@@ -506,23 +509,21 @@ def load_soxx_symbol_aliases(path: Path) -> Dict[str, Dict[str, str]]:
                 or not isinstance(item, dict)):
             raise ValueError("SOXX alias keys must be uppercase symbols")
         target = item.get("symbol")
-        cik = item.get("cik")
         reason = item.get("reason")
         mode = item.get("mode", "fallback")
         cusip = item.get("cusip")
         isin = item.get("isin")
         if (not isinstance(target, str) or target != target.upper()
-                or not isinstance(cik, str) or not cik
                 or not isinstance(reason, str) or not reason.strip()
                 or mode not in {"fallback", "authoritative"}):
             raise ValueError(f"invalid SOXX alias: {raw_symbol}")
-        if mode == "authoritative" and (
+        if (
                 not isinstance(cusip, str) or not cusip
                 or not isinstance(isin, str) or not isin):
             raise ValueError(
-                f"authoritative SOXX alias requires CUSIP and ISIN: {raw_symbol}")
+                f"SOXX alias requires exact CUSIP and ISIN: {raw_symbol}")
         normalized[raw_symbol] = {
-            "symbol": target, "cik": cik, "mode": mode,
+            "symbol": target, "mode": mode,
             "reason": reason.strip(),
             **({"cusip": cusip} if cusip else {}),
             **({"isin": isin} if isin else {}),
@@ -538,16 +539,16 @@ def resolve_disclosure_symbol(
     cusip: Optional[str] = None,
     isin: Optional[str] = None,
 ) -> Tuple[str, Optional[Dict[str, str]]]:
-    """Resolve only exact, CIK-backed corporate aliases; never fuzzy-match."""
+    """Resolve exact securities; cik is the filer, not the holding's issuer."""
     symbol = str(raw_symbol or "").strip().upper()
     alias = aliases.get(symbol)
     if alias is None:
         return symbol, None
-    if str(cik or "") != str(alias.get("cik") or ""):
-        raise ValueError(f"CIK mismatch for configured alias {symbol}")
-    if alias.get("cusip") and str(cusip or "") != str(alias["cusip"]):
+    if not alias.get("cusip") or not alias.get("isin"):
+        raise ValueError(f"security identity evidence missing for alias {symbol}")
+    if str(cusip or "") != str(alias["cusip"]):
         raise ValueError(f"CUSIP mismatch for configured alias {symbol}")
-    if alias.get("isin") and str(isin or "") != str(alias["isin"]):
+    if str(isin or "") != str(alias["isin"]):
         raise ValueError(f"ISIN mismatch for configured alias {symbol}")
     target = str(alias["symbol"]).upper()
     return target, {
@@ -631,6 +632,7 @@ def normalize_fund_disclosure_snapshot(
                 "weightPercentage": raw.get("pctVal"),
                 "marketValue": raw.get("valUsd"),
                 "updatedAt": raw.get("acceptedDate"),
+                "assetCategory": raw.get("assetCat"),
             })
             identity.append({
                 "raw_symbol": raw_symbol,
@@ -647,14 +649,18 @@ def normalize_fund_disclosure_snapshot(
             })
         else:
             raw_symbol = str(raw.get("asset") or "").strip().upper()
+            if (raw.get("securityCusip") and raw.get("cusip")
+                    and raw["securityCusip"] != raw["cusip"]):
+                raise ValueError("conflicting live CUSIP fields")
+            live_cusip = raw.get("securityCusip") or raw.get("cusip")
             _, alias_evidence = resolve_disclosure_symbol(
                 raw_symbol, raw.get("cik"), symbol_aliases,
-                cusip=raw.get("cusip"), isin=raw.get("isin"))
+                cusip=live_cusip, isin=raw.get("isin"))
             adapted.append(dict(raw))
             identity.append({
                 "raw_symbol": raw_symbol,
                 "cik": raw.get("cik"),
-                "cusip": raw.get("cusip"),
+                "cusip": live_cusip,
                 "isin": raw.get("isin"),
                 "row_accepted_at": None,
                 "alias_symbol": (
@@ -691,6 +697,9 @@ def normalize_fund_disclosure_snapshot(
         listing_overrides, share_class_groups)
     for row, evidence in zip(normalized, identity):
         row.update(evidence)
+        raw = dict(raw_rows[row["raw_row_index"]])
+        row.update(issuer_lei=raw.get("lei"), asset_category=raw.get("assetCat"),
+                   raw_payload_json=raw)
 
     # Membership drift is about source constituents, not filtered cash rows
     # or the economic target used to merge dual share-class weights.

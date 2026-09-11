@@ -1,13 +1,15 @@
 {
   "CREE": {
     "symbol": "WOLF",
-    "cik": "0001100663",
+    "cusip": "225447101",
+    "isin": "US2254471012",
     "mode": "fallback",
-    "reason": "Cree renamed Wolfspeed in 2021; FMP fund-disclosure rows use this same vendor CIK before and after the rename"
+    "reason": "Cree renamed Wolfspeed effective 2021-10-04 (issuer announcement); exact pre-rename security CUSIP 225447101 / ISIN US2254471012 verified in saved 2021Q3 disclosure. Filer CIK is not issuer identity.",
+    "source_url": "https://investor.wolfspeed.com/news/news-details/2021/Cree-Inc.-Officially-Changes-Company-Name-to-Wolfspeed-Inc.-Marking-Successful-Transition-to-Global-Semiconductor-Powerhouse/default.aspx",
+    "source_sha256": "8f892a66b39b8bff9b9cb1e36176a0bae8e47d5f3dd0a96a7bf54d0bfbc83aa8"
   },
   "TERN": {
     "symbol": "TER",
-    "cik": "0001100663",
     "cusip": "880770102",
     "isin": "US8807701029",
     "mode": "authoritative",

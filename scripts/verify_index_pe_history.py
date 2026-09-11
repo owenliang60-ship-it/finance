@@ -39,6 +39,9 @@ from src.data.fmp_forward_ingestion import (  # noqa: E402
     load_index_pe_basket_configs,
 )
 from src.data.fx_validation import USD_PER_UNIT_BOUNDS  # noqa: E402
+from src.data.fund_issuer_identity import (  # noqa: E402
+    load_issuer_overrides, valid_issuer_lei,
+)
 from terminal.basket_pe_aggregate import (  # noqa: E402
     MINIMUM_MCAP_COVERAGE,
     compute_aggregate_basket_pe,
@@ -938,35 +941,63 @@ def _kernel_reconciliation_errors(rows: Sequence[Mapping[str, Any]]) -> List[str
 
 
 def _company_identities(
-    conn: sqlite3.Connection, basket: str,
-) -> Dict[str, Dict[str, str]]:
-    """ticker -> CIK, per composition, straight from the disclosure rows.
+    conn: sqlite3.Connection, basket: str, overrides=(),
+) -> Dict[Tuple[str, str], Dict[str, Optional[str]]]:
+    """Independently derive issuer LEI from raw evidence of each physical snapshot.
 
-    Keyed by composition_effective_date because a ticker can change hands over
-    five years (FB/META), so the identity that matters is the one the snapshot
-    behind this row actually carried.
+    Do not import the producer's resolver: a normalized-LEI mapping bug must
+    disagree with this raw reconstruction. Filer CIK is deliberately unused.
+    Conflicting or missing evidence in any class poisons its merged target.
     """
-    identities: Dict[str, Dict[str, str]] = {}
+    candidates = {}
     for row in _rows(
-            conn,
-            "SELECT composition_effective_date, raw_symbol, symbol, covered_by, "
-            "cik FROM fmp_fund_disclosure_holdings WHERE basket_symbol = ?",
+            conn, "SELECT * FROM fmp_fund_disclosure_holdings WHERE basket_symbol = ?",
             [basket]):
-        cik = str(row["cik"] or "").strip()
-        if not cik:
+        if not row.get("included") and not row.get("covered_by"):
             continue
-        effective = str(row["composition_effective_date"])
-        for ticker in (row["raw_symbol"], row["symbol"], row["covered_by"]):
+        key = (str(row["holding_date"]), str(row["source_kind"]))
+        lei = None
+        try:
+            raw = json.loads(row.get("raw_payload_json") or "null")
+            if not isinstance(raw, dict):
+                raise ValueError("missing raw issuer evidence")
+            is_live = row["source_kind"] == "live"
+            raw_symbol = str(raw.get("asset" if is_live else "symbol") or "").strip().upper()
+            if raw_symbol != row["raw_symbol"]:
+                raise ValueError("raw security belongs to another source row")
+            if not is_live and raw.get("assetCat") != "EC":
+                raise ValueError("non-equity source cannot certify an equity member")
+            cusip = (raw.get("securityCusip") or raw.get("cusip")) if is_live else raw.get("cusip")
+            if is_live and raw.get("cusip") and raw.get("securityCusip") and raw["cusip"] != cusip:
+                raise ValueError("CUSIP conflict")
+            for field, original in (("issuer_lei", raw.get("lei")), ("cusip", cusip),
+                                    ("isin", raw.get("isin")), ("asset_category", raw.get("assetCat"))):
+                if row.get(field) != original:
+                    raise ValueError("normalized identity disagrees with raw source")
+            original = raw.get("lei")
+            if original not in (None, "", "N/A") and not valid_issuer_lei(original):
+                raise ValueError("invalid issuer LEI")
+            choices = {entry["issuer_lei"] for entry in overrides
+                       if entry["cusip"] == cusip and entry["isin"] == raw.get("isin")
+                       and entry["valid_from"] <= row["holding_date"] <= entry["valid_to"]}
+            if valid_issuer_lei(original):
+                choices.add(original)
+            if len(choices) == 1:
+                lei = choices.pop()
+        except (TypeError, ValueError):
+            lei = None  # Explicit unresolved identity, never a passing fallback.
+        for ticker in (row["raw_symbol"], row["symbol"], row["covered_by"],
+                       row.get("alias_symbol") if row.get("alias_mode") == "authoritative" else None):
             if ticker:
-                identities.setdefault(effective, {})[
-                    str(ticker).upper()] = cik
-    return identities
+                candidates.setdefault(key, {}).setdefault(str(ticker).upper(), set()).add(lei)
+    return {key: {ticker: next(iter(values)) if len(values) == 1 else None
+                  for ticker, values in names.items()} for key, names in candidates.items()}
 
 
 def _company_identity_check(
     basket: str,
     rows: Sequence[Mapping[str, Any]],
-    identities: Mapping[str, Mapping[str, str]],
+    identities: Mapping[Tuple[str, str], Mapping[str, Optional[str]]],
 ) -> Dict[str, Any]:
     """Two covered members of one company on one date is a double count.
 
@@ -976,19 +1007,22 @@ def _company_identity_check(
     under every class, so an uncovered pair divides one company's market cap by
     twice its earnings. The hindsight engine rejects a duplicate company key,
     but the TTM aggregate has no such backstop, and neither knows about a pair
-    absent from the config. The disclosure's own CIK is the identity that does
-    not depend on the config being complete.
+    absent from the config. Issuer LEI is distinct from the fund's filer CIK.
 
     Every covered member must resolve, not most of them: an unresolved member
     is precisely where an uncovered dual-class pair hides, so counting the gap
     would leave the check fail-open on the case it exists for.
     """
     errors: List[str] = []
-    with_cik = 0
-    without_cik = 0
+    with_identity = 0
+    without_identity = 0
     for row in rows:
-        effective = str(row["composition_effective_date"])
-        mapping = identities.get(effective, {})
+        payload = row["members_json"]
+        if not isinstance(payload, Mapping):
+            errors.append(f"{basket}:{row['valuation_date']}:identity_members_payload_invalid")
+            continue
+        kind = "live" if payload.get("weight_basis") == "live_snapshot_backcast_proxy" else "disclosure"
+        mapping = identities.get((payload.get("holding_date"), kind), {})
         seen: Dict[str, List[str]] = {}
         for member in _member_list(row):
             if member.get("market_cap") is None:
@@ -998,24 +1032,24 @@ def _company_identity_check(
                 continue
             symbol = str(member.get("symbol") or "").upper()
             raw_symbol = str(member.get("raw_symbol") or symbol).upper()
-            cik = mapping.get(raw_symbol) or mapping.get(symbol)
-            if not cik:
-                without_cik += 1
+            lei = mapping.get(raw_symbol)
+            if not lei:
+                without_identity += 1
                 errors.append(
                     f"{basket}:{row['valuation_date']}:"
                     f"company_identity_unresolved:{symbol}")
                 continue
-            with_cik += 1
-            seen.setdefault(cik, []).append(symbol)
-        for cik, tickers in sorted(seen.items()):
+            with_identity += 1
+            seen.setdefault(lei, []).append(symbol)
+        for lei, tickers in sorted(seen.items()):
             if len(tickers) > 1:
                 errors.append(
-                    f"{basket}:{row['valuation_date']}:duplicate_company_cik:"
-                    f"{cik}:{'+'.join(sorted(tickers))}")
-    if rows and with_cik == 0:
+                    f"{basket}:{row['valuation_date']}:duplicate_company_issuer:"
+                    f"{lei}:{'+'.join(sorted(tickers))}")
+    if rows and with_identity == 0:
         errors.append(f"{basket}:company_identity_unavailable")
-    return {"errors": errors, "members_with_cik": with_cik,
-            "members_without_cik": without_cik}
+    return {"errors": errors, "members_with_identity": with_identity,
+            "members_without_identity": without_identity}
 
 
 # ---------------------------------------------------------------------------
@@ -1405,6 +1439,7 @@ def verify_database(
     config_root = Path(config_dir or CONFIG_DIR)
     share_config = default_share_class_config(config_root)
     basket_configs = load_index_pe_basket_configs(config_root)
+    issuer_overrides = load_issuer_overrides(config_root)
 
     probe = _connection_is_read_only(conn)
     checks = [
@@ -1430,7 +1465,7 @@ def verify_database(
     version_errors: List[str] = []
     identity_errors: List[str] = []
     integrity_errors: List[str] = []
-    identity_totals = {"members_with_cik": 0, "members_without_cik": 0}
+    identity_totals = {"members_with_identity": 0, "members_without_identity": 0}
     per_basket: Dict[str, Any] = {}
     reconciliation = {"errors": [], "reconciled_market_caps": 0,
                       "reconciled_ttm_incomes": 0, "declined_ttm_incomes": 0,
@@ -1502,7 +1537,7 @@ def verify_database(
         evidence_errors.extend(_membership_errors(
             basket, rows, _disclosed_membership(conn, basket)))
         identity = _company_identity_check(
-            basket, rows, _company_identities(conn, basket))
+            basket, rows, _company_identities(conn, basket, issuer_overrides))
         identity_errors.extend(identity["errors"])
         for key in identity_totals:
             identity_totals[key] += identity[key]

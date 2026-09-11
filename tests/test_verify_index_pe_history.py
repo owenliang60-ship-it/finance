@@ -27,6 +27,7 @@ from scripts.verify_index_pe_history import (
     verify_database,
 )
 from src.data.market_store import MarketStore
+from tests.index_pe_identity_helpers import seed_source_identity, synthetic_lei
 from terminal.index_pe_weekly import (
     WEEKLY_METHODOLOGY_VERSION,
     expected_week_ends,
@@ -177,7 +178,7 @@ def _manifest_events(basket, run_id="run-1", expected_from=EXPECTED_FROM,
 
 def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
            row_dates=None, manifest_extra=(), expected_from=EXPECTED_FROM,
-           market_caps=(("AAA", 900.0), ("BBB", 100.0)), ciks=None,
+           market_caps=(("AAA", 900.0), ("BBB", 100.0)), issuer_labels=None,
            market_cap_dates=None, composition_floor="2021-01-25",
            composition_effective="2021-01-18",
            composition_available="2021-01-25"):
@@ -209,9 +210,6 @@ def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
                  for day in fiscal]
                 + [(symbol, day, "Q1", _accepted(day), "USD", 7.5)
                    for day in HINDSIGHT_FISCAL])
-        identities = dict(ciks or {
-            symbol: f"000000000{index + 1}"
-            for index, (symbol, _) in enumerate(market_caps)})
         conn.executemany(
             "INSERT OR REPLACE INTO fmp_fund_disclosure_holdings "
             "(basket_symbol, holding_date, source_kind, raw_row_index, "
@@ -221,10 +219,11 @@ def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [(basket, "2021-01-15", "disclosure", index, "2021-01-15",
               composition_effective, composition_available, symbol, symbol,
-              identities.get(symbol), weight, 1, "[]",
+              "0000884394", weight, 1, "[]",
               "2021-01-25T00:00:00Z", "2021-01-25T00:00:00Z")
              for index, ((symbol, _), weight)
              in enumerate(zip(market_caps, (60.0, 40.0)))])
+        seed_source_identity(conn, issuer_labels=issuer_labels)
     dates = list(row_dates if row_dates is not None
                  else ("2026-01-09", "2026-01-16"))
     members = [_member(symbol, weight, market_cap, None)
@@ -746,7 +745,7 @@ def test_a_run_that_failed_and_said_so_does_not_block_verification(
 # Final review / I1: two tickers of one company that the config never covered
 # ---------------------------------------------------------------------------
 
-def test_two_covered_members_sharing_a_cik_fail_closed(tmp_path, config_dir):
+def test_two_covered_members_sharing_an_issuer_fail_closed(tmp_path, config_dir):
     """The historical dual-class gap, caught structurally rather than by list.
 
     share_class_groups.json covers today's members. Over five years SPY held
@@ -756,27 +755,27 @@ def test_two_covered_members_sharing_a_cik_fail_closed(tmp_path, config_dir):
     duplicate-company backstop at all, so the verifier keys on the company
     identity the disclosure itself carries.
     """
-    db_path = _build(tmp_path, ciks={"AAA": "0001437107", "BBB": "0001437107"})
+    db_path = _build(tmp_path, issuer_labels={"AAA": "Discovery", "BBB": "Discovery"})
     failures = _failed(_verify(db_path, config_dir))
     assert "company_identity_uniqueness" in failures, failures
     errors = failures["company_identity_uniqueness"]["errors"]
-    assert any("duplicate_company_cik" in str(item) and "0001437107" in str(item)
+    assert any("duplicate_company_issuer" in str(item) and synthetic_lei("Discovery") in str(item)
                for item in errors), errors
 
 
-def test_distinct_ciks_pass_and_are_counted(tmp_path, config_dir):
+def test_distinct_issuers_with_same_filer_cik_pass_and_are_counted(tmp_path, config_dir):
     db_path = _build(tmp_path)
     report = _verify(db_path, config_dir)
     assert report["passed"], _failed(report)
     detail = {check["name"]: check["detail"] for check in report["checks"]}
-    assert detail["company_identity_uniqueness"]["members_with_cik"] > 0
-    assert detail["company_identity_uniqueness"]["members_without_cik"] == 0
+    assert detail["company_identity_uniqueness"]["members_with_identity"] > 0
+    assert detail["company_identity_uniqueness"]["members_without_identity"] == 0
 
 
 def test_missing_company_identity_fails_rather_than_skipping(tmp_path, config_dir):
     """A check that cannot see company identity has to say so, not pass."""
     db_path = _build(tmp_path)
-    _mutate(db_path, "UPDATE fmp_fund_disclosure_holdings SET cik = NULL")
+    _mutate(db_path, "UPDATE fmp_fund_disclosure_holdings SET issuer_lei = NULL")
     failures = _failed(_verify(db_path, config_dir))
     errors = failures["company_identity_uniqueness"]["errors"]
     assert any("company_identity_unavailable" in str(item) for item in errors)
@@ -828,14 +827,14 @@ def test_a_row_using_a_composition_before_its_disclosure_is_caught(
                for item in failures["materialised_evidence"]), failures
 
 
-def test_one_unresolvable_cik_fails_the_identity_check(tmp_path, config_dir):
+def test_one_unresolvable_issuer_fails_the_identity_check(tmp_path, config_dir):
     """Boss review P1-4: counting the gap is not closing it.
 
     Two members and one resolvable CIK is exactly the case the check exists
     for -- the unresolved one is where an uncovered dual-class pair hides.
     """
     db_path = _build(tmp_path)
-    _mutate(db_path, "UPDATE fmp_fund_disclosure_holdings SET cik = NULL "
+    _mutate(db_path, "UPDATE fmp_fund_disclosure_holdings SET issuer_lei = NULL "
                      "WHERE raw_symbol = 'BBB'")
     failures = _failed(_verify(db_path, config_dir))
     errors = failures["company_identity_uniqueness"]["errors"]
@@ -1838,6 +1837,7 @@ def _add_snapshot(db_path, *, holding_date, source_kind, available,
             "FROM fmp_fund_disclosure_holdings "
             "WHERE holding_date = '2021-01-15' AND source_kind = 'disclosure'",
             [holding_date, source_kind, available, *weights])
+        seed_source_identity(conn, "holding_date=? AND source_kind=?", [holding_date, source_kind])
 
 
 @pytest.mark.parametrize("source_kind", ["live", "disclosure"])
@@ -1906,11 +1906,13 @@ def test_covered_by_weights_are_folded_inside_one_snapshot(tmp_path, config_dir)
             "rebalance_close_date, composition_effective_date, "
             "composition_available_date, 'AAA.B', NULL, alias_symbol, "
             "alias_mode, alias_reason, name, 20.0, market_value, cik, cusip, "
-            "isin, 0, 'dual_class_secondary', 'AAA', row_accepted_at, "
+            "isin, issuer_lei, asset_category, raw_payload_json, "
+            "0, 'dual_class_secondary', 'AAA', row_accepted_at, "
             "snapshot_warnings_json, fetched_at, created_at "
             "FROM fmp_fund_disclosure_holdings WHERE symbol = 'AAA'")
         conn.execute("UPDATE fmp_fund_disclosure_holdings SET weight_pct = 40 "
                      "WHERE symbol = 'AAA'")
+        seed_source_identity(conn, "raw_symbol='AAA.B'")
     report = _verify(db_path, config_dir)
     assert report["passed"], _failed(report)
 

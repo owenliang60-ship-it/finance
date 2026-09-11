@@ -59,6 +59,9 @@ from src.data.fmp_forward_ingestion import (  # noqa: E402
     load_index_pe_basket_configs,
 )
 from src.data.market_store import MarketStore  # noqa: E402
+from src.data.fund_issuer_identity import (  # noqa: E402
+    audit_snapshot_identities, load_issuer_overrides,
+)
 from terminal.index_pe_weekly import (  # noqa: E402
     MINIMUM_MCAP_COVERAGE,
     MINIMUM_WEIGHT_COVERAGE,
@@ -330,6 +333,12 @@ def backfill_basket(
             str(row["composition_available_date"]) for row in state.snapshots
             if row.get("composition_available_date"))
         state.snapshots = _window_snapshots(state.snapshots, window)
+        identity = audit_snapshot_identities(
+            state.snapshots, load_issuer_overrides(config_dir))
+        report["source_identity"] = identity
+        if identity["errors"]:
+            raise ValueError("source issuer identity gate failed: "
+                             + "; ".join(identity["errors"][:5]))
         member_symbols = _snapshot_member_universe(state.snapshots)
         income_symbols = _snapshot_universe(state.snapshots)
         if not income_symbols:

@@ -37,6 +37,7 @@ from scripts.backfill_index_pe_history import (
 )
 from src.data.fmp_forward_ingestion import infer_basket_rebalance_close
 from src.data.market_store import MarketStore
+from tests.index_pe_identity_helpers import seed_source_identity, synthetic_lei
 from terminal.index_pe_weekly import (
     WEEKLY_METHODOLOGY_VERSION,
     compute_weekly_point,
@@ -538,9 +539,7 @@ def _fixture_db(tmp_path, baskets=("SPY",)):
                      "2025-12-22", "2026-01-02", symbol, symbol, symbol,
                      weight, weight * 10, 1, None, None, "[]",
                      "2026-01-20T00:00:00Z", "2026-01-20T00:00:00Z"])
-        conn.execute("UPDATE fmp_fund_disclosure_holdings SET cik = "
-                     "CASE symbol WHEN 'AAA' THEN '0000000001' "
-                     "ELSE '0000000002' END")
+        seed_source_identity(conn)
     return store
 
 
@@ -997,7 +996,8 @@ def _disclosure_row(symbol, weight, holding_date="2026-01-05"):
         "date": holding_date, "acceptedDate": "2026-01-06 16:00:00",
         "symbol": symbol, "title": symbol, "name": symbol,
         "pctVal": weight, "valUsd": weight * 100.0,
-        "cik": "0000000001" if symbol.startswith("AAA") else "0000000002",
+        "cik": "0000884394", "assetCat": "EC",
+        "lei": synthetic_lei(symbol.split(".")[0]),
     }
 
 
@@ -1118,6 +1118,7 @@ def test_a_composition_is_not_used_before_its_disclosure_date(
             "weight_pct, market_value, included, filter_reason, covered_by, "
             "snapshot_warnings_json, fetched_at, created_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+        seed_source_identity(conn)
     args = _args(tmp_path, config_dir)
     result = backfill_basket(args, "SPY", client=None, store=None, conn=conn)
     for row in result["rows"]:

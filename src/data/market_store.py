@@ -542,6 +542,9 @@ _SCHEMA = "\n\n".join([
     cik TEXT,
     cusip TEXT,
     isin TEXT,
+    issuer_lei TEXT,
+    asset_category TEXT,
+    raw_payload_json TEXT,
     included INTEGER NOT NULL CHECK(included IN (0,1)),
     filter_reason TEXT,
     covered_by TEXT,
@@ -1009,6 +1012,13 @@ class MarketStore:
                     logger.info("Migration: added column %s.%s", table, col)
         # Invalidate column cache so upsert sees updated schema
         _TABLE_COLUMNS.pop("metrics_quarterly", None)
+        # Additive source-evidence migration: old rows stay explicitly unknown.
+        source_columns = {row[1] for row in conn.execute(
+            "PRAGMA table_info(fmp_fund_disclosure_holdings)")}
+        for field in ("issuer_lei", "asset_category", "raw_payload_json"):
+            if field not in source_columns:
+                conn.execute(f"ALTER TABLE fmp_fund_disclosure_holdings ADD COLUMN {field} TEXT")
+        _TABLE_COLUMNS.pop("fmp_fund_disclosure_holdings", None)
 
     def close(self) -> None:
         conn = getattr(self._local, 'conn', None)
@@ -1477,6 +1487,9 @@ class MarketStore:
                         "snapshot_warnings_json": self._json_text(
                             row.get("snapshot_warnings_json", []),
                             "snapshot_warnings_json"),
+                        "raw_payload_json": (
+                            self._json_text(row["raw_payload_json"], "raw_payload_json")
+                            if row.get("raw_payload_json") is not None else None),
                         "fetched_at": fetched_at,
                         "created_at": created_at,
                     },

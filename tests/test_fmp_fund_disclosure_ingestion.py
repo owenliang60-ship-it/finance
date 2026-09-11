@@ -63,9 +63,9 @@ def test_adapter_reuses_cash_foreign_and_dual_class_rules():
         {"date": "2025-09-30", "acceptedDate": "2025-11-26 12:00:00",
          "symbol": "", "name": "USD CASH", "pctVal": 0.1, "valUsd": 1},
         {"date": "2025-09-30", "acceptedDate": "2025-11-26 12:00:00",
-         "symbol": "NVMI.TA", "name": "NOVA", "pctVal": 1.0, "valUsd": 2},
+         "symbol": "NVMI.TA", "name": "NOVA", "pctVal": 1.0, "valUsd": 2, "assetCat": "EC"},
         {"date": "2025-09-30", "acceptedDate": "2025-11-26 12:00:00",
-         "symbol": "GOOG", "name": "ALPHABET C", "pctVal": 0.5, "valUsd": 3},
+         "symbol": "GOOG", "name": "ALPHABET C", "pctVal": 0.5, "valUsd": 3, "assetCat": "EC"},
     ]
     rows, _ = normalize_fund_disclosure_snapshot(
         "SOXX", raw, "disclosure", "2026-07-14T02:00:00Z", _calendar(),
@@ -161,7 +161,7 @@ def test_live_authoritative_alias_requires_security_identity():
     aliases = load_soxx_symbol_aliases(ROOT / "config" / "soxx_symbol_aliases.json")
     raw = [{"asset": "TERN", "name": "Teradyne Inc",
             "weightPercentage": 2.0, "marketValue": 100}]
-    with pytest.raises(ValueError, match="CIK mismatch"):
+    with pytest.raises(ValueError, match="CUSIP mismatch"):
         normalize_fund_disclosure_snapshot(
             "SOXX", raw, "live", "2026-07-14T02:00:00Z", _calendar(),
             LISTING, GROUPS, aliases)
@@ -212,15 +212,16 @@ def test_membership_drift_ignores_filtered_cash_but_keeps_raw_share_classes():
 
 def test_corporate_alias_requires_matching_cik_and_never_fuzzy_matches():
     aliases = load_soxx_symbol_aliases(ROOT / "config" / "soxx_symbol_aliases.json")
-    # This is the FMP fund-disclosure identifier observed on both CREE and
-    # WOLF rows. It is deliberately not treated as an authoritative SEC CIK.
-    symbol, evidence = resolve_disclosure_symbol("CREE", "0001100663", aliases)
+    # The filer can differ across ETFs without changing the exact security.
+    symbol, evidence = resolve_disclosure_symbol("CREE", "0001100663", aliases,
+                                               cusip="225447101", isin="US2254471012")
     assert symbol == "WOLF"
     assert evidence["raw_symbol"] == "CREE"
     assert evidence["mode"] == "fallback"
     assert evidence["reason"]
     with pytest.raises(ValueError):
-        resolve_disclosure_symbol("CREE", "WRONG", aliases)
+        resolve_disclosure_symbol("CREE", "0001100663", aliases,
+                                  cusip="WRONG", isin="US2254471012")
     symbol, evidence = resolve_disclosure_symbol("CREE INC", "0001100663", aliases)
     assert symbol == "CREE INC"
     assert evidence is None
@@ -244,7 +245,7 @@ def test_teradyne_disclosure_records_authoritative_tern_to_ter_correction():
     raw = [{
         "date": "2022-06-30", "acceptedDate": "2022-08-25 14:39:49",
         "symbol": "TERN", "name": "Teradyne Inc", "title": "Teradyne Inc",
-        "pctVal": 2.07, "valUsd": 133_259_175.9, "cik": "0001100663",
+        "pctVal": 2.07, "valUsd": 133_259_175.9, "cik": "0001100663", "assetCat": "EC",
         "cusip": "880770102", "isin": "US8807701029",
     }]
     rows, _ = normalize_fund_disclosure_snapshot(
@@ -261,7 +262,8 @@ def test_disclosure_normalization_keeps_raw_symbol_and_records_alias_candidate()
     raw = [{
         "date": "2021-09-30", "acceptedDate": "2021-11-19 12:00:00",
         "symbol": "CREE", "name": "Cree Inc", "pctVal": 2.5,
-        "valUsd": 100, "cik": "0001100663",
+        "valUsd": 100, "cik": "0001100663", "assetCat": "EC",
+        "cusip": "225447101", "isin": "US2254471012",
     }]
     rows, _ = normalize_fund_disclosure_snapshot(
         "SOXX", raw, "disclosure", "2026-07-14T02:00:00Z",
