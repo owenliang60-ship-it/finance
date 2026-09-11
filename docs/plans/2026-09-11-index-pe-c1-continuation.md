@@ -44,3 +44,5 @@ flowchart LR
 具体口径冲突：原 `2026-07-09-fmp-forward-eps-valuation-spec.md` §6–7 规定分析师预期及街道 actual（blend 不能用 income GAAP EPS 替代），而 `2026-07-19-index-pe-morning-chart-design.md` §2.1 将真实 PIT NTM 称为“共识 NTM GAAP 净利润”。共识字段并不能仅凭其名称被认证为与已实现 GAAP 相同。
 
 建议的最小修订：保持原 FMP 公式和当前数据源，真实 PIT NTM 明确标注“分析师共识口径”；GAAP TTM/后视镜 actual 与共识尾部/PIT 的会计口径差异必须写入图例/脚注。若 Boss 要求严格同 GAAP，则先验证 vendor 的 net_income_avg 口径，不能直接给第三条线冠以 GAAP。该选择已异步提交，等待答复。
+
+**2026-09-11 Boss 已确认“继续，可以”**：采用现有 FMP 分析师共识，明确会计口径差异，继续 Task 5。Task 5 使用独立 `--phase valuation`，只读已 complete 的 weekly 源快照；不重新请求共识，不改变源 manifest。六篮子估值候选整体认证后落库，已认证快照只允许相同结果幂等复跑，不能因 resume 改写。NTM 与 blend 分别记录对称分子/分母及双覆盖门。历史估值不能回退到当前 profile 市值；blend 缺少可信财季股数或拆股口径不明时剔除并报告。

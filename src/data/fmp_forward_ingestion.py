@@ -334,6 +334,20 @@ def basket_history_gap(
 # Holdings 规范化
 # ---------------------------------------------------------------------------
 
+def non_equity_holding_reason(asset: str, name: str) -> Optional[str]:
+    """Explicit cash/derivative identities, also for legacy read-time views."""
+    asset, name = str(asset or "").strip().upper(), str(name or "").strip().upper()
+    if asset in _KNOWN_CASH_ASSETS or _CASH_NAME_RE.search(name):
+        return "cash_or_fund"
+    if _SWAP_NAME_RE.search(name):
+        return "swap"
+    if not asset and name in {"US DOLLAR", "POUND STERLING", "USD PENDING DIVIDENDS"}:
+        return "cash_or_fund"
+    if not asset and re.search(r"\b(?:INDEX FUTURE|CONTRA FUTURE)\b", name):
+        return "futures"
+    return None
+
+
 def normalize_holdings(
     basket: str,
     snapshot_date: str,
@@ -366,10 +380,9 @@ def normalize_holdings(
         filter_reason = None
         covered_by = None
 
-        if asset in _KNOWN_CASH_ASSETS or _CASH_NAME_RE.search(name):
-            filter_reason = "cash_or_fund"
-        elif _SWAP_NAME_RE.search(name):
-            filter_reason = "swap"
+        non_equity_reason = non_equity_holding_reason(asset, name)
+        if non_equity_reason is not None:
+            filter_reason = non_equity_reason
         elif "." in asset and asset not in class_vocabulary:
             mapped = listing_overrides.get(asset)
             if mapped:

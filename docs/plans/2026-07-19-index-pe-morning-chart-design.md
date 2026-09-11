@@ -48,7 +48,7 @@ Basket P/E = Σ covered member historical market cap
 
 - TTM：估值日可得的最近连续四个季度实际 GAAP 净利润；
 - 后视镜 NTM：估值日之后连续四个财政季度的实际 GAAP 净利润；
-- 真实 PIT NTM：对应快照日 FMP 共识构造的 NTM GAAP 净利润。
+- 真实 PIT NTM：对应快照日 FMP 分析师共识 NTM 净利润；**2026-09-11 Boss 确认**：不将共识标成已验证的 GAAP，图例/脚注明确其与实际 GAAP 的口径差异。后视镜 consensus tail 同样保留该提示。
 
 亏损成分股保留在分母中；不会像“剔除亏损股后做个股 P/E 算术平均”那样产生幸存者偏差。每个指标只在分子和分母使用完全相同的 covered member 集合。
 

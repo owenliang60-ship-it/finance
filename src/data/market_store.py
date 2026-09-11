@@ -1970,6 +1970,60 @@ class MarketStore:
         query += " ORDER BY snapshot_date DESC"
         return [dict(r) for r in conn.execute(query, params).fetchall()]
 
+    def commit_fmp_basket_valuations(self, rows, certify) -> int:
+        """Atomically certify six derived PIT rows; an existing vintage is frozen."""
+        baskets = {"SPY", "QQQ", "SOX", "MAGS", "IGV", "XLF"}
+        if len(rows) != 6 or {r.get("basket") for r in rows} != baskets:
+            raise ValueError("six unique PIT baskets required")
+        snapshots = {
+            self._require_iso_date(r.get("snapshot_date"), "snapshot_date")
+            for r in rows
+        }
+        if len(snapshots) != 1 or not callable(certify):
+            raise ValueError("one PIT snapshot and certification required")
+        snapshot = next(iter(snapshots))
+        prepared = [
+            {
+                **r,
+                "members_json": self._json_text(r.get("members_json"), "members_json"),
+            }
+            for r in rows
+        ]
+        conn = self._get_conn()
+        if conn.in_transaction:
+            raise ValueError("PIT commit requires its own transaction")
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            for row in prepared:
+                existing = conn.execute(
+                    "SELECT * FROM fmp_basket_valuation "
+                    "WHERE basket=? AND snapshot_date=?",
+                    [row["basket"], snapshot],
+                ).fetchone()
+                if existing:
+                    for key, value in row.items():
+                        old = existing[key]
+                        if key == "members_json":
+                            old, value = json.loads(old), json.loads(value)
+                        if old != value:
+                            raise ValueError(
+                                "refusing to rewrite frozen PIT valuation "
+                                f"{row['basket']}/{snapshot}"
+                            )
+                else:
+                    self._insert_validated(conn, "fmp_basket_valuation", row)
+            conn.execute("PRAGMA query_only=ON")
+            try:
+                if certify(conn) is not True:
+                    raise ValueError("PIT valuation certification failed")
+            finally:
+                conn.execute("PRAGMA query_only=OFF")
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+        return len(rows)
+
     def upsert_fmp_forward_run(self, row: Dict) -> int:
         """Run manifest。同 PK 只允许更新执行统计；universe 不可变。
 

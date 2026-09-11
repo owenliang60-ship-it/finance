@@ -448,7 +448,7 @@ python -m scripts.verify_index_pe_history \
 6. coverage gate 失败不写 complete valuation；
 7. SOX → display SOXX 映射仅在消费层，不改源 basket identity；
 8. resume 不重复覆盖坏的 snapshot state；
-9. cron writer lock 内顺序为 ingestion → PIT valuation → history-tail refresh → verifier；
+9. cron writer lock 内顺序为 ingestion → history full-window refresh/认证 → PIT valuation → 两个 verifier；**2026-09-11 技术修正**：history 会修复 HMC/FX 源表，必须先于冻结 PIT，否则最终对账会发现刚写入的 PIT 已过时；
 10. 任一步 non-zero 退出码上抛；
 11. 既有 reader `scripts/verify_fmp_forward.py:320`（`SELECT basket, members_json FROM fmp_basket_valuation`）在表从 0 行变为有数据后行为正确（空路径 → 逐行校验），不产生假绿；
 12. （2026-07-31 Boss 拍板，自 Task 8 提前）weekly tail refresh 触发 R5 拒绝（tier 降级/跨版本冲突）导致整篮回滚时：该 basket 的停发状态显式可查（manifest/状态表）、cron rc 非零、Telegram 告警发出；
@@ -458,6 +458,7 @@ python -m scripts.verify_index_pe_history \
 
 - 按冻结 spec 实现 `fwd_pe_ntm`，同时补齐已有表的 `fwd_pe_blend`，但图只用 NTM；
 - 成员级证据写 `members_json`；
+- **2026-09-11 口径确认**：PIT 使用分析师共识，不承诺 GAAP 等价；NTM 是发布门，blend 为辅助线独立门控。非 USD 街道 EPS 的币种/ADR 股数倍数未经证实则不做 EPS×股数乘法；blend 不足时显式 partial/NULL，保留已通过双门的 NTM。
 - update CLI 支持 `--phase valuation` 或与现有 run 语义兼容的显式入口；
 - weekly 完成后按 §3.3 C1 整窗事务重写三 basket 历史 TTM/hindsight 点，不做 tail-only 追加；
 - verifier 新增 basket 估值重算和 coverage 检查。
