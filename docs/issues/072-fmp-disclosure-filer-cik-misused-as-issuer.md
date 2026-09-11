@@ -39,3 +39,9 @@ Boss批准方案A后，`dc61062`修复源字段、精确证券alias、LEI/审查
 完整证据与待核名单见 `docs/audit/2026-09-11-index-pe-source-identity-repair.md`。代码修复完成不等于数据已认证，更不等于项目已上线。
 
 最终`26cec1b`隔离全量3506 passed/4 skipped、云端91 passed，零失败；原始数据缺口继续阻断发布，不删除或伪填未知身份。
+
+## 后续补证与LEI边界（2026-09-11 17时）
+
+首批12证券审核证据已提交78411b9，相关416tests、云端30tests及133行独立身份对拍通过，原表hash不变；缺失41证券/463行→29证券/330行。FMP新增0次（累计71）。
+
+查证同时发现LEI不只是缺值：CTAS候选指向LATM Management LLC，KHC混入食品子公司，STE候选是融资实体；有些公司仅搜到不相干名称。合法LEI校验位不能代替上市发行人验证。现有LEI+双证券编号强制schema无法表达所有权威身份证据，已写待批的verified-issuer-key修订，未私自放宽。详`docs/audit/2026-09-11-index-pe-issuer-evidence-followup.md`。

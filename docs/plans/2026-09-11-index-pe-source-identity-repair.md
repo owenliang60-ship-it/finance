@@ -121,3 +121,5 @@ Files: `config/soxx_symbol_aliases.json`、`src/data/fmp_forward_ingestion.py`�
 ## 2026-09-11 执行备注
 
 代码提交`dc61062`；真实数据复核追加`26cec1b`，FOXA/FOX、NWSA/NWS撤销未证实的split约定，使用既有列表形状声明convention未知，沿用原有排除门，不新增估值算法。原因与数据在`docs/audit/2026-09-11-index-pe-source-identity-repair.md`。DISCA/DISCK、UA/UAA同issuer证据已有，市值约定及缺失证券LEI未关闭，仍停在Task3的数据验收门。
+
+17时补证：78411b9新增12证券审核记录，133行缺口关闭，剩29证券/330行。原始N/A不改写，producer与独立verifier对拍一致。由于部分LEI指向子公司、部分证券仅有ISIN等问题，后续契约调整见`2026-09-11-index-pe-verified-issuer-key.md`（待批），不将本计划已有批准解释为对该修订的批准。
