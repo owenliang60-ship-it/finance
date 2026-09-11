@@ -1,6 +1,6 @@
 # 三指数 PE 整窗更新与失败恢复
 
-状态：C1 与 Task 5 PIT 聚合代码完成、未部署；晨报接线待后续。云端仍为 market.db 唯一写入方，正式执行继续沿用 `market_db_writer` 外层资源锁与备份策略。
+状态：C1、Task 5 PIT 聚合及晨报图表接线已实现，尚未部署；真实历史数据准备与最终验收未完成。云端仍为 market.db 唯一写入方，正式执行继续沿用 `market_db_writer` 外层资源锁与备份策略。
 
 ## 写入契约
 
@@ -21,6 +21,10 @@
 - 存在历史（C1 前）异常事件、跨版本数据或真实盈利从 actual_only 退级时，先人工归因，不能用重命名 run_id 或改 hash 绕过验收。
 
 ## 只读验收命令（部署及数据准备完成后）
+
+周频顺序为 yfinance → FMP ingestion → 历史源/整窗刷新并认证 → PIT 共识估值 → 两个 verifier。history 可能修正 HMC/FX，须在 PIT 冻结前完成。NTM 未过双门则六篮子批次回滚；blend 辅助线可为 NULL/partial。PIT snapshot 只读既有 complete weekly 源，估值失败不要对已 complete 的 ingestion 执行 resume。
+
+晨报估值路径只读两张估值表和完成记录，不触网、不写估值表。`0c. 三指数估值` 位于 `0b` 后、PMARP 前；同一 PNG 自包含嵌入 HTML 或作为 PDF 页面。任一序列最后有效点超过 14 天标过期；缺失数据/绘图失败展示说明，不阻断其余晨报。HTML 已成功发送后，摘要失败不再触发重复 PDF 发送。
 
 ```bash
 python -m scripts.verify_index_pe_history --baskets SPY,QQQ,SOXX \

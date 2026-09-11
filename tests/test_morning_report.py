@@ -1599,6 +1599,7 @@ def test_pmarp_visual_blocks_include_mcap_tier_in_title():
 
 def test_html_delivery_falls_back_to_pdf_on_send_false(monkeypatch, tmp_path):
     calls, sent = [], {}
+    monkeypatch.setattr(mr, "_prepare_index_valuation_chart", lambda *a: {"path":None,"caption":"test unavailable"})
     monkeypatch.setattr(mr, "build_html_payload", lambda ms, dv, as_of: {"as_of": as_of, "blocks": []})
     monkeypatch.setattr(mr, "compile_morning_html_report", lambda payload, d, **kw: tmp_path / "r.html")
     monkeypatch.setattr(mr, "render_morning_report_images", lambda **kw: [tmp_path / "p.png"])
@@ -1615,6 +1616,47 @@ def test_html_delivery_falls_back_to_pdf_on_send_false(monkeypatch, tmp_path):
     assert any(p.endswith(".html") for p in calls)   # 先试 HTML
     assert sent.get("pdf")                            # html send=False → 回退真实 PDF helper
     assert ok is True
+
+
+def test_valuation_png_reused_in_pdf_after_html_failure(monkeypatch, tmp_path):
+    from PIL import Image
+    chart=tmp_path/'valuation.png'
+    Image.new('RGB',(100,100),'white').save(chart)
+    prepared=[]; pdf_pages=[]; sent=[]
+    monkeypatch.setattr(mr,'_prepare_index_valuation_chart',lambda *a: prepared.append(a) or {
+        'path':str(chart),'caption':'test chart','available':True})
+    def fail_html(*a,**kw): raise RuntimeError('injected HTML failure')
+    monkeypatch.setattr(mr,'compile_morning_html_report',fail_html)
+    monkeypatch.setattr(mr,'render_morning_report_pdf',lambda paths: pdf_pages.extend(paths) or tmp_path/'report.pdf')
+    monkeypatch.setattr(mr,'_send_group_pdf_report',lambda p: sent.append(p) or True)
+    mr._deliver_morning_report({'pmarp':{'hits':[]}},None,'daily','html',True,str(tmp_path),False,'2026-09-11')
+    assert len(prepared)==1 and pdf_pages.count(chart)==1 and len(sent)==1
+    before=[p.name for p in pdf_pages[:pdf_pages.index(chart)]]
+    after=[p.name for p in pdf_pages[pdf_pages.index(chart)+1:]]
+    assert any('volume_concentration' in name for name in before)
+    assert any('pmarp' in name for name in after)
+
+
+def test_successful_html_is_not_resent_when_summary_fails(monkeypatch,tmp_path):
+    calls=[]
+    monkeypatch.setattr(mr,'_prepare_index_valuation_chart',lambda *a:{'path':None,'caption':'unavailable'})
+    monkeypatch.setattr(mr,'compile_morning_html_report',lambda *a,**kw:tmp_path/'report.html')
+    monkeypatch.setattr(mr,'send_document',lambda *a,**kw:calls.append(a) or True)
+    def fail_summary(*a,**kw): raise RuntimeError('injected summary failure')
+    monkeypatch.setattr(mr,'send_message',fail_summary)
+    monkeypatch.setattr(mr,'render_morning_report_images',lambda **kw:pytest.fail('no fallback after delivered HTML'))
+    assert mr._deliver_morning_report({},None,'daily','html',True,str(tmp_path),False,'2026-09-11')
+    assert len(calls)==1
+
+
+def test_chart_failure_keeps_unavailable_section(monkeypatch,tmp_path):
+    from terminal import index_valuation_chart
+    def fail_load(*a): raise ValueError('injected bad database')
+    monkeypatch.setattr(index_valuation_chart,'load_chart_data',fail_load)
+    chart=mr._prepare_index_valuation_chart('2026-09-11',tmp_path)
+    assert chart['available'] is False and chart['path'] is None
+    payload=mr.build_html_payload({'index_valuation_chart':chart},None,'2026-09-11')
+    assert next(b for b in payload['blocks'] if b['heading']=='0c. 三指数估值')['subtitle']
 
 
 # ---------- 6 个月 beta（2026-06-12 plan） ----------

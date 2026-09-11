@@ -1832,6 +1832,13 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
             "subtitle": "成交集中度: 数据不足（{}）".format(volconc_display["reason"]),
         })
 
+    chart = (market_signals or {}).get("index_valuation_chart")
+    if chart:
+        block = {"heading": "0c. 三指数估值", "subtitle": chart.get("caption", "")}
+        if chart.get("path"):
+            block.update(type="image", path=chart["path"],
+                         alt="SPY QQQ SOXX 五年周频：GAAP TTM、后视镜 NTM、真实 PIT NTM（分析师共识）")
+        blocks.append(block)
     blocks.append({"heading": "1. PMARP 信号"})
 
     # PMARP — signal -> cap-tier sub-blocks (columns one-to-one with text)
@@ -1995,6 +2002,14 @@ def build_morning_visual_sections(
                 "blocks": [],
             })
 
+        chart = market_signals.get("index_valuation_chart")
+        if chart:
+            section = {"slug": "00c_index_valuation", "title": "0c. 三指数估值",
+                       "subtitle": chart.get("caption", ""), "blocks": []}
+            if chart.get("path"):
+                section.update(type="image", path=chart["path"])
+            sections.append(section)
+
         pmarp = market_signals.get("pmarp", {})
         _pmarp_cols = ["标的", "概念", "信号", "当前", "变化", "市值", "β6M"]
         _pmarp_widths = [300, 320, 140, 130, 170, 150, 120]
@@ -2104,30 +2119,10 @@ def build_morning_visual_sections(
     return sections
 
 
-_VISUAL_FONT_CANDIDATES = {
-    "regular": [
-        "/System/Library/Fonts/STHeiti Light.ttc",
-        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-        "/Library/Fonts/Arial Unicode.ttf",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-        "/usr/share/fonts/truetype/unifont/unifont.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ],
-    "bold": [
-        "/System/Library/Fonts/STHeiti Medium.ttc",
-        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-        "/Library/Fonts/Arial Unicode.ttf",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-        "/usr/share/fonts/truetype/unifont/unifont.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    ],
-}
+from terminal.report_fonts import (
+    FONT_CANDIDATES as _VISUAL_FONT_CANDIDATES,
+    load_visual_font as _load_visual_font,
+)
 
 _VISUAL_LAYER_COLORS = {
     "pool": ("#1d4ed8", "#dbeafe"),
@@ -2139,21 +2134,6 @@ _VISUAL_WIDTH = 2400
 _VISUAL_MARGIN = 76
 _VISUAL_TABLE_HEADER_H = 54
 _VISUAL_TABLE_ROW_H = 58
-
-
-def _load_visual_font(size: int, bold: bool = False):
-    from PIL import ImageFont
-
-    key = "bold" if bold else "regular"
-    for candidate in _VISUAL_FONT_CANDIDATES[key]:
-        path = Path(candidate)
-        if not path.exists():
-            continue
-        try:
-            return ImageFont.truetype(str(path), size)
-        except Exception:
-            continue
-    return ImageFont.load_default()
 
 
 def _fit_text(draw, text: str, font, max_width: int) -> str:
@@ -2281,6 +2261,9 @@ def render_morning_report_images(
 
     image_paths = []
     for index, section in enumerate(sections, 1):
+        if section.get("type") == "image":
+            image_paths.append(Path(section["path"]))
+            continue
         height = _estimate_visual_height(section) + 2000
         image = Image.new("RGB", (width, height), "#f8fafc")
         draw = ImageDraw.Draw(image)
@@ -2726,6 +2709,22 @@ def run_dollar_volume() -> dict:
         return {"rankings": [], "new_faces": []}
 
 
+def _prepare_index_valuation_chart(as_of, output_dir=None):
+    """Read certified valuation data and produce one reusable attachment."""
+    try:
+        from config.settings import MARKET_DB_PATH
+        from terminal.index_valuation_chart import load_chart_data, render_chart, FOOTNOTE
+        data = load_chart_data(Path(MARKET_DB_PATH), as_of)
+        output = Path(output_dir) if output_dir else Path("reports/rendered")
+        path = render_chart(data, output / f"index_pe_weekly_{as_of}.png")
+        available = any(p["history"] or p["pit"] for p in data["panels"])
+        return {"path": str(path), "available": available,
+                "caption": FOOTNOTE if available else "估值数据尚未准备；完成回填与认证后显示曲线。"}
+    except Exception as exc:
+        logger.warning("三指数估值图暂不可用: %s", exc)
+        return {"path": None, "available": False, "caption": "估值图暂不可用；其余晨报正常展示。"}
+
+
 def _deliver_morning_report(market_signals, dv_result, daily_msg, image_delivery,
                             image_report, image_output_dir, photo_safe, as_of,
                             no_telegram=False):
@@ -2737,6 +2736,9 @@ def _deliver_morning_report(market_signals, dv_result, daily_msg, image_delivery
     — Pillow ImportError text degrade plus the pdf/document/photo/text send
     branches via the real _send_group_* helpers.
     """
+    market_signals = dict(market_signals or {})
+    if image_report or image_delivery == "html":
+        market_signals["index_valuation_chart"] = _prepare_index_valuation_chart(as_of, image_output_dir)
     # ── 新增 HTML 分支（仅 image_delivery == "html"）──
     if image_delivery == "html":
         try:
@@ -2747,7 +2749,10 @@ def _deliver_morning_report(market_signals, dv_result, daily_msg, image_delivery
                 return True
             if send_document(str(html_path),
                              caption="未来资本晨报 — {}".format(as_of), channel="group"):
-                send_message("晨报 HTML — {}".format(as_of), channel="group")
+                try:
+                    send_message("晨报 HTML — {}".format(as_of), channel="group")
+                except Exception as exc:
+                    logger.warning("HTML 已投递，摘要发送失败: %s", exc)
                 return True
             logger.warning("HTML send_document 返回 False → 回退 PDF")
         except Exception as exc:

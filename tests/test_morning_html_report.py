@@ -87,3 +87,24 @@ def test_compile_full_html_renders_volume_concentration_unavailable(tmp_path):
 
     assert "0b. 成交集中度" in text
     assert "成交集中度: 数据不足（历史数据不足）" in text
+
+
+def test_image_block_is_embedded_and_escaped(tmp_path):
+    from PIL import Image
+    path=tmp_path/'chart.png'
+    Image.new('RGB',(10,10),'white').save(path)
+    output=compile_morning_html_report({'blocks':[{
+        'type':'image','heading':'0c. 三指数估值','path':str(path),
+        'alt':'<test>"','caption':'A&B <caption>'}]},'2026-09-11',tmp_path)
+    text=output.read_text()
+    assert 'data:image/png;base64,' in text
+    assert str(tmp_path) not in text
+    assert '&lt;test&gt;&quot;' in text
+    assert 'A&amp;B &lt;caption&gt;' in text
+
+
+def test_valuation_block_is_between_concentration_and_pmarp():
+    payload=build_html_payload({'index_valuation_chart':{
+        'path':'chart.png','caption':'共识口径'}},None,'2026-09-11')
+    headings=[b['heading'] for b in payload['blocks']]
+    assert headings.index('0b. 成交集中度') < headings.index('0c. 三指数估值') < headings.index('1. PMARP 信号')

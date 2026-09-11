@@ -45,4 +45,6 @@ verifier 使用 SQLite `mode=ro + query_only` 从 source tables 重算每日结�
 
 ### 同日续做：C1 已实现（上段停点记录已被推进）
 
+后续展示契约：Boss 已确认共识口径显式标注。hindsight 是事后解释，不是历史可交易 forward 信号，共识尾部不能参加 actual-only 分位。reader 先验证完整已拥有行的 manifest hash，再截取五年窗口，避免截断后重算 hash 的假失败。短周频线段的虚线相位必须跨线段延续，否则每段不足 7px 时“虚线”会实际画成实线。HTML 成功投递后摘要失败不得再发送 PDF。对应回归在 chart 与 morning 测试中。
+
 Boss 随后授权继续，整窗写入/旧行清理/completed 现为同一事务，候选内只读认证成功才提交；五年滑动一周、同周取样日变更和失败保留旧数据/重跑恢复通过。源预检失败也保留明确 started+failed 形状，避免 terminal-only 记录毒化所有后续重跑。C1 已关闭；Task 5 的共识盈利是否可称为 GAAP 存在两文档冲突，已向 Boss 提出选择，云端 PIT 表仍为空。详 `docs/plans/2026-09-11-index-pe-c1-continuation.md`。

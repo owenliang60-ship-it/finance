@@ -1,6 +1,7 @@
 """晨报 HTML 渲染器（轻量）。复用 terminal/html_report.py 的 CSS/markdown 引擎，
 不复用 lenses/debate/oprms 抽取逻辑（与深度分析 markdown 强耦合，见 html_report.py:1181-1438）。"""
 import html
+import base64
 from pathlib import Path
 from typing import List, Dict
 from terminal.html_report import CSS, md_to_html   # CSS:23-520, md_to_html:547-659
@@ -10,6 +11,7 @@ EXTRA_CSS = (
     ".table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 0 16px;}"
     ".report-subtitle{color:#666;font-size:0.9em;margin:0 0 10px;}"
     ".alert{color:#c0392b;font-weight:600;margin:2px 0;}"
+    ".valuation-chart{display:block;width:100%;height:auto;}"
 )
 
 RENDERED_DIR = Path("reports/rendered")
@@ -40,7 +42,17 @@ def compile_morning_html_report(payload: dict, date: str, out_dir: Path = None) 
             parts.append('<p class="report-subtitle">{}</p>'.format(html.escape(str(subtitle))))
         for alert in block.get("alerts") or []:
             parts.append('<p class="alert">{}</p>'.format(html.escape(str(alert))))
-        if not is_section_title:
+        if block.get("type") == "image":
+            data = Path(block["path"]).read_bytes()
+            if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+                raise ValueError("image block must contain a PNG")
+            src = base64.b64encode(data).decode("ascii")
+            parts.append('<img class="valuation-chart" src="data:image/png;base64,{}" alt="{}">'.format(
+                src, html.escape(str(block.get("alt", heading)), quote=True)))
+            if block.get("caption"):
+                parts.append('<p class="report-subtitle">{}</p>'.format(
+                    html.escape(str(block["caption"]))))
+        elif not is_section_title:
             parts.append(dicts_to_html_table(block.get("rows", []), block.get("columns", [])))
     parts.append("</div></body></html>")
     out_dir = out_dir or RENDERED_DIR
