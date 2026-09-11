@@ -65,6 +65,12 @@ def _accepted(fiscal_date, days=20):
             + timedelta(days=days)).isoformat() + " 16:00:00"
 
 
+# The four quarters after the fixture's valuation dates, summing to a
+# member's hindsight income -- the producer records the window it used, so
+# the fixture does too.
+HINDSIGHT_FISCAL = ["2026-03-31", "2026-06-30", "2026-09-30", "2026-12-31"]
+
+
 def _member(symbol, weight, market_cap, market_cap_date, ttm=25.0,
             hindsight=30.0):
     return {
@@ -78,6 +84,7 @@ def _member(symbol, weight, market_cap, market_cap_date, ttm=25.0,
         "hindsight_actual_quarters": 4,
         "hindsight_estimate_quarters": 0,
         "hindsight_exclusion_reason": None,
+        "hindsight_window": [HINDSIGHT_FISCAL[0], HINDSIGHT_FISCAL[-1]],
     }
 
 
@@ -118,6 +125,8 @@ def _weekly_row(basket, valuation_date, members, quality_tier="actual_only",
         "composition_available_date": composition_available,
         "quality_tier": quality_tier,
         "members_json": {
+            "holding_date": "2021-01-15",
+            "weight_basis": "fixed_rebalance_weight_proxy",
             "consensus_snapshot_date": "2026-01-09",
             "is_ex_post": 1,
             "weight_coverage_ttm": sum(
@@ -177,6 +186,8 @@ def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
     conn = store._get_conn()
     trading = _weekdays(*calendar)
     fiscal = ["2024-12-31", "2025-03-31", "2025-06-30", "2025-09-30"]
+    # Four reported quarters before the valuation dates (TTM) and four after
+    # (hindsight), so both reconciliations have something to rebuild from.
     with conn:
         conn.executemany(
             "INSERT OR REPLACE INTO daily_price "
@@ -195,7 +206,9 @@ def _build(tmp_path, *, basket="SPY", calendar=("2026-01-05", "2026-01-16"),
                 "(symbol, date, period, accepted_date, reported_currency, "
                 "net_income) VALUES (?,?,?,?,?,?)",
                 [(symbol, day, "Q1", _accepted(day), "USD", 6.25)
-                 for day in fiscal])
+                 for day in fiscal]
+                + [(symbol, day, "Q1", _accepted(day), "USD", 7.5)
+                   for day in HINDSIGHT_FISCAL])
         identities = dict(ciks or {
             symbol: f"000000000{index + 1}"
             for index, (symbol, _) in enumerate(market_caps)})
@@ -941,9 +954,6 @@ def _future_quarters(db_path, symbol, values, currency="USD"):
     conn.close()
 
 
-HINDSIGHT_FISCAL = ["2026-03-31", "2026-06-30", "2026-09-30", "2026-12-31"]
-
-
 def _with_hindsight_sources(db_path, per_quarter=7.5):
     """The four quarters that follow the valuation dates, 30.0 a year."""
     for symbol in ("AAA", "BBB"):
@@ -1431,7 +1441,7 @@ def test_events_after_a_terminal_event_are_rejected(tmp_path, config_dir):
          "trigger_dates": ["2026-01-07"], "pre_row_hash": "a" * 64,
          "post_row_hash": "b" * 64, "skipped": False})])
     failures = _failed(_verify(db_path, config_dir))
-    assert any("events_after_its_terminal_event" in str(item)
+    assert any("terminal_is_not_the_last_event" in str(item)
                for item in failures["manifest_denominator"]), failures
 
 
@@ -1598,3 +1608,382 @@ def test_the_ordinary_retry_shape_verifies_clean(tmp_path, config_dir):
     report = _verify(db_path, config_dir)
     assert report["passed"], _failed(report)
     assert report["baskets"]["SPY"]["manifest_run_id"] == "retry-b"
+
+
+# ---------------------------------------------------------------------------
+# Boss review 2 / P1-C: manifest shape, and rowid as the only ordering
+# ---------------------------------------------------------------------------
+
+def test_a_run_with_no_run_started_is_rejected(tmp_path, config_dir):
+    """A completion nobody started is not a run."""
+    db_path = _build(tmp_path)
+    _mutate(db_path, "DELETE FROM basket_pe_backfill_runs "
+                     "WHERE event_kind = 'run_started'")
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("run_never_started" in str(item)
+               for item in failures["manifest_denominator"]), failures
+
+
+def test_event_seq_cannot_launder_the_physical_order(tmp_path, config_dir):
+    """event_seq is a label the writer chooses; rowid is what happened.
+
+    Appending the terminal first and the start afterwards, with event_seq
+    numbers that read correctly, produced a well-ordered run under an
+    event_seq sort. Only the manifest's own row order shows the truth.
+    """
+    db_path = _build(tmp_path)
+    _mutate(db_path, "DELETE FROM basket_pe_backfill_runs")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rows = [dict(row) for row in conn.execute(
+        "SELECT * FROM basket_weekly_pe_history ORDER BY valuation_date")]
+    conn.close()
+    # physically: terminal first, start second -- event_seq says otherwise
+    _append_events(db_path, [_run_event(
+        "run-1", 1, "run_completed",
+        {"weekly_rows": len(rows), "result_hash": weekly_result_hash(rows)})])
+    _append_events(db_path, [_run_event(
+        "run-1", 0, "run_started",
+        {"expected_weeks": ["2026-01-09", "2026-01-16"],
+         "calendar_hash": weekly_calendar_hash(
+             _weekdays("2026-01-05", "2026-01-16")),
+         "composition_floor": "2021-01-25"})])
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("run_started_is_not_the_first_event" in str(item)
+               or "terminal_is_not_the_last_event" in str(item)
+               for item in failures["manifest_denominator"]), failures
+
+
+def test_a_table_without_run_id_fails_verification(tmp_path, config_dir):
+    """Defence in depth for the migration: no ownership column, no trust."""
+    db_path = _build(tmp_path)
+    conn = sqlite3.connect(db_path)
+    with conn:
+        conn.execute("ALTER TABLE basket_weekly_pe_history "
+                     "RENAME COLUMN run_id TO run_id_removed")
+    conn.close()
+    conn = connect_readonly(db_path)
+    try:
+        with pytest.raises(ValueError, match="run_id"):
+            verify_database(conn, ["SPY"], AS_OF, YEARS, 8, config_dir)
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Boss review 2 / P1-B: a reconciliation that reconciles nothing is not one
+# ---------------------------------------------------------------------------
+
+def _strip_hindsight_evidence(db_path):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rows = [dict(row) for row in conn.execute(
+        "SELECT valuation_date, members_json FROM basket_weekly_pe_history")]
+    with conn:
+        for row in rows:
+            payload = json.loads(row["members_json"])
+            for member in payload["members"]:
+                member.pop("hindsight_window", None)
+                member.pop("hindsight_snapshot_date", None)
+            conn.execute(
+                "UPDATE basket_weekly_pe_history SET members_json = ? "
+                "WHERE valuation_date = ?",
+                [json.dumps(payload), row["valuation_date"]])
+    conn.close()
+
+
+def test_deleting_the_hindsight_evidence_does_not_buy_a_pass(
+        tmp_path, config_dir):
+    """Boss: strip every member's hindsight window and the check goes quiet.
+
+    Declining on ambiguity is right; declining on *everything* and still
+    passing means the check can be switched off by removing what it reads.
+    A published hindsight P/E has to be accompanied by the evidence that lets
+    it be rebuilt.
+    """
+    db_path = _build(tmp_path)
+    _with_hindsight_sources(db_path)
+    for valuation_date in ("2026-01-09", "2026-01-16"):
+        _set_member_window(db_path, valuation_date)
+    assert _verify(db_path, config_dir)["passed"], "baseline must be clean"
+
+    _strip_hindsight_evidence(db_path)
+    report = _verify(db_path, config_dir)
+    failures = _failed(report)
+    assert failures, "stripping the evidence bought a pass"
+    detail = failures["raw_source_spot_check"]
+    assert any("hindsight_evidence_missing" in str(item)
+               for item in detail["errors"]), detail
+
+
+def test_a_sample_that_reconciles_no_hindsight_row_fails(tmp_path, config_dir):
+    """Zero reconciled hindsight incomes across a sample containing them."""
+    db_path = _build(tmp_path)
+    _with_hindsight_sources(db_path)
+    for valuation_date in ("2026-01-09", "2026-01-16"):
+        _set_member_window(db_path, valuation_date)
+    # A window nothing can be rebuilt from: every member declines.
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rows = [dict(row) for row in conn.execute(
+        "SELECT valuation_date, members_json FROM basket_weekly_pe_history")]
+    with conn:
+        for row in rows:
+            payload = json.loads(row["members_json"])
+            for member in payload["members"]:
+                member["hindsight_window"] = ["2099-03-31", "2099-12-31"]
+            conn.execute(
+                "UPDATE basket_weekly_pe_history SET members_json = ? "
+                "WHERE valuation_date = ?",
+                [json.dumps(payload), row["valuation_date"]])
+    conn.close()
+    detail = _failed(_verify(db_path, config_dir))["raw_source_spot_check"]
+    assert detail["reconciled_hindsight_incomes"] == 0
+    assert any("no_hindsight_income_reconciled" in str(item)
+               for item in detail["errors"]), detail
+
+
+# ---------------------------------------------------------------------------
+# Boss review 2 / P1-D: the member set must come from the source, not the row
+# ---------------------------------------------------------------------------
+
+def test_a_deleted_member_cannot_hide_by_leaving_both_sides(
+        tmp_path, config_dir):
+    """Boss: delete a 40%-weight member and recompute everything around it.
+
+    Coverage was computed from the members the row happened to contain, so a
+    member removed from members_json vanished from numerator and denominator
+    alike and the row stayed self-consistent. The expected membership has to
+    come from the disclosure snapshot, exactly as the expected week set comes
+    from the manifest -- a denominator built out of the data it is judging is
+    not a denominator.
+    """
+    db_path = _build(tmp_path)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rows = [dict(row) for row in conn.execute(
+        "SELECT * FROM basket_weekly_pe_history ORDER BY valuation_date")]
+    with conn:
+        for row in rows:
+            payload = json.loads(row["members_json"])
+            kept = [m for m in payload["members"] if m["symbol"] != "BBB"]
+            payload["members"] = kept
+            payload["weight_coverage_ttm"] = 1.0
+            payload["weight_coverage_hindsight"] = 1.0
+            mcap = sum(m["market_cap"] for m in kept)
+            ttm = sum(m["ttm_net_income_usd"] for m in kept)
+            hs = sum(m["hindsight_ntm_net_income_usd"] for m in kept)
+            conn.execute(
+                "UPDATE basket_weekly_pe_history SET members_json = ?, "
+                "n_members = ?, n_covered_ttm = ?, n_covered_hindsight = ?, "
+                "ttm_total_mcap = ?, ttm_net_income = ?, ttm_pe_gaap = ?, "
+                "hindsight_total_mcap = ?, hindsight_ntm_net_income = ?, "
+                "hindsight_ntm_pe_gaap = ?, mcap_coverage_ttm = 1.0, "
+                "mcap_coverage_hindsight = 1.0 WHERE valuation_date = ?",
+                [json.dumps(payload), len(kept), len(kept), len(kept),
+                 mcap, ttm, mcap / ttm, mcap, hs, mcap / hs,
+                 row["valuation_date"]])
+    conn.close()
+    # re-declare the manifest so the hash cannot be what catches it
+    rows = _all_rows(db_path)
+    _mutate(db_path, "DELETE FROM basket_pe_backfill_runs")
+    _append_events(db_path, _manifest_events(
+        "SPY", run_id="run-1", trading=_weekdays("2026-01-05", "2026-01-16"),
+        rows=rows))
+    failures = _failed(_verify(db_path, config_dir))
+    assert failures, "a deleted member vanished from both sides unnoticed"
+    assert any("member_missing_from_members_json" in str(item)
+               and "BBB" in str(item)
+               for item in failures["materialised_evidence"]), failures
+
+
+def test_weight_coverage_is_measured_against_the_disclosed_weights(
+        tmp_path, config_dir):
+    """The eligible-weight denominator comes from the snapshot, not the row."""
+    db_path = _build(tmp_path)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    row = dict(conn.execute(
+        "SELECT * FROM basket_weekly_pe_history "
+        "WHERE valuation_date = '2026-01-16'").fetchone())
+    payload = json.loads(row["members_json"])
+    # BBB stays in the row but its disclosed 40% is understated as 4%,
+    # flattering the coverage that gates publication.
+    for member in payload["members"]:
+        if member["symbol"] == "BBB":
+            member["weight_pct"] = 4.0
+    with conn:
+        conn.execute("UPDATE basket_weekly_pe_history SET members_json = ? "
+                     "WHERE valuation_date = '2026-01-16'",
+                     [json.dumps(payload)])
+    conn.close()
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("member_weight_disagrees_with_the_disclosure" in str(item)
+               for item in failures["materialised_evidence"]), failures
+
+
+def _add_snapshot(db_path, *, holding_date, source_kind, available,
+                  weights=(60.0, 40.0)):
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO fmp_fund_disclosure_holdings "
+            "(basket_symbol, holding_date, source_kind, raw_row_index, "
+            "rebalance_close_date, composition_effective_date, "
+            "composition_available_date, raw_symbol, symbol, cik, weight_pct, "
+            "included, snapshot_warnings_json, fetched_at, created_at) "
+            "SELECT basket_symbol, ?, ?, raw_row_index, rebalance_close_date, "
+            "composition_effective_date, ?, raw_symbol, symbol, cik, "
+            "CASE raw_row_index WHEN 0 THEN ? ELSE ? END, included, "
+            "snapshot_warnings_json, fetched_at, created_at "
+            "FROM fmp_fund_disclosure_holdings "
+            "WHERE holding_date = '2021-01-15' AND source_kind = 'disclosure'",
+            [holding_date, source_kind, available, *weights])
+
+
+@pytest.mark.parametrize("source_kind", ["live", "disclosure"])
+def test_future_snapshot_does_not_change_past_membership(
+        tmp_path, config_dir, source_kind):
+    db_path = _build(tmp_path)
+    assert _verify(db_path, config_dir)["passed"]
+    _add_snapshot(db_path, holding_date="2026-02-01",
+                  source_kind=source_kind, available="2026-02-01",
+                  weights=(20.0, 80.0))
+    report = _verify(db_path, config_dir)
+    assert report["passed"], _failed(report)
+
+
+def test_disclosure_supersedes_live_at_the_same_effective_date(
+        tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    _add_snapshot(db_path, holding_date="2026-01-01", source_kind="live",
+                  available="2026-01-02", weights=(20.0, 80.0))
+    report = _verify(db_path, config_dir)
+    assert report["passed"], _failed(report)
+
+
+def test_live_snapshot_is_used_until_disclosure_becomes_available(
+        tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    _add_snapshot(db_path, holding_date="2021-01-15", source_kind="live",
+                  available="2021-01-25")
+    _mutate(db_path, "UPDATE fmp_fund_disclosure_holdings "
+                     "SET composition_available_date = '2026-02-01', "
+                     "weight_pct = weight_pct / 2 WHERE source_kind = 'disclosure'")
+    for row in _all_rows(db_path):
+        payload = json.loads(row["members_json"])
+        payload["weight_basis"] = "live_snapshot_backcast_proxy"
+        _mutate(db_path, "UPDATE basket_weekly_pe_history SET members_json = ? "
+                         "WHERE valuation_date = ?",
+                [json.dumps(payload), row["valuation_date"]])
+    report = _verify(db_path, config_dir)
+    assert report["passed"], _failed(report)
+
+
+def test_same_effective_newer_disclosure_must_be_selected(
+        tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    _add_snapshot(db_path, holding_date="2025-12-31",
+                  source_kind="disclosure", available="2026-01-02")
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("snapshot_identity_mismatch" in item
+               for item in failures["materialised_evidence"]), failures
+
+
+def test_membership_cannot_skip_a_missing_source_snapshot(tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    _mutate(db_path, "DELETE FROM fmp_fund_disclosure_holdings")
+    failures = _failed(_verify(db_path, config_dir))
+    assert any("no_eligible_membership_snapshot" in item
+               for item in failures["materialised_evidence"]), failures
+
+
+def test_covered_by_weights_are_folded_inside_one_snapshot(tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO fmp_fund_disclosure_holdings "
+            "SELECT basket_symbol, holding_date, source_kind, 2, "
+            "rebalance_close_date, composition_effective_date, "
+            "composition_available_date, 'AAA.B', NULL, alias_symbol, "
+            "alias_mode, alias_reason, name, 20.0, market_value, cik, cusip, "
+            "isin, 0, 'dual_class_secondary', 'AAA', row_accepted_at, "
+            "snapshot_warnings_json, fetched_at, created_at "
+            "FROM fmp_fund_disclosure_holdings WHERE symbol = 'AAA'")
+        conn.execute("UPDATE fmp_fund_disclosure_holdings SET weight_pct = 40 "
+                     "WHERE symbol = 'AAA'")
+    report = _verify(db_path, config_dir)
+    assert report["passed"], _failed(report)
+
+
+def test_hindsight_evidence_is_required_on_unsampled_rows(tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    row = _all_rows(db_path)[-1]
+    payload = json.loads(row["members_json"])
+    payload["members"][0].pop("hindsight_window")
+    _mutate(db_path, "UPDATE basket_weekly_pe_history SET members_json = ? "
+                     "WHERE valuation_date = ?",
+            [json.dumps(payload), row["valuation_date"]])
+    report = _verify(db_path, config_dir, sample=1)
+    assert row["valuation_date"] not in report["baskets"]["SPY"]["sampled"]
+    assert any("hindsight_evidence_missing" in item
+               for item in _failed(report)["materialised_evidence"])
+
+
+def test_estimated_member_requires_its_own_snapshot_evidence(
+        tmp_path, config_dir):
+    db_path = _build(tmp_path)
+    row = _all_rows(db_path)[-1]
+    payload = json.loads(row["members_json"])
+    payload["members"][0].update(
+        hindsight_actual_quarters=3, hindsight_estimate_quarters=1)
+    _mutate(db_path, "UPDATE basket_weekly_pe_history SET members_json = ? "
+                     "WHERE valuation_date = ?",
+            [json.dumps(payload), row["valuation_date"]])
+    failures = _failed(_verify(db_path, config_dir, sample=1))
+    assert any("hindsight_snapshot_evidence_missing" in item
+               for item in failures["materialised_evidence"])
+
+
+def test_one_baskets_reconciliation_cannot_cover_another(tmp_path, config_dir):
+    db_path = _build(tmp_path, basket="SPY")
+    _build(tmp_path, basket="QQQ")
+    with sqlite3.connect(db_path) as conn:
+        records = list(conn.execute(
+            "SELECT valuation_date, members_json FROM basket_weekly_pe_history "
+            "WHERE basket = 'QQQ'"))
+        for valuation_date, raw in records:
+            payload = json.loads(raw)
+            for member in payload["members"]:
+                member["hindsight_window"] = ["2099-03-31", "2099-12-31"]
+            conn.execute("UPDATE basket_weekly_pe_history SET members_json = ? "
+                         "WHERE basket = 'QQQ' AND valuation_date = ?",
+                         [json.dumps(payload), valuation_date])
+    report = _verify(db_path, config_dir, baskets=("SPY", "QQQ"))
+    assert report["baskets"]["SPY"]["raw_source_reconciliation"][
+        "reconciled_hindsight_incomes"] == 4
+    assert report["baskets"]["QQQ"]["raw_source_reconciliation"][
+        "reconciled_hindsight_incomes"] == 0
+    assert any("QQQ:no_hindsight_income_reconciled" in item
+               for item in _failed(report)["raw_source_spot_check"]["errors"])
+
+
+@pytest.mark.parametrize("broken_shape", ["no_start", "reversed"])
+def test_invalid_old_manifest_is_not_laundered_by_a_new_valid_run(
+        tmp_path, config_dir, broken_shape):
+    db_path = _build(tmp_path)
+    rows = _all_rows(db_path)
+    events = _manifest_events(
+        "SPY", trading=_weekdays("2026-01-05", "2026-01-16"), rows=rows)
+    _mutate(db_path, "DELETE FROM basket_pe_backfill_runs")
+    old_events = events[1:] if broken_shape == "no_start" else events[::-1]
+    _append_events(db_path, old_events)
+    _mutate(db_path, "UPDATE basket_weekly_pe_history SET run_id = 'run-2'")
+    _append_events(db_path, _manifest_events(
+        "SPY", run_id="run-2", rows=_all_rows(db_path),
+        trading=_weekdays("2026-01-05", "2026-01-16")))
+    report = _verify(db_path, config_dir)
+    assert report["baskets"]["SPY"]["manifest_run_id"] == "run-2"
+    expected = ("run_never_started" if broken_shape == "no_start"
+                else "run_started_is_not_the_first_event")
+    assert any(expected in item
+               for item in _failed(report)["manifest_denominator"])

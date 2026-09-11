@@ -814,9 +814,45 @@ class MarketStore:
 
     def _init_db(self) -> None:
         conn = self._get_conn()
+        self._migrate_basket_weekly_pe_run_id(conn)
         conn.executescript(_SCHEMA)
         self._migrate_add_columns(conn)
         conn.commit()
+
+    @staticmethod
+    def _migrate_basket_weekly_pe_run_id(conn: sqlite3.Connection) -> None:
+        """Bring a pre-run_id basket_weekly_pe_history up to the current shape.
+
+        ``CREATE TABLE IF NOT EXISTS`` does nothing to a table that already
+        exists, and ``_insert_validated`` writes only the columns a table
+        actually has. A database carrying the older table would therefore
+        accept published rows and silently drop their ``run_id``, leaving every
+        row unattributable and row-level certification defeated on its first
+        production use, with no error anywhere. Review found a legacy empty
+        table without this column in an existing database copy.
+
+        An empty legacy table is rebuilt in place -- there is nothing to
+        preserve. A *populated* one refuses: those rows predate ownership, no
+        correct owner can be invented for them, and choosing between
+        re-backfilling and discarding them is a decision rather than a
+        default.
+        """
+        existing = {row[1] for row in conn.execute(
+            "PRAGMA table_info(basket_weekly_pe_history)").fetchall()}
+        if not existing or "run_id" in existing:
+            return
+        rows = conn.execute(
+            "SELECT COUNT(*) FROM basket_weekly_pe_history").fetchone()[0]
+        if rows:
+            raise RuntimeError(
+                f"basket_weekly_pe_history holds {rows} row(s) written before "
+                "run_id ownership existed; they name no run and none can be "
+                "inferred. Migrate deliberately -- re-backfill under a new "
+                "run, or remove them -- then reopen the store.")
+        conn.execute("DROP TABLE basket_weekly_pe_history")
+        logger.info(
+            "Migration: rebuilt empty basket_weekly_pe_history to carry run_id")
+        _TABLE_COLUMNS.pop("basket_weekly_pe_history", None)
 
     def _migrate_add_columns(self, conn: sqlite3.Connection) -> None:
         """Add any new columns defined in field lists but missing from existing tables."""

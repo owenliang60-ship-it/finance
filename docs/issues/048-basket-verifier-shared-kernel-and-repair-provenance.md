@@ -28,3 +28,17 @@ verifier 使用 SQLite `mode=ro + query_only` 从 source tables 重算每日结�
 - verifier 在单一数据库快照或资源锁下运行，避免活跃 writer 导致跨阶段读到不同时间点；
 - 对关键公式增加异构/独立实现的抽样 reconciliation，而不是复制整套 producer；
 - 明确 expected start/end manifest，避免用户给较晚 `--min-date` 只验证 suffix。
+
+## 2026-09-11：三指数周频 verifier 四项 P1 修复（C1 前停止）
+
+原分支遗留四个未提交修复，本次接手并补全。修复记录见
+`docs/audit/2026-09-11-index-pe-pre-c1-repair.md`。
+
+- 旧空表显式迁移到 `run_id NOT NULL`，并清理列缓存；旧表已有行则拒绝自动迁移，保留原数据。
+- hindsight 重建所需证据全行检查，估计季度要求成员自己的 snapshot date；按篮子检查抽样是否实际完成重建，不能用另一篮子的成功抵消零对账。
+- manifest 起点必须存在且为物理首事件、终态必须为物理末事件；旧异常 run 不能被后续合法 run 洗白。
+- 成员分母从具体 `(holding_date, source_kind)` 快照独立重建，估值日双日期门控后再选择最新快照；同一 effective date 的 live/disclosure 不可相加。成员集合、逐成员权重和快照归属必须匹配。
+
+补充踩坑：首次成员对账补丁按 effective date 聚合，导致未来尚不可用快照也进入历史分母；60%/40% 可被加成 120%/80%，正确数据反而拒绝。根因是“生效日期”被误当成“快照唯一标识”。本次用多快照正反测试覆盖。
+
+本 issue 的整体状态仍为 OPEN：C1 滑窗整批写入与窗口外旧行处理尚未实现；同库原始数据和证据同时被改写也不在 verifier 的独立证明能力内。本轮不表示云端真实覆盖率已验收。

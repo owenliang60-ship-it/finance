@@ -216,6 +216,8 @@ def _invalid_runs(
     without either of them being invalid, and a run that failed early still
     closed before the runs that started after it.
     """
+    # `events` arrives in manifest row order, which is the only ordering this
+    # function trusts.
     by_run: Dict[str, List[Mapping[str, Any]]] = {}
     for row in events:
         by_run.setdefault(str(row["run_id"]), []).append(row)
@@ -223,21 +225,30 @@ def _invalid_runs(
     invalid: Dict[str, List[str]] = {}
     for run_id, rows in by_run.items():
         reasons: List[str] = []
-        ordered = sorted(rows, key=lambda row: int(row["event_seq"]))
-        kinds = [str(row["event_kind"]) for row in ordered]
+        # Physical order only. `event_seq` is a number the writer chooses, so
+        # sorting by it lets an appended event claim any position it likes --
+        # a terminal written first and a start written after it read as a
+        # well-formed run under an event_seq sort.
+        kinds = [str(row["event_kind"]) for row in rows]
         terminals = [index for index, kind in enumerate(kinds)
                      if kind in TERMINAL_EVENT_KINDS]
+        starts = [index for index, kind in enumerate(kinds)
+                  if kind == "run_started"]
         if "run_failed" in kinds and "run_completed" in kinds:
             reasons.append("run_both_failed_and_completed")
         elif len(terminals) > 1:
             reasons.append(
                 f"run_declared_multiple_terminal_events:{len(terminals)}")
-        if terminals and terminals[0] != len(ordered) - 1:
+        if not starts:
+            reasons.append("run_never_started")
+        elif len(starts) > 1:
+            reasons.append(f"run_started_more_than_once:{len(starts)}")
+        elif starts[0] != 0:
             reasons.append(
-                f"run_events_after_its_terminal_event:{kinds[terminals[0] + 1]}")
-        if kinds.count("run_started") > 1:
+                f"run_started_is_not_the_first_event:{kinds[0]}")
+        if terminals and terminals[0] != len(rows) - 1:
             reasons.append(
-                f"run_started_more_than_once:{kinds.count('run_started')}")
+                f"run_terminal_is_not_the_last_event:{kinds[terminals[0] + 1]}")
         if reasons:
             invalid[run_id] = reasons
 
@@ -662,44 +673,139 @@ def _weight_coverage(members: Sequence[Mapping[str, Any]], income_key: str) -> f
     return covered / total if total > 0 else 0.0
 
 
-def _latest_eligible_compositions(
+def _disclosed_membership(
     conn: sqlite3.Connection, basket: str,
-) -> List[Tuple[str, str]]:
-    """(effective, available) pairs on record, newest effective first."""
-    return [(str(row["composition_effective_date"]),
-             str(row["composition_available_date"]))
-            for row in _rows(
-                conn,
-                "SELECT DISTINCT composition_effective_date, "
-                "composition_available_date FROM fmp_fund_disclosure_holdings "
-                "WHERE basket_symbol = ? "
-                "ORDER BY composition_effective_date DESC", [basket])]
+) -> List[Dict[str, Any]]:
+    """Reconstruct weights independently, preserving each source snapshot.
 
-
-def _composition_choice_errors(
-    basket: str, rows: Sequence[Mapping[str, Any]],
-    compositions: Sequence[Tuple[str, str]],
-) -> List[str]:
-    """Each row must use the newest composition that was eligible for it.
-
-    Publishing an older one is a stale membership -- the same class of error
-    as reaching for a newer one, in the other direction, and just as invisible
-    from the row alone.
+    Effective dates are not snapshot identities: live and disclosure rows
+    can describe the same rebalance at different weights and availability
+    dates. Their source PK is (basket, holding_date, source_kind, row_index).
+    Normalized covered_by rows contribute to their target, including orphan
+    targets which the producer retains as excluded members.
     """
-    errors = []
+    snapshots: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for row in _rows(
+            conn,
+            "SELECT holding_date, source_kind, composition_effective_date, "
+            "composition_available_date, symbol, covered_by, "
+            "weight_pct, included FROM fmp_fund_disclosure_holdings "
+            "WHERE basket_symbol = ? ORDER BY holding_date, source_kind, "
+            "raw_row_index", [basket]):
+        key = (str(row["holding_date"]), str(row["source_kind"]))
+        snapshot = snapshots.setdefault(key, {
+            "holding_date": key[0], "source_kind": key[1],
+            "composition_effective_date": str(row["composition_effective_date"]),
+            "composition_available_date": str(row["composition_available_date"]),
+            "weights": {}, "errors": [],
+        })
+        for field in ("composition_effective_date", "composition_available_date"):
+            if str(row[field]) != snapshot[field]:
+                snapshot["errors"].append(f"source_snapshot_inconsistent:{field}")
+        target = row["symbol"] if row["included"] == 1 else row["covered_by"]
+        if not target:
+            continue
+        company = str(target).upper()
+        try:
+            weight = float(row["weight_pct"])
+        except (TypeError, ValueError):
+            snapshot["errors"].append(f"source_member_weight_invalid:{company}")
+            continue
+        if not math.isfinite(weight) or weight < 0:
+            snapshot["errors"].append(f"source_member_weight_invalid:{company}")
+            continue
+        weights = snapshot["weights"]
+        weights[company] = weights.get(company, 0.0) + weight
+    return list(snapshots.values())
+
+
+def _membership_errors(
+    basket: str, rows: Sequence[Mapping[str, Any]],
+    snapshots: Sequence[Mapping[str, Any]],
+) -> List[str]:
+    """Select the eligible snapshot, then compare its identity and membership."""
+    errors: List[str] = []
     for row in rows:
         valuation_date = str(row["valuation_date"])
-        eligible = [effective for effective, available in compositions
-                    if effective <= valuation_date
-                    and available <= valuation_date]
+        prefix = f"{basket}:{valuation_date}"
+        eligible = [item for item in snapshots
+                    if item["composition_effective_date"] <= valuation_date
+                    and item["composition_available_date"] <= valuation_date]
         if not eligible:
+            errors.append(f"{prefix}:no_eligible_membership_snapshot")
             continue
-        expected = max(eligible)
-        if str(row["composition_effective_date"]) != expected:
-            errors.append(
-                f"{basket}:{valuation_date}:not_the_latest_eligible_composition:"
-                f"{row['composition_effective_date']}!={expected}")
+        # Independent implementation of the frozen selection contract:
+        # newest effective, disclosure before live, newest holding date.
+        selected = max(eligible, key=lambda item: (
+            item["composition_effective_date"],
+            item["source_kind"] == "disclosure", item["holding_date"]))
+        errors.extend(f"{prefix}:{error}" for error in selected["errors"])
+        if str(row["composition_effective_date"]) != selected[
+                "composition_effective_date"]:
+            errors.append(f"{prefix}:not_the_latest_eligible_composition")
+        payload = row["members_json"]
+        basis = ("live_snapshot_backcast_proxy"
+                 if selected["source_kind"] == "live"
+                 else "fixed_rebalance_weight_proxy")
+        if (not isinstance(payload, Mapping)
+                or payload.get("holding_date") != selected["holding_date"]
+                or payload.get("weight_basis") != basis
+                or str(row["composition_available_date"]) != selected[
+                    "composition_available_date"]):
+            errors.append(f"{prefix}:snapshot_identity_mismatch")
+        expected = selected["weights"]
+        if not expected:
+            errors.append(f"{prefix}:source_snapshot_has_no_eligible_members")
+        observed = {}
+        for member in _member_list(row):
+            symbol = str(member.get("raw_symbol") or member.get("symbol")
+                         or "").upper()
+            if symbol in observed:
+                errors.append(f"{prefix}:duplicate_member:{symbol}")
+            try:
+                weight = float(member.get("weight_pct"))
+            except (TypeError, ValueError):
+                weight = None
+            observed[symbol] = weight
+        for company in sorted(expected):
+            if company not in observed:
+                errors.append(
+                    f"{prefix}:member_missing_from_members_json:{company}")
+                continue
+            if observed[company] is None:
+                errors.append(f"{prefix}:member_has_no_weight:{company}")
+            elif not _close(observed[company], expected[company],
+                            tolerance=1e-6):
+                errors.append(
+                    f"{prefix}:member_weight_disagrees_with_the_disclosure:"
+                    f"{company}:{observed[company]}!={expected[company]}")
+        for company in sorted(observed):
+            if company not in expected:
+                errors.append(
+                    f"{prefix}:member_not_in_the_disclosed_composition:{company}")
     return errors
+
+
+def _hindsight_evidence_errors(member: Mapping[str, Any], prefix: str) -> List[str]:
+    """Required reconstruction inputs are checked on every row, not sampled."""
+    if member.get("hindsight_ntm_net_income_usd") is None:
+        return []
+    prefix = f"{prefix}:{member.get('symbol')}"
+    window = member.get("hindsight_window")
+    if not isinstance(window, list) or len(window) != 2:
+        return [f"{prefix}:hindsight_evidence_missing"]
+    try:
+        start, end = (date.fromisoformat(value) for value in window)
+    except (TypeError, ValueError):
+        return [f"{prefix}:hindsight_window_invalid"]
+    if start >= end:
+        return [f"{prefix}:hindsight_window_invalid"]
+    if int(member.get("hindsight_estimate_quarters") or 0) > 0:
+        try:
+            date.fromisoformat(member.get("hindsight_snapshot_date"))
+        except (TypeError, ValueError):
+            return [f"{prefix}:hindsight_snapshot_evidence_missing"]
+    return []
 
 
 def _evidence_errors(
@@ -788,6 +894,7 @@ def _evidence_errors(
                 f"{prefix}:composition_not_yet_disclosed:"
                 f"{row['composition_available_date']}")
         for member in members:
+            errors.extend(_hindsight_evidence_errors(member, prefix))
             observed = member.get("market_cap_date")
             if not observed:
                 continue
@@ -1154,9 +1261,12 @@ def _raw_source_reconciliation(
             symbol = str(member.get("symbol") or "").upper()
             if member.get("hindsight_ntm_net_income_usd") is None:
                 continue
+            evidence_errors = _hindsight_evidence_errors(member, prefix)
+            if evidence_errors:
+                errors.extend(evidence_errors)
+                continue
             recomputed = _hindsight_income_sql(
-                conn, symbol, valuation_date,
-                member.get("hindsight_window") or [],
+                conn, symbol, valuation_date, member["hindsight_window"],
                 member.get("hindsight_snapshot_date") or row_snapshot,
                 max_staleness_days)
             if recomputed is None:
@@ -1169,6 +1279,13 @@ def _raw_source_reconciliation(
                     "hindsight_income_disagrees_with_raw_source")
                 continue
             reconciled_hindsight += 1
+    # A sample that contains hindsight rows but reconciles none of them has
+    # not checked anything: every path declined, and "no errors" is then a
+    # statement about the checker, not about the data.
+    if declined_hindsight and reconciled_hindsight == 0:
+        errors.append(
+            f"{rows[0]['basket'] if rows else '?'}:"
+            f"no_hindsight_income_reconciled:{declined_hindsight}_declined")
     return {
         "errors": errors,
         "reconciled_market_caps": reconciled_mcap,
@@ -1286,6 +1403,13 @@ def verify_database(
         raise ValueError(f"required tables missing: {', '.join(missing)}")
     columns = {row["name"] for row in _rows(
         conn, "SELECT name FROM pragma_table_info('basket_weekly_pe_history')")}
+    if "run_id" not in columns:
+        # Defence in depth for the schema migration: without the ownership
+        # column every row is unattributable and certification is meaningless.
+        raise ValueError(
+            "basket_weekly_pe_history has no run_id column; the database "
+            "predates row-level ownership and must be migrated before its "
+            "contents can be verified")
     config_root = Path(config_dir or CONFIG_DIR)
     share_config = default_share_class_config(config_root)
     basket_configs = load_index_pe_basket_configs(config_root)
@@ -1383,8 +1507,8 @@ def verify_database(
         staleness = int(basket_configs[basket].get(
             "market_cap_staleness_days", DEFAULT_MARKET_CAP_STALENESS_DAYS))
         evidence_errors.extend(_evidence_errors(rows, staleness))
-        evidence_errors.extend(_composition_choice_errors(
-            basket, rows, _latest_eligible_compositions(conn, basket)))
+        evidence_errors.extend(_membership_errors(
+            basket, rows, _disclosed_membership(conn, basket)))
         identity = _company_identity_check(
             basket, rows, _company_identities(conn, basket))
         identity_errors.extend(identity["errors"])
@@ -1419,6 +1543,7 @@ def verify_database(
             "quality_tiers": sorted({str(row["quality_tier"]) for row in rows}),
             "market_cap_staleness_days": staleness,
             "sampled": [row["valuation_date"] for row in sampled],
+            "raw_source_reconciliation": outcome,
         }
 
     duplicates = _rows(

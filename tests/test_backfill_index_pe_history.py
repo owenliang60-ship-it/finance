@@ -617,6 +617,40 @@ def test_write_mode_persists_one_row_per_week_and_a_manifest(tmp_path, config_di
     store.close()
 
 
+def test_all_baskets_producer_to_verifier_with_same_window_rerun(
+        tmp_path, config_dir):
+    """Persist real producer evidence, then independently certify each basket.
+
+    The same-window retry is in scope; sliding/pruning remains C1.
+    """
+    baskets = ("SPY", "QQQ", "SOXX")
+    store = _fixture_db(tmp_path, baskets=baskets)
+    with store._get_conn() as conn:
+        conn.execute("UPDATE fmp_fund_disclosure_holdings SET cik = "
+                     "CASE symbol WHEN 'AAA' THEN '0000000001' "
+                     "ELSE '0000000002' END")
+    try:
+        for run_id in ("first", "retry"):
+            args = _args(tmp_path, config_dir, dry_run=False, run_id=run_id)
+            for basket in baskets:
+                backfill_basket(args, basket, client=None, store=store,
+                                conn=store._get_conn())
+            readonly = verifier.connect_readonly(store.db_path)
+            try:
+                result = verifier.verify_database(
+                    readonly, baskets, args.as_of, args.years, 50, config_dir)
+            finally:
+                readonly.close()
+            assert result["passed"], result["checks"]
+            for basket in baskets:
+                summary = result["baskets"][basket]
+                assert summary["rows"] == 3  # Jan 2, Jan 9, Jan 16
+                assert summary["raw_source_reconciliation"][
+                    "reconciled_hindsight_incomes"] == 6
+    finally:
+        store.close()
+
+
 def test_member_failure_above_twenty_percent_publishes_nothing(tmp_path, config_dir):
     store = _fixture_db(tmp_path)
     _insert_live_snapshot(store, "SPY")

@@ -381,3 +381,89 @@ def test_r5_tail_upgrade_still_works_and_rebinds_the_run(store):
     assert len(stored) == 1
     assert stored[0]["quality_tier"] == "actual_only"
     assert stored[0]["run_id"] == "run-2"
+
+
+# ---------------------------------------------------------------------------
+# Boss review 2 / P1-A: the pre-run_id table must be migrated, not ignored
+# ---------------------------------------------------------------------------
+
+_PRE_RUN_ID_DDL = """CREATE TABLE basket_weekly_pe_history (
+    basket TEXT NOT NULL,
+    valuation_date TEXT NOT NULL,
+    ttm_pe_gaap REAL,
+    hindsight_ntm_pe_gaap REAL,
+    ttm_total_mcap REAL,
+    ttm_net_income REAL,
+    hindsight_total_mcap REAL,
+    hindsight_ntm_net_income REAL,
+    n_members INTEGER NOT NULL,
+    n_covered_ttm INTEGER NOT NULL,
+    n_covered_hindsight INTEGER NOT NULL,
+    mcap_coverage_ttm REAL NOT NULL,
+    mcap_coverage_hindsight REAL NOT NULL,
+    hindsight_actual_quarters INTEGER NOT NULL,
+    hindsight_estimate_quarters INTEGER NOT NULL,
+    composition_effective_date TEXT NOT NULL,
+    composition_available_date TEXT NOT NULL,
+    quality_tier TEXT NOT NULL,
+    members_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    methodology_version TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_updated TEXT NOT NULL,
+    PRIMARY KEY (basket, valuation_date)
+);"""
+
+
+def _legacy_db(tmp_path, rows=0):
+    """A database carrying the shipped pre-run_id table, as production does."""
+    path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(path)
+    with conn:
+        conn.executescript(_PRE_RUN_ID_DDL)
+        for index in range(rows):
+            conn.execute(
+                "INSERT INTO basket_weekly_pe_history VALUES "
+                "('SPY', ?, 20.0, 18.0, 1.0, 1.0, 1.0, 1.0, 1, 1, 1, 1.0, 1.0,"
+                " 4, 0, '2021-01-18', '2021-01-25', 'actual_only', '{}', '[]',"
+                " '1.0', 'x', 'x')", [f"2026-01-{index + 1:02d}"])
+    conn.close()
+    return path
+
+
+def test_an_empty_legacy_table_is_migrated_to_carry_run_id(tmp_path, monkeypatch):
+    """CREATE TABLE IF NOT EXISTS does not upgrade a table that already exists.
+
+    Production's table predates run_id and is empty. Left alone, the first
+    cloud write would silently drop the column -- `_insert_validated` filters
+    to the columns the table actually has -- and every row would land
+    unattributable, defeating row-level certification on its first use.
+    """
+    path = _legacy_db(tmp_path)
+    from src.data.market_store import _TABLE_COLUMNS
+    with sqlite3.connect(path) as conn:
+        legacy_columns = [row[1] for row in conn.execute(
+            "PRAGMA table_info(basket_weekly_pe_history)")]
+    monkeypatch.setitem(_TABLE_COLUMNS, "basket_weekly_pe_history", legacy_columns)
+    store = MarketStore(path)
+    try:
+        columns = {row[1]: row for row in store._get_conn().execute(
+            "PRAGMA table_info(basket_weekly_pe_history)")}
+        assert "run_id" in columns
+        assert columns["run_id"][3] == 1  # NOT NULL
+        store.upsert_basket_weekly_pe_batch([_row(run_id="run-1")])
+        assert store.get_basket_weekly_pe_history("SPY")[0]["run_id"] == "run-1"
+    finally:
+        store.close()
+
+
+def test_a_populated_legacy_table_refuses_to_migrate_itself(tmp_path):
+    """Rows without an owner cannot be given one by guessing."""
+    path = _legacy_db(tmp_path, rows=2)
+    with pytest.raises(RuntimeError, match="run_id"):
+        MarketStore(path)
+    with sqlite3.connect(path) as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM basket_weekly_pe_history").fetchone()[0] == 2
+        assert "run_id" not in {row[1] for row in conn.execute(
+            "PRAGMA table_info(basket_weekly_pe_history)")}
