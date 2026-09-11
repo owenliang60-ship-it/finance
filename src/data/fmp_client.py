@@ -66,12 +66,18 @@ class FMPClient:
     """FMP API 客户端"""
 
     def __init__(self, api_key: str = FMP_API_KEY,
-                 call_interval: Optional[float] = None):
+                 call_interval: Optional[float] = None,
+                 max_requests: Optional[int] = None):
+        if max_requests is not None and (not isinstance(max_requests, int)
+                or isinstance(max_requests, bool) or max_requests < 1):
+            raise ValueError("max_requests must be a positive integer")
         self.api_key = api_key
         self.base_url = FMP_BASE_URL
         # None → 全局默认（现有调用方行为不变）；forward CLI 显式传入独立间隔
         self.call_interval = API_CALL_INTERVAL if call_interval is None else call_interval
         self._last_call_time = 0
+        self.max_requests = max_requests
+        self.request_count = 0
 
     def _safe(self, value: object) -> str:
         return _sanitize_log_text(value, self.api_key)
@@ -98,6 +104,9 @@ class FMPClient:
         params["apikey"] = self.api_key
 
         for attempt in range(API_RETRY_TIMES):
+            if self.max_requests is not None and self.request_count >= self.max_requests:
+                raise RuntimeError(f"FMP request budget exhausted ({self.max_requests})")
+            self.request_count += 1  # Every HTTP attempt counts, including retries.
             try:
                 resp = requests.get(url, params=params, timeout=API_TIMEOUT)
 

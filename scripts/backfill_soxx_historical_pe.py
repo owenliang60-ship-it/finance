@@ -405,8 +405,21 @@ def _fetch_sources(
     added = 0
     skipped = 0
     quality = []
-    for item in sorted(dates, key=lambda value: value["date"]):
+    ordered = sorted(dates, key=lambda value: value["date"])
+    # Preserve two predecessor quarters for the public-composition lag at the
+    # left boundary, not the provider's entire fund history (SPY/QQQ starts in
+    # 2019 even when the requested/available price history starts years later).
+    predecessors = [item for item in ordered if str(item["date"]) < args.from_date][-2:]
+    required = predecessors + [item for item in ordered
+                               if args.from_date <= str(item["date"]) <= args.to_date]
+    calendar_start = min(state.trading_dates)
+    for item in required:
         holding_date = str(item["date"])
+        if holding_date < calendar_start:
+            skipped += 1
+            report.setdefault("warnings", []).append(
+                f"disclosure_before_price_calendar:{basket}:{holding_date}")
+            continue
         if (holding_date, "disclosure") in existing:
             skipped += 1
             continue

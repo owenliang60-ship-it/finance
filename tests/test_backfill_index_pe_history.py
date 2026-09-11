@@ -738,6 +738,25 @@ def test_failed_candidate_keeps_old_product_and_next_run_recovers(
         store.close()
 
 
+def test_http_budget_cli_is_explicit_and_positive():
+    args=backfill.parse_args(['--max-api-requests','3000'])
+    assert args.max_api_requests==3000
+    with pytest.raises(SystemExit) as error:
+        backfill.parse_args(['--max-api-requests','0'])
+    assert error.value.code==2
+
+
+def test_window_universe_keeps_public_predecessor_and_discards_unused_archive():
+    rows=[
+        {'holding_date':'2020-12-31','source_kind':'disclosure','composition_effective_date':'2020-12-21','composition_available_date':'2021-02-01'},
+        {'holding_date':'2025-09-30','source_kind':'disclosure','composition_effective_date':'2025-09-22','composition_available_date':'2025-11-01'},
+        {'holding_date':'2025-12-31','source_kind':'disclosure','composition_effective_date':'2025-12-22','composition_available_date':'2026-02-01'},
+        {'holding_date':'2026-01-12','source_kind':'live','composition_effective_date':'2026-01-12','composition_available_date':'2026-01-13'},
+    ]
+    got=backfill._window_snapshots(rows,('2026-01-01','2026-01-16'))
+    assert [r['holding_date'] for r in got]==['2025-09-30','2026-01-12']
+
+
 def test_member_failure_above_twenty_percent_publishes_nothing(tmp_path, config_dir):
     store = _fixture_db(tmp_path)
     _insert_live_snapshot(store, "SPY")
@@ -918,6 +937,7 @@ def test_both_merge_layers_read_share_classes_from_one_config_root(
 
     client = Mock()
     client.get_fund_disclosure_dates.return_value = [
+        {"date": "2019-09-30", "year": 2019, "quarter": 3},
         {"date": "2026-01-05", "year": 2026, "quarter": 1}]
     client.get_fund_disclosure.return_value = [
         _disclosure_row("AAA", 60.0), _disclosure_row("AAA.B", 0.0),
@@ -940,6 +960,7 @@ def test_both_merge_layers_read_share_classes_from_one_config_root(
         "FROM fmp_fund_disclosure_holdings WHERE basket_symbol = 'SPY' "
         "AND source_kind = 'disclosure' AND raw_symbol = 'AAA.B'").fetchall()]
     assert stored and stored[0]["covered_by"] == "AAA"
+    assert client.get_fund_disclosure.call_count == 1  # catalog predating calendar is not fetched
     assert stored[0]["filter_reason"] == "dual_class_secondary"
 
     # Product layer: the same group, with the convention this config declares.

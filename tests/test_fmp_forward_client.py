@@ -160,3 +160,27 @@ def test_new_methods_allow_valid_empty_list_for_orchestrator_to_classify(client)
     ]:
         with patch.object(client, "_request", return_value=[]):
             assert method(*args) == []
+
+
+def test_request_budget_stops_before_an_extra_http_request(monkeypatch):
+    calls=[]
+    monkeypatch.setattr(requests,'get',lambda *a,**kw:calls.append(a) or Mock(status_code=200,json=lambda:[]))
+    client=FMPClient(api_key=CANARY,call_interval=0,max_requests=1)
+    assert client._request('endpoint')==[]
+    with pytest.raises(RuntimeError,match='budget') as error:
+        client._request('endpoint')
+    assert len(calls)==1 and client.request_count==1
+    assert CANARY not in str(error.value)
+
+
+def test_request_budget_counts_failed_retry_attempts(monkeypatch):
+    monkeypatch.setattr(fmp_client_module,'API_RETRY_TIMES',3)
+    calls=[]
+    def fail(*a,**kw):
+        calls.append(a)
+        raise requests.exceptions.Timeout()
+    monkeypatch.setattr(requests,'get',fail)
+    client=FMPClient(api_key=CANARY,call_interval=0,max_requests=2)
+    with pytest.raises(RuntimeError,match='budget'):
+        client._request('endpoint')
+    assert len(calls)==2 and client.request_count==2

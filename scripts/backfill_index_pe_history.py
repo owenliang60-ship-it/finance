@@ -115,6 +115,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--allow-network", action="store_true",
         help="Permit API calls during dry-run; non-dry stages are explicit writes")
     parser.add_argument("--refresh-live", action="store_true")
+    parser.add_argument("--max-api-requests", type=int, default=None,
+                        help="hard HTTP request ceiling, including failed retries")
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--config-dir", type=Path, default=CONFIG_DIR,
                         help="basket + share-class config root (SSOT)")
@@ -123,6 +125,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.years <= 0:
         parser.error("--years must be positive")
+    if args.max_api_requests is not None and args.max_api_requests < 1:
+        parser.error("--max-api-requests must be positive")
     if args.run_id is None:
         args.run_id = f"index-pe-{args.as_of}-{uuid.uuid4().hex[:8]}"
     return args
@@ -234,6 +238,29 @@ def _stage_args(args: argparse.Namespace, window: Sequence[str]) -> Namespace:
         db=args.db)
 
 
+def _window_snapshots(rows, window):
+    """Only compositions which can affect this run's window enter its universe."""
+    groups = {}
+    for row in rows:
+        key = (row["holding_date"], row["source_kind"])
+        groups.setdefault(key, row)
+    eligible = {key: row for key, row in groups.items()
+                if max(row["composition_effective_date"],
+                       row["composition_available_date"]) <= window[1]}
+    initial = [(key, row) for key, row in eligible.items()
+               if max(row["composition_effective_date"],
+                      row["composition_available_date"]) <= window[0]]
+    keep = {key for key, row in eligible.items()
+            if max(row["composition_effective_date"],
+                   row["composition_available_date"]) > window[0]}
+    if initial:
+        key, _ = max(initial, key=lambda item: (
+            item[1]["composition_effective_date"],
+            item[1]["source_kind"] == "disclosure", item[1]["holding_date"]))
+        keep.add(key)
+    return [row for row in rows if (row["holding_date"], row["source_kind"]) in keep]
+
+
 def backfill_basket(
     args: argparse.Namespace,
     basket: str,
@@ -295,6 +322,10 @@ def backfill_basket(
                            basket_symbol=basket, basket_config=basket_config,
                            config_dir=config_dir)
 
+        source_available_dates = sorted(
+            str(row["composition_available_date"]) for row in state.snapshots
+            if row.get("composition_available_date"))
+        state.snapshots = _window_snapshots(state.snapshots, window)
         member_symbols = _snapshot_member_universe(state.snapshots)
         income_symbols = _snapshot_universe(state.snapshots)
         if not income_symbols:
@@ -315,10 +346,7 @@ def backfill_basket(
 
         # A composition is usable from the day it was disclosed, so the first
         # such date is the floor of what this run can be held accountable for.
-        available_dates = sorted(
-            str(row["composition_available_date"]) for row in state.snapshots
-            if row.get("composition_available_date"))
-        composition_floor = available_dates[0] if available_dates else None
+        composition_floor = source_available_dates[0] if source_available_dates else None
         window_calendar = [day for day in state.trading_dates
                            if window[0] <= day <= window[1]]
         expected_weeks = expected_week_ends(
@@ -549,12 +577,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             if not args.db.exists():
                 raise FileNotFoundError(f"market.db not found: {args.db}")
             conn = _connect_ro(args.db)
-            client = FMPClient() if args.allow_network else None
+            client = FMPClient(max_requests=args.max_api_requests) if args.allow_network else None
         else:
             backup_path, store = open_write_dependencies(args.db)
             conn = store._get_conn()
-            client = FMPClient()
+            client = FMPClient(max_requests=args.max_api_requests)
         report = run_backfill(args, client=client, store=store, conn=conn)
+        report["api_requests_used"] = client.request_count if client is not None else 0
+        report["api_request_limit"] = args.max_api_requests
         report["backup_path"] = str(backup_path) if backup_path else None
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True,
                          default=str))
