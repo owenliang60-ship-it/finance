@@ -1,0 +1,203 @@
+{
+  "registry": {
+    "response": {
+      "data": [
+        {
+          "attributes": {
+            "bic": null,
+            "conformityFlag": "NON_CONFORMING",
+            "entity": {
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "category": "GENERAL",
+              "creationDate": "2017-02-03T00:00:00Z",
+              "eventGroups": [],
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "headquartersAddress": {
+                "addressLines": [
+                  "7 ST. PAUL STREET",
+                  "SUITE 820"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "city": "BALTIMORE",
+                "country": "US",
+                "language": "en",
+                "mailRouting": "CSC-LAWYERS INCORPORATING SERVICE COMPANY",
+                "postalCode": "21202",
+                "region": "US-MD"
+              },
+              "jurisdiction": "US-MD",
+              "legalAddress": {
+                "addressLines": [
+                  "7 ST. PAUL STREET",
+                  "SUITE 820"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "city": "BALTIMORE",
+                "country": "US",
+                "language": "en",
+                "mailRouting": "CSC-LAWYERS INCORPORATING SERVICE COMPANY",
+                "postalCode": "21202",
+                "region": "US-MD"
+              },
+              "legalForm": {
+                "id": "HLR4",
+                "other": null
+              },
+              "legalName": {
+                "language": "en",
+                "name": "INVITATION HOMES INC."
+              },
+              "otherAddresses": [],
+              "otherNames": [],
+              "registeredAs": "D17772849",
+              "registeredAt": {
+                "id": "RA000614",
+                "other": null
+              },
+              "status": "ACTIVE",
+              "subCategory": null,
+              "successorEntities": [],
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "transliteratedOtherNames": []
+            },
+            "gem": null,
+            "lei": "984500FE452E665C9F85",
+            "mic": null,
+            "ocid": "us_md/D17772849",
+            "qcc": null,
+            "registration": {
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "initialRegistrationDate": "2022-03-18T19:05:37Z",
+              "lastUpdateDate": "2025-06-25T11:03:50Z",
+              "managingLou": "529900T8BM49AURSDO55",
+              "nextRenewalDate": "2025-06-25T10:35:52Z",
+              "otherValidationAuthorities": [
+                {
+                  "validatedAs": "6172492",
+                  "validatedAt": {
+                    "id": "RA000602"
+                  }
+                }
+              ],
+              "status": "LAPSED",
+              "validatedAs": "D17772849",
+              "validatedAt": {
+                "id": "RA000614",
+                "other": null
+              }
+            },
+            "spglobal": [
+              "415395909"
+            ]
+          },
+          "id": "984500FE452E665C9F85",
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85"
+          },
+          "relationships": {
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/direct-parent-reporting-exception"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/field-modifications"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/isins"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/lei-issuer"
+              }
+            },
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/managing-lou"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/ultimate-children",
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/ultimate-child-relationships"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/ultimate-parent-reporting-exception"
+              }
+            }
+          },
+          "type": "lei-records"
+        }
+      ],
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US46187W1071&page%5Bnumber%5D=1&page%5Bsize%5D=10",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US46187W1071&page%5Bnumber%5D=1&page%5Bsize%5D=10"
+      },
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-11T00:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "from": 1,
+          "lastPage": 1,
+          "perPage": 10,
+          "to": 1,
+          "total": 1
+        }
+      }
+    },
+    "retrieved_at": "2026-09-11T09:13:46.907368+00:00",
+    "sha256": "a8b56cea826e3fd075bc1cf1df17e8cbe4b8e83cf0c77ade799b53b4a93cd847",
+    "url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US46187W1071&page%5Bsize%5D=10"
+  },
+  "review": {
+    "identity_kind": "retrospective_entity_mapping",
+    "independent_security_source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US46187W1071&page%5Bsize%5D=10",
+    "legal_name": "INVITATION HOMES INC.",
+    "reason": "Exact security identifiers from frozen disclosures and named legal entity corroborated against the official GLEIF record. This mapping is reviewed now for the historical entity, not a claim that the LEI was registered or known on the holding date. No source LEI is overwritten.",
+    "reviewed_at": "2026-09-11",
+    "valid_from": "2022-09-30",
+    "valid_to": "2026-06-30"
+  },
+  "security": {
+    "cusip": "46187W107",
+    "holding_dates_with_missing_lei": [
+      "2022-09-30",
+      "2022-12-31",
+      "2023-03-31",
+      "2023-06-30",
+      "2023-09-30",
+      "2023-12-31",
+      "2024-03-31",
+      "2024-06-30",
+      "2024-09-30",
+      "2024-12-31",
+      "2025-03-31",
+      "2025-06-30",
+      "2025-09-30",
+      "2025-12-31",
+      "2026-03-31",
+      "2026-06-30"
+    ],
+    "isin": "US46187W1071",
+    "symbol": "INVH"
+  }
+}

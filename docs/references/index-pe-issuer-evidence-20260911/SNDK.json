@@ -1,0 +1,169 @@
+{
+  "registry": {
+    "response": {
+      "data": {
+        "attributes": {
+          "bic": [
+            "SRORUS66XXX"
+          ],
+          "conformityFlag": "CONFORMING",
+          "entity": {
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "category": "GENERAL",
+            "creationDate": "2024-02-04T23:00:00Z",
+            "eventGroups": [],
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "headquartersAddress": {
+              "addressLines": [
+                "c/o CORPORATION SERVICE COMPANY, 251 LITTLE FALLS DRIVE"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "city": "WILMINGTON",
+              "country": "US",
+              "language": "en",
+              "mailRouting": null,
+              "postalCode": "19808",
+              "region": "US-DE"
+            },
+            "jurisdiction": "US-DE",
+            "legalAddress": {
+              "addressLines": [
+                "c/o CORPORATION SERVICE COMPANY, 251 LITTLE FALLS DRIVE"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "city": "WILMINGTON",
+              "country": "US",
+              "language": "en",
+              "mailRouting": null,
+              "postalCode": "19808",
+              "region": "US-DE"
+            },
+            "legalForm": {
+              "id": "XTIQ",
+              "other": null
+            },
+            "legalName": {
+              "language": "en",
+              "name": "SANDISK CORPORATION"
+            },
+            "otherAddresses": [],
+            "otherNames": [],
+            "registeredAs": "2960734",
+            "registeredAt": {
+              "id": "RA000602",
+              "other": null
+            },
+            "status": "ACTIVE",
+            "subCategory": null,
+            "successorEntities": [],
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "transliteratedOtherNames": []
+          },
+          "gem": null,
+          "lei": "5299007I9R9N3RO43S32",
+          "mic": null,
+          "ocid": "us_de/2960734",
+          "qcc": null,
+          "registration": {
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "initialRegistrationDate": "2026-05-27T10:14:10Z",
+            "lastUpdateDate": "2026-05-27T10:14:10Z",
+            "managingLou": "5299000J2N45DDNE4Y28",
+            "nextRenewalDate": "2027-05-27T10:14:10Z",
+            "otherValidationAuthorities": [],
+            "status": "ISSUED",
+            "validatedAs": "2960734",
+            "validatedAt": {
+              "id": "RA000602",
+              "other": null
+            }
+          },
+          "spglobal": [
+            "1860586153"
+          ]
+        },
+        "id": "5299007I9R9N3RO43S32",
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/5299007I9R9N3RO43S32"
+        },
+        "relationships": {
+          "direct-children": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/5299007I9R9N3RO43S32/direct-children",
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/5299007I9R9N3RO43S32/direct-child-relationships"
+            }
+          },
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/5299007I9R9N3RO43S32/direct-parent-reporting-exception"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/5299007I9R9N3RO43S32/field-modifications"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/5299007I9R9N3RO43S32/lei-issuer"
+            }
+          },
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/5299007I9R9N3RO43S32/managing-lou"
+            }
+          },
+          "ultimate-children": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/5299007I9R9N3RO43S32/ultimate-children",
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/5299007I9R9N3RO43S32/ultimate-child-relationships"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/5299007I9R9N3RO43S32/ultimate-parent-reporting-exception"
+            }
+          }
+        },
+        "type": "lei-records"
+      },
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-11T00:00:00Z"
+        }
+      }
+    },
+    "retrieved_at": "2026-09-11T09:14:30.736916+00:00",
+    "sha256": "ae85c2de3f34f1ad002f0e971ab28dd3831086b7c01dac045ad7c2092604208c",
+    "url": "https://api.gleif.org/api/v1/lei-records/5299007I9R9N3RO43S32"
+  },
+  "review": {
+    "identity_kind": "retrospective_entity_mapping",
+    "independent_security_source_url": "https://www.sec.gov/Archives/edgar/data/1856405/000090514826000843/xslForm13F_X02/informationtable.xml",
+    "legal_name": "SANDISK CORPORATION",
+    "reason": "Exact security identifiers from frozen disclosures and named legal entity corroborated against the official GLEIF record. This mapping is reviewed now for the historical entity, not a claim that the LEI was registered or known on the holding date. No source LEI is overwritten.",
+    "reviewed_at": "2026-09-11",
+    "valid_from": "2025-12-31",
+    "valid_to": "2026-03-31"
+  },
+  "security": {
+    "cusip": "80004C200",
+    "holding_dates_with_missing_lei": [
+      "2025-12-31",
+      "2026-03-31"
+    ],
+    "isin": "US80004C2008",
+    "symbol": "SNDK"
+  }
+}

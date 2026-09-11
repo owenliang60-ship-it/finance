@@ -1,0 +1,211 @@
+{
+  "registry": {
+    "response": {
+      "data": [
+        {
+          "attributes": {
+            "bic": null,
+            "conformityFlag": "CONFORMING",
+            "entity": {
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "category": "GENERAL",
+              "creationDate": "2021-01-07T00:00:00Z",
+              "eventGroups": [
+                {
+                  "events": [
+                    {
+                      "effectiveDate": "2025-11-20T00:00:00Z",
+                      "recordedDate": "2025-11-20T16:01:44Z",
+                      "status": "COMPLETED",
+                      "type": "CHANGE_HQ_ADDRESS",
+                      "validationDocuments": "REGULATORY_FILING"
+                    }
+                  ],
+                  "groupType": "STANDALONE"
+                },
+                {
+                  "events": [
+                    {
+                      "effectiveDate": "2024-12-12T00:00:00Z",
+                      "recordedDate": "2024-12-12T16:44:20Z",
+                      "status": "COMPLETED",
+                      "type": "CHANGE_HQ_ADDRESS",
+                      "validationDocuments": "ACCOUNTS_FILING"
+                    }
+                  ],
+                  "groupType": "STANDALONE"
+                }
+              ],
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "headquartersAddress": {
+                "addressLines": [
+                  "2000 W Sam Houston Parkway S",
+                  "Suite 200"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "city": "Houston",
+                "country": "US",
+                "language": "en",
+                "mailRouting": null,
+                "postalCode": "77042",
+                "region": "US-TX"
+              },
+              "jurisdiction": "US-DE",
+              "legalAddress": {
+                "addressLines": [
+                  "C/O THE CORPORATION TRUST COMPANY",
+                  "CORPORATION TRUST CENTER",
+                  "1209 ORANGE ST"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "city": "WILMINGTON",
+                "country": "US",
+                "language": "en",
+                "mailRouting": null,
+                "postalCode": "19801",
+                "region": "US-DE"
+              },
+              "legalForm": {
+                "id": "XTIQ",
+                "other": null
+              },
+              "legalName": {
+                "language": "en",
+                "name": "APA CORPORATION"
+              },
+              "otherAddresses": [],
+              "otherNames": [],
+              "registeredAs": "4382543",
+              "registeredAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "status": "ACTIVE",
+              "subCategory": null,
+              "successorEntities": [],
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "transliteratedOtherNames": []
+            },
+            "gem": "E100001014129",
+            "lei": "549300VCIWLRHYVSHC79",
+            "mic": null,
+            "ocid": "us_de/4382543",
+            "qcc": null,
+            "registration": {
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "initialRegistrationDate": "2022-09-15T15:32:00Z",
+              "lastUpdateDate": "2025-11-21T10:40:25Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "nextRenewalDate": "2026-12-19T19:54:29Z",
+              "otherValidationAuthorities": [],
+              "status": "ISSUED",
+              "validatedAs": "4382543",
+              "validatedAt": {
+                "id": "RA000602",
+                "other": null
+              }
+            },
+            "spglobal": [
+              "169838"
+            ]
+          },
+          "id": "549300VCIWLRHYVSHC79",
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/549300VCIWLRHYVSHC79"
+          },
+          "relationships": {
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300VCIWLRHYVSHC79/direct-parent-reporting-exception"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300VCIWLRHYVSHC79/field-modifications"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300VCIWLRHYVSHC79/isins"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300VCIWLRHYVSHC79/lei-issuer"
+              }
+            },
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300VCIWLRHYVSHC79/managing-lou"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300VCIWLRHYVSHC79/ultimate-children",
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300VCIWLRHYVSHC79/ultimate-child-relationships"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300VCIWLRHYVSHC79/ultimate-parent-reporting-exception"
+              }
+            }
+          },
+          "type": "lei-records"
+        }
+      ],
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US03743Q1085&page%5Bnumber%5D=1&page%5Bsize%5D=10",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US03743Q1085&page%5Bnumber%5D=1&page%5Bsize%5D=10"
+      },
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-11T00:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "from": 1,
+          "lastPage": 1,
+          "perPage": 10,
+          "to": 1,
+          "total": 1
+        }
+      }
+    },
+    "retrieved_at": "2026-09-11T09:13:28.284359+00:00",
+    "sha256": "ecba9d637dad3ec1fd90f6f55458cb49cfe287b72c0144e77da321e427740de1",
+    "url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US03743Q1085&page%5Bsize%5D=10"
+  },
+  "review": {
+    "identity_kind": "retrospective_entity_mapping",
+    "independent_security_source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US03743Q1085&page%5Bsize%5D=10",
+    "legal_name": "APA CORPORATION",
+    "reason": "Exact security identifiers from frozen disclosures and named legal entity corroborated against the official GLEIF record. This mapping is reviewed now for the historical entity, not a claim that the LEI was registered or known on the holding date. No source LEI is overwritten.",
+    "reviewed_at": "2026-09-11",
+    "valid_from": "2021-06-30",
+    "valid_to": "2022-06-30"
+  },
+  "security": {
+    "cusip": "03743Q108",
+    "holding_dates_with_missing_lei": [
+      "2021-06-30",
+      "2021-09-30",
+      "2021-12-31",
+      "2022-03-31",
+      "2022-06-30"
+    ],
+    "isin": "US03743Q1085",
+    "symbol": "APA"
+  }
+}

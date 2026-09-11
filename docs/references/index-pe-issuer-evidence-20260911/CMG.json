@@ -1,0 +1,171 @@
+{
+  "registry": {
+    "response": {
+      "data": {
+        "attributes": {
+          "bic": null,
+          "conformityFlag": "CONFORMING",
+          "entity": {
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "category": "GENERAL",
+            "creationDate": "1998-01-29T23:00:00Z",
+            "eventGroups": [],
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "headquartersAddress": {
+              "addressLines": [
+                "c/o CORPORATION SERVICE COMPANY, 251 LITTLE FALLS DRIVE"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "city": "WILMINGTON",
+              "country": "US",
+              "language": "en",
+              "mailRouting": null,
+              "postalCode": "19808",
+              "region": "US-DE"
+            },
+            "jurisdiction": "US-DE",
+            "legalAddress": {
+              "addressLines": [
+                "c/o CORPORATION SERVICE COMPANY, 251 LITTLE FALLS DRIVE"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "city": "WILMINGTON",
+              "country": "US",
+              "language": "en",
+              "mailRouting": null,
+              "postalCode": "19808",
+              "region": "US-DE"
+            },
+            "legalForm": {
+              "id": "XTIQ",
+              "other": null
+            },
+            "legalName": {
+              "language": "en",
+              "name": "CHIPOTLE MEXICAN GRILL, INC."
+            },
+            "otherAddresses": [],
+            "otherNames": [],
+            "registeredAs": "2853698",
+            "registeredAt": {
+              "id": "RA000602",
+              "other": null
+            },
+            "status": "ACTIVE",
+            "subCategory": null,
+            "successorEntities": [],
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "transliteratedOtherNames": []
+          },
+          "gem": null,
+          "lei": "529900REP5VGTPCP1J71",
+          "mic": null,
+          "ocid": "us_de/2853698",
+          "qcc": null,
+          "registration": {
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "initialRegistrationDate": "2025-11-13T08:19:44Z",
+            "lastUpdateDate": "2025-11-13T08:19:44Z",
+            "managingLou": "5299000J2N45DDNE4Y28",
+            "nextRenewalDate": "2026-11-13T08:19:44Z",
+            "otherValidationAuthorities": [],
+            "status": "ISSUED",
+            "validatedAs": "2853698",
+            "validatedAt": {
+              "id": "RA000602",
+              "other": null
+            }
+          },
+          "spglobal": [
+            "26446"
+          ]
+        },
+        "id": "529900REP5VGTPCP1J71",
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/529900REP5VGTPCP1J71"
+        },
+        "relationships": {
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/529900REP5VGTPCP1J71/direct-parent-reporting-exception"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/529900REP5VGTPCP1J71/field-modifications"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/529900REP5VGTPCP1J71/lei-issuer"
+            }
+          },
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/529900REP5VGTPCP1J71/managing-lou"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/529900REP5VGTPCP1J71/ultimate-parent-reporting-exception"
+            }
+          }
+        },
+        "type": "lei-records"
+      },
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-11T00:00:00Z"
+        }
+      }
+    },
+    "retrieved_at": "2026-09-11T09:14:32.519448+00:00",
+    "sha256": "ddd083295b61fd4dcff5e2ad023929d6bceee2b32e68650327a492b23952f382",
+    "url": "https://api.gleif.org/api/v1/lei-records/529900REP5VGTPCP1J71"
+  },
+  "review": {
+    "identity_kind": "retrospective_entity_mapping",
+    "independent_security_source_url": "https://www.sec.gov/Archives/edgar/data/276101/000108514620002653/xslForm13F_X01/infotable.xml",
+    "legal_name": "CHIPOTLE MEXICAN GRILL, INC.",
+    "reason": "Exact security identifiers from frozen disclosures and named legal entity corroborated against the official GLEIF record. This mapping is reviewed now for the historical entity, not a claim that the LEI was registered or known on the holding date. No source LEI is overwritten.",
+    "reviewed_at": "2026-09-11",
+    "valid_from": "2021-06-30",
+    "valid_to": "2025-09-30"
+  },
+  "security": {
+    "cusip": "169656105",
+    "holding_dates_with_missing_lei": [
+      "2021-06-30",
+      "2021-09-30",
+      "2021-12-31",
+      "2022-03-31",
+      "2022-06-30",
+      "2022-09-30",
+      "2022-12-31",
+      "2023-03-31",
+      "2023-06-30",
+      "2023-09-30",
+      "2023-12-31",
+      "2024-03-31",
+      "2024-06-30",
+      "2024-09-30",
+      "2024-12-31",
+      "2025-03-31",
+      "2025-06-30",
+      "2025-09-30"
+    ],
+    "isin": "US1696561059",
+    "symbol": "CMG"
+  }
+}

@@ -1,0 +1,192 @@
+{
+  "registry": {
+    "response": {
+      "data": [
+        {
+          "attributes": {
+            "bic": null,
+            "conformityFlag": "CONFORMING",
+            "entity": {
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "category": "GENERAL",
+              "creationDate": "2021-06-15T00:00:00Z",
+              "eventGroups": [],
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "headquartersAddress": {
+                "addressLines": [
+                  "1310 Point Street"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "city": "Baltimore",
+                "country": "US",
+                "language": "en",
+                "mailRouting": null,
+                "postalCode": "21231",
+                "region": "US-MD"
+              },
+              "jurisdiction": "US-PA",
+              "legalAddress": {
+                "addressLines": [
+                  "C/O Corporate Creations Network, Inc.",
+                  "1001 State Street"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "city": "Erie",
+                "country": "US",
+                "language": "en",
+                "mailRouting": null,
+                "postalCode": "16501",
+                "region": "US-PA"
+              },
+              "legalForm": {
+                "id": "3JTE",
+                "other": null
+              },
+              "legalName": {
+                "language": "en",
+                "name": "Constellation Energy Corporation"
+              },
+              "otherAddresses": [],
+              "otherNames": [
+                {
+                  "language": "en",
+                  "name": "Constellation Newholdco, Inc.",
+                  "type": "PREVIOUS_LEGAL_NAME"
+                }
+              ],
+              "registeredAs": "7305437",
+              "registeredAt": {
+                "id": "RA000632",
+                "other": null
+              },
+              "status": "ACTIVE",
+              "subCategory": null,
+              "successorEntities": [],
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "transliteratedOtherNames": []
+            },
+            "gem": "E100001000208",
+            "lei": "549300F8Y20RYGNGV346",
+            "mic": null,
+            "ocid": "us_pa/7305437",
+            "qcc": null,
+            "registration": {
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "initialRegistrationDate": "2021-12-21T21:30:00Z",
+              "lastUpdateDate": "2025-12-08T16:23:23Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "nextRenewalDate": "2026-12-13T15:14:00Z",
+              "otherValidationAuthorities": [],
+              "status": "ISSUED",
+              "validatedAs": "7305437",
+              "validatedAt": {
+                "id": "RA000632",
+                "other": null
+              }
+            },
+            "spglobal": [
+              "3136719"
+            ]
+          },
+          "id": "549300F8Y20RYGNGV346",
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/549300F8Y20RYGNGV346"
+          },
+          "relationships": {
+            "direct-children": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300F8Y20RYGNGV346/direct-children",
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300F8Y20RYGNGV346/direct-child-relationships"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300F8Y20RYGNGV346/direct-parent-reporting-exception"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300F8Y20RYGNGV346/field-modifications"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300F8Y20RYGNGV346/isins"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300F8Y20RYGNGV346/lei-issuer"
+              }
+            },
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300F8Y20RYGNGV346/managing-lou"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300F8Y20RYGNGV346/ultimate-children",
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300F8Y20RYGNGV346/ultimate-child-relationships"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300F8Y20RYGNGV346/ultimate-parent-reporting-exception"
+              }
+            }
+          },
+          "type": "lei-records"
+        }
+      ],
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US21037T1097&page%5Bnumber%5D=1&page%5Bsize%5D=10",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US21037T1097&page%5Bnumber%5D=1&page%5Bsize%5D=10"
+      },
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-11T00:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "from": 1,
+          "lastPage": 1,
+          "perPage": 10,
+          "to": 1,
+          "total": 1
+        }
+      }
+    },
+    "retrieved_at": "2026-09-11T09:13:40.229007+00:00",
+    "sha256": "8d383ee1fc175f426915a33b27c491710c046e27d737e4a8bb12adeba422cb8c",
+    "url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US21037T1097&page%5Bsize%5D=10"
+  },
+  "review": {
+    "identity_kind": "retrospective_entity_mapping",
+    "independent_security_source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US21037T1097&page%5Bsize%5D=10",
+    "legal_name": "Constellation Energy Corporation",
+    "reason": "Exact security identifiers from frozen disclosures and named legal entity corroborated against the official GLEIF record. This mapping is reviewed now for the historical entity, not a claim that the LEI was registered or known on the holding date. No source LEI is overwritten.",
+    "reviewed_at": "2026-09-11",
+    "valid_from": "2022-03-31",
+    "valid_to": "2022-03-31"
+  },
+  "security": {
+    "cusip": "21037T109",
+    "holding_dates_with_missing_lei": [
+      "2022-03-31"
+    ],
+    "isin": "US21037T1097",
+    "symbol": "CEG"
+  }
+}

@@ -1,0 +1,188 @@
+{
+  "registry": {
+    "response": {
+      "data": [
+        {
+          "attributes": {
+            "bic": null,
+            "conformityFlag": "CONFORMING",
+            "entity": {
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "category": "GENERAL",
+              "creationDate": "2015-03-26T00:00:00Z",
+              "eventGroups": [],
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "headquartersAddress": {
+                "addressLines": [
+                  "14600 MYFORD ROAD"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "city": "IRVINE",
+                "country": "US",
+                "language": "en",
+                "mailRouting": null,
+                "postalCode": "92606",
+                "region": "US-CA"
+              },
+              "jurisdiction": "US-DE",
+              "legalAddress": {
+                "addressLines": [
+                  "C/O THE CORPORATION TRUST COMPANY",
+                  "CORPORATION TRUST CENTER",
+                  "1209 ORANGE ST"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "city": "WILMINGTON",
+                "country": "US",
+                "language": "en",
+                "mailRouting": null,
+                "postalCode": "19801",
+                "region": "US-DE"
+              },
+              "legalForm": {
+                "id": "XTIQ",
+                "other": null
+              },
+              "legalName": {
+                "language": "en",
+                "name": "RIVIAN AUTOMOTIVE, INC."
+              },
+              "otherAddresses": [],
+              "otherNames": [],
+              "registeredAs": "5708714",
+              "registeredAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "status": "ACTIVE",
+              "subCategory": null,
+              "successorEntities": [],
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "transliteratedOtherNames": []
+            },
+            "gem": null,
+            "lei": "25490004LNKJ84MFYY24",
+            "mic": null,
+            "ocid": "us_de/5708714",
+            "qcc": null,
+            "registration": {
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "initialRegistrationDate": "2023-10-02T07:12:51Z",
+              "lastUpdateDate": "2026-07-27T14:20:01Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "nextRenewalDate": "2027-08-02T07:12:51Z",
+              "otherValidationAuthorities": [],
+              "status": "ISSUED",
+              "validatedAs": "5708714",
+              "validatedAt": {
+                "id": "RA000602",
+                "other": null
+              }
+            },
+            "spglobal": [
+              "144746614"
+            ]
+          },
+          "id": "25490004LNKJ84MFYY24",
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/25490004LNKJ84MFYY24"
+          },
+          "relationships": {
+            "direct-children": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/25490004LNKJ84MFYY24/direct-children",
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/25490004LNKJ84MFYY24/direct-child-relationships"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/25490004LNKJ84MFYY24/direct-parent-reporting-exception"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/25490004LNKJ84MFYY24/field-modifications"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/25490004LNKJ84MFYY24/isins"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/25490004LNKJ84MFYY24/lei-issuer"
+              }
+            },
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/25490004LNKJ84MFYY24/managing-lou"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/25490004LNKJ84MFYY24/ultimate-children",
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/25490004LNKJ84MFYY24/ultimate-child-relationships"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/25490004LNKJ84MFYY24/ultimate-parent-reporting-exception"
+              }
+            }
+          },
+          "type": "lei-records"
+        }
+      ],
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US76954A1034&page%5Bnumber%5D=1&page%5Bsize%5D=10",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US76954A1034&page%5Bnumber%5D=1&page%5Bsize%5D=10"
+      },
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-11T00:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "from": 1,
+          "lastPage": 1,
+          "perPage": 10,
+          "to": 1,
+          "total": 1
+        }
+      }
+    },
+    "retrieved_at": "2026-09-11T09:14:04.808786+00:00",
+    "sha256": "571214814ebc7071d9906fbcc4dadca0fe0913323f7a853a8836dd6b47b4b6fb",
+    "url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US76954A1034&page%5Bsize%5D=10"
+  },
+  "review": {
+    "identity_kind": "retrospective_entity_mapping",
+    "independent_security_source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US76954A1034&page%5Bsize%5D=10",
+    "legal_name": "RIVIAN AUTOMOTIVE, INC.",
+    "reason": "Exact security identifiers from frozen disclosures and named legal entity corroborated against the official GLEIF record. This mapping is reviewed now for the historical entity, not a claim that the LEI was registered or known on the holding date. No source LEI is overwritten.",
+    "reviewed_at": "2026-09-11",
+    "valid_from": "2022-12-31",
+    "valid_to": "2023-03-31"
+  },
+  "security": {
+    "cusip": "76954A103",
+    "holding_dates_with_missing_lei": [
+      "2022-12-31",
+      "2023-03-31"
+    ],
+    "isin": "US76954A1034",
+    "symbol": "RIVN"
+  }
+}

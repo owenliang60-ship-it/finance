@@ -1,0 +1,174 @@
+{
+  "registry": {
+    "response": {
+      "data": {
+        "attributes": {
+          "bic": null,
+          "conformityFlag": "CONFORMING",
+          "entity": {
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "category": "GENERAL",
+            "creationDate": "2020-10-23T00:00:00Z",
+            "eventGroups": [],
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "headquartersAddress": {
+              "addressLines": [
+                "5488 MARVELL LN"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "city": "SANTA CLARA",
+              "country": "US",
+              "language": "en",
+              "mailRouting": null,
+              "postalCode": "95054",
+              "region": "US-CA"
+            },
+            "jurisdiction": "US-DE",
+            "legalAddress": {
+              "addressLines": [
+                "C/O COGENCY GLOBAL INC.",
+                "850 NEW BURTON ROAD",
+                "SUITE 201"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "city": "DOVER",
+              "country": "US",
+              "language": "en",
+              "mailRouting": null,
+              "postalCode": "19904",
+              "region": "US-DE"
+            },
+            "legalForm": {
+              "id": "XTIQ",
+              "other": null
+            },
+            "legalName": {
+              "language": "en",
+              "name": "MARVELL TECHNOLOGY, INC."
+            },
+            "otherAddresses": [],
+            "otherNames": [],
+            "registeredAs": "3954354",
+            "registeredAt": {
+              "id": "RA000602",
+              "other": null
+            },
+            "status": "ACTIVE",
+            "subCategory": null,
+            "successorEntities": [],
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "transliteratedOtherNames": []
+          },
+          "gem": null,
+          "lei": "254900WVU0BM7ZCJ9E93",
+          "mic": null,
+          "ocid": "us_de/3954354",
+          "qcc": null,
+          "registration": {
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "initialRegistrationDate": "2026-02-20T10:33:34Z",
+            "lastUpdateDate": "2026-02-20T10:33:34Z",
+            "managingLou": "5493001KJTIIGC8Y1R12",
+            "nextRenewalDate": "2027-02-20T10:33:34Z",
+            "otherValidationAuthorities": [],
+            "status": "ISSUED",
+            "validatedAs": "3954354",
+            "validatedAt": {
+              "id": "RA000602",
+              "other": null
+            }
+          },
+          "spglobal": [
+            "31158"
+          ]
+        },
+        "id": "254900WVU0BM7ZCJ9E93",
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/254900WVU0BM7ZCJ9E93"
+        },
+        "relationships": {
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/254900WVU0BM7ZCJ9E93/direct-parent-reporting-exception"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/254900WVU0BM7ZCJ9E93/field-modifications"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/254900WVU0BM7ZCJ9E93/lei-issuer"
+            }
+          },
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/254900WVU0BM7ZCJ9E93/managing-lou"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/254900WVU0BM7ZCJ9E93/ultimate-parent-reporting-exception"
+            }
+          }
+        },
+        "type": "lei-records"
+      },
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-11T00:00:00Z"
+        }
+      }
+    },
+    "retrieved_at": "2026-09-11T09:14:29.126514+00:00",
+    "sha256": "3d959d4172578e44f591a1e41a0cc4b56859c8731ebab8a29cb831a9d7b5fd50",
+    "url": "https://api.gleif.org/api/v1/lei-records/254900WVU0BM7ZCJ9E93"
+  },
+  "review": {
+    "identity_kind": "retrospective_entity_mapping",
+    "independent_security_source_url": "https://www.sec.gov/Archives/edgar/data/866780/000086678021000004/xslForm13F_X01/13FTothQ22021updated.xml",
+    "legal_name": "MARVELL TECHNOLOGY, INC.",
+    "reason": "Exact security identifiers from frozen disclosures and named legal entity corroborated against the official GLEIF record. This mapping is reviewed now for the historical entity, not a claim that the LEI was registered or known on the holding date. No source LEI is overwritten.",
+    "reviewed_at": "2026-09-11",
+    "valid_from": "2021-06-30",
+    "valid_to": "2025-12-31"
+  },
+  "security": {
+    "cusip": "573874104",
+    "holding_dates_with_missing_lei": [
+      "2021-06-30",
+      "2021-09-30",
+      "2021-12-31",
+      "2022-03-31",
+      "2022-06-30",
+      "2022-09-30",
+      "2022-12-31",
+      "2023-03-31",
+      "2023-06-30",
+      "2023-09-30",
+      "2023-12-31",
+      "2024-03-31",
+      "2024-06-30",
+      "2024-09-30",
+      "2024-12-31",
+      "2025-03-31",
+      "2025-06-30",
+      "2025-09-30",
+      "2025-12-31"
+    ],
+    "isin": "US5738741041",
+    "symbol": "MRVL"
+  }
+}

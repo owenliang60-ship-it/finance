@@ -1,0 +1,202 @@
+{
+  "registry": {
+    "response": {
+      "data": [
+        {
+          "attributes": {
+            "bic": null,
+            "conformityFlag": "NON_CONFORMING",
+            "entity": {
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "category": "GENERAL",
+              "creationDate": null,
+              "eventGroups": [],
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "headquartersAddress": {
+                "addressLines": [
+                  "12800 Tuckahoe Creek Parkway"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "city": "Richmond",
+                "country": "US",
+                "language": "en-US",
+                "mailRouting": null,
+                "postalCode": "23238",
+                "region": "US-VA"
+              },
+              "jurisdiction": "US-DE",
+              "legalAddress": {
+                "addressLines": [
+                  "c/o MAX E. SCOTT, 4 ADDIX AVE. P.O. BOX 2002"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "city": "GREENWOOD",
+                "country": "US",
+                "language": "en-US",
+                "mailRouting": null,
+                "postalCode": "19950",
+                "region": "US-DE"
+              },
+              "legalForm": {
+                "id": "8888",
+                "other": "Corporation"
+              },
+              "legalName": {
+                "language": "en-US",
+                "name": "CARMAX, INC."
+              },
+              "otherAddresses": [],
+              "otherNames": [],
+              "registeredAs": "2429989",
+              "registeredAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "status": "ACTIVE",
+              "subCategory": null,
+              "successorEntities": [],
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "transliteratedOtherNames": []
+            },
+            "gem": null,
+            "lei": "529900F60CID3NCZM330",
+            "mic": null,
+            "ocid": "us_de/2429989",
+            "qcc": null,
+            "registration": {
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "initialRegistrationDate": "2018-11-23T08:40:26Z",
+              "lastUpdateDate": "2021-07-15T05:09:24Z",
+              "managingLou": "5299000J2N45DDNE4Y28",
+              "nextRenewalDate": "2019-11-23T08:40:26Z",
+              "otherValidationAuthorities": [],
+              "status": "LAPSED",
+              "validatedAs": "2429989",
+              "validatedAt": {
+                "id": "RA000602",
+                "other": null
+              }
+            },
+            "spglobal": [
+              "356805"
+            ]
+          },
+          "id": "529900F60CID3NCZM330",
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/529900F60CID3NCZM330"
+          },
+          "relationships": {
+            "direct-children": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/529900F60CID3NCZM330/direct-children",
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/529900F60CID3NCZM330/direct-child-relationships"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/529900F60CID3NCZM330/direct-parent-reporting-exception"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/529900F60CID3NCZM330/field-modifications"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/529900F60CID3NCZM330/isins"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/529900F60CID3NCZM330/lei-issuer"
+              }
+            },
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/529900F60CID3NCZM330/managing-lou"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/529900F60CID3NCZM330/ultimate-children",
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/529900F60CID3NCZM330/ultimate-child-relationships"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/529900F60CID3NCZM330/ultimate-parent-reporting-exception"
+              }
+            }
+          },
+          "type": "lei-records"
+        }
+      ],
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US1431301027&page%5Bnumber%5D=1&page%5Bsize%5D=10",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US1431301027&page%5Bnumber%5D=1&page%5Bsize%5D=10"
+      },
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-11T00:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "from": 1,
+          "lastPage": 1,
+          "perPage": 10,
+          "to": 1,
+          "total": 1
+        }
+      }
+    },
+    "retrieved_at": "2026-09-11T09:13:31.800167+00:00",
+    "sha256": "215c42fd8d767200f7d1978641c3ba9f93cf0bb1dcb89e7f48a2d189757f38e6",
+    "url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US1431301027&page%5Bsize%5D=10"
+  },
+  "review": {
+    "identity_kind": "retrospective_entity_mapping",
+    "independent_security_source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US1431301027&page%5Bsize%5D=10",
+    "legal_name": "CARMAX, INC.",
+    "reason": "Exact security identifiers from frozen disclosures and named legal entity corroborated against the official GLEIF record. This mapping is reviewed now for the historical entity, not a claim that the LEI was registered or known on the holding date. No source LEI is overwritten.",
+    "reviewed_at": "2026-09-11",
+    "valid_from": "2021-06-30",
+    "valid_to": "2025-09-30"
+  },
+  "security": {
+    "cusip": "143130102",
+    "holding_dates_with_missing_lei": [
+      "2021-06-30",
+      "2021-09-30",
+      "2021-12-31",
+      "2022-03-31",
+      "2022-06-30",
+      "2022-09-30",
+      "2022-12-31",
+      "2023-03-31",
+      "2023-06-30",
+      "2023-09-30",
+      "2023-12-31",
+      "2024-03-31",
+      "2024-06-30",
+      "2024-09-30",
+      "2024-12-31",
+      "2025-03-31",
+      "2025-06-30",
+      "2025-09-30"
+    ],
+    "isin": "US1431301027",
+    "symbol": "KMX"
+  }
+}
