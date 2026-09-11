@@ -1,6 +1,6 @@
 # Issue 072: 基金披露的 filer CIK 被当成成分公司身份
 
-**Status**: CODE FIXED / DATA GATED — 方案A已批准并实现，真实身份缺口尚未关闭
+**Status**: IDENTITY FIX VERIFIED — 冻结历史窗口身份门已通过；真实估值与上线验收仍未完成
 **Date**: 2026-09-11
 **Severity**: HIGH — 三指数历史 verifier 必然误判、SPY alias 预检失败
 **Related**: `src/data/fmp_forward_ingestion.py`、`scripts/verify_index_pe_history.py`、`config/soxx_symbol_aliases.json`；issue045/048
@@ -45,3 +45,9 @@ Boss批准方案A后，`dc61062`修复源字段、精确证券alias、LEI/审查
 首批12证券审核证据已提交78411b9，相关416tests、云端30tests及133行独立身份对拍通过，原表hash不变；缺失41证券/463行→29证券/330行。FMP新增0次（累计71）。
 
 查证同时发现LEI不只是缺值：CTAS候选指向LATM Management LLC，KHC混入食品子公司，STE候选是融资实体；有些公司仅搜到不相干名称。合法LEI校验位不能代替上市发行人验证。现有LEI+双证券编号强制schema无法表达所有权威身份证据，已写待批的verified-issuer-key修订，未私自放宽。详`docs/audit/2026-09-11-index-pe-issuer-evidence-followup.md`。
+
+## 身份缺口关闭（2026-09-11 19时，前文停点已被替代）
+
+Boss要求小修不再另卡计划审批并指示继续后，`c7595c6`实现typed LEI/SEC issuer CIK、严格受约束的ISIN-only匹配、保留原文的证券级定点纠错及独立verifier；`a85d883`补34条SEC审核记录和两个历史股类组。原46条审核记录均有冻结证据。
+
+冻结导出source中SPY10,580、QQQ2,124、SOXX583条纳入/covered记录，身份门全部通过；13,287条独立核验一致、原始payload hash未变。相关438tests、隔离全量3530 passed/4 skipped。发行人身份修复已验证，但未知market-cap convention继续排除，不把身份门PASS扩大成数值认证或生产LIVE。云端仍停在原授权窗口，FMP累计71次；本地冻结副本数值试算另记验收结果。

@@ -1,6 +1,6 @@
 # Issue 073: 单条非正市值导致整个指数估值批次异常
 
-**Status**: CODE FIXED / OFFLINE REPLAY IN PROGRESS
+**Status**: FIX VERIFIED IN ISOLATED DB — 未部署生产
 **Date**: 2026-09-11
 **Severity**: HIGH — 一个成分的历史0值阻断其他成员与后续日期
 **Scope**: `terminal/historical_market_cap_sanity.py`及历史/PIT估值调用方
@@ -26,3 +26,5 @@ sanity扫描器原本把“值必须为正”当函数输入前提，在开始�
 8项新增边界测试先RED后GREEN：0/负值/NULL/NaN/Inf、坏值跨拆股、错误新regime拒绝、首行0值不可作anchor；as-of不可穿透隔离回取旧市值。相关6套225tests通过，真实副本复跑结果另见同日离线验收。
 
 原始证据在`reports/rendered/index-pe-trial-20260911/evidence/offline-valuation-result.json`及`offline-source-provenance.json`。修复后结果另存`offline-valuation-result-mcap-fix.json`，不覆盖失败物证。零新增API，未merge/push/部署。
+
+`d7110cd`真实复跑：QQQ/SPY都不再抛异常，分别完成262周认证（58个TTM、119个后视镜有效周）；SOXX251周维持NULL，PIT因覆盖门而非异常拒绝。354个可发布数值经独立SQL核对一致，HONA原始0行保留。全量3538 passed/4 skipped，相关225passed，Python3.10 AST与Ruff通过。

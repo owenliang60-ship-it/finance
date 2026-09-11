@@ -1,4 +1,43 @@
-# 三指数发行人证据补齐：首批12证券完成，剩余契约待修订
+# 三指数发行人证据补齐：冻结历史窗口身份门已通过
+
+## 最新状态（2026-09-11 19时）
+
+Boss要求小修不再单独开计划，随后“搞，继续”。`c7595c6`完成带类型的发行人键与独立核验；`a85d883`加入34条SEC审核规则，覆盖原29个缺口证券以及DISCA/DISCK、UAA/UA两个历史股类组。原12条GLEIF审核记录保留。
+
+- 从云端冻结导出的14,643条source记录重建规范化字段；SPY10,580、QQQ2,124、SOXX583条纳入/covered记录身份门全部通过，producer与独立verifier **13,287条一致**。
+- 原始payload hash仍为`196383f18b44327b26e05828de0f7408deee8b76a37a6b5a19d264b613e0f1a6`；未改持仓原文、公开日期或预测vintage。
+- SEC证据只采用issuer/subject company或该公司自身申报主体，拒绝基金filer和持股申报人。无LEI结果不被表述为“公司没有LEI”。错误子公司LEI只在精确证券/有效日期/预期原值范围内纠正，不全局合并母子公司。
+- DISCA/DISCK与UAA/UA的**同公司身份已确认，类间市值约定未确认**；与FOXA/FOX、NWSA/NWS一样继续按未知约定排除，权重仍计入覆盖分母。身份证明不能替代市值证明。
+- 相关438tests通过；独立数据副本全量 **3530 passed / 4 skipped**；Python3.10 AST、Ruff未定义名及diff检查通过。
+- FMP累计仍71/3000。原云端窗口10:35:35Z已结束；续期开窗问题已发给Boss，未获答复不新增云端API或回填。接下来仅在冻结DB的本地隔离副本上做数值验收；**身份门通过不代表五年数值已认证或已上线**。
+
+最新证据：`reports/rendered/index-pe-trial-20260911/evidence/canonical-source-check.json`、`canonical-normalized-sources.json.gz`及`docs/references/index-pe-sec-issuer-evidence-20260911/`。以下保留17时的调查与停点记录，不再代表当前剩余身份缺口。
+
+## 冻结真实数据离线验收（19:36）
+
+原云端隔离DB完整复制到本地（1,037,307,904字节，双端SHA256为`d68e992883f9a1f8b461305a5aebf51772cb5c100e687042726add2ea7904a3b`，源端无非空WAL）。运行全程禁用HTTP，代码只写这份任务自己的本地测试副本。
+
+先发现HONA 2026-06-26市值0使QQQ/SPY/PIT整批异常，按Boss小修直接处理要求以TDD修复，提交`d7110cd`；不改原始0值，改为隔离该日期并保留可信比较基准，见issue073。修复后全量 **3538 passed / 4 skipped**；Python3.10 AST、Ruff未定义名、diff检查通过。
+
+| 篮子 | 已认证周记录 | TTM可发布周 | 后视镜可发布周 | 9/10 TTM | 9/10后视镜尾部 |
+|---|---:|---:|---:|---:|---:|
+| SPY | 262 | 58 | 119 | 25.69× | 20.37× |
+| QQQ | 262 | 58 | 119 | 30.52× | 23.05× |
+| SOXX | 251 | 0 | 0 | N/A | N/A |
+
+**周记录认证通过并不代表五年覆盖验收通过。** 三个basket的sample=50独立verifier均通过；NULL被正确保留，未用“complete”状态冒称数值齐全。SPY/QQQ TTM首个有效周2025-08-08；后视镜首个有效周2024-06-07。9/10后视镜是2026-09-05共识补尾，不是当年PIT分析师预测。TTM分位仅基于现有58个有效点，不可称为完整五年分位。
+
+SOXX当前市值覆盖79.49%、权重覆盖85.54%：ASML/ASX/TSM/UMC因fx_daily为空而缺失，KLAC因市值状态隔离；均未达到90%。本地没有擅自补固定汇率或改正确市值猜测。旧研究PNG/CSV是不同生成链路的派生结果，不能反向当raw填进本次认证产品。
+
+九个现有weekly源vintage（7/13至9/5）均做PIT计算，按六篮子整批契约全部拒绝并回滚：各期SOX未过NTM门，7/13—8/1另有IGV未过、8/8另有XLF未过；最新9/5只剩SOX。**PIT产品表仍0行**，不单独将SPY/QQQ候选值发布。
+
+- 354个可发布数值经独立SQL从成员JSON重算Σ市值/Σ盈利，误差容忍1e-12内全部一致。
+- 14,643条source原始payload、公开/生效/抓取日期、原始CIK/LEI/CUSIP/ISIN全部未改；HONA原始0值保留；SQLite quick_check=ok。
+- 复跑耗时SOXX38s、QQQ85s、SPY398s；相关孤立验证worktree已清理，任务原worktree/副本/证据保留，无后台进程。
+- PNG：`reports/rendered/index-pe-trial-20260911/index-pe-frozen-real-data-coverage.png`，已目视检查；图内标出各线有效周数，SOXX及PIT空白，不是完整交付也未接入生产晨报。
+- 物证：`evidence/offline-valuation-result.json`保留原失败；`offline-valuation-result-mcap-fix.json`为修复后结果；`offline-independent-audit.json`为独立SQL/source核对；`full-tests-d7110cd.log`保留全量结果。
+
+下一步是原计划内真实源数据补齐（历史income、市值缺口/修复、split、FX），不是再开小修计划。原3小时云端窗已到期，**续窗待Boss答复**；累计FMP仍71/3000，未自动续时/增额；未merge、push、部署或发Telegram。
 
 ## 已完成结果
 

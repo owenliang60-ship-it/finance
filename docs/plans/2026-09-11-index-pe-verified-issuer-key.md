@@ -1,8 +1,8 @@
-# 三指数可核实发行人键修订（待 Boss 批准）
+# 三指数可核实发行人键修订（实施参考）
 
-> 本文件仅提出对既有方案A的必要修订，尚未实施；延续单主线程、TDD、隔离worktree与临时DB，禁止merge/push/部署生产。当前runtime没有executing-plans skill，按任务清单执行。
+> Boss于2026-09-11明确要求小修不另开计划、随后“搞，继续”，本文件作为既定目标内的实施参考，不再单独卡审批。延续单主线程、TDD、隔离worktree与临时DB，不扩大预算、不放宽数据门、不merge/push/部署生产。
 
-**Confidence: 85%**（字段契约可实现，真实证券覆盖仍须逐项核实）
+**状态**：身份契约、审核补证与13,287行独立核验已完成；真实估值和生产接入尚待验收。
 
 **不确定点**：未注册/未找到LEI的发行人、法人重组前后身份连续性，以及衍生/境外证券缺CUSIP时的替代证明。**不承诺数据完整率，不放宽原门槛。**
 
@@ -44,7 +44,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  A[Boss批准修订] --> B[审核剩余证券与股类证据]
+  A[Boss要求继续既定目标] --> B[审核剩余证券与股类证据]
   B --> C[离线对拍同公司双编号与错误子公司案例]
   C --> D{所有纳入成员可核实?}
   D -- 否 --> E[列出准确缺口 不发布]
@@ -60,7 +60,7 @@ flowchart LR
 
 降低到90%“身份已知”、直接忽略未知、或把ticker当issuer key都不采用。
 
-## 待审批契约
+## 实施契约
 
 1. 增加有类型的`canonical_issuer_key`（例如`sec-cik:000...`或`lei:...`）。**SEC发行人CIK来自明确发行人记录，绝不用基金披露的filer CIK，也不单凭当前FMP profile.cik。**所有CIK必须校验长度、非零和证券对应关系。
 2. LEI与CIK只有在证据表明是**同一法律实体**时才能归一为一个键。不能简单拼不同前缀后就视为两个公司；同公司股类分别给LEI/CIK也必须归一并检测双计。
@@ -70,48 +70,58 @@ flowchart LR
 6. 继续100%纳入成员身份门、90%估值mcap/weight双门、7天staleness、sample=50及C1整窗认证。LEI/CIK本身不是财报币种、股数或market-cap convention的证明。
 7. 发行人映射是现在审核的历史身份事实，保存reviewed_at和valid_from/to；不改holding日期、acceptedDate、earnings vintage，不把新查到的分析师预测当历史PIT。
 
-## Tasks（审批后）
+## Tasks（按既定目标执行）
 
 ### Task 0 — 真实边界RED
 
 Files: `tests/test_index_pe_source_identity.py`、`tests/test_reviewed_issuer_evidence.py`。
 
-- [ ] 以已保存OLED/MTSI/CRDO/CTAS/KHC案例，补无LEI但有发行人CIK、CUSIP缺失但有ISIN、母子公司不可混并的失败测试。
-- [ ] 补同公司两个股类分别用CIK/LEI仍被归一并报双计；不同公司各用一种编号应独立。
-- [ ] 补冲突证券编号、未审查的源LEI、越过有效范围、空CIK/filer CIK误用全部拒绝。
-- [ ] 运行`python -m pytest -q tests/test_index_pe_source_identity.py tests/test_reviewed_issuer_evidence.py`，确认RED来自新增契约。
+- [x] 以已保存OLED/MTSI/CRDO/CTAS/KHC案例，补无LEI但有发行人CIK、CUSIP缺失但有ISIN、母子公司不可混并的失败测试。
+- [x] 补同公司两个股类分别用CIK/LEI仍被归一并报双计；不同公司各用一种编号应独立。
+- [x] 补冲突证券编号、未审查的源LEI、越过有效范围、空CIK/filer CIK误用全部拒绝。
+- [x] 新边界测试实际位于`tests/test_canonical_issuer_identity.py`；经历RED→GREEN，原身份与证据测试同步回归。
 
 ### Task 1 — 审核证据schema与归一
 
 Files: `src/data/fund_issuer_identity.py`、`config/baskets/issuer_identity_overrides.json`、`docs/references/index-pe-issuer-evidence-20260911/`。
 
-- [ ] 兼容旧记录，增加明确issuer key、匹配方式、同实体ID集合、纠错预期值；strict parser拒绝不完整配置。
-- [ ] 实现精确证券/日期匹配与有证据的ID归一，不改原始source表。审核记录的哈希必须可由保存文件重放。
-- [ ] 单个原始LEI可以是不同证券上的误填值；纠错必须按证券作用域，不能全局union子公司与母公司。
-- [ ] 缺证据返回UNKNOWN，冲突不采用“优先选第一个”。测试GREEN后commit。
+- [x] 兼容旧记录，增加明确issuer key、匹配方式、同实体ID集合、纠错预期值；strict parser拒绝不完整配置。
+- [x] 实现精确证券/日期匹配与有证据的ID归一，不改原始source表。审核记录的哈希必须可由保存文件重放。
+- [x] 单个原始LEI可以是不同证券上的误填值；纠错必须按证券作用域，不能全局union子公司与母公司。
+- [x] 缺证据返回UNKNOWN，冲突不采用“优先选第一个”。测试GREEN后commit。
 
 ### Task 2 — 独立verifier接线
 
 Files: `scripts/verify_index_pe_history.py`、`scripts/backfill_index_pe_history.py`及相关tests。
 
-- [ ] producer输出身份来源/纠错说明；verifier独立从raw与审核文件重建同一规范键，不只相信producer写入的字符串。
-- [ ] 对齐物理快照归属，跨来源/跨年份/未公开快照不得借身份覆盖。
-- [ ] 复跑416项相邻基线与隔离数据副本全量；主线程review修完再commit。
+- [x] producer输出身份来源/纠错说明；verifier独立从raw与审核文件重建同一规范键，不只相信producer写入的字符串。
+- [x] 对齐物理快照归属，跨来源/跨年份/未公开快照不得借身份覆盖。
+- [x] 相邻438tests及隔离数据副本3530 passed/4 skipped；主线程review后提交。
 
 ### Task 3 — 真数据闭环
 
-- [ ] 核实剩余29证券，不把搜索无结果冒称不存在；报告新增发现的“有值但错”记录。
-- [ ] 为DISCA/DISCK、UA/UAA补同发行人和类间市值证据；FOXA/NWSA未证实约定仍不相加。
-- [ ] 只在临时库重放并统计每个缺口如何关闭，原始source哈希必须不变。
+- [x] 核实剩余29证券，不把搜索无结果冒称不存在；报告新增发现的“有值但错”记录。
+- [x] 为DISCA/DISCK、UA/UAA补同发行人证据；类间市值约定尚未证实，继续排除且保留权重分母，FOXA/NWSA同样不相加。
+- [x] 只在临时库重放并统计每个缺口如何关闭，原始source哈希未变。
 - [ ] 身份及股类口径完整后才逐股回填、两个verifier、真实PNG；未通过继续给准确缺口，禁止“为了出图”撤门。
 
 ## 风险自证与验收
 
 最大风险是ID种类增加后把同一公司当两家、或把母子公司强行并成一家。解决依靠经验证的同实体关系和显式证券作用域，不靠名称相似或关联地址。
 
-- [ ] 同实体双编号不双计，母子公司不同实体不全局合并。
-- [ ] 已核实的ISIN-only记录可用，但有效CUSIP冲突不能绕过。
-- [ ] 定点纠错只命中批准的错误值/日期/证券，未知新冲突拒绝。
-- [ ] 原始值、PIT时点、PE公式及所有覆盖门保持。
+- [x] 同实体双编号不双计，母子公司不同实体不全局合并。
+- [x] 已核实的ISIN-only记录可用，但有效CUSIP冲突不能绕过。
+- [x] 定点纠错只命中审核的错误值/日期/证券，未知新冲突拒绝。
+- [x] 原始值、PIT时点、PE公式及所有覆盖门保持。
 
 回滚：保留旧代码和两份临时库；新审核记录不影响原始source。失败时停用新派生结果，不恢复整库覆盖生产。网络额度仍是FMP累计71/3000、余2929；原试跑截止2026-09-11T10:35:35Z，超时需Boss另批，不自动续期。生产merge/push/部署仍另批。
+
+## 2026-09-11 进度
+
+`c7595c6`完成typed issuer key、严格ISIN-only、定点纠错、同实体LEI/CIK归一及独立verifier；`a85d883`加入34条SEC审核规则（29个剩余缺口证券及两组历史双股权），保留原始source。
+
+离线读取云端冻结导出的14,643行源记录，按新股类配置重建规范化字段：SPY10,580、QQQ2,124、SOXX583行纳入记录全部通过身份门，与独立verifier对拍13,287行一致。原始payload hash不变。DISCA/DISCK、UAA/UA只确认公司归属，不猜类间市值约定；未声明约定继续按原规则排除。
+
+相关438tests通过；隔离数据副本全量3530 passed/4 skipped。云端旧时间窗已结束，续开最多3小时、仍累计3000HTTP的授权已异步询问，未收到答复前不启动新云端回填；本地使用冻结副本继续离线试算，FMP仍累计71次。
+
+19:36离线数值试算完成：追加d7110cd修复HONA零市值全批异常，最终全量3538/4skip。SPY/QQQ各262周记录认证、58周TTM及119周后视镜有效；SOXX251周全部NULL，九期PIT全部因覆盖门回滚。354个发布数值独立SQL一致，rawsource未变，真实部分PNG已检查。五年数据补齐仍未完成，续云端窗待答；本地所有验证进程已结束，没有后台任务。详同日issuer-evidence-followup审计的19:36节。
