@@ -1,6 +1,6 @@
 # 三指数 PE 整窗更新与失败恢复
 
-状态：C1、Task 5 PIT 聚合及晨报图表接线已实现，尚未部署；真实历史数据准备与最终验收未完成。云端仍为 market.db 唯一写入方，正式执行继续沿用 `market_db_writer` 外层资源锁与备份策略。
+状态：C1、Task 5 PIT 聚合及晨报图表接线已实现；2026-09-11真实隔离验收完成（SPY/QQQ262周、SOXX251周双线，9期PIT全部通过），尚未部署。云端仍为 market.db 唯一写入方，正式执行继续沿用 `market_db_writer` 外层资源锁与备份策略。实测SPY零HTTP整窗组装约46分钟，生产SLO需计入该成本，不能沿用Phase1原时延描述。
 
 ## 写入契约
 
@@ -15,6 +15,9 @@
 旧表迁移边界：缺少 run_id 的空周频表可自动重建；有数据的旧表保留原样，Store 构造仅告警，不影响价格、forward ingestion 等其他读写。周频 PE 的两个写入入口拒绝旧 schema，backfill 在 source/API 调用前做同一预检；旧行如何归档和重新回填须显式处理，不猜测 run_id。
 
 ## 恢复步骤
+
+- 更新精确证券alias配置后，旧source中的派生alias元数据必须按保留的CUSIP/ISIN重新解析并留存变更清单；保留raw ticker、raw payload、原fetched/accepted/effective日期和权重。新预检会拒绝陈旧alias，并检查已审核target的财报issuer CIK。不得用增加币种支持掩盖查到另一公司的财报（issue075）。
+- 一次性验收脚本也必须等所有历史篮子的数据准备成功后才冻结PIT。若诊断阶段已经冻结了中间PIT，保留旧副本；最终验收从已审核source另建无PIT产品的新副本，不改写旧frozen vintage。本次cloud trial的旧批次与最终批次均保留。
 
 - 先查看 backfill 的 JSON 结果：`failed_baskets`、各篮子 `error` 和 `verification.checks`。run manifest 中 run_failed 是明确失败状态，不代表旧产品已被替换。
 - 修复导致失败的源数据/配置后，以**新 run_id**重跑完整五年窗口；不做 tail-only 补写，不修改旧 completed，不恢复整库覆盖同期其他数据。

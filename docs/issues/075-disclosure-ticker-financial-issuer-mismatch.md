@@ -1,6 +1,6 @@
 # Issue 075: 披露证券身份正确，但ticker查到了另一家公司的财报
 
-**Status**: FIX IMPLEMENTED / FINAL SPY REPLAY PENDING
+**Status**: FIX VERIFIED IN ISOLATED DB — 生产待审批
 **Date**: 2026-09-11
 **Severity**: HIGH
 
@@ -33,3 +33,7 @@
 - 旧快照需从保留的原始证券字段更新派生alias元数据；未经此步骤的新配置会明确拒绝。当前只改隔离库，生产source/财报均未改。
 - 13项新测试RED→GREEN，相关173项通过。SOXX、QQQ不受这批9个映射影响；SPY此前未成功落任何周频产品，最终PIT仍0行。
 - 此扫描覆盖同ISIN多ticker的财报主体冲突，不冒称证明所有单ticker vendor数据绝无错误。完整新源数据和历史披露之间仍应逐步加强身份核验。
+
+复验：按raw_symbol重新分组22组，7个CIK冲突全部消除（原首次按normalized symbol分组21组）。93c8a6f云端173tests、全量3563 passed/4 skipped；零HTTP SPY重跑中，累计FMP1693不变。
+
+最终：SPY262周双线全部通过，三篮子15项只读检查全PASS，九期六篮子PIT均通过，1640个数值独立SQL一致。62行派生alias元数据修正，14,643条raw/日期/证券字段保持原样。未扩AUD白名单，未将Mobilicom财报重命名成Monster。生产未改。
