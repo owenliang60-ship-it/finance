@@ -28,3 +28,11 @@ sanity扫描器原本把“值必须为正”当函数输入前提，在开始�
 原始证据在`reports/rendered/index-pe-trial-20260911/evidence/offline-valuation-result.json`及`offline-source-provenance.json`。修复后结果另存`offline-valuation-result-mcap-fix.json`，不覆盖失败物证。零新增API，未merge/push/部署。
 
 `d7110cd`真实复跑：QQQ/SPY都不再抛异常，分别完成262周认证（58个TTM、119个后视镜有效周）；SOXX251周维持NULL，PIT因覆盖门而非异常拒绝。354个可发布数值经独立SQL核对一致，HONA原始0行保留。全量3538 passed/4 skipped，相关225passed，Python3.10 AST与Ruff通过。
+
+## 续窗中的新响应边界（20:09）
+
+上述修复解决读取已有坏行；真实网络续跑HTTP attempt310再次从FMP取得HONA 53行，其中2026-06-26仍为0。range-replace正确拒绝写入，却把QQQ整批中止。保留`evidence/renewed/http-response-0310.json.gz`原始响应。
+
+本轮直接补齐同类失败路径，不另开计划：提取原CRUD纯校验供实际写入和network dry-run共用，非正/非有限/错symbol/date/重复date的完整响应区间均拒绝。普通mcap阶段记`invalid_responses`、保留原区间且计入实际尝试分母的>20%熔断；强制重拉记`skipped + rejection_reason + 相同pre/post hash`，不伪称修复成功。数据库写入故障仍向外抛，不能冒充坏vendor数据；内存只在真实写入成功后更新。
+
+12项新增边界测试先RED后GREEN，413项相关回归通过。运行中的云端代码未热改；待原批次结束、修复完整验证后，以新run_id在同一批准窗口和累计预算内重跑。

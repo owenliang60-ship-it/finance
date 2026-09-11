@@ -2,6 +2,7 @@
 """Staged, idempotent SOXX historical GAAP TTM PE backfill."""
 import argparse
 import json
+import logging
 import sqlite3
 import statistics
 import sys
@@ -46,6 +47,7 @@ STAGE_ORDER = (
 )
 NETWORK_STAGES = frozenset({"source", "fundamentals", "mcap", "splits", "fx"})
 CRITICAL_FAILURE_RATE = 0.20
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -569,9 +571,11 @@ def _run_mcap(
     """Refetch every member whose as-of market-cap chain has a gap.
 
     See `_run_fundamentals` for why the three-index weekly backfill fuses on
-    empty vendor responses instead of residual incompleteness -- a member
+    failed vendor responses instead of residual incompleteness -- a member
     listed part-way through the window cannot be made complete at its start --
     and why that fuse counts the members attempted rather than the universe.
+    Invalid nonempty ranges count as failures too; memory and storage both
+    preserve the previous range, with an explicit rejection reason.
     """
     missing = [symbol for symbol in symbols if not market_cap_complete(
         state.market_cap_by_symbol.get(symbol, []), state.trading_dates,
@@ -586,6 +590,7 @@ def _run_mcap(
             "complete": len(symbols) - len(missing), "planned": len(missing)}
         return
     failures = []
+    invalid_responses = {}
     fetched = 0
     for symbol in missing:
         rows = client.get_historical_market_cap(
@@ -593,19 +598,24 @@ def _run_mcap(
         if not rows:
             failures.append(symbol)
             continue
-        state.market_cap_by_symbol[symbol] = _replace_rows_in_memory(
-            state.market_cap_by_symbol.get(symbol, []), fetch_from, args.to_date, rows)
+        try:
+            MarketStore.prepare_historical_market_cap_range(
+                symbol, fetch_from, args.to_date, list(rows))
+        except ValueError as exc:
+            invalid_responses[symbol] = str(exc)
+            logger.warning("invalid market-cap response for %s; prior range preserved: %s",
+                           symbol, exc)
+            continue
         if store is not None:
             store.replace_historical_market_cap_range(
                 symbol, fetch_from, args.to_date, list(rows))
+        # Do not make memory appear newer than storage if a write failed.
+        state.market_cap_by_symbol[symbol] = _replace_rows_in_memory(
+            state.market_cap_by_symbol.get(symbol, []), fetch_from, args.to_date, rows)
         fetched += 1
     final_incomplete = [symbol for symbol in symbols if not market_cap_complete(
         state.market_cap_by_symbol.get(symbol, []), state.trading_dates,
         args.from_date, args.to_date)]
-    if fuse_on_incompleteness:
-        _check_fuse("mcap", final_incomplete, len(symbols))
-    else:
-        _check_fuse("mcap empty-response", failures, len(missing))
     final_complete = len(symbols) - len(final_incomplete)
     report["stages"]["mcap"] = {
         "preexisting_complete": len(symbols) - len(missing),
@@ -613,8 +623,13 @@ def _run_mcap(
         "rows_available": sum(bool(state.market_cap_by_symbol.get(symbol))
                               for symbol in symbols),
         "empty_responses": failures,
+        "invalid_responses": invalid_responses,
         "incomplete": final_incomplete,
         "failed": final_incomplete}
+    if fuse_on_incompleteness:
+        _check_fuse("mcap", final_incomplete, len(symbols))
+    else:
+        _check_fuse("mcap failed-response", failures + list(invalid_responses), len(missing))
 
 
 def _run_splits(
@@ -674,6 +689,8 @@ def _run_sanity(
                     "pre_row_count": outcome["pre_row_count"],
                     "post_row_count": outcome["post_row_count"],
                 }
+                if outcome.get("rejection_reason"):
+                    provenance["rejection_reason"] = outcome["rejection_reason"]
                 report.setdefault("forced_refresh_provenance", []).append(
                     provenance)
                 if outcome["skipped"]:

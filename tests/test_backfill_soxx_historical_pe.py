@@ -1,5 +1,6 @@
 """Backfill orchestration safety and idempotency contracts."""
 import logging
+import sqlite3
 from argparse import Namespace
 from pathlib import Path
 from unittest.mock import Mock
@@ -458,3 +459,56 @@ def test_soxx_incompleteness_fuse_keeps_the_universe_denominator(stage):
     report = {"stages": {}, "planned_network_calls": []}
     runner(args, state, universe, client, None, report)
     assert report["stages"][stage]["incomplete"] == broken
+
+
+@pytest.mark.parametrize("write", [False, True])
+def test_invalid_provider_cap_range_preserves_prior_and_continues_other_symbols(tmp_path, write):
+    symbols = ["HONA", "A", "B", "C", "D"]
+    prior = [{"symbol": "HONA", "date": "2026-01-15", "market_cap": 1000.0}]
+    state = BackfillState(trading_dates=["2026-01-20", "2026-01-23"],
+        market_cap_by_symbol={"HONA": list(prior)})
+    client = Mock()
+    client.get_historical_market_cap.side_effect = lambda symbol, **kwargs: [
+        {"symbol": symbol, "date": "2026-01-20", "market_cap": 0 if symbol == "HONA" else 2000}]
+    store = backfill.MarketStore(tmp_path / "market.db") if write else None
+    if store:
+        store.upsert_historical_market_cap("HONA", prior)
+    report = {"stages": {}, "planned_network_calls": []}
+    try:
+        backfill._run_mcap(Namespace(from_date="2026-01-20", to_date="2026-01-23"),
+            state, symbols, client, store, report, fuse_on_incompleteness=False)
+        assert state.market_cap_by_symbol["HONA"] == prior
+        assert set(report["stages"]["mcap"]["invalid_responses"]) == {"HONA"}
+        assert report["stages"]["mcap"]["fetched"] == 4
+        assert report["stages"]["mcap"]["empty_responses"] == []
+        if store:
+            rows = store.get_historical_market_cap_range("HONA", "2026-01-01", "2026-01-31")
+            assert [(r["date"], r["market_cap"]) for r in rows] == [("2026-01-15", 1000)]
+    finally:
+        if store:
+            store.close()
+
+
+def test_invalid_provider_caps_count_toward_attempted_request_fuse():
+    state = BackfillState(trading_dates=["2026-01-20"])
+    client = Mock()
+    client.get_historical_market_cap.side_effect = lambda symbol, **kwargs: [
+        {"symbol": symbol, "date": "2026-01-20", "market_cap": 0}]
+    report = {"stages": {}, "planned_network_calls": []}
+    with pytest.raises(RuntimeError, match="failure fuse"):
+        backfill._run_mcap(Namespace(from_date="2026-01-20", to_date="2026-01-23"),
+            state, ["A", "B"], client, None, report, fuse_on_incompleteness=False)
+    assert set(report["stages"]["mcap"]["invalid_responses"]) == {"A", "B"}
+    assert not state.market_cap_by_symbol
+
+
+def test_mcap_store_failure_is_not_misclassified_as_bad_vendor_data():
+    state = BackfillState(trading_dates=["2026-01-20"])
+    client, store = Mock(), Mock()
+    client.get_historical_market_cap.return_value = [
+        {"symbol": "A", "date": "2026-01-20", "market_cap": 1000}]
+    store.replace_historical_market_cap_range.side_effect = sqlite3.OperationalError("disk full")
+    with pytest.raises(sqlite3.OperationalError, match="disk full"):
+        backfill._run_mcap(Namespace(from_date="2026-01-20", to_date="2026-01-23"),
+            state, ["A"], client, store, {"stages": {}}, fuse_on_incompleteness=False)
+    assert not state.market_cap_by_symbol

@@ -405,6 +405,8 @@ def refresh_market_cap_windows(
     replaced; a skipped window hashes the preserved range on both sides so a
     no-op is provably a no-op.
     """
+    from src.data.market_store import MarketStore
+
     prior = list(existing_rows or [])
     results = []
     for window in windows:
@@ -425,6 +427,18 @@ def refresh_market_cap_windows(
                 "pre_row_hash": pre_hash, "post_row_hash": pre_hash,
                 "pre_row_count": len(replaced),
                 "post_row_count": len(replaced),
+            })
+            continue
+        try:
+            MarketStore.prepare_historical_market_cap_range(symbol, start, end, rows)
+        except ValueError as exc:
+            logger.warning("invalid market-cap refresh response for %s %s..%s; "
+                           "prior range preserved: %s", symbol, start, end, exc)
+            results.append({
+                "from_date": start, "to_date": end, "rows": len(rows),
+                "skipped": True, "row_data": [], "rejection_reason": str(exc),
+                "pre_row_hash": pre_hash, "post_row_hash": pre_hash,
+                "pre_row_count": len(replaced), "post_row_count": len(replaced),
             })
             continue
         if store is not None:

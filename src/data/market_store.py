@@ -15,6 +15,7 @@ Usage:
 import hashlib
 import json
 import logging
+import math
 import re
 import sqlite3
 import threading
@@ -2986,30 +2987,27 @@ class MarketStore:
         conn.commit()
         return len(data)
 
-    def replace_historical_market_cap_range(
-        self,
+    @classmethod
+    def prepare_historical_market_cap_range(
+        cls,
         symbol: str,
         from_date: str,
         to_date: str,
         rows: List[Dict[str, Any]],
-    ) -> int:
-        """Atomically replace an authoritative vendor range.
-
-        Unlike ordinary upsert, deleting the complete range first guarantees
-        that a stale bad date cannot survive merely because the refresh
-        response omitted that date. Validation happens before the transaction;
-        an empty or malformed response preserves the prior range.
-        """
+    ) -> tuple:
+        """Pure range validation shared by writers and network-enabled dry runs."""
         normalized_symbol = str(symbol).upper().strip()
-        start = self._require_iso_date(from_date, "from_date")
-        end = self._require_iso_date(to_date, "to_date")
+        start = cls._require_iso_date(from_date, "from_date")
+        end = cls._require_iso_date(to_date, "to_date")
         if not normalized_symbol or start > end or not rows:
             raise ValueError("non-empty authoritative market-cap range required")
         prepared = []
         seen_dates = set()
         for row in rows:
+            if not isinstance(row, dict):
+                raise ValueError("market-cap rows must be mappings")
             row_symbol = str(row.get("symbol", normalized_symbol)).upper()
-            row_date = self._require_iso_date(row.get("date"), "market-cap date")
+            row_date = cls._require_iso_date(row.get("date"), "market-cap date")
             if (row_symbol != normalized_symbol or not start <= row_date <= end
                     or row_date in seen_dates):
                 raise ValueError("market-cap row symbol/date outside range")
@@ -3018,10 +3016,22 @@ class MarketStore:
                 market_cap = float(row["market_cap"])
             except (KeyError, TypeError, ValueError) as exc:
                 raise ValueError("market_cap must be positive") from exc
-            if market_cap <= 0:
+            if not math.isfinite(market_cap) or market_cap <= 0:
                 raise ValueError("market_cap must be positive")
             prepared.append((normalized_symbol, row_date, market_cap))
+        return normalized_symbol, start, end, prepared
 
+    def replace_historical_market_cap_range(
+        self, symbol: str, from_date: str, to_date: str,
+        rows: List[Dict[str, Any]],
+    ) -> int:
+        """Atomically replace a validated authoritative vendor range.
+
+        Empty or malformed responses preserve the prior range. A successful
+        replacement removes old dates absent from the new authoritative range.
+        """
+        normalized_symbol, start, end, prepared = self.prepare_historical_market_cap_range(
+            symbol, from_date, to_date, rows)
         conn = self._get_conn()
         with conn:
             conn.execute(

@@ -331,6 +331,33 @@ def test_refresh_adapter_skips_empty_response_without_range_replace(caplog):
     ), "expected a warning naming the symbol and skipped window"
 
 
+@pytest.mark.parametrize("write", [False, True])
+@pytest.mark.parametrize("bad", [0, -1, float("inf"), float("nan")])
+def test_invalid_refresh_payload_preserves_range_and_explicit_skip_provenance(tmp_path, write, bad):
+    prior = [{"symbol": "HONA", "date": "2026-06-26", "market_cap": 0}]
+    client = Mock()
+    client.get_historical_market_cap.return_value = [
+        {"symbol": "HONA", "date": "2026-06-26", "market_cap": bad}]
+    store = MarketStore(tmp_path / "market.db") if write else None
+    if store:
+        store.upsert_historical_market_cap("HONA", prior)
+    try:
+        result = refresh_market_cap_windows("HONA", [{
+            "from_date": "2026-06-26", "to_date": "2026-06-29"}],
+            client, store, existing_rows=prior)[0]
+        assert result["skipped"] is True
+        assert result["rows"] == 1
+        assert result["rejection_reason"]
+        assert result["pre_row_hash"] == result["post_row_hash"]
+        assert result["row_data"] == []
+        if store:
+            assert store.get_historical_market_cap_range(
+                "HONA", "2026-06-26", "2026-06-29")[0]["market_cap"] == 0
+    finally:
+        if store:
+            store.close()
+
+
 # ---------------------------------------------------------------------------
 # Task 4 (R3 / issue048): forced-refresh provenance the source tables destroy
 # ---------------------------------------------------------------------------
