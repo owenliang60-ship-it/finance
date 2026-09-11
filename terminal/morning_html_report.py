@@ -12,6 +12,7 @@ EXTRA_CSS = (
     ".report-subtitle{color:#666;font-size:0.9em;margin:0 0 10px;}"
     ".alert{color:#c0392b;font-weight:600;margin:2px 0;}"
     ".valuation-chart{display:block;width:100%;height:auto;}"
+    ".premium-row td:first-child{color:#b91c1c;font-weight:700;}"
 )
 
 RENDERED_DIR = Path("reports/rendered")
@@ -20,7 +21,8 @@ RENDERED_DIR = Path("reports/rendered")
 def dicts_to_html_table(rows: List[Dict[str, str]], columns: List[str]) -> str:
     head = "".join("<th>{}</th>".format(html.escape(str(c))) for c in columns)
     body = "".join(
-        "<tr>" + "".join("<td>{}</td>".format(html.escape(str(r.get(c, "")))) for c in columns) + "</tr>"
+        ('<tr class="premium-row">' if r.get("_premium") else "<tr>")
+        + "".join("<td>{}</td>".format(html.escape(str(r.get(c, "")))) for c in columns) + "</tr>"
         for r in rows
     )
     return ('<div class="table-wrap"><table class="portfolio-table">'

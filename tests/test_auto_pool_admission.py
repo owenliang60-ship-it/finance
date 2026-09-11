@@ -275,7 +275,13 @@ class TestCollectDataAutoAdmit:
     """Integration test: collect_data() auto-admits non-pool tickers."""
 
     def test_auto_admits_in_collect_data(self):
-        """collect_data() calls ensure_in_pool + ensure_fundamentals_cached."""
+        """collect_data() calls ensure_tracked (watchlist) + ensure_fundamentals_cached.
+
+        T16: collect_data's auto-admit no longer writes universe.json — that
+        write path is now exclusively owned by the screener pool-refresh
+        cron (R2/R5/R13). Analysis-triggered tracking goes to the local
+        company.db `watchlist` table instead.
+        """
         with mock.patch("src.data.pool_manager.fmp_client") as mock_fmp, \
              mock.patch("src.data.fundamental_fetcher.fetch_profile", return_value=SAMPLE_PROFILE), \
              mock.patch("src.data.fundamental_fetcher.fetch_ratios", return_value=SAMPLE_RATIOS), \
@@ -294,10 +300,14 @@ class TestCollectDataAutoAdmit:
             from terminal.pipeline import collect_data
             pkg = collect_data("VRT", price_days=5)
 
-        # VRT should now be in pool
+        # VRT should now be tracked via the local watchlist (company.db),
+        # NOT written into universe.json (T16: write path cut, R2/R5/R13).
+        from terminal.company_store import get_store
+        assert "VRT" in get_store().get_watchlist()
+
         pool = load_universe()
         symbols = [s["symbol"] for s in pool]
-        assert "VRT" in symbols
+        assert "VRT" not in symbols
 
         # DataPackage should have data
         assert pkg.symbol == "VRT"

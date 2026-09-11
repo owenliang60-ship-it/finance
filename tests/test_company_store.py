@@ -71,6 +71,68 @@ class TestCompanies:
         assert len(rated) == 1
         assert rated[0]["symbol"] == "MSFT"
 
+    def test_list_in_pool_only_chunks_queries_for_large_pools(self, store, monkeypatch):
+        """Matrix #5 (company_store.py list_companies): IN (?,...) placeholders
+        chunked into batches of 500 so pool sizes beyond SQLITE_MAX_VARIABLE_NUMBER
+        (999) never bind more than 500 params in a single statement."""
+        store.upsert_company("AAPL")
+
+        pool_symbols = [f"SYM{i:04d}" for i in range(1100)]
+        pool_symbols[0] = "AAPL"  # lands in the 1st chunk (0-499)
+
+        real_conn = store._get_conn()
+        calls = []
+
+        class _ExecuteSpy:
+            def execute(self_, query, params=()):
+                if "FROM companies" in query and "symbol IN" in query:
+                    calls.append(params)
+                    assert len(params) <= 500, (
+                        f"single query bound {len(params)} params (>500 chunk size)"
+                    )
+                return real_conn.execute(query, params)
+
+            def __getattr__(self_, name):
+                return getattr(real_conn, name)
+
+        monkeypatch.setattr(store, "_get_conn", lambda: _ExecuteSpy())
+
+        with patch("src.data.pool_manager.get_symbols", return_value=pool_symbols):
+            pool = store.list_companies(in_pool_only=True)
+
+        assert len(calls) == 3  # ceil(1100 / 500)
+        assert [c["symbol"] for c in pool] == ["AAPL"]
+
+    def test_list_in_pool_only_1100_symbols_no_raise_and_equivalent(self, store):
+        """Matrix #5 test spec: 1,100-symbol input doesn't raise and result
+        is equivalent to what an unchunked query would return."""
+        store.upsert_company("AAPL")
+        store.upsert_company("ZLAST")
+        store.upsert_company("EXCLUDED")  # not in the requested pool
+
+        pool_symbols = [f"SYM{i:04d}" for i in range(1100)]
+        pool_symbols[0] = "AAPL"       # 1st chunk (0-499)
+        pool_symbols[1050] = "ZLAST"   # 3rd chunk (1000-1099)
+
+        with patch("src.data.pool_manager.get_symbols", return_value=pool_symbols):
+            pool = store.list_companies(in_pool_only=True)
+
+        assert [c["symbol"] for c in pool] == ["AAPL", "ZLAST"]  # sorted, no dupes
+
+    def test_list_in_pool_only_chunking_combines_with_has_oprms_only(self, store):
+        store.upsert_company("AAPL")
+        store.upsert_company("ZLAST")
+        store.save_oprms_rating("ZLAST", dna="S", timing="A", timing_coeff=0.9)
+
+        pool_symbols = [f"SYM{i:04d}" for i in range(1100)]
+        pool_symbols[0] = "AAPL"
+        pool_symbols[1050] = "ZLAST"
+
+        with patch("src.data.pool_manager.get_symbols", return_value=pool_symbols):
+            pool = store.list_companies(in_pool_only=True, has_oprms_only=True)
+
+        assert [c["symbol"] for c in pool] == ["ZLAST"]
+
 
 # ---------------------------------------------------------------------------
 # OPRMS Ratings
@@ -275,7 +337,10 @@ class TestDashboardAndStats:
         store.save_oprms_rating("MSFT", dna="A", timing="B", timing_coeff=0.5)
         store.save_analysis("AAPL", {"analysis_date": "2026-02-13"})
 
-        with patch("src.data.pool_manager.get_symbols", return_value=["AAPL", "MSFT"]):
+        with patch(
+            "src.data.universe_resolver.current_base_universe",
+            return_value=["AAPL", "MSFT"],
+        ):
             stats = store.get_stats()
         assert stats["total_companies"] == 3
         assert stats["in_pool"] == 2
@@ -285,11 +350,31 @@ class TestDashboardAndStats:
         assert stats["dna_distribution"]["A"] == 1
 
     def test_empty_stats(self, store):
-        with patch("src.data.pool_manager.get_symbols", return_value=[]):
+        with patch(
+            "src.data.universe_resolver.current_base_universe", return_value=[]
+        ):
             stats = store.get_stats()
         assert stats["total_companies"] == 0
         assert stats["in_pool"] == 0
         assert stats["rated"] == 0
+
+    def test_stats_falls_back_to_legacy_pool_when_resolver_raises(self, store, caplog):
+        """Matrix #3 (company_store.py get_stats): display context must never
+        crash — resolver failure (e.g. pre-bootstrap) falls back to
+        pool_manager.get_symbols() with a logged warning."""
+        import logging
+
+        def boom():
+            raise RuntimeError("extended_membership empty — run bootstrap first")
+
+        with patch("src.data.universe_resolver.current_base_universe", boom), \
+             patch("src.data.pool_manager.get_symbols", return_value=["AAPL", "MSFT", "GOOG"]):
+            with caplog.at_level(logging.WARNING, logger="terminal.company_store"):
+                stats = store.get_stats()
+        assert stats["in_pool"] == 3
+        assert any(
+            "current_base_universe unavailable" in rec.message for rec in caplog.records
+        )
 
 
 # ---------------------------------------------------------------------------

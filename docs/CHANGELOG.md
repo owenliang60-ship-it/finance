@@ -8,6 +8,7 @@
 
 | 里程碑 | 日期 | 增量 |
 |--------|------|------|
+| **Extended Primary Universe — Stop A implementation** | 2026-08-19 | Extended `$10B+` 成为唯一默认 base；security master + PIT membership/vintage + coverage/manifest；基本面共享采集内核；价格 FMP-overlay/yfinance-base 双腿；Core 软退役兼容层（待 Stop B–G 独立审批上线） |
 | Phase 1: Valuation → Finance 合并 + Desk 骨架 | 2026-02-06 | — |
 | Phase 2 P0: 4 desks (92 files, 9006 lines) | 2026-02-07 | +9,006 |
 | Terminal 编排层 (7 files, 1462 lines) | 2026-02-07 | +1,462 |

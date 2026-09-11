@@ -24,7 +24,7 @@
 
 周频顺序为 yfinance → FMP ingestion → 历史源/整窗刷新并认证 → PIT 共识估值 → 两个 verifier。history 可能修正 HMC/FX，须在 PIT 冻结前完成。NTM 未过双门则六篮子批次回滚；blend 辅助线可为 NULL/partial。PIT snapshot 只读既有 complete weekly 源，估值失败不要对已 complete 的 ingestion 执行 resume。
 
-晨报估值路径只读两张估值表和完成记录，不触网、不写估值表。`0c. 三指数估值` 位于 `0b` 后、PMARP 前；同一 PNG 自包含嵌入 HTML 或作为 PDF 页面。任一序列最后有效点超过 14 天标过期；缺失数据/绘图失败展示说明，不阻断其余晨报。HTML 已成功发送后，摘要失败不再触发重复 PDF 发送。
+晨报估值路径只读两张估值表和完成记录，不触网、不写估值表。`0d. 三指数估值` 位于 `0b` 后、PMARP 前；同一 PNG 自包含嵌入 HTML 或作为 PDF 页面。任一序列最后有效点超过 14 天标过期；缺失数据/绘图失败展示说明，不阻断其余晨报。HTML 已成功发送后，摘要失败不再触发重复 PDF 发送。
 
 ```bash
 python -m scripts.verify_index_pe_history --baskets SPY,QQQ,SOXX \

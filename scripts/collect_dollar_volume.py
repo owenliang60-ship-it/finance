@@ -13,17 +13,21 @@ import sys
 import time
 import argparse
 import logging
+import math
 from datetime import datetime, timedelta
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from config.settings import DOLLAR_VOLUME_TOP_N, DOLLAR_VOLUME_REPORT_N, DOLLAR_VOLUME_LOOKBACK
+from config.settings import DOLLAR_VOLUME_DB, DOLLAR_VOLUME_TOP_N, DOLLAR_VOLUME_REPORT_N, DOLLAR_VOLUME_LOOKBACK
 from src.data.fmp_client import FMPClient
 from src.data.dollar_volume import (
     init_db, store_daily_rankings, get_rankings, get_latest_date,
     detect_new_faces, log_collection, get_collection_log, is_collected,
+    collection_minimum, rankings_integrity_error, snapshot_integrity_error,
+    get_history_warning, get_previous_day_ranks,
+    latest_quality_reference, make_quality_evidence, leader_coverage_error, get_all_dates,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -92,6 +96,7 @@ def fetch_all_stocks(client: FMPClient, as_of_date: str = None) -> list:
         if not page:
             break
 
+        previous_count = len(all_stocks)
         for s in page:
             symbol = s.get("symbol")
             if symbol:
@@ -99,6 +104,8 @@ def fetch_all_stocks(client: FMPClient, as_of_date: str = None) -> list:
 
         if len(page) < 1000:
             break
+        if len(all_stocks) == previous_count or offset >= 19000:
+            raise ValueError("screener pagination did not terminate safely")
         offset += 1000
 
     # 补充一次高量小盘股（可能被前面分页遗漏）
@@ -135,14 +142,11 @@ def compute_rankings(stocks: list, top_n: int = DOLLAR_VOLUME_TOP_N) -> list:
     """计算 dollar volume 并排序取 Top N"""
     valid = []
     for s in stocks:
-        price = s.get("price") or s.get("lastAnnualDividend", 0)  # fallback
-        volume = s.get("volume", 0)
+        price = s.get("price")
+        volume = s.get("volume")
 
-        # 尝试从不同字段取 price
-        if not price:
-            price = s.get("priceAvg50") or s.get("priceAvg200") or 0
-
-        if price and volume and price > 0 and volume > 0:
+        if all(isinstance(v, (float, int)) and not isinstance(v, bool)
+               and math.isfinite(v) and v > 0 for v in (price, volume)):
             dv = price * volume
             valid.append({
                 "symbol": s.get("symbol", ""),
@@ -166,7 +170,8 @@ def compute_rankings(stocks: list, top_n: int = DOLLAR_VOLUME_TOP_N) -> list:
     return rankings
 
 
-def collect_daily(date: str = None, force: bool = False) -> dict:
+def collect_daily(date: str = None, force: bool = False,
+                  db_path: Path = DOLLAR_VOLUME_DB) -> dict:
     """
     执行一次每日采集
     返回采集结果摘要（供 daily_scan.py 使用）
@@ -174,16 +179,35 @@ def collect_daily(date: str = None, force: bool = False) -> dict:
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
 
-    init_db()
+    init_db(db_path=db_path)
+
+    def unavailable(reason):
+        logger.error("Dollar Volume unavailable date=%s: %s", date, reason)
+        # Keep good snapshots and their provenance on a failed --force. Record
+        # other failures so tomorrow cannot silently compare across the gap.
+        if not is_collected(date, db_path=db_path):
+            log_collection(date, {"status": "unavailable", "stored": 0}, db_path=db_path)
+        return {"date": date, "status": "unavailable", "rankings": [], "new_faces": [],
+                "warning": "数据不可用：" + reason}
+
+    def history_warning():
+        messages = [get_history_warning(date, db_path=db_path)]
+        if get_previous_day_ranks(date, db_path=db_path) is None:
+            messages.append("上一采集日数据不完整或缺失，暂停排名变化")
+        return "；".join(m for m in messages if m)
 
     # 检查是否已采集
-    if not force and is_collected(date):
+    if not force and is_collected(date, db_path=db_path):
+        error = snapshot_integrity_error(date, db_path)
+        if error:
+            return unavailable("缓存完整性检查未通过：" + error)
         logger.info(f"{date} already collected, skipping (use --force to override)")
         return {
             "date": date,
             "status": "skipped",
-            "rankings": get_rankings(date, DOLLAR_VOLUME_REPORT_N),
-            "new_faces": detect_new_faces(date, DOLLAR_VOLUME_LOOKBACK, DOLLAR_VOLUME_REPORT_N),
+            "rankings": get_rankings(date, DOLLAR_VOLUME_REPORT_N, db_path=db_path),
+            "new_faces": detect_new_faces(date, DOLLAR_VOLUME_LOOKBACK, DOLLAR_VOLUME_REPORT_N, db_path=db_path),
+            "history_warning": history_warning(),
         }
 
     start = time.time()
@@ -191,29 +215,48 @@ def collect_daily(date: str = None, force: bool = False) -> dict:
     # 拉取全市场
     client = FMPClient()
     logger.info(f"Fetching all US stocks for {date}...")
-    stocks, api_calls = fetch_all_stocks(client, as_of_date=date)
-    logger.info(f"Total unique stocks: {len(stocks)}")
-
-    # 计算排名
-    rankings = compute_rankings(stocks, DOLLAR_VOLUME_TOP_N)
-    logger.info(f"Top {len(rankings)} rankings computed")
-
-    # 存储
-    store_daily_rankings(date, rankings)
+    minimum = collection_minimum(date, db_path)
+    reference = latest_quality_reference(date, db_path=db_path)
+    if reference is None and any(d < date for d in get_all_dates(db_path)):
+        return unavailable("历史快照均不可作为可信参照，需核验后恢复")
+    api_calls = 0
+    for attempt in range(2):
+        try:
+            stocks, calls = fetch_all_stocks(client, as_of_date=date)
+            api_calls += calls
+            valid = compute_rankings(stocks, len(stocks))
+            rankings = valid[:DOLLAR_VOLUME_TOP_N]
+            error = rankings_integrity_error(rankings)
+            if len(stocks) < minimum:
+                error = f"候选数量 {len(stocks)} 低于完整性门槛 {minimum}"
+            valid_symbols = {r["symbol"] for r in valid}
+            error = error or leader_coverage_error(valid_symbols, reference)
+        except Exception:
+            # No provider URL, body or credentials in the public failure reason.
+            error = "采集请求或响应解析失败"
+        if not error:
+            break
+        logger.warning("DV integrity attempt=%d/2 date=%s: %s", attempt+1, date, error)
+        if attempt == 1:
+            return unavailable(error)
+        time.sleep(2)
+    logger.info("DV integrity passed: scanned=%d minimum=%d stored=%d", len(stocks), minimum, len(rankings))
 
     elapsed = time.time() - start
 
-    # 记录日志
-    log_collection(date, {
+    # Rankings, collection metadata and acceptance evidence commit together.
+    stats = {
         "total_scanned": len(stocks),
         "stored": len(rankings),
         "api_calls": api_calls,
         "elapsed": round(elapsed, 1),
         "status": "ok",
-    })
+    }
+    evidence = make_quality_evidence(rankings, len(stocks), valid_symbols, reference)
+    store_daily_rankings(date, rankings, db_path=db_path, stats=stats, evidence=evidence)
 
     # 检测新面孔
-    new_faces = detect_new_faces(date, DOLLAR_VOLUME_LOOKBACK, DOLLAR_VOLUME_REPORT_N)
+    new_faces = detect_new_faces(date, DOLLAR_VOLUME_LOOKBACK, DOLLAR_VOLUME_REPORT_N, db_path=db_path)
 
     result = {
         "date": date,
@@ -222,8 +265,9 @@ def collect_daily(date: str = None, force: bool = False) -> dict:
         "stored": len(rankings),
         "api_calls": api_calls,
         "elapsed": round(elapsed, 1),
-        "rankings": get_rankings(date, DOLLAR_VOLUME_REPORT_N),
+        "rankings": get_rankings(date, DOLLAR_VOLUME_REPORT_N, db_path=db_path),
         "new_faces": new_faces,
+        "history_warning": history_warning(),
     }
 
     logger.info(
@@ -281,6 +325,8 @@ def main():
     result = collect_daily(date=args.date, force=args.force)
     print(f"\nResult: {result['status']}, stored={result.get('stored', 0)}, "
           f"new_faces={len(result.get('new_faces', []))}")
+    if result["status"] == "unavailable":
+        sys.exit(1)
 
 
 if __name__ == "__main__":

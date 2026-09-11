@@ -10,6 +10,18 @@ from backtest.event_study.studies import RVOLStudyAdapter, RVOLStudyParams
 from backtest.event_study.universe import EventUniverseAudit
 
 
+def test_read_symbols_accepts_bare_list_and_dict(tmp_path):
+    from backtest.event_study.runner import _read_symbols
+
+    bare = tmp_path / "bare.json"
+    wrapped = tmp_path / "wrapped.json"
+    bare.write_text('["aapl", "MSFT", "AAPL"]', encoding="utf-8")
+    wrapped.write_text('{"symbols": ["nvda", "AAPL"]}', encoding="utf-8")
+
+    assert _read_symbols(bare) == ["AAPL", "MSFT"]
+    assert _read_symbols(wrapped) == ["AAPL", "NVDA"]
+
+
 def _frame(rows: list[tuple[str, float, float, float]]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["date", "open", "close", "volume"])
 

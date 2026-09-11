@@ -25,7 +25,7 @@
 | R3 | producer/verifier 聚合共享纯函数 + issue048 manifest 对齐 | Task 4 |
 | R4 | Task 0 数字修正（18 commits）、先合 main、冲突面预期仅 ARCHITECTURE.md | Task 0 |
 | R5 | hindsight tail 演化契约（quality_tier 单向升级、percentile 仅 actual_only） | §3.3、Task 2、Task 6 |
-| R6 | 晨报位置冻结为 `0c`（0b 之后）、split_marker 约束、typed image dispatch | Task 7 |
+| R6 | 晨报位置初始为 `0c`；2026-09-11 对齐主线时改为 `0d`（现有 0c 罗盘之后），split_marker 不变 | Task 7 |
 | R7 | 测试基线在 Task 0 合并后重新冻结，废弃 2026-07-19 旧基线 | Task 0、Task 9 |
 
 执行拆为三个审批停点：**停点 1** = Task 0–4（离线历史数据产品 + dry-run 验收）；**停点 2** = Task 5（打开 `fmp_basket_valuation` 生产写入路径）；**停点 3** = Task 6–9（图表 + 晨报 + 运维 + 部署审批）。每个停点须 Boss 批准后才进入下一段。
@@ -528,7 +528,7 @@ python -m terminal.index_valuation_chart \
 1. HTML payload 支持 typed `image` block；
 2. PNG 转 data URI，自包含 HTML 不引用本地绝对路径；
 3. image alt/caption HTML escape；
-4. （R6）图作为 `0c. 三指数估值` 插在 `0b. 成交集中度` 之后、`1. PMARP` 之前；既有 section 零重排，volconc frozen-fixture parity 测试零变化；`*D. Dollar Volume*` split_marker（`scripts/morning_report.py:104`）逐字不变；
+4. （R6）图作为 `0d. 三指数估值` 插在 `0b. 成交集中度` 之后、`1. PMARP` 之前；既有 section 零重排，volconc frozen-fixture parity 测试零变化；`*D. Dollar Volume*` split_marker（`scripts/morning_report.py:104`）逐字不变；
 5. HTML 成功仍只发送一个 document；
 6. HTML 失败时 valuation PNG 进入 PDF page list；
 7. 不额外调用 `send_photo`；

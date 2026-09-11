@@ -19,7 +19,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import MARKET_DB_PATH as MARKET_DB  # noqa: E402
 from src.data.pool_manager import get_symbols as get_pool_symbols  # noqa: E402
-from src.data.extended_universe_manager import get_extended_only_symbols  # noqa: E402
+from src.data.extended_universe_manager import get_extended_symbols  # noqa: E402
+from src.data.overlays import load_overlay_tier  # noqa: E402
 
 
 def _valid_iso_date(s: str) -> str:
@@ -78,17 +79,46 @@ def _bucket_report(name: str, expected: list, covered: set, min_pct: float) -> d
     }
 
 
+def get_expected_buckets() -> dict:
+    """Return disjoint base/overlay expectations for yfinance forward data.
+
+    After bootstrap, the resolver is the sole base denominator and explicit
+    overlays are reported separately.  Before bootstrap, preserve the old
+    ``Core ∪ Extended`` union as disjoint ``overlay=Core`` and
+    ``base=Extended-Core`` buckets.
+    """
+    from src.data.universe_resolver import (
+        current_base_universe,
+        is_prebootstrap_universe_error,
+    )
+    try:
+        base = {s.upper() for s in current_base_universe()}
+    except RuntimeError as exc:
+        if not is_prebootstrap_universe_error(exc):
+            raise
+        overlay = {s.upper() for s in get_pool_symbols()}
+        extended = {s.upper() for s in get_extended_symbols()}
+        base = extended - overlay
+    else:
+        overlay = {s.upper() for s in load_overlay_tier()}
+    return {
+        "overlay": sorted(overlay),
+        "base": sorted(base - overlay),
+    }
+
+
 def run(scope: str, min_core_pct: float, min_extended_pct: float,
         min_date) -> tuple:
     """Run verification. Returns (exit_code, report)."""
     covered = _covered_symbols(MARKET_DB, min_date)
+    expected = get_expected_buckets()
     report = {}
     if scope in ("core", "all"):
-        report["core"] = _bucket_report("core", get_pool_symbols(), covered, min_core_pct)
+        report["overlay"] = _bucket_report(
+            "overlay", expected["overlay"], covered, min_core_pct)
     if scope in ("extended", "all"):
-        report["extended"] = _bucket_report(
-            "extended", get_extended_only_symbols(), covered, min_extended_pct
-        )
+        report["base"] = _bucket_report(
+            "base", expected["base"], covered, min_extended_pct)
     rc = 0 if all(b["ok"] for b in report.values()) else 1
     return rc, report
 

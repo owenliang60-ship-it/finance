@@ -58,6 +58,8 @@ def mock_healthy_data(tmp_path, monkeypatch):
     for s in symbols:
         mconn.execute("INSERT INTO daily_price VALUES (?, ?, ?)", (s, today, 103.0))
         mconn.execute("INSERT INTO income_quarterly VALUES (?, ?, ?)", (s, today, 1000.0))
+        mconn.execute("INSERT INTO balance_sheet_quarterly VALUES (?, ?, ?)", (s, today, 5000.0))
+        mconn.execute("INSERT INTO cash_flow_quarterly VALUES (?, ?, ?)", (s, today, 200.0))
     # 插入 IV 数据 (60% 覆盖 → 超过 50% 阈值 → PASS)
     for s in symbols[:60]:
         mconn.execute("INSERT INTO iv_daily VALUES (?, ?, ?)", (s, today, 0.35))
@@ -72,6 +74,10 @@ def mock_healthy_data(tmp_path, monkeypatch):
     monkeypatch.setattr(health, "UNIVERSE_FILE", pool_dir / "universe.json")
     monkeypatch.setattr(health, "COMPANY_DB", db_path)
     monkeypatch.setattr(health, "MARKET_DB", market_db_path)
+    # _check_extended_coverage's denominator is current_base_universe(), not the pool
+    # symbols above — the same 100 symbols are fully covered across the 3 quarterly
+    # tables, so this check also PASSes in the "all-healthy" scenario.
+    monkeypatch.setattr(health, "current_base_universe", lambda: list(symbols))
 
     return tmp_path
 
@@ -111,6 +117,11 @@ def mock_unhealthy_data(tmp_path, monkeypatch):
     monkeypatch.setattr(health, "UNIVERSE_FILE", pool_dir / "universe.json")
     monkeypatch.setattr(health, "COMPANY_DB", tmp_path / "company.db")
     monkeypatch.setattr(health, "MARKET_DB", tmp_path / "market.db")
+
+    # Simulates a deployment before bootstrap has run — must WARN, not raise.
+    def _raise_bootstrap():
+        raise RuntimeError("extended_membership empty — run bootstrap first")
+    monkeypatch.setattr(health, "current_base_universe", _raise_bootstrap)
 
     return tmp_path
 
@@ -160,17 +171,46 @@ class TestCheckPoolIntegrity:
         result = _check_pool_integrity()
         assert result.status == "FAIL"
 
-    def test_small_pool(self, tmp_path, monkeypatch):
+    def test_below_pool_size_range_fails(self, tmp_path, monkeypatch):
+        """Below settings.POOL_SIZE_RANGE[0] (70) → FAIL, not the old 90-150 WARN band."""
         import src.data.data_health as health
         pool_dir = tmp_path / "pool"
         pool_dir.mkdir()
-        universe = [{"symbol": f"S{i}"} for i in range(80)]
+        universe = [{"symbol": f"S{i}"} for i in range(50)]
         (pool_dir / "universe.json").write_text(json.dumps(universe))
         monkeypatch.setattr(health, "UNIVERSE_FILE", pool_dir / "universe.json")
 
         from src.data.data_health import _check_pool_integrity
         result = _check_pool_integrity()
-        assert result.status == "WARN"
+        assert result.status == "FAIL"
+
+    def test_209_pool_passes(self, tmp_path, monkeypatch):
+        """R9/R14: today's real Core pool is 209 — must PASS under the widened
+        Boss-decided POOL_SIZE_RANGE=(70, 260), not FAIL the old >200 bound."""
+        import src.data.data_health as health
+        pool_dir = tmp_path / "pool"
+        pool_dir.mkdir()
+        universe = [{"symbol": f"S{i}"} for i in range(209)]
+        (pool_dir / "universe.json").write_text(json.dumps(universe))
+        monkeypatch.setattr(health, "UNIVERSE_FILE", pool_dir / "universe.json")
+
+        from src.data.data_health import _check_pool_integrity
+        result = _check_pool_integrity()
+        assert result.status == "PASS"
+        assert "209" in result.detail
+
+    def test_above_pool_size_range_fails(self, tmp_path, monkeypatch):
+        """Above settings.POOL_SIZE_RANGE[1] (260) still FAILs."""
+        import src.data.data_health as health
+        pool_dir = tmp_path / "pool"
+        pool_dir.mkdir()
+        universe = [{"symbol": f"S{i}"} for i in range(261)]
+        (pool_dir / "universe.json").write_text(json.dumps(universe))
+        monkeypatch.setattr(health, "UNIVERSE_FILE", pool_dir / "universe.json")
+
+        from src.data.data_health import _check_pool_integrity
+        result = _check_pool_integrity()
+        assert result.status == "FAIL"
 
 
 
@@ -482,3 +522,96 @@ class TestCheckMdbIvFreshness:
         result = _check_mdb_iv_freshness()
         assert result.status == "FAIL"
         assert "不存在" in result.detail
+
+
+# ============ Extended Primary Universe coverage 健康检查 (T14) ============
+
+
+class TestCheckExtendedCoverage:
+    """`_check_extended_coverage`: denominator is `current_base_universe()`
+    (active Extended membership ∩ SM eligible, R3-P1-1) — a different, larger
+    set than the Core `universe.json` pool. `settings.EXTENDED_COVERAGE_ENFORCE`
+    gates whether under-threshold coverage is WARN (backfill in progress, never
+    fails the build) or FAIL (Stop F, backfill declared complete)."""
+
+    @staticmethod
+    def _make_market_db(tmp_path, covered_symbols, today):
+        db_path = tmp_path / "market.db"
+        conn = sqlite3.connect(str(db_path))
+        for table in ("income_quarterly", "balance_sheet_quarterly", "cash_flow_quarterly"):
+            conn.execute(f"CREATE TABLE {table} (symbol TEXT, date TEXT, PRIMARY KEY(symbol, date))")
+        for s in covered_symbols:
+            for table in ("income_quarterly", "balance_sheet_quarterly", "cash_flow_quarterly"):
+                conn.execute(f"INSERT INTO {table} VALUES (?, ?)", (s, today))
+        conn.commit()
+        conn.close()
+        return db_path
+
+    def test_full_coverage_passes(self, tmp_path, monkeypatch):
+        import src.data.data_health as health
+        symbols = [f"SYM{i:04d}" for i in range(1000)]
+        today = datetime.now().strftime("%Y-%m-%d")
+        db_path = self._make_market_db(tmp_path, symbols, today)
+
+        monkeypatch.setattr(health, "MARKET_DB", db_path)
+        monkeypatch.setattr(health, "current_base_universe", lambda: list(symbols))
+
+        from src.data.data_health import _check_extended_coverage
+        result = _check_extended_coverage()
+        assert result.status == "PASS"
+        assert "1000/1000" in result.detail
+
+    def test_low_coverage_enforce_false_warns(self, tmp_path, monkeypatch):
+        """eligible=1000, covered=202 (~20%), enforce=False → WARN, never FAIL —
+        prevents a false gate before the production backfill completes."""
+        import src.data.data_health as health
+        symbols = [f"SYM{i:04d}" for i in range(1000)]
+        today = datetime.now().strftime("%Y-%m-%d")
+        db_path = self._make_market_db(tmp_path, symbols[:202], today)
+
+        monkeypatch.setattr(health, "MARKET_DB", db_path)
+        monkeypatch.setattr(health, "current_base_universe", lambda: list(symbols))
+        monkeypatch.setattr(health, "EXTENDED_COVERAGE_ENFORCE", False)
+
+        from src.data.data_health import _check_extended_coverage
+        result = _check_extended_coverage()
+        assert result.status == "WARN"
+        assert "202/1000" in result.detail
+
+    def test_low_coverage_enforce_true_fails(self, tmp_path, monkeypatch):
+        """Same 202/1000 coverage, but enforce=True (post Stop F) → FAIL."""
+        import src.data.data_health as health
+        symbols = [f"SYM{i:04d}" for i in range(1000)]
+        today = datetime.now().strftime("%Y-%m-%d")
+        db_path = self._make_market_db(tmp_path, symbols[:202], today)
+
+        monkeypatch.setattr(health, "MARKET_DB", db_path)
+        monkeypatch.setattr(health, "current_base_universe", lambda: list(symbols))
+        monkeypatch.setattr(health, "EXTENDED_COVERAGE_ENFORCE", True)
+
+        from src.data.data_health import _check_extended_coverage
+        result = _check_extended_coverage()
+        assert result.status == "FAIL"
+        assert "202/1000" in result.detail
+
+    def test_sm_empty_warns_with_bootstrap_hint(self, tmp_path, monkeypatch):
+        """SM/membership empty → current_base_universe() raises RuntimeError;
+        the check must convert that to WARN, never let it propagate — health
+        check has to run on a fresh deployment before bootstrap."""
+        import src.data.data_health as health
+
+        def _raise_bootstrap():
+            raise RuntimeError("security_master empty — run bootstrap first")
+        monkeypatch.setattr(health, "current_base_universe", _raise_bootstrap)
+
+        from src.data.data_health import _check_extended_coverage
+        result = _check_extended_coverage()
+        assert result.status == "WARN"
+        assert "bootstrap" in result.detail
+
+    def test_included_in_health_check_report(self, mock_healthy_data):
+        """Wired into the aggregate `health_check()` report, not just standalone."""
+        from src.data.data_health import health_check
+        report = health_check()
+        names = [c.name for c in report.checks]
+        assert "扩展覆盖率" in names

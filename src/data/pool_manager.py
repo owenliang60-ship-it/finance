@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # 文件路径
 UNIVERSE_FILE = POOL_DIR / "universe.json"
 HISTORY_FILE = POOL_DIR / "pool_history.json"
+LEGACY_CALLS_LOG_FILE = POOL_DIR / "legacy_calls.log"
 
 # Source 优先级 (高 = 赢)
 _SOURCE_PRIORITY = {"analysis": 4, "manual": 3, "screener": 1}
@@ -311,8 +312,26 @@ def cleanup_stale_data(active_symbols: List[str] = None) -> Dict[str, int]:
     return stats
 
 
+def _log_legacy_call() -> None:
+    """采样记录 get_symbols() 遗留 Core 池入口调用：caller 模块 + 日期。
+
+    R11 两阶段软退役 Stop G 阶段 1 的验收条件之一（另一条见
+    scripts/check_core_references.sh）。get_symbols() 在生产热路径上被调用，
+    任何埋点失败（目录只读/父目录不存在等）一律静默吞掉，绝不能影响调用方；
+    每次调用单次 open/append，不做批量缓冲。
+    """
+    try:
+        caller_module = sys._getframe(2).f_globals.get("__name__", "unknown")
+        LEGACY_CALLS_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(LEGACY_CALLS_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now().strftime('%Y-%m-%d')}\t{caller_module}\n")
+    except Exception:
+        pass
+
+
 def get_symbols() -> List[str]:
     """获取当前股票池的所有代码"""
+    _log_legacy_call()
     stocks = load_universe()
     return [s.get("symbol") for s in stocks if s.get("symbol")]
 

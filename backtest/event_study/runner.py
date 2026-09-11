@@ -356,5 +356,13 @@ def _read_symbols(path: Path) -> list[str]:
         return []
     with open(path, "r", encoding="utf-8") as handle:
         payload = json.load(handle)
-    symbols = payload.get("symbols", [])
+    if isinstance(payload, list):
+        symbols = payload
+    elif isinstance(payload, dict):
+        symbols = payload.get("symbols", [])
+    else:
+        raise ValueError(
+            "universe JSON must be a list or an object with a symbols field: %s"
+            % path
+        )
     return sorted({str(symbol).upper() for symbol in symbols if str(symbol).strip()})

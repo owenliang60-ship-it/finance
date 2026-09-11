@@ -3,12 +3,30 @@
 用法:
     python scripts/update_data.py --all          # 更新所有数据
     python scripts/update_data.py --pool         # 只更新股票池
-    python scripts/update_data.py --price        # 只更新量价数据
+    python scripts/update_data.py --price        # 只更新量价数据（FMP tier + yfinance batch）
     python scripts/update_data.py --fundamental  # 只更新基本面数据
     python scripts/update_data.py --price --symbols AAPL,NVDA  # 指定股票
     python scripts/update_data.py --check        # 仅运行健康检查
+    python scripts/update_data.py --fundamental --scope base    # 手动/维修，current_base_universe
+    python scripts/update_data.py --fundamental --scope events  # 财报窗口增量 (R6)
+
+行为变更 (T11, R6): `--fundamental` 不再直连 `update_all_fundamentals`（该函数
+仍保留，仅不再被本脚本调用），一律经 T8 共享采集内核
+(`src.data.fundamental_collector.collect_fundamentals_for_symbol`) 逐票写入。
+`--scope core`（默认）目标不变（`pool_manager.get_symbols()`），但内核路径会
+额外产出 `fundamental_vintage` 历史 + `coverage_status` 覆盖记录 —— 这是本次
+新增的副作用，此前的直连路径不写这两张表。`--scope base`/`events` 是 T11 新
+增的两个 scope：`base` 仅供手动/维修用（cron 不用它，P1-5），`events` 由
+`src.data.fundamental_events.detect_earnings_targets` 驱动，0 个目标是正常
+结果（exit 0），不是失败。
+
+行为变更 (矩阵 #6, Boss 拍板 P1): `--price` 的 FMP 腿只覆盖 overlay tier
+（holdings ∪ watchlist ∪ benchmarks，`price_fetcher.get_fmp_price_targets()`），
+基础池其余部分由同一步内新增的 yfinance batch 腿覆盖；`daily_price` 表 schema
+不变，两腿合计覆盖率 ≥ 迁移前。显式 `--symbols` 只跑 FMP 腿（调用方点名了目标）。
 """
 import argparse
+import logging
 import sys
 from pathlib import Path
 from datetime import datetime, timezone
@@ -19,25 +37,42 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.pool_manager import refresh_universe, get_symbols, print_universe_summary
 from src.data.price_fetcher import update_all_prices
+# NOTE: update_all_fundamentals stays importable (other callers may still use
+# it), but --fundamental no longer calls it (P1-3) — see run_fundamental_update.
 from src.data.fundamental_fetcher import update_all_fundamentals
+from src.data.fundamental_collector import (
+    DEFAULT_PROFILES_PATH,
+    collect_fundamentals_for_symbol,
+    rebuild_profiles_json,
+)
 from config.settings import ADANOS_REQUEST_DAYS, ADANOS_TRENDING_LIMIT
 
+FUNDAMENTAL_SCOPE_CHOICES = ("core", "extended", "all", "base", "events")
+logger = logging.getLogger(__name__)
 
-def _resolve_target_symbols(scope: str, symbols):
-    """Resolve target symbols for --forward-estimates based on scope.
+
+def _resolve_target_symbols(scope: str, symbols, *, store=None, as_of=None):
+    """Resolve target symbols for --forward-estimates / --fundamental based on scope.
 
     Args:
-        scope: "core" / "extended" / "all"
+        scope: "core" / "extended" / "all" / "base" / "events"
         symbols: explicit symbol list (overrides scope) or None/empty
+        store: MarketStore, only consulted by "base"/"events" (lazily opens
+            the default store via `get_store()` when omitted).
+        as_of: "YYYY-MM-DD", only consulted by "events" (defaults to today
+            UTC when omitted).
 
     Returns:
         List of symbols. scope='all' returns deduped + sorted union; 'core' /
         'extended' return the source list as-is (no dedup or normalization);
-        explicit ``symbols`` arg is returned as a shallow copy unchanged.
+        'base' returns `current_base_universe()` (active Extended membership
+        ∩ SM eligible — manual/repair use only, T11 P1-5: cron never passes
+        this scope); 'events' returns `detect_earnings_targets()`; explicit
+        ``symbols`` arg is returned as a shallow copy unchanged.
 
     Raises:
-        ValueError: scope not in {"core","extended","all"} when symbols is empty
-            (validation is bypassed when explicit symbols are supplied).
+        ValueError: scope not recognized when symbols is empty (validation is
+            bypassed when explicit symbols are supplied).
     """
     if symbols:
         return list(symbols)
@@ -53,9 +88,222 @@ def _resolve_target_symbols(scope: str, symbols):
     if scope == "all":
         from src.data.pool_manager import get_symbols
         from src.data.extended_universe_manager import get_extended_only_symbols
-        return sorted(set(get_symbols()) | set(get_extended_only_symbols()))
+        from src.data.overlays import load_overlay_tier
+        return sorted(
+            set(get_symbols())
+            | set(get_extended_only_symbols())
+            | set(load_overlay_tier())
+        )
 
-    raise ValueError(f"unknown scope={scope!r} (expected core/extended/all)")
+    if scope == "base":
+        from src.data.universe_resolver import current_base_universe
+        return current_base_universe(store=store)
+
+    if scope == "events":
+        from src.data.fundamental_events import detect_earnings_targets
+        if store is None:
+            from src.data.market_store import get_store
+            store = get_store()
+        effective_as_of = as_of or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return detect_earnings_targets(store, as_of=effective_as_of)
+
+    raise ValueError(
+        f"unknown scope={scope!r} (expected one of {FUNDAMENTAL_SCOPE_CHOICES})")
+
+
+def _should_run_price_yfinance_leg(args, symbols) -> bool:
+    """`--price` 这一步内部是否要补跑 yfinance 腿（矩阵 #6）。
+
+    不跑的两种情况：
+      - 显式 `--symbols`：调用方点名了目标，不替他扩面。
+      - `--all` / `--extended-prices` 同时在跑：Step 3d 会用同一批目标
+        (`get_yfinance_price_targets()`) 再跑一次，两处都跑等于把 ~950 只的
+        yfinance batch 白抓两遍。
+    """
+    if symbols:
+        return False
+    return not (args.all or args.extended_prices)
+
+
+def _yfinance_price_leg_targets(
+        fmp_targets, *, store=None, base_symbols=None,
+        legacy_core_symbols=None):
+    """基础池里 FMP tier 没覆盖到的部分，交给 yfinance batch（矩阵 #6, P1）。
+
+    Args:
+        fmp_targets: 本次 FMP 腿实际抓取的名单（`get_fmp_price_targets()` 或
+            显式 --symbols）。
+        store: MarketStore，省略时 resolver 自行打开默认 store。
+
+    Returns:
+        排序去重后的 yfinance 目标列表。基础池尚不可用（bootstrap 之前）时返回
+        `[]` —— 那个窗口里 FMP tier 本身还停在 legacy Core 名单上，当天覆盖率
+        与现状一致，不该再补一条无源可跑的腿。
+    """
+    from src.data.universe_resolver import current_base_universe
+
+    if base_symbols is None:
+        try:
+            base_symbols = current_base_universe(store=store)
+        except Exception as e:
+            from src.data.universe_resolver import is_prebootstrap_universe_error
+            if not is_prebootstrap_universe_error(e):
+                raise
+            logger.warning("yfinance price leg is pre-bootstrap: %s", e)
+            return []
+
+    if legacy_core_symbols is None:
+        legacy_core_symbols = []
+
+    covered = {s.upper() for s in fmp_targets}
+    required = (
+        {s.upper() for s in base_symbols}
+        | {s.upper() for s in legacy_core_symbols}
+    )
+    return sorted(required - covered)
+
+
+def _resolve_price_leg_targets(*, store=None, legacy_core_loader=None,
+                               legacy_extended_loader=None):
+    """Resolve both daily-price legs from one base snapshot.
+
+    Until matrix #22 migrates manual/analysis Core names to the watchlist,
+    the yfinance complement deliberately includes legacy Core.  A fail-loud
+    coverage assertion prevents the two individually-successful legs from
+    silently stranding those names.
+    """
+    from src.data.pool_manager import get_symbols as get_pool_symbols
+    from src.data.extended_universe_manager import get_extended_symbols
+    from src.data.universe_resolver import current_base_universe
+    from src.data.universe_resolver import is_prebootstrap_universe_error
+    from src.data.price_fetcher import get_fmp_price_targets
+
+    load_legacy = legacy_core_loader or get_pool_symbols
+    legacy_core = sorted({s.upper() for s in load_legacy()})
+    load_legacy_extended = legacy_extended_loader or get_extended_symbols
+
+    try:
+        base = current_base_universe(store=store)
+    except Exception as e:
+        if not is_prebootstrap_universe_error(e):
+            raise
+        legacy_extended = {s.upper() for s in load_legacy_extended()}
+        logger.warning(
+            "current_base_universe is pre-bootstrap; daily price legs preserve "
+            "legacy Core + Extended coverage: %s", e)
+        return legacy_core, sorted(legacy_extended - set(legacy_core))
+
+    fmp_targets = get_fmp_price_targets(store=store, base_symbols=base)
+    yf_targets = _yfinance_price_leg_targets(
+        fmp_targets,
+        store=store,
+        base_symbols=base,
+        legacy_core_symbols=legacy_core,
+    )
+    missing_legacy = set(legacy_core) - set(fmp_targets) - set(yf_targets)
+    if missing_legacy:
+        raise RuntimeError(
+            "daily price target split strands legacy Core symbols: %s"
+            % sorted(missing_legacy)
+        )
+    return sorted(set(fmp_targets)), sorted(set(yf_targets))
+
+
+def _resolve_correlation_symbols(*, wide: bool = False, market_store=None,
+                                 company_store=None):
+    """`--correlation` 的目标名单（矩阵 #9）。
+
+    默认 = overlay tier（holdings ∪ watchlist ∪ benchmarks，~50 只）。相关性矩阵
+    是 O(n²)，按全池跑出来的东西既慢也没人读。`--wide` 显式换成 resolver
+    eligible 全池。
+
+    默认路径不碰 `extended_membership`，bootstrap 之前照常可用；`--wide` 是显式
+    开关，基础池不可用时 fail-loud 冒泡 —— 悄悄缩回 overlay tier 会把一个坏掉的
+    universe 藏起来。
+    """
+    if wide:
+        from src.data.universe_resolver import current_base_universe
+        return current_base_universe(store=market_store)
+
+    from src.data.overlays import load_overlay_tier
+    return load_overlay_tier(store=company_store)
+
+
+def run_fundamental_update(*, scope: str, symbols=None, store=None, client=None,
+                           as_of=None, limit_quarters: int = 8,
+                           profiles_mirror_path=None) -> int:
+    """Drive `--fundamental` for one scope, entirely through the T8 kernel (P1-3).
+
+    Every dependency is injectable so tests never touch the network or the
+    real `market.db`; `main()` passes the production store/client.
+
+    Target resolution is `_resolve_target_symbols` (same helper
+    `--forward-estimates` uses), so "core"/"base"/"events" mean exactly what
+    they mean there:
+      - core:   `pool_manager.get_symbols()` — unchanged Core 209 targets.
+      - base:   `current_base_universe()` — manual/repair use only (P1-5:
+                cron never passes this scope).
+      - events: `detect_earnings_targets()` — 0 targets is a normal outcome
+                (nothing announced in the window), not a failure.
+
+    observed_at is always a FULL UTC timestamp computed here (CONTROLLER
+    RULING #11) — `as_of` (a pure date) is only ever used for the "events"
+    window filter, never as the kernel's observed_at.
+
+    Returns:
+        0 on a normal completion, including the "no targets" cases. Per
+        dataset failures are recorded by the kernel in `coverage_status`,
+        not surfaced as a non-zero exit here (R6: the manifest/coverage
+        tables are the source of truth for what failed, not the process
+        exit code).
+    """
+    if store is None:
+        from src.data.market_store import get_store
+        store = get_store()
+    if client is None:
+        from src.data.fmp_client import fmp_client
+        client = fmp_client
+
+    targets = _resolve_target_symbols(scope, symbols, store=store, as_of=as_of)
+
+    def refresh_mirror_once() -> None:
+        if profiles_mirror_path is None:
+            return
+        try:
+            rebuild_profiles_json(store, profiles_mirror_path)
+        except Exception as exc:
+            logger.warning("profiles.json mirror refresh failed: %s", exc)
+
+    if not targets:
+        if scope == "events":
+            print("update_data --fundamental --scope events: no earnings events")
+        else:
+            print(f"update_data --fundamental --scope {scope}: no target symbols")
+        refresh_mirror_once()
+        return 0
+
+    observed_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    print(f"Scope: {scope}, target {len(targets)} symbols")
+
+    ok = 0
+    partial = []
+    for i, sym in enumerate(targets, 1):
+        statuses = collect_fundamentals_for_symbol(
+            sym, client=client, store=store, limit_quarters=limit_quarters,
+            observed_at=observed_at)
+        if all(v in ("ok", "provider_empty") for v in statuses.values()):
+            ok += 1
+            print(f"  [{i}/{len(targets)}] {chr(10003)} {sym}: {statuses}")
+        else:
+            partial.append(sym)
+            print(f"  [{i}/{len(targets)}] {chr(10007)} {sym}: {statuses}")
+
+    print(f"\n{chr(9989)} 完整: {ok}/{len(targets)}")
+    if partial:
+        print(f"{chr(10060)} 部分失败 (见 coverage_status): {partial}")
+
+    refresh_mirror_once()
+    return 0
 
 
 def main():
@@ -67,6 +315,9 @@ def main():
     parser.add_argument("--symbols", type=str, help="指定股票代码，逗号分隔")
     parser.add_argument("--force", action="store_true", help="强制全量更新")
     parser.add_argument("--correlation", action="store_true", help="计算相关性矩阵")
+    parser.add_argument("--wide", action="store_true",
+                        help="--correlation: 按 resolver eligible 全池计算，"
+                             "而非默认的 overlay tier（O(n²)，慎用）")
     parser.add_argument("--forward-estimates", action="store_true",
                         help="更新前瞻预期数据 (yfinance)")
     parser.add_argument("--social-sentiment", action="store_true",
@@ -75,10 +326,13 @@ def main():
                         help="更新扩展池价格数据 (yfinance, $10B+ stocks)")
     parser.add_argument(
         "--scope",
-        choices=["core", "extended", "all"],
+        choices=list(FUNDAMENTAL_SCOPE_CHOICES),
         default="core",
-        help="Symbol scope for --forward-estimates: core=pool 156 (default), "
-             "extended=$10B+ ex-pool ~819, all=union ~949 (post-A1)",
+        help="Symbol scope for --forward-estimates / --fundamental: "
+             "core=pool (default; --fundamental's legacy target set), "
+             "extended=$10B+ ex-pool, all=union, "
+             "base=current_base_universe (manual/repair only, --fundamental), "
+             "events=earnings-window targets (--fundamental)",
     )
     parser.add_argument("--check", action="store_true", help="仅运行数据健康检查")
 
@@ -121,36 +375,63 @@ def main():
         print_universe_summary()
         print()
 
-    # 更新量价数据
+    price_yf_targets = None
+
+    # 更新量价数据（矩阵 #6 P1: FMP 只跑 overlay tier，其余走 yfinance batch）
     if args.all or args.price:
         print("=" * 40)
-        print("Step 2: 更新量价数据 (含基准: SPY, QQQ)")
+        print("Step 2: 更新量价数据 (FMP overlay tier + yfinance batch)")
         print("=" * 40)
-        target_symbols = symbols or get_symbols()
+        if symbols:
+            target_symbols = symbols
+        else:
+            target_symbols, price_yf_targets = _resolve_price_leg_targets()
+        print(f"FMP tier: {len(target_symbols)} symbols")
         result = update_all_prices(target_symbols, force_full=args.force)
-        print(f"\n✅ 成功: {len(result['success'])}")
+        print(f"\n✅ FMP 成功: {len(result['success'])}")
         if result['failed']:
-            print(f"❌ 失败: {result['failed']}")
+            print(f"❌ FMP 失败: {result['failed']}")
+
+        if _should_run_price_yfinance_leg(args, symbols):
+            yf_targets = price_yf_targets
+            if yf_targets:
+                from src.data.extended_price_fetcher import update_extended_prices
+                print(f"\nyfinance batch: {len(yf_targets)} symbols")
+                yf_result = update_extended_prices(
+                    full_backfill=args.force, symbols=yf_targets)
+                print("✅ yfinance 成功: %d/%d, %d rows upserted"
+                      % (yf_result["success"], yf_result["total"],
+                         yf_result["rows_inserted"]))
+                if yf_result["failed"]:
+                    print("❌ yfinance 失败: %s" % (yf_result["failed"][:20],))
         print()
 
-    # 更新基本面数据
+    # 更新基本面数据（全走内核 T8：额外产出 vintage + coverage — 行为新增, R6）
     if args.all or args.fundamental:
         print("=" * 40)
-        print("Step 3: 更新基本面数据")
+        print("Step 3: 更新基本面数据（内核逐票采集）")
         print("=" * 40)
-        target_symbols = symbols or get_symbols()
-        update_all_fundamentals(target_symbols)
+        from src.data.market_store import get_store
+
+        fundamental_store = get_store()
+        as_of_today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        target_symbols = _resolve_target_symbols(
+            args.scope, symbols, store=fundamental_store, as_of=as_of_today)
+        run_fundamental_update(scope=args.scope, symbols=target_symbols,
+                               store=fundamental_store,
+                               profiles_mirror_path=DEFAULT_PROFILES_PATH)
 
         # Pre-compute metrics in market.db
-        try:
-            from src.data.metrics_calculator import compute_all_metrics
-            print("\n--- 预计算 metrics ---")
-            result = compute_all_metrics(target_symbols)
-            print(f"Metrics computed for {len(result)} symbols")
-        except Exception as e:
-            import traceback
-            print(f"ERROR: metrics computation failed: {e}")
-            traceback.print_exc()
+        if target_symbols:
+            try:
+                from src.data.metrics_calculator import compute_all_metrics
+                print("\n--- 预计算 metrics ---")
+                result = compute_all_metrics(target_symbols)
+                print(f"Metrics computed for {len(result)} symbols")
+            except Exception as e:
+                import traceback
+                print(f"ERROR: metrics computation failed: {e}")
+                traceback.print_exc()
         print()
 
     # 更新前瞻预期数据
@@ -274,7 +555,11 @@ def main():
         print("Step 3d: 更新扩展池价格 (yfinance, $10B+ stocks)")
         print("=" * 40)
         from src.data.extended_price_fetcher import update_extended_prices
-        result = update_extended_prices(full_backfill=args.force, symbols=symbols)
+        extended_targets = symbols
+        if symbols is None and price_yf_targets is not None:
+            extended_targets = price_yf_targets
+        result = update_extended_prices(
+            full_backfill=args.force, symbols=extended_targets)
         print(
             "\n%s 成功: %d/%d, %d rows upserted"
             % (chr(9989), result["success"], result["total"], result["rows_inserted"])
@@ -289,7 +574,9 @@ def main():
         print("Step 4: 计算相关性矩阵")
         print("=" * 40)
         from src.analysis.correlation import get_correlation_matrix
-        corr_symbols = symbols or get_symbols()
+        corr_symbols = symbols or _resolve_correlation_symbols(wide=args.wide)
+        print(f"Scope: {'eligible (--wide)' if args.wide else 'overlay tier'}, "
+              f"{len(corr_symbols)} symbols")
         matrix = get_correlation_matrix(corr_symbols, use_cache=False)
         print(f"\n✅ 相关性矩阵: {len(matrix)} 只股票")
         print()

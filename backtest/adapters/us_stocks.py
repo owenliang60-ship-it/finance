@@ -2,7 +2,10 @@
 美股数据适配器 — 加载 market.db 量价数据 + 复用 RS 计算
 """
 
+import json
 import logging
+import warnings
+from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -25,6 +28,40 @@ def _get_bulk_mcaps(date: str) -> Dict[str, float]:
     return _get_market_store().get_bulk_market_caps_at(date)
 
 
+def _read_symbol_payload(path: Path) -> List[str]:
+    with open(path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if isinstance(payload, dict):
+        payload = payload.get("symbols", [])
+    if not isinstance(payload, list):
+        raise ValueError("universe JSON must be a list or symbols object: %s" % path)
+    symbols = set()
+    for item in payload:
+        value = item.get("symbol") if isinstance(item, dict) else item
+        if value is not None and str(value).strip():
+            symbols.add(str(value).upper())
+    return sorted(symbols)
+
+
+def _load_frozen_core_symbols() -> List[str]:
+    pool_root = resolve_shared_data_root() / "data" / "pool"
+    current = pool_root / "universe.json"
+    archived = pool_root / "archive" / "universe.json"
+    if current.exists():
+        return _read_symbol_payload(current)
+    if archived.exists():
+        warnings.warn(
+            "using frozen Core pool as of retirement date; new research should "
+            "use eligible_extended",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _read_symbol_payload(archived)
+    raise ValueError(
+        "Core pool file unavailable; use universe='eligible_extended'"
+    )
+
+
 class USStocksAdapter:
     """
     美股数据适配器
@@ -40,6 +77,7 @@ class USStocksAdapter:
         symbols: Optional[List[str]] = None,
         universe: Optional[str] = None,
         mcap_threshold: Optional[float] = None,
+        strict_mcap: bool = True,
     ):
         """
         Args:
@@ -48,13 +86,16 @@ class USStocksAdapter:
                 "pool" (池内 ~147),
                 "extended" (~533 active),
                 "extended_true" (active + delisted overlay),
+                "eligible_extended" (current resolver base),
                 None (all in db)
             mcap_threshold: 历史市值阈值 (e.g. 10e9)。每次 slice_to_date 时过滤低于阈值的股票
+            strict_mcap: 覆盖率 <90% 时是否 fail-closed；False 时告警并剔除缺数票
         """
         self._price_cache: Dict[str, pd.DataFrame] = {}
         self._symbols = symbols
         self._universe = universe
         self._mcap_threshold = mcap_threshold
+        self._strict_mcap = strict_mcap
 
     def load_all(self) -> Dict[str, pd.DataFrame]:
         """
@@ -202,11 +243,14 @@ class USStocksAdapter:
             coverage = has_data / len(sliced) if sliced else 0
             if coverage < 0.9:
                 missing = [sym for sym in sliced if sym not in mcaps]
-                raise ValueError(
+                message = (
                     f"{date}: reconstitution 覆盖率 {coverage:.1%} < 90% "
                     f"({has_data}/{len(sliced)}). "
                     f"缺失 mcap 数据的 symbols: {missing[:20]}..."
                 )
+                if self._strict_mcap:
+                    raise ValueError(message)
+                logger.warning(message)
 
             before = len(sliced)
             missing_count = sum(1 for sym in sliced if sym not in mcaps)
@@ -278,8 +322,7 @@ class USStocksAdapter:
         """从 market.db 发现有价格数据的股票，按 universe 参数过滤"""
         try:
             if self._universe == "pool":
-                from src.data.pool_manager import get_symbols as get_pool_symbols
-                return get_pool_symbols()
+                return _load_frozen_core_symbols()
             elif self._universe == "extended":
                 from src.data.extended_universe_manager import get_extended_symbols
                 return get_extended_symbols()
@@ -287,13 +330,21 @@ class USStocksAdapter:
                 from src.data.delisted_universe_manager import get_extended_true_symbols
 
                 return get_extended_true_symbols()
+            elif self._universe == "eligible_extended":
+                from src.data.universe_resolver import current_base_universe
+
+                return current_base_universe()
             else:
                 # Default: all symbols in market.db
                 store = _get_market_store()
                 symbols = store.get_symbols("daily_price")
                 symbols = [s for s in symbols if s not in ("SPY", "QQQ", "^VIX")]
                 return symbols
+        except ValueError:
+            raise
         except Exception as e:
+            if self._universe == "eligible_extended":
+                raise
             logger.warning("market.db 发现股票失败: %s", e)
             return []
 

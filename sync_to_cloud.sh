@@ -56,8 +56,12 @@ release_lock() {
 # even when `set -e` aborts pull_from_cloud before its own rm).
 _CC_TMP=""
 cleanup() {
-    release_lock
-    [ -n "$_CC_TMP" ] && rm -rf "$_CC_TMP"
+    local rc=$?
+    release_lock || true
+    if [ -n "$_CC_TMP" ]; then
+        rm -rf "$_CC_TMP" || true
+    fi
+    return "$rc"
 }
 
 trap cleanup EXIT
@@ -209,10 +213,43 @@ conn.close()
 print('company.db WAL checkpoint OK')
 "
 
-    # 3. rsync company.db 本地→云端 (+ 文件大小安全检查)
-    info "推送 company.db..."
+    # 3. company.db 本地→云端：上传 temp + checksum/integrity + 原子替换。
+    #    禁止直接 rsync live SQLite 主文件：远端连接/WAL 可能把旧页重新 checkpoint
+    #    回刚覆盖的 inode，出现“传输 exit 0 但内容仍是旧库”。
+    info "推送 company.db (validated atomic replace)..."
     check_file_size "$LOCAL_DIR/data/company.db" "$REMOTE_DIR/data/company.db" "company.db" "push"
-    rsync -avz "$LOCAL_DIR/data/company.db" "$REMOTE/data/company.db"
+    local remote_tmp="/tmp/finance-companydb-sync-$$.db"
+    local expected_sha
+    expected_sha=$(shasum -a 256 "$LOCAL_DIR/data/company.db" | awk '{print $1}')
+    rsync -avz "$LOCAL_DIR/data/company.db" "$REMOTE_HOST:$remote_tmp"
+    ssh "$REMOTE_HOST" "python3 - '$remote_tmp' '$expected_sha' <<'PY'
+import hashlib, sqlite3, sys
+path, expected = sys.argv[1:]
+actual = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+assert actual == expected, (actual, expected)
+conn = sqlite3.connect('file:' + path + '?mode=ro', uri=True)
+assert conn.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
+conn.close()
+print('company.db temp validated', actual)
+PY"
+    ssh "$REMOTE_HOST" "set -e
+if command -v lsof >/dev/null 2>&1 && lsof '$REMOTE_DIR/data/company.db' >/dev/null 2>&1; then
+  echo 'company.db is open on remote; refusing atomic replace' >&2
+  exit 75
+fi
+cp '$REMOTE_DIR/data/company.db' /tmp/company.db.pre-sync
+mv '$remote_tmp' '$REMOTE_DIR/data/company.db'
+rm -f '$REMOTE_DIR/data/company.db-wal' '$REMOTE_DIR/data/company.db-shm'"
+    ssh "$REMOTE_HOST" "python3 - '$REMOTE_DIR/data/company.db' '$expected_sha' <<'PY'
+import hashlib, sqlite3, sys
+path, expected = sys.argv[1:]
+actual = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+assert actual == expected, (actual, expected)
+conn = sqlite3.connect('file:' + path + '?mode=ro', uri=True)
+assert conn.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
+conn.close()
+print('company.db atomic replace verified', actual)
+PY"
 
     # 4. universe.json merge: 本地→云端
     info "合并 universe.json (本地→云端)..."
@@ -237,14 +274,14 @@ print(f'本地 merge 完成: 新增 {added} 个 symbol')
     # 5. 云端验证
     info "云端验证..."
     ssh "$REMOTE_HOST" "cd $REMOTE_DIR && python3 -c \"
-from src.data.pool_manager import get_symbols
 import sqlite3
-symbols = get_symbols()
 conn = sqlite3.connect('data/market.db')
+row = conn.execute('SELECT COUNT(DISTINCT symbol) FROM extended_membership WHERE effective_to IS NULL').fetchone()
+pool_count = row[0] if row else 0
 row = conn.execute('SELECT MAX(date) FROM daily_price').fetchone()
 conn.close()
 latest = row[0] if row else 'N/A'
-print(f'股票池: {len(symbols)} 只')
+print(f'股票池: {pool_count} 只')
 print(f'market.db 最新日期: {latest}')
 print('验证通过')
 \""
@@ -261,16 +298,16 @@ show_status() {
     info "--- 本地 ---"
     cd "$LOCAL_DIR"
     "$PYTHON" -c "
-from src.data.pool_manager import get_symbols
 import sqlite3, os
-symbols = get_symbols()
 conn = sqlite3.connect('data/market.db')
+row = conn.execute('SELECT COUNT(DISTINCT symbol) FROM extended_membership WHERE effective_to IS NULL').fetchone()
+pool_count = row[0] if row else 0
 row = conn.execute('SELECT MAX(date) FROM daily_price').fetchone()
 conn.close()
 latest = row[0] if row else 'N/A'
 cdb_size = os.path.getsize('data/company.db') / 1024 / 1024
 mdb_size = os.path.getsize('data/market.db') / 1024 / 1024
-print(f'  股票池: {len(symbols)} 只')
+print(f'  股票池: {pool_count} 只')
 print(f'  market.db: {mdb_size:.1f}MB, 最新日期: {latest}')
 print(f'  company.db: {cdb_size:.1f}MB')
 "
@@ -279,16 +316,16 @@ print(f'  company.db: {cdb_size:.1f}MB')
     echo ""
     info "--- 云端 ---"
     ssh "$REMOTE_HOST" "cd $REMOTE_DIR && python3 -c \"
-from src.data.pool_manager import get_symbols
 import sqlite3, os
-symbols = get_symbols()
 conn = sqlite3.connect('data/market.db')
+row = conn.execute('SELECT COUNT(DISTINCT symbol) FROM extended_membership WHERE effective_to IS NULL').fetchone()
+pool_count = row[0] if row else 0
 row = conn.execute('SELECT MAX(date) FROM daily_price').fetchone()
 conn.close()
 latest = row[0] if row else 'N/A'
 cdb_size = os.path.getsize('data/company.db') / 1024 / 1024
 mdb_size = os.path.getsize('data/market.db') / 1024 / 1024
-print(f'  股票池: {len(symbols)} 只')
+print(f'  股票池: {pool_count} 只')
 print(f'  market.db: {mdb_size:.1f}MB, 最新日期: {latest}')
 print(f'  company.db: {cdb_size:.1f}MB')
 \""

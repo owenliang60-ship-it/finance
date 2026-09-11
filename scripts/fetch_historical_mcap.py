@@ -67,7 +67,14 @@ def _resolve_symbols(args: argparse.Namespace) -> List[str]:
             )
         logger.info("Loaded %d symbols from broad_universe.json", len(symbols))
         return symbols
-    return get_extended_symbols()
+    if args.universe == "extended":
+        return get_extended_symbols()
+    # matrix #10: no fallthrough — the old implicit `extended` default turned a
+    # forgotten flag into a silent ~949-symbol FMP backfill.
+    raise ValueError(
+        f"--universe is required and must be one of pool/extended/broad_seed/broad "
+        f"(got {args.universe!r})"
+    )
 
 
 def _resolve_incremental_new_symbols(args: argparse.Namespace) -> List[str]:
@@ -149,8 +156,9 @@ def main() -> None:
     parser.add_argument(
         "--universe",
         choices=["pool", "extended", "broad_seed", "broad"],
-        default="extended",
-        help="Universe selector",
+        default=None,
+        help="Universe selector — required unless --symbols is given (matrix #10: "
+             "no implicit default)",
     )
     parser.add_argument("--years", type=int, default=5, help="Lookback years")
     parser.add_argument("--skip-existing", action="store_true")
@@ -166,6 +174,12 @@ def main() -> None:
         help="Backfill full history only for symbols absent from historical_market_cap",
     )
     args = parser.parse_args()
+
+    if not args.symbols and not args.universe:
+        parser.error(
+            "--universe is required (no implicit default) — pass one of "
+            "pool/extended/broad_seed/broad, or --symbols for explicit targets"
+        )
 
     if args.incremental and args.incremental_new_symbols:
         raise SystemExit("--incremental and --incremental-new-symbols are mutually exclusive")

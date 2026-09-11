@@ -63,10 +63,9 @@ def main() -> None:
         logger.info("Extended universe refreshed: %d symbols", len(symbols))
 
     from src.data.broad_universe_manager import get_broad_symbols, get_new_symbols_vs_price
-    from src.data.extended_price_fetcher import update_extended_prices
-    from src.data.extended_universe_manager import (
-        get_extended_only_symbols,
-        get_extended_symbols,
+    from src.data.extended_price_fetcher import (
+        get_yfinance_price_targets,
+        update_extended_prices,
     )
     from src.data.pool_manager import get_symbols as get_pool_symbols
 
@@ -93,23 +92,22 @@ def main() -> None:
                 start_date=start_date,
             )
     else:
-        ext_symbols = get_extended_symbols()
-        ext_only = get_extended_only_symbols()
-        if not ext_symbols:
-            logger.error("No extended universe found. Run with --refresh-universe first.")
+        # matrix #7: targets = current base universe − FMP tier (falls back to
+        # the legacy extended−core list while membership is still unbootstrapped)
+        yf_targets = get_yfinance_price_targets()
+        if not yf_targets:
+            logger.error(
+                "No yfinance price targets. Bootstrap extended_membership, or run "
+                "with --refresh-universe to rebuild the legacy extended cache."
+            )
             sys.exit(1)
-        logger.info(
-            "Extended universe: %d total, %d pool, %d extended-only",
-            len(ext_symbols),
-            len(ext_symbols) - len(ext_only),
-            len(ext_only),
-        )
+        logger.info("yfinance price targets: %d symbols", len(yf_targets))
         start_date = None
         if args.incremental:
             start_date = (date.today() - timedelta(days=args.incremental_days)).isoformat()
         result = update_extended_prices(
             full_backfill=args.full_backfill,
-            symbols=None,
+            symbols=yf_targets,
             start_date=start_date,
         )
 

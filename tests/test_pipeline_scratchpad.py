@@ -123,7 +123,10 @@ def test_collect_data_logs_errors(tmp_path, monkeypatch):
     error_events = [e for e in events if e["type"] == "reasoning" and e["step"] == "error"]
 
     assert len(error_events) > 0
-    assert "API failure" in error_events[0]["content"]
+    # Auto-track may log an unavailable optional provider before the Data Desk
+    # failure when the checkout intentionally has no API keys. Ordering is not
+    # the contract; preserving the requested failure in the scratchpad is.
+    assert any("API failure" in event["content"] for event in error_events)
 
 
 def test_backward_compatibility_collect_data(mock_data_sources):

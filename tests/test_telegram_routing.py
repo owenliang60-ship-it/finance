@@ -17,6 +17,7 @@ import scripts.broad_market_scan as broad_market_scan
 import scripts.morning_report as morning_report
 import scripts.portfolio_intelligence as portfolio_intelligence
 import scripts.rs_universe_scan as rs_universe_scan
+from portfolio.holdings.schema import Position
 
 
 class _FakeCursor:
@@ -305,7 +306,12 @@ class TestPortfolioRouting:
         mock_manager.load_holdings.return_value = []
         mock_manager_cls.return_value = mock_manager
 
-        result = portfolio_intelligence.run_intelligence(dry_run=False)
+        book = SimpleNamespace(
+            holdings=[], cash_usd=0.0, total_capital_usd=None,
+            markets=lambda: {}, sheet_prices=lambda: {},
+        )
+        with patch("scripts.portfolio_intelligence.load_sheet_book", return_value=book):
+            result = portfolio_intelligence.run_intelligence(dry_run=False)
 
         assert result == "📊 Portfolio Intelligence: 无持仓"
         mock_deliver.assert_called_once_with("📊 Portfolio Intelligence: 无持仓", dry_run=False)
@@ -327,18 +333,16 @@ class TestPortfolioRouting:
         mock_store._get_conn.return_value.execute.return_value.fetchone.return_value = (None,)
         mock_get_store.return_value = mock_store
 
-        position = SimpleNamespace(
-            symbol="AAPL",
-            cost_basis=100.0,
-            dna_rating="A",
-            current_weight=0.5,
-            sector="Technology",
-            unrealized_pnl=25.0,
+        position = Position(
+            symbol="AAPL", cost_basis=100.0, shares=1.0,
+            dna_rating="A", current_weight=0.5, sector="Technology",
         )
 
         mock_manager = MagicMock()
         mock_manager.load_holdings.return_value = [position]
+        mock_manager.enrich_holding_row.return_value = position
         mock_manager.get_total_nav.return_value = 1000.0
+        mock_manager.get_option_market_value.return_value = 0.0
         mock_manager.refresh_prices.return_value = [position]
         mock_manager_cls.return_value = mock_manager
         mock_fetch_stock.return_value = SimpleNamespace(
@@ -351,7 +355,20 @@ class TestPortfolioRouting:
             credits_remaining=None,
         )
 
-        result = portfolio_intelligence.run_intelligence(dry_run=False, allow_local=True)
+        holding = SimpleNamespace(
+            symbol="AAPL", cost_per_share=100.0, shares=1.0,
+            category="Technology", market="US", sheet_price=125.0,
+            is_leaps=False,
+        )
+        book = SimpleNamespace(
+            holdings=[holding], cash_usd=100.0, total_capital_usd=1000.0,
+            markets=lambda: {"AAPL": "US"},
+            sheet_prices=lambda: {"AAPL": 125.0},
+            fetched_at=pd.Timestamp("2026-08-21T12:00:00Z").to_pydatetime(),
+        )
+        with patch("scripts.portfolio_intelligence.load_sheet_book", return_value=book):
+            result = portfolio_intelligence.run_intelligence(
+                dry_run=False, allow_local=True)
 
         assert "组合概览" in result
         assert "NAV 快照 ET" in result

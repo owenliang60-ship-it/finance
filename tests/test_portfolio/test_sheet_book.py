@@ -188,6 +188,11 @@ class TestCashAndCapital:
         book = parse_sheet_book(build_fixture(cash=0.0), FETCHED_AT)
         assert book.cash_usd == 0.0
 
+    def test_negative_cash_allowed(self):
+        # Margin / leverage: broker cash balance can legitimately go negative.
+        book = parse_sheet_book(build_fixture(cash=-25000.0), FETCHED_AT)
+        assert book.cash_usd == -25000.0
+
     def test_missing_cash_value_raises(self):
         with pytest.raises(SheetBookError, match="missing cash value"):
             parse_sheet_book(build_fixture(cash=None), FETCHED_AT)

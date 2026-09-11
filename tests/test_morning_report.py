@@ -1,5 +1,6 @@
 """Tests for scripts/morning_report.py — 格式化函数单元测试"""
 import json
+import logging
 import os
 import sqlite3
 import sys
@@ -37,7 +38,7 @@ from scripts import morning_report as mr
 def _make_pmarp_hit(symbol="NVDA", signal="bullish_breakout", value=98.5,
                     market_cap=3e12, secondary_concept_id=None):
     return {"symbol": symbol, "signal": signal, "value": value, "previous": value - 1.0,
-            "marketCap": market_cap, "layer": "pool",
+            "marketCap": market_cap, "layer": "extend",
             "secondary_concept_id": secondary_concept_id}
 
 
@@ -54,7 +55,7 @@ def _make_dv_item(symbol="NVDA", rank=1, dollar_volume=9e9, price=100.0,
                   rank_change_label="=", market_cap=3e12):
     return {"symbol": symbol, "rank": rank, "dollar_volume": dollar_volume,
             "price": price, "rank_change_label": rank_change_label,
-            "market_cap": market_cap, "marketCap": market_cap, "layer": "pool"}
+            "market_cap": market_cap, "marketCap": market_cap, "layer": "extend"}
 
 
 def sample_market_signals():
@@ -126,14 +127,14 @@ def sample_market_signals():
                 {
                     "symbol": "NVDA", "companyName": "NVIDIA Corporation",
                     "sector": "Technology", "industry": "Semiconductors",
-                    "concept_bucket": "AI算力/云", "layer": "pool",
+                    "concept_bucket": "AI算力/云", "layer": "extend",
                     "value": 98.5, "previous": 97.2, "signal": "bullish_breakout",
                     "marketCap": 3e12,
                 },
                 {
                     "symbol": "TSLA", "companyName": "Tesla Inc.",
                     "sector": "Consumer Cyclical", "industry": "Auto Manufacturers",
-                    "concept_bucket": "自动驾驶/机器人", "layer": "pool",
+                    "concept_bucket": "自动驾驶/机器人", "layer": "extend",
                     "value": 96.8, "previous": 98.4, "signal": "momentum_fading",
                     "marketCap": 800e9,
                 },
@@ -152,7 +153,7 @@ def sample_market_signals():
                 {
                     "symbol": "MU", "companyName": "Micron Technology, Inc.",
                     "sector": "Technology", "industry": "Semiconductors",
-                    "concept_bucket": "半导体链", "layer": "pool",
+                    "concept_bucket": "半导体链", "layer": "extend",
                     "ratio": 1.8, "dv_5d": 900e6, "dv_20d": 500e6,
                     "marketCap": 160e9,
                 },
@@ -176,7 +177,7 @@ def sample_market_signals():
                 {
                     "symbol": "MU", "companyName": "Micron Technology, Inc.",
                     "sector": "Technology", "industry": "Semiconductors",
-                    "concept_bucket": "半导体链", "layer": "pool",
+                    "concept_bucket": "半导体链", "layer": "extend",
                     "from_dv": True, "from_rvol": True,
                     "dv_ratio": 1.8, "ratio": 1.8,
                     "dv_5d": 900e6, "dv_20d": 500e6,
@@ -188,7 +189,7 @@ def sample_market_signals():
                 {
                     "symbol": "DDOG", "companyName": "Datadog, Inc.",
                     "sector": "Technology", "industry": "Software",
-                    "concept_bucket": "软件/SaaS", "layer": "pool",
+                    "concept_bucket": "软件/SaaS", "layer": "extend",
                     "from_dv": True, "from_rvol": False,
                     "dv_ratio": 2.1, "ratio": 2.1,
                     "dv_5d": 2.2e9, "dv_20d": 1.0e9,
@@ -586,7 +587,7 @@ class TestLayeredSections:
                     {
                         "symbol": "MU", "companyName": "Micron",
                         "sector": "Technology", "industry": "Semiconductors",
-                        "concept_bucket": "半导体链", "layer": "pool",
+                        "concept_bucket": "半导体链", "layer": "extend",
                         "from_dv": True, "from_rvol": True,
                         "dv_ratio": 1.6, "ratio": 1.6,
                         "dv_5d": 4.2e9, "dv_20d": 2.6e9,
@@ -597,7 +598,7 @@ class TestLayeredSections:
                     {
                         "symbol": "AMAT", "companyName": "Applied Materials",
                         "sector": "Technology", "industry": "Semiconductors",
-                        "concept_bucket": "半导体链", "layer": "pool",
+                        "concept_bucket": "半导体链", "layer": "extend",
                         "from_dv": True, "from_rvol": False,
                         "dv_ratio": 1.7, "ratio": 1.7,
                         "dv_5d": 1.4e9, "dv_20d": 0.8e9,
@@ -737,7 +738,7 @@ class TestLayeredSections:
         assert 640 <= h < 20000  # bounded; no per-empty-bucket inflation
 
     def test_rows_by_layer_and_bucket_no_silent_drop_for_unregistered(self):
-        """Unregistered pool/extend symbols fall through to a legacy bucket label
+        """Unregistered extend-layer symbols fall through to a legacy bucket label
         (e.g. '其他') that is NOT in the 61-bucket L2 CONCEPT_BUCKET_ORDER.
         The render loop and height estimator must include those rows as
         trailing-extras — they must NOT be silently dropped from the visual."""
@@ -751,14 +752,14 @@ class TestLayeredSections:
         legacy_label = "其他"
         assert legacy_label not in CONCEPT_BUCKET_ORDER  # precondition: truly an extra
         rows = [
-            {"layer": "pool", "bucket": "计算芯片/GPU加速器", "cells": ["NVDA", "x"]},
-            {"layer": "pool", "bucket": legacy_label, "cells": ["DOCU", "x"]},
+            {"layer": "extend", "bucket": "计算芯片/GPU加速器", "cells": ["NVDA", "x"]},
+            {"layer": "extend", "bucket": legacy_label, "cells": ["DOCU", "x"]},
         ]
         grouped = _rows_by_layer_and_bucket(rows)
-        pool_nonempty = {b for b, r in grouped["pool"].items() if r}
+        extend_nonempty = {b for b, r in grouped["extend"].items() if r}
         # Both buckets must appear in the grouped dict (setdefault already handles this)
-        assert "计算芯片/GPU加速器" in pool_nonempty
-        assert legacy_label in pool_nonempty  # extra bucket present in dict
+        assert "计算芯片/GPU加速器" in extend_nonempty
+        assert legacy_label in extend_nonempty  # extra bucket present in dict
         # Build a synthetic section with these rows to verify the height estimator
         # counts the legacy-bucket rows (not zero).
         section = {
@@ -1080,10 +1081,12 @@ class TestMorningVisualReport:
         for block in sections[2]["blocks"]:
             assert block.get("grouped") is False
         all_pmarp_rows = [r for b in sections[2]["blocks"] for r in b["rows"]]
-        assert {row["layer"] for row in all_pmarp_rows} == {"pool", "extend"}
+        # R3 (Task 15): pool/extend merged into one "extend" layer.
+        assert {row["layer"] for row in all_pmarp_rows} == {"extend"}
         # Subtitle should not advertise broad layer anymore (but Section 0 still mentions S2 broad).
         assert "Pool / Extend / Broad" not in sections[2]["subtitle"]
-        assert "Pool / Extend 分层" in sections[2]["subtitle"]
+        assert "Pool" not in sections[2]["subtitle"]
+        assert "Extend 分层" in sections[2]["subtitle"]
 
     def test_render_visual_report_creates_one_png_per_section(self, tmp_path):
         pytest.importorskip("PIL")
@@ -1198,6 +1201,7 @@ class TestBroadDropPlanV3:
             },
         )
         monkeypatch.setattr(mr, "get_symbols", lambda: [])
+        monkeypatch.setattr(mr, "current_base_universe", lambda: [])
         monkeypatch.setattr(
             "src.indicators.dv_acceleration.scan_dv_acceleration",
             lambda *a, **kw: pd.DataFrame(),
@@ -1250,6 +1254,7 @@ class TestBroadDropPlanV3:
         )
         # Pool has D (mcap 2B → must be kept regardless of mcap)
         monkeypatch.setattr(mr, "get_symbols", lambda: ["D"])
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["D"])
         monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
         monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
         monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
@@ -1267,15 +1272,20 @@ class TestBroadDropPlanV3:
         )
         monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
 
-        build_market_signal_report()
+        result = build_market_signal_report()
         # A is dropped (8B<$10B, not pool); B/C kept; D kept (pool privilege)
         assert set(captured["symbols"]) == {"B", "C", "D"}
+        # R3 (Task 15) parity: content unchanged (same 3 symbols survive the
+        # filter above) — only the layer label collapses from the old
+        # {"pool": 1, "extend": 2} split into one merged "extend" bucket.
+        assert result["layer_counts"] == {"extend": 3}
 
-    def test_build_market_signal_report_override_promotes_all_to_pool(
+    def test_build_market_signal_report_override_promotes_all_to_extend(
         self, monkeypatch
     ):
-        """[v3 P2] --symbols override: every override symbol becomes layer='pool',
-        bypassing the $10B mcap filter. Used for ad-hoc debugging of small caps."""
+        """[v3 P2, R3/Task 15] --symbols override: every override symbol becomes
+        layer='extend' (pool/extend merged into one layer), bypassing the $10B
+        mcap filter. Used for ad-hoc debugging of small caps."""
         from scripts import morning_report as mr
 
         # OKLO mcap = $8B (would normally be filtered out by $10B threshold)
@@ -1304,6 +1314,7 @@ class TestBroadDropPlanV3:
             lambda symbols, **kw: {"OKLO": oklo_frame},
         )
         monkeypatch.setattr(mr, "get_symbols", lambda: [])
+        monkeypatch.setattr(mr, "current_base_universe", lambda: [])
         monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
         monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
         monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
@@ -1320,38 +1331,30 @@ class TestBroadDropPlanV3:
         result = build_market_signal_report(symbols_override=["OKLO"])
         oklo_hits = [h for h in result["pmarp"]["hits"] if h["symbol"] == "OKLO"]
         assert len(oklo_hits) == 1
-        # Despite mcap=8B (broad territory), override grants pool privilege
-        assert oklo_hits[0]["layer"] == "pool"
-        # layer_counts confirms classification
-        assert result["layer_counts"]["pool"] == 1
-        assert result["layer_counts"]["extend"] == 0
+        # Despite mcap=8B (broad territory), override grants extend privilege
+        assert oklo_hits[0]["layer"] == "extend"
+        # layer_counts confirms classification — "pool" key no longer exists.
+        assert result["layer_counts"] == {"extend": 1}
 
-    def test_dv_section_filters_out_broad_layer(self):
-        """[v3 P1] DV text section drops rows whose mcap classifies them as broad.
-        Aligned with the selection-scan universe scope (pool ∪ extend).
-        NOTE: ARM was removed from the new_faces fixture because ARM joined the
-        core pool (pool-drift, not a grouping bug) — confirmed via
-        data/pool/universe.json. Replaced with ZZZBROAD (synthetic, never in pool)."""
+    def test_dv_section_preserves_full_market_rows_and_original_ranks(self):
         dv_result = {
             "rankings": [
-                # mcap 25B → extend, kept
                 {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9,
                  "price": 890.5, "market_cap": 3e12},
-                # mcap 6B → broad, dropped
                 {"rank": 17, "symbol": "OKLO", "dollar_volume": 1.2e9,
                  "price": 45.0, "market_cap": 6e9},
             ],
             "new_faces": [
-                # not in pool + mcap 8B → broad, dropped
                 {"rank": 18, "symbol": "ZZZBROAD", "dollar_volume": 1.0e9, "market_cap": 8e9},
             ],
         }
         result = format_section_d(dv_result)
-        assert "NVDA" in result
-        assert "OKLO" not in result
-        assert "ZZZBROAD" not in result
+        assert "NVDA" in result and "#1" in result
+        assert "OKLO" in result and "#17" in result
+        assert "ZZZBROAD" in result and "#18" in result
+        assert result.index("NVDA") < result.index("OKLO")
 
-    def test_dv_filter_uses_dv_row_market_cap_over_stale_local_metadata(
+    def test_dv_total_rank_uses_row_market_cap_over_stale_local_metadata(
         self, monkeypatch
     ):
         """[v3 P1 regression] DV row's freshly-collected market_cap must override
@@ -1373,24 +1376,23 @@ class TestBroadDropPlanV3:
 
         monkeypatch.setattr(mr, "_merge_local_metadata", fake_merge)
         monkeypatch.setattr(mr, "get_symbols", lambda: [])
+        monkeypatch.setattr(mr, "current_base_universe", lambda: [])
 
         dv_result = {
             "rankings": [
-                # Today's DV row reports market_cap=$6B (broad). Must override
-                # the stale $20B in local metadata.
+                # Today's row must remain in the total ranking and override
+                # stale local metadata without any membership filtering.
                 {"rank": 17, "symbol": "OKLO", "dollar_volume": 1.2e9,
                  "price": 45.0, "market_cap": 6e9},
             ],
             "new_faces": [],
         }
         result = format_section_d(dv_result)
-        assert "OKLO" not in result, (
-            "OKLO should be filtered out by today's $6B mcap, "
-            "regardless of stale $20B in local metadata"
-        )
+        assert "OKLO" in result
+        normalized = mr._normalize_dv_items(dv_result)
+        assert normalized["rankings"][0]["marketCap"] == 6e9
 
-    def test_dv_visual_block_filters_out_broad_layer(self):
-        """[v3 P1] DV image-report block drops broad-layer rows."""
+    def test_dv_visual_block_keeps_full_market_rows(self):
         dv_result = {
             "rankings": [
                 {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9,
@@ -1411,7 +1413,34 @@ class TestBroadDropPlanV3:
         ]
         rendered = " ".join(all_cells)
         assert "NVDA" in rendered
-        assert "OKLO" not in rendered
+        assert "OKLO" in rendered
+
+    def test_dv_html_keeps_full_market_rows(self):
+        dv_result = {
+            "rankings": [
+                {"rank": 1, "symbol": "NVDA", "dollar_volume": 25e9,
+                 "price": 890.5, "market_cap": 3e12},
+                {"rank": 17, "symbol": "OKLO", "dollar_volume": 1.2e9,
+                 "price": 45.0, "market_cap": 6e9},
+            ],
+            "new_faces": [],
+        }
+        payload = mr.build_html_payload(sample_market_signals(), dv_result, "2026-09-04")
+        block = next(b for b in payload["blocks"]
+                     if b.get("heading") == "3. Dollar Volume — 成交额 Top 2")
+        assert [row["标的"].split()[0] for row in block["rows"]] == ["NVDA", "OKLO"]
+
+    def test_run_dollar_volume_uses_market_signal_session_date(self, monkeypatch):
+        captured = {}
+        monkeypatch.setattr(
+            "scripts.collect_dollar_volume.collect_daily",
+            lambda date=None: captured.update(date=date) or {
+                "date": date, "rankings": [], "new_faces": [],
+            },
+        )
+        result = mr.run_dollar_volume("2026-09-04")
+        assert captured == {"date": "2026-09-04"}
+        assert result["date"] == "2026-09-04"
 
 
 class TestVolumeAnomalyPayload:
@@ -1442,6 +1471,7 @@ class TestVolumeAnomalyPayload:
             lambda symbols, **kw: {"MU": mu_frame},
         )
         monkeypatch.setattr(mr, "get_symbols", lambda: [])
+        monkeypatch.setattr(mr, "current_base_universe", lambda: [])
         monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
         monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
         monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
@@ -1490,7 +1520,7 @@ class TestVolumeAnomalyPayload:
 
 def test_no_business_role_in_text_sections():
     ms = _make_market_signals(anomaly_hits=[
-        {"symbol": "NVDA", "marketCap": 3e12, "layer": "pool",
+        {"symbol": "NVDA", "marketCap": 3e12, "layer": "extend",
          "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
          "ratio": 5.0, "dv_5d": 1e9, "dv_20d": 2e8}])
     dv = _make_dv_result(rankings=[_make_dv_item()])
@@ -1656,7 +1686,7 @@ def test_chart_failure_keeps_unavailable_section(monkeypatch,tmp_path):
     chart=mr._prepare_index_valuation_chart('2026-09-11',tmp_path)
     assert chart['available'] is False and chart['path'] is None
     payload=mr.build_html_payload({'index_valuation_chart':chart},None,'2026-09-11')
-    assert next(b for b in payload['blocks'] if b['heading']=='0c. 三指数估值')['subtitle']
+    assert next(b for b in payload['blocks'] if b['heading']=='0d. 三指数估值')['subtitle']
 
 
 # ---------- 6 个月 beta（2026-06-12 plan） ----------
@@ -1741,6 +1771,7 @@ def test_builder_injects_beta_into_signal_rows(monkeypatch):
     monkeypatch.setattr("scripts.broad_market_scan.load_price_frames",
                         lambda symbols, **kw: {"MU": mu_frame})
     monkeypatch.setattr(mr, "get_symbols", lambda: [])
+    monkeypatch.setattr(mr, "current_base_universe", lambda: [])
     monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
     monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
     monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
@@ -1801,7 +1832,7 @@ def test_pmarp_text_section_beta_missing_dash():
 
 
 def test_volume_anomaly_text_section_has_beta_column():
-    hit = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+    hit = {"symbol": "SMCI", "marketCap": 30e9, "layer": "extend",
            "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
            "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9, "beta_6m": 2.05}
     out = mr.format_section_layered_volume_anomaly(_make_market_signals(anomaly_hits=[hit]))
@@ -1811,7 +1842,7 @@ def test_volume_anomaly_text_section_has_beta_column():
 
 
 def test_volume_anomaly_text_section_beta_missing_dash():
-    hit = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+    hit = {"symbol": "SMCI", "marketCap": 30e9, "layer": "extend",
            "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
            "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9}  # no beta_6m key
     out = mr.format_section_layered_volume_anomaly(_make_market_signals(anomaly_hits=[hit]))
@@ -1821,7 +1852,7 @@ def test_volume_anomaly_text_section_beta_missing_dash():
 
 def test_html_payload_pmarp_and_anomaly_have_beta_column():
     pm = _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12); pm["beta_6m"] = 1.83
-    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "extend",
           "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
           "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9, "beta_6m": None}
     ms = _make_market_signals(pmarp_hits=[pm], anomaly_hits=[va])
@@ -1854,7 +1885,7 @@ def test_pmarp_columns_exact_parity_across_three_surfaces():
 
 def test_volume_anomaly_columns_exact_parity_across_three_surfaces():
     expected = ["标的", "概念", "类型", "DV 5d/20d", "RVOL", "市值", "β6M"]
-    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "extend",
           "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
           "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9, "beta_6m": 2.05}
     ms = _make_market_signals(anomaly_hits=[va])
@@ -1872,7 +1903,7 @@ def test_volume_anomaly_columns_exact_parity_across_three_surfaces():
 
 def test_visual_blocks_have_beta_column_and_width():
     pm = _make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12); pm["beta_6m"] = 1.83
-    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "pool",
+    va = {"symbol": "SMCI", "marketCap": 30e9, "layer": "extend",
           "from_dv": True, "from_rvol": False, "volume_signal_kind": "流动性加速",
           "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9, "beta_6m": 2.05}
     sections = mr.build_morning_visual_sections(
@@ -2382,6 +2413,7 @@ def _stub_scan_deps_for_volconc_wiring(monkeypatch, mr):
         lambda symbols, **kw: {},
     )
     monkeypatch.setattr(mr, "get_symbols", lambda: [])
+    monkeypatch.setattr(mr, "current_base_universe", lambda: [])
     monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
     monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
     monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
@@ -2938,3 +2970,1077 @@ class TestVolumeConcentrationFrozenFixtureParity:
         assert payload["churn_pctile_1y"] == pytest.approx(0.0, abs=tol)
         assert payload["spy_ret20_pct"] > 0
         assert payload["regime"] == "高集中+上行（拥挤）"
+
+
+# ---------------------------------------------------------------------------
+# Task 15 (R3): 晨报标签迁移 — pool/extend layer merge, labels only.
+#
+# LAYER_ORDER (:53) and _layer_for_symbol (:315-321) used to classify a
+# symbol as either "pool" (local pool.json member) or "extend" ($10B+ market
+# cap) — two distinct, separately-labeled layers. This task merges them into
+# one "extend" layer: the underlying scan/inclusion rule is unchanged (pool
+# membership still bypasses the $10B mcap filter), only the resulting label
+# changes.
+#
+# Same frozen synthetic universe in, old-vs-new diff must be confined to the
+# layer field (pool -> extend); every other output field stays byte-
+# identical. Always-run, no live-data or skip conditions — same spirit as
+# TestVolumeConcentrationFrozenFixtureParity above (pure function + hardcoded
+# reference), adapted here to a small in-file literal fixture since the input
+# is a handful of classification rows, not a numeric DB-derived series.
+# ---------------------------------------------------------------------------
+
+class TestLayerLabelMergeFrozenFixtureParity:
+    """[Task 15 / R3] docs/plans/2026-08-16-extended-primary-universe-
+    implementation.md Task 15. `_old_layer_for_symbol` below is the frozen
+    reference: it encodes _layer_for_symbol's behavior exactly as it was
+    before this task's change (pool/extend as distinct layers). Diffing it
+    against the live `mr._layer_for_symbol` / `mr._enrich_with_layer` proves
+    the merge changed only the layer label, nothing else.
+    """
+
+    _METADATA = {
+        "NVDA": {"marketCap": 3e12, "companyName": "NVIDIA Corporation",
+                 "sector": "Technology", "industry": "Semiconductors"},
+        "OKLO": {"marketCap": 8e9, "companyName": "Oklo Inc.",
+                 "sector": "Utilities", "industry": "Utilities—Renewable"},
+        "BA": {"marketCap": 120e9, "companyName": "Boeing Company",
+               "sector": "Industrials", "industry": "Aerospace & Defense"},
+        "ZZZBROAD": {"marketCap": 2e9, "companyName": "Broad Co",
+                     "sector": "Technology", "industry": "Software"},
+    }
+    # NVDA: pool.json member that also clears $10B on its own.
+    # OKLO: pool.json member below $10B (force-included regardless of mcap —
+    #       mirrors the real OKLO override fixture used elsewhere in this file).
+    # BA: extend-only, never a pool.json member.
+    # ZZZBROAD: neither — classified "broad" both before and after the merge.
+    _POOL_SYMBOLS = {"NVDA", "OKLO"}
+    _SYMBOLS = ["NVDA", "OKLO", "BA", "ZZZBROAD"]
+
+    @staticmethod
+    def _old_layer_for_symbol(symbol, metadata, pool_symbols):
+        """Frozen reference: _layer_for_symbol before the R3 merge, when pool
+        and extend were distinct layers."""
+        if symbol in pool_symbols:
+            return "pool"
+        market_cap = metadata.get(symbol, {}).get("marketCap") or 0
+        if market_cap >= mr.EXTENDED_LAYER_MIN_MCAP:
+            return "extend"
+        return "broad"
+
+    def test_classification_diff_confined_to_pool_to_extend_relabel(self):
+        old = {s: self._old_layer_for_symbol(s, self._METADATA, self._POOL_SYMBOLS)
+               for s in self._SYMBOLS}
+        new = {s: mr._layer_for_symbol(s, self._METADATA, self._POOL_SYMBOLS)
+               for s in self._SYMBOLS}
+
+        # Sanity-check the frozen reference matches the documented pre-merge rule.
+        assert old == {"NVDA": "pool", "OKLO": "pool", "BA": "extend", "ZZZBROAD": "broad"}
+
+        diff = {s: (old[s], new[s]) for s in self._SYMBOLS if old[s] != new[s]}
+        # RED (pre-Step-3 code): _layer_for_symbol still returns "pool" for
+        # NVDA/OKLO, so `diff` is empty here and this assertion is exactly
+        # what fails to confirm RED (brief Step 2: "未改前 diff 为空 → 断言
+        # 存在且仅存在标签 diff 失败").
+        assert diff, "expected a pool->extend diff; none found (merge not applied)"
+        # GREEN: diff exists and is confined to the pool->extend relabel —
+        # nothing else moves.
+        assert diff == {"NVDA": ("pool", "extend"), "OKLO": ("pool", "extend")}
+        assert new["BA"] == old["BA"] == "extend"
+        assert new["ZZZBROAD"] == old["ZZZBROAD"] == "broad"
+
+    def test_enrich_with_layer_diff_confined_to_layer_field(self, monkeypatch):
+        # Deterministic concept_bucket, independent of live concept-registry
+        # state (this worktree's skeleton DB lacks concept-registry rows —
+        # see the ~5 pre-existing failures elsewhere in this file).
+        monkeypatch.setattr(mr, "_concept_bucket", lambda item: "测试题材")
+
+        for symbol in self._SYMBOLS:
+            old_layer = self._old_layer_for_symbol(symbol, self._METADATA, self._POOL_SYMBOLS)
+            if old_layer == "broad":
+                continue  # _enrich_with_layer fail-loud raises on broad leaks,
+                          # unchanged by this task — out of scope here.
+            item = {"symbol": symbol, "value": 1.0, "signal": "bullish_breakout"}
+            betas = {symbol: 1.23}
+
+            enriched = mr._enrich_with_layer(item, self._METADATA, self._POOL_SYMBOLS, betas=betas)
+
+            # Independently-reconstructed "old" reference: identical
+            # enrichment logic (untouched by this task), old layer rule.
+            meta = self._METADATA.get(symbol, {})
+            expected_old = dict(item)
+            for key in ["companyName", "shortName", "longName", "sector", "industry", "exchange"]:
+                if meta.get(key):
+                    expected_old[key] = meta[key]
+            expected_old["marketCap"] = meta.get("marketCap")
+            expected_old["layer"] = old_layer
+            expected_old["beta_6m"] = betas.get(symbol)
+            expected_old["concept_bucket"] = "测试题材"
+
+            all_keys = set(enriched) | set(expected_old)
+            diff_keys = {k for k in all_keys if enriched.get(k) != expected_old.get(k)}
+
+            if old_layer == "pool":
+                assert diff_keys == {"layer"}, (symbol, diff_keys, enriched, expected_old)
+                assert enriched["layer"] == "extend"
+            else:
+                assert diff_keys == set(), (symbol, diff_keys, enriched, expected_old)
+
+
+# ---------------------------------------------------------------------------
+# Task 15 fix round 1: both pool_symbols resolver call sites intentionally
+# keep a broad `except Exception` (the morning report must never crash), but
+# that fallback must leave a trace. Without a log line, a post-bootstrap
+# resolver wiring bug (TypeError, sqlite3.OperationalError, ...) would
+# silently and permanently fall back to legacy pool.json semantics with no
+# way to notice the R3 switchover isn't actually happening in production.
+# ---------------------------------------------------------------------------
+
+class TestResolverFallbackLogging:
+    """Both scripts/morning_report.py:~1120 (build_market_signal_report) and
+    :~1720 (_normalize_dv_items) must emit
+    logger.warning("current_base_universe unavailable, falling back to
+    legacy pool symbols: %s", e) when current_base_universe() raises."""
+
+    @staticmethod
+    def _raise_resolver_failure():
+        raise RuntimeError("boom: simulated resolver failure")
+
+    def test_build_market_signal_report_logs_fallback_warning(self, monkeypatch, caplog):
+        from scripts import morning_report as mr
+
+        monkeypatch.setattr(mr, "current_base_universe", self._raise_resolver_failure)
+        monkeypatch.setattr(mr, "get_symbols", lambda: [])
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.fetch_universe_metadata",
+            lambda **kw: {"stocks": {}},
+        )
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.load_price_frames", lambda symbols, **kw: {}
+        )
+        monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
+        monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
+        monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
+        monkeypatch.setattr(mr, "_load_market_db_broad_price_frames", lambda *a, **kw: {})
+        monkeypatch.setattr(
+            "src.indicators.dv_acceleration.scan_dv_acceleration",
+            lambda *a, **kw: pd.DataFrame(),
+        )
+        monkeypatch.setattr(
+            "src.indicators.rvol_sustained.scan_rvol_sustained", lambda *a, **kw: []
+        )
+        monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
+
+        with caplog.at_level(logging.WARNING, logger="scripts.morning_report"):
+            mr.build_market_signal_report()
+
+        assert any(
+            "current_base_universe unavailable" in rec.message
+            and "boom: simulated resolver failure" in rec.message
+            for rec in caplog.records
+        ), caplog.text
+
+    def test_normalize_dv_items_does_not_require_universe_resolver(self, monkeypatch, caplog):
+        from scripts import morning_report as mr
+
+        monkeypatch.setattr(mr, "current_base_universe", self._raise_resolver_failure)
+        monkeypatch.setattr(mr, "get_symbols", lambda: [])
+
+        dv_result = {"rankings": [{
+            "rank": 1, "symbol": "SMALL", "dollar_volume": 1e9,
+            "price": 10, "market_cap": 1e9,
+        }], "new_faces": []}
+        with caplog.at_level(logging.WARNING, logger="scripts.morning_report"):
+            result = mr._normalize_dv_items(dv_result)
+
+        assert [row["symbol"] for row in result["rankings"]] == ["SMALL"]
+        assert not any("current_base_universe unavailable" in rec.message
+                       for rec in caplog.records), caplog.text
+
+
+# ============================================================
+# Selection compass Task 2 — build_market_signal_report wiring
+# Plan: docs/plans/2026-09-04-selection-compass-morning-report.md
+# ============================================================
+
+
+def _compass_price_frame(as_of="2026-09-03"):
+    dates = pd.bdate_range(end=as_of, periods=180)
+    return pd.DataFrame(
+        {"close": range(100, 280), "volume": [1_000_000] * 180},
+        index=dates,
+    )
+
+
+def _wiring_premium_pool(symbols):
+    return {
+        "available": True, "reason": None, "name": "精选Premium池",
+        "as_of": "2026-09-03", "generated_at": "2026-09-03T10:00:00Z",
+        "coverage": {
+            "fundamental_ready": {"covered": len(symbols), "total": len(symbols), "ratio": 1.0},
+            "beta_ready": {"covered": len(symbols), "total": len(symbols), "ratio": 1.0},
+        },
+        "members": [{"symbol": symbol, "beta_6m": 1.5} for symbol in symbols],
+    }
+
+
+def _stub_compass_builder_dependencies(monkeypatch, *, frames, pmarp=None, dv=None):
+    monkeypatch.setattr(mr, "load_premium_pool", lambda: _wiring_premium_pool(list(frames)))
+    monkeypatch.setattr(
+        "scripts.broad_market_scan.fetch_universe_metadata",
+        lambda **kw: {
+            "stocks": {
+                "METADATA_ONLY": {
+                    "marketCap": 50e9,
+                    "shortName": "Metadata Only",
+                    "longName": "Metadata Only",
+                    "exchange": "DB",
+                }
+            }
+        },
+    )
+    monkeypatch.setattr(
+        "scripts.broad_market_scan.load_price_frames",
+        lambda symbols, **kw: {symbol: frames[symbol] for symbol in symbols if symbol in frames},
+    )
+    monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
+    monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
+    monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
+    monkeypatch.setattr(mr, "_load_market_db_broad_price_frames", lambda *a, **kw: {})
+    monkeypatch.setattr(
+        "src.indicators.pmarp.analyze_pmarp",
+        pmarp or (lambda *a, **kw: {"signal": "neutral", "current": None, "previous": None}),
+    )
+    monkeypatch.setattr(
+        "src.indicators.dv_acceleration.scan_dv_acceleration",
+        dv or (lambda *a, **kw: pd.DataFrame()),
+    )
+    monkeypatch.setattr(
+        "src.indicators.rvol_sustained.scan_rvol_sustained", lambda *a, **kw: []
+    )
+    monkeypatch.setattr(
+        mr,
+        "_load_volume_concentration_frames",
+        lambda: {"available": False, "reason": "test"},
+    )
+
+
+class TestSelectionCompassWiring:
+    def test_compass_supplements_127_row_base_symbol_db_only_without_technical_leakage(
+        self, monkeypatch
+    ):
+        technical_frame = _compass_price_frame("2026-09-03")
+        compass_only_frame = _compass_price_frame("2026-09-03").iloc[-150:]
+        shared_calls = []
+        db_only_calls = []
+        technical_inputs = {}
+        monkeypatch.setattr(mr, "load_premium_pool", lambda: _wiring_premium_pool(["BASE"]))
+
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["BASE"])
+        monkeypatch.setattr(
+            mr,
+            "get_symbols",
+            lambda: pytest.fail("strict resolver success must not use legacy symbols"),
+        )
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.fetch_universe_metadata",
+            lambda **kw: {
+                "stocks": {
+                    "METADATA_ONLY": {
+                        "marketCap": 50e9,
+                        "shortName": "Metadata Only",
+                        "longName": "Metadata Only",
+                        "exchange": "DB",
+                    }
+                }
+            },
+        )
+
+        def fake_shared_loader(symbols, *, rows_needed):
+            shared_calls.append((list(symbols), rows_needed))
+            # BASE has 150 rows: enough for compass, not enough for the shared
+            # 180-row technical scan, so the shared loader omits it.
+            return {"METADATA_ONLY": technical_frame}
+
+        def fake_db_only_loader(symbols, *, rows_needed):
+            db_only_calls.append((list(symbols), rows_needed))
+            return {"BASE": compass_only_frame}
+
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.load_price_frames", fake_shared_loader
+        )
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.load_price_frames_from_market_db",
+            fake_db_only_loader,
+        )
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.download_price_frames",
+            lambda *a, **kw: pytest.fail("compass supplement must never call yfinance"),
+        )
+        monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
+        monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
+        monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
+        monkeypatch.setattr(mr, "_load_market_db_broad_price_frames", lambda *a, **kw: {})
+        monkeypatch.setattr(
+            "src.indicators.pmarp.analyze_pmarp",
+            lambda *a, **kw: {"signal": "neutral", "current": None, "previous": None},
+        )
+
+        def fake_dv_scan(price_dict, **kwargs):
+            technical_inputs["dv"] = set(price_dict)
+            return pd.DataFrame()
+
+        def fake_rvol_scan(price_dict, **kwargs):
+            technical_inputs["rvol"] = set(price_dict)
+            return []
+
+        monkeypatch.setattr(
+            "src.indicators.dv_acceleration.scan_dv_acceleration", fake_dv_scan
+        )
+        monkeypatch.setattr(
+            "src.indicators.rvol_sustained.scan_rvol_sustained", fake_rvol_scan
+        )
+        monkeypatch.setattr(
+            mr,
+            "_load_volume_concentration_frames",
+            lambda: {"available": False, "reason": "test"},
+        )
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "CREATE TABLE historical_market_cap "
+            "(symbol TEXT, date TEXT, market_cap REAL, PRIMARY KEY(symbol, date))"
+        )
+        conn.execute(
+            "INSERT INTO historical_market_cap VALUES (?, ?, ?)",
+            ("BASE", "2026-09-03", 42e9),
+        )
+
+        class FakeStore:
+            def _get_conn(self):
+                return conn
+
+        from src.data import market_store as ms_mod
+
+        monkeypatch.setattr(ms_mod, "get_store", lambda: FakeStore())
+        scanner_inputs = {}
+
+        def fake_scan(**kwargs):
+            scanner_inputs.update(kwargs)
+            return {
+                "available": True,
+                "reason": None,
+                "coverage": {},
+                "hits": [{"symbol": "BASE", "marketCap": 42e9, "beta_6m": 1.5}],
+            }
+
+        monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", fake_scan)
+        beta_inputs = {}
+
+        def fake_betas(frames, symbols):
+            if symbols:
+                beta_inputs["frames"] = frames
+                beta_inputs["symbols"] = list(symbols)
+            return {symbol: 1.4 for symbol in symbols}
+
+        monkeypatch.setattr(mr, "_compute_signal_betas", fake_betas)
+
+        result = mr.build_market_signal_report()
+
+        assert shared_calls == [(["BASE", "METADATA_ONLY"], 180)]
+        assert db_only_calls == [(["BASE"], 127)]
+        assert set(scanner_inputs["price_frames"]) == {"BASE"}
+        assert scanner_inputs["price_frames"]["BASE"] is compass_only_frame
+        assert [m["symbol"] for m in scanner_inputs["premium_pool"]["members"]] == ["BASE"]
+        assert beta_inputs == {}
+        assert technical_inputs == {
+            "dv": {"METADATA_ONLY"},
+            "rvol": {"METADATA_ONLY"},
+        }
+        assert result["selection_compass"]["hits"][0]["beta_6m"] == 1.5
+
+    def test_strict_universe_success_uses_exact_current_base(self, monkeypatch):
+        frames = {"ACTIVE": _compass_price_frame(), "METADATA_ONLY": _compass_price_frame()}
+        _stub_compass_builder_dependencies(monkeypatch, frames=frames)
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["ACTIVE"])
+        monkeypatch.setattr(mr, "get_symbols", lambda: ["LEGACY"])
+
+        class FakeStore:
+            pass
+
+        from src.data import market_store as ms_mod
+
+        monkeypatch.setattr(ms_mod, "get_store", lambda: FakeStore())
+        monkeypatch.setattr(
+            mr, "_load_selection_compass_market_cap_observations", lambda *a, **kw: {}
+        )
+        captured = {}
+
+        def fake_scan(**kwargs):
+            captured.update(kwargs)
+            return {"available": True, "reason": None, "coverage": {}, "hits": []}
+
+        monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", fake_scan)
+        monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
+
+        result = mr.build_market_signal_report()
+
+        assert [m["symbol"] for m in captured["premium_pool"]["members"]] == [
+            "ACTIVE", "METADATA_ONLY",
+        ]
+        assert result["selection_compass"]["available"] is True
+
+    def test_scanner_receives_price_as_of_frames_and_dated_market_caps(self, monkeypatch):
+        active_frame = _compass_price_frame("2026-09-03")
+        frames = {"ACTIVE": active_frame}
+        _stub_compass_builder_dependencies(monkeypatch, frames=frames)
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["ACTIVE"])
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "CREATE TABLE historical_market_cap "
+            "(symbol TEXT, date TEXT, market_cap REAL, PRIMARY KEY(symbol, date))"
+        )
+        conn.executemany(
+            "INSERT INTO historical_market_cap VALUES (?, ?, ?)",
+            [
+                ("ACTIVE", "2026-09-01", 40e9),
+                ("ACTIVE", "2026-09-03", 42e9),
+                ("ACTIVE", "2026-09-04", 43e9),
+            ],
+        )
+
+        class FakeStore:
+            def _get_conn(self):
+                return conn
+
+        from src.data import market_store as ms_mod
+
+        monkeypatch.setattr(ms_mod, "get_store", lambda: FakeStore())
+        captured = {}
+
+        def fake_scan(**kwargs):
+            captured.update(kwargs)
+            return {"available": True, "reason": None, "coverage": {}, "hits": []}
+
+        monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", fake_scan)
+        monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
+
+        mr.build_market_signal_report()
+
+        assert captured["as_of"] == "2026-09-03"
+        assert captured["price_frames"]["ACTIVE"] is active_frame
+        assert captured["market_cap_observations"] == {
+            "ACTIVE": {"date": "2026-09-03", "marketCap": 42e9}
+        }
+        assert [m["symbol"] for m in captured["premium_pool"]["members"]] == ["ACTIVE"]
+
+    def test_weekly_premium_beta_is_passed_without_daily_recomputation(self, monkeypatch):
+        frames = {
+            "HIT": _compass_price_frame("2026-09-03"),
+            "MISS": _compass_price_frame("2026-09-03"),
+        }
+        _stub_compass_builder_dependencies(monkeypatch, frames=frames)
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["MISS", "HIT"])
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "CREATE TABLE historical_market_cap "
+            "(symbol TEXT, date TEXT, market_cap REAL, PRIMARY KEY(symbol, date))"
+        )
+        conn.executemany(
+            "INSERT INTO historical_market_cap VALUES (?, ?, ?)",
+            [("HIT", "2026-09-03", 42e9), ("MISS", "2026-09-03", 30e9)],
+        )
+
+        class FakeStore:
+            def _get_conn(self):
+                return conn
+
+        from src.data import market_store as ms_mod
+
+        monkeypatch.setattr(ms_mod, "get_store", lambda: FakeStore())
+        captured = {}
+
+        def fake_scan(**kw):
+            captured.update(kw)
+            return {
+                "available": True,
+                "reason": None,
+                "coverage": {},
+                "hits": [{"symbol": "HIT", "marketCap": 42e9, "beta_6m": 1.5}],
+            }
+
+        monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", fake_scan)
+        beta_calls = []
+
+        def fake_betas(price_frames, symbols):
+            beta_calls.append(list(symbols))
+            return {symbol: 1.73 for symbol in symbols}
+
+        monkeypatch.setattr(mr, "_compute_signal_betas", fake_betas)
+
+        result = mr.build_market_signal_report()
+
+        assert [symbols for symbols in beta_calls if symbols] == []
+        assert [m["symbol"] for m in captured["premium_pool"]["members"]] == ["HIT", "MISS"]
+        assert result["selection_compass"]["hits"] == [
+            {"symbol": "HIT", "marketCap": 42e9, "beta_6m": 1.5}
+        ]
+
+    def test_payload_keeps_existing_pmarp_and_volume_outputs_unchanged(self, monkeypatch):
+        frames = {"ACTIVE": _compass_price_frame("2026-09-03")}
+        _stub_compass_builder_dependencies(
+            monkeypatch,
+            frames=frames,
+            pmarp=lambda *a, **kw: {
+                "signal": "oversold_recovery",
+                "current": 2.5,
+                "previous": 1.7,
+            },
+            dv=lambda *a, **kw: pd.DataFrame(
+                [
+                    {
+                        "symbol": "ACTIVE",
+                        "ratio": 1.8,
+                        "dv_5d": 4.2e9,
+                        "dv_20d": 2.3e9,
+                        "signal": True,
+                    }
+                ]
+            ),
+        )
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["ACTIVE"])
+        monkeypatch.setattr(mr, "_concept_bucket", lambda item: "测试题材")
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "CREATE TABLE historical_market_cap "
+            "(symbol TEXT, date TEXT, market_cap REAL, PRIMARY KEY(symbol, date))"
+        )
+        conn.execute(
+            "INSERT INTO historical_market_cap VALUES (?, ?, ?)",
+            ("ACTIVE", "2026-09-03", 42e9),
+        )
+
+        class FakeStore:
+            def _get_conn(self):
+                return conn
+
+        from src.data import market_store as ms_mod
+
+        monkeypatch.setattr(ms_mod, "get_store", lambda: FakeStore())
+        compass_payload = {
+            "available": True,
+            "reason": None,
+            "coverage": {"fundamental_ready": {"covered": 1, "total": 1, "ratio": 1.0}},
+            "hits": [],
+        }
+        monkeypatch.setattr(
+            "terminal.selection_compass.scan_selection_compass",
+            lambda **kw: compass_payload,
+        )
+        monkeypatch.setattr(
+            mr,
+            "_compute_signal_betas",
+            lambda frames_arg, symbols: {symbol: 1.25 for symbol in symbols},
+        )
+
+        result = mr.build_market_signal_report()
+
+        assert result["selection_compass"] == compass_payload
+        assert result["pmarp"]["criteria"] == "PMARP 上穿2% / 上穿98% / 下穿98%"
+        assert result["pmarp"]["hits"][0]["symbol"] == "ACTIVE"
+        assert result["pmarp"]["hits"][0]["signal"] == "oversold_recovery"
+        assert result["volume_anomaly"]["criteria"].startswith("DV >")
+        assert result["volume_anomaly"]["hits"][0]["symbol"] == "ACTIVE"
+        assert result["volume_anomaly"]["hits"][0]["from_dv"] is True
+
+    @pytest.mark.parametrize(
+        ("resolver", "expected_reason", "expected_legacy_symbols"),
+        [
+            (lambda: [], "empty_universe", []),
+            (
+                lambda: (_ for _ in ()).throw(RuntimeError("resolver down")),
+                "universe_resolver_error",
+                ["LEGACY", "METADATA_ONLY"],
+            ),
+        ],
+    )
+    def test_resolver_empty_or_error_does_not_replace_valid_premium_pool(
+        self, monkeypatch, resolver, expected_reason, expected_legacy_symbols
+    ):
+        frames = {"LEGACY": _compass_price_frame()}
+        loaded = {}
+        _stub_compass_builder_dependencies(monkeypatch, frames=frames)
+        monkeypatch.setattr(mr, "current_base_universe", resolver)
+        monkeypatch.setattr(mr, "get_symbols", lambda: ["LEGACY"])
+
+        def fake_load_price_frames(symbols, **kwargs):
+            loaded["symbols"] = list(symbols)
+            return {symbol: frames[symbol] for symbol in symbols if symbol in frames}
+
+        monkeypatch.setattr(
+            "scripts.broad_market_scan.load_price_frames",
+            fake_load_price_frames,
+        )
+        captured = {}
+        def fake_scan(**kwargs):
+            captured.update(kwargs)
+            return {"available": True, "reason": None, "coverage": {}, "hits": []}
+        monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", fake_scan)
+        monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
+
+        result = mr.build_market_signal_report()
+
+        assert result["selection_compass"]["available"] is True
+        assert [m["symbol"] for m in captured["premium_pool"]["members"]] == ["LEGACY"]
+        assert loaded.get("symbols", []) == expected_legacy_symbols or expected_reason == "empty_universe"
+
+
+# ============================================================
+# Selection compass Task 3 — text / HTML / visual rendering
+# Plan: docs/plans/2026-09-04-selection-compass-morning-report.md
+# ============================================================
+
+
+_SELECTION_COMPASS_COLUMNS = [
+    "标的", "EPS YoY", "EPS QoQ", "营收4Q CAGR", "净利4Q CAGR",
+    "成长均值", "收盘", "EMA30", "当前市值", "β6M",
+]
+_SELECTION_COMPASS_WIDTHS = [180, 150, 150, 190, 190, 160, 210, 160, 170, 120]
+
+
+def _selection_compass_payload(*, available=True, reason=None, hits=None):
+    return {
+        "available": available,
+        "reason": reason,
+        "coverage": {
+            "fundamental_ready": {"covered": 19, "total": 20, "ratio": 0.95},
+            "beta_ready": {"covered": 20, "total": 20, "ratio": 1.0},
+            "ema30_ready": {"covered": 20, "total": 20, "ratio": 1.0},
+        },
+        "hits": hits or [],
+    }
+
+
+def _selection_compass_hit(
+    symbol,
+    market_cap,
+    *,
+    yoy=0.25,
+    qoq=0.30,
+    yoy_turnaround=False,
+    qoq_turnaround=False,
+    beta=1.25,
+):
+    return {
+        "symbol": symbol,
+        "eps_yoy_growth": yoy,
+        "eps_yoy_turnaround": yoy_turnaround,
+        "eps_qoq_growth": qoq,
+        "eps_qoq_turnaround": qoq_turnaround,
+        "revenue_cagr_4q": 0.18,
+        "net_income_cagr_4q": 0.22,
+        "growth_avg_4q": 0.20,
+        "close": 110.0,
+        "ema30": 100.0,
+        "marketCap": market_cap,
+        "beta_6m": beta,
+    }
+
+
+class TestFormatSelectionCompassText:
+    def test_exact_columns_formats_and_market_cap_order(self):
+        payload = _selection_compass_payload(hits=[
+            _selection_compass_hit(
+                "SMALL", 20e9, yoy=None, yoy_turnaround=True, beta=None,
+            ),
+            _selection_compass_hit(
+                "BIG", 2e12, qoq=None, qoq_turnaround=True, beta=1.23,
+            ),
+        ])
+
+        text = mr.format_section_selection_compass(payload)
+
+        lines = text.splitlines()
+        assert lines[0] == "*0c. 选股罗盘*"
+        assert lines[1].startswith("精选Premium池周频覆盖：基本面 19/20 | Beta 20/20 | EMA30 20/20")
+        assert lines[2] == " | ".join(_SELECTION_COMPASS_COLUMNS)
+        rows = lines[3:]
+        assert [row.split(" | ")[0] for row in rows] == ["BIG", "SMALL"]
+        assert all(len(row.split(" | ")) == 10 for row in rows)
+        assert rows[0].split(" | ") == [
+            "BIG", "25.0%", "扭亏", "18.0%", "22.0%", "20.0%",
+            "110.00", "100.00", "$2.0T", "1.23",
+        ]
+        assert rows[1].split(" | ") == [
+            "SMALL", "扭亏", "30.0%", "18.0%", "22.0%", "20.0%",
+            "110.00", "100.00", "$20.0B", "—",
+        ]
+
+
+class TestBuildHtmlPayloadSelectionCompass:
+    def test_exact_block_after_0b_with_columns_rows_and_order(self):
+        ms = _make_market_signals()
+        ms["selection_compass"] = _selection_compass_payload(hits=[
+            _selection_compass_hit("SMALL", 20e9, yoy=None, yoy_turnaround=True),
+            _selection_compass_hit("BIG", 2e12, qoq=None, qoq_turnaround=True),
+        ])
+
+        payload = mr.build_html_payload(ms, None, as_of="2026-09-03")
+
+        headings = [block.get("heading") for block in payload["blocks"]]
+        assert headings.index("0b. 成交集中度") < headings.index("0c. 选股罗盘")
+        assert headings.index("0c. 选股罗盘") < headings.index("1. PMARP 信号")
+        block = next(
+            block for block in payload["blocks"]
+            if block.get("heading") == "0c. 选股罗盘"
+        )
+        assert block["subtitle"].startswith("精选Premium池周频覆盖：基本面 19/20")
+        assert block["columns"] == _SELECTION_COMPASS_COLUMNS
+        assert [row["标的"] for row in block["rows"]] == ["BIG", "SMALL"]
+        assert list(block["rows"][0]) == _SELECTION_COMPASS_COLUMNS
+        assert list(block["rows"][0].values()) == [
+            "BIG", "25.0%", "扭亏", "18.0%", "22.0%", "20.0%",
+            "110.00", "100.00", "$2.0T", "1.25",
+        ]
+
+
+class TestBuildMorningVisualSectionsSelectionCompass:
+    def test_exact_ten_column_section_before_pmarp_without_zip_truncation(self):
+        ms = _make_market_signals()
+        ms["selection_compass"] = _selection_compass_payload(hits=[
+            _selection_compass_hit("SMALL", 20e9),
+            _selection_compass_hit("BIG", 2e12, qoq=None, qoq_turnaround=True),
+        ])
+
+        sections = mr.build_morning_visual_sections(
+            market_signals=ms, dv_result=None
+        )
+
+        slugs = [section["slug"] for section in sections]
+        assert slugs.index("00b_volume_concentration") < slugs.index(
+            "00c_selection_compass"
+        )
+        assert slugs.index("00c_selection_compass") < slugs.index("01_pmarp")
+        section = next(
+            section for section in sections
+            if section["slug"] == "00c_selection_compass"
+        )
+        assert section["title"] == "0c. 选股罗盘"
+        assert section["subtitle"].startswith("精选Premium池周频覆盖：基本面 19/20")
+        assert len(section["blocks"]) == 1
+        block = section["blocks"][0]
+        assert block["grouped"] is False
+        assert block["columns"] == _SELECTION_COMPASS_COLUMNS
+        assert block["widths"] == _SELECTION_COMPASS_WIDTHS
+        assert len(block["columns"]) == len(block["widths"]) == 10
+        assert [row["cells"][0] for row in block["rows"]] == ["BIG", "SMALL"]
+        assert all(len(row["cells"]) == len(block["columns"]) for row in block["rows"])
+        assert block["rows"][0]["cells"] == [
+            "BIG", "25.0%", "扭亏", "18.0%", "22.0%", "20.0%",
+            "110.00", "100.00", "$2.0T", "1.25",
+        ]
+
+
+class TestSelectionCompassSharedVisibility:
+    def test_current_thresholds_and_beta_gate_visible_on_all_report_surfaces(self):
+        compass = _selection_compass_payload(hits=[_selection_compass_hit("BIG", 2e12)])
+        compass["coverage"].update({
+            "ema30_ready": {"covered": 19, "total": 20, "ratio": 0.95},
+            "beta_ready": {"covered": 20, "total": 20, "ratio": 1.0},
+        })
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+        text = mr.format_section_selection_compass(compass)
+        html = next(b for b in mr.build_html_payload(ms, None, "2026-09-03")["blocks"]
+                    if b.get("heading") == "0c. 选股罗盘")
+        visual = next(s for s in mr.build_morning_visual_sections(ms, None)
+                      if s["slug"] == "00c_selection_compass")
+        for rendered in [text, html["subtitle"], visual["subtitle"]]:
+            assert "Beta 20/20" in rendered
+            assert "EPS YoY/QoQ ≥20%" in rendered
+            assert "成长均值 ≥10%或扭亏成长" in rendered
+            assert "β6M ≥1.35" in rendered
+
+    def test_beta_coverage_failure_uses_chinese_warning_and_hides_rows(self):
+        compass = _selection_compass_payload(
+            available=False, reason="beta_coverage_below_threshold",
+            hits=[_selection_compass_hit("MUST_NOT_RENDER", 2e12)],
+        )
+        compass["coverage"]["beta_ready"] = {
+            "covered": 18, "total": 20, "ratio": 0.90,
+        }
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+        rendered = [mr.format_section_selection_compass(compass),
+                    str(mr.build_html_payload(ms, None, "2026-09-03")),
+                    str(mr.build_morning_visual_sections(ms, None))]
+        for output in rendered:
+            assert "Beta 数据覆盖不足" in output
+            assert "MUST_NOT_RENDER" not in output
+
+    def test_turnaround_route_label_and_undefined_cagr_on_all_surfaces(self):
+        hit = _selection_compass_hit("BE", 20e9)
+        hit.update(growth_route="turnaround", net_income_cagr_4q=None, growth_avg_4q=None)
+        compass = _selection_compass_payload(hits=[hit])
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+        text = mr.format_section_selection_compass(compass)
+        html = next(b for b in mr.build_html_payload(ms, None, "2026-09-03")["blocks"]
+                    if b.get("heading") == "0c. 选股罗盘")
+        visual = next(s for s in mr.build_morning_visual_sections(ms, None)
+                      if s["slug"] == "00c_selection_compass")
+        rows = [text.splitlines()[-1].split(" | "), list(html["rows"][0].values()),
+                visual["blocks"][0]["rows"][0]["cells"]]
+        for row in rows:
+            assert len(row) == 10
+            assert row[4:6] == ["—", "扭亏成长"]
+
+    def test_ema30_rule_and_readiness_visible_on_all_report_surfaces(self):
+        compass = _selection_compass_payload(hits=[_selection_compass_hit("BIG", 2e12)])
+        compass["coverage"]["ema30_ready"] = {"covered": 20, "total": 20, "ratio": 1.0}
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+        text = mr.format_section_selection_compass(compass)
+        html = next(b for b in mr.build_html_payload(ms, None, "2026-09-03")["blocks"]
+                    if b.get("heading") == "0c. 选股罗盘")
+        visual = next(s for s in mr.build_morning_visual_sections(ms, None)
+                      if s["slug"] == "00c_selection_compass")
+
+        for rendered in [text, html["subtitle"], visual["subtitle"]]:
+            assert "EMA30 20/20" in rendered
+            assert "收盘价 > EMA30" in rendered
+        assert html["columns"] == visual["blocks"][0]["columns"] == _SELECTION_COMPASS_COLUMNS
+
+    def test_ema30_coverage_failure_uses_chinese_warning_and_hides_rows(self):
+        compass = _selection_compass_payload(
+            available=False, reason="ema30_coverage_below_threshold",
+            hits=[_selection_compass_hit("MUST_NOT_RENDER", 2e12)],
+        )
+        compass["coverage"]["ema30_ready"] = {"covered": 18, "total": 20, "ratio": 0.90}
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+        text = mr.format_section_selection_compass(compass)
+        html = next(b for b in mr.build_html_payload(ms, None, "2026-09-03")["blocks"]
+                    if b.get("heading") == "0c. 选股罗盘")
+        visual = next(s for s in mr.build_morning_visual_sections(ms, None)
+                      if s["slug"] == "00c_selection_compass")
+        for rendered in [text, str(html), str(visual)]:
+            assert "EMA30 价格覆盖不足" in rendered
+            assert "MUST_NOT_RENDER" not in rendered
+            assert "ema30_coverage_below_threshold" not in rendered
+
+    def test_healthy_no_hits_hides_section_across_all_surfaces(self):
+        ms = _make_market_signals()
+        ms["selection_compass"] = _selection_compass_payload(hits=[])
+
+        text = mr.format_morning_report(market_signals=ms, elapsed=1)
+        html = mr.build_html_payload(ms, None, as_of="2026-09-03")
+        visual = mr.build_morning_visual_sections(
+            market_signals=ms, dv_result=None
+        )
+
+        assert "选股罗盘" not in text
+        assert all(block.get("heading") != "0c. 选股罗盘" for block in html["blocks"])
+        assert all(section["slug"] != "00c_selection_compass" for section in visual)
+
+    def test_unavailable_warns_and_never_renders_partial_rows_across_all_surfaces(self):
+        partial = _selection_compass_hit("MUST_NOT_RENDER", 2e12)
+        compass = _selection_compass_payload(
+            available=False,
+            reason="fundamental_coverage_below_threshold",
+            hits=[partial],
+        )
+        compass["coverage"]["fundamental_ready"] = {
+            "covered": 18, "total": 20, "ratio": 0.90,
+        }
+        ms = _make_market_signals()
+        ms["selection_compass"] = compass
+
+        text = mr.format_morning_report(market_signals=ms, elapsed=1)
+        html = mr.build_html_payload(ms, None, as_of="2026-09-03")
+        visual = mr.build_morning_visual_sections(
+            market_signals=ms, dv_result=None
+        )
+
+        warning = "⚠️ 选股罗盘不可用（基本面覆盖不足）"
+        coverage = mr._selection_compass_coverage_subtitle(compass["coverage"])
+        assert warning in text
+        assert coverage in text
+        assert "MUST_NOT_RENDER" not in text
+
+        html_block = next(
+            block for block in html["blocks"]
+            if block.get("heading") == "0c. 选股罗盘"
+        )
+        assert html_block["subtitle"] == "{} | {}".format(warning, coverage)
+        assert not html_block.get("columns")
+        assert not html_block.get("rows")
+        assert "MUST_NOT_RENDER" not in str(html_block)
+
+        visual_section = next(
+            section for section in visual
+            if section["slug"] == "00c_selection_compass"
+        )
+        assert visual_section["subtitle"] == "{} | {}".format(warning, coverage)
+        assert visual_section["blocks"] == []
+        assert "MUST_NOT_RENDER" not in str(visual_section)
+
+    def test_table_section_order_in_full_text_report(self):
+        ms = sample_market_signals()
+        ms["selection_compass"] = _selection_compass_payload(
+            hits=[_selection_compass_hit("BIG", 2e12)]
+        )
+
+        text = mr.format_morning_report(market_signals=ms, elapsed=1)
+
+        assert text.index("0b. 成交集中度") < text.index("0c. 选股罗盘")
+        assert text.index("0c. 选股罗盘") < text.index("1. PMARP 信号")
+
+    @pytest.mark.parametrize(
+        ("reason", "label"),
+        [
+            ("fundamental_coverage_below_threshold", "基本面覆盖不足"),
+            ("rvol_coverage_below_threshold", "RVOL 覆盖不足"),
+            ("beta_coverage_below_threshold", "Beta 数据覆盖不足"),
+            ("market_cap_unavailable", "当前市值数据不足"),
+            ("empty_universe", "股票池读取异常"),
+            ("universe_resolver_error", "股票池读取异常"),
+            ("fundamental_store_error", "筛选计算异常"),
+            ("selection_compass_error", "筛选计算异常"),
+            ("unexpected_new_reason", "暂时无法生成"),
+            (None, "暂时无法生成"),
+        ],
+    )
+    def test_unavailable_reason_is_localized_and_raw_code_hidden_on_all_surfaces(
+        self, reason, label
+    ):
+        ms = _make_market_signals()
+        ms["selection_compass"] = _selection_compass_payload(
+            available=False, reason=reason
+        )
+
+        text = mr.format_morning_report(market_signals=ms, elapsed=1)
+        html = mr.build_html_payload(ms, None, as_of="2026-09-03")
+        visual = mr.build_morning_visual_sections(
+            market_signals=ms, dv_result=None
+        )
+
+        warning = "⚠️ 选股罗盘不可用（{}）".format(label)
+        html_block = next(
+            block for block in html["blocks"]
+            if block.get("heading") == "0c. 选股罗盘"
+        )
+        visual_section = next(
+            section for section in visual
+            if section["slug"] == "00c_selection_compass"
+        )
+        assert warning in text
+        assert warning in html_block["subtitle"]
+        assert warning in visual_section["subtitle"]
+        if reason:
+            assert reason not in text
+            assert reason not in str(html_block)
+            assert reason not in str(visual_section)
+
+
+class TestPremiumMorningHighlight:
+    @staticmethod
+    def _signal(symbol, premium):
+        return {
+            "symbol": symbol, "signal": "bullish_breakout", "value": 99.0,
+            "previous": 97.0, "marketCap": 20e9, "beta_6m": 1.8,
+            "layer": "extend", "concept_bucket": "测试概念",
+            "is_premium": premium,
+        }
+
+    @staticmethod
+    def _volume(symbol, premium):
+        return {
+            "symbol": symbol, "marketCap": 20e9, "beta_6m": 1.8,
+            "layer": "extend", "concept_bucket": "测试概念",
+            "is_premium": premium, "from_dv": True, "from_rvol": False,
+            "volume_signal_kind": "流动性加速", "dv_ratio": 2.0,
+            "dv_5d": 2e9, "dv_20d": 1e9,
+        }
+
+    def test_text_html_visual_highlight_only_premium_rows(self, monkeypatch):
+        monkeypatch.setattr(mr, "_display_concept_tags", lambda item: "测试概念")
+        monkeypatch.setattr(mr, "_grouping_bucket_for", lambda item: "测试概念")
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["PREM", "NORMAL"])
+        premium, normal = self._signal("PREM", True), self._signal("NORMAL", False)
+        market = _make_market_signals()
+        market.update({
+            "premium_pool": {"available": True, "symbols": ["PREM"]},
+            "selection_compass": None,
+            "pmarp": {"criteria": "PMARP", "hits": [premium, normal]},
+            "volume_anomaly": {
+                "criteria": "VOL", "hits": [self._volume("PREM", True), self._volume("NORMAL", False)],
+            },
+        })
+        dv = {"rankings": [
+            {"symbol": "PREM", "rank": 1, "dollar_volume": 3e9,
+             "price": 100, "market_cap": 20e9},
+            {"symbol": "NORMAL", "rank": 2, "dollar_volume": 2e9,
+             "price": 90, "market_cap": 20e9},
+        ], "new_faces": []}
+
+        text = mr.format_morning_report(market_signals=market, dv_result=dv, elapsed=1)
+        assert "🔴 *PREM*" in text
+        assert "🔴 *NORMAL*" not in text
+
+        html = mr.build_html_payload(market, dv, as_of="2026-09-04")
+        all_rows = [row for block in html["blocks"] for row in block.get("rows", [])]
+        premium_rows = [row for row in all_rows if row.get("标的") == "PREM"]
+        normal_rows = [row for row in all_rows if row.get("标的") == "NORMAL"]
+        assert premium_rows and all(row.get("_premium") is True for row in premium_rows)
+        assert normal_rows and all(not row.get("_premium") for row in normal_rows)
+
+        visual = mr.build_morning_visual_sections(market, dv)
+        stock_rows = [row for section in visual for block in section.get("blocks", [])
+                      for row in block.get("rows", []) if row.get("cells")]
+        assert any(row["cells"][0] == "PREM" and row.get("premium") is True
+                   for row in stock_rows)
+        assert all(not row.get("premium") for row in stock_rows
+                   if row["cells"][0] == "NORMAL")
+
+    def test_invalid_premium_pool_never_marks_rows(self, monkeypatch):
+        frames = {"PREM": _compass_price_frame()}
+        _stub_compass_builder_dependencies(monkeypatch, frames=frames,
+            pmarp=lambda *a, **kw: {
+                "signal": "bullish_breakout", "current": 99.0, "previous": 97.0,
+            })
+        monkeypatch.setattr(mr, "load_premium_pool", lambda: {
+            "available": False, "reason": "premium_pool_stale", "members": [],
+        })
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["PREM"])
+        monkeypatch.setattr(mr, "_concept_bucket", lambda item: "测试概念")
+        result = mr.build_market_signal_report()
+        assert result["premium_pool"]["available"] is False
+        assert result["pmarp"]["hits"][0]["is_premium"] is False
+
+    def test_compass_exception_preserves_weekly_coverage(self, monkeypatch):
+        frames = {"PREM": _compass_price_frame()}
+        _stub_compass_builder_dependencies(monkeypatch, frames=frames)
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["PREM"])
+        monkeypatch.setattr(
+            "terminal.selection_compass.scan_selection_compass",
+            lambda **kw: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        result = mr.build_market_signal_report()["selection_compass"]
+        assert result["available"] is False
+        assert result["coverage"]["fundamental_ready"] == {
+            "covered": 1, "total": 1, "ratio": 1.0,
+        }
+        assert result["coverage"]["beta_ready"] == {
+            "covered": 1, "total": 1, "ratio": 1.0,
+        }
+        assert result["coverage"]["ema30_ready"] == {
+            "covered": 0, "total": 1, "ratio": 0.0,
+        }

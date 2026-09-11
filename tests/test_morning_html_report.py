@@ -12,6 +12,18 @@ def test_dicts_to_html_table_escapes_and_wraps():
     assert "<Corp>" not in html                     # 原始尖括号不得泄漏
 
 
+def test_premium_row_styles_only_first_cell_red_bold_and_keeps_escaping():
+    output = dicts_to_html_table(
+        [{"标的": "A&B <Corp>", "市值": "$3.0T", "_premium": True},
+         {"标的": "NORMAL", "市值": "$2.0T"}],
+        columns=["标的", "市值"],
+    )
+    assert '<tr class="premium-row">' in output
+    assert "A&amp;B &lt;Corp&gt;" in output
+    assert "<Corp>" not in output
+    assert '<tr><td>NORMAL</td>' in output
+
+
 def test_compile_full_html(tmp_path):
     payload = {"as_of": "2026-06-03", "blocks": [
         {"heading": "1. PMARP 信号"},
@@ -94,7 +106,7 @@ def test_image_block_is_embedded_and_escaped(tmp_path):
     path=tmp_path/'chart.png'
     Image.new('RGB',(10,10),'white').save(path)
     output=compile_morning_html_report({'blocks':[{
-        'type':'image','heading':'0c. 三指数估值','path':str(path),
+        'type':'image','heading':'0d. 三指数估值','path':str(path),
         'alt':'<test>"','caption':'A&B <caption>'}]},'2026-09-11',tmp_path)
     text=output.read_text()
     assert 'data:image/png;base64,' in text
@@ -107,4 +119,12 @@ def test_valuation_block_is_between_concentration_and_pmarp():
     payload=build_html_payload({'index_valuation_chart':{
         'path':'chart.png','caption':'共识口径'}},None,'2026-09-11')
     headings=[b['heading'] for b in payload['blocks']]
-    assert headings.index('0b. 成交集中度') < headings.index('0c. 三指数估值') < headings.index('1. PMARP 信号')
+    assert headings.index('0b. 成交集中度') < headings.index('0d. 三指数估值') < headings.index('1. PMARP 信号')
+
+
+def test_valuation_preserves_existing_compass_section():
+    payload=build_html_payload({
+        'selection_compass':{'available':False,'reason':'insufficient_coverage','coverage':{}},
+        'index_valuation_chart':{'path':'chart.png','caption':'共识口径'}},None,'2026-09-11')
+    headings=[b['heading'] for b in payload['blocks']]
+    assert headings.index('0b. 成交集中度') < headings.index('0c. 选股罗盘') < headings.index('0d. 三指数估值') < headings.index('1. PMARP 信号')

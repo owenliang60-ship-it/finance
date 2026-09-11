@@ -10,7 +10,7 @@
 
 1. **§2.1 口径澄清**：aggregate `Σmcap/ΣNI` 是唯一的图表与 percentile 指标。SOXX 历史引擎的 holding-weighted 主字段（`rebalance_weighted_ttm_pe_gaap_proxy`）仅作日频诊断证据保留，不进 weekly 表、不进图；其 aggregate 次级字段现状不过 90% gate，weekly 产品须对 aggregate 指标重新施加门控。
 2. **§4 percentile 澄清**：五年分位只对 `quality_tier = actual_only` 的点计算；consensus tail 点展示数值但不参与分位；PIT 序列不给分位。
-3. **§5 位置冻结**：图表作为 `0c. 三指数估值` 插入 `0b. 成交集中度` 之后、`1. PMARP` 之前；既有 section 不重排，`*D. Dollar Volume*` Telegram split_marker 不变。
+3. **§5 位置冻结**：图表作为 `0d. 三指数估值` 插入 `0b. 成交集中度` 之后、`1. PMARP` 之前；既有 section 不重排，`*D. Dollar Volume*` Telegram split_marker 不变。
 
 **2026-07-31 修订**（Boss 停点 1 复审拍板）：
 
