@@ -19,7 +19,7 @@ import sqlite3
 import threading
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import pandas as pd
 
@@ -1543,44 +1543,127 @@ class MarketStore:
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         conn = self._get_conn()
         with conn:
-            for row in prepared:
-                existing = conn.execute(
-                    "SELECT quality_tier, methodology_version, created_at "
-                    "FROM basket_weekly_pe_history "
-                    "WHERE basket = ? AND valuation_date = ?",
-                    [row["basket"], row["valuation_date"]],
-                ).fetchone()
-                created_at = now
-                if existing is not None:
-                    created_at = existing["created_at"]
-                    if existing["methodology_version"] != \
-                            row["methodology_version"]:
-                        raise ValueError(
-                            "refusing cross-methodology_version overwrite "
-                            f"of existing row {row['basket']}/"
-                            f"{row['valuation_date']} (quality_tier="
-                            f"{existing['quality_tier']!r}): "
-                            f"{existing['methodology_version']!r} -> "
-                            f"{row['methodology_version']!r}. Use an "
-                            "explicit version migration instead: delete "
-                            "rows for the old methodology_version first, "
-                            "then backfill under the new version.")
-                    if existing["quality_tier"] == self._BWPH_COMPLETE_TIER \
-                            and row["quality_tier"] != self._BWPH_COMPLETE_TIER:
-                        logger.warning(
-                            "Rejected quality_tier downgrade for %s/%s: "
-                            "%s -> %s", row["basket"], row["valuation_date"],
-                            existing["quality_tier"], row["quality_tier"])
-                        raise ValueError(
-                            "refusing quality_tier downgrade for "
-                            f"{row['basket']}/{row['valuation_date']}: "
-                            f"{existing['quality_tier']!r} -> "
-                            f"{row['quality_tier']!r}")
-                self._insert_validated(conn, "basket_weekly_pe_history", {
-                    **row,
-                    "created_at": created_at,
-                    "last_updated": now,
-                })
+            self._upsert_bwph_prepared(conn, prepared, now)
+        return len(prepared)
+
+    def _check_bwph_replacement(self, existing, row: Dict[str, Any]) -> None:
+        if existing["methodology_version"] != row["methodology_version"]:
+            raise ValueError(
+                "refusing cross-methodology_version overwrite of existing row "
+                f"{row['basket']}/{row['valuation_date']}. "
+                "Use an explicit version migration instead.")
+        if (existing["quality_tier"] == self._BWPH_COMPLETE_TIER
+                and row["quality_tier"] != self._BWPH_COMPLETE_TIER):
+            logger.warning(
+                "Rejected quality_tier downgrade for %s/%s: %s -> %s",
+                row["basket"], row["valuation_date"],
+                existing["quality_tier"], row["quality_tier"])
+            raise ValueError(
+                "refusing quality_tier downgrade for "
+                f"{row['basket']}/{row['valuation_date']}: "
+                f"{existing['quality_tier']!r} -> {row['quality_tier']!r}")
+
+    def _upsert_bwph_prepared(self, conn: sqlite3.Connection,
+                             prepared: List[Dict[str, Any]], now: str) -> None:
+        """Shared row write logic; the public caller owns the transaction."""
+        for row in prepared:
+            existing = conn.execute(
+                "SELECT quality_tier, methodology_version, created_at "
+                "FROM basket_weekly_pe_history "
+                "WHERE basket = ? AND valuation_date = ?",
+                [row["basket"], row["valuation_date"]]).fetchone()
+            if existing is not None:
+                self._check_bwph_replacement(existing, row)
+            self._insert_validated(conn, "basket_weekly_pe_history", {
+                **row, "created_at": existing["created_at"] if existing else now,
+                "last_updated": now,
+            })
+
+    def commit_basket_weekly_pe_window(
+        self, rows: List[Dict[str, Any]], completed_event: Dict[str, Any],
+        certify: Callable[[sqlite3.Connection], bool],
+    ) -> int:
+        """Publish one full retained window and its completion atomically.
+
+        certify reads the candidate database with query_only enabled and must
+        return True. Any rejected row, prune, manifest insert or certification
+        rolls back to the previously committed product. The caller records
+        run_failed separately, after this method has rolled back.
+        """
+        if not rows or not callable(certify):
+            raise ValueError("non-empty window and certification required")
+        event = self._validate_bpbr_row(completed_event)
+        if event["event_kind"] != "run_completed":
+            raise ValueError("window requires a run_completed event")
+        prepared = [self._validate_bwph_row(row) for row in rows]
+        basket, run_id = event["basket"], event["run_id"]
+        start, end = event["expected_from_date"], event["expected_to_date"]
+        if any(row["basket"] != basket or row["run_id"] != run_id
+               or row["methodology_version"] != event["methodology_version"]
+               or not start <= row["valuation_date"] <= end for row in prepared):
+            raise ValueError("window rows disagree with completion identity/range")
+        conn = self._get_conn()
+        if conn.in_transaction:
+            raise ValueError("window commit requires its own transaction")
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        def week(day):
+            return date.fromisoformat(day).isocalendar()[:2]
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            started = conn.execute(
+                "SELECT * FROM basket_pe_backfill_runs WHERE basket = ? "
+                "AND run_id = ? AND event_kind = 'run_started'",
+                [basket, run_id]).fetchall()
+            if len(started) != 1:
+                raise ValueError("window requires exactly one persisted run_started")
+            for key in ("expected_from_date", "expected_to_date", "methodology_version"):
+                if started[0][key] != event[key]:
+                    raise ValueError(f"completion disagrees with started: {key}")
+            expected = json.loads(started[0]["payload_json"]).get("expected_weeks")
+            if not isinstance(expected, list) or not expected:
+                raise ValueError("run_started has no frozen expected weeks")
+            expected_by_week = {week(day): day for day in expected}
+            rows_by_week = {week(row["valuation_date"]): row for row in prepared}
+            if (len(rows_by_week) != len(prepared)
+                    or len(expected_by_week) != len(expected)
+                    or set(rows_by_week) != set(expected_by_week)
+                    or any(row["valuation_date"] > expected_by_week[key]
+                           for key, row in rows_by_week.items())):
+                raise ValueError("candidate week set differs from frozen expected weeks")
+            # Refuse accidental rewind of the retained product.
+            latest = conn.execute(
+                "SELECT MAX(expected_to_date) FROM basket_pe_backfill_runs "
+                "WHERE basket = ? AND event_kind = 'run_completed'", [basket]
+            ).fetchone()[0]
+            if latest and end < latest:
+                raise ValueError("retained window cannot move backwards")
+            previous = conn.execute(
+                "SELECT * FROM basket_weekly_pe_history WHERE basket = ?",
+                [basket]).fetchall()
+            for old in previous:
+                if old["methodology_version"] != event["methodology_version"]:
+                    raise ValueError("cross-methodology_version window replacement")
+                if old["run_id"] == run_id:
+                    raise ValueError("window run_id already owns published rows")
+                replacement = rows_by_week.get(week(old["valuation_date"]))
+                if replacement is not None:
+                    self._check_bwph_replacement(old, replacement)
+            self._upsert_bwph_prepared(conn, prepared, now)
+            # Includes superseded sample dates within a week as well as rows
+            # outside the retained range; missing weeks were rejected above.
+            conn.execute("DELETE FROM basket_weekly_pe_history "
+                         "WHERE basket = ? AND run_id != ?", [basket, run_id])
+            self._append_bpbr_prepared(conn, [event], now)
+            conn.execute("PRAGMA query_only=ON")
+            try:
+                if certify(conn) is not True:
+                    raise ValueError("weekly window certification failed")
+            finally:
+                conn.execute("PRAGMA query_only=OFF")
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
         return len(prepared)
 
     def get_basket_weekly_pe_history(
@@ -1676,23 +1759,26 @@ class MarketStore:
         conn = self._get_conn()
         try:
             with conn:
-                for row in prepared:
-                    conn.execute(
-                        "INSERT INTO basket_pe_backfill_runs "
-                        "(run_id, basket, event_seq, event_kind, frequency, "
-                        "expected_from_date, expected_to_date, "
-                        "methodology_version, target_count, "
-                        "target_universe_json, payload_json, created_at) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                        [row["run_id"], row["basket"], row["event_seq"],
-                         row["event_kind"], row["frequency"],
-                         row["expected_from_date"], row["expected_to_date"],
-                         row["methodology_version"], row["target_count"],
-                         row["target_universe_json"], row["payload_json"], now])
+                self._append_bpbr_prepared(conn, prepared, now)
         except sqlite3.IntegrityError as exc:
             raise ValueError(
                 f"refusing to rewrite an existing manifest event: {exc}") from exc
         return len(prepared)
+
+    @staticmethod
+    def _append_bpbr_prepared(conn: sqlite3.Connection,
+                             prepared: List[Dict[str, Any]], now: str) -> None:
+        for row in prepared:
+            conn.execute(
+                "INSERT INTO basket_pe_backfill_runs "
+                "(run_id, basket, event_seq, event_kind, frequency, "
+                "expected_from_date, expected_to_date, methodology_version, "
+                "target_count, target_universe_json, payload_json, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                [row["run_id"], row["basket"], row["event_seq"], row["event_kind"],
+                 row["frequency"], row["expected_from_date"], row["expected_to_date"],
+                 row["methodology_version"], row["target_count"],
+                 row["target_universe_json"], row["payload_json"], now])
 
     def get_basket_pe_run_events(
         self,

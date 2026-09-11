@@ -467,3 +467,131 @@ def test_a_populated_legacy_table_refuses_to_migrate_itself(tmp_path):
             "SELECT COUNT(*) FROM basket_weekly_pe_history").fetchone()[0] == 2
         assert "run_id" not in {row[1] for row in conn.execute(
             "PRAGMA table_info(basket_weekly_pe_history)")}
+
+
+def _window_events(store, rows, run_id="new", start="2021-07-10",
+                   end="2026-07-10", expected=None):
+    base = {
+        "run_id": run_id, "basket": "SPY", "frequency": "weekly",
+        "expected_from_date": start, "expected_to_date": end,
+        "methodology_version": "v1", "target_count": 1,
+        "target_universe_json": ["AAPL"],
+    }
+    store.append_basket_pe_run_events([{
+        **base, "event_seq": 0, "event_kind": "run_started",
+        "payload_json": {"expected_weeks": expected or [
+            row["valuation_date"] for row in rows]},
+    }])
+    return {**base, "event_seq": 1, "event_kind": "run_completed",
+            "payload_json": {"weekly_rows": len(rows)}}
+
+
+def test_window_commit_prunes_old_rows_and_keeps_other_baskets(store):
+    store.upsert_basket_weekly_pe_batch([
+        _row(valuation_date="2021-07-09"),
+        _row(valuation_date="2026-07-03"),
+        _row(basket="QQQ", valuation_date="2021-07-09"),
+    ])
+    rows = [_row(valuation_date=day, run_id="new")
+            for day in ("2026-07-03", "2026-07-10")]
+    event = _window_events(store, rows)
+    def certify(conn):
+        assert conn.execute("PRAGMA query_only").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM basket_weekly_pe_history "
+                            "WHERE basket = 'SPY'").fetchone()[0] == 2
+        assert conn.execute("SELECT COUNT(*) FROM basket_pe_backfill_runs "
+                            "WHERE event_kind = 'run_completed'").fetchone()[0] == 1
+        with sqlite3.connect(store.db_path.as_uri() + "?mode=ro", uri=True) as reader:
+            assert reader.execute("SELECT COUNT(*) FROM basket_weekly_pe_history "
+                                  "WHERE run_id = 'new'").fetchone()[0] == 0
+            assert reader.execute("SELECT COUNT(*) FROM basket_pe_backfill_runs "
+                                  "WHERE event_kind = 'run_completed'").fetchone()[0] == 0
+        return True
+    assert store.commit_basket_weekly_pe_window(rows, event, certify) == 2
+    assert len(store.get_basket_weekly_pe_history("QQQ")) == 1
+    assert store._get_conn().execute("PRAGMA query_only").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("failure", ["reject", "raise", "terminal", "prune"])
+def test_window_failure_rolls_back_pruning_rows_and_completion(store, failure):
+    store.upsert_basket_weekly_pe_batch([
+        _row(valuation_date="2021-07-09"), _row(valuation_date="2026-07-03")])
+    before = store.get_basket_weekly_pe_history("SPY")
+    rows = [_row(valuation_date=day, run_id="new")
+            for day in ("2026-07-03", "2026-07-10")]
+    event = _window_events(store, rows)
+    if failure == "terminal":
+        store._get_conn().execute(
+            "CREATE TRIGGER reject_completed BEFORE INSERT ON basket_pe_backfill_runs "
+            "WHEN NEW.event_kind = 'run_completed' BEGIN "
+            "SELECT RAISE(ABORT, 'injected terminal failure'); END")
+    if failure == "prune":
+        store._get_conn().execute(
+            "CREATE TRIGGER reject_prune BEFORE DELETE ON basket_weekly_pe_history "
+            "BEGIN SELECT RAISE(ABORT, 'injected prune failure'); END")
+    def certify(conn):
+        if failure == "raise":
+            raise RuntimeError("injected verifier failure")
+        return failure == "terminal"
+    with pytest.raises((RuntimeError, ValueError, sqlite3.IntegrityError)):
+        store.commit_basket_weekly_pe_window(rows, event, certify)
+    assert store.get_basket_weekly_pe_history("SPY") == before
+    assert [e["event_kind"] for e in store.get_basket_pe_run_events()] == ["run_started"]
+    assert store._get_conn().execute("PRAGMA query_only").fetchone()[0] == 0
+
+
+def test_window_rejects_missing_week_before_pruning(store):
+    rows = [_row(run_id="new")]
+    event = _window_events(store, rows, expected=["2026-07-03", "2026-07-10"])
+    with pytest.raises(ValueError, match="week"):
+        store.commit_basket_weekly_pe_window(rows, event, lambda conn: True)
+    assert store.get_basket_weekly_pe_history("SPY") == []
+
+
+def test_window_rejects_downgrade_even_when_sample_day_changes(store):
+    store.upsert_basket_weekly_pe_batch([_row(valuation_date="2026-07-10")])
+    rows = [_row(valuation_date="2026-07-09", run_id="new",
+                 quality_tier="latest_consensus_tail",
+                 hindsight_actual_quarters=3, hindsight_estimate_quarters=1)]
+    event = _window_events(store, rows, expected=["2026-07-10"])
+    with pytest.raises(ValueError, match="downgrade"):
+        store.commit_basket_weekly_pe_window(rows, event, lambda conn: True)
+    assert store.get_basket_weekly_pe_history("SPY")[0]["quality_tier"] == "actual_only"
+
+
+def test_window_replaces_old_sample_day_in_the_same_week(store):
+    store.upsert_basket_weekly_pe_batch([_row(valuation_date="2026-07-10")])
+    rows = [_row(valuation_date="2026-07-09", run_id="new")]
+    event = _window_events(store, rows, expected=["2026-07-10"])
+    store.commit_basket_weekly_pe_window(rows, event, lambda conn: True)
+    assert [r["valuation_date"] for r in store.get_basket_weekly_pe_history("SPY")] == ["2026-07-09"]
+
+
+@pytest.mark.parametrize("bad", ["empty", "basket", "owner", "range", "version"])
+def test_window_rejects_invalid_batch_without_removing_existing_rows(store, bad):
+    store.upsert_basket_weekly_pe_batch([_row()])
+    before = store.get_basket_weekly_pe_history("SPY")
+    rows = [_row(run_id="new")]
+    event = _window_events(store, rows)
+    if bad == "empty":
+        rows = []
+    else:
+        field, value = {"basket": ("basket", "QQQ"), "owner": ("run_id", "wrong"),
+                        "range": ("valuation_date", "2026-07-17"),
+                        "version": ("methodology_version", "v2")}[bad]
+        rows[0][field] = value
+    with pytest.raises(ValueError):
+        store.commit_basket_weekly_pe_window(rows, event, lambda conn: True)
+    assert store.get_basket_weekly_pe_history("SPY") == before
+
+
+def test_retained_window_cannot_rewind_over_a_newer_completed_run(store):
+    rows = [_row(run_id="first")]
+    event = _window_events(store, rows, run_id="first", end="2026-07-17")
+    store.commit_basket_weekly_pe_window(rows, event, lambda conn: True)
+    before = store.get_basket_weekly_pe_history("SPY")
+    new_rows = [_row(run_id="new")]
+    event = _window_events(store, new_rows, end="2026-07-10")
+    with pytest.raises(ValueError, match="backwards"):
+        store.commit_basket_weekly_pe_window(new_rows, event, lambda conn: True)
+    assert store.get_basket_weekly_pe_history("SPY") == before

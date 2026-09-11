@@ -155,7 +155,7 @@ fwd_pe_ntm(snapshot)
 | `members_json`, `warnings_json` | 审计证据 |
 | `methodology_version` | 固定版本，不允许静默覆写旧口径 |
 
-窄 CRUD：atomic whole-batch upsert、按 basket/date 只读查询、禁止 generic delete/update。新表必须显式注册进 `market_store.py` 的表白名单机制（现 `:606` 附近），未注册 fail-fast。
+窄 CRUD：atomic whole-batch upsert、按 basket/date 只读查询、禁止 generic delete/update。新表必须显式注册进 `market_store.py` 的表白名单机制（现 `:606` 附近），未注册 fail-fast。2026-09-11 C1 已增窄接口 `commit_basket_weekly_pe_window`，将整窗写入、旧行清理、完成记录与提交前只读认证合为单一事务；运行说明见 `docs/runbooks/index-pe-weekly-window.md`。
 
 **Tail 演化契约（R5）**：`quality_tier` 从 `latest_consensus_tail` 升级为 `actual_only` 是**同一 methodology 下的合法周频数据更新**，不 bump `methodology_version`。规则：
 
@@ -459,7 +459,7 @@ python -m scripts.verify_index_pe_history \
 - 按冻结 spec 实现 `fwd_pe_ntm`，同时补齐已有表的 `fwd_pe_blend`，但图只用 NTM；
 - 成员级证据写 `members_json`；
 - update CLI 支持 `--phase valuation` 或与现有 run 语义兼容的显式入口；
-- weekly 完成后追加三 basket 当前周历史 TTM/hindsight 点；
+- weekly 完成后按 §3.3 C1 整窗事务重写三 basket 历史 TTM/hindsight 点，不做 tail-only 追加；
 - verifier 新增 basket 估值重算和 coverage 检查。
 
 **Verify:**

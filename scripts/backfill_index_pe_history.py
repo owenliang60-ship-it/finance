@@ -164,8 +164,8 @@ class _Manifest:
         self.events: List[Dict[str, Any]] = []
         self._universe: List[str] = []
 
-    def append(self, event_kind: str, payload: Mapping[str, Any],
-               universe: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+    def build_event(self, event_kind: str, payload: Mapping[str, Any],
+                    universe: Optional[Sequence[str]] = None) -> Dict[str, Any]:
         if universe is not None:
             self._universe = [str(value) for value in universe]
         event = {
@@ -181,9 +181,14 @@ class _Manifest:
             "target_universe_json": list(self._universe),
             "payload_json": dict(payload),
         }
-        self.events.append(event)
+        return event
+
+    def append(self, event_kind: str, payload: Mapping[str, Any],
+               universe: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+        event = self.build_event(event_kind, payload, universe)
         if self.store is not None:
             self.store.append_basket_pe_run_events([event])
+        self.events.append(event)
         return event
 
 
@@ -361,17 +366,7 @@ def backfill_basket(
         report["rows"] = rows
         report["weekly_rows"] = len(rows)
 
-        if store is not None and rows:
-            # Each row names the run accountable for it, so a later manifest
-            # cannot claim rows it did not write.
-            store.upsert_basket_weekly_pe_batch([
-                {key: value for key, value in row.items()
-                 if not key.startswith("_")}
-                for row in ({**row, "run_id": args.run_id} for row in rows)])
-            rows_written = True
-
-        report["status"] = "complete"
-        manifest.append("run_completed", {
+        completion_payload = {
             "weekly_rows": len(rows),
             "published_ttm": sum(row["ttm_pe_gaap"] is not None for row in rows),
             "published_hindsight": sum(
@@ -381,10 +376,39 @@ def backfill_basket(
             # rows, so a deleted week or an edited P/E stops matching.
             "result_hash": weekly_result_hash(rows),
             "completed_at": _now(),
-        })
+        }
+        if store is not None:
+            from scripts.verify_index_pe_history import verify_database
+
+            def certify(candidate_conn):
+                verification = verify_database(
+                    candidate_conn, [basket], args.as_of, args.years,
+                    sample=50, config_dir=config_dir)
+                report["verification"] = verification
+                return verification["passed"]
+
+            completed = manifest.build_event("run_completed", completion_payload)
+            store.commit_basket_weekly_pe_window([
+                {key: value for key, value in row.items()
+                 if not key.startswith("_")}
+                for row in ({**row, "run_id": args.run_id} for row in rows)],
+                completed, certify)
+            rows_written = True
+            manifest.events.append(completed)
+        else:
+            manifest.append("run_completed", completion_payload)
+        report["status"] = "complete"
     except Exception as exc:
         report["status"] = "failed"
         report["error"] = f"{type(exc).__name__}: {exc}"
+        if not manifest.events:
+            # Preflight can fail before a universe/calendar can be frozen.
+            # Record that fact as a failed run, not a terminal-only event
+            # which would invalidate every later certification for the basket.
+            manifest.append("run_started", {
+                "preflight_failed": True, "expected_weeks": [],
+                "started_at": _now(), "as_of": args.as_of,
+            }, universe=[])
         # Whether the batch had already committed decides whether this run
         # left rows behind that no completed manifest accounts for.
         manifest.append("run_failed", {"error": report["error"],

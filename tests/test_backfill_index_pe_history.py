@@ -537,6 +537,9 @@ def _fixture_db(tmp_path, baskets=("SPY",)):
                      "2025-12-22", "2026-01-02", symbol, symbol, symbol,
                      weight, weight * 10, 1, None, None, "[]",
                      "2026-01-20T00:00:00Z", "2026-01-20T00:00:00Z"])
+        conn.execute("UPDATE fmp_fund_disclosure_holdings SET cik = "
+                     "CASE symbol WHEN 'AAA' THEN '0000000001' "
+                     "ELSE '0000000002' END")
     return store
 
 
@@ -651,6 +654,90 @@ def test_all_baskets_producer_to_verifier_with_same_window_rerun(
         store.close()
 
 
+def test_five_year_window_slides_a_week_without_orphaned_ownership(
+        tmp_path, config_dir):
+    from datetime import timedelta
+    store = _fixture_db(tmp_path)
+    days = []
+    day = date(2020, 12, 31)
+    while day <= date(2026, 1, 23):
+        if day.weekday() < 5:
+            days.append(day.isoformat())
+        day += timedelta(days=1)
+    quarters = [f"{year}-{ending}" for year in range(2020, 2028)
+                for ending in ("03-31", "06-30", "09-30", "12-31")]
+    with store._get_conn() as conn:
+        conn.execute("UPDATE fmp_fund_disclosure_holdings SET "
+                     "holding_date='2020-12-31', composition_effective_date='2021-01-04', "
+                     "composition_available_date='2021-01-05'")
+        for symbol in ("SPY", "AAA", "BBB"):
+            conn.executemany("INSERT OR REPLACE INTO daily_price "
+                             "(symbol,date,close) VALUES (?,?,?)",
+                             [(symbol, d, 10.0) for d in days])
+        for symbol in ("AAA", "BBB"):
+            conn.executemany("INSERT OR REPLACE INTO historical_market_cap "
+                             "(symbol,date,market_cap) VALUES (?,?,?)",
+                             [(symbol, d, 1000.0) for d in days])
+            conn.execute("DELETE FROM income_quarterly WHERE symbol=?", [symbol])
+            conn.executemany("INSERT INTO income_quarterly "
+                             "(symbol,date,period,accepted_date,reported_currency,net_income) "
+                             "VALUES (?,?,?,?,?,?)",
+                             [(symbol, d, f"Q{int(d[5:7]) // 3}",
+                               _accepted_for(d), "USD", 25.0) for d in quarters])
+    try:
+        first = backfill_basket(
+            _args(tmp_path, config_dir, dry_run=False, run_id="week-1"),
+            "SPY", store=store, conn=store._get_conn())
+        assert first["verification"]["passed"]
+        assert store.get_basket_weekly_pe_history("SPY")[0]["valuation_date"] == "2021-01-22"
+        second = backfill_basket(
+            _args(tmp_path, config_dir, dry_run=False, run_id="week-2",
+                  as_of="2026-01-23"),
+            "SPY", store=store, conn=store._get_conn())
+        rows = store.get_basket_weekly_pe_history("SPY")
+        assert second["verification"]["passed"]
+        assert rows[0]["valuation_date"] == "2021-01-29"
+        assert rows[-1]["valuation_date"] == "2026-01-23"
+        assert {r["run_id"] for r in rows} == {"week-2"}
+        readonly = verifier.connect_readonly(store.db_path)
+        try:
+            result = verifier.verify_database(
+                readonly, ["SPY"], "2026-01-23", 5, 50, config_dir)
+            assert result["passed"], result["checks"]
+        finally:
+            readonly.close()
+    finally:
+        store.close()
+
+
+def test_failed_candidate_keeps_old_product_and_next_run_recovers(
+        tmp_path, config_dir, monkeypatch):
+    store = _fixture_db(tmp_path)
+    try:
+        backfill_basket(_args(tmp_path, config_dir, dry_run=False, run_id="good"),
+                        "SPY", store=store, conn=store._get_conn())
+        before = store.get_basket_weekly_pe_history("SPY")
+        with monkeypatch.context() as patch:
+            patch.setattr(verifier, "verify_database", lambda *a, **kw: {
+                "passed": False, "checks": [{"passed": False, "name": "injected"}]})
+            with pytest.raises(ValueError, match="certification") as error:
+                backfill_basket(
+                    _args(tmp_path, config_dir, dry_run=False, run_id="bad"),
+                    "SPY", store=store, conn=store._get_conn())
+        assert error.value.backfill_report["verification"]["passed"] is False
+        assert store.get_basket_weekly_pe_history("SPY") == before
+        failed_events = store.get_basket_pe_run_events(basket="SPY", run_id="bad")
+        assert [r["event_kind"] for r in failed_events] == ["run_started", "run_failed"]
+        assert json.loads(failed_events[-1]["payload_json"])["rows_written"] is False
+        retry = backfill_basket(
+            _args(tmp_path, config_dir, dry_run=False, run_id="retry"),
+            "SPY", store=store, conn=store._get_conn())
+        assert retry["verification"]["passed"]
+        assert {r["run_id"] for r in store.get_basket_weekly_pe_history("SPY")} == {"retry"}
+    finally:
+        store.close()
+
+
 def test_member_failure_above_twenty_percent_publishes_nothing(tmp_path, config_dir):
     store = _fixture_db(tmp_path)
     _insert_live_snapshot(store, "SPY")
@@ -694,11 +781,23 @@ def test_one_basket_failing_leaves_the_others_committed(tmp_path, config_dir):
     diagnostics = report["baskets"]["QQQ"]
     assert "ValueError" in diagnostics["error"]
     assert [event["event_kind"] for event in diagnostics["manifest"]] == [
-        "run_failed"]
+        "run_started", "run_failed"]
+    assert diagnostics["manifest"][0]["payload_json"]["preflight_failed"] is True
     assert diagnostics["from_date"] == "2021-01-16"
     assert diagnostics["to_date"] == "2026-01-16"
     assert "stages" in diagnostics
     store.close()
+
+    # Restoring the source must permit a new valid run. A failure-only event
+    # would otherwise remain run_never_started and poison all future retries.
+    restored = _fixture_db(tmp_path, baskets=("SPY", "QQQ"))
+    try:
+        retry = backfill_basket(
+            _args(tmp_path, config_dir, dry_run=False, run_id="restored"),
+            "QQQ", store=restored, conn=restored._get_conn())
+        assert retry["verification"]["passed"]
+    finally:
+        restored.close()
 
 
 def test_rerun_rescans_jump_sanity_even_with_complete_market_cap_rows(tmp_path, config_dir):
@@ -785,7 +884,8 @@ def _disclosure_row(symbol, weight, holding_date="2026-01-05"):
     return {
         "date": holding_date, "acceptedDate": "2026-01-06 16:00:00",
         "symbol": symbol, "title": symbol, "name": symbol,
-        "pctVal": weight, "valUsd": weight * 100.0, "cik": None,
+        "pctVal": weight, "valUsd": weight * 100.0,
+        "cik": "0000000001" if symbol.startswith("AAA") else "0000000002",
     }
 
 

@@ -302,20 +302,12 @@ def _runs_after(events: Sequence[Mapping[str, Any]],
 
 
 def _unfinished_runs(events: Sequence[Mapping[str, Any]]) -> List[str]:
-    """Runs that never recorded an outcome.
+    """Runs that never recorded an outcome, including legacy partial writes.
 
-    The producer commits the weekly batch and *then* appends run_completed, so
-    a run killed in that gap leaves rows behind that no manifest accounts for.
-    Picking the newest completed run would hand those rows the previous run's
-    frozen universe and expected range to be verified against -- certifying
-    data the certified run never produced.
-
-    Rejecting here rather than widening the producer's transaction is
-    deliberate: making run_completed share a transaction with the data rows
-    would put manifest writes inside the same commit as the thing they
-    describe, and the manifest's value comes from being appended before the
-    work (run_started) and from being a plain INSERT that can never be
-    rewritten. Fail-closed reading costs nothing and keeps both properties.
+    C1 commits the candidate product and run_completed in one transaction;
+    run_started still lands before the work. Keep this check for crashes before
+    completion and for legacy runs which wrote rows before their terminal event.
+    A later successful full-window retry supersedes an earlier unfinished run.
     """
     kinds_by_run: Dict[str, set] = {}
     for row in events:
