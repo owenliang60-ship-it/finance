@@ -8,6 +8,60 @@
     "source_url": "https://investor.wolfspeed.com/news/news-details/2021/Cree-Inc.-Officially-Changes-Company-Name-to-Wolfspeed-Inc.-Marking-Successful-Transition-to-Global-Semiconductor-Powerhouse/default.aspx",
     "source_sha256": "8f892a66b39b8bff9b9cb1e36176a0bae8e47d5f3dd0a96a7bf54d0bfbc83aa8"
   },
+  "MOB": {
+    "symbol": "MNST", "cusip": "61174X109", "isin": "US61174X1090",
+    "mode": "authoritative", "issuer_cik": "0000865752",
+    "reason": "Exact Monster Beverage security mislabeled MOB in SPY disclosures; MOB financials are Mobilicom CIK 1898643, not Monster.",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/865752/000110465926070506/tm2616810d1_8k.htm"
+  },
+  "GNE": {
+    "symbol": "GE", "cusip": "369604301", "isin": "US3696043013",
+    "mode": "authoritative", "issuer_cik": "0000040545",
+    "reason": "Exact General Electric security; GNE financial endpoint belongs to a different issuer, CIK 1528356.",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/40545/000130817923000210/ge4125011-ars.pdf"
+  },
+  "SYM": {
+    "symbol": "GEN", "cusip": "668771108", "isin": "US6687711084",
+    "mode": "authoritative", "issuer_cik": "0000849399",
+    "reason": "Exact NortonLifeLock/Gen Digital security; SYM financials belong to Symbotic CIK 1837240. GEN/NLOK share issuer CIK 849399.",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/849399/000084939926000028/gen-20260806.htm"
+  },
+  "OCN": {
+    "symbol": "OMC", "cusip": "681919106", "isin": "US6819191064",
+    "mode": "authoritative", "issuer_cik": "0000029989",
+    "reason": "Exact Omnicom security; OCN financials carry a different issuer CIK 873860.",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/29989/000009375126000003/xslSCHEDULE_13G_X01/primary_doc.xml"
+  },
+  "PLL": {
+    "symbol": "PRU", "cusip": "744320102", "isin": "US7443201022",
+    "mode": "authoritative", "issuer_cik": "0001137774",
+    "reason": "Exact Prudential Financial security; PLL financials carry unrelated issuer CIK 1728205.",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1137774/000113777426000048/R1.htm"
+  },
+  "PARA": {
+    "symbol": "VIAC", "cusip": "92556H206", "isin": "US92556H2067",
+    "mode": "authoritative", "issuer_cik": "0000813828",
+    "reason": "Historical ViacomCBS/Paramount class B security. Use the retained VIAC financial series for issuer 813828; the current PARA endpoint returns issuer 1826011. VIAC is a historical data lookup, not a claim that Paramount still trades under that ticker.",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/813828/000119312519306334/d842322d8k.htm"
+  },
+  "VIA": {
+    "symbol": "VTRS", "cusip": "92556V106", "isin": "US92556V1061",
+    "mode": "authoritative", "issuer_cik": "0001792044",
+    "reason": "Exact Viatris security; VIA financial history contains unrelated issuers, not Viatris.",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1792044/000179204426000041/vtrs-20260630.htm"
+  },
+  "OEUR": {
+    "symbol": "O", "cusip": "756109104", "isin": "US7561091049",
+    "mode": "authoritative", "issuer_cik": "0000726728",
+    "reason": "Exact Realty Income common security; use primary USD O listing rather than unavailable OEUR financial history.",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/726728/000072672823000061/o-20221231xars.pdf"
+  },
+  "FB": {
+    "symbol": "META", "cusip": "30303M102", "isin": "US30303M1027",
+    "mode": "authoritative", "issuer_cik": "0001326801",
+    "reason": "Exact Meta class A security; retired FB lookup has no financial history, while META retains issuer 1326801 history.",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1326801/000162828026028526/R1.htm"
+  },
   "TERN": {
     "symbol": "TER",
     "cusip": "880770102",

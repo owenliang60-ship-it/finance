@@ -528,6 +528,11 @@ def load_soxx_symbol_aliases(path: Path) -> Dict[str, Dict[str, str]]:
             **({"cusip": cusip} if cusip else {}),
             **({"isin": isin} if isin else {}),
         }
+        if item.get("issuer_cik") is not None:
+            value = item["issuer_cik"]
+            if not isinstance(value, str) or len(value) != 10 or not value.isdigit() or int(value) == 0:
+                raise ValueError(f"invalid alias issuer CIK: {raw_symbol}")
+            normalized[raw_symbol]["issuer_cik"] = value
     return normalized
 
 
@@ -558,6 +563,25 @@ def resolve_disclosure_symbol(
         "mode": str(alias.get("mode", "fallback")),
         "reason": str(alias["reason"]),
     }
+
+
+def validate_disclosure_alias_bindings(rows, aliases, income_by_symbol=None):
+    """A known security correction must survive storage and bind the right income issuer."""
+    checked = set()
+    for row in rows:
+        raw = str(row.get("raw_symbol") or row.get("symbol") or "").upper()
+        if raw not in aliases:
+            continue
+        target, evidence = resolve_disclosure_symbol(raw, row.get("cik"), aliases,
+            cusip=row.get("cusip"), isin=row.get("isin"))
+        if row.get("alias_symbol") != target or row.get("alias_mode") != evidence["mode"]:
+            raise ValueError(f"stored disclosure alias metadata is stale: {raw}; reparse preserved raw source")
+        expected = aliases[raw].get("issuer_cik")
+        if income_by_symbol is not None and expected and target not in checked:
+            for statement in income_by_symbol.get(target, []):
+                if str(statement.get("cik") or "").zfill(10) != expected:
+                    raise ValueError(f"income issuer mismatch for verified alias {raw}->{target}")
+            checked.add(target)
 
 
 def _vendor_timestamp(value: Any, field_name: str) -> datetime:

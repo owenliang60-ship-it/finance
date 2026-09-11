@@ -52,11 +52,14 @@ from scripts.backfill_soxx_historical_pe import (  # noqa: E402
     load_state,
     open_write_dependencies,
     validate_snapshot_quality,
+    resolve_config_paths,
 )
 from src.data.fmp_client import FMPClient, FMPResponseError  # noqa: E402
 from src.data.fmp_forward_ingestion import (  # noqa: E402
     basket_history_gap,
     load_index_pe_basket_configs,
+    load_soxx_symbol_aliases,
+    validate_disclosure_alias_bindings,
 )
 from src.data.market_store import MarketStore  # noqa: E402
 from src.data.fund_issuer_identity import (  # noqa: E402
@@ -333,6 +336,9 @@ def backfill_basket(
             str(row["composition_available_date"]) for row in state.snapshots
             if row.get("composition_available_date"))
         state.snapshots = _window_snapshots(state.snapshots, window)
+        alias_path = resolve_config_paths(config_dir)["aliases"]
+        aliases = load_soxx_symbol_aliases(alias_path) if alias_path.exists() else {}
+        validate_disclosure_alias_bindings(state.snapshots, aliases)
         identity = audit_snapshot_identities(
             state.snapshots, load_issuer_overrides(config_dir))
         report["source_identity"] = identity
@@ -390,6 +396,7 @@ def backfill_basket(
         # that simply had not listed yet at the start of a five-year window.
         _run_fundamentals(stage_args, state, income_symbols, client, store,
                           report, fuse_on_incompleteness=False)
+        validate_disclosure_alias_bindings(state.snapshots, aliases, state.income_by_symbol)
         _run_mcap(stage_args, state, mcap_symbols, client, store, report,
                   fuse_on_incompleteness=False)
         _run_splits(state, mcap_symbols, client, store, report)

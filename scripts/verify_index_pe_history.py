@@ -37,6 +37,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.fmp_forward_ingestion import (  # noqa: E402
     load_index_pe_basket_configs,
+    load_soxx_symbol_aliases,
 )
 from src.data.fx_validation import USD_PER_UNIT_BOUNDS  # noqa: E402
 from src.data.fund_issuer_identity import (  # noqa: E402
@@ -1433,6 +1434,26 @@ def _denominator_errors(
 # top level
 # ---------------------------------------------------------------------------
 
+def _source_alias_binding_errors(conn, basket, aliases):
+    """Independently bind exact disclosed securities to their financial issuer."""
+    errors, checked = [], set()
+    for row in _rows(conn, "SELECT * FROM fmp_fund_disclosure_holdings WHERE basket_symbol=?", [basket]):
+        raw = str(row.get("raw_symbol") or row.get("symbol") or "").upper()
+        rule = aliases.get(raw)
+        if not rule:
+            continue
+        if (row.get("cusip") != rule["cusip"] or row.get("isin") != rule["isin"]
+                or row.get("alias_symbol") != rule["symbol"] or row.get("alias_mode") != rule["mode"]):
+            errors.append(f"{basket}:{raw}:stale_alias_or_security_mismatch")
+        target, expected = rule["symbol"], rule.get("issuer_cik")
+        if expected and target not in checked:
+            values = _rows(conn, "SELECT DISTINCT cik FROM income_quarterly WHERE symbol=?", [target])
+            if any(str(value.get("cik") or "").zfill(10) != expected for value in values):
+                errors.append(f"{basket}:{raw}:{target}:income_issuer_mismatch")
+            checked.add(target)
+    return errors
+
+
 def verify_database(
     conn: sqlite3.Connection,
     baskets: Sequence[str] = ("SPY", "QQQ", "SOXX"),
@@ -1461,6 +1482,12 @@ def verify_database(
     share_config = default_share_class_config(config_root)
     basket_configs = load_index_pe_basket_configs(config_root)
     issuer_overrides = load_issuer_overrides(config_root)
+    alias_path = config_root / "soxx_symbol_aliases.json"
+    if not alias_path.exists():
+        alias_path = config_root.parent / "soxx_symbol_aliases.json"
+    aliases = load_soxx_symbol_aliases(alias_path) if alias_path.exists() else {}
+    binding_errors = [error for basket in baskets
+                      for error in _source_alias_binding_errors(conn, basket, aliases)]
 
     probe = _connection_is_read_only(conn)
     checks = [
@@ -1600,6 +1627,7 @@ def verify_database(
               "HAVING n > 1")
 
     checks.extend([
+        _check("security_alias_bindings", not binding_errors, binding_errors),
         _check("manifest_denominator", not manifest_errors, manifest_errors),
         _check("forced_refresh_provenance", not provenance_errors,
                provenance_errors),
