@@ -48,3 +48,10 @@ verifier 使用 SQLite `mode=ro + query_only` 从 source tables 重算每日结�
 后续展示契约：Boss 已确认共识口径显式标注。hindsight 是事后解释，不是历史可交易 forward 信号，共识尾部不能参加 actual-only 分位。reader 先验证完整已拥有行的 manifest hash，再截取五年窗口，避免截断后重算 hash 的假失败。短周频线段的虚线相位必须跨线段延续，否则每段不足 7px 时“虚线”会实际画成实线。HTML 成功投递后摘要失败不得再发送 PDF。对应回归在 chart 与 morning 测试中。
 
 Boss 随后授权继续，整窗写入/旧行清理/completed 现为同一事务，候选内只读认证成功才提交；五年滑动一周、同周取样日变更和失败保留旧数据/重跑恢复通过。源预检失败也保留明确 started+failed 形状，避免 terminal-only 记录毒化所有后续重跑。C1 已关闭；Task 5 的共识盈利是否可称为 GAAP 存在两文档冲突，已向 Boss 提出选择，云端 PIT 表仍为空。详 `docs/plans/2026-09-11-index-pe-c1-continuation.md`。
+
+### 同日复审：迁移阻断范围与失败收尾（已修复，未部署）
+
+- 原 populated legacy table 守卫从 `MarketStore.__init__` 抛错，影响所有 writer-mode 使用方。改为保留旧行并告警，只在周频 PE 的两个窄写入入口拒绝缺少 run_id 的 schema；backfill 在 source/API 之前预检。空表迁移与只读 verifier 的拒绝逻辑保持不变。
+- 原错误路径向故障 store 写 started/failed，第二个异常会替换原异常并丢失报告。现先绑定 partial report，再 best-effort 写失败事件；次生失败另记 `manifest_persist_error` 和日志，裸 raise 保持原异常对象及 traceback。
+- 故障注入覆盖 preflight started、preflight failed、正常 started 写入及整窗提交四处故障；额外验证 CLI 所用汇总报告保留诊断并可 JSON 序列化。旧行完全保留、价格/forward 写入仍可用、PE 两入口拒写、预检零 API 请求均有测试。
+- 残余边界：存储确实不可写时无法保证落下失败终态；现不掩盖该情况，也不补造证据。后续仍须按 runbook 人工核对异常 run。

@@ -22,6 +22,7 @@ the baskets that succeeded.
 """
 import argparse
 import json
+import logging
 import sqlite3
 import sys
 import uuid
@@ -75,6 +76,7 @@ from terminal.index_pe_weekly import (  # noqa: E402
 
 CONFIG_DIR = PROJECT_ROOT / "config" / "baskets"
 FREQUENCIES = ("weekly",)
+logger = logging.getLogger(__name__)
 
 
 def _iso_date(value: str) -> str:
@@ -305,6 +307,8 @@ def backfill_basket(
     rows_written = False
 
     try:
+        if store is not None:
+            store.require_basket_weekly_pe_schema()
         state = load_state(conn, window[1], basket) if conn is not None \
             else BackfillState()
         if not state.trading_dates:
@@ -429,24 +433,28 @@ def backfill_basket(
     except Exception as exc:
         report["status"] = "failed"
         report["error"] = f"{type(exc).__name__}: {exc}"
-        if not manifest.events:
-            # Preflight can fail before a universe/calendar can be frozen.
-            # Record that fact as a failed run, not a terminal-only event
-            # which would invalidate every later certification for the basket.
-            manifest.append("run_started", {
-                "preflight_failed": True, "expected_weeks": [],
-                "started_at": _now(), "as_of": args.as_of,
-            }, universe=[])
-        # Whether the batch had already committed decides whether this run
-        # left rows behind that no completed manifest accounts for.
-        manifest.append("run_failed", {"error": report["error"],
-                                       "rows_written": rows_written,
-                                       "failed_at": _now()})
         report["manifest"] = manifest.events
-        # Carry the partial report out with the exception. Which stages ran,
-        # what the manifest recorded and which window was in flight are what an
-        # operator debugs from; the caller would otherwise have only the message.
+        # Preserve the primary failure before attempting more writes to the
+        # same store. The events list contains only successfully persisted events.
         setattr(exc, "backfill_report", report)
+        try:
+            if not manifest.events:
+                # Preflight can fail before a universe/calendar can be frozen.
+                # Never leave a terminal-only event that poisons later runs.
+                manifest.append("run_started", {
+                    "preflight_failed": True, "expected_weeks": [],
+                    "started_at": _now(), "as_of": args.as_of,
+                }, universe=[])
+            manifest.append("run_failed", {"error": report["error"],
+                                           "rows_written": rows_written,
+                                           "failed_at": _now()})
+        except Exception as persist_exc:
+            report["manifest_persist_error"] = (
+                f"{type(persist_exc).__name__}: {persist_exc}")
+            logger.error(
+                "Failed to persist failure manifest for %s/%s: %s; "
+                "preserving original failure: %s",
+                basket, args.run_id, report["manifest_persist_error"], report["error"])
         raise
     report["manifest"] = manifest.events
     return report

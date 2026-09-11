@@ -47,3 +47,14 @@ Task 5–8 本地代码完成：六篮子 PIT 共识估值、三指数五年周�
 已向 Boss 请求云端**隔离库**试跑批准：最多 3,000 次 FMP HTTP 请求（含重试）、3 小时；不写生产表、不改 cron、不发 Telegram、不合并发布。细则见 `docs/plans/2026-09-11-index-pe-cloud-trial.md`。
 
 真实验收须检查每快照 vendor CIK 覆盖与历史双股权 sweep、live 身份字段、FX 推断和真实 publishable 覆盖率；不能将 vendor CIK 当成 SEC CIK，也不能以本地 fixture 通过代替数据验收。
+
+## 同日复审修复：Store 故障范围与异常保真
+
+基于 `9dae7ac` 修复两项反馈，未启动云端试跑或生产部署：
+
+1. populated legacy 周频表缺 run_id 不再从 Store 构造抛错，只保留原行并告警；两个周频 PE 写入入口仍拒绝，backfill 在 source/API 前预检。价格与 forward ingestion 写入不被牵连。
+2. 失败分支先绑定原始异常与 partial report，再 best-effort 写 manifest；次生写入异常进入 `manifest_persist_error` 和日志，原异常对象/traceback、阶段信息、已确认的事件保留。
+
+TDD：六个故障场景先 RED，修复后 GREEN；另补汇总报告/JSON 诊断保留测试。最终相关回归 **365 passed**（10 个既有 concepts 弃用警告），包括全套 MarketStore 测试、backfill、独立 verifier、forward valuation 和 basket config。Python 3.10 AST、Ruff 未定义名检查、`git diff --check` 通过，主线程单遍检查本次生产代码 diff 无新增阻塞项。本次未重跑全量套件；上面的 3472 passed 是前一版本的全量证据。
+
+故障存储仍可能只写成功 started 而缺终态，必须按 runbook 人工核对，不能以新 run_id 自动洗掉旧异常；此修复不宣称解决底层可用性或为旧行补造归属。

@@ -457,11 +457,29 @@ def test_an_empty_legacy_table_is_migrated_to_carry_run_id(tmp_path, monkeypatch
         store.close()
 
 
-def test_a_populated_legacy_table_refuses_to_migrate_itself(tmp_path):
-    """Rows without an owner cannot be given one by guessing."""
+def test_populated_legacy_table_blocks_only_weekly_pe_writers(tmp_path):
+    """Preserve ownerless rows without taking unrelated data writers offline."""
     path = _legacy_db(tmp_path, rows=2)
-    with pytest.raises(RuntimeError, match="run_id"):
-        MarketStore(path)
+    store = MarketStore(path)
+    try:
+        before = store.get_basket_weekly_pe_history("SPY")
+        store.upsert_daily_prices("AAPL", [{"date": "2026-09-11", "close": 100.0}])
+        store.upsert_fmp_estimates("AAPL", [{
+            "snapshot_date": "2026-09-11", "fiscal_date": "2026-12-31",
+            "period_type": "Q", "snapshot_kind": "weekly", "eps_avg": 1.0,
+        }])
+        assert store.get_daily_prices("AAPL")[0]["close"] == 100.0
+        assert store.get_fmp_estimates("AAPL", snapshot_date="2026-09-11")
+        with pytest.raises(RuntimeError, match="run_id"):
+            store.upsert_basket_weekly_pe_batch([_row()])
+        rows = [_row(run_id="new")]
+        event = _window_events(store, rows)
+        with pytest.raises(RuntimeError, match="run_id"):
+            store.commit_basket_weekly_pe_window(rows, event, lambda conn: True)
+        assert store.get_basket_weekly_pe_history("SPY") == before
+        assert not store._get_conn().in_transaction
+    finally:
+        store.close()
     with sqlite3.connect(path) as conn:
         assert conn.execute(
             "SELECT COUNT(*) FROM basket_weekly_pe_history").fetchone()[0] == 2

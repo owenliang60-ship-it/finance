@@ -8,16 +8,18 @@
 2. 计算整个五年窗口；空批、漏周、跨篮子、错误 run_id/版本/日期范围均拒绝。
 3. BEGIN IMMEDIATE 内复用原 R5 校验写入全部候选，清理旧窗口以及被替代的周内日期，追加唯一 run_completed。
 4. 同一候选事务临时开启 query_only，以现有 verifier、固定 sample=50 验证；只有明确通过才提交。
-5. 失败时数据、清理和 completed 同时回滚；外部只读连接一直看到上次提交的数据。随后追加 run_failed（rows_written=false），命令非零退出。
+5. 失败时数据、清理和 completed 同时回滚；外部只读连接一直看到上次提交的数据。随后尽力追加 run_failed（rows_written=false），命令非零退出。若收尾写入也失败，保留原始异常和 partial report，另记 manifest_persist_error 并输出错误日志。
 
 一个 basket 是一次事务，其他 basket 保持独立。actual_only 不得降级为 tail/unpublishable，同周改取样日也不能绕过该检查。新窗口不得回退到已完成窗口之前；新方法学必须显式迁移。
+
+旧表迁移边界：缺少 run_id 的空周频表可自动重建；有数据的旧表保留原样，Store 构造仅告警，不影响价格、forward ingestion 等其他读写。周频 PE 的两个写入入口拒绝旧 schema，backfill 在 source/API 调用前做同一预检；旧行如何归档和重新回填须显式处理，不猜测 run_id。
 
 ## 恢复步骤
 
 - 先查看 backfill 的 JSON 结果：`failed_baskets`、各篮子 `error` 和 `verification.checks`。run manifest 中 run_failed 是明确失败状态，不代表旧产品已被替换。
 - 修复导致失败的源数据/配置后，以**新 run_id**重跑完整五年窗口；不做 tail-only 补写，不修改旧 completed，不恢复整库覆盖同期其他数据。
 - 新完整 run 通过验收后取代旧产品并恢复发布。测试覆盖“成功 → 验收失败 → 保留旧产品 → 新 run 成功”。
-- 若在 universe/calendar 冻结前失败，记录 `run_started(preflight_failed=true, expected_weeks=[])` + `run_failed`；该失败 run 不认证任何数据。避免终态单独存在使未来合法重跑永久失败。若数据库本身不可写，依靠 CLI/外层 cron 错误告警，不伪造完成记录。
+- 若在 universe/calendar 冻结前失败，尽力记录 `run_started(preflight_failed=true, expected_weeks=[])` + `run_failed`；该失败 run 不认证任何数据。若数据库本身不可写，JSON 中的 `error` 仍是原始失败，`manifest_persist_error` 记录收尾写入失败，`manifest` 仅包含确认写成功的事件。依靠 CLI 非零退出/外层告警，不伪造完成记录；若只落下 started 而没有终态，须先人工核对该异常 run，不能假定新 run 自动消除旧异常。
 - 存在历史（C1 前）异常事件、跨版本数据或真实盈利从 actual_only 退级时，先人工归因，不能用重命名 run_id 或改 hash 绕过验收。
 
 ## 只读验收命令（部署及数据准备完成后）

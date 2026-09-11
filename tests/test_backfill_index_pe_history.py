@@ -20,6 +20,7 @@ live `data/market.db`.
 """
 import json
 import shutil
+import sqlite3
 from argparse import Namespace
 from datetime import date
 from pathlib import Path
@@ -744,6 +745,98 @@ def test_http_budget_cli_is_explicit_and_positive():
     with pytest.raises(SystemExit) as error:
         backfill.parse_args(['--max-api-requests','0'])
     assert error.value.code==2
+
+
+def test_legacy_pe_schema_fails_preflight_before_network(tmp_path, config_dir):
+    store = _fixture_db(tmp_path)
+    try:
+        with store._get_conn() as conn:
+            conn.execute("ALTER TABLE basket_weekly_pe_history RENAME COLUMN run_id TO legacy_run_id")
+        client = Mock()
+        with pytest.raises(RuntimeError, match="run_id") as error:
+            backfill_basket(
+                _args(tmp_path, config_dir, dry_run=False, allow_network=True),
+                "SPY", client=client, store=store, conn=store._get_conn())
+        assert client.mock_calls == []
+        assert error.value.backfill_report["status"] == "failed"
+        assert [e["event_kind"] for e in error.value.backfill_report["manifest"]] == [
+            "run_started", "run_failed"]
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("phase", ["preflight_start", "preflight_terminal", "started", "commit"])
+def test_failure_manifest_error_preserves_original_exception_and_report(
+        tmp_path, config_dir, monkeypatch, caplog, phase):
+    store = _fixture_db(tmp_path)
+    primary = ValueError("primary pipeline failure")
+    secondary = OSError("failure manifest unavailable")
+    original_append = store.append_basket_pe_run_events
+    attempts = []
+
+    def fail_primary(*args, **kwargs):
+        raise primary
+
+    def append(events):
+        attempts.append(events[0]["event_kind"])
+        if phase == "preflight_start":
+            raise secondary
+        if phase == "started":
+            raise primary if len(attempts) == 1 else secondary
+        if events[0]["event_kind"] == "run_failed":
+            raise secondary
+        return original_append(events)
+
+    monkeypatch.setattr(store, "append_basket_pe_run_events", append)
+    if phase.startswith("preflight"):
+        monkeypatch.setattr(backfill, "load_state", fail_primary)
+    elif phase == "commit":
+        monkeypatch.setattr(store, "commit_basket_weekly_pe_window", fail_primary)
+    try:
+        with pytest.raises(ValueError) as error:
+            backfill_basket(_args(tmp_path, config_dir, dry_run=False), "SPY",
+                            store=store, conn=store._get_conn())
+        assert error.value is primary
+        report = error.value.backfill_report
+        assert report["error"] == "ValueError: primary pipeline failure"
+        assert report["status"] == "failed"
+        assert report["from_date"] == "2021-01-16"
+        assert report["manifest_persist_error"] == "OSError: failure manifest unavailable"
+        assert "failure manifest unavailable" in caplog.text
+        if phase == "commit":
+            assert report["stages"]["fundamentals"]
+        expected_events = [] if phase in ("preflight_start", "started") else ["run_started"]
+        assert [e["event_kind"] for e in report["manifest"]] == expected_events
+    finally:
+        store.close()
+
+
+def test_run_report_retains_diagnostics_when_failure_manifest_cannot_be_written(
+        tmp_path, config_dir, monkeypatch):
+    store = _fixture_db(tmp_path)
+
+    def fail_load(*args, **kwargs):
+        raise ValueError("primary source read failed")
+
+    def fail_append(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(backfill, "load_state", fail_load)
+    monkeypatch.setattr(store, "append_basket_pe_run_events", fail_append)
+    try:
+        report = backfill.run_backfill(
+            _args(tmp_path, config_dir, baskets=["SPY"], dry_run=False),
+            store=store, conn=store._get_conn())
+        assert report["failed_baskets"] == ["SPY"]
+        failed = report["baskets"]["SPY"]
+        assert failed["error"] == "ValueError: primary source read failed"
+        assert failed["manifest_persist_error"] == "OperationalError: database is locked"
+        assert failed["from_date"] == "2021-01-16"
+        assert "stages" in failed
+        assert failed["manifest"] == []
+        json.dumps(report)  # Same serialization as the CLI's failure output.
+    finally:
+        store.close()
 
 
 def test_window_universe_keeps_public_predecessor_and_discards_unused_archive():

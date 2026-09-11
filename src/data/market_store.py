@@ -959,10 +959,10 @@ class MarketStore:
         table without this column in an existing database copy.
 
         An empty legacy table is rebuilt in place -- there is nothing to
-        preserve. A *populated* one refuses: those rows predate ownership, no
-        correct owner can be invented for them, and choosing between
-        re-backfilling and discarding them is a decision rather than a
-        default.
+        preserve. A populated one is left untouched: those rows predate
+        ownership and no correct owner can be invented. Only weekly PE writers
+        are blocked by require_basket_weekly_pe_schema; unrelated store users
+        must remain available while an explicit migration is arranged.
         """
         existing = {row[1] for row in conn.execute(
             "PRAGMA table_info(basket_weekly_pe_history)").fetchall()}
@@ -971,15 +971,26 @@ class MarketStore:
         rows = conn.execute(
             "SELECT COUNT(*) FROM basket_weekly_pe_history").fetchone()[0]
         if rows:
-            raise RuntimeError(
-                f"basket_weekly_pe_history holds {rows} row(s) written before "
-                "run_id ownership existed; they name no run and none can be "
-                "inferred. Migrate deliberately -- re-backfill under a new "
-                "run, or remove them -- then reopen the store.")
+            logger.warning(
+                "Migration deferred: basket_weekly_pe_history has %s legacy "
+                "row(s) without run_id; weekly PE writes require explicit "
+                "migration, unrelated store operations remain available", rows)
+            return
         conn.execute("DROP TABLE basket_weekly_pe_history")
         logger.info(
             "Migration: rebuilt empty basket_weekly_pe_history to carry run_id")
         _TABLE_COLUMNS.pop("basket_weekly_pe_history", None)
+
+    def require_basket_weekly_pe_schema(self) -> None:
+        """Fail closed at the weekly PE boundary, not at store construction."""
+        # Inspect this connection's schema, not the cross-database column cache.
+        columns = {row[1] for row in self._get_conn().execute(
+            "PRAGMA table_info(basket_weekly_pe_history)")}
+        if "run_id" not in columns:
+            raise RuntimeError(
+                "basket_weekly_pe_history lacks run_id ownership; weekly PE "
+                "writes are blocked pending explicit migration. Preserve and "
+                "review legacy rows before re-backfilling under a new run.")
 
     def _migrate_add_columns(self, conn: sqlite3.Connection) -> None:
         """Add any new columns defined in field lists but missing from existing tables."""
@@ -1753,6 +1764,7 @@ class MarketStore:
         rolls back every write already made earlier in the same batch call.
         """
         _validate_table("basket_weekly_pe_history")
+        self.require_basket_weekly_pe_schema()
         if not rows:
             raise ValueError("non-empty batch required")
         prepared = [self._validate_bwph_row(row) for row in rows]
@@ -1813,6 +1825,7 @@ class MarketStore:
         rolls back to the previously committed product. The caller records
         run_failed separately, after this method has rolled back.
         """
+        self.require_basket_weekly_pe_schema()
         if not rows or not callable(certify):
             raise ValueError("non-empty window and certification required")
         event = self._validate_bpbr_row(completed_event)
