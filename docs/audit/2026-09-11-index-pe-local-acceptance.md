@@ -58,3 +58,7 @@ Task 5–8 本地代码完成：六篮子 PIT 共识估值、三指数五年周�
 TDD：六个故障场景先 RED，修复后 GREEN；另补汇总报告/JSON 诊断保留测试。最终相关回归 **365 passed**（10 个既有 concepts 弃用警告），包括全套 MarketStore 测试、backfill、独立 verifier、forward valuation 和 basket config。Python 3.10 AST、Ruff 未定义名检查、`git diff --check` 通过，主线程单遍检查本次生产代码 diff 无新增阻塞项。本次未重跑全量套件；上面的 3472 passed 是前一版本的全量证据。
 
 故障存储仍可能只写成功 started 而缺终态，必须按 runbook 人工核对，不能以新 run_id 自动洗掉旧异常；此修复不宣称解决底层可用性或为旧行补造归属。
+
+## 同日推进：真实隔离试跑已做，身份门失败
+
+Boss随后批准继续。云端独立副本/85tests通过，source-only实耗48次HTTP；发现基金filer CIK误作issuer CIK等源身份契约错误，在逐股补数前停止。QQQ/SOXX源快照已保存，不等于产品认证；两张估值表仍0行，无新真实PNG。GOOGL/GOOG 1,248对同日市值完全相同，band前置测量通过。上述“待批准试跑”状态已由本段推进，后续待批的是源身份修复方案。详cloud-trial audit、issue072及同日source-identity-repair plan。
