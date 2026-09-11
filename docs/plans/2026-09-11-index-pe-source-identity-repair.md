@@ -1,6 +1,6 @@
 # 三指数披露源身份修复 Implementation Plan
 
-> **For Claude/Codex:** 待 Boss 批准。批准后在现有 git worktree 按 Task 顺序 TDD 执行；复用现有 collector、MarketStore 和 verifier，不重写聚合。单主线程审查，不启动 subagent。当前 runtime 未提供 executing-plans skill，按以下 checklist 执行。
+> **For Claude/Codex:** Boss于2026-09-11回复“可以”已批准方案A。在现有 git worktree 按 Task 顺序 TDD 执行；复用现有 collector、MarketStore 和 verifier，不重写聚合。单主线程审查，不启动 subagent。当前 runtime 未提供 executing-plans skill，按以下 checklist 执行。
 
 **Confidence: 90%**（修复路径明确，不代表真实历史覆盖率能达标）
 
@@ -68,37 +68,37 @@ flowchart LR
 
 Files: 新增`tests/fixtures/index_pe_source_identity_20260911.json`、`tests/test_index_pe_source_identity.py`；扩展`tests/test_fmp_fund_disclosure_ingestion.py`、`tests/test_verify_index_pe_history.py`。
 
-- [ ] 从已保存响应取公开的AAPL/GOOG/GOOGL/TERN/DISCA/DISCK/缺LEI/NQM6/live样本，保持真实cik/LEI/标识，不编造“每ticker不同CIK”。带原始响应hash。
-- [ ] RED：不同发行人共享fund CIK不双计；Alphabet及Discovery同LEI股类会双计；SPY/SOXX同Teradyne证券应同样解析；缺证据和冲突必须失败。
-- [ ] RED：LEI缺失不能靠基金CIK补齐；live securityCusip保留；NQM6/NQU6排除股票集合。
-- [ ] 运行`python -m pytest -q tests/test_index_pe_source_identity.py tests/test_fmp_fund_disclosure_ingestion.py`确认失败原因是契约而非fixture缺环境。
+- [x] 从已保存响应取公开的AAPL/GOOG/GOOGL/TERN/DISCA/DISCK/缺LEI/NQM6/live样本，保持真实cik/LEI/标识，不编造“每ticker不同CIK”。带原始响应hash。
+- [x] RED：不同发行人共享fund CIK不双计；Alphabet及Discovery同LEI股类会双计；SPY/SOXX同Teradyne证券应同样解析；缺证据和冲突必须失败。
+- [x] RED：LEI缺失不能靠基金CIK补齐；live securityCusip保留；NQM6/NQU6排除股票集合。
+- [x] 运行`python -m pytest -q tests/test_index_pe_source_identity.py tests/test_fmp_fund_disclosure_ingestion.py`确认失败原因是契约而非fixture缺环境。
 
 ### Task 1：原始身份存储与adapter
 
 Files: `src/data/market_store.py`、`src/data/fmp_forward_ingestion.py`、`tests/test_market_store_historical_basket_valuation.py`。
 
-- [ ] additive迁移增加三列，历史表有数据时仍能构造Store；旧行保留、新字段为NULL。不得删除或猜测补齐。
-- [ ] normalizer保留issuer LEI/assetCat/raw payload，读取live正确CUSIP字段，冲突拒绝；原filer CIK不改。
-- [ ] 将资产类别识别前置并复用现有排除原因，阻断有ticker期货进入逐股请求。
-- [ ] storage round-trip与旧schema/已有行测试GREEN；3.10 AST、focused测试通过后commit。
+- [x] additive迁移增加三列，历史表有数据时仍能构造Store；旧行保留、新字段为NULL。不得删除或猜测补齐。
+- [x] normalizer保留issuer LEI/assetCat/raw payload，读取live正确CUSIP字段，冲突拒绝；原filer CIK不改。
+- [x] 将资产类别识别前置并复用现有排除原因，阻断有ticker期货进入逐股请求。
+- [x] storage round-trip与旧schema/已有行测试GREEN；3.10 AST、focused测试通过后commit。
 
 ### Task 2：精确证券alias与独立公司身份检查
 
 Files: `config/soxx_symbol_aliases.json`、`src/data/fmp_forward_ingestion.py`、`scripts/verify_index_pe_history.py`、`scripts/backfill_index_pe_history.py`、Task0 tests。
 
-- [ ] TERN配置与解析改为精确证券标识契约；CREE另有证据前保持拒绝，不删除其守卫。
-- [ ] 添加严格issuer identity解析；任何审核例外必须带来源/有效范围/精确证券标识，且不能覆盖冲突源值。普通缺数据留UNKNOWN。
-- [ ] producer在逐股请求前验证源身份；verifier从原始列和审核证据独立重建，再检测同公司多股类，按具体快照隔离。
-- [ ] 全部真实契约用例GREEN；注入基金CIK变化/LEI冲突/同日多快照/live未来可用日，确保无法绕过。
-- [ ] 运行三指数、Store、FMP ingestion、forward valuation相关测试与主线程review，再commit。
+- [x] TERN配置与解析改为精确证券标识契约；CREE另有证据前保持拒绝，不删除其守卫。
+- [x] 添加严格issuer identity解析；任何审核例外必须带来源/有效范围/精确证券标识，且不能覆盖冲突源值。普通缺数据留UNKNOWN。
+- [x] producer在逐股请求前验证源身份；verifier从原始列和审核证据独立重建，再检测同公司多股类，按具体快照隔离。
+- [x] 全部真实契约用例GREEN；注入基金CIK变化/LEI冲突/同日多快照/live未来可用日，确保无法绕过。
+- [x] 运行三指数、Store、FMP ingestion、forward valuation相关测试与主线程review，再commit。
 
 ### Task 3：离线重放并报告剩余真实缺口
 
-- [ ] 对现有临时库再做本地副本，使用48个原始响应重建源；保留原fetched_at/acceptedDate，不产生新PIT vintage。
-- [ ] 完整列出每快照LEI缺口、双股权组、证券标识冲突及非股票排除，带原始权重。SPY缺的后续披露仍须在预算内补取。
+- [x] 对现有临时库再做隔离副本（实际为云端第二临时库），使用48个原始响应重建源；原fetched_at/acceptedDate保留，不产生新PIT vintage。SPY首期此前未入库，其fetched_at以原source-stage启动秒为基准并标注依据。
+- [x] 完整列出每快照LEI缺口、双股权组、证券标识冲突及非股票排除，带原始权重；追加23HTTP补齐SPY后续披露与live，总计71/3000。
 - [ ] 复查GOOGL/GOOG的1,248对同日市值结果；DISCA/DISCK补证据，FOXA/NWSA不能只因两类市值不同就决定相加。
-- [ ] 身份仍不完整则停下交待核名单；完整后才续跑网络补齐，不为生成图表放宽门槛。
-- [ ] 续跑所有HTTP从既用48次扣除，最多另2,952次；原3小时窗口若已过则重新请求时间窗口，不自动延长。不写生产、不部署。
+- [x] 身份仍不完整则停下交待核名单：有效历史窗口41个不同证券、463行缺发行人身份证据；未启动逐股网络补齐或估值发布。
+- [x] 续跑所有HTTP从既用48次扣除，本轮追加23次，剩2,929次；原3小时窗口截至2026-09-11T10:35:35Z，不自动延长。不写生产、不部署。
 
 ## 风险自证与回滚
 
@@ -110,10 +110,14 @@ Files: `config/soxx_symbol_aliases.json`、`src/data/fmp_forward_ingestion.py`�
 
 ## 验收标准
 
-- [ ] 相同基金CIK不再让不同公司被判成一家；同一发行人不同股类仍被可靠检测。
-- [ ] 同一Teradyne证券在SPY与SOXX均映射TER，Terns证券不可映射TER。
-- [ ] live CUSIP无静默丢失，缺失issuer证明的行不能获得已认证身份。
-- [ ] 期货不进入股票补数；原始行和权重排除证据完整保留。
-- [ ] 剩余缺口有准确名单，无法满足时显示FAIL而非补造公司ID。
-- [ ] 保留365项当前相关基线、此前C1/manifest/R5行为；最终采用隔离数据副本全量测试。
+- [x] 相同基金CIK不再让不同公司被判成一家；同一发行人不同股类仍被可靠检测。
+- [x] 同一Teradyne证券在SPY与SOXX均映射TER，Terns证券不可映射TER。
+- [x] live CUSIP无静默丢失，缺失issuer证明的行不能获得已认证身份。
+- [x] 期货不进入股票补数；原始行和权重排除证据完整保留。
+- [x] 剩余缺口有准确名单，无法满足时显示FAIL而非补造公司ID。
+- [x] 保留此前C1/manifest/R5行为；最终26cec1b隔离数据副本全量3506 passed/4 skipped，414项相关回归通过，云端91passed。详同日source-identity-repair audit。
 - [ ] 真数据身份、覆盖、独立计算全过才生成真实PNG；该阶段仍不代表获准进生产晨报。
+
+## 2026-09-11 执行备注
+
+代码提交`dc61062`；真实数据复核追加`26cec1b`，FOXA/FOX、NWSA/NWS撤销未证实的split约定，使用既有列表形状声明convention未知，沿用原有排除门，不新增估值算法。原因与数据在`docs/audit/2026-09-11-index-pe-source-identity-repair.md`。DISCA/DISCK、UA/UAA同issuer证据已有，市值约定及缺失证券LEI未关闭，仍停在Task3的数据验收门。

@@ -1,6 +1,6 @@
 # Issue 072: 基金披露的 filer CIK 被当成成分公司身份
 
-**Status**: OPEN — 云端隔离试跑在身份预检停下，修复方案待审批
+**Status**: CODE FIXED / DATA GATED — 方案A已批准并实现，真实身份缺口尚未关闭
 **Date**: 2026-09-11
 **Severity**: HIGH — 三指数历史 verifier 必然误判、SPY alias 预检失败
 **Related**: `src/data/fmp_forward_ingestion.py`、`scripts/verify_index_pe_history.py`、`config/soxx_symbol_aliases.json`；issue045/048
@@ -29,3 +29,13 @@ QQQ 2026Q1/Q2 的 NQM6/NQU6 是 `assetCat=DE` 的 Nasdaq期货，当前却 `incl
 方案见 `docs/plans/2026-09-11-index-pe-source-identity-repair.md`。保留 filer CIK 原义，另做 issuer identity 与精确证券标识；不得用放宽覆盖率、删除 duplicate-company 检查、给每个 ticker 编造不同 CIK 的方式过关。LEI 缺口与历史多股权仍需证据，不自动猜测。
 
 本轮只在临时库落入44个规范化快照（QQQ23、SOXX21；SPY0），两张估值表仍为0行，生产库未写入。原始响应、脚本及哈希保存在 `reports/rendered/index-pe-trial-20260911/`；完整结果见同日 cloud-trial audit。
+
+## 后续实施（上段为修复前停点）
+
+Boss批准方案A后，`dc61062`修复源字段、精确证券alias、LEI/审查证据解析与独立verifier；additive迁移无数据删除。12个真实样本+故障注入通过，核心修复全量3505 passed/4 skipped。离线重放45快照成功，再用23HTTP补齐SPY，总计71次；67个源快照、估值表仍0行。
+
+实际五年窗口仍有41证券/463行身份缺口，另有DISCA/DISCK、UA/UAA未登记股类；保持100%身份门，未开始逐股网络补齐。`26cec1b`还撤销FOXA/NWSA未证实的市值相加约定：HMC/close对应公司整体股数，不能凭两类市值不同就求和。保守配置414项相关测试通过。
+
+完整证据与待核名单见 `docs/audit/2026-09-11-index-pe-source-identity-repair.md`。代码修复完成不等于数据已认证，更不等于项目已上线。
+
+最终`26cec1b`隔离全量3506 passed/4 skipped、云端91 passed，零失败；原始数据缺口继续阻断发布，不删除或伪填未知身份。
