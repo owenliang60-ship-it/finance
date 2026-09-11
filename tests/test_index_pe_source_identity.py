@@ -218,7 +218,7 @@ def test_reviewed_evidence_only_fills_matching_security_in_valid_range(tmp_path)
     rows, _ = normalize(["spy_AAPL"])
     row = rows[0]
     row["issuer_lei"] = row["raw_payload_json"]["lei"] = None
-    assert resolve_issuer_identity(row, overrides) == (item["issuer_lei"], "reviewed_security")
+    assert resolve_issuer_identity(row, overrides) == ("lei:" + item["issuer_lei"], "reviewed_security")
     assert resolve_issuer_identity({**row, "holding_date": "2021-04-01"}, overrides)[0] is None
     wrong_security = copy.deepcopy(row)
     wrong_security["isin"] = wrong_security["raw_payload_json"]["isin"] = "US0000000010"

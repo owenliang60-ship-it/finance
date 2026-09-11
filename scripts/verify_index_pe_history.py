@@ -943,7 +943,7 @@ def _kernel_reconciliation_errors(rows: Sequence[Mapping[str, Any]]) -> List[str
 def _company_identities(
     conn: sqlite3.Connection, basket: str, overrides=(),
 ) -> Dict[Tuple[str, str], Dict[str, Optional[str]]]:
-    """Independently derive issuer LEI from raw evidence of each physical snapshot.
+    """Independently derive canonical issuer keys from physical source evidence.
 
     Do not import the producer's resolver: a normalized-LEI mapping bug must
     disagree with this raw reconstruction. Filer CIK is deliberately unused.
@@ -975,13 +975,34 @@ def _company_identities(
                 if row.get(field) != original:
                     raise ValueError("normalized identity disagrees with raw source")
             original = raw.get("lei")
-            if original not in (None, "", "N/A") and not valid_issuer_lei(original):
-                raise ValueError("invalid issuer LEI")
-            choices = {entry["issuer_lei"] for entry in overrides
-                       if entry["cusip"] == cusip and entry["isin"] == raw.get("isin")
-                       and entry["valid_from"] <= row["holding_date"] <= entry["valid_to"]}
-            if valid_issuer_lei(original):
-                choices.add(original)
+            in_range = [entry for entry in overrides
+                        if entry["valid_from"] <= row["holding_date"] <= entry["valid_to"]]
+            matching = []
+            for entry in in_range:
+                if entry["isin"] != raw.get("isin"):
+                    continue
+                exact = entry.get("cusip") == cusip and cusip not in (None, "", "N/A", "000000000")
+                missing_allowed = (entry.get("match_mode") == "isin_allow_missing_cusip"
+                                   and cusip in entry.get("missing_cusip_values", []))
+                if not (exact or missing_allowed):
+                    raise ValueError("reviewed ISIN has conflicting CUSIP")
+                matching.append(entry)
+            choices = {entry.get("canonical_issuer_key") or "lei:" + entry["issuer_lei"] for entry in matching}
+            if "sec-cik:" + str(row.get("cik")) in choices:
+                raise ValueError("fund filer CIK cannot supply issuer identity")
+            corrections = [entry for entry in matching if original in entry.get("expected_raw_leis", [])]
+            corrected = bool(original not in (None, "", "N/A") and matching and len(corrections) == len(matching))
+            if original not in (None, "", "N/A") and not corrected:
+                if not valid_issuer_lei(original):
+                    raise ValueError("invalid issuer LEI")
+                keys = {entry.get("canonical_issuer_key") or "lei:" + entry["issuer_lei"]
+                        for entry in in_range if entry.get("issuer_lei") == original
+                        or original in entry.get("equivalent_leis", [])}
+                if len(keys) > 1:
+                    raise ValueError("issuer aliases conflict")
+                choices.add(next(iter(keys)) if keys else "lei:" + original)
+            if "sec-cik:" + str(row.get("cik")) in choices:
+                raise ValueError("issuer alias resolves to fund filer CIK")
             if len(choices) == 1:
                 lei = choices.pop()
         except (TypeError, ValueError):

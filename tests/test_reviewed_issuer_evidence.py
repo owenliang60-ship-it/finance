@@ -34,7 +34,7 @@ def test_reviewed_source_fills_only_exact_missing_identity_without_rewriting_raw
         source = {"raw_symbol": row["symbol"], "cusip": row["cusip"], "isin": row["isin"],
                   "issuer_lei": "N/A", "asset_category": "EC", "raw_payload_json": raw,
                   "holding_date": row["valid_from"], "source_kind": "disclosure"}
-        assert resolve_issuer_identity(source, rows) == (row["issuer_lei"], "reviewed_security")
+        assert resolve_issuer_identity(source, rows) == ("lei:" + row["issuer_lei"], "reviewed_security")
         assert source["issuer_lei"] == raw["lei"] == "N/A"
         source["holding_date"] = "2099-01-01"
         assert resolve_issuer_identity(source, rows)[0] is None
