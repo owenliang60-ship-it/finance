@@ -2,6 +2,7 @@
 import hashlib
 import json
 import logging
+import math
 from bisect import bisect_left
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set
 
@@ -113,9 +114,12 @@ def scan_market_cap_candidates(
         if not row_date or row_date in mcaps:
             raise ValueError("market-cap dates must be non-empty and unique")
         value = row.get("market_cap", row.get("marketCap"))
-        if value is None or float(value) <= 0:
-            raise ValueError("market_cap must be positive")
-        mcaps[row_date] = {**row, "market_cap": float(value)}
+        value = float(value) if value is not None else None
+        if value is not None and not math.isfinite(value):
+            value = None
+        # Legacy/vendor zero caps are data defects to quarantine, not an
+        # exception that stops every other member in the basket (HONA 6/26).
+        mcaps[row_date] = {**row, "market_cap": value}
     if not mcaps:
         return []
 
@@ -138,14 +142,17 @@ def scan_market_cap_candidates(
         split_by_date[split_date] = split_by_date.get(split_date, 1.0) * ratio
 
     ordered_dates = sorted(mcaps)
+    valid_dates = [day for day in ordered_dates
+                   if mcaps[day]["market_cap"] is not None
+                   and mcaps[day]["market_cap"] > 0]
     split_adjacent = _split_candidate_dates(ordered_dates, split_by_date)
     effective_splits: Dict[str, float] = {}
     effective_split_sources: Dict[str, List[str]] = {}
     for source_date, ratio in split_by_date.items():
-        position = bisect_left(ordered_dates, source_date)
-        if position >= len(ordered_dates):
+        position = bisect_left(valid_dates, source_date)
+        if position >= len(valid_dates):
             continue
-        effective_date = ordered_dates[position]
+        effective_date = valid_dates[position]
         effective_splits[effective_date] = (
             effective_splits.get(effective_date, 1.0) * ratio)
         effective_split_sources.setdefault(effective_date, []).append(source_date)
@@ -157,11 +164,12 @@ def scan_market_cap_candidates(
     output: List[Dict[str, Any]] = []
 
     for row_date in ordered_dates:
-        market_cap = float(mcaps[row_date]["market_cap"])
+        market_cap = mcaps[row_date]["market_cap"]
+        usable_cap = market_cap is not None and market_cap > 0
         close = prices.get(row_date)
-        implied_shares = market_cap / close if close is not None else None
+        implied_shares = market_cap / close if usable_cap and close is not None else None
         mcap_return = (market_cap / previous_mcap - 1.0
-                       if previous_mcap is not None else None)
+                       if usable_cap and previous_mcap is not None else None)
         price_return = (close / previous_price - 1.0
                         if close is not None and previous_price is not None else None)
         implied_share_ratio = (
@@ -227,7 +235,12 @@ def scan_market_cap_candidates(
         )
         was_open = anomaly_open
 
-        if expected_shares is None and implied_shares is not None:
+        if not usable_cap:
+            classification = {
+                "status": "invalid_mcap", "anomaly_open": True,
+                "normalization_recovery": False,
+            }
+        elif expected_shares is None and implied_shares is not None:
             classification = {
                 "status": "clean", "anomaly_open": False,
                 "normalization_recovery": False,
@@ -249,7 +262,9 @@ def scan_market_cap_candidates(
         if accepted_market_cap_status(status) and implied_shares is not None:
             expected_shares = implied_shares
 
-        if jump and adjacent:
+        if not usable_cap:
+            reason = "invalid_market_cap_value"
+        elif jump and adjacent:
             reason = "market_cap_jump+split_adjacent"
         elif jump:
             reason = "market_cap_jump"
@@ -284,9 +299,10 @@ def scan_market_cap_candidates(
             "normalization_recovery": bool(
                 classification["normalization_recovery"]),
         })
-        previous_mcap = market_cap
-        previous_price = close
-        previous_observed_shares = implied_shares
+        if usable_cap:
+            previous_mcap = market_cap
+            previous_price = close
+            previous_observed_shares = implied_shares
 
     return output
 

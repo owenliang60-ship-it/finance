@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.data.market_store import MarketStore
+from terminal.historical_basket_valuation import select_asof_market_cap
 from terminal.historical_market_cap_sanity import (
     accepted_market_cap_status,
     build_forced_refresh_windows,
@@ -176,6 +177,53 @@ def test_missing_price_on_trigger_is_unresolved_and_fail_closed():
     )
     assert result[-1]["status"] == "unresolved"
     assert not accepted_market_cap_status(result[-1]["status"])
+
+
+@pytest.mark.parametrize("bad", [0, -1, None, float("nan"), float("inf")])
+def test_invalid_market_cap_is_quarantined_without_poisoning_clean_anchor(bad):
+    caps = _rows("HONA", [("2026-06-25", 1000), ("2026-06-26", bad),
+                          ("2026-06-29", 1020)], "market_cap")
+    result = scan_market_cap_candidates(
+        caps, _rows("HONA", [("2026-06-25", 10), ("2026-06-26", 10),
+                              ("2026-06-29", 10.2)], "close"), [])
+    assert [r["status"] for r in result] == ["clean", "invalid_mcap", "clean"]
+    assert result[1]["candidate_reason"] == "invalid_market_cap_value"
+    assert quarantine_market_cap_dates(result) == {"2026-06-26"}
+    assert result[-1]["expected_shares"] == pytest.approx(100)
+    assert result[-1]["normalization_recovery"] is True
+    assert caps[1]["market_cap"] is bad  # The raw source is never patched.
+    assert select_asof_market_cap(caps, "2026-06-26",
+        {r["date"]: r["status"] for r in result},
+        quarantine_market_cap_dates(result)) is None
+
+
+def test_zero_market_cap_on_split_date_defers_event_until_valid_observation():
+    result = scan_market_cap_candidates(
+        _rows("TEST", [("2026-01-02", 1000), ("2026-01-05", 0),
+                       ("2026-01-06", 1020)], "market_cap"),
+        _rows("TEST", [("2026-01-02", 10), ("2026-01-05", 5),
+                       ("2026-01-06", 5.1)], "close"),
+        [{"date": "2026-01-05", "numerator": 2, "denominator": 1}])
+    assert [r["status"] for r in result] == ["clean", "invalid_mcap", "split_consistent"]
+    assert result[-1]["split_source_dates"] == ["2026-01-05"]
+    assert result[-1]["expected_shares"] == pytest.approx(200)
+
+
+def test_invalid_market_cap_does_not_allow_an_unverified_new_share_regime():
+    result = scan_market_cap_candidates(
+        _rows("TEST", [("2026-01-02", 1000), ("2026-01-05", 0),
+                       ("2026-01-06", 2000)], "market_cap"),
+        _rows("TEST", [("2026-01-02", 10), ("2026-01-05", 10),
+                       ("2026-01-06", 10)], "close"), [])
+    assert [r["status"] for r in result] == ["clean", "invalid_mcap", "invalid_mcap"]
+
+
+def test_leading_zero_cap_is_not_a_bootstrap_anchor_or_dropped_from_evidence():
+    result = scan_market_cap_candidates(
+        _rows("HONA", [("2026-06-26", 0), ("2026-06-29", 1000)], "market_cap"),
+        _rows("HONA", [("2026-06-26", 10), ("2026-06-29", 10)], "close"), [])
+    assert [r["status"] for r in result] == ["invalid_mcap", "clean"]
+    assert result[-1]["expected_shares"] is None
 
 
 def test_forced_refresh_windows_expand_and_merge_by_trading_calendar():
