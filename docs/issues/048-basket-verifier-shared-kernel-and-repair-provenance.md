@@ -55,3 +55,9 @@ Boss 随后授权继续，整窗写入/旧行清理/completed 现为同一事务
 - 原错误路径向故障 store 写 started/failed，第二个异常会替换原异常并丢失报告。现先绑定 partial report，再 best-effort 写失败事件；次生失败另记 `manifest_persist_error` 和日志，裸 raise 保持原异常对象及 traceback。
 - 故障注入覆盖 preflight started、preflight failed、正常 started 写入及整窗提交四处故障；额外验证 CLI 所用汇总报告保留诊断并可 JSON 序列化。旧行完全保留、价格/forward 写入仍可用、PE 两入口拒写、预检零 API 请求均有测试。
 - 残余边界：存储确实不可写时无法保证落下失败终态；现不掩盖该情况，也不补造证据。后续仍须按 runbook 人工核对异常 run。
+
+### 2026-09-12：推广窗口中的正常源数据漂移
+
+生产副本认证通过后，正常09:00维护补齐了HONA的新市值。正式推广的事务内原始源对拍发现SPY/QQQ在9/10的两个周点不再匹配，整批回滚（产品、manifest、披露仍0；income仍8081），只有预建空schema保留。
+
+这是已通过的结果对新源失效，不是调整阈值可以解决的问题。保留新的正常维护数据，另建无冻结产品的source-only隔离库，吸收维护差异并用既有C1 producer重算完整窗口及九期PIT；旧试跑库不覆写。推广前的审批/副本验收不能替代推广事务对当时源数据的认证。全过程0新增HTTP。
