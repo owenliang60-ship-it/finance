@@ -23,7 +23,10 @@ from typing import Dict, List, Optional, Tuple
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.data.fmp_forward_ingestion import parse_forward_run_evidence
+from src.data.fmp_forward_ingestion import (
+    parse_forward_run_evidence,
+    parse_share_class_groups,
+)
 
 BASKETS = ("SPY", "QQQ", "SOX", "IGV", "XLF")
 FULL_BASKETS = ("SPY", "QQQ", "SOX", "MAGS", "IGV", "XLF")
@@ -56,16 +59,19 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 
 def _connect_ro(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn = sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA query_only=ON")
+    conn.execute("BEGIN")
     return conn
 
 
 def _load_share_class_groups() -> Dict[str, List[str]]:
+    """Membership only; the market-cap convention is not this check's business."""
     path = PROJECT_ROOT / "config" / "baskets" / "share_class_groups.json"
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            return parse_share_class_groups(json.load(f))[0]
     except (OSError, ValueError):
         return {}
 
@@ -89,7 +95,8 @@ def _previous_completed_weekly_empty(conn, snapshot_date: str) -> Tuple[bool, se
 
 def verify_run(db_path: Path, data_root: Path, snapshot_date: str,
                run_kind: str = "weekly", stage: str = "data",
-               min_quarter_coverage_pct: float = 90.0) -> Tuple[int, Dict]:
+               min_quarter_coverage_pct: float = 90.0,
+               config_dir: Optional[Path] = None) -> Tuple[int, Dict]:
     report: Dict = {
         "ok": False,
         "snapshot_date": snapshot_date,
@@ -317,7 +324,7 @@ def verify_run(db_path: Path, data_root: Path, snapshot_date: str,
         # ---- Stage full：Phase 2 契约（6 篮子 + 合法 JSON）----
         if stage == "full":
             b_rows = conn.execute(
-                "SELECT basket, members_json FROM fmp_basket_valuation "
+                "SELECT * FROM fmp_basket_valuation "
                 "WHERE snapshot_date = ?",
                 [snapshot_date],
             ).fetchall()
@@ -327,12 +334,16 @@ def verify_run(db_path: Path, data_root: Path, snapshot_date: str,
                 failures.append(
                     f"stage=full requires six basket valuation rows; "
                     f"missing: {missing_baskets}")
-            for r in b_rows:
+            if run_kind != "weekly":
+                failures.append("PIT valuation requires weekly snapshots")
+            elif not missing_baskets:
+                from terminal.forward_valuation import verify_forward_valuations, CONFIG_DIR
                 try:
-                    json.loads(r["members_json"] or "null")
-                except ValueError:
-                    failures.append(
-                        f"basket {r['basket']} members_json invalid JSON")
+                    failures.extend(verify_forward_valuations(
+                        conn, snapshot_date, [dict(r) for r in b_rows],
+                        config_dir or CONFIG_DIR))
+                except (ValueError, KeyError, TypeError, sqlite3.Error) as exc:
+                    failures.append(f"basket valuation verification failed: {exc}")
     finally:
         conn.close()
 

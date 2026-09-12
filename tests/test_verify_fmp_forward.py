@@ -319,7 +319,8 @@ def test_stage_full_requires_six_basket_rows(db, tmp_path):
         })
     store.close()
     rc2, report2 = verify_run(db, db.parent, SNAP, stage="full")
-    assert rc2 == 0
+    assert rc2 == 1  # six empty JSON arrays are not certified valuations
+    assert any("basket" in failure for failure in report2["failures"])
 
 
 def test_report_shape_stable(db, tmp_path):

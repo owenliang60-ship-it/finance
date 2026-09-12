@@ -1,0 +1,175 @@
+{
+  "registry": {
+    "response": {
+      "data": {
+        "attributes": {
+          "bic": null,
+          "conformityFlag": "CONFORMING",
+          "entity": {
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "category": "GENERAL",
+            "creationDate": "2009-06-10T05:00:00Z",
+            "eventGroups": [],
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "headquartersAddress": {
+              "addressLines": [
+                "1 GRAND CANAL SQUARE",
+                "GRAND CANAL HARBOUR"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "city": "DUBLIN",
+              "country": "IE",
+              "language": "en",
+              "mailRouting": null,
+              "postalCode": "D02P820",
+              "region": "IE-D"
+            },
+            "jurisdiction": "IE",
+            "legalAddress": {
+              "addressLines": [
+                "1 GRAND CANAL SQUARE",
+                "GRAND CANAL HARBOUR"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "city": "DUBLIN",
+              "country": "IE",
+              "language": "en",
+              "mailRouting": null,
+              "postalCode": "D02P820",
+              "region": "IE-D"
+            },
+            "legalForm": {
+              "id": "VYAX",
+              "other": null
+            },
+            "legalName": {
+              "language": "en",
+              "name": "ACCENTURE PUBLIC LIMITED COMPANY"
+            },
+            "otherAddresses": [],
+            "otherNames": [],
+            "registeredAs": "471706",
+            "registeredAt": {
+              "id": "RA000402",
+              "other": null
+            },
+            "status": "ACTIVE",
+            "subCategory": null,
+            "successorEntities": [],
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "transliteratedOtherNames": []
+          },
+          "gem": null,
+          "lei": "5493000EWHDSR3MZWH98",
+          "mic": null,
+          "ocid": "ie/471706",
+          "qcc": "QIEA6049WB",
+          "registration": {
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "initialRegistrationDate": "2023-04-28T13:45:01Z",
+            "lastUpdateDate": "2026-04-17T13:23:36Z",
+            "managingLou": "213800WAVVOPS85N2205",
+            "nextRenewalDate": "2027-04-28T00:00:00Z",
+            "otherValidationAuthorities": [],
+            "status": "ISSUED",
+            "validatedAs": "471706",
+            "validatedAt": {
+              "id": "RA000402",
+              "other": null
+            }
+          },
+          "spglobal": [
+            "972190"
+          ]
+        },
+        "id": "5493000EWHDSR3MZWH98",
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/5493000EWHDSR3MZWH98"
+        },
+        "relationships": {
+          "direct-children": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/5493000EWHDSR3MZWH98/direct-children",
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/5493000EWHDSR3MZWH98/direct-child-relationships"
+            }
+          },
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/5493000EWHDSR3MZWH98/direct-parent-reporting-exception"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/5493000EWHDSR3MZWH98/field-modifications"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/5493000EWHDSR3MZWH98/lei-issuer"
+            }
+          },
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/5493000EWHDSR3MZWH98/managing-lou"
+            }
+          },
+          "ultimate-children": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/5493000EWHDSR3MZWH98/ultimate-children",
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/5493000EWHDSR3MZWH98/ultimate-child-relationships"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/5493000EWHDSR3MZWH98/ultimate-parent-reporting-exception"
+            }
+          }
+        },
+        "type": "lei-records"
+      },
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-11T00:00:00Z"
+        }
+      }
+    },
+    "retrieved_at": "2026-09-11T09:14:34.160261+00:00",
+    "sha256": "076e6fadc2e0803dc2213af3d189faf8a0e920fba88edf154ee160bc922e1f8d",
+    "url": "https://api.gleif.org/api/v1/lei-records/5493000EWHDSR3MZWH98"
+  },
+  "review": {
+    "identity_kind": "retrospective_entity_mapping",
+    "independent_security_source_url": "https://www.sec.gov/Archives/edgar/data/1316617/000131661713000007/Form13fholdings20130328.pdf",
+    "legal_name": "ACCENTURE PUBLIC LIMITED COMPANY",
+    "reason": "Exact security identifiers from frozen disclosures and named legal entity corroborated against the official GLEIF record. This mapping is reviewed now for the historical entity, not a claim that the LEI was registered or known on the holding date. No source LEI is overwritten.",
+    "reviewed_at": "2026-09-11",
+    "valid_from": "2021-06-30",
+    "valid_to": "2023-03-31"
+  },
+  "security": {
+    "cusip": "G1151C101",
+    "holding_dates_with_missing_lei": [
+      "2021-06-30",
+      "2021-09-30",
+      "2021-12-31",
+      "2022-03-31",
+      "2022-06-30",
+      "2022-09-30",
+      "2022-12-31",
+      "2023-03-31"
+    ],
+    "isin": "IE00B4BNMY34",
+    "symbol": "ACN"
+  }
+}

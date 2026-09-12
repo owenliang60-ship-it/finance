@@ -3,6 +3,7 @@
 本模块绝不调用 API 或 DB（纯函数，全部可单测）。
 Spec: docs/design/2026-07-09-fmp-forward-eps-valuation-spec.md §5.3 / §5.4 / §7.1
 """
+import calendar as calendar_module
 import json
 import re
 from datetime import date, datetime, timedelta, timezone
@@ -116,6 +117,62 @@ def validate_share_class_groups(groups: Mapping[str, Sequence[str]]) -> None:
         raise ValueError(f"primary also listed as secondary: {sorted(overlap)}")
 
 
+# How FMP quotes market cap for the classes of one dual-class company. The
+# choice is empirical, per pair, and cannot be inferred by a pure valuation
+# engine: market.db has GOOGL and GOOG both carrying the identical
+# full-company figure, while FOXA/FOX and NWSA/NWS split it across classes.
+# Summing the first pair doubles Alphabet; taking the primary alone halves Fox.
+SHARE_CLASS_MARKET_CAP_CONVENTIONS = frozenset({
+    "full_company_per_class",   # each class already quotes the whole company
+    "split_across_classes",     # the company is the sum of its classes
+})
+
+
+def parse_share_class_groups(
+    payload: Mapping[str, Any],
+) -> Tuple[Dict[str, List[str]], Dict[str, Optional[str]]]:
+    """Split share_class_groups.json into membership and market-cap convention.
+
+    Two value shapes are accepted. The legacy plain list keeps every existing
+    consumer (weight merging, holdings normalisation, forward verification)
+    working unchanged and declares no convention. The object shape adds
+    ``market_cap_convention``; a group without one is not merged into a single
+    company market cap, it is excluded, so an unreviewed pair can never be
+    silently double counted or halved.
+    """
+    secondaries: Dict[str, List[str]] = {}
+    conventions: Dict[str, Optional[str]] = {}
+    for primary, entry in payload.items():
+        if isinstance(entry, Mapping):
+            raw_secondaries = entry.get("secondaries")
+            convention = entry.get("market_cap_convention")
+            if convention not in SHARE_CLASS_MARKET_CAP_CONVENTIONS:
+                raise ValueError(
+                    f"share_class market_cap_convention for {primary!r} must "
+                    f"be one of {sorted(SHARE_CLASS_MARKET_CAP_CONVENTIONS)}: "
+                    f"{convention!r}")
+        else:
+            raw_secondaries = entry
+            convention = None
+        if (not isinstance(raw_secondaries, (list, tuple))
+                or not raw_secondaries
+                or any(not isinstance(value, str) or not value
+                       for value in raw_secondaries)):
+            raise ValueError(
+                f"share_class group {primary!r} needs a nonempty list of "
+                "secondary tickers")
+        secondaries[str(primary)] = [str(value) for value in raw_secondaries]
+        conventions[str(primary)] = convention
+    validate_share_class_groups(secondaries)
+    return secondaries, conventions
+
+
+def load_share_class_conventions(config_dir: Path) -> Dict[str, Optional[str]]:
+    """Per-company market-cap convention from config/baskets."""
+    with open(Path(config_dir) / "share_class_groups.json", encoding="utf-8") as f:
+        return parse_share_class_groups(json.load(f))[1]
+
+
 def validate_mags_members(config: Mapping[str, Any]) -> List[str]:
     if config.get("basket") != "MAGS":
         raise ValueError(f"mags config basket must be 'MAGS': {config.get('basket')!r}")
@@ -136,18 +193,160 @@ def load_basket_configs(config_dir: Path) -> Tuple[Dict[str, str],
     with open(config_dir / "listing_overrides.json", encoding="utf-8") as f:
         listing = json.load(f)
     with open(config_dir / "share_class_groups.json", encoding="utf-8") as f:
-        groups = json.load(f)
+        groups, _ = parse_share_class_groups(json.load(f))
     with open(config_dir / "mags_members.json", encoding="utf-8") as f:
         mags_config = json.load(f)
     validate_listing_overrides(listing)
-    validate_share_class_groups(groups)
     mags = validate_mags_members(mags_config)
     return listing, groups, mags
 
 
 # ---------------------------------------------------------------------------
+# Three-index (SPY/QQQ/SOXX) historical basket disclosure config
+# ---------------------------------------------------------------------------
+
+def validate_index_pe_basket_entry(
+    basket_symbol: str, entry: Mapping[str, Any],
+) -> None:
+    """Fail-closed schema check for one basket entry in index_pe_baskets.json."""
+    if basket_symbol != basket_symbol.upper():
+        raise ValueError(f"basket key must be uppercase: {basket_symbol!r}")
+    source_basket = entry.get("source_basket")
+    if (not isinstance(source_basket, str) or not source_basket
+            or source_basket != source_basket.upper()):
+        raise ValueError(
+            f"{basket_symbol}: source_basket must be a nonempty uppercase string")
+    display_order = entry.get("display_order")
+    if (not isinstance(display_order, int) or isinstance(display_order, bool)
+            or display_order < 1):
+        raise ValueError(f"{basket_symbol}: display_order must be a positive int")
+    window_years = entry.get("five_year_window_years")
+    if window_years != 5:
+        raise ValueError(
+            f"{basket_symbol}: five_year_window_years must be 5 (frozen scope)")
+    months = entry.get("rebalance_months")
+    if (not isinstance(months, list) or not months
+            or any(not isinstance(m, int) or isinstance(m, bool) or not 1 <= m <= 12
+                   for m in months)
+            or len(set(months)) != len(months)):
+        raise ValueError(
+            f"{basket_symbol}: rebalance_months must be unique ints in 1-12")
+    recon_month = entry.get("expected_reconstitution_month")
+    if recon_month is not None and (
+            not isinstance(recon_month, int) or isinstance(recon_month, bool)
+            or recon_month not in months):
+        raise ValueError(
+            f"{basket_symbol}: expected_reconstitution_month must be null "
+            "or one of rebalance_months")
+    staleness = entry.get("market_cap_staleness_days")
+    if (not isinstance(staleness, int) or isinstance(staleness, bool)
+            or staleness <= 0):
+        raise ValueError(
+            f"{basket_symbol}: market_cap_staleness_days must be a positive int")
+    quality = entry.get("snapshot_quality")
+    if not isinstance(quality, Mapping):
+        raise ValueError(f"{basket_symbol}: snapshot_quality must be an object")
+    min_members, max_members = quality.get("minimum_members"), quality.get("maximum_members")
+    min_weight, max_weight = quality.get("minimum_weight"), quality.get("maximum_weight")
+    if (not isinstance(min_members, int) or isinstance(min_members, bool)
+            or not isinstance(max_members, int) or isinstance(max_members, bool)
+            or not 0 < min_members <= max_members):
+        raise ValueError(
+            f"{basket_symbol}: snapshot_quality member bounds must satisfy "
+            "0 < minimum_members <= maximum_members")
+    if (not isinstance(min_weight, (int, float)) or isinstance(min_weight, bool)
+            or not isinstance(max_weight, (int, float)) or isinstance(max_weight, bool)
+            or not 0 < min_weight <= max_weight):
+        raise ValueError(
+            f"{basket_symbol}: snapshot_quality weight bounds must satisfy "
+            "0 < minimum_weight <= maximum_weight")
+    gap_start = entry.get("history_available_from")
+    if gap_start is not None:
+        try:
+            date.fromisoformat(gap_start)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{basket_symbol}: history_available_from must be null or "
+                "an ISO date") from exc
+
+
+def load_index_pe_basket_configs(config_dir: Path) -> Dict[str, Dict[str, Any]]:
+    """Load + validate config/baskets/index_pe_baskets.json.
+
+    SSOT for the SPY/QQQ/SOXX historical disclosure pipeline: each basket's
+    FMP-forward source identity (`source_basket`, must agree with
+    `ETF_HOLDING_SOURCES`), the frozen five-year window, its quarterly
+    rebalance-close schedule and (basket-specific, possibly absent) expected
+    reconstitution month, disclosure snapshot coverage/staleness bounds, the
+    morning-report display order, and any audited pre-history gap boundary.
+    """
+    path = Path(config_dir) / "index_pe_baskets.json"
+    with open(path, encoding="utf-8") as f:
+        payload = json.load(f)
+    if not isinstance(payload, dict) or not payload:
+        raise ValueError("index PE basket config must be a nonempty object")
+    seen_source_baskets: Dict[str, str] = {}
+    seen_display_orders: Dict[int, str] = {}
+    for basket_symbol, entry in payload.items():
+        if not isinstance(entry, Mapping):
+            raise ValueError(f"{basket_symbol}: basket config entry must be an object")
+        validate_index_pe_basket_entry(basket_symbol, entry)
+        source_basket = entry["source_basket"]
+        if source_basket in seen_source_baskets:
+            raise ValueError(
+                f"duplicate source_basket {source_basket!r}: "
+                f"{seen_source_baskets[source_basket]} and {basket_symbol}")
+        seen_source_baskets[source_basket] = basket_symbol
+        display_order = entry["display_order"]
+        if display_order in seen_display_orders:
+            raise ValueError(
+                f"duplicate display_order {display_order!r}: "
+                f"{seen_display_orders[display_order]} and {basket_symbol}")
+        seen_display_orders[display_order] = basket_symbol
+    return {symbol: dict(entry) for symbol, entry in payload.items()}
+
+
+def basket_history_gap(
+    basket_symbol: str, reference_date: str,
+    basket_configs: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    """True if reference_date predates this basket's audited disclosure history.
+
+    A basket with no declared `history_available_from` boundary has no known
+    gap *yet* -- that is an empirical finding to make against real vendor
+    responses (see SOXX's 2021-09-20 boundary -- the first trading day after
+    SOXX's first verifiable rebalance close, established in
+    docs/plans/2026-07-14-soxx-historical-ttm-pe.md:182 and reused as the
+    `--min-date`/`--from-date` floor throughout ARCHITECTURE.md:152-153 and
+    docs/research/2026-07-14-soxx-historical-pe-feasibility.md:138), not an
+    assumption to make on baskets that have not been audited.
+    """
+    symbol = basket_symbol.upper()
+    if symbol not in basket_configs:
+        raise ValueError(f"unknown basket: {basket_symbol}")
+    gap_start = basket_configs[symbol].get("history_available_from")
+    if gap_start is None:
+        return False
+    return date.fromisoformat(reference_date) < date.fromisoformat(gap_start)
+
+
+# ---------------------------------------------------------------------------
 # Holdings 规范化
 # ---------------------------------------------------------------------------
+
+def non_equity_holding_reason(asset: str, name: str) -> Optional[str]:
+    """Explicit cash/derivative identities, also for legacy read-time views."""
+    asset, name = str(asset or "").strip().upper(), str(name or "").strip().upper()
+    if asset in _KNOWN_CASH_ASSETS or _CASH_NAME_RE.search(name):
+        return "cash_or_fund"
+    if _SWAP_NAME_RE.search(name):
+        return "swap"
+    if not asset and name in {"US DOLLAR", "POUND STERLING", "USD PENDING DIVIDENDS"}:
+        return "cash_or_fund"
+    if re.search(r"\b(?:INDEX FUTURE|CONTRA FUTURE)\b", name):
+        return "futures"
+    return None
+
 
 def normalize_holdings(
     basket: str,
@@ -181,10 +380,12 @@ def normalize_holdings(
         filter_reason = None
         covered_by = None
 
-        if asset in _KNOWN_CASH_ASSETS or _CASH_NAME_RE.search(name):
-            filter_reason = "cash_or_fund"
-        elif _SWAP_NAME_RE.search(name):
-            filter_reason = "swap"
+        non_equity_reason = non_equity_holding_reason(asset, name)
+        if non_equity_reason is not None:
+            filter_reason = non_equity_reason
+        elif "assetCategory" in raw and raw["assetCategory"] != "EC":
+            filter_reason = {"STIV": "cash_or_fund", "DE": "derivative"}.get(
+                raw["assetCategory"], "unrecognized_asset_category")
         elif "." in asset and asset not in class_vocabulary:
             mapped = listing_overrides.get(asset)
             if mapped:
@@ -223,6 +424,342 @@ def normalize_holdings(
             "covered_by": covered_by,
         })
     return out
+
+
+# ---------------------------------------------------------------------------
+# Historical fund disclosure adapter + SOXX calendar semantics
+# ---------------------------------------------------------------------------
+
+_SOXX_REBALANCE_MONTHS = (3, 6, 9, 12)
+
+
+def _third_friday(year: int, month: int) -> date:
+    fridays = [week[calendar_module.FRIDAY]
+               for week in calendar_module.monthcalendar(year, month)
+               if week[calendar_module.FRIDAY]]
+    return date(year, month, fridays[2])
+
+
+def infer_basket_rebalance_close(
+    reference_date: str, rebalance_months: Sequence[int] = _SOXX_REBALANCE_MONTHS,
+) -> str:
+    """Most recent scheduled quarterly third-Friday close on/before reference_date.
+
+    `rebalance_months` is basket-configured (see `load_index_pe_basket_configs`)
+    rather than hardcoded, because published quarterly weight-adjustment /
+    reconstitution effective dates are set by each index's own methodology,
+    not by SOXX's.
+    """
+    reference = date.fromisoformat(reference_date)
+    months = sorted(set(rebalance_months))
+    if not months:
+        raise ValueError("rebalance_months must be nonempty")
+    candidates = [
+        _third_friday(year, month)
+        for year in (reference.year - 1, reference.year)
+        for month in months
+    ]
+    eligible = [candidate for candidate in candidates if candidate <= reference]
+    if not eligible:  # pragma: no cover - previous year always supplies one
+        raise ValueError("no rebalance close on or before reference date")
+    return max(eligible).isoformat()
+
+
+def infer_soxx_rebalance_close(reference_date: str) -> str:
+    """Backward-compatible SOXX wrapper; delegates to the general basket helper."""
+    return infer_basket_rebalance_close(reference_date, _SOXX_REBALANCE_MONTHS)
+
+
+def _normalized_trading_dates(trading_dates: Iterable[str]) -> List[date]:
+    try:
+        normalized = sorted({date.fromisoformat(value) for value in trading_dates})
+    except (TypeError, ValueError) as exc:
+        raise ValueError("trading calendar contains a non-ISO date") from exc
+    if not normalized:
+        raise ValueError("trading calendar is empty")
+    return normalized
+
+
+def next_trading_date(after_date: str, trading_dates: Iterable[str]) -> str:
+    anchor = date.fromisoformat(after_date)
+    later = [value for value in _normalized_trading_dates(trading_dates)
+             if value > anchor]
+    if not later:
+        raise ValueError(f"no trading date after {after_date}")
+    return min(later).isoformat()
+
+
+def anchor_trading_date(holding_date: str, trading_dates: Iterable[str]) -> str:
+    """Map a vendor holding date to the latest SOXX trading date on/before it."""
+    anchor = date.fromisoformat(holding_date)
+    earlier = [value for value in _normalized_trading_dates(trading_dates)
+               if value <= anchor]
+    if not earlier:
+        raise ValueError(f"no trading date on or before {holding_date}")
+    return max(earlier).isoformat()
+
+
+def load_soxx_symbol_aliases(path: Path) -> Dict[str, Dict[str, str]]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("SOXX aliases must be an object")
+    normalized: Dict[str, Dict[str, str]] = {}
+    for raw_symbol, item in payload.items():
+        if (not isinstance(raw_symbol, str) or raw_symbol != raw_symbol.upper()
+                or not isinstance(item, dict)):
+            raise ValueError("SOXX alias keys must be uppercase symbols")
+        target = item.get("symbol")
+        reason = item.get("reason")
+        mode = item.get("mode", "fallback")
+        cusip = item.get("cusip")
+        isin = item.get("isin")
+        if (not isinstance(target, str) or target != target.upper()
+                or not isinstance(reason, str) or not reason.strip()
+                or mode not in {"fallback", "authoritative"}):
+            raise ValueError(f"invalid SOXX alias: {raw_symbol}")
+        if (
+                not isinstance(cusip, str) or not cusip
+                or not isinstance(isin, str) or not isin):
+            raise ValueError(
+                f"SOXX alias requires exact CUSIP and ISIN: {raw_symbol}")
+        normalized[raw_symbol] = {
+            "symbol": target, "mode": mode,
+            "reason": reason.strip(),
+            **({"cusip": cusip} if cusip else {}),
+            **({"isin": isin} if isin else {}),
+        }
+        if item.get("issuer_cik") is not None:
+            value = item["issuer_cik"]
+            if not isinstance(value, str) or len(value) != 10 or not value.isdigit() or int(value) == 0:
+                raise ValueError(f"invalid alias issuer CIK: {raw_symbol}")
+            normalized[raw_symbol]["issuer_cik"] = value
+    return normalized
+
+
+def resolve_disclosure_symbol(
+    raw_symbol: str,
+    cik: Optional[str],
+    aliases: Mapping[str, Mapping[str, str]],
+    *,
+    cusip: Optional[str] = None,
+    isin: Optional[str] = None,
+) -> Tuple[str, Optional[Dict[str, str]]]:
+    """Resolve exact securities; cik is the filer, not the holding's issuer."""
+    symbol = str(raw_symbol or "").strip().upper()
+    alias = aliases.get(symbol)
+    if alias is None:
+        return symbol, None
+    if not alias.get("cusip") or not alias.get("isin"):
+        raise ValueError(f"security identity evidence missing for alias {symbol}")
+    if str(cusip or "") != str(alias["cusip"]):
+        raise ValueError(f"CUSIP mismatch for configured alias {symbol}")
+    if str(isin or "") != str(alias["isin"]):
+        raise ValueError(f"ISIN mismatch for configured alias {symbol}")
+    target = str(alias["symbol"]).upper()
+    return target, {
+        "raw_symbol": symbol,
+        "symbol": target,
+        "cik": str(cik),
+        "mode": str(alias.get("mode", "fallback")),
+        "reason": str(alias["reason"]),
+    }
+
+
+def validate_disclosure_alias_bindings(rows, aliases, income_by_symbol=None):
+    """A known security correction must survive storage and bind the right income issuer."""
+    checked = set()
+    for row in rows:
+        raw = str(row.get("raw_symbol") or row.get("symbol") or "").upper()
+        if raw not in aliases:
+            continue
+        target, evidence = resolve_disclosure_symbol(raw, row.get("cik"), aliases,
+            cusip=row.get("cusip"), isin=row.get("isin"))
+        if row.get("alias_symbol") != target or row.get("alias_mode") != evidence["mode"]:
+            raise ValueError(f"stored disclosure alias metadata is stale: {raw}; reparse preserved raw source")
+        expected = aliases[raw].get("issuer_cik")
+        if income_by_symbol is not None and expected and target not in checked:
+            for statement in income_by_symbol.get(target, []):
+                if str(statement.get("cik") or "").zfill(10) != expected:
+                    raise ValueError(f"income issuer mismatch for verified alias {raw}->{target}")
+            checked.add(target)
+
+
+def _vendor_timestamp(value: Any, field_name: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} missing or malformed")
+    text = value.strip().replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} missing or malformed") from exc
+
+
+def normalize_fund_disclosure_snapshot(
+    basket_symbol: str,
+    raw_rows: Sequence[Mapping[str, Any]],
+    source_kind: str,
+    fetched_at: str,
+    trading_dates: Iterable[str],
+    listing_overrides: Mapping[str, str],
+    share_class_groups: Mapping[str, Sequence[str]],
+    symbol_aliases: Mapping[str, Mapping[str, str]],
+    previous_symbols: Optional[Iterable[str]] = None,
+    *,
+    rebalance_months: Sequence[int] = _SOXX_REBALANCE_MONTHS,
+    expected_reconstitution_month: Optional[int] = 9,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Adapt disclosure/live rows, then reuse the proven holdings normalizer.
+
+    `rebalance_months` / `expected_reconstitution_month` default to SOXX's
+    already-audited values so every existing SOXX call site (production
+    script and tests) is unaffected; other baskets pass their own values
+    from `load_index_pe_basket_configs`. `expected_reconstitution_month =
+    None` means the basket has no documented month where membership changes
+    are the expected/scheduled outcome, so every observed delta warns.
+    """
+    if source_kind not in {"disclosure", "live"}:
+        raise ValueError("source_kind must be disclosure or live")
+    if not raw_rows:
+        raise ValueError("fund snapshot cannot be empty")
+    fetched = _vendor_timestamp(fetched_at, "fetched_at")
+    warnings: List[str] = []
+    accepted_values: List[datetime] = []
+    holding_dates = set()
+    adapted: List[Dict[str, Any]] = []
+    identity: List[Dict[str, Any]] = []
+
+    for raw_value in raw_rows:
+        if not isinstance(raw_value, Mapping):
+            raise ValueError("fund snapshot rows must be objects")
+        raw = dict(raw_value)
+        if source_kind == "disclosure":
+            raw_date = _parse_iso_date(raw.get("date"))
+            if raw_date is None:
+                raise ValueError("disclosure row date missing or malformed")
+            holding_dates.add(raw_date.isoformat())
+            accepted = _vendor_timestamp(
+                raw.get("acceptedDate"), "acceptedDate")
+            accepted_values.append(accepted)
+            raw_symbol = str(raw.get("symbol") or "").strip().upper()
+            _, alias_evidence = resolve_disclosure_symbol(
+                raw_symbol, raw.get("cik"), symbol_aliases,
+                cusip=raw.get("cusip"), isin=raw.get("isin"))
+            adapted.append({
+                # Raw-first contract: an alias is evidence for a later
+                # source-data fallback, never an unconditional ticker rewrite.
+                "asset": raw_symbol,
+                # Disclosure `name` can be only the issuer (for example
+                # "BlackRock Funds III") while `title` carries the security
+                # identity ("BlackRock Cash Funds..."). Prefer title so the
+                # existing cash/fund rule can fail closed on BISXX/STIV rows.
+                "name": raw.get("title") or raw.get("name"),
+                "weightPercentage": raw.get("pctVal"),
+                "marketValue": raw.get("valUsd"),
+                "updatedAt": raw.get("acceptedDate"),
+                "assetCategory": raw.get("assetCat"),
+            })
+            identity.append({
+                "raw_symbol": raw_symbol,
+                "cik": raw.get("cik"),
+                "cusip": raw.get("cusip"),
+                "isin": raw.get("isin"),
+                "row_accepted_at": raw.get("acceptedDate"),
+                "alias_symbol": (
+                    alias_evidence["symbol"] if alias_evidence else None),
+                "alias_mode": (
+                    alias_evidence["mode"] if alias_evidence else None),
+                "alias_reason": (
+                    alias_evidence["reason"] if alias_evidence else None),
+            })
+        else:
+            raw_symbol = str(raw.get("asset") or "").strip().upper()
+            if (raw.get("securityCusip") and raw.get("cusip")
+                    and raw["securityCusip"] != raw["cusip"]):
+                raise ValueError("conflicting live CUSIP fields")
+            live_cusip = raw.get("securityCusip") or raw.get("cusip")
+            _, alias_evidence = resolve_disclosure_symbol(
+                raw_symbol, raw.get("cik"), symbol_aliases,
+                cusip=live_cusip, isin=raw.get("isin"))
+            adapted.append(dict(raw))
+            identity.append({
+                "raw_symbol": raw_symbol,
+                "cik": raw.get("cik"),
+                "cusip": live_cusip,
+                "isin": raw.get("isin"),
+                "row_accepted_at": None,
+                "alias_symbol": (
+                    alias_evidence["symbol"] if alias_evidence else None),
+                "alias_mode": (
+                    alias_evidence["mode"] if alias_evidence else None),
+                "alias_reason": (
+                    alias_evidence["reason"] if alias_evidence else None),
+            })
+
+    if source_kind == "disclosure":
+        if len(holding_dates) != 1:
+            raise ValueError("disclosure snapshot contains mixed holding dates")
+        holding_date = next(iter(holding_dates))
+        accepted_text = {value.isoformat(sep=" ") for value in accepted_values}
+        if len(accepted_text) > 1:
+            warnings.append("inconsistent_row_accepted_at")
+        composition_available_date = max(accepted_values).date().isoformat()
+        weight_basis = "fixed_rebalance_weight_proxy"
+        quality = "historical_disclosure_fixed_proxy"
+    else:
+        holding_date = fetched.date().isoformat()
+        composition_available_date = holding_date
+        weight_basis = "live_snapshot_backcast_proxy"
+        quality = "live_tail_weaker"
+
+    rebalance_close_date = infer_basket_rebalance_close(
+        holding_date, rebalance_months)
+    composition_effective_date = next_trading_date(
+        rebalance_close_date, trading_dates)
+    anchor_date = anchor_trading_date(holding_date, trading_dates)
+    normalized = normalize_holdings(
+        basket_symbol, holding_date, adapted,
+        listing_overrides, share_class_groups)
+    for row, evidence in zip(normalized, identity):
+        row.update(evidence)
+        raw = dict(raw_rows[row["raw_row_index"]])
+        row.update(issuer_lei=raw.get("lei"), asset_category=raw.get("assetCat"),
+                   raw_payload_json=raw)
+
+    # Membership drift is about source constituents, not filtered cash rows
+    # or the economic target used to merge dual share-class weights.
+    current_symbols = {
+        str(row.get("raw_symbol") or row.get("symbol")
+            or row.get("covered_by")).upper()
+        for row in normalized
+        if (row.get("included") == 1 or row.get("covered_by"))
+        and (row.get("raw_symbol") or row.get("symbol")
+             or row.get("covered_by"))
+    }
+    if previous_symbols is not None:
+        previous = {str(symbol).upper() for symbol in previous_symbols}
+        is_expected_reconstitution = (
+            expected_reconstitution_month is not None
+            and date.fromisoformat(rebalance_close_date).month
+            == expected_reconstitution_month)
+        if current_symbols != previous and not is_expected_reconstitution:
+            warnings.append("non_reconstitution_membership_delta")
+    for row in normalized:
+        row["snapshot_warnings_json"] = list(warnings)
+
+    metadata = {
+        "basket_symbol": basket_symbol.upper(),
+        "holding_date": holding_date,
+        "anchor_trading_date": anchor_date,
+        "source_kind": source_kind,
+        "rebalance_close_date": rebalance_close_date,
+        "composition_effective_date": composition_effective_date,
+        "composition_available_date": composition_available_date,
+        "fetched_at": fetched_at,
+        "weight_basis": weight_basis,
+        "data_quality_tier": quality,
+        "warnings": warnings,
+    }
+    return normalized, metadata
 
 
 # ---------------------------------------------------------------------------

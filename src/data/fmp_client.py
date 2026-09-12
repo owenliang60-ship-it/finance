@@ -9,6 +9,7 @@ import re
 import requests
 import time
 import logging
+from datetime import date
 from typing import Optional, Dict, Any, List
 
 import sys
@@ -46,16 +47,37 @@ class FMPResponseError(Exception):
     """FMP 响应形状/传输失败。message 绝不含 URL、params、响应体或 key。"""
 
 
+def _validated_symbol(symbol: str) -> str:
+    if not isinstance(symbol, str) or not symbol.strip():
+        raise ValueError("symbol must be a non-empty string")
+    return symbol.strip().upper()
+
+
+def _validated_iso_date(value: str, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be YYYY-MM-DD")
+    try:
+        return date.fromisoformat(value).isoformat()
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be YYYY-MM-DD") from exc
+
+
 class FMPClient:
     """FMP API 客户端"""
 
     def __init__(self, api_key: str = FMP_API_KEY,
-                 call_interval: Optional[float] = None):
+                 call_interval: Optional[float] = None,
+                 max_requests: Optional[int] = None):
+        if max_requests is not None and (not isinstance(max_requests, int)
+                or isinstance(max_requests, bool) or max_requests < 1):
+            raise ValueError("max_requests must be a positive integer")
         self.api_key = api_key
         self.base_url = FMP_BASE_URL
         # None → 全局默认（现有调用方行为不变）；forward CLI 显式传入独立间隔
         self.call_interval = API_CALL_INTERVAL if call_interval is None else call_interval
         self._last_call_time = 0
+        self.max_requests = max_requests
+        self.request_count = 0
 
     def _safe(self, value: object) -> str:
         return _sanitize_log_text(value, self.api_key)
@@ -82,6 +104,9 @@ class FMPClient:
         params["apikey"] = self.api_key
 
         for attempt in range(API_RETRY_TIMES):
+            if self.max_requests is not None and self.request_count >= self.max_requests:
+                raise RuntimeError(f"FMP request budget exhausted ({self.max_requests})")
+            self.request_count += 1  # Every HTTP attempt counts, including retries.
             try:
                 resp = requests.get(url, params=params, timeout=API_TIMEOUT)
 
@@ -166,6 +191,75 @@ class FMPClient:
         data = self._request("etf/holdings", {"symbol": symbol.upper()})
         if not isinstance(data, list):
             raise FMPResponseError("etf/holdings returned no valid list payload")
+        return data
+
+    # ========== Historical basket valuation source contracts ==========
+
+    def get_fund_disclosure_dates(self, symbol: str) -> List[Dict]:
+        """Fund quarterly disclosure dates; raw vendor rows are preserved."""
+        data = self._request(
+            "funds/disclosure-dates", {"symbol": _validated_symbol(symbol)})
+        if not isinstance(data, list):
+            raise FMPResponseError(
+                "funds/disclosure-dates returned no valid list payload")
+        return data
+
+    def get_fund_disclosure(
+        self, symbol: str, year: int, quarter: int,
+    ) -> List[Dict]:
+        """One fund quarterly disclosure; raw rows are preserved."""
+        if (not isinstance(year, int) or isinstance(year, bool)
+                or year < 1900 or year > 2100):
+            raise ValueError("year must be an integer between 1900 and 2100")
+        if (not isinstance(quarter, int) or isinstance(quarter, bool)
+                or quarter not in {1, 2, 3, 4}):
+            raise ValueError("quarter must be one of 1, 2, 3, 4")
+        data = self._request(
+            "funds/disclosure",
+            {
+                "symbol": _validated_symbol(symbol),
+                "year": year,
+                "quarter": quarter,
+            },
+        )
+        if not isinstance(data, list):
+            raise FMPResponseError(
+                "funds/disclosure returned no valid list payload")
+        return data
+
+    def get_historical_fx(
+        self, symbol: str, from_date: str, to_date: str,
+    ) -> List[Dict]:
+        """Historical direct FX pair closes, for example EURUSD or TWDUSD."""
+        start = _validated_iso_date(from_date, "from_date")
+        end = _validated_iso_date(to_date, "to_date")
+        if start > end:
+            raise ValueError("from_date must be on or before to_date")
+        data = self._request(
+            "historical-price-eod/full",
+            {"symbol": _validated_symbol(symbol), "from": start, "to": end},
+        )
+        if not isinstance(data, list):
+            raise FMPResponseError(
+                "historical FX returned no valid list payload")
+        return data
+
+    def get_stock_splits(self, symbol: str) -> List[Dict]:
+        """Company split events used by historical market-cap sanity checks."""
+        data = self._request("splits", {"symbol": _validated_symbol(symbol)})
+        if not isinstance(data, list):
+            raise FMPResponseError("splits returned no valid list payload")
+        for row in data:
+            try:
+                if not isinstance(row, dict):
+                    raise ValueError
+                _validated_iso_date(row["date"], "split date")
+                numerator = float(row["numerator"])
+                denominator = float(row["denominator"])
+                if numerator <= 0 or denominator <= 0 or not row.get("splitType"):
+                    raise ValueError
+            except (KeyError, TypeError, ValueError):
+                raise FMPResponseError("splits returned a malformed row") from None
         return data
 
     # ========== 股票池相关 ==========

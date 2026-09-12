@@ -39,7 +39,7 @@
 
 | 源 | Plan | 用途 | 限流 |
 |----|------|------|------|
-| FMP | 升级 plan | 基本面 + 价格 + 分析师 grades + 内部交易 + news + **quarterly forward EPS estimates/earnings/ETF holdings（周频 PIT，`update_fmp_forward.py`）** | 2s（forward 线独立 `FMP_FORWARD_API_CALL_INTERVAL`） |
+| FMP | 升级 plan | 基本面 + 价格 + 分析师 grades + 内部交易 + news；quarterly forward EPS estimates/earnings/ETF holdings（周频 PIT）；SOXX historical disclosure/FX/splits（一次性 GAAP TTM PE proxy） | 2s（forward 线独立 `FMP_FORWARD_API_CALL_INTERVAL`） |
 | yfinance | Free | Forward estimates（对拍参照线，四周 review 前保留）+ 扩展池 batch 价格 | 1s |
 | FRED | Free | 16 宏观序列 | 120/min |
 | MarketData.app | Starter | 期权链 + IV + PI live quote（**单 IP 绑定云端**） | — |
@@ -78,6 +78,8 @@ API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`�
 
 `data_health.py`（11 项检查） + `data_guardian.py`（快照） + `data_validator.py`（一致性）。
 
+历史篮子估值另有 `verify_basket_ttm_pe.py`：只读逐日复算 disclosure → GAAP TTM income → FX → sanity-clean HMC → 两种 PE。source snapshot 先过 25–31 个 eligible equity rows 与 99.5%–100.5% raw weight 阻塞门，证券 alias 区分 raw-first fallback 与 CUSIP/ISIN-backed authoritative correction。`basket_ttm_valuation` 是固定调仓权重 retrospective proxy，不是官方 SOXX PE/历史 forward PE；当前一次性运行，**没有 cron**。
+
 ### 云端定时任务
 
 | 时间 | 频率 | 任务 |
@@ -89,6 +91,8 @@ API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`�
 | 22:00 / 23:00 SGT | Mon-Fri | Portfolio Intelligence 推送 |
 
 完整 cron 见 `ARCHITECTURE.md`。本地 launchd `com.finance.sync-pull` 每天 09:00 auto-pull。
+
+三指数 PE 升级在 `codex/index-pe-morning-chart` 已实现、尚未部署：周频整窗历史 TTM/后视镜 + 六篮子 PIT 共识估值 → 晨报 `0d` 只读 PNG（HTML/PDF 共用）。共识与 GAAP 实际口径差异必须显式标注；运行/恢复见 `docs/runbooks/index-pe-weekly-window.md`，不能把分支完成当作生产数据已就绪。
 
 ---
 

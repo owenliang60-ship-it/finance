@@ -1,0 +1,27 @@
+{
+  "equivalent_leis": [],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "Penn National Gaming Inc"
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "707569109",
+      "isin": "US7075691094",
+      "symbol": "PENN",
+      "valid_from": "2021-06-30",
+      "valid_to": "2022-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0000921738",
+    "form": "SCHEDULE 13G",
+    "sec_name": "PENN Entertainment, Inc.",
+    "section": "SUBJECT COMPANY",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/2100119/000210011926000929/0002100119-26-000929-index-headers.html",
+    "symbol": "PENN"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

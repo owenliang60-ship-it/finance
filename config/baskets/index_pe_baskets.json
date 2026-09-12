@@ -1,0 +1,47 @@
+{
+  "SPY": {
+    "source_basket": "SPY",
+    "display_order": 1,
+    "five_year_window_years": 5,
+    "rebalance_months": [3, 6, 9, 12],
+    "expected_reconstitution_month": null,
+    "market_cap_staleness_days": 7,
+    "snapshot_quality": {
+      "minimum_members": 480,
+      "maximum_members": 520,
+      "minimum_weight": 99.0,
+      "maximum_weight": 101.0
+    },
+    "history_available_from": null
+  },
+  "QQQ": {
+    "source_basket": "QQQ",
+    "display_order": 2,
+    "five_year_window_years": 5,
+    "rebalance_months": [3, 6, 9, 12],
+    "expected_reconstitution_month": null,
+    "market_cap_staleness_days": 7,
+    "snapshot_quality": {
+      "minimum_members": 95,
+      "maximum_members": 115,
+      "minimum_weight": 99.0,
+      "maximum_weight": 101.0
+    },
+    "history_available_from": null
+  },
+  "SOXX": {
+    "source_basket": "SOX",
+    "display_order": 3,
+    "five_year_window_years": 5,
+    "rebalance_months": [3, 6, 9, 12],
+    "expected_reconstitution_month": 9,
+    "market_cap_staleness_days": 7,
+    "snapshot_quality": {
+      "minimum_members": 25,
+      "maximum_members": 31,
+      "minimum_weight": 99.5,
+      "maximum_weight": 100.5
+    },
+    "history_available_from": "2021-09-20"
+  }
+}

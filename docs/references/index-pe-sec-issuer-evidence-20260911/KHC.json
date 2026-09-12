@@ -1,0 +1,32 @@
+{
+  "equivalent_leis": [
+    "9845007488EC87F5AF14"
+  ],
+  "expected_raw_leis": [
+    "5493003STKEZ2S0RNU91"
+  ],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "Kraft Heinz Co. (The)",
+    "Kraft Heinz Co/The"
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "500754106",
+      "isin": "US5007541064",
+      "symbol": "KHC",
+      "valid_from": "2021-06-30",
+      "valid_to": "2026-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001637459",
+    "form": "3",
+    "sec_name": "Kraft Heinz Co",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1637459/000163745922000005/0001637459-22-000005-index-headers.html",
+    "symbol": "KHC"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

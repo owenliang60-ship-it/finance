@@ -96,6 +96,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         description="FMP forward EPS weekly/backfill orchestrator",
         epilog=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=["weekly", "backfill"], required=True)
+    parser.add_argument("--phase", choices=["data", "valuation"], default="data",
+                        help="valuation reads a frozen weekly snapshot; no API calls")
     parser.add_argument("--snapshot-date", type=_iso_date, default=None,
                         help="default today; injectable for tests/replay")
     parser.add_argument("--backfill-start", type=_iso_date, default=None,
@@ -112,6 +114,13 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--config-dir", type=Path, default=None,
                         help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+
+    if args.phase == "valuation":
+        if args.mode != "weekly" or args.resume or args.symbols or args.backfill_start:
+            parser.error("valuation requires weekly mode without resume/symbols/backfill")
+        if args.config_dir is None:
+            args.config_dir = PROJECT_ROOT / "config" / "baskets"
+        return args
 
     # 无效组合在任何 API/DB 初始化前 exit 2
     if args.backfill_start is not None and args.mode != "backfill":
@@ -738,8 +747,99 @@ def build_pool_loaders(data_root: Optional[Path]):
     return extras_loader, base_loader
 
 
+def run_valuation_phase(args):
+    """Derive and certify one immutable six-basket vintage, without ingestion."""
+    from terminal.forward_valuation import (
+        build_forward_valuations,
+        verify_forward_valuations,
+    )
+    from scripts.verify_fmp_forward import _connect_ro
+    from config.settings import MARKET_DB_PATH
+
+    db_path = args.data_root / "market.db" if args.data_root else Path(MARKET_DB_PATH)
+    if not db_path.exists():
+        return 1, {"ok": False, "error": "market.db not found"}
+    store = None
+    if args.dry_run:
+        conn = _connect_ro(db_path)
+    else:
+        from src.data.market_store import MarketStore
+
+        store = MarketStore(db_path)
+        conn = store._get_conn()
+    report = {"ok": False, "phase": "valuation", "dry_run": bool(args.dry_run)}
+    try:
+        snapshot = args.snapshot_date
+        if snapshot is None:
+            snapshot = conn.execute(
+                "SELECT MAX(snapshot_date) FROM fmp_forward_runs "
+                "WHERE run_kind='weekly' AND status='complete' AND snapshot_date<=?",
+                [date.today().isoformat()],
+            ).fetchone()[0]
+        if not snapshot or snapshot > date.today().isoformat():
+            raise ValueError("a completed, non-future source snapshot is required")
+        report["snapshot_date"] = snapshot
+        rows = build_forward_valuations(conn, snapshot, args.config_dir)
+        report["baskets"] = [
+            {k: v for k, v in row.items() if k != "members_json"}
+            | {
+                "status": row["members_json"]["status"],
+                "excluded": [
+                    {
+                        "symbol": m["symbol"],
+                        "ntm": m.get("ntm_exclusion_reason"),
+                        "blend": m.get("blend_exclusion_reason"),
+                        "market_cap": m.get("market_cap_exclusion_reason"),
+                    }
+                    for m in row["members_json"]["members"]
+                    if m.get("market_cap") is None
+                    or m.get("ntm_net_income_usd") is None
+                    or m.get("blend_net_income_usd") is None
+                ][:20],
+            }
+            for row in rows
+        ]
+
+        def certify(candidate):
+            stored = (
+                [
+                    dict(r)
+                    for r in candidate.execute(
+                        "SELECT * FROM fmp_basket_valuation WHERE snapshot_date=?",
+                        [snapshot],
+                    )
+                ]
+                if store is not None
+                else rows
+            )
+            errors = verify_forward_valuations(
+                candidate, snapshot, stored, args.config_dir
+            )
+            report["failures"] = errors
+            return not errors
+
+        if store is None:
+            report["ok"] = certify(conn)
+        else:
+            store.commit_fmp_basket_valuations(rows, certify)
+            report["ok"] = True
+        return (0 if report["ok"] else 1), report
+    except (ValueError, RuntimeError, sqlite3.Error) as exc:
+        report["error"] = str(exc)
+        return 1, report
+    finally:
+        if store is not None:
+            store.close()
+        else:
+            conn.close()
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
+    if args.phase == "valuation":
+        rc, report = run_valuation_phase(args)
+        print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+        return rc
 
     from config.settings import FMP_FORWARD_API_CALL_INTERVAL
     from src.data.fmp_client import FMPClient

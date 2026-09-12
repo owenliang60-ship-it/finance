@@ -1,0 +1,36 @@
+{
+  "equivalent_leis": [
+    "254900HTTDFIJZ32GX53"
+  ],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "Aptiv PLC"
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": null,
+      "isin": "JE00B783TY65",
+      "symbol": "APTV",
+      "valid_from": "2021-06-30",
+      "valid_to": "2024-09-30"
+    },
+    {
+      "cusip": null,
+      "isin": "JE00BTDN8H13",
+      "symbol": "APTV",
+      "valid_from": "2025-03-31",
+      "valid_to": "2026-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001521332",
+    "form": "144",
+    "sec_name": "Aptiv PLC",
+    "section": "SUBJECT COMPANY",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1521332/000195917326000205/0001959173-26-000205-index-headers.html",
+    "symbol": "APTV"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

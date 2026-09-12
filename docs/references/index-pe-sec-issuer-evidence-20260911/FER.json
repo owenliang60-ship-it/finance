@@ -1,0 +1,31 @@
+{
+  "equivalent_leis": [
+    "72450022R2ZFL41Y6I04"
+  ],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "FERROVIAL SE",
+    "Ferrovial SE"
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "N3168P101",
+      "isin": "NL0015001FS8",
+      "symbol": "FER",
+      "valid_from": "2025-12-31",
+      "valid_to": "2026-03-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001468522",
+    "form": "6-K",
+    "sec_name": "Ferrovial SE",
+    "section": "FILER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1468522/000146852226000008/0001468522-26-000008-index-headers.html",
+    "symbol": "FER"
+  },
+  "security_source_url": "https://www.sec.gov/Archives/edgar/data/1515671/000094040025013953/xslFormNPORT-P_X01/primary_doc.xml",
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

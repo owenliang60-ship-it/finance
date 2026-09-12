@@ -15,15 +15,18 @@ Usage:
 import hashlib
 import json
 import logging
+import math
 import re
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import pandas as pd
+
+from src.data.fx_validation import validate_usd_per_unit
 
 logger = logging.getLogger(__name__)
 
@@ -520,6 +523,174 @@ _SCHEMA = "\n\n".join([
     "CREATE INDEX IF NOT EXISTS idx_sce_concept ON symbol_concept_edges(concept_id);",
     "CREATE INDEX IF NOT EXISTS idx_sce_edge_type ON symbol_concept_edges(edge_type);",
 
+    # -- Historical basket GAAP TTM valuation source and output tables --
+    """CREATE TABLE IF NOT EXISTS fmp_fund_disclosure_holdings (
+    basket_symbol TEXT NOT NULL,
+    holding_date TEXT NOT NULL,
+    source_kind TEXT NOT NULL CHECK(source_kind IN ('disclosure','live')),
+    raw_row_index INTEGER NOT NULL,
+    rebalance_close_date TEXT NOT NULL,
+    composition_effective_date TEXT NOT NULL,
+    composition_available_date TEXT NOT NULL,
+    raw_symbol TEXT,
+    symbol TEXT,
+    alias_symbol TEXT,
+    alias_mode TEXT,
+    alias_reason TEXT,
+    name TEXT,
+    weight_pct REAL,
+    market_value REAL,
+    cik TEXT,
+    cusip TEXT,
+    isin TEXT,
+    issuer_lei TEXT,
+    asset_category TEXT,
+    raw_payload_json TEXT,
+    included INTEGER NOT NULL CHECK(included IN (0,1)),
+    filter_reason TEXT,
+    covered_by TEXT,
+    row_accepted_at TEXT,
+    snapshot_warnings_json TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (basket_symbol, holding_date, source_kind, raw_row_index)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_ffdh_basket_effective "
+    "ON fmp_fund_disclosure_holdings(basket_symbol, composition_effective_date);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_ffdh_live_rebalance "
+    "ON fmp_fund_disclosure_holdings"
+    "(basket_symbol, rebalance_close_date, source_kind, raw_row_index) "
+    "WHERE source_kind = 'live';",
+
+    """CREATE TABLE IF NOT EXISTS fx_daily (
+    currency TEXT NOT NULL,
+    date TEXT NOT NULL,
+    usd_per_unit REAL NOT NULL CHECK(usd_per_unit > 0),
+    source_symbol TEXT NOT NULL,
+    source TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (currency, date)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_fx_daily_date ON fx_daily(date);",
+
+    """CREATE TABLE IF NOT EXISTS fmp_stock_splits (
+    symbol TEXT NOT NULL,
+    date TEXT NOT NULL,
+    numerator REAL NOT NULL CHECK(numerator > 0),
+    denominator REAL NOT NULL CHECK(denominator > 0),
+    split_type TEXT NOT NULL,
+    source TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (symbol, date)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_fss_symbol_date "
+    "ON fmp_stock_splits(symbol, date);",
+
+    """CREATE TABLE IF NOT EXISTS basket_ttm_valuation (
+    basket_symbol TEXT NOT NULL,
+    valuation_date TEXT NOT NULL,
+    holding_date TEXT NOT NULL,
+    composition_effective_date TEXT NOT NULL,
+    composition_available_date TEXT NOT NULL,
+    is_ex_post_composition INTEGER NOT NULL CHECK(is_ex_post_composition IN (0,1)),
+    weight_basis TEXT NOT NULL,
+    data_quality_tier TEXT NOT NULL,
+    is_observed_weight_date INTEGER NOT NULL CHECK(is_observed_weight_date IN (0,1)),
+    eligible_weight REAL NOT NULL,
+    covered_weight REAL NOT NULL,
+    rebalance_weighted_ttm_pe_gaap_proxy REAL,
+    weighted_earnings_yield REAL,
+    uncapped_mcap_basket_pe_gaap REAL,
+    covered_market_cap REAL,
+    ttm_net_income_usd REAL,
+    member_count INTEGER NOT NULL,
+    covered_count INTEGER NOT NULL,
+    weight_coverage REAL NOT NULL CHECK(weight_coverage >= 0 AND weight_coverage <= 1),
+    mcap_weight_coverage REAL NOT NULL CHECK(mcap_weight_coverage >= 0 AND mcap_weight_coverage <= 1),
+    income_weight_coverage REAL NOT NULL CHECK(income_weight_coverage >= 0 AND income_weight_coverage <= 1),
+    fx_weight_coverage REAL NOT NULL CHECK(fx_weight_coverage >= 0 AND fx_weight_coverage <= 1),
+    members_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    mcap_sanity_json TEXT NOT NULL,
+    methodology_version TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (basket_symbol, valuation_date)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_btv_basket_date "
+    "ON basket_ttm_valuation(basket_symbol, valuation_date);",
+
+    # 周频估值 SSOT（Plan 2026-07-19 §3.3）：hindsight NTM actual/estimate 引擎
+    # 的落库目标表。quality_tier 承载 R5 tail 演化契约（见
+    # upsert_basket_weekly_pe_batch 的 docstring）。
+    """CREATE TABLE IF NOT EXISTS basket_weekly_pe_history (
+    basket TEXT NOT NULL,
+    valuation_date TEXT NOT NULL,
+    -- 写入本行的 run（basket_pe_backfill_runs.run_id）。verifier 以此判定
+    -- "行归属" 与 "认证 run" 是否一致：manifest 只防改写不防追加，伪造一对
+    -- run_started+run_completed 曾能重新认证被篡改的行；行自带归属后，
+    -- 认证只对该 run 名下的行生效。R5 tail 升级会把归属改到重算的那次 run。
+    run_id TEXT NOT NULL,
+    ttm_pe_gaap REAL,
+    hindsight_ntm_pe_gaap REAL,
+    ttm_total_mcap REAL,
+    ttm_net_income REAL,
+    hindsight_total_mcap REAL,
+    hindsight_ntm_net_income REAL,
+    n_members INTEGER NOT NULL CHECK(n_members >= 0),
+    n_covered_ttm INTEGER NOT NULL CHECK(n_covered_ttm >= 0),
+    n_covered_hindsight INTEGER NOT NULL CHECK(n_covered_hindsight >= 0),
+    mcap_coverage_ttm REAL NOT NULL
+        CHECK(mcap_coverage_ttm >= 0 AND mcap_coverage_ttm <= 1),
+    mcap_coverage_hindsight REAL NOT NULL
+        CHECK(mcap_coverage_hindsight >= 0 AND mcap_coverage_hindsight <= 1),
+    hindsight_actual_quarters INTEGER NOT NULL
+        CHECK(hindsight_actual_quarters >= 0 AND hindsight_actual_quarters <= 4),
+    hindsight_estimate_quarters INTEGER NOT NULL
+        CHECK(hindsight_estimate_quarters >= 0 AND hindsight_estimate_quarters <= 4),
+    composition_effective_date TEXT NOT NULL,
+    composition_available_date TEXT NOT NULL,
+    quality_tier TEXT NOT NULL
+        CHECK(quality_tier IN ('actual_only','latest_consensus_tail','unpublishable')),
+    members_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    methodology_version TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_updated TEXT NOT NULL,
+    PRIMARY KEY (basket, valuation_date),
+    CHECK (
+        quality_tier = 'unpublishable'
+        OR hindsight_actual_quarters + hindsight_estimate_quarters = 4
+    )
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_bwph_basket_date "
+    "ON basket_weekly_pe_history(basket, valuation_date);",
+
+    # 三指数周频 backfill 的 append-only run manifest（Plan 2026-07-19 Task 4 /
+    # issue048 recurring 关闭条件）。每次 run 只追加事件，从不改写：
+    # run_started 冻结 writer 当时的 target universe 与 expected date range
+    # （防止后续用较晚 --min-date 只验证 suffix），forced_refresh 保留被覆盖
+    # 区间的 pre/post row hash（refresh 后源表已无法自证），run_completed /
+    # run_failed 记终局。verifier 以本表为分母 SSOT，不用当前 universe 重建。
+    """CREATE TABLE IF NOT EXISTS basket_pe_backfill_runs (
+    run_id TEXT NOT NULL,
+    basket TEXT NOT NULL,
+    event_seq INTEGER NOT NULL CHECK(event_seq >= 0),
+    event_kind TEXT NOT NULL CHECK(event_kind IN
+        ('run_started','forced_refresh','run_completed','run_failed')),
+    frequency TEXT NOT NULL,
+    expected_from_date TEXT NOT NULL,
+    expected_to_date TEXT NOT NULL,
+    methodology_version TEXT NOT NULL,
+    target_count INTEGER NOT NULL CHECK(target_count >= 0),
+    target_universe_json TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (run_id, basket, event_seq),
+    CHECK (expected_from_date <= expected_to_date)
+);""",
+    "CREATE INDEX IF NOT EXISTS idx_bpbr_basket_run "
+    "ON basket_pe_backfill_runs(basket, run_id, event_seq);",
+
     # -- FMP forward EPS 数据线（Spec 2026-07-09 §5.2，4 业务表 + 1 run-manifest）--
     # 周频 PIT 快照（append-only）
     """CREATE TABLE IF NOT EXISTS fmp_estimates (
@@ -691,6 +862,9 @@ _VALID_TABLES = frozenset({
     "historical_market_cap",
     "concepts", "concept_themes", "company_concept_tags",
     "symbol_concept_edges",
+    "fmp_fund_disclosure_holdings", "fx_daily", "fmp_stock_splits",
+    "basket_ttm_valuation", "basket_weekly_pe_history",
+    "basket_pe_backfill_runs",
     "fmp_estimates", "fmp_earnings", "fmp_etf_holdings_snapshot",
     "fmp_basket_valuation", "fmp_forward_runs",
     "security_master", "extended_membership", "coverage_status",
@@ -771,9 +945,56 @@ class MarketStore:
 
     def _init_db(self) -> None:
         conn = self._get_conn()
+        self._migrate_basket_weekly_pe_run_id(conn)
         conn.executescript(_SCHEMA)
         self._migrate_add_columns(conn)
         conn.commit()
+
+    @staticmethod
+    def _migrate_basket_weekly_pe_run_id(conn: sqlite3.Connection) -> None:
+        """Bring a pre-run_id basket_weekly_pe_history up to the current shape.
+
+        ``CREATE TABLE IF NOT EXISTS`` does nothing to a table that already
+        exists, and ``_insert_validated`` writes only the columns a table
+        actually has. A database carrying the older table would therefore
+        accept published rows and silently drop their ``run_id``, leaving every
+        row unattributable and row-level certification defeated on its first
+        production use, with no error anywhere. Review found a legacy empty
+        table without this column in an existing database copy.
+
+        An empty legacy table is rebuilt in place -- there is nothing to
+        preserve. A populated one is left untouched: those rows predate
+        ownership and no correct owner can be invented. Only weekly PE writers
+        are blocked by require_basket_weekly_pe_schema; unrelated store users
+        must remain available while an explicit migration is arranged.
+        """
+        existing = {row[1] for row in conn.execute(
+            "PRAGMA table_info(basket_weekly_pe_history)").fetchall()}
+        if not existing or "run_id" in existing:
+            return
+        rows = conn.execute(
+            "SELECT COUNT(*) FROM basket_weekly_pe_history").fetchone()[0]
+        if rows:
+            logger.warning(
+                "Migration deferred: basket_weekly_pe_history has %s legacy "
+                "row(s) without run_id; weekly PE writes require explicit "
+                "migration, unrelated store operations remain available", rows)
+            return
+        conn.execute("DROP TABLE basket_weekly_pe_history")
+        logger.info(
+            "Migration: rebuilt empty basket_weekly_pe_history to carry run_id")
+        _TABLE_COLUMNS.pop("basket_weekly_pe_history", None)
+
+    def require_basket_weekly_pe_schema(self) -> None:
+        """Fail closed at the weekly PE boundary, not at store construction."""
+        # Inspect this connection's schema, not the cross-database column cache.
+        columns = {row[1] for row in self._get_conn().execute(
+            "PRAGMA table_info(basket_weekly_pe_history)")}
+        if "run_id" not in columns:
+            raise RuntimeError(
+                "basket_weekly_pe_history lacks run_id ownership; weekly PE "
+                "writes are blocked pending explicit migration. Preserve and "
+                "review legacy rows before re-backfilling under a new run.")
 
     def _migrate_add_columns(self, conn: sqlite3.Connection) -> None:
         """Add any new columns defined in field lists but missing from existing tables."""
@@ -792,6 +1013,13 @@ class MarketStore:
                     logger.info("Migration: added column %s.%s", table, col)
         # Invalidate column cache so upsert sees updated schema
         _TABLE_COLUMNS.pop("metrics_quarterly", None)
+        # Additive source-evidence migration: old rows stay explicitly unknown.
+        source_columns = {row[1] for row in conn.execute(
+            "PRAGMA table_info(fmp_fund_disclosure_holdings)")}
+        for field in ("issuer_lei", "asset_category", "raw_payload_json"):
+            if field not in source_columns:
+                conn.execute(f"ALTER TABLE fmp_fund_disclosure_holdings ADD COLUMN {field} TEXT")
+        _TABLE_COLUMNS.pop("fmp_fund_disclosure_holdings", None)
 
     def close(self) -> None:
         conn = getattr(self._local, 'conn', None)
@@ -1152,6 +1380,674 @@ class MarketStore:
         rows = self._get_rows("forward_metadata", symbol, limit=1)
         return rows[0] if rows else None
 
+    # ---- Historical basket GAAP TTM valuation ----
+
+    @staticmethod
+    def _require_iso_date(value: str, field_name: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError(f"{field_name} must be YYYY-MM-DD")
+        try:
+            return date.fromisoformat(value).isoformat()
+        except ValueError as exc:
+            raise ValueError(f"{field_name} must be YYYY-MM-DD") from exc
+
+    @staticmethod
+    def _json_text(value: Any, field_name: str) -> str:
+        try:
+            payload = json.loads(value) if isinstance(value, str) else value
+            return json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                              separators=(",", ":"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field_name} must be valid JSON") from exc
+
+    def replace_fund_disclosure_snapshot(
+        self,
+        basket_symbol: str,
+        holding_date: str,
+        source_kind: str,
+        rows: List[Dict[str, Any]],
+        *,
+        rebalance_close_date: str,
+        composition_effective_date: str,
+        composition_available_date: str,
+        fetched_at: str,
+        refresh_live: bool = False,
+    ) -> int:
+        """Atomically replace one disclosure snapshot.
+
+        A live snapshot is frozen per scheduled rebalance. A later run is a
+        no-op unless ``refresh_live`` is explicit, preventing drifting live
+        weights from rewriting an already published backcast.
+        """
+        _validate_table("fmp_fund_disclosure_holdings")
+        basket = str(basket_symbol).upper().strip()
+        if not basket:
+            raise ValueError("basket_symbol required")
+        holding_date = self._require_iso_date(holding_date, "holding_date")
+        rebalance_close_date = self._require_iso_date(
+            rebalance_close_date, "rebalance_close_date")
+        composition_effective_date = self._require_iso_date(
+            composition_effective_date, "composition_effective_date")
+        composition_available_date = self._require_iso_date(
+            composition_available_date, "composition_available_date")
+        if source_kind not in {"disclosure", "live"}:
+            raise ValueError("source_kind must be disclosure or live")
+        if not fetched_at:
+            raise ValueError("fetched_at required")
+        if not rows:
+            raise ValueError("complete disclosure snapshot cannot be empty")
+
+        indexes = set()
+        for row in rows:
+            index = row.get("raw_row_index")
+            if not isinstance(index, int) or index < 0 or index in indexes:
+                raise ValueError("raw_row_index must be unique non-negative integers")
+            indexes.add(index)
+            if row.get("included") not in {0, 1}:
+                raise ValueError("included must be 0 or 1")
+
+        conn = self._get_conn()
+        if source_kind == "live" and not refresh_live:
+            frozen = conn.execute(
+                "SELECT COUNT(*) FROM fmp_fund_disclosure_holdings "
+                "WHERE basket_symbol = ? AND source_kind = 'live' "
+                "AND rebalance_close_date = ?",
+                [basket, rebalance_close_date],
+            ).fetchone()[0]
+            if frozen:
+                return 0
+
+        created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with conn:
+            if source_kind == "live" and refresh_live:
+                conn.execute(
+                    "DELETE FROM fmp_fund_disclosure_holdings "
+                    "WHERE basket_symbol = ? AND source_kind = 'live' "
+                    "AND rebalance_close_date = ?",
+                    [basket, rebalance_close_date],
+                )
+            else:
+                conn.execute(
+                    "DELETE FROM fmp_fund_disclosure_holdings "
+                    "WHERE basket_symbol = ? AND holding_date = ? "
+                    "AND source_kind = ?",
+                    [basket, holding_date, source_kind],
+                )
+            for row in rows:
+                self._insert_validated(
+                    conn,
+                    "fmp_fund_disclosure_holdings",
+                    {
+                        **row,
+                        "basket_symbol": basket,
+                        "holding_date": holding_date,
+                        "source_kind": source_kind,
+                        "rebalance_close_date": rebalance_close_date,
+                        "composition_effective_date": composition_effective_date,
+                        "composition_available_date": composition_available_date,
+                        "snapshot_warnings_json": self._json_text(
+                            row.get("snapshot_warnings_json", []),
+                            "snapshot_warnings_json"),
+                        "raw_payload_json": (
+                            self._json_text(row["raw_payload_json"], "raw_payload_json")
+                            if row.get("raw_payload_json") is not None else None),
+                        "fetched_at": fetched_at,
+                        "created_at": created_at,
+                    },
+                )
+        return len(rows)
+
+    def get_fund_disclosure_snapshots(
+        self,
+        basket_symbol: str,
+        holding_date: Optional[str] = None,
+        source_kind: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        query = (
+            "SELECT * FROM fmp_fund_disclosure_holdings "
+            "WHERE basket_symbol = ?")
+        params: List[Any] = [basket_symbol.upper()]
+        if holding_date is not None:
+            query += " AND holding_date = ?"
+            params.append(holding_date)
+        if source_kind is not None:
+            if source_kind not in {"disclosure", "live"}:
+                raise ValueError("source_kind must be disclosure or live")
+            query += " AND source_kind = ?"
+            params.append(source_kind)
+        query += " ORDER BY holding_date, source_kind, raw_row_index"
+        return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+    def upsert_fx_daily(self, rows: List[Dict[str, Any]]) -> int:
+        _validate_table("fx_daily")
+        prepared = []
+        created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        for row in rows:
+            currency = str(row.get("currency", "")).upper().strip()
+            source_symbol = str(row.get("source_symbol", "")).upper().strip()
+            if len(currency) != 3 or not source_symbol:
+                raise ValueError("currency/source_symbol required")
+            row_date = self._require_iso_date(row.get("date"), "FX date")
+            try:
+                rate = validate_usd_per_unit(
+                    currency, row["usd_per_unit"], source_symbol)
+            except KeyError as exc:
+                raise ValueError("USD-per-unit rate required") from exc
+            prepared.append({
+                "currency": currency,
+                "date": row_date,
+                "usd_per_unit": rate,
+                "source_symbol": source_symbol,
+                "source": row.get("source", "fmp"),
+                "created_at": created_at,
+            })
+        conn = self._get_conn()
+        with conn:
+            for row in prepared:
+                self._insert_validated(conn, "fx_daily", row)
+        return len(prepared)
+
+    def get_fx_at_or_before(
+        self, currency: str, valuation_date: str,
+    ) -> Optional[Dict[str, Any]]:
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM fx_daily WHERE currency = ? AND date <= ? "
+            "ORDER BY date DESC LIMIT 1",
+            [currency.upper(), valuation_date],
+        ).fetchone()
+        return dict(row) if row else None
+
+    def replace_stock_splits(
+        self, symbol: str, rows: List[Dict[str, Any]],
+    ) -> int:
+        """Replace complete split history for a symbol, including empty history."""
+        _validate_table("fmp_stock_splits")
+        normalized_symbol = str(symbol).upper().strip()
+        if not normalized_symbol:
+            raise ValueError("symbol required")
+        fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        prepared = []
+        seen_dates = set()
+        for row in rows:
+            row_symbol = str(row.get("symbol", normalized_symbol)).upper()
+            if row_symbol != normalized_symbol:
+                raise ValueError("split row symbol mismatch")
+            split_date = self._require_iso_date(row.get("date"), "split date")
+            if split_date in seen_dates:
+                raise ValueError("duplicate split date")
+            seen_dates.add(split_date)
+            try:
+                numerator = float(row["numerator"])
+                denominator = float(row["denominator"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("split ratio must be positive") from exc
+            split_type = row.get("split_type", row.get("splitType"))
+            if numerator <= 0 or denominator <= 0 or not split_type:
+                raise ValueError("split ratio/type must be valid")
+            prepared.append({
+                "symbol": normalized_symbol,
+                "date": split_date,
+                "numerator": numerator,
+                "denominator": denominator,
+                "split_type": split_type,
+                "source": row.get("source", "fmp"),
+                "fetched_at": fetched_at,
+            })
+        conn = self._get_conn()
+        with conn:
+            conn.execute(
+                "DELETE FROM fmp_stock_splits WHERE symbol = ?",
+                [normalized_symbol],
+            )
+            for row in prepared:
+                self._insert_validated(conn, "fmp_stock_splits", row)
+        return len(prepared)
+
+    def get_stock_splits(self, symbol: str) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM fmp_stock_splits WHERE symbol = ? ORDER BY date",
+            [symbol.upper()],
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def replace_basket_ttm_valuation_range(
+        self,
+        basket_symbol: str,
+        from_date: str,
+        to_date: str,
+        rows: List[Dict[str, Any]],
+    ) -> int:
+        """Atomically replace one output range so stale prior rows cannot survive."""
+        _validate_table("basket_ttm_valuation")
+        basket = str(basket_symbol).upper().strip()
+        start = self._require_iso_date(from_date, "from_date")
+        end = self._require_iso_date(to_date, "to_date")
+        if not basket or start > end:
+            raise ValueError("valid basket_symbol and date range required")
+        if not rows:
+            raise ValueError("non-empty basket valuation range required")
+        created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        prepared = []
+        seen_dates = set()
+        for row in rows:
+            valuation_date = self._require_iso_date(
+                row.get("valuation_date"), "valuation_date")
+            if not start <= valuation_date <= end or valuation_date in seen_dates:
+                raise ValueError("valuation dates must be unique and inside range")
+            seen_dates.add(valuation_date)
+            for field_name in (
+                "weight_coverage", "mcap_weight_coverage",
+                "income_weight_coverage", "fx_weight_coverage",
+            ):
+                value = row.get(field_name)
+                if value is None or not 0 <= float(value) <= 1:
+                    raise ValueError(f"{field_name} must be between 0 and 1")
+            prepared.append({
+                **row,
+                "basket_symbol": basket,
+                "valuation_date": valuation_date,
+                "members_json": self._json_text(
+                    row.get("members_json", []), "members_json"),
+                "warnings_json": self._json_text(
+                    row.get("warnings_json", []), "warnings_json"),
+                "mcap_sanity_json": self._json_text(
+                    row.get("mcap_sanity_json", []), "mcap_sanity_json"),
+                "created_at": created_at,
+            })
+        conn = self._get_conn()
+        with conn:
+            conn.execute(
+                "DELETE FROM basket_ttm_valuation "
+                "WHERE basket_symbol = ? AND valuation_date BETWEEN ? AND ?",
+                [basket, start, end],
+            )
+            for row in prepared:
+                self._insert_validated(conn, "basket_ttm_valuation", row)
+        return len(prepared)
+
+    def get_basket_ttm_valuations(
+        self,
+        basket_symbol: str,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        query = "SELECT * FROM basket_ttm_valuation WHERE basket_symbol = ?"
+        params: List[Any] = [basket_symbol.upper()]
+        if from_date is not None:
+            query += " AND valuation_date >= ?"
+            params.append(from_date)
+        if to_date is not None:
+            query += " AND valuation_date <= ?"
+            params.append(to_date)
+        query += " ORDER BY valuation_date"
+        return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+    # ---- Weekly basket PE valuation SSOT (Plan 2026-07-19 §3.3 — Task 2) ----
+
+    _BWPH_QUALITY_TIERS = frozenset({
+        "actual_only", "latest_consensus_tail", "unpublishable",
+    })
+    _BWPH_COMPLETE_TIER = "actual_only"
+
+    def _validate_bwph_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        """Row-intrinsic validation only; does not touch the DB.
+
+        Mirrors the DDL CHECK constraints in Python so a bad row fails fast
+        with a clear ValueError before any row in the batch is written.
+        """
+        basket = str(row.get("basket") or "").upper().strip()
+        if not basket:
+            raise ValueError("basket required")
+        valuation_date = self._require_iso_date(
+            row.get("valuation_date"), "valuation_date")
+        composition_effective_date = self._require_iso_date(
+            row.get("composition_effective_date"), "composition_effective_date")
+        composition_available_date = self._require_iso_date(
+            row.get("composition_available_date"), "composition_available_date")
+        methodology_version = row.get("methodology_version")
+        if not methodology_version:
+            raise ValueError("methodology_version required")
+        quality_tier = row.get("quality_tier")
+        if quality_tier not in self._BWPH_QUALITY_TIERS:
+            raise ValueError(f"invalid quality_tier: {quality_tier!r}")
+        run_id = str(row.get("run_id") or "").strip()
+        if not run_id:
+            raise ValueError("run_id required: a published row must name the "
+                             "run accountable for it")
+        for field_name in ("n_members", "n_covered_ttm", "n_covered_hindsight"):
+            value = row.get(field_name)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for field_name in ("mcap_coverage_ttm", "mcap_coverage_hindsight"):
+            value = row.get(field_name)
+            if value is None or not 0 <= float(value) <= 1:
+                raise ValueError(f"{field_name} must be between 0 and 1")
+        actual_q = row.get("hindsight_actual_quarters")
+        estimate_q = row.get("hindsight_estimate_quarters")
+        for field_name, value in (
+            ("hindsight_actual_quarters", actual_q),
+            ("hindsight_estimate_quarters", estimate_q),
+        ):
+            if not isinstance(value, int) or isinstance(value, bool) \
+                    or not 0 <= value <= 4:
+                raise ValueError(
+                    f"{field_name} must be an integer between 0 and 4")
+        if quality_tier != "unpublishable" and actual_q + estimate_q != 4:
+            raise ValueError(
+                "hindsight_actual_quarters + hindsight_estimate_quarters "
+                "must equal 4 for publishable quality_tier rows")
+        return {
+            **row,
+            "basket": basket,
+            "run_id": run_id,
+            "valuation_date": valuation_date,
+            "composition_effective_date": composition_effective_date,
+            "composition_available_date": composition_available_date,
+            "members_json": self._json_text(
+                row.get("members_json", []), "members_json"),
+            "warnings_json": self._json_text(
+                row.get("warnings_json", []), "warnings_json"),
+        }
+
+    def upsert_basket_weekly_pe_batch(self, rows: List[Dict[str, Any]]) -> int:
+        """Atomic whole-batch upsert for basket_weekly_pe_history.
+
+        R5 tail evolution contract: for the same (basket, valuation_date,
+        methodology_version), quality_tier may only move
+        latest_consensus_tail -> actual_only (or repeat unchanged) as the
+        weekly hindsight tail fills in with real earnings. Downgrading away
+        from actual_only is rejected and logged as a warning — it should
+        never happen under a stable methodology.
+
+        A different methodology_version is rejected for ANY existing row,
+        regardless of quality_tier — not just actual_only/complete ones.
+        Allowing a cross-version overwrite of a still-tail or unpublishable
+        row would let the historical series silently mix methodologies
+        across a version boundary, exactly what a fixed methodology_version
+        exists to prevent. A genuine methodology change must go through an
+        explicit version migration (delete the old version's rows, then
+        backfill under the new version) rather than an implicit overwrite
+        through this upsert path.
+
+        Whole batch is one transaction: any row rejected — whether by
+        row-intrinsic validation or by the DB-state-dependent checks above —
+        rolls back every write already made earlier in the same batch call.
+        """
+        _validate_table("basket_weekly_pe_history")
+        self.require_basket_weekly_pe_schema()
+        if not rows:
+            raise ValueError("non-empty batch required")
+        prepared = [self._validate_bwph_row(row) for row in rows]
+        seen = set()
+        for row in prepared:
+            key = (row["basket"], row["valuation_date"])
+            if key in seen:
+                raise ValueError(f"duplicate row for {key} within batch")
+            seen.add(key)
+
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        conn = self._get_conn()
+        with conn:
+            self._upsert_bwph_prepared(conn, prepared, now)
+        return len(prepared)
+
+    def _check_bwph_replacement(self, existing, row: Dict[str, Any]) -> None:
+        if existing["methodology_version"] != row["methodology_version"]:
+            raise ValueError(
+                "refusing cross-methodology_version overwrite of existing row "
+                f"{row['basket']}/{row['valuation_date']}. "
+                "Use an explicit version migration instead.")
+        if (existing["quality_tier"] == self._BWPH_COMPLETE_TIER
+                and row["quality_tier"] != self._BWPH_COMPLETE_TIER):
+            logger.warning(
+                "Rejected quality_tier downgrade for %s/%s: %s -> %s",
+                row["basket"], row["valuation_date"],
+                existing["quality_tier"], row["quality_tier"])
+            raise ValueError(
+                "refusing quality_tier downgrade for "
+                f"{row['basket']}/{row['valuation_date']}: "
+                f"{existing['quality_tier']!r} -> {row['quality_tier']!r}")
+
+    def _upsert_bwph_prepared(self, conn: sqlite3.Connection,
+                             prepared: List[Dict[str, Any]], now: str) -> None:
+        """Shared row write logic; the public caller owns the transaction."""
+        for row in prepared:
+            existing = conn.execute(
+                "SELECT quality_tier, methodology_version, created_at "
+                "FROM basket_weekly_pe_history "
+                "WHERE basket = ? AND valuation_date = ?",
+                [row["basket"], row["valuation_date"]]).fetchone()
+            if existing is not None:
+                self._check_bwph_replacement(existing, row)
+            self._insert_validated(conn, "basket_weekly_pe_history", {
+                **row, "created_at": existing["created_at"] if existing else now,
+                "last_updated": now,
+            })
+
+    def commit_basket_weekly_pe_window(
+        self, rows: List[Dict[str, Any]], completed_event: Dict[str, Any],
+        certify: Callable[[sqlite3.Connection], bool],
+    ) -> int:
+        """Publish one full retained window and its completion atomically.
+
+        certify reads the candidate database with query_only enabled and must
+        return True. Any rejected row, prune, manifest insert or certification
+        rolls back to the previously committed product. The caller records
+        run_failed separately, after this method has rolled back.
+        """
+        self.require_basket_weekly_pe_schema()
+        if not rows or not callable(certify):
+            raise ValueError("non-empty window and certification required")
+        event = self._validate_bpbr_row(completed_event)
+        if event["event_kind"] != "run_completed":
+            raise ValueError("window requires a run_completed event")
+        prepared = [self._validate_bwph_row(row) for row in rows]
+        basket, run_id = event["basket"], event["run_id"]
+        start, end = event["expected_from_date"], event["expected_to_date"]
+        if any(row["basket"] != basket or row["run_id"] != run_id
+               or row["methodology_version"] != event["methodology_version"]
+               or not start <= row["valuation_date"] <= end for row in prepared):
+            raise ValueError("window rows disagree with completion identity/range")
+        conn = self._get_conn()
+        if conn.in_transaction:
+            raise ValueError("window commit requires its own transaction")
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        def week(day):
+            return date.fromisoformat(day).isocalendar()[:2]
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            started = conn.execute(
+                "SELECT * FROM basket_pe_backfill_runs WHERE basket = ? "
+                "AND run_id = ? AND event_kind = 'run_started'",
+                [basket, run_id]).fetchall()
+            if len(started) != 1:
+                raise ValueError("window requires exactly one persisted run_started")
+            for key in ("expected_from_date", "expected_to_date", "methodology_version"):
+                if started[0][key] != event[key]:
+                    raise ValueError(f"completion disagrees with started: {key}")
+            expected = json.loads(started[0]["payload_json"]).get("expected_weeks")
+            if not isinstance(expected, list) or not expected:
+                raise ValueError("run_started has no frozen expected weeks")
+            expected_by_week = {week(day): day for day in expected}
+            rows_by_week = {week(row["valuation_date"]): row for row in prepared}
+            if (len(rows_by_week) != len(prepared)
+                    or len(expected_by_week) != len(expected)
+                    or set(rows_by_week) != set(expected_by_week)
+                    or any(row["valuation_date"] > expected_by_week[key]
+                           for key, row in rows_by_week.items())):
+                raise ValueError("candidate week set differs from frozen expected weeks")
+            # Refuse accidental rewind of the retained product.
+            latest = conn.execute(
+                "SELECT MAX(expected_to_date) FROM basket_pe_backfill_runs "
+                "WHERE basket = ? AND event_kind = 'run_completed'", [basket]
+            ).fetchone()[0]
+            if latest and end < latest:
+                raise ValueError("retained window cannot move backwards")
+            previous = conn.execute(
+                "SELECT * FROM basket_weekly_pe_history WHERE basket = ?",
+                [basket]).fetchall()
+            for old in previous:
+                if old["methodology_version"] != event["methodology_version"]:
+                    raise ValueError("cross-methodology_version window replacement")
+                if old["run_id"] == run_id:
+                    raise ValueError("window run_id already owns published rows")
+                replacement = rows_by_week.get(week(old["valuation_date"]))
+                if replacement is not None:
+                    self._check_bwph_replacement(old, replacement)
+            self._upsert_bwph_prepared(conn, prepared, now)
+            # Includes superseded sample dates within a week as well as rows
+            # outside the retained range; missing weeks were rejected above.
+            conn.execute("DELETE FROM basket_weekly_pe_history "
+                         "WHERE basket = ? AND run_id != ?", [basket, run_id])
+            self._append_bpbr_prepared(conn, [event], now)
+            conn.execute("PRAGMA query_only=ON")
+            try:
+                if certify(conn) is not True:
+                    raise ValueError("weekly window certification failed")
+            finally:
+                conn.execute("PRAGMA query_only=OFF")
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+        return len(prepared)
+
+    def get_basket_weekly_pe_history(
+        self,
+        basket: str,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Read-only range query. Never writes (including last_updated)."""
+        conn = self._get_conn()
+        query = "SELECT * FROM basket_weekly_pe_history WHERE basket = ?"
+        params: List[Any] = [basket.upper()]
+        if from_date is not None:
+            query += " AND valuation_date >= ?"
+            params.append(from_date)
+        if to_date is not None:
+            query += " AND valuation_date <= ?"
+            params.append(to_date)
+        query += " ORDER BY valuation_date"
+        return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+    # ---- 三指数 backfill run manifest（Plan 2026-07-19 Task 4 / issue048）----
+
+    _BPBR_EVENT_KINDS = frozenset({
+        "run_started", "forced_refresh", "run_completed", "run_failed",
+    })
+
+    def _validate_bpbr_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        run_id = str(row.get("run_id") or "").strip()
+        basket = str(row.get("basket") or "").upper().strip()
+        if not run_id or not basket:
+            raise ValueError("run_id and basket required")
+        event_seq = row.get("event_seq")
+        if not isinstance(event_seq, int) or isinstance(event_seq, bool) \
+                or event_seq < 0:
+            raise ValueError("event_seq must be a non-negative integer")
+        event_kind = row.get("event_kind")
+        if event_kind not in self._BPBR_EVENT_KINDS:
+            raise ValueError(f"invalid event_kind: {event_kind!r}")
+        frequency = str(row.get("frequency") or "").strip()
+        if not frequency:
+            raise ValueError("frequency required")
+        expected_from = self._require_iso_date(
+            row.get("expected_from_date"), "expected_from_date")
+        expected_to = self._require_iso_date(
+            row.get("expected_to_date"), "expected_to_date")
+        if expected_from > expected_to:
+            raise ValueError(
+                "expected_from_date must be on or before expected_to_date")
+        methodology_version = row.get("methodology_version")
+        if not methodology_version:
+            raise ValueError("methodology_version required")
+        target_count = row.get("target_count")
+        if not isinstance(target_count, int) or isinstance(target_count, bool) \
+                or target_count < 0:
+            raise ValueError("target_count must be a non-negative integer")
+        return {
+            "run_id": run_id,
+            "basket": basket,
+            "event_seq": event_seq,
+            "event_kind": event_kind,
+            "frequency": frequency,
+            "expected_from_date": expected_from,
+            "expected_to_date": expected_to,
+            "methodology_version": str(methodology_version),
+            "target_count": target_count,
+            "target_universe_json": self._json_text(
+                row.get("target_universe_json", []), "target_universe_json"),
+            "payload_json": self._json_text(
+                row.get("payload_json", {}), "payload_json"),
+        }
+
+    def append_basket_pe_run_events(self, rows: List[Dict[str, Any]]) -> int:
+        """Append run-manifest events. Never rewrites an existing event.
+
+        The manifest is the verifier's denominator SSOT and its only evidence
+        for repairs that the source tables can no longer show, so a plain
+        INSERT is deliberate: re-appending an existing (run_id, basket,
+        event_seq) raises instead of quietly replacing history. The whole
+        batch is one transaction.
+        """
+        _validate_table("basket_pe_backfill_runs")
+        if not rows:
+            raise ValueError("non-empty batch required")
+        prepared = [self._validate_bpbr_row(row) for row in rows]
+        seen = set()
+        for row in prepared:
+            key = (row["run_id"], row["basket"], row["event_seq"])
+            if key in seen:
+                raise ValueError(f"duplicate manifest event within batch: {key}")
+            seen.add(key)
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        conn = self._get_conn()
+        try:
+            with conn:
+                self._append_bpbr_prepared(conn, prepared, now)
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(
+                f"refusing to rewrite an existing manifest event: {exc}") from exc
+        return len(prepared)
+
+    @staticmethod
+    def _append_bpbr_prepared(conn: sqlite3.Connection,
+                             prepared: List[Dict[str, Any]], now: str) -> None:
+        for row in prepared:
+            conn.execute(
+                "INSERT INTO basket_pe_backfill_runs "
+                "(run_id, basket, event_seq, event_kind, frequency, "
+                "expected_from_date, expected_to_date, methodology_version, "
+                "target_count, target_universe_json, payload_json, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                [row["run_id"], row["basket"], row["event_seq"], row["event_kind"],
+                 row["frequency"], row["expected_from_date"], row["expected_to_date"],
+                 row["methodology_version"], row["target_count"],
+                 row["target_universe_json"], row["payload_json"], now])
+
+    def get_basket_pe_run_events(
+        self,
+        basket: Optional[str] = None,
+        run_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Read-only manifest query. Never writes."""
+        query = "SELECT * FROM basket_pe_backfill_runs WHERE 1=1"
+        params: List[Any] = []
+        if basket is not None:
+            query += " AND basket = ?"
+            params.append(basket.upper())
+        if run_id is not None:
+            query += " AND run_id = ?"
+            params.append(run_id)
+        query += " ORDER BY run_id, basket, event_seq"
+        return [dict(row)
+                for row in self._get_conn().execute(query, params).fetchall()]
+
     # ---- FMP forward EPS 数据线（Spec 2026-07-09 §5.2/§5.3）----
     # 输入行均为 ingestion 层产出的 snake_case 规范化行，不做 camelCase 转换。
 
@@ -1323,6 +2219,60 @@ class MarketStore:
             params.append(snapshot_date)
         query += " ORDER BY snapshot_date DESC"
         return [dict(r) for r in conn.execute(query, params).fetchall()]
+
+    def commit_fmp_basket_valuations(self, rows, certify) -> int:
+        """Atomically certify six derived PIT rows; an existing vintage is frozen."""
+        baskets = {"SPY", "QQQ", "SOX", "MAGS", "IGV", "XLF"}
+        if len(rows) != 6 or {r.get("basket") for r in rows} != baskets:
+            raise ValueError("six unique PIT baskets required")
+        snapshots = {
+            self._require_iso_date(r.get("snapshot_date"), "snapshot_date")
+            for r in rows
+        }
+        if len(snapshots) != 1 or not callable(certify):
+            raise ValueError("one PIT snapshot and certification required")
+        snapshot = next(iter(snapshots))
+        prepared = [
+            {
+                **r,
+                "members_json": self._json_text(r.get("members_json"), "members_json"),
+            }
+            for r in rows
+        ]
+        conn = self._get_conn()
+        if conn.in_transaction:
+            raise ValueError("PIT commit requires its own transaction")
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            for row in prepared:
+                existing = conn.execute(
+                    "SELECT * FROM fmp_basket_valuation "
+                    "WHERE basket=? AND snapshot_date=?",
+                    [row["basket"], snapshot],
+                ).fetchone()
+                if existing:
+                    for key, value in row.items():
+                        old = existing[key]
+                        if key == "members_json":
+                            old, value = json.loads(old), json.loads(value)
+                        if old != value:
+                            raise ValueError(
+                                "refusing to rewrite frozen PIT valuation "
+                                f"{row['basket']}/{snapshot}"
+                            )
+                else:
+                    self._insert_validated(conn, "fmp_basket_valuation", row)
+            conn.execute("PRAGMA query_only=ON")
+            try:
+                if certify(conn) is not True:
+                    raise ValueError("PIT valuation certification failed")
+            finally:
+                conn.execute("PRAGMA query_only=OFF")
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+        return len(rows)
 
     def upsert_fmp_forward_run(self, row: Dict) -> int:
         """Run manifest。同 PK 只允许更新执行统计；universe 不可变。
@@ -2036,6 +2986,76 @@ class MarketStore:
         conn.executemany(sql, data)
         conn.commit()
         return len(data)
+
+    @classmethod
+    def prepare_historical_market_cap_range(
+        cls,
+        symbol: str,
+        from_date: str,
+        to_date: str,
+        rows: List[Dict[str, Any]],
+    ) -> tuple:
+        """Pure range validation shared by writers and network-enabled dry runs."""
+        normalized_symbol = str(symbol).upper().strip()
+        start = cls._require_iso_date(from_date, "from_date")
+        end = cls._require_iso_date(to_date, "to_date")
+        if not normalized_symbol or start > end or not rows:
+            raise ValueError("non-empty authoritative market-cap range required")
+        prepared = []
+        seen_dates = set()
+        for row in rows:
+            if not isinstance(row, dict):
+                raise ValueError("market-cap rows must be mappings")
+            row_symbol = str(row.get("symbol", normalized_symbol)).upper()
+            row_date = cls._require_iso_date(row.get("date"), "market-cap date")
+            if (row_symbol != normalized_symbol or not start <= row_date <= end
+                    or row_date in seen_dates):
+                raise ValueError("market-cap row symbol/date outside range")
+            seen_dates.add(row_date)
+            try:
+                market_cap = float(row["market_cap"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("market_cap must be positive") from exc
+            if not math.isfinite(market_cap) or market_cap <= 0:
+                raise ValueError("market_cap must be positive")
+            prepared.append((normalized_symbol, row_date, market_cap))
+        return normalized_symbol, start, end, prepared
+
+    def replace_historical_market_cap_range(
+        self, symbol: str, from_date: str, to_date: str,
+        rows: List[Dict[str, Any]],
+    ) -> int:
+        """Atomically replace a validated authoritative vendor range.
+
+        Empty or malformed responses preserve the prior range. A successful
+        replacement removes old dates absent from the new authoritative range.
+        """
+        normalized_symbol, start, end, prepared = self.prepare_historical_market_cap_range(
+            symbol, from_date, to_date, rows)
+        conn = self._get_conn()
+        with conn:
+            conn.execute(
+                "DELETE FROM historical_market_cap "
+                "WHERE symbol = ? AND date BETWEEN ? AND ?",
+                [normalized_symbol, start, end],
+            )
+            conn.executemany(
+                "INSERT INTO historical_market_cap "
+                "(symbol, date, market_cap) VALUES (?, ?, ?)",
+                prepared,
+            )
+        return len(prepared)
+
+    def get_historical_market_cap_range(
+        self, symbol: str, from_date: str, to_date: str,
+    ) -> List[Dict[str, Any]]:
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT symbol, date, market_cap FROM historical_market_cap "
+            "WHERE symbol = ? AND date BETWEEN ? AND ? ORDER BY date",
+            [symbol.upper(), from_date, to_date],
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def get_market_cap_at(self, symbol: str, date: str) -> Optional[float]:
         """查询 symbol 在 date（或之前最近交易日）的市值。无数据返回 None。"""

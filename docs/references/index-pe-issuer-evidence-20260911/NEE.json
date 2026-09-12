@@ -1,0 +1,190 @@
+{
+  "registry": {
+    "response": {
+      "data": [
+        {
+          "attributes": {
+            "bic": null,
+            "conformityFlag": "CONFORMING",
+            "entity": {
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "category": "GENERAL",
+              "creationDate": "1984-09-10T00:00:00Z",
+              "eventGroups": [],
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "headquartersAddress": {
+                "addressLines": [
+                  "700 UNIVERSE BLVD"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "city": "JUNO BEACH",
+                "country": "US",
+                "language": "en",
+                "mailRouting": null,
+                "postalCode": "33408",
+                "region": "US-FL"
+              },
+              "jurisdiction": "US-FL",
+              "legalAddress": {
+                "addressLines": [
+                  "C/O CORPORATION SERVICE COMPANY",
+                  "1201 HAYS STREET"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "city": "TALLAHASSEE",
+                "country": "US",
+                "language": "en",
+                "mailRouting": null,
+                "postalCode": "32301",
+                "region": "US-FL"
+              },
+              "legalForm": {
+                "id": "TRI2",
+                "other": null
+              },
+              "legalName": {
+                "language": "en",
+                "name": "NextEra Energy, Inc."
+              },
+              "otherAddresses": [],
+              "otherNames": [],
+              "registeredAs": "M04961",
+              "registeredAt": {
+                "id": "RA000603",
+                "other": null
+              },
+              "status": "ACTIVE",
+              "subCategory": null,
+              "successorEntities": [],
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "transliteratedOtherNames": []
+            },
+            "gem": "E100000001267",
+            "lei": "254900RHL9MEUS5NKX63",
+            "mic": null,
+            "ocid": "us_fl/M04961",
+            "qcc": null,
+            "registration": {
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "initialRegistrationDate": "2024-02-26T08:29:55Z",
+              "lastUpdateDate": "2026-02-13T15:36:14Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "nextRenewalDate": "2027-02-26T08:29:55Z",
+              "otherValidationAuthorities": [],
+              "status": "ISSUED",
+              "validatedAs": "M04961",
+              "validatedAt": {
+                "id": "RA000603",
+                "other": null
+              }
+            },
+            "spglobal": [
+              "270586"
+            ]
+          },
+          "id": "254900RHL9MEUS5NKX63",
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/254900RHL9MEUS5NKX63"
+          },
+          "relationships": {
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/254900RHL9MEUS5NKX63/direct-parent-reporting-exception"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/254900RHL9MEUS5NKX63/field-modifications"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/254900RHL9MEUS5NKX63/isins"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/254900RHL9MEUS5NKX63/lei-issuer"
+              }
+            },
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/254900RHL9MEUS5NKX63/managing-lou"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/254900RHL9MEUS5NKX63/ultimate-children",
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/254900RHL9MEUS5NKX63/ultimate-child-relationships"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/254900RHL9MEUS5NKX63/ultimate-parent-reporting-exception"
+              }
+            }
+          },
+          "type": "lei-records"
+        }
+      ],
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US65339F1012&page%5Bnumber%5D=1&page%5Bsize%5D=10",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US65339F1012&page%5Bnumber%5D=1&page%5Bsize%5D=10"
+      },
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-11T00:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "from": 1,
+          "lastPage": 1,
+          "perPage": 10,
+          "to": 1,
+          "total": 1
+        }
+      }
+    },
+    "retrieved_at": "2026-09-11T09:13:58.201030+00:00",
+    "sha256": "486d316aa4fbe82c3b02204f294cbb713a8d13288843181ed88b2b734fde483f",
+    "url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US65339F1012&page%5Bsize%5D=10"
+  },
+  "review": {
+    "identity_kind": "retrospective_entity_mapping",
+    "independent_security_source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US65339F1012&page%5Bsize%5D=10",
+    "legal_name": "NextEra Energy, Inc.",
+    "reason": "Exact security identifiers from frozen disclosures and named legal entity corroborated against the official GLEIF record. This mapping is reviewed now for the historical entity, not a claim that the LEI was registered or known on the holding date. No source LEI is overwritten.",
+    "reviewed_at": "2026-09-11",
+    "valid_from": "2021-06-30",
+    "valid_to": "2023-12-31"
+  },
+  "security": {
+    "cusip": "65339F101",
+    "holding_dates_with_missing_lei": [
+      "2021-06-30",
+      "2021-09-30",
+      "2021-12-31",
+      "2022-03-31",
+      "2022-06-30",
+      "2022-09-30",
+      "2022-12-31",
+      "2023-03-31",
+      "2023-06-30",
+      "2023-09-30",
+      "2023-12-31"
+    ],
+    "isin": "US65339F1012",
+    "symbol": "NEE"
+  }
+}

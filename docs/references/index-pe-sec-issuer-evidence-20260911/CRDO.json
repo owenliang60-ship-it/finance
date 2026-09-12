@@ -1,0 +1,28 @@
+{
+  "equivalent_leis": [],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "Credo Technology Group Holding Ltd."
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "G25457105",
+      "isin": "KYG254571055",
+      "symbol": "CRDO",
+      "valid_from": "2026-06-30",
+      "valid_to": "2026-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001807794",
+    "form": "144",
+    "sec_name": "Credo Technology Group Holding Ltd",
+    "section": "SUBJECT COMPANY",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1807794/000195004726000043/0001950047-26-000043-index-headers.html",
+    "symbol": "CRDO"
+  },
+  "security_source_url": "https://www.sec.gov/Archives/edgar/data/1807794/000162828025018546/xslSCHEDULE_13G_X01/primary_doc.xml",
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

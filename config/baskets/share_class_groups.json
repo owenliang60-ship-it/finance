@@ -1,6 +1,16 @@
 {
-  "GOOGL": ["GOOG"],
+  "GOOGL": {
+    "secondaries": ["GOOG"],
+    "market_cap_convention": "full_company_per_class",
+    "evidence": "market.db historical_market_cap 2026-07-28: GOOGL and GOOG both 4054910209999.0, one identical full-company figure per class"
+  },
   "FOXA": ["FOX"],
   "NWSA": ["NWS"],
-  "HEI": ["HEI.A"]
+  "DISCA": ["DISCK"],
+  "UAA": ["UA"],
+  "HEI": {
+    "secondaries": ["HEI.A"],
+    "market_cap_convention": "split_across_classes",
+    "evidence": "HEICO class A trades separately; FMP carries no HEI.A market-cap history, so this group fails closed until a class figure exists"
+  }
 }

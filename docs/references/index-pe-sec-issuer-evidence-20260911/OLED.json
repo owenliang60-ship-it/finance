@@ -1,0 +1,28 @@
+{
+  "equivalent_leis": [],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "Universal Display Corp",
+    "Universal Display Corp."
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "91347P105",
+      "isin": "US91347P1057",
+      "symbol": "OLED",
+      "valid_from": "2021-09-30",
+      "valid_to": "2025-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001005284",
+    "form": "4",
+    "sec_name": "UNIVERSAL DISPLAY CORP \\PA\\",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1005284/000119312526059316/0001193125-26-059316-index-headers.html",
+    "symbol": "OLED"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

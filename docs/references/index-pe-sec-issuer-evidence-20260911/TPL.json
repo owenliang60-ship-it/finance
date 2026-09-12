@@ -1,0 +1,29 @@
+{
+  "equivalent_leis": [
+    "254900EMA79D44WVLD22"
+  ],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "Texas Pacific Land Corp"
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "88262P102",
+      "isin": "US88262P1021",
+      "symbol": "TPL",
+      "valid_from": "2024-12-31",
+      "valid_to": "2026-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001811074",
+    "form": "SCHEDULE 13G",
+    "sec_name": "Texas Pacific Land Corp",
+    "section": "SUBJECT COMPANY",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/93751/000009375125000634/0000093751-25-000634-index-headers.html",
+    "symbol": "TPL"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

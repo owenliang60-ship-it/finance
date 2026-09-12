@@ -1,0 +1,32 @@
+{
+  "equivalent_leis": [
+    "984500Q1D53D08E2E698"
+  ],
+  "expected_raw_leis": [
+    "RDQ0UPSUOQL9Y4XV6T33"
+  ],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "CoStar Group Inc",
+    "CoStar Group, Inc."
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "22160N109",
+      "isin": "US22160N1090",
+      "symbol": "CSGP",
+      "valid_from": "2022-09-30",
+      "valid_to": "2026-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001057352",
+    "form": "SCHEDULE 13G",
+    "sec_name": "COSTAR GROUP, INC.",
+    "section": "SUBJECT COMPANY",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/2100121/000210012126000288/0002100121-26-000288-index-headers.html",
+    "symbol": "CSGP"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}

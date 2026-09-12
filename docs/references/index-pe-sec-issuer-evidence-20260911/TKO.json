@@ -1,0 +1,27 @@
+{
+  "equivalent_leis": [],
+  "expected_raw_leis": [],
+  "identity_review": "Issuer is taken from the SEC ISSUER/SUBJECT COMPANY section, or its own corporate filing. A reporting owner or fund filer is not used. Security identifiers and date ranges are explicit. Reviewed LEI equivalence is distinct from security-scoped correction of another entity or unverified vendor LEI.",
+  "raw_issuer_names": [
+    "TKO Group Holdings Inc"
+  ],
+  "reviewed_at": "2026-09-11",
+  "reviewed_securities": [
+    {
+      "cusip": "87256C101",
+      "isin": "US87256C1018",
+      "symbol": "TKO",
+      "valid_from": "2025-03-31",
+      "valid_to": "2026-06-30"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001973266",
+    "form": "SCHEDULE 13G",
+    "sec_name": "TKO Group Holdings, Inc.",
+    "section": "SUBJECT COMPANY",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/2100119/000210011926001158/0002100119-26-001158-index-headers.html",
+    "symbol": "TKO"
+  },
+  "source_holdings_export_sha256": "bba1e8317f0a4a3d92515327d6793d775553a64bbb9e31579812d09872716e60"
+}
