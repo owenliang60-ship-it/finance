@@ -2,6 +2,17 @@
 
 Boss于2026-09-12批准合并、push和晨报上线。主线起点4bb2906，验收分支3db5a9b（69个提交）。新数据先在当日生产副本演练，再在共享写锁、SQLite事务与备份下推广；不覆盖整库、不发额外Telegram测试消息。
 
+## 已完成的合并与生产副本验收
+
+- 功能merge `fe52bf7`，首轮push `f508c4a`；功能目录与 `93c8a6f` 完全一致，沿用其3563 passed/4 skipped全量验收；合并后隔离回归490 passed/1 skipped，Python3.10 AST、bash -n、diff检查、敏感值/DB文件检查通过。
+- 原主目录CLAUDE两行云端SSOT提醒已还原为未提交修改，cio-b修改未动；仅三个冲突路径做了定向stash，`index-pe-rollout preserve overlapping user docs 2026-09-12`继续保留。两个issue的原文另在本文完整留档。
+- 副本演练：`aliyun:/tmp/finance-index-pe-deploy-20260912/staging.db`。第一次在Python3.10 authorizer清理失败，连接退出回滚；修复后9个迁移保护测试在本地/云端实际解释器通过（issue076）。第二次08:44:36至08:55:46提交成功，15项历史检查、九期PIT和quick_check全部通过。
+- 源变更：income新增21,197、更新56、经既有fiscal writer归档并移除1条MDT日期别名；HMC新增42,408、更新3,588；新增splits2,126、FX4,155、披露14,643。46家受影响公司的1,749条metrics经现有公式重算，保留归档。预测输入四表没有覆写。
+- 产品首次导入：775周频行、31条完整run事件（含原失败/成功顺序）、54条PIT（9期×6篮子）。产品表必须为空，导入采用原run_id、created_at及证据JSON，不利用bootstrap绕过C1或PIT不可变契约。
+- 迁移先做原基线→已接受试跑→当前生产三方比较，当前行不同于原基线且不同于目标即拒绝；只允许指定source/product和metrics/archive表写入。候选在同一SQLite事务内认证，不通过即回滚。原始逐行差异、脚本、测试与报告保留在worktree `reports/rendered/index-pe-deploy-20260912/`。
+- 全晨报只读预览复用今早`morning_20260912_080129.json`及已验收DV缓存：原有10块保持一致、Top50完整，新增0d恰好一张自包含PNG；三篮子均有9期PIT、无告警。报告日9/11滚动五年过滤后SPY/QQQ显示261点，SOXX251点；源产品仍分别262/262/251，并非漏周。PNG目视通过；HTTP/Telegram均0。
+- 09:00固定维护前不启动生产长事务，等待维护正常完成后推广。副本阶段的全表price EXCEPT附加对拍因IO竞争取消，不把未完成的检查列为PASS；既有15项认证正常完成。
+
 ## 合并提交范围（审批时）
 
 ```text
