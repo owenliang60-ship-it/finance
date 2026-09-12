@@ -1,8 +1,47 @@
-# 三指数 PE 上线前记录
+# 三指数 PE 上线记录
 
 Boss于2026-09-12批准合并、push和晨报上线。主线起点4bb2906，验收分支3db5a9b（69个提交）。新数据先在当日生产副本演练，再在共享写锁、SQLite事务与备份下推广；不覆盖整库、不发额外Telegram测试消息。
 
-## 当前停点（2026-09-12 11:25）
+## 最终生产结果（2026-09-12）
+
+**已部署，功能代码b352520。** 16:45:14开始最终推广，16:55:11生产事务提交成功；之后独立连接确认行数、quick_check，再fast-forward云端代码并通过Python3.10导入/编译、bash语法与执行权限检查。原crontab未改；没有重跑已完成的上游采集，没有额外Telegram发送。
+
+- 历史：as-of9/12整窗重算，SPY261、QQQ261、SOXX251，共773周，TTM与后视镜均全发布；样本50/篮子、15项检查全过，0 actual_only降级。SOXX首个有效周2021-11-26，披露起点前留白。
+- 真实PIT：云端先以只读源/内存产品预验收，再在生产候选事务内原生生成并严格重放10期×6篮子=60行（7/13–9/12）。不复制本地浮点计算结果，不覆盖任何旧试跑冻结vintage。生产表此前为空。
+- 独立SQL：事务外再核对1646个已发布数值、完整周集合、R5与旧PIT对应数值，零差异；60条PIT中部分blend按原门控为NULL，不伪造全覆盖。完整报告 `reports/rendered/index-pe-deploy-20260912/production-independent-comparison.json`。
+- 源写入：income upserts21238（其中替换51）、旧MDT日期别名1条由既有fiscal writer归档移除；42家公司的1626条metrics按既有公式重算并归档。HMC upserts45964（替换3588）；新增splits2126、FX4155、披露14643。四张forward源表未覆写，正常9/12数据保留。
+- 原始14643条披露内容及日期字段哈希前后一致。整窗推进使SPY/QQQ各滚出首周，并把三篮子末点9/10推进至9/11；历史TTM仅3点变化，最新共识尾部165点变化，最大约0.035x。
+- 正式备份：云端`data/market.db.before-index-pe-final-20260912`；native前次备份仍保留，早两次已归档本地。未整库覆盖生产，未清理无关周备份。
+- 最终候选SHA256 `aba0772a74c1f2da7bb0f5ad6c8d49dc078b1566ff23824122257182f55ba392`，本地/云端一致。上传后复核；正式提交后删除云端该冗余候选，本地完整候选继续留档。原传输中止的半文件已清理，未作为输入使用。
+- PNG：`reports/rendered/index-pe-deploy-20260912/index-pe-production-20260912.png`，1800×1510，SHA256 `f6292686554340419cc432da91a39c6a7bc1826774ac4c5d2e315a8ba770910b`，已目视检查。最新TTM为SPY25.8071、QQQ30.7206、SOXX36.7533；9/12真实NTM为20.2498、23.1022、19.3178（均为本模型口径，非官网PE）。
+- 晨报真实投递路径只读预览：保存的9/11行情输入，原有10块与Top50不变，恰好一个内嵌图像，HTTP/Telegram均0。该旧报告日自然只显示9期PIT（9/12当时尚不可用）；独立9/12PNG显示全部10期，未伪造日期。HTML/PDF共享图与失败不重复发送另有自动化回归覆盖。
+- SSH会话在远端已提交、结束并释放锁后仍未退出；核实事务报告ended_at、外部数据库及后续锁获取后，仅终止本次本地SSH PID28107。该清理返回255是传输进程结果，不是数据库回滚或部署失败。
+
+### 尚未宣称完成的事项
+
+1. 新完整周频wrapper的首次自然运行，以及下一次自然08:00晨报实际投递，尚未观察。此次用了已经完成的自然ingestion + 零HTTP整窗重算/原生PIT/两类认证，未重复发起数千API调用；无新增automation。
+2. 新调仓若真正需要live，仍须补足发行人证据（issue077）。当前窗口用正式披露；没有降低身份门，也没有声称未来live已经验收。
+3. 17:17清理已验证的本次临时镜像后，云盘仍仅余2.6GB（95%使用）。旧周备份保留策略的issue046仍待Boss授权，未清理无关历史备份；下一轮周任务前需处理空间余量，不能把此次代码/数据验收当作磁盘容量验收。
+
+### 本地缓存同步完成
+
+本地旧market.db在全量测试中发现malformed，具体损坏起因未确定，不能归因于本次PE代码。云端真库/最终候选均quick_check通过。17:15从云端只读SQLite backup得到一致性镜像，经SHA256 `440ad396050d6330bd0af509ac8eaacfd1894ee0e06221b663285316602d19f6`双端核对、773/60计数和quick_check，通过本地sync互斥锁及两次无打开连接检查后原子替换缓存；旧db及sidecar原样归档，旧WAL确认0字节。company.db、universe、持仓均未改。结果 `local-mirror-install.json`，旧缓存留在 `local-cache-before-refresh/`。本地新缓存和一致性镜像均保留；验证后移除云端临时镜像，正式生产备份不动。
+
+同步后从本地正式缓存再次核对14643条披露哈希一致；不做路径override重跑187项相关测试，187 passed/1 skipped。
+
+## 16:18 继续执行（以下为历史过程）
+
+- Boss确认继续；原10:45采集于12:27:32正常完成，wrapper rc=0、6151秒。1029 targets，1008 quarter_ok、7 failed、14 empty；这些源缺口仍由估值覆盖门决定，不冒充全覆盖。
+- 四张forward源表只读导出并导入source-only隔离库：runs11、estimates193692、earnings85297、holdings8349；gzip SHA256 `f8d9bbd913e8ea6e09da15f67986578e48f268c4f0d23c488470b020034f86fa`。无新增HTTP。
+- 首次9/12本地重算在逐股阶段前被未选用live身份拦住。修正1710450只排除同effective且披露更早可用的必败live候选（issue077）；原始表不改，实际选源、身份门和公式不变。三例TDD先红后绿；183回归本地与云端均通过。
+- 独立逐日比较：SPY/QQQ/SOXX各1255个交易日，修正前后选源完全一致。当前全部用6/30正式披露，不是9/11漂移live权重；原始14643条行内容哈希保留于 `source-scope-proof.json`。
+- 新完整重算16:15启动，as-of9/12，PIT仍延后到云端原生首次冻结；旧失败run/report保留，新run前缀deployment-selected-source。不能把旧9/10产品作为本次最终产物。
+- 空间处理仅涉及本次临时副本：旧refreshed-candidate与本地data/market.db的SHA256同为`edf06d1be0c74abcccc31e3f7f71e13973710e61dbfadb1305e86dbfc8c11713`；retry生产备份已归档本地production-before-retry.db，双端SHA256 `37c3a48c176e032cb95a065301d719165cbfb974a9652b5d774408327bd87531`、quick_check=ok。验证后移除这两份云端冗余副本，剩余空间3.7GB，native生产备份与其他历史备份未动。
+- 新调仓若真正需要live，发行人证据仍待补足；本次排除无用来源不代表该后续能力已经完成。
+- 16:27代码修正已cherry-pick至main/origin `b352520`。首次全量3554 passed/12 failed/4 skipped：5项因缺ignored广度CSV，7项因本地旧market.db损坏导致registry/罗盘读取失败。补只读广度依赖、使用已校验备份的专用测试副本（未改真库），先187 passed/1 skipped，再完整3566 passed/4 skipped/17 warnings。迁移脚本12 tests再次通过；部署功能目录与1710450一致。
+- 当日云端数据层verifier：ok=true，986/1029=95.82%有未来四季；TECH earnings为已记录的单票失败，failures=[]。保留结构性缺口漂移与未识别资产告警，不声称所有ticker完整。
+
+## 11:25 停点（历史记录）
 
 **代码已合并并push，生产尚未启用新入口。** main/origin为7bc7442，生产仍4bb2906。三次候选推广均整批回滚，正常生产数据未被旧候选覆盖：依次捕获HONA新增行情、跨Python浮点末位、ORCL新财报可用日期从9/10改到9/11。后两者说明旧验收结果不能直接当作更新中的生产源的当前结果。
 

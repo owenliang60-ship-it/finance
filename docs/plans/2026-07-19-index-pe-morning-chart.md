@@ -4,6 +4,8 @@
 
 **Confidence: 90%**
 
+**执行状态（2026-09-12）**：Task0–9代码、数据与图表验收完成，Boss已批准合并/push/生产推广，功能代码b352520已部署。生产773周双线、10期60条PIT、1646值独立SQL全过，完整证据见 `docs/audit/2026-09-12-index-pe-rollout.md`。自然新wrapper首跑/08:00实际投递仍待观察；未来真正采用live的新调仓须补足发行人证据（issue077），不是本次正式披露窗口的通过结果所覆盖。
+
 **不确定点**：FMP 历史 disclosure 对 SPY/QQQ/SOXX 的日期覆盖已通过只读 API probe 验证，但完整五年 backfill 后按 7 天市值 staleness 的 publishable 比例、SPY 临时成分变更造成的代理误差，只有真实 dry-run 才能最终量化。SOXX 2021-09 之前无披露是已知硬边界。
 
 **北极星对齐**：第一层 Data（PIT fundamentals、历史成分、HMC sanity、FX）→ 第二层 Analysis（可审计的指数估值聚合）→ Morning Report 消费；不进入策略或 CIO 自动决策层。
@@ -658,6 +660,8 @@ git status --short
 
 以下不是本计划自动授权范围：
 
+执行注记：以下推广已由Boss于2026-09-12单独批准。第8项未重复运行上游数千次HTTP调用，改用当日自然采集完成的源 + 下游整窗/PIT实际执行与认证作为分段smoke；首次完整新wrapper自然运行与第10项仍待验收。第9项使用保存的真实行情和只读DV，调用实际delivery路径生成no-send预览，避免完整CLI额外触发DV采集副作用。
+
 1. push feature branch；
 2. 在 aliyun 临时 checkout/worktree 运行 read-only dry-run；
 3. 估算调用量并由 Boss 批准一次性五年 backfill；
@@ -673,16 +677,19 @@ git status --short
 
 ## 8. Boss 可见验收标准
 
-- [ ] 一张 PNG，三行依次为 SPY、QQQ、SOXX，过去五年周频；
-- [ ] 每行清楚区分 TTM、后视镜 NTM、真实 PIT NTM；
-- [ ] 最近 estimate tail 是虚线，SOXX 2021-09 前是空白；
-- [ ] 最新值、五年分位、coverage、as-of 可读；
-- [ ] SPY/QQQ 五年范围完整；SOXX 从可验证历史起；
-- [ ] TTM 与 hindsight 使用同一聚合公式，亏损股保留；
-- [ ] 真实 PIT 不向 2026-07-13 之前伪造；
-- [ ] KLAC/MCHP 异常不会污染结果；
-- [ ] HTML 只有一个晨报附件且图像内嵌；
-- [ ] HTML fallback PDF 仍包含该图；
-- [ ] 数据任务失败不污染上次通过数据，晨报本身不中断；
-- [ ] 专属、相邻、全量质量门零新增失败；
-- [ ] Boss 目视批准实际生产数据 PNG 后才合并部署。
+- [x] 一张 PNG，三行依次为 SPY、QQQ、SOXX，过去五年周频；
+- [x] 每行清楚区分 TTM、后视镜 NTM、真实 PIT NTM；
+- [x] 最近 estimate tail 是虚线，SOXX可验证披露起点2021-11-26前留白；
+- [x] 最新值、五年分位、coverage、as-of 可读；
+- [x] SPY/QQQ 五年范围完整；SOXX 从可验证历史起；
+- [x] TTM 与 hindsight 使用同一聚合公式，亏损股保留；
+- [x] 真实 PIT 不向 2026-07-13 之前伪造；
+- [x] KLAC/MCHP 异常不会污染结果；
+- [x] HTML单附件路由测试通过、真实预览图像内嵌；自然投递另列待验；
+- [x] HTML fallback PDF仍包含该图（图复用/页序/不重复发送回归）；
+- [x] 数据任务失败不污染上次通过数据，晨报本身不中断；
+- [x] 专属、相邻、全量质量门零新增失败（3566 passed/4 skipped）；
+- [x] Boss于9/12批准真实数据PNG所对应的合并与部署，后续源漂移均重新验收。
+- [ ] 新完整周频wrapper首次自然运行验收（不重复额外API采集）；
+- [ ] 下一次自然08:00晨报实际投递验收；
+- [ ] 真正采用新调仓live之前的发行人证据补齐（issue077）。

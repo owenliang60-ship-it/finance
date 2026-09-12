@@ -1,6 +1,6 @@
 # Issue 073: 单条非正市值导致整个指数估值批次异常
 
-**Status**: FIX VERIFIED IN ISOLATED DB — 未部署生产
+**Status**: RESOLVED（隔离机制）— 2026-09-12已部署b352520，773周/10期PIT认证通过；HONA零值仍保留并隔离，不伪造修复。见 `docs/audit/2026-09-12-index-pe-rollout.md`
 **Date**: 2026-09-11
 **Severity**: HIGH — 一个成分的历史0值阻断其他成员与后续日期
 **Scope**: `terminal/historical_market_cap_sanity.py`及历史/PIT估值调用方

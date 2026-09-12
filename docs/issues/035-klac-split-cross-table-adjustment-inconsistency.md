@@ -1,6 +1,6 @@
 # Issue 035: KLAC 拆股窗口 historical_market_cap 跨表口径污染
 
-**Status**: OPEN — 历史篮子估值管线已隔离，源表修复待 production backfill
+**Status**: RESOLVED（本文件的HMC污染范围，2026-09-12生产推广完成）；原始price/EPS宽范围问题不在本次关闭范围
 **Date**: 2026-07-14
 **Severity**: HIGH — 会直接把 SOXX 2026-06 earnings yield 放大并压低 PE proxy
 **Related**: `historical_market_cap` · `daily_price` · `fmp_stock_splits` · SOXX historical TTM PE
@@ -31,3 +31,15 @@ Production backfill 后，2026-06-10..2026-06-23 每个 KLAC 行必须满足以�
 2. 保持 quarantine，相关 SOXX 日期不得使用 KLAC 市值且必须遵守 90% weight gate。
 
 完成后附 verifier 证据并把状态改为 RESOLVED。
+
+## 2026-09-12 生产关闭证据
+
+已批准的FMP重拉结果在备份、写锁及认证事务下推广，未靠手工乘10造数。
+生产只读重新运行全历史HMC/price/split sanity后，KLAC窗口实际9个交易日全部accepted；
+同时MCHP 2026-02-02..02-06的5行、BRK-B 2026-08-05..08-11的5行均accepted。
+周频三篮子15项认证、1646个已发布值独立SQL均通过。
+原始证据 `reports/rendered/index-pe-deploy-20260912/repaired-market-cap-windows.json`，
+部署与备份见 `docs/audit/2026-09-12-index-pe-rollout.md`。
+
+合并前原版issue035涉及的更广泛daily_price/EPS历史问题已完整保存在上述audit中；
+这里仅关闭影响本PE产品的historical_market_cap范围，不宣称那些问题已一并修好。

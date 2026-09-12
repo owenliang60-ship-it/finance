@@ -1,6 +1,6 @@
 # Issue 074: BRK-B 历史市值短窗口约缩小1500倍
 
-**Status**: ISOLATED REFETCH CORRECTED — 生产仍未修写
+**Status**: RESOLVED — 2026-09-12已按批准推广生产，窗口5行只读sanity全accepted；备份/1646值SQL对账见 `docs/audit/2026-09-12-index-pe-rollout.md`
 **Date**: 2026-09-11
 **Severity**: HIGH — 权重覆盖门已阻止受影响PIT批次发布
 

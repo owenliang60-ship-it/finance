@@ -1,6 +1,6 @@
 # Issue 075: 披露证券身份正确，但ticker查到了另一家公司的财报
 
-**Status**: FIX VERIFIED IN ISOLATED DB — 生产待审批
+**Status**: RESOLVED — Boss批准后2026-09-12部署b352520；精确证券绑定、773周与10期PIT生产认证通过。见 `docs/audit/2026-09-12-index-pe-rollout.md`
 **Date**: 2026-09-11
 **Severity**: HIGH
 

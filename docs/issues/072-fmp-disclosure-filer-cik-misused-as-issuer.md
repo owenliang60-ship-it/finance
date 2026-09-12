@@ -1,6 +1,6 @@
 # Issue 072: 基金披露的 filer CIK 被当成成分公司身份
 
-**Status**: IDENTITY FIX VERIFIED — 冻结历史窗口身份门已通过；真实估值与上线验收仍未完成
+**Status**: RESOLVED（已使用的正式披露窗口）— 2026-09-12生产773周/10期PIT认证完成，见 `docs/audit/2026-09-12-index-pe-rollout.md`；未来真正采用live时的证据门另见issue077
 **Date**: 2026-09-11
 **Severity**: HIGH — 三指数历史 verifier 必然误判、SPY alias 预检失败
 **Related**: `src/data/fmp_forward_ingestion.py`、`scripts/verify_index_pe_history.py`、`config/soxx_symbol_aliases.json`；issue045/048

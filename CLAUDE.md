@@ -92,7 +92,7 @@ API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`�
 
 完整 cron 见 `ARCHITECTURE.md`。本地 launchd `com.finance.sync-pull` 每天 09:00 auto-pull。
 
-三指数 PE 升级在 `codex/index-pe-morning-chart` 已实现、尚未部署：周频整窗历史 TTM/后视镜 + 六篮子 PIT 共识估值 → 晨报 `0d` 只读 PNG（HTML/PDF 共用）。共识与 GAAP 实际口径差异必须显式标注；运行/恢复见 `docs/runbooks/index-pe-weekly-window.md`，不能把分支完成当作生产数据已就绪。
+三指数 PE 于 2026-09-12 部署：SPY/QQQ 各261周、SOXX251周 TTM/后视镜，六篮子10期 PIT 共识估值 → 晨报 `0d` 只读 PNG（HTML/PDF 共用）。共识与 GAAP 实际口径差异必须显式标注；首次新周频入口/自然晨报投递仍待观察，未来真正使用 live 的调仓须另过发行人证据门（issue077）。运行/恢复见 `docs/runbooks/index-pe-weekly-window.md`。
 
 ---
 
