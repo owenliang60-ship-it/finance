@@ -2,6 +2,14 @@
 
 Boss于2026-09-12批准合并、push和晨报上线。主线起点4bb2906，验收分支3db5a9b（69个提交）。新数据先在当日生产副本演练，再在共享写锁、SQLite事务与备份下推广；不覆盖整库、不发额外Telegram测试消息。
 
+## 当前停点（2026-09-12 11:25）
+
+**代码已合并并push，生产尚未启用新入口。** main/origin为7bc7442，生产仍4bb2906。三次候选推广均整批回滚，正常生产数据未被旧候选覆盖：依次捕获HONA新增行情、跨Python浮点末位、ORCL新财报可用日期从9/10改到9/11。后两者说明旧验收结果不能直接当作更新中的生产源的当前结果。
+
+最新20个财季组及截至9/11量价已准备在独立source-only库：`.worktrees/index-pe-live-source-refresh/data/latest-market.db`，尚未产生新产品。10:45的正常forward任务持有写锁，FMP阶段11:11启动、1029 targets。完成后会只读导出四张forward源表，在此隔离库完成as-of9/12整窗重算；首次PIT由云端解释器在生产候选事务内生成并严格认证。迁移保护测试现12项通过，原生PIT九期内存测试全过，未调整容差。
+
+初轮生产备份现归档本地`reports/rendered/index-pe-deploy-20260912/production-before-initial.db`，1025384448字节与云端一致、quick_check和关键行数通过后清理其云端副本；后两轮备份仍在`data/market.db.before-index-pe-{retry,native}-20260912`。历史试跑冻结数据全部保留。本文以下为过程记录，不代表上述停点已经完成生产发布。
+
 ## 已完成的合并与生产副本验收
 
 - 功能merge `fe52bf7`，首轮push `f508c4a`；功能目录与 `93c8a6f` 完全一致，沿用其3563 passed/4 skipped全量验收；合并后隔离回归490 passed/1 skipped，Python3.10 AST、bash -n、diff检查、敏感值/DB文件检查通过。
