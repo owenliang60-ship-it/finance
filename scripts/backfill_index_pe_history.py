@@ -255,6 +255,17 @@ def _window_snapshots(rows, window):
     eligible = {key: row for key, row in groups.items()
                 if max(row["composition_effective_date"],
                        row["composition_available_date"]) <= window[1]}
+    # The frozen selector prefers disclosure over live at the same effective
+    # date. If that disclosure was already available when live became usable,
+    # live cannot win on ANY date. Keep its raw rows in storage, but do not let
+    # its unused members enter company requests or block the selected source.
+    eligible = {key: row for key, row in eligible.items()
+                if row["source_kind"] != "live" or not any(
+                    other["source_kind"] == "disclosure"
+                    and other["composition_effective_date"] == row["composition_effective_date"]
+                    and other["composition_available_date"] <= max(
+                        row["composition_effective_date"], row["composition_available_date"])
+                    for other in eligible.values())}
     initial = [(key, row) for key, row in eligible.items()
                if max(row["composition_effective_date"],
                       row["composition_available_date"]) <= window[0]]

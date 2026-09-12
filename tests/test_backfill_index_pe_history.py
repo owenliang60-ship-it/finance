@@ -59,6 +59,27 @@ TRADING_DATES = [
     "2026-01-16",
 ]
 
+
+@pytest.mark.parametrize("disclosed_at,live_effective,excluded", [
+    ("2026-08-28", "2026-06-22", True),
+    ("2026-09-12", "2026-06-22", False),
+    ("2026-08-28", "2026-09-21", False),
+])
+def test_only_always_dominated_live_snapshot_is_outside_source_scope(
+    disclosed_at, live_effective, excluded,
+):
+    disclosure = {"holding_date": "2026-06-30", "source_kind": "disclosure",
+                  "composition_effective_date": "2026-06-22",
+                  "composition_available_date": disclosed_at}
+    live = {"holding_date": "2026-09-11", "source_kind": "live",
+            "composition_effective_date": live_effective,
+            "composition_available_date": "2026-09-11"}
+    rows = [disclosure, live]
+    original = json.dumps(rows, sort_keys=True)
+    result = backfill._window_snapshots(rows, ("2021-09-12", "2026-09-26"))
+    assert (live not in result) is excluded
+    assert json.dumps(rows, sort_keys=True) == original
+
 COMPOSITION = {
     "holding_date": "2025-12-31",
     "anchor_trading_date": "2025-12-31",
