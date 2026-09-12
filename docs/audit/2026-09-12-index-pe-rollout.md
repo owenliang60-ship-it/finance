@@ -180,4 +180,3 @@ DB 显示 MU FY26 Q3（2026-05-28）：营收 $41.46B、毛利率 84.6%、净利
 - `docs/issues/035`（KLAC 拆股跨表失真，**真实** data issue）/ `036`（GLW 口径，真实）—— 同批分析（2026-06-30）的另两条，那两条是真 bug，本条是误报
 - MEMORY: `feedback_verify_ground_truth_before_quality_judgment` —— 本条是该反模式的"反向"实战案例，建议在该卡补一句"prior 也是过期数据，量级判断同样需 primary source 校准"
 - 报告产物：`reports/semicap-upstream-2026-06/`（MU 8 季表已全部启用）
-
