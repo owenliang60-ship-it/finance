@@ -13,6 +13,15 @@ Boss于2026-09-12批准合并、push和晨报上线。主线起点4bb2906，验�
 - 全晨报只读预览复用今早`morning_20260912_080129.json`及已验收DV缓存：原有10块保持一致、Top50完整，新增0d恰好一张自包含PNG；三篮子均有9期PIT、无告警。报告日9/11滚动五年过滤后SPY/QQQ显示261点，SOXX251点；源产品仍分别262/262/251，并非漏周。PNG目视通过；HTTP/Telegram均0。
 - 09:00固定维护前不启动生产长事务，等待维护正常完成后推广。副本阶段的全表price EXCEPT附加对拍因IO竞争取消，不把未完成的检查列为PASS；既有15项认证正常完成。
 
+## 正常维护引起漂移后的完整重算
+
+- 09:00维护于09:13:06正常结束，随后第一次正式推广在09:16回滚：SPY/QQQ的9/10 HONA member市值不匹配新源。生产income仍8081，产品、manifest和披露均0，quick_check=ok；仅预建空schema保留。备份`data/market.db.before-index-pe-20260912`。
+- 从维护后生产备份导出相关源变化；114条HMC中82条需吸收，1,074条价格中6条需吸收，其余与已接受副本相同。没有把旧值覆盖回正常维护的新数据。
+- 另建source-only隔离库，未复制/删除旧冻结产品，使用现有producer完成三个完整C1窗口和九期PIT。计算区为`.worktrees/index-pe-live-source-refresh`，09:25:28–09:44:31，HTTP=0；每个新run均重新冻结周集合/哈希并完成事务内sample=50认证。
+- 775个周键与此前完全一致，TTM/后视镜均全发布，没有actual_only降级。独立SQL复算1640个值零误差；54个真实PIT数值全部不变。历史线只有4个标量变化，最大0.0248904倍（QQQ 2026-06-12后视镜），另三个变化均更小；整体估值结论无实质变化。
+- 新候选传回`aliyun:/tmp/finance-index-pe-deploy-20260912/refreshed-candidate.db`，再次按完整推广与认证流程执行，不跳过门控。
+- 云端本次staging副本已完整带回本地`reports/rendered/index-pe-deploy-20260912/accepted-staging.db`，大小1126715392字节一致、quick_check及775/54行数通过后清理云端副本。原始9/11各冻结试跑、生产备份和本地证据均保留。
+
 ## 合并提交范围（审批时）
 
 ```text
