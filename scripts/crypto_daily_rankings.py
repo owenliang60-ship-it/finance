@@ -12,54 +12,129 @@ import pandas as pd
 
 from scripts.crypto_beta_scanner import MarketData, daily_frame, scan
 from scripts.compare_crypto_relative_momentum import window, score
+from src.indicators.beta import compute_beta
 
 
 def add_momentum(report, market, cache_dir):
     end = pd.Timestamp(report['as_of'], tz='UTC') + pd.Timedelta(days=1)
     cache_dir = Path(cache_dir) / report['as_of']
     cache_dir.mkdir(parents=True, exist_ok=True)
+    closes = {}
 
-    def history(symbol):
-        path = cache_dir / f'{symbol}_4h.csv'
-        if path.exists():
-            frame = pd.read_csv(path, parse_dates=['timestamp'])
-        else:
-            # Up to 6 current-day bars may be present; keep 181 closed prices
-            # ending at the fixed prior UTC day even when rerun later today.
-            frame = market.fetch(symbol, 188, interval='4h')
-            temp = path.with_name(path.name + f'.{os.getpid()}.tmp')
-            frame.to_csv(temp, index=False)
-            os.replace(temp, path)
-        data = daily_frame(frame)
-        return window(data['close'], end, '4h')
+    def load(symbol):
+        if symbol not in closes:
+            path = cache_dir / f'{symbol}_4h.csv'
+            if path.exists():
+                frame = pd.read_csv(path, parse_dates=['timestamp'])
+            else:
+                # Up to 6 current-day bars may be present; keep 181 closed prices
+                # ending at the fixed prior UTC day even when rerun later today.
+                frame = market.fetch(symbol, 188, interval='4h')
+                temp = path.with_name(path.name + f'.{os.getpid()}.tmp')
+                frame.to_csv(temp, index=False)
+                os.replace(temp, path)
+            closes[symbol] = daily_frame(frame)['close']
+        return closes[symbol]
 
-    benchmark = history('BTCUSDT')
+    benchmark = window(load('BTCUSDT'), end, '4h')
     if benchmark.pct_change().iloc[1:].var() < 1e-12:
         raise ValueError('4h BTC基准方差不足')
-    rows = []
+    try:
+        benchmark_7d = window(load('BTCUSDT'), end, '4h', count=42)
+    except ValueError as exc:
+        benchmark_7d = None
+        benchmark_7d_reason = str(exc)
+
+    rows, seven_beta_rows, seven_rs_rows = [], [], []
     for item in report['rows']:
         symbol = item['symbol']
+        try:
+            series = load(symbol)
+        except Exception as exc:
+            reason = str(exc)
+            seven_beta_rows.append(dict(symbol=symbol, beta=None, observations=0,
+                                        status='unavailable', reason=reason))
+            if symbol == 'BTCUSDT':
+                continue
+            rows.append(dict(symbol=symbol, score=None, rs=None,
+                             status='unavailable', reason=reason))
+            seven_rs_rows.append(dict(symbol=symbol, score=None, rs=None,
+                                      status='unavailable', reason=reason))
+            continue
+        seven = None
+        seven_error = None
+        if benchmark_7d is None:
+            seven_error = benchmark_7d_reason
+        else:
+            try:
+                seven = window(series, end, '4h', count=42)
+            except Exception as exc:
+                seven_error = str(exc)
+
+        beta_row = dict(symbol=symbol, beta=None, observations=0, status='unavailable')
+        if seven is not None:
+            try:
+                beta = compute_beta(seven, benchmark_7d, window=42, min_obs=42)
+                if beta is None or not math.isfinite(beta):
+                    raise ValueError('BTC方差不足或收益率无效')
+                # Identical valid price paths have beta exactly 1. Different
+                # covariance/variance kernels can otherwise yield 1 + epsilon.
+                if seven.equals(benchmark_7d):
+                    beta = 1.0
+                beta_row.update(beta=float(beta), observations=42, status='ok')
+            except Exception as exc:
+                beta_row['reason'] = str(exc)
+        else:
+            beta_row['reason'] = seven_error
+        seven_beta_rows.append(beta_row)
+
         if symbol == 'BTCUSDT':
             continue
         row = dict(symbol=symbol, score=None, rs=None, status='unavailable')
         try:
-            result = score(history(symbol), benchmark)
+            result = score(window(series, end, '4h'), benchmark)
             row.update(result, status='ok', observations=180)
         except Exception as exc:
             row['reason'] = str(exc)
         rows.append(row)
+
+        seven_row = dict(symbol=symbol, score=None, rs=None, status='unavailable')
+        if seven is not None:
+            try:
+                result = score(seven, benchmark_7d)
+                seven_row.update(result, status='ok', observations=42)
+            except Exception as exc:
+                seven_row['reason'] = str(exc)
+        else:
+            seven_row['reason'] = seven_error
+        seven_rs_rows.append(seven_row)
+
     report['momentum_rows'] = rows
     report['momentum_valid_count'] = sum(r['status'] == 'ok' for r in rows)
     report['momentum_target_count'] = len(rows)
+
+    seven = dict(period='7d', period_days=7, interval='4h', observations=42,
+                 window=42, benchmark='BTCUSDT',
+                 rows=seven_beta_rows,
+                 valid_count=sum(r['status'] == 'ok' for r in seven_beta_rows),
+                 momentum_rows=seven_rs_rows,
+                 momentum_valid_count=sum(r['status'] == 'ok' for r in seven_rs_rows),
+                 momentum_target_count=len(seven_rs_rows))
+    beta_top, rs_top = top_lists(seven)
+    seven['beta_top10'] = [r['symbol'] for r in beta_top]
+    seven['rs_top10'] = [r['symbol'] for r in rs_top]
+    seven['overlap'] = [r['symbol'] for r in beta_top if r['symbol'] in seven['rs_top10']]
+    report['seven_day'] = seven
     return report
 
 
-def top_lists(report):
-    beta = sorted((r for r in report['rows']
+def top_lists(report, source=None):
+    source = report if source is None else source
+    beta = sorted((r for r in source['rows']
                    if r['status'] == 'ok' and r['beta'] is not None
                    and math.isfinite(r['beta']) and r['beta'] > 1),
                   key=lambda r: (-r['beta'], r['symbol']))[:10]
-    rs = sorted((r for r in report['momentum_rows']
+    rs = sorted((r for r in source['momentum_rows']
                  if r['status'] == 'ok' and r['score'] is not None
                  and math.isfinite(r['score'])),
                 key=lambda r: (-r['score'], r['symbol']))[:10]
@@ -70,13 +145,27 @@ def symbol_label(symbol):
     return re.sub(r'([_*`\[])', r'\\\1', symbol.removesuffix('USDT'))
 
 
-def message(report):
-    beta, rs = top_lists(report)
+def message(report, period='30d'):
+    if period == '7d':
+        source = report['seven_day']
+        beta, rs = top_lists(report, source)
+        title = f"*Crypto 7天双榜 | {report['as_of']} UTC*"
+        universe = f"昨日USDT成交额前{report['selected_count']} · 同一7天窗口"
+        beta_count = f"42个4h收益率 · 有效{source['valid_count']}/{report['selected_count']}"
+        rs_count = (f"42个4h收益率 · 有效{source['momentum_valid_count']}/"
+                    f"{source['momentum_target_count']}")
+    else:
+        source = report
+        beta, rs = top_lists(report)
+        title = f"*Crypto 双榜 | {report['as_of']} UTC*"
+        universe = f"昨日USDT成交额前{report['selected_count']} · 同一30天窗口"
+        beta_count = f"日线30收益率 · 有效{source['valid_count']}/{report['selected_count']}"
+        rs_count = (f"180个4h收益率 · 有效{source['momentum_valid_count']}/"
+                    f"{source['momentum_target_count']}")
     beta_ranks = {r['symbol']: i for i, r in enumerate(beta, 1)}
     rs_ranks = {r['symbol']: i for i, r in enumerate(rs, 1)}
     shared = set(beta_ranks) & set(rs_ranks)
-    lines = [f"*Crypto 双榜 | {report['as_of']} UTC*",
-             f"昨日USDT成交额前{report['selected_count']} · 同一30天窗口", '',
+    lines = [title, universe, '',
              f"*⭐ 双榜同时入选：{len(shared)} 个*（重点关注名单）"]
     if shared:
         for row in beta:
@@ -85,23 +174,21 @@ def message(report):
                 lines.append(f"⭐ *{symbol_label(symbol)}* — Beta第{beta_ranks[symbol]} / RS第{rs_ranks[symbol]}")
     else:
         lines.append('今日两个前十榜无共同币种。')
-    lines += ['', f"*① Beta前十 · β > 1*（实际{len(beta)}个）",
-              f"日线30收益率 · 有效{report['valid_count']}/{report['selected_count']}"]
+    lines += ['', f"*① Beta前十 · β > 1*（实际{len(beta)}个）", beta_count]
     for i, row in enumerate(beta, 1):
         star = '⭐ ' if row['symbol'] in shared else ''
         lines.append(f"{i}. {star}{symbol_label(row['symbol'])} | β {row['beta']:.2f}")
     if not beta:
         lines.append('今日无 beta > 1 的有效币种。')
-    lines += ['', f"*② RS 4h前十*（实际{len(rs)}个）",
-              f"180个4h收益率 · 有效{report['momentum_valid_count']}/{report['momentum_target_count']}",
+    lines += ['', f"*② RS 4h前十*（实际{len(rs)}个）", rs_count,
               '评分=平均超额收益/超额波动；相对涨幅以BTC计价']
     for i, row in enumerate(rs, 1):
         star = '⭐ ' if row['symbol'] in shared else ''
         lines.append(f"{i}. {star}{symbol_label(row['symbol'])} | 分 {row['score']:+.3f} | 相对 {row['rs']:+.1%}")
     if not rs:
         lines.append('暂无有效4h RS结果，不能判断双榜交集。')
-    missing = report['momentum_target_count'] - report['momentum_valid_count']
-    if missing or report['valid_count'] < report['selected_count']:
+    missing = source['momentum_target_count'] - source['momentum_valid_count']
+    if missing or source['valid_count'] < report['selected_count']:
         lines += ['', '⚠️ 部分历史不足或数据不可用，排名及交集仅基于有效数据。']
     lines += ['', '⭐ = 两榜同时入选；历史联动与相对表现，不代表未来收益。']
     text = '\n'.join(lines)
@@ -118,7 +205,9 @@ def run(scanner_dir, output_dir, dry_run=False):
     report = scan(market, as_of)
     output_dir = Path(output_dir)
     add_momentum(report, market, output_dir / '4h_cache')
-    if report['momentum_valid_count'] == 0:
+    if 'seven_day' not in report:
+        raise RuntimeError('7天报告缺失，停止发送双榜')
+    if report['momentum_valid_count'] == 0 or report['seven_day']['momentum_valid_count'] == 0:
         raise RuntimeError('4h RS全部不可用，停止发送双榜')
     report['generated_at'] = pd.Timestamp.now(tz='UTC').isoformat()
     report['kline_requests'] = market.requests
@@ -126,15 +215,21 @@ def run(scanner_dir, output_dir, dry_run=False):
     report['beta_top10'] = [r['symbol'] for r in beta]
     report['rs_top10'] = [r['symbol'] for r in rs]
     report['overlap'] = [r['symbol'] for r in beta if r['symbol'] in report['rs_top10']]
-    text = message(report)
+    text_30d = message(report)
+    text_7d = message(report, '7d')
     target = output_dir / f"crypto_dual_top10_{report['as_of']}.json"
     temp = target.with_name(target.name + f'.{os.getpid()}.tmp')
     temp.write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
     os.replace(temp, target)
-    target.with_suffix('.md').write_text(text+'\n')
-    print(text, flush=True)
-    if not dry_run and not scanner.send_telegram_alert(text):
-        raise RuntimeError('双榜发送失败')
+    target.with_suffix('.md').write_text(text_30d+'\n')
+    target.with_name(f"crypto_dual_top10_7d_{report['as_of']}.md").write_text(text_7d+'\n')
+    print(text_30d, flush=True)
+    print(text_7d, flush=True)
+    if not dry_run:
+        if not scanner.send_telegram_alert(text_30d):
+            raise RuntimeError('30天双榜发送失败')
+        if not scanner.send_telegram_alert(text_7d):
+            raise RuntimeError('7天双榜发送失败')
     print(f'Artifact: {target}', flush=True)
     return report
 

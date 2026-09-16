@@ -44,6 +44,28 @@ def test_score_matches_explicit_excess_return_formula():
         score(btc,btc)
 
 
+def test_explicit_42_count_needs_43_closes():
+    dates = pd.date_range(end=END, periods=225, freq='4h')
+    s = pd.Series(np.arange(225)+100., index=dates)
+    actual = window(s, END, '4h', count=42)
+    assert len(actual) == 43
+    assert actual.index[-1] == END-pd.Timedelta(hours=4)
+    assert actual.index[-1]-actual.index[0] == pd.Timedelta(days=7)
+    # Only the last 43 complete bars are required: shorter but sufficient is fine.
+    closed = s.iloc[:-1]  # drop the still-open bar at END
+    assert len(window(closed.tail(43), END, '4h', count=42)) == 43
+    with pytest.raises(ValueError):
+        window(closed.tail(42), END, '4h', count=42)
+
+
+@pytest.mark.parametrize('bad', [0, -1, 2.5, True, '42'])
+def test_explicit_count_must_be_positive_integer(bad):
+    dates = pd.date_range(end=END, periods=225, freq='4h')
+    s = pd.Series(np.arange(225)+100., index=dates)
+    with pytest.raises(ValueError):
+        window(s, END, '4h', count=bad)
+
+
 def test_invalid_price_and_duplicate_bar_rejected():
     dates=pd.date_range(end=END-pd.Timedelta(days=1),periods=31)
     s=pd.Series(100.,index=dates)

@@ -17,8 +17,15 @@ def close_series(klines):
     return pd.Series([float(r[4]) for r in klines], index=dates).sort_index()
 
 
-def window(closes, end, interval):
-    count, freq = (180, '4h') if interval == '4h' else (30, '1D')
+def window(closes, end, interval, count=None):
+    if count is None:
+        count, freq = (180, '4h') if interval == '4h' else (30, '1D')
+    else:
+        # Explicit counts let callers reuse this strict validation for other
+        # horizons (e.g. 42 returns => 43 consecutive 4h closes).
+        if isinstance(count, bool) or not isinstance(count, (int, np.integer)) or count <= 0:
+            raise ValueError('count必须为正整数')
+        freq = '4h' if interval == '4h' else '1D'
     # end is exclusive UTC midnight. Candle timestamps denote opening times.
     delta = pd.Timedelta(hours=4) if interval == '4h' else pd.Timedelta(days=1)
     dates = pd.date_range(end=end-delta, periods=count+1, freq=freq)
