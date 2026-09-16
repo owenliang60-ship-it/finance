@@ -19,3 +19,9 @@ Boss要求在既有30天双榜旁增加7天周期，并指定DSH实施。独立w
 ## 运行行为
 原JSON增加seven_day嵌套报告；原30天Markdown保持，另写`crypto_dual_top10_7d_YYYY-MM-DD.md`。先落两份结果再发送30天/7天两条消息。dry-run不发送；任一发送失败冒泡。单币失败按周期显式不可用，BTC基础行情无效仍阻断。RS全不可用时不发送不完整双周期结果。
 Quant shim与cron不用改；原PMARP/RVOL/NUPL投递保持现状，本次不处理历史待确认项。未额外手动群发；下一次自然daily验收尚待发生。
+
+## 部署完成
+- 代码commit `90487ec` 已ff-merge到main、push GitHub；云端在原Quant cron锁内备份并pull至该commit。
+- 备份：`/root/workspace/Quant/backups/crypto-7d-20260916T002640Z/`（两源码及原revision）。
+- 生产实际模块run(dry_run=True)配合冻结真实scan输入：`production_smoke=PASS`，7d beta50/50、RS49/49，交集CVC/龙虾；JSON与两份Markdown落盘；live_api_calls=0、telegram_sends=0。证据位于`/tmp/crypto-seven-day-20260916/production-smoke/`。
+- cron/Quant shim没有改动，下一次08:06自然任务将发送30d再7d两条消息；自然触发尚未发生，不宣称已实际投递。
