@@ -22,3 +22,6 @@ python -m py_compile scripts/crypto_daily_rankings.py
 14d Beta有效49/50，RS48/49。交集USELESS（Beta#1/RS#7）、ZEC（Beta#4/RS#4）。输入/独立预期/验证JSON/预览：`reports/crypto_daily_rankings/2026-09-16-14d-validation/`。DSH私有工作日志位于worktree `work/crypto-dual-14d/`，未入公开Git。
 
 未手动发送Telegram；自然daily首次投递尚待发生。
+
+## 部署完成
+代码`06d4a3f`已合并main并push；云端在原Quant cron锁内备份并pull。备份`/root/workspace/Quant/backups/crypto-14d-20260916T012305Z/`。生产实际模块dry-run（冻结真实scan输入）PASS：49个14d beta/48个RS，交集USELESS/ZEC，30d/7d结果保持一致；三份Markdown及总JSON完整落盘，live_api_calls=0、telegram_sends=0。下次08:06自然daily发送30→14→7，未手动群发。
