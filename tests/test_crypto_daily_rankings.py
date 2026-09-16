@@ -85,6 +85,15 @@ def dual_report():
                        for i in range(5, 25)],
         momentum_valid_count=20, momentum_target_count=20,
         beta_top10=[], rs_top10=[], overlap=[])
+    data['fourteen_day'] = dict(
+        period='14d', period_days=14, interval='4h', observations=84, window=84,
+        benchmark='BTCUSDT',
+        rows=[dict(symbol=f'C{i:02}USDT', beta=3-i*.1, status='ok') for i in range(25)],
+        valid_count=25,
+        momentum_rows=[dict(symbol=f'C{i:02}USDT', score=3-i*.1, rs=.1, status='ok')
+                       for i in range(5, 25)],
+        momentum_valid_count=20, momentum_target_count=20,
+        beta_top10=[], rs_top10=[], overlap=[])
     return data
 
 
@@ -184,6 +193,9 @@ def test_each_symbol_fetched_once_across_periods(tmp_path):
     assert len(market.calls) == len(frames)
     assert sorted(s for s, _, _ in market.calls) == sorted(frames)
     assert all(limit == 188 and interval == '4h' for _, limit, interval in market.calls)
+    assert data['fourteen_day']['observations'] == 84
+    assert len(data['fourteen_day']['rows']) == len(frames)
+    assert len(data['fourteen_day']['momentum_rows']) == len(frames) - 1
 
 
 @pytest.mark.parametrize('failure', ['fetch_error', 'corrupt_cache'])
@@ -271,18 +283,22 @@ def test_new_coin_7d_valid_30d_invalid(tmp_path):
 
 
 @pytest.mark.parametrize('dry_run', [True,False])
-def test_run_sends_two_messages_or_none(monkeypatch,tmp_path,dry_run):
+def test_run_sends_three_messages_or_none(monkeypatch,tmp_path,dry_run):
     data=dual_report();sent=[]
     scanner=SimpleNamespace(send_telegram_alert=lambda msg: sent.append(msg) or True)
     monkeypatch.setitem(sys.modules,'binance_pmarp_scanner',scanner)
     monkeypatch.setattr(daily,'scan',lambda *args:data)
     monkeypatch.setattr(daily,'add_momentum',lambda *args:data)
     daily.run(tmp_path,tmp_path,dry_run=dry_run)
-    assert len(sent)==(0 if dry_run else 2)
-    assert '7天' in sent[1] if not dry_run else True
+    assert len(sent)==(0 if dry_run else 3)
+    if not dry_run:
+        assert '双榜' in sent[0] and '14天' not in sent[0]
+        assert '14天' in sent[1]
+        assert '7天' in sent[2]
     saved=json.loads(next(tmp_path.glob('crypto_dual_top10_*.json')).read_text())
     assert len(saved['overlap'])==5
     assert saved['seven_day']['observations']==42
+    assert saved['fourteen_day']['observations']==84
 
 
 def test_run_missing_seven_day_fails(monkeypatch,tmp_path):
@@ -327,3 +343,179 @@ def test_nonidentical_beta_just_above_one_is_not_rounded_away(tmp_path):
     daily.add_momentum(data, market, tmp_path)
     assert 'ABOVEUSDT' in data['seven_day']['beta_top10']
     assert 'BTCUSDT' not in data['seven_day']['beta_top10']
+
+
+def test_fourteen_day_beta_and_rs_use_84_returns(tmp_path):
+    dates = _momentum_dates()
+    ret = np.random.default_rng(7).normal(0, .01, len(dates) - 1)
+    frames = {'BTCUSDT': _series_frame(dates, ret, 1.),
+              'B2USDT': _series_frame(dates, ret, 2.),
+              'BNEGUSDT': _series_frame(dates, ret, -1.),
+              'B1USDT': _series_frame(dates, ret, 1.)}
+    data, market = _momentum_setup(frames)
+    daily.add_momentum(data, market, tmp_path)
+    fourteen = data['fourteen_day']
+    by = {r['symbol']: r for r in fourteen['rows']}
+    assert by['B2USDT']['beta'] == pytest.approx(2.)
+    assert by['BNEGUSDT']['beta'] == pytest.approx(-1.)
+    assert by['B1USDT']['beta'] == 1.0
+    assert by['BTCUSDT']['beta'] == 1.0
+    assert fourteen['observations'] == 84
+    assert all(r['observations'] == 84 for r in fourteen['rows'] if r['status'] == 'ok')
+    assert all(r['observations'] == 84 for r in fourteen['momentum_rows'] if r['status'] == 'ok')
+    assert 'B2USDT' in fourteen['beta_top10']
+    assert 'B1USDT' not in fourteen['beta_top10']
+    assert 'BTCUSDT' not in fourteen['beta_top10']
+
+
+def test_fourteen_day_shape_matches_seven_day(tmp_path):
+    dates = _momentum_dates()
+    ret = np.random.default_rng(7).normal(0, .01, len(dates) - 1)
+    data, market = _momentum_setup({'BTCUSDT': _series_frame(dates, ret, 1.),
+                                    'ALTUSDT': _series_frame(dates, ret, 2.)})
+    daily.add_momentum(data, market, tmp_path)
+    fourteen = data['fourteen_day']
+    assert set(fourteen) == set(data['seven_day'])
+    assert fourteen['period'] == '14d' and fourteen['period_days'] == 14
+    assert fourteen['observations'] == fourteen['window'] == 84
+    assert fourteen['beta_top10'] == ['ALTUSDT']
+    assert fourteen['rs_top10'] == ['ALTUSDT']
+    assert fourteen['overlap'] == ['ALTUSDT']
+    json.dumps(data, ensure_ascii=False, allow_nan=False)
+
+
+def test_new_coin_14d_valid_30d_invalid(tmp_path):
+    dates = _momentum_dates()
+    ret = np.random.default_rng(17).normal(0, .01, len(dates) - 1)
+    frames = {'BTCUSDT': _series_frame(dates, ret, 1.),
+              'NEWUSDT': _series_frame(dates[-86:-1], ret[-85:-1], 2.)}
+    data, market = _momentum_setup(frames)
+    daily.add_momentum(data, market, tmp_path)
+    row = next(r for r in data['momentum_rows'] if r['symbol'] == 'NEWUSDT')
+    assert row['status'] == 'unavailable' and row['score'] is None
+    fourteen = {r['symbol']: r for r in data['fourteen_day']['rows']}['NEWUSDT']
+    assert fourteen['status'] == 'ok' and fourteen['beta'] == pytest.approx(2.)
+    fourteen_rs = {r['symbol']: r for r in data['fourteen_day']['momentum_rows']}['NEWUSDT']
+    assert fourteen_rs['status'] == 'ok' and fourteen_rs['observations'] == 84
+    seven = {r['symbol']: r for r in data['seven_day']['rows']}['NEWUSDT']
+    assert seven['status'] == 'ok'
+
+
+def test_gap_outside_last85_breaks_30d_not_14d(tmp_path):
+    dates = _momentum_dates()
+    ret = np.random.default_rng(11).normal(0, .01, len(dates) - 1)
+    frames = {'BTCUSDT': _series_frame(dates, ret, 1.),
+              'ALTUSDT': _series_frame(dates, ret, 2.).drop(index=50).reset_index(drop=True)}
+    data, market = _momentum_setup(frames)
+    daily.add_momentum(data, market, tmp_path)
+    row = next(r for r in data['momentum_rows'] if r['symbol'] == 'ALTUSDT')
+    assert row['status'] == 'unavailable' and row['score'] is None
+    fourteen = {r['symbol']: r for r in data['fourteen_day']['rows']}['ALTUSDT']
+    assert fourteen['status'] == 'ok'
+    fourteen_rs = {r['symbol']: r for r in data['fourteen_day']['momentum_rows']}['ALTUSDT']
+    assert fourteen_rs['status'] == 'ok'
+
+
+def test_gap_inside_last85_outside_last43_breaks_14d_not_7d(tmp_path):
+    dates = _momentum_dates()
+    ret = np.random.default_rng(13).normal(0, .01, len(dates) - 1)
+    frames = {'BTCUSDT': _series_frame(dates, ret, 1.),
+              'ALTUSDT': _series_frame(dates, ret, 2.).drop(index=120).reset_index(drop=True)}
+    data, market = _momentum_setup(frames)
+    daily.add_momentum(data, market, tmp_path)
+    fourteen = {r['symbol']: r for r in data['fourteen_day']['rows']}['ALTUSDT']
+    assert fourteen['status'] == 'unavailable' and fourteen['beta'] is None
+    fourteen_rs = {r['symbol']: r for r in data['fourteen_day']['momentum_rows']}['ALTUSDT']
+    assert fourteen_rs['status'] == 'unavailable' and fourteen_rs['score'] is None
+    seven = {r['symbol']: r for r in data['seven_day']['rows']}['ALTUSDT']
+    assert seven['status'] == 'ok'
+    seven_rs = {r['symbol']: r for r in data['seven_day']['momentum_rows']}['ALTUSDT']
+    assert seven_rs['status'] == 'ok'
+
+
+def test_fourteen_day_constant_active_returns_have_no_fake_score(tmp_path):
+    dates = _momentum_dates()
+    ret = np.random.default_rng(29).normal(0, .01, len(dates) - 1)
+    frames = {'BTCUSDT': _series_frame(dates, ret, 1.),
+              'FLATUSDT': _series_frame(dates, ret + .001, 1.)}
+    data, market = _momentum_setup(frames)
+    daily.add_momentum(data, market, tmp_path)
+    fourteen_rs = {r['symbol']: r for r in data['fourteen_day']['momentum_rows']}['FLATUSDT']
+    assert fourteen_rs['status'] == 'unavailable'
+    assert fourteen_rs['score'] is None and fourteen_rs['rs'] is None
+    assert fourteen_rs['reason']
+
+
+def test_fourteen_day_intersection_is_period_local():
+    data = dual_report()
+    # 14d lists share C00..C09 (overlap 10); 7d fixture overlaps only C05..C09.
+    data['fourteen_day']['momentum_rows'] = [
+        dict(symbol=f'C{i:02}USDT', score=3-i*.1, rs=.1, status='ok') for i in range(25)]
+    text_14 = daily.message(data, '14d')
+    text_7 = daily.message(data, '7d')
+    assert '双榜同时入选：10 个' in text_14
+    assert '双榜同时入选：5 个' in text_7
+    assert '14天' in text_14 and '84个4h收益率' in text_14
+    assert len(text_14) < 4000
+
+
+def test_seven_and_thirty_messages_unchanged_when_fourteen_day_changes():
+    baseline = dual_report()
+    seven_before = daily.message(baseline, '7d')
+    thirty_before = daily.message(baseline)
+    changed = dual_report()
+    changed['fourteen_day']['momentum_rows'] = [
+        dict(symbol=f'C{i:02}USDT', score=9-i*.1, rs=.2, status='ok') for i in range(25)]
+    assert daily.message(changed, '7d') == seven_before
+    assert daily.message(changed) == thirty_before
+
+
+def test_missing_fourteen_day_fails(monkeypatch, tmp_path):
+    data = dual_report()
+    del data['fourteen_day']
+    monkeypatch.setitem(sys.modules, 'binance_pmarp_scanner',
+                        SimpleNamespace(send_telegram_alert=lambda msg: True))
+    monkeypatch.setattr(daily, 'scan', lambda *args: data)
+    monkeypatch.setattr(daily, 'add_momentum', lambda *args: data)
+    with pytest.raises(RuntimeError, match='14天报告缺失'):
+        daily.run(tmp_path, tmp_path)
+
+
+def test_zero_valid_fourteen_day_rs_fails(monkeypatch, tmp_path):
+    data = dual_report()
+    data['fourteen_day']['momentum_rows'] = []
+    data['fourteen_day']['momentum_valid_count'] = 0
+    monkeypatch.setitem(sys.modules, 'binance_pmarp_scanner',
+                        SimpleNamespace(send_telegram_alert=lambda msg: True))
+    monkeypatch.setattr(daily, 'scan', lambda *args: data)
+    monkeypatch.setattr(daily, 'add_momentum', lambda *args: data)
+    with pytest.raises(RuntimeError, match='RS全部不可用'):
+        daily.run(tmp_path, tmp_path)
+
+
+def test_outputs_persisted_before_first_send(monkeypatch, tmp_path):
+    data = dual_report()
+    monkeypatch.setitem(sys.modules, 'binance_pmarp_scanner',
+                        SimpleNamespace(send_telegram_alert=lambda msg: False))
+    monkeypatch.setattr(daily, 'scan', lambda *args: data)
+    monkeypatch.setattr(daily, 'add_momentum', lambda *args: data)
+    with pytest.raises(RuntimeError, match='发送失败'):
+        daily.run(tmp_path, tmp_path)
+    assert (tmp_path / 'crypto_dual_top10_2026-09-06.json').exists()
+    assert (tmp_path / 'crypto_dual_top10_2026-09-06.md').exists()
+    assert (tmp_path / 'crypto_dual_top10_7d_2026-09-06.md').exists()
+    assert (tmp_path / 'crypto_dual_top10_14d_2026-09-06.md').exists()
+
+
+def test_third_send_failure_propagates(monkeypatch, tmp_path):
+    data = dual_report(); calls = []
+    def send(msg):
+        calls.append(msg)
+        return len(calls) < 3
+    monkeypatch.setitem(sys.modules, 'binance_pmarp_scanner',
+                        SimpleNamespace(send_telegram_alert=send))
+    monkeypatch.setattr(daily, 'scan', lambda *args: data)
+    monkeypatch.setattr(daily, 'add_momentum', lambda *args: data)
+    with pytest.raises(RuntimeError, match='发送失败'):
+        daily.run(tmp_path, tmp_path)
+    assert len(calls) == 3

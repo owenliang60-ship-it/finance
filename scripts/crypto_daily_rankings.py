@@ -15,6 +15,44 @@ from scripts.compare_crypto_relative_momentum import window, score
 from src.indicators.beta import compute_beta
 
 
+def _short_period_rows(symbol, series, end, count, benchmark, benchmark_error):
+    """Beta and RS rows for one short 4h period from a caller-cached series.
+
+    The strictly validated window is shared by the beta and RS calculations so
+    the period never re-reads or re-downloads the symbol.
+    """
+    beta_row = dict(symbol=symbol, beta=None, observations=0, status='unavailable')
+    rs_row = dict(symbol=symbol, score=None, rs=None, status='unavailable')
+    sample = None
+    error = benchmark_error
+    if benchmark is not None:
+        try:
+            sample = window(series, end, '4h', count=count)
+        except Exception as exc:
+            error = str(exc)
+    if sample is None:
+        beta_row['reason'] = error
+        rs_row['reason'] = error
+        return beta_row, rs_row
+    try:
+        beta = compute_beta(sample, benchmark, window=count, min_obs=count)
+        if beta is None or not math.isfinite(beta):
+            raise ValueError('BTC方差不足或收益率无效')
+        # Identical valid price paths have beta exactly 1. Different
+        # covariance/variance kernels can otherwise yield 1 + epsilon.
+        if sample.equals(benchmark):
+            beta = 1.0
+        beta_row.update(beta=float(beta), observations=count, status='ok')
+    except Exception as exc:
+        beta_row['reason'] = str(exc)
+    try:
+        result = score(sample, benchmark)
+        rs_row.update(result, status='ok', observations=count)
+    except Exception as exc:
+        rs_row['reason'] = str(exc)
+    return beta_row, rs_row
+
+
 def add_momentum(report, market, cache_dir):
     end = pd.Timestamp(report['as_of'], tz='UTC') + pd.Timedelta(days=1)
     cache_dir = Path(cache_dir) / report['as_of']
@@ -41,11 +79,19 @@ def add_momentum(report, market, cache_dir):
         raise ValueError('4h BTC基准方差不足')
     try:
         benchmark_7d = window(load('BTCUSDT'), end, '4h', count=42)
+        benchmark_7d_reason = None
     except ValueError as exc:
         benchmark_7d = None
         benchmark_7d_reason = str(exc)
+    try:
+        benchmark_14d = window(load('BTCUSDT'), end, '4h', count=84)
+        benchmark_14d_reason = None
+    except ValueError as exc:
+        benchmark_14d = None
+        benchmark_14d_reason = str(exc)
 
     rows, seven_beta_rows, seven_rs_rows = [], [], []
+    fourteen_beta_rows, fourteen_rs_rows = [], []
     for item in report['rows']:
         symbol = item['symbol']
         try:
@@ -54,39 +100,24 @@ def add_momentum(report, market, cache_dir):
             reason = str(exc)
             seven_beta_rows.append(dict(symbol=symbol, beta=None, observations=0,
                                         status='unavailable', reason=reason))
+            fourteen_beta_rows.append(dict(symbol=symbol, beta=None, observations=0,
+                                           status='unavailable', reason=reason))
             if symbol == 'BTCUSDT':
                 continue
             rows.append(dict(symbol=symbol, score=None, rs=None,
                              status='unavailable', reason=reason))
             seven_rs_rows.append(dict(symbol=symbol, score=None, rs=None,
                                       status='unavailable', reason=reason))
+            fourteen_rs_rows.append(dict(symbol=symbol, score=None, rs=None,
+                                         status='unavailable', reason=reason))
             continue
-        seven = None
-        seven_error = None
-        if benchmark_7d is None:
-            seven_error = benchmark_7d_reason
-        else:
-            try:
-                seven = window(series, end, '4h', count=42)
-            except Exception as exc:
-                seven_error = str(exc)
 
-        beta_row = dict(symbol=symbol, beta=None, observations=0, status='unavailable')
-        if seven is not None:
-            try:
-                beta = compute_beta(seven, benchmark_7d, window=42, min_obs=42)
-                if beta is None or not math.isfinite(beta):
-                    raise ValueError('BTC方差不足或收益率无效')
-                # Identical valid price paths have beta exactly 1. Different
-                # covariance/variance kernels can otherwise yield 1 + epsilon.
-                if seven.equals(benchmark_7d):
-                    beta = 1.0
-                beta_row.update(beta=float(beta), observations=42, status='ok')
-            except Exception as exc:
-                beta_row['reason'] = str(exc)
-        else:
-            beta_row['reason'] = seven_error
-        seven_beta_rows.append(beta_row)
+        seven_beta_row, seven_rs_row = _short_period_rows(
+            symbol, series, end, 42, benchmark_7d, benchmark_7d_reason)
+        seven_beta_rows.append(seven_beta_row)
+        fourteen_beta_row, fourteen_rs_row = _short_period_rows(
+            symbol, series, end, 84, benchmark_14d, benchmark_14d_reason)
+        fourteen_beta_rows.append(fourteen_beta_row)
 
         if symbol == 'BTCUSDT':
             continue
@@ -98,16 +129,8 @@ def add_momentum(report, market, cache_dir):
             row['reason'] = str(exc)
         rows.append(row)
 
-        seven_row = dict(symbol=symbol, score=None, rs=None, status='unavailable')
-        if seven is not None:
-            try:
-                result = score(seven, benchmark_7d)
-                seven_row.update(result, status='ok', observations=42)
-            except Exception as exc:
-                seven_row['reason'] = str(exc)
-        else:
-            seven_row['reason'] = seven_error
-        seven_rs_rows.append(seven_row)
+        seven_rs_rows.append(seven_rs_row)
+        fourteen_rs_rows.append(fourteen_rs_row)
 
     report['momentum_rows'] = rows
     report['momentum_valid_count'] = sum(r['status'] == 'ok' for r in rows)
@@ -125,6 +148,19 @@ def add_momentum(report, market, cache_dir):
     seven['rs_top10'] = [r['symbol'] for r in rs_top]
     seven['overlap'] = [r['symbol'] for r in beta_top if r['symbol'] in seven['rs_top10']]
     report['seven_day'] = seven
+
+    fourteen = dict(period='14d', period_days=14, interval='4h', observations=84,
+                    window=84, benchmark='BTCUSDT',
+                    rows=fourteen_beta_rows,
+                    valid_count=sum(r['status'] == 'ok' for r in fourteen_beta_rows),
+                    momentum_rows=fourteen_rs_rows,
+                    momentum_valid_count=sum(r['status'] == 'ok' for r in fourteen_rs_rows),
+                    momentum_target_count=len(fourteen_rs_rows))
+    beta_top, rs_top = top_lists(fourteen)
+    fourteen['beta_top10'] = [r['symbol'] for r in beta_top]
+    fourteen['rs_top10'] = [r['symbol'] for r in rs_top]
+    fourteen['overlap'] = [r['symbol'] for r in beta_top if r['symbol'] in fourteen['rs_top10']]
+    report['fourteen_day'] = fourteen
     return report
 
 
@@ -153,6 +189,14 @@ def message(report, period='30d'):
         universe = f"昨日USDT成交额前{report['selected_count']} · 同一7天窗口"
         beta_count = f"42个4h收益率 · 有效{source['valid_count']}/{report['selected_count']}"
         rs_count = (f"42个4h收益率 · 有效{source['momentum_valid_count']}/"
+                    f"{source['momentum_target_count']}")
+    elif period == '14d':
+        source = report['fourteen_day']
+        beta, rs = top_lists(report, source)
+        title = f"*Crypto 14天双榜 | {report['as_of']} UTC*"
+        universe = f"昨日USDT成交额前{report['selected_count']} · 同一14天窗口"
+        beta_count = f"84个4h收益率 · 有效{source['valid_count']}/{report['selected_count']}"
+        rs_count = (f"84个4h收益率 · 有效{source['momentum_valid_count']}/"
                     f"{source['momentum_target_count']}")
     else:
         source = report
@@ -207,7 +251,11 @@ def run(scanner_dir, output_dir, dry_run=False):
     add_momentum(report, market, output_dir / '4h_cache')
     if 'seven_day' not in report:
         raise RuntimeError('7天报告缺失，停止发送双榜')
-    if report['momentum_valid_count'] == 0 or report['seven_day']['momentum_valid_count'] == 0:
+    if 'fourteen_day' not in report:
+        raise RuntimeError('14天报告缺失，停止发送双榜')
+    if (report['momentum_valid_count'] == 0
+            or report['seven_day']['momentum_valid_count'] == 0
+            or report['fourteen_day']['momentum_valid_count'] == 0):
         raise RuntimeError('4h RS全部不可用，停止发送双榜')
     report['generated_at'] = pd.Timestamp.now(tz='UTC').isoformat()
     report['kline_requests'] = market.requests
@@ -216,18 +264,23 @@ def run(scanner_dir, output_dir, dry_run=False):
     report['rs_top10'] = [r['symbol'] for r in rs]
     report['overlap'] = [r['symbol'] for r in beta if r['symbol'] in report['rs_top10']]
     text_30d = message(report)
+    text_14d = message(report, '14d')
     text_7d = message(report, '7d')
     target = output_dir / f"crypto_dual_top10_{report['as_of']}.json"
     temp = target.with_name(target.name + f'.{os.getpid()}.tmp')
     temp.write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
     os.replace(temp, target)
     target.with_suffix('.md').write_text(text_30d+'\n')
+    target.with_name(f"crypto_dual_top10_14d_{report['as_of']}.md").write_text(text_14d+'\n')
     target.with_name(f"crypto_dual_top10_7d_{report['as_of']}.md").write_text(text_7d+'\n')
     print(text_30d, flush=True)
+    print(text_14d, flush=True)
     print(text_7d, flush=True)
     if not dry_run:
         if not scanner.send_telegram_alert(text_30d):
             raise RuntimeError('30天双榜发送失败')
+        if not scanner.send_telegram_alert(text_14d):
+            raise RuntimeError('14天双榜发送失败')
         if not scanner.send_telegram_alert(text_7d):
             raise RuntimeError('7天双榜发送失败')
     print(f'Artifact: {target}', flush=True)
