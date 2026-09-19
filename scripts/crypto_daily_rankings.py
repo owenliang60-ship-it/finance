@@ -1,4 +1,4 @@
-"""Daily top-volume crypto: beta Top10, 4h relative momentum Top10 and overlap."""
+"""Live trend ranking entry point; legacy dual-ranking helpers kept for replay."""
 import argparse
 import importlib
 import json
@@ -241,7 +241,8 @@ def message(report, period='30d'):
     return text
 
 
-def run(scanner_dir, output_dir, dry_run=False):
+def run_legacy(scanner_dir, output_dir, dry_run=False):
+    """Historical dual-ranking runner; no longer invoked by daily/CLI entry."""
     sys.path.insert(0, str(scanner_dir))
     scanner = importlib.import_module('binance_pmarp_scanner')
     market = MarketData(scanner)
@@ -285,6 +286,11 @@ def run(scanner_dir, output_dir, dry_run=False):
             raise RuntimeError('7天双榜发送失败')
     print(f'Artifact: {target}', flush=True)
     return report
+
+
+def run(scanner_dir, output_dir, dry_run=False):
+    from scripts.crypto_trend_rankings import run as run_trend
+    return run_trend(scanner_dir, output_dir, dry_run=dry_run)
 
 
 def main():

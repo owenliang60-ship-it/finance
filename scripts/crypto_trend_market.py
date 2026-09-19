@@ -1,0 +1,206 @@
+"""Read-only Quant adapter and evidence for historical turnover universes."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import time
+import xml.etree.ElementTree as ET
+
+import pandas as pd
+import requests
+
+from scripts.crypto_beta_scanner import MarketData
+
+BUCKET = 'https://s3-ap-northeast-1.amazonaws.com/data.binance.vision'
+NS = {'s': 'http://s3.amazonaws.com/doc/2006-03-01/'}
+
+
+class InactiveSymbolError(RuntimeError):
+    """Explicit exchange -1122 response; not proof of no historical trading."""
+
+
+def eligible_metadata(metadata):
+    if not isinstance(metadata, list):
+        raise ValueError('合约元数据不是列表')
+    records, seen = [], set()
+    for meta in metadata:
+        if not isinstance(meta, dict) or not isinstance(meta.get('symbol'), str) or not meta['symbol']:
+            raise ValueError('合约元数据标识缺失')
+        symbol = meta['symbol']
+        if symbol in seen:
+            raise ValueError('重复合约元数据: '+symbol)
+        seen.add(symbol)
+        if any(key not in meta or not isinstance(meta[key], str)
+               for key in ('underlyingType','quoteAsset','contractType')):
+            raise ValueError('合约分类元数据缺失: '+symbol)
+        if not (meta.get('underlyingType') == 'COIN' and meta.get('quoteAsset') == 'USDT'
+                and meta.get('contractType') == 'PERPETUAL'):
+            continue
+        start, end = meta.get('onboardDate'), meta.get('deliveryDate')
+        if (type(start) is not int or type(end) is not int or start <= 0 or end <= start
+                or not isinstance(meta.get('status'), str) or not meta['status']):
+            raise ValueError('合约生命周期元数据无效: '+symbol)
+        records.append(meta)
+    return records
+
+
+def overlaps(meta, start, end):
+    return meta['onboardDate'] < int(end.timestamp()*1000) and meta['deliveryDate'] > int(start.timestamp()*1000)
+
+
+def _save(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(path.name+f'.{os.getpid()}.tmp')
+    temp.write_text(json.dumps(value, ensure_ascii=False, allow_nan=False)+'\n')
+    os.replace(temp, path)
+
+
+class TrendMarket(MarketData):
+    """All writes are task-owned evidence/cache; shared Quant cache is read-only."""
+    def __init__(self, scanner, cache_dir, as_of):
+        super().__init__(scanner)
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.as_of = pd.Timestamp(as_of)
+        self.end = self.as_of+pd.Timedelta(days=1)
+        self.archive_requests = 0
+        self.pending_symbols = set()
+
+    def _json(self, endpoint, params=None):
+        time.sleep(1)
+        self.requests += 1
+        value = self.scanner.api_request_with_retry(self.scanner.CONFIG['base_url']+endpoint, params=params)
+        if value is None:
+            raise RuntimeError('交易所API失败: '+endpoint)
+        return value
+
+    def archive_keys(self, *, prefix, delimiter='', marker=''):
+        seen = set()
+        while True:
+            params = dict(prefix=prefix, marker=marker, **{'max-keys':1000})
+            if delimiter:
+                params['delimiter'] = delimiter
+            key = hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()
+            path = self.cache_dir/'archive'/str(self.as_of.date())/(key+'.xml')
+            if path.exists():
+                raw = path.read_text()
+            else:
+                time.sleep(1)
+                self.archive_requests += 1
+                response = requests.get(BUCKET, params=params, timeout=30)
+                response.raise_for_status()
+                raw = response.text
+            root = ET.fromstring(raw)
+            truncated = root.findtext('s:IsTruncated', namespaces=NS)
+            if truncated not in ('true','false'):
+                raise ValueError('归档列表缺少分页状态')
+            next_marker = root.findtext('s:NextMarker', namespaces=NS)
+            if truncated == 'true' and (not next_marker or next_marker in seen or next_marker == marker):
+                raise ValueError('归档分页游标缺失或重复')
+            if not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                temp = path.with_name(path.name+f'.{os.getpid()}.tmp')
+                temp.write_text(raw)
+                os.replace(temp, path)
+            for node in root.findall('s:CommonPrefixes/s:Prefix', NS)+root.findall('s:Contents/s:Key', NS):
+                if node.text:
+                    yield node.text
+            if truncated == 'false':
+                break
+            seen.add(next_marker)
+            marker = next_marker
+
+    def archive_symbols(self):
+        symbols = set()
+        for frequency in ('daily','monthly'):
+            prefix = f'data/futures/um/{frequency}/klines/'
+            for key in self.archive_keys(prefix=prefix, delimiter='/'):
+                if key.startswith(prefix):
+                    symbol = key[len(prefix):].rstrip('/')
+                    if '/' not in symbol and symbol.endswith('USDT'):
+                        symbols.add(symbol)
+        if not symbols:
+            raise ValueError('归档合约目录为空，不能确认历史覆盖')
+        return symbols
+
+    def has_archive_activity(self, symbol, start, end):
+        prefix = f'data/futures/um/daily/klines/{symbol}/1d/'
+        marker = prefix+f'{symbol}-1d-{start.date()}'
+        for key in self.archive_keys(prefix=prefix, marker=marker):
+            if key.endswith('.zip'):
+                day = key[-14:-4]
+                if str(start.date()) <= day < str(end.date()):
+                    return True
+        return False
+
+    def catalog(self, as_of):
+        start = as_of-pd.Timedelta(days=29)
+        current = self._json('/fapi/v1/exchangeInfo')
+        if not isinstance(current, dict) or not current.get('symbols'):
+            raise ValueError('交易所合约元数据为空')
+        eligible_metadata(current['symbols'])
+        combined = {}
+        snapshots = []
+        for path in sorted(self.cache_dir.glob('catalog_*.json')):
+            if path.stem.removeprefix('catalog_') > str(as_of.date()):
+                continue
+            saved = json.loads(path.read_text())
+            eligible_metadata(saved['symbols'])
+            combined.update({m['symbol']:m for m in saved['symbols']})
+            snapshots.append(path.name)
+        combined.update({m['symbol']:m for m in current['symbols']})
+        records = eligible_metadata(list(combined.values()))
+        unknown = sorted(self.archive_symbols()-set(combined))
+        unresolved = [s for s in unknown if self.has_archive_activity(s, start, self.end)]
+        if unresolved:
+            raise ValueError('期内归档合约元数据缺失: '+', '.join(unresolved))
+        current_records = eligible_metadata(current['symbols'])
+        self.pending_symbols = {m['symbol'] for m in current_records if m['status'] == 'PENDING_TRADING'}
+        at = int(self.end.timestamp()*1000)
+        active = {m['symbol'] for m in current_records
+                  if m['status'] == 'TRADING' and m['onboardDate'] <= at < m['deliveryDate']}
+        if not active:
+            raise ValueError('当前可交易合约为空')
+        path = self.cache_dir/f'catalog_{as_of.date()}.json'
+        _save(path, dict(symbols=list(combined.values()),
+                         retrieved_at=pd.Timestamp.now(tz='UTC').isoformat()))
+        evidence = dict(method='effective-dated reconstruction; current exchangeInfo + saved catalogs + official archive audit',
+                        limitation='Not original point-in-time exchangeInfo vintages; archived prices/metadata may be revised.',
+                        prior_catalogs=snapshots, metadata_count=len(records),
+                        unknown_archive_symbols=unknown, unknown_active_symbols=unresolved)
+        return records, active, evidence
+
+    def fetch_daily(self, symbol, start, end):
+        params = dict(symbol=symbol, interval='1d', startTime=int(start.timestamp()*1000),
+                      endTime=int(end.timestamp()*1000)-1, limit=32)
+        try:
+            raw = self._json('/fapi/v1/klines', params)
+        except RuntimeError:
+            if symbol in self.pending_symbols:
+                # Quant's retry helper discards HTTP error bodies. Inspect this
+                # one known boundary without treating a transport failure as [].
+                time.sleep(1)
+                self.requests += 1
+                response = requests.get(self.scanner.CONFIG['base_url']+'/fapi/v1/klines',
+                                        params=params, timeout=30)
+                if response.status_code == 400 and response.json().get('code') == -1122:
+                    raise InactiveSymbolError(f'{symbol}: exchange -1122 Invalid symbol status')
+            raise
+        if not isinstance(raw, list):
+            raise ValueError('日线响应格式错误: '+symbol)
+        return self.scanner.klines_to_dataframe(raw) if raw else pd.DataFrame()
+
+    def fetch(self, symbol, limit, interval='4h'):
+        # Fixed endpoint prevents reruns later today from displacing closed bars.
+        path = self.cache_dir/'prices'/str(self.as_of.date())/f'{symbol}_{interval}.json'
+        if path.exists():
+            raw = json.loads(path.read_text())
+        else:
+            raw = self._json('/fapi/v1/klines', dict(symbol=symbol, interval=interval, limit=limit,
+                                                   endTime=int(self.end.timestamp()*1000)-1))
+            if not isinstance(raw, list) or not raw:
+                raise ValueError('价格数据缺失: '+symbol)
+            _save(path, raw)
+        if not isinstance(raw, list) or not raw:
+            raise ValueError('价格缓存无效: '+symbol)
+        return self.scanner.klines_to_dataframe(raw)

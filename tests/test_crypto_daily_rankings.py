@@ -1,3 +1,4 @@
+"""Historical dual-ranking helpers; live trend entry has separate regression tests."""
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -289,7 +290,7 @@ def test_run_sends_three_messages_or_none(monkeypatch,tmp_path,dry_run):
     monkeypatch.setitem(sys.modules,'binance_pmarp_scanner',scanner)
     monkeypatch.setattr(daily,'scan',lambda *args:data)
     monkeypatch.setattr(daily,'add_momentum',lambda *args:data)
-    daily.run(tmp_path,tmp_path,dry_run=dry_run)
+    daily.run_legacy(tmp_path,tmp_path,dry_run=dry_run)
     assert len(sent)==(0 if dry_run else 3)
     if not dry_run:
         assert '双榜' in sent[0] and '14天' not in sent[0]
@@ -308,7 +309,7 @@ def test_run_missing_seven_day_fails(monkeypatch,tmp_path):
     monkeypatch.setattr(daily,'scan',lambda *args:data)
     monkeypatch.setattr(daily,'add_momentum',lambda *args:data)
     with pytest.raises(RuntimeError,match='7天报告缺失'):
-        daily.run(tmp_path,tmp_path)
+        daily.run_legacy(tmp_path,tmp_path)
 
 
 def test_send_failure_propagates(monkeypatch,tmp_path):
@@ -317,7 +318,7 @@ def test_send_failure_propagates(monkeypatch,tmp_path):
     monkeypatch.setattr(daily,'scan',lambda *args:data)
     monkeypatch.setattr(daily,'add_momentum',lambda *args:data)
     with pytest.raises(RuntimeError,match='发送失败'):
-        daily.run(tmp_path,tmp_path)
+        daily.run_legacy(tmp_path,tmp_path)
 
 
 def test_second_send_failure_propagates(monkeypatch,tmp_path):
@@ -329,7 +330,7 @@ def test_second_send_failure_propagates(monkeypatch,tmp_path):
     monkeypatch.setattr(daily,'scan',lambda *args:data)
     monkeypatch.setattr(daily,'add_momentum',lambda *args:data)
     with pytest.raises(RuntimeError,match='发送失败'):
-        daily.run(tmp_path,tmp_path)
+        daily.run_legacy(tmp_path,tmp_path)
     assert len(calls)==2
 
 
@@ -478,7 +479,7 @@ def test_missing_fourteen_day_fails(monkeypatch, tmp_path):
     monkeypatch.setattr(daily, 'scan', lambda *args: data)
     monkeypatch.setattr(daily, 'add_momentum', lambda *args: data)
     with pytest.raises(RuntimeError, match='14天报告缺失'):
-        daily.run(tmp_path, tmp_path)
+        daily.run_legacy(tmp_path, tmp_path)
 
 
 def test_zero_valid_fourteen_day_rs_fails(monkeypatch, tmp_path):
@@ -490,7 +491,7 @@ def test_zero_valid_fourteen_day_rs_fails(monkeypatch, tmp_path):
     monkeypatch.setattr(daily, 'scan', lambda *args: data)
     monkeypatch.setattr(daily, 'add_momentum', lambda *args: data)
     with pytest.raises(RuntimeError, match='RS全部不可用'):
-        daily.run(tmp_path, tmp_path)
+        daily.run_legacy(tmp_path, tmp_path)
 
 
 def test_outputs_persisted_before_first_send(monkeypatch, tmp_path):
@@ -500,7 +501,7 @@ def test_outputs_persisted_before_first_send(monkeypatch, tmp_path):
     monkeypatch.setattr(daily, 'scan', lambda *args: data)
     monkeypatch.setattr(daily, 'add_momentum', lambda *args: data)
     with pytest.raises(RuntimeError, match='发送失败'):
-        daily.run(tmp_path, tmp_path)
+        daily.run_legacy(tmp_path, tmp_path)
     assert (tmp_path / 'crypto_dual_top10_2026-09-06.json').exists()
     assert (tmp_path / 'crypto_dual_top10_2026-09-06.md').exists()
     assert (tmp_path / 'crypto_dual_top10_7d_2026-09-06.md').exists()
@@ -517,5 +518,5 @@ def test_third_send_failure_propagates(monkeypatch, tmp_path):
     monkeypatch.setattr(daily, 'scan', lambda *args: data)
     monkeypatch.setattr(daily, 'add_momentum', lambda *args: data)
     with pytest.raises(RuntimeError, match='发送失败'):
-        daily.run(tmp_path, tmp_path)
+        daily.run_legacy(tmp_path, tmp_path)
     assert len(calls) == 3
