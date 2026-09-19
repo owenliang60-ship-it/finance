@@ -212,7 +212,7 @@ python -m scripts.query_basket_ttm_pe --basket SOXX --from-date 2021-09-20
 | 08:00 | Tue-Sat | 晨报生成与推送，HTML 附件投递（渲染/发送失败回退 PDF）（`run_market_report_pipeline.sh`） |
 | 08:30 | Sat | 股票池刷新（`run_update_data.sh --pool`） |
 | 09:00 | Sat | 广扫池 + 扩展池 + concept registry 周频刷新（`broad_universe_cron_wrapper.sh weekly_refresh`：broad 前 5 步；extended 第 6 步对共享 `market_db_writer` 有界等锁后提交 membership/SM/profile/coverage；**concept_weekly_sync 第 7 步**不被 step 6 失败连坐，但写库前独立非阻塞取同锁，失败只 WARN；registry 做确定性增量落库 / LLM review 队列 / CSV⇔DB lockstep 自检 / Telegram 摘要；extended 有 MIN_COUNT_FLOOR=800 保护 cache） |
-| 10:00 | Sat | 基本面 + metrics → 精选Premium池原子发布（`run_weekly_fundamentals.sh` 串行调用 `run_update_data.sh --fundamental` → `prepare_premium_fundamentals.py --apply --no-lock` → `build_premium_pool.py`；中间一步仅补 Extended 中从未采集或 income/metrics 日期不一致的对象，复用采集/计算内核，最多 50 只，默认只读，95% 门槛不变，全程由外层 `market_db_writer` 资源锁保护；任一步失败整项非零，旧Premium快照保留） |
+| 14:00 | Sat | 基本面 Core 更新 → `check_fundamental_quality.py --repair --no-lock --max-targets 200` → Premium 原有95%门控与原子发布。全程继承外层 `market_db_writer` 锁；检查三表/指标/采集状态/财季与源核验时效/缓存财报线索，异常优先并用剩余额度滚动核验；报告保留修前/修后与未解决项。数据质量 rc=1 仍允许原有Premium门控决定发布，最终任务保持非零告警；锁/执行错误则停止。 |
 | 10:45 | Sat | 前瞻预期更新（`run_forward_data.sh`：先 yfinance 旧线 `--forward-estimates --scope=all` ~15-22 min，再 FMP forward 新线 `update_fmp_forward.py --mode weekly`；2026-07-18 natural run：1,071 targets，FMP 79.6 min、总计 101.2 min，符合 95-105 min 实测 SLO；日志 `cron_forward_est.log`）。原 10:15 与 fundamental 并发写 market.db（2026-07-11 实测 fundamental 跑到 10:26）→ 移 10:45 留 19 min 缓冲；不并发保证来自共享 writer lock |
 | 22:00/23:00 SGT | Mon-Fri | Portfolio Intelligence 推送（夏令时切换） |
 

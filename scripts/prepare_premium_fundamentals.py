@@ -69,6 +69,19 @@ def repair_inputs(store: MarketStore, *, client, max_targets: int) -> dict:
     return {"targets": targets, "metrics": metrics, "failed": sorted(set(failed))}
 
 
+
+def inherited_writer_lock():
+    """Verify and reuse cron_wrapper's shared lock without releasing its fd."""
+    if os.environ.get("FINANCE_CRON_RESOURCE_KEY") != "market_db_writer":
+        raise ValueError("--no-lock requires cron_wrapper's market_db_writer lock")
+    inherited = os.fstat(8)
+    expected = LOCK_PATH.stat()
+    if (inherited.st_dev, inherited.st_ino) != (expected.st_dev, expected.st_ino):
+        raise ValueError("fd 8 is not the market_db_writer lock")
+    fcntl.flock(8, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    return NullLock()
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
@@ -81,17 +94,10 @@ def main(argv=None) -> int:
         parser.error("--max-targets must be positive")
     lock = None
     if args.apply:
-        if args.no_lock:
-            if os.environ.get("FINANCE_CRON_RESOURCE_KEY") != "market_db_writer":
-                parser.error("--no-lock requires cron_wrapper's market_db_writer lock")
-            inherited = os.fstat(8)
-            expected = LOCK_PATH.stat()
-            if (inherited.st_dev, inherited.st_ino) != (expected.st_dev, expected.st_ino):
-                parser.error("fd 8 is not the market_db_writer lock")
-            fcntl.flock(8, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            lock = NullLock()
-        else:
-            lock = FileLock()
+        try:
+            lock = inherited_writer_lock() if args.no_lock else FileLock()
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
         if not lock.acquire():
             return 75
     try:
