@@ -37,7 +37,9 @@ def build_weekly_artifact(store: MarketStore) -> dict:
         beta_observations=betas,
     )
     if not result.get("available"):
-        raise RuntimeError("Premium Pool unavailable: {}".format(result.get("reason")))
+        raise RuntimeError("Premium Pool unavailable: {}; coverage={}".format(
+            result.get("reason"), json.dumps(result.get("coverage"), sort_keys=True),
+        ))
     return build_artifact(result=result, as_of=as_of, universe_symbols=symbols)
 
 

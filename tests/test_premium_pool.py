@@ -71,6 +71,31 @@ def test_membership_coverage_below_95_percent_fails_closed():
     assert result["members"] == []
 
 
+def test_weekly_builder_error_includes_actual_coverage(monkeypatch):
+    import scripts.build_premium_pool as module
+
+    class Connection:
+        def execute(self, sql):
+            return self
+        def fetchone(self):
+            return ["2026-09-18"]
+
+    class BuildStore(Store):
+        def _get_conn(self):
+            return Connection()
+
+    store = BuildStore(["GOOD", "BAD"])
+    store.metrics["BAD"] = [{"date": "2026-03-31"}]
+    monkeypatch.setattr(module, "current_base_universe", lambda store: ["GOOD", "BAD"])
+    monkeypatch.setattr(module, "load_price_frames_from_market_db", lambda *a, **k: {"GOOD": None, "BAD": None})
+    monkeypatch.setattr(module, "_compute_signal_betas", lambda *a: {"GOOD": 1.5, "BAD": 1.5})
+    with pytest.raises(RuntimeError) as error:
+        module.build_weekly_artifact(store)
+    message = str(error.value)
+    assert "fundamental_coverage_below_threshold" in message
+    assert '"fundamental_ready": {"covered": 1, "ratio": 0.5, "total": 2}' in message
+
+
 def valid_artifact(members=None, generated_at="2026-09-06T02:00:00Z"):
     result = {
         "available": True,
