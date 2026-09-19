@@ -36,3 +36,9 @@ A separate cloud worktree ran the 202 targeted tests successfully before restora
 ## Rollback
 
 Code can be reverted as one isolated fix. Keep the database backup for audit; do not restore the entire old database over newer cron writes. If data reversal is needed, archive current affected rows first and perform a target-scoped restore under the writer lock. The old Premium snapshot is archived as `premium.before.json`; it is historical and should not be relabeled as current.
+
+## Deployment completion
+
+Code commit **b6a827f** was fast-forwarded to local `main`, pushed to GitHub and pulled by the cloud checkout. Production compilation and shell syntax passed; read-only preparer reported `{}`. Final targeted run: **203 passed in 3.99s**.
+
+Production `--apply` while the forward job held the lock returned **75**, leaving the published Premium file byte-identical. A separate temporary-database smoke test using a real inherited fd 8 passed and confirmed the parent shell retained its lock. The normal forward cron started at **10:45:01 CST** and was not skipped. Premium loader validation returned available=true, as_of=2026-09-18, 56 members. The next natural weekly run remains the routine operational observation; no extra automation was created.
