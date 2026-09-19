@@ -155,7 +155,7 @@ def test_telegram_legacy_markdown_symbol_is_escaped():
 
 def test_daily_entry_failure_is_visible(monkeypatch):
     from scripts.quant import daily_scan_all as daily
-    assert daily.SCANNERS[-1] == ('Crypto 双榜', 'binance_beta_scanner')
+    assert daily.SCANNERS[-1] == ('Crypto 趋势榜', 'binance_beta_scanner')
     def fail():
         raise RuntimeError('beta unavailable')
     monkeypatch.setitem(sys.modules, 'fake_beta_failure', SimpleNamespace(main=fail))
