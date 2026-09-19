@@ -47,3 +47,11 @@ DSH used the configured `deepseek-official/deepseek-flash` route (DeepSeek-V41-F
 - Final relevant suite: **277 passed in5.55s**. Full suite: **3650 passed,12 failed,4 skipped** in271.90s; failing node IDs exactly equal the12 failures already reproduced on baseline. The subsequently added concurrent-snapshot regression is included in the277 targeted tests.
 - Cloud isolated cached-source replay selected exactly TXT/VG/AZO (cap3), performed15 fake-source calls and zero external API calls. AZO request succeeded but remained stale; all three remained unresolved and none were counted truly_resolved. Failure/empty data remained explicit. The production DB was never opened for writes during this replay.
 - Main-thread code review of implementation/direct callers/tests completed, including false-clean timestamp/state cases, cooldown bypass, atomic reporting, bounded calls, writer-lock ownership and the independent Premium gate. No unresolved implementation findings at rollout.
+
+## Production rollout
+
+- Code `ebc7cc3` fast-forwarded to local/main, pushed and pulled on cloud; production Python3.10 compilation and shell syntax passed.
+- Existing `finance_fundamental` crontab entry changed from `0 10 * * 6` to `0 14 * * 6` (Asia/Shanghai). Exactly one new-time entry, no old-time duplicate, all unrelated active cron lines byte-equivalent. Backup/proposed crontab: `data/quality-deployment/20260919T031734Z/` on cloud.
+- Production read-only report `data/quality/deploy-readonly-20260919.json` again showed919 denominator,18 due repair targets,737 periodic candidates and883 fundamental-ready names. This is an actual FAIL assessment, not a claim those18 were repaired.
+- A production repair attempt while the existing forward writer held the lock returned75 before any database mutation. No live source calls were made for acceptance.
+- First complete automatic200-target run is scheduled for today2026-09-19 at14:00; natural-run completion is not yet verified. No extra monitor/automation was created.
