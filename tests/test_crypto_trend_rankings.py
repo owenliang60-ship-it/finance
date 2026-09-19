@@ -27,14 +27,42 @@ def prices(slope=.01):
     return pd.Series(100*np.exp(slope*np.arange(181)), index=dates)
 
 
-def test_daily_intersections_are_not_sum_volume_or_current_ranking():
+def test_majority_days_allows_an_occasional_day_outside_top100():
     data = frames()
     # B has one day outside Top2, 10 days ago, and qualifies again recently.
     data['BUSDT'].loc[19, 'quote_volume'] = 50
     rankings = trend.daily_volume_rankings(data, [meta(s) for s in data], ASOF, top_n=2)
     pools = trend.build_pools(rankings, ASOF, set(data))
-    assert pools == {'7d':['AUSDT','BUSDT'], '14d':['AUSDT'], '30d':['AUSDT']}
+    assert pools == {'7d':['AUSDT','BUSDT'], '14d':['AUSDT','BUSDT'], '30d':['AUSDT','BUSDT']}
     assert len(rankings) == 30
+
+
+@pytest.mark.parametrize('days,minimum',[(7,4),(14,8),(30,16)])
+def test_strict_majority_boundary_uses_full_window_denominator(days,minimum):
+    data={}
+    for i,day in enumerate(pd.date_range(end=ASOF,periods=days)):
+        symbols=['ALWAYSUSDT','PASSUSDT' if i<minimum else 'LATEUSDT',
+                 'FAILUSDT' if i<minimum-1 else 'RESTUSDT']
+        data[str(day.date())]=[dict(symbol=s,rank=j) for j,s in enumerate(symbols,1)]
+    pool=trend.build_pools(data,ASOF,{'ALWAYSUSDT','PASSUSDT','FAILUSDT'},periods=(days,))[f'{days}d']
+    assert pool==['ALWAYSUSDT','PASSUSDT']
+
+
+def test_majority_pools_need_not_be_nested_or_have_at_most_top_n_members():
+    ranks={}
+    for i,day in enumerate(pd.date_range(end=ASOF,periods=30)):
+        # Long was liquid early but absent recently; Short only recently.
+        symbols=['LONGUSDT'] if i<16 else ['OTHERUSDT']
+        if i>=26:symbols=['SHORTUSDT']
+        ranks[str(day.date())]=[dict(symbol=s,rank=1) for s in symbols]
+    pools=trend.build_pools(ranks,ASOF,{'LONGUSDT','SHORTUSDT','OTHERUSDT'})
+    assert pools['7d']==['SHORTUSDT']
+    assert pools['30d']==['LONGUSDT']
+    # Top2 each day, but three symbols can each appear on 4 of the 7 days.
+    seq=[['A','B'],['A','B'],['A','C'],['A','C'],['B','C'],['B','C'],['D','E']]
+    seven={str(d.date()):[dict(symbol=s,rank=j) for j,s in enumerate(names,1)]
+           for d,names in zip(pd.date_range(end=ASOF,periods=7),seq)}
+    assert trend.build_pools(seven,ASOF,set('ABCDE'),periods=(7,))['7d']==['A','B','C']
 
 
 def test_partial_delisting_day_still_competes():
@@ -151,14 +179,18 @@ class FakeMarket:
         return pd.DataFrame({'timestamp':prices().index,'close':prices().values})
 
 
-def test_build_report_reuses_cache_and_fetches_nested_pool_union_once():
+def test_build_report_reuses_cache_and_fetches_pool_union_once():
     market = FakeMarket()
     before = market.frames['AUSDT'].copy()
     r = trend.build_report(market,ASOF,top_n=2)
     assert market.history_calls == ['AUSDT','BUSDT']
     pd.testing.assert_frame_equal(before,market.frames['AUSDT'])
-    assert r['top_n']==2 and r['schema_version']==1
+    assert r['top_n']==2 and r['schema_version']==2
     assert r['periods']['30d']['pool_size']==2
+    assert [r['periods'][f'{h}d']['min_top100_days'] for h in (7,14,30)]==[4,8,16]
+    assert r['periods']['7d']['top100_day_counts']=={'AUSDT':7,'BUSDT':7}
+    assert '至少4/7天' in trend.message(r,7)
+    assert '交集' not in trend.message(r,7)
     assert r['weights']==trend.WEIGHTS
     json.dumps(r, allow_nan=False)
 

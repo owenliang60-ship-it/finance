@@ -6,7 +6,7 @@ Boss approved DSH implementation on 2026-09-19 after choosing separate 7/14/30-d
 
 - Binance COIN USDT perpetual contracts; quote turnover in USDT, not token units or rolling ticker/24hr volume.
 - As of yesterday's complete UTC day, construct a top-100 turnover ranking for EACH of the last 30 days, using contracts eligible on that date, including subsequently delisted contracts.
-- Pool H = intersection of all H daily top-100 sets, H in 7,14,30. No padding. Today's non-tradable contracts cannot be trading candidates, but must still compete in their historical daily volume rankings.
+- UPDATED by Boss on 2026-09-19: Pool H requires strictly more than half of ALL H days in daily Top100: 4/7, 8/14, 16/30. Not at least half; not a denominator shortened to observed/listed days. Pools are not necessarily nested and may exceed 100 members. Today's non-tradable contracts cannot be trading candidates, but must still compete in their historical daily volume rankings. This supersedes the original every-day intersection rule.
 - For each pool, compute from complete 4h closes: H*6 returns and H*6+1 closes. Same UTC endpoint for prices and volume.
 - Raw metrics: period simple return; absolute net log return / sum absolute log returns (ER); OLS log-close vs bar-number slope and R²; current drawdown from highest WINDOW CLOSE (includes initial close).
 - Valid flat paths have ER=0, R²=0, slope=0; no division by zero. Invalid prices or missing/duplicate bars are unavailable, never filled.
@@ -23,7 +23,7 @@ flowchart LR
   M[Exchange metadata + persisted catalog + archive audit] --> D[Complete daily turnover coverage]
   C[Existing read-only Quant cache and API] --> D
   D --> R[30 daily Top100 rankings]
-  R --> P[7 / 14 / 30 day intersections]
+  R --> P[7 / 14 / 30 day strict-majority pools]
   C --> H[Validated closed 4h prices]
   P --> S[Four metrics and pool percentiles]
   H --> S
@@ -64,4 +64,4 @@ Greatest risk is a missing contract/day silently promoting another coin into Top
 - [x] Independent 3000 daily rank rows/141 coin-windows and main-thread /cr; 3693 passed/12 baseline failures/4 skipped in full suite. Six further tests pass in final relevant suite.
 - [x] Audit, session digest, ongoing state, explicit-file commit. Preserve branch; merge/push/deployment are outside this turn's implementation authorization.
 
-API budget: reuse all cached daily histories; serial backfill only unresolved candidate histories. At most ~100 4h candidate histories per run because pools are nested. Archive/catalog discovery is read-only and cached with an explicit date; never count an API failure as empty evidence.
+API budget: reuse all cached daily histories; serial backfill only unresolved candidate histories. Fetch 4h history once per symbol in the UNION of three pools, not only the 7-day pool: strict-majority pools need not be nested and may exceed 100 members. Count that union before estimating requests. Archive/catalog discovery is read-only and cached with an explicit date; never count an API failure as empty evidence. Schema v2 records each window's required Top100 day count and every member's observed qualifying count. Four-metric weights and full-window price requirements remain unchanged.

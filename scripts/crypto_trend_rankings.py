@@ -1,4 +1,5 @@
-"""Descriptive 7/14/30-day trend rankings within persistent daily Top100 pools."""
+"""Trend rankings for coins in daily turnover Top100 on a strict majority of days."""
+from collections import Counter
 import importlib
 import json
 import math
@@ -74,7 +75,7 @@ def build_pools(daily_rankings, as_of, active_symbols, periods=PERIODS):
     as_of = utc_day(as_of)
     pools = {}
     for days in periods:
-        sets = []
+        counts = Counter()
         for day in pd.date_range(end=as_of, periods=days, freq='D'):
             rows = daily_rankings.get(str(day.date()))
             if not isinstance(rows, list) or not rows:
@@ -84,8 +85,9 @@ def build_pools(daily_rankings, as_of, active_symbols, periods=PERIODS):
                     or len(set(symbols)) != len(symbols)
                     or [r.get('rank') for r in rows] != list(range(1, len(rows)+1))):
                 raise ValueError(f'{day.date()}排名重复或无效')
-            sets.append(set(symbols))
-        pools[f'{days}d'] = sorted(set.intersection(*sets) & set(active_symbols))
+            counts.update(symbols)
+        pools[f'{days}d'] = sorted(symbol for symbol, count in counts.items()
+                                  if count >= days//2+1 and symbol in active_symbols)
     return pools
 
 
@@ -168,13 +170,19 @@ def build_report(market, as_of, top_n=100):
             price_failures[symbol] = str(exc)
     periods = {f'{days}d': rank_period(pools[f'{days}d'], closes, as_of, days) for days in PERIODS}
     for period in periods.values():
+        days = period['period_days']
+        counts = Counter(row['symbol']
+                         for date in pd.date_range(end=as_of, periods=days, freq='D')
+                         for row in daily[str(date.date())])
+        period['min_top100_days'] = days//2+1
+        period['top100_day_counts'] = {symbol: counts[symbol] for symbol in period['pool']}
         for row in period['rows']:
             if row['symbol'] in price_failures:
                 row['reason'] = price_failures[row['symbol']]
-    return dict(schema_version=1, as_of=str(as_of.date()), top_n=top_n,
+    return dict(schema_version=2, as_of=str(as_of.date()), top_n=top_n,
                 weights=WEIGHTS.copy(), percentile_method='100 * count(values <= current) / valid_pool_count; drawdown reversed',
                 direction_gate='return > 0 and log_price_slope > 0; applied AFTER pool percentiles',
-                pool_method='intersection of daily UTC quote-volume TopN over each horizon; currently tradable candidates',
+                pool_method='daily UTC quote-volume TopN on strictly more than half of ALL horizon days; currently tradable candidates',
                 universe_evidence=evidence, confirmed_unopened=unopened,
                 daily_top100=daily, periods=periods, kline_requests=market.requests)
 
@@ -182,7 +190,7 @@ def build_report(market, as_of, top_n=100):
 def message(report, days):
     period = report['periods'][f'{days}d']
     lines = [f"*Crypto {days}天趋势榜 | {report['as_of']} UTC*",
-             f"窗口内每日USDT成交额前{report['top_n']}的交集 · 4h完整收盘",
+             f"窗口内至少{period['min_top100_days']}/{days}天USDT成交额前{report['top_n']} · 4h完整收盘",
              f"池 {period['pool_size']} · 有效 {period['valid_count']} · 上涨 {period['uptrend_count']}",
              '权重：涨幅40% / ER20% / R²20% / 回撤20%',
              '分位在本窗口有效池内计算；上涨需涨幅与回归斜率均为正。', '']
