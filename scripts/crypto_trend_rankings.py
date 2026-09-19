@@ -107,10 +107,14 @@ def rank_period(pool, closes_by_symbol, as_of, days):
         raise ValueError(f'{days}天非空池全部价格不可用，停止发布')
     for row in valid:
         row['percentiles'] = {}
+        counts = {}
         for key in WEIGHTS:
             sign = -1 if key == 'drawdown' else 1
-            row['percentiles'][key] = 100*sum(sign*r[key] <= sign*row[key] for r in valid)/len(valid)
-        row['score'] = sum(row['percentiles'][key]*weight for key, weight in WEIGHTS.items())
+            counts[key] = sum(sign*r[key] <= sign*row[key] for r in valid)
+            row['percentiles'][key] = 100*counts[key]/len(valid)
+        # The 40/20/20/20 integer point numerator preserves exact ties;
+        # separately summing rounded percentile floats can invent 1e-14 gaps.
+        row['score'] = sum(counts[key]*(weight*100) for key, weight in WEIGHTS.items())/len(valid)
     ranked = sorted((row for row in valid if row['eligible']), key=lambda r: (-r['score'], r['symbol']))
     for i, row in enumerate(ranked, 1):
         row['rank'] = i

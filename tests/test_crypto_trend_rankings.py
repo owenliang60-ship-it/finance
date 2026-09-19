@@ -237,3 +237,15 @@ def test_invalid_symbol_status_needs_pending_and_no_archive(pending,has_history,
         assert report['periods']['7d']['pool']==['BUSDT','CUSDT']
     else:
         with pytest.raises(ValueError,match='历史成交额覆盖不完整'):trend.build_report(market,ASOF,top_n=2)
+
+
+def test_mathematical_score_ties_use_symbol_not_floating_sum_noise(monkeypatch):
+    values={
+        'AUSDT':{'return':.01,'er':.1,'r_squared':.9,'drawdown':.01,'slope':.01},
+        'BUSDT':{'return':.02,'er':.2,'r_squared':.1,'drawdown':.02,'slope':.01},
+        'CUSDT':{'return':.03,'er':.3,'r_squared':.5,'drawdown':.03,'slope':.01},
+    }
+    monkeypatch.setattr(trend,'trend_metrics',lambda sample:values[sample.name])
+    report=trend.rank_period(list(values),{s:prices().rename(s) for s in values},ASOF,7)
+    assert [r['symbol'] for r in report['ranked']]==['CUSDT','AUSDT','BUSDT']
+    assert [r['score'] for r in report['ranked']]==[80.,60.,60.]
