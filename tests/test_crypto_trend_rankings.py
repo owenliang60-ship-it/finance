@@ -218,3 +218,22 @@ def test_later_send_failure_propagates_and_stops(monkeypatch,tmp_path,fail_at):
     monkeypatch.setattr(trend.importlib,'import_module',lambda name:SimpleNamespace(send_telegram_alert=send))
     with pytest.raises(RuntimeError,match='发送失败'):trend.run(tmp_path,tmp_path)
     assert len(sent)==fail_at
+
+
+@pytest.mark.parametrize('pending,has_history,passes',[(True,False,True),(True,True,False),(False,False,False)])
+def test_invalid_symbol_status_needs_pending_and_no_archive(pending,has_history,passes):
+    from scripts.crypto_trend_market import InactiveSymbolError
+    market=FakeMarket()
+    records=[meta(s) for s in market.frames]
+    records[0]['status']='PENDING_TRADING' if pending else 'TRADING'
+    market.frames['AUSDT']=pd.DataFrame()
+    market.catalog=lambda asof:(records,{'BUSDT','CUSDT'}, {'method':'fixture'})
+    def invalid(*args):raise InactiveSymbolError('explicit -1122')
+    market.fetch_daily=invalid
+    market.has_archive_activity=lambda *args:has_history
+    if passes:
+        report=trend.build_report(market,ASOF,top_n=2)
+        assert report['confirmed_unopened']==['AUSDT']
+        assert report['periods']['7d']['pool']==['BUSDT','CUSDT']
+    else:
+        with pytest.raises(ValueError,match='历史成交额覆盖不完整'):trend.build_report(market,ASOF,top_n=2)

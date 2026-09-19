@@ -15,6 +15,10 @@ BUCKET = 'https://s3-ap-northeast-1.amazonaws.com/data.binance.vision'
 NS = {'s': 'http://s3.amazonaws.com/doc/2006-03-01/'}
 
 
+class InactiveSymbolError(RuntimeError):
+    """Explicit exchange -1122 response; not proof of no historical trading."""
+
+
 def eligible_metadata(metadata):
     if not isinstance(metadata, list):
         raise ValueError('合约元数据不是列表')
@@ -60,6 +64,7 @@ class TrendMarket(MarketData):
         self.as_of = pd.Timestamp(as_of)
         self.end = self.as_of+pd.Timedelta(days=1)
         self.archive_requests = 0
+        self.pending_symbols = set()
 
     def _json(self, endpoint, params=None):
         time.sleep(1)
@@ -150,6 +155,7 @@ class TrendMarket(MarketData):
         if unresolved:
             raise ValueError('期内归档合约元数据缺失: '+', '.join(unresolved))
         current_records = eligible_metadata(current['symbols'])
+        self.pending_symbols = {m['symbol'] for m in current_records if m['status'] == 'PENDING_TRADING'}
         at = int(self.end.timestamp()*1000)
         active = {m['symbol'] for m in current_records
                   if m['status'] == 'TRADING' and m['onboardDate'] <= at < m['deliveryDate']}
@@ -167,7 +173,19 @@ class TrendMarket(MarketData):
     def fetch_daily(self, symbol, start, end):
         params = dict(symbol=symbol, interval='1d', startTime=int(start.timestamp()*1000),
                       endTime=int(end.timestamp()*1000)-1, limit=32)
-        raw = self._json('/fapi/v1/klines', params)
+        try:
+            raw = self._json('/fapi/v1/klines', params)
+        except RuntimeError:
+            if symbol in self.pending_symbols:
+                # Quant's retry helper discards HTTP error bodies. Inspect this
+                # one known boundary without treating a transport failure as [].
+                time.sleep(1)
+                self.requests += 1
+                response = requests.get(self.scanner.CONFIG['base_url']+'/fapi/v1/klines',
+                                        params=params, timeout=30)
+                if response.status_code == 400 and response.json().get('code') == -1122:
+                    raise InactiveSymbolError(f'{symbol}: exchange -1122 Invalid symbol status')
+            raise
         if not isinstance(raw, list):
             raise ValueError('日线响应格式错误: '+symbol)
         return self.scanner.klines_to_dataframe(raw) if raw else pd.DataFrame()

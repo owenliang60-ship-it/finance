@@ -116,3 +116,16 @@ def test_missing_classification_is_unknown_not_out_of_universe(field):
     record=metadata()
     record.pop(field)
     with pytest.raises(ValueError,match='分类'): eligible_metadata([record])
+
+
+def test_explicit_pending_status_error_is_distinct_from_transport_failure(tmp_path,monkeypatch):
+    from scripts.crypto_trend_market import InactiveSymbolError
+    scanner=Scanner();scanner.reply=None
+    market=TrendMarket(scanner,tmp_path,ASOF)
+    market.pending_symbols={'AUSDT'}
+    response=SimpleNamespace(status_code=400,json=lambda:{'code':-1122,'msg':'Invalid symbol status.'})
+    monkeypatch.setattr('scripts.crypto_trend_market.requests.get',lambda *a,**k:response)
+    with pytest.raises(InactiveSymbolError):market.fetch_daily('AUSDT',ASOF,ASOF+pd.Timedelta(days=1))
+    response.json=lambda:{'code':-1000,'msg':'Unknown error'}
+    with pytest.raises(RuntimeError) as error:market.fetch_daily('AUSDT',ASOF,ASOF+pd.Timedelta(days=1))
+    assert not isinstance(error.value,InactiveSymbolError)

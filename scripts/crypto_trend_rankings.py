@@ -12,7 +12,7 @@ import pandas as pd
 from scripts.compare_crypto_relative_momentum import window
 from scripts.crypto_beta_scanner import daily_frame
 from scripts.crypto_trend_metrics import trend_metrics
-from scripts.crypto_trend_market import TrendMarket, eligible_metadata, overlaps
+from scripts.crypto_trend_market import TrendMarket, InactiveSymbolError, eligible_metadata, overlaps
 
 PERIODS = (7, 14, 30)
 WEIGHTS = {'return': .4, 'er': .2, 'r_squared': .2, 'drawdown': .2}
@@ -135,7 +135,14 @@ def build_report(market, as_of, top_n=100):
                 frame = market.cached(symbol)
                 volume_history(frame, meta, dates)
             except (ValueError, TypeError, KeyError, OSError, OverflowError):
-                frame = market.fetch_daily(symbol, dates[0], as_of+pd.Timedelta(days=1))
+                try:
+                    frame = market.fetch_daily(symbol, dates[0], as_of+pd.Timedelta(days=1))
+                except InactiveSymbolError:
+                    if (meta['status'] == 'PENDING_TRADING'
+                            and not market.has_archive_activity(symbol, dates[0], as_of+pd.Timedelta(days=1))):
+                        unopened.append(symbol)
+                        continue
+                    raise
                 if (frame.empty and meta['status'] == 'PENDING_TRADING'
                         and not market.has_archive_activity(symbol, dates[0], as_of+pd.Timedelta(days=1))):
                     unopened.append(symbol)
