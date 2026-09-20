@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+import requests
 
 from scripts.crypto_trend_market import TrendMarket, eligible_metadata
 
@@ -109,6 +110,72 @@ def test_archive_activity_date_boundaries(tmp_path,monkeypatch):
     monkeypatch.setattr(market,'archive_keys',lambda **kw:iter([prefix+'GONEUSDT-1d-2026-09-06.zip']))
     assert market.has_archive_activity('GONEUSDT',ASOF,ASOF+pd.Timedelta(days=1))
     assert not market.has_archive_activity('GONEUSDT',ASOF-pd.Timedelta(days=1),ASOF)
+
+
+def archive_response(status=200, text=None):
+    response = requests.Response()
+    response.status_code = status
+    response._content = (text or '<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'
+                         '<IsTruncated>false</IsTruncated><CommonPrefixes>'
+                         '<Prefix>data/futures/um/daily/klines/AUSDT/</Prefix>'
+                         '</CommonPrefixes></ListBucketResult>').encode()
+    return response
+
+
+@pytest.mark.parametrize('failure', [requests.ConnectionError('reset by peer'),
+                                    requests.Timeout('timeout'), 429, 500, 502, 503, 504])
+def test_archive_transient_failure_retries_same_page_and_caches_only_success(tmp_path, monkeypatch, caplog, failure):
+    market = TrendMarket(Scanner(), tmp_path, ASOF)
+    calls, sleeps = [], []
+    def get(url, **kwargs):
+        calls.append((url, kwargs))
+        if len(calls) == 1:
+            assert not list(tmp_path.rglob('*.xml'))
+            if isinstance(failure, Exception):
+                raise failure
+            return archive_response(failure)
+        return archive_response()
+    monkeypatch.setattr('scripts.crypto_trend_market.requests.get', get)
+    monkeypatch.setattr('scripts.crypto_trend_market.time.sleep', sleeps.append)
+    assert list(market.archive_keys(prefix='test/', marker='page2')) == ['data/futures/um/daily/klines/AUSDT/']
+    assert len(calls) == market.archive_requests == 2
+    assert calls[0] == calls[1]
+    assert 2 in sleeps
+    assert 'test/' in caplog.text and 'page2' in caplog.text and '1/3' in caplog.text
+    assert len(list(tmp_path.rglob('*.xml'))) == 1
+    list(market.archive_keys(prefix='test/', marker='page2'))
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize('failure', [requests.ConnectionError('reset'), requests.Timeout('timeout'), 503])
+def test_archive_retry_exhaustion_preserves_failure_and_writes_no_cache(tmp_path, monkeypatch, failure):
+    market = TrendMarket(Scanner(), tmp_path, ASOF)
+    calls = []
+    def get(*args, **kwargs):
+        calls.append(kwargs)
+        if isinstance(failure, Exception):
+            raise failure
+        return archive_response(failure)
+    monkeypatch.setattr('scripts.crypto_trend_market.requests.get', get)
+    with pytest.raises(RuntimeError, match='归档.*3次.*test/') as error:
+        list(market.archive_keys(prefix='test/'))
+    assert isinstance(error.value.__cause__, requests.RequestException)
+    assert len(calls) == market.archive_requests == 3
+    assert not list(tmp_path.rglob('*.xml'))
+
+
+@pytest.mark.parametrize('status', [400, 403, 404])
+def test_archive_permanent_http_failure_does_not_retry(tmp_path, monkeypatch, status):
+    market = TrendMarket(Scanner(), tmp_path, ASOF)
+    calls = []
+    def get(*args, **kwargs):
+        calls.append(kwargs)
+        return archive_response(status)
+    monkeypatch.setattr('scripts.crypto_trend_market.requests.get', get)
+    with pytest.raises(requests.HTTPError):
+        list(market.archive_keys(prefix='test/'))
+    assert len(calls) == market.archive_requests == 1
+    assert not list(tmp_path.rglob('*.xml'))
 
 
 @pytest.mark.parametrize('field',['quoteAsset','underlyingType','contractType'])

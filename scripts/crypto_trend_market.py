@@ -1,6 +1,7 @@
 """Read-only Quant adapter and evidence for historical turnover universes."""
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import time
@@ -13,6 +14,7 @@ from scripts.crypto_beta_scanner import MarketData
 
 BUCKET = 'https://s3-ap-northeast-1.amazonaws.com/data.binance.vision'
 NS = {'s': 'http://s3.amazonaws.com/doc/2006-03-01/'}
+logger = logging.getLogger(__name__)
 
 
 class InactiveSymbolError(RuntimeError):
@@ -86,10 +88,25 @@ class TrendMarket(MarketData):
                 raw = path.read_text()
             else:
                 time.sleep(1)
-                self.archive_requests += 1
-                response = requests.get(BUCKET, params=params, timeout=30)
-                response.raise_for_status()
-                raw = response.text
+                for attempt in range(1, 4):
+                    self.archive_requests += 1
+                    try:
+                        response = requests.get(BUCKET, params=params, timeout=30)
+                        response.raise_for_status()
+                        raw = response.text
+                        break
+                    except (requests.ConnectionError, requests.Timeout, requests.HTTPError) as exc:
+                        if (isinstance(exc, requests.HTTPError)
+                                and (exc.response is None or exc.response.status_code
+                                     not in (429, 500, 502, 503, 504))):
+                            raise
+                        logger.warning('Binance归档请求失败 %s/3 prefix=%s marker=%s: %s',
+                                       attempt, prefix, marker, exc)
+                        if attempt == 3:
+                            raise RuntimeError(
+                                f'Binance归档请求3次失败: prefix={prefix} marker={marker}'
+                            ) from exc
+                        time.sleep(attempt * 2)
             root = ET.fromstring(raw)
             truncated = root.findtext('s:IsTruncated', namespaces=NS)
             if truncated not in ('true','false'):
