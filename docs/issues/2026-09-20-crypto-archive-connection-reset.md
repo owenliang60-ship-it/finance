@@ -24,7 +24,20 @@ Permanent HTTP errors and malformed XML still fail. Cache only validated XML thr
 - Cloud full dry-run **PASS (exit 0)** under the existing Quant job lock, in `/tmp/finance-crypto-archive-retry-20260920`, using a copy of the dedicated trend cache and read-only shared Quant inputs. Telegram was replaced with a function that raises if called; **0 sends**. As-of 2026-09-19 means complete UTC data through 2026-09-20 08:00 China time.
 - Output verification: 30 daily Top100 lists / **3,000 rows**; three Top10 reports. Pools 7/14/30 = **90/85/81**, valid prices **90/84/79**. Existing unavailable rows remain explicit: PONSUSDT (14d), MARSCOINUSDT and 牛来USDT (30d). No missing-price substitution or universe padding. 127 exchange API helper calls; serial pacing retained.
 - Local dry-run evidence: `reports/crypto-trend-incident-20260920/` in the fix worktree (JSON, three Markdown reports, log and verification summary). Production source and cron were not changed, and today's production output files remain absent.
-- Production code and cron remain unchanged. Deployment and actual catch-up delivery are pending Boss approval.
+
+## Authorized deployment and recovery
+
+Boss approved merge, push, deployment and catch-up delivery on 2026-09-20. Fix **edb08e3** was fast-forwarded to main, pushed to origin and deployed while holding `/tmp/quant-cron-locks/quant_daily_scan.lock`. Existing local user edits were hash-verified unchanged. Production tests: **126 passed in 3.14s**; compile passed. Crontab and all three Quant entrypoint files were verified unchanged.
+
+The verified report artifacts were atomically published into the production `results/daily_rankings/` directory. Production rendering was checked byte-for-byte against the dry-run Markdown before delivery; an independent post-delivery hash comparison passed for all four JSON/Markdown files. No other scanner was rerun. The existing Telegram helper delivered in the requested order, with one HTTP attempt per message and durable receipts:
+
+| Report | Telegram message ID | Result |
+|---|---|---|
+| 30d | 1838 | API `ok=true`, confirmed |
+| 14d | 1839 | API `ok=true`, confirmed |
+| 7d | 1840 | API `ok=true`, confirmed |
+
+Backup and deployment evidence: `aliyun:/root/workspace/Quant/backups/crypto-archive-retry-20260920/` (previous source archive and head, cron comparison, entrypoint hashes, tests, delivery receipts, PASS marker). Local receipts are under `reports/crypto-trend-incident-20260920/deployment/` in the fix worktree. The original failed cron log remains historical evidence; recovery does not rewrite it. Next natural cron run remains to be observed; no automation was created.
 
 ## Lesson
 
