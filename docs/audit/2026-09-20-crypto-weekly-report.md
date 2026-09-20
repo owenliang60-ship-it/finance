@@ -13,3 +13,7 @@ Branch codex/crypto-weekly-report, baseline7bbdad6. Two DSH implementation sessi
 Production unchanged: no merge/push, no croninstall, noexisting dailyfiles modified. Remotevalidation isolated at /tmp/crypto-weekly-validation-20260920. Localprivatetaskbriefs, raw1winputs, referencecode, fulllogs in work/crypto-weekly/. No credentials copied or committed.
 
 Remaining: resolvehistoricalmetadata/terminalturnoverpolicy, implement/test permitted approach, complete real report andindependentpool/score audit, then rollout under sharedQuantlock withcrontab backup andverification.
+
+## 2026-09-20 addendum — current-universe scope (history above retained)
+
+Boss 明确「下架的就不需要了」: the weekly report is now current-tradable-only (`CurrentTrendMarket`/`current_catalog`), excluding delisted/SETTLING/PENDING/historical-only contracts before any history fetch. The historical AERGO/BDXN coverage gate above is superseded for the weekly report; the acceptance evidence remains dated history. Daily historical-universe behavior is unchanged. Live smoke and deployment remain NOT done.

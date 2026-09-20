@@ -5,12 +5,18 @@ Frozen behavior (Boss approved 2026-09-20):
 * One report per fully closed Binance native week.  The week boundary is
   Monday 00:00 UTC (08:00 Beijing); the report is derived from the most recent
   Monday 00:00 UTC ``<= now`` so a still-open partial week is never used.
-* Universe: Binance USDT-margined COIN PERPETUAL contracts; quote turnover in
-  USDT (never base units or rolling ticker volume).
+* Universe: current Binance USDT-margined COIN PERPETUAL contracts that are
+  ``status == TRADING`` with ``onboard <= report cutoff < delivery``.  Quote
+  turnover is in USDT (never base units or rolling ticker volume).
+* Delisted, SETTLING, PENDING and historical-only-absent contracts are
+  excluded from every weekly turnover ranking, indicator and trend pool.
+  This is an intentional current-universe historical replay
+  （当前可交易合约回看，已下架排除，非历史全市场快照）, not an original
+  all-market point-in-time snapshot.
 * The latest complete week's Top100 by USDT quote turnover is the selection
-  for RVOL and Fisher.  Every eligible historical competitor, including
-  delisted contracts, competes in the weekly rankings; only the trend
-  candidate pools require a currently-tradable contract.
+  for RVOL and Fisher, restricted to the current universe.  The 7/14/30 weeks
+  of historical weekly Top100 are retained but replayed over that same
+  current universe.
 * RVOL reuses :func:`src.indicators.rvol.calculate_rvol` with the previous 52
   complete weeks and population std (``ddof=0``).  A zero/undefined std is
   reported as unavailable rather than fabricated as a zero score.
@@ -42,8 +48,8 @@ import pandas as pd
 
 from scripts.compare_crypto_relative_momentum import window
 from scripts.crypto_beta_scanner import daily_frame
-from scripts.crypto_trend_market import (InactiveSymbolError, TrendMarket,
-                                         eligible_metadata, overlaps)
+from scripts.crypto_trend_market import (CurrentTrendMarket, eligible_metadata,
+                                         overlaps)
 from scripts.crypto_trend_metrics import trend_metrics
 from scripts.crypto_trend_rankings import (WEIGHTS, atomic_text, build_pools,
                                            score_valid_rows)
@@ -383,7 +389,11 @@ def build_report(market, cutoff, top_n=100):
     fetch_start = cutoff - pd.Timedelta(days=DAILY_HISTORY_DAYS)
 
     metadata, active, evidence = market.catalog(as_of)
-    records = eligible_metadata(metadata)
+    # Current-universe replay: exclude delisted/SETTLING/PENDING/historical-only
+    # contracts BEFORE any history fetch so an injected fixture catalog cannot
+    # leak a removed competitor into the rankings, indicators or trend pools.
+    records = [record for record in eligible_metadata(metadata)
+               if record['symbol'] in active]
     by_symbol = {record['symbol']: record for record in records}
 
     frames, unopened, failures = {}, [], []
@@ -395,19 +405,12 @@ def build_report(market, cutoff, top_n=100):
             frame = market.fetch_daily(symbol, fetch_start, cutoff, limit=DAILY_FETCH_LIMIT,
                                        required_history=DAILY_HISTORY_DAYS)
             if frame is None or frame.empty:
-                if (meta_record['status'] == 'PENDING_TRADING'
-                        and not market.has_archive_activity(symbol, report_start, cutoff)):
-                    unopened.append(symbol)
-                    continue
                 raise ValueError(f'{symbol} 日线数据为空')
             frames[symbol] = frame
-        except InactiveSymbolError:
-            if (meta_record['status'] == 'PENDING_TRADING'
-                    and not market.has_archive_activity(symbol, report_start, cutoff)):
-                unopened.append(symbol)
-                continue
-            failures.append(dict(symbol=symbol, reason='交易所 -1122 合约状态'))
         except Exception as exc:
+            # A currently-eligible contract with a real gap or API failure must
+            # still stop publication; excluding delisted is never a licence to
+            # skip a valid current contract.
             failures.append(dict(symbol=symbol, reason=str(exc)))
     if failures:
         raise ValueError('历史成交额覆盖不完整，停止发布: '
@@ -476,6 +479,9 @@ def build_report(market, cutoff, top_n=100):
                 beijing_close=cutoff.tz_convert('Asia/Shanghai').isoformat(),
                 top_n=top_n, weights=WEIGHTS.copy(),
                 rvol_lookback_weeks=RVOL_LOOKBACK, fisher_length=FISHER_LENGTH,
+                pool_method=('当前可交易合约回看：仅当前 TRADING COIN USDT 永续合约'
+                             '（onboard <= 截止 < delivery）参与 7/14/30 周历史周成交额前100与趋势池；'
+                             '已下架/SETTLING/PENDING/历史合约排除，非历史全市场快照。'),
                 universe_evidence=evidence, confirmed_unopened=unopened,
                 weekly_top100=rankings, latest_top100=rankings[latest_key],
                 rvol=rvol, fisher=fisher, trend={'periods': periods},
@@ -514,6 +520,7 @@ def build_messages(report):
 
     lines = [f'*Crypto 周报 · RVOL | {label}*',
              f"最新完整周 USDT 成交额前{report['top_n']} · 当前周 vs 前{RVOL_LOOKBACK}完整周（总体标准差）",
+             '当前可交易合约回看 · 已下架排除 · 非历史全市场快照',
              f"有效 {rvol['valid_count']}/{rvol['denominator']}"]
     for row in rvol['top20']:
         lines.append(f"{row['rank']}. *{symbol_label(row['symbol'])}* | {row['sigma']:+.2f}σ"
@@ -535,6 +542,7 @@ def build_messages(report):
              down_labels,
              '上穿Trigger：上周Fisher ≤ 上周Trigger，且本周Fisher > 本周Trigger',
              '下穿Trigger：上周Fisher ≥ 上周Trigger，且本周Fisher < 本周Trigger',
+             '当前可交易合约回看 · 已下架排除 · 非历史全市场快照',
              '未知历史不视为无交叉；仅统计最新完整周的新交叉。']
     messages.append('\n'.join(lines))
 
@@ -554,7 +562,7 @@ def build_messages(report):
         if period['valid_count'] < period['pool_size']:
             lines.append('⚠️ 部分成员日线历史不可用，评分基于有效成员，不补位。')
         lines += ['', '回撤=距窗口最高收盘价；分数仅代表本池相对位置。',
-                  '历史资格按现有上市/下架证据重建，非原始逐日快照。',
+                  '当前可交易合约回看，已下架排除，非历史全市场快照。',
                   '描述历史趋势，初始权重未经收益预测验证。']
         messages.append('\n'.join(lines))
     return messages
@@ -611,10 +619,10 @@ def run(scanner_dir, output_dir, dry_run=False, as_of=None, now=None, scanner=No
         scanner = importlib.import_module('binance_pmarp_scanner')
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    catalog_dirs = [output_dir.parent / 'daily_rankings' / 'trend_cache']
-    market = TrendMarket(scanner, output_dir / 'weekly_cache',
-                         cutoff - pd.Timedelta(days=1),
-                         history_days=RANK_HISTORY_DAYS, catalog_dirs=catalog_dirs)
+    # Current-universe replay: the weekly path neither reads daily catalogs nor
+    # audits the removed-contract archive.
+    market = CurrentTrendMarket(scanner, output_dir / 'weekly_cache',
+                                cutoff - pd.Timedelta(days=1))
     report = build_report(market, cutoff)
     report['generated_at'] = pd.Timestamp.now(tz='UTC').isoformat()
     chunks = []

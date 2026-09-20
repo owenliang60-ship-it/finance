@@ -211,6 +211,73 @@ def test_weekly_catalog_audits_removed_competitors_older_than_daily_horizon(tmp_
     assert start_seen == [ASOF-pd.Timedelta(days=209)]
 
 
+# ---------------------------------------------------------------------------
+# Current-only weekly catalog (delisted contracts excluded)
+# ---------------------------------------------------------------------------
+
+def current_metadata(symbol='AUSDT', status='TRADING',
+                     onboard=1500000000000, delivery=4133404800000):
+    return dict(symbol=symbol, quoteAsset='USDT', underlyingType='COIN',
+                contractType='PERPETUAL', status=status,
+                onboardDate=onboard, deliveryDate=delivery)
+
+
+class MultiScanner(Scanner):
+    def __init__(self, symbols):
+        super().__init__()
+        self.reply = {'symbols': list(symbols)}
+
+
+def test_current_catalog_is_current_trading_only_and_never_audits_archive(tmp_path, monkeypatch):
+    gone = current_metadata('GONEUSDT', status='SETTLING',
+                            delivery=int((ASOF-pd.Timedelta(days=1)).timestamp()*1000))
+    pend = current_metadata('PENDUSDT', status='PENDING_TRADING')
+    scanner = MultiScanner([current_metadata('AUSDT'), gone, pend])
+    # A saved historical snapshot must not resurrect a removed competitor.
+    (tmp_path/'catalog_2026-09-05.json').write_text(json.dumps({'symbols':[gone]}))
+    market = TrendMarket(scanner, tmp_path, ASOF, history_days=210, catalog_dirs=[tmp_path])
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('weekly current-only catalog must not audit the archive')
+
+    monkeypatch.setattr(market, 'archive_symbols', forbidden)
+    monkeypatch.setattr(market, 'has_archive_activity', forbidden)
+    records, active, evidence = market.current_catalog(ASOF)
+    assert {r['symbol'] for r in records} == {'AUSDT'}
+    assert active == {'AUSDT'}
+    assert len(scanner.calls) == 1                         # exchangeInfo fetched once
+    assert scanner.calls[0][0].endswith('/fapi/v1/exchangeInfo')
+    assert evidence['excluded_count'] == 2
+    assert set(evidence['excluded_symbols']) == {'GONEUSDT', 'PENDUSDT'}
+    assert 'current' in evidence['method'].lower()
+    assert (tmp_path/f'catalog_{ASOF.date()}.json').exists()
+
+
+def test_current_trend_market_catalog_dispatches_to_current_only(tmp_path, monkeypatch):
+    from scripts.crypto_trend_market import CurrentTrendMarket
+
+    market = CurrentTrendMarket(MultiScanner([current_metadata('AUSDT')]), tmp_path, ASOF)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('weekly catalog must not audit the archive')
+
+    monkeypatch.setattr(market, 'archive_symbols', forbidden)
+    monkeypatch.setattr(market, 'has_archive_activity', forbidden)
+    records, active, evidence = market.catalog(ASOF)
+    assert {r['symbol'] for r in records} == {'AUSDT'}
+    assert active == {'AUSDT'}
+    assert 'current' in evidence['method'].lower()
+
+
+def test_daily_default_catalog_still_audits_archive_gate(tmp_path, monkeypatch):
+    market = TrendMarket(Scanner(), tmp_path, ASOF)
+    calls = []
+    monkeypatch.setattr(market, 'archive_symbols', lambda: calls.append('archive') or {'AUSDT'})
+    records, active, evidence = market.catalog(ASOF)
+    assert calls == ['archive']
+    assert {r['symbol'] for r in records} == {'AUSDT'}
+
+
 def test_catalog_readonly_extra_directory_cannot_override_newer_lifecycle(tmp_path, monkeypatch):
     own, extra = tmp_path/'weekly', tmp_path/'daily'
     own.mkdir(); extra.mkdir()

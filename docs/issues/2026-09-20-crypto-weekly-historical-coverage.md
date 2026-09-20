@@ -18,3 +18,7 @@ Validation setup also requires the full backtest package: importing the existing
 Strict cloud smoke additionally flags BTCSTUSDT and SXPUSDT archive metadata; directory existence must not be treated as a live contract or sufficient lifecycle proof. No whitelist or guessed delisting timestamp was added.
 
 Both DSH runs hit the40-step limit despite writing tested code. Codex inspected actual files, completed docs, fixed catalog snapshot chronological merging and wrapper execute permission, and ran acceptance directly; harness status was not treated as success. Fullsuite12failureIDs exactly match the previous validated baseline. An interrupt during a slow curl callback produced a warning; the affected test_pipeline_scratchpad::test_collect_data_without_scratchpad was rerun separately:1passed in4.48s.
+
+## 2026-09-20 — user decision supersedes the weekly gate (history retained)
+
+Boss 明确「下架的就不需要了」. The weekly report now replays the 7/14/30 historical weekly Top100 over the current tradable universe only (`CurrentTrendMarket` / `current_catalog`; one exchangeInfo fetch, no archive audit, no saved historical catalogs). Delisted/SETTLING/PENDING/historical-only contracts are filtered out before any history fetch, so the AERGO/BDXN terminal-coverage exception described above is no longer required and strict historical reconstruction is superseded for the weekly report. Daily historical-universe behavior is unchanged. The dated evidence above is retained as history. Live smoke and deployment remain NOT done.

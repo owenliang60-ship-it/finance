@@ -1,4 +1,16 @@
-"""Read-only Quant adapter and evidence for historical turnover universes."""
+"""Read-only Quant adapter and evidence for turnover universes.
+
+Two catalog modes share the transport/cache helpers:
+
+* :meth:`TrendMarket.catalog` reconstructs the historical universe for the
+  daily scan (current exchangeInfo + saved catalogs + official archive audit).
+  It is the default and is unchanged.
+* :meth:`TrendMarket.current_catalog` / :class:`CurrentTrendMarket` serve the
+  weekly report, which intentionally replays history over the current
+  tradable universe only.  Delisted, SETTLING, PENDING and historical-only
+  contracts are excluded by construction; no archive audit and no saved
+  historical catalog are consulted.
+"""
 import hashlib
 import json
 import logging
@@ -199,6 +211,46 @@ class TrendMarket(MarketData):
                         unknown_archive_symbols=unknown, unknown_active_symbols=unresolved)
         return records, active, evidence
 
+    def current_catalog(self, as_of):
+        """Current-tradable-only catalog for the weekly current-universe replay.
+
+        Fetches ``exchangeInfo`` exactly once, validates the eligible metadata,
+        persists the weekly task's own snapshot and returns only contracts
+        that are TRADING with ``onboard <= cutoff < delivery``.  Delisted,
+        SETTLING, PENDING and historical-only-absent contracts are excluded by
+        construction, so the official archive audit and saved historical
+        catalogs are deliberately never consulted.  Daily callers keep using
+        :meth:`catalog`, whose defaults are byte-for-byte unchanged.
+        """
+        current = self._json('/fapi/v1/exchangeInfo')
+        if not isinstance(current, dict) or not current.get('symbols'):
+            raise ValueError('交易所合约元数据为空')
+        records = eligible_metadata(current['symbols'])
+        at = int(self.end.timestamp()*1000)
+        self.pending_symbols = {m['symbol'] for m in records
+                                if m['status'] == 'PENDING_TRADING'}
+        active = {m['symbol'] for m in records
+                  if m['status'] == 'TRADING' and m['onboardDate'] <= at < m['deliveryDate']}
+        if not active:
+            raise ValueError('当前可交易合约为空')
+        kept = [m for m in records if m['symbol'] in active]
+        excluded = [m for m in records if m['symbol'] not in active]
+        path = self.cache_dir/f'catalog_{as_of.date()}.json'
+        _save(path, dict(symbols=list(current['symbols']),
+                         retrieved_at=pd.Timestamp.now(tz='UTC').isoformat()))
+        evidence = dict(
+            method='current-universe replay; one exchangeInfo snapshot of Binance COIN USDT PERPETUAL contracts',
+            universe='current TRADING only (status==TRADING, onboard <= report cutoff < delivery)',
+            limitation=('Delisted/SETTLING/PENDING/historical-only contracts are excluded by design; '
+                        'historical weeks are replayed over the current tradable universe, '
+                        'not an original all-market point-in-time snapshot.'),
+            metadata_count=len(kept),
+            active_count=len(active),
+            excluded_count=len(excluded),
+            excluded_symbols=[m['symbol'] for m in excluded],
+        )
+        return kept, active, evidence
+
     def daily_cache_path(self, symbol, start, end, required_history):
         """Cache key identifies end (as_of dir), interval and required history."""
         return (self.cache_dir/'daily'/str(self.as_of.date())
@@ -256,3 +308,16 @@ class TrendMarket(MarketData):
         if not isinstance(raw, list) or not raw:
             raise ValueError('价格缓存无效: '+symbol)
         return self.scanner.klines_to_dataframe(raw)
+
+
+class CurrentTrendMarket(TrendMarket):
+    """Weekly adapter: current-tradable universe only.
+
+    ``catalog`` is redirected to :meth:`TrendMarket.current_catalog`, so the
+    weekly report never runs the archive audit and never reads saved
+    historical catalogs.  Everything else (JSON transport, cache keys,
+    pending-symbol handling) is inherited unchanged.
+    """
+
+    def catalog(self, as_of):
+        return self.current_catalog(as_of)

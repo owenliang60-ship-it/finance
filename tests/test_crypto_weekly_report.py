@@ -278,21 +278,33 @@ def test_weekly_rankings_descending_stable_ties_and_full_top_n_required():
         weekly_volume_rankings(weekly_map, records, weeks, top_n=4)
 
 
-def test_weekly_rankings_include_delisted_historical_competitor():
-    records = [meta('AUSDT'), meta('BUSDT'),
+def test_build_report_excludes_delisted_and_pending_before_fetch():
+    records = [meta('AUSDT'), meta('BUSDT'), meta('CUSDT'),
                meta('GONEUSDT', status='SETTLING',
-                    delivery=int((CUTOFF - pd.Timedelta(days=40)).timestamp() * 1000))]
-    weeks = week_starts(CUTOFF, 30)
-    weekly_map = {'AUSDT': {}, 'BUSDT': {}, 'GONEUSDT': {}}
-    for ws in weeks:
-        if ws <= CUTOFF - pd.Timedelta(days=42):
-            weekly_map['GONEUSDT'][week_key(ws)] = dict(quote_volume=999.0, complete=True, days=7)
-        weekly_map['AUSDT'][week_key(ws)] = dict(quote_volume=1.0, complete=True, days=7)
-        weekly_map['BUSDT'][week_key(ws)] = dict(quote_volume=0.5, complete=True, days=7)
-    rankings = weekly_volume_rankings(weekly_map, records, weeks, top_n=2)
-    old = rankings[week_key(weeks[0])]
-    assert old[0]['symbol'] == 'GONEUSDT'
-    assert 'GONEUSDT' not in [r['symbol'] for r in rankings[week_key(weeks[-1])]]
+                    delivery=int((CUTOFF - pd.Timedelta(days=40)).timestamp() * 1000)),
+               meta('PENDUSDT', status='PENDING_TRADING')]
+    daily = {
+        'AUSDT': daily_frame(base=3000.0, slope=0.010),
+        'BUSDT': daily_frame(base=2000.0, slope=-0.010),
+        'CUSDT': daily_frame(base=1000.0, slope=0.0),
+        # A removed competitor with enormous historical turnover must never be
+        # fetched and must not crowd the current-only ranking.
+        'GONEUSDT': daily_frame(base=1e12, slope=0.0),
+        'PENDUSDT': daily_frame(base=1e12, slope=0.0),
+    }
+    native = {'AUSDT': native_weekly(shape='up_last'),
+              'BUSDT': native_weekly(shape='down_last'),
+              'CUSDT': native_weekly(shape='calm')}
+    market = FakeMarket(records, daily, native, active={'AUSDT', 'BUSDT', 'CUSDT'})
+    report = build_report(market, CUTOFF, top_n=3)
+    fetched = {call[1] for call in market.calls}
+    assert fetched == {'AUSDT', 'BUSDT', 'CUSDT'}
+    ranked = {row['symbol'] for rows in report['weekly_top100'].values() for row in rows}
+    assert ranked == {'AUSDT', 'BUSDT', 'CUSDT'}
+    assert {row['symbol'] for row in report['latest_top100']} == {'AUSDT', 'BUSDT', 'CUSDT'}
+    for label in ('30w', '14w', '7w'):
+        assert 'GONEUSDT' not in report['trend']['periods'][label]['pool']
+        assert 'PENDUSDT' not in report['trend']['periods'][label]['pool']
 
 
 # ---------------------------------------------------------------------------
@@ -471,6 +483,35 @@ def test_report_universe_missing_stops_before_indicator_fetch():
     with pytest.raises(ValueError, match='成交额覆盖'):
         build_report(market, CUTOFF, top_n=3)
     assert all(call[0] != 'fetch' for call in market.calls)
+
+
+def test_report_current_contract_api_failure_still_stops():
+    market = fixture_market()
+
+    def boom(symbol, *args, **kwargs):
+        raise RuntimeError('network down')
+
+    market.fetch_daily = boom
+    with pytest.raises(ValueError, match='成交额覆盖'):
+        build_report(market, CUTOFF, top_n=3)
+
+
+def test_report_current_contract_empty_history_still_stops():
+    market = fixture_market()
+    market.daily['AUSDT'] = pd.DataFrame()
+    with pytest.raises(ValueError, match='成交额覆盖'):
+        build_report(market, CUTOFF, top_n=3)
+
+
+def test_report_and_messages_state_current_universe_replay():
+    report = build_report(fixture_market(), CUTOFF, top_n=3)
+    assert '当前可交易' in report['pool_method']
+    assert '已下架' in report['pool_method']
+    assert '非历史全市场快照' in report['pool_method']
+    joined = '\n'.join(build_messages(report))
+    assert '当前可交易合约回看' in joined
+    assert '已下架' in joined
+    assert '非历史全市场快照' in joined
 
 
 def test_daily_fetch_limit_is_weight_two_and_covers_history():
