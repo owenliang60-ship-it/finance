@@ -198,24 +198,25 @@ def test_build_report_reuses_cache_and_fetches_pool_union_once():
 def test_live_run_saves_before_send_and_dry_run_never_sends(monkeypatch,tmp_path):
     sent=[]
     def send(text):
-        assert len(list(tmp_path.glob('crypto_trend_top10*.md')))==3
+        assert len(list(tmp_path.glob('crypto_trend_top10*.md')))==2
         assert len(list(tmp_path.glob('crypto_trend_top10*.json')))==1
         sent.append(text)
         return True
     market=FakeMarket()
-    report=trend.build_report(market,ASOF,top_n=2)
+    report=trend.build_report(market,ASOF,top_n=2,scoring_version='v2',periods=(10,14))
     monkeypatch.setattr(trend,'build_report',lambda *args,**kw: report)
     monkeypatch.setattr(trend,'TrendMarket',lambda *args,**kw:market)
     monkeypatch.setattr(trend.importlib,'import_module',lambda name:SimpleNamespace(send_telegram_alert=send))
     trend.run(tmp_path,tmp_path,dry_run=True)
     assert sent==[]
     trend.run(tmp_path,tmp_path)
-    assert ['30天' in sent[0], '14天' in sent[1], '7天' in sent[2]] == [True]*3
+    assert len(sent)==2 and '10天' in sent[0] and '14天' in sent[1]
+    assert all('绝对涨跌幅50%' in text and '2026-09-07 08:00' in text for text in sent)
     assert all(len(t)<4000 and 'RS' not in t and 'Beta' not in t for t in sent)
 
 
 def test_live_run_send_failure_propagates(monkeypatch,tmp_path):
-    report=trend.build_report(FakeMarket(),ASOF,top_n=2)
+    report=trend.build_report(FakeMarket(),ASOF,top_n=2,scoring_version='v2',periods=(10,14))
     monkeypatch.setattr(trend,'build_report',lambda *args,**kw:report)
     monkeypatch.setattr(trend,'TrendMarket',lambda *args,**kw:FakeMarket())
     monkeypatch.setattr(trend.importlib,'import_module',lambda name:SimpleNamespace(send_telegram_alert=lambda text:False))
@@ -238,9 +239,9 @@ def test_volume_network_failure_blocks_before_price_fetch():
     assert market.history_calls==[]
 
 
-@pytest.mark.parametrize('fail_at',[2,3])
+@pytest.mark.parametrize('fail_at',[1,2])
 def test_later_send_failure_propagates_and_stops(monkeypatch,tmp_path,fail_at):
-    report=trend.build_report(FakeMarket(),ASOF,top_n=2)
+    report=trend.build_report(FakeMarket(),ASOF,top_n=2,scoring_version='v2',periods=(10,14))
     sent=[]
     def send(text):
         sent.append(text)
@@ -295,3 +296,29 @@ def test_daily_weights_message_and_default_score_scheme_unchanged():
     trend.score_valid_rows(rows)
     assert set(rows[0]['percentiles'])=={'return','er','r_squared','drawdown'}
     assert rows[0]['score']==pytest.approx(100.0)
+
+
+def test_selected_daily_windows_need_only_fourteen_volume_days():
+    market=FakeMarket()
+    market.frames={s:f.iloc[-14:].copy() for s,f in market.frames.items()}
+    report=trend.build_report(market,ASOF,top_n=2,scoring_version='v2',periods=(10,14))
+    assert list(report['periods'])==['10d','14d']
+    assert len(report['daily_top100'])==14
+    assert report['periods']['10d']['min_top100_days']==6
+    assert report['periods']['14d']['min_top100_days']==8
+    assert report['weights']==trend.STRENGTH_WEIGHTS
+
+
+def test_live_entry_explicitly_selects_only_ten_and_fourteen(monkeypatch,tmp_path):
+    selected=[]
+    def build(market,asof,**kw):
+        selected.append(kw)
+        return trend_build(FakeMarket(),ASOF,top_n=2,**kw)
+    trend_build=trend.build_report
+    monkeypatch.setattr(trend,'build_report',build)
+    monkeypatch.setattr(trend,'TrendMarket',lambda *args,**kw:FakeMarket())
+    monkeypatch.setattr(trend.importlib,'import_module',lambda name:SimpleNamespace(send_telegram_alert=lambda text:True))
+    result=trend.run(tmp_path,tmp_path,dry_run=True)
+    assert selected==[dict(scoring_version='v2',periods=(10,14))]
+    assert set(result['periods'])=={'10d','14d'}
+    assert not list(tmp_path.glob('*30d*')) and not list(tmp_path.glob('*7d*'))

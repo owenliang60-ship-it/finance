@@ -16,6 +16,7 @@ from scripts.crypto_trend_metrics import trend_metrics
 from scripts.crypto_trend_market import TrendMarket, InactiveSymbolError, eligible_metadata, overlaps
 
 PERIODS = (7, 14, 30)
+DAILY_PERIODS = (10, 14)
 WEIGHTS = {'return': .4, 'er': .2, 'r_squared': .2, 'drawdown': .2}
 STRENGTH_WEIGHTS = {'absolute_return': .5, 'er': .15, 'r_squared': .15,
                     'drawdown': .1, 'quote_volume': .1}
@@ -164,9 +165,13 @@ def rank_period(pool, closes_by_symbol, as_of, days, scoring_version='v1', quote
                 uptrend_count=len(ranked), rows=rows, ranked=ranked, top10=ranked[:10])
 
 
-def build_report(market, as_of, top_n=100, scoring_version='v1'):
+def build_report(market, as_of, top_n=100, scoring_version='v1', periods=PERIODS):
     as_of = utc_day(as_of)
-    dates = pd.date_range(end=as_of, periods=30, freq='D')
+    windows = tuple(periods)
+    if not windows or len(set(windows)) != len(windows) or any(type(h) is not int or h <= 0 for h in windows):
+        raise ValueError('报告周期须为不重复的正整数')
+    history_days = max(windows)
+    dates = pd.date_range(end=as_of, periods=history_days, freq='D')
     metadata, active, evidence = market.catalog(as_of)
     metadata = eligible_metadata(metadata)
     frames, unopened, failures = {}, [], []
@@ -197,17 +202,18 @@ def build_report(market, as_of, top_n=100, scoring_version='v1'):
             failures.append(dict(symbol=symbol, reason=str(exc)))
     if failures:
         raise ValueError('历史成交额覆盖不完整，停止发布: '+json.dumps(failures, ensure_ascii=False))
-    daily = daily_volume_rankings(frames, metadata, as_of, top_n=top_n, confirmed_unopened=unopened)
-    pools = build_pools(daily, as_of, active)
+    daily = daily_volume_rankings(frames, metadata, as_of, days=history_days, top_n=top_n, confirmed_unopened=unopened)
+    pools = build_pools(daily, as_of, active, periods=windows)
     closes, price_failures = {}, {}
     for symbol in sorted(set().union(*(set(pool) for pool in pools.values()))):
         try:
+            # Retain the existing daily-cache history contract for legacy callers.
             frame = daily_frame(market.fetch(symbol, 188, interval='4h'))
             closes[symbol] = frame['close']
         except Exception as exc:
             price_failures[symbol] = str(exc)
     periods={}
-    for days in PERIODS:
+    for days in windows:
         quotes=None
         if scoring_version=='v2':
             dates=pd.date_range(end=as_of,periods=days,freq='D')
@@ -247,6 +253,9 @@ def message(report, days):
              ('权重：绝对涨跌幅50% / ER15% / R²15% / 回撤10% / 成交额10%' if strength
               else '权重：涨幅40% / ER20% / R²20% / 回撤20%'),
              '分位在本窗口有效池内计算；上涨需涨幅与回归斜率均为正。', '']
+    if strength:
+        cutoff = (utc_day(report['as_of'])+pd.Timedelta(days=1)).tz_convert('Asia/Shanghai')
+        lines.insert(1, f'数据截至 {cutoff:%Y-%m-%d %H:%M} 北京时间')
     for row in period['top10']:
         symbol = re.sub(r'([_*`\[])', r'\\\1', row['symbol'].removesuffix('USDT'))
         lines.append(f"{row['rank']}. *{symbol}* | 分 {row['score']:.1f} | 涨 {row['return']:+.1%}"
@@ -278,9 +287,11 @@ def run(scanner_dir, output_dir, dry_run=False):
     as_of = pd.Timestamp.now(tz='UTC').normalize()-pd.Timedelta(days=1)
     output_dir = Path(output_dir)
     market = TrendMarket(scanner, output_dir/'trend_cache', as_of)
-    report = build_report(market, as_of, scoring_version='v2')
+    report = build_report(market, as_of, scoring_version='v2', periods=DAILY_PERIODS)
     report['generated_at'] = pd.Timestamp.now(tz='UTC').isoformat()
-    texts = [(days, message(report, days)) for days in (30,14,7)]
+    report['published_period_days'] = list(DAILY_PERIODS)
+    report['data_cutoff_utc'] = (utc_day(report['as_of'])+pd.Timedelta(days=1)).isoformat()
+    texts = [(days, message(report, days)) for days in DAILY_PERIODS]
     target = output_dir/f"crypto_trend_top10_{report['as_of']}.json"
     atomic_text(target, json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
     for days, text in texts:
