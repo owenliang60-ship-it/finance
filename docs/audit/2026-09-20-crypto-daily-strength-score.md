@@ -11,3 +11,6 @@ Validation before rollout:
 - Main-thread review: no outstanding findings in the bounded shared score and rendering change. Source acquisition and historical financial research remain in a separate worktree.
 
 No manual notification is part of this deployment. The cron schedule and scanner entrypoints remain unchanged. Natural next-run delivery is verified only after it occurs.
+
+## Production acceptance
+Runtime commit `7b1a9fd` was merged/pushed and deployed under `/tmp/quant-cron-locks/quant_daily_scan.lock`. Backup: `/root/workspace/Quant/backups/crypto-daily-strength-20260920/`. Cloud staging **241 passed/13.04s**, production **241 passed/12.41s**. Production rescoring/rendering matched the independently checked 253-row preview; the shared weekly scoring and pool helper source text is exactly unchanged. Crontab and all four entrypoint hashes match before/after. No manual Telegram messages were sent. Evidence: `reports/crypto-fisher-2026-09-20/daily_preview/deployment/`.
