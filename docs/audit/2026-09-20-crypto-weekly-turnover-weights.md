@@ -42,3 +42,13 @@ scope, the schedule or the RVOL/Fisher sections.
 Local focused suite: 234 passed in 6.23s. Cloud Python 3.10: 234 passed in 13.16s. A frozen daily fixture produced byte-identical JSON and all three daily messages before and after the change.
 
 Independent standard-library validation checked all 208 valid coin-window turnover sums, five percentiles, weighted scores and final rankings. Weekly pools, membership counts, signed returns, ER, regression metrics, drawdowns, RVOL and Fisher match the prior production report exactly. Only weekly scores/ranks and the new turnover component change. Verified preview: reports/crypto_weekly/2026-09-20-turnover-score/preview.md. The validation run reuses cached raw inputs and adds no data endpoint beyond the existing metadata request.
+
+## Production rollout
+
+Runtime commit `26c96e9` was merged, pushed and deployed under the shared Quant lock on 2026-09-20. Backup: `/root/workspace/Quant/backups/crypto-weekly-score-20260920T035328Z/`, including the old runtime and previous weekly JSON/Markdown before schema-2 output replaced it.
+
+Production focused tests: **234 passed in 13.09s**. Production dry-run and the independent 208 coin-window turnover/percentile/score/rank verification passed. Prior and new daily fixture JSON/messages are byte-identical; RVOL and Fisher are exactly unchanged. Crontab and all four daily/weekly entrypoint hashes are byte-identical before/after. No manual messages were sent.
+
+Final full suite: **3806 passed, 12 failed, 4 skipped**, 17 warnings in 263.46s. All 12 failure IDs match the earlier baseline; no new failures. Seven depend on missing local research snapshots/price samples, five concern morning-report classification expectations. They were not modified in this task.
+
+DSH handled one implementation invocation for this adjustment. Codex reviewed the code, corrected period/availability wording, verified the results independently and completed rollout. No additional subagents. Evidence: `reports/crypto_weekly/2026-09-20-turnover-score/deployment/`.

@@ -1,0 +1,1 @@
+PASS: weekly-only score deployed; daily fixture, all entrypoints and cron unchanged; no sends

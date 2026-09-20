@@ -1,0 +1,18 @@
+{
+  "summary": "12 failed, 3806 passed, 4 skipped, 17 warnings in 263.46s (0:04:23)",
+  "baseline_failure_ids_match": true,
+  "failure_ids": [
+    "tests/test_breadth_buy_quality.py::test_all_days_baseline_shape",
+    "tests/test_breadth_buy_quality.py::test_events_csv_columns_and_rows",
+    "tests/test_breadth_buy_quality.py::test_load_event_dates_s1_active_snapshot",
+    "tests/test_breadth_buy_quality.py::test_load_event_dates_s1_with_delisted_snapshot",
+    "tests/test_breadth_buy_quality.py::test_load_event_dates_s2_active_snapshot",
+    "tests/test_breadth_buy_quality.py::test_load_event_dates_s2_with_delisted_snapshot",
+    "tests/test_breadth_buy_quality.py::test_load_target_closes_respects_sample_window",
+    "tests/test_morning_report.py::TestFormatSectionD::test_dv_section_is_flat_with_l2_column_in_rank_order",
+    "tests/test_morning_report.py::TestFormatSectionD::test_missing_industry_uses_bucket_not_unclassified",
+    "tests/test_morning_report.py::TestLayeredSections::test_dv_layered_section",
+    "tests/test_morning_report.py::TestLayeredSections::test_layered_dv_groups_mu_under_l2_memory_chip_not_legacy_semi",
+    "tests/test_morning_report.py::TestLayeredSections::test_rows_by_layer_and_bucket_no_silent_drop_for_unregistered"
+  ]
+}
