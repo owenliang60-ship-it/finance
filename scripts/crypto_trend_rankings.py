@@ -17,6 +17,8 @@ from scripts.crypto_trend_market import TrendMarket, InactiveSymbolError, eligib
 
 PERIODS = (7, 14, 30)
 DAILY_PERIODS = (10, 14)
+# Permanent strategy exclusion; BTC prices remain available for regime/benchmarks.
+EXCLUDED_TRADING_SYMBOLS = frozenset({'BTCUSDT'})
 WEIGHTS = {'return': .4, 'er': .2, 'r_squared': .2, 'drawdown': .2}
 STRENGTH_WEIGHTS = {'absolute_return': .5, 'er': .15, 'r_squared': .15,
                     'drawdown': .1, 'quote_volume': .1}
@@ -26,6 +28,7 @@ def score_rows(rows, version='v1', quote_turnover=None):
     """Shared research/report score; percentiles precede direction filtering."""
     if version not in ('v1','v2'):
         raise ValueError('unknown scoring version')
+    rows[:] = [r for r in rows if r['symbol'] not in EXCLUDED_TRADING_SYMBOLS]
     valid=[r for r in rows if r['status']=='ok']
     weights=WEIGHTS if version=='v1' else STRENGTH_WEIGHTS
     if version=='v2':
@@ -140,6 +143,7 @@ def build_pools(daily_rankings, as_of, active_symbols, periods=PERIODS, freq='D'
 
 
 def rank_period(pool, closes_by_symbol, as_of, days, scoring_version='v1', quote_turnover=None):
+    pool = sorted(set(pool) - EXCLUDED_TRADING_SYMBOLS)
     as_of = utc_day(as_of)
     end = as_of+pd.Timedelta(days=1)
     rows = []
@@ -203,7 +207,7 @@ def build_report(market, as_of, top_n=100, scoring_version='v1', periods=PERIODS
     if failures:
         raise ValueError('历史成交额覆盖不完整，停止发布: '+json.dumps(failures, ensure_ascii=False))
     daily = daily_volume_rankings(frames, metadata, as_of, days=history_days, top_n=top_n, confirmed_unopened=unopened)
-    pools = build_pools(daily, as_of, active, periods=windows)
+    pools = build_pools(daily, as_of, set(active) - EXCLUDED_TRADING_SYMBOLS, periods=windows)
     closes, price_failures = {}, {}
     for symbol in sorted(set().union(*(set(pool) for pool in pools.values()))):
         try:
@@ -240,6 +244,7 @@ def build_report(market, as_of, top_n=100, scoring_version='v1', periods=PERIODS
                 weights=(STRENGTH_WEIGHTS if scoring_version=='v2' else WEIGHTS).copy(), percentile_method='100 * count(values <= current) / valid_pool_count; drawdown reversed',
                 direction_gate='return > 0 and log_price_slope > 0; applied AFTER pool percentiles',
                 pool_method='daily UTC quote-volume TopN on strictly more than half of ALL horizon days; currently tradable candidates',
+                excluded_trading_symbols=sorted(EXCLUDED_TRADING_SYMBOLS),
                 universe_evidence=evidence, confirmed_unopened=unopened,
                 daily_top100=daily, periods=periods, kline_requests=market.requests)
 
@@ -253,6 +258,8 @@ def message(report, days):
              ('权重：绝对涨跌幅50% / ER15% / R²15% / 回撤10% / 成交额10%' if strength
               else '权重：涨幅40% / ER20% / R²20% / 回撤20%'),
              '分位在本窗口有效池内计算；上涨需涨幅与回归斜率均为正。', '']
+    if report.get('excluded_trading_symbols'):
+        lines.insert(5, '永久排除：'+', '.join(report['excluded_trading_symbols'])+'（不参与候选池及评分）。')
     if strength:
         cutoff = (utc_day(report['as_of'])+pd.Timedelta(days=1)).tz_convert('Asia/Shanghai')
         lines.insert(1, f'数据截至 {cutoff:%Y-%m-%d %H:%M} 北京时间')

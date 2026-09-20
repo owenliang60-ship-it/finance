@@ -322,3 +322,34 @@ def test_live_entry_explicitly_selects_only_ten_and_fourteen(monkeypatch,tmp_pat
     assert selected==[dict(scoring_version='v2',periods=(10,14))]
     assert set(result['periods'])=={'10d','14d'}
     assert not list(tmp_path.glob('*30d*')) and not list(tmp_path.glob('*7d*'))
+
+
+def test_btc_is_excluded_before_daily_scoring_and_needs_no_price():
+    result = trend.rank_period(['BTCUSDT', 'ALTUSDT'], {'ALTUSDT': prices(.01)},
+                               ASOF, 14, 'v2', {'ALTUSDT': 1e8})
+    assert result['pool'] == ['ALTUSDT']
+    assert result['valid_count'] == result['pool_size'] == 1
+    assert [r['symbol'] for r in result['rows']] == ['ALTUSDT']
+    assert result['top10'][0]['score'] == 100
+    assert trend.rank_period(['BTCUSDT'], {}, ASOF, 14)['pool'] == []
+
+
+def test_shared_daily_scoring_removes_btc_before_percentiles():
+    rows = [dict(symbol=s, status='ok', **{'return': r}, er=r, r_squared=r,
+                 drawdown=1-r) for s, r in [('BTCUSDT', .9), ('ALTUSDT', .1)]]
+    trend.score_rows(rows, 'v2', {'ALTUSDT': 1e8})
+    assert [r['symbol'] for r in rows] == ['ALTUSDT']
+    assert rows[0]['score'] == 100
+
+
+def test_report_drops_btc_before_price_fetch_but_keeps_market_volume_reference():
+    market = FakeMarket()
+    market.frames['BTCUSDT'] = market.frames.pop('AUSDT')
+    report = trend.build_report(market, ASOF, top_n=2, scoring_version='v2', periods=(10,14))
+    assert market.history_calls == ['BUSDT']
+    assert report['excluded_trading_symbols'] == ['BTCUSDT']
+    assert report['daily_top100'][str(ASOF.date())][0]['symbol'] == 'BTCUSDT'
+    for h in (10,14):
+        assert report['periods'][f'{h}d']['pool'] == ['BUSDT']
+        assert report['periods'][f'{h}d']['top10'][0]['score'] == 100
+        assert '永久排除：BTCUSDT' in trend.message(report,h)
