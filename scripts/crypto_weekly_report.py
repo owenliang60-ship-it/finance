@@ -19,7 +19,10 @@ Frozen behavior (Boss approved 2026-09-20):
   current universe.
 * RVOL reuses :func:`src.indicators.rvol.calculate_rvol` with the previous 52
   complete weeks and population std (``ddof=0``).  A zero/undefined std is
-  reported as unavailable rather than fabricated as a zero score.
+  reported as unavailable rather than fabricated as a zero score.  The
+  reported Top20 is the approved equal-weight composite of the RVOL rank and
+  the full-selection turnover rank; unavailable rows keep no score and never
+  backfill from outside the Top100.
 * Fisher length 9 uses native Binance weekly high/low and a long warm-up.
   Only a NEW cross on the last completed week is counted; unknown history is
   never classified as a no-cross and the rate denominator is the fixed
@@ -60,8 +63,15 @@ from scripts.crypto_trend_rankings import (WEIGHTS, atomic_text, build_pools,
 from src.indicators.fisher import DEFAULT_LENGTH, fisher_transform, latest_crossing
 from src.indicators.rvol import calculate_rvol
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+TREND_SCORING_VERSION = 2            # weekly trend scoring unchanged by the composite
+RVOL_SCORING_VERSION = 1             # composite RVOL x turnover ranking generation
 RVOL_LOOKBACK = 52
+# Approved equal-weight composite: 50% RVOL rank + 50% turnover rank.  The
+# turnover leg keeps the literal 100/99 reference from the delivered workbook,
+# so production (Top100) is exact and small test selections stay comparable.
+RVOL_WEIGHTS = {'rvol': .5, 'turnover': .5}
+TURNOVER_RANK_REFERENCE = 100
 FISHER_LENGTH = DEFAULT_LENGTH
 TREND_WEEKS = (7, 14, 30)
 # Weekly-only approved weights.  ``quote_volume`` is the total USDT turnover
@@ -219,6 +229,24 @@ def rvol_for_symbol(symbol, volumes):
 
 
 def weekly_rvol(selected, volumes_by_symbol, errors=None):
+    """RVOL rows plus the approved composite Top20.
+
+    ``selected`` is already ordered by latest-week quote turnover
+    (``-quote_volume, symbol``), so enumerating it supplies ``turnover_rank``
+    for every selected symbol, including RVOL-unavailable members.  The
+    turnover leg therefore never collapses to a compressed valid-only subset.
+
+    The composite is the user-approved
+    ``50*(N-r)/(N-1) + 50*(100-v)/99`` where ``N`` is the valid-RVOL count,
+    ``r`` the descending RVOL rank (symbol ascending on ties, matching the
+    existing ordinal policy) and ``v`` the full-selection turnover rank.  The
+    literal 100 turnover reference is kept from the delivered workbook.
+    Ordering uses the equivalent integer numerator
+    ``(N-r)*99 + (100-v)*(N-1)`` so mathematically equal scores never flip on
+    floating-point noise.  ``N == 1`` gives the sole valid row an RVOL
+    component of 100; ``N == 0`` yields an empty ranking.  Unavailable rows
+    keep ``score=None`` and never backfill from outside the Top100.
+    """
     errors = errors or {}
     rows = []
     for symbol in selected:
@@ -227,15 +255,51 @@ def weekly_rvol(selected, volumes_by_symbol, errors=None):
                              reason=str(errors[symbol])))
         else:
             rows.append(rvol_for_symbol(symbol, volumes_by_symbol.get(symbol, [])))
+    for position, row in enumerate(rows, 1):
+        row['turnover_rank'] = position
+        row['rvol_rank'] = None
+        row['rvol_score'] = None
+        row['turnover_score'] = None
+        row['score'] = None
+        row['rank'] = None
     valid = [row for row in rows if row['status'] == 'ok']
     ordered = sorted(valid, key=lambda row: (-row['sigma'], row['symbol']))
+    for rvol_rank, row in enumerate(ordered, 1):
+        row['rvol_rank'] = rvol_rank
+        row['turnover_score'] = (100.0 * (TURNOVER_RANK_REFERENCE - row['turnover_rank'])
+                                 / 99.0)
+    count = len(valid)
+    if count > 1:
+        for row in valid:
+            rvol_rank = row['rvol_rank']
+            row['rvol_score'] = 100.0 * (count - rvol_rank) / (count - 1)
+            row['score'] = (50.0 * (count - rvol_rank) / (count - 1)
+                            + 50.0 * (TURNOVER_RANK_REFERENCE - row['turnover_rank']) / 99.0)
+        ordered = sorted(valid, key=lambda row: (
+            -((count - row['rvol_rank']) * 99
+              + (TURNOVER_RANK_REFERENCE - row['turnover_rank']) * (count - 1)),
+            row['rvol_rank'], row['turnover_rank'], row['symbol']))
+    elif count == 1:
+        row = valid[0]
+        row['rvol_score'] = 100.0
+        row['score'] = (50.0
+                        + 50.0 * (TURNOVER_RANK_REFERENCE - row['turnover_rank']) / 99.0)
+        ordered = valid
+    else:
+        ordered = []
     for rank, row in enumerate(ordered, 1):
         row['rank'] = rank
     denominator = len(selected)
     return dict(lookback_weeks=RVOL_LOOKBACK, selected_count=denominator,
-                denominator=denominator, valid_count=len(valid),
-                unavailable_count=len(rows) - len(valid),
-                coverage=(len(valid) / denominator) if denominator else None,
+                denominator=denominator, valid_count=count,
+                unavailable_count=len(rows) - count,
+                coverage=(count / denominator) if denominator else None,
+                scoring_version=RVOL_SCORING_VERSION,
+                weights=dict(RVOL_WEIGHTS),
+                turnover_reference=TURNOVER_RANK_REFERENCE,
+                rank_method=('composite 50*(N-r)/(N-1)+50*(100-v)/99; ordered by '
+                             'descending integer numerator (N-r)*99+(100-v)*(N-1), '
+                             'then r, v, symbol'),
                 rows=rows, top20=ordered[:20])
 
 
@@ -526,7 +590,8 @@ def build_report(market, cutoff, top_n=100):
         period['top100_week_counts'] = {symbol: counts[symbol] for symbol in period['pool']}
         periods[label] = period
 
-    return dict(schema_version=SCHEMA_VERSION, scoring_version=SCHEMA_VERSION,
+    return dict(schema_version=SCHEMA_VERSION, scoring_version=TREND_SCORING_VERSION,
+                rvol_scoring_version=RVOL_SCORING_VERSION,
                 report_type='crypto_weekly',
                 week_start=str(rank_week_list[-1].date()), week_end=str(cutoff.date()),
                 cutoff_utc=cutoff.isoformat(),
@@ -572,15 +637,21 @@ def build_messages(report):
     fisher = report['fisher']
     messages = []
 
-    lines = [f'*Crypto 周报 · RVOL | {label}*',
-             f"最新完整周 USDT 成交额前{report['top_n']} · 当前周 vs 前{RVOL_LOOKBACK}完整周（总体标准差）",
+    lines = [f'*Crypto 周报 · 综合分Top20 | {label}*',
+             f"最新完整周 USDT 成交额前{report['top_n']} · "
+             f"综合分 = RVOL排名50% + 成交额排名50%",
+             f"RVOL = 当前周 vs 前{RVOL_LOOKBACK}完整周（总体标准差）· "
+             "成交额排名取全榜位次（不可用成员占位，不补位）",
              '当前可交易合约回看 · 已下架排除 · 非历史全市场快照',
              f"有效 {rvol['valid_count']}/{rvol['denominator']}"]
     for row in rvol['top20']:
-        lines.append(f"{row['rank']}. *{symbol_label(row['symbol'])}* | {row['sigma']:+.2f}σ"
-                     f" | {format_amount(row['quote_volume'])} USDT")
+        lines.append(f"{row['rank']}. *{symbol_label(row['symbol'])}*"
+                     f" | 综合分 {row['score']:.2f}"
+                     f" | RVOL {row['sigma']:+.2f}σ"
+                     f" | 成交额 {format_amount(row['quote_volume'])} USDT"
+                     f" | 成交额排名{row['turnover_rank']}")
     if not rvol['top20']:
-        lines.append('无可用 RVOL。')
+        lines.append('无可用 RVOL 综合分。')
     if rvol['unavailable_count']:
         lines.append(f"⚠️ 不可用 {rvol['unavailable_count']} 个（完整周不足/标准差为零），不补位。")
     messages.append('\n'.join(lines))

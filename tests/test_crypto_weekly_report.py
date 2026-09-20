@@ -1,4 +1,5 @@
 """Behavioral tests for the weekly crypto report (RVOL / Fisher / weekly trend)."""
+from fractions import Fraction
 import json
 import re
 import subprocess
@@ -358,6 +359,215 @@ def test_rvol_rejects_negative_weekly_volume():
     assert row['status'] == 'unavailable'
     assert row['sigma'] is None
     assert '负' in row['reason']
+
+
+# ---------------------------------------------------------------------------
+# Weekly RVOL x turnover composite Top20
+# ---------------------------------------------------------------------------
+
+def rvol_history():
+    """52 complete-week baseline values with a non-zero population std."""
+    return list(np.linspace(100.0, 200.0, 52))
+
+
+def rvol_volumes(sigma, history=None):
+    """53 weekly values whose RVOL equals ``sigma`` exactly (population std).
+
+    ``rvol_for_symbol`` keeps the current week out of the baseline, so setting
+    the last value to ``mean + sigma * std`` makes the derived sigma exact.
+    Tests can therefore control the RVOL ordering with real indicator input
+    instead of mocking the indicator itself.
+    """
+    history = rvol_history() if history is None else history
+    mean = float(np.mean(history))
+    std = float(np.std(history, ddof=0))
+    return list(history) + [mean + sigma * std]
+
+
+def _composite_selected(symbols, v_by_symbol):
+    """Order the selected Top100 exactly as build_report does: by turnover rank."""
+    return sorted(symbols, key=lambda symbol: v_by_symbol[symbol])
+
+
+def test_composite_ranks_differ_from_pure_rvol_and_promote_below_rvol20():
+    n = 25
+    symbols = {r: f'S{r:02d}USDT' for r in range(1, n + 1)}
+    # Near-identity turnover rank, but the r=20 and r=21 RVOL ranks swap the
+    # best/worst turnover slots: the stronger-turnover below-RVOL-20 name must
+    # climb into the composite Top20 while the pure-RVOL Top20 name drops out.
+    remaining = list(range(2, 25))
+    v_by_r = {}
+    for r in range(1, n + 1):
+        if r == 20:
+            v_by_r[r] = 25
+        elif r == 21:
+            v_by_r[r] = 1
+        else:
+            v_by_r[r] = remaining.pop(0)
+    v_by_symbol = {symbols[r]: v_by_r[r] for r in range(1, n + 1)}
+    selected = _composite_selected(symbols.values(), v_by_symbol)
+    volumes = {symbols[r]: rvol_volumes(float(n + 1 - r))
+               for r in range(1, n + 1)}
+
+    result = weekly_rvol(selected, volumes)
+    by_rvol = {row['rvol_rank']: row for row in result['rows']}
+    assert result['valid_count'] == n
+    assert by_rvol[21]['turnover_rank'] == 1
+    assert by_rvol[20]['turnover_rank'] == 25
+    assert by_rvol[21]['rank'] <= 20              # promoted by the 50% turnover leg
+    assert by_rvol[20]['rank'] == 21              # displaced out of the Top20
+    top = {row['symbol'] for row in result['top20']}
+    assert symbols[21] in top and symbols[20] not in top
+    # The old pure-RVOL rule would have excluded the promoted candidate.
+    assert symbols[21] not in {symbols[r] for r in range(1, 21)}
+    assert [row['rank'] for row in result['top20']] == list(range(1, 21))
+    assert [row['symbol'] for row in result['top20']] == [
+        row['symbol'] for row in sorted(
+            result['rows'],
+            key=lambda row: (row['rank'] if row['rank'] is not None else 10 ** 9))[:20]]
+
+
+def test_turnover_rank_counts_rvol_unavailable_members():
+    selected = ['GAPUSDT', 'AUSDT', 'BUSDT']
+    volumes = {'AUSDT': rvol_volumes(2.0), 'BUSDT': rvol_volumes(1.0),
+               'GAPUSDT': []}
+    result = weekly_rvol(selected, volumes)
+    rows = {row['symbol']: row for row in result['rows']}
+    assert rows['GAPUSDT']['status'] == 'unavailable'
+    assert rows['GAPUSDT']['turnover_rank'] == 1
+    assert rows['AUSDT']['turnover_rank'] == 2    # full-list rank, not compressed
+    assert rows['BUSDT']['turnover_rank'] == 3
+    assert rows['GAPUSDT'].get('score') is None
+    assert rows['GAPUSDT'].get('rvol_rank') is None
+    assert all(row['symbol'] != 'GAPUSDT' for row in result['top20'])
+    # A valid-only turnover rank would drop A to v=1 and inflate its score.
+    assert rows['AUSDT']['score'] == pytest.approx(50 * 1 / 1 + 50 * (100 - 2) / 99)
+    assert rows['AUSDT']['score'] != pytest.approx(100.0)
+
+
+def test_signed_rvol_survives_into_composite_rows_and_top20():
+    selected = ['NEGUSDT', 'POSUSDT']
+    volumes = {'NEGUSDT': rvol_volumes(-1.5), 'POSUSDT': rvol_volumes(2.5)}
+    result = weekly_rvol(selected, volumes)
+    rows = {row['symbol']: row for row in result['rows']}
+    assert rows['NEGUSDT']['sigma'] == pytest.approx(-1.5)
+    assert rows['POSUSDT']['sigma'] == pytest.approx(2.5)
+    assert rows['NEGUSDT']['rvol_rank'] == 2
+    assert rows['POSUSDT']['rvol_rank'] == 1
+    top = {row['symbol']: row for row in result['top20']}
+    assert top['NEGUSDT']['sigma'] == pytest.approx(-1.5)   # sign preserved, not abs()
+    assert top['NEGUSDT']['rank'] == 2
+    assert top['NEGUSDT']['score'] == pytest.approx(50 * 0 / 1 + 50 * (100 - 1) / 99)
+
+
+def test_composite_scores_match_independent_fraction_arithmetic():
+    n = 25
+    symbols = {r: f'S{r:02d}USDT' for r in range(1, n + 1)}
+    remaining = list(range(2, 25))
+    v_by_r = {}
+    for r in range(1, n + 1):
+        if r == 20:
+            v_by_r[r] = 25
+        elif r == 21:
+            v_by_r[r] = 1
+        else:
+            v_by_r[r] = remaining.pop(0)
+    v_by_symbol = {symbols[r]: v_by_r[r] for r in range(1, n + 1)}
+    selected = _composite_selected(symbols.values(), v_by_symbol)
+    volumes = {symbols[r]: rvol_volumes(float(n + 1 - r))
+               for r in range(1, n + 1)}
+    result = weekly_rvol(selected, volumes)
+
+    exact = {r: 50 * Fraction(n - r, n - 1) + 50 * Fraction(100 - v_by_r[r], 99)
+             for r in range(1, n + 1)}
+    for row in result['rows']:
+        r = int(row['symbol'][1:3])
+        assert row['rvol_rank'] == r
+        assert row['score'] == pytest.approx(float(exact[r]), abs=1e-12)
+    exact_order = [symbols[r]
+                   for r in sorted(symbols, key=lambda r: (-exact[r], r))]
+    # Every composite score here is distinct, so the exact rational order and
+    # the production integer-numerator order must agree symbol for symbol.
+    ranked = sorted((row for row in result['rows'] if row['status'] == 'ok'),
+                    key=lambda row: row['rank'])
+    assert [row['symbol'] for row in ranked] == exact_order
+    assert [row['symbol'] for row in result['top20']] == exact_order[:20]
+
+
+def test_exact_composite_ties_break_on_lower_rvol_rank():
+    n = 100
+    symbols = {r: f'T{r:03d}USDT' for r in range(1, n + 1)}
+    # (N-r)*99+(100-v)*(N-1) is identical for (r=1,v=2) and (r=2,v=1) when N=100,
+    # so the two are a mathematically exact tie that must break on RVOL rank.
+    v_by_r = {r: r for r in range(1, n + 1)}
+    v_by_r[1], v_by_r[2] = 2, 1
+    v_by_symbol = {symbols[r]: v_by_r[r] for r in range(1, n + 1)}
+    selected = _composite_selected(symbols.values(), v_by_symbol)
+    volumes = {symbols[r]: rvol_volumes(float(n + 1 - r))
+               for r in range(1, n + 1)}
+    result = weekly_rvol(selected, volumes)
+    by_rvol = {row['rvol_rank']: row for row in result['rows']}
+    first, second = by_rvol[1], by_rvol[2]
+    assert first['turnover_rank'] == 2 and second['turnover_rank'] == 1
+    assert first['score'] == pytest.approx(second['score'])
+    assert (n - 1) * 99 + (100 - 2) * (n - 1) == (n - 2) * 99 + (100 - 1) * (n - 1)
+    assert [first['rank'], second['rank']] == [1, 2]
+    assert [row['symbol'] for row in result['top20'][:2]] == [
+        first['symbol'], second['symbol']]
+
+
+def test_composite_handles_zero_and_one_valid_rvol():
+    # N=0: every selected row is unavailable -> empty ranking, no score, no crash.
+    empty = weekly_rvol(['AUSDT', 'BUSDT'], {'AUSDT': [], 'BUSDT': []})
+    assert empty['valid_count'] == 0
+    assert empty['top20'] == []
+    assert all(row.get('score') is None for row in empty['rows'])
+    assert all(row.get('rvol_rank') is None for row in empty['rows'])
+    assert sorted(row['turnover_rank'] for row in empty['rows']) == [1, 2]
+
+    # N=1: the sole valid row is RVOL rank 1, so its RVOL component is 100.
+    one = weekly_rvol(['GAPUSDT', 'ONLYUSDT'],
+                      {'GAPUSDT': [], 'ONLYUSDT': rvol_volumes(-0.5)})
+    only = next(row for row in one['rows'] if row['symbol'] == 'ONLYUSDT')
+    assert one['valid_count'] == 1
+    assert only['rvol_rank'] == 1
+    assert only['turnover_rank'] == 2
+    assert only['score'] == pytest.approx(50 + 50 * (100 - 2) / 99)
+    assert one['top20'] == [only]
+    assert only['rank'] == 1
+
+
+def test_rvol_composite_scoring_metadata_and_schema_versions():
+    result = weekly_rvol(['AUSDT'], {'AUSDT': rvol_volumes(1.0)})
+    assert result['scoring_version'] == 1
+    assert result['weights'] == {'rvol': 0.5, 'turnover': 0.5}
+    assert result['turnover_reference'] == 100
+    assert 'integer' in result['rank_method']
+
+    report = build_report(fixture_market(), CUTOFF, top_n=3)
+    assert report['schema_version'] == 3
+    assert report['scoring_version'] == 2          # weekly trend scoring is unchanged
+    assert report['rvol_scoring_version'] == 1
+    assert report['rvol']['scoring_version'] == 1
+    assert report['weights'] == weekly.WEEKLY_WEIGHTS
+
+
+def test_composite_message_shows_score_raw_rvol_and_turnover_rank():
+    report = build_report(fixture_market(), CUTOFF, top_n=3)
+    messages = build_messages(report)
+    message = messages[0]
+    assert len(messages) == 5
+    assert '综合分Top20' in message
+    assert 'RVOL排名50%' in message and '成交额排名50%' in message
+    assert len(report['rvol']['top20']) == 3
+    for row in report['rvol']['top20']:
+        assert row['symbol'].removesuffix('USDT') in message
+        assert f"{row['score']:.2f}" in message
+        assert f"{row['sigma']:+.2f}σ" in message
+        assert f"排名{row['turnover_rank']}" in message
+    # The other four messages keep the existing Fisher / trend content.
+    assert 'Fisher9' in messages[1]
+    assert '30周趋势榜' in messages[2]
 
 
 # ---------------------------------------------------------------------------
@@ -856,7 +1066,7 @@ def test_rank_weeks_signed_return_and_direction_gate_unchanged():
 def test_report_uses_existing_daily_frames_for_turnover_without_extra_requests():
     market = fixture_market()
     report = build_report(market, CUTOFF, top_n=3)
-    assert report['schema_version'] == 2
+    assert report['schema_version'] == 3
     assert report['weights'] == weekly.WEEKLY_WEIGHTS
     assert sum(report['weights'].values()) == pytest.approx(1.0)
     assert len([call for call in market.calls if call[0] == 'daily']) == 6
