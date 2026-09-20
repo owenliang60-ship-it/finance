@@ -1,0 +1,3 @@
+# Frozen crypto preview requires the producer's timestamp column
+
+A read-only replay harness loaded captured CSVs with a DatetimeIndex but omitted the `timestamp` column expected by `daily_frame()`. The adapter consequently treated all frames as empty and correctly blocked publication. No production runtime failure or message occurred. Fixed the harness by mapping captured `time` to explicit `timestamp`, preserving source values, and retaining the evidence-backed GAIB pending/unopened exception. Retest independently reconstructed163valid10/14day rows successfully. Lesson: frozen-data adapters must reproduce the producer input schema, not only equivalent-looking timestamps.
