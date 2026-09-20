@@ -1,6 +1,6 @@
 # Crypto weekly report
 
-Status: implemented in codex/crypto-weekly-report; NOT deployed and live smoke NOT done. Weekly universe is **current-tradable-only** (2026-09-20 user decision 「下架的就不需要了」): only Binance COIN USDT PERPETUAL `status=TRADING` with `onboard ≤ cutoff < delivery`, replayed over the 7/14/30 historical weekly Top100. Delisted/SETTLING/PENDING/historical-only contracts are excluded from all rankings/indicators/trend pools; this is not an all-market point-in-time snapshot. The earlier historical-coverage gate is superseded for the weekly report; dated evidence remains in docs/issues/2026-09-20-crypto-weekly-historical-coverage.md. Daily historical-universe behavior is unchanged.
+Status: implemented in codex/crypto-weekly-report; NOT deployed; live isolated smoke and independent verification PASS. Weekly universe is **current-tradable-only** (2026-09-20 user decision 「下架的就不需要了」): only Binance COIN USDT PERPETUAL `status=TRADING` with `onboard ≤ cutoff < delivery`, replayed over the 7/14/30 historical weekly Top100. Delisted/SETTLING/PENDING/historical-only contracts are excluded from all rankings/indicators/trend pools; this is not an all-market point-in-time snapshot. The earlier historical-coverage gate is superseded for the weekly report; dated evidence remains in docs/issues/2026-09-20-crypto-weekly-historical-coverage.md. Daily historical-universe behavior is unchanged.
 
 ## Schedule and entry
 

@@ -14,7 +14,7 @@ Boss confirmed the five business choices on2026-09-20. Extends the existing scan
 
 ```mermaid
 flowchart LR
- A[Exchange metadata and archive audit] --> B[30 completed weekly Top100]
+ A[Current exchangeInfo: tradable COIN USDT perpetuals] --> B[30 completed weekly Top100]
  B --> C[Latest Top100: RVOL52 and Fisher9]
  B --> D[4 of7 /8 of14 /16 of30 pools]
  D --> E[Daily closes and existing trend math]
@@ -34,9 +34,14 @@ flowchart TD
 
 ## Implementation choices
 
-Reuse market adapter/scoring kernels with backward-compatible optional arguments; separate weekly module,cache,shim,wrapper. Replacing the existing daily entry would violate the requested retained daily report. Current-survivor-only historical ranking is simpler but rejected because removed contracts can change Top100 membership. **2026-09-20 后续**：Boss 明确「下架的就不需要了」，周报改为当前可交易合约回看（`CurrentTrendMarket` + `current_catalog`，不再做 archive audit 或读取历史 catalog）；此前的拒绝理由作为历史记录保留，daily 默认历史档案审计保持不变。
+Reuse the existing transport, RVOL, trend metrics and scoring kernels. Weekly reports have a dedicated adapter, cache, shim and wrapper; the daily entry remains in place.
 
-Greatest risk (historical reconstruction): missing historical turnover silently promotes rank101. Catalog audit widens30days→210days. Missing data is not zero; failure remains explicit. **2026-09-20 起**周报不再重建历史全市场：仅当前可交易合约参与，已下架合约不再需要；当前合格合约的真实缺口/API 失败仍然显式停止发布，绝不因「已排除下架」而跳过有效当前合约。
+| Choice | Effect | Decision |
+|---|---|---|
+| Reconstruct historical all-market universe, including removed contracts | Historical ranking includes formerly traded contracts; requires delisted metadata and terminal-day archives | Not used for weekly report after Boss said “下架的就不需要了” |
+| Replay historical weekly turnover among currently tradable contracts | Excludes removed/SETTLING/PENDING contracts from every ranking; current-contract gaps still fail | Selected; explicitly label current-universe replay |
+
+The weekly adapter obtains one current exchangeInfo snapshot and never reads historical catalogs or archive listings. Only current TRADING contracts with onboard ≤ cutoff < delivery are fetched. Missing data for a currently eligible contract remains an error; no invented zero volume or fallback selection.
 
 ## Checklist
 
@@ -50,4 +55,4 @@ Greatest risk (historical reconstruction): missing historical turnover silently 
 
 Independent diagnostic bounds for last closed week found identical pools with AERGO inside/outside its uncertain historicweek. This is not source-complete evidence and is retained only as dated history; the current-universe decision no longer depends on it.
 
-Independent diagnostic bounds for last closed week found identical pools with AERGO inside/outside its uncertain historicweek. This is not source-complete evidence and is not yet permitted as a production fallback.
+The earlier AERGO boundary-proof option was superseded by the explicit current-universe decision; no such fallback is implemented.

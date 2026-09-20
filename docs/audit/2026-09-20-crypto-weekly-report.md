@@ -17,3 +17,7 @@ Remaining: resolvehistoricalmetadata/terminalturnoverpolicy, implement/test perm
 ## 2026-09-20 addendum — current-universe scope (history above retained)
 
 Boss 明确「下架的就不需要了」: the weekly report is now current-tradable-only (`CurrentTrendMarket`/`current_catalog`), excluding delisted/SETTLING/PENDING/historical-only contracts before any history fetch. The historical AERGO/BDXN coverage gate above is superseded for the weekly report; the acceptance evidence remains dated history. Daily historical-universe behavior is unchanged. Live smoke and deployment remain NOT done.
+
+## Current-only acceptance, 2026-09-20
+
+DSH third invocation implemented the user-approved current-only universe and completed successfully. Codex reviewed the finaldiff, verified217focusedtests locally and217oncloudPython3.10. Real cloudrawdata:526eligiblecontracts,527prefetchrequests,zero failures; reuse100nativeweeklyhistories. Independentstdlib verifier reproduced3000weeklyTop100records,1040metricvalues, percentiles, threepools andTop10ranks. RVOLvalid77;Fishervalid96,newup2/down5. Pools7/14/30=78/73/60;valid77/72/59. WrapperrealLinuxfixture verifiedsharedlocktimeout75 andsubsequentexecution0 plusenvexport; noTelegramcredentials or sends. Evidence:reports/crypto_weekly/2026-09-20-current-only/.
