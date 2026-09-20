@@ -17,6 +17,25 @@ from scripts.crypto_trend_market import TrendMarket, InactiveSymbolError, eligib
 
 PERIODS = (7, 14, 30)
 WEIGHTS = {'return': .4, 'er': .2, 'r_squared': .2, 'drawdown': .2}
+STRENGTH_WEIGHTS = {'absolute_return': .5, 'er': .15, 'r_squared': .15,
+                    'drawdown': .1, 'quote_volume': .1}
+
+
+def score_rows(rows, version='v1', quote_turnover=None):
+    """Shared research/report score; percentiles precede direction filtering."""
+    if version not in ('v1','v2'):
+        raise ValueError('unknown scoring version')
+    valid=[r for r in rows if r['status']=='ok']
+    weights=WEIGHTS if version=='v1' else STRENGTH_WEIGHTS
+    if version=='v2':
+        for row in valid:
+            value=(quote_turnover or {}).get(row['symbol'])
+            if value is None or not math.isfinite(float(value)) or float(value)<0:
+                raise ValueError('missing/invalid turnover '+row['symbol'])
+            row['absolute_return']=abs(row['return'])
+            row['quote_volume']=float(value)
+    score_valid_rows(valid,weights)
+    return rows
 
 
 def utc_day(value):
@@ -119,7 +138,7 @@ def build_pools(daily_rankings, as_of, active_symbols, periods=PERIODS, freq='D'
     return pools
 
 
-def rank_period(pool, closes_by_symbol, as_of, days):
+def rank_period(pool, closes_by_symbol, as_of, days, scoring_version='v1', quote_turnover=None):
     as_of = utc_day(as_of)
     end = as_of+pd.Timedelta(days=1)
     rows = []
@@ -135,7 +154,7 @@ def rank_period(pool, closes_by_symbol, as_of, days):
     valid = [row for row in rows if row['status'] == 'ok']
     if pool and not valid:
         raise ValueError(f'{days}天非空池全部价格不可用，停止发布')
-    score_valid_rows(valid)
+    score_rows(rows, scoring_version, quote_turnover)
     ranked = sorted((row for row in valid if row['eligible']), key=lambda r: (-r['score'], r['symbol']))
     for i, row in enumerate(ranked, 1):
         row['rank'] = i
@@ -145,7 +164,7 @@ def rank_period(pool, closes_by_symbol, as_of, days):
                 uptrend_count=len(ranked), rows=rows, ranked=ranked, top10=ranked[:10])
 
 
-def build_report(market, as_of, top_n=100):
+def build_report(market, as_of, top_n=100, scoring_version='v1'):
     as_of = utc_day(as_of)
     dates = pd.date_range(end=as_of, periods=30, freq='D')
     metadata, active, evidence = market.catalog(as_of)
@@ -187,7 +206,19 @@ def build_report(market, as_of, top_n=100):
             closes[symbol] = frame['close']
         except Exception as exc:
             price_failures[symbol] = str(exc)
-    periods = {f'{days}d': rank_period(pools[f'{days}d'], closes, as_of, days) for days in PERIODS}
+    periods={}
+    for days in PERIODS:
+        quotes=None
+        if scoring_version=='v2':
+            dates=pd.date_range(end=as_of,periods=days,freq='D')
+            quotes={s:float(daily_frame(frames[s]).reindex(dates)['quote_volume'].mean())
+                    for s in pools[f'{days}d']}
+            # Complete volume history was checked before pool construction.
+            # A price-valid coin needs every day of its own score window.
+            for s in quotes:
+                if daily_frame(frames[s]).reindex(dates)['quote_volume'].isna().any():
+                    quotes[s]=None
+        periods[f'{days}d']=rank_period(pools[f'{days}d'],closes,as_of,days,scoring_version,quotes)
     for period in periods.values():
         days = period['period_days']
         counts = Counter(row['symbol']
@@ -198,8 +229,9 @@ def build_report(market, as_of, top_n=100):
         for row in period['rows']:
             if row['symbol'] in price_failures:
                 row['reason'] = price_failures[row['symbol']]
-    return dict(schema_version=2, as_of=str(as_of.date()), top_n=top_n,
-                weights=WEIGHTS.copy(), percentile_method='100 * count(values <= current) / valid_pool_count; drawdown reversed',
+    return dict(schema_version=3 if scoring_version=='v2' else 2, scoring_version=scoring_version,
+                as_of=str(as_of.date()), top_n=top_n,
+                weights=(STRENGTH_WEIGHTS if scoring_version=='v2' else WEIGHTS).copy(), percentile_method='100 * count(values <= current) / valid_pool_count; drawdown reversed',
                 direction_gate='return > 0 and log_price_slope > 0; applied AFTER pool percentiles',
                 pool_method='daily UTC quote-volume TopN on strictly more than half of ALL horizon days; currently tradable candidates',
                 universe_evidence=evidence, confirmed_unopened=unopened,
@@ -208,15 +240,18 @@ def build_report(market, as_of, top_n=100):
 
 def message(report, days):
     period = report['periods'][f'{days}d']
+    strength=report.get('scoring_version')=='v2'
     lines = [f"*Crypto {days}天趋势榜 | {report['as_of']} UTC*",
              f"窗口内至少{period['min_top100_days']}/{days}天USDT成交额前{report['top_n']} · 4h完整收盘",
              f"池 {period['pool_size']} · 有效 {period['valid_count']} · 上涨 {period['uptrend_count']}",
-             '权重：涨幅40% / ER20% / R²20% / 回撤20%',
+             ('权重：绝对涨跌幅50% / ER15% / R²15% / 回撤10% / 成交额10%' if strength
+              else '权重：涨幅40% / ER20% / R²20% / 回撤20%'),
              '分位在本窗口有效池内计算；上涨需涨幅与回归斜率均为正。', '']
     for row in period['top10']:
         symbol = re.sub(r'([_*`\[])', r'\\\1', row['symbol'].removesuffix('USDT'))
         lines.append(f"{row['rank']}. *{symbol}* | 分 {row['score']:.1f} | 涨 {row['return']:+.1%}"
-                     f" | ER {row['er']:.3f} | R² {row['r_squared']:.3f} | 回撤 {row['drawdown']:.1%}")
+                     f" | ER {row['er']:.3f} | R² {row['r_squared']:.3f} | 回撤 {row['drawdown']:.1%}"
+                     +(f" | 日均额 {row['quote_volume']/1e6:.1f}M USDT" if strength else ''))
     if not period['top10']:
         lines.append('本窗口无符合条件的上涨趋势币种，不补位。')
     if period['valid_count'] < period['pool_size']:
@@ -243,7 +278,7 @@ def run(scanner_dir, output_dir, dry_run=False):
     as_of = pd.Timestamp.now(tz='UTC').normalize()-pd.Timedelta(days=1)
     output_dir = Path(output_dir)
     market = TrendMarket(scanner, output_dir/'trend_cache', as_of)
-    report = build_report(market, as_of)
+    report = build_report(market, as_of, scoring_version='v2')
     report['generated_at'] = pd.Timestamp.now(tz='UTC').isoformat()
     texts = [(days, message(report, days)) for days in (30,14,7)]
     target = output_dir/f"crypto_trend_top10_{report['as_of']}.json"
