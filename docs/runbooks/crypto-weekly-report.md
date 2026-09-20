@@ -1,10 +1,10 @@
 # Crypto weekly report
 
-Status: implemented in codex/crypto-weekly-report; NOT deployed; live isolated smoke and independent verification PASS. Weekly universe is **current-tradable-only** (2026-09-20 user decision 「下架的就不需要了」): only Binance COIN USDT PERPETUAL `status=TRADING` with `onboard ≤ cutoff < delivery`, replayed over the 7/14/30 historical weekly Top100. Delisted/SETTLING/PENDING/historical-only contracts are excluded from all rankings/indicators/trend pools; this is not an all-market point-in-time snapshot. The earlier historical-coverage gate is superseded for the weekly report; dated evidence remains in docs/issues/2026-09-20-crypto-weekly-historical-coverage.md. Daily historical-universe behavior is unchanged.
+Status: LIVE as of 2026-09-20. Runtime deployed at4632cd7; backup /root/workspace/Quant/backups/crypto-weekly-20260920T032749Z/. Production tests and independent verification PASS. First natural run2026-09-21 09:00 Asia/Shanghai, not yet observed. Weekly universe is **current-tradable-only** (2026-09-20 user decision 「下架的就不需要了」): only Binance COIN USDT PERPETUAL `status=TRADING` with `onboard ≤ cutoff < delivery`, replayed over the 7/14/30 historical weekly Top100. Delisted/SETTLING/PENDING/historical-only contracts are excluded from all rankings/indicators/trend pools; this is not an all-market point-in-time snapshot. The earlier historical-coverage gate is superseded for the weekly report; dated evidence remains in docs/issues/2026-09-20-crypto-weekly-historical-coverage.md. Daily historical-universe behavior is unchanged.
 
 ## Schedule and entry
 
-Keep existing daily08:06 job. Intended new line under existing CRON_TZ=Asia/Shanghai:
+Keep existing daily08:06 job. Installed line under existing CRON_TZ=Asia/Shanghai:
 
 ```cron
 0 9 * * 1 /root/workspace/Quant/scanners/run_weekly_scan.sh

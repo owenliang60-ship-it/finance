@@ -1,0 +1,28 @@
+{
+  "result": "PASS",
+  "cutoff": "2026-09-14T00:00:00+00:00",
+  "current_contracts": 526,
+  "weekly_membership_rows": 3000,
+  "metric_checks": 1040,
+  "rvol_valid": 77,
+  "fisher_valid": 96,
+  "up": 2,
+  "down": 5,
+  "periods": {
+    "7": {
+      "pool": 78,
+      "valid": 77,
+      "up": 60
+    },
+    "14": {
+      "pool": 73,
+      "valid": 72,
+      "up": 41
+    },
+    "30": {
+      "pool": 60,
+      "valid": 59,
+      "up": 20
+    }
+  }
+}

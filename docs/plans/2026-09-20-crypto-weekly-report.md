@@ -45,14 +45,12 @@ The weekly adapter obtains one current exchangeInfo snapshot and never reads his
 
 ## Checklist
 
-- [x] DSH implementation and correction, isolatedworktree; two runs both reached40-step limit, status is not claimed as successful handoff.
-- [x] Codex review and211focused tests PASS; daily tests retained.
-- [x] Independent native1w vs dailyaggregate RVOL and Fisher recursion,100selected symbols PASS, cutoff2026-09-14.
-- [x] Full suite:3781passed/12samebaselinefailures/4skipped. One interrupted networkcallback test individually reran1PASS. Final metadata-ordering change separately covered by focused211PASS.
-- [x] 2026-09-20 user decision supersedes the AERGO/BDXN historical-coverage exception: 下架的就不需要了 —— weekly universe is current-tradable-only. Strict historical reconstruction is no longer required for the weekly report. Dated evidence kept in `docs/issues/2026-09-20-crypto-weekly-historical-coverage.md`.
-- [ ] Real complete report dry-run and independent weekly current-universe pool/score acceptance. **Live smoke NOT done.**
-- [ ] Merge/push/deploy cron, preserving daily schedule. **Not deployed.**
-
-Independent diagnostic bounds for last closed week found identical pools with AERGO inside/outside its uncertain historicweek. This is not source-complete evidence and is retained only as dated history; the current-universe decision no longer depends on it.
+- [x] DSH implemented the report and the current-only universe. Three invocations total: two reached the step limit; the third completed. Codex reviewed the actual changes and completed acceptance.
+- [x] Final focused tests: 217 passed locally, in isolated cloud validation, and in production. Daily regression tests retained.
+- [x] Final full suite: 3789 passed, 12 existing failures, 4 skipped. Failure IDs exactly match the baseline; seven missing research-data fixtures and five morning classification mismatches.
+- [x] Independent native weekly data and standard-library math reproduced RVOL and Fisher for 100 selected contracts, cutoff 2026-09-14.
+- [x] Current-universe real dry-run: 526 contracts, 3000 weekly Top100 records, 1040 metric checks, all three pools and Top10 rankings independently verified. Shared-lock timeout and subsequent execution tested.
+- [x] Merged, pushed and deployed runtime 4632cd7 under the shared Quant lock. Added only the Monday 09:00 job; existing cron bytes and daily script hashes unchanged. Backup: Quant/backups/crypto-weekly-20260920T032749Z/.
+- [x] Production dry-run and independent verification passed without sending messages. First natural run: 2026-09-21 09:00 Beijing; not yet observed.
 
 The earlier AERGO boundary-proof option was superseded by the explicit current-universe decision; no such fallback is implemented.

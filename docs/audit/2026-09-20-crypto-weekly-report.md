@@ -1,23 +1,35 @@
-# Crypto weekly report — implementation acceptance, rollout blocked
+# Crypto weekly report — deployed 2026-09-20
 
-Branch codex/crypto-weekly-report, baseline7bbdad6. Two DSH implementation sessions (default DeepSeek-V41-Flash) reached40-step limits; Codex completed review/corrections/documentation and directlyverified outputs. No subagents were spawned.
+Runtime commit 4632cd7 is merged into main, pushed and deployed. Weekly reports use currently tradable Binance COIN USDT perpetuals; Boss explicitly excluded delisted contracts. Existing daily reports retain their universe and schedule.
 
-- Focused command: `python -m pytest tests/test_crypto*.py tests/test_fisher_indicator.py tests/test_rvol_sustained.py -q` →211passed in5.84s.
-- Full suite →3781passed,12failed,4skipped. All12failureIDs match reports/crypto-alpha-2026-09-19/report/verification_logs/crypto-alpha-full-validated.log. Unchanged7breadthsnapshot failures and5morningconcept-render failures. Final catalog chronological-order correction covered by additional focusedtests.
-- An interrupt during an unrelated slowcurl callback produced a warning; affectedtest test_pipeline_scratchpad::test_collect_data_without_scratchpad reran separately →1passed in4.48s. Do not describe fullsuite as green.
-- LocalPython3.10 grammar, actualcloudPython3.10 compile, bash-n andgit diff--check pass. Newwrapperexecutable.
-- Independentstdlib calculation from frozen daily evidence plus live missingdailybars selects latest-week100; native1w API inputs independently reproduce RVOL fromdailyaggregation and Fisherrecursion. Cutoff2026-09-14: RVOLvalid77, Fishervalid96, newup2/down5 (2%/5% offixed100). JSON andindicatorpreview under reports/crypto_weekly/2026-09-20-validation/.
-- Strict cloud dryrun failed asintended at historiccatalog gate: AERGOUSDT,BDXNUSDT,BTCSTUSDT,SXPUSDT. Source coverageNOTpassed; nofulltrendpreview/Telegramsend.
-- Userclarification pending on allowing explicit invariant-pool evidence for the AERGOterminalday gap. Preliminaryindependentproof at thiscutoff finds78/73/59members in7/14/30weekpools identical under bothboundarycases, but that isnot sourcecomplete, notblanket futureproof, and notimplemented asfallback.
+## Live behavior
 
-Production unchanged: no merge/push, no croninstall, noexisting dailyfiles modified. Remotevalidation isolated at /tmp/crypto-weekly-validation-20260920. Localprivatetaskbriefs, raw1winputs, referencecode, fulllogs in work/crypto-weekly/. No credentials copied or committed.
+- Monday 09:00 Asia/Shanghai: `0 9 * * 1 /root/workspace/Quant/scanners/run_weekly_scan.sh`.
+- Last closed Binance week ends Monday 00:00 UTC / 08:00 Beijing. Latest completed-week quote-turnover Top100 selects RVOL Top20 (previous 52 weeks, population sigma) and Fisher9 new Trigger crossings, with a fixed denominator of 100.
+- Trend windows are 7/14/30 weeks using daily closes, strict-majority 4/8/16 weekly Top100 memberships, the same four metrics and 40/20/20/20 weights, and Top10 per window.
+- Every weekly ranking excludes current delisted, SETTLING and PENDING contracts. Current-contract data gaps still fail explicitly.
+- Shared daily Quant lock, finite 1800-second wait, own log and failure alert. Artifacts are saved before five ordered messages. No manual Telegram sends during rollout.
 
-Remaining: resolvehistoricalmetadata/terminalturnoverpolicy, implement/test permitted approach, complete real report andindependentpool/score audit, then rollout under sharedQuantlock withcrontab backup andverification.
+## Acceptance
 
-## 2026-09-20 addendum — current-universe scope (history above retained)
+- Codex independently ran 217 focused tests locally. Isolated cloud: 217 passed. Production: 217 passed in 12.16 seconds. Python 3.10 compile and bash syntax checks passed.
+- Final full suite: 3789 passed, 12 failed, 4 skipped, 17 warnings in 260.48 seconds. All 12 failure IDs match the prior baseline: seven missing local research-data/price fixtures and five morning concept-classification expectations. Details: `reports/crypto_weekly/2026-09-20-deployment/full-suite-summary.json`.
+- 526 current contracts fetched serially, 527 prefetch requests, zero failures. An independent standard-library verifier reproduced 3000 weekly Top100 records, 1040 metric values, percentiles, pool memberships and every Top10 rank.
+- At cutoff 2026-09-14, RVOL had 77 valid members. Fisher had 96 valid members, with two new upcrosses and five downcrosses: 2% and 5% of the fixed 100-member pool.
+- Pools for 7/14/30 weeks: 78/73/60; valid price histories: 77/72/59; positive trends: 60/41/20. Incomplete histories remain unavailable, without filling or replacement.
+- A real Linux wrapper fixture verified lock timeout exit 75, subsequent successful exit 0, and environment export. Telegram variables were blank, so no alert delivery occurred.
+- A production dry-run used the real Finance module and Quant adapter. The independent verifier checked the production raw cache and saved exchangeInfo snapshot again.
 
-Boss 明确「下架的就不需要了」: the weekly report is now current-tradable-only (`CurrentTrendMarket`/`current_catalog`), excluding delisted/SETTLING/PENDING/historical-only contracts before any history fetch. The historical AERGO/BDXN coverage gate above is superseded for the weekly report; the acceptance evidence remains dated history. Daily historical-universe behavior is unchanged. Live smoke and deployment remain NOT done.
+## Deployment evidence
 
-## Current-only acceptance, 2026-09-20
+Backup: `/root/workspace/Quant/backups/crypto-weekly-20260920T032749Z/`. It contains the old head 7bbdad6, prior changed runtime archive, crontab before/after, daily hashes before/after, tests, production preview, verification and PASS status.
 
-DSH third invocation implemented the user-approved current-only universe and completed successfully. Codex reviewed the finaldiff, verified217focusedtests locally and217oncloudPython3.10. Real cloudrawdata:526eligiblecontracts,527prefetchrequests,zero failures; reuse100nativeweeklyhistories. Independentstdlib verifier reproduced3000weeklyTop100records,1040metricvalues, percentiles, threepools andTop10ranks. RVOLvalid77;Fishervalid96,newup2/down5. Pools7/14/30=78/73/60;valid77/72/59. WrapperrealLinuxfixture verifiedsharedlocktimeout75 andsubsequentexecution0 plusenvexport; noTelegramcredentials or sends. Evidence:reports/crypto_weekly/2026-09-20-current-only/.
+Exactly one Monday 09:00 line and its comment were added; every previous crontab byte was retained. The SHA256 hashes of `run_daily_scan.sh` and `daily_scan_all.py` are unchanged. New wrapper and shim match their versioned sources. Existing user edits in CLAUDE.md and cio-b/CLAUDE.md were preserved by hash checks. No service restart or additional automation was created.
+
+First natural run: 2026-09-21 09:00 Beijing, not yet observed. All acceptance runs were dry-runs. Preview: `reports/crypto_weekly/2026-09-20-current-only/preview.md`. Production evidence: `reports/crypto_weekly/2026-09-20-deployment/`.
+
+## Implementation provenance
+
+DSH used three invocations across the task. Initial implementation and correction reached their 40-step limits. The later user-approved current-only scope completed in 50 steps with a 60-step allowance. Codex reviewed the actual changes, completed corrections and documentation, and verified the result independently. No additional subagents were spawned.
+
+The AERGO historical-coverage issue remains documented as dated evidence. The user's current-universe choice superseded that blocker; no missing-volume fallback was introduced.
