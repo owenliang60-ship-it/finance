@@ -1,0 +1,98 @@
+{
+  "result": "PASS",
+  "weights": {
+    "return": 0.5,
+    "er": 0.15,
+    "r_squared": 0.15,
+    "drawdown": 0.1,
+    "quote_volume": 0.1
+  },
+  "periods": {
+    "30w": {
+      "pool": 60,
+      "valid": 59,
+      "old_top10": [
+        "HYPEUSDT",
+        "ZECUSDT",
+        "VVVUSDT",
+        "LITUSDT",
+        "NEARUSDT",
+        "INJUSDT",
+        "币安人生USDT",
+        "XMRUSDT",
+        "TRXUSDT",
+        "UNIUSDT"
+      ],
+      "new_top10": [
+        "HYPEUSDT",
+        "ZECUSDT",
+        "VVVUSDT",
+        "NEARUSDT",
+        "币安人生USDT",
+        "LITUSDT",
+        "INJUSDT",
+        "UNIUSDT",
+        "XMRUSDT",
+        "TRXUSDT"
+      ]
+    },
+    "14w": {
+      "pool": 73,
+      "valid": 72,
+      "old_top10": [
+        "BTWUSDT",
+        "XMRUSDT",
+        "AKEUSDT",
+        "ETHUSDT",
+        "LITUSDT",
+        "ETHFIUSDT",
+        "UNIUSDT",
+        "AAVEUSDT",
+        "ZECUSDT",
+        "SOLUSDT"
+      ],
+      "new_top10": [
+        "AKEUSDT",
+        "BTWUSDT",
+        "ZECUSDT",
+        "UNIUSDT",
+        "ETHUSDT",
+        "LITUSDT",
+        "AAVEUSDT",
+        "XMRUSDT",
+        "SOLUSDT",
+        "PUMPUSDT"
+      ]
+    },
+    "7w": {
+      "pool": 78,
+      "valid": 77,
+      "old_top10": [
+        "BTWUSDT",
+        "MUBARAKUSDT",
+        "龙虾USDT",
+        "XMRUSDT",
+        "ZECUSDT",
+        "CRVUSDT",
+        "LITUSDT",
+        "PROMUSDT",
+        "AKEUSDT",
+        "BNBUSDT"
+      ],
+      "new_top10": [
+        "BTWUSDT",
+        "ZECUSDT",
+        "AKEUSDT",
+        "龙虾USDT",
+        "PROMUSDT",
+        "MUBARAKUSDT",
+        "LITUSDT",
+        "XMRUSDT",
+        "CRVUSDT",
+        "SOLUSDT"
+      ]
+    }
+  },
+  "turnover_checks": 208,
+  "invariants": "raw price metrics, pools, membership, standalone RVOL and Fisher exactly unchanged"
+}

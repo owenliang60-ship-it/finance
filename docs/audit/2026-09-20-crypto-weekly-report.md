@@ -33,3 +33,8 @@ First natural run: 2026-09-21 09:00 Beijing, not yet observed. All acceptance ru
 DSH used three invocations across the task. Initial implementation and correction reached their 40-step limits. The later user-approved current-only scope completed in 50 steps with a 60-step allowance. Codex reviewed the actual changes, completed corrections and documentation, and verified the result independently. No additional subagents were spawned.
 
 The AERGO historical-coverage issue remains documented as dated evidence. The user's current-universe choice superseded that blocker; no missing-volume fallback was introduced.
+
+> Superseded (weekly trend weights only, 2026-09-20): weekly trend scoring is now
+> return50 / ER15 / R²15 / drawdown10 / window-turnover10 (schema 2). See
+> `docs/audit/2026-09-20-crypto-weekly-turnover-weights.md`. Daily 40/20/20/20
+> and every other 2026-09-20 acceptance result above remain valid.

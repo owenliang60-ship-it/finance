@@ -281,3 +281,17 @@ def test_mathematical_score_ties_use_symbol_not_floating_sum_noise(monkeypatch):
     report=trend.rank_period(list(values),{s:prices().rename(s) for s in values},ASOF,7)
     assert [r['symbol'] for r in report['ranked']]==['CUSDT','AUSDT','BUSDT']
     assert [r['score'] for r in report['ranked']]==[80.,60.,60.]
+
+
+def test_daily_weights_message_and_default_score_scheme_unchanged():
+    """The shared kernel must keep the exact daily 40/20/20/20 behavior."""
+    assert trend.WEIGHTS=={'return':.4,'er':.2,'r_squared':.2,'drawdown':.2}
+    report=trend.build_report(FakeMarket(),ASOF,top_n=2)
+    assert report['weights']==trend.WEIGHTS
+    msg=trend.message(report,7)
+    assert '权重：涨幅40% / ER20% / R²20% / 回撤20%' in msg
+    assert '成交额10%' not in msg
+    rows=[dict(symbol='A',**{'return':1.0,'er':1.0,'r_squared':1.0,'drawdown':0.0})]
+    trend.score_valid_rows(rows)
+    assert set(rows[0]['percentiles'])=={'return','er','r_squared','drawdown'}
+    assert rows[0]['score']==pytest.approx(100.0)

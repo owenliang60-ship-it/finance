@@ -71,8 +71,8 @@ def daily_volume_rankings(frames, metadata, as_of, days=30, top_n=100,
     return rankings
 
 
-def score_valid_rows(valid):
-    """Attach percentiles and the 40/20/20/20 integer score to valid rows.
+def score_valid_rows(valid, weights=None):
+    """Attach percentiles and an integer weighted score to valid rows.
 
     Percentiles use ``100 * count(values <= current) / valid_count`` over ALL
     measured pool members (the caller applies the direction gate afterwards).
@@ -80,15 +80,20 @@ def score_valid_rows(valid):
     point numerator preserves exact ties; separately summing rounded
     percentile floats can invent 1e-14 gaps.  Shared by the daily 4h and
     weekly 1d ranking kernels.
+
+    ``weights`` defaults to the daily :data:`WEIGHTS` (40/20/20/20) so every
+    existing daily caller keeps its exact behavior; the weekly kernel passes
+    its own approved return/ER/R²/drawdown/turnover weights explicitly.
     """
+    weights = WEIGHTS if weights is None else weights
     for row in valid:
         row['percentiles'] = {}
         counts = {}
-        for key in WEIGHTS:
+        for key in weights:
             sign = -1 if key == 'drawdown' else 1
             counts[key] = sum(sign*r[key] <= sign*row[key] for r in valid)
             row['percentiles'][key] = 100*counts[key]/len(valid)
-        row['score'] = sum(counts[key]*(weight*100) for key, weight in WEIGHTS.items())/len(valid)
+        row['score'] = sum(counts[key]*(weight*100) for key, weight in weights.items())/len(valid)
     return valid
 
 

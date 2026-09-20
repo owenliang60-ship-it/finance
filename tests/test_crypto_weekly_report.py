@@ -1,5 +1,6 @@
 """Behavioral tests for the weekly crypto report (RVOL / Fisher / weekly trend)."""
 import json
+import re
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -699,3 +700,188 @@ def test_weekly_shim_points_at_versioned_finance_module():
     source = (ROOT / 'scripts' / 'quant' / 'weekly_scan_all.py').read_text()
     assert 'crypto_weekly_report' in source
     assert 'Finance' in source
+
+
+# ---------------------------------------------------------------------------
+# Weekly turnover-weighted trend score (return50/ER15/R²15/DD10/turnover10)
+# ---------------------------------------------------------------------------
+
+APPROVED_WEEKLY_WEIGHTS = {'return': .5, 'er': .15, 'r_squared': .15,
+                           'drawdown': .1, 'quote_volume': .1}
+
+
+def closes_series(slope, days=50, start=None):
+    end = CUTOFF - pd.Timedelta(days=1) if start is None else start
+    dates = pd.date_range(end=end, periods=days, freq='D')
+    values = 100.0 * np.exp(slope * np.arange(days))
+    return pd.Series(values, index=dates)
+
+
+def volume_frame(volume=1.0, days=260):
+    dates = pd.date_range(end=CUTOFF - pd.Timedelta(days=1), periods=days, freq='D')
+    return pd.DataFrame({'timestamp': dates, 'close': 100.0, 'quote_volume': volume})
+
+
+def test_weekly_weights_are_approved_scheme_and_sum_to_one():
+    assert weekly.WEEKLY_WEIGHTS == APPROVED_WEEKLY_WEIGHTS
+    assert sum(weekly.WEEKLY_WEIGHTS.values()) == pytest.approx(1.0)
+    assert set(weekly.WEEKLY_WEIGHTS) == {'return', 'er', 'r_squared',
+                                          'drawdown', 'quote_volume'}
+
+
+def test_period_quote_volume_is_full_horizon_excluding_baseline_and_current_week():
+    for weeks in (7, 14, 30):
+        days = weeks * 7
+        dates = pd.date_range(end=CUTOFF - pd.Timedelta(days=1), periods=days + 1, freq='D')
+        frame = pd.DataFrame({'timestamp': dates, 'close': 100.0, 'quote_volume': 1.0})
+        baseline = CUTOFF - pd.Timedelta(days=days + 1)
+        assert frame['timestamp'].iloc[0] == baseline
+        frame.loc[frame['timestamp'] == baseline, 'quote_volume'] = 1e9   # price baseline
+        frame.loc[frame['timestamp'] == CUTOFF - pd.Timedelta(days=1), 'quote_volume'] = 1.0
+        current = pd.DataFrame({'timestamp': [CUTOFF], 'close': [100.0], 'quote_volume': [1e9]})
+        frame = pd.concat([frame, current]).reset_index(drop=True)
+        assert weekly.period_quote_volume(frame, 'AUSDT', CUTOFF, weeks) == pytest.approx(float(days))
+
+
+def test_period_quote_volume_uses_usdt_quote_volume_not_base_volume():
+    dates = pd.date_range(end=CUTOFF - pd.Timedelta(days=1), periods=49, freq='D')
+    frame = pd.DataFrame({'timestamp': dates, 'close': 100.0, 'volume': 1e12,
+                          'quote_volume': 3.0})
+    assert weekly.period_quote_volume(frame, 'AUSDT', CUTOFF, 7) == pytest.approx(49 * 3.0)
+    with pytest.raises(ValueError, match='成交额'):
+        weekly.period_quote_volume(frame.drop(columns=['quote_volume']), 'AUSDT', CUTOFF, 7)
+
+
+def test_rank_weeks_bigger_quote_volume_raises_only_the_ten_percent_component():
+    closes = {'AUSDT': closes_series(.01), 'BUSDT': closes_series(.01)}
+    frames = {'AUSDT': volume_frame(2.0), 'BUSDT': volume_frame(1.0)}
+    report = weekly.rank_weeks(['AUSDT', 'BUSDT'], closes, frames, CUTOFF, 7)
+    by = {row['symbol']: row for row in report['rows']}
+    assert by['AUSDT']['percentiles']['quote_volume'] == pytest.approx(100.0)
+    assert by['BUSDT']['percentiles']['quote_volume'] == pytest.approx(50.0)
+    for key in ('return', 'er', 'r_squared', 'drawdown'):
+        assert by['AUSDT']['percentiles'][key] == by['BUSDT']['percentiles'][key]
+    assert by['AUSDT']['score'] - by['BUSDT']['score'] == pytest.approx(5.0)
+    assert [row['symbol'] for row in report['ranked']] == ['AUSDT', 'BUSDT']
+
+
+def test_rank_weeks_hand_scored_different_profiles_tie_exactly_at_75(monkeypatch):
+    metrics = {
+        'AUSDT': {'return': .02, 'er': .1, 'r_squared': .1, 'drawdown': .2, 'slope': .01},
+        'BUSDT': {'return': .01, 'er': .2, 'r_squared': .2, 'drawdown': .1, 'slope': .01},
+    }
+    monkeypatch.setattr(weekly, 'trend_metrics', lambda sample: metrics[sample.name])
+    closes = {symbol: closes_series(.01).rename(symbol) for symbol in metrics}
+    frames = {'AUSDT': volume_frame(1.0), 'BUSDT': volume_frame(2.0)}
+    report = weekly.rank_weeks(['AUSDT', 'BUSDT'], closes, frames, CUTOFF, 7)
+    by = {row['symbol']: row for row in report['rows']}
+    assert by['AUSDT']['score'] == pytest.approx(75.0)
+    assert by['BUSDT']['score'] == pytest.approx(75.0)
+    assert by['AUSDT']['eligible'] is True and by['BUSDT']['eligible'] is True
+    assert [row['symbol'] for row in report['ranked']] == ['AUSDT', 'BUSDT']
+
+
+def test_rank_weeks_identical_evidence_ties_stable_by_symbol():
+    closes = {'BUSDT': closes_series(.01), 'AUSDT': closes_series(.01)}
+    frames = {'AUSDT': volume_frame(1.0), 'BUSDT': volume_frame(1.0)}
+    report = weekly.rank_weeks(['BUSDT', 'AUSDT'], closes, frames, CUTOFF, 7)
+    by = {row['symbol']: row for row in report['rows']}
+    assert by['AUSDT']['score'] == by['BUSDT']['score']
+    for symbol in ('AUSDT', 'BUSDT'):
+        for key in weekly.WEEKLY_WEIGHTS:
+            assert by[symbol]['percentiles'][key] == 100.0
+    assert [row['symbol'] for row in report['ranked']] == ['AUSDT', 'BUSDT']
+
+
+@pytest.mark.parametrize('problem', ['missing', 'duplicate', 'nan', 'negative', 'stale'])
+def test_rank_weeks_bad_volume_evidence_is_explicitly_unavailable(problem):
+    frame = volume_frame(1.0)
+    target = 250                       # inside the strict 7-week window (labels 211..259)
+    if problem == 'missing':
+        frame = frame.drop(target).reset_index(drop=True)
+    elif problem == 'duplicate':
+        frame = pd.concat([frame, frame.loc[[target]]])
+    elif problem == 'nan':
+        frame.loc[target, 'quote_volume'] = float('nan')
+    elif problem == 'negative':
+        frame.loc[target, 'quote_volume'] = -1.0
+    elif problem == 'stale':
+        frame['timestamp'] = frame['timestamp'] - pd.Timedelta(days=1)
+    closes = {'AUSDT': closes_series(.01), 'BUSDT': closes_series(.01)}
+    frames = {'AUSDT': frame, 'BUSDT': volume_frame(1.0)}
+    report = weekly.rank_weeks(['AUSDT', 'BUSDT'], closes, frames, CUTOFF, 7)
+    by = {row['symbol']: row for row in report['rows']}
+    assert by['AUSDT']['status'] == 'unavailable'
+    assert by['AUSDT']['reason']
+    assert 'percentiles' not in by['AUSDT']
+    assert by['BUSDT']['status'] == 'ok'
+    assert report['valid_count'] == 1
+
+
+def test_rank_weeks_all_invalid_nonempty_pool_fails_closed():
+    frame = volume_frame(1.0)
+    frame.loc[250, 'quote_volume'] = float('nan')
+    with pytest.raises(ValueError, match='不可用'):
+        weekly.rank_weeks(['AUSDT'], {'AUSDT': closes_series(.01)},
+                          {'AUSDT': frame}, CUTOFF, 7)
+
+
+def test_rank_weeks_volume_percentile_denominator_includes_valid_downtrends():
+    closes = {'UPUSDT': closes_series(.01), 'FLATUSDT': closes_series(0.0),
+              'DOWNUSDT': closes_series(-.01)}
+    frames = {'UPUSDT': volume_frame(2.0), 'FLATUSDT': volume_frame(1.0),
+              'DOWNUSDT': volume_frame(3.0)}
+    report = weekly.rank_weeks(['UPUSDT', 'FLATUSDT', 'DOWNUSDT'], closes, frames, CUTOFF, 7)
+    by = {row['symbol']: row for row in report['rows']}
+    assert report['valid_count'] == 3 and report['uptrend_count'] == 1
+    assert by['FLATUSDT']['percentiles']['quote_volume'] == pytest.approx(100 / 3)
+    assert by['DOWNUSDT']['percentiles']['quote_volume'] == pytest.approx(100.0)
+    assert set(by['DOWNUSDT']['percentiles']) == {'return', 'er', 'r_squared',
+                                                  'drawdown', 'quote_volume'}
+    assert [row['symbol'] for row in report['top10']] == ['UPUSDT']
+
+
+def test_rank_weeks_signed_return_and_direction_gate_unchanged():
+    closes = {'UPUSDT': closes_series(.01), 'DOWNUSDT': closes_series(-.01)}
+    frames = {'UPUSDT': volume_frame(1.0), 'DOWNUSDT': volume_frame(1.0)}
+    report = weekly.rank_weeks(['UPUSDT', 'DOWNUSDT'], closes, frames, CUTOFF, 7)
+    by = {row['symbol']: row for row in report['rows']}
+    assert by['UPUSDT']['return'] > 0 and by['DOWNUSDT']['return'] < 0
+    assert by['UPUSDT']['eligible'] is True and by['DOWNUSDT']['eligible'] is False
+    assert [row['symbol'] for row in report['ranked']] == ['UPUSDT']
+    assert report['valid_count'] == 2 and report['uptrend_count'] == 1
+    assert by['DOWNUSDT']['percentiles']['return'] < by['UPUSDT']['percentiles']['return']
+
+
+def test_report_uses_existing_daily_frames_for_turnover_without_extra_requests():
+    market = fixture_market()
+    report = build_report(market, CUTOFF, top_n=3)
+    assert report['schema_version'] == 2
+    assert report['weights'] == weekly.WEEKLY_WEIGHTS
+    assert sum(report['weights'].values()) == pytest.approx(1.0)
+    assert len([call for call in market.calls if call[0] == 'daily']) == 6
+    native = [call for call in market.calls if call[0] == 'fetch']
+    assert len(native) == 3                       # Fisher9 only; no turnover fetches
+    assert all(call[2] == '1w' for call in native)
+    for label in ('7w', '14w', '30w'):
+        for row in report['trend']['periods'][label]['rows']:
+            if row['status'] == 'ok':
+                assert row['quote_volume'] >= 0.0
+                assert 'quote_volume' in row['percentiles']
+    json.dumps(report, ensure_ascii=False, allow_nan=False)
+
+
+def test_weekly_trend_messages_show_new_weights_and_window_turnover():
+    report = build_report(fixture_market(), CUTOFF, top_n=3)
+    messages = build_messages(report)
+    trend_messages = messages[2:5]
+    assert len(trend_messages) == 3
+    for message in trend_messages:
+        assert '涨幅50%' in message and 'ER15%' in message and 'R²15%' in message
+        assert '回撤10%' in message and '成交额10%' in message
+        assert '各自窗口累计USDT成交额' in message
+    joined = '\n'.join(trend_messages)
+    assert re.search(r'额 [\d.]+[KMB]?', joined)
+    assert weekly.format_amount(1.5e6) == '1.50M'
+    assert weekly.format_amount(2.5e9) == '2.50B'
+    json.dumps(report, ensure_ascii=False, allow_nan=False)

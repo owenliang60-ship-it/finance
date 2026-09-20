@@ -1,6 +1,6 @@
 # Crypto weekly report
 
-Status: LIVE as of 2026-09-20. Runtime deployed at4632cd7; backup /root/workspace/Quant/backups/crypto-weekly-20260920T032749Z/. Production tests and independent verification PASS. First natural run2026-09-21 09:00 Asia/Shanghai, not yet observed. Weekly universe is **current-tradable-only** (2026-09-20 user decision 「下架的就不需要了」): only Binance COIN USDT PERPETUAL `status=TRADING` with `onboard ≤ cutoff < delivery`, replayed over the 7/14/30 historical weekly Top100. Delisted/SETTLING/PENDING/historical-only contracts are excluded from all rankings/indicators/trend pools; this is not an all-market point-in-time snapshot. The earlier historical-coverage gate is superseded for the weekly report; dated evidence remains in docs/issues/2026-09-20-crypto-weekly-historical-coverage.md. Daily historical-universe behavior is unchanged.
+Status: LIVE as of 2026-09-20. Runtime deployed at4632cd7; backup /root/workspace/Quant/backups/crypto-weekly-20260920T032749Z/. Production tests and independent verification PASS. First natural run2026-09-21 09:00 Asia/Shanghai, not yet observed. Weekly universe is **current-tradable-only** (2026-09-20 user decision 「下架的就不需要了」): only Binance COIN USDT PERPETUAL `status=TRADING` with `onboard ≤ cutoff < delivery`, replayed over the 7/14/30 historical weekly Top100. Delisted/SETTLING/PENDING/historical-only contracts are excluded from all rankings/indicators/trend pools; this is not an all-market point-in-time snapshot. The earlier historical-coverage gate is superseded for the weekly report; dated evidence remains in docs/issues/2026-09-20-crypto-weekly-historical-coverage.md. Daily historical-universe behavior is unchanged. Weekly trend scoring was extended to the approved turnover-weighted scheme on 2026-09-20 (schema 2); see the weekly trend score section below.
 
 ## Schedule and entry
 
@@ -23,6 +23,24 @@ python3 -m scripts.crypto_weekly_report --scanner-dir /root/workspace/Quant/scan
 Explicit as-of must be a completed UTC Sunday; default derives most recent closed week. Only public marketdata and own artifacts are involved. dry-run must never send Telegram. Entire report is built and saved before first send. Current implementation does not deduplicate successful manual replays; rerun default with dry-run when inspecting.
 
 RVOL needs53completeweeklybars, excludes current from52mean/std. Fisher9 uses weeklyHL2,Trigger=Fisher[1], reports NEW crossings only; all percentages divide by selectedTop100, not merely validhistorycount. Unknown remains explicit. Trend pools independently require4/7,8/14,16/30weeklyTop100 memberships, prices are daily1dcloses. Universe is current-tradable-only: the weekly catalog fetches exchangeInfo once, saves its own snapshot and returns explicit current-universe evidence; delisted/SETTLING/PENDING contracts are filtered out before any history is fetched. A currently-eligible contract with a real gap or API failure still stops publication.
+
+## Weekly trend score (2026-09-20, schema 2)
+
+Weekly trend windows are scored return50 / ER15 / R²15 / drawdown10 /
+window-turnover10. `quote_volume` is the total USDT turnover over the ranking's
+own `weeks*7`-day horizon `[cutoff - 7*weeks, cutoff)`, so the initial price
+baseline bar (`cutoff - 7*weeks - 1 day`) and the still-open current week are
+excluded. It is summed from the same raw daily frames already fetched by
+`build_report`; no additional exchange request is made. Percentiles use the same
+eligible valid pool as the other metrics (valid downtrends stay in the
+denominator), the direction gate is unchanged (`return > 0 and slope > 0`,
+applied after scoring) and the JSON carries `schema_version=2` /
+`scoring_version=2` with the approved weights. Missing, duplicated, stale, NaN
+or negative daily volume is explicitly unavailable or fails the non-empty pool
+closed; numeric zero is a valid observation and is never replaced by a zero or
+old-weight fallback. Daily 40/20/20/20 rankings and messages are unchanged, and
+RVOL52 / Fisher9 / cron / artifact routes are untouched. Dated 2026-09-20
+acceptance evidence remains in `docs/audit/2026-09-20-crypto-weekly-report.md`.
 
 ## Rollout gate and rollback
 
