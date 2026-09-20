@@ -196,3 +196,34 @@ def test_explicit_pending_status_error_is_distinct_from_transport_failure(tmp_pa
     response.json=lambda:{'code':-1000,'msg':'Unknown error'}
     with pytest.raises(RuntimeError) as error:market.fetch_daily('AUSDT',ASOF,ASOF+pd.Timedelta(days=1))
     assert not isinstance(error.value,InactiveSymbolError)
+
+
+def test_weekly_catalog_audits_removed_competitors_older_than_daily_horizon(tmp_path, monkeypatch):
+    start_seen = []
+    market = TrendMarket(Scanner(), tmp_path, ASOF, history_days=210)
+    monkeypatch.setattr(market, 'archive_symbols', lambda: {'AUSDT', 'GONEUSDT'})
+    def activity(symbol, start, end):
+        start_seen.append(start)
+        return start <= ASOF-pd.Timedelta(days=60) < end
+    monkeypatch.setattr(market, 'has_archive_activity', activity)
+    with pytest.raises(ValueError, match='GONEUSDT'):
+        market.catalog(ASOF)
+    assert start_seen == [ASOF-pd.Timedelta(days=209)]
+
+
+def test_catalog_readonly_extra_directory_cannot_override_newer_lifecycle(tmp_path, monkeypatch):
+    own, extra = tmp_path/'weekly', tmp_path/'daily'
+    own.mkdir(); extra.mkdir()
+    old = metadata('GONEUSDT')
+    old.update(status='SETTLING', deliveryDate=int((ASOF-pd.Timedelta(days=10)).timestamp()*1000))
+    newer = dict(old, deliveryDate=int((ASOF-pd.Timedelta(days=1)).timestamp()*1000))
+    old_path = extra/'catalog_2026-09-01.json'
+    old_path.write_text(json.dumps({'symbols':[old]}))
+    old_bytes = old_path.read_bytes()
+    (own/'catalog_2026-09-05.json').write_text(json.dumps({'symbols':[newer]}))
+    market = TrendMarket(Scanner(), own, ASOF, catalog_dirs=[extra])
+    monkeypatch.setattr(market, 'archive_symbols', lambda: {'AUSDT', 'GONEUSDT'})
+    records, _, _ = market.catalog(ASOF)
+    assert next(m for m in records if m['symbol']=='GONEUSDT')['deliveryDate']==newer['deliveryDate']
+    assert old_path.read_bytes()==old_bytes
+    assert list(extra.iterdir())==[old_path]

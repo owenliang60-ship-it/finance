@@ -71,12 +71,34 @@ def daily_volume_rankings(frames, metadata, as_of, days=30, top_n=100,
     return rankings
 
 
-def build_pools(daily_rankings, as_of, active_symbols, periods=PERIODS):
+def score_valid_rows(valid):
+    """Attach percentiles and the 40/20/20/20 integer score to valid rows.
+
+    Percentiles use ``100 * count(values <= current) / valid_count`` over ALL
+    measured pool members (the caller applies the direction gate afterwards).
+    Drawdown is scored reversed so a smaller drawdown is better.  The integer
+    point numerator preserves exact ties; separately summing rounded
+    percentile floats can invent 1e-14 gaps.  Shared by the daily 4h and
+    weekly 1d ranking kernels.
+    """
+    for row in valid:
+        row['percentiles'] = {}
+        counts = {}
+        for key in WEIGHTS:
+            sign = -1 if key == 'drawdown' else 1
+            counts[key] = sum(sign*r[key] <= sign*row[key] for r in valid)
+            row['percentiles'][key] = 100*counts[key]/len(valid)
+        row['score'] = sum(counts[key]*(weight*100) for key, weight in WEIGHTS.items())/len(valid)
+    return valid
+
+
+def build_pools(daily_rankings, as_of, active_symbols, periods=PERIODS, freq='D',
+                label_suffix='d'):
     as_of = utc_day(as_of)
     pools = {}
     for days in periods:
         counts = Counter()
-        for day in pd.date_range(end=as_of, periods=days, freq='D'):
+        for day in pd.date_range(end=as_of, periods=days, freq=freq):
             rows = daily_rankings.get(str(day.date()))
             if not isinstance(rows, list) or not rows:
                 raise ValueError(f'{day.date()}完整排名缺失')
@@ -86,8 +108,9 @@ def build_pools(daily_rankings, as_of, active_symbols, periods=PERIODS):
                     or [r.get('rank') for r in rows] != list(range(1, len(rows)+1))):
                 raise ValueError(f'{day.date()}排名重复或无效')
             counts.update(symbols)
-        pools[f'{days}d'] = sorted(symbol for symbol, count in counts.items()
-                                  if count >= days//2+1 and symbol in active_symbols)
+        pools[f'{days}{label_suffix}'] = sorted(
+            symbol for symbol, count in counts.items()
+            if count >= days//2+1 and symbol in active_symbols)
     return pools
 
 
@@ -107,16 +130,7 @@ def rank_period(pool, closes_by_symbol, as_of, days):
     valid = [row for row in rows if row['status'] == 'ok']
     if pool and not valid:
         raise ValueError(f'{days}天非空池全部价格不可用，停止发布')
-    for row in valid:
-        row['percentiles'] = {}
-        counts = {}
-        for key in WEIGHTS:
-            sign = -1 if key == 'drawdown' else 1
-            counts[key] = sum(sign*r[key] <= sign*row[key] for r in valid)
-            row['percentiles'][key] = 100*counts[key]/len(valid)
-        # The 40/20/20/20 integer point numerator preserves exact ties;
-        # separately summing rounded percentile floats can invent 1e-14 gaps.
-        row['score'] = sum(counts[key]*(weight*100) for key, weight in WEIGHTS.items())/len(valid)
+    score_valid_rows(valid)
     ranked = sorted((row for row in valid if row['eligible']), key=lambda r: (-r['score'], r['symbol']))
     for i, row in enumerate(ranked, 1):
         row['rank'] = i

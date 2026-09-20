@@ -1,0 +1,690 @@
+{
+  "summary": {
+    "selected": 100,
+    "fisher_valid": 96,
+    "fisher_up": [
+      "TRXUSDT",
+      "XANUSDT"
+    ],
+    "fisher_down": [
+      "AKEUSDT",
+      "HEMIUSDT",
+      "FARTCOINUSDT",
+      "BTRUSDT",
+      "ACEUSDT"
+    ],
+    "rvol_valid": 77,
+    "result": "PASS"
+  },
+  "rows": [
+    {
+      "symbol": "BTCUSDT",
+      "weeks": 366,
+      "fisher": 1.629750933494611,
+      "crossing": null,
+      "rvol": -0.8307439297122635
+    },
+    {
+      "symbol": "ETHUSDT",
+      "weeks": 354,
+      "fisher": 2.487543563450773,
+      "crossing": null,
+      "rvol": -0.6694522690762681
+    },
+    {
+      "symbol": "ZECUSDT",
+      "weeks": 344,
+      "fisher": 1.9265675191008267,
+      "crossing": null,
+      "rvol": 1.661165933744962
+    },
+    {
+      "symbol": "SOLUSDT",
+      "weeks": 312,
+      "fisher": 1.8609393080713195,
+      "crossing": null,
+      "rvol": -0.7593109438745216
+    },
+    {
+      "symbol": "XRPUSDT",
+      "weeks": 348,
+      "fisher": 0.4867220738054039,
+      "crossing": null,
+      "rvol": -0.3472832818079528
+    },
+    {
+      "symbol": "LSKUSDT",
+      "weeks": 137,
+      "fisher": 0.8869826093709872,
+      "crossing": null,
+      "rvol": 14.297436435110356
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "weeks": 67,
+      "fisher": 1.0253788011733587,
+      "crossing": null,
+      "rvol": 0.03733442483785828
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "weeks": 322,
+      "fisher": 0.6492444747603496,
+      "crossing": null,
+      "rvol": -0.5285110870383788
+    },
+    {
+      "symbol": "BNBUSDT",
+      "weeks": 343,
+      "fisher": 1.854222462529351,
+      "crossing": null,
+      "rvol": -0.3815821630201284
+    },
+    {
+      "symbol": "牛来USDT",
+      "weeks": 2
+    },
+    {
+      "symbol": "IOSTUSDT",
+      "weeks": 342,
+      "fisher": -0.9435973177552089,
+      "crossing": null,
+      "rvol": 93.12672570178705
+    },
+    {
+      "symbol": "NEARUSDT",
+      "weeks": 308,
+      "fisher": 0.5140709962527297,
+      "crossing": null,
+      "rvol": 1.123800285655141
+    },
+    {
+      "symbol": "SUIUSDT",
+      "weeks": 175,
+      "fisher": 0.13467227041077204,
+      "crossing": null,
+      "rvol": -0.045706449309336414
+    },
+    {
+      "symbol": "SOPHUSDT",
+      "weeks": 67,
+      "fisher": -1.3719434608489036,
+      "crossing": null,
+      "rvol": 14.907666142729441
+    },
+    {
+      "symbol": "PUMPUSDT",
+      "weeks": 61,
+      "fisher": 2.1282333684564954,
+      "crossing": null,
+      "rvol": 0.24331105291599098
+    },
+    {
+      "symbol": "WLDUSDT",
+      "weeks": 163,
+      "fisher": 0.2895972083190773,
+      "crossing": null,
+      "rvol": 0.16091587289722298
+    },
+    {
+      "symbol": "USELESSUSDT",
+      "weeks": 56,
+      "fisher": 0.17147170742039514,
+      "crossing": null,
+      "rvol": 3.6550090762545753
+    },
+    {
+      "symbol": "1000PEPEUSDT",
+      "weeks": 175,
+      "fisher": 1.0747677760775016,
+      "crossing": null,
+      "rvol": -0.712211842636713
+    },
+    {
+      "symbol": "UNIUSDT",
+      "weeks": 312,
+      "fisher": 2.438006812436112,
+      "crossing": null,
+      "rvol": 0.9446250238467192
+    },
+    {
+      "symbol": "VTHOUSDT",
+      "weeks": 85,
+      "fisher": 0.2747307962035148,
+      "crossing": null,
+      "rvol": 64.91726837825296
+    },
+    {
+      "symbol": "龙虾USDT",
+      "weeks": 26,
+      "fisher": 3.28311976207056,
+      "crossing": null
+    },
+    {
+      "symbol": "ENAUSDT",
+      "weeks": 127,
+      "fisher": 1.5607181348960908,
+      "crossing": null,
+      "rvol": -0.11860191465470997
+    },
+    {
+      "symbol": "VVVUSDT",
+      "weeks": 84,
+      "fisher": 1.1553060807484137,
+      "crossing": null,
+      "rvol": 3.872951721419567
+    },
+    {
+      "symbol": "ADAUSDT",
+      "weeks": 345,
+      "fisher": 1.5988644764633837,
+      "crossing": null,
+      "rvol": -0.5511775666018337
+    },
+    {
+      "symbol": "RAYSOLUSDT",
+      "weeks": 91,
+      "fisher": 1.3081968121454297,
+      "crossing": null,
+      "rvol": 16.73049751463183
+    },
+    {
+      "symbol": "ARBUSDT",
+      "weeks": 181,
+      "fisher": 0.991970591723945,
+      "crossing": null,
+      "rvol": 1.6154797928311229
+    },
+    {
+      "symbol": "LINKUSDT",
+      "weeks": 347,
+      "fisher": 2.2850853539890514,
+      "crossing": null,
+      "rvol": -0.19854774585142804
+    },
+    {
+      "symbol": "PONSUSDT",
+      "weeks": 1
+    },
+    {
+      "symbol": "TAOUSDT",
+      "weeks": 126,
+      "fisher": 0.8209613759134946,
+      "crossing": null,
+      "rvol": -0.09476280049069168
+    },
+    {
+      "symbol": "MARSCOINUSDT",
+      "weeks": 1
+    },
+    {
+      "symbol": "DOTUSDT",
+      "weeks": 316,
+      "fisher": 0.6061068779755096,
+      "crossing": null,
+      "rvol": 0.33885715311604486
+    },
+    {
+      "symbol": "FILUSDT",
+      "weeks": 308,
+      "fisher": -0.5256550978475171,
+      "crossing": null,
+      "rvol": -0.11129621408878271
+    },
+    {
+      "symbol": "TRUMPUSDT",
+      "weeks": 86,
+      "fisher": -0.1457225248111966,
+      "crossing": null,
+      "rvol": -0.18439257188706606
+    },
+    {
+      "symbol": "UAIUSDT",
+      "weeks": 44,
+      "fisher": 0.5758953614264395,
+      "crossing": null
+    },
+    {
+      "symbol": "AKEUSDT",
+      "weeks": 50,
+      "fisher": 1.888328511476712,
+      "crossing": "down"
+    },
+    {
+      "symbol": "DASHUSDT",
+      "weeks": 344,
+      "fisher": 0.6986125043221297,
+      "crossing": null,
+      "rvol": 0.010173105429801233
+    },
+    {
+      "symbol": "AVAXUSDT",
+      "weeks": 311,
+      "fisher": 1.3744593132893224,
+      "crossing": null,
+      "rvol": -0.6422582068267626
+    },
+    {
+      "symbol": "FLOCKUSDT",
+      "weeks": 52,
+      "fisher": 0.0941571484080026,
+      "crossing": null
+    },
+    {
+      "symbol": "BCHUSDT",
+      "weeks": 351,
+      "fisher": 0.7194206103715013,
+      "crossing": null,
+      "rvol": -0.7455149047896364
+    },
+    {
+      "symbol": "LABUSDT",
+      "weeks": 47,
+      "fisher": -3.553567055391417,
+      "crossing": null
+    },
+    {
+      "symbol": "LTCUSDT",
+      "weeks": 348,
+      "fisher": 1.6399213806757673,
+      "crossing": null,
+      "rvol": -0.4351991086090404
+    },
+    {
+      "symbol": "LITUSDT",
+      "weeks": 37,
+      "fisher": 2.7623239415327827,
+      "crossing": null
+    },
+    {
+      "symbol": "INJUSDT",
+      "weeks": 212,
+      "fisher": 0.2742183441686179,
+      "crossing": null,
+      "rvol": 0.9940348953545046
+    },
+    {
+      "symbol": "ONDOUSDT",
+      "weeks": 138,
+      "fisher": 0.04133036042200063,
+      "crossing": null,
+      "rvol": 0.02329819651929149
+    },
+    {
+      "symbol": "AAVEUSDT",
+      "weeks": 308,
+      "fisher": 2.4520179125268733,
+      "crossing": null,
+      "rvol": -0.7919261942413804
+    },
+    {
+      "symbol": "ETHFIUSDT",
+      "weeks": 129,
+      "fisher": 2.4439378270428813,
+      "crossing": null,
+      "rvol": 0.917818379056806
+    },
+    {
+      "symbol": "ASTERUSDT",
+      "weeks": 51,
+      "fisher": 0.6105744042197639,
+      "crossing": null
+    },
+    {
+      "symbol": "BULLAUSDT",
+      "weeks": 62,
+      "fisher": 3.2438439211689163,
+      "crossing": null,
+      "rvol": 0.4563098207233154
+    },
+    {
+      "symbol": "XLMUSDT",
+      "weeks": 346,
+      "fisher": 0.17345541603839038,
+      "crossing": null,
+      "rvol": -0.24021595382185654
+    },
+    {
+      "symbol": "PAXGUSDT",
+      "weeks": 76,
+      "fisher": 0.9153257306465858,
+      "crossing": null,
+      "rvol": -0.7096871561314356
+    },
+    {
+      "symbol": "PENGUUSDT",
+      "weeks": 90,
+      "fisher": 0.4368144282748709,
+      "crossing": null,
+      "rvol": -0.537305157178005
+    },
+    {
+      "symbol": "APTUSDT",
+      "weeks": 203,
+      "fisher": -0.653741342770842,
+      "crossing": null,
+      "rvol": -0.2761416691307037
+    },
+    {
+      "symbol": "XMRUSDT",
+      "weeks": 344,
+      "fisher": 2.3562125350726473,
+      "crossing": null,
+      "rvol": -0.09955143332873508
+    },
+    {
+      "symbol": "FORMUSDT",
+      "weeks": 77,
+      "fisher": 1.4087619230801494,
+      "crossing": null,
+      "rvol": 0.41142637884808186
+    },
+    {
+      "symbol": "ETCUSDT",
+      "weeks": 347,
+      "fisher": 0.5412802967105544,
+      "crossing": null,
+      "rvol": -0.056967078241332646
+    },
+    {
+      "symbol": "XPLUSDT",
+      "weeks": 55,
+      "fisher": -0.0016653050450238516,
+      "crossing": null,
+      "rvol": -0.34020626291889766
+    },
+    {
+      "symbol": "WLFIUSDT",
+      "weeks": 55,
+      "fisher": -0.5094551692768301,
+      "crossing": null,
+      "rvol": -0.44816036444960333
+    },
+    {
+      "symbol": "ICPUSDT",
+      "weeks": 207,
+      "fisher": 1.119920972302407,
+      "crossing": null,
+      "rvol": -0.18786716114131724
+    },
+    {
+      "symbol": "TRXUSDT",
+      "weeks": 347,
+      "fisher": 0.8744921718962156,
+      "crossing": "up",
+      "rvol": -0.8739086156126784
+    },
+    {
+      "symbol": "METUSDT",
+      "weeks": 48,
+      "fisher": 1.789696336510568,
+      "crossing": null
+    },
+    {
+      "symbol": "HEMIUSDT",
+      "weeks": 54,
+      "fisher": 0.9364229882848291,
+      "crossing": "down",
+      "rvol": 0.1343464433366914
+    },
+    {
+      "symbol": "CVCUSDT",
+      "weeks": 69,
+      "fisher": -0.3440754207281406,
+      "crossing": null,
+      "rvol": 7.452091060917557
+    },
+    {
+      "symbol": "ATOMUSDT",
+      "weeks": 344,
+      "fisher": 0.28948406381717195,
+      "crossing": null,
+      "rvol": 0.5552515178467626
+    },
+    {
+      "symbol": "FFUSDT",
+      "weeks": 49,
+      "fisher": 1.212132563921907,
+      "crossing": null
+    },
+    {
+      "symbol": "REZUSDT",
+      "weeks": 123,
+      "fisher": 0.8759448735045519,
+      "crossing": null,
+      "rvol": 4.837851885497551
+    },
+    {
+      "symbol": "RIVERUSDT",
+      "weeks": 47,
+      "fisher": -6.916798085588341,
+      "crossing": null
+    },
+    {
+      "symbol": "FETUSDT",
+      "weeks": 191,
+      "fisher": -0.07537862728275402,
+      "crossing": null,
+      "rvol": -0.5020473617583163
+    },
+    {
+      "symbol": "1000SHIBUSDT",
+      "weeks": 278,
+      "fisher": 1.641124824455592,
+      "crossing": null,
+      "rvol": -0.8320479591353461
+    },
+    {
+      "symbol": "BTWUSDT",
+      "weeks": 14,
+      "fisher": 2.106107248834769,
+      "crossing": null
+    },
+    {
+      "symbol": "AEROUSDT",
+      "weeks": 92,
+      "fisher": 0.306688425664837,
+      "crossing": null,
+      "rvol": 1.7044178523046711
+    },
+    {
+      "symbol": "KATUSDT",
+      "weeks": 27,
+      "fisher": -1.4867708908933122,
+      "crossing": null
+    },
+    {
+      "symbol": "FARTCOINUSDT",
+      "weeks": 90,
+      "fisher": 0.4806095742387777,
+      "crossing": "down",
+      "rvol": -0.802476334707398
+    },
+    {
+      "symbol": "TIAUSDT",
+      "weeks": 149,
+      "fisher": 0.09209907714789409,
+      "crossing": null,
+      "rvol": -0.38774750556455634
+    },
+    {
+      "symbol": "OPUSDT",
+      "weeks": 223,
+      "fisher": 0.19851235846515175,
+      "crossing": null,
+      "rvol": -0.5198551724225264
+    },
+    {
+      "symbol": "XAUTUSDT",
+      "weeks": 24,
+      "fisher": 0.9031094420870405,
+      "crossing": null
+    },
+    {
+      "symbol": "DOODUSDT",
+      "weeks": 70,
+      "fisher": -0.5025865082623358,
+      "crossing": null,
+      "rvol": 0.8895112223307662
+    },
+    {
+      "symbol": "JUPUSDT",
+      "weeks": 136,
+      "fisher": 0.8893891083044483,
+      "crossing": null,
+      "rvol": 0.9026322798725938
+    },
+    {
+      "symbol": "STEEMUSDT",
+      "weeks": 148,
+      "fisher": 0.4320893767844548,
+      "crossing": null,
+      "rvol": 3.3659560888603433
+    },
+    {
+      "symbol": "BEATUSDT",
+      "weeks": 43,
+      "fisher": -2.7777737895245256,
+      "crossing": null
+    },
+    {
+      "symbol": "CRVUSDT",
+      "weeks": 314,
+      "fisher": 2.2081629955787867,
+      "crossing": null,
+      "rvol": -0.6729882004455828
+    },
+    {
+      "symbol": "ZENUSDT",
+      "weeks": 302,
+      "fisher": 0.9808593936436184,
+      "crossing": null,
+      "rvol": -0.2817670689375569
+    },
+    {
+      "symbol": "VIRTUALUSDT",
+      "weeks": 91,
+      "fisher": 0.47847331794389103,
+      "crossing": null,
+      "rvol": -0.44197079431873504
+    },
+    {
+      "symbol": "4USDT",
+      "weeks": 48,
+      "fisher": 1.8093952389440169,
+      "crossing": null
+    },
+    {
+      "symbol": "COTIUSDT",
+      "weeks": 287,
+      "fisher": 1.255534400481158,
+      "crossing": null,
+      "rvol": 0.2697275821335049
+    },
+    {
+      "symbol": "哈基米USDT",
+      "weeks": 1
+    },
+    {
+      "symbol": "HBARUSDT",
+      "weeks": 286,
+      "fisher": 0.6947588814254069,
+      "crossing": null,
+      "rvol": -0.7239912534459887
+    },
+    {
+      "symbol": "SAGAUSDT",
+      "weeks": 126,
+      "fisher": -0.04451357528046501,
+      "crossing": null,
+      "rvol": 0.29557536174763543
+    },
+    {
+      "symbol": "PROMUSDT",
+      "weeks": 86,
+      "fisher": 2.9119771184159022,
+      "crossing": null,
+      "rvol": 0.19479469779123826
+    },
+    {
+      "symbol": "BTRUSDT",
+      "weeks": 54,
+      "fisher": 1.0956101415559616,
+      "crossing": "down",
+      "rvol": -0.03379279748952988
+    },
+    {
+      "symbol": "ARKUSDT",
+      "weeks": 155,
+      "fisher": 0.0383580833473085,
+      "crossing": null,
+      "rvol": 9.530490332621078
+    },
+    {
+      "symbol": "1000BONKUSDT",
+      "weeks": 146,
+      "fisher": -1.108945771001858,
+      "crossing": null,
+      "rvol": -0.744672110309239
+    },
+    {
+      "symbol": "CHIPUSDT",
+      "weeks": 21,
+      "fisher": 0.5391181808655213,
+      "crossing": null
+    },
+    {
+      "symbol": "ACEUSDT",
+      "weeks": 142,
+      "fisher": 0.8688216698680449,
+      "crossing": "down",
+      "rvol": -0.06315539409694843
+    },
+    {
+      "symbol": "XANUSDT",
+      "weeks": 49,
+      "fisher": 0.6908427172978611,
+      "crossing": "up"
+    },
+    {
+      "symbol": "MINAUSDT",
+      "weeks": 188,
+      "fisher": 1.0108679936801876,
+      "crossing": null,
+      "rvol": 0.35759628787841374
+    },
+    {
+      "symbol": "PENDLEUSDT",
+      "weeks": 163,
+      "fisher": 1.3615223954210665,
+      "crossing": null,
+      "rvol": -0.27761111811789735
+    },
+    {
+      "symbol": "ORCAUSDT",
+      "weeks": 92,
+      "fisher": 0.7477129206794987,
+      "crossing": null,
+      "rvol": -0.030802443021226047
+    },
+    {
+      "symbol": "CAKEUSDT",
+      "weeks": 149,
+      "fisher": 3.1048205849372588,
+      "crossing": null,
+      "rvol": -0.14238507293320307
+    },
+    {
+      "symbol": "CYSUSDT",
+      "weeks": 39,
+      "fisher": -0.5016205623789729,
+      "crossing": null
+    },
+    {
+      "symbol": "我踏马来了USDT",
+      "weeks": 33,
+      "fisher": 1.775691044841515,
+      "crossing": null
+    }
+  ]
+}

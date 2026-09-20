@@ -58,13 +58,23 @@ def _save(path, value):
 
 
 class TrendMarket(MarketData):
-    """All writes are task-owned evidence/cache; shared Quant cache is read-only."""
-    def __init__(self, scanner, cache_dir, as_of):
+    """All writes are task-owned evidence/cache; shared Quant cache is read-only.
+
+    ``history_days`` widens the removed-contract archive audit for callers with
+    a longer horizon (the weekly report needs 210 days).  ``catalog_dirs`` adds
+    read-only saved-catalog locations (e.g. the daily trend cache) so the
+    weekly task never writes into the daily artifact directory.  Defaults keep
+    the daily caller byte-for-byte identical.
+    """
+
+    def __init__(self, scanner, cache_dir, as_of, history_days=30, catalog_dirs=()):
         super().__init__(scanner)
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.as_of = pd.Timestamp(as_of)
         self.end = self.as_of+pd.Timedelta(days=1)
+        self.history_days = history_days
+        self.catalog_dirs = [Path(directory) for directory in catalog_dirs]
         self.archive_requests = 0
         self.pending_symbols = set()
 
@@ -151,14 +161,16 @@ class TrendMarket(MarketData):
         return False
 
     def catalog(self, as_of):
-        start = as_of-pd.Timedelta(days=29)
+        start = as_of-pd.Timedelta(days=self.history_days-1)
         current = self._json('/fapi/v1/exchangeInfo')
         if not isinstance(current, dict) or not current.get('symbols'):
             raise ValueError('交易所合约元数据为空')
         eligible_metadata(current['symbols'])
         combined = {}
         snapshots = []
-        for path in sorted(self.cache_dir.glob('catalog_*.json')):
+        paths = {path for directory in [self.cache_dir, *self.catalog_dirs]
+                 for path in Path(directory).glob('catalog_*.json')}
+        for path in sorted(paths, key=lambda p: (p.name, str(p))):
             if path.stem.removeprefix('catalog_') > str(as_of.date()):
                 continue
             saved = json.loads(path.read_text())
@@ -187,29 +199,52 @@ class TrendMarket(MarketData):
                         unknown_archive_symbols=unknown, unknown_active_symbols=unresolved)
         return records, active, evidence
 
-    def fetch_daily(self, symbol, start, end):
+    def daily_cache_path(self, symbol, start, end, required_history):
+        """Cache key identifies end (as_of dir), interval and required history."""
+        return (self.cache_dir/'daily'/str(self.as_of.date())
+                / f'{symbol}_1d_{pd.Timestamp(start).date()}_{pd.Timestamp(end).date()}'
+                  f'_{required_history}.json')
+
+    def fetch_daily(self, symbol, start, end, limit=32, required_history=None):
         params = dict(symbol=symbol, interval='1d', startTime=int(start.timestamp()*1000),
-                      endTime=int(end.timestamp()*1000)-1, limit=32)
-        try:
-            raw = self._json('/fapi/v1/klines', params)
-        except RuntimeError:
-            if symbol in self.pending_symbols:
-                # Quant's retry helper discards HTTP error bodies. Inspect this
-                # one known boundary without treating a transport failure as [].
-                time.sleep(1)
-                self.requests += 1
-                response = requests.get(self.scanner.CONFIG['base_url']+'/fapi/v1/klines',
-                                        params=params, timeout=30)
-                if response.status_code == 400 and response.json().get('code') == -1122:
-                    raise InactiveSymbolError(f'{symbol}: exchange -1122 Invalid symbol status')
-            raise
-        if not isinstance(raw, list):
-            raise ValueError('日线响应格式错误: '+symbol)
+                      endTime=int(end.timestamp()*1000)-1, limit=limit)
+        raw = None
+        path = None
+        if required_history is not None:
+            path = self.daily_cache_path(symbol, start, end, required_history)
+            if path.exists():
+                try:
+                    raw = json.loads(path.read_text())
+                except (ValueError, OSError) as exc:
+                    raise ValueError('日线缓存无效: '+symbol) from exc
+                if not isinstance(raw, list):
+                    raise ValueError('日线缓存无效: '+symbol)
+        if raw is None:
+            try:
+                raw = self._json('/fapi/v1/klines', params)
+            except RuntimeError:
+                if symbol in self.pending_symbols:
+                    # Quant's retry helper discards HTTP error bodies. Inspect this
+                    # one known boundary without treating a transport failure as [].
+                    time.sleep(1)
+                    self.requests += 1
+                    response = requests.get(self.scanner.CONFIG['base_url']+'/fapi/v1/klines',
+                                            params=params, timeout=30)
+                    if response.status_code == 400 and response.json().get('code') == -1122:
+                        raise InactiveSymbolError(f'{symbol}: exchange -1122 Invalid symbol status')
+                raise
+            if not isinstance(raw, list):
+                raise ValueError('日线响应格式错误: '+symbol)
+            if path is not None:
+                _save(path, raw)
         return self.scanner.klines_to_dataframe(raw) if raw else pd.DataFrame()
 
-    def fetch(self, symbol, limit, interval='4h'):
+    def fetch(self, symbol, limit, interval='4h', required_history=None):
         # Fixed endpoint prevents reruns later today from displacing closed bars.
-        path = self.cache_dir/'prices'/str(self.as_of.date())/f'{symbol}_{interval}.json'
+        # A longer required history gets its own key so a smaller prior cache
+        # can never masquerade as sufficient history.
+        suffix = f'_{required_history}' if required_history is not None else ''
+        path = self.cache_dir/'prices'/str(self.as_of.date())/f'{symbol}_{interval}{suffix}.json'
         if path.exists():
             raw = json.loads(path.read_text())
         else:
