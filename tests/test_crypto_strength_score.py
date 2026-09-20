@@ -53,3 +53,32 @@ def test_weekly_compatibility_scoring_retains_explicit_signed_return_weights():
     for row in valid:row['quote_volume']=100.
     trend.score_valid_rows(valid,{'return':.5,'er':.15,'r_squared':.15,'drawdown':.1,'quote_volume':.1})
     assert valid[0]["score"]>valid[1]["score"]
+
+
+def test_v3_uses_absolute_dollar_saturation_not_volume_percentile():
+    same=rows()[:2]
+    scored=trend.score_rows(same,'v3',{'UP':1e9,'DOWN':3e9})
+    assert scored[0]['turnover_score']==50
+    assert scored[1]['turnover_score']==75
+    assert scored[0]['score']==pytest.approx(85)
+    assert scored[1]['score']==pytest.approx(92.5)
+    assert 'quote_volume' not in scored[0]['percentiles']
+
+
+@pytest.mark.parametrize('value',[None,float('nan'),float('inf'),-1.])
+def test_v3_invalid_volume_blocks_publication(value):
+    with pytest.raises(ValueError,match='turnover'):
+        trend.score_rows(rows(),'v3',{'UP':value,'DOWN':1e9,'SMALL':1e8})
+
+
+def test_v3_report_discloses_weights_formula_and_excludes_btc():
+    import runpy
+    f=runpy.run_path('tests/test_crypto_trend_rankings.py')
+    report=trend.build_report(f['FakeMarket'](),f['ASOF'],top_n=2,scoring_version='v3',periods=(10,14))
+    assert report['schema_version']==4
+    assert report['weights']==dict(absolute_return=.35,er=.15,r_squared=.15,drawdown=.05,quote_volume=.30)
+    assert report['turnover_scoring']['half_score_daily_quote_volume']==1e9
+    for h in (10,14):
+        text=trend.message(report,h)
+        assert '绝对涨跌幅35%' in text and '成交额30%' in text and '10亿USDT' in text
+        assert 'BTCUSDT' in text and len(text)<4000

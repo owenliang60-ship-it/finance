@@ -22,23 +22,32 @@ EXCLUDED_TRADING_SYMBOLS = frozenset({'BTCUSDT'})
 WEIGHTS = {'return': .4, 'er': .2, 'r_squared': .2, 'drawdown': .2}
 STRENGTH_WEIGHTS = {'absolute_return': .5, 'er': .15, 'r_squared': .15,
                     'drawdown': .1, 'quote_volume': .1}
+V3_WEIGHTS = {'absolute_return': .35, 'er': .15, 'r_squared': .15,
+              'drawdown': .05, 'quote_volume': .30}
+TURNOVER_HALF_SCORE = 1_000_000_000.0
 
 
 def score_rows(rows, version='v1', quote_turnover=None):
     """Shared research/report score; percentiles precede direction filtering."""
-    if version not in ('v1','v2'):
+    if version not in ('v1','v2','v3'):
         raise ValueError('unknown scoring version')
     rows[:] = [r for r in rows if r['symbol'] not in EXCLUDED_TRADING_SYMBOLS]
     valid=[r for r in rows if r['status']=='ok']
-    weights=WEIGHTS if version=='v1' else STRENGTH_WEIGHTS
-    if version=='v2':
+    weights={'v1':WEIGHTS,'v2':STRENGTH_WEIGHTS,'v3':V3_WEIGHTS}[version]
+    if version in ('v2','v3'):
         for row in valid:
             value=(quote_turnover or {}).get(row['symbol'])
             if value is None or not math.isfinite(float(value)) or float(value)<0:
                 raise ValueError('missing/invalid turnover '+row['symbol'])
             row['absolute_return']=abs(row['return'])
             row['quote_volume']=float(value)
-    score_valid_rows(valid,weights)
+    percentile_weights={k:v for k,v in weights.items() if version!='v3' or k!='quote_volume'}
+    score_valid_rows(valid,percentile_weights)
+    if version=='v3':
+        for row in valid:
+            v=row['quote_volume']
+            row['turnover_score']=100*(v/(v+TURNOVER_HALF_SCORE))
+            row['score']+=weights['quote_volume']*row['turnover_score']
     return rows
 
 
@@ -219,7 +228,7 @@ def build_report(market, as_of, top_n=100, scoring_version='v1', periods=PERIODS
     periods={}
     for days in windows:
         quotes=None
-        if scoring_version=='v2':
+        if scoring_version in ('v2','v3'):
             dates=pd.date_range(end=as_of,periods=days,freq='D')
             quotes={s:float(daily_frame(frames[s]).reindex(dates)['quote_volume'].mean())
                     for s in pools[f'{days}d']}
@@ -239,9 +248,11 @@ def build_report(market, as_of, top_n=100, scoring_version='v1', periods=PERIODS
         for row in period['rows']:
             if row['symbol'] in price_failures:
                 row['reason'] = price_failures[row['symbol']]
-    return dict(schema_version=3 if scoring_version=='v2' else 2, scoring_version=scoring_version,
+    return dict(schema_version={'v1':2,'v2':3,'v3':4}[scoring_version], scoring_version=scoring_version,
                 as_of=str(as_of.date()), top_n=top_n,
-                weights=(STRENGTH_WEIGHTS if scoring_version=='v2' else WEIGHTS).copy(), percentile_method='100 * count(values <= current) / valid_pool_count; drawdown reversed',
+                weights={'v1':WEIGHTS,'v2':STRENGTH_WEIGHTS,'v3':V3_WEIGHTS}[scoring_version].copy(),
+                percentile_method='100 * count(values <= current) / valid_pool_count; drawdown reversed; v3 turnover is absolute amount, not percentile',
+                turnover_scoring=(dict(method='100 * V / (V + K)',half_score_daily_quote_volume=TURNOVER_HALF_SCORE,unit='USDT/day') if scoring_version=='v3' else dict(method='percentile' if scoring_version=='v2' else 'unused')),
                 direction_gate='return > 0 and log_price_slope > 0; applied AFTER pool percentiles',
                 pool_method='daily UTC quote-volume TopN on strictly more than half of ALL horizon days; currently tradable candidates',
                 excluded_trading_symbols=sorted(EXCLUDED_TRADING_SYMBOLS),
@@ -251,13 +262,16 @@ def build_report(market, as_of, top_n=100, scoring_version='v1', periods=PERIODS
 
 def message(report, days):
     period = report['periods'][f'{days}d']
-    strength=report.get('scoring_version')=='v2'
+    v3=report.get('scoring_version')=='v3'
+    strength=report.get('scoring_version') in ('v2','v3')
     lines = [f"*Crypto {days}天趋势榜 | {report['as_of']} UTC*",
              f"窗口内至少{period['min_top100_days']}/{days}天USDT成交额前{report['top_n']} · 4h完整收盘",
              f"池 {period['pool_size']} · 有效 {period['valid_count']} · 上涨 {period['uptrend_count']}",
-             ('权重：绝对涨跌幅50% / ER15% / R²15% / 回撤10% / 成交额10%' if strength
+             ('权重：绝对涨跌幅35% / ER15% / R²15% / 回撤5% / 成交额30%' if v3 else '权重：绝对涨跌幅50% / ER15% / R²15% / 回撤10% / 成交额10%' if strength
               else '权重：涨幅40% / ER20% / R²20% / 回撤20%'),
-             '分位在本窗口有效池内计算；上涨需涨幅与回归斜率均为正。', '']
+             ('价格指标按有效池分位计分；成交额分=100×V/(V+10亿USDT)，V为窗口日均额。' if v3 else '分位在本窗口有效池内计算；上涨需涨幅与回归斜率均为正。'), '']
+    if v3:
+        lines.insert(5,'上涨需涨幅与回归斜率均为正。')
     if report.get('excluded_trading_symbols'):
         lines.insert(5, '永久排除：'+', '.join(report['excluded_trading_symbols'])+'（不参与候选池及评分）。')
     if strength:
@@ -272,7 +286,7 @@ def message(report, days):
         lines.append('本窗口无符合条件的上涨趋势币种，不补位。')
     if period['valid_count'] < period['pool_size']:
         lines.append('⚠️ 部分成员价格历史不可用，评分基于有效成员，不补位。')
-    lines += ['', '回撤=距窗口最高收盘价；分数仅代表本池相对位置。',
+    lines += ['', ('回撤=距窗口最高收盘价；综合分结合趋势与绝对成交额。' if v3 else '回撤=距窗口最高收盘价；分数仅代表本池相对位置。'),
               '历史资格按现有上市/下架证据重建，非原始逐日快照。',
               '描述历史趋势，初始权重未经收益预测验证。']
     text = '\n'.join(lines)
@@ -294,7 +308,7 @@ def run(scanner_dir, output_dir, dry_run=False):
     as_of = pd.Timestamp.now(tz='UTC').normalize()-pd.Timedelta(days=1)
     output_dir = Path(output_dir)
     market = TrendMarket(scanner, output_dir/'trend_cache', as_of)
-    report = build_report(market, as_of, scoring_version='v2', periods=DAILY_PERIODS)
+    report = build_report(market, as_of, scoring_version='v3', periods=DAILY_PERIODS)
     report['generated_at'] = pd.Timestamp.now(tz='UTC').isoformat()
     report['published_period_days'] = list(DAILY_PERIODS)
     report['data_cutoff_utc'] = (utc_day(report['as_of'])+pd.Timedelta(days=1)).isoformat()

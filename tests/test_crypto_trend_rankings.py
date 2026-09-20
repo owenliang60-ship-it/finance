@@ -319,7 +319,7 @@ def test_live_entry_explicitly_selects_only_ten_and_fourteen(monkeypatch,tmp_pat
     monkeypatch.setattr(trend,'TrendMarket',lambda *args,**kw:FakeMarket())
     monkeypatch.setattr(trend.importlib,'import_module',lambda name:SimpleNamespace(send_telegram_alert=lambda text:True))
     result=trend.run(tmp_path,tmp_path,dry_run=True)
-    assert selected==[dict(scoring_version='v2',periods=(10,14))]
+    assert selected==[dict(scoring_version='v3',periods=(10,14))]
     assert set(result['periods'])=={'10d','14d'}
     assert not list(tmp_path.glob('*30d*')) and not list(tmp_path.glob('*7d*'))
 
