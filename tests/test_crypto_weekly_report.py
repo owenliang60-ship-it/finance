@@ -545,8 +545,8 @@ def test_rvol_composite_scoring_metadata_and_schema_versions():
     assert 'integer' in result['rank_method']
 
     report = build_report(fixture_market(), CUTOFF, top_n=3)
-    assert report['schema_version'] == 3
-    assert report['scoring_version'] == 2          # weekly trend scoring is unchanged
+    assert report['schema_version'] == 4
+    assert report['scoring_version'] == 'v4'          # weekly trend scoring is unchanged
     assert report['rvol_scoring_version'] == 1
     assert report['rvol']['scoring_version'] == 1
     assert report['weights'] == weekly.WEEKLY_WEIGHTS
@@ -916,8 +916,8 @@ def test_weekly_shim_points_at_versioned_finance_module():
 # Weekly turnover-weighted trend score (return50/ER15/R²15/DD10/turnover10)
 # ---------------------------------------------------------------------------
 
-APPROVED_WEEKLY_WEIGHTS = {'return': .5, 'er': .15, 'r_squared': .15,
-                           'drawdown': .1, 'quote_volume': .1}
+APPROVED_WEEKLY_WEIGHTS = {'absolute_return': .45, 'er': .125, 'r_squared': .125,
+                           'drawdown': .05, 'quote_volume': .25}
 
 
 def closes_series(slope, days=50, start=None):
@@ -935,7 +935,7 @@ def volume_frame(volume=1.0, days=260):
 def test_weekly_weights_are_approved_scheme_and_sum_to_one():
     assert weekly.WEEKLY_WEIGHTS == APPROVED_WEEKLY_WEIGHTS
     assert sum(weekly.WEEKLY_WEIGHTS.values()) == pytest.approx(1.0)
-    assert set(weekly.WEEKLY_WEIGHTS) == {'return', 'er', 'r_squared',
+    assert set(weekly.WEEKLY_WEIGHTS) == {'absolute_return', 'er', 'r_squared',
                                           'drawdown', 'quote_volume'}
 
 
@@ -964,14 +964,14 @@ def test_period_quote_volume_uses_usdt_quote_volume_not_base_volume():
 
 def test_rank_weeks_bigger_quote_volume_raises_only_the_ten_percent_component():
     closes = {'AUSDT': closes_series(.01), 'BUSDT': closes_series(.01)}
-    frames = {'AUSDT': volume_frame(2.0), 'BUSDT': volume_frame(1.0)}
+    frames = {'AUSDT': volume_frame(2e9), 'BUSDT': volume_frame(1e9)}
     report = weekly.rank_weeks(['AUSDT', 'BUSDT'], closes, frames, CUTOFF, 7)
     by = {row['symbol']: row for row in report['rows']}
-    assert by['AUSDT']['percentiles']['quote_volume'] == pytest.approx(100.0)
-    assert by['BUSDT']['percentiles']['quote_volume'] == pytest.approx(50.0)
-    for key in ('return', 'er', 'r_squared', 'drawdown'):
+    assert by['AUSDT']['turnover_score'] == pytest.approx(100*2/3)
+    assert by['BUSDT']['turnover_score'] == pytest.approx(50.0)
+    for key in ('absolute_return', 'er', 'r_squared', 'drawdown'):
         assert by['AUSDT']['percentiles'][key] == by['BUSDT']['percentiles'][key]
-    assert by['AUSDT']['score'] - by['BUSDT']['score'] == pytest.approx(5.0)
+    assert by['AUSDT']['score'] - by['BUSDT']['score'] == pytest.approx(25/6)
     assert [row['symbol'] for row in report['ranked']] == ['AUSDT', 'BUSDT']
 
 
@@ -982,11 +982,11 @@ def test_rank_weeks_hand_scored_different_profiles_tie_exactly_at_75(monkeypatch
     }
     monkeypatch.setattr(weekly, 'trend_metrics', lambda sample: metrics[sample.name])
     closes = {symbol: closes_series(.01).rename(symbol) for symbol in metrics}
-    frames = {'AUSDT': volume_frame(1.0), 'BUSDT': volume_frame(2.0)}
+    frames = {'AUSDT': volume_frame(1e9), 'BUSDT': volume_frame(4e9)}
     report = weekly.rank_weeks(['AUSDT', 'BUSDT'], closes, frames, CUTOFF, 7)
     by = {row['symbol']: row for row in report['rows']}
-    assert by['AUSDT']['score'] == pytest.approx(75.0)
-    assert by['BUSDT']['score'] == pytest.approx(75.0)
+    assert by['AUSDT']['score'] == pytest.approx(72.5)
+    assert by['BUSDT']['score'] == pytest.approx(72.5)
     assert by['AUSDT']['eligible'] is True and by['BUSDT']['eligible'] is True
     assert [row['symbol'] for row in report['ranked']] == ['AUSDT', 'BUSDT']
 
@@ -998,7 +998,7 @@ def test_rank_weeks_identical_evidence_ties_stable_by_symbol():
     by = {row['symbol']: row for row in report['rows']}
     assert by['AUSDT']['score'] == by['BUSDT']['score']
     for symbol in ('AUSDT', 'BUSDT'):
-        for key in weekly.WEEKLY_WEIGHTS:
+        for key in ('absolute_return','er','r_squared','drawdown'):
             assert by[symbol]['percentiles'][key] == 100.0
     assert [row['symbol'] for row in report['ranked']] == ['AUSDT', 'BUSDT']
 
@@ -1044,10 +1044,9 @@ def test_rank_weeks_volume_percentile_denominator_includes_valid_downtrends():
     report = weekly.rank_weeks(['UPUSDT', 'FLATUSDT', 'DOWNUSDT'], closes, frames, CUTOFF, 7)
     by = {row['symbol']: row for row in report['rows']}
     assert report['valid_count'] == 3 and report['uptrend_count'] == 1
-    assert by['FLATUSDT']['percentiles']['quote_volume'] == pytest.approx(100 / 3)
-    assert by['DOWNUSDT']['percentiles']['quote_volume'] == pytest.approx(100.0)
-    assert set(by['DOWNUSDT']['percentiles']) == {'return', 'er', 'r_squared',
-                                                  'drawdown', 'quote_volume'}
+    assert by['FLATUSDT']['percentiles']['absolute_return'] == pytest.approx(100 / 3)
+    assert by['DOWNUSDT']['percentiles']['absolute_return'] == pytest.approx(200 / 3)
+    assert set(by['DOWNUSDT']['percentiles']) == {'absolute_return', 'er', 'r_squared', 'drawdown'}
     assert [row['symbol'] for row in report['top10']] == ['UPUSDT']
 
 
@@ -1060,13 +1059,13 @@ def test_rank_weeks_signed_return_and_direction_gate_unchanged():
     assert by['UPUSDT']['eligible'] is True and by['DOWNUSDT']['eligible'] is False
     assert [row['symbol'] for row in report['ranked']] == ['UPUSDT']
     assert report['valid_count'] == 2 and report['uptrend_count'] == 1
-    assert by['DOWNUSDT']['percentiles']['return'] < by['UPUSDT']['percentiles']['return']
+    assert by['DOWNUSDT']['percentiles']['absolute_return'] < by['UPUSDT']['percentiles']['absolute_return']
 
 
 def test_report_uses_existing_daily_frames_for_turnover_without_extra_requests():
     market = fixture_market()
     report = build_report(market, CUTOFF, top_n=3)
-    assert report['schema_version'] == 3
+    assert report['schema_version'] == 4
     assert report['weights'] == weekly.WEEKLY_WEIGHTS
     assert sum(report['weights'].values()) == pytest.approx(1.0)
     assert len([call for call in market.calls if call[0] == 'daily']) == 6
@@ -1077,7 +1076,7 @@ def test_report_uses_existing_daily_frames_for_turnover_without_extra_requests()
         for row in report['trend']['periods'][label]['rows']:
             if row['status'] == 'ok':
                 assert row['quote_volume'] >= 0.0
-                assert 'quote_volume' in row['percentiles']
+                assert 'quote_volume' not in row['percentiles'] and 'turnover_score' in row
     json.dumps(report, ensure_ascii=False, allow_nan=False)
 
 
@@ -1087,9 +1086,9 @@ def test_weekly_trend_messages_show_new_weights_and_window_turnover():
     trend_messages = messages[2:5]
     assert len(trend_messages) == 3
     for message in trend_messages:
-        assert '涨幅50%' in message and 'ER15%' in message and 'R²15%' in message
-        assert '回撤10%' in message and '成交额10%' in message
-        assert '各自窗口累计USDT成交额' in message
+        assert '涨跌幅45%' in message and 'ER12.5%' in message and 'R²12.5%' in message
+        assert '回撤5%' in message and '成交额25%' in message
+        assert 'V为窗口日均额' in message and '回撤≤30%' in message
     joined = '\n'.join(trend_messages)
     assert re.search(r'额 [\d.]+[KMB]?', joined)
     assert weekly.format_amount(1.5e6) == '1.50M'

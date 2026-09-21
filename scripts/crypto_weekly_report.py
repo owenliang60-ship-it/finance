@@ -59,12 +59,13 @@ from scripts.crypto_trend_market import (CurrentTrendMarket, eligible_metadata,
                                          overlaps)
 from scripts.crypto_trend_metrics import trend_metrics
 from scripts.crypto_trend_rankings import (WEIGHTS, atomic_text, build_pools,
-                                           score_valid_rows)
+    score_rows, V4_WEIGHTS, CURRENT_SCORING_VERSION, LONG_DRAWDOWN_LIMIT,
+    EXCLUDED_TRADING_SYMBOLS, direction_eligible, weight_description)
 from src.indicators.fisher import DEFAULT_LENGTH, fisher_transform, latest_crossing
 from src.indicators.rvol import calculate_rvol
 
-SCHEMA_VERSION = 3
-TREND_SCORING_VERSION = 2            # weekly trend scoring unchanged by the composite
+SCHEMA_VERSION = 4
+TREND_SCORING_VERSION = CURRENT_SCORING_VERSION
 RVOL_SCORING_VERSION = 1             # composite RVOL x turnover ranking generation
 RVOL_LOOKBACK = 52
 # Approved equal-weight composite: 50% RVOL rank + 50% turnover rank.  The
@@ -74,11 +75,9 @@ RVOL_WEIGHTS = {'rvol': .5, 'turnover': .5}
 TURNOVER_RANK_REFERENCE = 100
 FISHER_LENGTH = DEFAULT_LENGTH
 TREND_WEEKS = (7, 14, 30)
-# Weekly-only approved weights.  ``quote_volume`` is the total USDT turnover
-# over the matching weeks*7-day horizon, ranked higher-is-better like the
-# other positive metrics.  Daily WEIGHTS in crypto_trend_rankings is untouched.
-WEEKLY_WEIGHTS = {'return': .5, 'er': .15, 'r_squared': .15,
-                  'drawdown': .1, 'quote_volume': .1}
+# Weekly trend windows retain daily close sampling; score and long eligibility
+# use the same current rule as daily reports/backtests. Turnover is USDT/day.
+WEEKLY_WEIGHTS = V4_WEIGHTS
 RANK_WEEKS = 30                     # completed weeks used for turnover Top100
 DAILY_HISTORY_WEEKS = RVOL_LOOKBACK + 1
 DAILY_HISTORY_DAYS = DAILY_HISTORY_WEEKS * 7
@@ -441,6 +440,7 @@ def rank_weeks(pool, closes_by_symbol, frames_by_symbol, cutoff, weeks):
     unavailable and never scored on fabricated or old-weight evidence.
     """
     cutoff = _as_utc(cutoff)
+    pool = sorted(set(pool) - EXCLUDED_TRADING_SYMBOLS)
     as_of = cutoff - pd.Timedelta(days=1)
     rows = []
     for symbol in sorted(pool):
@@ -449,7 +449,7 @@ def rank_weeks(pool, closes_by_symbol, frames_by_symbol, cutoff, weeks):
             sample = window(closes_by_symbol[symbol], cutoff, '1d', count=weeks * 7)
             metrics = trend_metrics(sample)
             turnover = period_quote_volume(frames_by_symbol[symbol], symbol, cutoff, weeks)
-            row.update(metrics, quote_volume=turnover, status='ok',
+            row.update(metrics, quote_volume=turnover / (weeks * 7), window_quote_volume=turnover, status='ok',
                        eligible=metrics['return'] > 0 and metrics['slope'] > 0)
         except (KeyError, ValueError, TypeError, OverflowError) as exc:
             row['reason'] = str(exc)
@@ -457,7 +457,9 @@ def rank_weeks(pool, closes_by_symbol, frames_by_symbol, cutoff, weeks):
     valid = [row for row in rows if row['status'] == 'ok']
     if pool and not valid:
         raise ValueError(f'{weeks}周非空池全部价格或成交额不可用，停止发布')
-    score_valid_rows(valid, WEEKLY_WEIGHTS)
+    score_rows(rows, CURRENT_SCORING_VERSION, {r['symbol']: r.get('quote_volume') for r in rows})
+    for row in valid:
+        row['eligible'] = direction_eligible(row)
     ranked = sorted((row for row in valid if row['eligible']),
                     key=lambda row: (-row['score'], row['symbol']))
     for rank, row in enumerate(ranked, 1):
@@ -467,7 +469,8 @@ def rank_weeks(pool, closes_by_symbol, frames_by_symbol, cutoff, weeks):
                 observations=weeks * 7, as_of=str(as_of.date()),
                 start_date=str(start.date()), pool=sorted(pool), pool_size=len(pool),
                 valid_count=len(valid), uptrend_count=len(ranked),
-                weights=WEEKLY_WEIGHTS.copy(),
+                weights=WEEKLY_WEIGHTS.copy(), scoring_version=CURRENT_SCORING_VERSION,
+                long_drawdown_limit=LONG_DRAWDOWN_LIMIT, quote_volume_unit='USDT/day',
                 rows=rows, ranked=ranked, top10=ranked[:10])
 
 
@@ -676,13 +679,13 @@ def build_messages(report):
         lines = [f'*Crypto {weeks}周趋势榜 | {label}*',
                  f"近{weeks}个完整周至少{period['min_top100_weeks']}/{weeks}周进入周成交额前100 · 日线完整收盘",
                  f"池 {period['pool_size']} · 有效 {period['valid_count']} · 上涨 {period['uptrend_count']}",
-                 '权重：涨幅50% / ER15% / R²15% / 回撤10% / 成交额10%',
-                 '金额＝各自窗口累计USDT成交额；分位在本窗口有效池内计算；上涨需涨幅与回归斜率均为正。', '']
+                 weight_description(),
+                 '成交额分=100×V/(V+10亿USDT)，V为窗口日均额；先有效池分位计分，多头需涨幅与斜率均正、回撤≤30%。', '']
         for row in period['top10']:
             lines.append(f"{row['rank']}. *{symbol_label(row['symbol'])}* | 分 {row['score']:.1f}"
                          f" | 涨 {row['return']:+.1%} | ER {row['er']:.3f}"
                          f" | R² {row['r_squared']:.3f} | 回撤 {row['drawdown']:.1%}"
-                         f" | 额 {format_amount(row['quote_volume'])}")
+                         f" | 日均额 {format_amount(row['quote_volume'])}")
         if not period['top10']:
             lines.append('本窗口无符合条件的上涨趋势币种，不补位。')
         if period['valid_count'] < period['pool_size']:

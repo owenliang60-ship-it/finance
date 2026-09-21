@@ -9,6 +9,12 @@ from scripts import crypto_trend_rankings as trend
 
 ASOF = pd.Timestamp('2026-09-06', tz='UTC')
 
+# Historical mathematical fixtures explicitly request v1; live defaults are tested below.
+def legacy_rank_period(*args, **kwargs):
+    if len(args) < 5: kwargs.setdefault('scoring_version','v1')
+    return trend.rank_period(*args, **kwargs)
+
+
 
 def meta(symbol, **extra):
     return dict(symbol=symbol, quoteAsset='USDT', underlyingType='COIN',
@@ -141,7 +147,7 @@ def test_pool_input_missing_day_or_duplicate_symbol_fails():
 
 
 def test_percentile_denominator_includes_valid_downtrends():
-    r = trend.rank_period(['UPUSDT','FLATUSDT','DOWNUSDT'],
+    r = legacy_rank_period(['UPUSDT','FLATUSDT','DOWNUSDT'],
                           {'UPUSDT':prices(.01),'FLATUSDT':prices(0),'DOWNUSDT':prices(-.01)}, ASOF, 7)
     by = {row['symbol']:row for row in r['rows']}
     assert r['valid_count'] == 3 and r['uptrend_count'] == 1
@@ -153,12 +159,12 @@ def test_percentile_denominator_includes_valid_downtrends():
 
 
 def test_bad_prices_unavailable_without_replacement():
-    r = trend.rank_period(['GOODUSDT','BADUSDT'], {'GOODUSDT':prices(),'BADUSDT':prices().iloc[:-1]}, ASOF, 30)
+    r = legacy_rank_period(['GOODUSDT','BADUSDT'], {'GOODUSDT':prices(),'BADUSDT':prices().iloc[:-1]}, ASOF, 30)
     assert (r['pool_size'],r['valid_count']) == (2,1)
     assert next(x for x in r['rows'] if x['symbol']=='BADUSDT')['status'] == 'unavailable'
-    with pytest.raises(ValueError): trend.rank_period(['BADUSDT'],{},ASOF,7)
-    assert trend.rank_period([],{},ASOF,7)['top10'] == []
-    assert trend.rank_period(['DOWNUSDT'],{'DOWNUSDT':prices(-.01)},ASOF,7)['top10'] == []
+    with pytest.raises(ValueError): legacy_rank_period(['BADUSDT'],{},ASOF,7)
+    assert legacy_rank_period([],{},ASOF,7)['top10'] == []
+    assert legacy_rank_period(['DOWNUSDT'],{'DOWNUSDT':prices(-.01)},ASOF,7)['top10'] == []
 
 
 class FakeMarket:
@@ -182,7 +188,7 @@ class FakeMarket:
 def test_build_report_reuses_cache_and_fetches_pool_union_once():
     market = FakeMarket()
     before = market.frames['AUSDT'].copy()
-    r = trend.build_report(market,ASOF,top_n=2)
+    r = trend.build_report(market,ASOF,top_n=2,scoring_version='v1')
     assert market.history_calls == ['AUSDT','BUSDT']
     pd.testing.assert_frame_equal(before,market.frames['AUSDT'])
     assert r['top_n']==2 and r['schema_version']==2
@@ -279,15 +285,15 @@ def test_mathematical_score_ties_use_symbol_not_floating_sum_noise(monkeypatch):
         'CUSDT':{'return':.03,'er':.3,'r_squared':.5,'drawdown':.03,'slope':.01},
     }
     monkeypatch.setattr(trend,'trend_metrics',lambda sample:values[sample.name])
-    report=trend.rank_period(list(values),{s:prices().rename(s) for s in values},ASOF,7)
+    report=legacy_rank_period(list(values),{s:prices().rename(s) for s in values},ASOF,7)
     assert [r['symbol'] for r in report['ranked']]==['CUSDT','AUSDT','BUSDT']
     assert [r['score'] for r in report['ranked']]==[80.,60.,60.]
 
 
-def test_daily_weights_message_and_default_score_scheme_unchanged():
+def test_explicit_v1_weights_and_message_remain_reproducible():
     """The shared kernel must keep the exact daily 40/20/20/20 behavior."""
     assert trend.WEIGHTS=={'return':.4,'er':.2,'r_squared':.2,'drawdown':.2}
-    report=trend.build_report(FakeMarket(),ASOF,top_n=2)
+    report=trend.build_report(FakeMarket(),ASOF,top_n=2,scoring_version='v1')
     assert report['weights']==trend.WEIGHTS
     msg=trend.message(report,7)
     assert '权重：涨幅40% / ER20% / R²20% / 回撤20%' in msg
@@ -319,19 +325,19 @@ def test_live_entry_explicitly_selects_only_ten_and_fourteen(monkeypatch,tmp_pat
     monkeypatch.setattr(trend,'TrendMarket',lambda *args,**kw:FakeMarket())
     monkeypatch.setattr(trend.importlib,'import_module',lambda name:SimpleNamespace(send_telegram_alert=lambda text:True))
     result=trend.run(tmp_path,tmp_path,dry_run=True)
-    assert selected==[dict(scoring_version='v3',periods=(10,14))]
+    assert selected==[dict(scoring_version='v4',periods=(10,14))]
     assert set(result['periods'])=={'10d','14d'}
     assert not list(tmp_path.glob('*30d*')) and not list(tmp_path.glob('*7d*'))
 
 
 def test_btc_is_excluded_before_daily_scoring_and_needs_no_price():
-    result = trend.rank_period(['BTCUSDT', 'ALTUSDT'], {'ALTUSDT': prices(.01)},
+    result = legacy_rank_period(['BTCUSDT', 'ALTUSDT'], {'ALTUSDT': prices(.01)},
                                ASOF, 14, 'v2', {'ALTUSDT': 1e8})
     assert result['pool'] == ['ALTUSDT']
     assert result['valid_count'] == result['pool_size'] == 1
     assert [r['symbol'] for r in result['rows']] == ['ALTUSDT']
     assert result['top10'][0]['score'] == 100
-    assert trend.rank_period(['BTCUSDT'], {}, ASOF, 14)['pool'] == []
+    assert legacy_rank_period(['BTCUSDT'], {}, ASOF, 14)['pool'] == []
 
 
 def test_shared_daily_scoring_removes_btc_before_percentiles():
