@@ -224,9 +224,9 @@ def parse_sheet_book(xlsx_bytes: bytes, fetched_at: dt.datetime) -> SheetBook:
     )
 
 
-def load_sheet_book(sheet_id: Optional[str] = None,
-                    timeout: float = 30.0) -> SheetBook:
-    """Download the book-of-record workbook and parse it.
+def download_sheet_xlsx(sheet_id: Optional[str] = None,
+                        timeout: float = 30.0) -> bytes:
+    """Download the book-of-record workbook without parsing other tabs.
 
     Raises SheetBookError on any failure. Error messages never contain
     the sheet ID or URL (bearer secret, public repo).
@@ -249,4 +249,11 @@ def load_sheet_book(sheet_id: Optional[str] = None,
     if resp.status_code != 200:
         raise SheetBookError(
             "sheet download failed: HTTP %d" % resp.status_code)
-    return parse_sheet_book(resp.content, dt.datetime.now(dt.timezone.utc))
+    return resp.content
+
+
+def load_sheet_book(sheet_id: Optional[str] = None,
+                    timeout: float = 30.0) -> SheetBook:
+    """Download and parse the book; preserve the existing PI interface."""
+    payload = download_sheet_xlsx(sheet_id, timeout)
+    return parse_sheet_book(payload, dt.datetime.now(dt.timezone.utc))
