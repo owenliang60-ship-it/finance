@@ -61,3 +61,24 @@ Before installation confirm the live cron still equals the captured backup.
 Keep prior entries intact. To disable, remove only the marked Whole Port cron block
 from a fresh export and reinstall the file; retain all collected history.
 Never restore a stale full crontab over later unrelated changes.
+
+## Deployment evidence — 2026-09-23
+
+- Runtime revision `e38565154fb2a6e4bec5b1b7b8cd7d3f2d1dd99e`, installed as
+  `/root/workspace/Finance-jobs/whole-port-e3856515`.
+- Local and cloud: `python -m pytest tests/test_whole_port_snapshot.py
+  tests/test_portfolio/test_sheet_book.py tests/test_portfolio/test_intelligence.py
+  tests/test_telegram_routing.py -q` → **108 passed** on each host.
+- Cloud `py_compile` passed. Main-thread `/cr`: no blocking findings.
+- Live Sheet via the real cron wrapper in a minimal cron environment: **8 x 2**,
+  one snapshot, second call leaves database bytes unchanged, `quick_check=ok`.
+  Test database was temporary; no pre-09:00 production observation was inserted.
+- Archive SHA-256 matched on both hosts:
+  `ec9f8f8a2b42e5941c06052229a2f721eb5863f136a4701cba97b0a453b3e8a3`.
+- Cron daemon active, timezone Asia/Shanghai, installed crontab exactly matched
+  candidate, one new job, all earlier entries retained.
+- Prior cron backup:
+  `/root/workspace/Finance/data/whole_port/crontab-before-20260923T075718.txt`.
+- First scheduled observation: **2026-09-23 09:00 UTC+8**. Natural execution was
+  still pending at installation verification (07:57); not claimed as completed.
+- Work is retained on `codex/whole-port-daily-snapshot`; no main merge or Git push.
