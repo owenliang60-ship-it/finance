@@ -35,6 +35,12 @@ from scripts.morning_report import (
 from scripts import morning_report as mr
 
 
+@pytest.fixture(autouse=True)
+def isolate_s2_membership_io(monkeypatch):
+    # These tests cover selection/rendering; real cohort SQL is tested separately.
+    monkeypatch.setattr(mr, "_load_market_breadth_universes", lambda as_of: {})
+
+
 def _make_pmarp_hit(symbol="NVDA", signal="bullish_breakout", value=98.5,
                     market_cap=3e12, secondary_concept_id=None):
     return {"symbol": symbol, "signal": signal, "value": value, "previous": value - 1.0,
@@ -1159,73 +1165,28 @@ class TestBroadDropPlanV3:
     """v3 plan: drop broad universe selection scan, PMARP three signal kinds,
     decouple Section 0 S2 from selection-scan universe, override grants pool privilege."""
 
-    def test_market_timing_factor_uses_broad_db_regardless_of_scan_frames(
-        self, monkeypatch
-    ):
-        """[P0] S2 breadth must come from broad DB, not the selection-scan universe.
-        Even if selection scan is narrowed (extend $10B+), Section 0 S2 must keep
-        its broad MA20 semantics."""
-        from scripts import morning_report as mr
-
-        # Broad DB returns 60 symbols with 60% above MA20 → S2 breadth = 0.6
-        broad_frames = _build_breadth_fixture_frames(60, 0.6)
-        monkeypatch.setattr(
-            mr, "_load_market_db_broad_price_frames", lambda *a, **kw: broad_frames
-        )
-
-        # Selection scan returns 5 symbols, all below MA20 → would-be S2 = 0.0
-        # If scan frames leak into S2, current would be 0.0 instead of 0.6.
-        extend_frames = {
-            f"E{i}": pd.DataFrame(
-                {"close": [100.0] * 20 + [90.0] * 70},
-                index=pd.date_range("2026-01-01", periods=90, freq="B"),
-            )
-            for i in range(5)
-        }
-        monkeypatch.setattr(
-            "scripts.broad_market_scan.load_price_frames",
-            lambda symbols, **kw: {
-                s: extend_frames[s] for s in symbols if s in extend_frames
-            },
-        )
-        monkeypatch.setattr(
-            "scripts.broad_market_scan.fetch_universe_metadata",
-            lambda **kw: {
-                "stocks": {
-                    f"E{i}": {
-                        "marketCap": 50e9,
-                        "shortName": f"E{i}", "longName": f"E{i}", "exchange": "DB",
-                    }
-                    for i in range(5)
-                }
-            },
-        )
-        monkeypatch.setattr(mr, "get_symbols", lambda: [])
-        monkeypatch.setattr(mr, "current_base_universe", lambda: [])
-        monkeypatch.setattr(
-            "src.indicators.dv_acceleration.scan_dv_acceleration",
-            lambda *a, **kw: pd.DataFrame(),
-        )
-        monkeypatch.setattr(
-            "src.indicators.rvol_sustained.scan_rvol_sustained",
-            lambda *a, **kw: [],
-        )
-        monkeypatch.setattr(
-            "src.indicators.pmarp.analyze_pmarp",
-            lambda *a, **kw: {"signal": "neutral", "current": None, "previous": None},
-        )
-        # Stop the local-metadata merge from blocking I/O on disk during tests.
-        monkeypatch.setattr(mr, "_merge_local_metadata", lambda *a, **kw: None)
-        monkeypatch.setattr(mr, "_hydrate_signal_metadata", lambda *a, **kw: None)
-        # Section 0 PMARP target frames don't matter for this assertion.
-        monkeypatch.setattr(mr, "_load_market_timing_target_frames", lambda *a, **kw: {})
-        monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
-
-        result = build_market_signal_report()
-        breadth = result["market_timing_factor"]["breadth_s2"]
-        assert breadth["source"] == "market_db_broad_price_frames"
-        # current ≈ 0.6 (from broad fixture), NOT 0.0 (from extend frames)
-        assert breadth["current"] == pytest.approx(0.6)
+    def test_market_timing_factor_uses_independent_cohorts(self, monkeypatch):
+        frames = _build_breadth_fixture_frames(60, 0.6)
+        as_of = frames["B0"].index[-1].date().isoformat()
+        monkeypatch.setattr(mr, "_load_market_breadth_universes", lambda day: {
+            "SPY": {"symbols": list(frames)[:30]},
+            "QQQ": {"symbols": list(frames)[30:]},
+            "Extended": {"symbols": list(frames)},
+        })
+        def load(targets, **kwargs):
+            if targets == mr.MARKET_TIMING_TARGETS:
+                return {"SPY": pd.DataFrame({"date": [pd.Timestamp(as_of)], "close": [100.]})}
+            return {s: frames[s].rename_axis("date").reset_index() for s in targets}
+        monkeypatch.setattr(mr, "_load_market_timing_target_frames", load)
+        monkeypatch.setattr("src.indicators.pmarp.analyze_pmarp", lambda f: {})
+        def forbidden(*args, **kwargs):
+            pytest.fail("S2 cohorts must never fall back to broad")
+        monkeypatch.setattr(mr, "_load_market_db_broad_price_frames", forbidden)
+        result = mr.build_market_timing_factor_report()["breadth_s2_by_universe"]
+        assert result["SPY"]["current"] == 1.0
+        assert result["QQQ"]["current"] == .2
+        assert result["Extended"]["current"] == .6
+        assert result["SOXX"]["current"] is None
 
     def test_build_market_signal_report_filters_to_extend_plus_pool(self, monkeypatch):
         """[P1] Default path post-filters universe to ≥$10B ∪ pool symbols.
@@ -1605,9 +1566,9 @@ def test_build_html_payload_includes_market_timing_section_before_pmarp():
     headings = [b.get("heading", "") for b in payload["blocks"]]
     assert "0. 大盘择时因子" in headings
     assert headings.index("0. 大盘择时因子") < headings.index("1. PMARP 信号")
-    timing_tables = [b for b in payload["blocks"] if "指数" in (b.get("columns") or [])]
+    timing_tables = [b for b in payload["blocks"] if "股票池" in (b.get("columns") or [])]
     assert timing_tables, "market-timing table block missing from HTML payload"
-    assert any(r.get("指数") == "SPY" for r in timing_tables[0]["rows"])
+    assert any(r.get("股票池") == "SPY" for r in timing_tables[0]["rows"])
     alert_text = " ".join(a for b in payload["blocks"] for a in (b.get("alerts") or []))
     assert "PMARP 2% UPCROSS" in alert_text
 

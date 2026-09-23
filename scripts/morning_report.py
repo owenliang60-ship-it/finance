@@ -21,6 +21,7 @@ import time
 import json
 import argparse
 import logging
+import math
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -852,8 +853,8 @@ def _compute_breadth_s2_status(
         }
 
     df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date").dropna(subset=["breadth_20"]).reset_index(drop=True)
-    if df.empty:
+    df = df.sort_values("date").reset_index(drop=True)
+    if df.empty or pd.to_numeric(df["breadth_20"], errors="coerce").isna().all():
         return {
             "current": None,
             "previous": None,
@@ -871,8 +872,8 @@ def _compute_breadth_s2_status(
     latest_event = pd.Timestamp(events[-1]["label"]) if events else None
 
     return {
-        "current": float(signal.iloc[-1]),
-        "previous": float(signal.iloc[-2]) if len(signal) >= 2 else None,
+        "current": float(signal.iloc[-1]) if pd.notna(signal.iloc[-1]) else None,
+        "previous": float(signal.iloc[-2]) if len(signal) >= 2 and pd.notna(signal.iloc[-2]) else None,
         "as_of": latest_date.date().isoformat(),
         "threshold": threshold,
         "cooldown_days": cooldown_days,
@@ -983,7 +984,7 @@ def _compute_breadth_s2_status_from_price_frames(
     allow_market_db_fallback: bool = True,
     source: str = "live_broad_price_frames",
 ) -> dict:
-    """Compute live broad S2 participation from current broad price frames."""
+    """Compute equal-weight MA20 participation; never count MA warmup as below."""
     if not price_frames:
         if allow_market_db_fallback:
             fallback_frames = _load_market_db_broad_price_frames()
@@ -1006,11 +1007,11 @@ def _compute_breadth_s2_status_from_price_frames(
     for symbol, frame in price_frames.items():
         if frame is None or frame.empty or "close" not in frame.columns:
             continue
-        close = pd.to_numeric(frame["close"], errors="coerce").dropna()
-        if len(close) < 21:
+        close = pd.to_numeric(frame["close"], errors="coerce")
+        if close.count() < 21:
             continue
         ma20 = close.rolling(20, min_periods=20).mean()
-        signal = (close > ma20).astype(float)
+        signal = (close > ma20).astype(float).where(ma20.notna())
         above_ma20[symbol] = signal
 
     if len(above_ma20) < min_symbols:
@@ -1033,7 +1034,7 @@ def _compute_breadth_s2_status_from_price_frames(
         )
 
     panel = pd.concat(above_ma20, axis=1).sort_index()
-    participation = panel.mean(axis=1, skipna=True).dropna()
+    participation = panel.mean(axis=1, skipna=True).where(panel.count(axis=1) >= min_symbols)
     daily = pd.DataFrame({
         "date": participation.index,
         "breadth_20": participation.values,
@@ -1045,28 +1046,112 @@ def _compute_breadth_s2_status_from_price_frames(
     )
     result["source"] = source
     result["symbols_with_breadth"] = len(above_ma20)
+    result["symbols_latest"] = int(panel.iloc[-1].count())
+    if result["current"] is None:
+        result["error"] = "insufficient latest-day breadth coverage"
     return result
 
 
-def build_market_timing_factor_report() -> dict:
-    """Build market-level timing factor payload for SPY/QQQ/SOXX + broad S2.
+def _load_market_breadth_universes(as_of: str) -> dict:
+    """Read current ETF securities and Extended base, without overlays or writes.
 
-    S2 breadth always sources from broad universe ($1B+) in market.db,
-    decoupled from the selection-scan universe. This guarantees the
-    historically-calibrated 30% threshold keeps its broad MA20 semantics
-    even if the report's selection scan is narrowed (e.g. to extend $10B+).
+    Use complete weekly holdings snapshots (SOXX is stored as SOX). Keep
+    secondary share classes: breadth counts securities, unlike company PE.
+    The current member set is held fixed over the signal lookback.
     """
+    from src.data.fmp_forward_ingestion import ETF_HOLDING_SOURCES
+    from src.data.market_store import MarketStore
+
+    sources = {symbol: basket for basket, symbol in ETF_HOLDING_SOURCES.items()}
+    universes = {}
+    try:
+        conn = sqlite3.connect(f"file:{DATA_DIR / 'market.db'}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return {}
+    try:
+        for symbol in MARKET_TIMING_TARGETS:
+            try:
+                snapshot = conn.execute(
+                    "SELECT MAX(h.snapshot_date) FROM fmp_etf_holdings_snapshot h "
+                    "JOIN fmp_forward_runs r ON r.snapshot_date=h.snapshot_date "
+                    "AND r.run_kind='weekly' AND r.status='complete' "
+                    "WHERE h.basket=? AND h.snapshot_date<=?",
+                    (sources[symbol], as_of),
+                ).fetchone()[0]
+                if not snapshot:
+                    raise ValueError("missing complete holdings snapshot")
+                if (pd.Timestamp(as_of) - pd.Timestamp(snapshot)).days > 14:
+                    raise ValueError("holdings snapshot older than 14 days")
+                members = conn.execute(
+                    "SELECT raw_asset, symbol, included, filter_reason "
+                    "FROM fmp_etf_holdings_snapshot WHERE basket=? AND snapshot_date=?",
+                    (sources[symbol], snapshot),
+                ).fetchall()
+                symbols = set()
+                for raw_asset, member, included, reason in members:
+                    if included == 1 and member:
+                        symbols.add(member)
+                    elif reason == "dual_class_secondary" and raw_asset:
+                        symbols.add(raw_asset.strip().upper())
+                    elif reason not in ("cash_or_fund", "swap", "futures", "derivative"):
+                        raise ValueError("unresolved equity constituent")
+                if not symbols:
+                    raise ValueError("empty equity holdings snapshot")
+                universes[symbol] = {"symbols": sorted(symbols), "membership_as_of": snapshot}
+            except (sqlite3.Error, ValueError) as exc:
+                universes[symbol] = {"symbols": [], "error": str(exc)}
+        try:
+            store = MarketStore(DATA_DIR / "market.db", read_only=True)
+            try:
+                members = current_base_universe(store=store)
+            finally:
+                store.close()
+            universes["Extended"] = {"symbols": members, "membership_as_of": as_of}
+        except (sqlite3.Error, RuntimeError) as exc:
+            universes["Extended"] = {"symbols": [], "error": str(exc)}
+    finally:
+        conn.close()
+    return universes
+
+
+def build_market_timing_factor_report() -> dict:
+    """ETF PMARP plus independent SPY/QQQ/SOXX/Extended S2 participation."""
     from src.indicators.pmarp import analyze_pmarp
 
-    broad_frames = _load_market_db_broad_price_frames()
-    breadth = _compute_breadth_s2_status_from_price_frames(
-        broad_frames,
-        allow_market_db_fallback=False,
-        source="market_db_broad_price_frames",
-    )
     frames = _load_market_timing_target_frames(MARKET_TIMING_TARGETS)
+    dates = [pd.Timestamp(f["date"].iloc[-1]) for f in frames.values() if not f.empty]
+    as_of = max(dates).date().isoformat() if dates else datetime.now().date().isoformat()
+    universes = _load_market_breadth_universes(as_of)
+    members = sorted({s for u in universes.values() for s in u.get("symbols", [])})
+    member_frames = _load_market_timing_target_frames(members) if members else {}
+    calendar = pd.DatetimeIndex(sorted({
+        pd.Timestamp(day) for f in [*frames.values(), *member_frames.values()]
+        for day in f["date"] if pd.Timestamp(day) <= pd.Timestamp(as_of)
+    }))
+    breadth_by_universe = {}
     rows = []
-    for symbol in MARKET_TIMING_TARGETS:
+    for symbol in [*MARKET_TIMING_TARGETS, "Extended"]:
+        universe = universes.get(symbol, {})
+        symbols = universe.get("symbols", [])
+        source = "market_db_" + symbol
+        if symbols:
+            cohort = {
+                s: member_frames[s].set_index("date").reindex(calendar)
+                for s in symbols if s in member_frames
+            }
+            breadth = _compute_breadth_s2_status_from_price_frames(
+                cohort, min_symbols=math.ceil(len(symbols) * 0.95),
+                allow_market_db_fallback=False, source=source,
+            )
+            if breadth.get("as_of") != as_of and breadth.get("current") is not None:
+                breadth = _empty_breadth_s2_status("stale constituent prices", source=source)
+        else:
+            breadth = _empty_breadth_s2_status(
+                universe.get("error", "missing universe membership"), source=source,
+            )
+        breadth["symbols_expected"] = len(symbols)
+        breadth["membership_as_of"] = universe.get("membership_as_of")
+        breadth_by_universe[symbol] = breadth
         frame = frames.get(symbol)
         pmarp = analyze_pmarp(frame) if frame is not None else {
             "current": None,
@@ -1088,6 +1173,8 @@ def build_market_timing_factor_report() -> dict:
             "breadth_s2_previous": breadth.get("previous"),
             "breadth_s2_upcross": bool(breadth.get("upcross")),
             "breadth_s2_as_of": breadth.get("as_of"),
+            "breadth_s2_error": breadth.get("error"),
+            "breadth_s2_coverage": "{}/{}".format(breadth.get("symbols_latest", 0), len(symbols)),
         })
 
     alerts = []
@@ -1108,20 +1195,21 @@ def build_market_timing_factor_report() -> dict:
             "kind": "pmarp_up2",
             "text": "PMARP 2% UPCROSS: " + " / ".join(labels),
         })
-    if breadth.get("upcross"):
-        alerts.append({
-            "kind": "breadth_s2_upcross",
-            "text": "BREADTH S2 UPCROSS: broad MA20 participation {:.1%}→{:.1%}".format(
-                breadth.get("previous") or 0,
-                breadth.get("current") or 0,
-            ),
-        })
+    for symbol, breadth in breadth_by_universe.items():
+        if breadth.get("upcross"):
+            alerts.append({
+                "kind": "breadth_s2_upcross",
+                "universe": symbol,
+                "text": "BREADTH S2 UPCROSS: {} MA20 participation {:.1%}→{:.1%}".format(
+                    symbol, breadth.get("previous") or 0, breadth.get("current") or 0,
+                ),
+            })
 
     return {
-        "criteria": "PMARP 上穿2% + Broad S2(MA20 breadth 上穿30%, cooldown=60)",
+        "criteria": "PMARP 上穿2% + S2(各池等权 MA20 参与度上穿30%, cooldown=60)",
         "targets": MARKET_TIMING_TARGETS,
         "rows": rows,
-        "breadth_s2": breadth,
+        "breadth_s2_by_universe": breadth_by_universe,
         "alerts": alerts,
     }
 
@@ -1461,6 +1549,12 @@ def _format_timing_alerts(alerts: list[dict]) -> list[str]:
     return lines
 
 
+def _format_s2_trigger(row: dict) -> str:
+    if row.get("breadth_s2_current") is None or row.get("breadth_s2_previous") is None:
+        return "N/A"
+    return "YES" if row.get("breadth_s2_upcross") else "—"
+
+
 def format_section_market_timing_factor(market_signals: dict) -> str:
     section = market_signals.get("market_timing_factor", {}) if market_signals else {}
     lines = ["*0. 大盘择时因子*"]
@@ -1477,7 +1571,7 @@ def format_section_market_timing_factor(market_signals: dict) -> str:
         lines.append("数据不足")
         return "\n".join(lines)
 
-    lines.append("指数 | PMARP | PMARP 2%上穿 | S2参与度(broad) | S2触发")
+    lines.append("股票池 | PMARP | PMARP 2%上穿 | S2参与度(各池) | 覆盖 | S2触发")
     for row in rows:
         pmarp_display = _fmt_transition(
             row.get("pmarp_previous"),
@@ -1490,15 +1584,16 @@ def format_section_market_timing_factor(market_signals: dict) -> str:
             row.get("breadth_s2_current"),
             _fmt_participation,
         )
-        breadth_cross = "YES" if row.get("breadth_s2_upcross") else "—"
+        breadth_cross = _format_s2_trigger(row)
         if row.get("pmarp_up2") or row.get("breadth_s2_upcross"):
             pmarp_cross = "*{}*".format(pmarp_cross)
             breadth_cross = "*{}*".format(breadth_cross)
-        lines.append("{} | {} | {} | {} | {}".format(
+        lines.append("{} | {} | {} | {} | {} | {}".format(
             row.get("symbol", ""),
             pmarp_display,
             pmarp_cross,
             breadth_display,
+            row.get("breadth_s2_coverage", "—"),
             breadth_cross,
         ))
     return "\n".join(lines)
@@ -2100,13 +2195,14 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
                 "🔴 {}".format(a.get("text", "")) for a in alerts]
         blocks.append(title_block)
         if tf_rows:
-            tf_cols = ["指数", "PMARP", "PMARP 2%上穿", "S2参与度(broad)", "S2触发"]
-            blocks.append({"heading": "SPY / QQQ / SOXX", "columns": tf_cols, "rows": [
-                {"指数": row.get("symbol", ""),
+            tf_cols = ["股票池", "PMARP", "PMARP 2%上穿", "S2参与度(各池)", "覆盖", "S2触发"]
+            blocks.append({"heading": "SPY / QQQ / SOXX / Extended", "columns": tf_cols, "rows": [
+                {"股票池": row.get("symbol", ""),
                  "PMARP": _fmt_transition(row.get("pmarp_previous"), row.get("pmarp_current"), _fmt_pct_value),
                  "PMARP 2%上穿": "YES" if row.get("pmarp_up2") else "—",
-                 "S2参与度(broad)": _fmt_transition(row.get("breadth_s2_previous"), row.get("breadth_s2_current"), _fmt_participation),
-                 "S2触发": "YES" if row.get("breadth_s2_upcross") else "—"}
+                 "S2参与度(各池)": _fmt_transition(row.get("breadth_s2_previous"), row.get("breadth_s2_current"), _fmt_participation),
+                 "覆盖": row.get("breadth_s2_coverage", "—"),
+                 "S2触发": _format_s2_trigger(row)}
                 for row in tf_rows]})
 
     # 0b. 成交集中度 — shares _volconc_display_rows with text/PNG faces so
@@ -2274,9 +2370,9 @@ def build_morning_visual_sections(
                 "alerts": timing.get("alerts", []),
                 "blocks": [
                     {
-                        "title": "SPY / QQQ / SOXX",
-                        "columns": ["指数", "PMARP", "PMARP 2%上穿", "S2参与度(broad)", "S2触发"],
-                        "widths": [180, 260, 260, 330, 200],
+                        "title": "SPY / QQQ / SOXX / Extended",
+                        "columns": ["股票池", "PMARP", "PMARP 2%上穿", "S2参与度(各池)", "覆盖", "S2触发"],
+                        "widths": [180, 250, 250, 300, 150, 100],
                         "grouped": False,
                         "rows": [
                             {
@@ -2294,7 +2390,8 @@ def build_morning_visual_sections(
                                         row.get("breadth_s2_current"),
                                         _fmt_participation,
                                     ),
-                                    "YES" if row.get("breadth_s2_upcross") else "—",
+                                    row.get("breadth_s2_coverage", "—"),
+                                    _format_s2_trigger(row),
                                 ],
                             }
                             for row in timing.get("rows", [])
@@ -3215,7 +3312,7 @@ def main():
         if args.symbols:
             symbols_override = [s.strip().upper() for s in args.symbols.split(",")]
 
-        # 2. 市场技术信号（extend $10B+ ∪ pool.json 成员；broad universe 已退出选股扫描，仅保留给 Section 0 S2 大盘广度）
+        # 2. 市场技术信号（extend $10B+ ∪ pool.json 成员；S2 独立使用 ETF 成分和 Extended 全池）
         # R3 (Task 15): 弃用的独立 get_symbols() 预取已删除——build_market_signal_report
         # 内部经 resolver 自行解析扫描宇宙，此处不再需要重复计算 symbols 列表。
         market_signals = build_market_signal_report(symbols_override=symbols_override)
