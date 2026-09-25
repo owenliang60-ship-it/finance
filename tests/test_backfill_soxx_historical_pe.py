@@ -554,6 +554,7 @@ def test_live_rebalance_calendar_boundary(monkeypatch, fetched, calendar_end, de
         client.get_etf_holdings.assert_not_called()
         info = report['stages']['source']['live_deferred']
         assert info == {'rebalance_close_date': '2026-09-18',
+                        'expected_last_session': '2026-09-18',
                         'expected_first_session': '2026-09-21',
                         'expected_close_utc': '2026-09-21T20:00:00Z',
                         'fetched_at': fetched.replace('+00:00', 'Z'),
@@ -565,3 +566,60 @@ def test_live_rebalance_calendar_boundary(monkeypatch, fetched, calendar_end, de
         live = [r for r in state.snapshots if r['source_kind'] == 'live']
         assert live and {r['composition_effective_date'] for r in live} == {'2026-09-21'}
         assert 'live_deferred' not in report['stages']['source']
+
+
+def _source_boundary_case(monkeypatch, fetched, calendar, to_date=None, refresh=False):
+    from datetime import datetime
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls.fromisoformat(fetched.replace('Z', '+00:00'))
+    monkeypatch.setattr(backfill, 'datetime', Clock)
+    state = BackfillState(trading_dates=calendar)
+    client = Mock()
+    client.get_fund_disclosure_dates.return_value = [{'date': '2000-12-31', 'year': 2000, 'quarter': 4}]
+    client.get_etf_holdings.return_value = [{'asset': f'TEST{i}', 'name': f'TEST{i}', 'weightPercentage': 4, 'marketValue': 40} for i in range(25)]
+    args = Namespace(from_date=fetched[:4] + '-01-01', to_date=to_date or fetched[:10], refresh_live=refresh)
+    return args, state, client, {'stages': {}}
+
+
+def test_historical_as_of_does_not_fetch_inadmissible_current_live(monkeypatch):
+    args, state, client, report = _source_boundary_case(
+        monkeypatch, '2026-09-22T02:00:00Z', ['2026-09-18'], to_date='2026-09-18')
+    backfill._fetch_sources(args, state, client, None, report)
+    client.get_etf_holdings.assert_not_called()
+    assert report['stages']['source']['live_skipped']['reason'] == 'fetched_after_window'
+
+
+@pytest.mark.parametrize('to_date', ['2026-09-18', '2026-09-19'])
+def test_refresh_live_rejects_unfulfillable_request(monkeypatch, to_date):
+    args, state, client, report = _source_boundary_case(
+        monkeypatch, '2026-09-19T04:00:00Z', ['2026-09-18'], to_date=to_date, refresh=True)
+    with pytest.raises(ValueError, match='--refresh-live'):
+        backfill._fetch_sources(args, state, client, None, report)
+    client.get_etf_holdings.assert_not_called()
+
+
+@pytest.mark.parametrize('fetched,last_session,first_session', [
+    ('2027-06-19T04:00:00Z', '2027-06-17', '2027-06-21'),
+    ('2008-03-22T04:00:00Z', '2008-03-20', '2008-03-24'),
+    ('2022-06-18T04:00:00Z', '2022-06-17', '2022-06-21'),
+    ('2021-06-19T04:00:00Z', '2021-06-18', '2021-06-21'),
+    ('2026-12-21T20:30:00Z', '2026-12-18', '2026-12-21'),
+])
+def test_holiday_and_winter_rebalance_deferral(monkeypatch, fetched, last_session, first_session):
+    args, state, client, report = _source_boundary_case(monkeypatch, fetched, [last_session])
+    backfill._fetch_sources(args, state, client, None, report)
+    client.get_etf_holdings.assert_not_called()
+    info = report['stages']['source']['live_deferred']
+    assert info['expected_first_session'] == first_session
+    assert info['expected_last_session'] == last_session
+    if fetched.startswith('2026-12'):
+        assert info['expected_close_utc'] == '2026-12-21T21:00:00Z'
+
+
+def test_holiday_does_not_disguise_missing_thursday_price(monkeypatch):
+    args, state, client, report = _source_boundary_case(
+        monkeypatch, '2027-06-19T04:00:00Z', ['2027-06-16'])
+    with pytest.raises(ValueError, match='no trading date after'):
+        backfill._fetch_sources(args, state, client, None, report)

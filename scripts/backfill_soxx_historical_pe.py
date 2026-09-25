@@ -10,6 +10,9 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from zoneinfo import ZoneInfo
+
+from dateutil.easter import easter
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -378,6 +381,35 @@ def resolve_config_paths(config_dir: Optional[Path] = None) -> Dict[str, Path]:
     return {"baskets": root, "aliases": aliases}
 
 
+def _quarterly_rebalance_sessions(scheduled_close: str) -> Tuple[date, date, datetime]:
+    """Regular US equity sessions adjacent to a quarterly third Friday.
+
+    Only Good Friday and observed Juneteenth can intersect this narrow
+    March/June/September/December window. This is not a general exchange
+    calendar; unknown schedules and missing observed prices still fail closed.
+    Source metadata retains its original nominal third-Friday anchor.
+    """
+    anchor = date.fromisoformat(scheduled_close)
+    if anchor.month not in (3, 6, 9, 12):
+        raise ValueError("source deferral requires a quarterly rebalance schedule")
+    holidays = {easter(anchor.year) - timedelta(days=2)}
+    if anchor.year >= 2022:
+        juneteenth = date(anchor.year, 6, 19)
+        if juneteenth.weekday() == 5:
+            juneteenth -= timedelta(days=1)
+        elif juneteenth.weekday() == 6:
+            juneteenth += timedelta(days=1)
+        holidays.add(juneteenth)
+    last, first = anchor, anchor + timedelta(days=1)
+    while last.weekday() >= 5 or last in holidays:
+        last -= timedelta(days=1)
+    while first.weekday() >= 5 or first in holidays:
+        first += timedelta(days=1)
+    close = datetime.combine(first, datetime.min.time(),
+                             tzinfo=ZoneInfo("America/New_York")).replace(hour=16)
+    return last, first, close.astimezone(timezone.utc)
+
+
 def _fetch_sources(
     args: argparse.Namespace,
     state: BackfillState,
@@ -453,18 +485,20 @@ def _fetch_sources(
     fetch_date = fetched_at[:10]
     live_rebalance = infer_basket_rebalance_close(
         fetch_date, rules["rebalance_months"])
-    first_session = date.fromisoformat(live_rebalance) + timedelta(days=1)
-    while first_session.weekday() >= 5:
-        first_session += timedelta(days=1)
-    # Conservative cutoff: 20:00 UTC is no later than the regular US close.
-    # Holidays / winter-time gaps fail closed after this boundary.
-    expected_close = datetime.combine(
-        first_session, datetime.min.time(), tzinfo=timezone.utc).replace(hour=20)
+    last_session, first_session, expected_close = _quarterly_rebalance_sessions(live_rebalance)
     live_deferred = None
-    if (max(state.trading_dates) == live_rebalance
+    live_skipped = None
+    if fetch_date > args.to_date:
+        # Live is available only when fetched. A current response cannot
+        # contribute to a historical as-of window; its truncated calendar is
+        # not evidence that today's prices are missing.
+        live_skipped = {"reason": "fetched_after_window", "fetch_date": fetch_date,
+                        "window_end": args.to_date}
+    elif (max(state.trading_dates) == last_session.isoformat()
             and datetime.fromisoformat(fetched_at.replace("Z", "+00:00")) < expected_close):
         live_deferred = {
             "rebalance_close_date": live_rebalance,
+            "expected_last_session": last_session.isoformat(),
             "expected_first_session": first_session.isoformat(),
             "expected_close_utc": expected_close.isoformat().replace("+00:00", "Z"),
             "fetched_at": fetched_at, "calendar_end": max(state.trading_dates),
@@ -473,7 +507,15 @@ def _fetch_sources(
         row.get("source_kind") == "live"
         and row.get("rebalance_close_date") == live_rebalance
         for row in state.snapshots)
-    if live_deferred:
+    if live_deferred or live_skipped:
+        if args.refresh_live:
+            report["stages"]["source"] = {
+                "added": added, "skipped": skipped, "snapshot_quality": quality,
+                **({"live_deferred": live_deferred} if live_deferred else {"live_skipped": live_skipped}),
+            }
+            raise ValueError("--refresh-live cannot be fulfilled: " + (
+                "current live snapshot is outside the requested window" if live_skipped
+                else "first effective session has not closed"))
         skipped += 1
     elif not live_exists or args.refresh_live:
         raw_live = client.get_etf_holdings(basket)
@@ -506,6 +548,8 @@ def _fetch_sources(
         "added": added, "skipped": skipped, "snapshot_quality": quality}
     if live_deferred:
         report["stages"]["source"]["live_deferred"] = live_deferred
+    if live_skipped:
+        report["stages"]["source"]["live_skipped"] = live_skipped
 
 
 def _check_fuse(stage: str, failures: List[str], total: int) -> None:
