@@ -453,11 +453,29 @@ def _fetch_sources(
     fetch_date = fetched_at[:10]
     live_rebalance = infer_basket_rebalance_close(
         fetch_date, rules["rebalance_months"])
+    first_session = date.fromisoformat(live_rebalance) + timedelta(days=1)
+    while first_session.weekday() >= 5:
+        first_session += timedelta(days=1)
+    # Conservative cutoff: 20:00 UTC is no later than the regular US close.
+    # Holidays / winter-time gaps fail closed after this boundary.
+    expected_close = datetime.combine(
+        first_session, datetime.min.time(), tzinfo=timezone.utc).replace(hour=20)
+    live_deferred = None
+    if (max(state.trading_dates) == live_rebalance
+            and datetime.fromisoformat(fetched_at.replace("Z", "+00:00")) < expected_close):
+        live_deferred = {
+            "rebalance_close_date": live_rebalance,
+            "expected_first_session": first_session.isoformat(),
+            "expected_close_utc": expected_close.isoformat().replace("+00:00", "Z"),
+            "fetched_at": fetched_at, "calendar_end": max(state.trading_dates),
+        }
     live_exists = any(
         row.get("source_kind") == "live"
         and row.get("rebalance_close_date") == live_rebalance
         for row in state.snapshots)
-    if not live_exists or args.refresh_live:
+    if live_deferred:
+        skipped += 1
+    elif not live_exists or args.refresh_live:
         raw_live = client.get_etf_holdings(basket)
         normalized, metadata = normalize_fund_disclosure_snapshot(
             basket, raw_live, "live", fetched_at, state.trading_dates,
@@ -486,6 +504,8 @@ def _fetch_sources(
         skipped += 1
     report["stages"]["source"] = {
         "added": added, "skipped": skipped, "snapshot_quality": quality}
+    if live_deferred:
+        report["stages"]["source"]["live_deferred"] = live_deferred
 
 
 def _check_fuse(stage: str, failures: List[str], total: int) -> None:

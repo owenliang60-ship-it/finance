@@ -512,3 +512,56 @@ def test_mcap_store_failure_is_not_misclassified_as_bad_vendor_data():
         backfill._run_mcap(Namespace(from_date="2026-01-20", to_date="2026-01-23"),
             state, ["A"], client, store, {"stages": {}}, fuse_on_incompleteness=False)
     assert not state.market_cap_by_symbol
+
+
+@pytest.mark.parametrize('fetched,calendar_end,deferred', [
+    ('2026-09-19T04:00:00+00:00', '2026-09-18', True),
+    ('2026-09-21T15:00:00+00:00', '2026-09-18', True),
+    ('2026-09-21T20:00:00+00:00', '2026-09-18', False),
+    ('2026-09-22T02:00:00+00:00', '2026-09-18', False),
+    ('2026-09-19T04:00:00+00:00', '2026-09-10', False),
+    ('2026-09-26T04:00:00+00:00', '2026-09-21', False),
+])
+def test_live_rebalance_calendar_boundary(monkeypatch, fetched, calendar_end, deferred):
+    from datetime import datetime
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls.fromisoformat(fetched)
+
+    monkeypatch.setattr(backfill, 'datetime', Clock)
+    state = _state()
+    state.trading_dates += ['2026-09-10']
+    if calendar_end >= '2026-09-18':
+        state.trading_dates.append('2026-09-18')
+    if calendar_end >= '2026-09-21':
+        state.trading_dates.append('2026-09-21')
+    client = Mock()
+    client.get_fund_disclosure_dates.return_value = [
+        {'date': '2025-12-31', 'year': 2025, 'quarter': 4}]
+    client.get_etf_holdings.return_value = [
+        {'asset': row['symbol'], 'name': row['name'], 'weightPercentage': 4.0,
+         'marketValue': 40.0} for row in state.snapshots]
+    report = {'stages': {}}
+    args = Namespace(from_date='2026-01-01', to_date=fetched[:10], refresh_live=False)
+    if not deferred and calendar_end < '2026-09-21':
+        with pytest.raises(ValueError, match='no trading date after'):
+            backfill._fetch_sources(args, state, client, None, report)
+        return
+    backfill._fetch_sources(args, state, client, None, report)
+    if deferred:
+        client.get_etf_holdings.assert_not_called()
+        info = report['stages']['source']['live_deferred']
+        assert info == {'rebalance_close_date': '2026-09-18',
+                        'expected_first_session': '2026-09-21',
+                        'expected_close_utc': '2026-09-21T20:00:00Z',
+                        'fetched_at': fetched.replace('+00:00', 'Z'),
+                        'calendar_end': calendar_end}
+        assert all(row['source_kind'] != 'live' for row in state.snapshots)
+        assert report['stages']['source']['skipped'] == 2
+    else:
+        client.get_etf_holdings.assert_called_once_with('SOXX')
+        live = [r for r in state.snapshots if r['source_kind'] == 'live']
+        assert live and {r['composition_effective_date'] for r in live} == {'2026-09-21'}
+        assert 'live_deferred' not in report['stages']['source']
