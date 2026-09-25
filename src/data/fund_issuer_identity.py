@@ -113,7 +113,44 @@ def load_issuer_overrides(config_dir):
     return records
 
 
-def resolve_issuer_identity(row, overrides=()):
+def disclosure_security_issuers(rows, overrides=()):
+    """Keep the complete snapshot inventory, including unusable securities.
+
+    Selection happens before the CUSIP lookup: missing/bad recent evidence
+    must never resurrect an older successfully resolved holding.
+    """
+    snapshots = {}
+    for row in rows:
+        if row.get("source_kind") != "disclosure":
+            continue
+        snapshot = snapshots.setdefault((row["basket_symbol"], row["holding_date"]), {
+            "composition_available_date": row["composition_available_date"],
+            "securities": {},
+        })
+        snapshot["composition_available_date"] = max(
+            snapshot["composition_available_date"], row["composition_available_date"])
+        cusip = row.get("cusip")
+        if cusip in MISSING_CUSIPS:
+            continue
+        key, reason = resolve_issuer_identity(row, overrides)
+        status = ("resolved" if key else "conflict" if reason in (
+            "issuer_security_conflict", "issuer_evidence_conflict") else "unresolved")
+        entry = (key, row.get("isin"), status)
+        previous = snapshot["securities"].get(cusip)
+        if previous and (previous[2] == "conflict" or previous[:2] != entry[:2]):
+            entry = (None, previous[1], "conflict")
+        snapshot["securities"][cusip] = entry
+    return snapshots
+
+
+def latest_pit_disclosure(security_issuers, basket_symbol, as_of):
+    eligible = [key for key, snapshot in security_issuers.items()
+                if key[0] == basket_symbol and key[1] <= as_of
+                and snapshot["composition_available_date"] <= as_of]
+    return max(eligible, key=lambda key: key[1]) if eligible else None
+
+
+def resolve_issuer_identity(row, overrides=(), security_issuers=None):
     """Resolve normalized source columns, rejecting inconsistent raw evidence.
 
     Returns (typed issuer key or None, reason). Reviewed corrections are scoped
@@ -156,21 +193,37 @@ def resolve_issuer_identity(row, overrides=()):
         if key is None:
             return None, "issuer_evidence_conflict"
         candidates.add(key)
+    inherited = False
+    if is_live and security_issuers is not None and row.get("cusip") not in MISSING_CUSIPS:
+        snapshot_key = latest_pit_disclosure(
+            security_issuers, row.get("basket_symbol"), row["holding_date"])
+        evidence = (security_issuers[snapshot_key]["securities"].get(row["cusip"])
+                    if snapshot_key is not None else None)
+        if evidence is not None:
+            key, isin, status = evidence
+            if status == "conflict" or (isin and row.get("isin") and isin != row["isin"]):
+                return None, "issuer_evidence_conflict"
+            if status == "resolved":
+                inherited = not candidates
+                candidates.add(key)
     if "sec-cik:" + str(row.get("cik")) in candidates:
         return None, "filer_cik_is_not_issuer"
     if len(candidates) > 1:
         return None, "issuer_evidence_conflict"
     if not candidates:
         return None, "issuer_identity_unresolved"
-    reason = ("reviewed_security_correction" if corrected else
+    reason = ("disclosure_security_issuer" if inherited else
+              "reviewed_security_correction" if corrected else
               "disclosed_lei" if valid_issuer_lei(source_lei) else "reviewed_security")
     return next(iter(candidates)), reason
 
 
-def audit_snapshot_identities(rows, overrides=()):
+def audit_snapshot_identities(rows, overrides=(), source_rows=None):
     """Pre-company-API gate, with each physical source snapshot kept separate."""
     errors, resolved = [], []
     groups = defaultdict(lambda: defaultdict(set))
+    security_issuers = (disclosure_security_issuers(source_rows, overrides)
+                       if source_rows is not None else None)
     for row in rows:
         key = (row.get("basket_symbol"), row["holding_date"], row["source_kind"])
         label = f"{key}:{row.get('raw_row_index')}:{row.get('raw_symbol')}"
@@ -178,7 +231,7 @@ def audit_snapshot_identities(rows, overrides=()):
             errors.append(f"{label}:unrecognized_asset_category")
         if not row.get("included") and not row.get("covered_by"):
             continue
-        issuer_key, reason = resolve_issuer_identity(row, overrides)
+        issuer_key, reason = resolve_issuer_identity(row, overrides, security_issuers)
         if issuer_key is None:
             errors.append(f"{label}:{reason}")
             continue
@@ -192,6 +245,9 @@ def audit_snapshot_identities(rows, overrides=()):
                          "symbol": target, "canonical_issuer_key": issuer_key,
                          "issuer_lei": issuer_key[4:] if issuer_key.startswith("lei:") else None,
                          "reason": reason})
+        if reason == "disclosure_security_issuer":
+            resolved[-1]["evidence_disclosure_date"] = latest_pit_disclosure(
+                security_issuers, row.get("basket_symbol"), row["holding_date"])[1]
     for key, targets in groups.items():
         by_issuer = defaultdict(set)
         for target, leis in targets.items():

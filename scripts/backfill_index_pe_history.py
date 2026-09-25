@@ -346,12 +346,13 @@ def backfill_basket(
         source_available_dates = sorted(
             str(row["composition_available_date"]) for row in state.snapshots
             if row.get("composition_available_date"))
+        source_rows = list(state.snapshots)
         state.snapshots = _window_snapshots(state.snapshots, window)
         alias_path = resolve_config_paths(config_dir)["aliases"]
         aliases = load_soxx_symbol_aliases(alias_path) if alias_path.exists() else {}
         validate_disclosure_alias_bindings(state.snapshots, aliases)
         identity = audit_snapshot_identities(
-            state.snapshots, load_issuer_overrides(config_dir))
+            state.snapshots, load_issuer_overrides(config_dir), source_rows=source_rows)
         report["source_identity"] = identity
         if identity["errors"]:
             raise ValueError("source issuer identity gate failed: "

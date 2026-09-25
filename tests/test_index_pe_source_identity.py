@@ -281,3 +281,88 @@ def test_future_source_with_same_effective_date_cannot_supply_missing_identity(t
         assert _company_identity_check("SPY", [product], _company_identities(store._get_conn(), "SPY"))["errors"]
     finally:
         store.close()
+
+
+def normalize_as(basket, labels):
+    source_kind = EVIDENCE[labels[0]]['source_kind']
+    raw = [copy.deepcopy(EVIDENCE[label]['raw']) for label in labels]
+    rows, meta = normalize_fund_disclosure_snapshot(
+        basket, raw, source_kind, '2026-09-25T04:00:00Z', CALENDAR,
+        {}, {}, {}, expected_reconstitution_month=None)
+    return [{**row, **{key: meta[key] for key in (
+        'basket_symbol', 'holding_date', 'source_kind',
+        'composition_effective_date', 'composition_available_date')}} for row in rows]
+
+
+@pytest.mark.parametrize('case', [
+    'inherit', 'cross_basket', 'published_later', 'held_later', 'latest_missing',
+    'latest_unresolved', 'override_with_unresolved', 'duplicate_key_conflict',
+    'duplicate_isin_conflict', 'isin_conflict', 'override_conflict', 'lei_conflict',
+    'new_entrant', 'missing_cusip', 'sentinel_cusip', 'correction', 'legacy',
+])
+def test_live_disclosure_security_identity(case):
+    from src.data.fund_issuer_identity import audit_snapshot_identities
+    disclosure = normalize_as('SPY', ['spy_AAPL'])[0]
+    live = normalize_as('SPY', ['live_aapl'])[0]
+    key = 'lei:' + disclosure['issuer_lei']
+    other_lei = EVIDENCE['spy_GOOG']['raw']['lei']
+    overrides = []
+    sources = [disclosure]
+    expected, reason = key, 'disclosure_security_issuer'
+    if case == 'cross_basket':
+        live['basket_symbol'] = 'QQQ'
+    elif case == 'published_later':
+        disclosure['composition_available_date'] = '2026-10-01'
+    elif case == 'held_later':
+        disclosure['holding_date'] = '2026-09-30'
+    elif case.startswith('latest_') or case == 'override_with_unresolved':
+        newer = copy.deepcopy(disclosure)
+        newer.update(holding_date='2026-06-30', composition_available_date='2026-08-25')
+        if case == 'latest_missing':
+            newer['cusip'] = newer['raw_payload_json']['cusip'] = '000000001'
+        else:
+            newer['issuer_lei'] = newer['raw_payload_json']['lei'] = 'N/A'
+        sources.append(newer)
+    elif case.startswith('duplicate_'):
+        duplicate = copy.deepcopy(disclosure)
+        if case == 'duplicate_key_conflict':
+            duplicate['issuer_lei'] = duplicate['raw_payload_json']['lei'] = other_lei
+        else:
+            duplicate['isin'] = duplicate['raw_payload_json']['isin'] = 'US0000000010'
+        sources.extend([duplicate, copy.deepcopy(disclosure)])  # conflict must stay sticky
+    elif case == 'isin_conflict':
+        live['isin'] = live['raw_payload_json']['isin'] = 'US0000000010'
+    elif case == 'lei_conflict':
+        live['issuer_lei'] = live['raw_payload_json']['lei'] = other_lei
+    elif case in ('new_entrant', 'missing_cusip', 'sentinel_cusip'):
+        value = {'new_entrant': '000000001', 'missing_cusip': None,
+                 'sentinel_cusip': '000000000'}[case]
+        live['cusip'] = live['raw_payload_json']['securityCusip'] = value
+    elif case == 'correction':
+        disclosure['issuer_lei'] = disclosure['raw_payload_json']['lei'] = 'N/A'
+        overrides = [reviewed_override()]
+    if case in ('override_with_unresolved', 'override_conflict', 'duplicate_key_conflict'):
+        overrides = [{**reviewed_override(), 'valid_from': '2026-09-18',
+                      'valid_to': '2026-12-31',
+                      'issuer_lei': other_lei if case == 'override_conflict' else key[4:]}]
+    if case in ('cross_basket', 'published_later', 'held_later', 'latest_missing',
+                'latest_unresolved', 'new_entrant', 'missing_cusip', 'sentinel_cusip', 'legacy'):
+        expected, reason = None, 'issuer_identity_unresolved'
+    elif case in ('duplicate_key_conflict', 'duplicate_isin_conflict', 'isin_conflict',
+                  'override_conflict', 'lei_conflict'):
+        expected, reason = None, 'issuer_evidence_conflict'
+    elif case == 'override_with_unresolved':
+        reason = 'reviewed_security'
+    before = copy.deepcopy((sources, live))
+    report = audit_snapshot_identities([live], overrides,
+                                      source_rows=None if case == 'legacy' else sources)
+    assert (sources, live) == before
+    if expected is None:
+        assert report['resolved'] == []
+        assert any(reason in error for error in report['errors'])
+    else:
+        assert report['errors'] == []
+        assert report['resolved'][0]['canonical_issuer_key'] == expected
+        assert report['resolved'][0]['reason'] == reason
+        if reason == 'disclosure_security_issuer':
+            assert report['resolved'][0]['evidence_disclosure_date'] == disclosure['holding_date']
