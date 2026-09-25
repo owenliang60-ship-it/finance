@@ -114,33 +114,60 @@ def load_issuer_overrides(config_dir):
 
 
 def disclosure_security_issuers(rows, overrides=()):
-    """Keep the complete snapshot inventory, including unusable securities.
+    """Inventory every snapshot; parse only those selected by live rows.
 
-    Selection happens before the CUSIP lookup: missing/bad recent evidence
-    must never resurrect an older successfully resolved holding.
+    The cache belongs to this immutable source/override context, not to the
+    process. An absent recent security never revives an older snapshot.
     """
     snapshots = {}
+    overrides = tuple(overrides)
     for row in rows:
         if row.get("source_kind") != "disclosure":
             continue
         snapshot = snapshots.setdefault((row["basket_symbol"], row["holding_date"]), {
             "composition_available_date": row["composition_available_date"],
-            "securities": {},
+            "rows": [], "overrides": overrides, "by_as_of": {},
         })
         snapshot["composition_available_date"] = max(
             snapshot["composition_available_date"], row["composition_available_date"])
-        cusip = row.get("cusip")
-        if cusip in MISSING_CUSIPS:
-            continue
-        key, reason = resolve_issuer_identity(row, overrides)
-        status = ("resolved" if key else "conflict" if reason in (
-            "issuer_security_conflict", "issuer_evidence_conflict") else "unresolved")
-        entry = (key, row.get("isin"), status)
-        previous = snapshot["securities"].get(cusip)
-        if previous and (previous[2] == "conflict" or previous[:2] != entry[:2]):
-            entry = (None, previous[1], "conflict")
-        snapshot["securities"][cusip] = entry
+        snapshot["rows"].append(row)
     return snapshots
+
+
+def _disclosure_securities_as_of(snapshot, as_of):
+    if as_of in snapshot["by_as_of"]:
+        return snapshot["by_as_of"][as_of]
+    overrides = snapshot["overrides"]
+    if "original_evidence" not in snapshot:
+        groups = defaultdict(list)
+        for row in snapshot["rows"]:
+            if row.get("cusip") not in MISSING_CUSIPS:
+                key, reason = resolve_issuer_identity(row, overrides)
+                groups[row["cusip"]].append((row, key, reason))
+        snapshot["original_evidence"] = groups
+    active = tuple(r for r in overrides if r["valid_from"] <= as_of <= r["valid_to"])
+    securities = {}
+    for cusip, entries in snapshot["original_evidence"].items():
+        keys = {key for _, key, _ in entries if key is not None}
+        isins = {row["isin"] for row, _, _ in entries if row.get("isin")}
+        isin = next(iter(isins)) if len(isins) == 1 else None
+        conflict = (len(keys) > 1 or len(isins) > 1 or any(reason in (
+            "issuer_security_conflict", "issuer_evidence_conflict") for _, _, reason in entries))
+        key = next(iter(keys)) if len(keys) == 1 else None
+        if conflict:
+            status = "conflict"
+        elif key is None or any(original is None for _, original, _ in entries):
+            status = "unresolved"
+        elif active != overrides and any(
+                resolve_issuer_identity(row, active)[0] != key for row, _, _ in entries):
+            # Evaluate the original security/date again with still-live proof.
+            # Never expose a corrected wrong raw LEI when its override expires.
+            status = "unresolved"
+        else:
+            status = "resolved"
+        securities[cusip] = (key if status == "resolved" else None, isin, status)
+    snapshot["by_as_of"][as_of] = securities
+    return securities
 
 
 def latest_pit_disclosure(security_issuers, basket_symbol, as_of):
@@ -197,7 +224,8 @@ def resolve_issuer_identity(row, overrides=(), security_issuers=None):
     if is_live and security_issuers is not None and row.get("cusip") not in MISSING_CUSIPS:
         snapshot_key = latest_pit_disclosure(
             security_issuers, row.get("basket_symbol"), row["holding_date"])
-        evidence = (security_issuers[snapshot_key]["securities"].get(row["cusip"])
+        evidence = (_disclosure_securities_as_of(
+                        security_issuers[snapshot_key], row["holding_date"]).get(row["cusip"])
                     if snapshot_key is not None else None)
         if evidence is not None:
             key, isin, status = evidence

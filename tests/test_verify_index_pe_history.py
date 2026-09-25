@@ -2048,14 +2048,30 @@ def _live_identity_case(case):
             overrides = [override]
         else:
             expected = None
-    elif case in ("duplicate_conflict", "duplicate_isin", "mixed_resolution"):
+    elif case in ("duplicate_conflict", "duplicate_isin", "mixed_resolution",
+                  "mixed_no_own", "mixed_own_lei", "mixed_then_conflict",
+                  "duplicate_missing_isin"):
         overrides = [override]
-        rows.insert(1, row(index=1, lei=(None if case == "mixed_resolution" else other)))
+        mixed = case.startswith("mixed_")
+        rows.insert(1, row(index=1, lei=(None if mixed else other)))
         if case == "duplicate_isin":
             alter(rows[1], issuer_lei=apple, isin="US9876543210")
-        # A later matching row must not clear an established conflict.
+        # A later matching row must not clear missing evidence or conflicts.
         rows.insert(2, row(index=2))
         expected = None
+        if case == "mixed_resolution":
+            expected = "lei:" + apple
+        elif case == "mixed_no_own":
+            overrides = []
+        elif case == "mixed_own_lei":
+            overrides = []
+            alter(live, issuer_lei=apple)
+            expected = "lei:" + apple
+        elif case == "mixed_then_conflict":
+            alter(rows[2], issuer_lei=other)
+        elif case == "duplicate_missing_isin":
+            alter(rows[1], issuer_lei=apple, isin=None)
+            expected = "lei:" + apple
     elif case in ("future_publication", "future_holding", "cross_basket"):
         disclosure.update({
             "future_publication": {"composition_available_date": "2026-10-01"},
@@ -2071,6 +2087,35 @@ def _live_identity_case(case):
         overrides = [{**override, "valid_from": "2026-01-01",
                       "expected_raw_leis": [other]}]
         alter(disclosure, issuer_lei=other)
+    elif case in ("expired_source_override", "expired_source_correction",
+                  "raw_lei_survives_expiry", "active_source_override",
+                  "original_conflict_survives_expiry", "expired_duplicate_conflict",
+                  "expired_override_live_review"):
+        overrides = [{**override, "valid_from": "2026-01-01",
+                      "valid_to": "2026-06-30"}]
+        if case == "expired_source_override":
+            alter(disclosure, issuer_lei=None)
+            expected = None
+        elif case == "expired_source_correction":
+            alter(disclosure, issuer_lei=other)
+            overrides[0]["expected_raw_leis"] = [other]
+            expected = None
+        elif case == "active_source_override":
+            alter(disclosure, issuer_lei=None)
+            overrides[0]["valid_to"] = live["holding_date"]
+        elif case == "original_conflict_survives_expiry":
+            alter(disclosure, issuer_lei=other)
+            alter(live, issuer_lei=apple)
+            expected = None
+        elif case == "expired_duplicate_conflict":
+            alter(disclosure, issuer_lei=None)
+            rows.insert(1, row(index=1, lei=other, isin=None))
+            alter(live, issuer_lei=other)
+            expected = None
+        elif case == "expired_override_live_review":
+            alter(disclosure, issuer_lei=None)
+            overrides.append({**override, "issuer_lei": other})
+            expected = "lei:" + other
     elif case == "invalid_live_raw":
         live["issuer_lei"] = apple  # normalized-only edit must still fail
         expected = None
@@ -2095,6 +2140,11 @@ LIVE_IDENTITY_CASES = (
     "future_publication", "future_holding", "cross_basket", "new_entrant",
     "missing_cusip", "zero_cusip", "disclosure_correction",
     "invalid_live_raw", "invalid_disclosure_raw", "merged_unresolved",
+    "mixed_no_own", "mixed_own_lei", "mixed_then_conflict",
+    "duplicate_missing_isin", "expired_source_override",
+    "expired_source_correction", "raw_lei_survives_expiry",
+    "active_source_override", "original_conflict_survives_expiry",
+    "expired_duplicate_conflict", "expired_override_live_review",
 )
 
 
@@ -2146,3 +2196,48 @@ def test_live_identity_producer_verifier_parity(tmp_path, case):
         verifier_key = _company_identities(conn, "SPY", overrides)[
             ("2026-09-25", "live")]["AAA"]
     assert producer_key == verifier_key == expected
+
+
+
+def test_live_identity_only_reconstructs_selected_disclosure_snapshots(tmp_path, monkeypatch):
+    import scripts.verify_index_pe_history as verifier
+
+    rows, overrides, expected = _live_identity_case("inherit")
+    selected = rows[0]
+    excluded = {**selected, "holding_date": "2026-03-31", "included": 0,
+                "raw_payload_json": "excluded-old-disclosure-must-not-be-parsed"}
+    ordinary = {**selected, "holding_date": "2025-12-31",
+                "raw_payload_json": selected["raw_payload_json"] + " "}
+    # Both live physical rows choose the same snapshot and holding date.
+    rows += [excluded, ordinary, {**rows[1], "raw_row_index": 1}]
+    db_path = _identity_database(tmp_path, rows)
+    real_loads, seen = verifier.json.loads, []
+
+    def counted_loads(raw, *args, **kwargs):
+        seen.append(raw)
+        assert raw != excluded["raw_payload_json"]
+        return real_loads(raw, *args, **kwargs)
+
+    monkeypatch.setattr(verifier.json, "loads", counted_loads)
+    with connect_readonly(db_path) as conn:
+        result = verifier._company_identities(conn, "SPY", overrides)
+    assert result[("2026-09-25", "live")]["AAA"] == expected
+    assert result[("2025-12-31", "disclosure")]["AAA"] == expected
+    assert seen.count(ordinary["raw_payload_json"]) == 1
+    # Original source resolution plus re-resolution with live-date-valid
+    # overrides; the original result also serves ordinary disclosure output.
+    assert 1 <= seen.count(selected["raw_payload_json"]) <= 2
+
+
+def test_live_identity_disclosure_cache_respects_live_date(tmp_path):
+    from scripts.verify_index_pe_history import _company_identities
+
+    rows, overrides, _ = _live_identity_case("active_source_override")
+    later = {**rows[1], "holding_date": "2026-09-26",
+             "rebalance_close_date": "2026-09-26",
+             "composition_available_date": "2026-09-26"}
+    db_path = _identity_database(tmp_path, [*rows, later])
+    with connect_readonly(db_path) as conn:
+        result = _company_identities(conn, "SPY", overrides)
+    assert result[("2026-09-25", "live")]["AAA"] == "lei:" + synthetic_lei("AAA")
+    assert result[("2026-09-26", "live")]["AAA"] is None

@@ -958,7 +958,8 @@ def _company_identities(
     class EvidenceConflict(ValueError):
         pass
 
-    def source_identity(row):
+    def source_identity(row, evidence_overrides=None):
+        applicable = overrides if evidence_overrides is None else evidence_overrides
         try:
             raw = json.loads(row.get("raw_payload_json") or "null")
             if not isinstance(raw, dict):
@@ -977,7 +978,7 @@ def _company_identities(
                 if row.get(field) != original:
                     raise ValueError("normalized identity disagrees with raw source")
             original = raw.get("lei")
-            in_range = [entry for entry in overrides
+            in_range = [entry for entry in applicable
                         if entry["valid_from"] <= row["holding_date"] <= entry["valid_to"]]
             matching = []
             for entry in in_range:
@@ -1012,8 +1013,8 @@ def _company_identities(
                             if day <= row["holding_date"]
                             and snapshot["available"] is not None
                             and snapshot["available"] <= row["holding_date"]]
-                latest = disclosures[max(eligible)] if eligible else None
-                evidence = latest["securities"].get(cusip) if latest else None
+                evidence = (disclosure_evidence(max(eligible), row["holding_date"]).get(cusip)
+                            if eligible else None)
                 if evidence is not None:
                     inherited, source_isin, status = evidence
                     if (status == "conflict" or (source_isin and raw.get("isin")
@@ -1033,35 +1034,77 @@ def _company_identities(
             pass  # Invalid raw evidence cannot certify a source identity.
         return None, "unresolved"
 
-    # Keep the entire physical disclosure inventory, including rows which
-    # cannot resolve and rows outside the materialised valuation window.
+    # Inventory every snapshot without parsing its rows. Only a selected
+    # snapshot needs the additional live-inheritance reconstruction.
     for row in source_rows:
         if row["source_kind"] != "disclosure":
             continue
         snapshot = disclosures.setdefault(str(row["holding_date"]), {
-            "available": row.get("composition_available_date"), "securities": {}})
+            "available": row.get("composition_available_date"), "rows": []})
         available = row.get("composition_available_date")
         if snapshot["available"] is None or available is None:
             snapshot["available"] = None
         else:
             snapshot["available"] = max(snapshot["available"], available)
-        cusip = row.get("cusip")
-        if cusip in (None, "", "N/A", "000000000"):
-            continue
-        issuer, status = source_identity(row)
-        evidence = (issuer, row.get("isin"), status)
-        previous = snapshot["securities"].get(cusip)
-        if previous is not None and (previous[2] == "conflict"
-                                     or previous[:2] != evidence[:2]):
-            evidence = (None, previous[1], "conflict")
-        snapshot["securities"][cusip] = evidence
+        snapshot["rows"].append(row)
+
+    original_identities, inherited_snapshots = {}, {}
+
+    def original_identity(row):
+        # The same baseline result also serves the ordinary disclosure output.
+        marker = id(row)
+        if marker not in original_identities:
+            original_identities[marker] = source_identity(row)
+        return original_identities[marker]
+
+    def disclosure_evidence(snapshot_day, live_day):
+        marker = (snapshot_day, live_day)
+        if marker in inherited_snapshots:
+            return inherited_snapshots[marker]
+        live_overrides = [entry for entry in overrides
+                          if entry["valid_from"] <= live_day <= entry["valid_to"]]
+        groups = {}
+        for row in disclosures[snapshot_day]["rows"]:
+            cusip = row.get("cusip")
+            if cusip in (None, "", "N/A", "000000000"):
+                continue
+            group = groups.setdefault(cusip, {
+                "keys": set(), "isins": set(), "unresolved": False, "conflict": False})
+            original, status = original_identity(row)
+            if row.get("isin"):
+                group["isins"].add(row["isin"])
+            if original is not None:
+                group["keys"].add(original)
+            if status == "conflict":
+                group["conflict"] = True
+            elif original is None:
+                group["unresolved"] = True
+            else:
+                # Keep the source holding date: only remove reviews which are
+                # no longer active at the live date. Never inherit the wrong
+                # raw LEI newly exposed by an expired corrective override.
+                current, _ = source_identity(row, live_overrides)
+                if current != original:
+                    group["unresolved"] = True
+        evidence = {}
+        for cusip, group in groups.items():
+            isin = next(iter(group["isins"])) if len(group["isins"]) == 1 else None
+            if group["conflict"] or len(group["keys"]) > 1 or len(group["isins"]) > 1:
+                evidence[cusip] = (None, isin, "conflict")
+            elif group["unresolved"] or not group["keys"]:
+                evidence[cusip] = (None, isin, "unresolved")
+            else:
+                evidence[cusip] = (next(iter(group["keys"])), isin, "resolved")
+        inherited_snapshots[marker] = evidence
+        return evidence
 
     candidates = {}
     for row in source_rows:
         if not row.get("included") and not row.get("covered_by"):
             continue
         key = (str(row["holding_date"]), str(row["source_kind"]))
-        lei, _ = source_identity(row)
+        lei, _ = (original_identity(row) if row["source_kind"] == "disclosure"
+                  else source_identity(row))
         for ticker in (row["raw_symbol"], row["symbol"], row["covered_by"],
                        row.get("alias_symbol") if row.get("alias_mode") == "authoritative" else None):
             if ticker:

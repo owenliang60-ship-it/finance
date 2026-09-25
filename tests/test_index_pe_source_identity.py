@@ -340,7 +340,8 @@ def test_live_disclosure_security_identity(case):
         live['cusip'] = live['raw_payload_json']['securityCusip'] = value
     elif case == 'correction':
         disclosure['issuer_lei'] = disclosure['raw_payload_json']['lei'] = 'N/A'
-        overrides = [reviewed_override()]
+        overrides = [{**reviewed_override(), 'valid_to': '2026-12-31'}]
+        live['isin'] = live['raw_payload_json']['isin'] = None
     if case in ('override_with_unresolved', 'override_conflict', 'duplicate_key_conflict'):
         overrides = [{**reviewed_override(), 'valid_from': '2026-09-18',
                       'valid_to': '2026-12-31',
@@ -386,3 +387,55 @@ def test_backfill_keeps_disclosure_evidence_outside_valuation_window(tmp_path, m
     assert len(state.snapshots) == 1 and state.snapshots[0]['source_kind'] == 'live'
     assert report['source_identity']['errors'] == []
     assert report['source_identity']['resolved'][0]['evidence_disclosure_date'] == disclosure['holding_date']
+
+
+@pytest.mark.parametrize('case', ['mixed_with_own_lei', 'mixed_without_own_lei',
+                                  'expired_override', 'expired_correction',
+                                  'raw_lei_outlives_override', 'active_override'])
+def test_live_inheritance_distinguishes_absence_and_proof_expiry(case):
+    from src.data.fund_issuer_identity import audit_snapshot_identities
+    row = normalize_as('SPY', ['spy_AAPL'])[0]
+    live = normalize_as('SPY', ['live_aapl'])[0]
+    key = 'lei:' + row['issuer_lei']
+    sources, overrides = [row], []
+    if case.startswith('mixed_'):
+        duplicate = copy.deepcopy(row)
+        duplicate['issuer_lei'] = duplicate['raw_payload_json']['lei'] = 'N/A'
+        sources.append(duplicate)
+        if case == 'mixed_with_own_lei':
+            live['issuer_lei'] = live['raw_payload_json']['lei'] = row['issuer_lei']
+    else:
+        overrides = [reviewed_override()]
+        if case != 'raw_lei_outlives_override':
+            original = EVIDENCE['spy_GOOG']['raw']['lei'] if case == 'expired_correction' else 'N/A'
+            row['issuer_lei'] = row['raw_payload_json']['lei'] = original
+            if case == 'expired_correction':
+                overrides[0]['expected_raw_leis'] = [original]
+        if case == 'active_override':
+            overrides[0]['valid_to'] = '2026-09-25'
+    result = audit_snapshot_identities([live], overrides, source_rows=sources)
+    if case in ('mixed_with_own_lei', 'raw_lei_outlives_override', 'active_override'):
+        assert not result['errors']
+        assert result['resolved'][0]['canonical_issuer_key'] == key
+    else:
+        assert not result['resolved']
+        assert any('issuer_identity_unresolved' in e for e in result['errors'])
+
+
+def test_only_selected_disclosure_is_parsed_and_cached(monkeypatch):
+    from src.data import fund_issuer_identity as identity
+    old = normalize_as('SPY', ['spy_AAPL'])[0]
+    new = copy.deepcopy(old)
+    new.update(holding_date='2026-06-30', composition_available_date='2026-08-25')
+    live = normalize_as('SPY', ['live_aapl'])[0]
+    calls = []
+    original = identity.resolve_issuer_identity
+    def observe(row, *args, **kwargs):
+        if row['source_kind'] == 'disclosure':
+            assert row['holding_date'] != old['holding_date'], 'unused disclosure was parsed'
+            calls.append(row['holding_date'])
+        return original(row, *args, **kwargs)
+    monkeypatch.setattr(identity, 'resolve_issuer_identity', observe)
+    result = identity.audit_snapshot_identities([live, copy.deepcopy(live)], source_rows=[old, new])
+    assert not result['errors']
+    assert len(calls) <= 2  # Original proof plus live-date expiry check, once per context.
