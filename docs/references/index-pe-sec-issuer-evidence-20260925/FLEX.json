@@ -214,5 +214,15 @@
         }
       }
     }
+  },
+  "matching_scope": {
+    "mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "note": "Exact reviewed ISIN may supply missing-CUSIP evidence only for the listed sentinel values. Any other differing CUSIP remains a conflict."
   }
 }

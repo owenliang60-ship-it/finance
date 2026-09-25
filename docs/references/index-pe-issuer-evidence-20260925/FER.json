@@ -263,5 +263,37 @@
     "valid_to": "2026-12-31",
     "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
     "prior_disclosed_identity": []
-  }
+  },
+  "matching_scope": {
+    "mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "note": "Exact reviewed ISIN may supply missing-CUSIP evidence only for the listed sentinel values. Any other differing CUSIP remains a conflict."
+  },
+  "canonical_identity_reference": {
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260911/FER.json",
+    "source_sha256": "7cc85bcaa6964f1c0361bc89aae608a1d0e2702be40a19c9c202ea264ece8363",
+    "canonical_issuer_key": "sec-cik:0001468522"
+  },
+  "sec_issuer": {
+    "cik": "0001468522",
+    "form": "6-K",
+    "sec_name": "Ferrovial SE",
+    "section": "FILER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1468522/000146852226000008/0001468522-26-000008-index-headers.html",
+    "symbol": "FER"
+  },
+  "reviewed_securities": [
+    {
+      "symbol": "FER",
+      "cusip": "N3168P101",
+      "isin": "NL0015001FS8",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ]
 }

@@ -3,6 +3,8 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from src.data.fund_issuer_identity import load_issuer_overrides, resolve_issuer_identity
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,7 +42,7 @@ def test_reviewed_source_fills_only_exact_missing_identity_without_rewriting_raw
         assert resolve_issuer_identity(source, rows)[0] is None
 
 
-CURRENT_REVIEWED = set("XOM STX CB BE AON OKE RCL GRMN FERG ILMN P ACGL WTW SW AMCR BG IVZ SPCX FER SKHYV ASML LIN ETN MDT ACN TT JCI CRH CBRS FLEX CRDO CCL RDDT LYB ALLE APTV PNR NCLH TEL STE EG NXPI".split())
+CURRENT_REVIEWED = set("XOM STX CB BE AON OKE RCL GRMN FERG ILMN P ACGL WTW SW AMCR BG IVZ SPCX FER SKHYV ASML LIN ETN MDT ACN TT JCI CRH CBRS FLEX CRDO CCL RDDT LYB ALLE APTV PNR NCLH TEL STE EG NXPI CVX CTAS TDG BKR EXPE EXR LH PHM KHC TPL J INVH CSGP TKO MTSI".split())
 
 
 def test_current_reviewed_securities_have_exact_primary_evidence():
@@ -63,6 +65,7 @@ def test_current_reviewed_securities_have_exact_primary_evidence():
             issuer = evidence["sec_issuer"]
             assert issuer["section"] in {"ISSUER", "SUBJECT COMPANY", "FILER"}
             primary = evidence["primary_source"]
+            assert primary["source_url"] == issuer["source_url"]
             assert hashlib.sha256(primary["text"].encode()).hexdigest() == primary["sha256"]
             if "issuer_registry" in evidence:
                 assert evidence["issuer_registry"]["response"]["data"]["id"] == row["issuer_lei"]
@@ -88,3 +91,44 @@ def test_current_reviewed_securities_have_exact_primary_evidence():
         assert resolve_issuer_identity(live, records) == (expected, "reviewed_security")
         live["holding_date"] = "2099-01-01"
         assert resolve_issuer_identity(live, records)[0] is None
+
+
+@pytest.mark.parametrize('sample', json.loads((ROOT / 'tests/fixtures/index_pe_missing_cusip_disclosures.json').read_text())['rows'], ids=lambda r: r['source_row']['basket_symbol'] + '-' + r['source_row']['raw_symbol'])
+@pytest.mark.parametrize('missing_cusip', [None, '', 'N/A', '000000000'])
+def test_new_overrides_accept_future_disclosure_missing_cusips(sample, missing_cusip):
+    import copy
+    row = copy.deepcopy(sample['source_row'])
+    row['holding_date'] = row['raw_payload_json']['date'] = '2026-09-30'
+    row['cusip'] = row['raw_payload_json']['cusip'] = missing_cusip
+    overrides = load_issuer_overrides(ROOT / 'config/baskets')
+    assert resolve_issuer_identity(row, overrides)[0] == sample['expected_key']
+
+
+def test_new_overrides_preserve_existing_canonical_issuer_keys():
+    rows = load_issuer_overrides(ROOT / 'config/baskets')
+    for symbol, cik in [('FER', '0001468522'), ('APTV', '0001521332'), ('TEL', '0001385157')]:
+        current = next(r for r in rows if r['symbol'] == symbol and r['reviewed_at'] == '2026-09-25')
+        assert current['canonical_issuer_key'] == 'sec-cik:' + cik
+        assert current['issuer_lei'] in current['equivalent_leis']
+
+
+@pytest.mark.parametrize('missing_cusip', [None, '', 'N/A', '000000000'])
+def test_verifier_accepts_future_disclosure_placeholders(tmp_path, missing_cusip):
+    import copy
+    from tests.test_verify_index_pe_history import _identity_database
+    from scripts.verify_index_pe_history import _company_identities, connect_readonly
+    samples = json.loads((ROOT / 'tests/fixtures/index_pe_missing_cusip_disclosures.json').read_text())['rows']
+    rows = []
+    for sample in samples:
+        row = copy.deepcopy(sample['source_row'])
+        row['holding_date'] = row['raw_payload_json']['date'] = '2026-09-30'
+        row['cusip'] = row['raw_payload_json']['cusip'] = missing_cusip
+        row['raw_payload_json'] = json.dumps(row['raw_payload_json'])
+        rows.append(row)
+    db = _identity_database(tmp_path, rows)
+    overrides = load_issuer_overrides(ROOT / 'config/baskets')
+    with connect_readonly(db) as conn:
+        identities = {b: _company_identities(conn, b, overrides) for b in ('SPY', 'QQQ', 'SOXX')}
+    for sample in samples:
+        row = sample['source_row']
+        assert identities[row['basket_symbol']][('2026-09-30', 'disclosure')][row['raw_symbol']] == sample['expected_key']

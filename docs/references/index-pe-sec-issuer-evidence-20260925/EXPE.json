@@ -1,0 +1,277 @@
+{
+  "reviewed_at": "2026-09-25",
+  "retrieved_at": "2026-09-25T04:53:21.663932+00:00",
+  "reviewed_securities": [
+    {
+      "symbol": "EXPE",
+      "cusip": "30212P303",
+      "isin": "US30212P3038",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001324424",
+    "sec_name": "Expedia Group Inc",
+    "form": "SCHEDULE 13G",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1324424/000210011926000562/primary_doc.xml",
+    "filing_date": "2026-04-29"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1324424/000210011926000562/primary_doc.xml",
+    "sha256": "4b267bc58e6dfe97845077e16246b7ae35ac70308c3ef2c39ebfbedc61a50b8b",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n<schemaVersion>X0202</schemaVersion>\n<headerData>\n<submissionType>SCHEDULE 13G</submissionType>\n<filerInfo>\n<filer>\n<filerCredentials>\n<cik>0002100119</cik>\n<ccc>XXXXXXXX</ccc>\n</filerCredentials>\n</filer>\n<liveTestFlag>LIVE</liveTestFlag>\n</filerInfo>\n</headerData>\n<formData>\n<coverPageHeader>\n<securitiesClassTitle>Common Stock</securitiesClassTitle>\n<eventDateRequiresFilingThisStatement>03/31/2026</eventDateRequiresFilingThisStatement>\n<issuerInfo>\n<issuerCik>0001324424</issuerCik>\n<issuerName>Expedia Group Inc</issuerName>\n<issuerCusips>\n<issuerCusipNumber>30212P303</issuerCusipNumber>\n</issuerCusips>\n<issuerPrincipalExecutiveOfficeAddress>\n<com:street1>1111 Expedia Group Way W</com:street1>\n<com:city>Seattle</com:city>\n<com:stateOrCountry>WA</com:stateOrCountry>\n<com:zipCode>98119</com:zipCode>\n</issuerPrincipalExecutiveOfficeAddress>\n</issuerInfo>\n<designateRulesPursuantThisScheduleFiled>\n<designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n</designateRulesPursuantThisScheduleFiled>\n</coverPageHeader>\n<coverPageHeaderReportingPersonDetails>\n<reportingPersonName>Vanguard Capital Management</reportingPersonName>\n<citizenshipOrOrganization>PA</citizenshipOrOrganization>\n<reportingPersonBeneficiallyOwnedNumberOfShares>\n<soleVotingPower>1158525</soleVotingPower>\n<sharedVotingPower>0</sharedVotingPower>\n<soleDispositivePower>8759273</soleDispositivePower>\n<sharedDispositivePower>0</sharedDispositivePower>\n</reportingPersonBeneficiallyOwnedNumberOfShares>\n<reportingPersonBeneficiallyOwnedAggregateNumberOfShares>8759273</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n<classPercent>7.48</classPercent>\n<typeOfReportingPerson>IA</typeOfReportingPerson>\n<comments>\nIn accordance with SEC Release No. 34-39538 (January 12, 1998), this Schedule 13G reflects the securities beneficially owned, or deemed to be beneficially owned, by Vanguard Capital Management LLC and the following affiliates of Vanguard Capital Management LLC or business divisions of such affiliates: Vanguard Asset Management Limited, Vanguard Fiduciary Trust Company, Vanguard Global Advisers, LLC and Vanguard Investments Australia Ltd. This Schedule 13G includes securities held by Vanguard funds, or sleeves thereof, over which Vanguard Capital Management LLC exercises dispositive power, in addition to securities held by clients over which the affiliates or business divisions of such affiliates indicated above exercise dispositive and/or voting power. This Schedule 13G does not include securities, if any, beneficially owned by other subsidiaries or affiliates of Vanguard Capital Management LLC, or business divisions of such subsidiaries, whose ownership of securities is disaggregated from that of the reporting business unit in accordance with such release.\n\n</comments>\n</coverPageHeaderReportingPersonDetails>\n<items>\n<item1>\n<issuerName>Expedia Group Inc</issuerName>\n<issuerPrincipalExecutiveOfficeAddress>1111 Expedia Group Way W, Seattle, WA, 98119</issuerPrincipalExecutiveOfficeAddress>\n</item1>\n<item2>\n<filingPersonName>Vanguard Capital Management</filingPersonName>\n<principalBusinessOfficeOrResidenceAddress>100 Vanguard Blvd,, Malvern, PA, 19355</principalBusinessOfficeOrResidenceAddress>\n<citizenship>PA</citizenship>\n</item2>\n<item3>\n<notApplicableFlag>N</notApplicableFlag>\n<typeOfPersonFiling>IA</typeOfPersonFiling>\n</item3>\n<item4>\n<amountBeneficiallyOwned>8759273</amountBeneficiallyOwned>\n<classPercent>7.48</classPercent>\n<numberOfSharesPersonHas>\n<solePowerOrDirectToVote>1158525</solePowerOrDirectToVote>\n<sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n<solePowerOrDirectToDispose>8759273</solePowerOrDirectToDispose>\n<sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>\n</numberOfSharesPersonHas>\n</item4>\n<item5>\n<notApplicableFlag>Y</notApplicableFlag>\n</item5>\n<item6>\n<notApplicableFlag>N</notApplicableFlag>\n<ownershipMoreThan5PercentOnBehalfOfAnotherPerson>Vanguard Capital Management, including investment companies registered under the Investment Company Act of 1940 and other managed accounts, have the right to receive or the power to direct the receipt of dividends from, or the proceeds from the sale of, the securities reported herein.No one other person's interest in the securities reported herein is more than 5%.</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n</item6>\n<item7>\n<notApplicableFlag>Y</notApplicableFlag>\n</item7>\n<item8>\n<notApplicableFlag>Y</notApplicableFlag>\n</item8>\n<item9>\n<notApplicableFlag>Y</notApplicableFlag>\n</item9>\n<item10>\n<notApplicableFlag>N</notApplicableFlag>\n<certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under &amp;#167; 240.14a-11.</certifications>\n</item10>\n</items>\n<signatureInformation>\n<reportingPersonName>Vanguard Capital Management</reportingPersonName>\n<signatureDetails>\n<signature>Ashley Grim</signature>\n<title>Head of Global Fund Administration</title>\n<date>04/29/2026</date>\n</signatureDetails>\n</signatureInformation>\n</formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "Freshly retrieved SEC current submissions name/ticker/CIK and latest available issuerInfo exact CUSIP are consistent with frozen September live security and prior canonical issuer. Supported GLEIF legal entities have been refreshed independently. This is a proposed new bounded review interval, not modification of the historical review or proof of future corporate-action absence.",
+  "limitations": [],
+  "canonical_identity_reference": [
+    "docs/references/index-pe-sec-issuer-evidence-20260911/EXPE.json"
+  ],
+  "matching_scope": {
+    "mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
+  },
+  "scoped_raw_correction_review": [
+    {
+      "lei": "CI7MUJI4USF3V0NJ1H64",
+      "role": "prior_scoped_wrong_raw_correction",
+      "source_url": "https://api.gleif.org/api/v1/lei-records/CI7MUJI4USF3V0NJ1H64",
+      "raw_file": "EXPE-lei-CI7MUJI4USF3V0NJ1H64.json",
+      "sha256": "0d07f01c17299f18cfca93b182a7e5441c413885e12c51b2f489482ec34af26b",
+      "entity": {
+        "legalName": {
+          "name": "EXPEDIA, INC.",
+          "language": "en"
+        },
+        "otherNames": [],
+        "transliteratedOtherNames": [],
+        "legalAddress": {
+          "language": "en",
+          "addressLines": [
+            "C/O NATIONAL REGISTERED AGENTS, INC.",
+            "711 CAPITOL WAY S",
+            "STE 204"
+          ],
+          "addressNumber": null,
+          "addressNumberWithinBuilding": null,
+          "mailRouting": null,
+          "city": "OLYMPIA",
+          "region": "US-WA",
+          "country": "US",
+          "postalCode": "98501"
+        },
+        "headquartersAddress": {
+          "language": "en",
+          "addressLines": [
+            "1111 EXPEDIA GROUP WAY W"
+          ],
+          "addressNumber": null,
+          "addressNumberWithinBuilding": null,
+          "mailRouting": null,
+          "city": "SEATTLE",
+          "region": "US-WA",
+          "country": "US",
+          "postalCode": "98119"
+        },
+        "registeredAt": {
+          "id": "RA000641",
+          "other": null
+        },
+        "registeredAs": "601 975 803",
+        "jurisdiction": "US-WA",
+        "category": "GENERAL",
+        "legalForm": {
+          "id": "NHYA",
+          "other": null
+        },
+        "associatedEntity": {
+          "lei": null,
+          "name": null
+        },
+        "status": "ACTIVE",
+        "expiration": {
+          "date": null,
+          "reason": null
+        },
+        "successorEntity": {
+          "lei": null,
+          "name": null
+        },
+        "successorEntities": [],
+        "creationDate": "1999-08-23T00:00:00Z",
+        "subCategory": null,
+        "otherAddresses": [],
+        "eventGroups": []
+      },
+      "registration": {
+        "initialRegistrationDate": "2012-06-06T15:55:00Z",
+        "lastUpdateDate": "2026-05-04T13:55:33Z",
+        "status": "ISSUED",
+        "nextRenewalDate": "2027-01-23T15:35:51Z",
+        "managingLou": "5493001KJTIIGC8Y1R12",
+        "corroborationLevel": "FULLY_CORROBORATED",
+        "validatedAt": {
+          "id": "RA000641",
+          "other": null
+        },
+        "validatedAs": "601 975 803",
+        "otherValidationAuthorities": []
+      }
+    }
+  ],
+  "equivalence_registries": [
+    {
+      "source_url": "https://api.gleif.org/api/v1/lei-records/2549009GW3Z3DQCB8H87",
+      "response": {
+        "meta": {
+          "goldenCopy": {
+            "publishDate": "2026-09-24T16:00:00Z"
+          }
+        },
+        "data": {
+          "type": "lei-records",
+          "id": "2549009GW3Z3DQCB8H87",
+          "attributes": {
+            "lei": "2549009GW3Z3DQCB8H87",
+            "entity": {
+              "legalName": {
+                "name": "Expedia Group, Inc.",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "c/o NRAI",
+                  "1209 Orange Street"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Wilmington",
+                "region": "US-DE",
+                "country": "US",
+                "postalCode": "19801"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "1111 Expedia Group Way West",
+                  "Attn: Legal"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Seattle",
+                "region": "US-WA",
+                "country": "US",
+                "postalCode": "98119"
+              },
+              "registeredAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "registeredAs": "3956616",
+              "jurisdiction": "US-DE",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "XTIQ",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2005-04-18T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2026-05-01T17:46:51Z",
+              "lastUpdateDate": "2026-05-01T17:46:51Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-05-01T17:46:51Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "validatedAs": "3956616",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "us_de/3956616",
+            "qcc": null,
+            "gem": null,
+            "spglobal": [
+              "25915843"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2549009GW3Z3DQCB8H87/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2549009GW3Z3DQCB8H87/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2549009GW3Z3DQCB8H87/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/2549009GW3Z3DQCB8H87/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/2549009GW3Z3DQCB8H87/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/2549009GW3Z3DQCB8H87/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/2549009GW3Z3DQCB8H87/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/2549009GW3Z3DQCB8H87/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/2549009GW3Z3DQCB8H87/ultimate-children"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/2549009GW3Z3DQCB8H87"
+          }
+        }
+      }
+    }
+  ]
+}

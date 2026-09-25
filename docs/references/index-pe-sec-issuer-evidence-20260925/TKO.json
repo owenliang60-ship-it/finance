@@ -1,0 +1,42 @@
+{
+  "reviewed_at": "2026-09-25",
+  "retrieved_at": "2026-09-25T04:53:21.665146+00:00",
+  "reviewed_securities": [
+    {
+      "symbol": "TKO",
+      "cusip": "87256C101",
+      "isin": "US87256C1018",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001973266",
+    "sec_name": "TKO Group Holdings, Inc.",
+    "form": "SCHEDULE 13G/A",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1973266/000089542126000251/primary_doc.xml",
+    "filing_date": "2026-08-13"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1973266/000089542126000251/primary_doc.xml",
+    "sha256": "db3ea5dfe2e0eddbb3a422923c4d0e83d6063d2d0440f69cd617baa574b3de50",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\" xmlns:g=\"http://xml.ms.com/ns/itlnc/filelink/US13GFiling/v1.0\">\n  <schemaVersion>X0202</schemaVersion>\n<headerData>\n    <submissionType>SCHEDULE 13G/A</submissionType>\n    <previousAccessionNumber/>\n    <filerInfo>\n      <filer>\n        <filerCredentials>\n          <cik>0000895421</cik>\n          <ccc>XXXXXXXX</ccc>\n        </filerCredentials>\n      </filer>\n      <liveTestFlag>LIVE</liveTestFlag>\n\n\n\n    </filerInfo>\n  </headerData>\n  <formData>\n    <coverPageHeader>\n      <amendmentNo>1</amendmentNo>\n      <securitiesClassTitle>Class A Common Stock</securitiesClassTitle>\n      <eventDateRequiresFilingThisStatement>06/30/2026</eventDateRequiresFilingThisStatement>\n      <issuerInfo>\n        <issuerCik>0001973266</issuerCik>\n        <issuerName>TKO Group Holdings, Inc.</issuerName>\n        <issuerCusips>\n          <issuerCusipNumber>87256C101</issuerCusipNumber>\n        </issuerCusips>\n        <issuerPrincipalExecutiveOfficeAddress>\n          <com:street1>200 FIFTH AVE</com:street1>\n          <com:city>NEW YORK</com:city>\n          <com:stateOrCountry>NY</com:stateOrCountry>\n          <com:zipCode>10010</com:zipCode>\n        </issuerPrincipalExecutiveOfficeAddress>\n      </issuerInfo>\n      <designateRulesPursuantThisScheduleFiled>\n        <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n      </designateRulesPursuantThisScheduleFiled>\n    </coverPageHeader>\n    <coverPageHeaderReportingPersonDetails>\n\n\n      <reportingPersonName>Morgan Stanley</reportingPersonName>\n      <citizenshipOrOrganization>DE</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>0</soleVotingPower>\n        <sharedVotingPower>2809441</sharedVotingPower>\n        <soleDispositivePower>0</soleDispositivePower>\n        <sharedDispositivePower>3037424</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>3037964</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>\n      <classPercent>4.1</classPercent>\n      <typeOfReportingPerson>HC</typeOfReportingPerson>\n      <typeOfReportingPerson>CO</typeOfReportingPerson>\n      <comments>As of the date hereof, Morgan Stanley has ceased to be the beneficial owner of more than five percent of the class of securities.</comments>\n    </coverPageHeaderReportingPersonDetails>\n    <items>\n      <item1>\n        <issuerName>TKO Group Holdings, Inc.</issuerName>\n        <issuerPrincipalExecutiveOfficeAddress>200 FIFTH AVE, NEW YORK, NY, 10010</issuerPrincipalExecutiveOfficeAddress>\n      </item1>\n      <item2>\n        <filingPersonName>Morgan Stanley</filingPersonName>\n        <principalBusinessOfficeOrResidenceAddress>1585 Broadway, New York, NY 10036</principalBusinessOfficeOrResidenceAddress>\n        <citizenship>Delaware</citizenship>\n      </item2>\n      <item3>\n        <notApplicableFlag>N</notApplicableFlag>\n        <typeOfPersonFiling>HC</typeOfPersonFiling>\n      </item3>\n      <item4>\n        <amountBeneficiallyOwned>See the response(s) to Item 9 on the attached cover page(s).</amountBeneficiallyOwned>\n        <classPercent>4.1</classPercent>\n        <numberOfSharesPersonHas>\n          <solePowerOrDirectToVote>See the response(s) to Item 5 on the attached cover page(s).</solePowerOrDirectToVote>\n          <sharedPowerOrDirectToVote>See the response(s) to Item 6 on the attached cover page(s).</sharedPowerOrDirectToVote>\n          <solePowerOrDirectToDispose>See the response(s) to Item 7 on the attached cover page(s).</solePowerOrDirectToDispose>\n          <sharedPowerOrDirectToDispose>See the response(s) to Item 8 on the attached cover page(s).</sharedPowerOrDirectToDispose>\n        </numberOfSharesPersonHas>\n      </item4>\n      <item5>\n        <notApplicableFlag>N</notApplicableFlag>\n        <classOwnership5PercentOrLess>Y</classOwnership5PercentOrLess>\n      </item5>\n      <item6>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item6>\n      <item7>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item7>\n      <item8>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item8>\n      <item9>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item9>\n      <item10>\n        <notApplicableFlag>N</notApplicableFlag>\n        <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under Â§ 240.14a-11.\n\n\t\t\t\t\t*  In Accordance with the Securities and Exchange Commission Release\n\t\t\t\t\tNo. 34-39538 (January 12, 1998) (the \"Release\"), this filing reflects the\n\t\t\t\t\tsecurities beneficially owned, or that may be deemed to be beneficially owned,\n\t\t\t\t\tby certain operating units (collectively, the \"MS Reporting Units\") of Morgan\n\t\t\t\t\tStanley and its subsidiaries and affiliates (collectively, \"MS\").  This filing\n\t\t\t\t\tdoes not reflect securities, if any, beneficially owned by any operating units\n\t\t\t\t\tof MS whose ownership of securities is disaggregated from that of the MS\n\t\t\t\t\tReporting Units in accordance with the Release.\n\t\t\t\t\t</certifications>\n      </item10>\n    </items>\n    <signatureInformation>\n      <reportingPersonName>Morgan Stanley</reportingPersonName>\n      <signatureDetails>\n        <signature>Claire Gordon</signature>\n        <title>Authorized Signatory, Morgan Stanley</title>\n        <date>08/13/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n  </formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "Freshly retrieved SEC current submissions name/ticker/CIK and latest available issuerInfo exact CUSIP are consistent with frozen September live security and prior canonical issuer. Supported GLEIF legal entities have been refreshed independently. This is a proposed new bounded review interval, not modification of the historical review or proof of future corporate-action absence.",
+  "limitations": [],
+  "canonical_identity_reference": [
+    "docs/references/index-pe-sec-issuer-evidence-20260911/TKO.json"
+  ],
+  "matching_scope": {
+    "mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
+  },
+  "scoped_raw_correction_review": [],
+  "equivalence_registries": []
+}

@@ -1,6 +1,6 @@
 # Live issuer identity implementation — 2026-09-25
 
-Status: implementation complete for Tasks 1–3; Task 4 evidence partially complete; **source blockers remain, no production rollout**.
+Status: implementation plus eight review-boundary fixes complete; 57 current securities reviewed. **Two source blockers remain, no production rollout.** The first checkpoint below records the initial 42-security batch; the follow-up section supersedes its calendar and inheritance-boundary descriptions.
 
 ## Implementation and evidence
 
@@ -42,3 +42,26 @@ Three-basket identity acceptance and full-window restoration are **not complete*
 - Targeted FRED recheck, loading the same `.env` before pytest collection: **1 passed in 17.40s**. This does not turn the earlier full invocation into a fully green result. No unrelated macro code was changed.
 - Main-thread `/cr`: no actionable implementation findings; source-blocked deployment decision remains. One subagent independently implemented verifier/test coverage and later gathered bounded primary SEC evidence; all returned changes and issuer bindings were checked in the main thread.
 - All four production Python files pass Python 3.10 grammar parsing. `git diff --check` clean.
+
+
+## Review follow-up: boundary corrections
+
+- Missing CUSIP: current overrides explicitly allow only `null`, `""`, `N/A`, `000000000` with exact ISIN. Real historical sentinel rows projected to the future quarter test the failure before patch and both resolvers after it. STE's previously reviewed wrong raw LEI remains a scoped correction.
+- Historical as-of: a current live response cannot contribute before its fetch day; skip it with `live_skipped` diagnostics, without inferring freshness from a truncated calendar.
+- Quarterly session boundary: Good Friday, observed Juneteenth starting 2022, weekends and New York 16:00 close are covered, including holiday Monday and winter time. Only the four configured quarterly months are supported. Nominal stored rebalance metadata remains unchanged. Sources: [NYSE holiday calendar](https://www.nyse.com/trade/hours-calendars), [Juneteenth adoption](https://www.nyse.com/publicdocs/nyse/markets/nyse/rule-filings/sec-approvals/2021/%28SR-NYSE-2021-56%29%2034-93183.pdf).
+- Duplicate evidence: one valid key plus an unresolved row is unavailable inheritance, not an affirmative conflict. Two different valid keys/nonempty ISINs or an explicit row conflict still reject.
+- Expiry: reconstruct original proof with reviews valid on the source date, then require the same identity to remain supported by reviews also active on the live date. A raw LEI independent of expired reviews remains usable; an expired correction cannot turn its wrong raw LEI into inherited evidence.
+- Canonical keys: FER/APTV/TEL retain historical SEC keys with reviewed LEI equivalence; no arbitrary switch to LEI keys.
+- Refresh: a requested live refresh which must defer or lies outside the window now fails explicitly.
+- Runtime: inheritance resolves only selected snapshots and caches by live date. Ordinary historical row verification remains required.
+
+Enforcing expiry exposed **15 securities / 17 live rows** formerly certified through expired proof: CVX, CTAS, TDG, BKR, EXPE, EXR, LH, PHM, KHC, TPL, J, INVH, CSGP, TKO, MTSI. All were independently checked against fresh SEC issuer-role sources; six previously supported issuer LEIs were rechecked with GLEIF. New bounded review records were added, preserving the historical records and canonical identities. The review batch is now **57**. CSGP's legacy wrong raw LEI is still not an identified legal entity (GLEIF 404); its exact-security correction is supported by independently verified correct CIK/LEI, and is never treated as an equivalent LEI.
+
+Frozen 634-row replay remains producer/verifier-consistent: SPY 503/504 resolved, QQQ 101/101, SOXX 28/29. The two original source blockers remain. This is offline replay of retained primary inputs, not a claim of a new published valuation.
+
+Follow-up TDD evidence: 12 missing-CUSIP/canonical regression failures; 5 producer mixed/expiry/laziness failures; 8 calendar/refresh failures reproduced before correction. Validation: main eight-finding fix full suite **4078 passed, 1 skipped, 17 warnings in 538.87s** (`python -m pytest -q`). The final Christmas Eve close correction was then tested red-to-green with three additional cases; final focused suite **374 passed in 6.94s** across the seven affected test files. The full suite number is the checkpoint before that final small close-time correction, not a claim that its three added tests were in that invocation. Python 3.10 grammar and diff checks also pass.
+
+- Final calendar review also covers Christmas Eve as the first effective session (December 21 can be the third Friday): 13:00 New York early close, with pre-close / exact-close / post-close regression cases.
+
+
+Final follow-up online preflight (57-review configuration): SPY 2 HTTP requests / one unresolved CVR-like source row; QQQ 8 HTTP requests / zero identity errors, then expected budget exhaustion; SOXX 2 HTTP requests / one conflicting-CUSIP row. Aggregate 12 requests, each process capped at 8. No source gate was relaxed to remove either blocker; no production writes, merge, push or deployment.

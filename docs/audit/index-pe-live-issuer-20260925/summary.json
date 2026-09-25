@@ -117,7 +117,7 @@
       "sha256": "59a19b8895032bbd2cfb110aafe8b00e36af211deef8ca9ff215eba4a035a2cf"
     }
   },
-  "reviewed_override_count": 42,
+  "reviewed_override_count": 57,
   "remaining_source_rows": 2,
   "independent_parity": {
     "SPY": {
@@ -148,7 +148,73 @@
     "api_requests_used": 1,
     "reason": "Retain exact live security identifiers for manual issuer review; within eight-request preflight budget."
   },
-  "validation": {
+  "initial_reviewed_override_count": 42,
+  "review_followup": {
+    "items_addressed": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "renewed_securities": 15,
+    "renewed_live_rows": 17,
+    "frozen_source_parity": {
+      "SPY": {
+        "physical_equity_rows_checked": 504,
+        "resolved": 503,
+        "errors": [
+          "('SPY', '2026-09-25', 'live'):504:2602335D:issuer_identity_unresolved"
+        ],
+        "independent_verifier_parity": "PASS"
+      },
+      "QQQ": {
+        "physical_equity_rows_checked": 101,
+        "resolved": 101,
+        "errors": [],
+        "independent_verifier_parity": "PASS"
+      },
+      "SOXX": {
+        "physical_equity_rows_checked": 29,
+        "resolved": 28,
+        "errors": [
+          "('SOXX', '2026-09-25', 'live'):16:0EDE.L:issuer_security_conflict"
+        ],
+        "independent_verifier_parity": "PASS"
+      }
+    },
+    "online_preflights": {
+      "SPY": {
+        "api_requests_used": 2,
+        "request_limit": 8,
+        "status": "failed",
+        "error": "ValueError: source issuer identity gate failed: ('SPY', '2026-09-25', 'live'):504:2602335D:issuer_identity_unresolved",
+        "identity_errors": [
+          "('SPY', '2026-09-25', 'live'):504:2602335D:issuer_identity_unresolved"
+        ]
+      },
+      "QQQ": {
+        "api_requests_used": 8,
+        "request_limit": 8,
+        "status": "failed",
+        "error": "RuntimeError: FMP request budget exhausted (8)",
+        "identity_errors": []
+      },
+      "SOXX": {
+        "api_requests_used": 2,
+        "request_limit": 8,
+        "status": "failed",
+        "error": "ValueError: source issuer identity gate failed: ('SOXX', '2026-09-25', 'live'):16:0EDE.L:issuer_security_conflict",
+        "identity_errors": [
+          "('SOXX', '2026-09-25', 'live'):16:0EDE.L:issuer_security_conflict"
+        ]
+      }
+    }
+  },
+  "initial_validation": {
     "focused": {
       "passed": 282
     },
@@ -166,5 +232,24 @@
     "diff_check": "PASS",
     "known_credentials_scan": "PASS",
     "main_thread_review": "no actionable code findings"
+  },
+  "validation": {
+    "main_review_fix_full_suite": {
+      "passed": 4078,
+      "skipped": 1,
+      "failed": 0,
+      "warnings": 17,
+      "seconds": 538.87,
+      "note": "Before final three Christmas Eve cases and close-time branch."
+    },
+    "final_focused_suite": {
+      "passed": 374,
+      "failed": 0,
+      "seconds": 6.94
+    },
+    "python_3_10_grammar": "PASS",
+    "diff_check": "PASS",
+    "known_credentials_scan": "PASS",
+    "main_thread_review": "No remaining actionable implementation findings; source blockers remain."
   }
 }

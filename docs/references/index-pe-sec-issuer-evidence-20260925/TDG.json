@@ -1,0 +1,42 @@
+{
+  "reviewed_at": "2026-09-25",
+  "retrieved_at": "2026-09-25T04:53:21.663761+00:00",
+  "reviewed_securities": [
+    {
+      "symbol": "TDG",
+      "cusip": "893641100",
+      "isin": "US8936411003",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001260221",
+    "sec_name": "TransDigm Group Inc.",
+    "form": "SCHEDULE 13G/A",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1260221/000142284926000103/primary_doc.xml",
+    "filing_date": "2026-05-14"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1260221/000142284926000103/primary_doc.xml",
+    "sha256": "bc94033359522c676d55818e8b4614a0c26aab8292d7c168b3550c2bf425a94d",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n  <schemaVersion>X0202</schemaVersion>\n<headerData>\n    <submissionType>SCHEDULE 13G/A</submissionType>\n    <previousAccessionNumber>0001422848-24-000298</previousAccessionNumber>\n    <filerInfo>\n      <filer>\n        <filerCredentials>\n          <cik>0001422849</cik>\n          <ccc>XXXXXXXX</ccc>\n        </filerCredentials>\n      </filer>\n      <liveTestFlag>LIVE</liveTestFlag>\n\n\n\n    </filerInfo>\n  </headerData>\n  <formData>\n    <coverPageHeader>\n      <amendmentNo>2</amendmentNo>\n      <securitiesClassTitle>Common Stock</securitiesClassTitle>\n      <eventDateRequiresFilingThisStatement>03/31/2026</eventDateRequiresFilingThisStatement>\n      <issuerInfo>\n        <issuerCik>0001260221</issuerCik>\n        <issuerName>TransDigm Group Inc.</issuerName>\n        <issuerCusips>\n          <issuerCusipNumber>893641100</issuerCusipNumber>\n        </issuerCusips>\n        <issuerPrincipalExecutiveOfficeAddress>\n          <com:street1>1350 Euclid Ave</com:street1>\n          <com:street2>Suite 1600</com:street2>\n          <com:city>Cleveland</com:city>\n          <com:stateOrCountry>X1</com:stateOrCountry>\n          <com:zipCode>44115</com:zipCode>\n        </issuerPrincipalExecutiveOfficeAddress>\n      </issuerInfo>\n      <designateRulesPursuantThisScheduleFiled>\n        <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n      </designateRulesPursuantThisScheduleFiled>\n    </coverPageHeader>\n    <coverPageHeaderReportingPersonDetails>\n\n      <reportingPersonName>Capital World Investors</reportingPersonName>\n      <citizenshipOrOrganization>DE</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>4697654</soleVotingPower>\n        <sharedVotingPower>0</sharedVotingPower>\n        <soleDispositivePower>4705728</soleDispositivePower>\n        <sharedDispositivePower>0</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>4705728.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <classPercent>8.3</classPercent>\n      <typeOfReportingPerson>IA</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <items>\n      <item1>\n        <issuerName>TransDigm Group Inc.</issuerName>\n        <issuerPrincipalExecutiveOfficeAddress>1350 Euclid Ave, Suite 1600, Cleveland, OH 44115, United States of America</issuerPrincipalExecutiveOfficeAddress>\n      </item1>\n      <item2>\n        <filingPersonName>Capital World Investors</filingPersonName>\n        <principalBusinessOfficeOrResidenceAddress>333 SOUTH HOPE STREET, 55TH FLOOR, LOS ANGELES, CALIFORNIA  90071\n</principalBusinessOfficeOrResidenceAddress>\n        <citizenship>N/A</citizenship>\n      </item2>\n      <item3>\n        <notApplicableFlag>N</notApplicableFlag>\n        <typeOfPersonFiling>IA</typeOfPersonFiling>\n      </item3>\n      <item4>\n        <amountBeneficiallyOwned>4,705,728 **\n\n**Capital World Investors (\"CWI\") is a division of Capital Research and Management Company (\"CRMC\"), as well as its investment management subsidiaries and affiliates Capital Bank and Trust Company, Capital International, Inc., Capital International Limited, Capital International Sarl, Capital International K.K., Capital Group Private Client Services, Inc., and Capital Group Investment Management Private Limited (together with CRMC, the \"investment management entities\"). CWI's divisions of each of the investment management entities collectively provide investment management services under the name \"Capital World Investors.\" CWI is deemed to be the beneficial owner of 4,705,728 shares or 8.3% of the 56,473,563 shares believed to be outstanding.</amountBeneficiallyOwned>\n        <classPercent>8.3</classPercent>\n        <numberOfSharesPersonHas>\n          <solePowerOrDirectToVote>4,697,654</solePowerOrDirectToVote>\n          <sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n          <solePowerOrDirectToDispose>4,705,728</solePowerOrDirectToDispose>\n          <sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>\n        </numberOfSharesPersonHas>\n      </item4>\n      <item5>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item5>\n      <item6>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item6>\n      <item7>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item7>\n      <item8>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item8>\n      <item9>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item9>\n      <item10>\n        <notApplicableFlag>N</notApplicableFlag>\n        <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under ?? 240.14a-11.</certifications>\n      </item10>\n    </items>\n    <signatureInformation>\n      <reportingPersonName>Capital World Investors</reportingPersonName>\n      <signatureDetails>\n        <signature>Jae Won Chung</signature>\n        <title>Senior Vice President and Associate General Counsel, Capital Research and Management Company</title>\n        <date>05/13/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n  </formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "Freshly retrieved SEC current submissions name/ticker/CIK and latest available issuerInfo exact CUSIP are consistent with frozen September live security and prior canonical issuer. Supported GLEIF legal entities have been refreshed independently. This is a proposed new bounded review interval, not modification of the historical review or proof of future corporate-action absence.",
+  "limitations": [],
+  "canonical_identity_reference": [
+    "docs/references/index-pe-sec-issuer-evidence-20260911/TDG.json"
+  ],
+  "matching_scope": {
+    "mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
+  },
+  "scoped_raw_correction_review": [],
+  "equivalence_registries": []
+}

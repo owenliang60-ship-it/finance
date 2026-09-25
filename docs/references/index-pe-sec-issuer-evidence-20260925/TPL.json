@@ -1,0 +1,178 @@
+{
+  "reviewed_at": "2026-09-25",
+  "retrieved_at": "2026-09-25T04:53:21.664317+00:00",
+  "reviewed_securities": [
+    {
+      "symbol": "TPL",
+      "cusip": "88262P102",
+      "isin": "US88262P1021",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001811074",
+    "sec_name": "Texas Pacific Land Corp",
+    "form": "SCHEDULE 13D/A",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1811074/000105682326000015/primary_doc.xml",
+    "filing_date": "2026-05-07"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1811074/000105682326000015/primary_doc.xml",
+    "sha256": "812a9d598c39d7a6f94b685acd1a4db063eb8f6415cec77817d4f0aa1a69c015",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13D\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n  <schemaVersion>X0202</schemaVersion>\n<headerData>\n    <submissionType>SCHEDULE 13D/A</submissionType>\n    <filerInfo>\n      <filer>\n        <filerCredentials>\n          <cik>0001056823</cik>\n          <ccc>XXXXXXXX</ccc>\n        </filerCredentials>\n      </filer>\n      <liveTestFlag>LIVE</liveTestFlag>\n\n\n\n    </filerInfo>\n  </headerData>\n  <formData>\n    <coverPageHeader>\n      <amendmentNo>11</amendmentNo>\n      <securitiesClassTitle>Common Stock</securitiesClassTitle>\n      <dateOfEvent>05/05/2026</dateOfEvent>\n      <previouslyFiledFlag>false</previouslyFiledFlag>\n      <issuerInfo>\n        <issuerCIK>0001811074</issuerCIK>\n        <issuerCusips>\n          <issuerCusipNumber>88262P102</issuerCusipNumber>\n        </issuerCusips>\n        <issuerName>Texas Pacific Land Corp</issuerName>\n        <address>\n          <com:street1>2699 HOWELL STREET</com:street1>\n          <com:street2>SUITE 800</com:street2>\n          <com:city>DALLAS</com:city>\n          <com:stateOrCountry>TX</com:stateOrCountry>\n          <com:zipCode>75204</com:zipCode>\n        </address>\n      </issuerInfo>\n      <authorizedPersons>\n        <notificationInfo>\n          <personName>Jay Kesslen</personName>\n          <personPhoneNum>646-867-1176</personPhoneNum>\n          <personAddress>\n            <com:street1>470 Park Ave S</com:street1>\n            <com:city>New York</com:city>\n            <com:stateOrCountry>NY</com:stateOrCountry>\n            <com:zipCode>10016</com:zipCode>\n          </personAddress>\n        </notificationInfo>\n      </authorizedPersons>\n    </coverPageHeader>\n    <reportingPersons>\n      <reportingPersonInfo>\n        <reportingPersonCIK>0001056823</reportingPersonCIK>\n        <reportingPersonNoCIK>N</reportingPersonNoCIK>\n        <reportingPersonName>HORIZON KINETICS ASSET MANAGEMENT LLC</reportingPersonName>\n        <fundType>WC</fundType>\n        <legalProceedings>N</legalProceedings>\n        <citizenshipOrOrganization>DE</citizenshipOrOrganization>\n        <soleVotingPower>10109933.00</soleVotingPower>\n        <sharedVotingPower>0.00</sharedVotingPower>\n        <soleDispositivePower>10109933.00</soleDispositivePower>\n        <sharedDispositivePower>0.00</sharedDispositivePower>\n        <aggregateAmountOwned>10109933.00</aggregateAmountOwned>\n        <isAggregateExcludeShares>N</isAggregateExcludeShares>\n        <percentOfClass>14.7</percentOfClass>\n        <typeOfReportingPerson>IA</typeOfReportingPerson>\n        <commentContent>Horizon Kinetics Asset Management LLC (HKAM) is a Delaware limited liability company and a wholly owned subsidiary of Horizon Kinetics Holding Corporation (HKHC), a Delaware corporation, and manages funds and accounts (Managed Accounts) that hold securities of the Issuer.\n\nThe following constitutes Amendment No. 11 to the Schedule 13D filed by the undersigned Amendment No. 11. This Amendment No. 11 amends, supplements and to the extent inconsistent with, supersedes the initial Schedule 13D filed with the Securities and Exchange Commission (the SEC) on April 9, 2026, as amended by Amendment No. 1 filed with the SEC on February 2, 2022, Amendment No. 2 filed with the SEC on January 27, 2023, Amendment No. 3 filed with the SEC on August 1, 2023, Amendment No. 4 filed with the SEC on December 6, 2023, Amendment No. 5 filed with the SEC on February 5, 2024, and Amendment No. 6 filed with the SEC on February 7, 2024, Amendment No. 7 filed with the SEC on February 28, 2024, Amendment No. 8 filed with the SEC on December 18, 2024, Amendment No. No. 9 filed with the SEC on March 26, 2026, Amendment No. 10 filed with the SEC on April 13, 2026 (Amendment No. 10 and, collectively with the initial Schedule 13D filed on January 12, 2021 and each subsequent amendment thereto, the Schedule 13D).</commentContent>\n      </reportingPersonInfo>\n      <reportingPersonInfo>\n        <reportingPersonCIK>0000088000</reportingPersonCIK>\n        <reportingPersonNoCIK>N</reportingPersonNoCIK>\n        <reportingPersonName>Horizon Kinetics Holding Corp</reportingPersonName>\n        <fundType>AF</fundType>\n        <legalProceedings>N</legalProceedings>\n        <citizenshipOrOrganization>DE</citizenshipOrOrganization>\n        <soleVotingPower>10109933.00</soleVotingPower>\n        <sharedVotingPower>0.00</sharedVotingPower>\n        <soleDispositivePower>10109933.00</soleDispositivePower>\n        <aggregateAmountOwned>10109933.00</aggregateAmountOwned>\n        <isAggregateExcludeShares>N</isAggregateExcludeShares>\n        <percentOfClass>14.7</percentOfClass>\n        <typeOfReportingPerson>HC</typeOfReportingPerson>\n        <commentContent>HKHC is the parent company to HKAM, a registered investment adviser. HKHC may be deemed to beneficially own the 10,109,933 shares beneficially owned by HKAM.\n\nHKHC has not entered into any separate transactions in the shares following the filing of Amendment No. 10 other than those listed under Schedule A, which were effectuated by HKAM.\n\n</commentContent>\n      </reportingPersonInfo>\n    </reportingPersons>\n    <items1To7>\n      <item1>\n        <securityTitle>Common Stock</securityTitle>\n        <issuerName>Texas Pacific Land Corp</issuerName>\n        <issuerPrincipalAddress>\n          <com:street1>2699 HOWELL STREET</com:street1>\n          <com:street2>SUITE 800</com:street2>\n          <com:city>DALLAS</com:city>\n          <com:stateOrCountry>TX</com:stateOrCountry>\n          <com:zipCode>75204</com:zipCode>\n        </issuerPrincipalAddress>\n      </item1>\n      <item2>\n        <filingPersonName>Item 2 (a) is hereby amended and restated in its entirety to read as follows:\n\nThis Schedule 13D is being filed by HKAM, a Delaware limited liability company and wholly owned subsidiary of HKHC, the parent company to HKAM, with respect to the shares of common stock of the Issuer beneficially owned by Managed Accounts.\n\nOn May 5, 2026, Peter Doyle, who serves as Co-Chief Executive Officer of HKAM, was elected to the Board of Directors of the Issuer.\n</filingPersonName>\n      </item2>\n      <item4>\n        <transactionPurpose>Item 4 is hereby amended and restated in its entirety to read as follows:\n\nHKAM acquired the securities reported herein on behalf of the Managed Accounts for investment purposes. In the ordinary course of its business, HKAM intends to regularly review its equity interest in the Issuer and may, from time to time, acquire additional shares or other securities of the Issuer. While HKAM has no present intention to dispose of all or any portion of the shares beneficially owned by Managed Accounts, it may sell shares from time to time for a number of reasons, not limited to client requests, regulatory or investment limitations or other reasons. Any such sales of securities of the Issuer may be in the open market, privately negotiated transactions or otherwise.\n\nOn May 5, 2026, Peter Doyle, who serves as Co-Chief Executive Officer of HKAM, was elected to the Board of Directors of the Issuer.  Additional details are disclosed in Item 6 below and are hereby incorporated by reference.\n\n</transactionPurpose>\n      </item4>\n      <item5>\n        <percentageOfClassSecurities>Item 5 is hereby amended and restated in its entirety to read as follows:\n\nPercentages calculated herein are based upon the 68,974,429 shares outstanding as of April 30, 2026, as reported in TPL's Form 10-Q filed with the SEC on May 6, 2026.\n\nAs of the close of business on May 5, 2026, HKAM beneficially owned 10,109,933 shares of common stock, representing approximately 14.7%.\n\nNeither the filing of this Schedule 13D nor any of its contents shall be deemed to constitute an admission that HKAM is the beneficial owner of the common stock referred to herein for purposes of Sections 13(d) and or 16 of the Securities Exchange Act of 1934, or for any other purpose, and such beneficial ownership is expressly disclaimed, except to the extent of its pecuniary interest therein.</percentageOfClassSecurities>\n        <numberOfShares>HKAM's sole power to vote is 10,109,933 shares.</numberOfShares>\n        <transactionDesc>Except as set forth in Schedule A attached hereto as Exhibit 99, neither HKAM or HKHC has effected any transactions in common stock in the past 60 days.</transactionDesc>\n        <listOfShareholders>Except for Managed Accounts, who may have the right to receive or the power to direct the receipt of dividends from, or the proceeds from the sale of, common stock, no other person is known by HKAM or HKHC to have the right to receive or the power to direct the receipt of dividends from, or the proceeds from the sale of, any common stock that may be beneficially owned by HKAM or HKHC.</listOfShareholders>\n        <date5PercentOwnership>n/a</date5PercentOwnership>\n      </item5>\n      <item6>\n        <contractDescription>On May 5, 2026, Texas Pacific Land Corporation, a Delaware corporation (the Company), entered into a Board Representative Agreement (the Agreement) with HKHC and HKAM (together and collectively with their respective affiliates, including the HK Funds (as defined in the Agreement), Horizon). Pursuant to the Agreement, the Company has agreed to, among other things, nominate a designee of Horizon (the HK Designee) for election to the board of directors of the Company (the Board), subject to the approval of the nominating and corporate governance committee of the Board, at the Company's 2026 annual meeting of stockholders (the 2026 Annual Meeting). Pursuant to the Agreement, Peter Doyle has been selected as the HK Designee.\n\nOn May 5, 2026, the Board appointed Peter Doyle to the Board, subject to the terms of the full Agreement. Mr. Doyle will stand for re-election at the 2026 Annual Meeting. Mr. Doyle was also appointed to serve on the strategic acquisitions committee of the Board.\n\n\nThe entire Agreement is hereby incorporated by reference.\nhttps://www.sec.gov/ix?doc=/Archives/edgar/data/0001811074/000181107426000033/tpl-20260505.htm\n</contractDescription>\n      </item6>\n      <item7>\n        <filedExhibits>Exhibit 99 - 60 Day Trading History\n\n</filedExhibits>\n      </item7>\n    </items1To7>\n    <signatureInfo>\n      <signaturePerson>\n        <signatureReportingPerson>HORIZON KINETICS ASSET MANAGEMENT LLC</signatureReportingPerson>\n        <signatureDetails>\n          <signature>/s/Jay Kesslen</signature>\n          <title>Jay Kesslen</title>\n          <date>05/07/2026</date>\n        </signatureDetails>\n      </signaturePerson>\n      <signaturePerson>\n        <signatureReportingPerson>Horizon Kinetics Holding Corp</signatureReportingPerson>\n        <signatureDetails>\n          <signature>/s/Jay Kesslen</signature>\n          <title>Jay Kesslen, General Counsel</title>\n          <date>05/07/2026</date>\n        </signatureDetails>\n      </signaturePerson>\n    </signatureInfo>\n  </formData>\n\n</edgarSubmission>\n"
+  },
+  "identity_review": "Freshly retrieved SEC current submissions name/ticker/CIK and latest available issuerInfo exact CUSIP are consistent with frozen September live security and prior canonical issuer. Supported GLEIF legal entities have been refreshed independently. This is a proposed new bounded review interval, not modification of the historical review or proof of future corporate-action absence.",
+  "limitations": [],
+  "canonical_identity_reference": [
+    "docs/references/index-pe-sec-issuer-evidence-20260911/TPL.json"
+  ],
+  "matching_scope": {
+    "mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
+  },
+  "scoped_raw_correction_review": [],
+  "equivalence_registries": [
+    {
+      "source_url": "https://api.gleif.org/api/v1/lei-records/254900EMA79D44WVLD22",
+      "response": {
+        "meta": {
+          "goldenCopy": {
+            "publishDate": "2026-09-24T16:00:00Z"
+          }
+        },
+        "data": {
+          "type": "lei-records",
+          "id": "254900EMA79D44WVLD22",
+          "attributes": {
+            "lei": "254900EMA79D44WVLD22",
+            "entity": {
+              "legalName": {
+                "name": "TEXAS PACIFIC LAND CORPORATION",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "C/O CAPITOL SERVICES, INC.",
+                  "108 LAKELAND AVE."
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "DOVER",
+                "region": "US-DE",
+                "country": "US",
+                "postalCode": "19901"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "2699 HOWELL STREET",
+                  "SUITE 800"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "DALLAS",
+                "region": "US-TX",
+                "country": "US",
+                "postalCode": "75204"
+              },
+              "registeredAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "registeredAs": "7891250",
+              "jurisdiction": "US-DE",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "XTIQ",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2020-04-28T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2026-06-09T10:55:45Z",
+              "lastUpdateDate": "2026-06-09T10:55:45Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-06-09T10:55:45Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "validatedAs": "7891250",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "us_de/7891250",
+            "qcc": null,
+            "gem": null,
+            "spglobal": [
+              "308037"
+            ],
+            "conformityFlag": "NON_CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/254900EMA79D44WVLD22/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/254900EMA79D44WVLD22/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/254900EMA79D44WVLD22/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/254900EMA79D44WVLD22/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/254900EMA79D44WVLD22/ultimate-parent-reporting-exception"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/254900EMA79D44WVLD22"
+          }
+        }
+      }
+    }
+  ]
+}

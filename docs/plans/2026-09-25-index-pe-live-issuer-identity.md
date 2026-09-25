@@ -218,3 +218,21 @@ timeout 3600 python3 scripts/backfill_index_pe_history.py --baskets <B> --freque
 - No merge, push, cloud code pull or recovery writes performed. Production issue remains open. See `docs/audit/2026-09-25-index-pe-live-issuer-identity.md`.
 
 - Final validation: 282 focused tests passed; full suite 3988 passed / 1 FRED network failure / 1 skipped. Same-credential isolated FRED retry passed. Main-thread review found no additional code defects; source blockers remain.
+
+
+## Review follow-up — eight boundary findings (implemented, supersedes conflicting details above)
+
+1. All current reviewed securities explicitly permit only the established missing-CUSIP sentinels through `isin_allow_missing_cusip`; genuine differing CUSIPs still conflict. Eleven frozen historical placeholder cases are projected to September 30 in tests, with all four sentinels checked in producer and verifier.
+2. Current live responses are inadmissible when fetch date exceeds the run window. Historical reruns skip that fetch explicitly rather than interpreting the valuation-truncated calendar as source freshness.
+3. `_quarterly_rebalance_sessions` models only sessions around the configured quarterly third Friday: Good Friday, observed Juneteenth from 2022, weekends, and 16:00 America/New_York close. Original nominal source metadata stays unchanged. Tests cover 2008 Good Friday, 2027 holiday Friday, 2022 holiday Monday and winter close.
+4. Mixed resolved/unresolved duplicate rows make inheritance unavailable, permitting other valid live evidence. Distinct affirmative issuer keys or nonempty ISINs remain conflicts.
+5. Inheritance reconstructs original source identity, then checks that identity again using only overrides still valid on the live date. Mismatch makes inheritance unavailable; an expired correction never reveals and inherits its wrong raw value.
+6. FER, APTV and TEL retain their established SEC canonical keys and reviewed LEI equivalences. STE keeps its scoped raw-LEI correction.
+7. Unfulfillable `--refresh-live` requests fail explicitly, including historical windows and deferred effective sessions.
+8. Snapshot inventory is cheap and complete; source reconstruction is lazy and cached by selected snapshot/live date. Ordinary historical-row verification is not removed.
+
+Expiry enforcement exposed 15 additional securities (17 live rows) whose old evidence was being extended implicitly. These now have freshly retrieved primary evidence and **new** September 18–December 31 review records; old records remain unchanged. The current review batch is **57** securities. CSGP's known vendor raw value returns GLEIF 404; only the exact-security correction is retained, never LEI equivalence, with that limitation explicit in its evidence.
+
+Final real-source replay still rejects SPY `2602335D` and SOXX `0EDE.L`; no production rollout. Review-fix validation is recorded in the audit report.
+
+- Final calendar review also covers Christmas Eve as the first effective session (December 21 can be the third Friday): 13:00 New York early close, with pre-close / exact-close / post-close regression cases.

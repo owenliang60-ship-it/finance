@@ -36,3 +36,7 @@ The existing runbook reports ~46min for SPY alone. Do not launch a long recovery
 ## 2026-09-25 implementation checkpoint (not deployed)
 
 Tasks 1–3 implemented and independently replayed in `codex/index-pe-live-issuer-identity`. Initial real preflight produced 44 unresolved rows, including missing-CUSIP foreign disclosure rows; 42 reviewed overrides now have frozen primary evidence. QQQ passes identity; SPY `2602335D` (empty ISIN / possible CVR) and SOXX `0EDE.L` (CUSIP conflicts with issuer-published NXP identifiers) remain fail-closed. Status remains **open / source-blocked**, not repaired in production. No merge, push or recovery. Full evidence and validation: `docs/audit/2026-09-25-index-pe-live-issuer-identity.md`.
+
+### Same-day review follow-up
+
+Eight review-boundary findings addressed: sentinel CUSIP matching, historical-window admissibility, holiday/session cutoff, mixed missing evidence, inherited proof expiry, canonical key consistency, explicit refresh rejection and lazy inheritance reconstruction. Expiry enforcement required 15 fresh primary-source renewals (17 rows); current review batch now 57 securities. Old review validity stays intact. The same two source blockers remain; still not deployed or recovered. Full audit has the final validation details.

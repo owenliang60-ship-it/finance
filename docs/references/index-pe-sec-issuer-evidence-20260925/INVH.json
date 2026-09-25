@@ -1,0 +1,195 @@
+{
+  "reviewed_at": "2026-09-25",
+  "retrieved_at": "2026-09-25T04:53:21.664884+00:00",
+  "reviewed_securities": [
+    {
+      "symbol": "INVH",
+      "cusip": "46187W107",
+      "isin": "US46187W1071",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001687229",
+    "sec_name": "Invitation Homes, Inc.",
+    "form": "SCHEDULE 13G/A",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1687229/000128481226000108/primary_doc.xml",
+    "filing_date": "2026-05-15"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1687229/000128481226000108/primary_doc.xml",
+    "sha256": "48b15b2767b41cbbfc0445074e2ca588decd987a8b5ec851321a4a95ef49fe3c",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n  <schemaVersion>X0202</schemaVersion>\n<headerData>\n    <submissionType>SCHEDULE 13G/A</submissionType>\n    <previousAccessionNumber>0001284812-19-000033</previousAccessionNumber>\n    <filerInfo>\n      <filer>\n        <filerCredentials>\n          <cik>0001284812</cik>\n          <ccc>XXXXXXXX</ccc>\n        </filerCredentials>\n      </filer>\n      <liveTestFlag>LIVE</liveTestFlag>\n\n\n\n    </filerInfo>\n  </headerData>\n  <formData>\n    <coverPageHeader>\n      <amendmentNo>10</amendmentNo>\n      <securitiesClassTitle>Common Stock</securitiesClassTitle>\n      <eventDateRequiresFilingThisStatement>03/31/2026</eventDateRequiresFilingThisStatement>\n      <issuerInfo>\n        <issuerCik>0001687229</issuerCik>\n        <issuerName>Invitation Homes, Inc.</issuerName>\n        <issuerCusips>\n          <issuerCusipNumber>46187W107</issuerCusipNumber>\n        </issuerCusips>\n        <issuerPrincipalExecutiveOfficeAddress>\n          <street1 xmlns=\"http://www.sec.gov/edgar/common\">5420 LBJ Freeway</street1>\n          <street2 xmlns=\"http://www.sec.gov/edgar/common\">Suite 600</street2>\n          <city xmlns=\"http://www.sec.gov/edgar/common\">Dallas</city>\n          <stateOrCountry xmlns=\"http://www.sec.gov/edgar/common\">TX</stateOrCountry>\n          <zipCode xmlns=\"http://www.sec.gov/edgar/common\">75240</zipCode>\n        </issuerPrincipalExecutiveOfficeAddress>\n      </issuerInfo>\n      <designateRulesPursuantThisScheduleFiled>\n        <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n      </designateRulesPursuantThisScheduleFiled>\n    </coverPageHeader>\n    <coverPageHeaderReportingPersonDetails>\n\n\n      <reportingPersonName>Cohen &amp; Steers, Inc.</reportingPersonName>\n      <memberGroup>b</memberGroup>\n      <citizenshipOrOrganization>DE</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>28266553</soleVotingPower>\n        <sharedVotingPower>0</sharedVotingPower>\n        <soleDispositivePower>35859953</soleDispositivePower>\n        <sharedDispositivePower>0</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>35859953</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>\n      <classPercent>5.98</classPercent>\n      <typeOfReportingPerson>HC</typeOfReportingPerson>\n      <typeOfReportingPerson>CO</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <coverPageHeaderReportingPersonDetails>\n\n\n      <reportingPersonName>Cohen &amp; Steers Capital Management, Inc.</reportingPersonName>\n      <memberGroup>b</memberGroup>\n      <citizenshipOrOrganization>NY</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>28041175</soleVotingPower>\n        <sharedVotingPower>0</sharedVotingPower>\n        <soleDispositivePower>35318962</soleDispositivePower>\n        <sharedDispositivePower>0</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>35318962</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>\n      <classPercent>5.89</classPercent>\n      <typeOfReportingPerson>IA</typeOfReportingPerson>\n      <typeOfReportingPerson>CO</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <coverPageHeaderReportingPersonDetails>\n\n\n      <reportingPersonName>Cohen &amp; Steers UK Limited</reportingPersonName>\n      <memberGroup>b</memberGroup>\n      <citizenshipOrOrganization>X0</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>192146</soleVotingPower>\n        <sharedVotingPower>0</sharedVotingPower>\n        <soleDispositivePower>507759</soleDispositivePower>\n        <sharedDispositivePower>0</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>507759</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>\n      <classPercent>0.08</classPercent>\n      <typeOfReportingPerson>IA</typeOfReportingPerson>\n      <typeOfReportingPerson>CO</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <coverPageHeaderReportingPersonDetails>\n\n\n      <reportingPersonName>Cohen &amp; Steers Asia Limited</reportingPersonName>\n      <memberGroup>b</memberGroup>\n      <citizenshipOrOrganization>K3</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>0</soleVotingPower>\n        <sharedVotingPower>0</sharedVotingPower>\n        <soleDispositivePower>0</soleDispositivePower>\n        <sharedDispositivePower>0</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>0</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>\n      <classPercent>0.00</classPercent>\n      <typeOfReportingPerson>IA</typeOfReportingPerson>\n      <typeOfReportingPerson>CO</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <coverPageHeaderReportingPersonDetails>\n\n      <reportingPersonName>Cohen &amp; Steers Ireland Limited</reportingPersonName>\n      <memberGroup>b</memberGroup>\n      <citizenshipOrOrganization>L2</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>33232</soleVotingPower>\n        <sharedVotingPower>0</sharedVotingPower>\n        <soleDispositivePower>33232</soleDispositivePower>\n        <sharedDispositivePower>0</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>33232</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>\n      <classPercent>0.01</classPercent>\n      <typeOfReportingPerson>FI</typeOfReportingPerson>\n      <typeOfReportingPerson>CO</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <items>\n      <item1>\n        <issuerName>Invitation Homes, Inc.</issuerName>\n        <issuerPrincipalExecutiveOfficeAddress>5420 LBJ Freeway, Suite 600, Dallas, Texas 75240</issuerPrincipalExecutiveOfficeAddress>\n      </item1>\n      <item2>\n        <filingPersonName>Cohen &amp; Steers, Inc.\nCohen &amp; Steers Capital Management, Inc.\nCohen &amp; Steers UK Ltd\nCohen &amp; Steers Asia Ltd\nCohen &amp; Steers Ireland Ltd</filingPersonName>\n        <principalBusinessOfficeOrResidenceAddress>The principal address for Cohen &amp; Steers, Inc.\nand Cohen &amp; Steers Capital Management, Inc. is:\n\n1166 Avenue of the Americas, 30th Floor\nNew York, NY 10036\n\nThe principal address for Cohen &amp; Steers UK Ltd. is:\n\nThe Burlian, 2nd Floor\n3 Dering Street, London W1S 1AA\nUnited Kingdom\n\nThe principal address for Cohen &amp; Steers Asia Ltd. is:\n\n3301B, 33rd Floor, The Henderson\n2 Murray Road\nCentral, Hong Kong\n\nThe principal address for Cohen &amp; Steers Ireland Ltd. is:\n\nSuite G01\n81 Merrion Square South\nDublin 2\nD02 NR12\nIreland</principalBusinessOfficeOrResidenceAddress>\n        <citizenship>Cohen &amp; Steers, Inc: Delaware corporation\nCohen &amp; Steers Capital Management, Inc: New York corporation\nCohen &amp; Steers UK Ltd: United Kingdom Private Limited Company\nCohen &amp; Steers Asia Ltd: Asia Private Limited Company\nCohen &amp; Steers Ireland Ltd: Ireland Private Limited Company</citizenship>\n      </item2>\n      <item3>\n        <notApplicableFlag>N</notApplicableFlag>\n        <typeOfPersonFiling>IA</typeOfPersonFiling>\n        <typeOfPersonFiling>HC</typeOfPersonFiling>\n        <typeOfPersonFiling>FI</typeOfPersonFiling>\n        <otherTypeOfPersonFiling>Corporation</otherTypeOfPersonFiling>\n      </item3>\n      <item4>\n        <amountBeneficiallyOwned>35,859,953</amountBeneficiallyOwned>\n        <classPercent>5.98%</classPercent>\n        <numberOfSharesPersonHas>\n          <solePowerOrDirectToVote>28,266,553</solePowerOrDirectToVote>\n          <sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n          <solePowerOrDirectToDispose>35,859,953</solePowerOrDirectToDispose>\n          <sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>\n        </numberOfSharesPersonHas>\n      </item4>\n      <item5>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item5>\n      <item6>\n        <notApplicableFlag>N</notApplicableFlag>\n        <ownershipMoreThan5PercentOnBehalfOfAnotherPerson>Each of Cohen &amp; Steers Capital Management, Inc., Cohen &amp; Steers UK Ltd., Cohen &amp; Steers Asia Ltd. and Cohen &amp; Steers Ireland Ltd. holds the securities of the Issuer to which this statement relates for the benefit of their respective\naccount holders. Such account holders have the right to receive or the power to direct the receipt of dividends from, or proceeds from the sale of, the securities of the Issuer that are held on their behalf.</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n      </item6>\n      <item7>\n        <notApplicableFlag>N</notApplicableFlag>\n        <subsidiaryIdentificationAndClassification>Cohen &amp; Steers, Inc. holds a 100% interest in Cohen &amp; Steers Capital Management, Inc., Cohen &amp; Steers UK Ltd., Cohen &amp; Steers Asia Ltd. (investment advisors registered under Section 203 of the Investment Advisers Act) and Cohen &amp;\nSteers Ireland Ltd. (a non-US institution).</subsidiaryIdentificationAndClassification>\n      </item7>\n      <item8>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item8>\n      <item9>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item9>\n      <item10>\n        <notApplicableFlag>N</notApplicableFlag>\n        <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under ?? 240.14a-11.</certifications>\n      </item10>\n    </items>\n    <signatureInformation>\n      <reportingPersonName>Cohen &amp; Steers, Inc.</reportingPersonName>\n      <signatureDetails>\n        <signature>/s/ Nargis Hilal</signature>\n        <title>SVP, Global Chief Compliance Officer &amp; Associate General Counsel</title>\n        <date>05/15/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n    <signatureInformation>\n      <reportingPersonName>Cohen &amp; Steers Capital Management, Inc.</reportingPersonName>\n      <signatureDetails>\n        <signature>/s/ Nargis Hilal</signature>\n        <title>SVP, Global Chief Compliance Officer &amp; Associate General Counsel</title>\n        <date>05/15/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n    <signatureInformation>\n      <reportingPersonName>Cohen &amp; Steers UK Limited</reportingPersonName>\n      <signatureDetails>\n        <signature>/s/ Nargis Hilal</signature>\n        <title>SVP, Global Chief Compliance Officer &amp; Associate General Counsel</title>\n        <date>05/15/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n    <signatureInformation>\n      <reportingPersonName>Cohen &amp; Steers Asia Limited</reportingPersonName>\n      <signatureDetails>\n        <signature>/s/ Catherine Cheng</signature>\n        <title>VP, Compliance Officer</title>\n        <date>05/15/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n    <signatureInformation>\n      <reportingPersonName>Cohen &amp; Steers Ireland Limited</reportingPersonName>\n      <signatureDetails>\n        <signature>/s/ Alan Cooper</signature>\n        <title>VP, Compliance Office</title>\n        <date>05/15/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n  </formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "Freshly retrieved SEC current submissions name/ticker/CIK and latest available issuerInfo exact CUSIP are consistent with frozen September live security and prior canonical issuer. Supported GLEIF legal entities have been refreshed independently. This is a proposed new bounded review interval, not modification of the historical review or proof of future corporate-action absence. GLEIF exact ISIN query currently returns the existing issuer LEI. Registration LAPSED; entity remains ACTIVE.",
+  "limitations": [],
+  "canonical_identity_reference": [
+    "docs/references/index-pe-issuer-evidence-20260911/INVH.json"
+  ],
+  "matching_scope": {
+    "mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
+  },
+  "scoped_raw_correction_review": [],
+  "equivalence_registries": [],
+  "issuer_registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85",
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        }
+      },
+      "data": {
+        "type": "lei-records",
+        "id": "984500FE452E665C9F85",
+        "attributes": {
+          "lei": "984500FE452E665C9F85",
+          "entity": {
+            "legalName": {
+              "name": "INVITATION HOMES INC.",
+              "language": "en"
+            },
+            "otherNames": [],
+            "transliteratedOtherNames": [],
+            "legalAddress": {
+              "language": "en",
+              "addressLines": [
+                "7 ST. PAUL STREET",
+                "SUITE 820"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": "CSC-LAWYERS INCORPORATING SERVICE COMPANY",
+              "city": "BALTIMORE",
+              "region": "US-MD",
+              "country": "US",
+              "postalCode": "21202"
+            },
+            "headquartersAddress": {
+              "language": "en",
+              "addressLines": [
+                "7 ST. PAUL STREET",
+                "SUITE 820"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": "CSC-LAWYERS INCORPORATING SERVICE COMPANY",
+              "city": "BALTIMORE",
+              "region": "US-MD",
+              "country": "US",
+              "postalCode": "21202"
+            },
+            "registeredAt": {
+              "id": "RA000614",
+              "other": null
+            },
+            "registeredAs": "D17772849",
+            "jurisdiction": "US-MD",
+            "category": "GENERAL",
+            "legalForm": {
+              "id": "HLR4",
+              "other": null
+            },
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "status": "ACTIVE",
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "successorEntities": [],
+            "creationDate": "2017-02-03T00:00:00Z",
+            "subCategory": null,
+            "otherAddresses": [],
+            "eventGroups": []
+          },
+          "registration": {
+            "initialRegistrationDate": "2022-03-18T19:05:37Z",
+            "lastUpdateDate": "2025-06-25T11:03:50Z",
+            "status": "LAPSED",
+            "nextRenewalDate": "2025-06-25T10:35:52Z",
+            "managingLou": "529900T8BM49AURSDO55",
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "validatedAt": {
+              "id": "RA000614",
+              "other": null
+            },
+            "validatedAs": "D17772849",
+            "otherValidationAuthorities": [
+              {
+                "validatedAt": {
+                  "id": "RA000602"
+                },
+                "validatedAs": "6172492"
+              }
+            ]
+          },
+          "bic": null,
+          "mic": null,
+          "ocid": "us_md/D17772849",
+          "qcc": null,
+          "gem": null,
+          "spglobal": [
+            "415395909"
+          ],
+          "conformityFlag": "NON_CONFORMING"
+        },
+        "relationships": {
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/managing-lou"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/lei-issuer"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/field-modifications"
+            }
+          },
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/direct-parent-reporting-exception"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/ultimate-parent-reporting-exception"
+            }
+          },
+          "ultimate-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/ultimate-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/ultimate-children"
+            }
+          },
+          "isins": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85/isins"
+            }
+          }
+        },
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/984500FE452E665C9F85"
+        }
+      }
+    }
+  }
+}

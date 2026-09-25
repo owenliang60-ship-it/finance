@@ -1,0 +1,42 @@
+{
+  "reviewed_at": "2026-09-25",
+  "retrieved_at": "2026-09-25T04:53:21.665247+00:00",
+  "reviewed_securities": [
+    {
+      "symbol": "MTSI",
+      "cusip": "55405Y100",
+      "isin": "US55405Y1001",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001493594",
+    "sec_name": "MACOM TECHNOLOGY SOLUTIONS HOLDINGS INC",
+    "form": "SCHEDULE 13G/A",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1493594/000189761226000599/primary_doc.xml",
+    "filing_date": "2026-08-14"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1493594/000189761226000599/primary_doc.xml",
+    "sha256": "176613079ed73cb61ecccf064975668612276a6910cecb1bf7839816830e9b71",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:ns2=\"http://www.sec.gov/edgar/common\">\n    <schemaVersion>X0202</schemaVersion>\n<headerData>\n        <submissionType>SCHEDULE 13G/A</submissionType>\n        <previousAccessionNumber>0001897612-25-000531</previousAccessionNumber>\n        <filerInfo>\n            <filer>\n                <filerCredentials>\n                    <cik>0001897612</cik>\n                    <ccc>XXXXXXXX</ccc>\n                </filerCredentials>\n            </filer>\n            <liveTestFlag>LIVE</liveTestFlag>\n\n\n        </filerInfo>\n    </headerData>\n    <formData>\n        <coverPageHeader>\n            <amendmentNo>2</amendmentNo>\n            <securitiesClassTitle>COMMON STOCK</securitiesClassTitle>\n            <eventDateRequiresFilingThisStatement>06/30/2026</eventDateRequiresFilingThisStatement>\n            <issuerInfo>\n                <issuerCik>0001493594</issuerCik>\n                <issuerName>MACOM TECHNOLOGY SOLUTIONS HOLDINGS INC</issuerName>\n                <issuerCusips>\n                    <issuerCusipNumber>55405Y100</issuerCusipNumber>\n                </issuerCusips>\n                <issuerPrincipalExecutiveOfficeAddress>\n                    <ns2:street1>100 CHELMSFORD STREET</ns2:street1>\n                    <ns2:city>LOWELL</ns2:city>\n                    <ns2:stateOrCountry>MA</ns2:stateOrCountry>\n                    <ns2:zipCode>01851</ns2:zipCode>\n                </issuerPrincipalExecutiveOfficeAddress>\n            </issuerInfo>\n            <designateRulesPursuantThisScheduleFiled>\n                <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n            </designateRulesPursuantThisScheduleFiled>\n        </coverPageHeader>\n        <coverPageHeaderReportingPersonDetails>\n\n            <reportingPersonName>T. Rowe Price Investment Management, Inc.</reportingPersonName>\n            <citizenshipOrOrganization>MD</citizenshipOrOrganization>\n            <reportingPersonBeneficiallyOwnedNumberOfShares>\n                <soleVotingPower>2841849</soleVotingPower>\n                <sharedVotingPower>0</sharedVotingPower>\n                <soleDispositivePower>2850185</soleDispositivePower>\n                <sharedDispositivePower>0</sharedDispositivePower>\n            </reportingPersonBeneficiallyOwnedNumberOfShares>\n            <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>2850185</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n            <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>\n            <classPercent>3.7</classPercent>\n            <typeOfReportingPerson>IA</typeOfReportingPerson>\n        </coverPageHeaderReportingPersonDetails>\n        <items>\n            <item1>\n                <issuerName>MACOM TECHNOLOGY SOLUTIONS HOLDINGS INC</issuerName>\n                <issuerPrincipalExecutiveOfficeAddress>100 CHELMSFORD STREET, LOWELL, MA, 01851</issuerPrincipalExecutiveOfficeAddress>\n            </item1>\n            <item2>\n                <filingPersonName>T. Rowe Price Investment Management, Inc.</filingPersonName>\n                <principalBusinessOfficeOrResidenceAddress>1307 Point Street, Baltimore, MD 21231</principalBusinessOfficeOrResidenceAddress>\n                <citizenship>Maryland</citizenship>\n            </item2>\n            <item3>\n                <notApplicableFlag>N</notApplicableFlag>\n                <typeOfPersonFiling>IA</typeOfPersonFiling>\n            </item3>\n            <item4>\n                <amountBeneficiallyOwned>2850185</amountBeneficiallyOwned>\n                <classPercent>3.7</classPercent>\n                <numberOfSharesPersonHas>\n                    <solePowerOrDirectToVote>2841849</solePowerOrDirectToVote>\n                    <sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n                    <solePowerOrDirectToDispose>2850185</solePowerOrDirectToDispose>\n                    <sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>\n                </numberOfSharesPersonHas>\n            </item4>\n            <item5>\n                <notApplicableFlag>N</notApplicableFlag>\n                <classOwnership5PercentOrLess>Y</classOwnership5PercentOrLess>\n            </item5>\n            <item6>\n                <notApplicableFlag>Y</notApplicableFlag>\n            </item6>\n            <item7>\n                <notApplicableFlag>Y</notApplicableFlag>\n            </item7>\n            <item8>\n                <notApplicableFlag>Y</notApplicableFlag>\n            </item8>\n            <item9>\n                <notApplicableFlag>Y</notApplicableFlag>\n            </item9>\n            <item10>\n                <notApplicableFlag>N</notApplicableFlag>\n                <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under Â§ 240.14a-11. T. Rowe Price Investment Management, Inc. hereby declares and affirms that the filing of Schedule 13G shall not be construed as an admission that Price Investment Management is the beneficial owner of the securities referred to, which beneficial ownership is expressly denied.</certifications>\n            </item10>\n        </items>\n        <signatureInformation>\n            <reportingPersonName>T. Rowe Price Investment Management, Inc.</reportingPersonName>\n            <signatureDetails>\n                <signature>Ellen York</signature>\n                <title>Vice President</title>\n                <date>08/14/2026</date>\n            </signatureDetails>\n        </signatureInformation>\n    </formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "Freshly retrieved SEC current submissions name/ticker/CIK and latest available issuerInfo exact CUSIP are consistent with frozen September live security and prior canonical issuer. Supported GLEIF legal entities have been refreshed independently. This is a proposed new bounded review interval, not modification of the historical review or proof of future corporate-action absence.",
+  "limitations": [],
+  "canonical_identity_reference": [
+    "docs/references/index-pe-sec-issuer-evidence-20260911/MTSI.json"
+  ],
+  "matching_scope": {
+    "mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
+  },
+  "scoped_raw_correction_review": [],
+  "equivalence_registries": []
+}

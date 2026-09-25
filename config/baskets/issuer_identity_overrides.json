@@ -820,8 +820,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US30233Q1085",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/XOM.json",
-    "source_sha256": "2122dff048bc962b81b8698232c6654c8fd310babd54227f7afb44ca83c052a2",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "23bbefecc60388f0cb9e67bf8e795cd186b67a68b76b4f59dda10791e05ff03b",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "STX",
@@ -833,8 +840,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00BKVD2N49",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/STX.json",
-    "source_sha256": "dcb75d3018f95f5f05eab2fb99fbb1b0e47d7b8b9ad770a5a736e304c6de8299",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "4ca1d23bb1ac81832356855bc9753c24a0e50139c2c6bc87ee4e87bf18ba7625",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "CB",
@@ -846,8 +860,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=CH0044328745",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/CB.json",
-    "source_sha256": "59b428b9874bba8f8bad6ac8398c28b97143f02a684c6e4a72f5f16973d20148",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "4667256c96c2b6cc93967057267c497d66d720b2e9deb56922906b9ed443bfca",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "BE",
@@ -859,8 +880,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US0937121079",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/BE.json",
-    "source_sha256": "a26eeff90ff63a8ae664cd80ccb1ca33fd243212cde93abc5fbcf1a90eea514d",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "3911a10f169e0c904b163cb246ad7a33c0e80cf13a9c7eee1de5dd8f6e9a3bf4",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "AON",
@@ -872,8 +900,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00BLP1HW54",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/AON.json",
-    "source_sha256": "144da3671e7e9f6b56819b9cf1f0587f2e3f130a63756353e266cb8fa0920841",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "b4e291a2e6c7565da30f8f7aeb887819ad25be58918f6d22e97c5e40875e0d6a",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "OKE",
@@ -885,8 +920,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US30609A1097",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/OKE.json",
-    "source_sha256": "1587d595a9c963e8eb95b21fddb677659d8eaac4f8e3b3cd0641eb721bc6995a",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "c43ff439551aa364d182e6d9f8b62b5e7909e5351f29c5a6b063e0266e711099",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "RCL",
@@ -898,8 +940,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=LR0008862868",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/RCL.json",
-    "source_sha256": "f22283be8fdf51c4bc2c96a089919e24f93ff4fe1454012eb76569f2392f629a",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "3870cdd1f2636732600e501f3b910dc17e7a837a7cbbb438365304c3022e73ca",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "GRMN",
@@ -911,8 +960,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=CH0114405324",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/GRMN.json",
-    "source_sha256": "6c64a05d144e49532c12121ffcb6acc9921485bfcb8b893f319290943814616b",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "3ec852f0ea606fd43f311fc2c511fd4d15fc4d30b08908064010a93a9050e5c8",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "FERG",
@@ -924,8 +980,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US31488V1070",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/FERG.json",
-    "source_sha256": "1336eb1fe208bd97e6f2e978245d6c1c9d908d6234baf8fedeefc17e10525933",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "d7d2036dffd938bdd87878b70e225152a99458a8f5bce2e1bb33cbd50e39347d",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "ILMN",
@@ -937,8 +1000,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US4523271090",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/ILMN.json",
-    "source_sha256": "8eb42f0f3f18807fb39661631b6ff1bd7a413dc1328e07636844db58ad58423e",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "852a63c0e49c29d6e69a960098dfd7968bec58086bdb6630b6a62b77172f76e1",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "P",
@@ -950,8 +1020,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US74624M1027",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/P.json",
-    "source_sha256": "a3a3b1e5f32702f661eab19d5ed66b49fb4977d4b5929ef71b9b09148662a50c",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "e2443388043ec9a0bd665457e86d9534c2272dae6d4636fd4f1ef3625e38fdb4",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "ACGL",
@@ -963,8 +1040,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=BMG0450A1053",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/ACGL.json",
-    "source_sha256": "57ee0ea1b285eec3da501233c3a6709cccc251fb8e2f186c36ff6196177f2697",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "fc379937779f3f311cac5520d82e6ebac41941160b04616d940aeddde2c23620",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "WTW",
@@ -976,8 +1060,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00BDB6Q211",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/WTW.json",
-    "source_sha256": "f599648f7142c0d43911602ca8aed0356ef7066f049deedb3d612e931697894c",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "6155f0561c04e8a8dabf0c9aaf6978257c54baaf1286515bdf0ad6c4923df22b",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "SW",
@@ -989,8 +1080,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00028FXN24",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/SW.json",
-    "source_sha256": "f6bfcbf7011bb2ea47f259d75890beff0b4aa3bfcfe5c32880b4d9348dc49cc9",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "7345ed8753fcc5d3cf466d3ffc80af5c5d9a2471437892190e4a028f6125d526",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "AMCR",
@@ -1002,8 +1100,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=JE00BV7DQ550",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/AMCR.json",
-    "source_sha256": "c9fac7c77ba31b80149adcceec5cba35eb2afdf32482226c42360a1cdcb4e2ee",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "fe7779da44d9a45891127267f777e9e91215a47fe31ebd23bcc2ec5e4fb1e081",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "BG",
@@ -1015,8 +1120,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=CH1300646267",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/BG.json",
-    "source_sha256": "36fdddf403f6f4d7852a7ab657799ed525b815d1359cf49f4d753cb4445ac290",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "03986a258cd9c31f527e8c84f628d4d0dc7008d479e1c1b4d6d492ce8b6a254f",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "IVZ",
@@ -1028,8 +1140,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=BMG491BT1088",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/IVZ.json",
-    "source_sha256": "ef0017c4e692bb2f89e6cdf33ce3e089f5641f29d1ad13e88af0110904550159",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "cf70f0982df52916f7f0fa55c486cbf04203e8cacd6bb42bea8e736aff10557b",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "SPCX",
@@ -1041,8 +1160,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US84615Q1031",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/SPCX.json",
-    "source_sha256": "32739ad9d45c5fcca77dac68692353e7435059126775e453b8976dec28b021a9",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "3892a35fc6ddfaf04f62e382d8986b8d7ac248f8ebcb4a7f7b4da29902299497",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "FER",
@@ -1054,8 +1180,22 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=NL0015001FS8",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/FER.json",
-    "source_sha256": "5e9daaeeb2412a94d4c16db3e5946e46440d21b92db11beedc23aabc84e9250f",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "d0e027e69287f2b4bc848186fadb517191e57dc566e0f1f763463effc41a42f0",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "canonical_issuer_key": "sec-cik:0001468522",
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1468522/000146852226000008/0001468522-26-000008-index-headers.html",
+    "equivalent_leis": [
+      "72450022R2ZFL41Y6I04"
+    ],
+    "lei_search_reviewed": true
   },
   {
     "symbol": "SKHYV",
@@ -1067,8 +1207,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US78392B2060",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/SKHYV.json",
-    "source_sha256": "76bb96725fa2a55b9bb5ef9fa20ab16b1526946ac03325de440da904af9a1de3",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "0c6c6cf5dac1f9f1c78313846a39ffed7142d0d8da8f954e042ebef979e89d01",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "ASML",
@@ -1080,8 +1227,15 @@
     "reviewed_at": "2026-09-25",
     "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=USN070592100",
     "source_path": "docs/references/index-pe-issuer-evidence-20260925/ASML.json",
-    "source_sha256": "1ba7d611bbc9a5fb779a5be1193962c40ad8d0ed0fb959cc4a95c82ee8a91235",
-    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained."
+    "source_sha256": "467d0558c6d279dd41db7dcbdc78bb2ac1c33dcb64ce7d314ebbfebb3fe49572",
+    "reason": "Reviewed exact live security against primary GLEIF ISIN-to-LEI evidence; raw source retained.",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "LIN",
@@ -1094,7 +1248,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "5299003QR1WT0EF88V51",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/LIN.json",
-    "source_sha256": "f9a3430a20b1c70d7dd7677b5447d615b3c696308154fa70399575be1a807194"
+    "source_sha256": "4068aaa96ac33157ad672ce7c3908f1af0fa8d9837f57ad4c8e0870c3ecf476c",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "ETN",
@@ -1107,7 +1268,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "549300VDIGTMXUNT7H71",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/ETN.json",
-    "source_sha256": "41b9d782b693c90927823083d22f103461133c6610e0164830230ff79f0c94b5"
+    "source_sha256": "8cf92708a3c33d0aa8b35f3089ac72e524126dfcb80f2661669bd1a6ef41d6e3",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "MDT",
@@ -1120,7 +1288,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "549300GX3ZBSQWUXY261",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/MDT.json",
-    "source_sha256": "9a7481a7a469d6f60bd643d707520b40b9f7f8ea542465368e8fcb9a0a4ab3a0"
+    "source_sha256": "00f1c7bd1732ba62f99fff612c593ce4e21c9e0bbefd33cb6623dada387a43e9",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "ACN",
@@ -1133,7 +1308,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "5493000EWHDSR3MZWH98",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/ACN.json",
-    "source_sha256": "ed4d11d097700cddf7fe643cb884b8f6aff3fb86e00a0c0c82b5c9be90da4933"
+    "source_sha256": "e309cfcfe5f349b81c4aa5b902ac64a115f77627c141c497333ac69db0e6280d",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "TT",
@@ -1146,7 +1328,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "549300BURLR9SLYY2705",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/TT.json",
-    "source_sha256": "1601d9eb93649cfd502338609f1c24606acc71e98231967964d0cded01d59222"
+    "source_sha256": "9827cbeaaceacafbc55627172dfc45b775b69d6f76d760788cd92a8f59eb81ec",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "JCI",
@@ -1159,7 +1348,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "549300XQ6S1GYKGBL205",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/JCI.json",
-    "source_sha256": "b8876801e86b0e1acbd831c9a6f4b7c07ebbaa586e6cad62310c31b3efeabc88"
+    "source_sha256": "010e5795b4eb68d95457e56904370a17ab187fe30e4bf91dd0737de9c770361c",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "CRH",
@@ -1172,7 +1368,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "549300MIDJNNTH068E74",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/CRH.json",
-    "source_sha256": "aac9ccb44fb01f687c85708409e6d3fe25984723c4d5abf8275e5ebf88318e6a"
+    "source_sha256": "fc885adc4193c1f3b179efb635123aece67f42f9335fbe3032969ca67e4a67e9",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "CBRS",
@@ -1189,7 +1392,14 @@
     "equivalent_leis": [],
     "lei_search_reviewed": true,
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/CBRS.json",
-    "source_sha256": "b32e3fe95a61acc1f536f709bbc0b2f98cdaeb95654f4536179938b0e0a852a2"
+    "source_sha256": "98e5f696ca01cb49bc588b97d6169d863be5daa2484626ce6d0e9364e4b9942b",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "FLEX",
@@ -1202,7 +1412,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "549300EAQH74YHD07T53",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/FLEX.json",
-    "source_sha256": "f82cf2a103bf614115e1bb7adf65a21607dd72a14ebc54ea1c371edeaa8f54ab"
+    "source_sha256": "59cf0c2386c406fc24212fb03918a5b59b425423443ef21647e0e99776228f63",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "CRDO",
@@ -1219,7 +1436,14 @@
     "equivalent_leis": [],
     "lei_search_reviewed": true,
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/CRDO.json",
-    "source_sha256": "b4606c25d418128ac8b31681f5e1b787fc2ad7751567a8deb31666082c8fa5e7"
+    "source_sha256": "4fef8da8db2a8d65278f2c6e3355e78ea54db516cb81ab595131c0fff67fb79c",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "CCL",
@@ -1232,7 +1456,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "F1OF2ZSX47CR0BCWA982",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/CCL.json",
-    "source_sha256": "b86cf4fecb9938a0d3abf747607f2ddbeb967f1610234316909b3e43d2f358b1"
+    "source_sha256": "f09b0f3a9d0b7d9612ab923f7c8541bfe3e4b2918d2b28dac71d2d4998e12658",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "RDDT",
@@ -1249,7 +1480,14 @@
     "equivalent_leis": [],
     "lei_search_reviewed": true,
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/RDDT.json",
-    "source_sha256": "611e3872c964c14caf47d7f96e15f005c8a8fc4934f39f8029119ed2a687a9e7"
+    "source_sha256": "9e17fd2153c6be2fd9e410abf8b16b28ae36d4b18c54b0ab782c37fecec7742f",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "LYB",
@@ -1262,7 +1500,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "BN6WCCZ8OVP3ITUUVN49",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/LYB.json",
-    "source_sha256": "489b08b3cc2314f11bf419e30f80d5d9c04418281fa296f7fdb43754fd9f4037"
+    "source_sha256": "178c615db9a38e37c9eaf853f2db8af42868199084058bb87fb2e81fdc466277",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "ALLE",
@@ -1275,7 +1520,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "984500560CAC2E6FB757",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/ALLE.json",
-    "source_sha256": "c31ab1270d5eb8b4093542c553ac1079b16d6e110c26043257ac0f85ba7ef2a0"
+    "source_sha256": "9abd1e31d8256e7cf39651fcea324f9efefc2325362b5888ff0025e2fe45ed47",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "APTV",
@@ -1288,7 +1540,21 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "254900HTTDFIJZ32GX53",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/APTV.json",
-    "source_sha256": "94a3549ed4f2afdaa1d424cc78242d6661a76c1f1624b4da06b000815e21f4fc"
+    "source_sha256": "e045765df5fa5e9a7b3b2fa9321c19dc3e95d60d7f9d82cd24731e9762b629c7",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "canonical_issuer_key": "sec-cik:0001521332",
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1521332/000195917326000205/0001959173-26-000205-index-headers.html",
+    "equivalent_leis": [
+      "254900HTTDFIJZ32GX53"
+    ],
+    "lei_search_reviewed": true
   },
   {
     "symbol": "PNR",
@@ -1301,7 +1567,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "549300EVR9D56WPSRP15",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/PNR.json",
-    "source_sha256": "9895ac528e83b1ff0425c95ce7095daa0995e39291a85a2501365c2eb0077eba"
+    "source_sha256": "d48ffd78e9d9d176e9515aed5954fcd23df4c9a47d023f1bade79d96b4063d47",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "NCLH",
@@ -1318,7 +1591,14 @@
     "equivalent_leis": [],
     "lei_search_reviewed": true,
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/NCLH.json",
-    "source_sha256": "345e647bd29c6d9522297d042cc35cf37a979bfd4bbbce81fb83d98b47c12a62"
+    "source_sha256": "574eab119730b1f44baf2d76ebc46b762a44a63bebfd88696227698176879a33",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "TEL",
@@ -1331,7 +1611,21 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "6367003TB6K484NFHE54",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/TEL.json",
-    "source_sha256": "dea2d9db2111a78dcb6c3c26ea544ddd1cd1fe5c433f7dc3f9ad4a4950652c6d"
+    "source_sha256": "c1e046803751a5c1fb018b4d388d1ef01452d74dcfa38320d779d3270a667e2b",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "canonical_issuer_key": "sec-cik:0001385157",
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1385157/000110465926006062/0001104659-26-006062-index-headers.html",
+    "equivalent_leis": [
+      "6367003TB6K484NFHE54"
+    ],
+    "lei_search_reviewed": true
   },
   {
     "symbol": "STE",
@@ -1344,11 +1638,21 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "canonical_issuer_key": "sec-cik:0001757898",
     "sec_role": "issuer",
-    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1757898/000009375126000294/primary_doc.xml",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/2100119/000210011926001123/0002100119-26-001123-index-headers.html",
     "equivalent_leis": [],
     "lei_search_reviewed": true,
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/STE.json",
-    "source_sha256": "39092c30a0e5b8e33899fff1c4cedc6fe0bd8468debe58059ad79b9183356f8d"
+    "source_sha256": "f85a46611745a1644d0984b65ea07695433d95e3149b3663002c013ce4b8e84a",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "expected_raw_leis": [
+      "549300BRDKZ1HFI2J358"
+    ]
   },
   {
     "symbol": "EG",
@@ -1361,7 +1665,14 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "549300N24XF2VV0B3570",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/EG.json",
-    "source_sha256": "bc60759e17ff236f51110c351dad33e88fd000baee3a70ff2ff98850f6005452"
+    "source_sha256": "bbd80ad5004f7e699de5de85230774a7db74fd8ae3af7a784ea6422fc29ed4d5",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
   },
   {
     "symbol": "NXPI",
@@ -1374,6 +1685,411 @@
     "reason": "Exact CUSIP matched in SEC issuer-role evidence, with live ISIN retained as the additional matching scope; current issuer LEI independently corroborated where available. Raw holdings unchanged.",
     "issuer_lei": "724500M9BY5293JDF951",
     "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/NXPI.json",
-    "source_sha256": "3408f586911a58acf922b924c83d5cd24326e2f6a473156fb414387541f3e4a7"
+    "source_sha256": "ef4e284e50bef811b7d00e39089b0c1b6a6852d9dcbe8177e84fbd7213838832",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
+  },
+  {
+    "symbol": "CVX",
+    "cusip": "166764100",
+    "isin": "US1667641005",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0000093410",
+    "equivalent_leis": [],
+    "expected_raw_leis": [],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/93410/000119312526227102/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/93410/000119312526227102/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/CVX.json",
+    "source_sha256": "c44fedba8b7c22021d9e148647a6257ff1fd027458c2b56ac8a6a0399913c1ea"
+  },
+  {
+    "symbol": "CTAS",
+    "cusip": "172908105",
+    "isin": "US1729081059",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0000723254",
+    "equivalent_leis": [],
+    "expected_raw_leis": [
+      "549300E27V6N4OJCJ944"
+    ],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/723254/000210011926000362/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/723254/000210011926000362/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/CTAS.json",
+    "source_sha256": "34bd18fb8cbd3347432f6fa7e6c7397c22464069535d73b3dcc7176e4ec09e9f"
+  },
+  {
+    "symbol": "TDG",
+    "cusip": "893641100",
+    "isin": "US8936411003",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0001260221",
+    "equivalent_leis": [],
+    "expected_raw_leis": [],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1260221/000142284926000103/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1260221/000142284926000103/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/TDG.json",
+    "source_sha256": "4f8f439b8d951182512bd5533adc6031b2ee39167a01be6b05018ec6ffb196b3"
+  },
+  {
+    "symbol": "BKR",
+    "cusip": "05722G100",
+    "isin": "US05722G1004",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0001701605",
+    "equivalent_leis": [],
+    "expected_raw_leis": [
+      "549300XU3XH6F05YEQ93"
+    ],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1701605/000001961726000308/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1701605/000001961726000308/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/BKR.json",
+    "source_sha256": "cabcd11399ed938382bcc79b9cdb7dcf3de57fa958f80d4fa05f0f459c9f3017"
+  },
+  {
+    "symbol": "EXPE",
+    "cusip": "30212P303",
+    "isin": "US30212P3038",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0001324424",
+    "equivalent_leis": [
+      "2549009GW3Z3DQCB8H87"
+    ],
+    "expected_raw_leis": [
+      "CI7MUJI4USF3V0NJ1H64"
+    ],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1324424/000210011926000562/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1324424/000210011926000562/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/EXPE.json",
+    "source_sha256": "580e9010deeacae4a22d0b2039bb08bf4da15731995cbde7f3e0b9a357eb77fc"
+  },
+  {
+    "symbol": "EXR",
+    "cusip": "30225T102",
+    "isin": "US30225T1025",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0001289490",
+    "equivalent_leis": [],
+    "expected_raw_leis": [],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1289490/000128481226000181/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1289490/000128481226000181/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/EXR.json",
+    "source_sha256": "76ffc0daf8cd4568d651b7d932934536bc8d31e56a99b339b5dfa64efe385d2b"
+  },
+  {
+    "symbol": "LH",
+    "cusip": "504922105",
+    "isin": "US5049221055",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0000920148",
+    "equivalent_leis": [],
+    "expected_raw_leis": [],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/920148/000210011926000016/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/920148/000210011926000016/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/LH.json",
+    "source_sha256": "53564072ef3bbf7e11c00c3553a0f4bae9312fa4f7ad121a0bf4174b551d3677"
+  },
+  {
+    "symbol": "PHM",
+    "cusip": "745867101",
+    "isin": "US7458671010",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0000822416",
+    "equivalent_leis": [],
+    "expected_raw_leis": [],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/822416/000210011926000900/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/822416/000210011926000900/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/PHM.json",
+    "source_sha256": "cd75990ea439049f6cbff9614163caa1514995a10154b5c82ce864570d910f46"
+  },
+  {
+    "symbol": "KHC",
+    "cusip": "500754106",
+    "isin": "US5007541064",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0001637459",
+    "equivalent_leis": [
+      "9845007488EC87F5AF14"
+    ],
+    "expected_raw_leis": [
+      "5493003STKEZ2S0RNU91"
+    ],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1637459/000210011926000679/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1637459/000210011926000679/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/KHC.json",
+    "source_sha256": "b5040e0a0d4eca24975e257a5785e09f5540998f7f06045ba94a7e5069d8d723"
+  },
+  {
+    "symbol": "TPL",
+    "cusip": "88262P102",
+    "isin": "US88262P1021",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0001811074",
+    "equivalent_leis": [
+      "254900EMA79D44WVLD22"
+    ],
+    "expected_raw_leis": [],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1811074/000105682326000015/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1811074/000105682326000015/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/TPL.json",
+    "source_sha256": "c699ae10bfe96ee1147b024406d910a80af4858346bb645e7a891e5a7f061b73"
+  },
+  {
+    "symbol": "J",
+    "cusip": "46982L108",
+    "isin": "US46982L1089",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0000052988",
+    "equivalent_leis": [
+      "254900E3KHXCC2C8K272"
+    ],
+    "expected_raw_leis": [
+      "549300CZ8QS1GE53O776"
+    ],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/52988/000210011926000705/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/52988/000210011926000705/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/J.json",
+    "source_sha256": "63f072cc3da1ce90dcba207cf7d7c2386c8462d07c7f3953c8ea02ed61b37061"
+  },
+  {
+    "symbol": "INVH",
+    "cusip": "46187W107",
+    "isin": "US46187W1071",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "lei:984500FE452E665C9F85",
+    "equivalent_leis": [],
+    "expected_raw_leis": [],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1687229/000128481226000108/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1687229/000128481226000108/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "issuer_lei": "984500FE452E665C9F85",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/INVH.json",
+    "source_sha256": "7d8d9cb8a4b50554ae24abfda46771718dcd6dd605af860cad553868ec08c9ab"
+  },
+  {
+    "symbol": "CSGP",
+    "cusip": "22160N109",
+    "isin": "US22160N1090",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0001057352",
+    "equivalent_leis": [
+      "984500Q1D53D08E2E698"
+    ],
+    "expected_raw_leis": [
+      "RDQ0UPSUOQL9Y4XV6T33"
+    ],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1057352/000101791826000058/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1057352/000101791826000058/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/CSGP.json",
+    "source_sha256": "96f50da3bad24d7da67494571329505b7882e4d25815cde82009a1943bf3ba0d"
+  },
+  {
+    "symbol": "TKO",
+    "cusip": "87256C101",
+    "isin": "US87256C1018",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0001973266",
+    "equivalent_leis": [],
+    "expected_raw_leis": [],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1973266/000089542126000251/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1973266/000089542126000251/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/TKO.json",
+    "source_sha256": "63a9ca2893b109aa632340e03c58ce522b77e43581c1f743f78e71cb4388abf2"
+  },
+  {
+    "symbol": "MTSI",
+    "cusip": "55405Y100",
+    "isin": "US55405Y1001",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "reviewed_at": "2026-09-25",
+    "canonical_issuer_key": "sec-cik:0001493594",
+    "equivalent_leis": [],
+    "expected_raw_leis": [],
+    "lei_search_reviewed": true,
+    "sec_role": "issuer",
+    "sec_issuer_url": "https://www.sec.gov/Archives/edgar/data/1493594/000189761226000599/primary_doc.xml",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1493594/000189761226000599/primary_doc.xml",
+    "match_mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "reason": "New bounded review of the current exact security against freshly retrieved SEC issuer-role evidence, preserving the established canonical issuer and scoped corrections. Historical review validity is unchanged.",
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260925/MTSI.json",
+    "source_sha256": "99ea2a0e4d85058edf0e4909514a86e4778ee315a0c0b70f0f74ccf54f5bcfb4"
   }
 ]

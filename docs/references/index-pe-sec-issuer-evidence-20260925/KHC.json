@@ -1,0 +1,318 @@
+{
+  "reviewed_at": "2026-09-25",
+  "retrieved_at": "2026-09-25T04:53:21.664215+00:00",
+  "reviewed_securities": [
+    {
+      "symbol": "KHC",
+      "cusip": "500754106",
+      "isin": "US5007541064",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001637459",
+    "sec_name": "Kraft Heinz Co/The",
+    "form": "SCHEDULE 13G",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1637459/000210011926000679/primary_doc.xml",
+    "filing_date": "2026-04-30"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1637459/000210011926000679/primary_doc.xml",
+    "sha256": "94ec6dfe32741ab99160a9b5b8fe33567de00cc7eca252c73b23fa28dedf4fea",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n<schemaVersion>X0202</schemaVersion>\n<headerData>\n<submissionType>SCHEDULE 13G</submissionType>\n<filerInfo>\n<filer>\n<filerCredentials>\n<cik>0002100119</cik>\n<ccc>XXXXXXXX</ccc>\n</filerCredentials>\n</filer>\n<liveTestFlag>LIVE</liveTestFlag>\n</filerInfo>\n</headerData>\n<formData>\n<coverPageHeader>\n<securitiesClassTitle>Common Stock</securitiesClassTitle>\n<eventDateRequiresFilingThisStatement>03/31/2026</eventDateRequiresFilingThisStatement>\n<issuerInfo>\n<issuerCik>0001637459</issuerCik>\n<issuerName>Kraft Heinz Co/The</issuerName>\n<issuerCusips>\n<issuerCusipNumber>500754106</issuerCusipNumber>\n</issuerCusips>\n<issuerPrincipalExecutiveOfficeAddress>\n<com:street1>1 PPG Place</com:street1>\n<com:city>Pittsburgh</com:city>\n<com:stateOrCountry>PA</com:stateOrCountry>\n<com:zipCode>15222</com:zipCode>\n</issuerPrincipalExecutiveOfficeAddress>\n</issuerInfo>\n<designateRulesPursuantThisScheduleFiled>\n<designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n</designateRulesPursuantThisScheduleFiled>\n</coverPageHeader>\n<coverPageHeaderReportingPersonDetails>\n<reportingPersonName>Vanguard Capital Management</reportingPersonName>\n<citizenshipOrOrganization>PA</citizenshipOrOrganization>\n<reportingPersonBeneficiallyOwnedNumberOfShares>\n<soleVotingPower>8724858</soleVotingPower>\n<sharedVotingPower>0</sharedVotingPower>\n<soleDispositivePower>63268818</soleDispositivePower>\n<sharedDispositivePower>0</sharedDispositivePower>\n</reportingPersonBeneficiallyOwnedNumberOfShares>\n<reportingPersonBeneficiallyOwnedAggregateNumberOfShares>63268818</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n<classPercent>5.34</classPercent>\n<typeOfReportingPerson>IA</typeOfReportingPerson>\n<comments>\nIn accordance with SEC Release No. 34-39538 (January 12, 1998), this Schedule 13G reflects the securities beneficially owned, or deemed to be beneficially owned, by Vanguard Capital Management LLC and the following affiliates of Vanguard Capital Management LLC or business divisions of such affiliates: Vanguard Asset Management Limited, Vanguard Fiduciary Trust Company, Vanguard Global Advisers, LLC and Vanguard Investments Australia Ltd. This Schedule 13G includes securities held by Vanguard funds, or sleeves thereof, over which Vanguard Capital Management LLC exercises dispositive power, in addition to securities held by clients over which the affiliates or business divisions of such affiliates indicated above exercise dispositive and/or voting power. This Schedule 13G does not include securities, if any, beneficially owned by other subsidiaries or affiliates of Vanguard Capital Management LLC, or business divisions of such subsidiaries, whose ownership of securities is disaggregated from that of the reporting business unit in accordance with such release.\n\n</comments>\n</coverPageHeaderReportingPersonDetails>\n<items>\n<item1>\n<issuerName>Kraft Heinz Co/The</issuerName>\n<issuerPrincipalExecutiveOfficeAddress>1 PPG Place, Pittsburgh, PA, 15222</issuerPrincipalExecutiveOfficeAddress>\n</item1>\n<item2>\n<filingPersonName>Vanguard Capital Management</filingPersonName>\n<principalBusinessOfficeOrResidenceAddress>100 Vanguard Blvd,, Malvern, PA, 19355</principalBusinessOfficeOrResidenceAddress>\n<citizenship>PA</citizenship>\n</item2>\n<item3>\n<notApplicableFlag>N</notApplicableFlag>\n<typeOfPersonFiling>IA</typeOfPersonFiling>\n</item3>\n<item4>\n<amountBeneficiallyOwned>63268818</amountBeneficiallyOwned>\n<classPercent>5.34</classPercent>\n<numberOfSharesPersonHas>\n<solePowerOrDirectToVote>8724858</solePowerOrDirectToVote>\n<sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n<solePowerOrDirectToDispose>63268818</solePowerOrDirectToDispose>\n<sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>\n</numberOfSharesPersonHas>\n</item4>\n<item5>\n<notApplicableFlag>Y</notApplicableFlag>\n</item5>\n<item6>\n<notApplicableFlag>N</notApplicableFlag>\n<ownershipMoreThan5PercentOnBehalfOfAnotherPerson>Vanguard Capital Management, including investment companies registered under the Investment Company Act of 1940 and other managed accounts, have the right to receive or the power to direct the receipt of dividends from, or the proceeds from the sale of, the securities reported herein.No one other person's interest in the securities reported herein is more than 5%.</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n</item6>\n<item7>\n<notApplicableFlag>Y</notApplicableFlag>\n</item7>\n<item8>\n<notApplicableFlag>Y</notApplicableFlag>\n</item8>\n<item9>\n<notApplicableFlag>Y</notApplicableFlag>\n</item9>\n<item10>\n<notApplicableFlag>N</notApplicableFlag>\n<certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under &amp;#167; 240.14a-11.</certifications>\n</item10>\n</items>\n<signatureInformation>\n<reportingPersonName>Vanguard Capital Management</reportingPersonName>\n<signatureDetails>\n<signature>Ashley Grim</signature>\n<title>Head of Global Fund Administration</title>\n<date>04/30/2026</date>\n</signatureDetails>\n</signatureInformation>\n</formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "Freshly retrieved SEC current submissions name/ticker/CIK and latest available issuerInfo exact CUSIP are consistent with frozen September live security and prior canonical issuer. Supported GLEIF legal entities have been refreshed independently. This is a proposed new bounded review interval, not modification of the historical review or proof of future corporate-action absence.",
+  "limitations": [],
+  "canonical_identity_reference": [
+    "docs/references/index-pe-sec-issuer-evidence-20260911/KHC.json"
+  ],
+  "matching_scope": {
+    "mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
+  },
+  "scoped_raw_correction_review": [
+    {
+      "lei": "5493003STKEZ2S0RNU91",
+      "role": "prior_scoped_wrong_raw_correction",
+      "source_url": "https://api.gleif.org/api/v1/lei-records/5493003STKEZ2S0RNU91",
+      "raw_file": "KHC-lei-5493003STKEZ2S0RNU91.json",
+      "sha256": "5ece10fc15cb5462450e35da4e8c96bfe7dae1d4b4f35fed35bf93ec2f6100c3",
+      "entity": {
+        "legalName": {
+          "name": "Kraft Heinz Foods Company",
+          "language": "en"
+        },
+        "otherNames": [
+          {
+            "name": "H. J. HEINZ COMPANY",
+            "language": "en",
+            "type": "PREVIOUS_LEGAL_NAME"
+          }
+        ],
+        "transliteratedOtherNames": [],
+        "legalAddress": {
+          "language": "en",
+          "addressLines": [
+            "CT Corporation System"
+          ],
+          "addressNumber": null,
+          "addressNumberWithinBuilding": null,
+          "mailRouting": null,
+          "city": "Dauphin",
+          "region": "US-PA",
+          "country": "US",
+          "postalCode": "17101"
+        },
+        "headquartersAddress": {
+          "language": "en",
+          "addressLines": [
+            "1 PPG PL STE 3400"
+          ],
+          "addressNumber": null,
+          "addressNumberWithinBuilding": null,
+          "mailRouting": null,
+          "city": "PITTSBURGH",
+          "region": "US-PA",
+          "country": "US",
+          "postalCode": "15222"
+        },
+        "registeredAt": {
+          "id": "RA000632",
+          "other": null
+        },
+        "registeredAs": "157772",
+        "jurisdiction": "US-PA",
+        "category": "GENERAL",
+        "legalForm": {
+          "id": "9C19",
+          "other": null
+        },
+        "associatedEntity": {
+          "lei": null,
+          "name": null
+        },
+        "status": "ACTIVE",
+        "expiration": {
+          "date": null,
+          "reason": null
+        },
+        "successorEntity": {
+          "lei": null,
+          "name": null
+        },
+        "successorEntities": [],
+        "creationDate": "1900-07-27T00:00:00Z",
+        "subCategory": null,
+        "otherAddresses": [],
+        "eventGroups": [
+          {
+            "groupType": "STANDALONE",
+            "events": [
+              {
+                "validationDocuments": "SUPPORTING_DOCUMENTS",
+                "effectiveDate": "2025-08-05T00:00:00Z",
+                "recordedDate": "2025-11-13T13:25:03Z",
+                "type": "CHANGE_HQ_ADDRESS",
+                "status": "COMPLETED"
+              }
+            ]
+          }
+        ]
+      },
+      "registration": {
+        "initialRegistrationDate": "2013-03-25T17:33:00Z",
+        "lastUpdateDate": "2025-11-13T13:25:03Z",
+        "status": "ISSUED",
+        "nextRenewalDate": "2026-11-28T12:34:11Z",
+        "managingLou": "529900T8BM49AURSDO55",
+        "corroborationLevel": "FULLY_CORROBORATED",
+        "validatedAt": {
+          "id": "RA000632",
+          "other": null
+        },
+        "validatedAs": "157772",
+        "otherValidationAuthorities": []
+      }
+    }
+  ],
+  "equivalence_registries": [
+    {
+      "source_url": "https://api.gleif.org/api/v1/lei-records/9845007488EC87F5AF14",
+      "response": {
+        "meta": {
+          "goldenCopy": {
+            "publishDate": "2026-09-24T16:00:00Z"
+          }
+        },
+        "data": {
+          "type": "lei-records",
+          "id": "9845007488EC87F5AF14",
+          "attributes": {
+            "lei": "9845007488EC87F5AF14",
+            "entity": {
+              "legalName": {
+                "name": "THE KRAFT HEINZ COMPANY",
+                "language": "en"
+              },
+              "otherNames": [
+                {
+                  "name": "H.J. Heinz Holding Corp",
+                  "language": "en",
+                  "type": "PREVIOUS_LEGAL_NAME"
+                }
+              ],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "251 LITTLE FALLS DRIVE"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": "c/o CORPORATION SERVICE COMPANY",
+                "city": "WILMINGTON",
+                "region": "US-DE",
+                "country": "US",
+                "postalCode": "19808"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "ONE PPG PLACE"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "PITTSBURGH",
+                "region": "US-PA",
+                "country": "US",
+                "postalCode": "15222"
+              },
+              "registeredAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "registeredAs": "5286651",
+              "jurisdiction": "US-DE",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "XTIQ",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2013-02-08T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": [
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "SUPPORTING_DOCUMENTS",
+                      "effectiveDate": "2015-07-01T00:00:00Z",
+                      "recordedDate": "2025-05-21T19:04:11Z",
+                      "type": "CHANGE_LEGAL_NAME",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                }
+              ]
+            },
+            "registration": {
+              "initialRegistrationDate": "2022-06-28T16:49:27Z",
+              "lastUpdateDate": "2026-06-11T15:45:34Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-06-28T16:54:47Z",
+              "managingLou": "529900T8BM49AURSDO55",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "validatedAs": "5286651",
+              "otherValidationAuthorities": [
+                {
+                  "validatedAt": {
+                    "id": "RA000665"
+                  },
+                  "validatedAs": "0001637459"
+                }
+              ]
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "us_de/5286651",
+            "qcc": null,
+            "gem": null,
+            "spglobal": [
+              "278212"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/9845007488EC87F5AF14/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/9845007488EC87F5AF14/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/9845007488EC87F5AF14/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/9845007488EC87F5AF14/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/9845007488EC87F5AF14/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/9845007488EC87F5AF14/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/9845007488EC87F5AF14/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/9845007488EC87F5AF14/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/9845007488EC87F5AF14/ultimate-children"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/9845007488EC87F5AF14"
+          }
+        }
+      }
+    }
+  ]
+}

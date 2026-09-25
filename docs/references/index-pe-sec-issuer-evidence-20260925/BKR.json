@@ -1,0 +1,141 @@
+{
+  "reviewed_at": "2026-09-25",
+  "retrieved_at": "2026-09-25T04:53:21.663850+00:00",
+  "reviewed_securities": [
+    {
+      "symbol": "BKR",
+      "cusip": "05722G100",
+      "isin": "US05722G1004",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001701605",
+    "sec_name": "Baker Hughes Company",
+    "form": "SCHEDULE 13G/A",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1701605/000001961726000308/primary_doc.xml",
+    "filing_date": "2026-07-27"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1701605/000001961726000308/primary_doc.xml",
+    "sha256": "5bfa737f1bf79b177c66101cf62df21afdcd7a6b1db2d21fcfea2fc1c78ae683",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n<schemaVersion>X0202</schemaVersion>\n<headerData>\n<submissionType>SCHEDULE 13G/A</submissionType>\n<filerInfo>\n<filer>\n<filerCredentials>\n<cik>0000019617</cik>\n<ccc>XXXXXXXX</ccc>\n</filerCredentials>\n</filer>\n<liveTestFlag>LIVE</liveTestFlag>\n</filerInfo>\n</headerData>\n<formData>\n<coverPageHeader>\n<amendmentNo>8</amendmentNo>\n<securitiesClassTitle>Class A Common Stock, par value $0.0001 per share</securitiesClassTitle>\n<eventDateRequiresFilingThisStatement>06/30/2026</eventDateRequiresFilingThisStatement>\n<issuerInfo>\n<issuerCik>0001701605</issuerCik>\n<issuerName>Baker Hughes Company</issuerName>\n<issuerCusips>\n<issuerCusipNumber>05722G100</issuerCusipNumber>\n</issuerCusips>\n<issuerPrincipalExecutiveOfficeAddress>\n<com:street1>575 N. Dairy Ashford Rd.</com:street1>\n<com:street2>Suite 100</com:street2>\n<com:city>Houston</com:city>\n<com:stateOrCountry>TX</com:stateOrCountry>\n<com:zipCode>77079-1121</com:zipCode>\n</issuerPrincipalExecutiveOfficeAddress>\n</issuerInfo>\n<designateRulesPursuantThisScheduleFiled>\n<designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n</designateRulesPursuantThisScheduleFiled>\n</coverPageHeader>\n<coverPageHeaderReportingPersonDetails>\n<reportingPersonName>JPMORGAN CHASE &amp; CO.</reportingPersonName>\n<citizenshipOrOrganization>DE</citizenshipOrOrganization>\n<reportingPersonBeneficiallyOwnedNumberOfShares>\n<soleVotingPower>60561427</soleVotingPower>\n<sharedVotingPower>834763.0</sharedVotingPower>\n<soleDispositivePower>69017574</soleDispositivePower>\n<sharedDispositivePower>111034.0</sharedDispositivePower>\n</reportingPersonBeneficiallyOwnedNumberOfShares>\n<reportingPersonBeneficiallyOwnedAggregateNumberOfShares>69128703</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n<classPercent>6.9</classPercent>\n<typeOfReportingPerson>HC</typeOfReportingPerson>\n</coverPageHeaderReportingPersonDetails>\n<items>\n<item1>\n<issuerName>Baker Hughes Company</issuerName>\n<issuerPrincipalExecutiveOfficeAddress>575 N. Dairy Ashford Rd. Suite 100 Houston TX 77079-1121</issuerPrincipalExecutiveOfficeAddress>\n</item1>\n<item2>\n<filingPersonName>JPMORGAN CHASE &amp; CO.</filingPersonName>\n<principalBusinessOfficeOrResidenceAddress>270 Park Avenue,,New York, NY 10017</principalBusinessOfficeOrResidenceAddress>\n<citizenship>DE</citizenship>\n</item2>\n<item3>\n<notApplicableFlag>N</notApplicableFlag>\n<typeOfPersonFiling>HC</typeOfPersonFiling>\n</item3>\n<item4>\n<amountBeneficiallyOwned>69128703</amountBeneficiallyOwned>\n<classPercent>6.9</classPercent>\n<numberOfSharesPersonHas>\n<solePowerOrDirectToVote>60561427</solePowerOrDirectToVote>\n<sharedPowerOrDirectToVote>834763</sharedPowerOrDirectToVote>\n<solePowerOrDirectToDispose>69017574</solePowerOrDirectToDispose>\n<sharedPowerOrDirectToDispose>111034</sharedPowerOrDirectToDispose>\n</numberOfSharesPersonHas>\n</item4>\n<item5>\n<notApplicableFlag>Y</notApplicableFlag>\n<classOwnership5PercentOrLess>N</classOwnership5PercentOrLess>\n</item5>\n<item6>\n<notApplicableFlag>N</notApplicableFlag>\n<ownershipMoreThan5PercentOnBehalfOfAnotherPerson>Not Applicable</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n</item6>\n<item7>\n<notApplicableFlag>N</notApplicableFlag>\n<subsidiaryIdentificationAndClassification>J.P. Morgan Trust Company of Delaware;\nJ.P. Morgan Securities LLC;\nJPMorgan Chase Bank, National Association;\nJPMorgan Asset Management (UK) Limited;\nJ.P. MORGAN SE;\nJ.P. Morgan (Suisse) SA;\nJPMorgan Asset Management Holdings Inc.;\nJ.P. Morgan Investment Management Inc.;\nJ.P. Morgan Mansart Management Limited;\nJPMorgan Asset Management (Taiwan) Limited;\nJPMorgan Asset Management (China) Company Limited;\nJ.P. Morgan Wealth Management Solutions Inc.;\n55I, LLC</subsidiaryIdentificationAndClassification>\n</item7>\n<item8>\n<notApplicableFlag>N</notApplicableFlag>\n<identificationAndClassificationOfGroupMembers>Not Applicable</identificationAndClassificationOfGroupMembers>\n</item8>\n<item9>\n<notApplicableFlag>N</notApplicableFlag>\n<groupDissolutionNotice>Not Applicable</groupDissolutionNotice>\n</item9>\n<item10>\n<notApplicableFlag>N</notApplicableFlag>\n<certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under Â§ 240.14a-11.</certifications>\n</item10>\n</items>\n<signatureInformation>\n<reportingPersonName>JPMORGAN CHASE &amp; CO.</reportingPersonName>\n<signatureDetails>\n<signature>Rachel Tsvaygoft</signature>\n<title>Vice President</title>\n<date>07/27/2026</date>\n</signatureDetails>\n</signatureInformation>\n</formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "Freshly retrieved SEC current submissions name/ticker/CIK and latest available issuerInfo exact CUSIP are consistent with frozen September live security and prior canonical issuer. Supported GLEIF legal entities have been refreshed independently. This is a proposed new bounded review interval, not modification of the historical review or proof of future corporate-action absence.",
+  "limitations": [],
+  "canonical_identity_reference": [
+    "docs/references/index-pe-sec-issuer-evidence-20260911/BKR.json"
+  ],
+  "matching_scope": {
+    "mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
+  },
+  "scoped_raw_correction_review": [
+    {
+      "lei": "549300XU3XH6F05YEQ93",
+      "role": "prior_scoped_wrong_raw_correction",
+      "source_url": "https://api.gleif.org/api/v1/lei-records/549300XU3XH6F05YEQ93",
+      "raw_file": "BKR-lei-549300XU3XH6F05YEQ93.json",
+      "sha256": "8d666116e476be5433a472c96ccfa76c0cf5a8f8f1f40a16b8f62b953db26bd7",
+      "entity": {
+        "legalName": {
+          "name": "BAKER HUGHES HOLDINGS LLC",
+          "language": "en"
+        },
+        "otherNames": [
+          {
+            "name": "BAKER HUGHES, A GE COMPANY, LLC",
+            "language": "en",
+            "type": "PREVIOUS_LEGAL_NAME"
+          },
+          {
+            "name": "Baker Hughes Incorporated",
+            "language": "en",
+            "type": "PREVIOUS_LEGAL_NAME"
+          }
+        ],
+        "transliteratedOtherNames": [],
+        "legalAddress": {
+          "language": "en",
+          "addressLines": [
+            "C/O THE CORPORATION TRUST COMPANY",
+            "CORPORATION TRUST CENTER",
+            "1209 ORANGE ST"
+          ],
+          "addressNumber": null,
+          "addressNumberWithinBuilding": null,
+          "mailRouting": null,
+          "city": "WILMINGTON",
+          "region": "US-DE",
+          "country": "US",
+          "postalCode": "19801"
+        },
+        "headquartersAddress": {
+          "language": "en",
+          "addressLines": [
+            "575 N. Dairy Ashford Rd.",
+            "Suite 100"
+          ],
+          "addressNumber": null,
+          "addressNumberWithinBuilding": null,
+          "mailRouting": null,
+          "city": "Houston",
+          "region": "US-TX",
+          "country": "US",
+          "postalCode": "77079"
+        },
+        "registeredAt": {
+          "id": "RA000602",
+          "other": null
+        },
+        "registeredAs": "2106297",
+        "jurisdiction": "US-DE",
+        "category": "GENERAL",
+        "legalForm": {
+          "id": "HZEH",
+          "other": null
+        },
+        "associatedEntity": {
+          "lei": null,
+          "name": null
+        },
+        "status": "ACTIVE",
+        "expiration": {
+          "date": null,
+          "reason": null
+        },
+        "successorEntity": {
+          "lei": null,
+          "name": null
+        },
+        "successorEntities": [],
+        "creationDate": "1986-11-03T00:00:00Z",
+        "subCategory": null,
+        "otherAddresses": [],
+        "eventGroups": []
+      },
+      "registration": {
+        "initialRegistrationDate": "2016-07-27T02:00:00Z",
+        "lastUpdateDate": "2026-07-08T19:32:36Z",
+        "status": "ISSUED",
+        "nextRenewalDate": "2027-08-05T15:57:00Z",
+        "managingLou": "5493001KJTIIGC8Y1R12",
+        "corroborationLevel": "FULLY_CORROBORATED",
+        "validatedAt": {
+          "id": "RA000602",
+          "other": null
+        },
+        "validatedAs": "2106297",
+        "otherValidationAuthorities": []
+      }
+    }
+  ],
+  "equivalence_registries": []
+}

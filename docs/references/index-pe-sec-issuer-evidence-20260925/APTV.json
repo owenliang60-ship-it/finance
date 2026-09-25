@@ -189,5 +189,20 @@
         }
       }
     }
+  },
+  "matching_scope": {
+    "mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ],
+    "note": "Exact reviewed ISIN may supply missing-CUSIP evidence only for the listed sentinel values. Any other differing CUSIP remains a conflict."
+  },
+  "canonical_identity_reference": {
+    "source_path": "docs/references/index-pe-sec-issuer-evidence-20260911/APTV.json",
+    "source_sha256": "d5fe54e1faadbf170fbfefd68238bac661726f613c9c3346565885c9fb419407",
+    "canonical_issuer_key": "sec-cik:0001521332"
   }
 }

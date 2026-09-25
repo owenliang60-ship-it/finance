@@ -1,0 +1,129 @@
+{
+  "reviewed_at": "2026-09-25",
+  "retrieved_at": "2026-09-25T04:53:21.663637+00:00",
+  "reviewed_securities": [
+    {
+      "symbol": "CTAS",
+      "cusip": "172908105",
+      "isin": "US1729081059",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0000723254",
+    "sec_name": "Cintas Corp",
+    "form": "SCHEDULE 13G",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/723254/000210011926000362/primary_doc.xml",
+    "filing_date": "2026-04-29"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/723254/000210011926000362/primary_doc.xml",
+    "sha256": "afb8b2b10d547816f7869130cd5142a7626bbcffc2e4f1f350e39bb16e7a1b23",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n<schemaVersion>X0202</schemaVersion>\n<headerData>\n<submissionType>SCHEDULE 13G</submissionType>\n<filerInfo>\n<filer>\n<filerCredentials>\n<cik>0002100119</cik>\n<ccc>XXXXXXXX</ccc>\n</filerCredentials>\n</filer>\n<liveTestFlag>LIVE</liveTestFlag>\n</filerInfo>\n</headerData>\n<formData>\n<coverPageHeader>\n<securitiesClassTitle>Common Stock</securitiesClassTitle>\n<eventDateRequiresFilingThisStatement>03/31/2026</eventDateRequiresFilingThisStatement>\n<issuerInfo>\n<issuerCik>0000723254</issuerCik>\n<issuerName>Cintas Corp</issuerName>\n<issuerCusips>\n<issuerCusipNumber>172908105</issuerCusipNumber>\n</issuerCusips>\n<issuerPrincipalExecutiveOfficeAddress>\n<com:street1>6800 Cintas Blvd</com:street1>\n<com:street2>PO Box 625737</com:street2>\n<com:city>Cincinnati</com:city>\n<com:stateOrCountry>OH</com:stateOrCountry>\n<com:zipCode>45262</com:zipCode>\n</issuerPrincipalExecutiveOfficeAddress>\n</issuerInfo>\n<designateRulesPursuantThisScheduleFiled>\n<designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n</designateRulesPursuantThisScheduleFiled>\n</coverPageHeader>\n<coverPageHeaderReportingPersonDetails>\n<reportingPersonName>Vanguard Capital Management</reportingPersonName>\n<citizenshipOrOrganization>PA</citizenshipOrOrganization>\n<reportingPersonBeneficiallyOwnedNumberOfShares>\n<soleVotingPower>3396072</soleVotingPower>\n<sharedVotingPower>0</sharedVotingPower>\n<soleDispositivePower>25480477</soleDispositivePower>\n<sharedDispositivePower>0</sharedDispositivePower>\n</reportingPersonBeneficiallyOwnedNumberOfShares>\n<reportingPersonBeneficiallyOwnedAggregateNumberOfShares>25480477</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n<classPercent>6.36</classPercent>\n<typeOfReportingPerson>IA</typeOfReportingPerson>\n<comments>\nIn accordance with SEC Release No. 34-39538 (January 12, 1998), this Schedule 13G reflects the securities beneficially owned, or deemed to be beneficially owned, by Vanguard Capital Management LLC and the following affiliates of Vanguard Capital Management LLC or business divisions of such affiliates: Vanguard Asset Management Limited, Vanguard Fiduciary Trust Company, Vanguard Global Advisers, LLC and Vanguard Investments Australia Ltd. This Schedule 13G includes securities held by Vanguard funds, or sleeves thereof, over which Vanguard Capital Management LLC exercises dispositive power, in addition to securities held by clients over which the affiliates or business divisions of such affiliates indicated above exercise dispositive and/or voting power. This Schedule 13G does not include securities, if any, beneficially owned by other subsidiaries or affiliates of Vanguard Capital Management LLC, or business divisions of such subsidiaries, whose ownership of securities is disaggregated from that of the reporting business unit in accordance with such release.\n\n</comments>\n</coverPageHeaderReportingPersonDetails>\n<items>\n<item1>\n<issuerName>Cintas Corp</issuerName>\n<issuerPrincipalExecutiveOfficeAddress>6800 Cintas Blvd, PO Box 625737, Cincinnati, OH, 45262</issuerPrincipalExecutiveOfficeAddress>\n</item1>\n<item2>\n<filingPersonName>Vanguard Capital Management</filingPersonName>\n<principalBusinessOfficeOrResidenceAddress>100 Vanguard Blvd,, Malvern, PA, 19355</principalBusinessOfficeOrResidenceAddress>\n<citizenship>PA</citizenship>\n</item2>\n<item3>\n<notApplicableFlag>N</notApplicableFlag>\n<typeOfPersonFiling>IA</typeOfPersonFiling>\n</item3>\n<item4>\n<amountBeneficiallyOwned>25480477</amountBeneficiallyOwned>\n<classPercent>6.36</classPercent>\n<numberOfSharesPersonHas>\n<solePowerOrDirectToVote>3396072</solePowerOrDirectToVote>\n<sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n<solePowerOrDirectToDispose>25480477</solePowerOrDirectToDispose>\n<sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>\n</numberOfSharesPersonHas>\n</item4>\n<item5>\n<notApplicableFlag>Y</notApplicableFlag>\n</item5>\n<item6>\n<notApplicableFlag>N</notApplicableFlag>\n<ownershipMoreThan5PercentOnBehalfOfAnotherPerson>Vanguard Capital Management, including investment companies registered under the Investment Company Act of 1940 and other managed accounts, have the right to receive or the power to direct the receipt of dividends from, or the proceeds from the sale of, the securities reported herein.No one other person's interest in the securities reported herein is more than 5%.</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n</item6>\n<item7>\n<notApplicableFlag>Y</notApplicableFlag>\n</item7>\n<item8>\n<notApplicableFlag>Y</notApplicableFlag>\n</item8>\n<item9>\n<notApplicableFlag>Y</notApplicableFlag>\n</item9>\n<item10>\n<notApplicableFlag>N</notApplicableFlag>\n<certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under &amp;#167; 240.14a-11.</certifications>\n</item10>\n</items>\n<signatureInformation>\n<reportingPersonName>Vanguard Capital Management</reportingPersonName>\n<signatureDetails>\n<signature>Ashley Grim</signature>\n<title>Head of Global Fund Administration</title>\n<date>04/29/2026</date>\n</signatureDetails>\n</signatureInformation>\n</formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "Freshly retrieved SEC current submissions name/ticker/CIK and latest available issuerInfo exact CUSIP are consistent with frozen September live security and prior canonical issuer. Supported GLEIF legal entities have been refreshed independently. This is a proposed new bounded review interval, not modification of the historical review or proof of future corporate-action absence.",
+  "limitations": [],
+  "canonical_identity_reference": [
+    "docs/references/index-pe-sec-issuer-evidence-20260911/CTAS.json"
+  ],
+  "matching_scope": {
+    "mode": "isin_allow_missing_cusip",
+    "missing_cusip_values": [
+      null,
+      "",
+      "N/A",
+      "000000000"
+    ]
+  },
+  "scoped_raw_correction_review": [
+    {
+      "lei": "549300E27V6N4OJCJ944",
+      "role": "prior_scoped_wrong_raw_correction",
+      "source_url": "https://api.gleif.org/api/v1/lei-records/549300E27V6N4OJCJ944",
+      "raw_file": "CTAS-lei-549300E27V6N4OJCJ944.json",
+      "sha256": "567c98fc82d75199017e05ab2814f416fa3bba4b6f96da490db8c261afaa15a6",
+      "entity": {
+        "legalName": {
+          "name": "LATM Management Company, LLC",
+          "language": "en"
+        },
+        "otherNames": [],
+        "transliteratedOtherNames": [],
+        "legalAddress": {
+          "language": "en",
+          "addressLines": [
+            "C/O KMK Service Corp.",
+            "1 East 4th Street",
+            "Suite 1400"
+          ],
+          "addressNumber": null,
+          "addressNumberWithinBuilding": null,
+          "mailRouting": null,
+          "city": "Cincinnati",
+          "region": "US-OH",
+          "country": "US",
+          "postalCode": "45202"
+        },
+        "headquartersAddress": {
+          "language": "en",
+          "addressLines": [
+            "6847 Cintas Boulevard"
+          ],
+          "addressNumber": null,
+          "addressNumberWithinBuilding": null,
+          "mailRouting": null,
+          "city": "Mason",
+          "region": "US-OH",
+          "country": "US",
+          "postalCode": "45040"
+        },
+        "registeredAt": {
+          "id": "RA000629",
+          "other": null
+        },
+        "registeredAs": "1701293",
+        "jurisdiction": "US-OH",
+        "category": "GENERAL",
+        "legalForm": {
+          "id": "EZNQ",
+          "other": null
+        },
+        "associatedEntity": {
+          "lei": null,
+          "name": null
+        },
+        "status": "ACTIVE",
+        "expiration": {
+          "date": null,
+          "reason": null
+        },
+        "successorEntity": {
+          "lei": null,
+          "name": null
+        },
+        "successorEntities": [],
+        "creationDate": "2007-05-17T00:00:00Z",
+        "subCategory": null,
+        "otherAddresses": [],
+        "eventGroups": []
+      },
+      "registration": {
+        "initialRegistrationDate": "2013-10-08T03:01:00Z",
+        "lastUpdateDate": "2026-05-18T15:58:38Z",
+        "status": "LAPSED",
+        "nextRenewalDate": "2014-10-04T18:41:00Z",
+        "managingLou": "5493001KJTIIGC8Y1R12",
+        "corroborationLevel": "FULLY_CORROBORATED",
+        "validatedAt": {
+          "id": "RA000629",
+          "other": null
+        },
+        "validatedAs": "1701293",
+        "otherValidationAuthorities": []
+      }
+    }
+  ],
+  "equivalence_registries": []
+}
