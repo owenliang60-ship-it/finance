@@ -950,14 +950,15 @@ def _company_identities(
     disagree with this raw reconstruction. Filer CIK is deliberately unused.
     Conflicting or missing evidence in any class poisons its merged target.
     """
-    candidates = {}
-    for row in _rows(
-            conn, "SELECT * FROM fmp_fund_disclosure_holdings WHERE basket_symbol = ?",
-            [basket]):
-        if not row.get("included") and not row.get("covered_by"):
-            continue
-        key = (str(row["holding_date"]), str(row["source_kind"]))
-        lei = None
+    source_rows = _rows(
+        conn, "SELECT * FROM fmp_fund_disclosure_holdings WHERE basket_symbol = ?",
+        [basket])
+    disclosures = {}
+
+    class EvidenceConflict(ValueError):
+        pass
+
+    def source_identity(row):
         try:
             raw = json.loads(row.get("raw_payload_json") or "null")
             if not isinstance(raw, dict):
@@ -986,7 +987,7 @@ def _company_identities(
                 missing_allowed = (entry.get("match_mode") == "isin_allow_missing_cusip"
                                    and cusip in entry.get("missing_cusip_values", []))
                 if not (exact or missing_allowed):
-                    raise ValueError("reviewed ISIN has conflicting CUSIP")
+                    raise EvidenceConflict("reviewed ISIN has conflicting CUSIP")
                 matching.append(entry)
             choices = {entry.get("canonical_issuer_key") or "lei:" + entry["issuer_lei"] for entry in matching}
             if "sec-cik:" + str(row.get("cik")) in choices:
@@ -1000,14 +1001,67 @@ def _company_identities(
                         for entry in in_range if entry.get("issuer_lei") == original
                         or original in entry.get("equivalent_leis", [])}
                 if len(keys) > 1:
-                    raise ValueError("issuer aliases conflict")
+                    raise EvidenceConflict("issuer aliases conflict")
                 choices.add(next(iter(keys)) if keys else "lei:" + original)
             if "sec-cik:" + str(row.get("cik")) in choices:
                 raise ValueError("issuer alias resolves to fund filer CIK")
+            if is_live and cusip not in (None, "", "N/A", "000000000"):
+                # Select a complete snapshot first: an absent or unresolved
+                # security in it cannot make an older disclosure eligible.
+                eligible = [day for day, snapshot in disclosures.items()
+                            if day <= row["holding_date"]
+                            and snapshot["available"] is not None
+                            and snapshot["available"] <= row["holding_date"]]
+                latest = disclosures[max(eligible)] if eligible else None
+                evidence = latest["securities"].get(cusip) if latest else None
+                if evidence is not None:
+                    inherited, source_isin, status = evidence
+                    if (status == "conflict" or (source_isin and raw.get("isin")
+                                                and source_isin != raw["isin"])):
+                        raise EvidenceConflict("latest disclosure security conflict")
+                    if inherited is not None:
+                        choices.add(inherited)
+            if "sec-cik:" + str(row.get("cik")) in choices:
+                raise ValueError("inherited identity resolves to fund filer CIK")
+            if len(choices) > 1:
+                raise EvidenceConflict("issuer evidence conflicts")
             if len(choices) == 1:
-                lei = choices.pop()
+                return next(iter(choices)), "resolved"
+        except EvidenceConflict:
+            return None, "conflict"
         except (TypeError, ValueError):
-            lei = None  # Explicit unresolved identity, never a passing fallback.
+            pass  # Invalid raw evidence cannot certify a source identity.
+        return None, "unresolved"
+
+    # Keep the entire physical disclosure inventory, including rows which
+    # cannot resolve and rows outside the materialised valuation window.
+    for row in source_rows:
+        if row["source_kind"] != "disclosure":
+            continue
+        snapshot = disclosures.setdefault(str(row["holding_date"]), {
+            "available": row.get("composition_available_date"), "securities": {}})
+        available = row.get("composition_available_date")
+        if snapshot["available"] is None or available is None:
+            snapshot["available"] = None
+        else:
+            snapshot["available"] = max(snapshot["available"], available)
+        cusip = row.get("cusip")
+        if cusip in (None, "", "N/A", "000000000"):
+            continue
+        issuer, status = source_identity(row)
+        evidence = (issuer, row.get("isin"), status)
+        previous = snapshot["securities"].get(cusip)
+        if previous is not None and (previous[2] == "conflict"
+                                     or previous[:2] != evidence[:2]):
+            evidence = (None, previous[1], "conflict")
+        snapshot["securities"][cusip] = evidence
+
+    candidates = {}
+    for row in source_rows:
+        if not row.get("included") and not row.get("covered_by"):
+            continue
+        key = (str(row["holding_date"]), str(row["source_kind"]))
+        lei, _ = source_identity(row)
         for ticker in (row["raw_symbol"], row["symbol"], row["covered_by"],
                        row.get("alias_symbol") if row.get("alias_mode") == "authoritative" else None):
             if ticker:

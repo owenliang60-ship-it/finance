@@ -1989,3 +1989,160 @@ def test_invalid_old_manifest_is_not_laundered_by_a_new_valid_run(
                 else "run_started_is_not_the_first_event")
     assert any(expected in item
                for item in _failed(report)["manifest_denominator"])
+
+
+# The verifier reconstructs live identity from raw physical source rows. These
+# fixtures intentionally never call the producer to build expected identities.
+def _live_identity_case(case):
+    apple, other = synthetic_lei("AAA"), synthetic_lei("OTHER")
+
+    def row(*, day="2026-06-30", kind="disclosure", lei=apple,
+            cusip="123456789", isin="US1234567890", symbol="AAA",
+            basket="SPY", available="2026-08-01", index=0):
+        raw = {"symbol": symbol, "asset": symbol, "lei": lei,
+               "cusip": cusip, "isin": isin, "assetCat": "EC"}
+        return {"basket_symbol": basket, "holding_date": day,
+                "source_kind": kind, "raw_row_index": index,
+                "composition_available_date": available,
+                "raw_symbol": symbol, "symbol": symbol, "covered_by": None,
+                "alias_symbol": None, "alias_mode": None, "included": 1,
+                "issuer_lei": lei, "cusip": cusip, "isin": isin,
+                "asset_category": "EC", "cik": "0000884394",
+                "raw_payload_json": json.dumps(raw)}
+
+    def alter(source, **fields):
+        source.update(fields)
+        raw = json.loads(source["raw_payload_json"])
+        for name, value in fields.items():
+            if name in ("cusip", "isin"):
+                raw[name] = value
+            elif name == "issuer_lei":
+                raw["lei"] = value
+        source["raw_payload_json"] = json.dumps(raw)
+
+    disclosure = row()
+    live = row(day="2026-09-25", kind="live", lei=None,
+               available="2026-09-25")
+    rows, overrides, expected = [disclosure, live], [], "lei:" + apple
+    override = {"valid_from": "2026-09-18", "valid_to": "2026-12-31",
+                "cusip": live["cusip"], "isin": live["isin"], "issuer_lei": apple}
+    if case == "inherit":
+        pass
+    elif case in ("own_lei_conflict", "override_conflict"):
+        if case == "own_lei_conflict":
+            alter(live, issuer_lei=other)
+        else:
+            overrides = [{**override, "issuer_lei": other}]
+        expected = None
+    elif case == "isin_conflict":
+        alter(live, isin="US9876543210")
+        overrides = [{**override, "isin": live["isin"]}]
+        expected = None
+    elif case in ("latest_missing", "latest_unresolved", "unresolved_override"):
+        rows.insert(0, row(day="2026-03-31", available="2026-05-01"))
+        if case == "latest_missing":
+            alter(disclosure, cusip="987654321", isin="US9876543210")
+        else:
+            alter(disclosure, issuer_lei="N/A")
+        if case == "unresolved_override":
+            overrides = [override]
+        else:
+            expected = None
+    elif case in ("duplicate_conflict", "duplicate_isin", "mixed_resolution"):
+        overrides = [override]
+        rows.insert(1, row(index=1, lei=(None if case == "mixed_resolution" else other)))
+        if case == "duplicate_isin":
+            alter(rows[1], issuer_lei=apple, isin="US9876543210")
+        # A later matching row must not clear an established conflict.
+        rows.insert(2, row(index=2))
+        expected = None
+    elif case in ("future_publication", "future_holding", "cross_basket"):
+        disclosure.update({
+            "future_publication": {"composition_available_date": "2026-10-01"},
+            "future_holding": {"holding_date": "2026-09-30"},
+            "cross_basket": {"basket_symbol": "QQQ"},
+        }[case])
+        expected = None
+    elif case in ("new_entrant", "missing_cusip", "zero_cusip"):
+        alter(live, cusip={"new_entrant": "987654321", "missing_cusip": None,
+                           "zero_cusip": "000000000"}[case])
+        expected = None
+    elif case == "disclosure_correction":
+        overrides = [{**override, "valid_from": "2026-01-01",
+                      "expected_raw_leis": [other]}]
+        alter(disclosure, issuer_lei=other)
+    elif case == "invalid_live_raw":
+        live["issuer_lei"] = apple  # normalized-only edit must still fail
+        expected = None
+    elif case == "invalid_disclosure_raw":
+        disclosure["issuer_lei"] = other
+        expected = None
+    elif case == "merged_unresolved":
+        rows.append(row(day="2026-09-25", kind="live", lei=None,
+                        cusip="987654321", isin="US9876543210",
+                        symbol="AAA.B", available="2026-09-25", index=1))
+        rows[-1].update(included=0, symbol=None, covered_by="AAA")
+        expected = None
+    else:
+        raise AssertionError(case)
+    return rows, overrides, expected
+
+
+LIVE_IDENTITY_CASES = (
+    "inherit", "own_lei_conflict", "override_conflict", "isin_conflict",
+    "latest_missing", "latest_unresolved", "unresolved_override",
+    "duplicate_conflict", "duplicate_isin", "mixed_resolution",
+    "future_publication", "future_holding", "cross_basket", "new_entrant",
+    "missing_cusip", "zero_cusip", "disclosure_correction",
+    "invalid_live_raw", "invalid_disclosure_raw", "merged_unresolved",
+)
+
+
+def _identity_database(tmp_path, rows):
+    db_path = _build(tmp_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        template = dict(conn.execute(
+            "SELECT * FROM fmp_fund_disclosure_holdings LIMIT 1").fetchone())
+        conn.execute("DELETE FROM fmp_fund_disclosure_holdings")
+        for row in rows:
+            record = {**template, **row}
+            conn.execute(
+                "INSERT INTO fmp_fund_disclosure_holdings ("
+                + ",".join(record) + ") VALUES ("
+                + ",".join("?" for _ in record) + ")", list(record.values()))
+    return db_path
+
+
+@pytest.mark.parametrize("case", LIVE_IDENTITY_CASES)
+def test_live_identity_from_latest_pit_disclosure(tmp_path, case):
+    from scripts.verify_index_pe_history import _company_identities
+
+    rows, overrides, expected = _live_identity_case(case)
+    db_path = _identity_database(tmp_path, rows)
+    with connect_readonly(db_path) as conn:
+        actual = _company_identities(conn, "SPY", overrides)
+    assert actual[("2026-09-25", "live")]["AAA"] == expected
+
+
+@pytest.mark.parametrize("case", LIVE_IDENTITY_CASES)
+def test_live_identity_producer_verifier_parity(tmp_path, case):
+    # Importing the producer is confined to this comparison test. Neither
+    # implementation consumes the other's reconstruction or expected result.
+    from scripts.verify_index_pe_history import _company_identities
+    from src.data.fund_issuer_identity import audit_snapshot_identities
+
+    rows, overrides, expected = _live_identity_case(case)
+    db_path = _identity_database(tmp_path, rows)
+    live = [row for row in rows if row["source_kind"] == "live"]
+    producer = audit_snapshot_identities(live, overrides, source_rows=rows)
+    producer_keys = {entry["canonical_issuer_key"]
+                     for entry in producer["resolved"] if entry["symbol"] == "AAA"}
+    # An unresolved merged class rejects the snapshot even if its primary
+    # class independently resolves; a partial audit is not usable evidence.
+    producer_key = (next(iter(producer_keys))
+                    if not producer["errors"] and len(producer_keys) == 1 else None)
+    with connect_readonly(db_path) as conn:
+        verifier_key = _company_identities(conn, "SPY", overrides)[
+            ("2026-09-25", "live")]["AAA"]
+    assert producer_key == verifier_key == expected
