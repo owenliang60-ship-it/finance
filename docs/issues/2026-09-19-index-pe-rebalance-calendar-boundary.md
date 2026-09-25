@@ -40,3 +40,7 @@ Tasks 1–3 implemented and independently replayed in `codex/index-pe-live-issue
 ### Same-day review follow-up
 
 Eight review-boundary findings addressed: sentinel CUSIP matching, historical-window admissibility, holiday/session cutoff, mixed missing evidence, inherited proof expiry, canonical key consistency, explicit refresh rejection and lazy inheritance reconstruction. Expiry enforcement required 15 fresh primary-source renewals (17 rows); current review batch now 57 securities. Old review validity stays intact. The same two source blockers remain; still not deployed or recovered. Full audit has the final validation details.
+
+### Code deployed, recovery still blocked
+
+2026-09-25: Boss authorized merge/push/deploy; functional code e730c3af is on cloud main. Isolated cloud Python 3.10 tests: 374 passed; deployed read-only source smoke preserves both expected blockers. No backfill or PIT recovery ran. Status: code repaired/deployed; source-data remediation and product recovery still open.

@@ -202,8 +202,8 @@ timeout 3600 python3 scripts/backfill_index_pe_history.py --baskets <B> --freque
 - Modify: `docs/issues/2026-09-19-index-pe-rebalance-calendar-boundary.md`（状态改为 repaired，附证据）
 
 - [ ] Step 1: `/cr` 审 worktree diff；全量 `pytest -q`，贴输出。
-- [ ] Step 2: 请 Boss 确认 → merge 到 main。
-- [ ] Step 3: 请 Boss 确认 → push；云端 06:25 auto-pull 或手动 pull。
+- [x] Step 2: Boss 已明确批准，fast-forward merge 到 main。
+- [x] Step 3: Boss 已明确批准，push 后云端手动 fast-forward pull；功能代码 e730c3af。
 - [ ] Step 4: 请 Boss 确认运行时间（避开周六 10:45 与 14:00 写锁任务）→ 云端在 `market_db_writer` 锁内依次执行：`backfill_index_pe_history.py --baskets SPY,QQQ,SOXX --frequency weekly --years 5 --as-of <恢复日>` → `update_fmp_forward.py --mode weekly --phase valuation --snapshot-date <最近 complete ingestion 日>` → `verify_fmp_forward.py --stage full ...` → `verify_index_pe_history.py ... --mode ro`。as-of/snapshot-date 在执行前按当时 manifest 核对后填写。
 - [ ] Step 5: 核对验收标准第 4 条；更新 runbook 与 issue；commit 文档。
 
@@ -236,3 +236,7 @@ Expiry enforcement exposed 15 additional securities (17 live rows) whose old evi
 Final real-source replay still rejects SPY `2602335D` and SOXX `0EDE.L`; no production rollout. Review-fix validation is recorded in the audit report.
 
 - Final calendar review also covers Christmas Eve as the first effective session (December 21 can be the third Friday): 13:00 New York early close, with pre-close / exact-close / post-close regression cases.
+
+## Deployment checkpoint
+
+Code merged, pushed and deployed with explicit authorization on 2026-09-25. Cloud Python 3.10 focused suite: 374 passed; deployed read-only 634-row parity smoke passed with the two known rejections. Task 5 recovery Step 4 remains unexecuted because source blockers remain. See the audit deployment section.

@@ -1,6 +1,6 @@
 # Live issuer identity implementation — 2026-09-25
 
-Status: implementation plus eight review-boundary fixes complete; 57 current securities reviewed. **Two source blockers remain, no production rollout.** The first checkpoint below records the initial 42-security batch; the follow-up section supersedes its calendar and inheritance-boundary descriptions.
+Status: code merged, pushed and deployed on 2026-09-25; 57 current securities reviewed. **Two source blockers remain; valuation recovery has not run.** Earlier no-deployment statements below describe their historical checkpoints; the deployment section is the current status.
 
 ## Implementation and evidence
 
@@ -65,3 +65,17 @@ Follow-up TDD evidence: 12 missing-CUSIP/canonical regression failures; 5 produc
 
 
 Final follow-up online preflight (57-review configuration): SPY 2 HTTP requests / one unresolved CVR-like source row; QQQ 8 HTTP requests / zero identity errors, then expected budget exhaustion; SOXX 2 HTTP requests / one conflicting-CUSIP row. Aggregate 12 requests, each process capped at 8. No source gate was relaxed to remove either blocker; no production writes, merge, push or deployment.
+
+
+## Code deployment — 2026-09-25
+
+Boss explicitly authorized merge, push and deployment in this task. Functional code commit: `e730c3afc8fe3c07632da4421cd9583b6087d5f6`.
+
+- Local `main` fast-forwarded from `0968c466`; pushed successfully to `origin/main`.
+- Four unrelated tracked local modifications were hash-checked and preserved. Existing untracked plan/issue originals were archived under `.git/codex-deploy-backups/index-pe-live-issuer-e730c3af/` before the merge.
+- Cloud production `/root/workspace/Finance` fast-forwarded from `5751b79e9474ba7c55bdaffd149ba72d5ac0577f` to the functional code commit. Tracked checkout clean.
+- Before the production checkout changed, its Python 3.10.12 runtime ran the seven-file focused suite in an isolated temporary worktree: **374 passed in 59.88s**. All ten changed Python files relative to the prior cloud commit also passed Python 3.10 syntax parsing.
+- After deployment, a read-only replay using the cloud source database and retained live inputs checked **634 equity rows**, independently comparing producer/verifier identities. SPY 503/504 resolved, QQQ 101/101, SOXX 28/29; expected `2602335D` and `0EDE.L` blocks remain. No HTTP calls or production database writes were used for this deployment smoke check.
+- Existing weekly valuation products remain at `2026-09-11`: QQQ 261 rows, SOXX 251, SPY 261. No full-window recovery, PIT freezing, service restart or cron modification was performed.
+
+Deployment is complete for the code. The two source blockers and valuation recovery remain open. The next scheduled execution will use the new code; this deployment does not certify a successful future weekly run.

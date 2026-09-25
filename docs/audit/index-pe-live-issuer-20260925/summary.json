@@ -1,7 +1,7 @@
 {
   "as_of": "2026-09-26",
   "review_date": "2026-09-25",
-  "status": "IMPLEMENTED_SOURCE_BLOCKED_NOT_DEPLOYED",
+  "status": "CODE_DEPLOYED_SOURCE_BLOCKED",
   "network_preflights": {
     "preflight-SPY": {
       "api_requests_used": 2,
@@ -251,5 +251,36 @@
     "diff_check": "PASS",
     "known_credentials_scan": "PASS",
     "main_thread_review": "No remaining actionable implementation findings; source blockers remain."
+  },
+  "deployment": {
+    "recorded_at_utc": "2026-09-25T05:18:15.710850+00:00",
+    "functional_commit": "e730c3afc8fe3c07632da4421cd9583b6087d5f6",
+    "previous_cloud_commit": "5751b79e9474ba7c55bdaffd149ba72d5ac0577f",
+    "host": "aliyun",
+    "path": "/root/workspace/Finance",
+    "python": "3.10.12",
+    "cloud_tests": {
+      "passed": 374,
+      "seconds": 59.88
+    },
+    "cloud_changed_python_syntax_files": 10,
+    "cloud_source_parity_rows": 634,
+    "source_errors": {
+      "SPY": [
+        "2602335D"
+      ],
+      "QQQ": [],
+      "SOXX": [
+        "0EDE.L"
+      ]
+    },
+    "valuation_latest": "2026-09-11",
+    "valuation_rows": {
+      "QQQ": 261,
+      "SOXX": 251,
+      "SPY": 261
+    },
+    "production_database_writes": false,
+    "valuation_recovery_executed": false
   }
 }
