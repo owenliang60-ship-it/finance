@@ -221,6 +221,8 @@ class TestCompileDeepReport:
             patch("terminal.company_store.get_store"),
             patch("terminal.dashboard.generate_dashboard"),
             patch("terminal.memory.extract_situation_summary", return_value=None),
+            patch("terminal.company_db.save_kill_conditions"),
+            patch("terminal.company_db.save_alpha_package"),
         ):
             yield
 
@@ -391,6 +393,80 @@ class TestCompileDeepReport:
             # Research Context and Macro should NOT be in the report
             assert "Research Context" not in report
             assert "宏观环境" not in report
+
+    def test_saves_kill_conditions_and_alpha_package(self, tmp_path):
+        with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path), \
+             patch("terminal.company_db.save_kill_conditions") as save_kc, \
+             patch("terminal.company_db.save_alpha_package") as save_alpha:
+            from terminal.deep_pipeline import get_research_dir, compile_deep_report
+
+            research_dir = get_research_dir("TEST")
+            self._populate_research_dir(research_dir)
+            (research_dir / "lens_deep_value.md").write_text(
+                "## Deep Value\n\n## 4. 触杀条件\n\n1. **现金流底失效**：若 FCF 跌破 18%。\n"
+            )
+            (research_dir / "alpha_debate.md").write_text(
+                "## Debate\nfinal_conviction_modifier: 0.85\n"
+            )
+            compile_deep_report("TEST", research_dir)
+
+            save_kc.assert_called_once_with(
+                "TEST", [{"description": "现金流底失效", "source_lens": "deep_value"}]
+            )
+            symbol, alpha = save_alpha.call_args.args
+            assert symbol == "TEST"
+            assert "Barbell structure" in alpha["bet"]
+            assert "Cisco analog" in alpha["red_team"]
+            assert "Late expansion" in alpha["cycle"]
+            assert "final_conviction_modifier" in alpha["debate"]
+            assert alpha["debate_conviction_modifier"] == 0.85
+
+    def test_skips_kill_condition_save_when_none_parsed(self, tmp_path):
+        """Saving an empty list would deactivate existing kill conditions."""
+        with patch("terminal.deep_pipeline._COMPANIES_DIR", tmp_path), \
+             patch("terminal.company_db.save_kill_conditions") as save_kc:
+            from terminal.deep_pipeline import get_research_dir, compile_deep_report
+
+            research_dir = get_research_dir("TEST")
+            self._populate_research_dir(research_dir)
+            compile_deep_report("TEST", research_dir)
+
+            save_kc.assert_not_called()
+
+
+class TestExtractKillConditions:
+    """Tests for extract_kill_conditions() — titles from lens 触杀条件 sections."""
+
+    def test_extracts_bold_titles_per_lens(self, tmp_path):
+        from terminal.deep_pipeline import extract_kill_conditions
+
+        (tmp_path / "lens_quality_compounder.md").write_text(
+            "## 核心论点\n1. **不是条件**：前面的列表\n\n"
+            "## 4. 触杀条件（本透镜视角）\n\n"
+            "1. **毛利率修复失败**：若毛利率跌回 54% [数据源: 实际数据]。\n"
+            "2. **资本配置偏离复利纪律**：若并购无法转化。\n\n"
+            "## 数据缺口\n1. **也不是条件**\n"
+        )
+        (tmp_path / "lens_event_driven.md").write_text(
+            "## 触杀条件\n\n"
+            "1. **[时间触发]** 2026 Q1 财报后 3 日内股价破 $140 且未收复 → 确认动能衰竭。\n"
+            "2. **[事件触发]** AWS re:Invent（11-12 月）披露 Trainium 4 归 Alchip → 升级为 SHORT。\n"
+        )
+        (tmp_path / "lens_deep_value.md").write_text("## Deep Value\n没有触杀条件段落。\n")
+
+        result = extract_kill_conditions(tmp_path)
+
+        assert result == [
+            {"description": "2026 Q1 财报后 3 日内股价破 $140 且未收复", "source_lens": "event_driven"},
+            {"description": "AWS re:Invent 披露 Trainium 4 归 Alchip", "source_lens": "event_driven"},
+            {"description": "毛利率修复失败", "source_lens": "quality_compounder"},
+            {"description": "资本配置偏离复利纪律", "source_lens": "quality_compounder"},
+        ]
+
+    def test_no_lens_files_returns_empty(self, tmp_path):
+        from terminal.deep_pipeline import extract_kill_conditions
+
+        assert extract_kill_conditions(tmp_path) == []
 
 
 class TestWriteAgentPrompts:
@@ -997,6 +1073,8 @@ class TestReportSummaryAlternativeFormats:
             patch("terminal.company_store.get_store"),
             patch("terminal.dashboard.generate_dashboard"),
             patch("terminal.memory.extract_situation_summary", return_value=None),
+            patch("terminal.company_db.save_kill_conditions"),
+            patch("terminal.company_db.save_alpha_package"),
         ):
             yield
 
@@ -1072,6 +1150,8 @@ class TestCompileDeepReportWithDebate:
             patch("terminal.company_store.get_store"),
             patch("terminal.dashboard.generate_dashboard"),
             patch("terminal.memory.extract_situation_summary", return_value=None),
+            patch("terminal.company_db.save_kill_conditions"),
+            patch("terminal.company_db.save_alpha_package"),
         ):
             yield
 

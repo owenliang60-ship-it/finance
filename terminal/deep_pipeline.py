@@ -660,6 +660,41 @@ def _extract_summary_from_sections(
     return "\n".join(lines)
 
 
+def _kill_condition_title(item: str) -> str:
+    """Short title of a kill-condition list item: its leading bold span,
+    or the first clause when the bold is a tag like **[时间触发]**."""
+    bold = re.match(r"\*\*(.+?)\*\*", item)
+    if bold and not bold.group(1).startswith("["):
+        return bold.group(1).strip(" ：:")
+    text = item[bold.end():] if bold else item
+    text = re.sub(r"\[数据源[^\]]*\]|（[^）]*）", " ", text).replace("**", "")
+    text = re.sub(r"\s+", " ", text).strip()
+    return re.split(r"[，。；：→—]", text, maxsplit=1)[0].strip()[:40]
+
+
+def extract_kill_conditions(research_dir: Path) -> List[Dict[str, str]]:
+    """Collect kill-condition titles from each lens file's 触杀条件 section.
+
+    Returns [{description, source_lens}] in the shape company_db.save_kill_conditions expects.
+    """
+    conditions = []
+    for path in sorted(research_dir.glob("lens_*.md")):
+        in_section = False
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("#"):
+                in_section = "触杀条件" in line
+                continue
+            m = re.match(r"\s*\d+\.\s+(.+)", line) if in_section else None
+            if m:
+                title = _kill_condition_title(m.group(1))
+                if title:
+                    conditions.append({
+                        "description": title,
+                        "source_lens": path.stem[len("lens_"):],
+                    })
+    return conditions
+
+
 def extract_structured_data(symbol: str, research_dir: Path) -> Dict[str, Any]:
     """Extract structured data from research files for SQLite storage.
 
@@ -1076,6 +1111,7 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
 
     # Auto-save to SQLite company database
     analysis_id = None
+    structured: Dict[str, Any] = {}
     try:
         from terminal.company_store import get_store
         store = get_store()
@@ -1112,6 +1148,35 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
                 )
         except Exception as e:
             logger.warning(f"OPRMS rating save failed for {symbol} (non-fatal): {e}")
+
+    # Save kill conditions (degradable). Skip when none parsed: saving an
+    # empty list would deactivate the ticker's existing conditions.
+    try:
+        from terminal.company_db import save_kill_conditions
+        kill_conditions = extract_kill_conditions(research_dir)
+        if kill_conditions:
+            save_kill_conditions(symbol, kill_conditions)
+            logger.info(f"Saved {len(kill_conditions)} kill conditions for {symbol}")
+        else:
+            logger.warning(f"No kill conditions parsed for {symbol}; existing ones kept")
+    except Exception as e:
+        logger.warning(f"Kill condition save failed for {symbol} (non-fatal): {e}")
+
+    # Save alpha package (degradable)
+    if alpha_bet:
+        try:
+            from terminal.company_db import save_alpha_package
+            save_alpha_package(symbol, {
+                "red_team": alpha_rt,
+                "cycle": alpha_cy,
+                "bet": alpha_bet,
+                "debate": alpha_debate,
+                "conviction_modifier": structured.get("conviction_modifier"),
+                "debate_conviction_modifier": structured.get("debate_conviction_modifier"),
+                "final_action": structured.get("debate_final_action"),
+            })
+        except Exception as e:
+            logger.warning(f"Alpha package save failed for {symbol} (non-fatal): {e}")
 
     # Auto-regenerate dashboard (degradable)
     try:
