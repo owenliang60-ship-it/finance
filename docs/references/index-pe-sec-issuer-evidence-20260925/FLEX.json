@@ -1,0 +1,218 @@
+{
+  "reviewed_at": "2026-09-25",
+  "reviewed_securities": [
+    {
+      "symbol": "FLEX",
+      "cusip": "Y2573F102",
+      "isin": "SG9999000020",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0000866374",
+    "sec_name": "Flex Ltd.",
+    "section": "ISSUER",
+    "form": "SCHEDULE 13G/A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/866374/000090221926000275/primary_doc.xml",
+    "filing_date": "2026-08-13"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "FLEX",
+    "name": "FLEX LTD",
+    "isin": "SG9999000020",
+    "securityCusip": "Y2573F102",
+    "sharesNumber": 4546723,
+    "weightPercentage": 0.0622345,
+    "marketValue": 501290530,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/866374/000090221926000275/primary_doc.xml",
+    "sha256": "201ed6f83f088603e7b66b25e604b40993383de65e510fc13d31d6132cce2990",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n  <schemaVersion>X0202</schemaVersion>\n<headerData>\n    <submissionType>SCHEDULE 13G/A</submissionType>\n    <previousAccessionNumber>0000902219-26-000124</previousAccessionNumber>\n    <filerInfo>\n      <filer>\n        <filerCredentials>\n          <cik>0000902219</cik>\n          <ccc>XXXXXXXX</ccc>\n        </filerCredentials>\n      </filer>\n      <liveTestFlag>LIVE</liveTestFlag>\n\n\n\n    </filerInfo>\n  </headerData>\n  <formData>\n    <coverPageHeader>\n      <amendmentNo>1</amendmentNo>\n      <securitiesClassTitle>Common Stock</securitiesClassTitle>\n      <eventDateRequiresFilingThisStatement>06/30/2026</eventDateRequiresFilingThisStatement>\n      <issuerInfo>\n        <issuerCik>0000866374</issuerCik>\n        <issuerName>Flex Ltd.</issuerName>\n        <issuerCusips>\n          <issuerCusipNumber>Y2573F102</issuerCusipNumber>\n        </issuerCusips>\n        <issuerPrincipalExecutiveOfficeAddress>\n          <com:street1>12515-8 RESEARCH BLVD</com:street1>\n          <com:street2>SUITE 300</com:street2>\n          <com:city>AUSTIN</com:city>\n          <com:stateOrCountry>X1</com:stateOrCountry>\n          <com:zipCode>78759</com:zipCode>\n        </issuerPrincipalExecutiveOfficeAddress>\n      </issuerInfo>\n      <designateRulesPursuantThisScheduleFiled>\n        <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n      </designateRulesPursuantThisScheduleFiled>\n    </coverPageHeader>\n    <coverPageHeaderReportingPersonDetails>\n\n      <reportingPersonName>Wellington Management Group LLP</reportingPersonName>\n      <citizenshipOrOrganization>MA</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>0</soleVotingPower>\n        <sharedVotingPower>16162370</sharedVotingPower>\n        <soleDispositivePower>0</soleDispositivePower>\n        <sharedDispositivePower>17978332</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>17978332.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <classPercent>4.9</classPercent>\n      <typeOfReportingPerson>HC</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <coverPageHeaderReportingPersonDetails>\n\n      <reportingPersonName>Wellington Group Holdings LLP</reportingPersonName>\n      <citizenshipOrOrganization>DE</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>0</soleVotingPower>\n        <sharedVotingPower>16162370</sharedVotingPower>\n        <soleDispositivePower>0</soleDispositivePower>\n        <sharedDispositivePower>17978332</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>17978332.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <classPercent>4.9</classPercent>\n      <typeOfReportingPerson>HC</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <coverPageHeaderReportingPersonDetails>\n\n      <reportingPersonName>Wellington Investment Advisors Holdings LLP</reportingPersonName>\n      <citizenshipOrOrganization>DE</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>0</soleVotingPower>\n        <sharedVotingPower>16162370</sharedVotingPower>\n        <soleDispositivePower>0</soleDispositivePower>\n        <sharedDispositivePower>17978332</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>17978332.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <classPercent>4.9</classPercent>\n      <typeOfReportingPerson>HC</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <items>\n      <item1>\n        <issuerName>Flex Ltd.</issuerName>\n        <issuerPrincipalExecutiveOfficeAddress>12515-8 RESEARCH BLVD, SUITE 300, AUSTIN TX 78759</issuerPrincipalExecutiveOfficeAddress>\n      </item1>\n      <item2>\n        <filingPersonName>\nWellington Management Group LLP\nWellington Group Holdings LLP\nWellington Investment Advisors Holdings LLP\n</filingPersonName>\n        <principalBusinessOfficeOrResidenceAddress>c/o Wellington Management Company LLP, 280 Congress Street, Boston MA 02210</principalBusinessOfficeOrResidenceAddress>\n        <citizenship>\nWellington Management Group LLP - Massachusetts\nWellington Group Holdings LLP - Delaware\nWellington Investment Advisors Holdings LLP - Delaware</citizenship>\n      </item2>\n      <item3>\n        <notApplicableFlag>N</notApplicableFlag>\n        <typeOfPersonFiling>HC</typeOfPersonFiling>\n      </item3>\n      <item4>\n        <amountBeneficiallyOwned>See the responses to Item 9 on the attached cover pages.</amountBeneficiallyOwned>\n        <classPercent>4.87</classPercent>\n        <numberOfSharesPersonHas>\n          <solePowerOrDirectToVote>0</solePowerOrDirectToVote>\n          <sharedPowerOrDirectToVote>See the responses to Item 6 on the attached cover pages.</sharedPowerOrDirectToVote>\n          <solePowerOrDirectToDispose>0</solePowerOrDirectToDispose>\n          <sharedPowerOrDirectToDispose>See the responses to Item 8 on the attached cover pages.</sharedPowerOrDirectToDispose>\n        </numberOfSharesPersonHas>\n      </item4>\n      <item5>\n        <classOwnership5PercentOrLess>Y</classOwnership5PercentOrLess>\n      </item5>\n      <item6>\n        <notApplicableFlag>N</notApplicableFlag>\n        <ownershipMoreThan5PercentOnBehalfOfAnotherPerson>The securities as to which this Schedule is filed are owned of record by clients of one or more investment advisers identified in Item 7 directly or indirectly owned by Wellington Management Group LLP. Those clients have the right to receive, or the power to direct the receipt of, dividends from, or the proceeds from the sale of, such securities. No such client is known to have such right or power with respect to more than five percent of this class of securities, except as follows:\n            Not Applicable.\n            </ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n      </item6>\n      <item7>\n        <notApplicableFlag>N</notApplicableFlag>\n        <subsidiaryIdentificationAndClassification>\nPursuant to the instructions in Item 7 of Schedule 13G, the following lists the identity and Item 3 classification of each relevant entity that beneficially owns shares of the security class being reported on this Schedule 13G.\n\n    Wellington Group Holdings LLP - HC\n    Wellington Investment Advisors LLP - HC\n    Wellington Management Global Holdings, Ltd. - HC\n\nOne or more of the following investment advisers (the \"Wellington Investment Advisers\"):\n\n    Wellington Management Company LLP - IA\n    Wellington Management Canada LLC - IA\n    Wellington Management Singapore Pte Ltd - IA\n    Wellington Management Hong Kong Ltd - IA\n    Wellington Management International Ltd - IA\n    Wellington Management Japan Pte Ltd - IA\n    Wellington Management Australia Pty Ltd - IA\n\nThe securities as to which this Schedule is filed by Wellington Management Group LLP, as parent holding company of certain holding companies and the Wellington Investment Advisers, are owned of record by clients of the Wellington Investment Advisers. Wellington Investment Advisors Holdings LLP controls directly, or indirectly through Wellington Management Global Holdings, Ltd., the Wellington Investment Advisers. Wellington Investment Advisors Holdings LLP is owned by Wellington Group Holdings LLP. Wellington Group Holdings LLP is owned by Wellington Management Group LLP.\n</subsidiaryIdentificationAndClassification>\n      </item7>\n      <item8>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item8>\n      <item9>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item9>\n      <item10>\n        <notApplicableFlag>N</notApplicableFlag>\n        <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under Â§ 240.14a-11.</certifications>\n      </item10>\n    </items>\n    <signatureInformation>\n      <reportingPersonName>Wellington Management Group LLP</reportingPersonName>\n      <signatureDetails>\n        <signature>Matthew Revell</signature>\n        <title>Compliance Manager</title>\n        <date>08/14/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n    <signatureInformation>\n      <reportingPersonName>Wellington Group Holdings LLP</reportingPersonName>\n      <signatureDetails>\n        <signature>Matthew Revell</signature>\n        <title>Compliance Manager</title>\n        <date>08/14/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n    <signatureInformation>\n      <reportingPersonName>Wellington Investment Advisors Holdings LLP</reportingPersonName>\n      <signatureDetails>\n        <signature>Matthew Revell</signature>\n        <title>Compliance Manager</title>\n        <date>08/14/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n  </formData>\n\n</edgarSubmission>\n"
+  },
+  "identity_review": "SEC issuerInfo / subject-company identity inspected independently of filing owner CIK. Exact CUSIP evidence establishes issuer; ISIN retained from live source as matching scope, not claimed to be independently certified by every SEC filing.",
+  "lei_search_reviewed": true,
+  "equivalent_leis": [],
+  "limitations": [
+    "Independent non-CUSIP ISIN mapping unless noted below"
+  ],
+  "issuer_registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records/549300EAQH74YHD07T53",
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        }
+      },
+      "data": {
+        "type": "lei-records",
+        "id": "549300EAQH74YHD07T53",
+        "attributes": {
+          "lei": "549300EAQH74YHD07T53",
+          "entity": {
+            "legalName": {
+              "name": "FLEX LTD.",
+              "language": "en"
+            },
+            "otherNames": [
+              {
+                "name": "FLEXTRONICS INTERNATIONAL LTD.",
+                "language": "en",
+                "type": "PREVIOUS_LEGAL_NAME"
+              },
+              {
+                "name": "FLEX HOLDINGS PTE LIMITED",
+                "language": "en",
+                "type": "PREVIOUS_LEGAL_NAME"
+              }
+            ],
+            "transliteratedOtherNames": [],
+            "legalAddress": {
+              "language": "en",
+              "addressLines": [
+                "1 KALLANG PLACE"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "SINGAPORE",
+              "region": "SG-01",
+              "country": "SG",
+              "postalCode": "339211"
+            },
+            "headquartersAddress": {
+              "language": "en",
+              "addressLines": [
+                "1 KALLANG PLACE"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "SINGAPORE",
+              "region": "SG-01",
+              "country": "SG",
+              "postalCode": "339211"
+            },
+            "registeredAt": {
+              "id": "RA000523",
+              "other": null
+            },
+            "registeredAs": "199002645H",
+            "jurisdiction": "SG",
+            "category": "GENERAL",
+            "legalForm": {
+              "id": "IWZF",
+              "other": null
+            },
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "status": "ACTIVE",
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "successorEntities": [],
+            "creationDate": "1990-05-31T00:00:00Z",
+            "subCategory": null,
+            "otherAddresses": [],
+            "eventGroups": [
+              {
+                "groupType": "STANDALONE",
+                "events": [
+                  {
+                    "validationDocuments": "REGULATORY_FILING",
+                    "effectiveDate": "2026-05-31T16:00:00Z",
+                    "recordedDate": "2026-07-12T16:30:14Z",
+                    "type": "CHANGE_LEGAL_ADDRESS",
+                    "status": "COMPLETED"
+                  }
+                ]
+              }
+            ]
+          },
+          "registration": {
+            "initialRegistrationDate": "2016-03-17T19:50:00Z",
+            "lastUpdateDate": "2026-07-13T08:00:34Z",
+            "status": "ISSUED",
+            "nextRenewalDate": "2027-09-04T07:24:30Z",
+            "managingLou": "52990034RLKT0WSOAM90",
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "validatedAt": {
+              "id": "RA000523",
+              "other": null
+            },
+            "validatedAs": "199002645H",
+            "otherValidationAuthorities": []
+          },
+          "bic": [
+            "FLEISGSGXXX"
+          ],
+          "mic": null,
+          "ocid": "sg/199002645H",
+          "qcc": "QSGQMRYF2J",
+          "gem": null,
+          "spglobal": [
+            "26510"
+          ],
+          "conformityFlag": "CONFORMING"
+        },
+        "relationships": {
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300EAQH74YHD07T53/managing-lou"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300EAQH74YHD07T53/lei-issuer"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300EAQH74YHD07T53/field-modifications"
+            }
+          },
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300EAQH74YHD07T53/direct-parent-reporting-exception"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300EAQH74YHD07T53/ultimate-parent-reporting-exception"
+            }
+          },
+          "direct-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300EAQH74YHD07T53/direct-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/549300EAQH74YHD07T53/direct-children"
+            }
+          },
+          "ultimate-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300EAQH74YHD07T53/ultimate-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/549300EAQH74YHD07T53/ultimate-children"
+            }
+          },
+          "isins": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300EAQH74YHD07T53/isins"
+            }
+          }
+        },
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/549300EAQH74YHD07T53"
+        }
+      }
+    }
+  }
+}

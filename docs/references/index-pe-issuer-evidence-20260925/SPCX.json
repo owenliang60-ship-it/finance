@@ -1,0 +1,220 @@
+{
+  "security": {
+    "symbol": "SPCX",
+    "cusip": "84615Q103",
+    "isin": "US84615Q1031",
+    "name": "Space Exploration Technologies Corp"
+  },
+  "raw_live_holding": {
+    "symbol": "QQQ",
+    "asset": "SPCX",
+    "name": "Space Exploration Technologies Corp",
+    "isin": "US84615Q1031",
+    "securityCusip": "84615Q103",
+    "sharesNumber": 89113307,
+    "weightPercentage": 2.65625967,
+    "marketValue": 13220850226.52,
+    "updatedAt": "2026-09-24 13:34:47"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US84615Q1031",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US84615Q1031&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US84615Q1031&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "549300B9WLO96RQCXP87",
+          "attributes": {
+            "lei": "549300B9WLO96RQCXP87",
+            "entity": {
+              "legalName": {
+                "name": "SPACE EXPLORATION TECHNOLOGIES CORP.",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "C/O CORPORATION SERVICE COMPANY",
+                  "211 E. 7TH STREET",
+                  "SUITE 620"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "AUSTIN",
+                "region": "US-TX",
+                "country": "US",
+                "postalCode": "78701"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "1 ROCKET RD"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "HAWTHORNE",
+                "region": "US-CA",
+                "country": "US",
+                "postalCode": "90250"
+              },
+              "registeredAt": {
+                "id": "RA000637",
+                "other": null
+              },
+              "registeredAs": "0805421124",
+              "jurisdiction": "US-TX",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "C5K7",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2024-02-15T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": [
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "OTHER_OFFICIAL_DOCUMENTS",
+                      "effectiveDate": "2024-02-14T00:00:00Z",
+                      "recordedDate": "2024-09-27T01:21:15Z",
+                      "type": "CHANGE_LEGAL_ADDRESS",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                },
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "OTHER_OFFICIAL_DOCUMENTS",
+                      "effectiveDate": "2024-02-14T00:00:00Z",
+                      "recordedDate": "2024-09-27T01:21:15Z",
+                      "type": "CHANGE_HQ_ADDRESS",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                },
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "OTHER_OFFICIAL_DOCUMENTS",
+                      "effectiveDate": "2024-02-14T00:00:00Z",
+                      "recordedDate": "2024-09-27T01:21:15Z",
+                      "type": "CHANGE_LEGAL_FORM",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                }
+              ]
+            },
+            "registration": {
+              "initialRegistrationDate": "2022-11-10T15:35:00Z",
+              "lastUpdateDate": "2026-08-19T05:32:54Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-08-27T02:31:42Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000637",
+                "other": null
+              },
+              "validatedAs": "0805421124",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "us_tx/0805421124",
+            "qcc": null,
+            "gem": "E100000004087",
+            "spglobal": [
+              "7702894"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300B9WLO96RQCXP87/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300B9WLO96RQCXP87/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300B9WLO96RQCXP87/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300B9WLO96RQCXP87/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300B9WLO96RQCXP87/ultimate-parent-reporting-exception"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300B9WLO96RQCXP87/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/549300B9WLO96RQCXP87"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "SPACE EXPLORATION TECHNOLOGIES CORP.",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

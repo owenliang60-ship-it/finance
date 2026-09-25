@@ -1,0 +1,201 @@
+{
+  "security": {
+    "symbol": "WTW",
+    "cusip": "G96629103",
+    "isin": "IE00BDB6Q211",
+    "name": "WILLIS TOWERS WATSON PLC"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "WTW",
+    "name": "WILLIS TOWERS WATSON PLC",
+    "isin": "IE00BDB6Q211",
+    "securityCusip": "G96629103",
+    "sharesNumber": 1145355,
+    "weightPercentage": 0.04173985,
+    "marketValue": 336208904,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00BDB6Q211",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00BDB6Q211&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00BDB6Q211&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "549300WHC56FF48KL350",
+          "attributes": {
+            "lei": "549300WHC56FF48KL350",
+            "entity": {
+              "legalName": {
+                "name": "WILLIS TOWERS WATSON PUBLIC LIMITED COMPANY",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "ELM PARK",
+                  "MERRION ROAD"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": "c/o WILLIS TOWERS WATSON HOUSE",
+                "city": "MERRION",
+                "region": "IE-D",
+                "country": "IE",
+                "postalCode": "D04 EC86"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "ELM PARK",
+                  "MERRION ROAD"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": "c/o WILLIS TOWERS WATSON HOUSE",
+                "city": "MERRION",
+                "region": "IE-D",
+                "country": "IE",
+                "postalCode": "D04 EC86"
+              },
+              "registeredAt": {
+                "id": "RA000402",
+                "other": null
+              },
+              "registeredAs": "475616",
+              "jurisdiction": "IE",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "VYAX",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2009-09-24T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2015-11-24T02:15:00Z",
+              "lastUpdateDate": "2026-02-11T08:53:43Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-02-19T14:42:52Z",
+              "managingLou": "529900T8BM49AURSDO55",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000402",
+                "other": null
+              },
+              "validatedAs": "475616",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "ie/475616",
+            "qcc": "QIE9S94DYN",
+            "gem": null,
+            "spglobal": [
+              "36623"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350/ultimate-children"
+              }
+            },
+            "managed-funds": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350/managed-fund-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350/managed-funds"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/549300WHC56FF48KL350"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "WILLIS TOWERS WATSON PUBLIC LIMITED COMPANY",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

@@ -1,0 +1,194 @@
+{
+  "security": {
+    "symbol": "RCL",
+    "cusip": "V7780T103",
+    "isin": "LR0008862868",
+    "name": "ROYAL CARIBBEAN CRUISES LTD"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "RCL",
+    "name": "ROYAL CARIBBEAN CRUISES LTD",
+    "isin": "LR0008862868",
+    "securityCusip": "V7780T103",
+    "sharesNumber": 3060815,
+    "weightPercentage": 0.08591802,
+    "marketValue": 692058132,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=LR0008862868",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=LR0008862868&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=LR0008862868&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "K2NEH8QNVW44JIWK7Z55",
+          "attributes": {
+            "lei": "K2NEH8QNVW44JIWK7Z55",
+            "entity": {
+              "legalName": {
+                "name": "ROYAL CARIBBEAN CRUISES LTD.",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "C/O THE LISCR TRUST COMPANY",
+                  "80 BROAD STREET"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "MONROVIA",
+                "region": "LR-MO",
+                "country": "LR",
+                "postalCode": "1000"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "1050 CARIBBEAN WAY"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "MIAMI",
+                "region": "US-FL",
+                "country": "US",
+                "postalCode": "33132"
+              },
+              "registeredAt": {
+                "id": "RA000427",
+                "other": null
+              },
+              "registeredAs": "C-38863",
+              "jurisdiction": "LR",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "9999",
+                "other": "CORPORATION"
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "1989-05-11T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2012-11-19T19:06:00Z",
+              "lastUpdateDate": "2026-05-04T14:35:32Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-06-19T00:00:00Z",
+              "managingLou": "213800WAVVOPS85N2205",
+              "corroborationLevel": "PARTIALLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000427",
+                "other": null
+              },
+              "validatedAs": "C-38863",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": null,
+            "qcc": null,
+            "gem": null,
+            "spglobal": [
+              "325643"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/K2NEH8QNVW44JIWK7Z55/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/K2NEH8QNVW44JIWK7Z55/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/K2NEH8QNVW44JIWK7Z55/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/K2NEH8QNVW44JIWK7Z55/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/K2NEH8QNVW44JIWK7Z55/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/K2NEH8QNVW44JIWK7Z55/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/K2NEH8QNVW44JIWK7Z55/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/K2NEH8QNVW44JIWK7Z55/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/K2NEH8QNVW44JIWK7Z55/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/K2NEH8QNVW44JIWK7Z55/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/K2NEH8QNVW44JIWK7Z55"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "ROYAL CARIBBEAN CRUISES LTD.",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

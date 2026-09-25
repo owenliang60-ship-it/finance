@@ -1,0 +1,188 @@
+{
+  "reviewed_at": "2026-09-25",
+  "reviewed_securities": [
+    {
+      "symbol": "PNR",
+      "cusip": "G7S00T104",
+      "isin": "IE00BLS09M33",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0000077360",
+    "sec_name": "PENTAIR PLC",
+    "section": "ISSUER",
+    "form": "SCHEDULE 13G/A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/77360/000008025526000549/primary_doc.xml",
+    "filing_date": "2026-08-14"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "PNR",
+    "name": "PENTAIR PLC",
+    "isin": "IE00BLS09M33",
+    "securityCusip": "G7S00T104",
+    "sharesNumber": 1997108,
+    "weightPercentage": 0.01344918,
+    "marketValue": 108331300,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/77360/000008025526000549/primary_doc.xml",
+    "sha256": "c04a76b6777276558455cfb9821f754dfcb4b093788417f40d56b6e65254cb81",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:ns2=\"http://www.sec.gov/edgar/common\">\n    <schemaVersion>X0202</schemaVersion>\n<headerData>\n        <submissionType>SCHEDULE 13G/A</submissionType>\n        <previousAccessionNumber>0000080255-26-000406</previousAccessionNumber>\n        <filerInfo>\n            <filer>\n                <filerCredentials>\n                    <cik>0000080255</cik>\n                    <ccc>XXXXXXXX</ccc>\n                </filerCredentials>\n            </filer>\n            <liveTestFlag>LIVE</liveTestFlag>\n\n\n        </filerInfo>\n    </headerData>\n    <formData>\n        <coverPageHeader>\n            <amendmentNo>1</amendmentNo>\n            <securitiesClassTitle>COMMON STOCK</securitiesClassTitle>\n            <eventDateRequiresFilingThisStatement>06/30/2026</eventDateRequiresFilingThisStatement>\n            <issuerInfo>\n                <issuerCik>0000077360</issuerCik>\n                <issuerName>PENTAIR PLC</issuerName>\n                <issuerCusips>\n                    <issuerCusipNumber>G7S00T104</issuerCusipNumber>\n                </issuerCusips>\n                <issuerPrincipalExecutiveOfficeAddress>\n                    <ns2:street1>REGAL HOUSE, 70 LONDON ROAD</ns2:street1>\n                    <ns2:street2>TWICKENHAM</ns2:street2>\n                    <ns2:city>LONDON</ns2:city>\n                    <ns2:stateOrCountry>X0</ns2:stateOrCountry>\n                    <ns2:zipCode>TW13QS</ns2:zipCode>\n                </issuerPrincipalExecutiveOfficeAddress>\n            </issuerInfo>\n            <designateRulesPursuantThisScheduleFiled>\n                <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n            </designateRulesPursuantThisScheduleFiled>\n        </coverPageHeader>\n        <coverPageHeaderReportingPersonDetails>\n\n            <reportingPersonName>T. Rowe Price Associates, Inc.</reportingPersonName>\n            <citizenshipOrOrganization>MD</citizenshipOrOrganization>\n            <reportingPersonBeneficiallyOwnedNumberOfShares>\n                <soleVotingPower>6382604</soleVotingPower>\n                <sharedVotingPower>0</sharedVotingPower>\n                <soleDispositivePower>6404874</soleDispositivePower>\n                <sharedDispositivePower>0</sharedDispositivePower>\n            </reportingPersonBeneficiallyOwnedNumberOfShares>\n            <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>6404874</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n            <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>\n            <classPercent>4.0</classPercent>\n            <typeOfReportingPerson>IA</typeOfReportingPerson>\n        </coverPageHeaderReportingPersonDetails>\n        <items>\n            <item1>\n                <issuerName>PENTAIR PLC</issuerName>\n                <issuerPrincipalExecutiveOfficeAddress>REGAL HOUSE, 70 LONDON ROAD, TWICKENHAM, LONDON, X0, TW13QS</issuerPrincipalExecutiveOfficeAddress>\n            </item1>\n            <item2>\n                <filingPersonName>T. Rowe Price Associates, Inc.</filingPersonName>\n                <principalBusinessOfficeOrResidenceAddress>1307 Point Street, Baltimore, MD 21231</principalBusinessOfficeOrResidenceAddress>\n                <citizenship>Maryland</citizenship>\n            </item2>\n            <item3>\n                <notApplicableFlag>N</notApplicableFlag>\n                <typeOfPersonFiling>IA</typeOfPersonFiling>\n            </item3>\n            <item4>\n                <amountBeneficiallyOwned>6404874</amountBeneficiallyOwned>\n                <classPercent>4.0</classPercent>\n                <numberOfSharesPersonHas>\n                    <solePowerOrDirectToVote>6382604</solePowerOrDirectToVote>\n                    <sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n                    <solePowerOrDirectToDispose>6404874</solePowerOrDirectToDispose>\n                    <sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>\n                </numberOfSharesPersonHas>\n            </item4>\n            <item5>\n                <notApplicableFlag>N</notApplicableFlag>\n                <classOwnership5PercentOrLess>Y</classOwnership5PercentOrLess>\n            </item5>\n            <item6>\n                <notApplicableFlag>Y</notApplicableFlag>\n            </item6>\n            <item7>\n                <notApplicableFlag>Y</notApplicableFlag>\n            </item7>\n            <item8>\n                <notApplicableFlag>Y</notApplicableFlag>\n            </item8>\n            <item9>\n                <notApplicableFlag>Y</notApplicableFlag>\n            </item9>\n            <item10>\n                <notApplicableFlag>N</notApplicableFlag>\n                <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under Â§ 240.14a-11. T. Rowe Price Associates, Inc. hereby declares and affirms that the filing of Schedule 13G shall not be construed as an admission that Price Associates is the beneficial owner of the securities referred to, which beneficial ownership is expressly denied.</certifications>\n            </item10>\n        </items>\n        <signatureInformation>\n            <reportingPersonName>T. Rowe Price Associates, Inc.</reportingPersonName>\n            <signatureDetails>\n                <signature>Ellen York</signature>\n                <title>Vice President</title>\n                <date>08/14/2026</date>\n            </signatureDetails>\n        </signatureInformation>\n    </formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "SEC issuerInfo / subject-company identity inspected independently of filing owner CIK. Exact CUSIP evidence establishes issuer; ISIN retained from live source as matching scope, not claimed to be independently certified by every SEC filing.",
+  "lei_search_reviewed": true,
+  "equivalent_leis": [],
+  "limitations": [
+    "Independent non-CUSIP ISIN mapping unless noted below"
+  ],
+  "issuer_registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records/549300EVR9D56WPSRP15",
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        }
+      },
+      "data": {
+        "type": "lei-records",
+        "id": "549300EVR9D56WPSRP15",
+        "attributes": {
+          "lei": "549300EVR9D56WPSRP15",
+          "entity": {
+            "legalName": {
+              "name": "PENTAIR PUBLIC LIMITED COMPANY",
+              "language": "en"
+            },
+            "otherNames": [],
+            "transliteratedOtherNames": [],
+            "legalAddress": {
+              "language": "en",
+              "addressLines": [
+                "ARTHUR COX BUILDING",
+                "10 EARLSFORT TERRACE DUBLIN 2"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "DUBLIN",
+              "region": "IE-D",
+              "country": "IE",
+              "postalCode": "D02 CK83"
+            },
+            "headquartersAddress": {
+              "language": "en",
+              "addressLines": [
+                "10 EARLSFORT TERRACE"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "DUBLIN",
+              "region": "IE-D",
+              "country": "IE",
+              "postalCode": "D02 T380"
+            },
+            "registeredAt": {
+              "id": "RA000402",
+              "other": null
+            },
+            "registeredAs": "536025",
+            "jurisdiction": "IE",
+            "category": "GENERAL",
+            "legalForm": {
+              "id": "VYAX",
+              "other": null
+            },
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "status": "ACTIVE",
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "successorEntities": [],
+            "creationDate": null,
+            "subCategory": null,
+            "otherAddresses": [],
+            "eventGroups": []
+          },
+          "registration": {
+            "initialRegistrationDate": "2017-05-05T01:56:00Z",
+            "lastUpdateDate": "2023-07-31T17:11:36Z",
+            "status": "LAPSED",
+            "nextRenewalDate": "2018-04-26T14:03:00Z",
+            "managingLou": "213800WAVVOPS85N2205",
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "validatedAt": {
+              "id": "RA000402",
+              "other": null
+            },
+            "validatedAs": "536025",
+            "otherValidationAuthorities": []
+          },
+          "bic": null,
+          "mic": null,
+          "ocid": "ie/536025",
+          "qcc": "QIE5QXNX3A",
+          "gem": null,
+          "spglobal": [
+            "295688"
+          ],
+          "conformityFlag": "NON_CONFORMING"
+        },
+        "relationships": {
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300EVR9D56WPSRP15/managing-lou"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300EVR9D56WPSRP15/lei-issuer"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300EVR9D56WPSRP15/field-modifications"
+            }
+          },
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300EVR9D56WPSRP15/direct-parent-reporting-exception"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300EVR9D56WPSRP15/ultimate-parent-reporting-exception"
+            }
+          },
+          "direct-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300EVR9D56WPSRP15/direct-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/549300EVR9D56WPSRP15/direct-children"
+            }
+          },
+          "ultimate-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300EVR9D56WPSRP15/ultimate-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/549300EVR9D56WPSRP15/ultimate-children"
+            }
+          }
+        },
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/549300EVR9D56WPSRP15"
+        }
+      }
+    }
+  }
+}

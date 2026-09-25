@@ -1,0 +1,267 @@
+{
+  "security": {
+    "symbol": "FER",
+    "cusip": "N3168P101",
+    "isin": "NL0015001FS8",
+    "name": "Ferrovial NV"
+  },
+  "raw_live_holding": {
+    "symbol": "QQQ",
+    "asset": "FER",
+    "name": "Ferrovial NV",
+    "isin": "NL0015001FS8",
+    "securityCusip": "N3168P101",
+    "sharesNumber": 15150469,
+    "weightPercentage": 0.16826944,
+    "marketValue": 837517926.32,
+    "updatedAt": "2026-09-24 13:34:47"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=NL0015001FS8",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=NL0015001FS8&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=NL0015001FS8&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "72450022R2ZFL41Y6I04",
+          "attributes": {
+            "lei": "72450022R2ZFL41Y6I04",
+            "entity": {
+              "legalName": {
+                "name": "Ferrovial N.V.",
+                "language": "nl"
+              },
+              "otherNames": [
+                {
+                  "name": "Ferrovial SE",
+                  "language": "nl",
+                  "type": "PREVIOUS_LEGAL_NAME"
+                }
+              ],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "nl",
+                "addressLines": [
+                  "Gustav Mahlerplein 61",
+                  "14e verdieping"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Amsterdam",
+                "region": null,
+                "country": "NL",
+                "postalCode": "1082MS"
+              },
+              "headquartersAddress": {
+                "language": "nl",
+                "addressLines": [
+                  "Gustav Mahlerplein 61",
+                  "14e verdieping"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Amsterdam",
+                "region": null,
+                "country": "NL",
+                "postalCode": "1082MS"
+              },
+              "registeredAt": {
+                "id": "RA000463",
+                "other": null
+              },
+              "registeredAs": "73422134",
+              "jurisdiction": "NL",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "B5PM",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2018-12-14T23:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": [
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "SUPPORTING_DOCUMENTS",
+                      "validationReference": "https://www.kvk.nl/orderstraat/subproduct-kiezen/?kvknummer=73422134&productgroep=Uittreksel",
+                      "effectiveDate": "2026-05-12T11:33:13Z",
+                      "recordedDate": "2026-05-12T11:33:13Z",
+                      "type": "CHANGE_LEGAL_NAME",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                },
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "SUPPORTING_DOCUMENTS",
+                      "validationReference": "https://www.kvk.nl/orderstraat/subproduct-kiezen/?kvknummer=73422134&productgroep=Uittreksel",
+                      "effectiveDate": "2026-05-12T11:33:13Z",
+                      "recordedDate": "2026-05-12T11:33:13Z",
+                      "type": "CHANGE_LEGAL_FORM",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                },
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "SUPPORTING_DOCUMENTS",
+                      "validationReference": "https://www.kvk.nl/orderstraat/subproduct-kiezen/?kvknummer=73422134&productgroep=Uittreksel",
+                      "effectiveDate": "2024-03-27T10:24:03Z",
+                      "recordedDate": "2024-03-27T10:24:03Z",
+                      "type": "CHANGE_HQ_ADDRESS",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                },
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "SUPPORTING_DOCUMENTS",
+                      "validationReference": "https://www.kvk.nl/orderstraat/subproduct-kiezen/?kvknummer=73422134&productgroep=Uittreksel",
+                      "effectiveDate": "2024-03-27T10:24:03Z",
+                      "recordedDate": "2024-03-27T10:24:03Z",
+                      "type": "CHANGE_LEGAL_ADDRESS",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                },
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "SUPPORTING_DOCUMENTS",
+                      "validationReference": "https://www.kvk.nl/orderstraat/subproduct-kiezen/?kvknummer=73422134&productgroep=Uittreksel",
+                      "effectiveDate": "2023-06-19T10:16:44Z",
+                      "recordedDate": "2023-06-19T10:16:44Z",
+                      "type": "CHANGE_LEGAL_NAME",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                }
+              ]
+            },
+            "registration": {
+              "initialRegistrationDate": "2023-03-13T08:58:49Z",
+              "lastUpdateDate": "2026-05-12T11:33:18Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-03-13T08:58:44Z",
+              "managingLou": "724500A93Z8V1MJK5349",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000463",
+                "other": null
+              },
+              "validatedAs": "73422134",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "nl/73422134",
+            "qcc": "QNLK284Y69",
+            "gem": "E100001015007",
+            "spglobal": [
+              "883809"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/72450022R2ZFL41Y6I04/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/72450022R2ZFL41Y6I04/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/72450022R2ZFL41Y6I04/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/72450022R2ZFL41Y6I04/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/72450022R2ZFL41Y6I04/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/72450022R2ZFL41Y6I04/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/72450022R2ZFL41Y6I04/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/72450022R2ZFL41Y6I04/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/72450022R2ZFL41Y6I04/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/72450022R2ZFL41Y6I04/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/72450022R2ZFL41Y6I04"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "Ferrovial N.V.",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

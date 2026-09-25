@@ -1,0 +1,194 @@
+{
+  "reviewed_at": "2026-09-25",
+  "reviewed_securities": [
+    {
+      "symbol": "CRH",
+      "cusip": "G25508105",
+      "isin": "IE0001827041",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0000849395",
+    "sec_name": "CRH PLC",
+    "section": "ISSUER",
+    "form": "SCHEDULE 13G",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/849395/000210011926000027/primary_doc.xml",
+    "filing_date": "2026-04-28"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "CRH",
+    "name": "CRH PLC",
+    "isin": "IE0001827041",
+    "securityCusip": "G25508105",
+    "sharesNumber": 8185267,
+    "weightPercentage": 0.08503073,
+    "marketValue": 684911080,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/849395/000210011926000027/primary_doc.xml",
+    "sha256": "b917e65b408f002e04a22f98d73dea9a06fda22b1578e534f354129647beeb44",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n<schemaVersion>X0202</schemaVersion>\n<headerData>\n<submissionType>SCHEDULE 13G</submissionType>\n<filerInfo>\n<filer>\n<filerCredentials>\n<cik>0002100119</cik>\n<ccc>XXXXXXXX</ccc>\n</filerCredentials>\n</filer>\n<liveTestFlag>LIVE</liveTestFlag>\n</filerInfo>\n</headerData>\n<formData>\n<coverPageHeader>\n<securitiesClassTitle>Common Stock</securitiesClassTitle>\n<eventDateRequiresFilingThisStatement>03/31/2026</eventDateRequiresFilingThisStatement>\n<issuerInfo>\n<issuerCik>0000849395</issuerCik>\n<issuerName>CRH PLC</issuerName>\n<issuerCusips>\n<issuerCusipNumber>G25508105</issuerCusipNumber>\n</issuerCusips>\n<issuerPrincipalExecutiveOfficeAddress>\n<com:street1>1350 Avenue Of The Americas</com:street1>\n<com:city>New York</com:city>\n<com:stateOrCountry>NY</com:stateOrCountry>\n<com:zipCode>10019</com:zipCode>\n</issuerPrincipalExecutiveOfficeAddress>\n</issuerInfo>\n<designateRulesPursuantThisScheduleFiled>\n<designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n</designateRulesPursuantThisScheduleFiled>\n</coverPageHeader>\n<coverPageHeaderReportingPersonDetails>\n<reportingPersonName>Vanguard Capital Management</reportingPersonName>\n<citizenshipOrOrganization>PA</citizenshipOrOrganization>\n<reportingPersonBeneficiallyOwnedNumberOfShares>\n<soleVotingPower>6661989</soleVotingPower>\n<sharedVotingPower>0</sharedVotingPower>\n<soleDispositivePower>50139318</soleDispositivePower>\n<sharedDispositivePower>0</sharedDispositivePower>\n</reportingPersonBeneficiallyOwnedNumberOfShares>\n<reportingPersonBeneficiallyOwnedAggregateNumberOfShares>50139318</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n<classPercent>7.49</classPercent>\n<typeOfReportingPerson>IA</typeOfReportingPerson>\n<comments>\nIn accordance with SEC Release No. 34-39538 (January 12, 1998), this Schedule 13G reflects the securities beneficially owned, or deemed to be beneficially owned, by Vanguard Capital Management LLC and the following affiliates of Vanguard Capital Management LLC or business divisions of such affiliates: Vanguard Asset Management Limited, Vanguard Fiduciary Trust Company, Vanguard Global Advisers, LLC and Vanguard Investments Australia Ltd. This Schedule 13G includes securities held by Vanguard funds, or sleeves thereof, over which Vanguard Capital Management LLC exercises dispositive power, in addition to securities held by clients over which the affiliates or business divisions of such affiliates indicated above exercise dispositive and/or voting power. This Schedule 13G does not include securities, if any, beneficially owned by other subsidiaries or affiliates of Vanguard Capital Management LLC, or business divisions of such subsidiaries, whose ownership of securities is disaggregated from that of the reporting business unit in accordance with such release.\n\n</comments>\n</coverPageHeaderReportingPersonDetails>\n<items>\n<item1>\n<issuerName>CRH PLC</issuerName>\n<issuerPrincipalExecutiveOfficeAddress>1350 Avenue Of The Americas, New York, NY, 10019</issuerPrincipalExecutiveOfficeAddress>\n</item1>\n<item2>\n<filingPersonName>Vanguard Capital Management</filingPersonName>\n<principalBusinessOfficeOrResidenceAddress>100 Vanguard Blvd,, Malvern, PA, 19355</principalBusinessOfficeOrResidenceAddress>\n<citizenship>PA</citizenship>\n</item2>\n<item3>\n<notApplicableFlag>N</notApplicableFlag>\n<typeOfPersonFiling>IA</typeOfPersonFiling>\n</item3>\n<item4>\n<amountBeneficiallyOwned>50139318</amountBeneficiallyOwned>\n<classPercent>7.49</classPercent>\n<numberOfSharesPersonHas>\n<solePowerOrDirectToVote>6661989</solePowerOrDirectToVote>\n<sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n<solePowerOrDirectToDispose>50139318</solePowerOrDirectToDispose>\n<sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>\n</numberOfSharesPersonHas>\n</item4>\n<item5>\n<notApplicableFlag>Y</notApplicableFlag>\n</item5>\n<item6>\n<notApplicableFlag>N</notApplicableFlag>\n<ownershipMoreThan5PercentOnBehalfOfAnotherPerson>Vanguard Capital Management, including investment companies registered under the Investment Company Act of 1940 and other managed accounts, have the right to receive or the power to direct the receipt of dividends from, or the proceeds from the sale of, the securities reported herein.No one other person's interest in the securities reported herein is more than 5%.</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n</item6>\n<item7>\n<notApplicableFlag>Y</notApplicableFlag>\n</item7>\n<item8>\n<notApplicableFlag>Y</notApplicableFlag>\n</item8>\n<item9>\n<notApplicableFlag>Y</notApplicableFlag>\n</item9>\n<item10>\n<notApplicableFlag>N</notApplicableFlag>\n<certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under &amp;#167; 240.14a-11.</certifications>\n</item10>\n</items>\n<signatureInformation>\n<reportingPersonName>Vanguard Capital Management</reportingPersonName>\n<signatureDetails>\n<signature>Ashley Grim</signature>\n<title>Head of Global Fund Administration</title>\n<date>04/28/2026</date>\n</signatureDetails>\n</signatureInformation>\n</formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "SEC issuerInfo / subject-company identity inspected independently of filing owner CIK. Exact CUSIP evidence establishes issuer; ISIN retained from live source as matching scope, not claimed to be independently certified by every SEC filing.",
+  "lei_search_reviewed": true,
+  "equivalent_leis": [],
+  "limitations": [
+    "Independent non-CUSIP ISIN mapping unless noted below"
+  ],
+  "issuer_registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records/549300MIDJNNTH068E74",
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        }
+      },
+      "data": {
+        "type": "lei-records",
+        "id": "549300MIDJNNTH068E74",
+        "attributes": {
+          "lei": "549300MIDJNNTH068E74",
+          "entity": {
+            "legalName": {
+              "name": "CRH PUBLIC LIMITED COMPANY",
+              "language": "en"
+            },
+            "otherNames": [],
+            "transliteratedOtherNames": [],
+            "legalAddress": {
+              "language": "en",
+              "addressLines": [
+                "42 FITZWILLIAM SQUARE",
+                "RATHFARNHAM"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "DUBLIN",
+              "region": "IE-D",
+              "country": "IE",
+              "postalCode": "D02 R279"
+            },
+            "headquartersAddress": {
+              "language": "en",
+              "addressLines": [
+                "42 FITZWILLIAM SQUARE",
+                "RATHFARNHAM"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "DUBLIN",
+              "region": "IE-D",
+              "country": "IE",
+              "postalCode": "D02 R279"
+            },
+            "registeredAt": {
+              "id": "RA000402",
+              "other": null
+            },
+            "registeredAs": "12965",
+            "jurisdiction": "IE",
+            "category": "GENERAL",
+            "legalForm": {
+              "id": "VYAX",
+              "other": null
+            },
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "status": "ACTIVE",
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "successorEntities": [],
+            "creationDate": "1949-06-20T00:00:00Z",
+            "subCategory": null,
+            "otherAddresses": [],
+            "eventGroups": []
+          },
+          "registration": {
+            "initialRegistrationDate": "2014-02-04T00:48:00Z",
+            "lastUpdateDate": "2026-08-19T14:44:58Z",
+            "status": "ISSUED",
+            "nextRenewalDate": "2027-09-25T00:00:00Z",
+            "managingLou": "213800WAVVOPS85N2205",
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "validatedAt": {
+              "id": "RA000402",
+              "other": null
+            },
+            "validatedAs": "12965",
+            "otherValidationAuthorities": []
+          },
+          "bic": null,
+          "mic": null,
+          "ocid": "ie/12965",
+          "qcc": "QIEG24F5K5",
+          "gem": "E100000131458",
+          "spglobal": [
+            "257151"
+          ],
+          "conformityFlag": "CONFORMING"
+        },
+        "relationships": {
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300MIDJNNTH068E74/managing-lou"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300MIDJNNTH068E74/lei-issuer"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300MIDJNNTH068E74/field-modifications"
+            }
+          },
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300MIDJNNTH068E74/direct-parent-reporting-exception"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300MIDJNNTH068E74/ultimate-parent-reporting-exception"
+            }
+          },
+          "direct-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300MIDJNNTH068E74/direct-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/549300MIDJNNTH068E74/direct-children"
+            }
+          },
+          "ultimate-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300MIDJNNTH068E74/ultimate-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/549300MIDJNNTH068E74/ultimate-children"
+            }
+          },
+          "isins": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300MIDJNNTH068E74/isins"
+            }
+          }
+        },
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/549300MIDJNNTH068E74"
+        }
+      }
+    }
+  }
+}

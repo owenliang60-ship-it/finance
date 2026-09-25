@@ -1,0 +1,200 @@
+{
+  "security": {
+    "symbol": "BE",
+    "cusip": "093712107",
+    "isin": "US0937121079",
+    "name": "BLOOM ENERGY CORP  A"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "BE",
+    "name": "BLOOM ENERGY CORP  A",
+    "isin": "US0937121079",
+    "securityCusip": "093712107",
+    "sharesNumber": 3631470,
+    "weightPercentage": 0.12180511,
+    "marketValue": 981123826,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US0937121079",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US0937121079&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US0937121079&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "549300XB5J9BFW5JXV97",
+          "attributes": {
+            "lei": "549300XB5J9BFW5JXV97",
+            "entity": {
+              "legalName": {
+                "name": "BLOOM ENERGY CORPORATION",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "251 LITTLE FALLS DRIVE"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": "c/o CORPORATION SERVICE COMPANY",
+                "city": "WILMINGTON",
+                "region": "US-DE",
+                "country": "US",
+                "postalCode": "19808"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "4353 N 1ST STREET"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "SAN JOSE",
+                "region": "US-CA",
+                "country": "US",
+                "postalCode": "95134"
+              },
+              "registeredAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "registeredAs": "3345681",
+              "jurisdiction": "US-DE",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "XTIQ",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2001-01-18T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2013-05-16T18:26:00Z",
+              "lastUpdateDate": "2026-05-15T10:36:47Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-06-05T16:20:55Z",
+              "managingLou": "529900T8BM49AURSDO55",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "validatedAs": "3345681",
+              "otherValidationAuthorities": [
+                {
+                  "validatedAt": {
+                    "id": "RA000598"
+                  },
+                  "validatedAs": "2412427"
+                }
+              ]
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "us_de/3345681",
+            "qcc": null,
+            "gem": null,
+            "spglobal": [
+              "28543927"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300XB5J9BFW5JXV97/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300XB5J9BFW5JXV97/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300XB5J9BFW5JXV97/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300XB5J9BFW5JXV97/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300XB5J9BFW5JXV97/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300XB5J9BFW5JXV97/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/549300XB5J9BFW5JXV97/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300XB5J9BFW5JXV97/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/549300XB5J9BFW5JXV97/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300XB5J9BFW5JXV97/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/549300XB5J9BFW5JXV97"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "BLOOM ENERGY CORPORATION",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

@@ -1,0 +1,223 @@
+{
+  "security": {
+    "symbol": "SW",
+    "cusip": "G8267P108",
+    "isin": "IE00028FXN24",
+    "name": "SMURFIT WESTROCK PLC"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "SW",
+    "name": "SMURFIT WESTROCK PLC",
+    "isin": "IE00028FXN24",
+    "securityCusip": "G8267P108",
+    "sharesNumber": 6488755,
+    "weightPercentage": 0.0367684,
+    "marketValue": 296164510,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00028FXN24",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00028FXN24&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00028FXN24&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "635400EGSEOPDW2EXS14",
+          "attributes": {
+            "lei": "635400EGSEOPDW2EXS14",
+            "entity": {
+              "legalName": {
+                "name": "SMURFIT WESTROCK PUBLIC LIMITED COMPANY",
+                "language": "en-IE"
+              },
+              "otherNames": [
+                {
+                  "name": "SMURFIT WESTROCK LIMITED",
+                  "language": "en-IE",
+                  "type": "PREVIOUS_LEGAL_NAME"
+                }
+              ],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en-IE",
+                "addressLines": [
+                  "Beech Hill",
+                  "Clonskeagh"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Dublin",
+                "region": "IE-D",
+                "country": "IE",
+                "postalCode": null
+              },
+              "headquartersAddress": {
+                "language": "en-IE",
+                "addressLines": [
+                  "Beech Hill",
+                  "Clonskeagh"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Dublin",
+                "region": "IE-D",
+                "country": "IE",
+                "postalCode": null
+              },
+              "registeredAt": {
+                "id": "RA000402",
+                "other": null
+              },
+              "registeredAs": "607515",
+              "jurisdiction": "IE",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "VYAX",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2017-07-05T23:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": [
+                {
+                  "groupType": "CHANGE_LEGAL_FORM_AND_NAME",
+                  "events": [
+                    {
+                      "validationDocuments": "SUPPORTING_DOCUMENTS",
+                      "validationReference": "https://euronext.sharepoint.com/sites/ExStream/Market_Services/LeiListings/7502d327-3c2e-ef11-840a-6045bd0c6824/Smurfit%20WestRock%20Public%20Limited%20Company%20%C2%A6%20Certificate%20of%20Incorporation%20on%20Change%20of%20Name.pdf",
+                      "effectiveDate": "2024-07-05T07:00:00Z",
+                      "recordedDate": "2024-07-05T09:56:00Z",
+                      "type": "CHANGE_LEGAL_NAME",
+                      "status": "COMPLETED"
+                    },
+                    {
+                      "validationDocuments": "SUPPORTING_DOCUMENTS",
+                      "validationReference": "https://core.cro.ie/e-commerce/company/640124",
+                      "effectiveDate": "2024-06-18T00:00:00Z",
+                      "recordedDate": "2024-06-19T13:02:32Z",
+                      "type": "CHANGE_LEGAL_FORM",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                }
+              ]
+            },
+            "registration": {
+              "initialRegistrationDate": "2024-01-15T00:00:00Z",
+              "lastUpdateDate": "2026-04-07T23:00:00Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-01-15T00:00:00Z",
+              "managingLou": "635400DZBUIMTBCXGA12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000402",
+                "other": null
+              },
+              "validatedAs": "607515",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "ie/607515",
+            "qcc": "QIE860R8NY",
+            "gem": null,
+            "spglobal": [
+              "30384"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/635400EGSEOPDW2EXS14/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/635400EGSEOPDW2EXS14/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/635400EGSEOPDW2EXS14/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/635400EGSEOPDW2EXS14/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/635400EGSEOPDW2EXS14/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/635400EGSEOPDW2EXS14/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/635400EGSEOPDW2EXS14/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/635400EGSEOPDW2EXS14/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/635400EGSEOPDW2EXS14/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/635400EGSEOPDW2EXS14/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/635400EGSEOPDW2EXS14"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "SMURFIT WESTROCK PUBLIC LIMITED COMPANY",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

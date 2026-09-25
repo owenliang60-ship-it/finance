@@ -1,0 +1,195 @@
+{
+  "security": {
+    "symbol": "STX",
+    "cusip": "G7997R103",
+    "isin": "IE00BKVD2N49",
+    "name": "SEAGATE TECHNOLOGY HOLDINGS"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "STX",
+    "name": "SEAGATE TECHNOLOGY HOLDINGS",
+    "isin": "IE00BKVD2N49",
+    "securityCusip": "G7997R103",
+    "sharesNumber": 2794615,
+    "weightPercentage": 0.31443523,
+    "marketValue": 2532733546,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00BKVD2N49",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00BKVD2N49&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00BKVD2N49&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "635400RUXIFEZSRU8X70",
+          "attributes": {
+            "lei": "635400RUXIFEZSRU8X70",
+            "entity": {
+              "legalName": {
+                "name": "SEAGATE TECHNOLOGY HOLDINGS PUBLIC LIMITED COMPANY",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "10 Earlsfort Terrace",
+                  "Dublin 2"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Dublin",
+                "region": "IE-D",
+                "country": "IE",
+                "postalCode": "D02 T380"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "10 Earlsfort Terrace",
+                  "Dublin 2"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Dublin",
+                "region": "IE-D",
+                "country": "IE",
+                "postalCode": "D02 T380"
+              },
+              "registeredAt": {
+                "id": "RA000402",
+                "other": null
+              },
+              "registeredAs": "606203",
+              "jurisdiction": "IE",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "VYAX",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2021-02-16T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2021-03-26T00:00:00Z",
+              "lastUpdateDate": "2026-08-31T14:06:28Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-09-18T13:16:48Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000402",
+                "other": null
+              },
+              "validatedAs": "606203",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "ie/606203",
+            "qcc": "QIE344RY20",
+            "gem": null,
+            "spglobal": [
+              "3738520"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/635400RUXIFEZSRU8X70/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/635400RUXIFEZSRU8X70/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/635400RUXIFEZSRU8X70/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/635400RUXIFEZSRU8X70/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/635400RUXIFEZSRU8X70/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/635400RUXIFEZSRU8X70/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/635400RUXIFEZSRU8X70/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/635400RUXIFEZSRU8X70/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/635400RUXIFEZSRU8X70/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/635400RUXIFEZSRU8X70/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/635400RUXIFEZSRU8X70"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "SEAGATE TECHNOLOGY HOLDINGS PUBLIC LIMITED COMPANY",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

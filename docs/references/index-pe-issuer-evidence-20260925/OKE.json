@@ -1,0 +1,202 @@
+{
+  "security": {
+    "symbol": "OKE",
+    "cusip": "30609A109",
+    "isin": "US30609A1097",
+    "name": "ONEOK INC"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "OKE",
+    "name": "ONEOK INC",
+    "isin": "US30609A1097",
+    "securityCusip": "30609A109",
+    "sharesNumber": 7789439,
+    "weightPercentage": 0.08595994,
+    "marketValue": 692395788,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US30609A1097",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US30609A1097&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US30609A1097&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "2T3D6M0JSY48PSZI1Q41",
+          "attributes": {
+            "lei": "2T3D6M0JSY48PSZI1Q41",
+            "entity": {
+              "legalName": {
+                "name": "ONEOK, INC.",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "C/O NATIONAL REGISTERED AGENTS, INC.",
+                  "1833 SOUTH MORGAN ROAD"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "OKLAHOMA CITY",
+                "region": "US-OK",
+                "country": "US",
+                "postalCode": "73128"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "100 West 5th Street"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Tulsa",
+                "region": "US-OK",
+                "country": "US",
+                "postalCode": "74103-4298"
+              },
+              "registeredAt": {
+                "id": "RA000630",
+                "other": null
+              },
+              "registeredAs": "1900584812",
+              "jurisdiction": "US-OK",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "BGH4",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "1997-05-16T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2012-06-06T15:57:00Z",
+              "lastUpdateDate": "2025-11-21T12:19:38Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2026-11-21T12:19:38Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000630",
+                "other": null
+              },
+              "validatedAs": "1900584812",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "us_ok/1900584812",
+            "qcc": null,
+            "gem": "E100001015278",
+            "spglobal": [
+              "293889"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2T3D6M0JSY48PSZI1Q41/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2T3D6M0JSY48PSZI1Q41/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2T3D6M0JSY48PSZI1Q41/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/2T3D6M0JSY48PSZI1Q41/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/2T3D6M0JSY48PSZI1Q41/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/2T3D6M0JSY48PSZI1Q41/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/2T3D6M0JSY48PSZI1Q41/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/2T3D6M0JSY48PSZI1Q41/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/2T3D6M0JSY48PSZI1Q41/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2T3D6M0JSY48PSZI1Q41/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/2T3D6M0JSY48PSZI1Q41"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "ONEOK, INC.",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": [
+      {
+        "holding_date": "2026-06-30",
+        "raw_symbol": "OKE",
+        "cusip": "682680103",
+        "isin": "US6826801036",
+        "issuer_lei": "2T3D6M0JSY48PSZI1Q41"
+      }
+    ]
+  }
+}

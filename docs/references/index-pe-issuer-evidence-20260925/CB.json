@@ -1,0 +1,218 @@
+{
+  "security": {
+    "symbol": "CB",
+    "cusip": "H1467J104",
+    "isin": "CH0044328745",
+    "name": "CHUBB LTD"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "CB",
+    "name": "CHUBB LTD",
+    "isin": "CH0044328745",
+    "securityCusip": "H1467J104",
+    "sharesNumber": 4324355,
+    "weightPercentage": 0.17668074,
+    "marketValue": 1423139650,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=CH0044328745",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=CH0044328745&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=CH0044328745&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "E0JAN6VLUDI1HITHT809",
+          "attributes": {
+            "lei": "E0JAN6VLUDI1HITHT809",
+            "entity": {
+              "legalName": {
+                "name": "Chubb Limited",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "Barengasse 32"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Zurich",
+                "region": "CH-ZH",
+                "country": "CH",
+                "postalCode": "8001"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "Barengasse 32"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Zurich",
+                "region": "CH-ZH",
+                "country": "CH",
+                "postalCode": "8001"
+              },
+              "registeredAt": {
+                "id": "RA000548",
+                "other": null
+              },
+              "registeredAs": "CHE-114.425.464",
+              "jurisdiction": "CH",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "MVII",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2008-07-18T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [
+                {
+                  "fieldType": "OtherAddress",
+                  "language": "de",
+                  "type": "ALTERNATIVE_LANGUAGE_LEGAL_ADDRESS",
+                  "addressLines": [
+                    "Bärengasse 32"
+                  ],
+                  "city": "Zürich",
+                  "region": "CH-ZH",
+                  "country": "CH",
+                  "postalCode": "8001"
+                },
+                {
+                  "fieldType": "OtherAddress",
+                  "language": "de",
+                  "type": "ALTERNATIVE_LANGUAGE_HEADQUARTERS_ADDRESS",
+                  "addressLines": [
+                    "Bärengasse 32"
+                  ],
+                  "city": "Zürich",
+                  "region": "CH-ZH",
+                  "country": "CH",
+                  "postalCode": "8001"
+                }
+              ],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2012-06-06T15:51:00Z",
+              "lastUpdateDate": "2026-02-11T14:41:31Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-02-12T13:12:34Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000548",
+                "other": null
+              },
+              "validatedAs": "CHE-114.425.464",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": null,
+            "qcc": "QCHVTAC68V",
+            "gem": null,
+            "spglobal": [
+              "203028"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/E0JAN6VLUDI1HITHT809/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/E0JAN6VLUDI1HITHT809/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/E0JAN6VLUDI1HITHT809/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/E0JAN6VLUDI1HITHT809/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/E0JAN6VLUDI1HITHT809/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/E0JAN6VLUDI1HITHT809/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/E0JAN6VLUDI1HITHT809/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/E0JAN6VLUDI1HITHT809/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/E0JAN6VLUDI1HITHT809/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/E0JAN6VLUDI1HITHT809/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/E0JAN6VLUDI1HITHT809"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "Chubb Limited",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

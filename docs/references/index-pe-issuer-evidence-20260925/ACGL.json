@@ -1,0 +1,195 @@
+{
+  "security": {
+    "symbol": "ACGL",
+    "cusip": "G0450A105",
+    "isin": "BMG0450A1053",
+    "name": "ARCH CAPITAL GROUP LTD"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "ACGL",
+    "name": "ARCH CAPITAL GROUP LTD",
+    "isin": "BMG0450A1053",
+    "securityCusip": "G0450A105",
+    "sharesNumber": 4173567,
+    "weightPercentage": 0.04840805,
+    "marketValue": 389920326,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=BMG0450A1053",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=BMG0450A1053&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=BMG0450A1053&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "549300AYR4P8AFKDCE43",
+          "attributes": {
+            "lei": "549300AYR4P8AFKDCE43",
+            "entity": {
+              "legalName": {
+                "name": "Arch Capital Group Ltd.",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "Clarendon House",
+                  "2 Church Street"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Hamilton",
+                "region": null,
+                "country": "BM",
+                "postalCode": "HM 11"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "Waterloo House",
+                  "100 Pitts Bay Road"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Hamilton",
+                "region": null,
+                "country": "BM",
+                "postalCode": "HM 08"
+              },
+              "registeredAt": {
+                "id": "RA000028",
+                "other": null
+              },
+              "registeredAs": "29407",
+              "jurisdiction": "BM",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "7AS7",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2000-09-22T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2018-01-10T15:35:00Z",
+              "lastUpdateDate": "2025-10-27T18:22:04Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2026-11-09T18:00:00Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000028",
+                "other": null
+              },
+              "validatedAs": "29407",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "bm/29407",
+            "qcc": "QBMC79DRHA",
+            "gem": null,
+            "spglobal": [
+              "346919"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300AYR4P8AFKDCE43/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300AYR4P8AFKDCE43/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300AYR4P8AFKDCE43/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300AYR4P8AFKDCE43/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300AYR4P8AFKDCE43/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300AYR4P8AFKDCE43/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/549300AYR4P8AFKDCE43/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300AYR4P8AFKDCE43/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/549300AYR4P8AFKDCE43/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300AYR4P8AFKDCE43/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/549300AYR4P8AFKDCE43"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "Arch Capital Group Ltd.",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

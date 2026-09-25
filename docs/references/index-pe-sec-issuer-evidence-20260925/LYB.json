@@ -1,0 +1,192 @@
+{
+  "reviewed_at": "2026-09-25",
+  "reviewed_securities": [
+    {
+      "symbol": "LYB",
+      "cusip": "N53745100",
+      "isin": "NL0009434992",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001489393",
+    "sec_name": "LYONDELLBASELL INDUSTRIES N.V.",
+    "section": "ISSUER",
+    "form": "SCHEDULE 13G/A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1489393/000119312526349408/primary_doc.xml",
+    "filing_date": "2026-08-13"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "LYB",
+    "name": "LYONDELLBASELL INDU CL A",
+    "isin": "NL0009434992",
+    "securityCusip": "N53745100",
+    "sharesNumber": 3203752,
+    "weightPercentage": 0.02341803,
+    "marketValue": 188629113,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1489393/000119312526349408/primary_doc.xml",
+    "sha256": "34b80dc7c6f27a35a21566d2e445e993c5ac4c8cdcab344a48ce4c0af8206a57",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n  <schemaVersion>X0202</schemaVersion>\n<headerData>\n    <submissionType>SCHEDULE 13G/A</submissionType>\n    <previousAccessionNumber>0000950170-25-019843</previousAccessionNumber>\n    <filerInfo>\n      <filer>\n        <filerCredentials>\n          <cik>0000200217</cik>\n          <ccc>XXXXXXXX</ccc>\n        </filerCredentials>\n      </filer>\n      <liveTestFlag>LIVE</liveTestFlag>\n\n\n\n    </filerInfo>\n  </headerData>\n  <formData>\n    <coverPageHeader>\n      <amendmentNo>1</amendmentNo>\n      <securitiesClassTitle>Ordinary Shares</securitiesClassTitle>\n      <eventDateRequiresFilingThisStatement>06/30/2026</eventDateRequiresFilingThisStatement>\n      <issuerInfo>\n        <issuerCik>0001489393</issuerCik>\n        <issuerName>LYONDELLBASELL INDUSTRIES N.V.</issuerName>\n        <issuerCusips>\n          <issuerCusipNumber>N53745100</issuerCusipNumber>\n        </issuerCusips>\n        <issuerPrincipalExecutiveOfficeAddress>\n          <street1 xmlns=\"http://www.sec.gov/edgar/common\">2800 Post Oak Blvd.</street1>\n          <street2 xmlns=\"http://www.sec.gov/edgar/common\">Suite 5100</street2>\n          <city xmlns=\"http://www.sec.gov/edgar/common\">Houston</city>\n          <stateOrCountry xmlns=\"http://www.sec.gov/edgar/common\">TX</stateOrCountry>\n          <zipCode xmlns=\"http://www.sec.gov/edgar/common\">77056</zipCode>\n        </issuerPrincipalExecutiveOfficeAddress>\n      </issuerInfo>\n      <designateRulesPursuantThisScheduleFiled>\n        <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n      </designateRulesPursuantThisScheduleFiled>\n    </coverPageHeader>\n    <coverPageHeaderReportingPersonDetails>\n\n\n      <reportingPersonName>Dodge &amp; Cox</reportingPersonName>\n      <citizenshipOrOrganization>CA</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>800</soleVotingPower>\n        <sharedVotingPower>0</sharedVotingPower>\n        <soleDispositivePower>800</soleDispositivePower>\n        <sharedDispositivePower>0</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>800</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>\n      <classPercent>0.0</classPercent>\n      <typeOfReportingPerson>IA</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <items>\n      <item1>\n        <issuerName>LYONDELLBASELL INDUSTRIES N.V.</issuerName>\n        <issuerPrincipalExecutiveOfficeAddress>2800 Post Oak Blvd. Suite 5100, Houston, Texas 77056</issuerPrincipalExecutiveOfficeAddress>\n      </item1>\n      <item2>\n        <filingPersonName>Dodge &amp; Cox</filingPersonName>\n        <principalBusinessOfficeOrResidenceAddress>555 California Street 40th Floor, San Francisco, CA 94104</principalBusinessOfficeOrResidenceAddress>\n        <citizenship>California, USA</citizenship>\n      </item2>\n      <item3>\n        <notApplicableFlag>N</notApplicableFlag>\n        <typeOfPersonFiling>IA</typeOfPersonFiling>\n      </item3>\n      <item4>\n        <amountBeneficiallyOwned>800</amountBeneficiallyOwned>\n        <classPercent>0.0</classPercent>\n        <numberOfSharesPersonHas>\n          <solePowerOrDirectToVote>800</solePowerOrDirectToVote>\n          <sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n          <solePowerOrDirectToDispose>800</solePowerOrDirectToDispose>\n          <sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>\n        </numberOfSharesPersonHas>\n      </item4>\n      <item5>\n        <notApplicableFlag>N</notApplicableFlag>\n        <classOwnership5PercentOrLess>Y</classOwnership5PercentOrLess>\n      </item5>\n      <item6>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item6>\n      <item7>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item7>\n      <item8>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item8>\n      <item9>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item9>\n      <item10>\n        <notApplicableFlag>N</notApplicableFlag>\n        <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under Â§ 240.14a-11.</certifications>\n      </item10>\n    </items>\n    <signatureInformation>\n      <reportingPersonName>Dodge &amp; Cox</reportingPersonName>\n      <signatureDetails>\n        <signature>/S/ Katherine M. Primas</signature>\n        <title>Chief Compliance Officer</title>\n        <date>08/13/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n  </formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "SEC issuerInfo / subject-company identity inspected independently of filing owner CIK. Exact CUSIP evidence establishes issuer; ISIN retained from live source as matching scope, not claimed to be independently certified by every SEC filing.",
+  "lei_search_reviewed": true,
+  "equivalent_leis": [],
+  "limitations": [
+    "Independent non-CUSIP ISIN mapping unless noted below"
+  ],
+  "issuer_registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records/BN6WCCZ8OVP3ITUUVN49",
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        }
+      },
+      "data": {
+        "type": "lei-records",
+        "id": "BN6WCCZ8OVP3ITUUVN49",
+        "attributes": {
+          "lei": "BN6WCCZ8OVP3ITUUVN49",
+          "entity": {
+            "legalName": {
+              "name": "LyondellBasell Industries N.V.",
+              "language": "nl"
+            },
+            "otherNames": [],
+            "transliteratedOtherNames": [],
+            "legalAddress": {
+              "language": "en",
+              "addressLines": [
+                "4th Floor, One Vine Street"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "London",
+              "region": "GB-WSM",
+              "country": "GB",
+              "postalCode": "W1J 0AH"
+            },
+            "headquartersAddress": {
+              "language": "en",
+              "addressLines": [
+                "4th Floor, One Vine Street"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "London",
+              "region": "GB-WSM",
+              "country": "GB",
+              "postalCode": "W1J 0AH"
+            },
+            "registeredAt": {
+              "id": "RA000463",
+              "other": null
+            },
+            "registeredAs": "24473890",
+            "jurisdiction": "NL",
+            "category": "GENERAL",
+            "legalForm": {
+              "id": "B5PM",
+              "other": null
+            },
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "status": "ACTIVE",
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "successorEntities": [],
+            "creationDate": "2009-10-15T00:00:00Z",
+            "subCategory": null,
+            "otherAddresses": [],
+            "eventGroups": []
+          },
+          "registration": {
+            "initialRegistrationDate": "2012-06-06T15:51:00Z",
+            "lastUpdateDate": "2026-02-07T18:37:00Z",
+            "status": "ISSUED",
+            "nextRenewalDate": "2027-02-22T12:53:46Z",
+            "managingLou": "529900T8BM49AURSDO55",
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "validatedAt": {
+              "id": "RA000463",
+              "other": null
+            },
+            "validatedAs": "24473890",
+            "otherValidationAuthorities": []
+          },
+          "bic": null,
+          "mic": null,
+          "ocid": "nl/24473890",
+          "qcc": null,
+          "gem": "E100000000741",
+          "spglobal": [
+            "792424"
+          ],
+          "conformityFlag": "CONFORMING"
+        },
+        "relationships": {
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/BN6WCCZ8OVP3ITUUVN49/managing-lou"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/BN6WCCZ8OVP3ITUUVN49/lei-issuer"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/BN6WCCZ8OVP3ITUUVN49/field-modifications"
+            }
+          },
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/BN6WCCZ8OVP3ITUUVN49/direct-parent-reporting-exception"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/BN6WCCZ8OVP3ITUUVN49/ultimate-parent-reporting-exception"
+            }
+          },
+          "direct-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/BN6WCCZ8OVP3ITUUVN49/direct-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/BN6WCCZ8OVP3ITUUVN49/direct-children"
+            }
+          },
+          "ultimate-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/BN6WCCZ8OVP3ITUUVN49/ultimate-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/BN6WCCZ8OVP3ITUUVN49/ultimate-children"
+            }
+          },
+          "isins": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/BN6WCCZ8OVP3ITUUVN49/isins"
+            }
+          }
+        },
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/BN6WCCZ8OVP3ITUUVN49"
+        }
+      }
+    }
+  }
+}

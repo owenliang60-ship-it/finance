@@ -1,0 +1,213 @@
+{
+  "security": {
+    "symbol": "P",
+    "cusip": "74624M102",
+    "isin": "US74624M1027",
+    "name": "EVERPURE INC A"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "P",
+    "name": "EVERPURE INC A",
+    "isin": "US74624M1027",
+    "securityCusip": "74624M102",
+    "sharesNumber": 4098552,
+    "weightPercentage": 0.05477582,
+    "marketValue": 441211880,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US74624M1027",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US74624M1027&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US74624M1027&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "549300NPDB0BZTK3WO90",
+          "attributes": {
+            "lei": "549300NPDB0BZTK3WO90",
+            "entity": {
+              "legalName": {
+                "name": "EVERPURE, INC.",
+                "language": "en"
+              },
+              "otherNames": [
+                {
+                  "name": "PURE STORAGE, INC.",
+                  "language": "en",
+                  "type": "PREVIOUS_LEGAL_NAME"
+                }
+              ],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "C/O CORPORATION SERVICE COMPANY",
+                  "251 LITTLE FALLS DRIVE"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "WILMINGTON",
+                "region": "US-DE",
+                "country": "US",
+                "postalCode": "19808"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "251 LITTLE FALLS DRIVE"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "WILMINGTON",
+                "region": "US-DE",
+                "country": "US",
+                "postalCode": "19808"
+              },
+              "registeredAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "registeredAs": "4737699",
+              "jurisdiction": "US-DE",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "XTIQ",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2009-10-02T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": [
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "SUPPORTING_DOCUMENTS",
+                      "effectiveDate": "2026-02-20T00:00:00Z",
+                      "recordedDate": "2026-03-12T00:00:00Z",
+                      "type": "CHANGE_LEGAL_NAME",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                }
+              ]
+            },
+            "registration": {
+              "initialRegistrationDate": "2015-08-15T02:06:00Z",
+              "lastUpdateDate": "2026-08-18T10:06:06Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-08-20T00:00:00Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "validatedAs": "4737699",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "us_de/4737699",
+            "qcc": null,
+            "gem": null,
+            "spglobal": [
+              "111528632"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300NPDB0BZTK3WO90/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300NPDB0BZTK3WO90/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300NPDB0BZTK3WO90/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300NPDB0BZTK3WO90/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300NPDB0BZTK3WO90/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300NPDB0BZTK3WO90/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/549300NPDB0BZTK3WO90/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300NPDB0BZTK3WO90/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/549300NPDB0BZTK3WO90/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300NPDB0BZTK3WO90/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/549300NPDB0BZTK3WO90"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "EVERPURE, INC.",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

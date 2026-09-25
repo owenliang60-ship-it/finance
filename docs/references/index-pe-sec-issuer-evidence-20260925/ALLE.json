@@ -1,0 +1,212 @@
+{
+  "reviewed_at": "2026-09-25",
+  "reviewed_securities": [
+    {
+      "symbol": "ALLE",
+      "cusip": "G0176J109",
+      "isin": "IE00BFRT3W74",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001579241",
+    "sec_name": "ALLEGION PLC",
+    "section": "ISSUER",
+    "form": "SCHEDULE 13G",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1579241/000009375126000404/primary_doc.xml",
+    "filing_date": "2026-08-07"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "ALLE",
+    "name": "ALLEGION PLC",
+    "isin": "IE00BFRT3W74",
+    "securityCusip": "G0176J109",
+    "sharesNumber": 1050078,
+    "weightPercentage": 0.01972213,
+    "marketValue": 158859109,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1579241/000009375126000404/primary_doc.xml",
+    "sha256": "50dd1f07af887a5df1b867a40949356d96b3b9ddbe6e1d7bb9f03d71a9092f01",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n   <schemaVersion>X0202</schemaVersion>\n<headerData>\n      <submissionType>SCHEDULE 13G</submissionType>\n      <filerInfo>\n         <filer>\n            <filerCredentials>\n               <cik>0000093751</cik>\n               <ccc>XXXXXXXX</ccc>\n            </filerCredentials>\n         </filer>\n         <liveTestFlag>LIVE</liveTestFlag>\n\n\n\n      </filerInfo>\n   </headerData>\n   <formData>\n      <coverPageHeader>\n         <securitiesClassTitle>COMMON STOCK</securitiesClassTitle>\n         <eventDateRequiresFilingThisStatement>06/30/2026</eventDateRequiresFilingThisStatement>\n         <issuerInfo>\n            <issuerCik>0001579241</issuerCik>\n            <issuerName>ALLEGION PLC</issuerName>\n            <issuerCusips>\n               <issuerCusipNumber>G0176J109</issuerCusipNumber>\n            </issuerCusips>\n            <issuerPrincipalExecutiveOfficeAddress>\n               <com:street1>IVEAGH COURT, BLOCK D</com:street1>\n               <com:street2>HARCOURT ROAD</com:street2>\n               <com:city>DUBLIN 2</com:city>\n               <com:stateOrCountry>L2</com:stateOrCountry>\n               <com:zipCode>D02 VH94</com:zipCode>\n            </issuerPrincipalExecutiveOfficeAddress>\n         </issuerInfo>\n         <designateRulesPursuantThisScheduleFiled>\n            <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n         </designateRulesPursuantThisScheduleFiled>\n      </coverPageHeader>\n      <coverPageHeaderReportingPersonDetails>\n\n\n         <reportingPersonName>STATE STREET CORPORATION</reportingPersonName>\n         <citizenshipOrOrganization>MA</citizenshipOrOrganization>\n         <reportingPersonBeneficiallyOwnedNumberOfShares>\n            <soleVotingPower>0.00</soleVotingPower>\n            <sharedVotingPower>2798235.00</sharedVotingPower>\n            <soleDispositivePower>0.00</soleDispositivePower>\n            <sharedDispositivePower>4344088.00</sharedDispositivePower>\n         </reportingPersonBeneficiallyOwnedNumberOfShares>\n         <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>4348530.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n         <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>\n         <classPercent>5.1</classPercent>\n         <typeOfReportingPerson>HC</typeOfReportingPerson>\n      </coverPageHeaderReportingPersonDetails>\n      <items>\n         <item1>\n            <issuerName>ALLEGION PLC</issuerName>\n            <issuerPrincipalExecutiveOfficeAddress>IVEAGH COURT, BLOCK D, HARCOURT ROAD, DUBLIN 2, IRELAND, D02 VH94</issuerPrincipalExecutiveOfficeAddress>\n         </item1>\n         <item2>\n            <filingPersonName>STATE STREET CORPORATION;</filingPersonName>\n            <principalBusinessOfficeOrResidenceAddress>ONE CONGRESS STREET, SUITE 1, BOSTON MA 02114, UNITED STATES</principalBusinessOfficeOrResidenceAddress>\n            <citizenship>MA</citizenship>\n         </item2>\n         <item3>\n            <notApplicableFlag>N</notApplicableFlag>\n            <typeOfPersonFiling>IA</typeOfPersonFiling>\n            <typeOfPersonFiling>HC</typeOfPersonFiling>\n         </item3>\n         <item4>\n            <amountBeneficiallyOwned>4348530.00</amountBeneficiallyOwned>\n            <classPercent>5.1</classPercent>\n            <numberOfSharesPersonHas>\n               <solePowerOrDirectToVote>0</solePowerOrDirectToVote>\n               <sharedPowerOrDirectToVote>2,798,235</sharedPowerOrDirectToVote>\n               <solePowerOrDirectToDispose>0</solePowerOrDirectToDispose>\n               <sharedPowerOrDirectToDispose>4,344,088</sharedPowerOrDirectToDispose>\n            </numberOfSharesPersonHas>\n         </item4>\n         <item5>\n            <notApplicableFlag>Y</notApplicableFlag>\n            <classOwnership5PercentOrLess>N</classOwnership5PercentOrLess>\n         </item5>\n         <item6>\n            <notApplicableFlag>N</notApplicableFlag>\n            <ownershipMoreThan5PercentOnBehalfOfAnotherPerson>NOT APPLICABLE</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n         </item6>\n         <item7>\n            <notApplicableFlag>N</notApplicableFlag>\n            <subsidiaryIdentificationAndClassification>SSGA FUNDS MANAGEMENT, INC. (IA);STATE STREET GLOBAL ADVISORS (JAPAN) CO., LTD. (IA);STATE STREET GLOBAL ADVISORS ASIA LIMITED (IA);STATE STREET GLOBAL ADVISORS EUROPE LIMITED (IA);STATE STREET GLOBAL ADVISORS LIMITED (IA);STATE STREET GLOBAL ADVISORS SINGAPORE LIMITED (IA);STATE STREET GLOBAL ADVISORS TRUST COMPANY (IA);STATE STREET GLOBAL ADVISORS, AUSTRALIA, LIMITED (IA);STATE STREET GLOBAL ADVISORS, LTD. (IA);</subsidiaryIdentificationAndClassification>\n         </item7>\n         <item8>\n            <notApplicableFlag>N</notApplicableFlag>\n            <identificationAndClassificationOfGroupMembers>NOT APPLICABLE</identificationAndClassificationOfGroupMembers>\n         </item8>\n         <item9>\n            <notApplicableFlag>N</notApplicableFlag>\n            <groupDissolutionNotice>NOT APPLICABLE</groupDissolutionNotice>\n         </item9>\n         <item10>\n            <notApplicableFlag>N</notApplicableFlag>\n            <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under Â§ 240.14a-11.</certifications>\n         </item10>\n      </items>\n      <signatureInformation>\n         <reportingPersonName>STATE STREET CORPORATION</reportingPersonName>\n         <signatureDetails>\n            <signature>ELIZABETH SCHAEFER</signature>\n            <title>SENIOR VICE PRESIDENT, CHIEF ACCOUNTING OFFICER</title>\n            <date>08/07/2026</date>\n         </signatureDetails>\n      </signatureInformation>\n   </formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "SEC issuerInfo / subject-company identity inspected independently of filing owner CIK. Exact CUSIP evidence establishes issuer; ISIN retained from live source as matching scope, not claimed to be independently certified by every SEC filing.",
+  "lei_search_reviewed": true,
+  "equivalent_leis": [],
+  "limitations": [
+    "Independent non-CUSIP ISIN mapping unless noted below"
+  ],
+  "issuer_registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records/984500560CAC2E6FB757",
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        }
+      },
+      "data": {
+        "type": "lei-records",
+        "id": "984500560CAC2E6FB757",
+        "attributes": {
+          "lei": "984500560CAC2E6FB757",
+          "entity": {
+            "legalName": {
+              "name": "ALLEGION PUBLIC LIMITED COMPANY",
+              "language": "en"
+            },
+            "otherNames": [],
+            "transliteratedOtherNames": [],
+            "legalAddress": {
+              "language": "en",
+              "addressLines": [
+                "Suite 233, The Capel Building, Mary's Abbey"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "DUBLIN 7",
+              "region": "IE-D",
+              "country": "IE",
+              "postalCode": "D07 X324"
+            },
+            "headquartersAddress": {
+              "language": "en",
+              "addressLines": [
+                "Suite 233, The Capel Building, Mary's Abbey"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "DUBLIN 7",
+              "region": "IE-D",
+              "country": "IE",
+              "postalCode": "D07 X324"
+            },
+            "registeredAt": {
+              "id": "RA000402",
+              "other": null
+            },
+            "registeredAs": "527370",
+            "jurisdiction": "IE",
+            "category": "GENERAL",
+            "legalForm": {
+              "id": "VYAX",
+              "other": null
+            },
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "status": "ACTIVE",
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "successorEntities": [],
+            "creationDate": "2013-05-09T00:00:00Z",
+            "subCategory": null,
+            "otherAddresses": [],
+            "eventGroups": [
+              {
+                "groupType": "STANDALONE",
+                "events": [
+                  {
+                    "validationDocuments": "SUPPORTING_DOCUMENTS",
+                    "effectiveDate": "2026-05-07T00:00:00Z",
+                    "recordedDate": "2026-05-07T15:17:51Z",
+                    "type": "CHANGE_LEGAL_ADDRESS",
+                    "status": "COMPLETED"
+                  }
+                ]
+              },
+              {
+                "groupType": "STANDALONE",
+                "events": [
+                  {
+                    "validationDocuments": "SUPPORTING_DOCUMENTS",
+                    "effectiveDate": "2026-05-07T00:00:00Z",
+                    "recordedDate": "2026-05-07T15:17:51Z",
+                    "type": "CHANGE_HQ_ADDRESS",
+                    "status": "COMPLETED"
+                  }
+                ]
+              }
+            ]
+          },
+          "registration": {
+            "initialRegistrationDate": "2021-04-06T14:10:40Z",
+            "lastUpdateDate": "2026-05-07T15:17:51Z",
+            "status": "ISSUED",
+            "nextRenewalDate": "2027-05-07T15:17:44Z",
+            "managingLou": "529900T8BM49AURSDO55",
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "validatedAt": {
+              "id": "RA000402",
+              "other": null
+            },
+            "validatedAs": "527370",
+            "otherValidationAuthorities": []
+          },
+          "bic": null,
+          "mic": null,
+          "ocid": "ie/527370",
+          "qcc": "QIE2XT8S0W",
+          "gem": null,
+          "spglobal": [
+            "241782379"
+          ],
+          "conformityFlag": "CONFORMING"
+        },
+        "relationships": {
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/984500560CAC2E6FB757/managing-lou"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/984500560CAC2E6FB757/lei-issuer"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/984500560CAC2E6FB757/field-modifications"
+            }
+          },
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/984500560CAC2E6FB757/direct-parent-reporting-exception"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/984500560CAC2E6FB757/ultimate-parent-reporting-exception"
+            }
+          },
+          "direct-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/984500560CAC2E6FB757/direct-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/984500560CAC2E6FB757/direct-children"
+            }
+          },
+          "ultimate-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/984500560CAC2E6FB757/ultimate-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/984500560CAC2E6FB757/ultimate-children"
+            }
+          }
+        },
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/984500560CAC2E6FB757"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,794 @@
+[
+  {
+    "basket": "SPY",
+    "symbol": "XOM",
+    "cusip": "30233Q108",
+    "isin": "US30233Q1085",
+    "name": "EXXONMOBIL HOLDINGS CORP",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "XOM",
+      "name": "EXXONMOBIL HOLDINGS CORP",
+      "isin": "US30233Q1085",
+      "securityCusip": "30233Q108",
+      "sharesNumber": 50691547,
+      "weightPercentage": 0.99616919,
+      "marketValue": 8024008975,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "LIN",
+    "cusip": "G54950103",
+    "isin": "IE000S9YS762",
+    "name": "LINDE PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "LIN",
+      "name": "LINDE PLC",
+      "isin": "IE000S9YS762",
+      "securityCusip": "G54950103",
+      "sharesNumber": 5680280,
+      "weightPercentage": 0.32520755,
+      "marketValue": 2619503099,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "STX",
+    "cusip": "G7997R103",
+    "isin": "IE00BKVD2N49",
+    "name": "SEAGATE TECHNOLOGY HOLDINGS",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "STX",
+      "name": "SEAGATE TECHNOLOGY HOLDINGS",
+      "isin": "IE00BKVD2N49",
+      "securityCusip": "G7997R103",
+      "sharesNumber": 2794615,
+      "weightPercentage": 0.31443523,
+      "marketValue": 2532733546,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "ETN",
+    "cusip": "G29183103",
+    "isin": "IE00B8KQN827",
+    "name": "EATON CORP PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "ETN",
+      "name": "EATON CORP PLC",
+      "isin": "IE00B8KQN827",
+      "securityCusip": "G29183103",
+      "sharesNumber": 4794224,
+      "weightPercentage": 0.25638769,
+      "marketValue": 2065168418,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "CB",
+    "cusip": "H1467J104",
+    "isin": "CH0044328745",
+    "name": "CHUBB LTD",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "CB",
+      "name": "CHUBB LTD",
+      "isin": "CH0044328745",
+      "securityCusip": "H1467J104",
+      "sharesNumber": 4324355,
+      "weightPercentage": 0.17668074,
+      "marketValue": 1423139650,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "MDT",
+    "cusip": "G5960L103",
+    "isin": "IE00BTN1Y115",
+    "name": "MEDTRONIC PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "MDT",
+      "name": "MEDTRONIC PLC",
+      "isin": "IE00BTN1Y115",
+      "securityCusip": "G5960L103",
+      "sharesNumber": 15766562,
+      "weightPercentage": 0.17160848,
+      "marketValue": 1382283274,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "ACN",
+    "cusip": "G1151C101",
+    "isin": "IE00B4BNMY34",
+    "name": "ACCENTURE PLC CL A",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "ACN",
+      "name": "ACCENTURE PLC CL A",
+      "isin": "IE00B4BNMY34",
+      "securityCusip": "G1151C101",
+      "sharesNumber": 7537401,
+      "weightPercentage": 0.16859926,
+      "marketValue": 1358044397,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "TT",
+    "cusip": "G8994E103",
+    "isin": "IE00BK9ZQ967",
+    "name": "TRANE TECHNOLOGIES PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "TT",
+      "name": "TRANE TECHNOLOGIES PLC",
+      "isin": "IE00BK9ZQ967",
+      "securityCusip": "G8994E103",
+      "sharesNumber": 2709122,
+      "weightPercentage": 0.14432787,
+      "marketValue": 1162541572,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "JCI",
+    "cusip": "G51502105",
+    "isin": "IE00BY7QL619",
+    "name": "JOHNSON CONTROLS INTERNATION",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "JCI",
+      "name": "JOHNSON CONTROLS INTERNATION",
+      "isin": "IE00BY7QL619",
+      "securityCusip": "G51502105",
+      "sharesNumber": 7457800,
+      "weightPercentage": 0.13262234,
+      "marketValue": 1068255154,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "BE",
+    "cusip": "093712107",
+    "isin": "US0937121079",
+    "name": "BLOOM ENERGY CORP  A",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "BE",
+      "name": "BLOOM ENERGY CORP  A",
+      "isin": "US0937121079",
+      "securityCusip": "093712107",
+      "sharesNumber": 3631470,
+      "weightPercentage": 0.12180511,
+      "marketValue": 981123826,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "TEL",
+    "cusip": "G87052109",
+    "isin": "IE000IVNQZ81",
+    "name": "TE CONNECTIVITY PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "TEL",
+      "name": "TE CONNECTIVITY PLC",
+      "isin": "IE000IVNQZ81",
+      "securityCusip": "G87052109",
+      "sharesNumber": 3569494,
+      "weightPercentage": 0.0932749,
+      "marketValue": 751316760,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "AON",
+    "cusip": "G0403H108",
+    "isin": "IE00BLP1HW54",
+    "name": "AON PLC CLASS A",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "AON",
+      "name": "AON PLC CLASS A",
+      "isin": "IE00BLP1HW54",
+      "securityCusip": "G0403H108",
+      "sharesNumber": 2610568,
+      "weightPercentage": 0.08960195,
+      "marketValue": 721731663,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "NXPI",
+    "cusip": "N6596X109",
+    "isin": "NL0009538784",
+    "name": "NXP SEMICONDUCTORS NV",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "NXPI",
+      "name": "NXP SEMICONDUCTORS NV",
+      "isin": "NL0009538784",
+      "securityCusip": "N6596X109",
+      "sharesNumber": 3109478,
+      "weightPercentage": 0.08923166,
+      "marketValue": 718749035,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "OKE",
+    "cusip": "30609A109",
+    "isin": "US30609A1097",
+    "name": "ONEOK INC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "OKE",
+      "name": "ONEOK INC",
+      "isin": "US30609A1097",
+      "securityCusip": "30609A109",
+      "sharesNumber": 7789439,
+      "weightPercentage": 0.08595994,
+      "marketValue": 692395788,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "RCL",
+    "cusip": "V7780T103",
+    "isin": "LR0008862868",
+    "name": "ROYAL CARIBBEAN CRUISES LTD",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "RCL",
+      "name": "ROYAL CARIBBEAN CRUISES LTD",
+      "isin": "LR0008862868",
+      "securityCusip": "V7780T103",
+      "sharesNumber": 3060815,
+      "weightPercentage": 0.08591802,
+      "marketValue": 692058132,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "CRH",
+    "cusip": "G25508105",
+    "isin": "IE0001827041",
+    "name": "CRH PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "CRH",
+      "name": "CRH PLC",
+      "isin": "IE0001827041",
+      "securityCusip": "G25508105",
+      "sharesNumber": 8185267,
+      "weightPercentage": 0.08503073,
+      "marketValue": 684911080,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "GRMN",
+    "cusip": "H2906T109",
+    "isin": "CH0114405324",
+    "name": "GARMIN LTD",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "GRMN",
+      "name": "GARMIN LTD",
+      "isin": "CH0114405324",
+      "securityCusip": "H2906T109",
+      "sharesNumber": 2045138,
+      "weightPercentage": 0.07168535,
+      "marketValue": 577415880,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "FERG",
+    "cusip": "31488V107",
+    "isin": "US31488V1070",
+    "name": "FERGUSON ENTERPRISES INC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "FERG",
+      "name": "FERGUSON ENTERPRISES INC",
+      "isin": "US31488V1070",
+      "securityCusip": "31488V107",
+      "sharesNumber": 2385340,
+      "weightPercentage": 0.06430253,
+      "marketValue": 517948226,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "FLEX",
+    "cusip": "Y2573F102",
+    "isin": "SG9999000020",
+    "name": "FLEX LTD",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "FLEX",
+      "name": "FLEX LTD",
+      "isin": "SG9999000020",
+      "securityCusip": "Y2573F102",
+      "sharesNumber": 4546723,
+      "weightPercentage": 0.0622345,
+      "marketValue": 501290530,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "ILMN",
+    "cusip": "452327109",
+    "isin": "US4523271090",
+    "name": "ILLUMINA INC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "ILMN",
+      "name": "ILLUMINA INC",
+      "isin": "US4523271090",
+      "securityCusip": "452327109",
+      "sharesNumber": 1861697,
+      "weightPercentage": 0.05794873,
+      "marketValue": 466769224,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "P",
+    "cusip": "74624M102",
+    "isin": "US74624M1027",
+    "name": "EVERPURE INC A",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "P",
+      "name": "EVERPURE INC A",
+      "isin": "US74624M1027",
+      "securityCusip": "74624M102",
+      "sharesNumber": 4098552,
+      "weightPercentage": 0.05477582,
+      "marketValue": 441211880,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "ACGL",
+    "cusip": "G0450A105",
+    "isin": "BMG0450A1053",
+    "name": "ARCH CAPITAL GROUP LTD",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "ACGL",
+      "name": "ARCH CAPITAL GROUP LTD",
+      "isin": "BMG0450A1053",
+      "securityCusip": "G0450A105",
+      "sharesNumber": 4173567,
+      "weightPercentage": 0.04840805,
+      "marketValue": 389920326,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "WTW",
+    "cusip": "G96629103",
+    "isin": "IE00BDB6Q211",
+    "name": "WILLIS TOWERS WATSON PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "WTW",
+      "name": "WILLIS TOWERS WATSON PLC",
+      "isin": "IE00BDB6Q211",
+      "securityCusip": "G96629103",
+      "sharesNumber": 1145355,
+      "weightPercentage": 0.04173985,
+      "marketValue": 336208904,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "CCL",
+    "cusip": "G2004J103",
+    "isin": "BMG2004J1036",
+    "name": "CARNIVAL CORP LTD",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "CCL",
+      "name": "CARNIVAL CORP LTD",
+      "isin": "BMG2004J1036",
+      "securityCusip": "G2004J103",
+      "sharesNumber": 15705810,
+      "weightPercentage": 0.04173187,
+      "marketValue": 336144588,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "SW",
+    "cusip": "G8267P108",
+    "isin": "IE00028FXN24",
+    "name": "SMURFIT WESTROCK PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "SW",
+      "name": "SMURFIT WESTROCK PLC",
+      "isin": "IE00028FXN24",
+      "securityCusip": "G8267P108",
+      "sharesNumber": 6488755,
+      "weightPercentage": 0.0367684,
+      "marketValue": 296164510,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "RDDT",
+    "cusip": "75734B100",
+    "isin": "US75734B1008",
+    "name": "REDDIT INC CL A",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "RDDT",
+      "name": "REDDIT INC CL A",
+      "isin": "US75734B1008",
+      "securityCusip": "75734B100",
+      "sharesNumber": 1801148,
+      "weightPercentage": 0.03336493,
+      "marketValue": 268750058,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "STE",
+    "cusip": "G8473T100",
+    "isin": "IE00BFY8C754",
+    "name": "STERIS PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "STE",
+      "name": "STERIS PLC",
+      "isin": "IE00BFY8C754",
+      "securityCusip": "G8473T100",
+      "sharesNumber": 1212097,
+      "weightPercentage": 0.03102143,
+      "marketValue": 249873480,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "AMCR",
+    "cusip": "G0250X149",
+    "isin": "JE00BV7DQ550",
+    "name": "AMCOR PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "AMCR",
+      "name": "AMCOR PLC",
+      "isin": "JE00BV7DQ550",
+      "securityCusip": "G0250X149",
+      "sharesNumber": 5676727,
+      "weightPercentage": 0.02961414,
+      "marketValue": 238537885,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "BG",
+    "cusip": "H11356104",
+    "isin": "CH1300646267",
+    "name": "BUNGE GLOBAL SA",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "BG",
+      "name": "BUNGE GLOBAL SA",
+      "isin": "CH1300646267",
+      "securityCusip": "H11356104",
+      "sharesNumber": 1942446,
+      "weightPercentage": 0.02639332,
+      "marketValue": 212594649,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "LYB",
+    "cusip": "N53745100",
+    "isin": "NL0009434992",
+    "name": "LYONDELLBASELL INDU CL A",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "LYB",
+      "name": "LYONDELLBASELL INDU CL A",
+      "isin": "NL0009434992",
+      "securityCusip": "N53745100",
+      "sharesNumber": 3203752,
+      "weightPercentage": 0.02341803,
+      "marketValue": 188629113,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "IVZ",
+    "cusip": "G491BT108",
+    "isin": "BMG491BT1088",
+    "name": "INVESCO LTD",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "IVZ",
+      "name": "INVESCO LTD",
+      "isin": "BMG491BT1088",
+      "securityCusip": "G491BT108",
+      "sharesNumber": 5491674,
+      "weightPercentage": 0.02057549,
+      "marketValue": 165732820,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "EG",
+    "cusip": "G3223R108",
+    "isin": "BMG3223R1088",
+    "name": "EVEREST GROUP LTD",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "EG",
+      "name": "EVEREST GROUP LTD",
+      "isin": "BMG3223R1088",
+      "securityCusip": "G3223R108",
+      "sharesNumber": 439950,
+      "weightPercentage": 0.01996766,
+      "marketValue": 160836808,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "ALLE",
+    "cusip": "G0176J109",
+    "isin": "IE00BFRT3W74",
+    "name": "ALLEGION PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "ALLE",
+      "name": "ALLEGION PLC",
+      "isin": "IE00BFRT3W74",
+      "securityCusip": "G0176J109",
+      "sharesNumber": 1050078,
+      "weightPercentage": 0.01972213,
+      "marketValue": 158859109,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "APTV",
+    "cusip": "G3265R107",
+    "isin": "JE00BTDN8H13",
+    "name": "APTIV PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "APTV",
+      "name": "APTIV PLC",
+      "isin": "JE00BTDN8H13",
+      "securityCusip": "G3265R107",
+      "sharesNumber": 2617793,
+      "weightPercentage": 0.01441233,
+      "marketValue": 116089348,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "PNR",
+    "cusip": "G7S00T104",
+    "isin": "IE00BLS09M33",
+    "name": "PENTAIR PLC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "PNR",
+      "name": "PENTAIR PLC",
+      "isin": "IE00BLS09M33",
+      "securityCusip": "G7S00T104",
+      "sharesNumber": 1997108,
+      "weightPercentage": 0.01344918,
+      "marketValue": 108331300,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "NCLH",
+    "cusip": "G66721104",
+    "isin": "BMG667211046",
+    "name": "NORWEGIAN CRUISE LINE HOLDIN",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "NCLH",
+      "name": "NORWEGIAN CRUISE LINE HOLDIN",
+      "isin": "BMG667211046",
+      "securityCusip": "G66721104",
+      "sharesNumber": 5714925,
+      "weightPercentage": 0.00987703,
+      "marketValue": 79558185,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "SPY",
+    "symbol": "2602335D",
+    "cusip": "436CVR021",
+    "isin": "",
+    "name": "TPG INC",
+    "raw": {
+      "symbol": "SPY",
+      "asset": "2602335D",
+      "name": "TPG INC",
+      "isin": "",
+      "securityCusip": "436CVR021",
+      "sharesNumber": 2578626,
+      "weightPercentage": 2.99e-06,
+      "marketValue": 24118,
+      "updatedAt": "2026-09-24 23:38:06"
+    }
+  },
+  {
+    "basket": "QQQ",
+    "symbol": "SPCX",
+    "cusip": "84615Q103",
+    "isin": "US84615Q1031",
+    "name": "Space Exploration Technologies Corp",
+    "raw": {
+      "symbol": "QQQ",
+      "asset": "SPCX",
+      "name": "Space Exploration Technologies Corp",
+      "isin": "US84615Q1031",
+      "securityCusip": "84615Q103",
+      "sharesNumber": 89113307,
+      "weightPercentage": 2.65625967,
+      "marketValue": 13220850226.52,
+      "updatedAt": "2026-09-24 13:34:47"
+    }
+  },
+  {
+    "basket": "QQQ",
+    "symbol": "FER",
+    "cusip": "N3168P101",
+    "isin": "NL0015001FS8",
+    "name": "Ferrovial NV",
+    "raw": {
+      "symbol": "QQQ",
+      "asset": "FER",
+      "name": "Ferrovial NV",
+      "isin": "NL0015001FS8",
+      "securityCusip": "N3168P101",
+      "sharesNumber": 15150469,
+      "weightPercentage": 0.16826944,
+      "marketValue": 837517926.32,
+      "updatedAt": "2026-09-24 13:34:47"
+    }
+  },
+  {
+    "basket": "SOXX",
+    "symbol": "SKHYV",
+    "cusip": "78392B206",
+    "isin": "US78392B2060",
+    "name": "SK HYNIX AMERICAN DEPOSITARY SHARE",
+    "raw": {
+      "symbol": "SOXX",
+      "asset": "SKHYV",
+      "name": "SK HYNIX AMERICAN DEPOSITARY SHARE",
+      "isin": "US78392B2060",
+      "securityCusip": "78392B206",
+      "sharesNumber": 8167602,
+      "weightPercentage": 3.31678986,
+      "marketValue": 1531425375,
+      "updatedAt": "2026-09-22 03:23:59"
+    }
+  },
+  {
+    "basket": "SOXX",
+    "symbol": "0EDE.L",
+    "cusip": "F2933A109",
+    "isin": "NL0009538784",
+    "name": "NXP SEMICONDUCTORS NV",
+    "raw": {
+      "symbol": "SOXX",
+      "asset": "0EDE.L",
+      "name": "NXP SEMICONDUCTORS NV",
+      "isin": "NL0009538784",
+      "securityCusip": "F2933A109",
+      "sharesNumber": 6117471,
+      "weightPercentage": 3.02071559,
+      "marketValue": 1394722213.29,
+      "updatedAt": "2026-09-22 03:23:59"
+    }
+  },
+  {
+    "basket": "SOXX",
+    "symbol": "CRDO",
+    "cusip": "G25457105",
+    "isin": "KYG254571055",
+    "name": "CREDO TECHNOLOGY GROUP HOLDING LTD",
+    "raw": {
+      "symbol": "SOXX",
+      "asset": "CRDO",
+      "name": "CREDO TECHNOLOGY GROUP HOLDING LTD",
+      "isin": "KYG254571055",
+      "securityCusip": "G25457105",
+      "sharesNumber": 4103207,
+      "weightPercentage": 1.56309975,
+      "marketValue": 721713079.23,
+      "updatedAt": "2026-09-22 03:23:59"
+    }
+  },
+  {
+    "basket": "SOXX",
+    "symbol": "ASML",
+    "cusip": "N07059210",
+    "isin": "USN070592100",
+    "name": "ASML HOLDING ADR REPRESENTING",
+    "raw": {
+      "symbol": "SOXX",
+      "asset": "ASML",
+      "name": "ASML HOLDING ADR REPRESENTING",
+      "isin": "USN070592100",
+      "securityCusip": "N07059210",
+      "sharesNumber": 396296,
+      "weightPercentage": 1.44188428,
+      "marketValue": 665745576.32,
+      "updatedAt": "2026-09-22 03:23:59"
+    }
+  },
+  {
+    "basket": "SOXX",
+    "symbol": "CBRS",
+    "cusip": "15675D103",
+    "isin": "US15675D1037",
+    "name": "CEREBRAS SYSTEMS INC CLASS A",
+    "raw": {
+      "symbol": "SOXX",
+      "asset": "CBRS",
+      "name": "CEREBRAS SYSTEMS INC CLASS A",
+      "isin": "US15675D1037",
+      "securityCusip": "15675D103",
+      "sharesNumber": 2332680,
+      "weightPercentage": 1.00219741,
+      "marketValue": 462733731.6,
+      "updatedAt": "2026-09-22 03:23:59"
+    }
+  }
+]

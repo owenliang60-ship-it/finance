@@ -1,0 +1,200 @@
+{
+  "reviewed_at": "2026-09-25",
+  "reviewed_securities": [
+    {
+      "symbol": "CCL",
+      "cusip": "G2004J103",
+      "isin": "BMG2004J1036",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0000815097",
+    "sec_name": "CARNIVAL CORP LTD",
+    "section": "ISSUER",
+    "form": "SCHEDULE 13G",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/815097/000201238326002138/primary_doc.xml",
+    "filing_date": "2026-07-27"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "CCL",
+    "name": "CARNIVAL CORP LTD",
+    "isin": "BMG2004J1036",
+    "securityCusip": "G2004J103",
+    "sharesNumber": 15705810,
+    "weightPercentage": 0.04173187,
+    "marketValue": 336144588,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/815097/000201238326002138/primary_doc.xml",
+    "sha256": "5583b9769fbc5c92f3301d165a445d734ae7bd84c7c62c9e0eb1d2adc60379d2",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:ns2=\"http://www.sec.gov/edgar/common\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"##generate\">\n\t<schemaVersion>X0202</schemaVersion>\n<headerData>\n\t\t<submissionType>SCHEDULE 13G</submissionType>\n\t\t<filerInfo>\n\t\t\t<filer>\n\t\t\t\t<filerCredentials>\n\t\t\t\t\t<cik>0002012383</cik>\n\t\t\t\t\t<ccc>XXXXXXXX</ccc>\n\t\t\t\t</filerCredentials>\n\t\t\t</filer>\n\t\t\t<liveTestFlag>LIVE</liveTestFlag>\n\n\n\t\t</filerInfo>\n\t</headerData>\n\t<formData>\n\t\t<coverPageHeader>\n\t\t\t<securitiesClassTitle>Common Stock</securitiesClassTitle>\n\t\t\t<eventDateRequiresFilingThisStatement>06/30/2026</eventDateRequiresFilingThisStatement>\n\t\t\t<issuerInfo>\n\t\t\t\t<issuerCik>0000815097</issuerCik>\n\t\t\t\t<issuerName>CARNIVAL CORP LTD</issuerName>\n\t\t\t\t<issuerCusips>\n\t\t\t\t\t<issuerCusipNumber>G2004J103</issuerCusipNumber>\n\t\t\t\t</issuerCusips>\n\t\t\t\t<issuerPrincipalExecutiveOfficeAddress>\n\t\t\t\t\t<ns2:street1>3655 N.W. 87th Avenue</ns2:street1>\n\t\t\t\t\t<ns2:city>Miami</ns2:city>\n\t\t\t\t\t<ns2:stateOrCountry>FL</ns2:stateOrCountry>\n\t\t\t\t\t<ns2:zipCode>33178-2428</ns2:zipCode>\n\t\t\t\t</issuerPrincipalExecutiveOfficeAddress>\n\t\t\t</issuerInfo>\n\t\t\t<designateRulesPursuantThisScheduleFiled>\n\t\t\t\t<designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n\t\t\t</designateRulesPursuantThisScheduleFiled>\n\t\t</coverPageHeader>\n\t\t<coverPageHeaderReportingPersonDetails>\n\n\t\t\t<reportingPersonName>BlackRock, Inc.</reportingPersonName>\n\t\t\t<memberGroup>b</memberGroup>\n\t\t\t<citizenshipOrOrganization>DE</citizenshipOrOrganization>\n\t\t\t<reportingPersonBeneficiallyOwnedNumberOfShares>\n\t\t\t\t<soleVotingPower>86069788</soleVotingPower>\n\t\t\t\t<sharedVotingPower>0</sharedVotingPower>\n\t\t\t\t<soleDispositivePower>92488135</soleDispositivePower>\n\t\t\t\t<sharedDispositivePower>0</sharedDispositivePower>\n\t\t\t</reportingPersonBeneficiallyOwnedNumberOfShares>\n\t\t\t<reportingPersonBeneficiallyOwnedAggregateNumberOfShares>92488135</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n\t\t\t<classPercent>6.8</classPercent>\n\t\t\t<typeOfReportingPerson>HC</typeOfReportingPerson>\n\t\t</coverPageHeaderReportingPersonDetails>\n\t\t<items>\n\t\t\t<item1>\n\t\t\t\t<issuerName>CARNIVAL CORP LTD</issuerName>\n\t\t\t\t<issuerPrincipalExecutiveOfficeAddress>3655 N.W. 87th Avenue Miami FL 33178-2428</issuerPrincipalExecutiveOfficeAddress>\n\t\t\t</item1>\n\t\t\t<item2>\n\t\t\t\t<filingPersonName>BlackRock, Inc.\n\nIn accordance with SEC Release No. 34-39538 (January 12, 1998), this Schedule 13G reflects the securities beneficially owned, or deemed to be beneficially owned, by certain business units (collectively, the \"Reporting Business Units\") of BlackRock, Inc. and its subsidiaries and affiliates. It does not include securities, if any, beneficially owned by other business units whose beneficial ownership of securities are disaggregated from that of the Reporting Business Units in accordance with such release.</filingPersonName>\n\t\t\t\t<principalBusinessOfficeOrResidenceAddress>BlackRock, Inc., 50 Hudson Yards New York, NY 10001</principalBusinessOfficeOrResidenceAddress>\n\t\t\t\t<citizenship>See Item 4 of Cover Page</citizenship>\n\t\t\t</item2>\n\t\t\t<item3>\n\t\t\t\t<notApplicableFlag>N</notApplicableFlag>\n\t\t\t\t<typeOfPersonFiling>HC</typeOfPersonFiling>\n\t\t\t</item3>\n\t\t\t<item4>\n\t\t\t\t<amountBeneficiallyOwned>92488135</amountBeneficiallyOwned>\n\t\t\t\t<classPercent>6.8</classPercent>\n\t\t\t\t<numberOfSharesPersonHas>\n\t\t\t\t\t<solePowerOrDirectToVote>86069788</solePowerOrDirectToVote>\n\t\t\t\t\t<sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n\t\t\t\t\t<solePowerOrDirectToDispose>92488135</solePowerOrDirectToDispose>\n\t\t\t\t\t<sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>\n\t\t\t\t</numberOfSharesPersonHas>\n\t\t\t</item4>\n\t\t\t<item5>\n\t\t\t\t<notApplicableFlag>Y</notApplicableFlag>\n\t\t\t\t<classOwnership5PercentOrLess>N</classOwnership5PercentOrLess>\n\t\t\t</item5>\n\t\t\t<item6>\n\t\t\t\t<notApplicableFlag>N</notApplicableFlag>\n\t\t\t\t<ownershipMoreThan5PercentOnBehalfOfAnotherPerson>Various persons have the right to receive or the power to direct the receipt of dividends from, or the proceeds from the sale of the common stock of CARNIVAL CORP LTD. No one person's interest in the common stock of CARNIVAL CORP LTD is more than five percent of the total outstanding common shares.</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n\t\t\t</item6>\n\t\t\t<item7>\n\t\t\t\t<notApplicableFlag>N</notApplicableFlag>\n\t\t\t\t<subsidiaryIdentificationAndClassification>See Exhibit 99</subsidiaryIdentificationAndClassification>\n\t\t\t</item7>\n\t\t\t<item8>\n\t\t\t\t<notApplicableFlag>Y</notApplicableFlag>\n\t\t\t</item8>\n\t\t\t<item9>\n\t\t\t\t<notApplicableFlag>Y</notApplicableFlag>\n\t\t\t</item9>\n\t\t\t<item10>\n\t\t\t\t<notApplicableFlag>N</notApplicableFlag>\n\t\t\t\t<certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under Â§ 240.14a-11.</certifications>\n\t\t\t</item10>\n\t\t</items>\n\t\t<exhibitInfo>Exhibit 24: Power of Attorney Exhibit 99: Item 7</exhibitInfo>\n\t\t<signatureInformation>\n\t\t\t<reportingPersonName>BlackRock, Inc.</reportingPersonName>\n\t\t\t<signatureDetails>\n\t\t\t\t<signature>Spencer Fleming</signature>\n\t\t\t\t<title>Managing Director</title>\n\t\t\t\t<date>07/27/2026</date>\n\t\t\t</signatureDetails>\n\t\t</signatureInformation>\n\t</formData>\n\n</edgarSubmission>\n"
+  },
+  "identity_review": "SEC issuerInfo / subject-company identity inspected independently of filing owner CIK. Exact CUSIP evidence establishes issuer; ISIN retained from live source as matching scope, not claimed to be independently certified by every SEC filing.",
+  "lei_search_reviewed": true,
+  "equivalent_leis": [],
+  "limitations": [
+    "Independent non-CUSIP ISIN mapping unless noted below"
+  ],
+  "issuer_registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records/F1OF2ZSX47CR0BCWA982",
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        }
+      },
+      "data": {
+        "type": "lei-records",
+        "id": "F1OF2ZSX47CR0BCWA982",
+        "attributes": {
+          "lei": "F1OF2ZSX47CR0BCWA982",
+          "entity": {
+            "legalName": {
+              "name": "CARNIVAL CORPORATION LTD.",
+              "language": "en"
+            },
+            "otherNames": [
+              {
+                "name": "CARNIVAL CORPORATION.",
+                "language": "en",
+                "type": "PREVIOUS_LEGAL_NAME"
+              }
+            ],
+            "transliteratedOtherNames": [],
+            "legalAddress": {
+              "language": "en",
+              "addressLines": [
+                "C/O CONYERS CORPORATE SERVICES (BERMUDA) LIMITED",
+                "CLARENDON HOUSE, 2 CHURCH STREET"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "HAMILTON",
+              "region": null,
+              "country": "BM",
+              "postalCode": "HM 11"
+            },
+            "headquartersAddress": {
+              "language": "en",
+              "addressLines": [
+                "C/O CONYERS CORPORATE SERVICES (BERMUDA) LIMITED",
+                "CLARENDON HOUSE, 2 CHURCH STREET"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "HAMILTON",
+              "region": null,
+              "country": "BM",
+              "postalCode": "HM 11"
+            },
+            "registeredAt": {
+              "id": "RA000028",
+              "other": null
+            },
+            "registeredAs": "202605772",
+            "jurisdiction": "BM",
+            "category": "GENERAL",
+            "legalForm": {
+              "id": "7AS7",
+              "other": null
+            },
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "status": "ACTIVE",
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "successorEntities": [],
+            "creationDate": "1974-11-21T00:00:00Z",
+            "subCategory": null,
+            "otherAddresses": [],
+            "eventGroups": []
+          },
+          "registration": {
+            "initialRegistrationDate": "2012-10-08T15:09:00Z",
+            "lastUpdateDate": "2026-09-18T09:46:45Z",
+            "status": "ISSUED",
+            "nextRenewalDate": "2027-10-27T00:00:00Z",
+            "managingLou": "213800WAVVOPS85N2205",
+            "corroborationLevel": "PARTIALLY_CORROBORATED",
+            "validatedAt": {
+              "id": "RA000028",
+              "other": null
+            },
+            "validatedAs": "202605772",
+            "otherValidationAuthorities": []
+          },
+          "bic": null,
+          "mic": null,
+          "ocid": null,
+          "qcc": null,
+          "gem": null,
+          "spglobal": [
+            "258823"
+          ],
+          "conformityFlag": "CONFORMING"
+        },
+        "relationships": {
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/F1OF2ZSX47CR0BCWA982/managing-lou"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/F1OF2ZSX47CR0BCWA982/lei-issuer"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/F1OF2ZSX47CR0BCWA982/field-modifications"
+            }
+          },
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/F1OF2ZSX47CR0BCWA982/direct-parent-reporting-exception"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/F1OF2ZSX47CR0BCWA982/ultimate-parent-reporting-exception"
+            }
+          },
+          "direct-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/F1OF2ZSX47CR0BCWA982/direct-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/F1OF2ZSX47CR0BCWA982/direct-children"
+            }
+          },
+          "ultimate-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/F1OF2ZSX47CR0BCWA982/ultimate-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/F1OF2ZSX47CR0BCWA982/ultimate-children"
+            }
+          },
+          "isins": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/F1OF2ZSX47CR0BCWA982/isins"
+            }
+          }
+        },
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/F1OF2ZSX47CR0BCWA982"
+        }
+      }
+    }
+  }
+}

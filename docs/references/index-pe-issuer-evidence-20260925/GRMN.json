@@ -1,0 +1,212 @@
+{
+  "security": {
+    "symbol": "GRMN",
+    "cusip": "H2906T109",
+    "isin": "CH0114405324",
+    "name": "GARMIN LTD"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "GRMN",
+    "name": "GARMIN LTD",
+    "isin": "CH0114405324",
+    "securityCusip": "H2906T109",
+    "sharesNumber": 2045138,
+    "weightPercentage": 0.07168535,
+    "marketValue": 577415880,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=CH0114405324",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=CH0114405324&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=CH0114405324&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "2549001E0HIPIJQ0W046",
+          "attributes": {
+            "lei": "2549001E0HIPIJQ0W046",
+            "entity": {
+              "legalName": {
+                "name": "Garmin Ltd.",
+                "language": "en"
+              },
+              "otherNames": [
+                {
+                  "name": "Garmin AG",
+                  "language": "en",
+                  "type": "TRADING_OR_OPERATING_NAME"
+                }
+              ],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "Muhlentalstrasse 36/38"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Schaffhausen",
+                "region": "CH-SH",
+                "country": "CH",
+                "postalCode": "8200"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "Muhlentalstrasse 36/38"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Schaffhausen",
+                "region": "CH-SH",
+                "country": "CH",
+                "postalCode": "8200"
+              },
+              "registeredAt": {
+                "id": "RA000549",
+                "other": null
+              },
+              "registeredAs": "CHE-115.417.272",
+              "jurisdiction": "CH",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "MVII",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2010-06-27T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": [
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "OTHER_OFFICIAL_DOCUMENTS",
+                      "effectiveDate": "2025-12-02T00:00:00Z",
+                      "recordedDate": "2026-09-11T19:07:53Z",
+                      "type": "CHANGE_LEGAL_ADDRESS",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                },
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "OTHER_OFFICIAL_DOCUMENTS",
+                      "effectiveDate": "2025-12-02T00:00:00Z",
+                      "recordedDate": "2026-09-11T19:07:53Z",
+                      "type": "CHANGE_HQ_ADDRESS",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                }
+              ]
+            },
+            "registration": {
+              "initialRegistrationDate": "2017-11-06T14:52:28Z",
+              "lastUpdateDate": "2026-09-11T20:49:44Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-09-17T17:29:32Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000549",
+                "other": null
+              },
+              "validatedAs": "CHE-115.417.272",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": null,
+            "qcc": "QCH0A5U14P",
+            "gem": null,
+            "spglobal": [
+              "598655"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2549001E0HIPIJQ0W046/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2549001E0HIPIJQ0W046/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2549001E0HIPIJQ0W046/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/2549001E0HIPIJQ0W046/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/2549001E0HIPIJQ0W046/ultimate-parent-reporting-exception"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2549001E0HIPIJQ0W046/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/2549001E0HIPIJQ0W046"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "Garmin Ltd.",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

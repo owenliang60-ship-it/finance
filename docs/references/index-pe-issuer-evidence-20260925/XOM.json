@@ -1,0 +1,203 @@
+{
+  "security": {
+    "symbol": "XOM",
+    "cusip": "30233Q108",
+    "isin": "US30233Q1085",
+    "name": "EXXONMOBIL HOLDINGS CORP"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "XOM",
+    "name": "EXXONMOBIL HOLDINGS CORP",
+    "isin": "US30233Q1085",
+    "securityCusip": "30233Q108",
+    "sharesNumber": 50691547,
+    "weightPercentage": 0.99616919,
+    "marketValue": 8024008975,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US30233Q1085",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US30233Q1085&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US30233Q1085&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "J3WHBG0MTS7O8ZVMDC91",
+          "attributes": {
+            "lei": "J3WHBG0MTS7O8ZVMDC91",
+            "entity": {
+              "legalName": {
+                "name": "EXXON MOBIL CORPORATION",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "C/O Corporation Service Company",
+                  "Princeton South Corporate Center",
+                  "Suite 160"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Ewing",
+                "region": "US-NJ",
+                "country": "US",
+                "postalCode": "08628"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "22777 SPRINGWOODS VILLAGE"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "SPRING",
+                "region": "US-TX",
+                "country": "US",
+                "postalCode": "77389"
+              },
+              "registeredAt": {
+                "id": "RA000625",
+                "other": null
+              },
+              "registeredAs": "3793794100",
+              "jurisdiction": "US-NJ",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "XSNP",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "1882-08-05T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2012-06-06T15:51:00Z",
+              "lastUpdateDate": "2026-09-01T18:49:44Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-06-06T14:41:00Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000625",
+                "other": null
+              },
+              "validatedAs": "3793794100",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "us_nj/3793794100",
+            "qcc": null,
+            "gem": "E100000001213",
+            "spglobal": [
+              "406338"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/J3WHBG0MTS7O8ZVMDC91/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/J3WHBG0MTS7O8ZVMDC91/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/J3WHBG0MTS7O8ZVMDC91/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/J3WHBG0MTS7O8ZVMDC91/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/J3WHBG0MTS7O8ZVMDC91/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/J3WHBG0MTS7O8ZVMDC91/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/J3WHBG0MTS7O8ZVMDC91/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/J3WHBG0MTS7O8ZVMDC91/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/J3WHBG0MTS7O8ZVMDC91/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/J3WHBG0MTS7O8ZVMDC91/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/J3WHBG0MTS7O8ZVMDC91"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "EXXON MOBIL CORPORATION",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": [
+      {
+        "holding_date": "2026-06-30",
+        "raw_symbol": "",
+        "cusip": "30231G102",
+        "isin": "US30231G1022",
+        "issuer_lei": "J3WHBG0MTS7O8ZVMDC91"
+      }
+    ]
+  }
+}

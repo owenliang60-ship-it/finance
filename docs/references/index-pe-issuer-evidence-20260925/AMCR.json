@@ -1,0 +1,202 @@
+{
+  "security": {
+    "symbol": "AMCR",
+    "cusip": "G0250X149",
+    "isin": "JE00BV7DQ550",
+    "name": "AMCOR PLC"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "AMCR",
+    "name": "AMCOR PLC",
+    "isin": "JE00BV7DQ550",
+    "securityCusip": "G0250X149",
+    "sharesNumber": 5676727,
+    "weightPercentage": 0.02961414,
+    "marketValue": 238537885,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=JE00BV7DQ550",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=JE00BV7DQ550&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=JE00BV7DQ550&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "549300GSODGFCDQ3DI89",
+          "attributes": {
+            "lei": "549300GSODGFCDQ3DI89",
+            "entity": {
+              "legalName": {
+                "name": "AMCOR PLC",
+                "language": "en"
+              },
+              "otherNames": [
+                {
+                  "name": "ARCTIC JERSEY LIMITED",
+                  "language": "en",
+                  "type": "PREVIOUS_LEGAL_NAME"
+                }
+              ],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "3RD FLOOR, 44 ESPLANADE"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "ST HELIER",
+                "region": null,
+                "country": "JE",
+                "postalCode": "JE4 9WG"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "83 TOWER ROAD NORTH",
+                  "WARMLEY"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "BRISTOL",
+                "region": "GB-BST",
+                "country": "GB",
+                "postalCode": "BS30 8XP"
+              },
+              "registeredAt": {
+                "id": "RA000414",
+                "other": null
+              },
+              "registeredAs": "126984",
+              "jurisdiction": "JE",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "JOX1",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2018-07-31T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2019-06-20T14:30:00Z",
+              "lastUpdateDate": "2026-07-14T17:16:23Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-09-02T00:00:00Z",
+              "managingLou": "213800WAVVOPS85N2205",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000414",
+                "other": null
+              },
+              "validatedAs": "126984",
+              "otherValidationAuthorities": []
+            },
+            "bic": [
+              "BEHIGB22XXX"
+            ],
+            "mic": null,
+            "ocid": null,
+            "qcc": "QJE50C6NV8",
+            "gem": null,
+            "spglobal": [
+              "401715"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300GSODGFCDQ3DI89/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300GSODGFCDQ3DI89/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300GSODGFCDQ3DI89/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300GSODGFCDQ3DI89/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300GSODGFCDQ3DI89/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300GSODGFCDQ3DI89/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/549300GSODGFCDQ3DI89/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300GSODGFCDQ3DI89/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/549300GSODGFCDQ3DI89/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/549300GSODGFCDQ3DI89/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/549300GSODGFCDQ3DI89"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "AMCOR PLC",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

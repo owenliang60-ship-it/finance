@@ -1,0 +1,220 @@
+{
+  "security": {
+    "symbol": "AON",
+    "cusip": "G0403H108",
+    "isin": "IE00BLP1HW54",
+    "name": "AON PLC CLASS A"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "AON",
+    "name": "AON PLC CLASS A",
+    "isin": "IE00BLP1HW54",
+    "securityCusip": "G0403H108",
+    "sharesNumber": 2610568,
+    "weightPercentage": 0.08960195,
+    "marketValue": 721731663,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00BLP1HW54",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00BLP1HW54&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=IE00BLP1HW54&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "635400FALWQYX5E6QC64",
+          "attributes": {
+            "lei": "635400FALWQYX5E6QC64",
+            "entity": {
+              "legalName": {
+                "name": "AON PUBLIC LIMITED COMPANY",
+                "language": "en"
+              },
+              "otherNames": [
+                {
+                  "name": "AON LIMITED",
+                  "language": "en",
+                  "type": "PREVIOUS_LEGAL_NAME"
+                },
+                {
+                  "name": "LINZICON LIMITED",
+                  "language": "en",
+                  "type": "PREVIOUS_LEGAL_NAME"
+                }
+              ],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "15 Georges Quay",
+                  "Dublin 2"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Dublin",
+                "region": "IE-D",
+                "country": "IE",
+                "postalCode": "D02V R98"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "METROPOLITAN BUILDING",
+                  "JAMES JOYCE STREET",
+                  "DUBLIN 1"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "DUBLIN",
+                "region": "IE-D",
+                "country": "IE",
+                "postalCode": "D01 K0Y8"
+              },
+              "registeredAt": {
+                "id": "RA000402",
+                "other": null
+              },
+              "registeredAs": "604607",
+              "jurisdiction": "IE",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "VYAX",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2017-05-23T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": [
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "SUPPORTING_DOCUMENTS",
+                      "effectiveDate": "2019-05-11T00:00:00Z",
+                      "recordedDate": "2026-08-26T00:00:00Z",
+                      "type": "CHANGE_LEGAL_NAME",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                }
+              ]
+            },
+            "registration": {
+              "initialRegistrationDate": "2020-02-18T00:00:00Z",
+              "lastUpdateDate": "2026-08-26T05:31:32Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-09-21T09:29:16Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000402",
+                "other": null
+              },
+              "validatedAs": "604607",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "ie/604607",
+            "qcc": "QIE2BKBQN4",
+            "gem": null,
+            "spglobal": [
+              "119853"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/635400FALWQYX5E6QC64/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/635400FALWQYX5E6QC64/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/635400FALWQYX5E6QC64/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/635400FALWQYX5E6QC64/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/635400FALWQYX5E6QC64/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/635400FALWQYX5E6QC64/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/635400FALWQYX5E6QC64/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/635400FALWQYX5E6QC64/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/635400FALWQYX5E6QC64/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/635400FALWQYX5E6QC64/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/635400FALWQYX5E6QC64"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "AON PUBLIC LIMITED COMPANY",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

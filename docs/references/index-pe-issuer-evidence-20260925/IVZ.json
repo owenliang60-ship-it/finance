@@ -1,0 +1,220 @@
+{
+  "security": {
+    "symbol": "IVZ",
+    "cusip": "G491BT108",
+    "isin": "BMG491BT1088",
+    "name": "INVESCO LTD"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "IVZ",
+    "name": "INVESCO LTD",
+    "isin": "BMG491BT1088",
+    "securityCusip": "G491BT108",
+    "sharesNumber": 5491674,
+    "weightPercentage": 0.02057549,
+    "marketValue": 165732820,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=BMG491BT1088",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=BMG491BT1088&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=BMG491BT1088&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "ECPGFXU8A2SHKVVGJI15",
+          "attributes": {
+            "lei": "ECPGFXU8A2SHKVVGJI15",
+            "entity": {
+              "legalName": {
+                "name": "INVESCO LTD.",
+                "language": "en"
+              },
+              "otherNames": [
+                {
+                  "name": "Amvescap PLC",
+                  "language": "en",
+                  "type": "PREVIOUS_LEGAL_NAME"
+                },
+                {
+                  "name": "Invesco PLC",
+                  "language": "en",
+                  "type": "PREVIOUS_LEGAL_NAME"
+                }
+              ],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "Victoria Place"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Hamilton",
+                "region": null,
+                "country": "BM",
+                "postalCode": "HM 10"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "1331 Spring Street NW",
+                  "Suite 2500"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Atlanta",
+                "region": "US-GA",
+                "country": "US",
+                "postalCode": "30309"
+              },
+              "registeredAt": {
+                "id": "RA000028",
+                "other": null
+              },
+              "registeredAs": "40671",
+              "jurisdiction": "BM",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "7AS7",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2007-09-12T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": [
+                {
+                  "groupType": "STANDALONE",
+                  "events": [
+                    {
+                      "validationDocuments": "SUPPORTING_DOCUMENTS",
+                      "effectiveDate": "2025-09-02T00:00:00Z",
+                      "recordedDate": "2025-09-02T00:00:00Z",
+                      "type": "CHANGE_LEGAL_NAME",
+                      "status": "COMPLETED"
+                    }
+                  ]
+                }
+              ]
+            },
+            "registration": {
+              "initialRegistrationDate": "2012-06-06T15:51:00Z",
+              "lastUpdateDate": "2026-06-02T18:19:20Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-06-06T16:16:47Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000028",
+                "other": null
+              },
+              "validatedAs": "40671",
+              "otherValidationAuthorities": []
+            },
+            "bic": [
+              "IVZLBMHHXXX"
+            ],
+            "mic": null,
+            "ocid": "bm/40671",
+            "qcc": "QBMSB4CTGC",
+            "gem": "E100001000346",
+            "spglobal": [
+              "384779"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/ECPGFXU8A2SHKVVGJI15/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/ECPGFXU8A2SHKVVGJI15/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/ECPGFXU8A2SHKVVGJI15/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/ECPGFXU8A2SHKVVGJI15/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/ECPGFXU8A2SHKVVGJI15/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/ECPGFXU8A2SHKVVGJI15/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/ECPGFXU8A2SHKVVGJI15/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/ECPGFXU8A2SHKVVGJI15/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/ECPGFXU8A2SHKVVGJI15/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/ECPGFXU8A2SHKVVGJI15/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/ECPGFXU8A2SHKVVGJI15"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "INVESCO LTD.",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

@@ -1,0 +1,195 @@
+{
+  "security": {
+    "symbol": "ILMN",
+    "cusip": "452327109",
+    "isin": "US4523271090",
+    "name": "ILLUMINA INC"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "ILMN",
+    "name": "ILLUMINA INC",
+    "isin": "US4523271090",
+    "securityCusip": "452327109",
+    "sharesNumber": 1861697,
+    "weightPercentage": 0.05794873,
+    "marketValue": 466769224,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US4523271090",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US4523271090&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US4523271090&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "SQ95QG8SR5Q56LSNF682",
+          "attributes": {
+            "lei": "SQ95QG8SR5Q56LSNF682",
+            "entity": {
+              "legalName": {
+                "name": "ILLUMINA, INC.",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "C/O THE CORPORATION TRUST COMPANY",
+                  "CORPORATION TRUST CENTER",
+                  "1209 ORANGE ST"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "WILMINGTON",
+                "region": "US-DE",
+                "country": "US",
+                "postalCode": "19801"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "5200 ILLUMINA WAY"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "SAN DIEGO",
+                "region": "US-CA",
+                "country": "US",
+                "postalCode": "92122"
+              },
+              "registeredAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "registeredAs": "3228889",
+              "jurisdiction": "US-DE",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "XTIQ",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2000-05-16T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2012-11-13T23:11:09Z",
+              "lastUpdateDate": "2026-04-06T17:55:46Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-04-14T13:53:20Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "validatedAs": "3228889",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "us_de/3228889",
+            "qcc": null,
+            "gem": null,
+            "spglobal": [
+              "29753"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/SQ95QG8SR5Q56LSNF682/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/SQ95QG8SR5Q56LSNF682/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/SQ95QG8SR5Q56LSNF682/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/SQ95QG8SR5Q56LSNF682/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/SQ95QG8SR5Q56LSNF682/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/SQ95QG8SR5Q56LSNF682/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/SQ95QG8SR5Q56LSNF682/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/SQ95QG8SR5Q56LSNF682/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/SQ95QG8SR5Q56LSNF682/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/SQ95QG8SR5Q56LSNF682/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/SQ95QG8SR5Q56LSNF682"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "ILLUMINA, INC.",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

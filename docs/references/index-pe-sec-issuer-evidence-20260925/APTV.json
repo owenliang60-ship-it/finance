@@ -1,0 +1,193 @@
+{
+  "reviewed_at": "2026-09-25",
+  "reviewed_securities": [
+    {
+      "symbol": "APTV",
+      "cusip": "G3265R107",
+      "isin": "JE00BTDN8H13",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001521332",
+    "sec_name": "Aptiv PLC",
+    "section": "ISSUER",
+    "form": "SCHEDULE 13G",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1521332/000031302826000037/primary_doc.xml",
+    "filing_date": "2026-08-12"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "APTV",
+    "name": "APTIV PLC",
+    "isin": "JE00BTDN8H13",
+    "securityCusip": "G3265R107",
+    "sharesNumber": 2617793,
+    "weightPercentage": 0.01441233,
+    "marketValue": 116089348,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1521332/000031302826000037/primary_doc.xml",
+    "sha256": "ad86fb019098cf0b94698197a1a4b352c8c45bee01a7f1912931ac0e272af7f6",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n  <schemaVersion>X0202</schemaVersion>\n<headerData>\n    <submissionType>SCHEDULE 13G</submissionType>\n    <filerInfo>\n      <filer>\n        <filerCredentials>\n          <cik>0000313028</cik>\n          <ccc>XXXXXXXX</ccc>\n        </filerCredentials>\n      </filer>\n      <liveTestFlag>LIVE</liveTestFlag>\n\n\n\n    </filerInfo>\n  </headerData>\n  <formData>\n    <coverPageHeader>\n      <securitiesClassTitle>Common Stock</securitiesClassTitle>\n      <eventDateRequiresFilingThisStatement>06/30/2026</eventDateRequiresFilingThisStatement>\n      <issuerInfo>\n        <issuerCik>0001521332</issuerCik>\n        <issuerName>Aptiv PLC</issuerName>\n        <issuerCusips>\n          <issuerCusipNumber>G3265R107</issuerCusipNumber>\n        </issuerCusips>\n        <issuerPrincipalExecutiveOfficeAddress>\n          <com:street1>SPITALSTRASSE 5</com:street1>\n          <com:city>SCHAFFHAUSEN</com:city>\n          <com:stateOrCountry>V8</com:stateOrCountry>\n          <com:zipCode>8200</com:zipCode>\n        </issuerPrincipalExecutiveOfficeAddress>\n      </issuerInfo>\n      <designateRulesPursuantThisScheduleFiled>\n        <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n      </designateRulesPursuantThisScheduleFiled>\n    </coverPageHeader>\n    <coverPageHeaderReportingPersonDetails>\n\n      <reportingPersonName>BARROW HANLEY MEWHINNEY &amp; STRAUSS LLC</reportingPersonName>\n      <citizenshipOrOrganization>DE</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>7193522.00</soleVotingPower>\n        <sharedVotingPower>3602869.00</sharedVotingPower>\n        <soleDispositivePower>10796391.00</soleDispositivePower>\n        <sharedDispositivePower>0.00</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>10796391.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <classPercent>5.1</classPercent>\n      <typeOfReportingPerson>IA</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <items>\n      <item1>\n        <issuerName>Aptiv PLC</issuerName>\n        <issuerPrincipalExecutiveOfficeAddress>SPITALSTRASSE 5, SCHAFFHAUSEN, SWITZERLAND, 8200.</issuerPrincipalExecutiveOfficeAddress>\n      </item1>\n      <item2>\n        <filingPersonName>Barrow Hanley Global Investors\n</filingPersonName>\n        <principalBusinessOfficeOrResidenceAddress>2200 Ross Avenue, 31st Floor\nDallas, TX 75201\"\n</principalBusinessOfficeOrResidenceAddress>\n        <citizenship>Delaware LLC\n</citizenship>\n      </item2>\n      <item3>\n        <notApplicableFlag>N</notApplicableFlag>\n        <typeOfPersonFiling>IA</typeOfPersonFiling>\n      </item3>\n      <item4>\n        <amountBeneficiallyOwned>10,796,391\n</amountBeneficiallyOwned>\n        <classPercent>5.10%\n</classPercent>\n        <numberOfSharesPersonHas>\n          <solePowerOrDirectToVote>7,193,522\n</solePowerOrDirectToVote>\n          <sharedPowerOrDirectToVote>3,602,869\n</sharedPowerOrDirectToVote>\n          <solePowerOrDirectToDispose>10,796,391\n</solePowerOrDirectToDispose>\n          <sharedPowerOrDirectToDispose>0\n</sharedPowerOrDirectToDispose>\n        </numberOfSharesPersonHas>\n      </item4>\n      <item5>\n        <notApplicableFlag>Y</notApplicableFlag>\n        <classOwnership5PercentOrLess>N</classOwnership5PercentOrLess>\n      </item5>\n      <item6>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item6>\n      <item7>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item7>\n      <item8>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item8>\n      <item9>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item9>\n      <item10>\n        <notApplicableFlag>N</notApplicableFlag>\n        <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under &amp;#167; 240.14a-11.\n\n</certifications>\n      </item10>\n    </items>\n    <signatureInformation>\n      <reportingPersonName>BARROW HANLEY MEWHINNEY &amp; STRAUSS LLC</reportingPersonName>\n      <signatureDetails>\n        <signature>Hannah Ackels</signature>\n        <title>CCO</title>\n        <date>08/12/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n  </formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "SEC issuerInfo / subject-company identity inspected independently of filing owner CIK. Exact CUSIP evidence establishes issuer; ISIN retained from live source as matching scope, not claimed to be independently certified by every SEC filing.",
+  "lei_search_reviewed": true,
+  "equivalent_leis": [],
+  "limitations": [
+    "Independent non-CUSIP ISIN mapping unless noted below"
+  ],
+  "issuer_registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records/254900HTTDFIJZ32GX53",
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        }
+      },
+      "data": {
+        "type": "lei-records",
+        "id": "254900HTTDFIJZ32GX53",
+        "attributes": {
+          "lei": "254900HTTDFIJZ32GX53",
+          "entity": {
+            "legalName": {
+              "name": "Aptiv PLC",
+              "language": "en"
+            },
+            "otherNames": [],
+            "transliteratedOtherNames": [],
+            "legalAddress": {
+              "language": "en",
+              "addressLines": [
+                "13 Castle Street"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "St. Helier",
+              "region": null,
+              "country": "JE",
+              "postalCode": "JE1 1ES"
+            },
+            "headquartersAddress": {
+              "language": "en",
+              "addressLines": [
+                "5 Hanover Quay",
+                "Grand Canal Dock"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "Dublin",
+              "region": "IE-D",
+              "country": "IE",
+              "postalCode": "D02 VY79"
+            },
+            "registeredAt": {
+              "id": "RA000414",
+              "other": null
+            },
+            "registeredAs": "108188",
+            "jurisdiction": "JE",
+            "category": "GENERAL",
+            "legalForm": {
+              "id": "JOX1",
+              "other": null
+            },
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "status": "ACTIVE",
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "successorEntities": [],
+            "creationDate": "2011-05-19T00:00:00Z",
+            "subCategory": null,
+            "otherAddresses": [],
+            "eventGroups": []
+          },
+          "registration": {
+            "initialRegistrationDate": "2024-05-22T10:13:46Z",
+            "lastUpdateDate": "2025-05-22T13:30:04Z",
+            "status": "LAPSED",
+            "nextRenewalDate": "2025-05-22T10:13:46Z",
+            "managingLou": "5493001KJTIIGC8Y1R12",
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "validatedAt": {
+              "id": "RA000414",
+              "other": null
+            },
+            "validatedAs": "108188",
+            "otherValidationAuthorities": []
+          },
+          "bic": null,
+          "mic": null,
+          "ocid": null,
+          "qcc": "QJEB8UNRSS",
+          "gem": null,
+          "spglobal": [
+            "59502420"
+          ],
+          "conformityFlag": "NON_CONFORMING"
+        },
+        "relationships": {
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/254900HTTDFIJZ32GX53/managing-lou"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/254900HTTDFIJZ32GX53/lei-issuer"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/254900HTTDFIJZ32GX53/field-modifications"
+            }
+          },
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/254900HTTDFIJZ32GX53/direct-parent-reporting-exception"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/254900HTTDFIJZ32GX53/ultimate-parent-reporting-exception"
+            }
+          },
+          "direct-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/254900HTTDFIJZ32GX53/direct-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/254900HTTDFIJZ32GX53/direct-children"
+            }
+          },
+          "ultimate-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/254900HTTDFIJZ32GX53/ultimate-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/254900HTTDFIJZ32GX53/ultimate-children"
+            }
+          },
+          "isins": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/254900HTTDFIJZ32GX53/isins"
+            }
+          }
+        },
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/254900HTTDFIJZ32GX53"
+        }
+      }
+    }
+  }
+}

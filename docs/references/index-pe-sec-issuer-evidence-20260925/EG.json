@@ -1,0 +1,210 @@
+{
+  "reviewed_at": "2026-09-25",
+  "reviewed_securities": [
+    {
+      "symbol": "EG",
+      "cusip": "G3223R108",
+      "isin": "BMG3223R1088",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001095073",
+    "sec_name": "EVEREST GROUP, LTD.",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1095073/000137417026000045/primary_doc.xml",
+    "form": "SCHEDULE 13G",
+    "filing_date": "2026-05-11"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "EG",
+    "name": "EVEREST GROUP LTD",
+    "isin": "BMG3223R1088",
+    "securityCusip": "G3223R108",
+    "sharesNumber": 439950,
+    "weightPercentage": 0.01996766,
+    "marketValue": 160836808,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1095073/000137417026000045/primary_doc.xml",
+    "sha256": "202213cc05348a14a82879ef008a36cfc24c3f40b58c5d4fc692140e56b5b574",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n  <schemaVersion>X0202</schemaVersion>\n<headerData>\n    <submissionType>SCHEDULE 13G</submissionType>\n    <filerInfo>\n      <filer>\n        <filerCredentials>\n          <cik>0001374170</cik>\n          <ccc>XXXXXXXX</ccc>\n        </filerCredentials>\n      </filer>\n      <liveTestFlag>LIVE</liveTestFlag>\n\n\n    </filerInfo>\n  </headerData>\n  <formData>\n    <coverPageHeader>\n      <securitiesClassTitle>Common Stock</securitiesClassTitle>\n      <eventDateRequiresFilingThisStatement>03/31/2026</eventDateRequiresFilingThisStatement>\n      <issuerInfo>\n        <issuerCik>0001095073</issuerCik>\n        <issuerName>EVEREST GROUP, LTD.</issuerName>\n        <issuerCusips>\n          <issuerCusipNumber>G3223R108</issuerCusipNumber>\n        </issuerCusips>\n        <issuerPrincipalExecutiveOfficeAddress>\n          <com:street1>SEON PLACE, 4TH FLOOR</com:street1>\n          <com:street2>141 FRONT STREET</com:street2>\n          <com:city>HAMILTON</com:city>\n          <com:stateOrCountry>D0</com:stateOrCountry>\n          <com:zipCode>HM 19</com:zipCode>\n        </issuerPrincipalExecutiveOfficeAddress>\n      </issuerInfo>\n      <designateRulesPursuantThisScheduleFiled>\n        <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n      </designateRulesPursuantThisScheduleFiled>\n    </coverPageHeader>\n    <coverPageHeaderReportingPersonDetails>\n\n      <reportingPersonName>Norges Bank</reportingPersonName>\n      <citizenshipOrOrganization>Q8</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>2097552.00</soleVotingPower>\n        <sharedVotingPower>0.00</sharedVotingPower>\n        <soleDispositivePower>2097552.00</soleDispositivePower>\n        <sharedDispositivePower>386.00</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>2097938.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <classPercent>5.1942</classPercent>\n      <typeOfReportingPerson>FI</typeOfReportingPerson>\n      <typeOfReportingPerson>OO</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <items>\n      <item1>\n        <issuerName>EVEREST GROUP, LTD.</issuerName>\n        <issuerPrincipalExecutiveOfficeAddress>SEON PLACE, 4TH FLOOR, 141 FRONT STREET, HAMILTON, D0, HM 19</issuerPrincipalExecutiveOfficeAddress>\n      </item1>\n      <item2>\n        <filingPersonName>Norges Bank</filingPersonName>\n        <principalBusinessOfficeOrResidenceAddress>Bankplassen 2, PO Box 1179 Sentrum, Oslo, NO-0107, Oslo, Norway</principalBusinessOfficeOrResidenceAddress>\n        <citizenship>Norway</citizenship>\n      </item2>\n      <item3>\n        <notApplicableFlag>N</notApplicableFlag>\n        <typeOfPersonFiling>FI</typeOfPersonFiling>\n        <typeOfPersonFiling>OO</typeOfPersonFiling>\n        <otherTypeOfPersonFiling>Investment Adviser</otherTypeOfPersonFiling>\n      </item3>\n      <item4>\n        <amountBeneficiallyOwned>2097938</amountBeneficiallyOwned>\n        <classPercent>5.1942</classPercent>\n        <numberOfSharesPersonHas>\n          <solePowerOrDirectToVote>2097552</solePowerOrDirectToVote>\n          <sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n          <solePowerOrDirectToDispose>2097552</solePowerOrDirectToDispose>\n          <sharedPowerOrDirectToDispose>386</sharedPowerOrDirectToDispose>\n        </numberOfSharesPersonHas>\n      </item4>\n      <item5>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item5>\n      <item6>\n        <notApplicableFlag>N</notApplicableFlag>\n        <ownershipMoreThan5PercentOnBehalfOfAnotherPerson>Certain shares reported herein are invested on behalf of the Government of Norway.</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n      </item6>\n      <item7>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item7>\n      <item8>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item8>\n      <item9>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item9>\n      <item10>\n        <notApplicableFlag>N</notApplicableFlag>\n        <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under ?? 240.14a-11. I also certify that, to the best of my knowledge and belief, the foreign regulatory scheme applicable to the investment management division of Norges Bank, the central bank of Norway, is substantially comparable to the regulatory scheme applicable to the functionally equivalent U.S. institution(s). I undertake to furnish to the Commission staff, upon request, information that would otherwise be disclosed in a Schedule 13D.</certifications>\n      </item10>\n    </items>\n    <signatureInformation>\n      <reportingPersonName>Norges Bank</reportingPersonName>\n      <signatureDetails>\n        <signature>Stanislav Boiadjiev</signature>\n        <title>Business and Regulatory Compliance</title>\n        <date>05/11/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n  </formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "SEC issuerInfo / subject-company identity inspected independently of filing owner CIK. Exact CUSIP evidence establishes issuer; ISIN retained from live source as matching scope, not claimed to be independently certified by every SEC filing.",
+  "lei_search_reviewed": true,
+  "equivalent_leis": [],
+  "limitations": [
+    "Independent ISIN-to-CUSIP mapping not reverified; exact CUSIP-to-issuer CIK is primary-source verified."
+  ],
+  "issuer_registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records/549300N24XF2VV0B3570",
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        }
+      },
+      "data": {
+        "type": "lei-records",
+        "id": "549300N24XF2VV0B3570",
+        "attributes": {
+          "lei": "549300N24XF2VV0B3570",
+          "entity": {
+            "legalName": {
+              "name": "EVEREST GROUP, LTD.",
+              "language": "en"
+            },
+            "otherNames": [
+              {
+                "name": "EVEREST RE GROUP, LTD.",
+                "language": "en",
+                "type": "PREVIOUS_LEGAL_NAME"
+              }
+            ],
+            "transliteratedOtherNames": [],
+            "legalAddress": {
+              "language": "en",
+              "addressLines": [
+                "Clarendon House",
+                "2 Church Street"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "Hamilton",
+              "region": null,
+              "country": "BM",
+              "postalCode": "HM 11"
+            },
+            "headquartersAddress": {
+              "language": "en",
+              "addressLines": [
+                "Seon Place, 4th Floor",
+                "PO Box HM 845",
+                "141 Front Street"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "Hamilton",
+              "region": null,
+              "country": "BM",
+              "postalCode": "HM 19"
+            },
+            "registeredAt": {
+              "id": "RA000028",
+              "other": null
+            },
+            "registeredAs": "26918",
+            "jurisdiction": "BM",
+            "category": "GENERAL",
+            "legalForm": {
+              "id": "7AS7",
+              "other": null
+            },
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "status": "ACTIVE",
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "successorEntities": [],
+            "creationDate": "1999-08-26T00:00:00Z",
+            "subCategory": null,
+            "otherAddresses": [],
+            "eventGroups": [
+              {
+                "groupType": "STANDALONE",
+                "events": [
+                  {
+                    "validationDocuments": "SUPPORTING_DOCUMENTS",
+                    "effectiveDate": "2023-07-10T00:00:00Z",
+                    "recordedDate": "2023-12-14T15:47:38Z",
+                    "type": "CHANGE_LEGAL_NAME",
+                    "status": "COMPLETED"
+                  }
+                ]
+              }
+            ]
+          },
+          "registration": {
+            "initialRegistrationDate": "2018-04-05T15:32:00Z",
+            "lastUpdateDate": "2026-07-20T08:33:31Z",
+            "status": "ISSUED",
+            "nextRenewalDate": "2027-07-26T14:22:10Z",
+            "managingLou": "5493001KJTIIGC8Y1R12",
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "validatedAt": {
+              "id": "RA000028",
+              "other": null
+            },
+            "validatedAs": "26918",
+            "otherValidationAuthorities": []
+          },
+          "bic": null,
+          "mic": null,
+          "ocid": "bm/26918",
+          "qcc": "QBM590QAMD",
+          "gem": null,
+          "spglobal": [
+            "340813"
+          ],
+          "conformityFlag": "CONFORMING"
+        },
+        "relationships": {
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300N24XF2VV0B3570/managing-lou"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300N24XF2VV0B3570/lei-issuer"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300N24XF2VV0B3570/field-modifications"
+            }
+          },
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300N24XF2VV0B3570/direct-parent-reporting-exception"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300N24XF2VV0B3570/ultimate-parent-reporting-exception"
+            }
+          },
+          "direct-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300N24XF2VV0B3570/direct-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/549300N24XF2VV0B3570/direct-children"
+            }
+          },
+          "ultimate-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300N24XF2VV0B3570/ultimate-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/549300N24XF2VV0B3570/ultimate-children"
+            }
+          }
+        },
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/549300N24XF2VV0B3570"
+        }
+      }
+    }
+  },
+  "rejected_lei": "254900P29PM5UJR3VU91 (EVEREST REINSURANCE HOLDINGS INC, not the group issuer)"
+}

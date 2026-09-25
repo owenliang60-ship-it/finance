@@ -1,0 +1,170 @@
+{
+  "as_of": "2026-09-26",
+  "review_date": "2026-09-25",
+  "status": "IMPLEMENTED_SOURCE_BLOCKED_NOT_DEPLOYED",
+  "network_preflights": {
+    "preflight-SPY": {
+      "api_requests_used": 2,
+      "request_limit": 8,
+      "status": "failed",
+      "error": "ValueError: source issuer identity gate failed: ('SPY', '2026-09-25', 'live'):14:XOM:issuer_identity_unresolved; ('SPY', '2026-09-25', 'live'):53:LIN:issuer_identity_unresolved; ('SPY', '2026-09-25', 'live'):56:STX:issuer_identity_unresolved; ('SPY', '2026-09-25', 'live'):68:ETN:issuer_identity_unresolved; ('SPY', '2026-09-25', 'live'):95:CB:issuer_identity_unresolved",
+      "identity_resolved": 11047,
+      "identity_errors": [
+        "('SPY', '2026-09-25', 'live'):14:XOM:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):53:LIN:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):56:STX:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):68:ETN:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):95:CB:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):98:MDT:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):99:ACN:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):115:TT:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):126:JCI:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):141:BE:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):187:TEL:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):193:AON:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):195:NXPI:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):204:OKE:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):205:RCL:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):208:CRH:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):229:GRMN:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):250:FERG:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):256:FLEX:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):268:ILMN:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):276:P:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):294:ACGL:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):314:WTW:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):315:CCL:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):345:SW:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):364:RDDT:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):376:STE:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):382:AMCR:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):406:BG:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):422:LYB:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):439:IVZ:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):444:EG:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):448:ALLE:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):483:APTV:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):488:PNR:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):495:NCLH:issuer_identity_unresolved",
+        "('SPY', '2026-09-25', 'live'):504:2602335D:issuer_identity_unresolved"
+      ]
+    },
+    "postflight-SPY": {
+      "api_requests_used": 2,
+      "request_limit": 8,
+      "status": "failed",
+      "error": "ValueError: source issuer identity gate failed: ('SPY', '2026-09-25', 'live'):504:2602335D:issuer_identity_unresolved",
+      "identity_resolved": 11083,
+      "identity_errors": [
+        "('SPY', '2026-09-25', 'live'):504:2602335D:issuer_identity_unresolved"
+      ]
+    },
+    "preflight-QQQ": {
+      "api_requests_used": 2,
+      "request_limit": 8,
+      "status": "failed",
+      "error": "ValueError: source issuer identity gate failed: ('QQQ', '2026-09-25', 'live'):11:SPCX:issuer_identity_unresolved; ('QQQ', '2026-09-25', 'live'):89:FER:issuer_identity_unresolved",
+      "identity_resolved": 2223,
+      "identity_errors": [
+        "('QQQ', '2026-09-25', 'live'):11:SPCX:issuer_identity_unresolved",
+        "('QQQ', '2026-09-25', 'live'):89:FER:issuer_identity_unresolved"
+      ]
+    },
+    "postflight-QQQ": {
+      "api_requests_used": 8,
+      "request_limit": 8,
+      "status": "failed",
+      "error": "RuntimeError: FMP request budget exhausted (8)",
+      "identity_resolved": 2225,
+      "identity_errors": []
+    },
+    "preflight-SOXX": {
+      "api_requests_used": 2,
+      "request_limit": 8,
+      "status": "failed",
+      "error": "ValueError: source issuer identity gate failed: ('SOXX', '2026-09-25', 'live'):12:SKHYV:issuer_identity_unresolved; ('SOXX', '2026-09-25', 'live'):16:0EDE.L:issuer_identity_unresolved; ('SOXX', '2026-09-25', 'live'):19:CRDO:issuer_identity_unresolved; ('SOXX', '2026-09-25', 'live'):20:ASML:issuer_identity_unresolved; ('SOXX', '2026-09-25', 'live'):25:CBRS:issuer_identity_unresolved",
+      "identity_resolved": 607,
+      "identity_errors": [
+        "('SOXX', '2026-09-25', 'live'):12:SKHYV:issuer_identity_unresolved",
+        "('SOXX', '2026-09-25', 'live'):16:0EDE.L:issuer_identity_unresolved",
+        "('SOXX', '2026-09-25', 'live'):19:CRDO:issuer_identity_unresolved",
+        "('SOXX', '2026-09-25', 'live'):20:ASML:issuer_identity_unresolved",
+        "('SOXX', '2026-09-25', 'live'):25:CBRS:issuer_identity_unresolved"
+      ]
+    },
+    "postflight-SOXX": {
+      "api_requests_used": 2,
+      "request_limit": 8,
+      "status": "failed",
+      "error": "ValueError: source issuer identity gate failed: ('SOXX', '2026-09-25', 'live'):16:0EDE.L:issuer_security_conflict",
+      "identity_resolved": 611,
+      "identity_errors": [
+        "('SOXX', '2026-09-25', 'live'):16:0EDE.L:issuer_security_conflict"
+      ]
+    }
+  },
+  "raw_sources": {
+    "SPY": {
+      "path": "docs/audit/index-pe-live-issuer-20260925/live-SPY.json",
+      "sha256": "172a2bafa8c657a363a5cf41e642701adf762c351dc857148432eed100121994"
+    },
+    "QQQ": {
+      "path": "docs/audit/index-pe-live-issuer-20260925/live-QQQ.json",
+      "sha256": "5539be185e71a832e908aec7b877b0dd39cd2f87f9f8e3c567d034f0e83c07f3"
+    },
+    "SOXX": {
+      "path": "docs/audit/index-pe-live-issuer-20260925/live-SOXX.json",
+      "sha256": "59a19b8895032bbd2cfb110aafe8b00e36af211deef8ca9ff215eba4a035a2cf"
+    }
+  },
+  "reviewed_override_count": 42,
+  "remaining_source_rows": 2,
+  "independent_parity": {
+    "SPY": {
+      "physical_equity_rows_checked": 504,
+      "resolved": 503,
+      "errors": [
+        "('SPY', '2026-09-25', 'live'):504:2602335D:issuer_identity_unresolved"
+      ],
+      "independent_verifier_parity": "PASS"
+    },
+    "QQQ": {
+      "physical_equity_rows_checked": 101,
+      "resolved": 101,
+      "errors": [],
+      "independent_verifier_parity": "PASS"
+    },
+    "SOXX": {
+      "physical_equity_rows_checked": 29,
+      "resolved": 28,
+      "errors": [
+        "('SOXX', '2026-09-25', 'live'):16:0EDE.L:issuer_security_conflict"
+      ],
+      "independent_verifier_parity": "PASS"
+    }
+  },
+  "additional_raw_capture": {
+    "basket": "SPY",
+    "api_requests_used": 1,
+    "reason": "Retain exact live security identifiers for manual issuer review; within eight-request preflight budget."
+  },
+  "validation": {
+    "focused": {
+      "passed": 282
+    },
+    "full": {
+      "passed": 3988,
+      "failed": 1,
+      "skipped": 1,
+      "warnings": 17,
+      "failure": "Unchanged FRED DGS10 integration test: upstream TLS EOF"
+    },
+    "fred_same_credentials_recheck": {
+      "passed": 1
+    },
+    "python_3_10_grammar": "PASS",
+    "diff_check": "PASS",
+    "known_credentials_scan": "PASS",
+    "main_thread_review": "no actionable code findings"
+  }
+}

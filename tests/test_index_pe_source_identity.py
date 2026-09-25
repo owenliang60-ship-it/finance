@@ -366,3 +366,23 @@ def test_live_disclosure_security_identity(case):
         assert report['resolved'][0]['reason'] == reason
         if reason == 'disclosure_security_issuer':
             assert report['resolved'][0]['evidence_disclosure_date'] == disclosure['holding_date']
+
+
+def test_backfill_keeps_disclosure_evidence_outside_valuation_window(tmp_path, monkeypatch):
+    from scripts import backfill_index_pe_history as runner
+    from scripts.backfill_soxx_historical_pe import BackfillState
+    from tests.test_backfill_index_pe_history import _args
+    disclosure = normalize_as('SPY', ['spy_AAPL'])[0]
+    live = normalize_as('SPY', ['live_aapl'])[0]
+    state = BackfillState(trading_dates=CALENDAR, snapshots=[disclosure, live])
+    monkeypatch.setattr(runner, 'load_state', lambda *a: state)
+    monkeypatch.setattr(runner, 'resolve_window', lambda *a: ('2026-09-25', '2026-09-26'))
+    def stop_after_identity(*a):
+        raise RuntimeError('identity passed; stop before company work')
+    monkeypatch.setattr(runner, '_snapshot_member_universe', stop_after_identity)
+    with pytest.raises(RuntimeError, match='identity passed') as error:
+        runner.backfill_basket(_args(tmp_path, ROOT / 'config/baskets'), 'SPY', conn=object())
+    report = error.value.backfill_report
+    assert len(state.snapshots) == 1 and state.snapshots[0]['source_kind'] == 'live'
+    assert report['source_identity']['errors'] == []
+    assert report['source_identity']['resolved'][0]['evidence_disclosure_date'] == disclosure['holding_date']

@@ -1,0 +1,194 @@
+{
+  "security": {
+    "symbol": "BG",
+    "cusip": "H11356104",
+    "isin": "CH1300646267",
+    "name": "BUNGE GLOBAL SA"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "BG",
+    "name": "BUNGE GLOBAL SA",
+    "isin": "CH1300646267",
+    "securityCusip": "H11356104",
+    "sharesNumber": 1942446,
+    "weightPercentage": 0.02639332,
+    "marketValue": 212594649,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=CH1300646267",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=CH1300646267&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=CH1300646267&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "254900IVXSV9K0B7PO26",
+          "attributes": {
+            "lei": "254900IVXSV9K0B7PO26",
+            "entity": {
+              "legalName": {
+                "name": "Bunge Global SA",
+                "language": "fr"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "C/O Bunge SA",
+                  "Route De Florissant 13"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Geneva",
+                "region": "CH-GE",
+                "country": "CH",
+                "postalCode": "1206"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "1391 Timberlake Manor Parkway"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Chesterfield",
+                "region": "US-MO",
+                "country": "US",
+                "postalCode": "63017"
+              },
+              "registeredAt": {
+                "id": "RA000549",
+                "other": null
+              },
+              "registeredAs": "CHE-318.451.510",
+              "jurisdiction": "CH",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "MVII",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2023-02-14T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2023-10-25T18:08:29Z",
+              "lastUpdateDate": "2025-10-01T20:58:14Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2026-10-25T20:23:16Z",
+              "managingLou": "5493001KJTIIGC8Y1R12",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000549",
+                "other": null
+              },
+              "validatedAs": "CHE-318.451.510",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": null,
+            "qcc": "QCHS99H2V2",
+            "gem": "E100002024303",
+            "spglobal": [
+              "687261"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/254900IVXSV9K0B7PO26/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/254900IVXSV9K0B7PO26/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/254900IVXSV9K0B7PO26/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/254900IVXSV9K0B7PO26/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/254900IVXSV9K0B7PO26/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/254900IVXSV9K0B7PO26/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/254900IVXSV9K0B7PO26/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/254900IVXSV9K0B7PO26/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/254900IVXSV9K0B7PO26/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/254900IVXSV9K0B7PO26/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/254900IVXSV9K0B7PO26"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "Bunge Global SA",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

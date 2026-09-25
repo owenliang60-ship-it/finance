@@ -1,0 +1,194 @@
+{
+  "security": {
+    "symbol": "FERG",
+    "cusip": "31488V107",
+    "isin": "US31488V1070",
+    "name": "FERGUSON ENTERPRISES INC"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "FERG",
+    "name": "FERGUSON ENTERPRISES INC",
+    "isin": "US31488V1070",
+    "securityCusip": "31488V107",
+    "sharesNumber": 2385340,
+    "weightPercentage": 0.06430253,
+    "marketValue": 517948226,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US31488V1070",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US31488V1070&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US31488V1070&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "2138003JYQMRP3SLX189",
+          "attributes": {
+            "lei": "2138003JYQMRP3SLX189",
+            "entity": {
+              "legalName": {
+                "name": "FERGUSON ENTERPRISES INC.",
+                "language": "en"
+              },
+              "otherNames": [],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "en",
+                "addressLines": [
+                  "C/O CORPORATE CREATIONS NETWORK INC.",
+                  "1521 CONCORD PIKE SUITE 201"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "WILMINGTON",
+                "region": "US-DE",
+                "country": "US",
+                "postalCode": "19803"
+              },
+              "headquartersAddress": {
+                "language": "en",
+                "addressLines": [
+                  "751 LAKEFRONT COMMONS"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "NEWPORT NEWS",
+                "region": "US-VA",
+                "country": "US",
+                "postalCode": "23606"
+              },
+              "registeredAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "registeredAs": "3047060",
+              "jurisdiction": "US-DE",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "XTIQ",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "2024-02-05T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2024-03-07T00:00:00Z",
+              "lastUpdateDate": "2026-08-04T14:17:16Z",
+              "status": "ISSUED",
+              "nextRenewalDate": "2027-03-07T00:00:00Z",
+              "managingLou": "213800WAVVOPS85N2205",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000602",
+                "other": null
+              },
+              "validatedAs": "3047060",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": "us_de/3047060",
+            "qcc": null,
+            "gem": null,
+            "spglobal": [
+              "875151"
+            ],
+            "conformityFlag": "CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2138003JYQMRP3SLX189/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2138003JYQMRP3SLX189/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2138003JYQMRP3SLX189/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/2138003JYQMRP3SLX189/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/2138003JYQMRP3SLX189/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/2138003JYQMRP3SLX189/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/2138003JYQMRP3SLX189/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/2138003JYQMRP3SLX189/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/2138003JYQMRP3SLX189/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/2138003JYQMRP3SLX189/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/2138003JYQMRP3SLX189"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "FERGUSON ENTERPRISES INC.",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}

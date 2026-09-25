@@ -1,0 +1,47 @@
+{
+  "reviewed_at": "2026-09-25",
+  "reviewed_securities": [
+    {
+      "symbol": "STE",
+      "cusip": "G8473T100",
+      "isin": "IE00BFY8C754",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001757898",
+    "sec_name": "STERIS PLC",
+    "section": "ISSUER",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1757898/000009375126000294/primary_doc.xml",
+    "form": "SCHEDULE 13G",
+    "filing_date": "2026-05-12"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "STE",
+    "name": "STERIS PLC",
+    "isin": "IE00BFY8C754",
+    "securityCusip": "G8473T100",
+    "sharesNumber": 1212097,
+    "weightPercentage": 0.03102143,
+    "marketValue": 249873480,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1757898/000009375126000294/primary_doc.xml",
+    "sha256": "f4e75027bfa3a7d627502bee8e1eae38ea27ee8484e09ec1672d8064fee86126",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n   <schemaVersion>X0202</schemaVersion>\n<headerData>\n      <submissionType>SCHEDULE 13G</submissionType>\n      <filerInfo>\n         <filer>\n            <filerCredentials>\n               <cik>0000093751</cik>\n               <ccc>XXXXXXXX</ccc>\n            </filerCredentials>\n         </filer>\n         <liveTestFlag>LIVE</liveTestFlag>\n\n\n\n      </filerInfo>\n   </headerData>\n   <formData>\n      <coverPageHeader>\n         <securitiesClassTitle>COMMON STOCK</securitiesClassTitle>\n         <eventDateRequiresFilingThisStatement>03/31/2026</eventDateRequiresFilingThisStatement>\n         <issuerInfo>\n            <issuerCik>0001757898</issuerCik>\n            <issuerName>STERIS PLC</issuerName>\n            <issuerCusips>\n               <issuerCusipNumber>G8473T100</issuerCusipNumber>\n            </issuerCusips>\n            <issuerPrincipalExecutiveOfficeAddress>\n               <com:street1>5960 HEISLEY ROAD</com:street1>\n               <com:city>MENTOR</com:city>\n               <com:stateOrCountry>OH</com:stateOrCountry>\n               <com:zipCode>44060</com:zipCode>\n            </issuerPrincipalExecutiveOfficeAddress>\n         </issuerInfo>\n         <designateRulesPursuantThisScheduleFiled>\n            <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n         </designateRulesPursuantThisScheduleFiled>\n      </coverPageHeader>\n      <coverPageHeaderReportingPersonDetails>\n\n\n         <reportingPersonName>STATE STREET CORPORATION</reportingPersonName>\n         <citizenshipOrOrganization>MA</citizenshipOrOrganization>\n         <reportingPersonBeneficiallyOwnedNumberOfShares>\n            <soleVotingPower>0.00</soleVotingPower>\n            <sharedVotingPower>3198310.00</sharedVotingPower>\n            <soleDispositivePower>0.00</soleDispositivePower>\n            <sharedDispositivePower>4992076.00</sharedDispositivePower>\n         </reportingPersonBeneficiallyOwnedNumberOfShares>\n         <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>4995259.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n         <aggregateAmountExcludesCertainSharesFlag>N</aggregateAmountExcludesCertainSharesFlag>\n         <classPercent>5.1</classPercent>\n         <typeOfReportingPerson>HC</typeOfReportingPerson>\n      </coverPageHeaderReportingPersonDetails>\n      <items>\n         <item1>\n            <issuerName>STERIS PLC</issuerName>\n            <issuerPrincipalExecutiveOfficeAddress>5960 HEISLEY ROAD, MENTOR, OHIO, 44060</issuerPrincipalExecutiveOfficeAddress>\n         </item1>\n         <item2>\n            <filingPersonName>STATE STREET CORPORATION;</filingPersonName>\n            <principalBusinessOfficeOrResidenceAddress>ONE CONGRESS STREET, SUITE 1, BOSTON MA 02114, UNITED STATES</principalBusinessOfficeOrResidenceAddress>\n            <citizenship>MA</citizenship>\n         </item2>\n         <item3>\n            <notApplicableFlag>N</notApplicableFlag>\n            <typeOfPersonFiling>BK</typeOfPersonFiling>\n            <typeOfPersonFiling>IA</typeOfPersonFiling>\n            <typeOfPersonFiling>HC</typeOfPersonFiling>\n         </item3>\n         <item4>\n            <amountBeneficiallyOwned>4995259.00</amountBeneficiallyOwned>\n            <classPercent>5.1</classPercent>\n            <numberOfSharesPersonHas>\n               <solePowerOrDirectToVote>0</solePowerOrDirectToVote>\n               <sharedPowerOrDirectToVote>3,198,310</sharedPowerOrDirectToVote>\n               <solePowerOrDirectToDispose>0</solePowerOrDirectToDispose>\n               <sharedPowerOrDirectToDispose>4,992,076</sharedPowerOrDirectToDispose>\n            </numberOfSharesPersonHas>\n         </item4>\n         <item5>\n            <notApplicableFlag>Y</notApplicableFlag>\n            <classOwnership5PercentOrLess>N</classOwnership5PercentOrLess>\n         </item5>\n         <item6>\n            <notApplicableFlag>N</notApplicableFlag>\n            <ownershipMoreThan5PercentOnBehalfOfAnotherPerson>NOT APPLICABLE</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n         </item6>\n         <item7>\n            <notApplicableFlag>N</notApplicableFlag>\n            <subsidiaryIdentificationAndClassification>SSGA FUNDS MANAGEMENT, INC. (IA);STATE STREET BANK AND TRUST COMPANY (BK);STATE STREET GLOBAL ADVISORS (JAPAN) CO., LTD. (IA);STATE STREET GLOBAL ADVISORS ASIA LIMITED (IA);STATE STREET GLOBAL ADVISORS EUROPE LIMITED (IA);STATE STREET GLOBAL ADVISORS LIMITED (IA);STATE STREET GLOBAL ADVISORS SINGAPORE LIMITED (IA);STATE STREET GLOBAL ADVISORS TRUST COMPANY (IA);STATE STREET GLOBAL ADVISORS, AUSTRALIA, LIMITED (IA);STATE STREET GLOBAL ADVISORS, LTD. (IA);STATE STREET SAUDI ARABIA FINANCIAL SOLUTIONS COMPANY (IA);</subsidiaryIdentificationAndClassification>\n         </item7>\n         <item8>\n            <notApplicableFlag>N</notApplicableFlag>\n            <identificationAndClassificationOfGroupMembers>NOT APPLICABLE</identificationAndClassificationOfGroupMembers>\n         </item8>\n         <item9>\n            <notApplicableFlag>N</notApplicableFlag>\n            <groupDissolutionNotice>NOT APPLICABLE</groupDissolutionNotice>\n         </item9>\n         <item10>\n            <notApplicableFlag>N</notApplicableFlag>\n            <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under ?? 240.14a-11.</certifications>\n         </item10>\n      </items>\n      <signatureInformation>\n         <reportingPersonName>STATE STREET CORPORATION</reportingPersonName>\n         <signatureDetails>\n            <signature>ELIZABETH SCHAEFER</signature>\n            <title>SENIOR VICE PRESIDENT, CHIEF ACCOUNTING OFFICER</title>\n            <date>05/12/2026</date>\n         </signatureDetails>\n      </signatureInformation>\n   </formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "SEC issuerInfo / subject-company identity inspected independently of filing owner CIK. Exact CUSIP evidence establishes issuer; ISIN retained from live source as matching scope, not claimed to be independently certified by every SEC filing.",
+  "lei_search_reviewed": true,
+  "equivalent_leis": [],
+  "limitations": [
+    "Independent ISIN-to-CUSIP mapping not reverified; exact CUSIP-to-issuer CIK is primary-source verified.",
+    "No current LEI for STERIS plc found; SEC issuer key is supported independently."
+  ],
+  "rejected_leis": [
+    "549300F1857N5E6G6T48 (STERIS LIMITED)",
+    "549300BRDKZ1HFI2J358 (STERIS IRISH FINCO UNLIMITED COMPANY)"
+  ]
+}

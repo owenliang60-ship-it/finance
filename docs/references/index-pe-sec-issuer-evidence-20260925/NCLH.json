@@ -1,0 +1,43 @@
+{
+  "reviewed_at": "2026-09-25",
+  "reviewed_securities": [
+    {
+      "symbol": "NCLH",
+      "cusip": "G66721104",
+      "isin": "BMG667211046",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001513761",
+    "sec_name": "Norwegian Cruise Line Holdings Ltd.",
+    "section": "ISSUER",
+    "form": "SCHEDULE 13G/A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1513761/000156223026000108/primary_doc.xml",
+    "filing_date": "2026-08-12"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "NCLH",
+    "name": "NORWEGIAN CRUISE LINE HOLDIN",
+    "isin": "BMG667211046",
+    "securityCusip": "G66721104",
+    "sharesNumber": 5714925,
+    "weightPercentage": 0.00987703,
+    "marketValue": 79558185,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1513761/000156223026000108/primary_doc.xml",
+    "sha256": "872068aac0dcd82d5ef84fcb8dcde1914049c06fe2c54050e34083e99bd562fd",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n  <schemaVersion>X0202</schemaVersion>\n<headerData>\n    <submissionType>SCHEDULE 13G/A</submissionType>\n    <previousAccessionNumber>0001562230-17-000010</previousAccessionNumber>\n    <filerInfo>\n      <filer>\n        <filerCredentials>\n          <cik>0001562230</cik>\n          <ccc>XXXXXXXX</ccc>\n        </filerCredentials>\n      </filer>\n      <liveTestFlag>LIVE</liveTestFlag>\n\n\n\n    </filerInfo>\n  </headerData>\n  <formData>\n    <coverPageHeader>\n      <amendmentNo>4</amendmentNo>\n      <securitiesClassTitle>Common Stock</securitiesClassTitle>\n      <eventDateRequiresFilingThisStatement>06/30/2026</eventDateRequiresFilingThisStatement>\n      <issuerInfo>\n        <issuerCik>0001513761</issuerCik>\n        <issuerName>Norwegian Cruise Line Holdings Ltd.</issuerName>\n        <issuerCusips>\n          <issuerCusipNumber>G66721104</issuerCusipNumber>\n        </issuerCusips>\n        <issuerPrincipalExecutiveOfficeAddress>\n          <com:street1>7665 CORPORATE DRIVE</com:street1>\n          <com:city>MIAMI</com:city>\n          <com:stateOrCountry>X1</com:stateOrCountry>\n          <com:zipCode>33126</com:zipCode>\n        </issuerPrincipalExecutiveOfficeAddress>\n      </issuerInfo>\n      <designateRulesPursuantThisScheduleFiled>\n        <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n      </designateRulesPursuantThisScheduleFiled>\n    </coverPageHeader>\n    <coverPageHeaderReportingPersonDetails>\n\n      <reportingPersonName>Capital International Investors</reportingPersonName>\n      <citizenshipOrOrganization>DE</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>14137983</soleVotingPower>\n        <sharedVotingPower>0</sharedVotingPower>\n        <soleDispositivePower>14139297</soleDispositivePower>\n        <sharedDispositivePower>0</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>14139297.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <classPercent>3.1</classPercent>\n      <typeOfReportingPerson>IA</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <items>\n      <item1>\n        <issuerName>Norwegian Cruise Line Holdings Ltd.</issuerName>\n        <issuerPrincipalExecutiveOfficeAddress>7665 CORPORATE DRIVE, MIAMI, FL 33126, United States of America</issuerPrincipalExecutiveOfficeAddress>\n      </item1>\n      <item2>\n        <filingPersonName>Capital International Investors</filingPersonName>\n        <principalBusinessOfficeOrResidenceAddress>333 South Hope Street, 55th Fl, Los Angeles, CA  90071\n</principalBusinessOfficeOrResidenceAddress>\n        <citizenship>N/A</citizenship>\n      </item2>\n      <item3>\n        <notApplicableFlag>N</notApplicableFlag>\n        <typeOfPersonFiling>IA</typeOfPersonFiling>\n      </item3>\n      <item4>\n        <amountBeneficiallyOwned>14,139,297 **\n\n**Capital International Investors (\"CII\") is a division of Capital Research and Management Company (\"CRMC\"), as well as its investment management subsidiaries and affiliates Capital Bank and Trust Company, Capital International, Inc., Capital International Limited, Capital International Sarl, Capital International K.K., Capital Group Private Client Services, Inc., and Capital Group Investment Management Private Limited (together with CRMC, the \"investment management entities\"). CII's divisions of each of the investment management entities collectively provide investment management services under the name \"Capital International Investors.\" CII is deemed to be the beneficial owner of 14,139,297 shares or 3.1% of the 459,110,140 shares believed to be outstanding.</amountBeneficiallyOwned>\n        <classPercent>3.1</classPercent>\n        <numberOfSharesPersonHas>\n          <solePowerOrDirectToVote>14,137,983</solePowerOrDirectToVote>\n          <sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n          <solePowerOrDirectToDispose>14,139,297</solePowerOrDirectToDispose>\n          <sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>\n        </numberOfSharesPersonHas>\n      </item4>\n      <item5>\n        <classOwnership5PercentOrLess>Y</classOwnership5PercentOrLess>\n      </item5>\n      <item6>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item6>\n      <item7>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item7>\n      <item8>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item8>\n      <item9>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item9>\n      <item10>\n        <notApplicableFlag>N</notApplicableFlag>\n        <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under Â§ 240.14a-11.</certifications>\n      </item10>\n    </items>\n    <signatureInformation>\n      <reportingPersonName>Capital International Investors</reportingPersonName>\n      <signatureDetails>\n        <signature>Aaron Espin</signature>\n        <title>Senior Vice President</title>\n        <date>07/29/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n  </formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "SEC issuerInfo / subject-company identity inspected independently of filing owner CIK. Exact CUSIP evidence establishes issuer; ISIN retained from live source as matching scope, not claimed to be independently certified by every SEC filing.",
+  "lei_search_reviewed": true,
+  "equivalent_leis": [],
+  "limitations": [
+    "Independent non-CUSIP ISIN mapping unless noted below",
+    "Current LEI/equivalence not researched beyond existing approved ACN/APTV records"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "reviewed_at": "2026-09-25",
+  "reviewed_securities": [
+    {
+      "symbol": "RDDT",
+      "cusip": "75734B100",
+      "isin": "US75734B1008",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001713445",
+    "sec_name": "Reddit, Inc.",
+    "section": "ISSUER",
+    "form": "SCHEDULE 13G",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1713445/000108887526000033/primary_doc.xml",
+    "filing_date": "2026-05-07"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "RDDT",
+    "name": "REDDIT INC CL A",
+    "isin": "US75734B1008",
+    "securityCusip": "75734B100",
+    "sharesNumber": 1801148,
+    "weightPercentage": 0.03336493,
+    "marketValue": 268750058,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1713445/000108887526000033/primary_doc.xml",
+    "sha256": "a79febf5c041a4534b7dec2f1b31b2ce2dcb8a0fffca5bb33acef959df6860e5",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n  <schemaVersion>X0202</schemaVersion>\n<headerData>\n    <submissionType>SCHEDULE 13G</submissionType>\n    <filerInfo>\n      <filer>\n        <filerCredentials>\n          <cik>0001088875</cik>\n          <ccc>XXXXXXXX</ccc>\n        </filerCredentials>\n      </filer>\n      <liveTestFlag>LIVE</liveTestFlag>\n\n\n\n    </filerInfo>\n  </headerData>\n  <formData>\n    <coverPageHeader>\n      <securitiesClassTitle>Class A Common Stock</securitiesClassTitle>\n      <eventDateRequiresFilingThisStatement>03/31/2026</eventDateRequiresFilingThisStatement>\n      <issuerInfo>\n        <issuerCik>0001713445</issuerCik>\n        <issuerName>Reddit, Inc.</issuerName>\n        <issuerCusips>\n          <issuerCusipNumber>75734B100</issuerCusipNumber>\n        </issuerCusips>\n        <issuerPrincipalExecutiveOfficeAddress>\n          <com:street1>303 2ND STREET</com:street1>\n          <com:street2>SOUTH TOWER, 5TH FLOOR</com:street2>\n          <com:city>SAN FRANCISCO</com:city>\n          <com:stateOrCountry>CA</com:stateOrCountry>\n          <com:zipCode>94104</com:zipCode>\n        </issuerPrincipalExecutiveOfficeAddress>\n      </issuerInfo>\n      <designateRulesPursuantThisScheduleFiled>\n        <designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n      </designateRulesPursuantThisScheduleFiled>\n    </coverPageHeader>\n    <coverPageHeaderReportingPersonDetails>\n\n      <reportingPersonName>BAILLIE GIFFORD &amp; CO</reportingPersonName>\n      <citizenshipOrOrganization>X0</citizenshipOrOrganization>\n      <reportingPersonBeneficiallyOwnedNumberOfShares>\n        <soleVotingPower>3539481.00</soleVotingPower>\n        <sharedVotingPower>0.00</sharedVotingPower>\n        <soleDispositivePower>7309109.00</soleDispositivePower>\n        <sharedDispositivePower>0.00</sharedDispositivePower>\n      </reportingPersonBeneficiallyOwnedNumberOfShares>\n      <reportingPersonBeneficiallyOwnedAggregateNumberOfShares>7309109.00</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n      <classPercent>5.2</classPercent>\n      <typeOfReportingPerson>IA</typeOfReportingPerson>\n    </coverPageHeaderReportingPersonDetails>\n    <items>\n      <item1>\n        <issuerName>Reddit, Inc.</issuerName>\n        <issuerPrincipalExecutiveOfficeAddress>303 2ND STREET, SOUTH TOWER, 5TH FLOOR, SAN FRANCISCO, CALIFORNIA, 94104</issuerPrincipalExecutiveOfficeAddress>\n      </item1>\n      <item2>\n        <filingPersonName>Baillie Gifford &amp; Co</filingPersonName>\n        <principalBusinessOfficeOrResidenceAddress>Calton Square\n1 Greenside Row\nEdinburgh\nEH1 3AN\nScotland\nUK\n</principalBusinessOfficeOrResidenceAddress>\n        <citizenship>Scotland</citizenship>\n      </item2>\n      <item3>\n        <notApplicableFlag>N</notApplicableFlag>\n        <typeOfPersonFiling>FI</typeOfPersonFiling>\n        <otherTypeOfPersonFiling>Investment Adviser</otherTypeOfPersonFiling>\n      </item3>\n      <item4>\n        <amountBeneficiallyOwned>7,309,109</amountBeneficiallyOwned>\n        <classPercent>5.23</classPercent>\n        <numberOfSharesPersonHas>\n          <solePowerOrDirectToVote>3,539,481</solePowerOrDirectToVote>\n          <sharedPowerOrDirectToVote>0</sharedPowerOrDirectToVote>\n          <solePowerOrDirectToDispose>7,309,109</solePowerOrDirectToDispose>\n          <sharedPowerOrDirectToDispose>0</sharedPowerOrDirectToDispose>\n        </numberOfSharesPersonHas>\n      </item4>\n      <item5>\n        <notApplicableFlag>Y</notApplicableFlag>\n        <classOwnership5PercentOrLess>N</classOwnership5PercentOrLess>\n      </item5>\n      <item6>\n        <notApplicableFlag>N</notApplicableFlag>\n        <ownershipMoreThan5PercentOnBehalfOfAnotherPerson>Securities reported on this Schedule 13G as being beneficially owned by Baillie Gifford &amp; Co. are held by Baillie Gifford &amp; Co. and/or one or more of its investment adviser subsidiaries, which may include Baillie Gifford Overseas Limited, on behalf of investment advisory clients, which may include investment companies registered under the Investment Company Act, employee benefit plans, pension funds or other institutional clients.</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n      </item6>\n      <item7>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item7>\n      <item8>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item8>\n      <item9>\n        <notApplicableFlag>Y</notApplicableFlag>\n      </item9>\n      <item10>\n        <notApplicableFlag>N</notApplicableFlag>\n        <certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under ? 240.14a-11.\n\nBy signing below I certify that, to the best of my knowledge and belief, the foreign regulatory scheme applicable to Investment Adviser is substantially comparable to the regulatory scheme applicable to the functionally equivalent U.S. institution(s). I also undertake to furnish to the Commission staff, upon request, information that would otherwise be disclosed in a Schedule 13D.\n\n</certifications>\n      </item10>\n    </items>\n    <signatureInformation>\n      <reportingPersonName>BAILLIE GIFFORD &amp; CO</reportingPersonName>\n      <signatureDetails>\n        <signature>Grant Meikle</signature>\n        <title>Regulatory Reporting Manager</title>\n        <date>05/07/2026</date>\n      </signatureDetails>\n    </signatureInformation>\n  </formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "SEC issuerInfo / subject-company identity inspected independently of filing owner CIK. Exact CUSIP evidence establishes issuer; ISIN retained from live source as matching scope, not claimed to be independently certified by every SEC filing.",
+  "lei_search_reviewed": true,
+  "equivalent_leis": [],
+  "limitations": [
+    "Independent non-CUSIP ISIN mapping unless noted below",
+    "Current LEI/equivalence not researched beyond existing approved ACN/APTV records"
+  ]
+}

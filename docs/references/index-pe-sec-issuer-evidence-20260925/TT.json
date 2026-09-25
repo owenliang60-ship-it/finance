@@ -1,0 +1,194 @@
+{
+  "reviewed_at": "2026-09-25",
+  "reviewed_securities": [
+    {
+      "symbol": "TT",
+      "cusip": "G8994E103",
+      "isin": "IE00BK9ZQ967",
+      "valid_from": "2026-09-18",
+      "valid_to": "2026-12-31"
+    }
+  ],
+  "sec_issuer": {
+    "cik": "0001466258",
+    "sec_name": "TRANE TECHNOLOGIES PLC",
+    "section": "ISSUER",
+    "form": "SCHEDULE 13G/A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1466258/000001961726000315/primary_doc.xml",
+    "filing_date": "2026-07-27"
+  },
+  "raw_live_holding": {
+    "symbol": "SPY",
+    "asset": "TT",
+    "name": "TRANE TECHNOLOGIES PLC",
+    "isin": "IE00BK9ZQ967",
+    "securityCusip": "G8994E103",
+    "sharesNumber": 2709122,
+    "weightPercentage": 0.14432787,
+    "marketValue": 1162541572,
+    "updatedAt": "2026-09-24 23:38:06"
+  },
+  "primary_source": {
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1466258/000001961726000315/primary_doc.xml",
+    "sha256": "9af9564cba64975111b8525bb8677cb1f4b3c5035602bea08ecde02d855c2f95",
+    "text": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><edgarSubmission xmlns=\"http://www.sec.gov/edgar/schedule13g\" xmlns:com=\"http://www.sec.gov/edgar/common\">\n<schemaVersion>X0202</schemaVersion>\n<headerData>\n<submissionType>SCHEDULE 13G/A</submissionType>\n<filerInfo>\n<filer>\n<filerCredentials>\n<cik>0000019617</cik>\n<ccc>XXXXXXXX</ccc>\n</filerCredentials>\n</filer>\n<liveTestFlag>LIVE</liveTestFlag>\n</filerInfo>\n</headerData>\n<formData>\n<coverPageHeader>\n<amendmentNo>5</amendmentNo>\n<securitiesClassTitle>Ordinary Shares, Par Value $1.00 per Share</securitiesClassTitle>\n<eventDateRequiresFilingThisStatement>06/30/2026</eventDateRequiresFilingThisStatement>\n<issuerInfo>\n<issuerCik>0001466258</issuerCik>\n<issuerName>TRANE TECHNOLOGIES PLC</issuerName>\n<issuerCusips>\n<issuerCusipNumber>G8994E103</issuerCusipNumber>\n</issuerCusips>\n<issuerPrincipalExecutiveOfficeAddress>\n<com:street1>170/175 Lakeview Dr.</com:street1>\n<com:street2>Airside Business Park</com:street2>\n<com:city>Swords Co. Dublin</com:city>\n<com:stateOrCountry>L2</com:stateOrCountry>\n<com:zipCode>00000</com:zipCode>\n</issuerPrincipalExecutiveOfficeAddress>\n</issuerInfo>\n<designateRulesPursuantThisScheduleFiled>\n<designateRulePursuantThisScheduleFiled>Rule 13d-1(b)</designateRulePursuantThisScheduleFiled>\n</designateRulesPursuantThisScheduleFiled>\n</coverPageHeader>\n<coverPageHeaderReportingPersonDetails>\n<reportingPersonName>JPMORGAN CHASE &amp; CO.</reportingPersonName>\n<citizenshipOrOrganization>DE</citizenshipOrOrganization>\n<reportingPersonBeneficiallyOwnedNumberOfShares>\n<soleVotingPower>11187605</soleVotingPower>\n<sharedVotingPower>130079.0</sharedVotingPower>\n<soleDispositivePower>12389599</soleDispositivePower>\n<sharedDispositivePower>60399.0</sharedDispositivePower>\n</reportingPersonBeneficiallyOwnedNumberOfShares>\n<reportingPersonBeneficiallyOwnedAggregateNumberOfShares>12451325</reportingPersonBeneficiallyOwnedAggregateNumberOfShares>\n<classPercent>5.6</classPercent>\n<typeOfReportingPerson>HC</typeOfReportingPerson>\n</coverPageHeaderReportingPersonDetails>\n<items>\n<item1>\n<issuerName>TRANE TECHNOLOGIES PLC</issuerName>\n<issuerPrincipalExecutiveOfficeAddress>170/175 Lakeview Dr. Airside Business Park Swords Co. Dublin L2 00000</issuerPrincipalExecutiveOfficeAddress>\n</item1>\n<item2>\n<filingPersonName>JPMORGAN CHASE &amp; CO.</filingPersonName>\n<principalBusinessOfficeOrResidenceAddress>270 Park Avenue,,New York, NY 10017</principalBusinessOfficeOrResidenceAddress>\n<citizenship>DE</citizenship>\n</item2>\n<item3>\n<notApplicableFlag>N</notApplicableFlag>\n<typeOfPersonFiling>HC</typeOfPersonFiling>\n</item3>\n<item4>\n<amountBeneficiallyOwned>12451325</amountBeneficiallyOwned>\n<classPercent>5.6</classPercent>\n<numberOfSharesPersonHas>\n<solePowerOrDirectToVote>11187605</solePowerOrDirectToVote>\n<sharedPowerOrDirectToVote>130079</sharedPowerOrDirectToVote>\n<solePowerOrDirectToDispose>12389599</solePowerOrDirectToDispose>\n<sharedPowerOrDirectToDispose>60399</sharedPowerOrDirectToDispose>\n</numberOfSharesPersonHas>\n</item4>\n<item5>\n<notApplicableFlag>Y</notApplicableFlag>\n<classOwnership5PercentOrLess>N</classOwnership5PercentOrLess>\n</item5>\n<item6>\n<notApplicableFlag>N</notApplicableFlag>\n<ownershipMoreThan5PercentOnBehalfOfAnotherPerson>Not Applicable</ownershipMoreThan5PercentOnBehalfOfAnotherPerson>\n</item6>\n<item7>\n<notApplicableFlag>N</notApplicableFlag>\n<subsidiaryIdentificationAndClassification>J.P. Morgan Trust Company of Delaware;\nJ.P. Morgan Securities LLC;\nJPMorgan Chase Bank, National Association;\nJPMorgan Asset Management (UK) Limited;\nJ.P. MORGAN SE;\nJ.P. Morgan (Suisse) SA;\nJPMorgan Asset Management Holdings Inc.;\nJ.P. Morgan Investment Management Inc.;\nJ.P. Morgan Mansart Management Limited;\nJPMorgan Asset Management (Taiwan) Limited;\nJ.P. Morgan Private Investments Inc.;\nJPMorgan Asset Management (China) Company Limited;\nJ.P. Morgan Wealth Management Solutions Inc.;\n55I, LLC</subsidiaryIdentificationAndClassification>\n</item7>\n<item8>\n<notApplicableFlag>N</notApplicableFlag>\n<identificationAndClassificationOfGroupMembers>Not Applicable</identificationAndClassificationOfGroupMembers>\n</item8>\n<item9>\n<notApplicableFlag>N</notApplicableFlag>\n<groupDissolutionNotice>Not Applicable</groupDissolutionNotice>\n</item9>\n<item10>\n<notApplicableFlag>N</notApplicableFlag>\n<certifications>By signing below I certify that, to the best of my knowledge and belief, the securities referred to above were acquired and are held in the ordinary course of business and were not acquired and are not held for the purpose of or with the effect of changing or influencing the control of the issuer of the securities and were not acquired and are not held in connection with or as a participant in any transaction having that purpose or effect, other than activities solely in connection with a nomination under Â§ 240.14a-11.</certifications>\n</item10>\n</items>\n<signatureInformation>\n<reportingPersonName>JPMORGAN CHASE &amp; CO.</reportingPersonName>\n<signatureDetails>\n<signature>Rachel Tsvaygoft</signature>\n<title>Vice President</title>\n<date>07/27/2026</date>\n</signatureDetails>\n</signatureInformation>\n</formData>\n</edgarSubmission>\n"
+  },
+  "identity_review": "SEC issuerInfo / subject-company identity inspected independently of filing owner CIK. Exact CUSIP evidence establishes issuer; ISIN retained from live source as matching scope, not claimed to be independently certified by every SEC filing.",
+  "lei_search_reviewed": true,
+  "equivalent_leis": [],
+  "limitations": [
+    "Independent non-CUSIP ISIN mapping unless noted below"
+  ],
+  "issuer_registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records/549300BURLR9SLYY2705",
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        }
+      },
+      "data": {
+        "type": "lei-records",
+        "id": "549300BURLR9SLYY2705",
+        "attributes": {
+          "lei": "549300BURLR9SLYY2705",
+          "entity": {
+            "legalName": {
+              "name": "TRANE TECHNOLOGIES PUBLIC LIMITED COMPANY",
+              "language": "en"
+            },
+            "otherNames": [
+              {
+                "name": "INGERSOLL-RAND PUBLIC LIMITED COMPANY",
+                "language": "en",
+                "type": "PREVIOUS_LEGAL_NAME"
+              }
+            ],
+            "transliteratedOtherNames": [],
+            "legalAddress": {
+              "language": "en",
+              "addressLines": [
+                "170/175 LAKEVIEW DRIVE, AIRSIDE BUSINESS PARK",
+                "CO DUBLIN"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "SWORDS",
+              "region": "IE-D",
+              "country": "IE",
+              "postalCode": "K67 EW96"
+            },
+            "headquartersAddress": {
+              "language": "en",
+              "addressLines": [
+                "170/175 LAKEVIEW DRIVE"
+              ],
+              "addressNumber": null,
+              "addressNumberWithinBuilding": null,
+              "mailRouting": null,
+              "city": "SWORDS",
+              "region": "IE-D",
+              "country": "IE",
+              "postalCode": "K67 EW96"
+            },
+            "registeredAt": {
+              "id": "RA000402",
+              "other": null
+            },
+            "registeredAs": "469272",
+            "jurisdiction": "IE",
+            "category": "GENERAL",
+            "legalForm": {
+              "id": "VYAX",
+              "other": null
+            },
+            "associatedEntity": {
+              "lei": null,
+              "name": null
+            },
+            "status": "ACTIVE",
+            "expiration": {
+              "date": null,
+              "reason": null
+            },
+            "successorEntity": {
+              "lei": null,
+              "name": null
+            },
+            "successorEntities": [],
+            "creationDate": "2019-06-03T00:00:00Z",
+            "subCategory": null,
+            "otherAddresses": [],
+            "eventGroups": []
+          },
+          "registration": {
+            "initialRegistrationDate": "2019-06-03T14:33:00Z",
+            "lastUpdateDate": "2023-12-20T00:10:22Z",
+            "status": "LAPSED",
+            "nextRenewalDate": "2023-12-19T14:43:00Z",
+            "managingLou": "213800WAVVOPS85N2205",
+            "corroborationLevel": "FULLY_CORROBORATED",
+            "validatedAt": {
+              "id": "RA000402",
+              "other": null
+            },
+            "validatedAs": "469272",
+            "otherValidationAuthorities": []
+          },
+          "bic": null,
+          "mic": null,
+          "ocid": "ie/469272",
+          "qcc": "QIEYK432VD",
+          "gem": null,
+          "spglobal": [
+            "280944"
+          ],
+          "conformityFlag": "NON_CONFORMING"
+        },
+        "relationships": {
+          "managing-lou": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300BURLR9SLYY2705/managing-lou"
+            }
+          },
+          "lei-issuer": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300BURLR9SLYY2705/lei-issuer"
+            }
+          },
+          "field-modifications": {
+            "links": {
+              "related": "https://api.gleif.org/api/v1/lei-records/549300BURLR9SLYY2705/field-modifications"
+            }
+          },
+          "direct-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300BURLR9SLYY2705/direct-parent-reporting-exception"
+            }
+          },
+          "ultimate-parent": {
+            "links": {
+              "reporting-exception": "https://api.gleif.org/api/v1/lei-records/549300BURLR9SLYY2705/ultimate-parent-reporting-exception"
+            }
+          },
+          "direct-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300BURLR9SLYY2705/direct-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/549300BURLR9SLYY2705/direct-children"
+            }
+          },
+          "ultimate-children": {
+            "links": {
+              "relationship-records": "https://api.gleif.org/api/v1/lei-records/549300BURLR9SLYY2705/ultimate-child-relationships",
+              "related": "https://api.gleif.org/api/v1/lei-records/549300BURLR9SLYY2705/ultimate-children"
+            }
+          }
+        },
+        "links": {
+          "self": "https://api.gleif.org/api/v1/lei-records/549300BURLR9SLYY2705"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,228 @@
+{
+  "security": {
+    "symbol": "SKHYV",
+    "cusip": "78392B206",
+    "isin": "US78392B2060",
+    "name": "SK HYNIX AMERICAN DEPOSITARY SHARE"
+  },
+  "raw_live_holding": {
+    "symbol": "SOXX",
+    "asset": "SKHYV",
+    "name": "SK HYNIX AMERICAN DEPOSITARY SHARE",
+    "isin": "US78392B2060",
+    "securityCusip": "78392B206",
+    "sharesNumber": 8167602,
+    "weightPercentage": 3.31678986,
+    "marketValue": 1531425375,
+    "updatedAt": "2026-09-22 03:23:59"
+  },
+  "registry": {
+    "source_url": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US78392B2060",
+    "http_status": 200,
+    "response": {
+      "meta": {
+        "goldenCopy": {
+          "publishDate": "2026-09-24T16:00:00Z"
+        },
+        "pagination": {
+          "currentPage": 1,
+          "perPage": 15,
+          "from": 1,
+          "to": 1,
+          "total": 1,
+          "lastPage": 1
+        }
+      },
+      "links": {
+        "first": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US78392B2060&page%5Bnumber%5D=1&page%5Bsize%5D=15",
+        "last": "https://api.gleif.org/api/v1/lei-records?filter%5Bisin%5D=US78392B2060&page%5Bnumber%5D=1&page%5Bsize%5D=15"
+      },
+      "data": [
+        {
+          "type": "lei-records",
+          "id": "988400XAIK6XISWQV045",
+          "attributes": {
+            "lei": "988400XAIK6XISWQV045",
+            "entity": {
+              "legalName": {
+                "name": "에스케이하이닉스 주식회사",
+                "language": "ko"
+              },
+              "otherNames": [
+                {
+                  "name": "SK HYNIX INC.",
+                  "language": "en",
+                  "type": "ALTERNATIVE_LANGUAGE_LEGAL_NAME"
+                }
+              ],
+              "transliteratedOtherNames": [],
+              "legalAddress": {
+                "language": "ko",
+                "addressLines": [
+                  "경기도 이천시 부발읍 경충대로 2091",
+                  "에스케이하이닉스"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Icheon-si",
+                "region": "KR-41",
+                "country": "KR",
+                "postalCode": "17336"
+              },
+              "headquartersAddress": {
+                "language": "ko",
+                "addressLines": [
+                  "경기도 이천시 부발읍 경충대로 2091",
+                  "에스케이하이닉스"
+                ],
+                "addressNumber": null,
+                "addressNumberWithinBuilding": null,
+                "mailRouting": null,
+                "city": "Icheon-si",
+                "region": "KR-41",
+                "country": "KR",
+                "postalCode": "17336"
+              },
+              "registeredAt": {
+                "id": "RA000657",
+                "other": null
+              },
+              "registeredAs": "126-81-03725",
+              "jurisdiction": "KR",
+              "category": "GENERAL",
+              "legalForm": {
+                "id": "5RCH",
+                "other": null
+              },
+              "associatedEntity": {
+                "lei": null,
+                "name": null
+              },
+              "status": "ACTIVE",
+              "expiration": {
+                "date": null,
+                "reason": null
+              },
+              "successorEntity": {
+                "lei": null,
+                "name": null
+              },
+              "successorEntities": [],
+              "creationDate": "1949-10-15T00:00:00Z",
+              "subCategory": null,
+              "otherAddresses": [
+                {
+                  "fieldType": "OtherAddress",
+                  "language": "en",
+                  "type": "ALTERNATIVE_LANGUAGE_LEGAL_ADDRESS",
+                  "addressLines": [
+                    "2091, Gyeongchung-daero, Bubal-eup, Icheon-si, Gyeonggi-do",
+                    "SK HYNIX"
+                  ],
+                  "city": "Icheon-si",
+                  "region": "KR-41",
+                  "country": "KR",
+                  "postalCode": "17336"
+                },
+                {
+                  "fieldType": "OtherAddress",
+                  "language": "en",
+                  "type": "ALTERNATIVE_LANGUAGE_HEADQUARTERS_ADDRESS",
+                  "addressLines": [
+                    "2091, Gyeongchung-daero, Bubal-eup, Icheon-si, Gyeonggi-do",
+                    "SK HYNIX"
+                  ],
+                  "city": "Icheon-si",
+                  "region": "KR-41",
+                  "country": "KR",
+                  "postalCode": "17336"
+                }
+              ],
+              "eventGroups": []
+            },
+            "registration": {
+              "initialRegistrationDate": "2017-11-07T00:00:00Z",
+              "lastUpdateDate": "2025-11-17T05:30:08Z",
+              "status": "LAPSED",
+              "nextRenewalDate": "2025-11-17T00:00:00Z",
+              "managingLou": "9884008RRMX1X5HV6625",
+              "corroborationLevel": "FULLY_CORROBORATED",
+              "validatedAt": {
+                "id": "RA000657",
+                "other": null
+              },
+              "validatedAs": "126-81-03725",
+              "otherValidationAuthorities": []
+            },
+            "bic": null,
+            "mic": null,
+            "ocid": null,
+            "qcc": "QKRFQGXW3R",
+            "gem": "E100000002115",
+            "spglobal": [
+              "883357"
+            ],
+            "conformityFlag": "NON_CONFORMING"
+          },
+          "relationships": {
+            "managing-lou": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/988400XAIK6XISWQV045/managing-lou"
+              }
+            },
+            "lei-issuer": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/988400XAIK6XISWQV045/lei-issuer"
+              }
+            },
+            "field-modifications": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/988400XAIK6XISWQV045/field-modifications"
+              }
+            },
+            "direct-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/988400XAIK6XISWQV045/direct-parent-reporting-exception"
+              }
+            },
+            "ultimate-parent": {
+              "links": {
+                "reporting-exception": "https://api.gleif.org/api/v1/lei-records/988400XAIK6XISWQV045/ultimate-parent-reporting-exception"
+              }
+            },
+            "direct-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/988400XAIK6XISWQV045/direct-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/988400XAIK6XISWQV045/direct-children"
+              }
+            },
+            "ultimate-children": {
+              "links": {
+                "relationship-records": "https://api.gleif.org/api/v1/lei-records/988400XAIK6XISWQV045/ultimate-child-relationships",
+                "related": "https://api.gleif.org/api/v1/lei-records/988400XAIK6XISWQV045/ultimate-children"
+              }
+            },
+            "isins": {
+              "links": {
+                "related": "https://api.gleif.org/api/v1/lei-records/988400XAIK6XISWQV045/isins"
+              }
+            }
+          },
+          "links": {
+            "self": "https://api.gleif.org/api/v1/lei-records/988400XAIK6XISWQV045"
+          }
+        }
+      ]
+    }
+  },
+  "review": {
+    "identity_kind": "prospective_security_mapping",
+    "reviewed_at": "2026-09-25",
+    "legal_name": "에스케이하이닉스 주식회사",
+    "valid_from": "2026-09-18",
+    "valid_to": "2026-12-31",
+    "basis": "Unique primary GLEIF ISIN response matched to the named live security; exact CUSIP and ISIN retained.",
+    "prior_disclosed_identity": []
+  }
+}
