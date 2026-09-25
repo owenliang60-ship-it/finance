@@ -623,3 +623,19 @@ def test_holiday_does_not_disguise_missing_thursday_price(monkeypatch):
         monkeypatch, '2027-06-19T04:00:00Z', ['2027-06-16'])
     with pytest.raises(ValueError, match='no trading date after'):
         backfill._fetch_sources(args, state, client, None, report)
+
+
+@pytest.mark.parametrize('fetched,should_defer', [
+    ('2018-12-24T17:00:00Z', True),
+    ('2018-12-24T18:00:00Z', False),
+    ('2018-12-24T19:00:00Z', False),
+])
+def test_first_effective_session_christmas_eve_early_close(monkeypatch, fetched, should_defer):
+    args, state, client, report = _source_boundary_case(monkeypatch, fetched, ['2018-12-21'])
+    if should_defer:
+        backfill._fetch_sources(args, state, client, None, report)
+        assert report['stages']['source']['live_deferred']['expected_close_utc'] == '2018-12-24T18:00:00Z'
+        client.get_etf_holdings.assert_not_called()
+    else:
+        with pytest.raises(ValueError, match='no trading date after'):
+            backfill._fetch_sources(args, state, client, None, report)

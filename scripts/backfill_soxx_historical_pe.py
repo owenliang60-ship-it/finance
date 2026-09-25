@@ -405,8 +405,11 @@ def _quarterly_rebalance_sessions(scheduled_close: str) -> Tuple[date, date, dat
         last -= timedelta(days=1)
     while first.weekday() >= 5 or first in holidays:
         first += timedelta(days=1)
+    # December 21 can be the third Friday, making Christmas Eve the first
+    # effective session. Its 13:00 close must not create a three-hour grace.
+    close_hour = 13 if (first.month, first.day) == (12, 24) else 16
     close = datetime.combine(first, datetime.min.time(),
-                             tzinfo=ZoneInfo("America/New_York")).replace(hour=16)
+                             tzinfo=ZoneInfo("America/New_York")).replace(hour=close_hour)
     return last, first, close.astimezone(timezone.utc)
 
 
