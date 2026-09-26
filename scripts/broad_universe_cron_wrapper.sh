@@ -99,7 +99,7 @@ case "$MODE" in
       -m src.data.extended_universe_manager --refresh || extended_rc=$?
     concept_rc=0
     run_step_with_market_writer_lock 0 "concept_weekly_sync" "$PYTHON" \
-      scripts/build_company_concept_registry.py --weekly-sync || concept_rc=$?
+      scripts/build_company_concept_registry.py --weekly-sync --scheduled || concept_rc=$?
     if [ "$concept_rc" -ne 0 ]; then
       log "WARN concept_weekly_sync rc=$concept_rc (nonblocking, continuing)"
     fi

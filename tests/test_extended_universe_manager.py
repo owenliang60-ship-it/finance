@@ -58,7 +58,7 @@ def test_weekly_refresh_holds_market_writer_lock_for_extended_membership_write(t
     assert result.returncode == 75
     calls_text = calls.read_text()
     assert "extended_universe_manager --refresh" not in calls_text
-    assert "build_company_concept_registry.py --weekly-sync" in calls_text
+    assert "build_company_concept_registry.py --weekly-sync --scheduled" in calls_text
     log = next((project / "logs").glob("cron_broad_weekly_refresh_*.log")).read_text()
     assert "market_db_writer lock busy" in log
     assert "BEGIN concept_weekly_sync" in log

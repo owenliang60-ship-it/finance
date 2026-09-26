@@ -129,6 +129,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--max-api-requests", type=int, default=None,
                         help="hard HTTP request ceiling, including failed retries")
     parser.add_argument("--run-id", default=None)
+    parser.add_argument(
+        "--scheduled", action="store_true",
+        help="cron run: back up as auto-index-pe-weekly and keep only the newest 1 "
+             "(manual runs keep pre-soxx-historical-pe and never prune)")
     parser.add_argument("--config-dir", type=Path, default=CONFIG_DIR,
                         help="basket + share-class config root (SSOT)")
     parser.add_argument("--db", type=Path,
@@ -626,7 +630,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             conn = _connect_ro(args.db)
             client = FMPClient(max_requests=args.max_api_requests) if args.allow_network else None
         else:
-            backup_path, store = open_write_dependencies(args.db)
+            backup_path, store = (
+                open_write_dependencies(args.db, label="auto-index-pe-weekly", keep=1)
+                if args.scheduled else open_write_dependencies(args.db))
             conn = store._get_conn()
             client = FMPClient(max_requests=args.max_api_requests)
         report = run_backfill(args, client=client, store=store, conn=conn)

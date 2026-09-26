@@ -28,7 +28,7 @@ SNAPSHOT_DATE="$(date +%F)"
 # History refresh can correct market caps/FX used by PIT. Complete it first so
 # the newly frozen PIT rows are not immediately invalidated by a source repair.
 "$PYTHON" scripts/backfill_index_pe_history.py --baskets SPY,QQQ,SOXX \
-  --frequency weekly --years 5 --as-of "$SNAPSHOT_DATE"
+  --frequency weekly --years 5 --as-of "$SNAPSHOT_DATE" --scheduled
 "$PYTHON" scripts/update_fmp_forward.py --mode weekly --phase valuation \
   --snapshot-date "$SNAPSHOT_DATE"
 "$PYTHON" scripts/verify_fmp_forward.py --stage full --run-kind weekly \

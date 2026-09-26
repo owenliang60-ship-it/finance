@@ -296,9 +296,15 @@ def load_state(
     return state
 
 
-def open_write_dependencies(db_path: Path) -> Tuple[Optional[Path], MarketStore]:
-    """Backup existing pages before MarketStore can initialize schema/WAL."""
-    backup_path = _backup_sqlite(Path(db_path), "pre-soxx-historical-pe")
+def open_write_dependencies(
+        db_path: Path, *, label: str = "pre-soxx-historical-pe",
+        keep: Optional[int] = None) -> Tuple[Optional[Path], MarketStore]:
+    """Backup existing pages before MarketStore can initialize schema/WAL.
+
+    Manual callers keep the default label and never prune; only the scheduled
+    index-PE run passes an auto- label with `keep` (plan 2026-09-26 M0).
+    """
+    backup_path = _backup_sqlite(Path(db_path), label, keep=keep)
     return backup_path, MarketStore(Path(db_path))
 
 

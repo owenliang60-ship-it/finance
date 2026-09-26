@@ -999,6 +999,7 @@ def weekly_sync(
     refresh_fn=refresh_profiles,
     store_factory=None,
     telegram_fn=None,
+    scheduled: bool = False,
 ) -> WeeklySyncResult:
     """7a 分类 → 7b 增量落库（preflight/postflight）→ 7c 队列 + Telegram(必发).
 
@@ -1057,7 +1058,7 @@ def weekly_sync(
                 _weekly_sync_persist(
                     res, store=store, canonical_csv=canonical_csv, profiles_path=profiles_path,
                     market_db_path=market_db_path, queue_dir=queue_dir,
-                    taxonomy=taxonomy, run_date=run_date)
+                    taxonomy=taxonomy, run_date=run_date, scheduled=scheduled)
     except Exception as exc:                                          # P1.3 fatal → still notify
         logger.exception("weekly_sync fatal")
         res.error = f"weekly_sync fatal: {exc}"
@@ -1101,6 +1102,7 @@ def _weekly_sync_persist(
     queue_dir: Path,
     taxonomy: dict,
     run_date: str,
+    scheduled: bool = False,
 ) -> None:
     """7b deterministic save (incremental, fail-closed via DB restore) + 7c queue.
 
@@ -1118,7 +1120,8 @@ def _weekly_sync_persist(
             for row, _prof in res._deterministic
         ]
         db_rows = [_row_to_db(row) for row, _prof in res._deterministic]
-        backup = _backup_sqlite(store.db_path, "pre-weekly-sync")
+        backup = (_backup_sqlite(store.db_path, "auto-weekly-sync", keep=2) if scheduled
+                  else _backup_sqlite(store.db_path, "pre-weekly-sync"))
         tmp_csv = None
         try:
             # Two-phase commit (P1.B): stage the failure-prone CSV write FIRST (no
@@ -1732,6 +1735,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--weekly-sync", action="store_true",
                         help="Sync registry to current extended_universe drift (A3): "
                              "deterministic auto-save, LLM queue, Telegram summary.")
+    parser.add_argument("--scheduled", action="store_true",
+                        help="Cron run: back up with the auto-weekly-sync label and keep "
+                             "only the newest 2 (manual runs never prune).")
     parser.add_argument("--canonical-csv", type=Path, default=None,
                         help="Canonical reviewed CSV (default: reports/concept_registry/reviewed_current.csv)")
     parser.add_argument("--bootstrap-canonical", type=Path, default=None,
@@ -1811,7 +1817,8 @@ def main(argv: list[str] | None = None) -> int:
             extended_universe_path=extended_universe_path, profiles_path=profiles_path,
             market_db_path=market_db_path, queue_dir=canonical_csv.parent,
             run_date=_dt.date.today().isoformat(),
-            store_factory=_open_store, telegram_fn=send_message)
+            store_factory=_open_store, telegram_fn=send_message,
+            scheduled=args.scheduled)
         print(res.summary_text())
         return 2 if res.error else 0
 
