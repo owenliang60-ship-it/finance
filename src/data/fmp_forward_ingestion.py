@@ -345,6 +345,10 @@ def non_equity_holding_reason(asset: str, name: str) -> Optional[str]:
         return "cash_or_fund"
     if re.search(r"\b(?:INDEX FUTURE|CONTRA FUTURE)\b", name):
         return "futures"
+    # Reviewed issuer holdings + CME XAF specification (2026-09-26).
+    # Require the exact contract/name pair; unknown rolls remain unclassified.
+    if asset == "IXAZ6" and re.fullmatch(r"XAF\s+FINANCIAL\s+DEC26", name):
+        return "futures"
     return None
 
 

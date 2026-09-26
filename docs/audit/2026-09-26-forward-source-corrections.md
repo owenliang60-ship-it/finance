@@ -73,6 +73,40 @@ preserving unknown-currency rejection. Focused post-fix results are retained in
 the recovery reports. Production rollout/resumption follows the approved
 recovery scope and still uses the same1,200-request cumulative ledger.
 
+### Three histories certified; XLF contract classification
+
+KRW code `cb78ee43` was deployed after313 focused local tests and80 direct
+production tests passed. Attempt3 recertified SPY without refetching it, restored
+SOXX253 rows, and recomputed QQQ261 rows after raw-source verification caught
+COST/CTAS/PAYX changes since the earlier QQQ product. All three histories then
+passed joint verification. BNY metrics were recomputed again after collection:
+60 current income/metric rows, with old metrics archived.
+
+PIT then failed closed on XLF's negative-weight `IXAZ6` row, still marked equity
+in the legacy holdings table. State Street's official daily workbook contains
+the exact `IXAZ6 / XAF FINANCIAL DEC26 / ADI394XV5` row; CME's product table
+identifies XAF as E-mini Financial Select Sector futures. The frozen workbook
+and source/hash receipt are in the evidence directory. The added classification
+requires the exact ticker and full December26 name (whitespace/case normalized),
+does not infer other contract rolls, and retains raw weights and physical rows.
+Unknown/negative equity weights still fail. TDD first reproduced the failure;
+local/cloud relevant tests both118 passed, independent review found no blocker.
+
+Six-basket PIT dry-run then passed with valid NTM values and both90% coverage
+gates. SOX/IGV retain partial auxiliary blend-line status; no false completeness
+claim is made. Cumulative actual recovery HTTP reservations stand at1,119/1,200.
+Formal PIT write and final verifiers remain pending the final test/release step.
+
+### Release command incident
+
+During KRW rollout, another chat's existing commit `f15923c5` (five prosperity
+engine design documents, no runtime code) made the local main branch diverge.
+The fast-forward merge failed, but the shell command continued to push; that
+existing documentation commit was unintentionally synchronized to origin/cloud.
+It was preserved and disclosed to Boss. The KRW patch was then rebased onto
+current main, merged, pushed and deployed successfully as `cb78ee43`. Subsequent
+merge/push steps use separate checked commands to prevent continuation on failure.
+
 ## Result
 
 - SPY `2602335D / 436CVR021 / TPG INC / empty ISIN` is a reviewed CVR, excluded

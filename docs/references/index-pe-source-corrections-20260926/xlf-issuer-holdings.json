@@ -1,0 +1,14 @@
+{
+  "reviewed_on": "2026-09-26",
+  "source_url": "https://www.ssga.com/library-content/products/fund-data/etfs/us/holdings-daily-us-en-xlf.xlsx",
+  "sha256": "ed04c6a484b9aae9e20db1e7aed595a5a4a6adbd084143f0cc7f97671900d09e",
+  "exact_row": {
+    "name": "XAF FINANCIAL     DEC26",
+    "ticker": "IXAZ6",
+    "issuer_identifier": "ADI394XV5",
+    "weight_percent": -0.006536
+  },
+  "type_evidence": "https://www.cmegroup.com/markets/equities/select-sectors.html",
+  "classification": "E-mini Financial Select Sector futures (CME XAF)",
+  "scope": "Exact IXAZ6 / XAF FINANCIAL DEC26 pair only; no new-roll inference"
+}

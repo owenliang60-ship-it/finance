@@ -593,3 +593,37 @@ def test_physical_reviewed_cvr_marker_cannot_exclude_an_ordinary_equity(store):
                      "WHERE basket='SPY' AND symbol='MSFT'")
     with pytest.raises(ValueError, match='physical.*correction'):
         build_forward_valuations(store._get_conn(), SNAP)
+
+
+def test_verified_xlf_financial_future_keeps_raw_negative_weight(store):
+    from src.data.fmp_forward_ingestion import normalize_holdings
+    old = store.get_fmp_etf_holdings('XLF', SNAP)
+    future = dict(raw_row_index=99, raw_asset='IXAZ6', symbol='IXAZ6',
+                  name='XAF FINANCIAL     DEC26', weight_pct=-0.0065394,
+                  included=1, filter_reason=None, covered_by=None)
+    store.replace_fmp_etf_holdings('XLF', SNAP, old+[future])
+    rows = build_forward_valuations(store._get_conn(), SNAP)
+    row = next(r for r in rows if r['basket']=='XLF')
+    assert row['n_members'] == len(old)
+    excluded = row['members_json']['non_equity_exclusions']
+    assert excluded[0]['valuation_filter_reason']=='futures'
+    assert excluded[0]['weight_pct']==future['weight_pct']
+    assert store.get_fmp_etf_holdings('XLF', SNAP)[-1]['included']==1
+    assert verify_forward_valuations(store._get_conn(), SNAP, rows)==[]
+    normalized = normalize_holdings('XLF',SNAP,[{
+        'asset':'IXAZ6','name':future['name'],'weightPercentage':future['weight_pct']}],{}, {})
+    assert normalized[0]['filter_reason']=='futures' and normalized[0]['included']==0
+    assert normalized[0]['weight_pct']==future['weight_pct']
+
+
+@pytest.mark.parametrize('asset,name', [
+    ('MSFT','XAF FINANCIAL DEC26'), ('IXAZ6','MICROSOFT CORP'),
+    ('IXAZ7','XAF FINANCIAL DEC26'), ('IXAZ6','XAF FINANCIAL DEC27'),
+])
+def test_unreviewed_ticker_name_pair_keeps_negative_equity_gate(store,asset,name):
+    original = store.get_fmp_etf_holdings('XLF',SNAP)
+    store.replace_fmp_etf_holdings('XLF',SNAP,original+[{
+        'raw_row_index':99,'raw_asset':asset,'symbol':asset,'name':name,
+        'weight_pct':-0.01,'included':1,'filter_reason':None,'covered_by':None}])
+    with pytest.raises(ValueError,match='invalid equity weight'):
+        build_forward_valuations(store._get_conn(),SNAP)
