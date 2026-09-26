@@ -1403,7 +1403,26 @@ def _build_display_tags(row: dict, concepts_by_id: dict[str, str]) -> str:
     return " / ".join(parts)
 
 
-def _backup_sqlite(db_path: Path, label: str) -> Path | None:
+AUTO_BACKUP_PREFIX = "auto-"
+BACKUP_SPACE_FACTOR = 1.5
+
+
+def _backup_timestamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+
+
+def _quick_check(path: Path) -> str:
+    import sqlite3
+    # Plain (not mode=ro) connection: the backup inherits WAL mode, and only a
+    # writable last-closer removes the -wal/-shm sidecars it creates.
+    conn = sqlite3.connect(str(path))
+    try:
+        return conn.execute("PRAGMA quick_check").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def _backup_sqlite(db_path: Path, label: str, keep: int | None = None) -> Path | None:
     """WAL-safe SQLite snapshot using the official backup API.
 
     Why not shutil.copy2: market.db (and company.db) both run journal_mode=WAL.
@@ -1411,22 +1430,75 @@ def _backup_sqlite(db_path: Path, label: str) -> Path | None:
     sidecar, leaving the backup logically incomplete. sqlite3.Connection.backup()
     coordinates with WAL and produces a consistent destination file regardless
     of pending writes. Returns the new backup path, or None when db_path missing.
+
+    M0 (plan 2026-09-26, issue046): refuses when free disk < logical size
+    (page_count*page_size, which includes WAL) x1.5; writes a private temp file,
+    quick_checks it, then publishes with os.link (never overwrites). With `keep`,
+    prunes older backups of the same `auto-` label, never the one just made.
+    Every backup-phase failure surfaces as RuntimeError (original chained).
     """
+    if keep is not None and (not label.startswith(AUTO_BACKUP_PREFIX) or keep < 1):
+        raise ValueError(f"keep={keep} requires an '{AUTO_BACKUP_PREFIX}' label and keep>=1, got {label!r}")
     if not db_path.exists():
         return None
+    import re
     import sqlite3
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    backup_path = db_path.with_name(f"{db_path.name}.backup-{ts}-{label}")
-    src = sqlite3.connect(str(db_path))
-    dst = sqlite3.connect(str(backup_path))
+    import tempfile
+    final = db_path.with_name(f"{db_path.name}.backup-{_backup_timestamp()}-{label}")
+    tmp: Path | None = None
+    phase = "space check"
     try:
-        with dst:
-            src.backup(dst)
-    finally:
-        src.close()
-        dst.close()
-    logger.info("WAL-safe backup %s -> %s", db_path, backup_path)
-    return backup_path
+        src = sqlite3.connect(str(db_path))
+        try:
+            logical = (src.execute("PRAGMA page_count").fetchone()[0]
+                       * src.execute("PRAGMA page_size").fetchone()[0])
+            need = int(logical * BACKUP_SPACE_FACTOR)
+            free = shutil.disk_usage(db_path.parent).free
+            if free < need:
+                raise RuntimeError(
+                    f"insufficient disk for backup of {db_path}: free={free} need={need}")
+            phase = "write"
+            fd, tmp_name = tempfile.mkstemp(
+                dir=db_path.parent, prefix=f"{final.name}.", suffix=".partial")
+            os.close(fd)
+            tmp = Path(tmp_name)
+            dst = sqlite3.connect(str(tmp))
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            src.close()
+        phase = "verify"
+        result = _quick_check(tmp)
+        if result != "ok":
+            raise RuntimeError(f"quick_check={result!r}")
+        phase = "publish"
+        os.link(tmp, final)
+        tmp.unlink()
+        tmp = None
+    except Exception as exc:
+        if tmp is not None:
+            for suffix in ("", "-journal", "-wal", "-shm"):
+                leftover = tmp.with_name(tmp.name + suffix)
+                leftover.unlink(missing_ok=True)
+        if phase == "space check" and isinstance(exc, RuntimeError):
+            raise
+        raise RuntimeError(f"backup {phase} failed for {final}: {exc}") from exc
+    logger.info("WAL-safe backup %s -> %s", db_path, final)
+
+    if keep is not None:
+        pattern = re.compile(rf"^{re.escape(db_path.name)}\.backup-\d{{14}}-{re.escape(label)}$")
+        older = sorted(p for p in db_path.parent.iterdir()
+                       if p != final and pattern.match(p.name))
+        excess = older[:max(len(older) - (keep - 1), 0)]
+        try:
+            for old in excess:
+                old.unlink()
+                logger.info("pruned old backup %s (label=%s keep=%d)", old, label, keep)
+        except OSError as exc:
+            raise RuntimeError(f"backup prune failed for {final}: {exc}") from exc
+    return final
 
 
 def apply_reviewed_csv(
