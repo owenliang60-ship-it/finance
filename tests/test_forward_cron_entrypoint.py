@@ -137,6 +137,7 @@ def test_source_refresh_precedes_frozen_pit_and_both_verifiers(env_project):
         "verify_history",
     ]
     assert "--sample 50" in lines[-1]
+    assert "--scheduled" in lines[2].split()   # cron history run uses auto-label backup retention
     wrapper = (SCRIPT.parent / "cron_wrapper.sh").read_text()
     assert "market_db_writer" in wrapper
 

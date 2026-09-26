@@ -1052,6 +1052,303 @@ def test_backup_sqlite_captures_wal_committed_writes(tmp_path):
     assert rows == [("committed_then_backup",)]
 
 
+
+# ---- M0 (plan 2026-09-26): backup space gate, atomic publish, auto-label retention ----
+
+
+def _m0_live_db(path, rows=1):
+    import sqlite3
+    conn = sqlite3.connect(str(path))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("CREATE TABLE t (k TEXT)")
+    conn.executemany("INSERT INTO t VALUES (?)", [(f"r{i}",) for i in range(rows)])
+    conn.commit()
+    conn.close()
+    return path
+
+
+def _m0_fixed_ts(monkeypatch, *stamps):
+    import scripts.build_company_concept_registry as mod
+    it = iter(stamps)
+    monkeypatch.setattr(mod, "_backup_timestamp", lambda: next(it))
+
+
+def _m0_free(monkeypatch, free):
+    import collections
+    import scripts.build_company_concept_registry as mod
+    usage = collections.namedtuple("usage", "total used free")
+    monkeypatch.setattr(mod.shutil, "disk_usage", lambda _p: usage(free * 2, free, free))
+
+
+class _M0Boom:
+    """Wrap a sqlite3 connection so .backup() fails like a full disk mid-copy."""
+    def __init__(self, real):
+        self._real = real
+    def backup(self, *_a, **_k):
+        raise OSError(28, "No space left on device")
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+def _m0_enospc(monkeypatch):
+    import sqlite3
+    real_connect = sqlite3.connect
+    monkeypatch.setattr(sqlite3, "connect", lambda *a, **k: _M0Boom(real_connect(*a, **k)))
+
+
+def _m0_partials(directory):
+    return sorted(p.name for p in directory.iterdir() if ".partial" in p.name)
+
+
+def test_backup_space_gate_counts_uncheckpointed_wal(tmp_path, monkeypatch):
+    """P1-1: the main file can be tiny while WAL holds the data; the gate must use
+    the logical size (page_count*page_size), not stat().st_size."""
+    import sqlite3
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = tmp_path / "market.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA wal_autocheckpoint=0")
+    conn.execute("CREATE TABLE t (x BLOB)")
+    conn.executemany("INSERT INTO t VALUES (randomblob(4000))", [()] * 1000)
+    conn.commit()
+    main_size = db.stat().st_size
+    page_count = conn.execute("PRAGMA page_count").fetchone()[0]
+    page_size = conn.execute("PRAGMA page_size").fetchone()[0]
+    logical = page_count * page_size
+    assert logical > main_size * 100   # the reproduced shape: data lives in WAL
+    _m0_free(monkeypatch, int(logical * 1.2))   # enough for main*1.5, not logical*1.5
+    with pytest.raises(RuntimeError, match="insufficient disk"):
+        _backup_sqlite(db, "auto-x", keep=2)
+    conn.close()
+    assert list(tmp_path.glob("market.db.backup-*")) == []
+    assert _m0_partials(tmp_path) == []
+
+
+def test_backup_prunes_auto_label_to_keep(tmp_path, monkeypatch):
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    for ts in ("20260101000000", "20260102000000", "20260103000000"):
+        (tmp_path / f"market.db.backup-{ts}-auto-x").write_bytes(b"old")
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    new = _backup_sqlite(db, "auto-x", keep=2)
+    left = sorted(p.name for p in tmp_path.glob("market.db.backup-*"))
+    assert left == ["market.db.backup-20260103000000-auto-x",
+                    "market.db.backup-20260104000000-auto-x"]
+    assert new.name == "market.db.backup-20260104000000-auto-x"
+
+
+def test_backup_never_prunes_the_new_backup(tmp_path, monkeypatch):
+    """P2-4: a same-label file with a LATER timestamp must not push out the
+    backup this call just created."""
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    future = tmp_path / "market.db.backup-20991231000000-auto-x"
+    future.write_bytes(b"clock-skew")
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    new = _backup_sqlite(db, "auto-x", keep=1)
+    assert new.exists()
+    assert not future.exists()
+
+
+def test_backup_same_second_retry_does_not_overwrite(tmp_path, monkeypatch):
+    import sqlite3
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    _m0_fixed_ts(monkeypatch, "20260104000000", "20260104000000")
+    first = _backup_sqlite(db, "auto-x", keep=2)
+    before = first.read_bytes()
+    with sqlite3.connect(str(db)) as conn:
+        conn.execute("INSERT INTO t VALUES ('later')")
+    with pytest.raises(RuntimeError, match="publish") as info:
+        _backup_sqlite(db, "auto-x", keep=2)
+    assert isinstance(info.value.__cause__, FileExistsError)
+    assert first.read_bytes() == before
+    assert _m0_partials(tmp_path) == []
+
+
+def test_backup_failure_leaves_other_callers_temp_files(tmp_path, monkeypatch):
+    """Second-round P2-1: cleanup removes only this call's own temp file."""
+    import sqlite3
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    other = tmp_path / "market.db.backup-20260104000000-auto-x.other123.partial"
+    other.write_bytes(b"another caller is writing")
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    _m0_enospc(monkeypatch)
+    with pytest.raises(RuntimeError, match="write"):
+        _backup_sqlite(db, "auto-x", keep=2)
+    assert other.read_bytes() == b"another caller is writing"
+    assert _m0_partials(tmp_path) == [other.name]
+
+
+def test_backup_prune_scope_is_exact(tmp_path, monkeypatch):
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "m+k.db")   # regex metacharacter in db name
+    keep_files = [
+        "m+k.db.backup-20200101000000-auto-x.gz",
+        "m+k.db.backup-20200101000000-auto-x.gz.json",
+        "m+k.db.backup-20200101000000-pre-weekly-sync",
+        "m+k.db.backup-20200101000000-auto-y",
+        "m+k.db.before-x",
+        "mmk.db.backup-20200101000000-auto-x",
+        "m+k.db.backup-2020-auto-x",
+    ]
+    for name in keep_files:
+        (tmp_path / name).write_bytes(b"keep")
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    _backup_sqlite(db, "auto-x", keep=1)
+    for name in keep_files:
+        assert (tmp_path / name).exists(), name
+
+
+def test_backup_keep_requires_auto_label(tmp_path):
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    with pytest.raises(ValueError):
+        _backup_sqlite(db, "pre-weekly-sync", keep=2)
+    with pytest.raises(ValueError):
+        _backup_sqlite(db, "auto-x", keep=0)
+    assert list(tmp_path.glob("market.db.backup-*")) == []
+
+
+def test_backup_without_keep_prunes_nothing(tmp_path, monkeypatch):
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    for ts in ("20260101000000", "20260102000000"):
+        (tmp_path / f"market.db.backup-{ts}-pre-rebuild").write_bytes(b"old")
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    _backup_sqlite(db, "pre-rebuild")
+    assert len(list(tmp_path.glob("market.db.backup-*-pre-rebuild"))) == 3
+
+
+def test_backup_midway_failure_keeps_old_backups(tmp_path, monkeypatch):
+    import sqlite3
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    old = tmp_path / "market.db.backup-20260101000000-auto-x"
+    old.write_bytes(b"old-backup")
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    _m0_enospc(monkeypatch)
+    with pytest.raises(RuntimeError) as info:
+        _backup_sqlite(db, "auto-x", keep=1)
+    assert isinstance(info.value.__cause__, OSError)
+    assert old.read_bytes() == b"old-backup"
+    assert not (tmp_path / "market.db.backup-20260104000000-auto-x").exists()
+    assert _m0_partials(tmp_path) == []
+
+
+def test_backup_quick_check_failure_publishes_nothing(tmp_path, monkeypatch):
+    import scripts.build_company_concept_registry as mod
+    db = _m0_live_db(tmp_path / "market.db")
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    monkeypatch.setattr(mod, "_quick_check", lambda _p: "*** corrupt page 7")
+    with pytest.raises(RuntimeError, match="verify"):
+        mod._backup_sqlite(db, "auto-x", keep=1)
+    assert list(tmp_path.glob("market.db.backup-*")) == []
+    assert _m0_partials(tmp_path) == []
+
+
+def test_backup_future_timestamp_does_not_occupy_a_keep_slot(tmp_path, monkeypatch):
+    """Review #6: with keep=2 a clock-skewed future file must not displace the
+    real previous backup."""
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    prev = tmp_path / "market.db.backup-20260103000000-auto-x"
+    prev.write_bytes(b"prev")
+    future = tmp_path / "market.db.backup-20991231000000-auto-x"
+    future.write_bytes(b"clock-skew")
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    new = _backup_sqlite(db, "auto-x", keep=2)
+    assert new.exists() and prev.exists()
+    assert not future.exists()
+
+
+def test_backup_existing_target_fails_before_copying(tmp_path, monkeypatch):
+    """Review #8: an existing final name is refused before any temp copy is made."""
+    import tempfile
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    (tmp_path / "market.db.backup-20260104000000-auto-x").write_bytes(b"first")
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    made = []
+    real_mkstemp = tempfile.mkstemp
+    monkeypatch.setattr(tempfile, "mkstemp", lambda *a, **k: made.append(1) or real_mkstemp(*a, **k))
+    with pytest.raises(RuntimeError, match="publish") as info:
+        _backup_sqlite(db, "auto-x", keep=2)
+    assert isinstance(info.value.__cause__, FileExistsError)
+    assert made == []
+
+
+def test_backup_is_published_world_readable(tmp_path, monkeypatch):
+    """Review #7: mkstemp creates 0600; the published backup keeps the old 0644."""
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    new = _backup_sqlite(db, "auto-x", keep=2)
+    assert new.stat().st_mode & 0o777 == 0o644
+
+
+def test_backup_temp_cleanup_failure_after_publish_still_returns_backup(tmp_path, monkeypatch):
+    """Review #4: once os.link published the backup, a failing temp unlink is a
+    warning, not a failed backup."""
+    import scripts.build_company_concept_registry as mod
+    db = _m0_live_db(tmp_path / "market.db")
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    real_unlink = Path.unlink
+    def unlink(self, *a, **k):
+        if self.name.endswith(".partial"):
+            raise OSError(5, "I/O error")
+        return real_unlink(self, *a, **k)
+    monkeypatch.setattr(Path, "unlink", unlink)
+    new = mod._backup_sqlite(db, "auto-x", keep=2)
+    assert new == tmp_path / "market.db.backup-20260104000000-auto-x"
+    assert new.exists()
+
+
+def test_backup_prune_failure_keeps_published_backup_and_does_not_raise(tmp_path, monkeypatch, caplog):
+    """Review #2: the new backup is already safe; a prune failure is logged as an
+    error (the space gate is the backstop), never turned into a failed backup."""
+    import logging
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    old = tmp_path / "market.db.backup-20260101000000-auto-x"
+    old.write_bytes(b"old")
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    real_unlink = Path.unlink
+    def unlink(self, *a, **k):
+        if self == old:
+            raise PermissionError(1, "Operation not permitted")
+        return real_unlink(self, *a, **k)
+    monkeypatch.setattr(Path, "unlink", unlink)
+    with caplog.at_level(logging.ERROR):
+        new = _backup_sqlite(db, "auto-x", keep=1)
+    assert new.exists() and old.exists()
+    assert "prune" in caplog.text
+
+
+def test_backup_removes_stale_same_label_partials_only(tmp_path, monkeypatch):
+    """Review #1: a hard-killed earlier run leaves <final>.<rand>.partial (+ sidecars).
+    Stale (>24h) same-auto-label leftovers are removed; fresh ones or other labels stay."""
+    import os
+    import time
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    old_t = time.time() - 2 * 86400
+    stale = [tmp_path / "market.db.backup-20260101000000-auto-x.ab12cd.partial",
+             tmp_path / "market.db.backup-20260101000000-auto-x.ab12cd.partial-wal",
+             tmp_path / "market.db.backup-20260101000000-auto-x.ab12cd.partial-shm"]
+    fresh = tmp_path / "market.db.backup-20260103000000-auto-x.ef34gh.partial"
+    other_label = tmp_path / "market.db.backup-20260101000000-pre-rebuild.zz99.partial"
+    for p in stale + [fresh, other_label]:
+        p.write_bytes(b"x")
+    for p in stale + [other_label]:
+        os.utime(p, (old_t, old_t))
+    _m0_fixed_ts(monkeypatch, "20260104000000")
+    _backup_sqlite(db, "auto-x", keep=2)
+    assert not any(p.exists() for p in stale)
+    assert fresh.exists() and other_label.exists()
+
 # ---- Task 11: legacy taxonomy.json + concept_themes.json are dead code ----
 
 

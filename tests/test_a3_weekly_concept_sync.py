@@ -356,3 +356,91 @@ def test_bootstrap_normalizes_and_writes_manifest(tmp_path):
     assert rc == 0
     assert b._read_csv_symbols(out) == {"AAA"}
     assert b._load_review_manifest(out) == {"AAA"}
+
+
+# ---- M0 (plan 2026-09-26): scheduled runs use the auto- label with retention ----
+
+
+def _persisting_weekly_sync(tmp_path, monkeypatch, **kwargs):
+    """Real store + one deterministic drift symbol, so persist (and its backup) runs."""
+    import json
+    from src.data.market_store import MarketStore
+    cfg = Path("config/concepts")
+    taxonomy = json.loads((cfg / "concept_taxonomy_v2.json").read_text(encoding="utf-8"))
+    registry = b.ConceptRegistry(taxonomy_path=cfg / "concept_taxonomy_v2.json",
+                                 watchlist_path=cfg / "concept_watchlist.json")
+    db = tmp_path / "m.db"; store = MarketStore(db); store.rebuild_concept_tree(registry.concepts)
+    seed_l1 = taxonomy["concepts"][0]["concept_id"]
+    store.upsert_company_concepts([{"symbol": "AAA", "primary_concept_id": seed_l1,
+        "theme_ids": [], "display_tags": "", "business_role": "", "confidence": 1.0,
+        "source": "manual", "evidence": "seed", "needs_review": 0}])
+    canon = tmp_path / "canon.csv"; _write(canon, b.REVIEW_CSV_FIELDS, [["ok", "AAA"] + [""] * 14])
+    imap = taxonomy["industry_map"]; key = next(iter(imap)); sector, industry = key.split("|", 1)
+    uni = tmp_path / "uni.json"; uni.write_text(json.dumps({"symbols": ["AAA", "RULEX"]}), encoding="utf-8")
+    monkeypatch.setattr(b, "_load_profiles",
+        lambda p: {"RULEX": {"symbol": "RULEX", "sector": sector, "industry": industry,
+                             "companyName": "Rule Co", "description": "x"}})
+    sent = []
+    res = b.weekly_sync(
+        registry=registry, taxonomy=taxonomy, canonical_csv=canon,
+        extended_universe_path=uni, profiles_path=tmp_path / "prof.json",
+        market_db_path=db, queue_dir=tmp_path, run_date="2026-06-01",
+        refresh_fn=lambda syms, profiles_path: 0, store_factory=lambda: store,
+        telegram_fn=lambda text, channel: sent.append((text, channel)), **kwargs)
+    return res, store, sent
+
+
+def _record_backup(monkeypatch, calls, fail=None):
+    def fake(path, label, keep=None):
+        calls.append((label, keep))
+        if fail is not None:
+            raise fail
+        return None
+    monkeypatch.setattr(b, "_backup_sqlite", fake)
+
+
+def test_weekly_sync_scheduled_uses_auto_label_keep_two(tmp_path, monkeypatch):
+    calls = []
+    _record_backup(monkeypatch, calls)
+    res, store, _ = _persisting_weekly_sync(tmp_path, monkeypatch, scheduled=True)
+    assert res.error is None
+    assert calls == [("auto-weekly-sync", 2)]
+
+
+def test_weekly_sync_manual_keeps_legacy_label_without_pruning(tmp_path, monkeypatch):
+    calls = []
+    _record_backup(monkeypatch, calls)
+    res, store, _ = _persisting_weekly_sync(tmp_path, monkeypatch)
+    assert res.error is None
+    assert calls == [("pre-weekly-sync", None)]
+
+
+def test_weekly_sync_backup_failure_is_fatal_before_any_db_write(tmp_path, monkeypatch):
+    calls, saves = [], []
+    _record_backup(monkeypatch, calls, fail=RuntimeError("insufficient disk for backup"))
+    monkeypatch.setattr(b, "save_to_market_db", lambda **kw: saves.append(kw))
+    res, store, sent = _persisting_weekly_sync(tmp_path, monkeypatch, scheduled=True)
+    assert res.error and "insufficient disk" in res.error
+    assert saves == []
+    assert b._db_tag_symbols(store) == {"AAA"}
+    assert sent and "insufficient disk" in sent[0][0]
+
+
+def test_cli_scheduled_flag_reaches_weekly_sync(tmp_path, monkeypatch):
+    seen = {}
+
+    class _Res:
+        error = None
+        def summary_text(self):
+            return "ok"
+
+    def fake_weekly_sync(**kwargs):
+        seen.update(kwargs)
+        return _Res()
+
+    monkeypatch.setattr(b, "weekly_sync", fake_weekly_sync)
+    assert b.main(["--weekly-sync", "--scheduled", "--data-root", str(tmp_path)]) == 0
+    assert seen["scheduled"] is True
+    seen.clear()
+    assert b.main(["--weekly-sync", "--data-root", str(tmp_path)]) == 0
+    assert seen["scheduled"] is False

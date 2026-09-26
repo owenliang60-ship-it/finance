@@ -999,6 +999,7 @@ def weekly_sync(
     refresh_fn=refresh_profiles,
     store_factory=None,
     telegram_fn=None,
+    scheduled: bool = False,
 ) -> WeeklySyncResult:
     """7a 分类 → 7b 增量落库（preflight/postflight）→ 7c 队列 + Telegram(必发).
 
@@ -1057,7 +1058,7 @@ def weekly_sync(
                 _weekly_sync_persist(
                     res, store=store, canonical_csv=canonical_csv, profiles_path=profiles_path,
                     market_db_path=market_db_path, queue_dir=queue_dir,
-                    taxonomy=taxonomy, run_date=run_date)
+                    taxonomy=taxonomy, run_date=run_date, scheduled=scheduled)
     except Exception as exc:                                          # P1.3 fatal → still notify
         logger.exception("weekly_sync fatal")
         res.error = f"weekly_sync fatal: {exc}"
@@ -1101,6 +1102,7 @@ def _weekly_sync_persist(
     queue_dir: Path,
     taxonomy: dict,
     run_date: str,
+    scheduled: bool = False,
 ) -> None:
     """7b deterministic save (incremental, fail-closed via DB restore) + 7c queue.
 
@@ -1118,7 +1120,8 @@ def _weekly_sync_persist(
             for row, _prof in res._deterministic
         ]
         db_rows = [_row_to_db(row) for row, _prof in res._deterministic]
-        backup = _backup_sqlite(store.db_path, "pre-weekly-sync")
+        backup = (_backup_sqlite(store.db_path, "auto-weekly-sync", keep=2) if scheduled
+                  else _backup_sqlite(store.db_path, "pre-weekly-sync"))
         tmp_csv = None
         try:
             # Two-phase commit (P1.B): stage the failure-prone CSV write FIRST (no
@@ -1403,7 +1406,26 @@ def _build_display_tags(row: dict, concepts_by_id: dict[str, str]) -> str:
     return " / ".join(parts)
 
 
-def _backup_sqlite(db_path: Path, label: str) -> Path | None:
+AUTO_BACKUP_PREFIX = "auto-"
+BACKUP_SPACE_FACTOR = 1.5
+
+
+def _backup_timestamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+
+
+def _quick_check(path: Path) -> str:
+    import sqlite3
+    # Plain (not mode=ro) connection: the backup inherits WAL mode, and only a
+    # writable last-closer removes the -wal/-shm sidecars it creates.
+    conn = sqlite3.connect(str(path))
+    try:
+        return conn.execute("PRAGMA quick_check").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def _backup_sqlite(db_path: Path, label: str, keep: int | None = None) -> Path | None:
     """WAL-safe SQLite snapshot using the official backup API.
 
     Why not shutil.copy2: market.db (and company.db) both run journal_mode=WAL.
@@ -1411,22 +1433,99 @@ def _backup_sqlite(db_path: Path, label: str) -> Path | None:
     sidecar, leaving the backup logically incomplete. sqlite3.Connection.backup()
     coordinates with WAL and produces a consistent destination file regardless
     of pending writes. Returns the new backup path, or None when db_path missing.
+
+    M0 (plan 2026-09-26, issue046): refuses when free disk < logical size
+    (page_count*page_size, which includes WAL) x1.5; writes a private temp file,
+    quick_checks it, then publishes with os.link (never overwrites). With `keep`,
+    prunes older backups of the same `auto-` label, never the one just made.
+    Every backup-phase failure surfaces as RuntimeError (original chained).
     """
+    if keep is not None and (not label.startswith(AUTO_BACKUP_PREFIX) or keep < 1):
+        raise ValueError(f"keep={keep} requires an '{AUTO_BACKUP_PREFIX}' label and keep>=1, got {label!r}")
     if not db_path.exists():
         return None
     import sqlite3
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    backup_path = db_path.with_name(f"{db_path.name}.backup-{ts}-{label}")
-    src = sqlite3.connect(str(db_path))
-    dst = sqlite3.connect(str(backup_path))
+    import tempfile
+    stamp = _backup_timestamp()
+    final = db_path.with_name(f"{db_path.name}.backup-{stamp}-{label}")
+    tmp: Path | None = None
+    phase = "space check"
     try:
-        with dst:
-            src.backup(dst)
-    finally:
-        src.close()
-        dst.close()
-    logger.info("WAL-safe backup %s -> %s", db_path, backup_path)
-    return backup_path
+        src = sqlite3.connect(str(db_path))
+        try:
+            logical = (src.execute("PRAGMA page_count").fetchone()[0]
+                       * src.execute("PRAGMA page_size").fetchone()[0])
+            need = int(logical * BACKUP_SPACE_FACTOR)
+            free = shutil.disk_usage(db_path.parent).free
+            if free < need:
+                raise RuntimeError(
+                    f"insufficient disk for backup of {db_path}: free={free} need={need}")
+            phase = "publish"
+            if final.exists():   # cheap refusal before a full copy; os.link still guards races
+                raise FileExistsError(17, "backup target exists", str(final))
+            phase = "write"
+            fd, tmp_name = tempfile.mkstemp(
+                dir=db_path.parent, prefix=f"{final.name}.", suffix=".partial")
+            os.close(fd)
+            tmp = Path(tmp_name)
+            os.chmod(tmp, 0o644)   # mkstemp is 0600; keep the old backup mode
+            dst = sqlite3.connect(str(tmp))
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            src.close()
+        phase = "verify"
+        result = _quick_check(tmp)
+        if result != "ok":
+            raise RuntimeError(f"quick_check={result!r}")
+        phase = "publish"
+        os.link(tmp, final)
+    except Exception as exc:
+        if tmp is not None:
+            for suffix in ("", "-journal", "-wal", "-shm"):
+                leftover = tmp.with_name(tmp.name + suffix)
+                leftover.unlink(missing_ok=True)
+        if phase == "space check" and isinstance(exc, RuntimeError):
+            raise
+        raise RuntimeError(f"backup {phase} failed for {final}: {exc}") from exc
+    try:
+        tmp.unlink()
+    except OSError as exc:   # backup already published; a stray temp is not a failed backup
+        logger.warning("backup published but temp cleanup failed for %s: %s", tmp, exc)
+    logger.info("WAL-safe backup %s -> %s", db_path, final)
+    if keep is not None:
+        _prune_auto_backups(db_path, label, final, stamp, keep)
+    return final
+
+
+def _prune_auto_backups(db_path: Path, label: str, final: Path, stamp: str, keep: int) -> None:
+    """Keep `final` + the newest keep-1 older same-label backups; drop the rest,
+    including future-stamped files (clock skew) and >24h-old orphaned temp files
+    from hard-killed runs. Failures are logged, not raised: the backup is already
+    published and the space gate is the backstop."""
+    import re
+    import time
+    name, lab = re.escape(db_path.name), re.escape(label)
+    backup_re = re.compile(rf"^{name}\.backup-(\d{{14}})-{lab}$")
+    partial_re = re.compile(rf"^{name}\.backup-\d{{14}}-{lab}\.[^.]+\.partial(-journal|-wal|-shm)?$")
+    older, doomed = [], []
+    stale_before = time.time() - 86400
+    for p in db_path.parent.iterdir():
+        m = backup_re.match(p.name)
+        if m and p != final:
+            (older if m.group(1) < stamp else doomed).append(p)
+        elif partial_re.match(p.name) and p.stat().st_mtime < stale_before:
+            doomed.append(p)
+    older.sort()
+    doomed += older[:max(len(older) - (keep - 1), 0)]
+    for old in sorted(doomed):
+        try:
+            old.unlink()
+            logger.info("pruned %s (label=%s keep=%d)", old, label, keep)
+        except OSError as exc:
+            logger.error("backup prune failed for %s: %s", old, exc)
 
 
 def apply_reviewed_csv(
@@ -1660,6 +1759,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--weekly-sync", action="store_true",
                         help="Sync registry to current extended_universe drift (A3): "
                              "deterministic auto-save, LLM queue, Telegram summary.")
+    parser.add_argument("--scheduled", action="store_true",
+                        help="Cron run: back up with the auto-weekly-sync label and keep "
+                             "only the newest 2 (manual runs never prune).")
     parser.add_argument("--canonical-csv", type=Path, default=None,
                         help="Canonical reviewed CSV (default: reports/concept_registry/reviewed_current.csv)")
     parser.add_argument("--bootstrap-canonical", type=Path, default=None,
@@ -1739,7 +1841,8 @@ def main(argv: list[str] | None = None) -> int:
             extended_universe_path=extended_universe_path, profiles_path=profiles_path,
             market_db_path=market_db_path, queue_dir=canonical_csv.parent,
             run_date=_dt.date.today().isoformat(),
-            store_factory=_open_store, telegram_fn=send_message)
+            store_factory=_open_store, telegram_fn=send_message,
+            scheduled=args.scheduled)
         print(res.summary_text())
         return 2 if res.error else 0
 

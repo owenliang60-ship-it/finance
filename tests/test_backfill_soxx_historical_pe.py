@@ -239,12 +239,13 @@ def test_write_dependency_opens_backup_before_market_store(monkeypatch, tmp_path
     db.write_bytes(b"placeholder")
     monkeypatch.setattr(
         backfill, "_backup_sqlite",
-        lambda path, label: events.append(("backup", Path(path), label)) or tmp_path / "b.db")
+        lambda path, label, keep=None: events.append(("backup", Path(path), label, keep))
+        or tmp_path / "b.db")
     monkeypatch.setattr(
         backfill, "MarketStore",
         lambda path: events.append(("store", Path(path))) or Mock())
     backup_path, store = backfill.open_write_dependencies(db)
-    assert events[0][0] == "backup"
+    assert events[0] == ("backup", db, "pre-soxx-historical-pe", None)   # manual: no pruning
     assert events[1][0] == "store"
     assert backup_path == tmp_path / "b.db"
     assert store is not None

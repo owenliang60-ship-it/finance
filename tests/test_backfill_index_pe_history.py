@@ -1175,3 +1175,83 @@ def test_a_week_before_any_disclosure_produces_no_row(tmp_path, config_dir):
     result = backfill_basket(args, "SPY", client=None, store=None, conn=conn)
     assert [row["valuation_date"] for row in result["rows"]] == ["2026-01-16"]
     store.close()
+
+
+# ---------------------------------------------------------------------------
+# M0 (plan 2026-09-26): scheduled backup label + every backup failure → rc 2
+# ---------------------------------------------------------------------------
+
+import scripts.backfill_soxx_historical_pe as soxx_backfill  # noqa: E402
+import scripts.build_company_concept_registry as concept_build  # noqa: E402
+
+
+def _m0_plain_db(path):
+    conn = sqlite3.connect(str(path))
+    conn.execute("CREATE TABLE t (k TEXT)")
+    conn.execute("INSERT INTO t VALUES ('x')")
+    conn.commit()
+    conn.close()
+    return path
+
+
+def _m0_stub_after_backup(monkeypatch, stores):
+    """Record MarketStore construction and stop right after it, before any network."""
+    def store(path):
+        stores.append(Path(path))
+        raise RuntimeError("stop after store")
+    monkeypatch.setattr(soxx_backfill, "MarketStore", store)
+
+
+@pytest.mark.parametrize("flags,label,keep", [
+    (["--scheduled"], "auto-index-pe-weekly", 2),
+    ([], "pre-soxx-historical-pe", None),
+])
+def test_cli_scheduled_flag_selects_backup_policy(tmp_path, monkeypatch, flags, label, keep):
+    db = _m0_plain_db(tmp_path / "market.db")
+    calls, stores = [], []
+    monkeypatch.setattr(soxx_backfill, "_backup_sqlite",
+                        lambda path, lbl, keep=None: calls.append((lbl, keep)) or None)
+    _m0_stub_after_backup(monkeypatch, stores)
+    assert backfill.main(["--db", str(db), *flags]) == 2
+    assert calls == [(label, keep)]
+    assert stores == [db]
+
+
+def _m0_no_space(monkeypatch):
+    import collections
+    usage = collections.namedtuple("usage", "total used free")
+    monkeypatch.setattr(concept_build.shutil, "disk_usage", lambda _p: usage(10, 10, 0))
+
+
+def _m0_enospc_midway(monkeypatch):
+    real_connect = sqlite3.connect
+
+    class _Boom:
+        def __init__(self, real):
+            self._real = real
+        def backup(self, *_a, **_k):
+            raise OSError(28, "No space left on device")
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
+    monkeypatch.setattr(sqlite3, "connect", lambda *a, **k: _Boom(real_connect(*a, **k)))
+
+
+def _m0_publish_conflict(monkeypatch):
+    monkeypatch.setattr(concept_build, "_backup_timestamp", lambda: "20260104000000")
+    def link(_src, _dst):
+        raise FileExistsError(17, "File exists")
+    monkeypatch.setattr(concept_build.os, "link", link)
+
+
+@pytest.mark.parametrize("inject", [_m0_no_space, _m0_enospc_midway, _m0_publish_conflict])
+def test_every_real_backup_failure_returns_2_before_market_store(
+        tmp_path, monkeypatch, capsys, inject):
+    db = _m0_plain_db(tmp_path / "market.db")
+    stores = []
+    _m0_stub_after_backup(monkeypatch, stores)
+    inject(monkeypatch)
+    assert backfill.main(["--db", str(db), "--scheduled"]) == 2
+    assert stores == []                               # MarketStore never constructed
+    assert "backup" in capsys.readouterr().err
+    assert [p.name for p in tmp_path.iterdir() if ".partial" in p.name] == []
