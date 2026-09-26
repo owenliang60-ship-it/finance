@@ -1,0 +1,281 @@
+CAPE - Shiller CAPE® U.S. Equities ETF
+Holdings as of 7/31/2026
+% of Net Assets Security Name                   Security Id   Ticker   Market Value        Shares         Asset Class
+     6.32      Amazon.com Inc                   023135106     AMZN         15,235,094.84            56,098 COMMON STOCK
+
+     3.64      Tesla Inc                        88160R101     TSLA          8,776,433.21            28,201 COMMON STOCK
+     3.20      Linde PLC                        G54950103     LIN           7,718,182.92            16,134 COMMON STOCK
+
+     2.77      Welltower Inc                    95040Q104     WELL          6,679,430.04            28,491 REIT
+
+     2.64      Walmart Inc                      931142103     WMT           6,362,641.60            57,218 COMMON STOCK
+     2.29      Prologis Inc                     74340W103     PLD           5,529,597.18            38,238 REIT
+
+     2.28      Costco Wholesale Corp            22160K105     COST          5,509,539.32             5,788 COMMON STOCK
+     1.83      Coca-Cola Co/The                 191216100     KO            4,411,207.58            50,362 COMMON STOCK
+
+     1.81      Procter & Gamble Co/The          742718109     PG            4,377,324.55            30,295 COMMON STOCK
+     1.60      Philip Morris International In   718172109     PM            3,849,030.22            20,171 COMMON STOCK
+
+     1.45      Newmont Corp                     651639106     NEM           3,507,659.01            37,431 COMMON STOCK
+     1.37      Home Depot Inc/The               437076102     HD            3,313,956.68             9,983 COMMON STOCK
+
+     1.31      Freeport-McMoRan Inc             35671D857     FCX           3,156,050.96            50,392 COMMON STOCK
+
+     1.22      Sherwin-Williams Co/The          824348106     SHW           2,940,172.10             8,626 COMMON STOCK
+     1.21      Simon Property Group Inc         828806109     SPG           2,915,980.81            12,713 REIT
+
+     1.21      Digital Realty Trust Inc         253868103     DLR           2,908,675.08            15,429 REIT
+     1.17      Ecolab Inc                       278865100     ECL           2,817,944.50            10,150 COMMON STOCK
+
+     1.16      Colgate-Palmolive Co             194162103     CL            2,799,440.60            30,662 COMMON STOCK
+     1.15      Air Products and Chemicals Inc   009158106     APD           2,771,081.33             9,397 COMMON STOCK
+
+     1.13      Corteva Inc                      22052L104     CTVA          2,729,662.80            34,680 COMMON STOCK
+
+     1.11      PepsiCo Inc                      713448108     PEP           2,671,317.96            19,141 COMMON STOCK
+     1.11      Mondelez International Inc       609207105     MDLZ          2,666,681.07            42,797 COMMON STOCK
+
+     1.11      Monster Beverage Corp            61174X109     MNST          2,666,256.32            27,664 COMMON STOCK
+     1.11      Nucor Corp                       670346105     NUE           2,665,267.11            10,359 COMMON STOCK
+
+     1.10      Equinix Inc                      29444U700     EQIX          2,658,282.24             2,608 REIT
+     1.09      Realty Income Corp               756109104     O             2,627,484.06            41,138 REIT
+
+     1.06      Vulcan Materials Co              929160109     VMC           2,566,186.35             9,555 COMMON STOCK
+     1.06      Altria Group Inc                 02209S103     MO            2,564,971.54            37,538 COMMON STOCK
+CAPE - Shiller CAPE® U.S. Equities ETF
+Holdings as of 7/31/2026
+     1.06     Target Corp                      87612E106   TGT    2,553,571.77   17,673 COMMON STOCK
+     1.04     McDonald's Corp                  580135101   MCD    2,500,442.96    9,239 COMMON STOCK
+
+     1.03     CRH PLC                          G25508105   CRH    2,482,041.24   26,124 COMMON STOCK
+     1.03     Martin Marietta Materials Inc    573284106   MLM    2,480,236.22    4,723 COMMON STOCK
+
+     1.01     TJX Cos Inc/The                  872540109   TJX    2,446,951.68   15,552 COMMON STOCK
+
+     1.01     American Tower Corp              03027X100   AMT    2,444,549.36   14,101 REIT
+     1.01     Steel Dynamics Inc               858119100   STLD   2,442,749.72    9,722 COMMON STOCK
+
+     0.94     Public Storage                   74460D109   PSA    2,261,409.92    6,976 REIT
+     0.93     Booking Holdings Inc             09857L108   BKNG   2,250,178.50   11,665 COMMON STOCK
+
+     0.83     Ventas Inc                       92276F100   VTR    2,003,825.79   21,429 REIT
+     0.82     PPG Industries Inc               693506107   PPG    1,987,149.60   17,980 COMMON STOCK
+
+     0.80     Smurfit WestRock PLC             G8267P108   SW     1,936,072.52   42,116 COMMON STOCK
+     0.79     CBRE Group Inc                   12504L109   CBRE   1,898,987.35   12,935 COMMON STOCK
+
+     0.74     Starbucks Corp                   855244109   SBUX   1,791,355.00   17,020 COMMON STOCK
+
+     0.73     Packaging Corp of America        695156109   PKG    1,753,330.88    7,132 COMMON STOCK
+     0.73     Lowe's Cos Inc                   548661107   LOW    1,750,175.82    8,422 COMMON STOCK
+
+     0.72     International Paper Co           460146103   IP     1,739,113.02   42,594 COMMON STOCK
+     0.70     Dow Inc                          260557103   DOW    1,690,575.77   55,813 COMMON STOCK
+
+     0.69     Amcor PLC                        G0250X149   AMCR   1,673,126.40   37,280 COMMON STOCK
+     0.68     Keurig Dr Pepper Inc             49271V100   KDP    1,645,407.76   52,873 COMMON STOCK
+
+     0.68     International Flavors & Fragra   459506101   IFF    1,632,486.54   20,607 COMMON STOCK
+
+     0.67     Iron Mountain Inc                46284V101   IRM    1,611,443.68   13,174 REIT
+     0.66     Sysco Corp                       871829107   SYY    1,580,179.12   18,538 COMMON STOCK
+
+     0.62     CF Industries Holdings Inc       125269100   CF     1,505,409.75   12,025 COMMON STOCK
+     0.62     DuPont de Nemours Inc            26614N201   DD     1,491,793.00   10,889 COMMON STOCK
+
+     0.61     Crown Castle Inc                 22822V101   CCI    1,470,911.40   19,278 REIT
+     0.61     Archer-Daniels-Midland Co        039483102   ADM    1,462,848.58   18,454 COMMON STOCK
+
+     0.60     Kenvue Inc                       49177J102   KVUE   1,436,573.84   74,666 COMMON STOCK
+     0.58     Kimberly-Clark Corp              494368103   KMB    1,410,208.31   12,901 COMMON STOCK
+CAPE - Shiller CAPE® U.S. Equities ETF
+Holdings as of 7/31/2026
+     0.57     Extra Space Storage Inc         30225T102   EXR    1,381,805.36    9,334 REIT
+     0.57     Ball Corp                       058498106   BALL   1,381,526.30   21,287 COMMON STOCK
+
+     0.53     VICI Properties Inc             925652109   VICI   1,280,320.15   48,589 REIT
+     0.53     Kroger Co/The                   501044101   KR     1,273,051.52   22,048 COMMON STOCK
+
+     0.52     LyondellBasell Industries NV    N53745100   LYB    1,250,229.12   20,139 COMMON STOCK
+
+     0.52     Casey's General Stores Inc      147528103   CASY   1,244,659.00    1,429 COMMON STOCK
+     0.51     Marriott International Inc/MD   571903202   MAR    1,224,373.72    3,284 COMMON STOCK
+
+     0.50     Ross Stores Inc                 778296103   ROST   1,214,174.52    4,836 COMMON STOCK
+     0.50     General Motors Co               37045V100   GM     1,200,676.32   13,512 COMMON STOCK
+
+     0.49     Royal Caribbean Cruises Ltd     V7780T103   RCL    1,193,625.00    3,750 COMMON STOCK
+     0.47     AvalonBay Communities Inc       053484101   AVB    1,140,202.23    6,143 REIT
+
+     0.46     DoorDash Inc                    25809K105   DASH   1,118,504.32    5,702 COMMON STOCK
+     0.46     O'Reilly Automotive Inc         67103H107   ORLY   1,107,046.50   12,390 COMMON STOCK
+
+     0.46     Albemarle Corp                  012653101   ALB    1,102,051.52    9,368 COMMON STOCK
+
+     0.45     Hilton Worldwide Holdings Inc   43300A203   HLT    1,095,114.33    3,417 COMMON STOCK
+     0.45     Dollar General Corp             256677105   DG     1,091,613.60    8,592 COMMON STOCK
+
+     0.43     Avery Dennison Corp             053611109   AVY    1,038,068.68    6,116 COMMON STOCK
+     0.42     Vivmark Residential             29476L107   VMRK   1,002,398.25   15,085 REIT
+
+     0.41     Hershey Co/The                  427866108   HSY     998,835.30     5,706 COMMON STOCK
+     0.39     Airbnb Inc                      009066101   ABNB    948,515.20     6,260 COMMON STOCK
+
+     0.38     Church & Dwight Co Inc          171340102   CHD     910,336.53     9,213 COMMON STOCK
+
+     0.37     Dollar Tree Inc                 256746108   DLTR    899,247.49     7,069 COMMON STOCK
+     0.36     Ford Motor Co                   345370860   F       860,248.00    58,600 COMMON STOCK
+
+     0.36     Kraft Heinz Co/The              500754106   KHC     857,082.60    33,156 COMMON STOCK
+     0.35     SBA Communications Corp         78410G104   SBAC    849,882.08     4,696 REIT
+
+     0.34     Essex Property Trust Inc        297178105   ESS     808,378.30     2,845 REIT
+     0.33     Estee Lauder Cos Inc/The        518439104   EL      805,020.50     9,595 COMMON STOCK
+
+     0.33     Weyerhaeuser Co                 962166104   WY      799,808.62    31,954 REIT
+     0.31     Kimco Realty Corp               49446R109   KIM     759,533.32    29,809 REIT
+CAPE - Shiller CAPE® U.S. Equities ETF
+Holdings as of 7/31/2026
+     0.31     eBay Inc                         278642103   EBAY   759,420.61    6,661 COMMON STOCK
+     0.31     NIKE Inc                         654106103   NKE    749,570.41   17,971 COMMON STOCK
+
+     0.31     AutoZone Inc                     053332102   AZO    741,997.50     246 COMMON STOCK
+     0.31     General Mills Inc                370334104   GIS    739,310.00   20,680 COMMON STOCK
+
+     0.31     Annaly Capital Management Inc    035710839   NLY    738,309.12   32,496 REIT
+
+     0.30     Jones Lang LaSalle Inc           48020Q107   JLL    729,231.62    2,054 COMMON STOCK
+     0.30     WP Carey Inc                     92936U109   WPC    723,120.00    9,825 REIT
+
+     0.30     Invitation Homes Inc             46187W107   INVH   719,283.44   24,202 REIT
+     0.30     Garmin Ltd                       H2906T109   GRMN   719,173.44    2,448 COMMON STOCK
+
+     0.30     Chipotle Mexican Grill Inc       169656105   CMG    714,177.36   19,188 COMMON STOCK
+     0.29     Host Hotels & Resorts Inc        44107P104   HST    709,495.29   28,233 REIT
+
+     0.29     Constellation Brands Inc         21036P108   STZ    703,502.46    5,402 COMMON STOCK
+     0.29     Carvana Co                       146869102   CVNA   700,115.72   11,227 COMMON STOCK
+
+     0.28     Mid-America Apartment Communit   59522J103   MAA    681,021.64    5,146 REIT
+
+     0.27     Healthpeak Properties Inc        42250P103   DOC    663,020.76   30,372 REIT
+     0.27     Omega Healthcare Investors Inc   681936100   OHI    656,193.15   13,137 REIT
+
+     0.26     Yum! Brands Inc                  988498101   YUM    635,039.04    4,143 COMMON STOCK
+     0.26     Tyson Foods Inc                  902494103   TSN    633,502.80   10,930 COMMON STOCK
+
+     0.26     Sun Communities Inc              866674104   SUI    631,847.16    5,117 REIT
+     0.26     Lamar Advertising Co             512816109   LAMR   616,005.96    3,851 REIT
+
+     0.24     Regency Centers Corp             758849103   REG    584,671.78    7,282 REIT
+
+     0.24     DR Horton Inc                    23331A109   DHI    567,805.14    3,969 COMMON STOCK
+     0.23     Gaming and Leisure Properties    36467J108   GLPI   560,636.43   12,517 REIT
+
+     0.23     Mosaic Co/The                    61945C103   MOS    557,822.16   25,218 COMMON STOCK
+     0.23     Equity LifeStyle Properties In   29472R108   ELS    557,780.04    8,572 REIT
+
+     0.23     Bunge Global SA                  H11356104   BG     549,209.10    5,170 COMMON STOCK
+     0.22     Carnival Corp Ltd                G2004J103   CCL    542,128.14   19,494 COMMON STOCK
+
+     0.22     AGNC Investment Corp             00123Q104   AGNC   541,773.18   50,823 REIT
+     0.21     CoStar Group Inc                 22160N109   CSGP   517,392.40   17,990 COMMON STOCK
+CAPE - Shiller CAPE® U.S. Equities ETF
+Holdings as of 7/31/2026
+     0.21     Expedia Group Inc                30212P303   EXPE   509,015.98    1,727 COMMON STOCK
+     0.21     McCormick & Co Inc/MD            579780206   MKC    501,466.80    9,852 COMMON STOCK
+
+     0.21     UDR Inc                          902653104   UDR    499,819.68   13,098 REIT
+     0.21     EastGroup Properties Inc         277276101   EGP    495,353.70    2,370 REIT
+
+     0.20     J M Smucker Co/The               832696405   SJM    493,736.40    4,140 COMMON STOCK
+
+     0.20     Camden Property Trust            133131102   CPT    492,550.45    4,445 REIT
+     0.19     American Homes 4 Rent            02665T306   AMH    468,013.68   14,004 REIT
+
+     0.19     Tapestry Inc                     876030107   TPR    462,442.95    3,035 COMMON STOCK
+     0.19     BXP Inc                          101121101   BXP    460,618.28    6,569 REIT
+
+     0.19     Clorox Co/The                    189054109   CLX    449,373.12    4,704 COMMON STOCK
+     0.18     Federal Realty Investment Trus   313745101   FRT    430,095.94    3,466 REIT
+
+     0.18     Brixmor Property Group Inc       11120U105   BRX    426,645.40   13,540 REIT
+     0.17     CubeSmart                        229663109   CUBE   415,760.88   10,028 REIT
+
+     0.17     Agree Realty Corp                008492100   ADC    411,717.60    5,292 REIT
+
+     0.17     Williams-Sonoma Inc              969904101   WSM    403,127.58    1,763 COMMON STOCK
+     0.17     NNN REIT Inc                     637417106   NNN    399,310.56    8,403 REIT
+
+     0.16     First Industrial Realty Trust    32054K103   FR     384,637.28    5,842 REIT
+     0.16     Rexford Industrial Realty Inc    76169C100   REXR   375,056.10    9,930 REIT
+
+     0.15     PulteGroup Inc                   745867101   PHM    362,589.49    2,867 COMMON STOCK
+     0.15     Alexandria Real Estate Equitie   015271109   ARE    358,143.45    6,961 REIT
+
+     0.14     Darden Restaurants Inc           237194105   DRI    348,936.12    1,714 COMMON STOCK
+
+     0.14     Ulta Beauty Inc                  90384S303   ULTA   333,339.50     650 COMMON STOCK
+     0.13     STAG Industrial Inc              85254J102   STAG   323,909.16    8,466 REIT
+
+     0.13     Healthcare Realty Trust Inc      42226K105   HR     321,053.81   15,281 REIT
+     0.12     Hormel Foods Corp                440452100   HRL    281,612.60   11,260 COMMON STOCK
+
+     0.11     Vornado Realty Trust             929042109   VNO    276,163.29    7,011 REIT
+     0.11     Lennar Corp                      526057104   LEN    265,990.50    3,230 COMMON STOCK
+
+     0.11     Molson Coors Beverage Co         60871R209   TAP    259,417.52    6,242 COMMON STOCK
+     0.11     Genuine Parts Co                 372460105   GPC    257,445.90    2,070 COMMON STOCK
+CAPE - Shiller CAPE® U.S. Equities ETF
+Holdings as of 7/31/2026
+     0.11     Zillow Group Inc                 98954M200   Z          257,289.24       7,554 COMMON STOCK
+     0.10     Best Buy Co Inc                  086516101   BBY        253,173.10       2,935 COMMON STOCK
+
+     0.10     Starwood Property Trust Inc      85571B105   STWD       246,235.82      15,409 REIT
+     0.10     NVR Inc                          62944T105   NVR        245,882.00          40 COMMON STOCK
+
+     0.10     Rithm Capital Corp               64828T201   RITM       244,322.52      24,729 REIT
+
+     0.10     Tractor Supply Co                892356106   TSCO       241,975.28       7,864 COMMON STOCK
+     0.10     Sabra Health Care REIT Inc       78573L106   SBRA       236,257.20      11,160 REIT
+
+     0.10     Cousins Properties Inc           222795502   CUZ        229,589.35       7,277 REIT
+     0.09     Ralph Lauren Corp                751212101   RL         221,357.88         582 COMMON STOCK
+
+     0.09     Las Vegas Sands Corp             517834107   LVS        217,071.60       4,440 COMMON STOCK
+     0.09     Deckers Outdoor Corp             243537107   DECK       206,063.76       2,127 COMMON STOCK
+
+     0.08     Millrose Properties Inc          601137102   MRP        191,439.16       6,842 REIT
+     0.08     Brown-Forman Corp                115637209   BF/B       189,273.24       6,588 COMMON STOCK
+
+     0.08     Hasbro Inc                       418056107   HAS        189,101.22       2,013 COMMON STOCK
+
+     0.08     Lululemon Athletica Inc          550021109   LULU       185,793.81       1,563 COMMON STOCK
+     0.08     DREYFUS GOVERN CASH GNT-INS      262006208              183,596.34   183,596.34 CASH
+
+     0.08     Kilroy Realty Corp               49427F108   KRC        183,540.96       4,728 REIT
+     0.07     Aptiv PLC                        G3265R107   APTV       180,139.30       3,190 COMMON STOCK
+
+     0.07     Americold Realty Trust Inc       03064D108   COLD       179,140.26      12,714 REIT
+     0.07     MSILF Government Portfolio       61747C707   MVRXX      178,196.44   178,196.44 CASH
+
+     0.07     Northern Institutional Funds -   665279808   NITXX      178,196.44   178,196.44 CASH
+
+     0.07     Domino's Pizza Inc               25754A201   DPZ        158,780.08         457 COMMON STOCK
+     0.05     Norwegian Cruise Line Holdings   G66721104   NCLH       129,117.04       6,968 COMMON STOCK
+
+     0.05     MGM Resorts International        552953101   MGM        126,935.36       2,848 COMMON STOCK
+     0.05     Wynn Resorts Ltd                 983134107   WYNN       123,640.95       1,245 COMMON STOCK
+
+     0.04     Lineage Inc                      53566V106   LINE       106,730.03       2,519 REIT
+     0.03     Zillow Group Inc                 98954M101   ZG          65,529.41       1,889 COMMON STOCK
+
+     0.02     CASH                                                     48,097.40     48,097.4 CASH
+     0.01     Sycamore Partners LLC            931CVR013   2556706D    19,056.15      35,955 RIGHT
+CAPE - Shiller CAPE® U.S. Equities ETF
+Holdings as of 7/31/2026
+     0.00     NET OTHER ASSETS                                  159.44   159.44
+     0.00     TPG Inc                    436CVR021   2602335D    26.80    2,680 RIGHT
+

@@ -1,0 +1,37 @@
+[
+  {
+    "file": "doubleline-cape-holdings.pdf",
+    "url": "https://doubleline.com/wp-content/uploads/ETF-Website-Holdings-CAPE.pdf",
+    "bytes": 228181,
+    "sha256": "e134f00fbb88146af0d7fae9c106fdc3f5d40d42e192260dfb7d8069eb8b617e",
+    "retained_in_bundle": true
+  },
+  {
+    "file": "acvf-holdings.html",
+    "url": "https://acvetfs.com/fund/acv-etf-fund-data/",
+    "bytes": 766673,
+    "sha256": "5893a6ab1147c61a1febf4ff12c91d7b6a51a15e64a767cf9c989c1fe735af4a",
+    "retained_in_bundle": true
+  },
+  {
+    "file": "nxp-investor-faq.html",
+    "url": "https://www.nxp.com/company/about-nxp/investor-relations/investor-faqs:INVESTORS-FAQS",
+    "bytes": 86867,
+    "sha256": "7263bf23ac7ed2c229d1e42c2413f2ee1d7f43cf05fb699e7823c895eb3ae28f",
+    "retained_in_bundle": true
+  },
+  {
+    "file": "cvr-nport.xml",
+    "url": "https://www.sec.gov/Archives/edgar/data/1860434/000141036826067310/primary_doc.xml",
+    "error": "<urlopen error [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1081)>",
+    "retained_in_bundle": false
+  },
+  {
+    "file": "lse-nxp.html",
+    "url": "https://www.londonstockexchange.com/exchange/instrument-result.html?filterBy=&filterClause=&initial=N&page=21",
+    "bytes": 54995,
+    "sha256": "c082660492d1bfb06ac164700d1187ed1d47dc1e940d356ff9f622546ef03d25",
+    "retained_in_bundle": false,
+    "limitation": "Downloaded shell lacks the binding; not retained or used as replayable proof."
+  }
+]
