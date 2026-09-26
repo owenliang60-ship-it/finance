@@ -1,8 +1,77 @@
 # Forward source corrections — 2026-09-26
 
-Status: implementation and independent review complete; not deployed, no weekly
-or PIT production valuation restored by this work. Boss approved the two scoped
+Status: deployed; SPY restored, remaining recovery in progress. Boss approved the two scoped
 corrections in `docs/plans/2026-09-26-index-pe-source-corrections.md`.
+
+## Production deployment and recovery (live checkpoint)
+
+Boss subsequently approved merge, push, deployment and a cumulative1,200-request
+recovery ceiling. Main/origin/cloud advanced to `3bfd5002`, including functional
+commit `4eca9467`. The deployment's Python3.10 imports compiled successfully.
+The task-created1,151,180,800-byte pre-quality backup was gzip-archived to
+306,739,585 bytes; decompressed SHA256 matched the original before the redundant
+uncompressed file was removed. Its `.gz.json` receipt remains beside the archive.
+
+Recovery acquired `market_db_writer`, created a fresh SQLite backup, and reserved
+each HTTP attempt in `data/forward-recovery-20260926/budget.json` before sending.
+Attempt1 stopped after4 requests on BNY's conflicting fiscal identity; no new
+weekly/PIT product was published. A further provider query used request5.
+
+### BNY source-label correction
+
+The existing row for2025-09-30 had `period=Q4`, while the current provider and
+[BNY's SEC-filed third-quarter release](https://www.sec.gov/Archives/edgar/data/1390777/000139077725000144/ex991_earningsreleasex3q25.htm)
+identify it as Q3; the $1.445bn shareholder net income and $1.88 diluted EPS
+match. Current provider comparison found12 income rows whose only changed
+field was period (September Q4→Q3; March Q2→Q1). Matching dates in the other two
+statements had5 mislabeled rows each. No financial amount was manually changed.
+
+The22-row plan froze exact old-row hashes, date, year and before/after period.
+An isolated SQLite simulation archived and corrected the labels, recomputed
+metrics and proved the previously blocked40-row income write succeeds. Production
+then repeated the hash checks under the shared lock, archived all22 old rows and
+old metrics in the same transaction, changed only period, recomputed40 metrics,
+and passed `quick_check`. Existing vintages were not relabeled or backdated.
+Archive operation: `bny-period-20260926`. The existing recovery backup remains.
+Final metrics are to be recomputed once historical collection has added quarters.
+
+Attempt2 uses a new run ID and resumes the **same** durable budget at5. It reuses
+the original recovery backup, preserving attempt1's logs/failed manifest. PIT
+remains gated on successful certification of all historical products. Status and
+results live under `data/forward-recovery-20260926-attempt2/` on the cloud.
+
+### SPY restored; KRW follow-up
+
+SPY attempt2 completed and passed independent certification:261 weekly rows,
+all261 TTM and hindsight values, window2021-10-01 through2026-09-25. SOXX then
+stopped at FX validation after total853 requests: freshly fetched SKHYV income
+uses KRW, which had no allowlisted USD-per-unit range. Request854 retained the
+five-year KRWUSD response:1,388 rows, observed range0.000637–0.000852.
+
+Issuer/currency evidence was checked before extending support:
+- Nasdaq ETA2026-37 binds CUSIP78392B206 to SK hynix's SKHYV listing and SKHY
+  regular-way successor: https://www.nasdaqtrader.com/TraderNews.aspx?id=ETA2026-37
+- The issuer's Q1 release reports KRW amounts:
+  https://news.skhynix.com/en/q1-2026-business-results/
+- Federal Reserve H.10 reports1,387.97 KRW/USD on2026-09-18, reciprocal about
+  0.0007205 USD/KRW; vendor close0.000717 is about0.5% different, consistent
+  in orientation/order of magnitude, not asserted to be the identical fixing:
+  https://www.federalreserve.gov/releases/h10/current/
+
+The added KRW band0.0004–0.0013 permits the reviewed direct quote and rejects
+inversion, wrong symbol, zero, NaN and out-of-range values. Other currencies'
+bounds and stale/missing-data rules are unchanged. The verifier also requires
+KRW support. This does not remap SKHYV to SKHY or certify the temporary ticker's
+market-cap freshness; missing/quarantined inputs remain subject to coverage.
+Primary vendor response SHA256:
+`76f489ef49ed3cfe32d8713ae4015892a11d6880060c877aaa775c77d4d81769`.
+
+The KRW conversion test first failed; independent review found no blocker.
+Full-suite checkpoint:4204 passed,1 failed,1 skipped; failure was the old test
+using KRW as its deliberately unsupported currency. That fixture now uses CHF,
+preserving unknown-currency rejection. Focused post-fix results are retained in
+the recovery reports. Production rollout/resumption follows the approved
+recovery scope and still uses the same1,200-request cumulative ledger.
 
 ## Result
 

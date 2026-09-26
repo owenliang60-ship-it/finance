@@ -419,3 +419,22 @@ def test_cny_reverse_or_implausible_quote_still_fails_closed(rate, source_symbol
     rows = [{"currency": "CNY", "date": "2026-01-30",
              "usd_per_unit": rate, "source_symbol": source_symbol}]
     assert select_asof_fx("CNY", rows, "2026-02-02") is None
+
+
+def test_reviewed_krw_reporter_converts_income_to_usd():
+    krw = [{'currency': 'KRW', 'date': '2026-01-30', 'usd_per_unit': 0.000734,
+            'source_symbol': 'KRWUSD'}]
+    assert select_asof_fx('KRW', krw, '2026-02-02')['usd_per_unit'] == 0.000734
+    result = compute_member_ttm_income_usd(_quarters(currency='KRW', income=1_000_000),
+                                          {'KRW': krw}, '2026-02-02')
+    assert result['ttm_net_income_usd'] == pytest.approx(2936)
+
+
+@pytest.mark.parametrize('rate,symbol', [
+    (1387.97, 'KRWUSD'), (0.000734, 'USDKRW'), (0, 'KRWUSD'),
+    (0.000399, 'KRWUSD'), (0.001301, 'KRWUSD'), (float('nan'), 'KRWUSD'),
+])
+def test_krw_inverted_unknown_direction_and_outliers_fail_closed(rate, symbol):
+    rows = [{'currency': 'KRW', 'date': '2026-01-30', 'usd_per_unit': rate,
+             'source_symbol': symbol}]
+    assert select_asof_fx('KRW', rows, '2026-02-02') is None

@@ -870,16 +870,16 @@ def test_eur_and_twd_conversion_reuses_the_historical_engine_fx():
 
 
 def test_unallowlisted_currency_fails_closed():
-    # KRW has no reviewed USD-per-unit band, so a KRW reporter must be
+    # CHF has no reviewed USD-per-unit band, so a CHF reporter must be
     # excluded rather than converted with an unvalidated rate.
-    income = _actual_year(symbol="SKHY", currency="KRW", income=100.0)
+    income = _actual_year(symbol="UNREVIEWED", currency="CHF", income=100.0)
     window = select_next_four_hindsight_quarters(
         income, [], "2025-12-31", consensus_snapshot_date=None)
     assert window["quarters"] is not None
     assert compute_member_hindsight_ntm_income_usd(
         window["quarters"],
-        {"KRW": [{"date": "2025-12-30", "usd_per_unit": 0.00072,
-                  "source_symbol": "KRWUSD"}]},
+        {"CHF": [{"date": "2025-12-30", "usd_per_unit": 1.1,
+                  "source_symbol": "CHFUSD"}]},
         "2025-12-31") is None
 
 

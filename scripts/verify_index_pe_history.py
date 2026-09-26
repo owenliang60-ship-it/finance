@@ -1679,7 +1679,7 @@ def verify_database(
                not (columns & set(FORBIDDEN_COLUMNS)),
                {"forbidden_present": sorted(columns & set(FORBIDDEN_COLUMNS))}),
         _check("fx_allowlist_covers_basket_currencies",
-               {"EUR", "TWD", "CNY"} <= set(USD_PER_UNIT_BOUNDS),
+               {"EUR", "TWD", "CNY", "KRW"} <= set(USD_PER_UNIT_BOUNDS),
                sorted(USD_PER_UNIT_BOUNDS)),
     ]
 

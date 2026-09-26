@@ -50,6 +50,16 @@ def config_dir(tmp_path):
     return target
 
 
+def test_verifier_requires_reviewed_krw_support(tmp_path, config_dir, monkeypatch):
+    import scripts.verify_index_pe_history as verifier
+    db_path = _build(tmp_path)
+    monkeypatch.setattr(verifier, 'USD_PER_UNIT_BOUNDS', {
+        k: v for k, v in verifier.USD_PER_UNIT_BOUNDS.items() if k != 'KRW'})
+    report = _verify(db_path, config_dir)
+    assert not report['passed']
+    assert 'fx_allowlist_covers_basket_currencies' in json.dumps(_failed(report))
+
+
 def _weekdays(start, end):
     current = date.fromisoformat(start)
     final = date.fromisoformat(end)

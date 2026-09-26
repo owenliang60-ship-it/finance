@@ -11,6 +11,9 @@ USD_PER_UNIT_BOUNDS = {
     # PDD (QQQ) files in CNY. CNYUSD has traded 0.1366-0.1580 since 2021;
     # the inverse quote is ~7, three decades away from the upper bound.
     "CNY": (0.10, 0.20),
+    # SK hynix ADS (CUSIP 78392B206) reports in KRW. Reviewed 2026-09-26:
+    # FMP 5y KRWUSD range 0.000637-0.000852; Fed H.10 confirms orientation.
+    "KRW": (0.0004, 0.0013),
 }
 
 
@@ -21,7 +24,7 @@ def validate_usd_per_unit(
 ) -> float:
     """Return a plausible ``<currency>USD`` rate or fail closed.
 
-    The historical SOXX dataset currently needs only EUR and TWD. Unknown
+    The basket sources include EUR, TWD, CNY and KRW reporters. Unknown
     non-USD currencies are rejected until an explicit, reviewed range is
     added; this prevents silently accepting an inverted quote.
     """
