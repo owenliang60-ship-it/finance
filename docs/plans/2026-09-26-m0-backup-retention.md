@@ -19,7 +19,7 @@
 ```mermaid
 flowchart LR
   WS["broad wrapper<br/>--weekly-sync --scheduled"] -->|label=auto-weekly-sync, keep=2| B
-  PE["run_forward_data.sh<br/>backfill_index_pe_history --scheduled"] -->|label=auto-index-pe-weekly, keep=1| B
+  PE["run_forward_data.sh<br/>backfill_index_pe_history --scheduled"] -->|label=auto-index-pe-weekly, keep=2| B
   MAN["手动运行（weekly-sync / SOXX 补数 / 指数 PE 修复 / rebuild）"] -->|原标签, keep=None| B
   B["_backup_sqlite()"] --> G{"free ≥ page_count×page_size×1.5 ?"}
   G -- 否 --> X["RuntimeError，不创建文件"]
@@ -36,10 +36,10 @@ flowchart TD
   A2 -- 是 --> A3["写库 + auto-weekly-sync 留 2 份"]
   S --> C["指数 PE 周更"] --> C2{"备份成功?"}
   C2 -- 否 --> T2["任何备份失败（空间门/写入/校验/发布冲突）都是 RuntimeError → main 返回 rc=2，MarketStore 未构造，没有写库"]
-  C2 -- 是 --> C3["写库 + auto-index-pe-weekly 留 1 份"]
+  C2 -- 是 --> C3["写库 + auto-index-pe-weekly 留 2 份"]
 ```
 
-受管理备份的稳定状态：在线库 1 份 + `auto-weekly-sync` 2 份 + `auto-index-pe-weekly` 1 份，约 4.6G，随库大小增长。**这个数不含**保留的 `.gz`、手动回滚点、guardian 快照以及切换前的两份 `pre-weekly-sync`。
+受管理备份的稳定状态：在线库 1 份 + `auto-weekly-sync` 2 份 + `auto-index-pe-weekly` 2 份，约 5.8G，随库大小增长。**这个数不含**保留的 `.gz`、手动回滚点、guardian 快照以及切换前的两份 `pre-weekly-sync`。
 
 ## 替代方案
 
@@ -62,7 +62,7 @@ flowchart TD
 
 1. 本地：新增单测全部通过，`test_build_concept_registry.py`、`test_backfill_soxx_historical_pe.py` 以及指数 PE 相关测试文件全部通过。
 2. 部署后首个自然周六，只读核查，**每类备份单独判定**：
-   - 当天生成了 `auto-*` 备份的：新备份 `quick_check=ok`；日志中空间门的"需要/可用"字节数与 `page_count×page_size×1.5` 一致；修剪名单与预期一致；份数 ≤ 上限（周同步 2 / PE 1）。
+   - 当天生成了 `auto-*` 备份的：新备份 `quick_check=ok`；日志中空间门的"需要/可用"字节数与 `page_count×page_size×1.5` 一致；修剪名单与预期一致；份数 ≤ 上限（周同步 2 / PE 2）。
    - 受保护文件（所有 `pre-*` 手动与遗留备份、`.gz`、`.json`）的名单、大小、mtime 与部署前快照一致。
    - 某类备份当天没有触发（例如概念同步没有变更）：记为"待验证"，顺延到下一次触发，不当作通过。
 3. 部署前在云端临时目录用生产代码做一次空间门演练：用临时测试库，**mock** 可用空间，不去真的填满生产磁盘；Telegram 等通知通道换成测试记录器。确认 `backfill_index_pe_history` 返回 2、`MarketStore` 未构造；`weekly_sync` 走 fatal 分支且临时库行数不变。
@@ -72,7 +72,7 @@ flowchart TD
 
 - 空闲空间 ≥10G；下一次周六备份后份数仍 ≤2（北极星 P0 验收）
 - 周备份留 2 份，手动快照清空，脚本加上限（北极星决策表 2026-09-26）
-- Boss 2026-09-26：周同步备份留 2、PE 备份留 1；备份前空间不足（< 逻辑库大小 × 1.5）就拒绝
+- Boss 2026-09-26：周同步备份留 2、PE 备份留 2（2026-09-26 Boss 按代码审查 #3 由 1 改为 2）；备份前空间不足（< 逻辑库大小 × 1.5）就拒绝
 - 云端 Python 3.10；merge / push / 部署每步单独确认；worktree 开发，用主 `.venv`
 
 ---
@@ -118,13 +118,13 @@ def _backup_sqlite(db_path: Path, label: str, keep: int | None = None) -> Path |
   - CLI（`:1660` 附近）加 `--scheduled`；`:1737` 把它传给 `weekly_sync(..., scheduled=False)` → `_weekly_sync_persist(..., scheduled)`
   - `:1121`：`scheduled` 时 `_backup_sqlite(db, "auto-weekly-sync", keep=2)`，否则保持 `_backup_sqlite(db, "pre-weekly-sync")`
 - Modify: `scripts/backfill_soxx_historical_pe.py:299-302`：`open_write_dependencies(db_path, *, label="pre-soxx-historical-pe", keep=None)`；SOXX 手动入口 `:1115` 不改
-- Modify: `scripts/backfill_index_pe_history.py`：加 `--scheduled`；`:629` 在 `scheduled` 时调用 `open_write_dependencies(args.db, label="auto-index-pe-weekly", keep=1)`，否则沿用默认值
+- Modify: `scripts/backfill_index_pe_history.py`：加 `--scheduled`；`:629` 在 `scheduled` 时调用 `open_write_dependencies(args.db, label="auto-index-pe-weekly", keep=2)`，否则沿用默认值
 - Modify: `scripts/broad_universe_cron_wrapper.sh:102` 加 `--scheduled`；`scripts/run_forward_data.sh:30` 加 `--scheduled`
 - 不改：`pre-rebuild`（`:594`、`:1459`）
 
 **Tests:**
 - `tests/test_backfill_soxx_historical_pe.py:236`：默认调用断言 `label="pre-soxx-historical-pe"`、`keep=None`
-- 指数 PE：`--scheduled` → `auto-index-pe-weekly`/`keep=1`；不带 → 默认值。用真实 `_backup_sqlite` 分别注入空间不足、中途 ENOSPC、发布冲突三种失败 → `main` 都返回 2，`MarketStore` 都没被构造
+- 指数 PE：`--scheduled` → `auto-index-pe-weekly`/`keep=2`；不带 → 默认值。用真实 `_backup_sqlite` 分别注入空间不足、中途 ENOSPC、发布冲突三种失败 → `main` 都返回 2，`MarketStore` 都没被构造
 - 概念同步：`scheduled=True` → `auto-weekly-sync`/`keep=2`；默认 → `pre-weekly-sync`/`keep=None`；备份抛错时 `res.error` 有值，`save_to_market_db` 没被调用
 - 两个 shell 脚本：`grep` 断言调用行带 `--scheduled`（照现有 shell 测试的做法；没有就用 `bash -n` 加文本断言）
 
@@ -152,4 +152,4 @@ def _backup_sqlite(db_path: Path, label: str, keep: int | None = None) -> Path |
 | 二轮 P2-1 | 固定 `.partial` 名会在并发调用之间串扰 | 接受：`mkstemp` 独占临时文件，只清理本次的；加测试 5b |
 | 二轮 P2-2 | `OSError` 类失败没被 main 捕获 | 接受：备份阶段统一包装为 `RuntimeError`（from exc），三种失败都测 rc=2 |
 | 二轮措辞 | 演练用 mock；quick_check 含义；部署前核实进程 | 接受，已写入验收标准 3、风险自证、Task 3 |
-| 代码审查 high | 10 条 | #1 超过 24 小时的同标签孤儿临时文件在修剪时清理；#2 修剪失败只记日志；#4 发布成功后临时文件删不掉只记警告；#6 未来时间戳文件不占保留名额；#7 发布出去的备份权限为 0644；#8 目标已存在时在复制之前就拒绝；#10 测试辅助函数去重；#5 只改文档；#9（搬到 `src/data/`）不在本次范围；#3（PE 留 1 的回滚窗口）交 Boss 决定 |
+| 代码审查 high | 10 条 | #1 超过 24 小时的同标签孤儿临时文件在修剪时清理；#2 修剪失败只记日志；#4 发布成功后临时文件删不掉只记警告；#6 未来时间戳文件不占保留名额；#7 发布出去的备份权限为 0644；#8 目标已存在时在复制之前就拒绝；#10 测试辅助函数去重；#5 只改文档；#9（搬到 `src/data/`）不在本次范围；#3 Boss 决定 PE 改为留 2 份 |

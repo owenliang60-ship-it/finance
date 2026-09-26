@@ -131,7 +131,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--run-id", default=None)
     parser.add_argument(
         "--scheduled", action="store_true",
-        help="cron run: back up as auto-index-pe-weekly and keep only the newest 1 "
+        help="cron run: back up as auto-index-pe-weekly and keep only the newest 2 "
              "(manual runs keep pre-soxx-historical-pe and never prune)")
     parser.add_argument("--config-dir", type=Path, default=CONFIG_DIR,
                         help="basket + share-class config root (SSOT)")
@@ -631,7 +631,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             client = FMPClient(max_requests=args.max_api_requests) if args.allow_network else None
         else:
             backup_path, store = (
-                open_write_dependencies(args.db, label="auto-index-pe-weekly", keep=1)
+                open_write_dependencies(args.db, label="auto-index-pe-weekly", keep=2)
                 if args.scheduled else open_write_dependencies(args.db))
             conn = store._get_conn()
             client = FMPClient(max_requests=args.max_api_requests)

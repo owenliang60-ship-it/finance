@@ -1203,7 +1203,7 @@ def _m0_stub_after_backup(monkeypatch, stores):
 
 
 @pytest.mark.parametrize("flags,label,keep", [
-    (["--scheduled"], "auto-index-pe-weekly", 1),
+    (["--scheduled"], "auto-index-pe-weekly", 2),
     ([], "pre-soxx-historical-pe", None),
 ])
 def test_cli_scheduled_flag_selects_backup_policy(tmp_path, monkeypatch, flags, label, keep):
