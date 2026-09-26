@@ -484,6 +484,43 @@ def test_missing_earnings_table_is_explicit_unknown(run_audit, tmp_store):
 # Cooldown deferral / proactive verification
 # ---------------------------------------------------------------------------
 
+@pytest.mark.parametrize("kind", ["stale", "missing", "healthy"])
+@pytest.mark.parametrize("as_of,due", [
+    ("2026-09-25T23:59:59Z", False),
+    ("2026-09-26T00:00:00Z", True),
+    ("2026-09-26T06:28:07Z", True),
+    ("2026-09-26T07:01:38Z", True),
+    ("2026-09-26T08:00:00+08:00", True),
+])
+def test_weekly_cooldown_due_by_utc_date(run_audit, tmp_store, kind, as_of, due):
+    # Last week's collector finished later than this week's selection starts.
+    stamp = "2026-09-19T06:59:52Z"
+    latest = "2026-03-31" if kind == "stale" else "2026-06-30"
+    _seed_ready(tmp_store, "WEEKLY", latest=latest,
+                q=1 if kind == "stale" else 2,
+                last_success_at=stamp, last_attempt_at=stamp)
+    if kind == "missing":
+        tmp_store._get_conn().execute("DELETE FROM cash_flow_quarterly WHERE symbol='WEEKLY'")
+        tmp_store._get_conn().commit()
+    report = run_audit(["WEEKLY"], as_of=as_of)
+    target_key = "verification_targets" if kind == "healthy" else "repair_targets"
+    assert ("WEEKLY" in report[target_key]) is due
+    if kind != "healthy":
+        assert ("WEEKLY" in report["deferred"]) is not due
+
+
+def test_calendar_cooldown_does_not_advance_explicit_retry_timer(run_audit, tmp_store):
+    stamp = "2026-09-19T06:59:52Z"
+    _seed_ready(tmp_store, "RETRY", last_success_at=stamp, last_attempt_at=stamp,
+                per_table={"income": {"status": "fetch_failed",
+                                       "next_retry_at": "2026-09-26T07:00:00Z"}})
+    before = run_audit(["RETRY"], as_of="2026-09-26T06:28:07Z")
+    assert before["repair_targets"] == []
+    assert "retry_timer_active" in before["symbols"]["RETRY"]["issues"]
+    after = run_audit(["RETRY"], as_of="2026-09-26T07:00:00Z")
+    assert after["repair_targets"] == ["RETRY"]
+
+
 def test_recent_source_check_defers_persistent_fiscal_stale(run_audit, tmp_store):
     _seed_ready(tmp_store, "COOLDOWN", latest="2026-03-31", fy=2026, q=1,
                 last_success_at=SUCCESS_FRESH, last_attempt_at=SUCCESS_FRESH)

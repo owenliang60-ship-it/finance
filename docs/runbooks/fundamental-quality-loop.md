@@ -12,6 +12,13 @@ Quarter gaps, short history and absent/stale earnings evidence remain explicit w
 
 Repair candidates take priority. Spare budget is filled with the oldest successfully checked securities (at least7 days since all required sources were checked), up to **200 total symbols per run**, including periodic checks. Source requests use the existing five-dataset collector, eight-quarter limit and vintage history; metrics use the existing calculator. The same auditor reruns afterwards against a consistent SQLite read snapshot.
 
+The seven-day successful-check cooldown counts **UTC calendar dates**, for both
+repair eligibility and periodic verification. A check on the previous Saturday
+is due from this Saturday 00:00 UTC, even if last week's collector finished
+later in the day. This prevents selecting around a still-active cooldown and
+then failing the same batch when it expires during collection. Future timestamps
+remain invalid; explicit `next_retry_at` failure timers still compare exact times.
+
 `requests_successful` is not `truly_resolved`. If the source still returns an old statement, the report retains the issue, marks it unresolved and uses the seven-day recheck cooldown. Known incomplete history is never rewritten as healthy. At roughly919 base securities and a weekly Core refresh, this budget supports about a month of rolling checks; heavier repair demand or pool growth creates a visible backlog rather than silently claiming this cadence was met.
 
 Worst-case additional request budget:200 ×5 datasets ×2s ≈33 minutes, excluding retries/latency. The Core update precedes it, so the weekly job moved away from the old 10:45 collision window.

@@ -22,6 +22,9 @@ Contract highlights (frozen by the task brief):
 * ``fetch_failed`` / ``provider_empty`` coverage states with an active or
   unknown retry timer block the whole symbol; a valid due timer permits repair.
 * A future or unparseable timestamp is UNKNOWN, never fresh.
+* Successful-check cooldowns use UTC calendar days, so a weekly run can select
+  last week's checks even if it starts earlier in the day. Explicit failure
+  retry timers keep their precise timestamp semantics.
 
 Reason strings in ``issues`` are stable: coverage/timer/verification reasons
 are defined by this module; canonical raw-predicate reasons are passed through
@@ -242,10 +245,10 @@ def _timer_state(next_retry_at: Any, as_of_dt: datetime) -> str:
 
 def _recently_checked(cov: Dict[str, Any], as_of_dt: datetime,
                       cooldown_days: int) -> bool:
-    """True only for a parseable, non-future attempt/success inside cooldown."""
+    """True for a non-future attempt/success inside the UTC-date cooldown."""
     for field in ("last_attempt_at", "last_success_at"):
         ts = _parse_ts(cov.get(field))
-        if ts is not None and ts <= as_of_dt and (as_of_dt - ts).days < cooldown_days:
+        if ts is not None and ts <= as_of_dt and (as_of_dt.date() - ts.date()).days < cooldown_days:
             return True
     return False
 
@@ -485,7 +488,7 @@ def _evaluate_symbol(symbol: str, *, store: Any, cov_map: Dict[str, Dict[str, An
     oldest_success = min(success_ts) if success_ts else None
     evidence["oldest_success_at"] = _format_ts(oldest_success)
     all_recent_success = bool(success_ts) and all(
-        (as_of_dt - ts).days < cooldown_days for ts in success_ts)
+        (as_of_date - ts.date()).days < cooldown_days for ts in success_ts)
 
     reasons = _unique([entry["reason"] for entry in entries])
     deferred_reasons: List[str] = []
@@ -581,7 +584,7 @@ def _audit_fundamentals(store: Any, *, as_of: str, refresh_days: int = 30,
         if (not result.record["repair_eligible"] and not result.blocked
                 and not result.record["deferred_reasons"]
                 and result.all_successes_valid and result.oldest_success is not None
-                and (as_of_dt - result.oldest_success).days >= cooldown_days):
+                and (as_of_date - result.oldest_success.date()).days >= cooldown_days):
             verification_ranked.append((result.oldest_success, symbol))
 
     repair_targets = [symbol for _, symbol in sorted(repair_ranked, key=lambda item: item[0])]
