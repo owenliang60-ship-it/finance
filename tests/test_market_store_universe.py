@@ -244,3 +244,64 @@ def test_coverage_identity_blocked_clears_next_retry_at(tmp_store):
     ).fetchone()
     assert row["next_retry_at"] is None
     assert tmp_store.get_coverage("income_quarterly") == {"AAPL": "identity_blocked"}
+
+
+# ---------------------------------------------------------------------------
+# Prosperity P1: market-cap freshness window + symbol aliases
+# ---------------------------------------------------------------------------
+
+_RENAME = {"alias": "ABC", "canonical": "COR", "kind": "rename",
+           "status": "verified", "reviewed_at": "2026-09-27", "evidence": "test"}
+_MERGER = {"alias": "WRK", "canonical": "SW", "kind": "merger",
+           "effective_date": "2024-07-05", "status": "verified",
+           "reviewed_at": "2026-09-27", "evidence": "test"}
+
+
+def test_approximate_drops_member_whose_latest_mcap_is_stale(tmp_store):
+    _seed_hmcap(tmp_store, "GONE", "2025-06-20", 12e9)     # 11 days before as_of
+    _seed_hmcap(tmp_store, "LIVE", "2025-06-21", 12e9)     # exactly 10 days before
+    out = tmp_store.approximate_members_as_of("2025-07-01", aliases=[])
+    assert "GONE" not in out["symbols"] and "LIVE" in out["symbols"]
+    assert out["stale_excluded"] == ["GONE"]
+
+
+def test_approximate_staleness_window_is_a_parameter(tmp_store):
+    _seed_hmcap(tmp_store, "GONE", "2025-06-20", 12e9)
+    out = tmp_store.approximate_members_as_of("2025-07-01", max_staleness_days=30,
+                                              aliases=[])
+    assert "GONE" in out["symbols"]
+
+
+def test_approximate_rename_counts_company_once(tmp_store):
+    tmp_store.upsert_security_master([_sm_row(symbol="COR", cik="1")])
+    _seed_hmcap(tmp_store, "ABC", "2022-06-30", 30e9)
+    _seed_hmcap(tmp_store, "COR", "2022-06-30", 30e9)
+    out = tmp_store.approximate_members_as_of("2022-06-30", aliases=[_RENAME])
+    assert out["symbols"] == ["COR"]
+    assert out["aliases_applied"] == {"ABC": "COR"}
+
+
+def test_approximate_rename_alias_alone_still_yields_canonical(tmp_store):
+    tmp_store.upsert_security_master([_sm_row(symbol="COR", cik="1")])
+    _seed_hmcap(tmp_store, "ABC", "2022-06-30", 30e9)
+    out = tmp_store.approximate_members_as_of("2022-06-30", aliases=[_RENAME])
+    assert out["symbols"] == ["COR"] and out["unverified"] == []
+
+
+def test_approximate_merger_switches_on_effective_date(tmp_store):
+    tmp_store.upsert_security_master([_sm_row(symbol="SW", cik="2")])
+    for d in ("2023-06-30", "2024-07-03"):
+        _seed_hmcap(tmp_store, "WRK", d, 11e9)
+    for d in ("2023-06-30", "2024-09-30"):
+        _seed_hmcap(tmp_store, "SW", d, 20e9)
+    before = tmp_store.approximate_members_as_of("2023-06-30", aliases=[_MERGER])
+    assert before["symbols"] == ["WRK"] and before["unverified"] == ["WRK"]
+    after = tmp_store.approximate_members_as_of("2024-09-30", aliases=[_MERGER])
+    assert after["symbols"] == ["SW"]
+
+
+def test_approximate_blocks_by_canonical_identity(tmp_store):
+    tmp_store.upsert_security_master([_sm_row(symbol="COR", eligible=0, reason="etf")])
+    _seed_hmcap(tmp_store, "ABC", "2022-06-30", 30e9)
+    out = tmp_store.approximate_members_as_of("2022-06-30", aliases=[_RENAME])
+    assert out["symbols"] == []

@@ -68,6 +68,12 @@ def test_explicit_override_can_resolve_known_name_mismatch_group():
         "isFund": False, "marketCap": 69_810_603_859,
     },
     {
+        "symbol": "ELC",
+        "companyName": "Entergy Louisiana, LLC COLLATERAL TR MT",
+        "cik": "60527", "exchange": "NYSE", "isEtf": False,
+        "isFund": False, "marketCap": 30_000_000_000,
+    },
+    {
         "symbol": "FITB-PM", "companyName": "Fifth Third Bancorp",
         "cik": "35527", "exchange": "NYSE", "isEtf": False,
         "isFund": False, "marketCap": 51_408_207_397,

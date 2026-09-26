@@ -32,6 +32,7 @@ _PREFERRED_SYMBOL_RE = re.compile(r"-P[A-Z0-9]*$", re.IGNORECASE)
 _NON_COMMON_NAME_RE = re.compile(
     r"(?:\bpfd\b|\bpreferred\b|\bincome\s+capital\s+obligations?\b|"
     r"\bdebentures?\b|\bsubordinated\s+notes?\b|\bnotes?\s+20\d{2}\b|"
+    r"\bcollateral\s+tr(?:ust)?\b|"
     r"\d+(?:\.\d+)?\s*%)",
     re.IGNORECASE,
 )

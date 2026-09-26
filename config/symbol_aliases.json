@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "aliases": [
+    {
+      "alias": "ABC",
+      "canonical": "COR",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 100% of 517 overlapping days; ABC last mcap 2023-09-25"
+    },
+    {
+      "alias": "ANTM",
+      "canonical": "ELV",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 100% of 204 overlapping days; ANTM last mcap 2022-06-27"
+    },
+    {
+      "alias": "BLL",
+      "canonical": "BALL",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 100% of 171 overlapping days; BLL last mcap 2022-05-09"
+    },
+    {
+      "alias": "FLT",
+      "canonical": "CPAY",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 100% of 657 overlapping days; FLT last mcap 2024-04-16"
+    },
+    {
+      "alias": "PEAK",
+      "canonical": "DOC",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 91% of 645 overlapping days; PEAK last mcap 2024-03-28"
+    },
+    {
+      "alias": "CDAY",
+      "canonical": "DAY",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 100% of 623 overlapping days; CDAY last mcap 2024-02-28; DAY itself last mcap 2026-02-03"
+    },
+    {
+      "alias": "FI",
+      "canonical": "FISV",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 92% of 1068 overlapping days; FI last mcap 2025-12-08"
+    },
+    {
+      "alias": "GPS",
+      "canonical": "GAP",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 84% of 396 overlapping days; GPS last mcap 2024-09-18"
+    },
+    {
+      "alias": "MMC",
+      "canonical": "MRSH",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 100% of 1108 overlapping days; MMC last mcap 2026-02-09"
+    },
+    {
+      "alias": "PKI",
+      "canonical": "RVTY",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 100% of 432 overlapping days; PKI last mcap 2023-05-23"
+    },
+    {
+      "alias": "DISCA",
+      "canonical": "WBD",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 100% of 1270 overlapping days; Discovery Series A; both codes still carry WBD's market cap"
+    },
+    {
+      "alias": "DISCK",
+      "canonical": "WBD",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 100% of 1270 overlapping days; Discovery Series C; both codes still carry WBD's market cap"
+    },
+    {
+      "alias": "CUK",
+      "canonical": "CCL",
+      "kind": "dual_listing",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 100% of 1268 overlapping days; Carnival plc ADS quoted at the combined Carnival Corporation & plc market cap; CUK last mcap 2026-05-06"
+    },
+    {
+      "alias": "VMRK",
+      "canonical": "EQR",
+      "kind": "duplicate",
+      "status": "pending_verification",
+      "reviewed_at": "2026-09-27",
+      "evidence": "historical_market_cap same-day within 2% on 100% of 1260 overlapping days since 2021-08-30; EQR last mcap 2026-09-04, VMRK continues; VMRK has no security_master row. Possibly a 2026-09 ticker change, unverified — EQR kept canonical because it holds the security_master row and statements"
+    },
+    {
+      "alias": "WRK",
+      "canonical": "SW",
+      "kind": "merger",
+      "effective_date": "2024-07-05",
+      "status": "verified",
+      "reviewed_at": "2026-09-27",
+      "evidence": "WestRock combined into Smurfit Westrock; SW history before 2024-07 tracks WRK within 2% on 81% of 712 days (vendor backfill); WRK last mcap 2024-07-05"
+    }
+  ]
+}

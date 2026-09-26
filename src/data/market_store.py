@@ -27,6 +27,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 import pandas as pd
 
 from src.data.fx_validation import validate_usd_per_unit
+from src.data.symbol_aliases import load_symbol_aliases, resolve_alias
 
 logger = logging.getLogger(__name__)
 
@@ -3479,18 +3480,30 @@ class MarketStore:
         return [r["symbol"] for r in rows]
 
     def approximate_members_as_of(self, as_of: str,
-                                   min_mcap_usd: float = 1e10) -> Dict[str, Any]:
+                                   min_mcap_usd: float = 1e10,
+                                   max_staleness_days: int = 10,
+                                   aliases: Optional[List[Dict[str, Any]]] = None,
+                                   ) -> Dict[str, Any]:
         """近似接口（P1-6 + R2-P1-1）：historical_market_cap 中 as-of 达标全体。
 
         不与当前 Extended membership 求交（已跌出池/已退市者必须保留）；仅剔除
         security_master 中身份封禁者；SM 无记录的达标 symbol 保留并单列进
         `unverified`。`approximate` 标志硬编码在返回结构里，调用方无法丢弃。
+
+        景气北极星 P1：最近一条市值须落在 as_of 前 `max_staleness_days` 天内，
+        否则是已退市/改名的幽灵代码（列入 `stale_excluded`）；同一公司的多个
+        代码按 `config/symbol_aliases.json` 折成一个（`aliases=None` 读默认配置），
+        身份封禁按折叠后的代码判断。
         """
+        if aliases is None:
+            aliases = load_symbol_aliases()
+        window_start = (date.fromisoformat(as_of[:10])
+                        - timedelta(days=max_staleness_days)).isoformat()
         conn = self._get_conn()
         qualifying_rows = conn.execute(
             """
-            SELECT symbol FROM (
-                SELECT symbol, market_cap,
+            SELECT symbol, date FROM (
+                SELECT symbol, date, market_cap,
                        ROW_NUMBER() OVER (
                            PARTITION BY symbol ORDER BY date DESC
                        ) AS rn
@@ -3501,7 +3514,18 @@ class MarketStore:
             """,
             (as_of, min_mcap_usd),
         ).fetchall()
-        qualifying = {r["symbol"] for r in qualifying_rows}
+        stale = sorted(r["symbol"] for r in qualifying_rows if r["date"] < window_start)
+        qualifying = set()
+        aliases_applied: Dict[str, str] = {}
+        for r in qualifying_rows:
+            if r["date"] < window_start:
+                continue
+            code = resolve_alias(r["symbol"], as_of, aliases)
+            if code is None:
+                continue
+            if code != r["symbol"]:
+                aliases_applied[r["symbol"]] = code
+            qualifying.add(code)
 
         sm_rows = conn.execute("SELECT symbol, reason FROM security_master").fetchall()
         sm_reason = {r["symbol"]: r["reason"] for r in sm_rows}
@@ -3521,6 +3545,8 @@ class MarketStore:
         return {
             "symbols": sorted(symbols_out),
             "unverified": sorted(unverified),
+            "stale_excluded": stale,
+            "aliases_applied": aliases_applied,
             "approximate": True,
             "as_of": as_of,
             "basis": "historical_market_cap",
