@@ -290,6 +290,10 @@ def _historical_targets(store: MarketStore, as_of: str) -> Dict[str, Any]:
     if unverified:
         logger.info("%d as-of candidate(s) have no security_master row yet "
                     "(unverified identity); collecting them anyway", len(unverified))
+    logger.info("as-of %s: %d candidate(s); %d stale code(s) excluded as delisted; "
+                "%d alias code(s) folded", as_of, len(candidates),
+                len(approx.get("stale_excluded") or []),
+                len(approx.get("aliases_applied") or {}))
     covered_set = {s for s in candidates if has_asof_window(store, s, as_of)}
     return {
         "candidates": candidates,

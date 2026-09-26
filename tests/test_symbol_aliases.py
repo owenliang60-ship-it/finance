@@ -23,8 +23,9 @@ def _write(tmp_path, entries):
     return tmp_path
 
 
-def test_missing_file_means_no_aliases(tmp_path):
-    assert load_symbol_aliases(tmp_path) == []
+def test_missing_file_fails_loud(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        load_symbol_aliases(tmp_path)
 
 
 def test_valid_entries_load(tmp_path):
@@ -44,6 +45,7 @@ def test_valid_entries_load(tmp_path):
     [_entry(kind="merger")],                                     # merger needs effective_date
     [_entry(effective_date="2024-13-01", kind="merger")],        # bad date
     [_entry(evidence="")],                                       # evidence required
+    [_entry(effective_date="2024-07-05")],                       # only mergers carry a date
 ])
 def test_invalid_entries_fail_loud(tmp_path, entries):
     with pytest.raises(ValueError):

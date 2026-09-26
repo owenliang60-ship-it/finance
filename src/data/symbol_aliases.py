@@ -11,6 +11,10 @@ Kinds:
   merger — before `effective_date` the alias is the company and the
            canonical code's history is vendor backfill (dropped); from the
            effective date the alias folds into the survivor.
+
+`status` is audit-only: a `pending_verification` entry still folds, because
+the evidence (identical market cap series) already proves one company; what
+is pending is only which code should be canonical.
 """
 import json
 from datetime import date
@@ -23,9 +27,9 @@ DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
 
 
 def load_symbol_aliases(config_dir=DEFAULT_CONFIG_DIR) -> List[Dict[str, Any]]:
+    # Missing file is an error, not "no aliases": silently skipping the fold
+    # would quietly double-count renamed companies again.
     path = Path(config_dir) / "symbol_aliases.json"
-    if not path.exists():
-        return []
     doc = json.loads(path.read_text())
     if not isinstance(doc, dict) or doc.get("schema_version") != 1:
         raise ValueError("symbol_aliases.json needs schema_version 1")
@@ -45,8 +49,10 @@ def load_symbol_aliases(config_dir=DEFAULT_CONFIG_DIR) -> List[Dict[str, Any]]:
             raise ValueError("alias {} has bad kind/status".format(e["alias"]))
         try:
             date.fromisoformat(e["reviewed_at"])
-            if e["kind"] == "merger" or "effective_date" in e:
+            if e["kind"] == "merger":
                 date.fromisoformat(e["effective_date"])
+            elif "effective_date" in e:
+                raise ValueError("only mergers carry an effective_date")
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError("alias {} has a bad or missing date".format(e["alias"])) from exc
         aliases.add(e["alias"])

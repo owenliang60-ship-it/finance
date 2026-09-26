@@ -305,3 +305,19 @@ def test_approximate_blocks_by_canonical_identity(tmp_store):
     _seed_hmcap(tmp_store, "ABC", "2022-06-30", 30e9)
     out = tmp_store.approximate_members_as_of("2022-06-30", aliases=[_RENAME])
     assert out["symbols"] == []
+
+
+def test_approximate_fails_loud_when_hmcap_not_refreshed(tmp_store):
+    _seed_hmcap(tmp_store, "AAA", "2025-06-01", 12e9)
+    _seed_hmcap(tmp_store, "BBB", "2025-06-02", 12e9)
+    with pytest.raises(RuntimeError, match="historical_market_cap"):
+        tmp_store.approximate_members_as_of("2025-07-01", aliases=[])
+
+
+def test_approximate_alias_cannot_revive_stale_canonical(tmp_store):
+    tmp_store.upsert_security_master([_sm_row(symbol="COR", cik="1")])
+    _seed_hmcap(tmp_store, "COR", "2025-05-01", 30e9)        # canonical delisted
+    _seed_hmcap(tmp_store, "ABC", "2025-06-30", 30e9)        # vendor keeps the alias alive
+    _seed_hmcap(tmp_store, "LIVE", "2025-06-30", 12e9)
+    out = tmp_store.approximate_members_as_of("2025-06-30", aliases=[_RENAME])
+    assert out["symbols"] == ["LIVE"] and "COR" in out["stale_excluded"]

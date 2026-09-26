@@ -3514,17 +3514,26 @@ class MarketStore:
             """,
             (as_of, min_mcap_usd),
         ).fetchall()
-        stale = sorted(r["symbol"] for r in qualifying_rows if r["date"] < window_start)
+        newest = conn.execute(
+            "SELECT MAX(date) FROM historical_market_cap WHERE date <= ?", (as_of,)
+        ).fetchone()[0]
+        if newest is not None and newest < window_start:
+            # Whole table is behind: a missed refresh, not mass delisting.
+            raise RuntimeError(
+                "historical_market_cap newest row {} is older than {} days before "
+                "{} — refresh market caps before resolving membership".format(
+                    newest, max_staleness_days, as_of))
+        fresh = [r["symbol"] for r in qualifying_rows if r["date"] >= window_start]
+        stale = sorted({r["symbol"] for r in qualifying_rows} - set(fresh))
         qualifying = set()
         aliases_applied: Dict[str, str] = {}
-        for r in qualifying_rows:
-            if r["date"] < window_start:
+        for sym in fresh:
+            code = resolve_alias(sym, as_of, aliases)
+            # an alias the vendor keeps alive must not revive a stale canonical
+            if code is None or code in stale:
                 continue
-            code = resolve_alias(r["symbol"], as_of, aliases)
-            if code is None:
-                continue
-            if code != r["symbol"]:
-                aliases_applied[r["symbol"]] = code
+            if code != sym:
+                aliases_applied[sym] = code
             qualifying.add(code)
 
         sm_rows = conn.execute("SELECT symbol, reason FROM security_master").fetchall()
