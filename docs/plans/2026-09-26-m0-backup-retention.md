@@ -1,7 +1,7 @@
 # M0 备份保留上限 + 磁盘空间门 Implementation Plan
 
 **Goal:** 让云端定时任务生成的 SQLite 整库备份有保留上限、写前空间检查和原子发布，磁盘不再被备份悄悄写满；手动回滚点永远不被自动删。
-**Architecture:** 共享函数 `_backup_sqlite()` 改为：按源连接的逻辑大小（含 WAL）做空间门 → 写本次独占的临时文件（`mkstemp`）→ `quick_check` → 不覆盖地发布正式名 → 仅对 `auto-` 标签按份数修剪；备份阶段的 I/O 与 SQLite 异常统一包装为带阶段与路径的 `RuntimeError`。定时入口显式加 `--scheduled`，这时才用 `auto-` 标签并传入保留份数；手动运行保持原标签，不修剪。
+**Architecture:** 共享函数 `_backup_sqlite()` 改为：按源连接的逻辑大小（含 WAL）做空间门 → 写本次独占的临时文件（`mkstemp`）→ `quick_check` → 不覆盖地发布正式名 → 仅对 `auto-` 标签按份数修剪；备份阶段的 I/O 与 SQLite 异常统一包装为带阶段与路径的 `RuntimeError`。定时入口显式加 `--scheduled`，这时才用 `auto-` 标签并传入保留份数；手动运行保持原标签，不修剪。空间门和 `quick_check` 对所有调用方一律生效，手动也不例外：空间不够时，手动修复同样会被拒绝（代码审查 #5 的澄清）。
 **Tech Stack:** Python 3.10（云端）、sqlite3 backup API、pytest
 **Spec:** 北极星 `docs/design/prosperity-engine-north-star.md` 第一层 P0 行 + 决策表"备份保留"；issue `docs/issues/046-cloud-market-db-weekly-backup-unbounded-retention.md`
 **北极星对齐:** 第一层（数据前置）M0；上线前置条件，也对应 Pre-mortem"云端资源问题：磁盘写满"
@@ -54,7 +54,7 @@ flowchart TD
 - **误删回滚点**：只有带 `auto-` 前缀的标签才会被修剪；`keep` 配上非 `auto-` 标签直接报 `ValueError`。正则用 `re.escape(库名)`、`re.escape(label)`，精确匹配 `^{库名}\.backup-\d{14}-{label}$`，不碰 `.gz`、`.json`、`.partial` 和其他标签。本次新备份不参与候选，保证不会被删。所以现有的 `pre-*` 文件（包括 forward 修复的 041749）永远不会被自动删，部署时间不再依赖那次修复。
 - **空间估算偏低**：WAL 里已提交的数据也会进入备份。实测主文件 4,096 字节、WAL 16.5MB，备份 16.4MB，而 `page_count×page_size` = 16.4MB。所以门槛基数改为源连接读到的 `page_count × page_size`。预检只能拦下明显不够的情况，写到一半磁盘满时靠 `.partial` 清理兜底。
 - **残缺备份与并发**：用 `tempfile.mkstemp(dir=同目录, prefix=f"{final.name}.", suffix=".partial")` 创建本次调用独占的临时文件，两个同秒同标签的调用不会共用。备份写入并关闭连接、`quick_check` 通过后，再用 `os.link` 发布正式名，然后删除本次临时文件。发布是原子的，目标已存在时会失败，不会覆盖。异常时只删除本次创建的临时文件及其 `-journal`，别的调用的临时文件不动。
-- **异常出口统一**：备份阶段（空间门、写入、校验、发布）的 `OSError`/`sqlite3.Error`，包括 `FileExistsError`、ENOSPC 和 `os.link` 失败，一律包装成 `RuntimeError(f"backup {phase} failed for {path}: {exc}") from exc`，保留原始异常链。这样 `backfill_index_pe_history.main` 现有的 `RuntimeError` 分支（`:639`）就能统一返回 2。修剪阶段的删除失败同样包装。
+- **异常出口统一**：备份阶段（空间门、写入、校验、发布）的 `OSError`/`sqlite3.Error`，包括 `FileExistsError`、ENOSPC 和 `os.link` 失败，一律包装成 `RuntimeError(f"backup {phase} failed for {path}: {exc}") from exc`，保留原始异常链。这样 `backfill_index_pe_history.main` 现有的 `RuntimeError` 分支（`:639`）就能统一返回 2。修剪发生在备份已经发布之后，删除失败只记 `logger.error`、不抛出（代码审查 #2）：备份本身已经安全，不能因此跳过当周写库；万一旧文件删不掉导致空间变紧，由下次的空间门拦下。
 - **空间门让当周任务跳过**：这是 Boss 选定的取舍。两个出口都已核实：`weekly_sync` 在 `build_company_concept_registry.py:1062` 捕获 fatal 并发 Telegram，这时备份在写库之前（`:1121`），DB 没被写；`backfill_index_pe_history.main`（`:629`）在打开 `MarketStore` 之前就先备份，失败时会被 `RuntimeError` 分支捕获，返回 2。
 - **quick_check 成本与含义**：对 1.1GB 的备份多做一次只读检查，每周只有 1–2 次，代价可以接受。`quick_check=ok` 只说明文件结构完整，不保证业务数据正确。
 
@@ -152,3 +152,4 @@ def _backup_sqlite(db_path: Path, label: str, keep: int | None = None) -> Path |
 | 二轮 P2-1 | 固定 `.partial` 名会在并发调用之间串扰 | 接受：`mkstemp` 独占临时文件，只清理本次的；加测试 5b |
 | 二轮 P2-2 | `OSError` 类失败没被 main 捕获 | 接受：备份阶段统一包装为 `RuntimeError`（from exc），三种失败都测 rc=2 |
 | 二轮措辞 | 演练用 mock；quick_check 含义；部署前核实进程 | 接受，已写入验收标准 3、风险自证、Task 3 |
+| 代码审查 high | 10 条 | #1 超过 24 小时的同标签孤儿临时文件在修剪时清理；#2 修剪失败只记日志；#4 发布成功后临时文件删不掉只记警告；#6 未来时间戳文件不占保留名额；#7 发布出去的备份权限为 0644；#8 目标已存在时在复制之前就拒绝；#10 测试辅助函数去重；#5 只改文档；#9（搬到 `src/data/`）不在本次范围；#3（PE 留 1 的回滚窗口）交 Boss 决定 |

@@ -1444,10 +1444,10 @@ def _backup_sqlite(db_path: Path, label: str, keep: int | None = None) -> Path |
         raise ValueError(f"keep={keep} requires an '{AUTO_BACKUP_PREFIX}' label and keep>=1, got {label!r}")
     if not db_path.exists():
         return None
-    import re
     import sqlite3
     import tempfile
-    final = db_path.with_name(f"{db_path.name}.backup-{_backup_timestamp()}-{label}")
+    stamp = _backup_timestamp()
+    final = db_path.with_name(f"{db_path.name}.backup-{stamp}-{label}")
     tmp: Path | None = None
     phase = "space check"
     try:
@@ -1460,11 +1460,15 @@ def _backup_sqlite(db_path: Path, label: str, keep: int | None = None) -> Path |
             if free < need:
                 raise RuntimeError(
                     f"insufficient disk for backup of {db_path}: free={free} need={need}")
+            phase = "publish"
+            if final.exists():   # cheap refusal before a full copy; os.link still guards races
+                raise FileExistsError(17, "backup target exists", str(final))
             phase = "write"
             fd, tmp_name = tempfile.mkstemp(
                 dir=db_path.parent, prefix=f"{final.name}.", suffix=".partial")
             os.close(fd)
             tmp = Path(tmp_name)
+            os.chmod(tmp, 0o644)   # mkstemp is 0600; keep the old backup mode
             dst = sqlite3.connect(str(tmp))
             try:
                 src.backup(dst)
@@ -1478,8 +1482,6 @@ def _backup_sqlite(db_path: Path, label: str, keep: int | None = None) -> Path |
             raise RuntimeError(f"quick_check={result!r}")
         phase = "publish"
         os.link(tmp, final)
-        tmp.unlink()
-        tmp = None
     except Exception as exc:
         if tmp is not None:
             for suffix in ("", "-journal", "-wal", "-shm"):
@@ -1488,20 +1490,42 @@ def _backup_sqlite(db_path: Path, label: str, keep: int | None = None) -> Path |
         if phase == "space check" and isinstance(exc, RuntimeError):
             raise
         raise RuntimeError(f"backup {phase} failed for {final}: {exc}") from exc
+    try:
+        tmp.unlink()
+    except OSError as exc:   # backup already published; a stray temp is not a failed backup
+        logger.warning("backup published but temp cleanup failed for %s: %s", tmp, exc)
     logger.info("WAL-safe backup %s -> %s", db_path, final)
-
     if keep is not None:
-        pattern = re.compile(rf"^{re.escape(db_path.name)}\.backup-\d{{14}}-{re.escape(label)}$")
-        older = sorted(p for p in db_path.parent.iterdir()
-                       if p != final and pattern.match(p.name))
-        excess = older[:max(len(older) - (keep - 1), 0)]
-        try:
-            for old in excess:
-                old.unlink()
-                logger.info("pruned old backup %s (label=%s keep=%d)", old, label, keep)
-        except OSError as exc:
-            raise RuntimeError(f"backup prune failed for {final}: {exc}") from exc
+        _prune_auto_backups(db_path, label, final, stamp, keep)
     return final
+
+
+def _prune_auto_backups(db_path: Path, label: str, final: Path, stamp: str, keep: int) -> None:
+    """Keep `final` + the newest keep-1 older same-label backups; drop the rest,
+    including future-stamped files (clock skew) and >24h-old orphaned temp files
+    from hard-killed runs. Failures are logged, not raised: the backup is already
+    published and the space gate is the backstop."""
+    import re
+    import time
+    name, lab = re.escape(db_path.name), re.escape(label)
+    backup_re = re.compile(rf"^{name}\.backup-(\d{{14}})-{lab}$")
+    partial_re = re.compile(rf"^{name}\.backup-\d{{14}}-{lab}\.[^.]+\.partial(-journal|-wal|-shm)?$")
+    older, doomed = [], []
+    stale_before = time.time() - 86400
+    for p in db_path.parent.iterdir():
+        m = backup_re.match(p.name)
+        if m and p != final:
+            (older if m.group(1) < stamp else doomed).append(p)
+        elif partial_re.match(p.name) and p.stat().st_mtime < stale_before:
+            doomed.append(p)
+    older.sort()
+    doomed += older[:max(len(older) - (keep - 1), 0)]
+    for old in sorted(doomed):
+        try:
+            old.unlink()
+            logger.info("pruned %s (label=%s keep=%d)", old, label, keep)
+        except OSError as exc:
+            logger.error("backup prune failed for %s: %s", old, exc)
 
 
 def apply_reviewed_csv(
