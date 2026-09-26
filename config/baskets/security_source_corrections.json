@@ -1,0 +1,54 @@
+[
+  {
+    "source_kind": "live",
+    "valid_from": "2026-09-25",
+    "valid_to": "2026-09-26",
+    "reviewed_at": "2026-09-26",
+    "required_snapshot_dates": [
+      "2026-09-26"
+    ],
+    "id": "spy-hologic-cvr-20260926",
+    "basket": "SPY",
+    "raw_symbol": "2602335D",
+    "raw_name": "TPG INC",
+    "raw_cusip": "436CVR021",
+    "raw_isin": "",
+    "action": "classify_cvr",
+    "evidence": [
+      {
+        "path": "docs/references/index-pe-source-corrections-20260926/doubleline-cape-holdings.pdf",
+        "sha256": "e134f00fbb88146af0d7fae9c106fdc3f5d40d42e192260dfb7d8069eb8b617e",
+        "url": "https://doubleline.com/wp-content/uploads/ETF-Website-Holdings-CAPE.pdf"
+      },
+      {
+        "path": "docs/references/index-pe-source-corrections-20260926/acvf-holdings.html",
+        "sha256": "5893a6ab1147c61a1febf4ff12c91d7b6a51a15e64a767cf9c989c1fe735af4a",
+        "url": "https://acvetfs.com/fund/acv-etf-fund-data/"
+      }
+    ]
+  },
+  {
+    "source_kind": "live",
+    "valid_from": "2026-09-25",
+    "valid_to": "2026-09-26",
+    "reviewed_at": "2026-09-26",
+    "required_snapshot_dates": [
+      "2026-09-26"
+    ],
+    "id": "soxx-nxp-cusip-20260926",
+    "basket": "SOXX",
+    "raw_symbol": "0EDE.L",
+    "raw_name": "NXP SEMICONDUCTORS NV",
+    "raw_cusip": "F2933A109",
+    "raw_isin": "NL0009538784",
+    "action": "correct_cusip",
+    "effective_cusip": "N6596X109",
+    "evidence": [
+      {
+        "path": "docs/references/index-pe-source-corrections-20260926/nxp-investor-faq.html",
+        "sha256": "7263bf23ac7ed2c229d1e42c2413f2ee1d7f43cf05fb699e7823c895eb3ae28f",
+        "url": "https://www.nxp.com/company/about-nxp/investor-relations/investor-faqs:INVESTORS-FAQS"
+      }
+    ]
+  }
+]

@@ -669,8 +669,66 @@ def _weight_coverage(members: Sequence[Mapping[str, Any]], income_key: str) -> f
     return covered / total if total > 0 else 0.0
 
 
+def _reviewed_source_correction(row, source_corrections=()):
+    """Match a review independently against physical source fields.
+
+    Neither an effective identifier supplied by the producer nor its CVR
+    classification is evidence here. Invalid raw/normalized pairs cannot use
+    a review to become acceptable.
+    """
+    if row.get('filter_reason') == 'reviewed_cvr':
+        raise ValueError('source_correction_physical_marker_invalid')
+    scoped = [entry for entry in source_corrections
+              if entry["basket"] == row.get("basket_symbol")
+              and entry["source_kind"] == row.get("source_kind") == "live"
+              and entry["valid_from"] <= row["holding_date"] <= entry["valid_to"]]
+    if not scoped:
+        return None
+    try:
+        raw = json.loads(row.get("raw_payload_json") or "null")
+    except (TypeError, ValueError) as exc:
+        if any(entry["raw_symbol"] == row.get("raw_symbol") for entry in scoped):
+            raise ValueError("source_correction_raw_invalid") from exc
+        return None
+    if not isinstance(raw, dict):
+        if any(entry["raw_symbol"] == row.get("raw_symbol") for entry in scoped):
+            raise ValueError("source_correction_raw_invalid")
+        return None
+    if not any(entry["raw_symbol"] in (raw.get("asset"), row.get("raw_symbol"))
+               for entry in scoped):
+        return None
+    cusip = raw.get("securityCusip") or raw.get("cusip")
+    if (raw.get("securityCusip") and raw.get("cusip")
+            and raw["securityCusip"] != raw["cusip"]):
+        raise ValueError("source_correction_conflicting_cusips")
+    original_fields = {
+        "raw_symbol": str(raw.get("asset") or "").strip().upper(),
+        "name": raw.get("name"), "cusip": cusip, "isin": raw.get("isin"),
+        "issuer_lei": raw.get("lei"), "asset_category": raw.get("assetCat"),
+        "market_value": raw.get("marketValue"),
+    }
+    if any(row.get(field) != value for field, value in original_fields.items()):
+        raise ValueError("source_correction_normalized_raw_mismatch")
+    matches = [entry for entry in scoped
+               if (entry["raw_symbol"], entry["raw_name"], entry["raw_cusip"], entry["raw_isin"])
+               == (raw.get("asset"), raw.get("name"), cusip, raw.get("isin"))]
+    if len(matches) > 1:
+        raise ValueError("source_correction_ambiguous_review")
+    if not matches:
+        return None
+    try:
+        weight, original_weight = float(row["weight_pct"]), float(raw["weightPercentage"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("source_correction_weight_invalid") from exc
+    if (not math.isfinite(weight) or weight < 0
+            or not math.isfinite(original_weight) or original_weight < 0
+            or not _close(weight, original_weight, tolerance=1e-12)):
+        raise ValueError("source_correction_weight_mismatch")
+    return matches[0]
+
+
 def _disclosed_membership(
-    conn: sqlite3.Connection, basket: str,
+    conn: sqlite3.Connection, basket: str, source_corrections=(),
 ) -> List[Dict[str, Any]]:
     """Reconstruct weights independently, preserving each source snapshot.
 
@@ -683,9 +741,7 @@ def _disclosed_membership(
     snapshots: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for row in _rows(
             conn,
-            "SELECT holding_date, source_kind, composition_effective_date, "
-            "composition_available_date, symbol, covered_by, "
-            "weight_pct, included FROM fmp_fund_disclosure_holdings "
+            "SELECT * FROM fmp_fund_disclosure_holdings "
             "WHERE basket_symbol = ? ORDER BY holding_date, source_kind, "
             "raw_row_index", [basket]):
         key = (str(row["holding_date"]), str(row["source_kind"]))
@@ -693,11 +749,21 @@ def _disclosed_membership(
             "holding_date": key[0], "source_kind": key[1],
             "composition_effective_date": str(row["composition_effective_date"]),
             "composition_available_date": str(row["composition_available_date"]),
-            "weights": {}, "errors": [],
+            "weights": {}, "errors": [], "source_correction_counts": {},
         })
         for field in ("composition_effective_date", "composition_available_date"):
             if str(row[field]) != snapshot[field]:
                 snapshot["errors"].append(f"source_snapshot_inconsistent:{field}")
+        try:
+            review = _reviewed_source_correction(row, source_corrections)
+        except ValueError as exc:
+            snapshot["errors"].append(str(exc))
+            review = None
+        if review is not None:
+            counts = snapshot["source_correction_counts"]
+            counts[review["id"]] = counts.get(review["id"], 0) + 1
+            if review["action"] == "classify_cvr":
+                continue
         target = row["symbol"] if row["included"] == 1 else row["covered_by"]
         if not target:
             continue
@@ -712,6 +778,16 @@ def _disclosed_membership(
             continue
         weights = snapshot["weights"]
         weights[company] = weights.get(company, 0.0) + weight
+    for snapshot in snapshots.values():
+        for review in source_corrections:
+            if (review["basket"] == basket
+                    and review["source_kind"] == snapshot["source_kind"]
+                    and snapshot["holding_date"] in review.get("required_snapshot_dates", ())):
+                count = snapshot["source_correction_counts"].get(review["id"], 0)
+                if count != 1:
+                    reason = "row_missing" if count == 0 else "row_duplicated"
+                    snapshot["errors"].append(
+                        f"source_correction_{reason}:{review['id']}:{count}")
     return list(snapshots.values())
 
 
@@ -942,7 +1018,7 @@ def _kernel_reconciliation_errors(rows: Sequence[Mapping[str, Any]]) -> List[str
 
 
 def _company_identities(
-    conn: sqlite3.Connection, basket: str, overrides=(),
+    conn: sqlite3.Connection, basket: str, overrides=(), source_corrections=(),
 ) -> Dict[Tuple[str, str], Dict[str, Optional[str]]]:
     """Independently derive canonical issuer keys from physical source evidence.
 
@@ -977,6 +1053,11 @@ def _company_identities(
                                     ("isin", raw.get("isin")), ("asset_category", raw.get("assetCat"))):
                 if row.get(field) != original:
                     raise ValueError("normalized identity disagrees with raw source")
+            review = _reviewed_source_correction(row, source_corrections)
+            if review is not None:
+                if review["action"] == "classify_cvr":
+                    return None, "excluded"
+                cusip = review["effective_cusip"]
             original = raw.get("lei")
             in_range = [entry for entry in applicable
                         if entry["valid_from"] <= row["holding_date"] <= entry["valid_to"]]
@@ -1579,6 +1660,8 @@ def verify_database(
     share_config = default_share_class_config(config_root)
     basket_configs = load_index_pe_basket_configs(config_root)
     issuer_overrides = load_issuer_overrides(config_root)
+    from src.data.security_source_corrections import load_security_source_corrections
+    source_corrections = load_security_source_corrections(config_root)
     alias_path = config_root / "soxx_symbol_aliases.json"
     if not alias_path.exists():
         alias_path = config_root.parent / "soxx_symbol_aliases.json"
@@ -1679,10 +1762,17 @@ def verify_database(
         staleness = int(basket_configs[basket].get(
             "market_cap_staleness_days", DEFAULT_MARKET_CAP_STALENESS_DAYS))
         evidence_errors.extend(_evidence_errors(rows, staleness))
-        evidence_errors.extend(_membership_errors(
-            basket, rows, _disclosed_membership(conn, basket)))
+        snapshots = _disclosed_membership(conn, basket, source_corrections)
+        evidence_errors.extend(_membership_errors(basket, rows, snapshots))
+        # A reviewed physical source row must remain verifiable even when its
+        # snapshot is not yet available to any Friday valuation in the window.
+        evidence_errors.extend(
+            f"{basket}:{snapshot['holding_date']}:{error}"
+            for snapshot in snapshots for error in snapshot["errors"]
+            if error.startswith("source_correction_"))
         identity = _company_identity_check(
-            basket, rows, _company_identities(conn, basket, issuer_overrides))
+            basket, rows, _company_identities(conn, basket, issuer_overrides,
+                                               source_corrections))
         identity_errors.extend(identity["errors"])
         for key in identity_totals:
             identity_totals[key] += identity[key]

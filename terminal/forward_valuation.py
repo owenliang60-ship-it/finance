@@ -17,6 +17,9 @@ from src.data.fmp_forward_ingestion import (
     parse_forward_run_evidence,
     non_equity_holding_reason,
 )
+from src.data.security_source_corrections import (
+    apply_pit_security_corrections, load_security_source_corrections,
+)
 from terminal.basket_pe_aggregate import compute_aggregate_basket_pe
 from terminal.hindsight_ntm_valuation import (
     is_same_fiscal_quarter,
@@ -370,6 +373,7 @@ def build_forward_valuations(conn, snapshot_date, config_dir=CONFIG_DIR):
     if snapshot_date < "2026-07-13":
         raise ValueError("PIT valuation starts at 2026-07-13")
     _, _, mags = load_basket_configs(Path(config_dir))
+    corrections = load_security_source_corrections(config_dir)
     share = default_share_class_config(Path(config_dir))
     fx = {}
     for r in _rows(conn, "SELECT * FROM fx_daily WHERE date<=?", [snapshot_date]):
@@ -411,16 +415,19 @@ def build_forward_valuations(conn, snapshot_date, config_dir=CONFIG_DIR):
         )
         if not holdings:
             raise ValueError(f"{basket}: holdings snapshot missing")
+        if any(r.get('filter_reason') == 'reviewed_cvr' for r in holdings):
+            raise ValueError('physical holdings cannot supply a reviewed correction marker')
+        holdings = apply_pit_security_corrections(conn, basket, snapshot_date, holdings, corrections)
         primaries = {r.get("symbol") for r in holdings if r.get("included") == 1}
         weights = {}
         non_equity = []
         for index, row in enumerate(holdings):
             reason = row.get("filter_reason")
-            if reason not in ("cash_or_fund", "swap", "futures"):
+            if reason not in ("cash_or_fund", "swap", "futures", "reviewed_cvr"):
                 reason = non_equity_holding_reason(
                     row.get("raw_asset"), row.get("name")
                 )
-            if reason in ("cash_or_fund", "swap", "futures"):
+            if reason in ("cash_or_fund", "swap", "futures", "reviewed_cvr"):
                 non_equity.append(
                     {
                         "raw_asset": row.get("raw_asset"),
@@ -428,6 +435,7 @@ def build_forward_valuations(conn, snapshot_date, config_dir=CONFIG_DIR):
                         "weight_pct": row.get("weight_pct"),
                         "source_filter_reason": row.get("filter_reason"),
                         "valuation_filter_reason": reason,
+                        **({'correction_id': row['correction_id']} if row.get('correction_id') else {}),
                     }
                 )
                 continue
@@ -514,7 +522,8 @@ def build_forward_valuations(conn, snapshot_date, config_dir=CONFIG_DIR):
 
 def verify_forward_valuations(conn, snapshot_date, rows, config_dir=CONFIG_DIR):
     """Raw-source replay plus independent quarter sums and ratio assertions."""
-    errors = []
+    from terminal.forward_source_verifier import verify_pit_security_corrections
+    errors = verify_pit_security_corrections(conn, snapshot_date, rows, config_dir)
     expected = build_forward_valuations(conn, snapshot_date, config_dir)
     observed = {r["basket"]: dict(r) for r in rows}
     if len(observed) != len(rows) or set(observed) != set(FULL_BASKETS):

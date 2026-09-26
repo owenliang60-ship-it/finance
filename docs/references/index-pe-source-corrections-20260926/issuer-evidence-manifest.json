@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "scope": "Independent supplemental issuer-security evidence; does not replace manifest.json",
+  "artifacts": [
+    {
+      "file": "sec-436cvr021-web-extract.json",
+      "sha256": "ae68399d2983a557dd09fa7d54e7de065ea77f30425b441b5f24e3dc35bc1bac",
+      "bytes": 34180,
+      "source_url": "https://www.sec.gov/Archives/edgar/data/1860434/000141036826067310/xslFormNPORT-P_X01/primary_doc.xml",
+      "artifact_kind": "web_tool_open_extracted_text",
+      "retrieved_on": "2026-09-26"
+    },
+    {
+      "file": "lse-0ede-web-extract.json",
+      "sha256": "a1e78b81dc395ae9a8e2c6e6689618a0b00cde171cd9db5dd49fd7447e8f9006",
+      "bytes": 1742,
+      "source_url": "https://www.londonstockexchange.com/exchange/instrument-result.html?filterBy=&filterClause=&initial=N&page=21",
+      "artifact_kind": "web_tool_search_extracted_text",
+      "retrieved_on": "2026-09-26"
+    }
+  ]
+}

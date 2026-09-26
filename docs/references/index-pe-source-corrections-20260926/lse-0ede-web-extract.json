@@ -1,0 +1,9 @@
+{
+  "source_url": "https://www.londonstockexchange.com/exchange/instrument-result.html?filterBy=&filterClause=&initial=N&page=21",
+  "retrieved_on": "2026-09-26",
+  "artifact_kind": "web_tool_search_extracted_text",
+  "extraction_method": "Exact query to web search, constrained to LSE official instrument-result URL; retained actual returned excerpt. Not downloaded original HTML. Search result states Crawled: 3 months ago. Direct web open now redirects to LSE account-update page, so this is cached discovery evidence, not a freshly served security directory.",
+  "query": "site:londonstockexchange.com/exchange/instrument-result.html \"0EDE\" \"NXP SEMICONDUCTORS ORD SHS\"",
+  "tool_response": " (https://www.londonstockexchange.com/exchange/instrument-result.html?filterBy=&filterClause=&initial=N&page=21)\nciteturn10search0 [wordlim: 200] Crawled: 3 months ago; 0EDE  | NXP SEMICONDUCTORS NV NXP SEMICONDUCTORS ORD SHS\n\nList Companies starting with:\n\nA B C D E F G H I J K L M N O P Q R S T U V W X Y Z 0-9\n\nCode  | Name\n--- | ---\n0NHS  | NUTRIEN LTD NUTRIEN ORD SHS\n0R1I  | NVIDIA CORP NVIDIA ORD SHS\n0NVR  | NVR INC NVR ORD SHS\n0EDE  | NXP SEMICONDUCTORS NV NXP SEMICONDUCTORS ORD SHS\n0MSE  | NYESA VALORES CORPORACION SA NYESA VALORES ORD SHS\n0GTU  | NYORDA AB NYORDA AB ORD SHS\n0RH8  | NYRSTAR NV NYRSTAR ORD SHS\nBTEE  | ISHARES IV PLC ISH NASDAQ US BTEC UCITS ETF USD DIST\nQQQG  | UBS (IRL) ETF PLC UBS NASDAQ-100 UCITS ETF HGBP ACC\nQQIA  | INVESCO MARKETS II PLC IVZ NASDAQ-100 INCOME ADVANTAGE DIST\n\n‹ Previous 21 22 23 24 25 26 27 28 29 30 Next ›",
+  "limitation": "Binds 0EDE to NXP ordinary shares only. Does not bind ISIN/CUSIP, identify F2933A109, or prove current listing availability."
+}

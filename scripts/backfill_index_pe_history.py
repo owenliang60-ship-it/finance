@@ -62,6 +62,9 @@ from src.data.fmp_forward_ingestion import (  # noqa: E402
     validate_disclosure_alias_bindings,
 )
 from src.data.market_store import MarketStore  # noqa: E402
+from src.data.security_source_corrections import (
+    apply_security_source_corrections, load_security_source_corrections,
+)
 from src.data.fund_issuer_identity import (  # noqa: E402
     audit_snapshot_identities, load_issuer_overrides,
 )
@@ -343,6 +346,13 @@ def backfill_basket(
                            basket_symbol=basket, basket_config=basket_config,
                            config_dir=config_dir)
 
+        corrections = load_security_source_corrections(config_dir)
+        state.snapshots = apply_security_source_corrections(state.snapshots, corrections)
+        report['source_corrections'] = [
+            {'basket': row['basket_symbol'], 'holding_date': row['holding_date'],
+             'raw_row_index': row['raw_row_index'], 'correction_id': row['correction_id'],
+             'effective_security': row['effective_security']}
+            for row in state.snapshots if row.get('correction_id')]
         source_available_dates = sorted(
             str(row["composition_available_date"]) for row in state.snapshots
             if row.get("composition_available_date"))
@@ -352,7 +362,8 @@ def backfill_basket(
         aliases = load_soxx_symbol_aliases(alias_path) if alias_path.exists() else {}
         validate_disclosure_alias_bindings(state.snapshots, aliases)
         identity = audit_snapshot_identities(
-            state.snapshots, load_issuer_overrides(config_dir), source_rows=source_rows)
+            state.snapshots, load_issuer_overrides(config_dir), source_rows=source_rows,
+            corrections=corrections)
         report["source_identity"] = identity
         if identity["errors"]:
             raise ValueError("source issuer identity gate failed: "

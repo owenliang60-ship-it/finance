@@ -487,6 +487,8 @@ def config_dir(tmp_path):
     """
     target = tmp_path / "baskets"
     shutil.copytree(REPO_CONFIG_DIR, target)
+    # This synthetic two-member universe has no production security anchors.
+    (target / 'security_source_corrections.json').write_text('[]')
     shutil.copy(REPO_CONFIG_DIR.parent / "soxx_symbol_aliases.json", target)
     payload = json.loads((target / "index_pe_baskets.json").read_text())
     for entry in payload.values():

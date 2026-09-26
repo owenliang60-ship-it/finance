@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
+from src.data.security_source_corrections import match_security_source_correction
 
 MISSING_CUSIPS = (None, "", "N/A", "000000000")
 MISSING_LEIS = (None, "", "N/A")
@@ -177,7 +178,7 @@ def latest_pit_disclosure(security_issuers, basket_symbol, as_of):
     return max(eligible, key=lambda key: key[1]) if eligible else None
 
 
-def resolve_issuer_identity(row, overrides=(), security_issuers=None):
+def resolve_issuer_identity(row, overrides=(), security_issuers=None, corrections=()):
     """Resolve normalized source columns, rejecting inconsistent raw evidence.
 
     Returns (typed issuer key or None, reason). Reviewed corrections are scoped
@@ -203,8 +204,12 @@ def resolve_issuer_identity(row, overrides=(), security_issuers=None):
                              ("isin", raw.get("isin")), ("asset_category", raw.get("assetCat"))):
         if row.get(column) != original:
             return None, f"source_identity_field_mismatch:{column}"
+    correction = match_security_source_correction(row, corrections)
+    if correction and correction['action'] == 'classify_cvr':
+        return None, 'source_not_common_equity'
+    effective_cusip = (correction['effective_cusip'] if correction else row.get('cusip'))
     source_lei = row.get("issuer_lei")
-    matches = [(r, issuer_record_match(r, row.get("cusip"), row.get("isin"), row["holding_date"])) for r in overrides]
+    matches = [(r, issuer_record_match(r, effective_cusip, row.get("isin"), row["holding_date"])) for r in overrides]
     if any(status == "conflict" for _, status in matches):
         return None, "issuer_security_conflict"
     matching = [r for r, status in matches if status == "match"]
@@ -221,11 +226,11 @@ def resolve_issuer_identity(row, overrides=(), security_issuers=None):
             return None, "issuer_evidence_conflict"
         candidates.add(key)
     inherited = False
-    if is_live and security_issuers is not None and row.get("cusip") not in MISSING_CUSIPS:
+    if is_live and security_issuers is not None and effective_cusip not in MISSING_CUSIPS:
         snapshot_key = latest_pit_disclosure(
             security_issuers, row.get("basket_symbol"), row["holding_date"])
         evidence = (_disclosure_securities_as_of(
-                        security_issuers[snapshot_key], row["holding_date"]).get(row["cusip"])
+                        security_issuers[snapshot_key], row["holding_date"]).get(effective_cusip)
                     if snapshot_key is not None else None)
         if evidence is not None:
             key, isin, status = evidence
@@ -246,7 +251,7 @@ def resolve_issuer_identity(row, overrides=(), security_issuers=None):
     return next(iter(candidates)), reason
 
 
-def audit_snapshot_identities(rows, overrides=(), source_rows=None):
+def audit_snapshot_identities(rows, overrides=(), source_rows=None, corrections=()):
     """Pre-company-API gate, with each physical source snapshot kept separate."""
     errors, resolved = [], []
     groups = defaultdict(lambda: defaultdict(set))
@@ -259,7 +264,7 @@ def audit_snapshot_identities(rows, overrides=(), source_rows=None):
             errors.append(f"{label}:unrecognized_asset_category")
         if not row.get("included") and not row.get("covered_by"):
             continue
-        issuer_key, reason = resolve_issuer_identity(row, overrides, security_issuers)
+        issuer_key, reason = resolve_issuer_identity(row, overrides, security_issuers, corrections)
         if issuer_key is None:
             errors.append(f"{label}:{reason}")
             continue
@@ -273,6 +278,8 @@ def audit_snapshot_identities(rows, overrides=(), source_rows=None):
                          "symbol": target, "canonical_issuer_key": issuer_key,
                          "issuer_lei": issuer_key[4:] if issuer_key.startswith("lei:") else None,
                          "reason": reason})
+        if row.get('correction_id'):
+            resolved[-1]['correction_id'] = row['correction_id']
         if reason == "disclosure_security_issuer":
             resolved[-1]["evidence_disclosure_date"] = latest_pit_disclosure(
                 security_issuers, row.get("basket_symbol"), row["holding_date"])[1]

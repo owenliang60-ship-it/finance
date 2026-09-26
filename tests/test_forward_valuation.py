@@ -552,3 +552,44 @@ def test_legacy_cash_and_negative_futures_are_excluded_without_source_rewrite(st
         "futures",
         "futures",
     ]
+
+
+def test_pit_valuation_excludes_reviewed_cvr_with_audited_source_join(store, monkeypatch):
+    from pathlib import Path
+    import terminal.forward_valuation as module
+    import terminal.forward_source_verifier as source_verifier
+    from src.data.security_source_corrections import load_security_source_corrections
+    root = Path(__file__).resolve().parents[1]
+    corrections = load_security_source_corrections(root/'config/baskets')[:1]
+    corrections[0].update(valid_from=SNAP, valid_to=SNAP, required_snapshot_dates=[SNAP])
+    monkeypatch.setattr(module, 'load_security_source_corrections', lambda _: corrections)
+    monkeypatch.setattr(source_verifier, 'load_security_source_corrections', lambda _: corrections)
+    source = json.loads((root/'tests/fixtures/index_pe_source_errors_20260926.json').read_text())[0]
+    raw = json.loads(source['raw_payload_json'])
+    raw['updatedAt'] = SNAP + ' 00:00:00'
+    source.update(raw_payload_json=raw, holding_date=SNAP,
+                  composition_available_date=SNAP, fetched_at=SNAP+'T12:00:00Z')
+    store.replace_fund_disclosure_snapshot('SPY', SNAP, 'live', [source],
+        rebalance_close_date='2025-12-19', composition_effective_date='2025-12-22',
+        composition_available_date=SNAP, fetched_at=source['fetched_at'])
+    original = store.get_fmp_etf_holdings('SPY', SNAP)
+    cvr = dict(raw_row_index=99, raw_asset=raw['asset'], name=raw['name'],
+               weight_pct=raw['weightPercentage'], market_value=raw['marketValue'],
+               updated_at=raw['updatedAt'], included=1, symbol=raw['asset'],
+               covered_by=None, filter_reason=None)
+    store.replace_fmp_etf_holdings('SPY', SNAP, original+[cvr])
+    rows = build_forward_valuations(store._get_conn(), SNAP)
+    spy = next(r for r in rows if r['basket'] == 'SPY')
+    assert spy['n_members'] == len(original)
+    assert spy['members_json']['non_equity_exclusions'][0]['correction_id'] == corrections[0]['id']
+    assert not any(m['symbol'] == raw['asset'] for m in spy['members_json']['members'])
+    assert store.get_fmp_etf_holdings('SPY', SNAP)[-1]['included'] == 1
+    assert verify_forward_valuations(store._get_conn(), SNAP, rows) == []
+
+
+def test_physical_reviewed_cvr_marker_cannot_exclude_an_ordinary_equity(store):
+    with store._get_conn() as conn:
+        conn.execute("UPDATE fmp_etf_holdings_snapshot SET filter_reason='reviewed_cvr' "
+                     "WHERE basket='SPY' AND symbol='MSFT'")
+    with pytest.raises(ValueError, match='physical.*correction'):
+        build_forward_valuations(store._get_conn(), SNAP)
