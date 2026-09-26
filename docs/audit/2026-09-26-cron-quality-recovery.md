@@ -70,11 +70,10 @@ suite: **76 passed in15.81s**; compilation passed. No service restart was needed
 Unrelated local tracked modifications were preserved. This deployment applies
 only the cooldown fix; Forward implementation and rollout remain separate.
 
-## Forward remains separate
+## Final linked recovery
 
-FMP ingestion on 9/26 is complete (979/1021 quarterly successes); QQQ weekly PE
-is updated through9/25. SPY/SOXX weekly products remain through9/11, and six-basket
-PIT valuation remains9/12 because history failure stopped the wrapper.
-Official sources now identify the SPY instrument as a CVR and NXP's correct
-CUSIP; implementation needs an explicit scoped source-correction contract.
-See `docs/plans/2026-09-26-index-pe-source-corrections.md` for approval scope.
+Forward recovery subsequently completed on release28b5761d: all three historical
+series through9/25 and six-basket NTM through9/26, both verifiers passed and
+SQLite checked ok. Final fundamental audit is WARN/rc0, repair_due0 and
+884/917 ready (96.40%); source warnings remain explicit. Details and the bounded
+1,119/1,200 request ledger are in `2026-09-26-forward-source-corrections.md`.

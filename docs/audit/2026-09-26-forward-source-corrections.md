@@ -1,7 +1,46 @@
 # Forward source corrections — 2026-09-26
 
-Status: deployed; SPY restored, remaining recovery in progress. Boss approved the two scoped
+Status: deployed and recovery complete; final exit code0. Boss approved the two scoped
 corrections in `docs/plans/2026-09-26-index-pe-source-corrections.md`.
+
+## Final acceptance
+
+Production functional release: `28b5761d`. All requested recovery steps completed
+on2026-09-26; the full Forward verifier, three-index historical verifier and SQLite
+`quick_check` passed. Cumulative recovery requests: **1,119 / 1,200**. The complete
+weekly9/26 ingestion was preserved; no ingestion resume, extra cron or Telegram
+send was used.
+
+| Product | Rows / baskets | Latest date |
+|---|---:|---|
+| SPY weekly TTM/hindsight | 261 | 2026-09-25 |
+| QQQ weekly TTM/hindsight | 261 | 2026-09-25 |
+| SOXX weekly TTM/hindsight | 253 | 2026-09-25 |
+| PIT NTM forward valuation | 6 | 2026-09-26 |
+
+All six NTM lines pass both coverage gates. SOX and IGV auxiliary blend PEs are
+NULL/partial under the existing rule, not silently marked complete. Data-layer
+4Q coverage is979/1,021 (95.89%); valid-empty drift and unknown/unmapped source
+holdings remain visible warnings. HONA's invalid nonpositive market-cap response
+was rejected and its prior source range retained.
+
+Final fundamental audit: **WARN / rc0**, repair_due0, fundamental_ready884/917
+(96.40%). Source-pending/structural warnings are retained. The scheduler itself
+has not had a subsequent natural run since these fixes; this acceptance is the
+actual bounded production recovery, not a claim about a future cron execution.
+
+Final code full suite: **4211 passed,1 skipped,17 warnings in553.06s**. XLF change
+also passed118 local/cloud relevant tests and independent review. Raw source
+rows/identifiers and weights were preserved; reviewed BNY period-only changes
+and recomputed metrics have transaction-level archival provenance.
+
+Cloud receipt directory: `data/forward-recovery-20260926-final/` contains
+`result.json`, `published-state.json`, both verifiers, data check and PIT write
+report. Final fundamental report: `data/quality/post-forward-recovery-20260926.json`.
+Local copies and final test output: `reports/cron-recovery-20260926/final/` in the
+attached recovery worktree. Only task-created backup files were compressed with
+SHA256 round-trip verification; recoverable `.gz` archives and receipts remain.
+The following sections preserve the earlier checkpoints and failures.
 
 ## Production deployment and recovery (live checkpoint)
 

@@ -1,6 +1,12 @@
 # 三指数 PE 整窗更新与失败恢复
 
-## 2026-09-26 待发布：精确源纠错
+## 2026-09-26 已部署并恢复：精确源纠错
+
+最终功能版本 `28b5761d`。SPY/QQQ各261周、SOXX253周均恢复到9/25；六篮子
+PIT NTM更新至9/26。两套verifier与SQLite检查通过，正式恢复累计1,119/1,200请求。
+SOX/IGV辅助blend线仍为NULL/partial，源数据警告保留。尚未观察后续自然cron。
+恢复中还补充了经发行人/官方汇率证据核实的KRW校验范围，以及XLF精确
+`IXAZ6 / XAF FINANCIAL DEC26`期货分类；不同合约换月仍需审核，不能按负权重跳过。
 
 `security_source_corrections.json` 为两条已审核的9/25–9/26证券输入定义有限纠错：
 SPY `2602335D/436CVR021` 按CVR衍生品排除普通股PE；SOXX
