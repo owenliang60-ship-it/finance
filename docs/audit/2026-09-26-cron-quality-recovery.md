@@ -59,7 +59,16 @@ Budget: 13 symbols × 5 datasets, client hard cap65; actual **65 requests**.
   Local copies: `reports/cron-recovery-20260926/` in the isolated worktree.
 
 The existing published Premium list was not rebuilt by this supplemental run.
-No Telegram message, cron modification, merge, push or code deployment occurred.
+No Telegram message or cron modification occurred.
+
+## Cooldown code deployment
+
+After Boss explicitly approved merge/push/deployment, local main fast-forwarded
+to `a9926c6d` and origin/main was pushed. Cloud main then fast-forwarded under
+the shared writer lock. Production Python3.10 targeted auditor/runner/wrapper
+suite: **76 passed in15.81s**; compilation passed. No service restart was needed.
+Unrelated local tracked modifications were preserved. This deployment applies
+only the cooldown fix; Forward implementation and rollout remain separate.
 
 ## Forward remains separate
 

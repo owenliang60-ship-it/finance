@@ -1,6 +1,6 @@
 # Forward 两处证券源数据纠错方案
 
-状态：待 Boss 确认数据处理边界；尚未实现或写生产数据。
+状态：Boss 已于2026-09-26确认；实现与独立验证已完成，整体测试验收中。Forward 尚未部署或恢复生产估值。
 
 **Goal:** 用已核实的精确证券证据解除 SPY / SOXX 的两项身份阻塞。
 **Architecture:** 在既有 holdings 规范化及身份验证之间添加范围严格的审核纠错视图。原始证券字段、原始 JSON、行数和权重保留；producer 与 verifier 独立重建有效分类/标识。不改变估值公式、权重门槛和逐篮子事务。
@@ -28,6 +28,8 @@ R2. SOXX 仅在完整精确条件匹配时，把有效 CUSIP 纠正为 `N6596X10
 R3. 审核记录包含 basket、source_kind=live、raw ticker/name、原始 CUSIP/ISIN、允许的缺失值、审核日、有效起止日和来源 SHA。仅审核实际留存的 9/25–9/26 输入范围；其他日期需明确扩展审核，不能靠无限期规则放行。
 R4. 已存快照通过只读有效视图纠正；不覆盖旧 raw 字段，不删源行。新摄取和旧快照读取同样生效，防止“只修新数据，旧阻塞永远重现”。纠错 ID/理由显式进入运行证据。
 R5. 既有方法仍为固定调仓权重 retrospective proxy；逐篮子原子认证、99.5%–100.5% raw weight 门槛、普通股成员数量门槛、PIT日期和精确冲突检查不放宽。
+
+实施细化：纠错集中于 `src/data/security_source_corrections.py`，在新摄取进入内存后的统一读取点及旧快照读取时应用，不将运行时分类写回物理源。9/26已审核快照必须恰有一条匹配源行，防止删行/重复被跳过。PIT旧表缺CUSIP/ISIN，故仅对9/26通过完整源表的同日唯一见证，核对asset/name/weight/market_value/updated_at后应用分类；独立 `terminal/forward_source_verifier.py` 重建并验证该关联。历史缺见证的PIT周次不追溯改写。
 
 ## 架构与业务流程
 
