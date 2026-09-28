@@ -53,7 +53,8 @@ ranking when it is short.
 CLI:
     python scripts/backfill_extended_fundamentals.py --run-id <id> \\
         [--canary N] [--resume] [--limit-quarters 8] [--dry-run] [--no-lock] \\
-        [--include-historical --as-of YYYY-MM-DD]
+        [--include-historical --as-of YYYY-MM-DD] \\
+        [--targets-file PATH] [--datasets income,balance,cashflow]
     python scripts/backfill_extended_fundamentals.py --run-id <id> --verify-only
 
 Exit codes: 0 success / verification pass · 1 partial failure / circuit
@@ -64,6 +65,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import json
 import logging
 import math
@@ -71,7 +73,7 @@ import os
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -130,8 +132,9 @@ HISTORICAL_LIMIT_QUARTERS_CAP = 40
 
 # The three statement tables an as-of ranking reads. Derived from the kernel's
 # map so a dataset→table rename cannot silently desync this check.
+STATEMENT_DATASETS = ("income", "balance", "cashflow")
 ASOF_WINDOW_TABLES = tuple(
-    COLLECTION_DATASET_TABLES[key] for key in ("income", "balance", "cashflow")
+    COLLECTION_DATASET_TABLES[key] for key in STATEMENT_DATASETS
 )
 
 
@@ -301,6 +304,24 @@ def _historical_targets(store: MarketStore, as_of: str) -> Dict[str, Any]:
     }
 
 
+def load_targets_file(path) -> List[str]:
+    """Frozen external target list: JSON `{"symbols": [...], ...}`.
+
+    Upper-cased, deduplicated, sorted (the grid order is lexicographic either
+    way). An empty or malformed file raises — an empty denominator must never
+    turn into a silent no-op run.
+    """
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or not isinstance(payload.get("symbols"), list):
+        raise ValueError("targets file {} must be an object with a 'symbols' "
+                         "list".format(path))
+    symbols = sorted({str(s).strip().upper() for s in payload["symbols"]
+                      if str(s).strip()})
+    if not symbols:
+        raise ValueError("targets file {} holds no symbols".format(path))
+    return symbols
+
+
 def _coverage_report(store: MarketStore, candidates: List[str],
                      as_of: str) -> Dict[str, Any]:
     covered = [s for s in candidates if has_asof_window(store, s, as_of)]
@@ -338,7 +359,8 @@ def _utc_now_ts() -> str:
 
 
 def _resolve_targets(store: MarketStore, *, resume: bool, include_historical: bool,
-                     as_of: Optional[str], run_id: str) -> Dict[str, Any]:
+                     as_of: Optional[str], run_id: str,
+                     targets_override: Optional[List[str]] = None) -> Dict[str, Any]:
     """Frozen target list plus the historical bookkeeping the report needs.
 
     Returns {"targets", "candidates", "error"}; `error` set means exit 2.
@@ -355,6 +377,10 @@ def _resolve_targets(store: MarketStore, *, resume: bool, include_historical: bo
         # Nothing frozen under this run_id yet: fall through and freeze now,
         # so `--resume` on a run that died before its manifest existed still
         # does the right thing instead of exiting empty.
+
+    if targets_override is not None:
+        return {"targets": sorted({s.upper() for s in targets_override}),
+                "candidates": None, "error": None}
 
     if include_historical:
         selection = _historical_targets(store, as_of)
@@ -382,7 +408,10 @@ def run_backfill(*, run_id: str, store: MarketStore, client: Any, lock: Any,
                  limit_quarters: int = DEFAULT_LIMIT_QUARTERS,
                  dry_run: bool = False, include_historical: bool = False,
                  as_of: Optional[str] = None,
-                 profiles_mirror_path: Optional[Path] = None) -> int:
+                 profiles_mirror_path: Optional[Path] = None,
+                 targets_override: Optional[List[str]] = None,
+                 datasets: Sequence[str] = DATASETS,
+                 targets_meta: Optional[Dict[str, Any]] = None) -> int:
     """Drive one backfill run. Every dependency is injected: tests never touch
     the network, the real lock file or `data/`.
 
@@ -390,12 +419,24 @@ def run_backfill(*, run_id: str, store: MarketStore, client: Any, lock: Any,
     rebuilt once at the end of the batch (R2-P2-3 — once per run, never per
     symbol). None means "leave the mirror alone", which is what every test
     wants and what keeps this function free of real-filesystem side effects;
-    `main()` passes the production path.
+    `main()` passes the production path. The mirror is only rebuilt when the
+    run's grid carries `profile` jobs.
+
+    `targets_override` replaces target selection with an externally frozen
+    list (`--targets-file`); `--resume` still trusts the manifest grid.
+    `datasets` restricts the grid to a subset of the kernel's DATASETS.
 
     Returns an exit code — see the module docstring's table.
     """
     if include_historical and not as_of:
         raise ValueError("--include-historical requires --as-of")
+    if targets_override is not None and include_historical:
+        raise ValueError("targets_override and include_historical are exclusive")
+    datasets = list(datasets)
+    unknown = [d for d in datasets if d not in DATASETS]
+    if not datasets or unknown:
+        raise ValueError("datasets must be a non-empty subset of {}, got {}".format(
+            DATASETS, datasets))
 
     if not lock.acquire():
         # Exit BEFORE the manifest exists: a busy lock must leave no trace
@@ -407,13 +448,15 @@ def run_backfill(*, run_id: str, store: MarketStore, client: Any, lock: Any,
     try:
         selection = _resolve_targets(store, resume=resume,
                                      include_historical=include_historical,
-                                     as_of=as_of, run_id=run_id)
+                                     as_of=as_of, run_id=run_id,
+                                     targets_override=targets_override)
         if selection["error"]:
             print("backfill: {} (exit {})".format(selection["error"],
                                                   EXIT_EMPTY_UNIVERSE))
             return EXIT_EMPTY_UNIVERSE
 
         targets = list(selection["targets"])
+        frozen_count = len(targets)
         candidates = selection["candidates"]
         if canary is not None:
             targets = targets[:canary]      # already lexicographic
@@ -441,10 +484,20 @@ def run_backfill(*, run_id: str, store: MarketStore, client: Any, lock: Any,
         params = {
             "canary": canary, "limit_quarters": effective_limit,
             "include_historical": include_historical, "as_of": as_of,
-            "datasets": list(DATASETS),
+            "datasets": datasets,
         }
+        if targets_override is not None:
+            params["targets_override_count"] = frozen_count
+            params.update(targets_meta or {})
         try:
-            store.create_backfill_run(run_id, targets, list(DATASETS), params)
+            store.create_backfill_run(run_id, targets, datasets, params)
+            stored = store.get_backfill_run(run_id)["params"] or {}
+            stored_datasets = stored.get("datasets", list(DATASETS))
+            if not resume and stored_datasets != datasets:
+                # The manifest identity is the symbol set only; a rerun asking
+                # for other datasets would silently reuse the old grid.
+                raise ValueError("run {!r} was frozen with datasets {}, not {}".format(
+                    run_id, stored_datasets, datasets))
         except ValueError as exc:
             print("backfill: {} (exit {})".format(exc, EXIT_EMPTY_UNIVERSE))
             return EXIT_EMPTY_UNIVERSE
@@ -480,6 +533,11 @@ def _drive(*, run_id: str, store: MarketStore, client: Any, targets: List[str],
     processed_datasets = 0
     fetch_failed_events = 0
     collected_symbols = 0
+    # Rebuild the mirror whenever this run's grid carries profile jobs — also
+    # on a resume where a crashed predecessor collected every profile.
+    has_profile_jobs = store._get_conn().execute(
+        "SELECT 1 FROM fundamental_backfill_jobs WHERE run_id = ? AND dataset = 'profile' "
+        "LIMIT 1", [run_id]).fetchone() is not None
 
     for index, symbol in enumerate(targets, start=1):
         claimed = store.claim_pending_jobs(run_id, symbol)
@@ -526,7 +584,7 @@ def _drive(*, run_id: str, store: MarketStore, client: Any, targets: List[str],
                       CIRCUIT_BREAKER_FAILURE_RATIO, index))
             return EXIT_PARTIAL
 
-    if collected_symbols and profiles_mirror_path is not None:
+    if collected_symbols and has_profile_jobs and profiles_mirror_path is not None:
         _refresh_profiles_mirror(store, profiles_mirror_path)
 
     prog = store.run_progress(run_id)
@@ -641,7 +699,22 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                              "(requires --as-of).")
     parser.add_argument("--as-of", default=None,
                         help="YYYY-MM-DD as-of date for historical mode.")
+    parser.add_argument("--targets-file", default=None,
+                        help="JSON {\"symbols\": [...]} frozen target list; "
+                             "replaces universe/historical selection.")
+    parser.add_argument("--datasets", default=None,
+                        help="Comma-separated subset of {} (default: all).".format(
+                            ",".join(DATASETS)))
     args = parser.parse_args(argv)
+
+    if args.datasets is not None:
+        args.datasets = tuple(d.strip() for d in args.datasets.split(",") if d.strip())
+        unknown = [d for d in args.datasets if d not in DATASETS]
+        if not args.datasets or unknown:
+            parser.error("--datasets must be a subset of {}, got {!r}".format(
+                ",".join(DATASETS), ",".join(args.datasets)))
+    if args.targets_file and args.include_historical:
+        parser.error("--targets-file cannot be combined with --include-historical")
 
     if args.include_historical and not args.as_of:
         parser.error("--include-historical requires --as-of YYYY-MM-DD")
@@ -654,7 +727,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         parser.error("--canary must be a positive integer")
     if args.verify_only and (
             args.canary is not None or args.resume or args.dry_run
-            or args.no_lock or args.include_historical or args.as_of):
+            or args.no_lock or args.include_historical or args.as_of
+            or args.targets_file or args.datasets):
         parser.error("--verify-only cannot be combined with collection options")
     return args
 
@@ -675,6 +749,19 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     from src.data.fmp_client import FMPClient
 
+    targets_override = targets_meta = None
+    if args.targets_file:
+        try:
+            targets_override = load_targets_file(args.targets_file)
+        except (OSError, ValueError) as exc:
+            print("backfill: {} (exit {})".format(exc, EXIT_EMPTY_UNIVERSE))
+            sys.exit(EXIT_EMPTY_UNIVERSE)
+        targets_meta = {
+            "targets_file": args.targets_file,
+            "targets_file_sha256": hashlib.sha256(
+                Path(args.targets_file).read_bytes()).hexdigest(),
+        }
+
     lock = NullLock() if args.no_lock else FileLock()
     if not lock.acquire():
         print("backfill: {} is held by another writer — skipping (exit {})".format(
@@ -692,6 +779,8 @@ def main(argv: Optional[List[str]] = None) -> None:
             limit_quarters=args.limit_quarters, dry_run=args.dry_run,
             include_historical=args.include_historical, as_of=args.as_of,
             profiles_mirror_path=DEFAULT_PROFILES_PATH,
+            targets_override=targets_override,
+            datasets=args.datasets or DATASETS, targets_meta=targets_meta,
         )
     finally:
         # run_backfill releases the idempotently acquired lock on normal paths;
