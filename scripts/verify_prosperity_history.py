@@ -104,21 +104,10 @@ def cmd_targets(args) -> int:
     return 0 if union else 2
 
 
-# historical_market_cap is censored at its global start: a first row there
-# says nothing about when the company listed.
-HMCAP_CENSOR_SLACK_DAYS = 7
-
-
-def _hmcap_global_start(store: MarketStore) -> Optional[str]:
-    return store._get_conn().execute(
-        "SELECT MIN(date) FROM historical_market_cap").fetchone()[0]
-
-
 class _SymbolData:
     """Everything the report reads for one symbol, loaded once."""
 
-    def __init__(self, store: MarketStore, symbol: str,
-                 hmcap_start: Optional[str] = None):
+    def __init__(self, store: MarketStore, symbol: str):
         conn = store._get_conn()
         self.tables = {
             t: [dict(r) for r in conn.execute(
@@ -128,17 +117,16 @@ class _SymbolData:
         self.income = self.tables[ASOF_WINDOW_TABLES[0]]
         self.earnings = store.get_fmp_earnings(symbol)
         self.splits = store.get_stock_splits(symbol)
-        self.listed_after, self.listed_by = self._listing_evidence(
-            conn, symbol, hmcap_start)
+        self.listed_after, self.listed_by = self._listing_evidence(conn, symbol)
 
     @staticmethod
-    def _listing_evidence(conn, symbol: str, hmcap_start: Optional[str]):
+    def _listing_evidence(conn, symbol: str):
         """(listed_after, listed_by): known lower / upper bounds on listing.
 
-        ipoDate (profile) is the lower bound unless market-cap history predates
-        it (then the ipoDate is wrong); without a profile, a first market cap
-        clearly after the table's global start stands in. Upper bound: the
-        earliest of the two.
+        Only the profile ipoDate proves "not listed before" — and not when
+        market-cap history predates it (then the ipoDate is wrong). A first
+        market-cap row only proves "listed by then" (vendor coverage can start
+        late), so it is an upper bound, never a lower one.
         """
         row = conn.execute("SELECT payload FROM company_profile WHERE symbol = ?",
                            (symbol,)).fetchone()
@@ -151,13 +139,7 @@ class _SymbolData:
         first = conn.execute("SELECT MIN(date) FROM historical_market_cap WHERE symbol = ?",
                              (symbol,)).fetchone()[0]
         listed_by = min((v for v in (ipo, first) if v), default=None)
-        if ipo:
-            listed_after = ipo if not first or first >= ipo else None
-        elif first and hmcap_start and (date.fromisoformat(first) - date.fromisoformat(
-                hmcap_start)).days > HMCAP_CENSOR_SLACK_DAYS:
-            listed_after = first
-        else:
-            listed_after = None
+        listed_after = ipo if ipo and (not first or first >= ipo) else None
         return listed_after, listed_by
 
     def known_dates(self, rows, as_of: str) -> List[str]:
@@ -204,7 +186,6 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
                  run_ids: List[str]) -> Dict[str, Any]:
     by_qe = targets["by_quarter_end"]
     jobs = _job_status(store, run_ids)
-    hmcap_start = _hmcap_global_start(store)
     cache: Dict[str, _SymbolData] = {}
     quarters, gaps3, gaps_eps = [], [], []
     dup_fiscal: Dict[str, List[str]] = {}
@@ -222,7 +203,7 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
         reasons_eps: Dict[str, int] = {}
         arrivals = []
         for sym in members:
-            data = cache.get(sym) or cache.setdefault(sym, _SymbolData(store, sym, hmcap_start))
+            data = cache.get(sym) or cache.setdefault(sym, _SymbolData(store, sym))
             if three_table_ok(store, sym, qe):
                 ok3 += 1
             else:
@@ -292,12 +273,13 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
             "street_eps_depth": "consecutive mapped quarters announced by qe (fiscal dates "
                                 "<=20d apart are one quarter) reaching the newest quarter "
                                 "all three statements had by qe: depth >= 11, full 13",
-            "sue": "north-star SUE actually computable at the newest quarter: date-paired "
-                   "YoY, sigma over the 8 previous YoY changes (not demeaned), >= 6 obs, "
-                   "sigma != 0; dSUE also at the quarter before",
-            "short_history": "only with listing evidence (profile ipoDate, or first market "
-                             "cap clearly after the table start) later than the window "
-                             "start; otherwise vendor_short / history_depth_unknown (fixable)",
+            "sue": "north-star SUE actually computable at the EPS quarter aligned with "
+                   "the three statements' current quarter: date-paired YoY numerator, "
+                   "sigma = standard deviation of the 8 previous YoY changes, >= 6 obs, "
+                   "finite and != 0; dSUE also at the quarter before",
+            "short_history": "only with a profile ipoDate later than the window start "
+                             "(and not contradicted by earlier market caps); otherwise "
+                             "vendor_short / history_depth_unknown (fixable)",
             "freeze_season": "fiscal quarter ending in (prev_qe+7d, qe+7d]; arrival = the "
                              "day the last of its three statements was known "
                              "(accepted_date, fallback filing_date) minus qe",

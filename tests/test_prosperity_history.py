@@ -383,3 +383,41 @@ def test_report_one_short_table_is_not_short_history(tmp_store, tmp_path, monkey
     doc = json.loads((tmp_path / "o" / "d9-coverage-x.json").read_text())
     assert doc["gaps"]["three_table"][0]["reason"] == "gap_in_series"
     assert doc["summary"]["three_table_fixable_symbols"] == ["OLD"]
+
+
+# ---------------------------------------------------------------------------
+# Second external review repros
+# ---------------------------------------------------------------------------
+
+def _linear_rows(bump=None):
+    rows = _eps_rows(FISCALS)                       # 2022-03 .. 2026-03
+    for i, r in enumerate(rows):
+        r["eps_actual"] = float(i)
+    if bump is not None:
+        rows[bump]["eps_actual"] += 1.0
+    return rows
+
+
+def test_constant_yoy_change_has_zero_sigma():
+    # EPS 0,1,2,...: every YoY change is 4 -> standard deviation 0.
+    d = street_eps_depth(_linear_rows(), "2026-06-30", "2026-03-31")
+    assert d["depth_full"] and not d["sue_ok"] and d["sue_missing"] == "zero_sigma"
+
+
+def test_sue_is_judged_at_the_statement_quarter_not_a_later_eps():
+    rows = _linear_rows(bump=15)                    # 2025-12 bumped: only its YoY is 5
+    at_statements = street_eps_depth(rows, "2026-06-30", current_fiscal="2025-12-31")
+    assert at_statements["latest_fiscal"] == "2026-03-31"
+    assert at_statements["anchor_fiscal"] == "2025-12-31"
+    assert at_statements["sue_missing"] == "zero_sigma" and not at_statements["sue_ok"]
+    ahead = street_eps_depth(rows, "2026-06-30", current_fiscal="2026-03-31")
+    assert ahead["sue_ok"]
+
+
+def test_first_market_cap_is_not_listing_evidence(report_store, tmp_path, monkeypatch):
+    report_store.upsert_historical_market_cap("AAA", [{"date": "2021-04-13", "market_cap": 5e10}])
+    report_store.upsert_historical_market_cap("BBB", [{"date": "2025-01-02", "market_cap": 5e10}])
+    rc, doc, _ = _run_report(report_store, tmp_path, monkeypatch)
+    eps = {(g["quarter_end"], g["symbol"]): g for g in doc["gaps"]["street_eps"]}
+    assert eps[("2025-06-30", "BBB")]["reason"] == "statements_history_depth_unknown"
+    assert doc["summary"]["eps_fixable_symbols"] == ["BBB"]

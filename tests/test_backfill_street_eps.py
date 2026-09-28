@@ -283,3 +283,29 @@ def test_fetch_quarantines_a_conflicting_new_mapping(tmp_store, tmp_path):
     rows = _by_announce(tmp_store, "ABC")
     assert rows["2024-05-15"]["match_method"] == "none"
     assert json.loads(progress.read_text())["conflicts"] == {"ABC": 1}
+
+
+def test_scheduled_row_mapping_is_not_protected(tmp_store, tmp_path):
+    conn = tmp_store._get_conn()
+    with conn:
+        conn.execute("INSERT INTO fmp_earnings (symbol, announce_date, fiscal_date, "
+                     "match_method, eps_actual) VALUES "
+                     "('ABC', '2024-05-15', '2024-01-31', 'estimates_window', NULL)")
+    _seed_estimates(tmp_store, "ABC", ["2024-01-31"])
+    _seed_income(tmp_store, "ABC", ["2024-01-31", "2024-04-30"])
+    client = FakeEarningsClient({"ABC": [_vendor("2024-05-15", 2.0)]})
+    run_street_eps(targets_file=_targets(tmp_path, ["ABC"]), store=tmp_store,
+                   client=client, lock=FakeLock(), progress_path=tmp_path / "p.json")
+    row = _by_announce(tmp_store, "ABC")["2024-05-15"]
+    assert (row["fiscal_date"], row["match_method"], row["eps_actual"]) == \
+        ("2024-04-30", "statement_window", 2.0)
+
+
+def test_near_estimate_must_precede_the_announcement(tmp_store, tmp_path):
+    _seed_income(tmp_store, "ABC", ["2024-03-15"])
+    _seed_estimates(tmp_store, "ABC", ["2024-03-31"])
+    client = FakeEarningsClient({"ABC": [_vendor("2024-03-20", 1.0)]})
+    run_street_eps(targets_file=_targets(tmp_path, ["ABC"]), store=tmp_store,
+                   client=client, lock=FakeLock(), progress_path=tmp_path / "p.json")
+    row = _by_announce(tmp_store, "ABC")["2024-03-20"]
+    assert (row["fiscal_date"], row["match_method"]) == ("2024-03-15", "statement_window")

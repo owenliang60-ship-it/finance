@@ -6,6 +6,8 @@ Read-only over MarketStore. Membership comes from M1's
 nothing here re-implements membership, the three-table window or fiscal
 matching — those are imported from their owners.
 """
+import math
+import statistics
 from datetime import date
 from typing import Any, Dict, List, Optional
 
@@ -48,8 +50,10 @@ def members_by_quarter_end(store, qes: List[str],
 SUE_MIN_QUARTERS = 11
 SUE_FULL_QUARTERS = 13
 DSUE_MIN_QUARTERS = SUE_MIN_QUARTERS + 1
-# SUE formula (north star): (this quarter − same quarter last year) ÷ σ, σ over
-# the 8 previous YoY changes (not demeaned), at least 6 observations, σ ≠ 0.
+# SUE formula (north star, Novy-Marx): (this quarter − same quarter last year)
+# ÷ σ, σ = standard deviation of the 8 previous YoY changes, at least 6
+# observations, σ finite and ≠ 0. "Not demeaned" is the numerator (no drift
+# term); σ is an ordinary standard deviation.
 SUE_SIGMA_WINDOW = 8
 SUE_SIGMA_MIN_OBS = 6
 YEAR_DAYS = 365
@@ -111,7 +115,9 @@ def _sue_at(series: List[tuple], i: int) -> Optional[str]:
              if v is not None]
     if len(prior) < SUE_SIGMA_MIN_OBS:
         return "few_sigma_obs"
-    if sum(v * v for v in prior) == 0:
+    sigma = statistics.stdev(prior)
+    scale = max(1.0, max(abs(v) for v in prior))
+    if not math.isfinite(sigma) or sigma <= 1e-9 * scale:
         return "zero_sigma"
     return None
 
@@ -123,13 +129,16 @@ def street_eps_depth(rows: List[Dict[str, Any]], as_of: str,
     Only announced actuals count; unmapped rows lower `mapped_ratio` but never
     extend the run. Fiscal dates within SAME_QUARTER_DAYS are one quarter
     (reported in `dup_fiscal`; the latest announcement wins). `current_fiscal`
-    is the season the three statement tables had reached by `as_of`: EPS that
-    does not reach it is `behind_current` and nothing is computable. Without
-    an anchor, a newest quarter older than LATEST_FISCAL_MAX_AGE_DAYS is stale.
+    is the season the three statement tables had reached by `as_of`: every
+    factor is judged at that quarter, so depth and SUE are measured from the
+    EPS quarter aligned with it (±SAME_QUARTER_DAYS). EPS announced for later
+    quarters is shown (`latest_fiscal`) but not used; EPS without the anchor
+    quarter is `behind_current` and nothing is computable. Without an anchor,
+    the newest EPS quarter is used unless older than LATEST_FISCAL_MAX_AGE_DAYS.
 
-    `depth_ok` / `depth_full`: ≥11 / ≥13 consecutive quarters. `sue_ok` /
-    `dsue_ok`: the north-star SUE is actually computable at the newest quarter
-    (and the one before it, for ΔSUE).
+    `depth_ok` / `depth_full`: ≥11 / ≥13 consecutive quarters from the anchor.
+    `sue_ok` / `dsue_ok`: the north-star SUE is actually computable at the
+    anchor quarter (and the one before it, for ΔSUE).
     """
     known = _known_eps_rows(rows, as_of)
     mapped = sorted((r for r in known if r.get("fiscal_date")),
@@ -146,20 +155,31 @@ def street_eps_depth(rows: List[Dict[str, Any]], as_of: str,
                max(g, key=lambda r: r["announce_date"])["eps_actual"]) for g in groups]
     heads = [f for f, _ in series]
 
-    consecutive = 1 if heads else 0
-    gap_max = _gap_max_days()
-    for newer, older in zip(heads, heads[1:]):
-        if (_d(newer) - _d(older)).days > gap_max:
-            break
-        consecutive += 1
-
     latest = heads[0] if heads else None
-    behind = bool(current_fiscal) and (
-        latest is None or (_d(current_fiscal) - _d(latest)).days > SAME_QUARTER_DAYS)
+    if current_fiscal:
+        anchor = next((i for i, f in enumerate(heads)
+                       if abs((_d(f) - _d(current_fiscal)).days) <= SAME_QUARTER_DAYS), None)
+    else:
+        anchor = 0 if heads else None
+    behind = bool(current_fiscal) and anchor is None
+
+    consecutive = 0
+    if anchor is not None:
+        consecutive = 1
+        gap_max = _gap_max_days()
+        for newer, older in zip(heads[anchor:], heads[anchor + 1:]):
+            if (_d(newer) - _d(older)).days > gap_max:
+                break
+            consecutive += 1
     stale = behind or (current_fiscal is None and latest is not None
                        and (_d(as_of) - _d(latest)).days > LATEST_FISCAL_MAX_AGE_DAYS)
     run = 0 if stale else consecutive
-    sue_missing = "stale" if stale else (_sue_at(series, 0) if series else "no_rows")
+    if not series:
+        sue_missing = "no_rows"
+    elif stale:
+        sue_missing = "stale"
+    else:
+        sue_missing = _sue_at(series, anchor)
     sue_ok = sue_missing is None
     return {
         "consecutive": consecutive,
@@ -168,9 +188,10 @@ def street_eps_depth(rows: List[Dict[str, Any]], as_of: str,
         "depth_ok": run >= SUE_MIN_QUARTERS,
         "depth_full": run >= SUE_FULL_QUARTERS,
         "sue_ok": sue_ok,
-        "dsue_ok": sue_ok and _sue_at(series, 1) is None,
+        "dsue_ok": sue_ok and _sue_at(series, anchor + 1) is None,
         "sue_missing": sue_missing,
         "latest_fiscal": latest,
+        "anchor_fiscal": heads[anchor] if anchor is not None else None,
         "mapped_ratio": (len(mapped) / len(known)) if known else None,
         "dup_fiscal": dup,
     }
@@ -255,8 +276,9 @@ def eps_gap_reason(depth: Dict[str, Any], statement_fiscals: List[str],
                             listed_after, listed_by)
         return reason if reason in INHERENT_GAP_REASONS else "statements_" + reason
     latest = depth["latest_fiscal"]
+    ref = depth["anchor_fiscal"] or latest
     recent_unmapped = [r for r in unmapped_rows
-                       if latest is None or r["announce_date"][:10] > latest]
+                       if ref is None or r["announce_date"][:10] > ref]
     if latest is None and not unmapped_rows:
         return "no_earnings_rows"
     if depth["stale"]:

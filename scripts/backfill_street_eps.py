@@ -104,14 +104,19 @@ def reconcile_mappings(rows: List[Dict[str, Any]], existing: List[Dict[str, Any]
     one, and `normalize_earnings` only sees estimate fiscal dates — so an
     estimate set missing the true quarter would re-pin an announcement onto
     the previous quarter. Here:
-      - a row already mapped in the store keeps its stored mapping, always;
+      - a row already mapped in the store WITH a reported actual keeps its
+        stored mapping, always; scheduled rows (eps_actual NULL) are re-matched
+        on new evidence and never hold a quarter;
       - a new row matches against estimate ∪ statement fiscal dates (same
         `match_fiscal_date` rule); an estimate date within SAME_QUARTER_DAYS
-        of the winner makes it `estimates_window`, else `statement_window`;
+        of the winner — itself inside the match window (before the
+        announcement, ≤120 days) — makes it `estimates_window`, else
+        `statement_window`;
       - a match within SAME_QUARTER_DAYS of a quarter another row already
         holds is quarantined as `none` (counted, left for review).
     """
-    mapped = {r["announce_date"]: r for r in existing if r.get("fiscal_date")}
+    mapped = {r["announce_date"]: r for r in existing
+              if r.get("fiscal_date") and r.get("eps_actual") is not None}
     used = [_d(r["fiscal_date"]) for r in mapped.values()]
     candidates = sorted(set(estimate_dates) | set(statement_dates))
     conflicts = 0
@@ -127,7 +132,8 @@ def reconcile_mappings(rows: List[Dict[str, Any]], existing: List[Dict[str, Any]
         if fiscal is None:
             continue
         near_estimates = [e for e in estimate_dates
-                          if abs((_d(e) - _d(fiscal)).days) <= SAME_QUARTER_DAYS]
+                          if abs((_d(e) - _d(fiscal)).days) <= SAME_QUARTER_DAYS
+                          and match_fiscal_date(row["announce_date"], [e]) == e]
         method = "statement_window"
         if near_estimates:
             fiscal = min(near_estimates, key=lambda e: abs((_d(e) - _d(fiscal)).days))
