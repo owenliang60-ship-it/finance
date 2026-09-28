@@ -232,3 +232,54 @@ def test_dry_run_refuses_foreign_progress_like_the_real_run(tmp_store, tmp_path,
     rc = run_street_eps(targets_file=_targets(tmp_path, ["ABC", "XYZ"]), store=tmp_store,
                         client=None, lock=FakeLock(), progress_path=progress, dry_run=True)
     assert rc == 2
+
+
+# ---------------------------------------------------------------------------
+# mapping protection across remap → fetch (external review P1)
+# ---------------------------------------------------------------------------
+
+def test_fetch_never_overwrites_a_repaired_mapping(tmp_store, tmp_path):
+    tmp_store.replace_fmp_earnings("ABC", [_none_row("2024-04-20")])
+    _seed_income(tmp_store, "ABC", ["2024-03-31"])
+    assert tmp_store.remap_unmatched_earnings("ABC", ["2024-03-31"]) == 1
+    _seed_estimates(tmp_store, "ABC", ["2023-12-31"])        # true quarter missing
+    client = FakeEarningsClient({"ABC": [_vendor("2024-04-20", 1.0)]})
+    run_street_eps(targets_file=_targets(tmp_path, ["ABC"]), store=tmp_store,
+                   client=client, lock=FakeLock(), progress_path=tmp_path / "p.json")
+    row = _by_announce(tmp_store, "ABC")["2024-04-20"]
+    assert (row["fiscal_date"], row["match_method"]) == ("2024-03-31", "statement_window")
+
+
+def test_fetch_prefers_the_statement_quarter_over_a_stale_estimate(tmp_store, tmp_path):
+    _seed_income(tmp_store, "ABC", ["2023-12-31", "2024-03-31"])
+    _seed_estimates(tmp_store, "ABC", ["2023-12-31"])
+    client = FakeEarningsClient({"ABC": [_vendor("2024-04-20", 1.0)]})
+    run_street_eps(targets_file=_targets(tmp_path, ["ABC"]), store=tmp_store,
+                   client=client, lock=FakeLock(), progress_path=tmp_path / "p.json")
+    row = _by_announce(tmp_store, "ABC")["2024-04-20"]
+    assert (row["fiscal_date"], row["match_method"]) == ("2024-03-31", "statement_window")
+
+
+def test_fetch_uses_estimate_date_for_near_statement_date(tmp_store, tmp_path):
+    _seed_income(tmp_store, "ABC", ["2024-03-30"])
+    _seed_estimates(tmp_store, "ABC", ["2024-03-31"])
+    client = FakeEarningsClient({"ABC": [_vendor("2024-04-20", 1.0)]})
+    run_street_eps(targets_file=_targets(tmp_path, ["ABC"]), store=tmp_store,
+                   client=client, lock=FakeLock(), progress_path=tmp_path / "p.json")
+    row = _by_announce(tmp_store, "ABC")["2024-04-20"]
+    assert (row["fiscal_date"], row["match_method"]) == ("2024-03-31", "estimates_window")
+
+
+def test_fetch_quarantines_a_conflicting_new_mapping(tmp_store, tmp_path):
+    tmp_store.replace_fmp_earnings("ABC", [
+        {"announce_date": "2024-04-20", "fiscal_date": "2024-03-31",
+         "match_method": "estimates_window", "eps_actual": 1.0}])
+    _seed_estimates(tmp_store, "ABC", ["2024-03-31"])
+    progress = tmp_path / "p.json"
+    client = FakeEarningsClient({"ABC": [_vendor("2024-04-20", 1.0),
+                                         _vendor("2024-05-15", 1.1)]})   # restated repost
+    run_street_eps(targets_file=_targets(tmp_path, ["ABC"]), store=tmp_store,
+                   client=client, lock=FakeLock(), progress_path=progress)
+    rows = _by_announce(tmp_store, "ABC")
+    assert rows["2024-05-15"]["match_method"] == "none"
+    assert json.loads(progress.read_text())["conflicts"] == {"ABC": 1}

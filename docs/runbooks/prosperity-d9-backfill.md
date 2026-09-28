@@ -59,29 +59,37 @@ nohup python3 scripts/backfill_extended_fundamentals.py --run-id d9-full-YYYYMMD
 
 中断或熔断：原命令加 `--resume` 续跑。结束后 `--verify-only`。
 
-## 6. 报告 → street EPS 缺口名单（只读）
+## 6. 三表补完后的报告（只读）
 
 ```bash
 python3 scripts/verify_prosperity_history.py report --targets data/prosperity/d9_targets.json \
-    --run-id d9-canary-YYYYMMDD --run-id d9-full-YYYYMMDD \
-    --eps-targets-out data/prosperity/d9_eps_gaps.json
+    --run-id d9-canary-YYYYMMDD --run-id d9-full-YYYYMMDD --date after-statements-$(date +%F)
 ```
 
-## 7. remap（写库，不调 API）
+看三表门槛和 street EPS 缺口的分布。这一步**不写**缺口清单。
+
+## 7. remap（写库，不调 API）→ 冻结 street EPS 缺口清单（只读）
 
 ```bash
 python3 scripts/backfill_street_eps.py --targets-file data/prosperity/d9_targets.json --remap-only
+python3 scripts/verify_prosperity_history.py report --targets data/prosperity/d9_targets.json \
+    --run-id d9-canary-YYYYMMDD --run-id d9-full-YYYYMMDD --date after-remap-$(date +%F) \
+    --eps-targets-out data/prosperity/d9_eps_gaps_r1.json
 ```
 
-只改 `match_method='none'` 且财季为空的已公告行，标 `statement_window`，数值不动。之后重跑第 6 步，看补上多少、缺口名单缩到多少。
+remap 只改 `match_method='none'` 且财季为空的已公告行，标 `statement_window`，数值不动。
+缺口清单一经写出即冻结：`--eps-targets-out` 拒绝覆盖已存在的文件，因为补数进度绑定清单文件的 sha。
 
-## 8. street EPS 补数（写库，按缺口名单，预计 ≤400 次调用）
+## 8. street EPS 补数（写库，按冻结清单，预计 ≤400 次调用）
 
 ```bash
-python3 scripts/backfill_street_eps.py --targets-file data/prosperity/d9_eps_gaps.json
+python3 scripts/backfill_street_eps.py --targets-file data/prosperity/d9_eps_gaps_r1.json
 ```
 
-进度在 `data/prosperity/street_eps_progress_d9_eps_gaps.json`，中断后原命令续跑。然后跑最终报告（第 6 步，`--date` 用当天）。
+进度在 `data/prosperity/street_eps_progress_d9_eps_gaps_r1.json`，中断后原命令续跑；返回空的票每次续跑都会重试。
+已有财季映射永不被覆盖；新映射与已占用财季冲突时置为 `none`，汇总里的 `mapping_conflicts` 要逐只看。
+最终报告：重跑第 6 步的命令（`--date final-...`），**不要**带 `--eps-targets-out`。
+还要补下一轮时，写新文件 `d9_eps_gaps_r2.json`，它会用自己的 progress 文件。
 
 ## 9. 完整性
 

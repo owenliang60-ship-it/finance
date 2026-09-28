@@ -104,10 +104,21 @@ def cmd_targets(args) -> int:
     return 0 if union else 2
 
 
+# historical_market_cap is censored at its global start: a first row there
+# says nothing about when the company listed.
+HMCAP_CENSOR_SLACK_DAYS = 7
+
+
+def _hmcap_global_start(store: MarketStore) -> Optional[str]:
+    return store._get_conn().execute(
+        "SELECT MIN(date) FROM historical_market_cap").fetchone()[0]
+
+
 class _SymbolData:
     """Everything the report reads for one symbol, loaded once."""
 
-    def __init__(self, store: MarketStore, symbol: str):
+    def __init__(self, store: MarketStore, symbol: str,
+                 hmcap_start: Optional[str] = None):
         conn = store._get_conn()
         self.tables = {
             t: [dict(r) for r in conn.execute(
@@ -117,6 +128,37 @@ class _SymbolData:
         self.income = self.tables[ASOF_WINDOW_TABLES[0]]
         self.earnings = store.get_fmp_earnings(symbol)
         self.splits = store.get_stock_splits(symbol)
+        self.listed_after, self.listed_by = self._listing_evidence(
+            conn, symbol, hmcap_start)
+
+    @staticmethod
+    def _listing_evidence(conn, symbol: str, hmcap_start: Optional[str]):
+        """(listed_after, listed_by): known lower / upper bounds on listing.
+
+        ipoDate (profile) is the lower bound unless market-cap history predates
+        it (then the ipoDate is wrong); without a profile, a first market cap
+        clearly after the table's global start stands in. Upper bound: the
+        earliest of the two.
+        """
+        row = conn.execute("SELECT payload FROM company_profile WHERE symbol = ?",
+                           (symbol,)).fetchone()
+        ipo = None
+        if row:
+            try:
+                ipo = (json.loads(row[0]).get("ipoDate") or "")[:10] or None
+            except (TypeError, ValueError):
+                ipo = None
+        first = conn.execute("SELECT MIN(date) FROM historical_market_cap WHERE symbol = ?",
+                             (symbol,)).fetchone()[0]
+        listed_by = min((v for v in (ipo, first) if v), default=None)
+        if ipo:
+            listed_after = ipo if not first or first >= ipo else None
+        elif first and hmcap_start and (date.fromisoformat(first) - date.fromisoformat(
+                hmcap_start)).days > HMCAP_CENSOR_SLACK_DAYS:
+            listed_after = first
+        else:
+            listed_after = None
+        return listed_after, listed_by
 
     def known_dates(self, rows, as_of: str) -> List[str]:
         out = []
@@ -129,6 +171,12 @@ class _SymbolData:
     def any_table_known(self, as_of: str) -> List[str]:
         return sorted({d for rows in self.tables.values()
                        for d in self.known_dates(rows, as_of)})
+
+    def current_fiscal(self, as_of: str) -> Optional[str]:
+        """Newest fiscal quarter all three statements had reached by as_of."""
+        common = set.intersection(*(set(self.known_dates(rows, as_of))
+                                    for rows in self.tables.values()))
+        return max(common) if common else None
 
 
 def _job_status(store: MarketStore, run_ids: List[str]) -> Dict[str, str]:
@@ -156,6 +204,7 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
                  run_ids: List[str]) -> Dict[str, Any]:
     by_qe = targets["by_quarter_end"]
     jobs = _job_status(store, run_ids)
+    hmcap_start = _hmcap_global_start(store)
     cache: Dict[str, _SymbolData] = {}
     quarters, gaps3, gaps_eps = [], [], []
     dup_fiscal: Dict[str, List[str]] = {}
@@ -167,17 +216,18 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
         members = by_qe[qe]
         window_start = (date.fromisoformat(qe) - timedelta(days=window_span)).isoformat()
         eps_start = (date.fromisoformat(qe) - timedelta(days=eps_span)).isoformat()
-        ok3 = sue = full = dsue = 0
+        ok3 = depth_ok = depth_full = sue = dsue = 0
         mapping: Dict[str, int] = {}
         reasons3: Dict[str, int] = {}
         reasons_eps: Dict[str, int] = {}
         arrivals = []
         for sym in members:
-            data = cache.get(sym) or cache.setdefault(sym, _SymbolData(store, sym))
+            data = cache.get(sym) or cache.setdefault(sym, _SymbolData(store, sym, hmcap_start))
             if three_table_ok(store, sym, qe):
                 ok3 += 1
             else:
-                reason = gap_reason(data.any_table_known(qe), jobs.get(sym), window_start)
+                reason = gap_reason(data.any_table_known(qe), jobs.get(sym), window_start,
+                                    data.listed_after, data.listed_by)
                 reasons3[reason] = reasons3.get(reason, 0) + 1
                 gaps3.append({"quarter_end": qe, "symbol": sym, "reason": reason,
                               "inherent": reason in INHERENT_GAP_REASONS})
@@ -187,9 +237,10 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
             for r in known:
                 m = r.get("match_method") or "none"
                 mapping[m] = mapping.get(m, 0) + 1
-            depth = street_eps_depth(data.earnings, qe)
+            depth = street_eps_depth(data.earnings, qe, data.current_fiscal(qe))
+            depth_ok += depth["depth_ok"]
+            depth_full += depth["depth_full"]
             sue += depth["sue_ok"]
-            full += depth["sue_full"]
             dsue += depth["dsue_ok"]
             if depth["dup_fiscal"]:
                 dup_fiscal[sym] = sorted(set(dup_fiscal.get(sym, []) + depth["dup_fiscal"]))
@@ -198,12 +249,14 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
             if not depth["sue_ok"]:
                 unmapped = [r for r in known if not r.get("fiscal_date")]
                 reason = eps_gap_reason(depth, data.known_dates(data.income, qe), unmapped,
-                                        jobs.get(sym), eps_start)
+                                        jobs.get(sym), eps_start,
+                                        data.listed_after, data.listed_by)
                 reasons_eps[reason] = reasons_eps.get(reason, 0) + 1
                 gaps_eps.append({"quarter_end": qe, "symbol": sym, "reason": reason,
                                  "consecutive": depth["consecutive"],
+                                 "sue_missing": depth["sue_missing"],
                                  "inherent": reason in INHERENT_GAP_REASONS})
-            arrivals.append(arrival_day(data.income, qe))
+            arrivals.append(arrival_day(data.tables, qe))
 
         n = len(members)
         pct3 = (ok3 / n) if n else 0.0
@@ -211,7 +264,7 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
             "quarter_end": qe, "members": n,
             "three_table_ok": ok3, "three_table_pct": round(pct3, 4),
             "three_table_pass": bool(n) and pct3 >= THREE_TABLE_GATE,
-            "sue_ok": sue, "sue_full": full, "dsue_ok": dsue,
+            "depth_ok": depth_ok, "depth_full": depth_full, "sue_ok": sue, "dsue_ok": dsue,
             "sue_ok_pct": round(sue / n, 4) if n else None,
             "mapping": mapping, "three_table_gap_reasons": reasons3,
             "street_eps_gap_reasons": reasons_eps,
@@ -236,11 +289,18 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
         "definitions": {
             "three_table_gate": "has_asof_window (8 contiguous quarters, all three tables, "
                                 "known by accepted_date/filing_date) >= 95% of members",
-            "sue": "consecutive mapped quarters announced by qe (fiscal dates <=20d apart "
-                   "are one quarter; newest must be <=211d before qe): SUE >= 11, "
-                   "full 13, dSUE >= 12",
-            "freeze_season": "fiscal quarter ending in (qe-85d, qe+7d], arrival = income "
-                             "accepted_date (fallback filing_date) minus qe",
+            "street_eps_depth": "consecutive mapped quarters announced by qe (fiscal dates "
+                                "<=20d apart are one quarter) reaching the newest quarter "
+                                "all three statements had by qe: depth >= 11, full 13",
+            "sue": "north-star SUE actually computable at the newest quarter: date-paired "
+                   "YoY, sigma over the 8 previous YoY changes (not demeaned), >= 6 obs, "
+                   "sigma != 0; dSUE also at the quarter before",
+            "short_history": "only with listing evidence (profile ipoDate, or first market "
+                             "cap clearly after the table start) later than the window "
+                             "start; otherwise vendor_short / history_depth_unknown (fixable)",
+            "freeze_season": "fiscal quarter ending in (prev_qe+7d, qe+7d]; arrival = the "
+                             "day the last of its three statements was known "
+                             "(accepted_date, fallback filing_date) minus qe",
         },
     }
 
@@ -251,20 +311,23 @@ def _render_md(doc: Dict[str, Any]) -> str:
                                                   ", ".join(doc["run_ids"]) or "—"), "",
              "street EPS 数值门槛：**待 Boss 定**（本报告只给数字）。", "",
              "## 逐季末", "",
-             "| 季末 | 成员 | 三表合格 | 门槛 | SUE 可算 | 完整 13 季 | ΔSUE | 第60天 | 第80天 | 首次≥95% |",
-             "|---|---|---|---|---|---|---|---|---|---|"]
+             "| 季末 | 成员 | 三表合格 | 门槛 | EPS 深度≥11 | 深度≥13 | SUE 可算 | ΔSUE 可算 "
+             "| 三表到达 第60天 | 第80天 | 首次≥95% |",
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
     for q in doc["quarter_ends"]:
         n = q["members"] or 1
         f = q["freeze"]
-        lines.append("| {} | {} | {:.1%} | {} | {:.1%} | {:.1%} | {:.1%} | {} | {} | {} |".format(
+        lines.append("| {} | {} | {:.1%} | {} | {:.1%} | {:.1%} | {:.1%} | {:.1%} "
+                     "| {} | {} | {} |".format(
             q["quarter_end"], q["members"], q["three_table_pct"],
             "PASS" if q["three_table_pass"] else "FAIL",
-            q["sue_ok"] / n, q["sue_full"] / n, q["dsue_ok"] / n,
+            q["depth_ok"] / n, q["depth_full"] / n, q["sue_ok"] / n, q["dsue_ok"] / n,
             "—" if f["cov_d60"] is None else "{:.1%}".format(f["cov_d60"]),
             "—" if f["cov_d80"] is None else "{:.1%}".format(f["cov_d80"]),
             f["first_day_ge95"] if f["first_day_ge95"] is not None else "未达"))
     lines += ["", "## 缺口原因（逐季末计数）", "",
-              "`short_history` = 上市历史本来不足；其余都是采集不足 / 映射缺失 / 失败，要回 P2 补。", "",
+              "`short_history`（有上市证据的历史不足）与 `sue_degenerate`（EPS 序列本身使 σ 无定义）"
+              "不可补；其余都是采集不足 / 映射缺失 / 失败 / 历史深度待查，要回 P2 补。", "",
               "| 季末 | 三表缺口 | street EPS 缺口 | 映射来源 |", "|---|---|---|---|"]
     for q in doc["quarter_ends"]:
         fmt = lambda d: ", ".join("{} {}".format(k, v) for k, v in sorted(d.items())) or "—"
@@ -284,6 +347,12 @@ def _render_md(doc: Dict[str, Any]) -> str:
 
 
 def cmd_report(args) -> int:
+    # A street EPS progress file is bound to its targets file's sha; rewriting
+    # a frozen list would strand that progress.
+    if args.eps_targets_out and Path(args.eps_targets_out).exists():
+        print("report: {} already exists — frozen target lists are never "
+              "overwritten; pick a new path (exit 2)".format(args.eps_targets_out))
+        return 2
     targets = json.loads(Path(args.targets).read_text(encoding="utf-8"))
     store = _open_store()
     doc = build_report(store, targets, args.run_id or [])
@@ -322,7 +391,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     r.add_argument("--out-dir", default=str(DEFAULT_REPORT_DIR))
     r.add_argument("--date", default=None, help="report file date (default today)")
     r.add_argument("--eps-targets-out", default=None,
-                   help="also write fixable street EPS gaps as a targets file")
+                   help="also write fixable street EPS gaps as a NEW targets file "
+                        "(refuses to overwrite)")
     r.set_defaults(func=cmd_report)
     return parser.parse_args(argv)
 

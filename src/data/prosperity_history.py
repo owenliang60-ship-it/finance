@@ -43,26 +43,36 @@ def members_by_quarter_end(store, qes: List[str],
 # Three tables + street EPS depth (P3 acceptance)
 # ---------------------------------------------------------------------------
 
-# SUE needs 11 consecutive reported quarters at minimum, the full window is
-# 13, and ΔSUE needs one more quarter than SUE (north star layer 2).
+# Depth: SUE needs 11 consecutive reported quarters at minimum, the full
+# window is 13, ΔSUE one more (north star layer 2 / data layer P3).
 SUE_MIN_QUARTERS = 11
 SUE_FULL_QUARTERS = 13
 DSUE_MIN_QUARTERS = SUE_MIN_QUARTERS + 1
+# SUE formula (north star): (this quarter − same quarter last year) ÷ σ, σ over
+# the 8 previous YoY changes (not demeaned), at least 6 observations, σ ≠ 0.
+SUE_SIGMA_WINDOW = 8
+SUE_SIGMA_MIN_OBS = 6
+YEAR_DAYS = 365
 SPLIT_MATCH_TOLERANCE = 0.15
 # Two fiscal dates this close are one quarter (52/53-week filers: the estimate
 # and the income statement can date the same quarter a few days apart).
 SAME_QUARTER_DAYS = 20
-# The newest mapped quarter must be the season just reported, or at most one
-# season behind a late filer; anything older means the recent run is broken.
+# Fallback when no statement anchor exists: the newest mapped quarter must be
+# at most one season behind a late filer.
 LATEST_FISCAL_MAX_AGE_DAYS = 91 + 120
 
-# "The company simply has no longer history" vs everything that is ours to fix.
-INHERENT_GAP_REASONS = {"short_history"}
+# Reasons that more collection cannot fix: the company is younger than the
+# window (with listing evidence), or the EPS series itself makes σ undefined.
+INHERENT_GAP_REASONS = {"short_history", "sue_degenerate"}
 
 
 def _gap_max_days() -> int:
     from config.settings import FUNDAMENTAL_QUARTER_GAP_MAX_DAYS
     return FUNDAMENTAL_QUARTER_GAP_MAX_DAYS
+
+
+def _d(value: str) -> date:
+    return date.fromisoformat(value[:10])
 
 
 def three_table_ok(store, symbol: str, as_of: str) -> bool:
@@ -77,46 +87,90 @@ def _known_eps_rows(rows, as_of: str):
             and r.get("eps_actual") is not None]
 
 
-def street_eps_depth(rows: List[Dict[str, Any]], as_of: str) -> Dict[str, Any]:
-    """Consecutive mapped street-EPS quarters announced by `as_of`.
+def _sue_at(series: List[tuple], i: int) -> Optional[str]:
+    """None when SUE is computable at series[i], else why not.
 
-    Only rows with an announced actual count; unmapped rows (no fiscal date)
-    lower `mapped_ratio` but never extend the run. Fiscal dates within
-    SAME_QUARTER_DAYS of each other are one quarter (reported as duplicates).
-    Counted from the newest fiscal quarter back while adjacent quarters are ≤
-    the quarter-gap cap; if the newest one is older than
-    LATEST_FISCAL_MAX_AGE_DAYS the run is `stale` and nothing is computable.
+    `series`: (fiscal_date, eps) newest first, one entry per quarter. YoY pairs
+    are matched by date (365 ± SAME_QUARTER_DAYS), never by position.
+    """
+    def yoy(k):
+        if k >= len(series):
+            return None
+        day, eps = _d(series[k][0]), series[k][1]
+        for j in range(k + 1, len(series)):
+            gap = (day - _d(series[j][0])).days
+            if abs(gap - YEAR_DAYS) <= SAME_QUARTER_DAYS:
+                return eps - series[j][1]
+            if gap > YEAR_DAYS + SAME_QUARTER_DAYS:
+                break
+        return None
+
+    if yoy(i) is None:
+        return "no_yoy_pair"
+    prior = [v for v in (yoy(k) for k in range(i + 1, i + 1 + SUE_SIGMA_WINDOW))
+             if v is not None]
+    if len(prior) < SUE_SIGMA_MIN_OBS:
+        return "few_sigma_obs"
+    if sum(v * v for v in prior) == 0:
+        return "zero_sigma"
+    return None
+
+
+def street_eps_depth(rows: List[Dict[str, Any]], as_of: str,
+                     current_fiscal: Optional[str] = None) -> Dict[str, Any]:
+    """Street EPS depth and SUE computability at `as_of`.
+
+    Only announced actuals count; unmapped rows lower `mapped_ratio` but never
+    extend the run. Fiscal dates within SAME_QUARTER_DAYS are one quarter
+    (reported in `dup_fiscal`; the latest announcement wins). `current_fiscal`
+    is the season the three statement tables had reached by `as_of`: EPS that
+    does not reach it is `behind_current` and nothing is computable. Without
+    an anchor, a newest quarter older than LATEST_FISCAL_MAX_AGE_DAYS is stale.
+
+    `depth_ok` / `depth_full`: ≥11 / ≥13 consecutive quarters. `sue_ok` /
+    `dsue_ok`: the north-star SUE is actually computable at the newest quarter
+    (and the one before it, for ΔSUE).
     """
     known = _known_eps_rows(rows, as_of)
-    mapped = [r for r in known if r.get("fiscal_date")]
-    quarters: List[List[str]] = []          # newest first; each = same-quarter dates
-    for f in sorted({r["fiscal_date"][:10] for r in mapped}, reverse=True):
-        if quarters and (date.fromisoformat(quarters[-1][-1])
-                         - date.fromisoformat(f)).days <= SAME_QUARTER_DAYS:
-            quarters[-1].append(f)
+    mapped = sorted((r for r in known if r.get("fiscal_date")),
+                    key=lambda r: (r["fiscal_date"][:10], r["announce_date"]))
+    groups: List[List[Dict[str, Any]]] = []          # newest quarter first
+    for r in reversed(mapped):
+        if groups and (_d(groups[-1][-1]["fiscal_date"])
+                       - _d(r["fiscal_date"])).days <= SAME_QUARTER_DAYS:
+            groups[-1].append(r)
         else:
-            quarters.append([f])
-    per_date: Dict[str, int] = {}
-    for r in mapped:
-        per_date[r["fiscal_date"][:10]] = per_date.get(r["fiscal_date"][:10], 0) + 1
-    dup = sorted(q[0] for q in quarters if len(q) > 1 or per_date[q[0]] > 1)
-    heads = [q[0] for q in quarters]
+            groups.append([r])
+    dup = sorted(g[0]["fiscal_date"][:10] for g in groups if len(g) > 1)
+    series = [(g[0]["fiscal_date"][:10],
+               max(g, key=lambda r: r["announce_date"])["eps_actual"]) for g in groups]
+    heads = [f for f, _ in series]
+
     consecutive = 1 if heads else 0
     gap_max = _gap_max_days()
     for newer, older in zip(heads, heads[1:]):
-        if (date.fromisoformat(newer) - date.fromisoformat(older)).days > gap_max:
+        if (_d(newer) - _d(older)).days > gap_max:
             break
         consecutive += 1
-    stale = bool(heads) and (date.fromisoformat(as_of[:10])
-                             - date.fromisoformat(heads[0])).days > LATEST_FISCAL_MAX_AGE_DAYS
-    usable = 0 if stale else consecutive
+
+    latest = heads[0] if heads else None
+    behind = bool(current_fiscal) and (
+        latest is None or (_d(current_fiscal) - _d(latest)).days > SAME_QUARTER_DAYS)
+    stale = behind or (current_fiscal is None and latest is not None
+                       and (_d(as_of) - _d(latest)).days > LATEST_FISCAL_MAX_AGE_DAYS)
+    run = 0 if stale else consecutive
+    sue_missing = "stale" if stale else (_sue_at(series, 0) if series else "no_rows")
+    sue_ok = sue_missing is None
     return {
         "consecutive": consecutive,
         "stale": stale,
-        "sue_ok": usable >= SUE_MIN_QUARTERS,
-        "sue_full": usable >= SUE_FULL_QUARTERS,
-        "dsue_ok": usable >= DSUE_MIN_QUARTERS,
-        "latest_fiscal": heads[0] if heads else None,
+        "behind_current": behind,
+        "depth_ok": run >= SUE_MIN_QUARTERS,
+        "depth_full": run >= SUE_FULL_QUARTERS,
+        "sue_ok": sue_ok,
+        "dsue_ok": sue_ok and _sue_at(series, 1) is None,
+        "sue_missing": sue_missing,
+        "latest_fiscal": latest,
         "mapped_ratio": (len(mapped) / len(known)) if known else None,
         "dup_fiscal": dup,
     }
@@ -154,15 +208,22 @@ def split_suspects(rows: List[Dict[str, Any]], splits: List[Dict[str, Any]],
 
 
 def gap_reason(statement_dates: List[str], job_status: Optional[str],
-               window_start: str) -> str:
+               window_start: str, listed_after: Optional[str] = None,
+               listed_by: Optional[str] = None) -> str:
     """Why a symbol lacks a window at some as-of date.
 
     `statement_dates`: fiscal dates on hand in ANY statement table, known by
     the as-of (the union: one short table must not make an old company look
     young); `job_status`: the worst backfill job status across the three
     datasets (None = never in the manifest); `window_start`: earliest fiscal
-    date the window needs. Only a completed collection whose earliest filing
-    is after `window_start` is `short_history`.
+    date the window needs.
+
+    A completed collection only proves we stored what the vendor returned, so
+    a history that starts after `window_start` is `short_history` (inherent)
+    only with listing evidence: `listed_after` (the company is known to have
+    listed after this date) past the window start. Evidence that it listed
+    earlier (`listed_by`) makes it `vendor_short`; no evidence at all is
+    `history_depth_unknown`. Both stay on the fixable side.
     """
     if job_status is None:
         return "not_attempted"
@@ -170,44 +231,61 @@ def gap_reason(statement_dates: List[str], job_status: Optional[str],
         return "fetch_failed"
     if job_status == "provider_empty" or not statement_dates:
         return "provider_empty"
-    if min(statement_dates) > window_start:
+    if min(statement_dates) <= window_start:
+        return "gap_in_series"
+    if listed_after and listed_after > window_start:
         return "short_history"
-    return "gap_in_series"
+    if listed_by and listed_by <= window_start:
+        return "vendor_short"
+    return "history_depth_unknown"
 
 
 def eps_gap_reason(depth: Dict[str, Any], statement_fiscals: List[str],
                    unmapped_rows: List[Dict[str, Any]], job_status: Optional[str],
-                   window_start: str) -> str:
-    """Why a symbol falls short of the SUE minimum at some as-of date.
+                   window_start: str, listed_after: Optional[str] = None,
+                   listed_by: Optional[str] = None) -> str:
+    """Why SUE is not computable for a symbol at some as-of date.
 
-    `statement_fiscals` / `job_status`: known statement fiscal dates and the
-    worst statement job status, as for `gap_reason`; `window_start`: earliest
-    fiscal date the SUE window needs. Filings that are shorter than the window
-    make the company too young (`short_history`) only when the statement
-    collection itself completed; otherwise the statement gap is ours to fix.
+    `statement_fiscals` / `job_status` / listing evidence: as for `gap_reason`,
+    over the income statement; `window_start`: earliest fiscal date the SUE
+    window needs; `unmapped_rows`: announced actuals without a fiscal date.
     """
     if len(statement_fiscals) < SUE_MIN_QUARTERS:
-        reason = gap_reason(statement_fiscals, job_status, window_start)
-        return "short_history" if reason == "short_history" else "statements_" + reason
-    if depth["latest_fiscal"] is None and not unmapped_rows:
+        reason = gap_reason(statement_fiscals, job_status, window_start,
+                            listed_after, listed_by)
+        return reason if reason in INHERENT_GAP_REASONS else "statements_" + reason
+    latest = depth["latest_fiscal"]
+    recent_unmapped = [r for r in unmapped_rows
+                       if latest is None or r["announce_date"][:10] > latest]
+    if latest is None and not unmapped_rows:
         return "no_earnings_rows"
-    if unmapped_rows:
-        return "unmapped"
-    return "missing_quarters"
+    if depth["stale"]:
+        if recent_unmapped:
+            return "unmapped"
+        return "missing_current_quarter" if depth["behind_current"] else "stale_series"
+    if not depth["depth_ok"]:
+        return "unmapped" if unmapped_rows else "missing_quarters"
+    return "sue_degenerate"
 
 
 # ---------------------------------------------------------------------------
 # Freeze-parameter recheck (north star: day 60 / 95% / day 80)
 # ---------------------------------------------------------------------------
 
-# A fiscal quarter "belongs" to calendar quarter end qe when it ends in
-# (qe − 85d, qe + 7d]: off-calendar and 52/53-week years land on the right
-# season without stealing the previous one (qe − 90d is the prior quarter end).
-SEASON_BEFORE_DAYS = 85
-SEASON_AFTER_DAYS = 7
+# Calendar quarter end qe owns fiscal quarters ending in (prev_qe + 7d, qe + 7d]
+# — a partition, so no fiscal quarter lands in two seasons, and 52/53-week
+# years ending a few days after the calendar quarter stay in it.
+SEASON_SHIFT_DAYS = 7
 FREEZE_DAYS = (60, 80)
 FREEZE_COVERAGE = 0.95
 FREEZE_SCAN_MAX_DAYS = 120
+
+
+def _prev_quarter_end(qe: str) -> date:
+    end = _d(qe)
+    month = end.month - 3 if end.month > 3 else 12
+    year = end.year if end.month > 3 else end.year - 1
+    return date(year, month, QUARTER_END_MONTH_DAYS[month])
 
 
 def _known_on(row: Dict[str, Any]) -> Optional[str]:
@@ -216,15 +294,23 @@ def _known_on(row: Dict[str, Any]) -> Optional[str]:
     return accepted or (row.get("filing_date") or "")[:10] or None
 
 
-def arrival_day(statement_rows: List[Dict[str, Any]], qe: str) -> Optional[int]:
-    """Days after `qe` when this season's quarter first became known; None = never."""
+def arrival_day(tables: Dict[str, List[Dict[str, Any]]], qe: str) -> Optional[int]:
+    """Days after `qe` when this season's quarter was known in ALL three tables.
+
+    `tables`: statement rows per table. A fiscal quarter arrives when the last
+    of its three statements became known; None = never (within the data).
+    """
     from datetime import timedelta
-    end = date.fromisoformat(qe)
-    lo = (end - timedelta(days=SEASON_BEFORE_DAYS)).isoformat()
-    hi = (end + timedelta(days=SEASON_AFTER_DAYS)).isoformat()
-    days = [(date.fromisoformat(k) - end).days
-            for r in statement_rows
-            if lo < r["date"][:10] <= hi and (k := _known_on(r))]
+    lo = (_prev_quarter_end(qe) + timedelta(days=SEASON_SHIFT_DAYS)).isoformat()
+    hi = (_d(qe) + timedelta(days=SEASON_SHIFT_DAYS)).isoformat()
+    known: List[Dict[str, str]] = []
+    for rows in tables.values():
+        known.append({r["date"][:10]: k for r in rows
+                      if lo < r["date"][:10] <= hi and (k := _known_on(r))})
+    if not known:
+        return None
+    common = set.intersection(*(set(k) for k in known))
+    days = [(_d(max(k[f] for k in known)) - _d(qe)).days for f in common]
     return min(days) if days else None
 
 

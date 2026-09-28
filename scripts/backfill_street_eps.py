@@ -3,7 +3,8 @@
 A thin wrapper over the weekly forward chain, reused verbatim:
 `FMPClient.get_earnings` → `normalize_earnings` (fiscal match against the
 estimates already in `fmp_estimates`; no new estimate pulls) →
-`replace_fmp_earnings`, then `remap_unmatched_earnings` fills the remaining
+`replace_fmp_earnings`, with `reconcile_mappings` in between so a stored
+fiscal mapping is never overwritten; then `remap_unmatched_earnings` fills the remaining
 `match_method='none'` rows from the income statement's fiscal dates
 (`statement_window`).
 
@@ -28,6 +29,7 @@ import json
 import logging
 import sys
 from pathlib import Path
+from datetime import date
 from typing import Any, Dict, List, Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -43,8 +45,9 @@ from scripts.backfill_extended_fundamentals import (  # noqa: E402
     NullLock,
     load_targets_file,
 )
-from src.data.fmp_forward_ingestion import normalize_earnings  # noqa: E402
+from src.data.fmp_forward_ingestion import match_fiscal_date, normalize_earnings  # noqa: E402
 from src.data.market_store import MarketStore  # noqa: E402
+from src.data.prosperity_history import SAME_QUARTER_DAYS  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +57,10 @@ BREAKER_MIN_SYMBOLS = 50
 BREAKER_FAILURE_RATIO = 0.2
 PROGRESS_LOG_EVERY = 25
 DEFAULT_PROGRESS_DIR = PROJECT_ROOT / "data" / "prosperity"
+
+
+def _d(value: str) -> date:
+    return date.fromisoformat(value[:10])
 
 
 def _fiscal_dates(store: MarketStore, table: str, sql: str, symbol: str) -> List[str]:
@@ -89,17 +96,64 @@ def _save_progress(path: Path, doc: Dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def reconcile_mappings(rows: List[Dict[str, Any]], existing: List[Dict[str, Any]],
+                       estimate_dates: List[str], statement_dates: List[str]) -> int:
+    """Fix each fetched row's fiscal mapping in place; returns conflicts quarantined.
+
+    `replace_fmp_earnings` lets any non-null new mapping overwrite a stored
+    one, and `normalize_earnings` only sees estimate fiscal dates — so an
+    estimate set missing the true quarter would re-pin an announcement onto
+    the previous quarter. Here:
+      - a row already mapped in the store keeps its stored mapping, always;
+      - a new row matches against estimate ∪ statement fiscal dates (same
+        `match_fiscal_date` rule); an estimate date within SAME_QUARTER_DAYS
+        of the winner makes it `estimates_window`, else `statement_window`;
+      - a match within SAME_QUARTER_DAYS of a quarter another row already
+        holds is quarantined as `none` (counted, left for review).
+    """
+    mapped = {r["announce_date"]: r for r in existing if r.get("fiscal_date")}
+    used = [_d(r["fiscal_date"]) for r in mapped.values()]
+    candidates = sorted(set(estimate_dates) | set(statement_dates))
+    conflicts = 0
+    for row in sorted(rows, key=lambda r: r["announce_date"]):
+        stored = mapped.get(row["announce_date"])
+        if stored:
+            row["fiscal_date"], row["match_method"] = stored["fiscal_date"], stored["match_method"]
+            continue
+        row["fiscal_date"], row["match_method"] = None, "none"
+        if row.get("eps_actual") is None:
+            continue
+        fiscal = match_fiscal_date(row["announce_date"], candidates)
+        if fiscal is None:
+            continue
+        near_estimates = [e for e in estimate_dates
+                          if abs((_d(e) - _d(fiscal)).days) <= SAME_QUARTER_DAYS]
+        method = "statement_window"
+        if near_estimates:
+            fiscal = min(near_estimates, key=lambda e: abs((_d(e) - _d(fiscal)).days))
+            method = "estimates_window"
+        if any(abs((_d(fiscal) - u).days) <= SAME_QUARTER_DAYS for u in used):
+            conflicts += 1
+            continue
+        row["fiscal_date"], row["match_method"] = fiscal, method
+        used.append(_d(fiscal))
+    return conflicts
+
+
 def _fetch_one(store: MarketStore, client: Any, symbol: str) -> Dict[str, Any]:
     raw = client.get_earnings(symbol, limit=EARNINGS_LIMIT)
     if not raw:
-        return {"status": "empty", "rows": 0}
-    rows, _ = normalize_earnings(symbol, raw, estimate_fiscal_dates(store, symbol))
+        return {"status": "empty", "rows": 0, "conflicts": 0}
+    estimates = estimate_fiscal_dates(store, symbol)
+    rows, _ = normalize_earnings(symbol, raw, estimates)
     if not rows:
         # Non-empty payload with zero valid rows is an endpoint failure, exactly
         # as update_fmp_forward treats it.
         raise ValueError("earnings payload had no valid rows")
+    conflicts = reconcile_mappings(rows, store.get_fmp_earnings(symbol), estimates,
+                                   statement_fiscal_dates(store, symbol))
     store.replace_fmp_earnings(symbol, rows)
-    return {"status": "done", "rows": len(rows)}
+    return {"status": "done", "rows": len(rows), "conflicts": conflicts}
 
 
 def run_street_eps(*, targets_file, store: MarketStore, client: Any, lock: Any,
@@ -160,6 +214,8 @@ def run_street_eps(*, targets_file, store: MarketStore, client: Any, lock: Any,
                     progress["empty"].remove(symbol)
                 progress["failed"].pop(symbol, None)
                 rows += result["rows"]
+                if result["conflicts"]:
+                    progress.setdefault("conflicts", {})[symbol] = result["conflicts"]
             except KeyboardInterrupt:
                 raise
             except Exception as exc:
@@ -176,9 +232,10 @@ def run_street_eps(*, targets_file, store: MarketStore, client: Any, lock: Any,
                 return EXIT_PARTIAL
 
         print("street_eps: tried={} failed={} rows={} remapped={} done={} empty={} "
-              "failed_total={}".format(tried, failed, rows, remapped,
-                                       len(progress["done"]), len(progress["empty"]),
-                                       len(progress["failed"])))
+              "failed_total={} mapping_conflicts={}".format(
+                  tried, failed, rows, remapped, len(progress["done"]),
+                  len(progress["empty"]), len(progress["failed"]),
+                  sum(progress.get("conflicts", {}).values())))
         return EXIT_OK if not progress["failed"] else EXIT_PARTIAL
     finally:
         lock.release()
