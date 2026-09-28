@@ -1,0 +1,6850 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "as_of": "2026-09-27",
+  "data_cutoff_utc": "2026-09-28T00:00:00+00:00",
+  "lookback_days": 365,
+  "comparison_start": "2025-09-27",
+  "comparison_end": "2026-09-26",
+  "percentile_method": "100 * count(previous 365 daily breadth values <= today) / 365; excludes today; ties included",
+  "parameters": {
+    "ema_period": 20,
+    "pmarp_lookback": 150,
+    "seed_days": 365,
+    "price_start": "2024-09-27",
+    "strong_threshold": 98,
+    "weak_threshold": 2
+  },
+  "universe": "historical daily Crypto USDT perpetuals; BTC included; no turnover filter",
+  "universe_evidence": {
+    "method": "effective-dated reconstruction; current exchangeInfo + saved catalogs + official archive audit",
+    "limitation": "Not original point-in-time exchangeInfo vintages; archived prices/metadata may be revised.",
+    "prior_catalogs": [
+      "catalog_2026-09-06.json",
+      "catalog_2026-09-18.json",
+      "catalog_2026-09-20.json",
+      "catalog_2026-09-21.json",
+      "catalog_2026-09-22.json",
+      "catalog_2026-09-23.json",
+      "catalog_2026-09-24.json",
+      "catalog_2026-09-25.json",
+      "catalog_2026-09-26.json",
+      "catalog_2026-09-27.json",
+      "catalog_2026-09-27.json"
+    ],
+    "metadata_count": 658,
+    "unknown_archive_symbols": [
+      "1000BTTCUSDT",
+      "AKROUSDT",
+      "ANCUSDT",
+      "ANTUSDT",
+      "AUDIOUSDT",
+      "BLUEBIRDUSDT",
+      "BTSUSDT",
+      "BTTUSDT",
+      "BZRXUSDT",
+      "COCOSUSDT",
+      "DODOUSDT",
+      "DOTECOUSDT",
+      "EOSUSDT",
+      "FOOTBALLUSDT",
+      "FRONTUSDT",
+      "GALUSDT",
+      "HNTUSDT",
+      "KEEPUSDT",
+      "LENDUSDT",
+      "LUNAUSDT",
+      "MATICUSDT",
+      "MBLUSDT",
+      "NUUSDT",
+      "RNDRUSDT",
+      "SRMUSDT",
+      "TOMOUSDT",
+      "YFIIUSDT"
+    ],
+    "unknown_active_symbols": [],
+    "supplemental_records": [
+      {
+        "symbol": "AERGOUSDT",
+        "underlyingType": "COIN",
+        "quoteAsset": "USDT",
+        "contractType": "PERPETUAL",
+        "status": "SETTLING",
+        "onboardDate": 1744801200000,
+        "deliveryDate": 1784874600000,
+        "onboard_precision": "minute",
+        "sources": {
+          "launch": "https://www.binance.com/en/support/announcement/detail/82f730b7ef444a38b323ab7a2e56b757",
+          "retirement": "https://www.binance.com/en/support/announcement/detail/f0e3fc835b9545759e4279c64b200389"
+        }
+      },
+      {
+        "symbol": "BDXNUSDT",
+        "underlyingType": "COIN",
+        "quoteAsset": "USDT",
+        "contractType": "PERPETUAL",
+        "status": "SETTLING",
+        "onboardDate": 1748946600000,
+        "deliveryDate": 1773738000000,
+        "onboard_precision": "minute",
+        "sources": {
+          "launch": "https://www.binance.com/en/support/announcement/detail/2dae21629d644e7695f9570769bbdd44",
+          "retirement": "https://www.binance.com/en/support/announcement/detail/f6ebc17e4dbd451b873d9ef25c801237"
+        }
+      },
+      {
+        "symbol": "SXPUSDT",
+        "underlyingType": "COIN",
+        "quoteAsset": "USDT",
+        "contractType": "PERPETUAL",
+        "status": "SETTLING",
+        "onboardDate": 1595289600000,
+        "deliveryDate": 1764925200000,
+        "onboard_precision": "date",
+        "sources": {
+          "launch": "https://www.binance.com/en/blog/all/421499824684900793",
+          "retirement": "https://www.binance.com/en-TR/support/announcement/detail/746056ce732d43dda12c1e5ae1b7a059"
+        }
+      }
+    ],
+    "archive_retirements": {
+      "BTCSTUSDT": {
+        "deliveryDate": 1615514400000,
+        "source": "https://www.binance.com/en/support/announcement/detail/2c08ba9e1a1b409fb6a4a2cb2f5ed58b",
+        "note": "USDT futures terminated before report window; later spot reopening is not futures evidence."
+      }
+    }
+  },
+  "constituents": {
+    "0GUSDT": {
+      "onboardDate": 1758123900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "1000000BOBUSDT": {
+      "onboardDate": 1749112200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 30.666666666666664
+    },
+    "1000000MOGUSDT": {
+      "onboardDate": 1730982600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "1000BONKUSDT": {
+      "onboardDate": 1700661600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "1000CATUSDT": {
+      "onboardDate": 1729513800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.66666666666667
+    },
+    "1000CHEEMSUSDT": {
+      "onboardDate": 1732535100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 78.0
+    },
+    "1000FLOKIUSDT": {
+      "onboardDate": 1683331200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 87.33333333333333
+    },
+    "1000LUNCUSDT": {
+      "onboardDate": 1662620400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 84.0
+    },
+    "1000PEPEUSDT": {
+      "onboardDate": 1683244800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "1000RATSUSDT": {
+      "onboardDate": 1702648800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 54.0
+    },
+    "1000SATSUSDT": {
+      "onboardDate": 1702389600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "1000SHIBUSDT": {
+      "onboardDate": 1620630000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "1000WHYUSDT": {
+      "onboardDate": 1732534200000,
+      "deliveryDate": 1773738000000,
+      "pmarp_as_of": null
+    },
+    "1000XECUSDT": {
+      "onboardDate": 1631775600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "1000XUSDT": {
+      "onboardDate": 1731501000000,
+      "deliveryDate": 1763110800000,
+      "pmarp_as_of": null
+    },
+    "1INCHUSDT": {
+      "onboardDate": 1608879600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 87.33333333333333
+    },
+    "1MBABYDOGEUSDT": {
+      "onboardDate": 1726486500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "2ZUSDT": {
+      "onboardDate": 1759408200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "42USDT": {
+      "onboardDate": 1761561000000,
+      "deliveryDate": 1769763600000,
+      "pmarp_as_of": null
+    },
+    "4USDT": {
+      "onboardDate": 1759923000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 54.666666666666664
+    },
+    "A2ZUSDT": {
+      "onboardDate": 1753862400000,
+      "deliveryDate": 1774342800000,
+      "pmarp_as_of": null
+    },
+    "AAVEUSDT": {
+      "onboardDate": 1602831600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "ACEUSDT": {
+      "onboardDate": 1702893600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 78.66666666666666
+    },
+    "ACHUSDT": {
+      "onboardDate": 1676962800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "ACTUSDT": {
+      "onboardDate": 1731327300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 81.33333333333333
+    },
+    "ACUUSDT": {
+      "onboardDate": 1768999500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 80.0
+    },
+    "ACXUSDT": {
+      "onboardDate": 1733497200000,
+      "deliveryDate": 1786093200000,
+      "pmarp_as_of": null
+    },
+    "ADAUSDT": {
+      "onboardDate": 1580457600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.66666666666667
+    },
+    "AERGOUSDT": {
+      "onboardDate": 1744801200000,
+      "deliveryDate": 1784874600000,
+      "pmarp_as_of": null
+    },
+    "AEROUSDT": {
+      "onboardDate": 1733321700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "AEVOUSDT": {
+      "onboardDate": 1710336600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "AGLDUSDT": {
+      "onboardDate": 1690597800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.66666666666666
+    },
+    "AGTUSDT": {
+      "onboardDate": 1747737000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 91.33333333333333
+    },
+    "AI16ZUSDT": {
+      "onboardDate": 1735825500000,
+      "deliveryDate": 1762419600000,
+      "pmarp_as_of": null
+    },
+    "AIAUSDT": {
+      "onboardDate": 1768907700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 45.33333333333333
+    },
+    "AIGENSYNUSDT": {
+      "onboardDate": 1777472100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.0
+    },
+    "AINUSDT": {
+      "onboardDate": 1752144300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 7.333333333333333
+    },
+    "AIOTUSDT": {
+      "onboardDate": 1746016200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "AIOUSDT": {
+      "onboardDate": 1755084600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 66.0
+    },
+    "AIUSDT": {
+      "onboardDate": 1704717000000,
+      "deliveryDate": 1777370400000,
+      "pmarp_as_of": null
+    },
+    "AIXBTUSDT": {
+      "onboardDate": 1734719400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "AKEUSDT": {
+      "onboardDate": 1758889800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 26.666666666666668
+    },
+    "AKTUSDT": {
+      "onboardDate": 1731929400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 82.66666666666667
+    },
+    "ALCHUSDT": {
+      "onboardDate": 1736250300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "ALGOUSDT": {
+      "onboardDate": 1592298000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "ALICEUSDT": {
+      "onboardDate": 1615791600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "ALLOUSDT": {
+      "onboardDate": 1762869600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 70.0
+    },
+    "ALPINEUSDT": {
+      "onboardDate": 1746524700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "ALTUSDT": {
+      "onboardDate": 1706191200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "ANIMEUSDT": {
+      "onboardDate": 1737651600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "ANKRUSDT": {
+      "onboardDate": 1611558000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.66666666666667
+    },
+    "APEUSDT": {
+      "onboardDate": 1647500400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "API3USDT": {
+      "onboardDate": 1645426800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "APRUSDT": {
+      "onboardDate": 1761215400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 27.333333333333332
+    },
+    "APTUSDT": {
+      "onboardDate": 1666076400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "ARBUSDT": {
+      "onboardDate": 1679554800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 84.66666666666667
+    },
+    "ARCUSDT": {
+      "onboardDate": 1737118800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 45.33333333333333
+    },
+    "ARIAUSDT": {
+      "onboardDate": 1756897200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "ARKMUSDT": {
+      "onboardDate": 1690512300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 100.0
+    },
+    "ARKUSDT": {
+      "onboardDate": 1695133800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.66666666666667
+    },
+    "ARPAUSDT": {
+      "onboardDate": 1634540400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "ARUSDT": {
+      "onboardDate": 1632812400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "ARXUSDT": {
+      "onboardDate": 1782189900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "ASRUSDT": {
+      "onboardDate": 1746523800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.0
+    },
+    "ASTERUSDT": {
+      "onboardDate": 1758283200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 60.0
+    },
+    "ASTRUSDT": {
+      "onboardDate": 1676271600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "ATAUSDT": {
+      "onboardDate": 1630306800000,
+      "deliveryDate": 1779181200000,
+      "pmarp_as_of": null
+    },
+    "ATHUSDT": {
+      "onboardDate": 1743608700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "ATOMUSDT": {
+      "onboardDate": 1581077400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "ATUSDT": {
+      "onboardDate": 1761737400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 47.333333333333336
+    },
+    "AUCTIONUSDT": {
+      "onboardDate": 1702645200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "AUSDT": {
+      "onboardDate": 1748419200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "AVAAIUSDT": {
+      "onboardDate": 1737119700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 57.99999999999999
+    },
+    "AVAUSDT": {
+      "onboardDate": 1734094800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "AVAXUSDT": {
+      "onboardDate": 1600844400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "AVNTUSDT": {
+      "onboardDate": 1757430000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.66666666666667
+    },
+    "AWEUSDT": {
+      "onboardDate": 1747814400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 89.33333333333333
+    },
+    "AXLUSDT": {
+      "onboardDate": 1709307000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "AXSUSDT": {
+      "onboardDate": 1605855600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "AZTECUSDT": {
+      "onboardDate": 1770784200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "B2USDT": {
+      "onboardDate": 1746538200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "B3USDT": {
+      "onboardDate": 1739446200000,
+      "deliveryDate": 1777366800000,
+      "pmarp_as_of": null
+    },
+    "BABYUSDT": {
+      "onboardDate": 1743859800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "BAKEUSDT": {
+      "onboardDate": 1621321200000,
+      "deliveryDate": 1759482000000,
+      "pmarp_as_of": null
+    },
+    "BANANAS31USDT": {
+      "onboardDate": 1742634900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 71.33333333333334
+    },
+    "BANANAUSDT": {
+      "onboardDate": 1723687200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 68.66666666666667
+    },
+    "BANDUSDT": {
+      "onboardDate": 1596006000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "BANKUSDT": {
+      "onboardDate": 1745001000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 59.333333333333336
+    },
+    "BANUSDT": {
+      "onboardDate": 1731929400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 70.0
+    },
+    "BARDUSDT": {
+      "onboardDate": 1758193200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "BASEDUSDT": {
+      "onboardDate": 1774864800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 84.66666666666667
+    },
+    "BASUSDT": {
+      "onboardDate": 1756215000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 57.99999999999999
+    },
+    "BATUSDT": {
+      "onboardDate": 1581581100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "BBUSDT": {
+      "onboardDate": 1715603400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "BCHUSDT": {
+      "onboardDate": 1576745700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "BDXNUSDT": {
+      "onboardDate": 1748946600000,
+      "deliveryDate": 1773738000000,
+      "pmarp_as_of": null
+    },
+    "BEAMXUSDT": {
+      "onboardDate": 1700227800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "BEATUSDT": {
+      "onboardDate": 1762949700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 38.666666666666664
+    },
+    "BELUSDT": {
+      "onboardDate": 1605682800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.0
+    },
+    "BERAUSDT": {
+      "onboardDate": 1738854000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "BICOUSDT": {
+      "onboardDate": 1695904200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 80.66666666666666
+    },
+    "BIDUSDT": {
+      "onboardDate": 1742463000000,
+      "deliveryDate": 1768986000000,
+      "pmarp_as_of": null
+    },
+    "BIGTIMEUSDT": {
+      "onboardDate": 1697121000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 100.0
+    },
+    "BILLUSDT": {
+      "onboardDate": 1778141700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "BIOUSDT": {
+      "onboardDate": 1735906500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "BIRBUSDT": {
+      "onboardDate": 1769663700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.66666666666667
+    },
+    "BLESSUSDT": {
+      "onboardDate": 1758619800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 48.66666666666667
+    },
+    "BLUAIUSDT": {
+      "onboardDate": 1761046200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 14.000000000000002
+    },
+    "BLURUSDT": {
+      "onboardDate": 1682553600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "BMTUSDT": {
+      "onboardDate": 1742218200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 77.33333333333333
+    },
+    "BNBUSDT": {
+      "onboardDate": 1581321600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 76.0
+    },
+    "BNTUSDT": {
+      "onboardDate": 1691668800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "BOBUSDT": {
+      "onboardDate": 1763721900000,
+      "deliveryDate": 1777366800000,
+      "pmarp_as_of": null
+    },
+    "BOMEUSDT": {
+      "onboardDate": 1710592200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 60.0
+    },
+    "BRETTUSDT": {
+      "onboardDate": 1724150100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "BREVUSDT": {
+      "onboardDate": 1767091500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "BROCCOLI714USDT": {
+      "onboardDate": 1742547600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "BROCCOLIF3BUSDT": {
+      "onboardDate": 1742548500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.0
+    },
+    "BRUSDT": {
+      "onboardDate": 1742561100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 77.33333333333333
+    },
+    "BSBUSDT": {
+      "onboardDate": 1774439100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 79.33333333333333
+    },
+    "BSVUSDT": {
+      "onboardDate": 1697805000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "BTCUSDT": {
+      "onboardDate": 1567965300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 78.66666666666666
+    },
+    "BTRUSDT": {
+      "onboardDate": 1756290600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 43.333333333333336
+    },
+    "BTWUSDT": {
+      "onboardDate": 1780582500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "BULLAUSDT": {
+      "onboardDate": 1751619600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 50.0
+    },
+    "BUSDT": {
+      "onboardDate": 1747931400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 59.333333333333336
+    },
+    "C98USDT": {
+      "onboardDate": 1629702000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "CAKEUSDT": {
+      "onboardDate": 1698929100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "CAPUSDT": {
+      "onboardDate": 1782560700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "CARVUSDT": {
+      "onboardDate": 1754585100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "CATIUSDT": {
+      "onboardDate": 1726831800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 50.66666666666667
+    },
+    "CCUSDT": {
+      "onboardDate": 1761912000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "CELOUSDT": {
+      "onboardDate": 1632639600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 91.33333333333333
+    },
+    "CELRUSDT": {
+      "onboardDate": 1617001200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "CETUSUSDT": {
+      "onboardDate": 1730901600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "CFGUSDT": {
+      "onboardDate": 1773666000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "CFXUSDT": {
+      "onboardDate": 1676790000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "CGPTUSDT": {
+      "onboardDate": 1734722100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 84.0
+    },
+    "CHESSUSDT": {
+      "onboardDate": 1724916600000,
+      "deliveryDate": 1770368400000,
+      "pmarp_as_of": null
+    },
+    "CHILLGUYUSDT": {
+      "onboardDate": 1732718700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 64.66666666666666
+    },
+    "CHIPUSDT": {
+      "onboardDate": 1776323700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 73.33333333333333
+    },
+    "CHRUSDT": {
+      "onboardDate": 1615532400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.66666666666667
+    },
+    "CHZUSDT": {
+      "onboardDate": 1611212400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.66666666666666
+    },
+    "CKBUSDT": {
+      "onboardDate": 1677481200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "CLANKERUSDT": {
+      "onboardDate": 1762948800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "CLOUSDT": {
+      "onboardDate": 1760441400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 26.0
+    },
+    "COAIUSDT": {
+      "onboardDate": 1758785400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 52.666666666666664
+    },
+    "COLLECTUSDT": {
+      "onboardDate": 1767186900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 13.333333333333334
+    },
+    "COMMONUSDT": {
+      "onboardDate": 1761568200000,
+      "deliveryDate": 1769763600000,
+      "pmarp_as_of": null
+    },
+    "COMPUSDT": {
+      "onboardDate": 1593507600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "COOKIEUSDT": {
+      "onboardDate": 1736249400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 84.0
+    },
+    "COSUSDT": {
+      "onboardDate": 1727701200000,
+      "deliveryDate": 1781168400000,
+      "pmarp_as_of": null
+    },
+    "COTIUSDT": {
+      "onboardDate": 1615273200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 18.0
+    },
+    "COWUSDT": {
+      "onboardDate": 1730899800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "CROSSUSDT": {
+      "onboardDate": 1752143400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 78.0
+    },
+    "CRVUSDT": {
+      "onboardDate": 1598943600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 56.666666666666664
+    },
+    "CTKUSDT": {
+      "onboardDate": 1746008100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "CTRUSDT": {
+      "onboardDate": 1779960600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "CTSIUSDT": {
+      "onboardDate": 1635145200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.66666666666666
+    },
+    "CUDISUSDT": {
+      "onboardDate": 1755688500000,
+      "deliveryDate": 1769763600000,
+      "pmarp_as_of": null
+    },
+    "CUSDT": {
+      "onboardDate": 1752570000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "CVCUSDT": {
+      "onboardDate": 1747384200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "CVXUSDT": {
+      "onboardDate": 1753270200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 81.33333333333333
+    },
+    "CYBERUSDT": {
+      "onboardDate": 1692619200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "CYSUSDT": {
+      "onboardDate": 1765537200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 21.333333333333336
+    },
+    "DAMUSDT": {
+      "onboardDate": 1755520200000,
+      "deliveryDate": 1777453200000,
+      "pmarp_as_of": null
+    },
+    "DASHUSDT": {
+      "onboardDate": 1580803500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 84.0
+    },
+    "DATAIPUSDT": {
+      "onboardDate": 1783061100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "DEEPUSDT": {
+      "onboardDate": 1745310600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.66666666666667
+    },
+    "DEGENUSDT": {
+      "onboardDate": 1731670200000,
+      "deliveryDate": 1777366800000,
+      "pmarp_as_of": null
+    },
+    "DEGOUSDT": {
+      "onboardDate": 1734095700000,
+      "deliveryDate": 1776762000000,
+      "pmarp_as_of": null
+    },
+    "DENTUSDT": {
+      "onboardDate": 1616482800000,
+      "deliveryDate": 1776762000000,
+      "pmarp_as_of": null
+    },
+    "DEXEUSDT": {
+      "onboardDate": 1735039800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 50.66666666666667
+    },
+    "DFUSDT": {
+      "onboardDate": 1735559100000,
+      "deliveryDate": 1770368400000,
+      "pmarp_as_of": null
+    },
+    "DIAUSDT": {
+      "onboardDate": 1727872200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "DMCUSDT": {
+      "onboardDate": 1750770000000,
+      "deliveryDate": 1768986000000,
+      "pmarp_as_of": null
+    },
+    "DODOXUSDT": {
+      "onboardDate": 1691496000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 61.33333333333333
+    },
+    "DOGEUSDT": {
+      "onboardDate": 1594371600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 83.33333333333334
+    },
+    "DOGSUSDT": {
+      "onboardDate": 1724675400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 79.33333333333333
+    },
+    "DOLOUSDT": {
+      "onboardDate": 1746068400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.66666666666667
+    },
+    "DOODUSDT": {
+      "onboardDate": 1746797400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 87.33333333333333
+    },
+    "DOSUSDT": {
+      "onboardDate": 1786460400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "DOTUSDT": {
+      "onboardDate": 1598079600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "DRIFTUSDT": {
+      "onboardDate": 1731080700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "DUSDT": {
+      "onboardDate": 1736416800000,
+      "deliveryDate": 1781168400000,
+      "pmarp_as_of": null
+    },
+    "DUSKUSDT": {
+      "onboardDate": 1641452400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "DYDXUSDT": {
+      "onboardDate": 1631170800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 91.33333333333333
+    },
+    "DYMUSDT": {
+      "onboardDate": 1707289200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "EDENUSDT": {
+      "onboardDate": 1759230000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 83.33333333333334
+    },
+    "EDGEUSDT": {
+      "onboardDate": 1773928800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 56.00000000000001
+    },
+    "EDUUSDT": {
+      "onboardDate": 1682640000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 64.0
+    },
+    "EGLDUSDT": {
+      "onboardDate": 1600066800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 82.0
+    },
+    "EIGENUSDT": {
+      "onboardDate": 1727762400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "ELSAUSDT": {
+      "onboardDate": 1769066700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 77.33333333333333
+    },
+    "ENAUSDT": {
+      "onboardDate": 1712061000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "ENJUSDT": {
+      "onboardDate": 1601362800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "ENSOUSDT": {
+      "onboardDate": 1760432400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 74.0
+    },
+    "ENSUSDT": {
+      "onboardDate": 1638169200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 84.66666666666667
+    },
+    "EPICUSDT": {
+      "onboardDate": 1741852800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 69.33333333333334
+    },
+    "EPTUSDT": {
+      "onboardDate": 1745240400000,
+      "deliveryDate": 1769763600000,
+      "pmarp_as_of": null
+    },
+    "ERAUSDT": {
+      "onboardDate": 1752766200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "ESPORTSUSDT": {
+      "onboardDate": 1753783200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 76.66666666666667
+    },
+    "ESPUSDT": {
+      "onboardDate": 1770711000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "ETCUSDT": {
+      "onboardDate": 1579161600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "ETHFIUSDT": {
+      "onboardDate": 1710775800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 70.0
+    },
+    "ETHUSDT": {
+      "onboardDate": 1574840700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 69.33333333333334
+    },
+    "ETHWUSDT": {
+      "onboardDate": 1701174600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.66666666666666
+    },
+    "EULUSDT": {
+      "onboardDate": 1760365800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "EVAAUSDT": {
+      "onboardDate": 1759487400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 78.0
+    },
+    "FARTCOINUSDT": {
+      "onboardDate": 1734720300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 83.33333333333334
+    },
+    "FETUSDT": {
+      "onboardDate": 1673766000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "FFUSDT": {
+      "onboardDate": 1759152600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 53.333333333333336
+    },
+    "FHEUSDT": {
+      "onboardDate": 1744470000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 73.33333333333333
+    },
+    "FIDAUSDT": {
+      "onboardDate": 1726749000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 89.33333333333333
+    },
+    "FIGHTUSDT": {
+      "onboardDate": 1769170500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 80.0
+    },
+    "FILUSDT": {
+      "onboardDate": 1602828000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "FIOUSDT": {
+      "onboardDate": 1726831800000,
+      "deliveryDate": 1776243600000,
+      "pmarp_as_of": null
+    },
+    "FISUSDT": {
+      "onboardDate": 1745566200000,
+      "deliveryDate": 1765357200000,
+      "pmarp_as_of": null
+    },
+    "FLMUSDT": {
+      "onboardDate": 1601362800000,
+      "deliveryDate": 1763715600000,
+      "pmarp_as_of": null
+    },
+    "FLOCKUSDT": {
+      "onboardDate": 1757400300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 72.66666666666667
+    },
+    "FLOWUSDT": {
+      "onboardDate": 1644390000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 91.33333333333333
+    },
+    "FLUIDUSDT": {
+      "onboardDate": 1758708900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "FLUXUSDT": {
+      "onboardDate": 1725346800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "FOGOUSDT": {
+      "onboardDate": 1768053600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 25.333333333333336
+    },
+    "FOLKSUSDT": {
+      "onboardDate": 1762432200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.66666666666667
+    },
+    "FORMUSDT": {
+      "onboardDate": 1742371200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 87.33333333333333
+    },
+    "FORTHUSDT": {
+      "onboardDate": 1744101000000,
+      "deliveryDate": 1774342800000,
+      "pmarp_as_of": null
+    },
+    "FRAXUSDT": {
+      "onboardDate": 1768464000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "FUNUSDT": {
+      "onboardDate": 1743409800000,
+      "deliveryDate": 1776243600000,
+      "pmarp_as_of": null
+    },
+    "FUSDT": {
+      "onboardDate": 1750250700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 78.0
+    },
+    "FXSUSDT": {
+      "onboardDate": 1674111600000,
+      "deliveryDate": 1767690000000,
+      "pmarp_as_of": null
+    },
+    "GALAUSDT": {
+      "onboardDate": 1631862000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.66666666666667
+    },
+    "GASUSDT": {
+      "onboardDate": 1698201900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "GENIUSUSDT": {
+      "onboardDate": 1776310200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 68.0
+    },
+    "GHSTUSDT": {
+      "onboardDate": 1727096400000,
+      "deliveryDate": 1770368400000,
+      "pmarp_as_of": null
+    },
+    "GIGGLEUSDT": {
+      "onboardDate": 1760003100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 67.33333333333333
+    },
+    "GLMUSDT": {
+      "onboardDate": 1708596000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "GMTUSDT": {
+      "onboardDate": 1647241200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "GMXUSDT": {
+      "onboardDate": 1676530800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 82.66666666666667
+    },
+    "GOATUSDT": {
+      "onboardDate": 1729776600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "GPSUSDT": {
+      "onboardDate": 1739811600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "GRAMUSDT": {
+      "onboardDate": 1782979200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "GRASSUSDT": {
+      "onboardDate": 1731079800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 100.0
+    },
+    "GRIFFAINUSDT": {
+      "onboardDate": 1735824600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "GRTUSDT": {
+      "onboardDate": 1608274800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 100.0
+    },
+    "GRVTUSDT": {
+      "onboardDate": 1785501900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "GTCUSDT": {
+      "onboardDate": 1615791600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 89.33333333333333
+    },
+    "GUAUSDT": {
+      "onboardDate": 1766312100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 75.33333333333333
+    },
+    "GUNUSDT": {
+      "onboardDate": 1743426000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "GUSDT": {
+      "onboardDate": 1723725000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 56.00000000000001
+    },
+    "GWEIUSDT": {
+      "onboardDate": 1769664600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 52.666666666666664
+    },
+    "HAEDALUSDT": {
+      "onboardDate": 1746069300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "HANAUSDT": {
+      "onboardDate": 1758886200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 26.666666666666668
+    },
+    "HBARUSDT": {
+      "onboardDate": 1615964400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "HEIUSDT": {
+      "onboardDate": 1739437200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 66.66666666666666
+    },
+    "HEMIUSDT": {
+      "onboardDate": 1756441800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 24.0
+    },
+    "HFTUSDT": {
+      "onboardDate": 1680652800000,
+      "deliveryDate": 1786093200000,
+      "pmarp_as_of": null
+    },
+    "HIFIUSDT": {
+      "onboardDate": 1694874600000,
+      "deliveryDate": 1759482000000,
+      "pmarp_as_of": null
+    },
+    "HIGHUSDT": {
+      "onboardDate": 1675407600000,
+      "deliveryDate": 1781168400000,
+      "pmarp_as_of": null
+    },
+    "HIPPOUSDT": {
+      "onboardDate": 1731501000000,
+      "deliveryDate": 1775638800000,
+      "pmarp_as_of": null
+    },
+    "HIVEUSDT": {
+      "onboardDate": 1734953400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "HMSTRUSDT": {
+      "onboardDate": 1727353800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 72.66666666666667
+    },
+    "HOLOUSDT": {
+      "onboardDate": 1757592000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 82.66666666666667
+    },
+    "HOMEUSDT": {
+      "onboardDate": 1749555000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 68.66666666666667
+    },
+    "HOOKUSDT": {
+      "onboardDate": 1674111600000,
+      "deliveryDate": 1774342800000,
+      "pmarp_as_of": null
+    },
+    "HOTUSDT": {
+      "onboardDate": 1617087600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "HUMAUSDT": {
+      "onboardDate": 1748264400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.66666666666667
+    },
+    "HUSDT": {
+      "onboardDate": 1750843800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 47.333333333333336
+    },
+    "HYPERUSDT": {
+      "onboardDate": 1745326800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 89.33333333333333
+    },
+    "HYPEUSDT": {
+      "onboardDate": 1748601000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 54.666666666666664
+    },
+    "ICNTUSDT": {
+      "onboardDate": 1751547600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "ICPUSDT": {
+      "onboardDate": 1627628400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.0
+    },
+    "ICXUSDT": {
+      "onboardDate": 1600153200000,
+      "deliveryDate": 1787734800000,
+      "pmarp_as_of": null
+    },
+    "IDOLUSDT": {
+      "onboardDate": 1751620500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 51.33333333333333
+    },
+    "IDUSDT": {
+      "onboardDate": 1679529600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "ILVUSDT": {
+      "onboardDate": 1699633800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "IMXUSDT": {
+      "onboardDate": 1644476400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 100.0
+    },
+    "INITUSDT": {
+      "onboardDate": 1744785000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.66666666666667
+    },
+    "INJUSDT": {
+      "onboardDate": 1660633200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 75.33333333333333
+    },
+    "INUSDT": {
+      "onboardDate": 1754562600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "INXUSDT": {
+      "onboardDate": 1769799600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "IOSTUSDT": {
+      "onboardDate": 1582272300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "IOTAUSDT": {
+      "onboardDate": 1581494400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.0
+    },
+    "IOTXUSDT": {
+      "onboardDate": 1628665200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 80.0
+    },
+    "IOUSDT": {
+      "onboardDate": 1718114400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "IPUSDT": {
+      "onboardDate": 1739466000000,
+      "deliveryDate": 1782637200000,
+      "pmarp_as_of": null
+    },
+    "IRUSDT": {
+      "onboardDate": 1766313000000,
+      "deliveryDate": 1777453200000,
+      "pmarp_as_of": null
+    },
+    "IRYSUSDT": {
+      "onboardDate": 1764172800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 85.33333333333334
+    },
+    "JASMYUSDT": {
+      "onboardDate": 1650351600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "JCTUSDT": {
+      "onboardDate": 1762770600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 71.33333333333334
+    },
+    "JELLYJELLYUSDT": {
+      "onboardDate": 1743004800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 46.666666666666664
+    },
+    "JOEUSDT": {
+      "onboardDate": 1679961600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "JSTUSDT": {
+      "onboardDate": 1745832600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "JTOUSDT": {
+      "onboardDate": 1702029600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "JUPUSDT": {
+      "onboardDate": 1706725800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "KAIAUSDT": {
+      "onboardDate": 1733320800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "KAITOUSDT": {
+      "onboardDate": 1740056400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 63.33333333333333
+    },
+    "KASUSDT": {
+      "onboardDate": 1700186400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "KATUSDT": {
+      "onboardDate": 1772427600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "KAVAUSDT": {
+      "onboardDate": 1595919900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 70.0
+    },
+    "KDAUSDT": {
+      "onboardDate": 1726666200000,
+      "deliveryDate": 1762419600000,
+      "pmarp_as_of": null
+    },
+    "KERNELUSDT": {
+      "onboardDate": 1744632000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "KGENUSDT": {
+      "onboardDate": 1759847400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 57.333333333333336
+    },
+    "KITEUSDT": {
+      "onboardDate": 1761733800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "KMNOUSDT": {
+      "onboardDate": 1734721200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "KNCUSDT": {
+      "onboardDate": 1592815800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 84.0
+    },
+    "KOMAUSDT": {
+      "onboardDate": 1733832900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 66.0
+    },
+    "KSMUSDT": {
+      "onboardDate": 1602658800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.0
+    },
+    "LABUSDT": {
+      "onboardDate": 1760711400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 54.666666666666664
+    },
+    "LAUSDT": {
+      "onboardDate": 1749114000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 80.0
+    },
+    "LAYERUSDT": {
+      "onboardDate": 1739288700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "LDOUSDT": {
+      "onboardDate": 1663743600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "LIGHTUSDT": {
+      "onboardDate": 1758972600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 68.0
+    },
+    "LINEAUSDT": {
+      "onboardDate": 1756715400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "LINKUSDT": {
+      "onboardDate": 1579248000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "LISTAUSDT": {
+      "onboardDate": 1718886600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "LITUSDT": {
+      "onboardDate": 1766511000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 19.333333333333332
+    },
+    "LPTUSDT": {
+      "onboardDate": 1636527600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "LQTYUSDT": {
+      "onboardDate": 1678258800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 87.33333333333333
+    },
+    "LRCUSDT": {
+      "onboardDate": 1603091100000,
+      "deliveryDate": 1774342800000,
+      "pmarp_as_of": null
+    },
+    "LSKUSDT": {
+      "onboardDate": 1706192100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 48.0
+    },
+    "LTCUSDT": {
+      "onboardDate": 1578557100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "LUMIAUSDT": {
+      "onboardDate": 1734521400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 89.33333333333333
+    },
+    "LUNA2USDT": {
+      "onboardDate": 1662706800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 87.33333333333333
+    },
+    "LYNUSDT": {
+      "onboardDate": 1759735800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "MAGICUSDT": {
+      "onboardDate": 1674457200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "MAGMAUSDT": {
+      "onboardDate": 1767187800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 24.0
+    },
+    "MANAUSDT": {
+      "onboardDate": 1615705200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "MANTAUSDT": {
+      "onboardDate": 1705586400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.0
+    },
+    "MANTRAUSDT": {
+      "onboardDate": 1772611200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "MARSCOINUSDT": {
+      "onboardDate": 1788255900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "MASKUSDT": {
+      "onboardDate": 1626418800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 84.66666666666667
+    },
+    "MAVIAUSDT": {
+      "onboardDate": 1743008400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 80.66666666666666
+    },
+    "MAVUSDT": {
+      "onboardDate": 1688040000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "MBOXUSDT": {
+      "onboardDate": 1724837400000,
+      "deliveryDate": 1781168400000,
+      "pmarp_as_of": null
+    },
+    "MEGAUSDT": {
+      "onboardDate": 1769775300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 87.33333333333333
+    },
+    "MELANIAUSDT": {
+      "onboardDate": 1737365400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 77.33333333333333
+    },
+    "MEMEUSDT": {
+      "onboardDate": 1699012800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.0
+    },
+    "MERLUSDT": {
+      "onboardDate": 1748507400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "METISUSDT": {
+      "onboardDate": 1710232200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "METUSDT": {
+      "onboardDate": 1760185800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "MEUSDT": {
+      "onboardDate": 1733850000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "MEWUSDT": {
+      "onboardDate": 1718632800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 91.33333333333333
+    },
+    "MILKUSDT": {
+      "onboardDate": 1746539100000,
+      "deliveryDate": 1764925200000,
+      "pmarp_as_of": null
+    },
+    "MINAUSDT": {
+      "onboardDate": 1675407600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 89.33333333333333
+    },
+    "MIRAUSDT": {
+      "onboardDate": 1758888000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "MITOUSDT": {
+      "onboardDate": 1756398600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 66.0
+    },
+    "MLNUSDT": {
+      "onboardDate": 1743410700000,
+      "deliveryDate": 1779181200000,
+      "pmarp_as_of": null
+    },
+    "MMTUSDT": {
+      "onboardDate": 1762257600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.0
+    },
+    "MOCAUSDT": {
+      "onboardDate": 1734348600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "MONUSDT": {
+      "onboardDate": 1760080500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.66666666666666
+    },
+    "MOODENGUSDT": {
+      "onboardDate": 1729850400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 87.33333333333333
+    },
+    "MORPHOUSDT": {
+      "onboardDate": 1732717800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 80.0
+    },
+    "MOVEUSDT": {
+      "onboardDate": 1733752800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.0
+    },
+    "MOVRUSDT": {
+      "onboardDate": 1703593800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "MTLUSDT": {
+      "onboardDate": 1617174000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.0
+    },
+    "MUBARAKUSDT": {
+      "onboardDate": 1742219100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "MUSDT": {
+      "onboardDate": 1751880600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 38.0
+    },
+    "MYROUSDT": {
+      "onboardDate": 1709627400000,
+      "deliveryDate": 1763110800000,
+      "pmarp_as_of": null
+    },
+    "MYXUSDT": {
+      "onboardDate": 1750249800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "NAORISUSDT": {
+      "onboardDate": 1753965000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 62.66666666666667
+    },
+    "NEARUSDT": {
+      "onboardDate": 1602748800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "NEIROUSDT": {
+      "onboardDate": 1726486200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 64.0
+    },
+    "NEOUSDT": {
+      "onboardDate": 1581929100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "NEWTUSDT": {
+      "onboardDate": 1750343400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "NFPUSDT": {
+      "onboardDate": 1703680200000,
+      "deliveryDate": 1782982800000,
+      "pmarp_as_of": null
+    },
+    "NIGHTUSDT": {
+      "onboardDate": 1765364400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "NILUSDT": {
+      "onboardDate": 1742821200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.66666666666666
+    },
+    "NKNUSDT": {
+      "onboardDate": 1617865200000,
+      "deliveryDate": 1770368400000,
+      "pmarp_as_of": null
+    },
+    "NMRUSDT": {
+      "onboardDate": 1687435200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.66666666666667
+    },
+    "NOMUSDT": {
+      "onboardDate": 1759305600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "NOTUSDT": {
+      "onboardDate": 1715868000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "NTRNUSDT": {
+      "onboardDate": 1699963200000,
+      "deliveryDate": 1774342800000,
+      "pmarp_as_of": null
+    },
+    "NXPCUSDT": {
+      "onboardDate": 1747290600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.0
+    },
+    "OBOLUSDT": {
+      "onboardDate": 1746613800000,
+      "deliveryDate": 1764927000000,
+      "pmarp_as_of": null
+    },
+    "OGNUSDT": {
+      "onboardDate": 1617174000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "OGUSDT": {
+      "onboardDate": 1747040400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 76.0
+    },
+    "OLUSDT": {
+      "onboardDate": 1750851000000,
+      "deliveryDate": 1775638800000,
+      "pmarp_as_of": null
+    },
+    "OMUSDT": {
+      "onboardDate": 1707832800000,
+      "deliveryDate": 1771837200000,
+      "pmarp_as_of": null
+    },
+    "ONDOUSDT": {
+      "onboardDate": 1705755600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.66666666666667
+    },
+    "ONEUSDT": {
+      "onboardDate": 1615964400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "ONGUSDT": {
+      "onboardDate": 1701090000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.0
+    },
+    "ONTUSDT": {
+      "onboardDate": 1581408300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "ONUSDT": {
+      "onboardDate": 1761294600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 10.0
+    },
+    "OPENUSDT": {
+      "onboardDate": 1757336400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 60.66666666666667
+    },
+    "OPGUSDT": {
+      "onboardDate": 1776871800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "OPNUSDT": {
+      "onboardDate": 1771686000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "OPUSDT": {
+      "onboardDate": 1654066800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "ORCAUSDT": {
+      "onboardDate": 1733497200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "ORDERUSDT": {
+      "onboardDate": 1758890700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "ORDIUSDT": {
+      "onboardDate": 1699360200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 82.66666666666667
+    },
+    "OUSDT": {
+      "onboardDate": 1782301500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "OXTUSDT": {
+      "onboardDate": 1691755200000,
+      "deliveryDate": 1776243600000,
+      "pmarp_as_of": null
+    },
+    "PARTIUSDT": {
+      "onboardDate": 1742907600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 82.0
+    },
+    "PAXGUSDT": {
+      "onboardDate": 1743071400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 28.666666666666668
+    },
+    "PENDLEUSDT": {
+      "onboardDate": 1690511400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 72.0
+    },
+    "PENGUUSDT": {
+      "onboardDate": 1734452100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 91.33333333333333
+    },
+    "PEOPLEUSDT": {
+      "onboardDate": 1640242800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 73.33333333333333
+    },
+    "PERPUSDT": {
+      "onboardDate": 1677999600000,
+      "deliveryDate": 1763715600000,
+      "pmarp_as_of": null
+    },
+    "PHAROSUSDT": {
+      "onboardDate": 1778735700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "PHAUSDT": {
+      "onboardDate": 1735558200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "PHBUSDT": {
+      "onboardDate": 1676444400000,
+      "deliveryDate": 1779181200000,
+      "pmarp_as_of": null
+    },
+    "PIEVERSEUSDT": {
+      "onboardDate": 1763119800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 61.33333333333333
+    },
+    "PIPPINUSDT": {
+      "onboardDate": 1737713700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 76.66666666666667
+    },
+    "PIXELUSDT": {
+      "onboardDate": 1708354800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.66666666666667
+    },
+    "PLAYUSDT": {
+      "onboardDate": 1753954200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 81.33333333333333
+    },
+    "PLUMEUSDT": {
+      "onboardDate": 1742562000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "PNUTUSDT": {
+      "onboardDate": 1731328200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 80.0
+    },
+    "POLUSDT": {
+      "onboardDate": 1726229700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "POLYXUSDT": {
+      "onboardDate": 1698201000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "PONKEUSDT": {
+      "onboardDate": 1730723400000,
+      "deliveryDate": 1764320400000,
+      "pmarp_as_of": null
+    },
+    "PONSUSDT": {
+      "onboardDate": 1788677100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "POPCATUSDT": {
+      "onboardDate": 1724331600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 80.66666666666666
+    },
+    "PORT3USDT": {
+      "onboardDate": 1749026700000,
+      "deliveryDate": 1763879400000,
+      "pmarp_as_of": null
+    },
+    "PORTALUSDT": {
+      "onboardDate": 1709218800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 46.666666666666664
+    },
+    "POWERUSDT": {
+      "onboardDate": 1765011600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 43.333333333333336
+    },
+    "POWRUSDT": {
+      "onboardDate": 1698373800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "PRLUSDT": {
+      "onboardDate": 1775039400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 48.0
+    },
+    "PROMPTUSDT": {
+      "onboardDate": 1744353000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 80.0
+    },
+    "PROMUSDT": {
+      "onboardDate": 1736944200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 76.66666666666667
+    },
+    "PROVEUSDT": {
+      "onboardDate": 1754413200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.0
+    },
+    "PTBUSDT": {
+      "onboardDate": 1756902600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.0
+    },
+    "PUFFERUSDT": {
+      "onboardDate": 1749025800000,
+      "deliveryDate": 1775638800000,
+      "pmarp_as_of": null
+    },
+    "PUMPBTCUSDT": {
+      "onboardDate": 1749808800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 64.66666666666666
+    },
+    "PUMPUSDT": {
+      "onboardDate": 1752132600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.66666666666666
+    },
+    "PUNDIXUSDT": {
+      "onboardDate": 1746007200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "PYTHUSDT": {
+      "onboardDate": 1700663400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "QNTUSDT": {
+      "onboardDate": 1666076400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 100.0
+    },
+    "QTUMUSDT": {
+      "onboardDate": 1582185900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "QUICKUSDT": {
+      "onboardDate": 1725598800000,
+      "deliveryDate": 1764320400000,
+      "pmarp_as_of": null
+    },
+    "QUSDT": {
+      "onboardDate": 1756798200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 91.33333333333333
+    },
+    "RAREUSDT": {
+      "onboardDate": 1723726800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "RAVEUSDT": {
+      "onboardDate": 1765726200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 72.0
+    },
+    "RAYSOLUSDT": {
+      "onboardDate": 1733832000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 91.33333333333333
+    },
+    "RDNTUSDT": {
+      "onboardDate": 1680566400000,
+      "deliveryDate": 1774342800000,
+      "pmarp_as_of": null
+    },
+    "RECALLUSDT": {
+      "onboardDate": 1760531400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 84.0
+    },
+    "REDUSDT": {
+      "onboardDate": 1741276800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "REIUSDT": {
+      "onboardDate": 1727434800000,
+      "deliveryDate": 1765357200000,
+      "pmarp_as_of": null
+    },
+    "RENDERUSDT": {
+      "onboardDate": 1721988000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "RESOLVUSDT": {
+      "onboardDate": 1749562200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "REUSDT": {
+      "onboardDate": 1781791200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "REZUSDT": {
+      "onboardDate": 1714485600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "RIFUSDT": {
+      "onboardDate": 1697891400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 54.666666666666664
+    },
+    "RIVERUSDT": {
+      "onboardDate": 1760712300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 65.33333333333333
+    },
+    "RLCUSDT": {
+      "onboardDate": 1596178800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "RLSUSDT": {
+      "onboardDate": 1764669600000,
+      "deliveryDate": 1775638800000,
+      "pmarp_as_of": null
+    },
+    "ROBOUSDT": {
+      "onboardDate": 1772181900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 46.666666666666664
+    },
+    "RONINUSDT": {
+      "onboardDate": 1707193800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "ROSEUSDT": {
+      "onboardDate": 1640934000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 100.0
+    },
+    "RPLUSDT": {
+      "onboardDate": 1725885000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "RSRUSDT": {
+      "onboardDate": 1603091100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.0
+    },
+    "RUNEUSDT": {
+      "onboardDate": 1599203400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "RVNUSDT": {
+      "onboardDate": 1614063600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 82.0
+    },
+    "RVVUSDT": {
+      "onboardDate": 1760794200000,
+      "deliveryDate": 1770714000000,
+      "pmarp_as_of": null
+    },
+    "SAFEUSDT": {
+      "onboardDate": 1729859400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "SAGAUSDT": {
+      "onboardDate": 1712658600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 8.0
+    },
+    "SAHARAUSDT": {
+      "onboardDate": 1750939200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 83.33333333333334
+    },
+    "SANDUSDT": {
+      "onboardDate": 1610953200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "SANTOSUSDT": {
+      "onboardDate": 1730124000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.0
+    },
+    "SAPIENUSDT": {
+      "onboardDate": 1755711000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 78.0
+    },
+    "SCRTUSDT": {
+      "onboardDate": 1732188600000,
+      "deliveryDate": 1787734800000,
+      "pmarp_as_of": null
+    },
+    "SCRUSDT": {
+      "onboardDate": 1729591200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "SEIUSDT": {
+      "onboardDate": 1692239400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "SENTUSDT": {
+      "onboardDate": 1763124300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "SFPUSDT": {
+      "onboardDate": 1614150000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.66666666666667
+    },
+    "SHELLUSDT": {
+      "onboardDate": 1739812500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.0
+    },
+    "SIGNUSDT": {
+      "onboardDate": 1745838000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "SIRENUSDT": {
+      "onboardDate": 1742634000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 60.0
+    },
+    "SKATEUSDT": {
+      "onboardDate": 1749465000000,
+      "deliveryDate": 1765357200000,
+      "pmarp_as_of": null
+    },
+    "SKLUSDT": {
+      "onboardDate": 1598252400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "SKRUSDT": {
+      "onboardDate": 1769078700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 51.33333333333333
+    },
+    "SKYAIUSDT": {
+      "onboardDate": 1747129500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 47.333333333333336
+    },
+    "SKYUSDT": {
+      "onboardDate": 1757401200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "SLERFUSDT": {
+      "onboardDate": 1732188600000,
+      "deliveryDate": 1760950800000,
+      "pmarp_as_of": null
+    },
+    "SLPUSDT": {
+      "onboardDate": 1753271100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 82.0
+    },
+    "SLXUSDT": {
+      "onboardDate": 1780299000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "SNXUSDT": {
+      "onboardDate": 1597388400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "SOLUSDT": {
+      "onboardDate": 1600066800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 85.33333333333334
+    },
+    "SOLVUSDT": {
+      "onboardDate": 1737116100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 70.66666666666667
+    },
+    "SOMIUSDT": {
+      "onboardDate": 1756114200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "SONICUSDT": {
+      "onboardDate": 1736319600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "SOONUSDT": {
+      "onboardDate": 1747989000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 100.0
+    },
+    "SOPHUSDT": {
+      "onboardDate": 1748437200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 40.0
+    },
+    "SPACEUSDT": {
+      "onboardDate": 1769168700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 85.33333333333334
+    },
+    "SPELLUSDT": {
+      "onboardDate": 1662361200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "SPKUSDT": {
+      "onboardDate": 1750150800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "SPORTFUNUSDT": {
+      "onboardDate": 1768571100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 48.0
+    },
+    "SPXUSDT": {
+      "onboardDate": 1733834700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 20.0
+    },
+    "SQDUSDT": {
+      "onboardDate": 1749645900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 47.333333333333336
+    },
+    "SSVUSDT": {
+      "onboardDate": 1677135600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 78.0
+    },
+    "STABLEUSDT": {
+      "onboardDate": 1762430400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 74.66666666666667
+    },
+    "STARUSDT": {
+      "onboardDate": 1778736600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "STBLUSDT": {
+      "onboardDate": 1758087900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 67.33333333333333
+    },
+    "STEEMUSDT": {
+      "onboardDate": 1699453800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.66666666666667
+    },
+    "STGUSDT": {
+      "onboardDate": 1661324400000,
+      "deliveryDate": 1790240400000,
+      "pmarp_as_of": null
+    },
+    "STORJUSDT": {
+      "onboardDate": 1600239600000,
+      "deliveryDate": 1787734800000,
+      "pmarp_as_of": null
+    },
+    "STOUSDT": {
+      "onboardDate": 1744469100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "STRKUSDT": {
+      "onboardDate": 1708448400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "STXUSDT": {
+      "onboardDate": 1676876400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 84.66666666666667
+    },
+    "SUIUSDT": {
+      "onboardDate": 1683072000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "SUNUSDT": {
+      "onboardDate": 1724331900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 42.0
+    },
+    "SUPERUSDT": {
+      "onboardDate": 1701003600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "SUSDT": {
+      "onboardDate": 1737021600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 89.33333333333333
+    },
+    "SUSHIUSDT": {
+      "onboardDate": 1599202800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.0
+    },
+    "SWARMSUSDT": {
+      "onboardDate": 1736252100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 80.66666666666666
+    },
+    "SWELLUSDT": {
+      "onboardDate": 1731081600000,
+      "deliveryDate": 1764320400000,
+      "pmarp_as_of": null
+    },
+    "SXPUSDT": {
+      "onboardDate": 1595289600000,
+      "deliveryDate": 1764925200000,
+      "pmarp_as_of": null
+    },
+    "SXTUSDT": {
+      "onboardDate": 1746174600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.0
+    },
+    "SYNUSDT": {
+      "onboardDate": 1723811400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 70.66666666666667
+    },
+    "SYRUPUSDT": {
+      "onboardDate": 1746606600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 54.0
+    },
+    "SYSUSDT": {
+      "onboardDate": 1724070600000,
+      "deliveryDate": 1779181200000,
+      "pmarp_as_of": null
+    },
+    "TACUSDT": {
+      "onboardDate": 1752575400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 47.333333333333336
+    },
+    "TAGUSDT": {
+      "onboardDate": 1753442100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 81.33333333333333
+    },
+    "TAIKOUSDT": {
+      "onboardDate": 1749645000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "TAKEUSDT": {
+      "onboardDate": 1756898100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 28.666666666666668
+    },
+    "TANSSIUSDT": {
+      "onboardDate": 1752060600000,
+      "deliveryDate": 1768986000000,
+      "pmarp_as_of": null
+    },
+    "TAOUSDT": {
+      "onboardDate": 1712845800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "TAUSDT": {
+      "onboardDate": 1753083000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 44.666666666666664
+    },
+    "THETAUSDT": {
+      "onboardDate": 1590566400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 89.33333333333333
+    },
+    "THEUSDT": {
+      "onboardDate": 1732709700000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "TIAUSDT": {
+      "onboardDate": 1698769800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "TLMUSDT": {
+      "onboardDate": 1680048000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.66666666666666
+    },
+    "TNSRUSDT": {
+      "onboardDate": 1712595600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "TOKENUSDT": {
+      "onboardDate": 1699023600000,
+      "deliveryDate": 1764927000000,
+      "pmarp_as_of": null
+    },
+    "TONUSDT": {
+      "onboardDate": 1709296200000,
+      "deliveryDate": 1782205200000,
+      "pmarp_as_of": null
+    },
+    "TOSHIUSDT": {
+      "onboardDate": 1758087000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 87.33333333333333
+    },
+    "TOWNSUSDT": {
+      "onboardDate": 1754404200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 89.33333333333333
+    },
+    "TRADOORUSDT": {
+      "onboardDate": 1758285000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 56.00000000000001
+    },
+    "TRBUSDT": {
+      "onboardDate": 1599116400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 76.0
+    },
+    "TREEUSDT": {
+      "onboardDate": 1753797600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "TRIAUSDT": {
+      "onboardDate": 1770380100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 83.33333333333334
+    },
+    "TRUMPUSDT": {
+      "onboardDate": 1737205200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 81.33333333333333
+    },
+    "TRUSTUSDT": {
+      "onboardDate": 1762335000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 100.0
+    },
+    "TRUTHUSDT": {
+      "onboardDate": 1759320000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 22.666666666666664
+    },
+    "TRUUSDT": {
+      "onboardDate": 1678086000000,
+      "deliveryDate": 1776762000000,
+      "pmarp_as_of": null
+    },
+    "TRXUSDT": {
+      "onboardDate": 1579075500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 18.0
+    },
+    "TSTUSDT": {
+      "onboardDate": 1739106000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 82.0
+    },
+    "TURBOUSDT": {
+      "onboardDate": 1717083000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 81.33333333333333
+    },
+    "TURTLEUSDT": {
+      "onboardDate": 1761145200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 78.0
+    },
+    "TUSDT": {
+      "onboardDate": 1675148400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "TUTUSDT": {
+      "onboardDate": 1742461200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 48.0
+    },
+    "TWTUSDT": {
+      "onboardDate": 1699021800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 74.0
+    },
+    "UAIUSDT": {
+      "onboardDate": 1762428600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 4.666666666666667
+    },
+    "UBUSDT": {
+      "onboardDate": 1757673000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 70.66666666666667
+    },
+    "UMAUSDT": {
+      "onboardDate": 1683590400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "UNIUSDT": {
+      "onboardDate": 1600412400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 85.33333333333334
+    },
+    "USDCUSDT": {
+      "onboardDate": 1678579200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 36.666666666666664
+    },
+    "USELESSUSDT": {
+      "onboardDate": 1755260100000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 61.33333333333333
+    },
+    "USTCUSDT": {
+      "onboardDate": 1701088200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "USUALUSDT": {
+      "onboardDate": 1734526800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "USUSDT": {
+      "onboardDate": 1765536300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 93.33333333333333
+    },
+    "VANAUSDT": {
+      "onboardDate": 1734355800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 90.0
+    },
+    "VANRYUSDT": {
+      "onboardDate": 1710351000000,
+      "deliveryDate": 1786093200000,
+      "pmarp_as_of": null
+    },
+    "VELODROMEUSDT": {
+      "onboardDate": 1734106500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "VELVETUSDT": {
+      "onboardDate": 1752570900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 28.666666666666668
+    },
+    "VETUSDT": {
+      "onboardDate": 1581667200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 80.0
+    },
+    "VFYUSDT": {
+      "onboardDate": 1759233600000,
+      "deliveryDate": 1773738000000,
+      "pmarp_as_of": null
+    },
+    "VICUSDT": {
+      "onboardDate": 1741798800000,
+      "deliveryDate": 1786093200000,
+      "pmarp_as_of": null
+    },
+    "VINEUSDT": {
+      "onboardDate": 1737712800000,
+      "deliveryDate": 1777370400000,
+      "pmarp_as_of": null
+    },
+    "VIRTUALUSDT": {
+      "onboardDate": 1733833800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "VOXELUSDT": {
+      "onboardDate": 1724149800000,
+      "deliveryDate": 1765357200000,
+      "pmarp_as_of": null
+    },
+    "VTHOUSDT": {
+      "onboardDate": 1737538200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.66666666666667
+    },
+    "VVVUSDT": {
+      "onboardDate": 1738138500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 65.33333333333333
+    },
+    "WALUSDT": {
+      "onboardDate": 1743089400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 97.33333333333334
+    },
+    "WAXPUSDT": {
+      "onboardDate": 1697640300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "WCTUSDT": {
+      "onboardDate": 1744714800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.66666666666666
+    },
+    "WETUSDT": {
+      "onboardDate": 1765350000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "WIFUSDT": {
+      "onboardDate": 1705587300000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 83.33333333333334
+    },
+    "WLDUSDT": {
+      "onboardDate": 1690200000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 92.66666666666666
+    },
+    "WLFIUSDT": {
+      "onboardDate": 1755937800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.66666666666667
+    },
+    "WOOUSDT": {
+      "onboardDate": 1649314800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 100.0
+    },
+    "WUSDT": {
+      "onboardDate": 1712158200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 100.0
+    },
+    "XAIUSDT": {
+      "onboardDate": 1704808800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 99.33333333333333
+    },
+    "XANUSDT": {
+      "onboardDate": 1759141800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 60.0
+    },
+    "XAUTUSDT": {
+      "onboardDate": 1774533600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 28.666666666666668
+    },
+    "XCNUSDT": {
+      "onboardDate": 1744385400000,
+      "deliveryDate": 1763715600000,
+      "pmarp_as_of": null
+    },
+    "XLMUSDT": {
+      "onboardDate": 1579507200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 85.33333333333334
+    },
+    "XMRUSDT": {
+      "onboardDate": 1580716800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 40.0
+    },
+    "XNYUSDT": {
+      "onboardDate": 1755085500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 73.33333333333333
+    },
+    "XPINUSDT": {
+      "onboardDate": 1757664000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 37.333333333333336
+    },
+    "XPLUSDT": {
+      "onboardDate": 1755855000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.0
+    },
+    "XRPUSDT": {
+      "onboardDate": 1578298800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 84.66666666666667
+    },
+    "XTZUSDT": {
+      "onboardDate": 1580976000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 82.0
+    },
+    "XVGUSDT": {
+      "onboardDate": 1688558400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 98.0
+    },
+    "XVSUSDT": {
+      "onboardDate": 1681257600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "YALAUSDT": {
+      "onboardDate": 1754584200000,
+      "deliveryDate": 1770714000000,
+      "pmarp_as_of": null
+    },
+    "YBUSDT": {
+      "onboardDate": 1760107500000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 65.33333333333333
+    },
+    "YFIUSDT": {
+      "onboardDate": 1598857200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 91.33333333333333
+    },
+    "YGGUSDT": {
+      "onboardDate": 1691206200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 95.33333333333334
+    },
+    "ZAMAUSDT": {
+      "onboardDate": 1767949200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 79.33333333333333
+    },
+    "ZBTUSDT": {
+      "onboardDate": 1760700600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 83.33333333333334
+    },
+    "ZECUSDT": {
+      "onboardDate": 1580889600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 68.66666666666667
+    },
+    "ZENUSDT": {
+      "onboardDate": 1606201200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 78.0
+    },
+    "ZEREBROUSDT": {
+      "onboardDate": 1735826400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 42.66666666666667
+    },
+    "ZESTUSDT": {
+      "onboardDate": 1780581600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "ZETAUSDT": {
+      "onboardDate": 1706862600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.0
+    },
+    "ZILUSDT": {
+      "onboardDate": 1592470800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.0
+    },
+    "ZKCUSDT": {
+      "onboardDate": 1757944800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 88.66666666666667
+    },
+    "ZKJUSDT": {
+      "onboardDate": 1747128600000,
+      "deliveryDate": 1777453200000,
+      "pmarp_as_of": null
+    },
+    "ZKPUSDT": {
+      "onboardDate": 1766311200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 94.66666666666667
+    },
+    "ZKUSDT": {
+      "onboardDate": 1718622000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "ZORAUSDT": {
+      "onboardDate": 1753441200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 78.66666666666666
+    },
+    "ZRCUSDT": {
+      "onboardDate": 1753782300000,
+      "deliveryDate": 1768986000000,
+      "pmarp_as_of": null
+    },
+    "ZROUSDT": {
+      "onboardDate": 1718893800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 96.66666666666667
+    },
+    "ZRXUSDT": {
+      "onboardDate": 1592989200000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 86.0
+    },
+    "哈基米USDT": {
+      "onboardDate": 1788678900000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "币安人生USDT": {
+      "onboardDate": 1760958000000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 36.666666666666664
+    },
+    "我踏马来了USDT": {
+      "onboardDate": 1769005800000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 54.0
+    },
+    "牛来USDT": {
+      "onboardDate": 1788089400000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": null
+    },
+    "龙虾USDT": {
+      "onboardDate": 1773228600000,
+      "deliveryDate": 4133404800000,
+      "pmarp_as_of": 0.0
+    }
+  },
+  "confirmed_unopened": [
+    "GAIBUSDT"
+  ],
+  "history": [
+    {
+      "date": "2025-09-27",
+      "eligible_count": 498,
+      "warmup_count": 111,
+      "valid_count": 387,
+      "strong_count": 2,
+      "weak_count": 6,
+      "strong_pct": 0.5167958656330749,
+      "weak_pct": 1.550387596899225
+    },
+    {
+      "date": "2025-09-28",
+      "eligible_count": 498,
+      "warmup_count": 109,
+      "valid_count": 389,
+      "strong_count": 1,
+      "weak_count": 1,
+      "strong_pct": 0.2570694087403599,
+      "weak_pct": 0.2570694087403599
+    },
+    {
+      "date": "2025-09-29",
+      "eligible_count": 500,
+      "warmup_count": 110,
+      "valid_count": 390,
+      "strong_count": 2,
+      "weak_count": 4,
+      "strong_pct": 0.5128205128205128,
+      "weak_pct": 1.0256410256410255
+    },
+    {
+      "date": "2025-09-30",
+      "eligible_count": 502,
+      "warmup_count": 112,
+      "valid_count": 390,
+      "strong_count": 1,
+      "weak_count": 5,
+      "strong_pct": 0.2564102564102564,
+      "weak_pct": 1.2820512820512822
+    },
+    {
+      "date": "2025-10-01",
+      "eligible_count": 504,
+      "warmup_count": 114,
+      "valid_count": 390,
+      "strong_count": 8,
+      "weak_count": 1,
+      "strong_pct": 2.051282051282051,
+      "weak_pct": 0.2564102564102564
+    },
+    {
+      "date": "2025-10-02",
+      "eligible_count": 505,
+      "warmup_count": 115,
+      "valid_count": 390,
+      "strong_count": 8,
+      "weak_count": 1,
+      "strong_pct": 2.051282051282051,
+      "weak_pct": 0.2564102564102564
+    },
+    {
+      "date": "2025-10-03",
+      "eligible_count": 504,
+      "warmup_count": 112,
+      "valid_count": 392,
+      "strong_count": 12,
+      "weak_count": 2,
+      "strong_pct": 3.061224489795918,
+      "weak_pct": 0.5102040816326531
+    },
+    {
+      "date": "2025-10-04",
+      "eligible_count": 504,
+      "warmup_count": 110,
+      "valid_count": 394,
+      "strong_count": 9,
+      "weak_count": 2,
+      "strong_pct": 2.284263959390863,
+      "weak_pct": 0.5076142131979695
+    },
+    {
+      "date": "2025-10-05",
+      "eligible_count": 504,
+      "warmup_count": 110,
+      "valid_count": 394,
+      "strong_count": 8,
+      "weak_count": 2,
+      "strong_pct": 2.030456852791878,
+      "weak_pct": 0.5076142131979695
+    },
+    {
+      "date": "2025-10-06",
+      "eligible_count": 505,
+      "warmup_count": 110,
+      "valid_count": 395,
+      "strong_count": 11,
+      "weak_count": 0,
+      "strong_pct": 2.7848101265822787,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2025-10-07",
+      "eligible_count": 506,
+      "warmup_count": 111,
+      "valid_count": 395,
+      "strong_count": 10,
+      "weak_count": 0,
+      "strong_pct": 2.5316455696202533,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2025-10-08",
+      "eligible_count": 507,
+      "warmup_count": 112,
+      "valid_count": 395,
+      "strong_count": 13,
+      "weak_count": 0,
+      "strong_pct": 3.2911392405063293,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2025-10-09",
+      "eligible_count": 508,
+      "warmup_count": 112,
+      "valid_count": 396,
+      "strong_count": 7,
+      "weak_count": 1,
+      "strong_pct": 1.7676767676767677,
+      "weak_pct": 0.25252525252525254
+    },
+    {
+      "date": "2025-10-10",
+      "eligible_count": 510,
+      "warmup_count": 112,
+      "valid_count": 398,
+      "strong_count": 4,
+      "weak_count": 353,
+      "strong_pct": 1.0050251256281406,
+      "weak_pct": 88.69346733668341
+    },
+    {
+      "date": "2025-10-11",
+      "eligible_count": 511,
+      "warmup_count": 113,
+      "valid_count": 398,
+      "strong_count": 6,
+      "weak_count": 337,
+      "strong_pct": 1.5075376884422111,
+      "weak_pct": 84.67336683417085
+    },
+    {
+      "date": "2025-10-12",
+      "eligible_count": 511,
+      "warmup_count": 112,
+      "valid_count": 399,
+      "strong_count": 12,
+      "weak_count": 182,
+      "strong_pct": 3.007518796992481,
+      "weak_pct": 45.6140350877193
+    },
+    {
+      "date": "2025-10-13",
+      "eligible_count": 512,
+      "warmup_count": 112,
+      "valid_count": 400,
+      "strong_count": 11,
+      "weak_count": 30,
+      "strong_pct": 2.75,
+      "weak_pct": 7.5
+    },
+    {
+      "date": "2025-10-14",
+      "eligible_count": 514,
+      "warmup_count": 114,
+      "valid_count": 400,
+      "strong_count": 9,
+      "weak_count": 58,
+      "strong_pct": 2.25,
+      "weak_pct": 14.5
+    },
+    {
+      "date": "2025-10-15",
+      "eligible_count": 515,
+      "warmup_count": 115,
+      "valid_count": 400,
+      "strong_count": 4,
+      "weak_count": 120,
+      "strong_pct": 1.0,
+      "weak_pct": 30.0
+    },
+    {
+      "date": "2025-10-16",
+      "eligible_count": 515,
+      "warmup_count": 115,
+      "valid_count": 400,
+      "strong_count": 7,
+      "weak_count": 190,
+      "strong_pct": 1.75,
+      "weak_pct": 47.5
+    },
+    {
+      "date": "2025-10-17",
+      "eligible_count": 518,
+      "warmup_count": 117,
+      "valid_count": 401,
+      "strong_count": 3,
+      "weak_count": 191,
+      "strong_pct": 0.7481296758104738,
+      "weak_pct": 47.63092269326683
+    },
+    {
+      "date": "2025-10-18",
+      "eligible_count": 519,
+      "warmup_count": 117,
+      "valid_count": 402,
+      "strong_count": 3,
+      "weak_count": 23,
+      "strong_pct": 0.746268656716418,
+      "weak_pct": 5.721393034825871
+    },
+    {
+      "date": "2025-10-19",
+      "eligible_count": 519,
+      "warmup_count": 116,
+      "valid_count": 403,
+      "strong_count": 2,
+      "weak_count": 4,
+      "strong_pct": 0.49627791563275436,
+      "weak_pct": 0.9925558312655087
+    },
+    {
+      "date": "2025-10-20",
+      "eligible_count": 519,
+      "warmup_count": 116,
+      "valid_count": 403,
+      "strong_count": 4,
+      "weak_count": 0,
+      "strong_pct": 0.9925558312655087,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2025-10-21",
+      "eligible_count": 520,
+      "warmup_count": 117,
+      "valid_count": 403,
+      "strong_count": 0,
+      "weak_count": 7,
+      "strong_pct": 0.0,
+      "weak_pct": 1.7369727047146402
+    },
+    {
+      "date": "2025-10-22",
+      "eligible_count": 521,
+      "warmup_count": 118,
+      "valid_count": 403,
+      "strong_count": 1,
+      "weak_count": 9,
+      "strong_pct": 0.24813895781637718,
+      "weak_pct": 2.2332506203473947
+    },
+    {
+      "date": "2025-10-23",
+      "eligible_count": 522,
+      "warmup_count": 118,
+      "valid_count": 404,
+      "strong_count": 3,
+      "weak_count": 1,
+      "strong_pct": 0.7425742574257426,
+      "weak_pct": 0.24752475247524752
+    },
+    {
+      "date": "2025-10-24",
+      "eligible_count": 523,
+      "warmup_count": 119,
+      "valid_count": 404,
+      "strong_count": 4,
+      "weak_count": 3,
+      "strong_pct": 0.9900990099009901,
+      "weak_pct": 0.7425742574257426
+    },
+    {
+      "date": "2025-10-25",
+      "eligible_count": 523,
+      "warmup_count": 117,
+      "valid_count": 406,
+      "strong_count": 5,
+      "weak_count": 3,
+      "strong_pct": 1.2315270935960592,
+      "weak_pct": 0.7389162561576355
+    },
+    {
+      "date": "2025-10-26",
+      "eligible_count": 523,
+      "warmup_count": 116,
+      "valid_count": 407,
+      "strong_count": 7,
+      "weak_count": 2,
+      "strong_pct": 1.71990171990172,
+      "weak_pct": 0.4914004914004914
+    },
+    {
+      "date": "2025-10-27",
+      "eligible_count": 525,
+      "warmup_count": 117,
+      "valid_count": 408,
+      "strong_count": 4,
+      "weak_count": 3,
+      "strong_pct": 0.9803921568627451,
+      "weak_pct": 0.7352941176470589
+    },
+    {
+      "date": "2025-10-28",
+      "eligible_count": 525,
+      "warmup_count": 117,
+      "valid_count": 408,
+      "strong_count": 2,
+      "weak_count": 5,
+      "strong_pct": 0.49019607843137253,
+      "weak_pct": 1.2254901960784315
+    },
+    {
+      "date": "2025-10-29",
+      "eligible_count": 527,
+      "warmup_count": 119,
+      "valid_count": 408,
+      "strong_count": 1,
+      "weak_count": 6,
+      "strong_pct": 0.24509803921568626,
+      "weak_pct": 1.4705882352941178
+    },
+    {
+      "date": "2025-10-30",
+      "eligible_count": 527,
+      "warmup_count": 119,
+      "valid_count": 408,
+      "strong_count": 4,
+      "weak_count": 17,
+      "strong_pct": 0.9803921568627451,
+      "weak_pct": 4.166666666666667
+    },
+    {
+      "date": "2025-10-31",
+      "eligible_count": 528,
+      "warmup_count": 119,
+      "valid_count": 409,
+      "strong_count": 4,
+      "weak_count": 6,
+      "strong_pct": 0.9779951100244498,
+      "weak_pct": 1.466992665036675
+    },
+    {
+      "date": "2025-11-01",
+      "eligible_count": 528,
+      "warmup_count": 117,
+      "valid_count": 411,
+      "strong_count": 10,
+      "weak_count": 1,
+      "strong_pct": 2.4330900243309004,
+      "weak_pct": 0.24330900243309003
+    },
+    {
+      "date": "2025-11-02",
+      "eligible_count": 528,
+      "warmup_count": 115,
+      "valid_count": 413,
+      "strong_count": 7,
+      "weak_count": 2,
+      "strong_pct": 1.694915254237288,
+      "weak_pct": 0.48426150121065376
+    },
+    {
+      "date": "2025-11-03",
+      "eligible_count": 528,
+      "warmup_count": 115,
+      "valid_count": 413,
+      "strong_count": 6,
+      "weak_count": 90,
+      "strong_pct": 1.4527845036319613,
+      "weak_pct": 21.791767554479417
+    },
+    {
+      "date": "2025-11-04",
+      "eligible_count": 529,
+      "warmup_count": 116,
+      "valid_count": 413,
+      "strong_count": 9,
+      "weak_count": 140,
+      "strong_pct": 2.179176755447942,
+      "weak_pct": 33.898305084745765
+    },
+    {
+      "date": "2025-11-05",
+      "eligible_count": 530,
+      "warmup_count": 117,
+      "valid_count": 413,
+      "strong_count": 11,
+      "weak_count": 15,
+      "strong_pct": 2.6634382566585955,
+      "weak_pct": 3.6319612590799033
+    },
+    {
+      "date": "2025-11-06",
+      "eligible_count": 531,
+      "warmup_count": 119,
+      "valid_count": 412,
+      "strong_count": 12,
+      "weak_count": 28,
+      "strong_pct": 2.912621359223301,
+      "weak_pct": 6.796116504854369
+    },
+    {
+      "date": "2025-11-07",
+      "eligible_count": 531,
+      "warmup_count": 117,
+      "valid_count": 414,
+      "strong_count": 24,
+      "weak_count": 2,
+      "strong_pct": 5.797101449275362,
+      "weak_pct": 0.4830917874396135
+    },
+    {
+      "date": "2025-11-08",
+      "eligible_count": 531,
+      "warmup_count": 115,
+      "valid_count": 416,
+      "strong_count": 16,
+      "weak_count": 4,
+      "strong_pct": 3.8461538461538463,
+      "weak_pct": 0.9615384615384616
+    },
+    {
+      "date": "2025-11-09",
+      "eligible_count": 531,
+      "warmup_count": 115,
+      "valid_count": 416,
+      "strong_count": 13,
+      "weak_count": 1,
+      "strong_pct": 3.125,
+      "weak_pct": 0.2403846153846154
+    },
+    {
+      "date": "2025-11-10",
+      "eligible_count": 532,
+      "warmup_count": 115,
+      "valid_count": 417,
+      "strong_count": 15,
+      "weak_count": 1,
+      "strong_pct": 3.597122302158273,
+      "weak_pct": 0.23980815347721823
+    },
+    {
+      "date": "2025-11-11",
+      "eligible_count": 533,
+      "warmup_count": 116,
+      "valid_count": 417,
+      "strong_count": 9,
+      "weak_count": 5,
+      "strong_pct": 2.158273381294964,
+      "weak_pct": 1.1990407673860912
+    },
+    {
+      "date": "2025-11-12",
+      "eligible_count": 535,
+      "warmup_count": 118,
+      "valid_count": 417,
+      "strong_count": 9,
+      "weak_count": 2,
+      "strong_pct": 2.158273381294964,
+      "weak_pct": 0.47961630695443647
+    },
+    {
+      "date": "2025-11-13",
+      "eligible_count": 535,
+      "warmup_count": 118,
+      "valid_count": 417,
+      "strong_count": 6,
+      "weak_count": 15,
+      "strong_pct": 1.4388489208633093,
+      "weak_pct": 3.597122302158273
+    },
+    {
+      "date": "2025-11-14",
+      "eligible_count": 535,
+      "warmup_count": 119,
+      "valid_count": 416,
+      "strong_count": 5,
+      "weak_count": 33,
+      "strong_pct": 1.2019230769230769,
+      "weak_pct": 7.9326923076923075
+    },
+    {
+      "date": "2025-11-15",
+      "eligible_count": 535,
+      "warmup_count": 117,
+      "valid_count": 418,
+      "strong_count": 5,
+      "weak_count": 11,
+      "strong_pct": 1.1961722488038278,
+      "weak_pct": 2.6315789473684212
+    },
+    {
+      "date": "2025-11-16",
+      "eligible_count": 535,
+      "warmup_count": 116,
+      "valid_count": 419,
+      "strong_count": 4,
+      "weak_count": 17,
+      "strong_pct": 0.954653937947494,
+      "weak_pct": 4.05727923627685
+    },
+    {
+      "date": "2025-11-17",
+      "eligible_count": 535,
+      "warmup_count": 116,
+      "valid_count": 419,
+      "strong_count": 4,
+      "weak_count": 27,
+      "strong_pct": 0.954653937947494,
+      "weak_pct": 6.443914081145585
+    },
+    {
+      "date": "2025-11-18",
+      "eligible_count": 535,
+      "warmup_count": 116,
+      "valid_count": 419,
+      "strong_count": 2,
+      "weak_count": 5,
+      "strong_pct": 0.477326968973747,
+      "weak_pct": 1.1933174224343674
+    },
+    {
+      "date": "2025-11-19",
+      "eligible_count": 535,
+      "warmup_count": 116,
+      "valid_count": 419,
+      "strong_count": 5,
+      "weak_count": 16,
+      "strong_pct": 1.1933174224343674,
+      "weak_pct": 3.818615751789976
+    },
+    {
+      "date": "2025-11-20",
+      "eligible_count": 535,
+      "warmup_count": 116,
+      "valid_count": 419,
+      "strong_count": 9,
+      "weak_count": 37,
+      "strong_pct": 2.1479713603818618,
+      "weak_pct": 8.83054892601432
+    },
+    {
+      "date": "2025-11-21",
+      "eligible_count": 533,
+      "warmup_count": 116,
+      "valid_count": 417,
+      "strong_count": 3,
+      "weak_count": 105,
+      "strong_pct": 0.7194244604316546,
+      "weak_pct": 25.179856115107913
+    },
+    {
+      "date": "2025-11-22",
+      "eligible_count": 533,
+      "warmup_count": 114,
+      "valid_count": 419,
+      "strong_count": 3,
+      "weak_count": 68,
+      "strong_pct": 0.7159904534606205,
+      "weak_pct": 16.2291169451074
+    },
+    {
+      "date": "2025-11-23",
+      "eligible_count": 532,
+      "warmup_count": 113,
+      "valid_count": 419,
+      "strong_count": 4,
+      "weak_count": 17,
+      "strong_pct": 0.954653937947494,
+      "weak_pct": 4.05727923627685
+    },
+    {
+      "date": "2025-11-24",
+      "eligible_count": 532,
+      "warmup_count": 113,
+      "valid_count": 419,
+      "strong_count": 4,
+      "weak_count": 8,
+      "strong_pct": 0.954653937947494,
+      "weak_pct": 1.909307875894988
+    },
+    {
+      "date": "2025-11-25",
+      "eligible_count": 532,
+      "warmup_count": 113,
+      "valid_count": 419,
+      "strong_count": 6,
+      "weak_count": 2,
+      "strong_pct": 1.431980906921241,
+      "weak_pct": 0.477326968973747
+    },
+    {
+      "date": "2025-11-26",
+      "eligible_count": 533,
+      "warmup_count": 114,
+      "valid_count": 419,
+      "strong_count": 5,
+      "weak_count": 2,
+      "strong_pct": 1.1933174224343674,
+      "weak_pct": 0.477326968973747
+    },
+    {
+      "date": "2025-11-27",
+      "eligible_count": 533,
+      "warmup_count": 114,
+      "valid_count": 419,
+      "strong_count": 4,
+      "weak_count": 2,
+      "strong_pct": 0.954653937947494,
+      "weak_pct": 0.477326968973747
+    },
+    {
+      "date": "2025-11-28",
+      "eligible_count": 530,
+      "warmup_count": 114,
+      "valid_count": 416,
+      "strong_count": 7,
+      "weak_count": 4,
+      "strong_pct": 1.6826923076923077,
+      "weak_pct": 0.9615384615384616
+    },
+    {
+      "date": "2025-11-29",
+      "eligible_count": 530,
+      "warmup_count": 114,
+      "valid_count": 416,
+      "strong_count": 6,
+      "weak_count": 10,
+      "strong_pct": 1.4423076923076923,
+      "weak_pct": 2.4038461538461537
+    },
+    {
+      "date": "2025-11-30",
+      "eligible_count": 530,
+      "warmup_count": 113,
+      "valid_count": 417,
+      "strong_count": 8,
+      "weak_count": 6,
+      "strong_pct": 1.9184652278177459,
+      "weak_pct": 1.4388489208633093
+    },
+    {
+      "date": "2025-12-01",
+      "eligible_count": 530,
+      "warmup_count": 111,
+      "valid_count": 419,
+      "strong_count": 5,
+      "weak_count": 37,
+      "strong_pct": 1.1933174224343674,
+      "weak_pct": 8.83054892601432
+    },
+    {
+      "date": "2025-12-02",
+      "eligible_count": 531,
+      "warmup_count": 112,
+      "valid_count": 419,
+      "strong_count": 3,
+      "weak_count": 13,
+      "strong_pct": 0.7159904534606205,
+      "weak_pct": 3.1026252983293556
+    },
+    {
+      "date": "2025-12-03",
+      "eligible_count": 531,
+      "warmup_count": 112,
+      "valid_count": 419,
+      "strong_count": 3,
+      "weak_count": 8,
+      "strong_pct": 0.7159904534606205,
+      "weak_pct": 1.909307875894988
+    },
+    {
+      "date": "2025-12-04",
+      "eligible_count": 531,
+      "warmup_count": 111,
+      "valid_count": 420,
+      "strong_count": 4,
+      "weak_count": 8,
+      "strong_pct": 0.9523809523809523,
+      "weak_pct": 1.9047619047619047
+    },
+    {
+      "date": "2025-12-05",
+      "eligible_count": 527,
+      "warmup_count": 111,
+      "valid_count": 416,
+      "strong_count": 3,
+      "weak_count": 11,
+      "strong_pct": 0.7211538461538461,
+      "weak_pct": 2.644230769230769
+    },
+    {
+      "date": "2025-12-06",
+      "eligible_count": 528,
+      "warmup_count": 111,
+      "valid_count": 417,
+      "strong_count": 6,
+      "weak_count": 9,
+      "strong_pct": 1.4388489208633093,
+      "weak_pct": 2.158273381294964
+    },
+    {
+      "date": "2025-12-07",
+      "eligible_count": 528,
+      "warmup_count": 108,
+      "valid_count": 420,
+      "strong_count": 4,
+      "weak_count": 8,
+      "strong_pct": 0.9523809523809523,
+      "weak_pct": 1.9047619047619047
+    },
+    {
+      "date": "2025-12-08",
+      "eligible_count": 528,
+      "warmup_count": 108,
+      "valid_count": 420,
+      "strong_count": 4,
+      "weak_count": 6,
+      "strong_pct": 0.9523809523809523,
+      "weak_pct": 1.4285714285714286
+    },
+    {
+      "date": "2025-12-09",
+      "eligible_count": 528,
+      "warmup_count": 108,
+      "valid_count": 420,
+      "strong_count": 6,
+      "weak_count": 6,
+      "strong_pct": 1.4285714285714286,
+      "weak_pct": 1.4285714285714286
+    },
+    {
+      "date": "2025-12-10",
+      "eligible_count": 526,
+      "warmup_count": 110,
+      "valid_count": 416,
+      "strong_count": 4,
+      "weak_count": 3,
+      "strong_pct": 0.9615384615384616,
+      "weak_pct": 0.7211538461538461
+    },
+    {
+      "date": "2025-12-11",
+      "eligible_count": 526,
+      "warmup_count": 110,
+      "valid_count": 416,
+      "strong_count": 2,
+      "weak_count": 1,
+      "strong_pct": 0.4807692307692308,
+      "weak_pct": 0.2403846153846154
+    },
+    {
+      "date": "2025-12-12",
+      "eligible_count": 528,
+      "warmup_count": 109,
+      "valid_count": 419,
+      "strong_count": 1,
+      "weak_count": 0,
+      "strong_pct": 0.2386634844868735,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2025-12-13",
+      "eligible_count": 528,
+      "warmup_count": 109,
+      "valid_count": 419,
+      "strong_count": 3,
+      "weak_count": 0,
+      "strong_pct": 0.7159904534606205,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2025-12-14",
+      "eligible_count": 529,
+      "warmup_count": 109,
+      "valid_count": 420,
+      "strong_count": 3,
+      "weak_count": 0,
+      "strong_pct": 0.7142857142857143,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2025-12-15",
+      "eligible_count": 529,
+      "warmup_count": 109,
+      "valid_count": 420,
+      "strong_count": 2,
+      "weak_count": 8,
+      "strong_pct": 0.47619047619047616,
+      "weak_pct": 1.9047619047619047
+    },
+    {
+      "date": "2025-12-16",
+      "eligible_count": 529,
+      "warmup_count": 109,
+      "valid_count": 420,
+      "strong_count": 2,
+      "weak_count": 3,
+      "strong_pct": 0.47619047619047616,
+      "weak_pct": 0.7142857142857143
+    },
+    {
+      "date": "2025-12-17",
+      "eligible_count": 529,
+      "warmup_count": 109,
+      "valid_count": 420,
+      "strong_count": 4,
+      "weak_count": 37,
+      "strong_pct": 0.9523809523809523,
+      "weak_pct": 8.80952380952381
+    },
+    {
+      "date": "2025-12-18",
+      "eligible_count": 529,
+      "warmup_count": 108,
+      "valid_count": 421,
+      "strong_count": 3,
+      "weak_count": 88,
+      "strong_pct": 0.7125890736342043,
+      "weak_pct": 20.902612826603324
+    },
+    {
+      "date": "2025-12-19",
+      "eligible_count": 529,
+      "warmup_count": 108,
+      "valid_count": 421,
+      "strong_count": 7,
+      "weak_count": 4,
+      "strong_pct": 1.66270783847981,
+      "weak_pct": 0.9501187648456056
+    },
+    {
+      "date": "2025-12-20",
+      "eligible_count": 529,
+      "warmup_count": 106,
+      "valid_count": 423,
+      "strong_count": 7,
+      "weak_count": 4,
+      "strong_pct": 1.6548463356973995,
+      "weak_pct": 0.9456264775413712
+    },
+    {
+      "date": "2025-12-21",
+      "eligible_count": 532,
+      "warmup_count": 109,
+      "valid_count": 423,
+      "strong_count": 5,
+      "weak_count": 9,
+      "strong_pct": 1.1820330969267139,
+      "weak_pct": 2.127659574468085
+    },
+    {
+      "date": "2025-12-22",
+      "eligible_count": 532,
+      "warmup_count": 107,
+      "valid_count": 425,
+      "strong_count": 3,
+      "weak_count": 2,
+      "strong_pct": 0.7058823529411765,
+      "weak_pct": 0.47058823529411764
+    },
+    {
+      "date": "2025-12-23",
+      "eligible_count": 533,
+      "warmup_count": 108,
+      "valid_count": 425,
+      "strong_count": 4,
+      "weak_count": 2,
+      "strong_pct": 0.9411764705882353,
+      "weak_pct": 0.47058823529411764
+    },
+    {
+      "date": "2025-12-24",
+      "eligible_count": 533,
+      "warmup_count": 108,
+      "valid_count": 425,
+      "strong_count": 3,
+      "weak_count": 1,
+      "strong_pct": 0.7058823529411765,
+      "weak_pct": 0.23529411764705882
+    },
+    {
+      "date": "2025-12-25",
+      "eligible_count": 533,
+      "warmup_count": 108,
+      "valid_count": 425,
+      "strong_count": 2,
+      "weak_count": 2,
+      "strong_pct": 0.47058823529411764,
+      "weak_pct": 0.47058823529411764
+    },
+    {
+      "date": "2025-12-26",
+      "eligible_count": 533,
+      "warmup_count": 105,
+      "valid_count": 428,
+      "strong_count": 6,
+      "weak_count": 1,
+      "strong_pct": 1.4018691588785046,
+      "weak_pct": 0.2336448598130841
+    },
+    {
+      "date": "2025-12-27",
+      "eligible_count": 533,
+      "warmup_count": 104,
+      "valid_count": 429,
+      "strong_count": 4,
+      "weak_count": 1,
+      "strong_pct": 0.9324009324009324,
+      "weak_pct": 0.2331002331002331
+    },
+    {
+      "date": "2025-12-28",
+      "eligible_count": 533,
+      "warmup_count": 102,
+      "valid_count": 431,
+      "strong_count": 6,
+      "weak_count": 4,
+      "strong_pct": 1.3921113689095128,
+      "weak_pct": 0.9280742459396751
+    },
+    {
+      "date": "2025-12-29",
+      "eligible_count": 533,
+      "warmup_count": 102,
+      "valid_count": 431,
+      "strong_count": 10,
+      "weak_count": 4,
+      "strong_pct": 2.320185614849188,
+      "weak_pct": 0.9280742459396751
+    },
+    {
+      "date": "2025-12-30",
+      "eligible_count": 534,
+      "warmup_count": 103,
+      "valid_count": 431,
+      "strong_count": 12,
+      "weak_count": 4,
+      "strong_pct": 2.7842227378190256,
+      "weak_pct": 0.9280742459396751
+    },
+    {
+      "date": "2025-12-31",
+      "eligible_count": 536,
+      "warmup_count": 105,
+      "valid_count": 431,
+      "strong_count": 10,
+      "weak_count": 3,
+      "strong_pct": 2.320185614849188,
+      "weak_pct": 0.6960556844547564
+    },
+    {
+      "date": "2026-01-01",
+      "eligible_count": 536,
+      "warmup_count": 105,
+      "valid_count": 431,
+      "strong_count": 19,
+      "weak_count": 2,
+      "strong_pct": 4.408352668213457,
+      "weak_pct": 0.46403712296983757
+    },
+    {
+      "date": "2026-01-02",
+      "eligible_count": 536,
+      "warmup_count": 103,
+      "valid_count": 433,
+      "strong_count": 62,
+      "weak_count": 2,
+      "strong_pct": 14.318706697459584,
+      "weak_pct": 0.4618937644341801
+    },
+    {
+      "date": "2026-01-03",
+      "eligible_count": 536,
+      "warmup_count": 103,
+      "valid_count": 433,
+      "strong_count": 53,
+      "weak_count": 2,
+      "strong_pct": 12.240184757505773,
+      "weak_pct": 0.4618937644341801
+    },
+    {
+      "date": "2026-01-04",
+      "eligible_count": 536,
+      "warmup_count": 100,
+      "valid_count": 436,
+      "strong_count": 97,
+      "weak_count": 2,
+      "strong_pct": 22.24770642201835,
+      "weak_pct": 0.45871559633027525
+    },
+    {
+      "date": "2026-01-05",
+      "eligible_count": 536,
+      "warmup_count": 100,
+      "valid_count": 436,
+      "strong_count": 127,
+      "weak_count": 2,
+      "strong_pct": 29.128440366972477,
+      "weak_pct": 0.45871559633027525
+    },
+    {
+      "date": "2026-01-06",
+      "eligible_count": 535,
+      "warmup_count": 100,
+      "valid_count": 435,
+      "strong_count": 133,
+      "weak_count": 2,
+      "strong_pct": 30.57471264367816,
+      "weak_pct": 0.45977011494252873
+    },
+    {
+      "date": "2026-01-07",
+      "eligible_count": 535,
+      "warmup_count": 100,
+      "valid_count": 435,
+      "strong_count": 34,
+      "weak_count": 3,
+      "strong_pct": 7.816091954022989,
+      "weak_pct": 0.6896551724137931
+    },
+    {
+      "date": "2026-01-08",
+      "eligible_count": 535,
+      "warmup_count": 100,
+      "valid_count": 435,
+      "strong_count": 26,
+      "weak_count": 1,
+      "strong_pct": 5.977011494252873,
+      "weak_pct": 0.22988505747126436
+    },
+    {
+      "date": "2026-01-09",
+      "eligible_count": 536,
+      "warmup_count": 101,
+      "valid_count": 435,
+      "strong_count": 27,
+      "weak_count": 0,
+      "strong_pct": 6.206896551724138,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-01-10",
+      "eligible_count": 537,
+      "warmup_count": 100,
+      "valid_count": 437,
+      "strong_count": 21,
+      "weak_count": 0,
+      "strong_pct": 4.805491990846682,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-01-11",
+      "eligible_count": 537,
+      "warmup_count": 100,
+      "valid_count": 437,
+      "strong_count": 16,
+      "weak_count": 0,
+      "strong_pct": 3.6613272311212817,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-01-12",
+      "eligible_count": 537,
+      "warmup_count": 99,
+      "valid_count": 438,
+      "strong_count": 14,
+      "weak_count": 0,
+      "strong_pct": 3.1963470319634704,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-01-13",
+      "eligible_count": 537,
+      "warmup_count": 99,
+      "valid_count": 438,
+      "strong_count": 60,
+      "weak_count": 1,
+      "strong_pct": 13.698630136986301,
+      "weak_pct": 0.228310502283105
+    },
+    {
+      "date": "2026-01-14",
+      "eligible_count": 537,
+      "warmup_count": 99,
+      "valid_count": 438,
+      "strong_count": 31,
+      "weak_count": 2,
+      "strong_pct": 7.077625570776256,
+      "weak_pct": 0.45662100456621
+    },
+    {
+      "date": "2026-01-15",
+      "eligible_count": 538,
+      "warmup_count": 99,
+      "valid_count": 439,
+      "strong_count": 19,
+      "weak_count": 2,
+      "strong_pct": 4.328018223234624,
+      "weak_pct": 0.45558086560364464
+    },
+    {
+      "date": "2026-01-16",
+      "eligible_count": 539,
+      "warmup_count": 100,
+      "valid_count": 439,
+      "strong_count": 21,
+      "weak_count": 2,
+      "strong_pct": 4.783599088838269,
+      "weak_pct": 0.45558086560364464
+    },
+    {
+      "date": "2026-01-17",
+      "eligible_count": 539,
+      "warmup_count": 98,
+      "valid_count": 441,
+      "strong_count": 32,
+      "weak_count": 4,
+      "strong_pct": 7.2562358276643995,
+      "weak_pct": 0.9070294784580499
+    },
+    {
+      "date": "2026-01-18",
+      "eligible_count": 539,
+      "warmup_count": 98,
+      "valid_count": 441,
+      "strong_count": 19,
+      "weak_count": 3,
+      "strong_pct": 4.308390022675737,
+      "weak_pct": 0.6802721088435374
+    },
+    {
+      "date": "2026-01-19",
+      "eligible_count": 539,
+      "warmup_count": 97,
+      "valid_count": 442,
+      "strong_count": 15,
+      "weak_count": 5,
+      "strong_pct": 3.3936651583710407,
+      "weak_pct": 1.1312217194570136
+    },
+    {
+      "date": "2026-01-20",
+      "eligible_count": 540,
+      "warmup_count": 97,
+      "valid_count": 443,
+      "strong_count": 10,
+      "weak_count": 16,
+      "strong_pct": 2.2573363431151243,
+      "weak_pct": 3.6117381489841986
+    },
+    {
+      "date": "2026-01-21",
+      "eligible_count": 538,
+      "warmup_count": 99,
+      "valid_count": 439,
+      "strong_count": 14,
+      "weak_count": 5,
+      "strong_pct": 3.1890660592255125,
+      "weak_pct": 1.1389521640091116
+    },
+    {
+      "date": "2026-01-22",
+      "eligible_count": 540,
+      "warmup_count": 100,
+      "valid_count": 440,
+      "strong_count": 11,
+      "weak_count": 4,
+      "strong_pct": 2.5,
+      "weak_pct": 0.9090909090909091
+    },
+    {
+      "date": "2026-01-23",
+      "eligible_count": 542,
+      "warmup_count": 101,
+      "valid_count": 441,
+      "strong_count": 14,
+      "weak_count": 2,
+      "strong_pct": 3.1746031746031744,
+      "weak_pct": 0.45351473922902497
+    },
+    {
+      "date": "2026-01-24",
+      "eligible_count": 542,
+      "warmup_count": 100,
+      "valid_count": 442,
+      "strong_count": 11,
+      "weak_count": 2,
+      "strong_pct": 2.48868778280543,
+      "weak_pct": 0.45248868778280543
+    },
+    {
+      "date": "2026-01-25",
+      "eligible_count": 542,
+      "warmup_count": 99,
+      "valid_count": 443,
+      "strong_count": 5,
+      "weak_count": 8,
+      "strong_pct": 1.1286681715575622,
+      "weak_pct": 1.8058690744920993
+    },
+    {
+      "date": "2026-01-26",
+      "eligible_count": 542,
+      "warmup_count": 98,
+      "valid_count": 444,
+      "strong_count": 7,
+      "weak_count": 3,
+      "strong_pct": 1.5765765765765767,
+      "weak_pct": 0.6756756756756757
+    },
+    {
+      "date": "2026-01-27",
+      "eligible_count": 542,
+      "warmup_count": 98,
+      "valid_count": 444,
+      "strong_count": 9,
+      "weak_count": 4,
+      "strong_pct": 2.027027027027027,
+      "weak_pct": 0.9009009009009009
+    },
+    {
+      "date": "2026-01-28",
+      "eligible_count": 542,
+      "warmup_count": 98,
+      "valid_count": 444,
+      "strong_count": 6,
+      "weak_count": 5,
+      "strong_pct": 1.3513513513513513,
+      "weak_pct": 1.1261261261261262
+    },
+    {
+      "date": "2026-01-29",
+      "eligible_count": 544,
+      "warmup_count": 99,
+      "valid_count": 445,
+      "strong_count": 3,
+      "weak_count": 11,
+      "strong_pct": 0.6741573033707865,
+      "weak_pct": 2.4719101123595504
+    },
+    {
+      "date": "2026-01-30",
+      "eligible_count": 542,
+      "warmup_count": 98,
+      "valid_count": 444,
+      "strong_count": 5,
+      "weak_count": 5,
+      "strong_pct": 1.1261261261261262,
+      "weak_pct": 1.1261261261261262
+    },
+    {
+      "date": "2026-01-31",
+      "eligible_count": 542,
+      "warmup_count": 95,
+      "valid_count": 447,
+      "strong_count": 3,
+      "weak_count": 109,
+      "strong_pct": 0.6711409395973155,
+      "weak_pct": 24.384787472035793
+    },
+    {
+      "date": "2026-02-01",
+      "eligible_count": 542,
+      "warmup_count": 95,
+      "valid_count": 447,
+      "strong_count": 1,
+      "weak_count": 117,
+      "strong_pct": 0.22371364653243847,
+      "weak_pct": 26.174496644295303
+    },
+    {
+      "date": "2026-02-02",
+      "eligible_count": 542,
+      "warmup_count": 95,
+      "valid_count": 447,
+      "strong_count": 3,
+      "weak_count": 14,
+      "strong_pct": 0.6711409395973155,
+      "weak_pct": 3.131991051454139
+    },
+    {
+      "date": "2026-02-03",
+      "eligible_count": 542,
+      "warmup_count": 95,
+      "valid_count": 447,
+      "strong_count": 2,
+      "weak_count": 24,
+      "strong_pct": 0.44742729306487694,
+      "weak_pct": 5.369127516778524
+    },
+    {
+      "date": "2026-02-04",
+      "eligible_count": 542,
+      "warmup_count": 95,
+      "valid_count": 447,
+      "strong_count": 4,
+      "weak_count": 27,
+      "strong_pct": 0.8948545861297539,
+      "weak_pct": 6.040268456375839
+    },
+    {
+      "date": "2026-02-05",
+      "eligible_count": 542,
+      "warmup_count": 94,
+      "valid_count": 448,
+      "strong_count": 2,
+      "weak_count": 306,
+      "strong_pct": 0.44642857142857145,
+      "weak_pct": 68.30357142857143
+    },
+    {
+      "date": "2026-02-06",
+      "eligible_count": 539,
+      "warmup_count": 92,
+      "valid_count": 447,
+      "strong_count": 3,
+      "weak_count": 36,
+      "strong_pct": 0.6711409395973155,
+      "weak_pct": 8.053691275167786
+    },
+    {
+      "date": "2026-02-07",
+      "eligible_count": 539,
+      "warmup_count": 92,
+      "valid_count": 447,
+      "strong_count": 2,
+      "weak_count": 26,
+      "strong_pct": 0.44742729306487694,
+      "weak_pct": 5.8165548098434
+    },
+    {
+      "date": "2026-02-08",
+      "eligible_count": 539,
+      "warmup_count": 91,
+      "valid_count": 448,
+      "strong_count": 1,
+      "weak_count": 31,
+      "strong_pct": 0.22321428571428573,
+      "weak_pct": 6.919642857142857
+    },
+    {
+      "date": "2026-02-09",
+      "eligible_count": 539,
+      "warmup_count": 89,
+      "valid_count": 450,
+      "strong_count": 2,
+      "weak_count": 5,
+      "strong_pct": 0.4444444444444444,
+      "weak_pct": 1.1111111111111112
+    },
+    {
+      "date": "2026-02-10",
+      "eligible_count": 538,
+      "warmup_count": 89,
+      "valid_count": 449,
+      "strong_count": 4,
+      "weak_count": 14,
+      "strong_pct": 0.89086859688196,
+      "weak_pct": 3.11804008908686
+    },
+    {
+      "date": "2026-02-11",
+      "eligible_count": 539,
+      "warmup_count": 90,
+      "valid_count": 449,
+      "strong_count": 5,
+      "weak_count": 13,
+      "strong_pct": 1.1135857461024499,
+      "weak_pct": 2.89532293986637
+    },
+    {
+      "date": "2026-02-12",
+      "eligible_count": 539,
+      "warmup_count": 89,
+      "valid_count": 450,
+      "strong_count": 5,
+      "weak_count": 6,
+      "strong_pct": 1.1111111111111112,
+      "weak_pct": 1.3333333333333333
+    },
+    {
+      "date": "2026-02-13",
+      "eligible_count": 539,
+      "warmup_count": 89,
+      "valid_count": 450,
+      "strong_count": 6,
+      "weak_count": 5,
+      "strong_pct": 1.3333333333333333,
+      "weak_pct": 1.1111111111111112
+    },
+    {
+      "date": "2026-02-14",
+      "eligible_count": 539,
+      "warmup_count": 86,
+      "valid_count": 453,
+      "strong_count": 10,
+      "weak_count": 4,
+      "strong_pct": 2.207505518763797,
+      "weak_pct": 0.8830022075055187
+    },
+    {
+      "date": "2026-02-15",
+      "eligible_count": 539,
+      "warmup_count": 85,
+      "valid_count": 454,
+      "strong_count": 7,
+      "weak_count": 3,
+      "strong_pct": 1.5418502202643172,
+      "weak_pct": 0.6607929515418502
+    },
+    {
+      "date": "2026-02-16",
+      "eligible_count": 539,
+      "warmup_count": 83,
+      "valid_count": 456,
+      "strong_count": 10,
+      "weak_count": 3,
+      "strong_pct": 2.192982456140351,
+      "weak_pct": 0.6578947368421053
+    },
+    {
+      "date": "2026-02-17",
+      "eligible_count": 539,
+      "warmup_count": 83,
+      "valid_count": 456,
+      "strong_count": 8,
+      "weak_count": 2,
+      "strong_pct": 1.7543859649122806,
+      "weak_pct": 0.43859649122807015
+    },
+    {
+      "date": "2026-02-18",
+      "eligible_count": 539,
+      "warmup_count": 83,
+      "valid_count": 456,
+      "strong_count": 6,
+      "weak_count": 4,
+      "strong_pct": 1.3157894736842106,
+      "weak_pct": 0.8771929824561403
+    },
+    {
+      "date": "2026-02-19",
+      "eligible_count": 539,
+      "warmup_count": 83,
+      "valid_count": 456,
+      "strong_count": 5,
+      "weak_count": 4,
+      "strong_pct": 1.0964912280701755,
+      "weak_pct": 0.8771929824561403
+    },
+    {
+      "date": "2026-02-20",
+      "eligible_count": 539,
+      "warmup_count": 82,
+      "valid_count": 457,
+      "strong_count": 9,
+      "weak_count": 5,
+      "strong_pct": 1.9693654266958425,
+      "weak_pct": 1.0940919037199124
+    },
+    {
+      "date": "2026-02-21",
+      "eligible_count": 540,
+      "warmup_count": 82,
+      "valid_count": 458,
+      "strong_count": 7,
+      "weak_count": 2,
+      "strong_pct": 1.5283842794759825,
+      "weak_pct": 0.4366812227074236
+    },
+    {
+      "date": "2026-02-22",
+      "eligible_count": 540,
+      "warmup_count": 81,
+      "valid_count": 459,
+      "strong_count": 4,
+      "weak_count": 3,
+      "strong_pct": 0.8714596949891068,
+      "weak_pct": 0.6535947712418301
+    },
+    {
+      "date": "2026-02-23",
+      "eligible_count": 539,
+      "warmup_count": 77,
+      "valid_count": 462,
+      "strong_count": 3,
+      "weak_count": 7,
+      "strong_pct": 0.6493506493506493,
+      "weak_pct": 1.5151515151515151
+    },
+    {
+      "date": "2026-02-24",
+      "eligible_count": 539,
+      "warmup_count": 76,
+      "valid_count": 463,
+      "strong_count": 9,
+      "weak_count": 6,
+      "strong_pct": 1.9438444924406046,
+      "weak_pct": 1.2958963282937366
+    },
+    {
+      "date": "2026-02-25",
+      "eligible_count": 539,
+      "warmup_count": 76,
+      "valid_count": 463,
+      "strong_count": 11,
+      "weak_count": 2,
+      "strong_pct": 2.375809935205184,
+      "weak_pct": 0.4319654427645788
+    },
+    {
+      "date": "2026-02-26",
+      "eligible_count": 539,
+      "warmup_count": 74,
+      "valid_count": 465,
+      "strong_count": 10,
+      "weak_count": 6,
+      "strong_pct": 2.150537634408602,
+      "weak_pct": 1.2903225806451613
+    },
+    {
+      "date": "2026-02-27",
+      "eligible_count": 540,
+      "warmup_count": 73,
+      "valid_count": 467,
+      "strong_count": 8,
+      "weak_count": 5,
+      "strong_pct": 1.7130620985010707,
+      "weak_pct": 1.0706638115631693
+    },
+    {
+      "date": "2026-02-28",
+      "eligible_count": 540,
+      "warmup_count": 71,
+      "valid_count": 469,
+      "strong_count": 11,
+      "weak_count": 2,
+      "strong_pct": 2.345415778251599,
+      "weak_pct": 0.42643923240938164
+    },
+    {
+      "date": "2026-03-01",
+      "eligible_count": 540,
+      "warmup_count": 70,
+      "valid_count": 470,
+      "strong_count": 7,
+      "weak_count": 5,
+      "strong_pct": 1.4893617021276595,
+      "weak_pct": 1.0638297872340425
+    },
+    {
+      "date": "2026-03-02",
+      "eligible_count": 541,
+      "warmup_count": 70,
+      "valid_count": 471,
+      "strong_count": 10,
+      "weak_count": 1,
+      "strong_pct": 2.1231422505307855,
+      "weak_pct": 0.21231422505307856
+    },
+    {
+      "date": "2026-03-03",
+      "eligible_count": 541,
+      "warmup_count": 70,
+      "valid_count": 471,
+      "strong_count": 12,
+      "weak_count": 3,
+      "strong_pct": 2.5477707006369426,
+      "weak_pct": 0.6369426751592356
+    },
+    {
+      "date": "2026-03-04",
+      "eligible_count": 542,
+      "warmup_count": 71,
+      "valid_count": 471,
+      "strong_count": 17,
+      "weak_count": 2,
+      "strong_pct": 3.6093418259023355,
+      "weak_pct": 0.42462845010615713
+    },
+    {
+      "date": "2026-03-05",
+      "eligible_count": 542,
+      "warmup_count": 70,
+      "valid_count": 472,
+      "strong_count": 15,
+      "weak_count": 2,
+      "strong_pct": 3.1779661016949152,
+      "weak_pct": 0.423728813559322
+    },
+    {
+      "date": "2026-03-06",
+      "eligible_count": 542,
+      "warmup_count": 69,
+      "valid_count": 473,
+      "strong_count": 10,
+      "weak_count": 2,
+      "strong_pct": 2.1141649048625792,
+      "weak_pct": 0.42283298097251587
+    },
+    {
+      "date": "2026-03-07",
+      "eligible_count": 542,
+      "warmup_count": 68,
+      "valid_count": 474,
+      "strong_count": 9,
+      "weak_count": 2,
+      "strong_pct": 1.8987341772151898,
+      "weak_pct": 0.4219409282700422
+    },
+    {
+      "date": "2026-03-08",
+      "eligible_count": 542,
+      "warmup_count": 67,
+      "valid_count": 475,
+      "strong_count": 9,
+      "weak_count": 5,
+      "strong_pct": 1.894736842105263,
+      "weak_pct": 1.0526315789473684
+    },
+    {
+      "date": "2026-03-09",
+      "eligible_count": 542,
+      "warmup_count": 65,
+      "valid_count": 477,
+      "strong_count": 14,
+      "weak_count": 0,
+      "strong_pct": 2.9350104821802936,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-03-10",
+      "eligible_count": 542,
+      "warmup_count": 64,
+      "valid_count": 478,
+      "strong_count": 18,
+      "weak_count": 1,
+      "strong_pct": 3.7656903765690375,
+      "weak_pct": 0.20920502092050208
+    },
+    {
+      "date": "2026-03-11",
+      "eligible_count": 543,
+      "warmup_count": 65,
+      "valid_count": 478,
+      "strong_count": 21,
+      "weak_count": 1,
+      "strong_pct": 4.393305439330544,
+      "weak_pct": 0.20920502092050208
+    },
+    {
+      "date": "2026-03-12",
+      "eligible_count": 543,
+      "warmup_count": 64,
+      "valid_count": 479,
+      "strong_count": 19,
+      "weak_count": 1,
+      "strong_pct": 3.9665970772442587,
+      "weak_pct": 0.20876826722338204
+    },
+    {
+      "date": "2026-03-13",
+      "eligible_count": 543,
+      "warmup_count": 62,
+      "valid_count": 481,
+      "strong_count": 16,
+      "weak_count": 2,
+      "strong_pct": 3.3264033264033266,
+      "weak_pct": 0.4158004158004158
+    },
+    {
+      "date": "2026-03-14",
+      "eligible_count": 543,
+      "warmup_count": 61,
+      "valid_count": 482,
+      "strong_count": 19,
+      "weak_count": 4,
+      "strong_pct": 3.9419087136929463,
+      "weak_pct": 0.8298755186721992
+    },
+    {
+      "date": "2026-03-15",
+      "eligible_count": 543,
+      "warmup_count": 61,
+      "valid_count": 482,
+      "strong_count": 30,
+      "weak_count": 2,
+      "strong_pct": 6.224066390041494,
+      "weak_pct": 0.4149377593360996
+    },
+    {
+      "date": "2026-03-16",
+      "eligible_count": 544,
+      "warmup_count": 59,
+      "valid_count": 485,
+      "strong_count": 77,
+      "weak_count": 3,
+      "strong_pct": 15.876288659793815,
+      "weak_pct": 0.6185567010309279
+    },
+    {
+      "date": "2026-03-17",
+      "eligible_count": 541,
+      "warmup_count": 59,
+      "valid_count": 482,
+      "strong_count": 49,
+      "weak_count": 4,
+      "strong_pct": 10.16597510373444,
+      "weak_pct": 0.8298755186721992
+    },
+    {
+      "date": "2026-03-18",
+      "eligible_count": 541,
+      "warmup_count": 59,
+      "valid_count": 482,
+      "strong_count": 15,
+      "weak_count": 13,
+      "strong_pct": 3.112033195020747,
+      "weak_pct": 2.6970954356846475
+    },
+    {
+      "date": "2026-03-19",
+      "eligible_count": 542,
+      "warmup_count": 59,
+      "valid_count": 483,
+      "strong_count": 12,
+      "weak_count": 10,
+      "strong_pct": 2.484472049689441,
+      "weak_pct": 2.070393374741201
+    },
+    {
+      "date": "2026-03-20",
+      "eligible_count": 542,
+      "warmup_count": 58,
+      "valid_count": 484,
+      "strong_count": 15,
+      "weak_count": 13,
+      "strong_pct": 3.0991735537190084,
+      "weak_pct": 2.6859504132231407
+    },
+    {
+      "date": "2026-03-21",
+      "eligible_count": 542,
+      "warmup_count": 57,
+      "valid_count": 485,
+      "strong_count": 10,
+      "weak_count": 9,
+      "strong_pct": 2.0618556701030926,
+      "weak_pct": 1.8556701030927836
+    },
+    {
+      "date": "2026-03-22",
+      "eligible_count": 542,
+      "warmup_count": 56,
+      "valid_count": 486,
+      "strong_count": 9,
+      "weak_count": 10,
+      "strong_pct": 1.8518518518518519,
+      "weak_pct": 2.05761316872428
+    },
+    {
+      "date": "2026-03-23",
+      "eligible_count": 542,
+      "warmup_count": 55,
+      "valid_count": 487,
+      "strong_count": 16,
+      "weak_count": 11,
+      "strong_pct": 3.2854209445585214,
+      "weak_pct": 2.2587268993839835
+    },
+    {
+      "date": "2026-03-24",
+      "eligible_count": 536,
+      "warmup_count": 55,
+      "valid_count": 481,
+      "strong_count": 13,
+      "weak_count": 5,
+      "strong_pct": 2.7027027027027026,
+      "weak_pct": 1.0395010395010396
+    },
+    {
+      "date": "2026-03-25",
+      "eligible_count": 537,
+      "warmup_count": 56,
+      "valid_count": 481,
+      "strong_count": 16,
+      "weak_count": 3,
+      "strong_pct": 3.3264033264033266,
+      "weak_pct": 0.6237006237006237
+    },
+    {
+      "date": "2026-03-26",
+      "eligible_count": 538,
+      "warmup_count": 57,
+      "valid_count": 481,
+      "strong_count": 10,
+      "weak_count": 10,
+      "strong_pct": 2.079002079002079,
+      "weak_pct": 2.079002079002079
+    },
+    {
+      "date": "2026-03-27",
+      "eligible_count": 538,
+      "warmup_count": 57,
+      "valid_count": 481,
+      "strong_count": 11,
+      "weak_count": 10,
+      "strong_pct": 2.286902286902287,
+      "weak_pct": 2.079002079002079
+    },
+    {
+      "date": "2026-03-28",
+      "eligible_count": 538,
+      "warmup_count": 55,
+      "valid_count": 483,
+      "strong_count": 8,
+      "weak_count": 5,
+      "strong_pct": 1.6563146997929608,
+      "weak_pct": 1.0351966873706004
+    },
+    {
+      "date": "2026-03-29",
+      "eligible_count": 538,
+      "warmup_count": 55,
+      "valid_count": 483,
+      "strong_count": 5,
+      "weak_count": 5,
+      "strong_pct": 1.0351966873706004,
+      "weak_pct": 1.0351966873706004
+    },
+    {
+      "date": "2026-03-30",
+      "eligible_count": 539,
+      "warmup_count": 55,
+      "valid_count": 484,
+      "strong_count": 8,
+      "weak_count": 3,
+      "strong_pct": 1.6528925619834711,
+      "weak_pct": 0.6198347107438017
+    },
+    {
+      "date": "2026-03-31",
+      "eligible_count": 539,
+      "warmup_count": 55,
+      "valid_count": 484,
+      "strong_count": 11,
+      "weak_count": 1,
+      "strong_pct": 2.272727272727273,
+      "weak_pct": 0.2066115702479339
+    },
+    {
+      "date": "2026-04-01",
+      "eligible_count": 540,
+      "warmup_count": 56,
+      "valid_count": 484,
+      "strong_count": 21,
+      "weak_count": 4,
+      "strong_pct": 4.338842975206612,
+      "weak_pct": 0.8264462809917356
+    },
+    {
+      "date": "2026-04-02",
+      "eligible_count": 540,
+      "warmup_count": 56,
+      "valid_count": 484,
+      "strong_count": 24,
+      "weak_count": 5,
+      "strong_pct": 4.958677685950414,
+      "weak_pct": 1.0330578512396693
+    },
+    {
+      "date": "2026-04-03",
+      "eligible_count": 540,
+      "warmup_count": 55,
+      "valid_count": 485,
+      "strong_count": 25,
+      "weak_count": 8,
+      "strong_pct": 5.154639175257732,
+      "weak_pct": 1.6494845360824741
+    },
+    {
+      "date": "2026-04-04",
+      "eligible_count": 540,
+      "warmup_count": 54,
+      "valid_count": 486,
+      "strong_count": 22,
+      "weak_count": 5,
+      "strong_pct": 4.526748971193416,
+      "weak_pct": 1.02880658436214
+    },
+    {
+      "date": "2026-04-05",
+      "eligible_count": 540,
+      "warmup_count": 51,
+      "valid_count": 489,
+      "strong_count": 20,
+      "weak_count": 4,
+      "strong_pct": 4.08997955010225,
+      "weak_pct": 0.8179959100204499
+    },
+    {
+      "date": "2026-04-06",
+      "eligible_count": 540,
+      "warmup_count": 51,
+      "valid_count": 489,
+      "strong_count": 18,
+      "weak_count": 6,
+      "strong_pct": 3.6809815950920246,
+      "weak_pct": 1.2269938650306749
+    },
+    {
+      "date": "2026-04-07",
+      "eligible_count": 540,
+      "warmup_count": 51,
+      "valid_count": 489,
+      "strong_count": 27,
+      "weak_count": 1,
+      "strong_pct": 5.521472392638037,
+      "weak_pct": 0.20449897750511248
+    },
+    {
+      "date": "2026-04-08",
+      "eligible_count": 536,
+      "warmup_count": 50,
+      "valid_count": 486,
+      "strong_count": 20,
+      "weak_count": 3,
+      "strong_pct": 4.11522633744856,
+      "weak_pct": 0.6172839506172839
+    },
+    {
+      "date": "2026-04-09",
+      "eligible_count": 536,
+      "warmup_count": 49,
+      "valid_count": 487,
+      "strong_count": 27,
+      "weak_count": 8,
+      "strong_pct": 5.544147843942505,
+      "weak_pct": 1.6427104722792607
+    },
+    {
+      "date": "2026-04-10",
+      "eligible_count": 536,
+      "warmup_count": 48,
+      "valid_count": 488,
+      "strong_count": 29,
+      "weak_count": 5,
+      "strong_pct": 5.942622950819672,
+      "weak_pct": 1.0245901639344261
+    },
+    {
+      "date": "2026-04-11",
+      "eligible_count": 536,
+      "warmup_count": 46,
+      "valid_count": 490,
+      "strong_count": 30,
+      "weak_count": 5,
+      "strong_pct": 6.122448979591836,
+      "weak_pct": 1.0204081632653061
+    },
+    {
+      "date": "2026-04-12",
+      "eligible_count": 536,
+      "warmup_count": 46,
+      "valid_count": 490,
+      "strong_count": 22,
+      "weak_count": 6,
+      "strong_pct": 4.489795918367347,
+      "weak_pct": 1.2244897959183674
+    },
+    {
+      "date": "2026-04-13",
+      "eligible_count": 536,
+      "warmup_count": 44,
+      "valid_count": 492,
+      "strong_count": 39,
+      "weak_count": 5,
+      "strong_pct": 7.926829268292683,
+      "weak_pct": 1.016260162601626
+    },
+    {
+      "date": "2026-04-14",
+      "eligible_count": 536,
+      "warmup_count": 44,
+      "valid_count": 492,
+      "strong_count": 32,
+      "weak_count": 7,
+      "strong_pct": 6.504065040650406,
+      "weak_pct": 1.4227642276422765
+    },
+    {
+      "date": "2026-04-15",
+      "eligible_count": 533,
+      "warmup_count": 44,
+      "valid_count": 489,
+      "strong_count": 53,
+      "weak_count": 2,
+      "strong_pct": 10.838445807770961,
+      "weak_pct": 0.40899795501022496
+    },
+    {
+      "date": "2026-04-16",
+      "eligible_count": 535,
+      "warmup_count": 46,
+      "valid_count": 489,
+      "strong_count": 132,
+      "weak_count": 3,
+      "strong_pct": 26.993865030674847,
+      "weak_pct": 0.6134969325153374
+    },
+    {
+      "date": "2026-04-17",
+      "eligible_count": 535,
+      "warmup_count": 46,
+      "valid_count": 489,
+      "strong_count": 151,
+      "weak_count": 6,
+      "strong_pct": 30.879345603271982,
+      "weak_pct": 1.2269938650306749
+    },
+    {
+      "date": "2026-04-18",
+      "eligible_count": 535,
+      "warmup_count": 46,
+      "valid_count": 489,
+      "strong_count": 56,
+      "weak_count": 8,
+      "strong_pct": 11.451942740286299,
+      "weak_pct": 1.6359918200408998
+    },
+    {
+      "date": "2026-04-19",
+      "eligible_count": 535,
+      "warmup_count": 46,
+      "valid_count": 489,
+      "strong_count": 24,
+      "weak_count": 13,
+      "strong_pct": 4.9079754601226995,
+      "weak_pct": 2.658486707566462
+    },
+    {
+      "date": "2026-04-20",
+      "eligible_count": 535,
+      "warmup_count": 45,
+      "valid_count": 490,
+      "strong_count": 37,
+      "weak_count": 5,
+      "strong_pct": 7.551020408163265,
+      "weak_pct": 1.0204081632653061
+    },
+    {
+      "date": "2026-04-21",
+      "eligible_count": 532,
+      "warmup_count": 45,
+      "valid_count": 487,
+      "strong_count": 34,
+      "weak_count": 1,
+      "strong_pct": 6.981519507186858,
+      "weak_pct": 0.2053388090349076
+    },
+    {
+      "date": "2026-04-22",
+      "eligible_count": 533,
+      "warmup_count": 46,
+      "valid_count": 487,
+      "strong_count": 23,
+      "weak_count": 2,
+      "strong_pct": 4.722792607802875,
+      "weak_pct": 0.4106776180698152
+    },
+    {
+      "date": "2026-04-23",
+      "eligible_count": 533,
+      "warmup_count": 46,
+      "valid_count": 487,
+      "strong_count": 40,
+      "weak_count": 1,
+      "strong_pct": 8.213552361396303,
+      "weak_pct": 0.2053388090349076
+    },
+    {
+      "date": "2026-04-24",
+      "eligible_count": 533,
+      "warmup_count": 46,
+      "valid_count": 487,
+      "strong_count": 34,
+      "weak_count": 4,
+      "strong_pct": 6.981519507186858,
+      "weak_pct": 0.8213552361396304
+    },
+    {
+      "date": "2026-04-25",
+      "eligible_count": 533,
+      "warmup_count": 45,
+      "valid_count": 488,
+      "strong_count": 28,
+      "weak_count": 3,
+      "strong_pct": 5.737704918032787,
+      "weak_pct": 0.6147540983606558
+    },
+    {
+      "date": "2026-04-26",
+      "eligible_count": 533,
+      "warmup_count": 45,
+      "valid_count": 488,
+      "strong_count": 33,
+      "weak_count": 4,
+      "strong_pct": 6.762295081967213,
+      "weak_pct": 0.819672131147541
+    },
+    {
+      "date": "2026-04-27",
+      "eligible_count": 533,
+      "warmup_count": 45,
+      "valid_count": 488,
+      "strong_count": 19,
+      "weak_count": 1,
+      "strong_pct": 3.8934426229508197,
+      "weak_pct": 0.20491803278688525
+    },
+    {
+      "date": "2026-04-28",
+      "eligible_count": 528,
+      "warmup_count": 45,
+      "valid_count": 483,
+      "strong_count": 23,
+      "weak_count": 0,
+      "strong_pct": 4.761904761904762,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-04-29",
+      "eligible_count": 526,
+      "warmup_count": 45,
+      "valid_count": 481,
+      "strong_count": 16,
+      "weak_count": 2,
+      "strong_pct": 3.3264033264033266,
+      "weak_pct": 0.4158004158004158
+    },
+    {
+      "date": "2026-04-30",
+      "eligible_count": 526,
+      "warmup_count": 45,
+      "valid_count": 481,
+      "strong_count": 13,
+      "weak_count": 1,
+      "strong_pct": 2.7027027027027026,
+      "weak_pct": 0.2079002079002079
+    },
+    {
+      "date": "2026-05-01",
+      "eligible_count": 526,
+      "warmup_count": 45,
+      "valid_count": 481,
+      "strong_count": 18,
+      "weak_count": 3,
+      "strong_pct": 3.7422037422037424,
+      "weak_pct": 0.6237006237006237
+    },
+    {
+      "date": "2026-05-02",
+      "eligible_count": 526,
+      "warmup_count": 45,
+      "valid_count": 481,
+      "strong_count": 24,
+      "weak_count": 1,
+      "strong_pct": 4.98960498960499,
+      "weak_pct": 0.2079002079002079
+    },
+    {
+      "date": "2026-05-03",
+      "eligible_count": 526,
+      "warmup_count": 45,
+      "valid_count": 481,
+      "strong_count": 18,
+      "weak_count": 0,
+      "strong_pct": 3.7422037422037424,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-05-04",
+      "eligible_count": 526,
+      "warmup_count": 45,
+      "valid_count": 481,
+      "strong_count": 25,
+      "weak_count": 1,
+      "strong_pct": 5.197505197505198,
+      "weak_pct": 0.2079002079002079
+    },
+    {
+      "date": "2026-05-05",
+      "eligible_count": 526,
+      "warmup_count": 44,
+      "valid_count": 482,
+      "strong_count": 24,
+      "weak_count": 1,
+      "strong_pct": 4.979253112033195,
+      "weak_pct": 0.2074688796680498
+    },
+    {
+      "date": "2026-05-06",
+      "eligible_count": 526,
+      "warmup_count": 44,
+      "valid_count": 482,
+      "strong_count": 41,
+      "weak_count": 1,
+      "strong_pct": 8.506224066390041,
+      "weak_pct": 0.2074688796680498
+    },
+    {
+      "date": "2026-05-07",
+      "eligible_count": 527,
+      "warmup_count": 45,
+      "valid_count": 482,
+      "strong_count": 49,
+      "weak_count": 1,
+      "strong_pct": 10.16597510373444,
+      "weak_pct": 0.2074688796680498
+    },
+    {
+      "date": "2026-05-08",
+      "eligible_count": 527,
+      "warmup_count": 45,
+      "valid_count": 482,
+      "strong_count": 90,
+      "weak_count": 0,
+      "strong_pct": 18.672199170124482,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-05-09",
+      "eligible_count": 527,
+      "warmup_count": 43,
+      "valid_count": 484,
+      "strong_count": 61,
+      "weak_count": 0,
+      "strong_pct": 12.603305785123966,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-05-10",
+      "eligible_count": 527,
+      "warmup_count": 43,
+      "valid_count": 484,
+      "strong_count": 105,
+      "weak_count": 0,
+      "strong_pct": 21.694214876033058,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-05-11",
+      "eligible_count": 527,
+      "warmup_count": 41,
+      "valid_count": 486,
+      "strong_count": 75,
+      "weak_count": 0,
+      "strong_pct": 15.432098765432098,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-05-12",
+      "eligible_count": 527,
+      "warmup_count": 41,
+      "valid_count": 486,
+      "strong_count": 34,
+      "weak_count": 0,
+      "strong_pct": 6.995884773662551,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-05-13",
+      "eligible_count": 527,
+      "warmup_count": 40,
+      "valid_count": 487,
+      "strong_count": 15,
+      "weak_count": 7,
+      "strong_pct": 3.080082135523614,
+      "weak_pct": 1.4373716632443532
+    },
+    {
+      "date": "2026-05-14",
+      "eligible_count": 529,
+      "warmup_count": 42,
+      "valid_count": 487,
+      "strong_count": 12,
+      "weak_count": 8,
+      "strong_pct": 2.4640657084188913,
+      "weak_pct": 1.6427104722792607
+    },
+    {
+      "date": "2026-05-15",
+      "eligible_count": 529,
+      "warmup_count": 42,
+      "valid_count": 487,
+      "strong_count": 6,
+      "weak_count": 7,
+      "strong_pct": 1.2320328542094456,
+      "weak_pct": 1.4373716632443532
+    },
+    {
+      "date": "2026-05-16",
+      "eligible_count": 529,
+      "warmup_count": 42,
+      "valid_count": 487,
+      "strong_count": 5,
+      "weak_count": 10,
+      "strong_pct": 1.0266940451745379,
+      "weak_pct": 2.0533880903490758
+    },
+    {
+      "date": "2026-05-17",
+      "eligible_count": 529,
+      "warmup_count": 42,
+      "valid_count": 487,
+      "strong_count": 3,
+      "weak_count": 15,
+      "strong_pct": 0.6160164271047228,
+      "weak_pct": 3.080082135523614
+    },
+    {
+      "date": "2026-05-18",
+      "eligible_count": 529,
+      "warmup_count": 42,
+      "valid_count": 487,
+      "strong_count": 2,
+      "weak_count": 13,
+      "strong_pct": 0.4106776180698152,
+      "weak_pct": 2.6694045174537986
+    },
+    {
+      "date": "2026-05-19",
+      "eligible_count": 525,
+      "warmup_count": 42,
+      "valid_count": 483,
+      "strong_count": 3,
+      "weak_count": 12,
+      "strong_pct": 0.6211180124223602,
+      "weak_pct": 2.484472049689441
+    },
+    {
+      "date": "2026-05-20",
+      "eligible_count": 525,
+      "warmup_count": 40,
+      "valid_count": 485,
+      "strong_count": 6,
+      "weak_count": 4,
+      "strong_pct": 1.2371134020618557,
+      "weak_pct": 0.8247422680412371
+    },
+    {
+      "date": "2026-05-21",
+      "eligible_count": 525,
+      "warmup_count": 40,
+      "valid_count": 485,
+      "strong_count": 10,
+      "weak_count": 3,
+      "strong_pct": 2.0618556701030926,
+      "weak_pct": 0.6185567010309279
+    },
+    {
+      "date": "2026-05-22",
+      "eligible_count": 525,
+      "warmup_count": 39,
+      "valid_count": 486,
+      "strong_count": 6,
+      "weak_count": 8,
+      "strong_pct": 1.2345679012345678,
+      "weak_pct": 1.646090534979424
+    },
+    {
+      "date": "2026-05-23",
+      "eligible_count": 525,
+      "warmup_count": 39,
+      "valid_count": 486,
+      "strong_count": 10,
+      "weak_count": 4,
+      "strong_pct": 2.05761316872428,
+      "weak_pct": 0.823045267489712
+    },
+    {
+      "date": "2026-05-24",
+      "eligible_count": 525,
+      "warmup_count": 39,
+      "valid_count": 486,
+      "strong_count": 9,
+      "weak_count": 6,
+      "strong_pct": 1.8518518518518519,
+      "weak_pct": 1.2345679012345678
+    },
+    {
+      "date": "2026-05-25",
+      "eligible_count": 525,
+      "warmup_count": 39,
+      "valid_count": 486,
+      "strong_count": 11,
+      "weak_count": 3,
+      "strong_pct": 2.263374485596708,
+      "weak_pct": 0.6172839506172839
+    },
+    {
+      "date": "2026-05-26",
+      "eligible_count": 525,
+      "warmup_count": 39,
+      "valid_count": 486,
+      "strong_count": 7,
+      "weak_count": 10,
+      "strong_pct": 1.440329218106996,
+      "weak_pct": 2.05761316872428
+    },
+    {
+      "date": "2026-05-27",
+      "eligible_count": 525,
+      "warmup_count": 39,
+      "valid_count": 486,
+      "strong_count": 1,
+      "weak_count": 11,
+      "strong_pct": 0.205761316872428,
+      "weak_pct": 2.263374485596708
+    },
+    {
+      "date": "2026-05-28",
+      "eligible_count": 526,
+      "warmup_count": 40,
+      "valid_count": 486,
+      "strong_count": 5,
+      "weak_count": 17,
+      "strong_pct": 1.02880658436214,
+      "weak_pct": 3.4979423868312756
+    },
+    {
+      "date": "2026-05-29",
+      "eligible_count": 526,
+      "warmup_count": 39,
+      "valid_count": 487,
+      "strong_count": 9,
+      "weak_count": 14,
+      "strong_pct": 1.8480492813141685,
+      "weak_pct": 2.8747433264887063
+    },
+    {
+      "date": "2026-05-30",
+      "eligible_count": 526,
+      "warmup_count": 37,
+      "valid_count": 489,
+      "strong_count": 14,
+      "weak_count": 10,
+      "strong_pct": 2.8629856850715747,
+      "weak_pct": 2.044989775051125
+    },
+    {
+      "date": "2026-05-31",
+      "eligible_count": 526,
+      "warmup_count": 37,
+      "valid_count": 489,
+      "strong_count": 16,
+      "weak_count": 1,
+      "strong_pct": 3.2719836400817996,
+      "weak_pct": 0.20449897750511248
+    },
+    {
+      "date": "2026-06-01",
+      "eligible_count": 527,
+      "warmup_count": 38,
+      "valid_count": 489,
+      "strong_count": 14,
+      "weak_count": 2,
+      "strong_pct": 2.8629856850715747,
+      "weak_pct": 0.40899795501022496
+    },
+    {
+      "date": "2026-06-02",
+      "eligible_count": 527,
+      "warmup_count": 38,
+      "valid_count": 489,
+      "strong_count": 14,
+      "weak_count": 16,
+      "strong_pct": 2.8629856850715747,
+      "weak_pct": 3.2719836400817996
+    },
+    {
+      "date": "2026-06-03",
+      "eligible_count": 527,
+      "warmup_count": 38,
+      "valid_count": 489,
+      "strong_count": 10,
+      "weak_count": 20,
+      "strong_pct": 2.044989775051125,
+      "weak_pct": 4.08997955010225
+    },
+    {
+      "date": "2026-06-04",
+      "eligible_count": 529,
+      "warmup_count": 40,
+      "valid_count": 489,
+      "strong_count": 4,
+      "weak_count": 73,
+      "strong_pct": 0.8179959100204499,
+      "weak_pct": 14.928425357873211
+    },
+    {
+      "date": "2026-06-05",
+      "eligible_count": 529,
+      "warmup_count": 40,
+      "valid_count": 489,
+      "strong_count": 4,
+      "weak_count": 237,
+      "strong_pct": 0.8179959100204499,
+      "weak_pct": 48.466257668711656
+    },
+    {
+      "date": "2026-06-06",
+      "eligible_count": 529,
+      "warmup_count": 40,
+      "valid_count": 489,
+      "strong_count": 8,
+      "weak_count": 184,
+      "strong_pct": 1.6359918200408998,
+      "weak_pct": 37.627811860940696
+    },
+    {
+      "date": "2026-06-07",
+      "eligible_count": 529,
+      "warmup_count": 40,
+      "valid_count": 489,
+      "strong_count": 6,
+      "weak_count": 57,
+      "strong_pct": 1.2269938650306749,
+      "weak_pct": 11.656441717791411
+    },
+    {
+      "date": "2026-06-08",
+      "eligible_count": 529,
+      "warmup_count": 39,
+      "valid_count": 490,
+      "strong_count": 5,
+      "weak_count": 15,
+      "strong_pct": 1.0204081632653061,
+      "weak_pct": 3.061224489795918
+    },
+    {
+      "date": "2026-06-09",
+      "eligible_count": 529,
+      "warmup_count": 38,
+      "valid_count": 491,
+      "strong_count": 4,
+      "weak_count": 47,
+      "strong_pct": 0.814663951120163,
+      "weak_pct": 9.572301425661914
+    },
+    {
+      "date": "2026-06-10",
+      "eligible_count": 529,
+      "warmup_count": 38,
+      "valid_count": 491,
+      "strong_count": 7,
+      "weak_count": 55,
+      "strong_pct": 1.4256619144602851,
+      "weak_pct": 11.201629327902241
+    },
+    {
+      "date": "2026-06-11",
+      "eligible_count": 525,
+      "warmup_count": 38,
+      "valid_count": 487,
+      "strong_count": 9,
+      "weak_count": 8,
+      "strong_pct": 1.8480492813141685,
+      "weak_pct": 1.6427104722792607
+    },
+    {
+      "date": "2026-06-12",
+      "eligible_count": 525,
+      "warmup_count": 38,
+      "valid_count": 487,
+      "strong_count": 6,
+      "weak_count": 3,
+      "strong_pct": 1.2320328542094456,
+      "weak_pct": 0.6160164271047228
+    },
+    {
+      "date": "2026-06-13",
+      "eligible_count": 525,
+      "warmup_count": 38,
+      "valid_count": 487,
+      "strong_count": 4,
+      "weak_count": 4,
+      "strong_pct": 0.8213552361396304,
+      "weak_pct": 0.8213552361396304
+    },
+    {
+      "date": "2026-06-14",
+      "eligible_count": 525,
+      "warmup_count": 37,
+      "valid_count": 488,
+      "strong_count": 4,
+      "weak_count": 4,
+      "strong_pct": 0.819672131147541,
+      "weak_pct": 0.819672131147541
+    },
+    {
+      "date": "2026-06-15",
+      "eligible_count": 525,
+      "warmup_count": 36,
+      "valid_count": 489,
+      "strong_count": 6,
+      "weak_count": 5,
+      "strong_pct": 1.2269938650306749,
+      "weak_pct": 1.0224948875255624
+    },
+    {
+      "date": "2026-06-16",
+      "eligible_count": 525,
+      "warmup_count": 36,
+      "valid_count": 489,
+      "strong_count": 11,
+      "weak_count": 2,
+      "strong_pct": 2.2494887525562373,
+      "weak_pct": 0.40899795501022496
+    },
+    {
+      "date": "2026-06-17",
+      "eligible_count": 525,
+      "warmup_count": 36,
+      "valid_count": 489,
+      "strong_count": 12,
+      "weak_count": 1,
+      "strong_pct": 2.4539877300613497,
+      "weak_pct": 0.20449897750511248
+    },
+    {
+      "date": "2026-06-18",
+      "eligible_count": 526,
+      "warmup_count": 37,
+      "valid_count": 489,
+      "strong_count": 6,
+      "weak_count": 4,
+      "strong_pct": 1.2269938650306749,
+      "weak_pct": 0.8179959100204499
+    },
+    {
+      "date": "2026-06-19",
+      "eligible_count": 526,
+      "warmup_count": 36,
+      "valid_count": 490,
+      "strong_count": 9,
+      "weak_count": 4,
+      "strong_pct": 1.836734693877551,
+      "weak_pct": 0.8163265306122449
+    },
+    {
+      "date": "2026-06-20",
+      "eligible_count": 526,
+      "warmup_count": 34,
+      "valid_count": 492,
+      "strong_count": 14,
+      "weak_count": 5,
+      "strong_pct": 2.845528455284553,
+      "weak_pct": 1.016260162601626
+    },
+    {
+      "date": "2026-06-21",
+      "eligible_count": 526,
+      "warmup_count": 32,
+      "valid_count": 494,
+      "strong_count": 11,
+      "weak_count": 3,
+      "strong_pct": 2.2267206477732793,
+      "weak_pct": 0.6072874493927125
+    },
+    {
+      "date": "2026-06-22",
+      "eligible_count": 526,
+      "warmup_count": 30,
+      "valid_count": 496,
+      "strong_count": 11,
+      "weak_count": 6,
+      "strong_pct": 2.217741935483871,
+      "weak_pct": 1.2096774193548387
+    },
+    {
+      "date": "2026-06-23",
+      "eligible_count": 526,
+      "warmup_count": 31,
+      "valid_count": 495,
+      "strong_count": 5,
+      "weak_count": 7,
+      "strong_pct": 1.0101010101010102,
+      "weak_pct": 1.4141414141414141
+    },
+    {
+      "date": "2026-06-24",
+      "eligible_count": 527,
+      "warmup_count": 32,
+      "valid_count": 495,
+      "strong_count": 3,
+      "weak_count": 10,
+      "strong_pct": 0.6060606060606061,
+      "weak_pct": 2.0202020202020203
+    },
+    {
+      "date": "2026-06-25",
+      "eligible_count": 527,
+      "warmup_count": 32,
+      "valid_count": 495,
+      "strong_count": 8,
+      "weak_count": 12,
+      "strong_pct": 1.6161616161616161,
+      "weak_pct": 2.4242424242424243
+    },
+    {
+      "date": "2026-06-26",
+      "eligible_count": 527,
+      "warmup_count": 32,
+      "valid_count": 495,
+      "strong_count": 6,
+      "weak_count": 9,
+      "strong_pct": 1.2121212121212122,
+      "weak_pct": 1.8181818181818181
+    },
+    {
+      "date": "2026-06-27",
+      "eligible_count": 528,
+      "warmup_count": 33,
+      "valid_count": 495,
+      "strong_count": 6,
+      "weak_count": 7,
+      "strong_pct": 1.2121212121212122,
+      "weak_pct": 1.4141414141414141
+    },
+    {
+      "date": "2026-06-28",
+      "eligible_count": 527,
+      "warmup_count": 31,
+      "valid_count": 496,
+      "strong_count": 5,
+      "weak_count": 9,
+      "strong_pct": 1.0080645161290323,
+      "weak_pct": 1.814516129032258
+    },
+    {
+      "date": "2026-06-29",
+      "eligible_count": 527,
+      "warmup_count": 29,
+      "valid_count": 498,
+      "strong_count": 8,
+      "weak_count": 6,
+      "strong_pct": 1.606425702811245,
+      "weak_pct": 1.2048192771084338
+    },
+    {
+      "date": "2026-06-30",
+      "eligible_count": 527,
+      "warmup_count": 29,
+      "valid_count": 498,
+      "strong_count": 1,
+      "weak_count": 11,
+      "strong_pct": 0.20080321285140562,
+      "weak_pct": 2.208835341365462
+    },
+    {
+      "date": "2026-07-01",
+      "eligible_count": 527,
+      "warmup_count": 29,
+      "valid_count": 498,
+      "strong_count": 8,
+      "weak_count": 12,
+      "strong_pct": 1.606425702811245,
+      "weak_pct": 2.4096385542168677
+    },
+    {
+      "date": "2026-07-02",
+      "eligible_count": 527,
+      "warmup_count": 30,
+      "valid_count": 497,
+      "strong_count": 10,
+      "weak_count": 10,
+      "strong_pct": 2.0120724346076457,
+      "weak_pct": 2.0120724346076457
+    },
+    {
+      "date": "2026-07-03",
+      "eligible_count": 528,
+      "warmup_count": 31,
+      "valid_count": 497,
+      "strong_count": 22,
+      "weak_count": 6,
+      "strong_pct": 4.426559356136821,
+      "weak_pct": 1.2072434607645874
+    },
+    {
+      "date": "2026-07-04",
+      "eligible_count": 528,
+      "warmup_count": 31,
+      "valid_count": 497,
+      "strong_count": 21,
+      "weak_count": 6,
+      "strong_pct": 4.225352112676056,
+      "weak_pct": 1.2072434607645874
+    },
+    {
+      "date": "2026-07-05",
+      "eligible_count": 528,
+      "warmup_count": 31,
+      "valid_count": 497,
+      "strong_count": 16,
+      "weak_count": 6,
+      "strong_pct": 3.2193158953722336,
+      "weak_pct": 1.2072434607645874
+    },
+    {
+      "date": "2026-07-06",
+      "eligible_count": 528,
+      "warmup_count": 30,
+      "valid_count": 498,
+      "strong_count": 21,
+      "weak_count": 7,
+      "strong_pct": 4.216867469879518,
+      "weak_pct": 1.4056224899598393
+    },
+    {
+      "date": "2026-07-07",
+      "eligible_count": 528,
+      "warmup_count": 30,
+      "valid_count": 498,
+      "strong_count": 8,
+      "weak_count": 15,
+      "strong_pct": 1.606425702811245,
+      "weak_pct": 3.0120481927710845
+    },
+    {
+      "date": "2026-07-08",
+      "eligible_count": 528,
+      "warmup_count": 30,
+      "valid_count": 498,
+      "strong_count": 6,
+      "weak_count": 20,
+      "strong_pct": 1.2048192771084338,
+      "weak_pct": 4.016064257028113
+    },
+    {
+      "date": "2026-07-09",
+      "eligible_count": 528,
+      "warmup_count": 30,
+      "valid_count": 498,
+      "strong_count": 5,
+      "weak_count": 10,
+      "strong_pct": 1.0040160642570282,
+      "weak_pct": 2.0080321285140563
+    },
+    {
+      "date": "2026-07-10",
+      "eligible_count": 528,
+      "warmup_count": 29,
+      "valid_count": 499,
+      "strong_count": 13,
+      "weak_count": 8,
+      "strong_pct": 2.6052104208416833,
+      "weak_pct": 1.6032064128256514
+    },
+    {
+      "date": "2026-07-11",
+      "eligible_count": 528,
+      "warmup_count": 28,
+      "valid_count": 500,
+      "strong_count": 9,
+      "weak_count": 9,
+      "strong_pct": 1.8,
+      "weak_pct": 1.8
+    },
+    {
+      "date": "2026-07-12",
+      "eligible_count": 528,
+      "warmup_count": 28,
+      "valid_count": 500,
+      "strong_count": 9,
+      "weak_count": 6,
+      "strong_pct": 1.8,
+      "weak_pct": 1.2
+    },
+    {
+      "date": "2026-07-13",
+      "eligible_count": 528,
+      "warmup_count": 28,
+      "valid_count": 500,
+      "strong_count": 6,
+      "weak_count": 10,
+      "strong_pct": 1.2,
+      "weak_pct": 2.0
+    },
+    {
+      "date": "2026-07-14",
+      "eligible_count": 528,
+      "warmup_count": 28,
+      "valid_count": 500,
+      "strong_count": 7,
+      "weak_count": 5,
+      "strong_pct": 1.4,
+      "weak_pct": 1.0
+    },
+    {
+      "date": "2026-07-15",
+      "eligible_count": 528,
+      "warmup_count": 28,
+      "valid_count": 500,
+      "strong_count": 12,
+      "weak_count": 5,
+      "strong_pct": 2.4,
+      "weak_pct": 1.0
+    },
+    {
+      "date": "2026-07-16",
+      "eligible_count": 528,
+      "warmup_count": 28,
+      "valid_count": 500,
+      "strong_count": 4,
+      "weak_count": 12,
+      "strong_pct": 0.8,
+      "weak_pct": 2.4
+    },
+    {
+      "date": "2026-07-17",
+      "eligible_count": 528,
+      "warmup_count": 28,
+      "valid_count": 500,
+      "strong_count": 7,
+      "weak_count": 14,
+      "strong_pct": 1.4,
+      "weak_pct": 2.8
+    },
+    {
+      "date": "2026-07-18",
+      "eligible_count": 528,
+      "warmup_count": 28,
+      "valid_count": 500,
+      "strong_count": 6,
+      "weak_count": 9,
+      "strong_pct": 1.2,
+      "weak_pct": 1.8
+    },
+    {
+      "date": "2026-07-19",
+      "eligible_count": 528,
+      "warmup_count": 28,
+      "valid_count": 500,
+      "strong_count": 10,
+      "weak_count": 8,
+      "strong_pct": 2.0,
+      "weak_pct": 1.6
+    },
+    {
+      "date": "2026-07-20",
+      "eligible_count": 528,
+      "warmup_count": 28,
+      "valid_count": 500,
+      "strong_count": 11,
+      "weak_count": 6,
+      "strong_pct": 2.2,
+      "weak_pct": 1.2
+    },
+    {
+      "date": "2026-07-21",
+      "eligible_count": 528,
+      "warmup_count": 27,
+      "valid_count": 501,
+      "strong_count": 10,
+      "weak_count": 5,
+      "strong_pct": 1.996007984031936,
+      "weak_pct": 0.998003992015968
+    },
+    {
+      "date": "2026-07-22",
+      "eligible_count": 528,
+      "warmup_count": 27,
+      "valid_count": 501,
+      "strong_count": 8,
+      "weak_count": 7,
+      "strong_pct": 1.596806387225549,
+      "weak_pct": 1.3972055888223553
+    },
+    {
+      "date": "2026-07-23",
+      "eligible_count": 528,
+      "warmup_count": 27,
+      "valid_count": 501,
+      "strong_count": 8,
+      "weak_count": 7,
+      "strong_pct": 1.596806387225549,
+      "weak_pct": 1.3972055888223553
+    },
+    {
+      "date": "2026-07-24",
+      "eligible_count": 527,
+      "warmup_count": 27,
+      "valid_count": 500,
+      "strong_count": 9,
+      "weak_count": 8,
+      "strong_pct": 1.8,
+      "weak_pct": 1.6
+    },
+    {
+      "date": "2026-07-25",
+      "eligible_count": 527,
+      "warmup_count": 27,
+      "valid_count": 500,
+      "strong_count": 10,
+      "weak_count": 4,
+      "strong_pct": 2.0,
+      "weak_pct": 0.8
+    },
+    {
+      "date": "2026-07-26",
+      "eligible_count": 527,
+      "warmup_count": 27,
+      "valid_count": 500,
+      "strong_count": 14,
+      "weak_count": 4,
+      "strong_pct": 2.8,
+      "weak_pct": 0.8
+    },
+    {
+      "date": "2026-07-27",
+      "eligible_count": 527,
+      "warmup_count": 26,
+      "valid_count": 501,
+      "strong_count": 10,
+      "weak_count": 8,
+      "strong_pct": 1.996007984031936,
+      "weak_pct": 1.596806387225549
+    },
+    {
+      "date": "2026-07-28",
+      "eligible_count": 527,
+      "warmup_count": 26,
+      "valid_count": 501,
+      "strong_count": 8,
+      "weak_count": 5,
+      "strong_pct": 1.596806387225549,
+      "weak_pct": 0.998003992015968
+    },
+    {
+      "date": "2026-07-29",
+      "eligible_count": 527,
+      "warmup_count": 26,
+      "valid_count": 501,
+      "strong_count": 4,
+      "weak_count": 17,
+      "strong_pct": 0.7984031936127745,
+      "weak_pct": 3.3932135728542914
+    },
+    {
+      "date": "2026-07-30",
+      "eligible_count": 527,
+      "warmup_count": 25,
+      "valid_count": 502,
+      "strong_count": 5,
+      "weak_count": 11,
+      "strong_pct": 0.9960159362549801,
+      "weak_pct": 2.191235059760956
+    },
+    {
+      "date": "2026-07-31",
+      "eligible_count": 528,
+      "warmup_count": 26,
+      "valid_count": 502,
+      "strong_count": 8,
+      "weak_count": 10,
+      "strong_pct": 1.593625498007968,
+      "weak_pct": 1.9920318725099602
+    },
+    {
+      "date": "2026-08-01",
+      "eligible_count": 528,
+      "warmup_count": 25,
+      "valid_count": 503,
+      "strong_count": 11,
+      "weak_count": 10,
+      "strong_pct": 2.1868787276341948,
+      "weak_pct": 1.9880715705765408
+    },
+    {
+      "date": "2026-08-02",
+      "eligible_count": 528,
+      "warmup_count": 25,
+      "valid_count": 503,
+      "strong_count": 9,
+      "weak_count": 8,
+      "strong_pct": 1.7892644135188867,
+      "weak_pct": 1.5904572564612327
+    },
+    {
+      "date": "2026-08-03",
+      "eligible_count": 528,
+      "warmup_count": 25,
+      "valid_count": 503,
+      "strong_count": 13,
+      "weak_count": 8,
+      "strong_pct": 2.584493041749503,
+      "weak_pct": 1.5904572564612327
+    },
+    {
+      "date": "2026-08-04",
+      "eligible_count": 528,
+      "warmup_count": 25,
+      "valid_count": 503,
+      "strong_count": 7,
+      "weak_count": 12,
+      "strong_pct": 1.3916500994035785,
+      "weak_pct": 2.3856858846918487
+    },
+    {
+      "date": "2026-08-05",
+      "eligible_count": 528,
+      "warmup_count": 25,
+      "valid_count": 503,
+      "strong_count": 10,
+      "weak_count": 5,
+      "strong_pct": 1.9880715705765408,
+      "weak_pct": 0.9940357852882704
+    },
+    {
+      "date": "2026-08-06",
+      "eligible_count": 528,
+      "warmup_count": 25,
+      "valid_count": 503,
+      "strong_count": 23,
+      "weak_count": 5,
+      "strong_pct": 4.572564612326044,
+      "weak_pct": 0.9940357852882704
+    },
+    {
+      "date": "2026-08-07",
+      "eligible_count": 524,
+      "warmup_count": 25,
+      "valid_count": 499,
+      "strong_count": 15,
+      "weak_count": 4,
+      "strong_pct": 3.006012024048096,
+      "weak_pct": 0.8016032064128257
+    },
+    {
+      "date": "2026-08-08",
+      "eligible_count": 524,
+      "warmup_count": 24,
+      "valid_count": 500,
+      "strong_count": 27,
+      "weak_count": 2,
+      "strong_pct": 5.4,
+      "weak_pct": 0.4
+    },
+    {
+      "date": "2026-08-09",
+      "eligible_count": 524,
+      "warmup_count": 24,
+      "valid_count": 500,
+      "strong_count": 40,
+      "weak_count": 5,
+      "strong_pct": 8.0,
+      "weak_pct": 1.0
+    },
+    {
+      "date": "2026-08-10",
+      "eligible_count": 524,
+      "warmup_count": 24,
+      "valid_count": 500,
+      "strong_count": 28,
+      "weak_count": 5,
+      "strong_pct": 5.6,
+      "weak_pct": 1.0
+    },
+    {
+      "date": "2026-08-11",
+      "eligible_count": 525,
+      "warmup_count": 25,
+      "valid_count": 500,
+      "strong_count": 15,
+      "weak_count": 6,
+      "strong_pct": 3.0,
+      "weak_pct": 1.2
+    },
+    {
+      "date": "2026-08-12",
+      "eligible_count": 525,
+      "warmup_count": 25,
+      "valid_count": 500,
+      "strong_count": 10,
+      "weak_count": 15,
+      "strong_pct": 2.0,
+      "weak_pct": 3.0
+    },
+    {
+      "date": "2026-08-13",
+      "eligible_count": 525,
+      "warmup_count": 24,
+      "valid_count": 501,
+      "strong_count": 6,
+      "weak_count": 10,
+      "strong_pct": 1.1976047904191616,
+      "weak_pct": 1.996007984031936
+    },
+    {
+      "date": "2026-08-14",
+      "eligible_count": 525,
+      "warmup_count": 24,
+      "valid_count": 501,
+      "strong_count": 8,
+      "weak_count": 10,
+      "strong_pct": 1.596806387225549,
+      "weak_pct": 1.996007984031936
+    },
+    {
+      "date": "2026-08-15",
+      "eligible_count": 525,
+      "warmup_count": 24,
+      "valid_count": 501,
+      "strong_count": 10,
+      "weak_count": 15,
+      "strong_pct": 1.996007984031936,
+      "weak_pct": 2.9940119760479043
+    },
+    {
+      "date": "2026-08-16",
+      "eligible_count": 525,
+      "warmup_count": 23,
+      "valid_count": 502,
+      "strong_count": 5,
+      "weak_count": 12,
+      "strong_pct": 0.9960159362549801,
+      "weak_pct": 2.3904382470119523
+    },
+    {
+      "date": "2026-08-17",
+      "eligible_count": 525,
+      "warmup_count": 23,
+      "valid_count": 502,
+      "strong_count": 6,
+      "weak_count": 11,
+      "strong_pct": 1.1952191235059761,
+      "weak_pct": 2.191235059760956
+    },
+    {
+      "date": "2026-08-18",
+      "eligible_count": 525,
+      "warmup_count": 23,
+      "valid_count": 502,
+      "strong_count": 8,
+      "weak_count": 10,
+      "strong_pct": 1.593625498007968,
+      "weak_pct": 1.9920318725099602
+    },
+    {
+      "date": "2026-08-19",
+      "eligible_count": 525,
+      "warmup_count": 23,
+      "valid_count": 502,
+      "strong_count": 23,
+      "weak_count": 9,
+      "strong_pct": 4.581673306772909,
+      "weak_pct": 1.792828685258964
+    },
+    {
+      "date": "2026-08-20",
+      "eligible_count": 525,
+      "warmup_count": 23,
+      "valid_count": 502,
+      "strong_count": 82,
+      "weak_count": 9,
+      "strong_pct": 16.334661354581673,
+      "weak_pct": 1.792828685258964
+    },
+    {
+      "date": "2026-08-21",
+      "eligible_count": 525,
+      "warmup_count": 23,
+      "valid_count": 502,
+      "strong_count": 232,
+      "weak_count": 4,
+      "strong_pct": 46.21513944223108,
+      "weak_pct": 0.796812749003984
+    },
+    {
+      "date": "2026-08-22",
+      "eligible_count": 525,
+      "warmup_count": 22,
+      "valid_count": 503,
+      "strong_count": 120,
+      "weak_count": 8,
+      "strong_pct": 23.856858846918488,
+      "weak_pct": 1.5904572564612327
+    },
+    {
+      "date": "2026-08-23",
+      "eligible_count": 525,
+      "warmup_count": 21,
+      "valid_count": 504,
+      "strong_count": 136,
+      "weak_count": 6,
+      "strong_pct": 26.984126984126984,
+      "weak_pct": 1.1904761904761905
+    },
+    {
+      "date": "2026-08-24",
+      "eligible_count": 525,
+      "warmup_count": 21,
+      "valid_count": 504,
+      "strong_count": 87,
+      "weak_count": 4,
+      "strong_pct": 17.261904761904763,
+      "weak_pct": 0.7936507936507936
+    },
+    {
+      "date": "2026-08-25",
+      "eligible_count": 525,
+      "warmup_count": 21,
+      "valid_count": 504,
+      "strong_count": 20,
+      "weak_count": 3,
+      "strong_pct": 3.9682539682539684,
+      "weak_pct": 0.5952380952380952
+    },
+    {
+      "date": "2026-08-26",
+      "eligible_count": 522,
+      "warmup_count": 21,
+      "valid_count": 501,
+      "strong_count": 39,
+      "weak_count": 3,
+      "strong_pct": 7.7844311377245505,
+      "weak_pct": 0.5988023952095808
+    },
+    {
+      "date": "2026-08-27",
+      "eligible_count": 522,
+      "warmup_count": 20,
+      "valid_count": 502,
+      "strong_count": 33,
+      "weak_count": 3,
+      "strong_pct": 6.573705179282869,
+      "weak_pct": 0.5976095617529881
+    },
+    {
+      "date": "2026-08-28",
+      "eligible_count": 522,
+      "warmup_count": 20,
+      "valid_count": 502,
+      "strong_count": 18,
+      "weak_count": 2,
+      "strong_pct": 3.585657370517928,
+      "weak_pct": 0.398406374501992
+    },
+    {
+      "date": "2026-08-29",
+      "eligible_count": 522,
+      "warmup_count": 19,
+      "valid_count": 503,
+      "strong_count": 18,
+      "weak_count": 3,
+      "strong_pct": 3.5785288270377733,
+      "weak_pct": 0.5964214711729622
+    },
+    {
+      "date": "2026-08-30",
+      "eligible_count": 523,
+      "warmup_count": 20,
+      "valid_count": 503,
+      "strong_count": 13,
+      "weak_count": 4,
+      "strong_pct": 2.584493041749503,
+      "weak_pct": 0.7952286282306164
+    },
+    {
+      "date": "2026-08-31",
+      "eligible_count": 523,
+      "warmup_count": 20,
+      "valid_count": 503,
+      "strong_count": 17,
+      "weak_count": 4,
+      "strong_pct": 3.3797216699801194,
+      "weak_pct": 0.7952286282306164
+    },
+    {
+      "date": "2026-09-01",
+      "eligible_count": 524,
+      "warmup_count": 21,
+      "valid_count": 503,
+      "strong_count": 12,
+      "weak_count": 6,
+      "strong_pct": 2.3856858846918487,
+      "weak_pct": 1.1928429423459244
+    },
+    {
+      "date": "2026-09-02",
+      "eligible_count": 524,
+      "warmup_count": 21,
+      "valid_count": 503,
+      "strong_count": 13,
+      "weak_count": 7,
+      "strong_pct": 2.584493041749503,
+      "weak_pct": 1.3916500994035785
+    },
+    {
+      "date": "2026-09-03",
+      "eligible_count": 524,
+      "warmup_count": 21,
+      "valid_count": 503,
+      "strong_count": 22,
+      "weak_count": 4,
+      "strong_pct": 4.3737574552683895,
+      "weak_pct": 0.7952286282306164
+    },
+    {
+      "date": "2026-09-04",
+      "eligible_count": 524,
+      "warmup_count": 21,
+      "valid_count": 503,
+      "strong_count": 20,
+      "weak_count": 4,
+      "strong_pct": 3.9761431411530817,
+      "weak_pct": 0.7952286282306164
+    },
+    {
+      "date": "2026-09-05",
+      "eligible_count": 524,
+      "warmup_count": 21,
+      "valid_count": 503,
+      "strong_count": 39,
+      "weak_count": 2,
+      "strong_pct": 7.753479125248509,
+      "weak_pct": 0.3976143141153082
+    },
+    {
+      "date": "2026-09-06",
+      "eligible_count": 526,
+      "warmup_count": 23,
+      "valid_count": 503,
+      "strong_count": 47,
+      "weak_count": 3,
+      "strong_pct": 9.343936381709742,
+      "weak_pct": 0.5964214711729622
+    },
+    {
+      "date": "2026-09-07",
+      "eligible_count": 526,
+      "warmup_count": 23,
+      "valid_count": 503,
+      "strong_count": 25,
+      "weak_count": 3,
+      "strong_pct": 4.970178926441352,
+      "weak_pct": 0.5964214711729622
+    },
+    {
+      "date": "2026-09-08",
+      "eligible_count": 526,
+      "warmup_count": 23,
+      "valid_count": 503,
+      "strong_count": 29,
+      "weak_count": 3,
+      "strong_pct": 5.7654075546719685,
+      "weak_pct": 0.5964214711729622
+    },
+    {
+      "date": "2026-09-09",
+      "eligible_count": 526,
+      "warmup_count": 23,
+      "valid_count": 503,
+      "strong_count": 18,
+      "weak_count": 7,
+      "strong_pct": 3.5785288270377733,
+      "weak_pct": 1.3916500994035785
+    },
+    {
+      "date": "2026-09-10",
+      "eligible_count": 526,
+      "warmup_count": 23,
+      "valid_count": 503,
+      "strong_count": 8,
+      "weak_count": 12,
+      "strong_pct": 1.5904572564612327,
+      "weak_pct": 2.3856858846918487
+    },
+    {
+      "date": "2026-09-11",
+      "eligible_count": 526,
+      "warmup_count": 23,
+      "valid_count": 503,
+      "strong_count": 8,
+      "weak_count": 6,
+      "strong_pct": 1.5904572564612327,
+      "weak_pct": 1.1928429423459244
+    },
+    {
+      "date": "2026-09-12",
+      "eligible_count": 526,
+      "warmup_count": 23,
+      "valid_count": 503,
+      "strong_count": 24,
+      "weak_count": 5,
+      "strong_pct": 4.7713717693836974,
+      "weak_pct": 0.9940357852882704
+    },
+    {
+      "date": "2026-09-13",
+      "eligible_count": 526,
+      "warmup_count": 21,
+      "valid_count": 505,
+      "strong_count": 17,
+      "weak_count": 5,
+      "strong_pct": 3.366336633663366,
+      "weak_pct": 0.9900990099009901
+    },
+    {
+      "date": "2026-09-14",
+      "eligible_count": 526,
+      "warmup_count": 21,
+      "valid_count": 505,
+      "strong_count": 16,
+      "weak_count": 1,
+      "strong_pct": 3.1683168316831685,
+      "weak_pct": 0.19801980198019803
+    },
+    {
+      "date": "2026-09-15",
+      "eligible_count": 526,
+      "warmup_count": 21,
+      "valid_count": 505,
+      "strong_count": 14,
+      "weak_count": 3,
+      "strong_pct": 2.772277227722772,
+      "weak_pct": 0.594059405940594
+    },
+    {
+      "date": "2026-09-16",
+      "eligible_count": 526,
+      "warmup_count": 21,
+      "valid_count": 505,
+      "strong_count": 10,
+      "weak_count": 4,
+      "strong_pct": 1.9801980198019802,
+      "weak_pct": 0.7920792079207921
+    },
+    {
+      "date": "2026-09-17",
+      "eligible_count": 526,
+      "warmup_count": 21,
+      "valid_count": 505,
+      "strong_count": 12,
+      "weak_count": 2,
+      "strong_pct": 2.376237623762376,
+      "weak_pct": 0.39603960396039606
+    },
+    {
+      "date": "2026-09-18",
+      "eligible_count": 526,
+      "warmup_count": 21,
+      "valid_count": 505,
+      "strong_count": 46,
+      "weak_count": 1,
+      "strong_pct": 9.108910891089108,
+      "weak_pct": 0.19801980198019803
+    },
+    {
+      "date": "2026-09-19",
+      "eligible_count": 526,
+      "warmup_count": 20,
+      "valid_count": 506,
+      "strong_count": 71,
+      "weak_count": 1,
+      "strong_pct": 14.031620553359684,
+      "weak_pct": 0.1976284584980237
+    },
+    {
+      "date": "2026-09-20",
+      "eligible_count": 526,
+      "warmup_count": 20,
+      "valid_count": 506,
+      "strong_count": 51,
+      "weak_count": 0,
+      "strong_pct": 10.079051383399209,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-09-21",
+      "eligible_count": 526,
+      "warmup_count": 20,
+      "valid_count": 506,
+      "strong_count": 109,
+      "weak_count": 0,
+      "strong_pct": 21.541501976284586,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-09-22",
+      "eligible_count": 526,
+      "warmup_count": 20,
+      "valid_count": 506,
+      "strong_count": 147,
+      "weak_count": 0,
+      "strong_pct": 29.051383399209485,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-09-23",
+      "eligible_count": 526,
+      "warmup_count": 20,
+      "valid_count": 506,
+      "strong_count": 30,
+      "weak_count": 1,
+      "strong_pct": 5.928853754940712,
+      "weak_pct": 0.1976284584980237
+    },
+    {
+      "date": "2026-09-24",
+      "eligible_count": 525,
+      "warmup_count": 20,
+      "valid_count": 505,
+      "strong_count": 55,
+      "weak_count": 1,
+      "strong_pct": 10.891089108910892,
+      "weak_pct": 0.19801980198019803
+    },
+    {
+      "date": "2026-09-25",
+      "eligible_count": 525,
+      "warmup_count": 20,
+      "valid_count": 505,
+      "strong_count": 104,
+      "weak_count": 0,
+      "strong_pct": 20.594059405940595,
+      "weak_pct": 0.0
+    },
+    {
+      "date": "2026-09-26",
+      "eligible_count": 525,
+      "warmup_count": 19,
+      "valid_count": 506,
+      "strong_count": 74,
+      "weak_count": 1,
+      "strong_pct": 14.624505928853756,
+      "weak_pct": 0.1976284584980237
+    },
+    {
+      "date": "2026-09-27",
+      "eligible_count": 525,
+      "warmup_count": 19,
+      "valid_count": 506,
+      "strong_count": 70,
+      "weak_count": 1,
+      "strong_pct": 13.83399209486166,
+      "weak_pct": 0.1976284584980237
+    }
+  ],
+  "current": {
+    "date": "2026-09-27",
+    "eligible_count": 525,
+    "warmup_count": 19,
+    "valid_count": 506,
+    "strong_count": 70,
+    "weak_count": 1,
+    "strong_pct": 13.83399209486166,
+    "weak_pct": 0.1976284584980237
+  },
+  "kline_requests": 381,
+  "archive_requests": 1,
+  "strong_percentile": 94.52054794520548,
+  "weak_percentile": 7.123287671232877,
+  "generated_at": "2026-09-28T12:47:00.641863+00:00"
+}

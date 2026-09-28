@@ -290,7 +290,10 @@ def run_legacy(scanner_dir, output_dir, dry_run=False):
 
 def run(scanner_dir, output_dir, dry_run=False):
     from scripts.crypto_trend_rankings import run as run_trend
-    return run_trend(scanner_dir, output_dir, dry_run=dry_run)
+    from scripts.crypto_pmarp_breadth import run as run_breadth
+    report = run_trend(scanner_dir, output_dir, dry_run=dry_run)
+    run_breadth(scanner_dir, output_dir, dry_run=dry_run, as_of=report['as_of'])
+    return report
 
 
 def main():

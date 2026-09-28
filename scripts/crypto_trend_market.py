@@ -79,7 +79,8 @@ class TrendMarket(MarketData):
     the daily caller byte-for-byte identical.
     """
 
-    def __init__(self, scanner, cache_dir, as_of, history_days=30, catalog_dirs=()):
+    def __init__(self, scanner, cache_dir, as_of, history_days=30, catalog_dirs=(),
+                 supplemental_records=(), archive_retirements=None):
         super().__init__(scanner)
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -89,6 +90,8 @@ class TrendMarket(MarketData):
         self.catalog_dirs = [Path(directory) for directory in catalog_dirs]
         self.archive_requests = 0
         self.pending_symbols = set()
+        self.supplemental_records = list(supplemental_records)
+        self.archive_retirements = dict(archive_retirements or {})
 
     def _json(self, endpoint, params=None):
         time.sleep(1)
@@ -190,8 +193,18 @@ class TrendMarket(MarketData):
             combined.update({m['symbol']:m for m in saved['symbols']})
             snapshots.append(path.name)
         combined.update({m['symbol']:m for m in current['symbols']})
+        eligible_metadata(self.supplemental_records)
+        for meta in self.supplemental_records:
+            combined.setdefault(meta['symbol'], meta)
         records = eligible_metadata(list(combined.values()))
-        unknown = sorted(self.archive_symbols()-set(combined))
+        retired = {}
+        for symbol, proof in self.archive_retirements.items():
+            if (type(proof.get('deliveryDate')) is not int or proof['deliveryDate'] <= 0
+                    or not proof.get('source')):
+                raise ValueError('归档退市证据无效: '+symbol)
+            if proof['deliveryDate'] <= int(start.timestamp()*1000):
+                retired[symbol] = proof
+        unknown = sorted(self.archive_symbols()-set(combined)-set(retired))
         unresolved = [s for s in unknown if self.has_archive_activity(s, start, self.end)]
         if unresolved:
             raise ValueError('期内归档合约元数据缺失: '+', '.join(unresolved))
@@ -209,6 +222,9 @@ class TrendMarket(MarketData):
                         limitation='Not original point-in-time exchangeInfo vintages; archived prices/metadata may be revised.',
                         prior_catalogs=snapshots, metadata_count=len(records),
                         unknown_archive_symbols=unknown, unknown_active_symbols=unresolved)
+        if self.supplemental_records or retired:
+            evidence['supplemental_records'] = self.supplemental_records
+            evidence['archive_retirements'] = retired
         return records, active, evidence
 
     def current_catalog(self, as_of):

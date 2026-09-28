@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-09-28",
+  "symbols": [
+    {
+      "symbol": "AERGOUSDT",
+      "underlyingType": "COIN",
+      "quoteAsset": "USDT",
+      "contractType": "PERPETUAL",
+      "status": "SETTLING",
+      "onboardDate": 1744801200000,
+      "deliveryDate": 1784874600000,
+      "onboard_precision": "minute",
+      "sources": {
+        "launch": "https://www.binance.com/en/support/announcement/detail/82f730b7ef444a38b323ab7a2e56b757",
+        "retirement": "https://www.binance.com/en/support/announcement/detail/f0e3fc835b9545759e4279c64b200389"
+      }
+    },
+    {
+      "symbol": "BDXNUSDT",
+      "underlyingType": "COIN",
+      "quoteAsset": "USDT",
+      "contractType": "PERPETUAL",
+      "status": "SETTLING",
+      "onboardDate": 1748946600000,
+      "deliveryDate": 1773738000000,
+      "onboard_precision": "minute",
+      "sources": {
+        "launch": "https://www.binance.com/en/support/announcement/detail/2dae21629d644e7695f9570769bbdd44",
+        "retirement": "https://www.binance.com/en/support/announcement/detail/f6ebc17e4dbd451b873d9ef25c801237"
+      }
+    },
+    {
+      "symbol": "SXPUSDT",
+      "underlyingType": "COIN",
+      "quoteAsset": "USDT",
+      "contractType": "PERPETUAL",
+      "status": "SETTLING",
+      "onboardDate": 1595289600000,
+      "deliveryDate": 1764925200000,
+      "onboard_precision": "date",
+      "sources": {
+        "launch": "https://www.binance.com/en/blog/all/421499824684900793",
+        "retirement": "https://www.binance.com/en-TR/support/announcement/detail/746056ce732d43dda12c1e5ae1b7a059"
+      }
+    }
+  ],
+  "archive_retirements": {
+    "BTCSTUSDT": {
+      "deliveryDate": 1615514400000,
+      "source": "https://www.binance.com/en/support/announcement/detail/2c08ba9e1a1b409fb6a4a2cb2f5ed58b",
+      "note": "USDT futures terminated before report window; later spot reopening is not futures evidence."
+    }
+  },
+  "retired_prices": {
+    "AERGOUSDT": {
+      "sha256": "a864f5a7e4836fbd90cb1e9c659d6316b88ad4439516f383b0f34270cd80a978",
+      "source": "checksum-verified official archives",
+      "origin": "reports/crypto-fisher-2026-09-20/raw/daily/AERGOUSDT.json",
+      "note": "Original archive rows retained; production calculation clips to official lifecycle."
+    },
+    "BDXNUSDT": {
+      "sha256": "a02c2f3ae178322df877f6d7638cd80a0bd9d1fbcd5a45d309ed32c1b1f7fcad",
+      "source": "checksum-verified official archives",
+      "origin": "reports/crypto-fisher-2026-09-20/raw/daily/BDXNUSDT.json",
+      "note": "Original archive rows retained; production calculation clips to official lifecycle."
+    },
+    "SXPUSDT": {
+      "sha256": "e8b8b3f016118ca7c7d65cfdd892ab229702a0910397c438d784e34d059e6c38",
+      "source": "checksum verified official archives",
+      "origin": "reports/crypto-fisher-2026-09-20/raw/daily/SXPUSDT.json",
+      "note": "Original archive rows retained; production calculation clips to official lifecycle."
+    }
+  }
+}

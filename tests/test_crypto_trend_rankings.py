@@ -231,7 +231,9 @@ def test_live_run_send_failure_propagates(monkeypatch,tmp_path):
 
 def test_existing_daily_entry_dispatches_new_pipeline(monkeypatch,tmp_path):
     from scripts import crypto_daily_rankings as daily
-    marker={'new_pipeline':True}
+    from scripts import crypto_pmarp_breadth as breadth
+    marker={'new_pipeline':True,'as_of':str(ASOF.date())}
+    monkeypatch.setattr(breadth,'run',lambda *a,**kw:{})
     monkeypatch.setattr(trend,'run',lambda scanner_dir,output_dir,dry_run=False:marker)
     assert daily.run(tmp_path,tmp_path,dry_run=True) is marker
 
