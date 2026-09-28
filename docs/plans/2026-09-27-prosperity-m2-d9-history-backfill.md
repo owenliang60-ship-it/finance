@@ -236,7 +236,7 @@ def test_wrapper_breaker_and_lock(tmp_store, failing_client, busy_lock, tmp_path
 2. 只读：`verify_prosperity_history.py targets` → 清单只数应为 1,184 左右；`report` 出**补数前基线**
 3. 备份：用现有备份脚本打 `pre-d9-backfill` 标签（手动标签，不参与自动修剪；验收后经 Boss 确认删除）
 4. 三表 canary：`backfill_extended_fundamentals.py --run-id d9-20260928 --targets-file data/prosperity/d9_targets.json --datasets income,balance,cashflow --limit-quarters 40 --canary 20`，看 manifest 与 20 只的 40 季是否落库、vintage 是否只追加
-5. 三表全量：同一 run_id 加 `--resume`（约 3,550 次调用，约 2 小时）；中断就原命令续跑
+5. 三表全量：**新 run_id** `d9-full-*`（canary 已把 20 只冻结进自己的清单，同 run_id `--resume` 只会续跑那 20 只；执行中发现并修正）（约 3,550 次调用，约 2 小时）；中断就原命令加 `--resume` 续跑
 6. `report` → 取 street EPS 缺口名单（没有 earnings 行的 + 深度不足 / 映射缺失的）写成第二份清单
 7. `backfill_street_eps.py --remap-only`（全量 1,184 只，不调 API）→ 再 `report`，看 remap 补上多少
 8. `backfill_street_eps.py --targets-file <缺口清单>`（预计 ≤400 次调用）→ 最终 `report`
