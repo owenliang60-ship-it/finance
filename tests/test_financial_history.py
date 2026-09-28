@@ -485,3 +485,67 @@ class TestReviewFixes:
         h = build_financial_history("TST", as_of=date(2026, 10, 5), db_path=self._ended_unseen_db(tmp_path))
         assert h["status"] == "partial"
         assert any("实时核实未执行" in g for g in h["gaps"])
+
+
+class TestSecondReviewFixes:
+    def test_live_actuals_replace_db_row_with_same_date_and_null_actuals(self, tmp_path):
+        db = make_db(tmp_path, estimates=_std_estimates())
+        conn = sqlite3.connect(db)      # DB already holds the scheduled 10/02 release, actuals null
+        conn.execute("INSERT INTO fmp_earnings VALUES ('TST','2026-10-02','2026-09-29',"
+                     "'estimates_window',NULL,1.3,NULL,1300.0,'x')")
+        conn.commit()
+        conn.close()
+
+        class FakeClient:
+            def get_earnings(self, symbol, limit):
+                return [{"date": "2026-10-02", "epsActual": 1.4, "revenueActual": 1310.0}]
+
+            def get_income_statement(self, symbol, period, limit):
+                return []
+
+        h = build_financial_history("TST", as_of=date(2026, 10, 5), db_path=db,
+                                    live=_Live("TST", tmp_path / "src", FakeClient(), enabled=True))
+        actual = [p for p in h["periods"] if p["kind"] == "actual"]
+        assert actual[-1]["period_end"] == "2026-09-29" and actual[-1]["revenue"] == 1310.0
+        assert [p for p in h["periods"] if p["kind"] == "estimate"][0]["period_end"] == "2026-12-30"
+        assert h["status"] == "partial"
+        assert not any("尚未发布" in w for w in h["warnings"])
+
+    def test_empty_live_response_is_not_evidence(self, tmp_path):
+        class FakeClient:
+            def get_earnings(self, symbol, limit):
+                return []
+
+        h = build_financial_history("TST", as_of=date(2026, 10, 5),
+                                    db_path=make_db(tmp_path, estimates=_std_estimates()),
+                                    live=_Live("TST", tmp_path / "src", FakeClient(), enabled=True))
+        assert h["status"] == "partial"
+        assert any("无证据" in g for g in h["gaps"])
+        assert not any("尚未发布" in w for w in h["warnings"])
+
+    def test_currency_change_blocks_qoq_and_labels_rows(self, tmp_path):
+        db = make_db(tmp_path, estimates=_std_estimates())
+        conn = sqlite3.connect(db)
+        conn.execute("UPDATE income_quarterly SET reported_currency='JPY', revenue=revenue*100, "
+                     "net_income=net_income*100 WHERE date='2026-06-30'")
+        conn.commit()
+        conn.close()
+        h = build(db)
+        latest = next(p for p in h["periods"] if p["period_end"] == "2026-06-30")
+        assert latest["revenue_qoq"] is None and latest["revenue_na_reason"] == "currency_break"
+        assert latest["net_income_qoq"] is None and latest["net_income_na_reason"] == "currency_break"
+        assert h["status"] == "partial"
+        from terminal.financial_history import render_markdown
+        md = render_markdown(h)
+        assert "123.0K JPY" not in md and "JPY |" in md and "$123.0K" not in md
+
+    def test_missing_metric_is_reported_not_complete(self, tmp_path):
+        db = make_db(tmp_path, estimates=_std_estimates())
+        conn = sqlite3.connect(db)
+        conn.execute("UPDATE income_quarterly SET net_income=NULL")
+        conn.execute("UPDATE fmp_estimates SET net_income_avg=NULL")
+        conn.commit()
+        conn.close()
+        h = build(db)
+        assert h["status"] == "partial"
+        assert any(g.startswith("净利润缺失 23 季") for g in h["gaps"])

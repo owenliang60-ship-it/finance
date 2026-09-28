@@ -54,6 +54,7 @@ NA_REASONS = {
     "zero_base": "基期为0",
     "nonpositive_base": "基期≤0",
     "basis_break": "口径切换",
+    "currency_break": "币种切换",
 }
 
 REVENUE_BASIS_LABELS = {
@@ -110,14 +111,15 @@ def format_money(value: Optional[float], currency: Optional[str] = "USD") -> str
     """Shared by financial_history.md and the PNG so both read identically."""
     if value is None:
         return "—"
-    sym = "$" if currency in (None, "USD") else ""
+    usd = currency in (None, "USD")
+    sym, suffix = ("$", "") if usd else ("", f" {currency}")
     sign = "-" if value < 0 else ""
     v = abs(value)
     if v >= 1e9:
-        return f"{sign}{sym}{v / 1e9:,.2f}B"
+        return f"{sign}{sym}{v / 1e9:,.2f}B{suffix}"
     if v >= 1e6:
-        return f"{sign}{sym}{v / 1e6:,.1f}M"
-    return f"{sign}{sym}{v:,.0f}"
+        return f"{sign}{sym}{v / 1e6:,.1f}M{suffix}"
+    return f"{sign}{sym}{v:,.0f}{suffix}"
 
 
 _money = format_money
@@ -193,6 +195,8 @@ def compute_changes(periods: List[Dict[str, Any]]) -> None:
             common = "no_base"
         elif not _adjacent(_day(prev["period_end"]), _day(row["period_end"])):
             common = "gap"
+        elif prev.get("currency") and row.get("currency") and prev["currency"] != row["currency"]:
+            common = "currency_break"
         else:
             common = None
 
@@ -610,25 +614,33 @@ def build_financial_history(
     ended_verified = False
     if ended_unseen:
         from src.data.fmp_forward_ingestion import match_fiscal_date
-        raw = live.call("earnings", "get_earnings", limit=12)
-        if raw is not None:
-            ended_verified = True
-            pool = sorted({r["fiscal_date"] for r in estimate_rows} | {a["period_end"] for a in actuals})
-            seen = {e["announce_date"] for e in earnings}
-            for r in raw:
-                ann = _day(r.get("date"))
-                if (ann is None or ann > as_of or ann.isoformat() in seen
-                        or (r.get("epsActual") is None and r.get("revenueActual") is None)):
-                    continue
-                earnings.append({
-                    "announce_date": ann.isoformat(),
-                    "fiscal_date": match_fiscal_date(ann.isoformat(), pool),
-                    "match_method": "fmp_live:earnings", "eps_actual": _num(r.get("epsActual")),
-                    "eps_estimated": _num(r.get("epsEstimated")),
-                    "revenue_actual": _num(r.get("revenueActual")),
-                    "revenue_estimated": _num(r.get("revenueEstimated")), "last_updated": None,
-                })
-            earnings.sort(key=lambda e: e["announce_date"])
+        raw = live.call("earnings", "get_earnings", limit=12) or []
+        # Only a row dated after the last reported quarter is evidence about the
+        # pending one (scheduled date or fresh actuals); an empty or stale list is not.
+        ended_verified = any(_day(r.get("date")) and _day(r.get("date")) > last_end for r in raw)
+        pool = sorted({r["fiscal_date"] for r in estimate_rows} | {a["period_end"] for a in actuals})
+        by_date = {e["announce_date"]: e for e in earnings}
+        for r in raw:
+            ann = _day(r.get("date"))
+            if (ann is None or ann > as_of
+                    or (r.get("epsActual") is None and r.get("revenueActual") is None)):
+                continue
+            known = by_date.get(ann.isoformat())
+            if known and (known["eps_actual"] is not None or known["revenue_actual"] is not None):
+                continue
+            fresh = {
+                "announce_date": ann.isoformat(),
+                "fiscal_date": (known or {}).get("fiscal_date") or match_fiscal_date(ann.isoformat(), pool),
+                "match_method": "fmp_live:earnings", "eps_actual": _num(r.get("epsActual")),
+                "eps_estimated": _num(r.get("epsEstimated")),
+                "revenue_actual": _num(r.get("revenueActual")),
+                "revenue_estimated": _num(r.get("revenueEstimated")), "last_updated": None,
+            }
+            if known:                      # DB held the scheduled date with null actuals
+                known.update(fresh)
+            else:
+                earnings.append(fresh)
+        earnings.sort(key=lambda e: e["announce_date"])
     announced_missing = [
         e for e in earnings
         if _day(e["fiscal_date"]) and (e["eps_actual"] is not None or e["revenue_actual"] is not None)
@@ -812,7 +824,7 @@ def build_financial_history(
             if ended_verified:
                 warnings.append("首个预测季已过期末，实时 FMP 财报日历显示尚未发布，仍按共识预测展示")
             else:
-                gaps.append("首个预测季已过期末，库内未见其财报且实时核实未执行/失败；"
+                gaps.append("首个预测季已过期末，库内未见其财报且实时核实未执行/失败/无证据；"
                             "若公司本周已发布，图中该季仍是财报前共识")
         if street_mode and estimates:
             warnings.append("银行/券商营收预测为街口径净营收共识，与历史净营收同口径")
@@ -843,6 +855,11 @@ def build_financial_history(
     displays = [pd.Period(p["display_quarter"], "Q") for p in visible]
     if len(set(displays)) != len(displays):
         warnings.append("两个财季落在同一显示季度，图上会重叠；请核对财季日期")
+    for metric, name in (("revenue", "营收"), ("net_income", "净利润")):
+        missing = [f"FY{p['fiscal_year']} {p['fiscal_quarter']}{'E' if p['kind'] == 'estimate' else ''}"
+                   for p in visible if p["role"] == "window" and p[metric] is None]
+        if missing:
+            gaps.append(f"{name}缺失 {len(missing)} 季：{', '.join(missing[:8])}{'…' if len(missing) > 8 else ''}")
     for p in shown_actuals:
         if p["revenue_na_reason"] == "gap":
             gaps.append(f"{p['period_end']} 之前缺季，QoQ 不计算")
@@ -1000,12 +1017,12 @@ def render_markdown(history: Dict[str, Any], png_name: Optional[str] = PNG_NAME)
         eps = "—" if p.get("eps") is None else f"{p['eps']:.2f}"
         lines.append(
             f"| FY{p['fiscal_year']} {p['fiscal_quarter']} | {p['period_end']} | {p['display_quarter']}"
-            f"{'*' if p.get('display_shifted') else ''} | {kind} | {_money(p['revenue'])} | {rev_q} | "
-            f"{_money(p['net_income'])} | {p['income_change_label']} | {eps} | {analysts} |")
+            f"{'*' if p.get('display_shifted') else ''} | {kind} | {_money(p['revenue'], p.get('currency'))} | {rev_q} | "
+            f"{_money(p['net_income'], p.get('currency'))} | {p['income_change_label']} | {eps} | {analysts} |")
     complete_4q = [p for p in h["periods"] if p["kind"] == "estimate"]
     if len(complete_4q) == h["forecast_quarters"] and all(p["revenue"] is not None for p in complete_4q):
-        lines += ["", f"未来 {h['forecast_quarters']} 季营收共识合计：{_money(sum(p['revenue'] for p in complete_4q))}"
-                  + (f"；净利润共识合计：{_money(sum(p['net_income'] for p in complete_4q))}（口径未核实）"
+        lines += ["", f"未来 {h['forecast_quarters']} 季营收共识合计：{_money(sum(p['revenue'] for p in complete_4q), h.get('currency'))}"
+                  + (f"；净利润共识合计：{_money(sum(p['net_income'] for p in complete_4q), h.get('currency'))}（口径未核实）"
                      if all(p["net_income"] is not None for p in complete_4q) else "")]
     lines += ["", "## 季度股价收益（仅价格，不含股息）", "", "| 季度 | 基准 | 季末 | 收益 | 标记 |", "|---|---|---|---|---|"]
     for q in price["quarters"]:

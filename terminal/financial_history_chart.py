@@ -142,7 +142,7 @@ def _bar_panel(ax, axis: _Axis, rows: List[Dict[str, Any]], font, *, metric: str
     for r, v, pv in zip(rows, raw, plotted):
         x = axis.qx(r["display_quarter"])
         est = r["kind"] == "estimate"
-        amount = _money(r[metric], currency)
+        amount = _money(r[metric], r.get("currency") or currency)
         if pv is not None:
             color = (pos_e if est else pos_a) if v >= 0 else (RED_EST if est else RED)
             edge = pos_a if v >= 0 else RED
