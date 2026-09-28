@@ -2152,6 +2152,38 @@ class MarketStore:
                 self._insert_validated(conn, "fmp_earnings", data)
         return len(rows)
 
+    def remap_unmatched_earnings(self, symbol: str, fiscal_dates: List[str]) -> int:
+        """给 match_method='none' 的已公告行按利润表财季补映射，标 statement_window。
+
+        规则同 match_fiscal_date（fiscal < announce 且 ≤120 天取最近）；已有映射的行、
+        预排行（eps_actual 为空）一行不碰；算出的财季已被该股其他行占用时不写，
+        避免把缺季公司的公告错配到上一季。只改 fiscal_date/match_method，数值不动。
+        返回改动行数。
+        """
+        from src.data.fmp_forward_ingestion import match_fiscal_date
+        sym = symbol.upper()
+        conn = self._get_conn()
+        with conn:
+            used = {r["fiscal_date"] for r in conn.execute(
+                "SELECT fiscal_date FROM fmp_earnings WHERE symbol = ? "
+                "AND fiscal_date IS NOT NULL", [sym]).fetchall()}
+            pending = conn.execute(
+                "SELECT announce_date FROM fmp_earnings WHERE symbol = ? "
+                "AND match_method = 'none' AND fiscal_date IS NULL "
+                "AND eps_actual IS NOT NULL ORDER BY announce_date", [sym]).fetchall()
+            changed = 0
+            for r in pending:
+                fiscal = match_fiscal_date(r["announce_date"], fiscal_dates)
+                if fiscal is None or fiscal in used:
+                    continue
+                conn.execute(
+                    "UPDATE fmp_earnings SET fiscal_date = ?, match_method = 'statement_window' "
+                    "WHERE symbol = ? AND announce_date = ?",
+                    [fiscal, sym, r["announce_date"]])
+                used.add(fiscal)
+                changed += 1
+        return changed
+
     def get_fmp_earnings(self, symbol: str,
                          as_of: Optional[str] = None) -> List[Dict]:
         """财报事实。as_of: 只取 announce_date <= as_of（历史计算防泄露）。"""
