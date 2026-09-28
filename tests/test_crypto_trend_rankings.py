@@ -234,7 +234,7 @@ def test_existing_daily_entry_dispatches_new_pipeline(monkeypatch,tmp_path):
     from scripts import crypto_pmarp_breadth as breadth
     marker={'new_pipeline':True,'as_of':str(ASOF.date())}
     monkeypatch.setattr(breadth,'run',lambda *a,**kw:{})
-    monkeypatch.setattr(trend,'run',lambda scanner_dir,output_dir,dry_run=False:marker)
+    monkeypatch.setattr(trend,'run',lambda scanner_dir,output_dir,dry_run=False,**kw:marker)
     assert daily.run(tmp_path,tmp_path,dry_run=True) is marker
 
 
@@ -361,3 +361,18 @@ def test_report_drops_btc_before_price_fetch_but_keeps_market_volume_reference()
         assert report['periods'][f'{h}d']['pool'] == ['BUSDT']
         assert report['periods'][f'{h}d']['top10'][0]['score'] == 100
         assert '永久排除：BTCUSDT' in trend.message(report,h)
+
+
+def test_partial_success_retry_only_sends_missing_period(monkeypatch,tmp_path):
+    report=trend.build_report(FakeMarket(),ASOF,top_n=2,scoring_version='v2',periods=(10,14))
+    sent=[]
+    def send(text):
+        sent.append(text)
+        return len(sent)!=2
+    monkeypatch.setattr(trend,'build_report',lambda *a,**kw:report)
+    monkeypatch.setattr(trend,'TrendMarket',lambda *a,**kw:FakeMarket())
+    monkeypatch.setattr(trend.importlib,'import_module',lambda name:SimpleNamespace(send_telegram_alert=send))
+    with pytest.raises(RuntimeError):trend.run(tmp_path,tmp_path)
+    trend.run(tmp_path,tmp_path)
+    assert len(sent)==3
+    assert '10天' in sent[0] and '14天' in sent[1] and sent[1]==sent[2]

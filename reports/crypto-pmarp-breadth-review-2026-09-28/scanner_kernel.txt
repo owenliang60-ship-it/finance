@@ -1,0 +1,39 @@
+def calculate_pmarp(prices: pd.Series, ema_period: int = 20, lookback: int = 150) -> pd.Series:
+    """
+    计算PMARP (Price Moving Average Ratio Percentile)
+
+    PMAR = Price / EMA(Price, period)
+    PMARP = 在过去lookback根K线中，有多少比例的PMAR大于当前PMAR
+
+    PMARP低 (如<2%) = 价格处于历史极低位（超卖）
+    PMARP高 (如>98%) = 价格处于历史极高位（超买/追涨）
+
+    Args:
+        prices: 收盘价序列
+        ema_period: EMA周期
+        lookback: 回看周期
+
+    Returns:
+        PMARP序列 (0-100)
+    """
+    # 计算EMA
+    ema = prices.ewm(span=ema_period, adjust=False).mean()
+
+    # 计算PMAR
+    pmar = prices / ema
+
+    # 计算PMARP
+    pmarp = pd.Series(index=pmar.index, dtype=float)
+
+    for i in range(lookback, len(pmar)):
+        current = pmar.iloc[i]
+        historical = pmar.iloc[i-lookback:i]
+
+        # 计算有多少历史PMAR小于等于当前PMAR
+        count_le = (historical <= current).sum()
+
+        # PMARP = 小于等于当前值的比例 * 100
+        # PMARP高 = 当前处于历史高位（强势）
+        pmarp.iloc[i] = count_le / lookback * 100
+
+    return pmarp

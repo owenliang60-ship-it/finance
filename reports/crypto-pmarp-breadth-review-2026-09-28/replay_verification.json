@@ -1,0 +1,40 @@
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "phase": "legacy_import",
+      "status": "PASS",
+      "identical_fields": [
+        "history",
+        "current",
+        "constituents",
+        "confirmed_unopened",
+        "strong_percentile",
+        "weak_percentile"
+      ],
+      "price_network_requests": 0,
+      "confirmed_pending_probe": [
+        "GAIBUSDT"
+      ]
+    },
+    {
+      "phase": "rolling_replay",
+      "status": "PASS",
+      "identical_fields": [
+        "history",
+        "current",
+        "constituents",
+        "confirmed_unopened",
+        "strong_percentile",
+        "weak_percentile"
+      ],
+      "price_network_requests": 0,
+      "confirmed_pending_probe": [
+        "GAIBUSDT"
+      ]
+    }
+  ],
+  "rolling_files": 607,
+  "rolling_bytes": 51474922,
+  "max_rows_per_contract": 731
+}

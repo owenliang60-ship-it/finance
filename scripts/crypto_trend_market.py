@@ -33,6 +33,20 @@ class InactiveSymbolError(RuntimeError):
     """Explicit exchange -1122 response; not proof of no historical trading."""
 
 
+def fetch_daily_or_confirm_unopened(market, meta, start, end, **kwargs):
+    """None only for explicit pending-state + no-archive evidence."""
+    symbol = meta['symbol']
+    try:
+        frame = market.fetch_daily(symbol,start,end,**kwargs)
+    except InactiveSymbolError:
+        if meta['status']=='PENDING_TRADING' and not market.has_archive_activity(symbol,start,end):
+            return None
+        raise
+    if frame.empty and meta['status']=='PENDING_TRADING' and not market.has_archive_activity(symbol,start,end):
+        return None
+    return frame
+
+
 def eligible_metadata(metadata):
     if not isinstance(metadata, list):
         raise ValueError('合约元数据不是列表')
@@ -190,12 +204,20 @@ class TrendMarket(MarketData):
                 continue
             saved = json.loads(path.read_text())
             eligible_metadata(saved['symbols'])
-            combined.update({m['symbol']:m for m in saved['symbols']})
+            # Old breadth snapshots mistakenly persisted derived supplements.
+            # Drop those provenance-tagged rows; apply today's manifest below.
+            combined.update({m['symbol']:m for m in saved['symbols']
+                             if not (m.get('_catalog_source') == 'supplement'
+                                     or {'launch','retirement'} <= set(m.get('sources', {})))})
             snapshots.append(path.name)
         combined.update({m['symbol']:m for m in current['symbols']})
+        observed_records = list(combined.values())
         eligible_metadata(self.supplemental_records)
+        effective_supplements = []
         for meta in self.supplemental_records:
-            combined.setdefault(meta['symbol'], meta)
+            if meta['symbol'] not in combined:
+                combined[meta['symbol']] = dict(meta, _catalog_source='supplement')
+                effective_supplements.append(meta)
         records = eligible_metadata(list(combined.values()))
         retired = {}
         for symbol, proof in self.archive_retirements.items():
@@ -216,14 +238,14 @@ class TrendMarket(MarketData):
         if not active:
             raise ValueError('当前可交易合约为空')
         path = self.cache_dir/f'catalog_{as_of.date()}.json'
-        _save(path, dict(symbols=list(combined.values()),
+        _save(path, dict(symbols=observed_records,
                          retrieved_at=pd.Timestamp.now(tz='UTC').isoformat()))
         evidence = dict(method='effective-dated reconstruction; current exchangeInfo + saved catalogs + official archive audit',
                         limitation='Not original point-in-time exchangeInfo vintages; archived prices/metadata may be revised.',
                         prior_catalogs=snapshots, metadata_count=len(records),
                         unknown_archive_symbols=unknown, unknown_active_symbols=unresolved)
         if self.supplemental_records or retired:
-            evidence['supplemental_records'] = self.supplemental_records
+            evidence['supplemental_records'] = effective_supplements
             evidence['archive_retirements'] = retired
         return records, active, evidence
 
@@ -274,8 +296,6 @@ class TrendMarket(MarketData):
                   f'_{required_history}.json')
 
     def fetch_daily(self, symbol, start, end, limit=32, required_history=None):
-        params = dict(symbol=symbol, interval='1d', startTime=int(start.timestamp()*1000),
-                      endTime=int(end.timestamp()*1000)-1, limit=limit)
         raw = None
         path = None
         if required_history is not None:
@@ -288,24 +308,30 @@ class TrendMarket(MarketData):
                 if not isinstance(raw, list):
                     raise ValueError('日线缓存无效: '+symbol)
         if raw is None:
-            try:
-                raw = self._json('/fapi/v1/klines', params)
-            except RuntimeError:
-                if symbol in self.pending_symbols:
-                    # Quant's retry helper discards HTTP error bodies. Inspect this
-                    # one known boundary without treating a transport failure as [].
-                    time.sleep(1)
-                    self.requests += 1
-                    response = requests.get(self.scanner.CONFIG['base_url']+'/fapi/v1/klines',
-                                            params=params, timeout=30)
-                    if response.status_code == 400 and response.json().get('code') == -1122:
-                        raise InactiveSymbolError(f'{symbol}: exchange -1122 Invalid symbol status')
-                raise
-            if not isinstance(raw, list):
-                raise ValueError('日线响应格式错误: '+symbol)
+            raw = self.fetch_daily_raw(symbol,start,end,limit=limit)
             if path is not None:
                 _save(path, raw)
         return self.scanner.klines_to_dataframe(raw) if raw else pd.DataFrame()
+
+    def fetch_daily_raw(self, symbol, start, end, limit=1000):
+        params = dict(symbol=symbol, interval='1d', startTime=int(start.timestamp()*1000),
+                      endTime=int(end.timestamp()*1000)-1, limit=limit)
+        try:
+            raw = self._json('/fapi/v1/klines', params)
+        except RuntimeError:
+            if symbol in self.pending_symbols:
+                # Quant's retry helper discards HTTP error bodies. Inspect this
+                # one known boundary without treating a transport failure as [].
+                time.sleep(1)
+                self.requests += 1
+                response = requests.get(self.scanner.CONFIG['base_url']+'/fapi/v1/klines',
+                                        params=params, timeout=30)
+                if response.status_code == 400 and response.json().get('code') == -1122:
+                    raise InactiveSymbolError(f'{symbol}: exchange -1122 Invalid symbol status')
+            raise
+        if not isinstance(raw, list):
+            raise ValueError('日线响应格式错误: '+symbol)
+        return raw
 
     def fetch(self, symbol, limit, interval='4h', required_history=None):
         # Fixed endpoint prevents reruns later today from displacing closed bars.

@@ -289,10 +289,35 @@ def run_legacy(scanner_dir, output_dir, dry_run=False):
 
 
 def run(scanner_dir, output_dir, dry_run=False):
-    from scripts.crypto_trend_rankings import run as run_trend
+    from scripts.crypto_trend_rankings import run as run_trend, atomic_text
     from scripts.crypto_pmarp_breadth import run as run_breadth
-    report = run_trend(scanner_dir, output_dir, dry_run=dry_run)
-    run_breadth(scanner_dir, output_dir, dry_run=dry_run, as_of=report['as_of'])
+    from scripts.crypto_report_delivery import send_once
+    as_of = str((pd.Timestamp.now(tz='UTC').normalize()-pd.Timedelta(days=1)).date())
+    failures = []
+    report = None
+    try:
+        report = run_trend(scanner_dir, output_dir, dry_run=dry_run, as_of=as_of)
+        as_of = report['as_of']
+    except Exception as exc:
+        failures.append('趋势榜: '+str(exc))
+        text = f'Crypto 趋势榜 | {as_of} UTC\n⚠️ 不可用：趋势榜运行失败，请检查任务错误记录。'
+        atomic_text(Path(output_dir)/f'crypto_trend_unavailable_{as_of}.md',text+'\n')
+        if not dry_run:
+            try:
+                sys.path.insert(0,str(scanner_dir))
+                scanner = importlib.import_module('binance_pmarp_scanner')
+                send_once(scanner,text,output_dir,as_of+'-trend-unavailable')
+            except Exception as alert_exc:
+                failures.append('趋势榜错误通知: '+str(alert_exc))
+    try:
+        run_breadth(scanner_dir, output_dir, dry_run=dry_run, as_of=as_of)
+    except Exception as exc:
+        failures.append('宽度: '+str(exc))
+    atomic_text(Path(output_dir)/f'crypto_daily_status_{as_of}.json',
+                json.dumps(dict(as_of=as_of,status='failed' if failures else 'ok',
+                                failures=failures),ensure_ascii=False,indent=2)+'\n')
+    if failures:
+        raise RuntimeError('；'.join(failures))
     return report
 
 

@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "historical_contracts": 610,
+  "next_day_requests": 525,
+  "bars_per_request": 1,
+  "total_new_bars": 525,
+  "network_requests": 0,
+  "retired_contracts_reused_without_download": 85
+}

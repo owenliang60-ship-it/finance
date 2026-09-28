@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from scripts.crypto_beta_scanner import daily_frame
-from scripts.crypto_trend_market import TrendMarket, InactiveSymbolError, eligible_metadata, overlaps
+from scripts.crypto_trend_market import TrendMarket, eligible_metadata, fetch_daily_or_confirm_unopened
 from scripts.crypto_trend_rankings import atomic_text, utc_day
 
 LOOKBACK_DAYS = 365
@@ -27,6 +27,7 @@ SEED_DAYS = 365
 
 
 MANIFEST_PATH = Path(__file__).resolve().parents[1]/'config/crypto_pmarp_breadth_sources.json'
+BUNDLED_RETIRED_DIR = MANIFEST_PATH.parents[1]/'reports/crypto-pmarp-breadth-2026-09-28/breadth_cache/retired_prices'
 
 
 class BreadthMarket(TrendMarket):
@@ -34,6 +35,14 @@ class BreadthMarket(TrendMarket):
     def __init__(self, *args, manifest, retired_dir, **kwargs):
         self.retired_dir = Path(retired_dir)
         self.retired_sources = manifest['retired_prices']
+        errors = []
+        for symbol in sorted(self.retired_sources):
+            try:
+                self._retired_rows(symbol)
+            except (ValueError, OSError) as exc:
+                errors.append(symbol+': '+str(exc))
+        if errors:
+            raise ValueError('退市价格预检查失败: '+'; '.join(errors))
         super().__init__(*args, supplemental_records=manifest['symbols'],
                          archive_retirements=manifest['archive_retirements'], **kwargs)
         for meta in self.supplemental_records:
@@ -42,14 +51,26 @@ class BreadthMarket(TrendMarket):
                 if seed_start <= pd.Timestamp(meta['onboardDate'],unit='ms',tz='UTC')+pd.Timedelta(days=1):
                     raise ValueError('日期精度上市证据不足以覆盖该暖机窗口: '+meta['symbol'])
 
+    def catalog(self, as_of):
+        records, active, evidence = super().catalog(as_of)
+        self.lifetimes = {m['symbol']:m for m in records}
+        return records, active, evidence
+
     def fetch_daily(self, symbol, start, end, **kwargs):
         if symbol not in self.retired_sources:
-            return super().fetch_daily(symbol, start, end, **kwargs)
+            from scripts.crypto_breadth_cache import daily_rows
+            rows = daily_rows(self,symbol,start,end,self.lifetimes[symbol])
+            return self.scanner.klines_to_dataframe(rows) if rows else pd.DataFrame()
+        return self.scanner.klines_to_dataframe(self._retired_rows(symbol))
+
+    def _retired_rows(self, symbol):
         raw = (self.retired_dir/(symbol+'.json')).read_bytes()
         if hashlib.sha256(raw).hexdigest() != self.retired_sources[symbol]['sha256']:
             raise ValueError('退市价格hash不符: '+symbol)
         rows = json.loads(raw)
-        return self.scanner.klines_to_dataframe(rows)
+        if not isinstance(rows, list) or not rows:
+            raise ValueError('退市价格格式错误: '+symbol)
+        return rows
 
 
 def percentile(current, history):
@@ -92,7 +113,10 @@ def build_report(market, as_of):
     dates = pd.date_range(end=as_of, periods=LOOKBACK_DAYS+1, freq='D')
     start = dates[0]-pd.Timedelta(days=SEED_DAYS)
     metadata, _active, evidence = market.catalog(as_of)
-    records = [m for m in eligible_metadata(metadata) if overlaps(m, dates[0], end)]
+    records = [m for m in eligible_metadata(metadata)
+               if max(dates[0]+pd.Timedelta(days=1),
+                      pd.Timestamp(m['onboardDate'],unit='ms',tz='UTC').normalize()+pd.Timedelta(days=1))
+               <= min(end,pd.Timestamp(m['deliveryDate'],unit='ms',tz='UTC'))]
     if not records:
         raise ValueError('历史Crypto合约池为空')
     rows = {day:dict(date=str(day.date()), eligible_count=0, warmup_count=0,
@@ -100,22 +124,20 @@ def build_report(market, as_of):
             for day in dates}
     constituents = {}
     unopened = []
+    failures = []
     for meta in sorted(records, key=lambda m:m['symbol']):
         symbol = meta['symbol']
         try:
-            frame = market.fetch_daily(symbol, start, end, limit=1000,
-                                       required_history='breadth_731_ema20_pmarp150')
-        except InactiveSymbolError:
-            if (meta['status'] == 'PENDING_TRADING'
-                    and not market.has_archive_activity(symbol, start, end)):
+            frame = fetch_daily_or_confirm_unopened(
+                market,meta,start,end,limit=1000,
+                required_history='breadth_731_ema20_pmarp150')
+            if frame is None:
                 unopened.append(symbol)
                 continue
-            raise
-        if (frame.empty and meta['status'] == 'PENDING_TRADING'
-                and not market.has_archive_activity(symbol, start, end)):
-            unopened.append(symbol)
+            scores = symbol_history(frame, meta, start, end, market.scanner.calculate_pmarp)
+        except Exception as exc:
+            failures.append(dict(symbol=symbol,reason=str(exc)))
             continue
-        scores = symbol_history(frame, meta, start, end, market.scanner.calculate_pmarp)
         today = None
         for day, row in rows.items():
             if not (meta['onboardDate'] < int((day+pd.Timedelta(days=1)).timestamp()*1000)
@@ -134,6 +156,8 @@ def build_report(market, as_of):
         constituents[symbol] = dict(onboardDate=meta['onboardDate'],
                                     deliveryDate=meta['deliveryDate'],
                                     pmarp_as_of=today)
+    if failures:
+        raise ValueError('日线/PMARP检查失败: '+json.dumps(failures,ensure_ascii=False))
     for row in rows.values():
         if not row['valid_count']:
             raise ValueError(row['date']+': PMARP有效分母为零')
@@ -169,7 +193,7 @@ def message(report):
                      f"{current[side+'_pct']:.2f}% | 一年分位 P{report[side+'_percentile']:.1f}")
     lines += [f"对比 {report['comparison_start']} 至 {report['comparison_end']}，此前365日，不含当天。",
               '分位=历史宽度≤今日的天数占比；并列计入（连续为0也可能P100）。',
-              'EMA20 / PMARP150 · 极弱分位越高，极弱状态越普遍。']
+              'EMA20 / PMARP150 · 先看今日占比；分位仅表示历史排名，并列会抬高排名。']
     return '\n'.join(lines)
 
 
@@ -189,7 +213,7 @@ def run(scanner_dir, output_dir, dry_run=False, *, scanner=None, as_of=None, ret
         manifest = json.loads(MANIFEST_PATH.read_text())
         market = BreadthMarket(scanner, output_dir/'breadth_cache', as_of,
                              manifest=manifest,
-                             retired_dir=retired_dir or output_dir/'breadth_cache/retired_prices',
+                             retired_dir=retired_dir if retired_dir is not None else BUNDLED_RETIRED_DIR,
                              history_days=LOOKBACK_DAYS+1,
                              catalog_dirs=[output_dir/'trend_cache'])
         report = build_report(market, as_of)
@@ -206,8 +230,8 @@ def run(scanner_dir, output_dir, dry_run=False, *, scanner=None, as_of=None, ret
     atomic_text(path.with_suffix('.md'),text+'\n')
     print(text,flush=True)
     print(f'Artifact: {path}',flush=True)
-    if not dry_run and not scanner.send_telegram_alert(text):
-        raise RuntimeError('市场宽度发送失败')
+    from scripts.crypto_report_delivery import send_once
+    send_once(scanner,text,output_dir,f"{as_of.date()}-breadth-{report['status']}",dry_run=dry_run)
     if error is not None:
         raise RuntimeError('市场宽度不可用: '+str(error)) from error
     return report

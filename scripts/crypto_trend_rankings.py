@@ -13,7 +13,7 @@ import pandas as pd
 from scripts.compare_crypto_relative_momentum import window
 from scripts.crypto_beta_scanner import daily_frame
 from scripts.crypto_trend_metrics import trend_metrics
-from scripts.crypto_trend_market import TrendMarket, InactiveSymbolError, eligible_metadata, overlaps
+from scripts.crypto_trend_market import TrendMarket, InactiveSymbolError, eligible_metadata, overlaps, fetch_daily_or_confirm_unopened
 
 PERIODS = (7, 14, 30)
 DAILY_PERIODS = (10, 14)
@@ -254,16 +254,8 @@ def build_report(market, as_of, top_n=100, scoring_version=CURRENT_SCORING_VERSI
                 frame = market.cached(symbol)
                 volume_history(frame, meta, dates)
             except (ValueError, TypeError, KeyError, OSError, OverflowError):
-                try:
-                    frame = market.fetch_daily(symbol, dates[0], as_of+pd.Timedelta(days=1))
-                except InactiveSymbolError:
-                    if (meta['status'] == 'PENDING_TRADING'
-                            and not market.has_archive_activity(symbol, dates[0], as_of+pd.Timedelta(days=1))):
-                        unopened.append(symbol)
-                        continue
-                    raise
-                if (frame.empty and meta['status'] == 'PENDING_TRADING'
-                        and not market.has_archive_activity(symbol, dates[0], as_of+pd.Timedelta(days=1))):
+                frame = fetch_daily_or_confirm_unopened(market,meta,dates[0],as_of+pd.Timedelta(days=1))
+                if frame is None:
                     unopened.append(symbol)
                     continue
                 volume_history(frame, meta, dates)
@@ -364,10 +356,10 @@ def atomic_text(path, content):
     os.replace(temp, path)
 
 
-def run(scanner_dir, output_dir, dry_run=False):
+def run(scanner_dir, output_dir, dry_run=False, *, as_of=None):
     sys.path.insert(0, str(scanner_dir))
     scanner = importlib.import_module('binance_pmarp_scanner')
-    as_of = pd.Timestamp.now(tz='UTC').normalize()-pd.Timedelta(days=1)
+    as_of = utc_day(as_of) if as_of is not None else pd.Timestamp.now(tz='UTC').normalize()-pd.Timedelta(days=1)
     output_dir = Path(output_dir)
     market = TrendMarket(scanner, output_dir/'trend_cache', as_of)
     report = build_report(market, as_of, scoring_version=CURRENT_SCORING_VERSION, periods=DAILY_PERIODS)
@@ -381,7 +373,7 @@ def run(scanner_dir, output_dir, dry_run=False):
         atomic_text(output_dir/f"crypto_trend_top10_{days}d_{report['as_of']}.md", text+'\n')
     for days, text in texts:
         print(text, flush=True)
-        if not dry_run and not scanner.send_telegram_alert(text):
-            raise RuntimeError(f'{days}天趋势榜发送失败')
+        from scripts.crypto_report_delivery import send_once
+        send_once(scanner,text,output_dir,f"{report['as_of']}-trend-{days}d",dry_run=dry_run)
     print(f'Artifact: {target}', flush=True)
     return report

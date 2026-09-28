@@ -40,7 +40,10 @@ seed/report interval; `confirmed_unopened` records these exceptions.
 
 `config/crypto_pmarp_breadth_sources.json` contains source-linked historical
 supplements for AERGO, BDXN and SXP. Supplements fill absent records only;
-current exchangeInfo and saved catalogs take precedence. These are
+current exchangeInfo and genuine saved exchange rows take precedence. Derived
+supplements are not persisted as observed exchange rows. Older derived rows
+are recognized by their source fields and discarded on load, so a corrected
+manifest takes effect on the next run. Audit evidence lists effective supplements. These are
 retrospective effective-date reconstructions, not original PIT snapshots.
 SXP's launch is known to date precision only, and supported runs must start
 the EMA seed window after that date's upper bound.
@@ -53,25 +56,59 @@ is not proof of active trading: archives may contain padding after retirement.
 Three immutable derived JSON files contain just the original Binance row
 arrays, with SHA256 pinned by the manifest. `origin` identifies the original
 research object file; **do not copy that object as the deployment file**.
-Use generated files from:
+The default reads the following versioned, bundled files directly; there is
+no separate manual cloud copy. Startup checks every file and hash before any
+API call, and reports all preflight errors together. `--retired-dir` is an
+explicit override and is checked equally strictly:
 
 `reports/crypto-pmarp-breadth-2026-09-28/breadth_cache/retired_prices/*.json`
 
 AERGO prelisting rows and BDXN post-retirement rows are retained for provenance
 but clipped before indicator calculation. Other contracts use the existing
-REST adapter, bounded by the last closed day. A newly retired contract whose
-REST history disappears requires a verified price artifact before numeric
-publication resumes; it is not silently omitted.
+REST adapter, bounded by the last closed day, through a rolling per-contract
+cache. A retired contract with a known lifecycle and complete cached prices
+needs no REST call. If necessary prices or lifecycle evidence are genuinely
+missing, publication remains unavailable until repaired; it is not silently omitted.
 
 ## Execution and artifacts
 
-`crypto_daily_rankings.run` sends existing 10/14-day trend reports first,
-then invokes breadth with their identical `as_of` day. The existing Quant
-wrapper and 08:06 entry are reused; no new scheduler is needed. All traffic
-is serial and uses existing API throttling. Full history is task-cached per
-report day; first run requests up to one 731-bar REST response per relevant
-contract, plus the historical archive audit (allow roughly 10–20 minutes,
-subject to network/retries). No market.db/company.db writes are involved.
+`crypto_daily_rankings.run` runs trends and breadth independently for one fixed
+closed UTC day. An error (including failure to send its error notice) in one
+part does not skip the other. Both errors are summarized in
+`crypto_daily_status_DATE.json`, and the job exits unsuccessfully if either
+part failed. A trend failure produces its own unavailable notice.
+
+Each successful 10d/14d/breadth message has a separate acknowledged-send
+receipt in `delivery_receipts/`. A retry skips only the same key and same
+text hash; changed content fails explicitly so a correction can be approved
+instead of silently pretending it was delivered. An unavailable breadth
+notice and a successful recovery have separate keys. Dry-run never writes
+receipts. The existing Quant resource lock serializes executions; do not run
+concurrent manual publishers outside that lock. These receipts cannot promise
+exactly-once Telegram delivery: the remote service has no idempotency key, and
+a lost acknowledgment or crash between sending and writing the receipt may
+still duplicate a message. Review delivery state before manually resolving
+such ambiguous failures. Explicit corrections require preserving the old
+receipt as evidence and authorizing a replacement send.
+
+The existing Quant wrapper/08:06 entry stays in place. All traffic is serial
+and uses existing throttling. Cold initialization fetches up to 731 bars per
+contract. Thereafter `breadth_cache/rolling_1d/SYMBOL.json` holds at most 731
+validated rows with a checksum; only missing spans are requested (normally
+one new bar per active contract). The old dated snapshots are imported once,
+read-only, and are not deleted. A failed update leaves the prior cache intact;
+a past replay cannot replace a newer cache. Symbols retired before the first
+comparison day's close are not fetched at all. Per-symbol failures are
+collected across the pool before numeric publication is rejected.
+
+Incremental fetching reduces payload and repeated disk storage, not the
+per-symbol request count: approximately 500–600 requests and the one-second
+serial throttle can still take 10+ minutes. Do not call this a seconds-long
+daily job. The previous full daily snapshot measured about 52 MB; rolling
+prices occupy roughly that order of space in total instead of adding it each
+day. Small dated reports, catalogs and archive-audit evidence still accumulate;
+no automatic deletion of old evidence is introduced. No market.db/company.db
+writes are involved.
 
 Preview without sending:
 
@@ -79,7 +116,6 @@ Preview without sending:
 python3 -m scripts.crypto_pmarp_breadth \
   --scanner-dir /root/workspace/Quant/scanners \
   --output-dir /tmp/breadth-preview \
-  --retired-dir /path/to/verified/retired_prices \
   --as-of 2026-09-27 --dry-run
 ```
 
@@ -91,20 +127,17 @@ Artifacts: `crypto_pmarp_breadth_DATE.json` and `.md`, including 366 daily
 counts, current per-symbol PMARP, metadata evidence, seed dates, request
 counts, comparison dates and two percentiles. On failure they instead carry
 `status=unavailable` and the concrete reason; the message contains no numbers.
-Artifacts are written before sending. Send failures propagate. A breadth
-failure happens after existing rankings have been published and makes the
-Quant scanner return failure.
+Artifacts are written before sending. Send failures propagate into the
+independent-task summary; successfully acknowledged messages are not repeated
+on an ordinary retry.
 
 ## Deployment / rollback
 
-After approval, deploy the reviewed Finance revision and put the three
-hash-verified derived files under:
-
-`/root/workspace/Quant/results/daily_rankings/breadth_cache/retired_prices/`
-
-Run a cloud `--dry-run` against the deployed code and verify manifest hashes
-before permitting the normal entry to execute. Publishing a separate live
-preview is not required. The existing wrapper/cron stays in place.
+After approval, deploy the reviewed Finance revision, including the three
+versioned bundled price files. No manual copy to an output cache is required.
+Run cloud `--dry-run` first; bundled asset/hash checks happen before collection.
+The existing wrapper/cron stays in place. First startup can import the already
+verified dated snapshots; later runs use rolling caches.
 
 Rollback the Finance revision (in particular the breadth call in
 `crypto_daily_rankings.run`). Task artifacts can remain for inspection;

@@ -234,7 +234,7 @@ def test_pending_invalid_status_needs_archive_proof_before_exclusion(has_archive
     market.fetch_daily=get
     market.has_archive_activity=lambda *a:has_archive
     if has_archive:
-        with pytest.raises(InactiveSymbolError):breadth.build_report(market,ASOF)
+        with pytest.raises(ValueError,match='exchange -1122'):breadth.build_report(market,ASOF)
     else:
         result=breadth.build_report(market,ASOF)
         assert result['confirmed_unopened']==['PENDINGUSDT']
@@ -245,3 +245,47 @@ def test_cli_runner_rejects_unclosed_daily_bar_before_network(tmp_path):
     with pytest.raises(ValueError,match='已收盘'):
         breadth.run(tmp_path,tmp_path,dry_run=True,scanner=SimpleNamespace(),
                     as_of=pd.Timestamp.now(tz='UTC').normalize())
+
+
+def test_trend_failure_still_runs_breadth_and_both_failures_are_reported(monkeypatch,tmp_path):
+    from scripts import crypto_daily_rankings as daily
+    from scripts import crypto_trend_rankings as trend
+    calls=[]
+    def bad_trend(*a,**k):raise ValueError('trend broken')
+    def bad_breadth(*a,**k):calls.append(k);raise ValueError('breadth broken')
+    monkeypatch.setattr(trend,'run',bad_trend)
+    monkeypatch.setattr(breadth,'run',bad_breadth)
+    with pytest.raises(RuntimeError,match='trend broken.*breadth broken'):
+        daily.run(tmp_path,tmp_path,dry_run=True)
+    assert len(calls)==1
+    assert list(tmp_path.glob('crypto_daily_status_*.json'))
+
+
+def test_first_comparison_day_intraday_retirement_never_fetches_prices():
+    last=str((ASOF-365*DAY+pd.Timedelta(hours=6)).isoformat())
+    gone=meta('GONEUSDT');gone['deliveryDate']=int(pd.Timestamp(last).timestamp()*1000)
+    market=Market([meta('BTCUSDT'),gone])
+    fetch=market.fetch_daily
+    def get(symbol,*a,**k):
+        assert symbol!='GONEUSDT'
+        return fetch(symbol,*a,**k)
+    market.fetch_daily=get
+    report=breadth.build_report(market,ASOF)
+    assert set(report['constituents'])=={'BTCUSDT'}
+
+
+def test_price_errors_are_collected_across_all_contracts():
+    market=Market([meta('BTCUSDT'),meta('BAD1USDT'),meta('BAD2USDT')])
+    fetch=market.fetch_daily
+    def get(symbol,*a,**k):
+        if symbol.startswith('BAD'):raise ValueError('bad '+symbol)
+        return fetch(symbol,*a,**k)
+    market.fetch_daily=get
+    with pytest.raises(ValueError,match='BAD1USDT.*BAD2USDT'):
+        breadth.build_report(market,ASOF)
+
+
+def test_bundled_retired_prices_default_and_preflight_lists_missing_files(tmp_path):
+    manifest=json.loads(breadth.MANIFEST_PATH.read_text())
+    with pytest.raises(ValueError,match='AERGOUSDT.*BDXNUSDT.*SXPUSDT'):
+        breadth.BreadthMarket(SimpleNamespace(),tmp_path,ASOF,manifest=manifest,retired_dir=tmp_path)

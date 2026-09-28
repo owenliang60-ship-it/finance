@@ -294,3 +294,20 @@ def test_catalog_readonly_extra_directory_cannot_override_newer_lifecycle(tmp_pa
     assert next(m for m in records if m['symbol']=='GONEUSDT')['deliveryDate']==newer['deliveryDate']
     assert old_path.read_bytes()==old_bytes
     assert list(extra.iterdir())==[old_path]
+
+
+def test_changed_supplement_replaces_old_derived_snapshot_but_not_exchange(tmp_path,monkeypatch):
+    old=metadata('GONEUSDT')
+    old['sources']={'launch':'official launch','retirement':'official retirement'}
+    (tmp_path/'catalog_2026-09-05.json').write_text(json.dumps({'symbols':[old]}))
+    updated=dict(old,deliveryDate=int((ASOF-pd.Timedelta(days=5)).timestamp()*1000))
+    market=TrendMarket(Scanner(),tmp_path,ASOF,supplemental_records=[updated])
+    monkeypatch.setattr(market,'archive_symbols',lambda:{'AUSDT','GONEUSDT'})
+    records,_,evidence=market.catalog(ASOF)
+    assert next(m for m in records if m['symbol']=='GONEUSDT')['deliveryDate']==updated['deliveryDate']
+    saved=json.loads((tmp_path/'catalog_2026-09-06.json').read_text())
+    assert 'GONEUSDT' not in {m['symbol'] for m in saved['symbols']}
+    conflicting=metadata('AUSDT');conflicting['onboardDate']=1
+    market.supplemental_records=[updated,conflicting]
+    records,_,evidence=market.catalog(ASOF)
+    assert next(m for m in records if m['symbol']=='AUSDT')['onboardDate']!=1

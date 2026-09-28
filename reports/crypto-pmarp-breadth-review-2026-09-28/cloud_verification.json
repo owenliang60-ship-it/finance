@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "exit_code": 0,
+  "same_fields": [
+    "history",
+    "current",
+    "constituents",
+    "confirmed_unopened",
+    "strong_percentile",
+    "weak_percentile"
+  ],
+  "report_sha256": "53f2b70c4542c4601805678283f1dd058527f776faedc047f81dac9123de544e"
+}
