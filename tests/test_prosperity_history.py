@@ -173,3 +173,95 @@ def test_three_table_ok_delegates_to_backfill_window(tmp_store, monkeypatch):
                         lambda store, s, a, quarters=8: seen.append((s, a)) or True)
     assert three_table_ok(tmp_store, "ABC", "2024-06-30") is True
     assert seen == [("ABC", "2024-06-30")]
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — read-only coverage report
+# ---------------------------------------------------------------------------
+
+def _seed_statements_filed(store, symbol, fiscals, filing_lag_days):
+    from datetime import date, timedelta
+    rows = [{"date": f, "symbol": symbol, "period": "Q", "revenue": 1.0,
+             "filingDate": (date.fromisoformat(f)
+                            + timedelta(days=filing_lag_days)).isoformat()}
+            for f in fiscals]
+    store.upsert_income(symbol, rows)
+    store.upsert_balance_sheet(symbol, rows)
+    store.upsert_cash_flow(symbol, rows)
+
+
+@pytest.fixture
+def report_store(tmp_store):
+    # AAA: 13 statement quarters filed +40d; 13 street EPS quarters +35d and
+    #      one ancient unmapped row. BBB: two quarters filed +70d, no EPS.
+    _seed_statements_filed(tmp_store, "AAA", quarter_ends("2022-09-30", "2025-09-30"), 40)
+    _seed_statements_filed(tmp_store, "BBB", ["2025-03-31", "2025-06-30"], 70)
+    tmp_store.replace_fmp_earnings("AAA", _eps_rows(quarter_ends("2022-06-30", "2025-06-30"))
+                                   + [{"announce_date": "2020-01-01", "fiscal_date": None,
+                                       "match_method": "none", "eps_actual": 1.0}])
+    tmp_store.create_backfill_run("d9", ["AAA", "BBB"], ["income", "balance", "cashflow"], {})
+    conn = tmp_store._get_conn()
+    with conn:
+        for sym in ("AAA", "BBB"):
+            for ds in ("income", "balance", "cashflow"):
+                tmp_store.complete_job_in_conn(conn, "d9", sym, ds, "done")
+    return tmp_store
+
+
+def _run_report(store, tmp_path, monkeypatch, extra=()):
+    targets = tmp_path / "targets.json"
+    targets.write_text(json.dumps({
+        "symbols": ["AAA", "BBB"], "quarter_ends": ["2025-06-30", "2025-09-30"],
+        "by_quarter_end": {"2025-06-30": ["AAA", "BBB"], "2025-09-30": ["AAA", "BBB"]}}))
+    monkeypatch.setattr("scripts.verify_prosperity_history._open_store", lambda: store)
+    out_dir = tmp_path / "out"
+    rc = verify_main(["report", "--targets", str(targets), "--run-id", "d9",
+                      "--out-dir", str(out_dir), "--date", "2026-09-28", *extra])
+    return rc, json.loads((out_dir / "d9-coverage-2026-09-28.json").read_text()), out_dir
+
+
+def test_report_quarter_metrics_and_gate(report_store, tmp_path, monkeypatch):
+    rc, doc, out_dir = _run_report(report_store, tmp_path, monkeypatch)
+    assert rc == 1                                   # 50% < 95% three-table gate
+    q = {row["quarter_end"]: row for row in doc["quarter_ends"]}
+    jun = q["2025-06-30"]
+    assert jun["members"] == 2
+    assert jun["three_table_ok"] == 1 and jun["three_table_pass"] is False
+    assert jun["sue_ok"] == 1 and jun["sue_full"] == 0 and jun["dsue_ok"] == 1
+    assert jun["mapping"] == {"estimates_window": 12, "none": 1}
+    assert q["2025-09-30"]["sue_full"] == 1
+    assert jun["freeze"] == {"cov_d60": 0.5, "cov_d80": 1.0, "first_day_ge95": 70}
+    assert q["2025-09-30"]["freeze"]["first_day_ge95"] is None
+    assert doc["street_eps_threshold"] == "pending_boss"
+    assert (out_dir / "d9-coverage-2026-09-28.md").exists()
+
+
+def test_report_gap_reasons_split_inherent_vs_fixable(report_store, tmp_path, monkeypatch):
+    rc, doc, _ = _run_report(report_store, tmp_path, monkeypatch)
+    three = {(g["quarter_end"], g["symbol"]): g["reason"] for g in doc["gaps"]["three_table"]}
+    assert three[("2025-06-30", "BBB")] == "short_history"
+    eps = {(g["quarter_end"], g["symbol"]): g for g in doc["gaps"]["street_eps"]}
+    assert eps[("2025-06-30", "BBB")]["reason"] == "short_history"
+    assert eps[("2025-06-30", "BBB")]["inherent"] is True
+    assert doc["summary"]["eps_fixable_symbols"] == []
+
+
+def test_report_eps_targets_out_lists_fixable_only(report_store, tmp_path, monkeypatch):
+    # Give BBB a long statement history but no EPS rows -> fixable gap.
+    _seed_statements_filed(report_store, "BBB", quarter_ends("2022-06-30", "2025-06-30"), 70)
+    eps_out = tmp_path / "eps_targets.json"
+    rc, doc, _ = _run_report(report_store, tmp_path, monkeypatch,
+                             extra=("--eps-targets-out", str(eps_out)))
+    assert doc["summary"]["eps_fixable_symbols"] == ["BBB"]
+    assert json.loads(eps_out.read_text())["symbols"] == ["BBB"]
+
+
+def test_report_three_table_gate_passes(tmp_store, tmp_path, monkeypatch):
+    _seed_statements_filed(tmp_store, "AAA", quarter_ends("2022-09-30", "2025-09-30"), 40)
+    targets = tmp_path / "t.json"
+    targets.write_text(json.dumps({"symbols": ["AAA"], "quarter_ends": ["2025-06-30"],
+                                   "by_quarter_end": {"2025-06-30": ["AAA"]}}))
+    monkeypatch.setattr("scripts.verify_prosperity_history._open_store", lambda: tmp_store)
+    rc = verify_main(["report", "--targets", str(targets), "--out-dir",
+                      str(tmp_path / "o"), "--date", "2026-09-28"])
+    assert rc == 0

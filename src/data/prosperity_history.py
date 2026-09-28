@@ -166,3 +166,50 @@ def eps_gap_reason(depth: Dict[str, Any], statement_fiscals: List[str],
     if unmapped_rows:
         return "unmapped"
     return "missing_quarters"
+
+
+# ---------------------------------------------------------------------------
+# Freeze-parameter recheck (north star: day 60 / 95% / day 80)
+# ---------------------------------------------------------------------------
+
+# A fiscal quarter "belongs" to calendar quarter end qe when it ends in
+# (qe − 85d, qe + 7d]: off-calendar and 52/53-week years land on the right
+# season without stealing the previous one (qe − 90d is the prior quarter end).
+SEASON_BEFORE_DAYS = 85
+SEASON_AFTER_DAYS = 7
+FREEZE_DAYS = (60, 80)
+FREEZE_COVERAGE = 0.95
+FREEZE_SCAN_MAX_DAYS = 120
+
+
+def _known_on(row: Dict[str, Any]) -> Optional[str]:
+    """accepted_date (date part), falling back to filing_date."""
+    accepted = (row.get("accepted_date") or "")[:10]
+    return accepted or (row.get("filing_date") or "")[:10] or None
+
+
+def arrival_day(statement_rows: List[Dict[str, Any]], qe: str) -> Optional[int]:
+    """Days after `qe` when this season's quarter first became known; None = never."""
+    from datetime import timedelta
+    end = date.fromisoformat(qe)
+    lo = (end - timedelta(days=SEASON_BEFORE_DAYS)).isoformat()
+    hi = (end + timedelta(days=SEASON_AFTER_DAYS)).isoformat()
+    days = [(date.fromisoformat(k) - end).days
+            for r in statement_rows
+            if lo < r["date"][:10] <= hi and (k := _known_on(r))]
+    return min(days) if days else None
+
+
+def freeze_coverage(arrivals: List[Optional[int]]) -> Dict[str, Any]:
+    """Coverage at day 60 / 80 and the first day it reaches 95%."""
+    n = len(arrivals)
+    if not n:
+        return {"cov_d60": None, "cov_d80": None, "first_day_ge95": None}
+
+    def cov(day):
+        return sum(1 for a in arrivals if a is not None and a <= day) / n
+
+    first = next((d for d in range(FREEZE_SCAN_MAX_DAYS + 1) if cov(d) >= FREEZE_COVERAGE),
+                 None)
+    return {"cov_d60": round(cov(FREEZE_DAYS[0]), 4), "cov_d80": round(cov(FREEZE_DAYS[1]), 4),
+            "first_day_ge95": first}
