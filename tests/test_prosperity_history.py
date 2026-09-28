@@ -144,27 +144,51 @@ def test_split_suspects_quiet_when_adjusted_or_after_asof():
 
 def test_gap_reason_classes():
     window_start = "2019-06-01"
-    assert gap_reason([], None, 40, window_start) == "not_attempted"
-    assert gap_reason([], "fetch_failed", 40, window_start) == "fetch_failed"
-    assert gap_reason([], "pending", 40, window_start) == "fetch_failed"
-    assert gap_reason([], "provider_empty", 40, window_start) == "provider_empty"
-    assert gap_reason(["2021-03-31", "2021-06-30"], "done", 40,
-                      window_start) == "short_history"
-    assert gap_reason(["2019-03-31", "2021-06-30"], "done", 40,
-                      window_start) == "gap_in_series"
+    assert gap_reason([], None, window_start) == "not_attempted"
+    assert gap_reason([], "fetch_failed", window_start) == "fetch_failed"
+    assert gap_reason([], "pending", window_start) == "fetch_failed"
+    assert gap_reason([], "provider_empty", window_start) == "provider_empty"
+    assert gap_reason(["2021-03-31", "2021-06-30"], "done", window_start) == "short_history"
+    assert gap_reason(["2019-03-31", "2021-06-30"], "done", window_start) == "gap_in_series"
     assert INHERENT_GAP_REASONS == {"short_history"}
 
 
 def test_eps_gap_reason_classes():
+    start = "2023-06-01"
     d = street_eps_depth(_eps_rows(FISCALS[-5:]), "2026-06-30")
-    assert eps_gap_reason(d, FISCALS[-5:], []) == "short_history"
+    assert eps_gap_reason(d, FISCALS[-5:], [], "done", start) == "short_history"
     none_d = street_eps_depth([], "2026-06-30")
-    assert eps_gap_reason(none_d, FISCALS, []) == "no_earnings_rows"
+    assert eps_gap_reason(none_d, FISCALS, [], "done", start) == "no_earnings_rows"
     unmapped = [{"announce_date": "2023-02-01", "fiscal_date": None,
                  "match_method": "none", "eps_actual": 1.0}]
     d2 = street_eps_depth(_eps_rows(FISCALS[-5:]) + unmapped, "2026-06-30")
-    assert eps_gap_reason(d2, FISCALS, unmapped) == "unmapped"
-    assert eps_gap_reason(d, FISCALS, []) == "missing_quarters"
+    assert eps_gap_reason(d2, FISCALS, unmapped, "done", start) == "unmapped"
+    assert eps_gap_reason(d, FISCALS, [], "done", start) == "missing_quarters"
+
+
+def test_eps_gap_reason_short_statements_from_failed_collection_is_fixable():
+    none_d = street_eps_depth([], "2026-06-30")
+    assert eps_gap_reason(none_d, [], [], "fetch_failed", "2023-06-01") == \
+        "statements_fetch_failed"
+    assert eps_gap_reason(none_d, [], [], None, "2023-06-01") == "statements_not_attempted"
+    # an old company whose income only goes back a few quarters is not "young"
+    assert eps_gap_reason(none_d, ["2020-03-31", "2026-03-31"], [], "done",
+                          "2023-06-01") == "statements_gap_in_series"
+
+
+def test_street_eps_depth_stale_latest_is_not_computable():
+    d = street_eps_depth(_eps_rows(FISCALS[:12]), "2026-06-30")   # ends 2024-12-31
+    assert d["consecutive"] == 12 and d["stale"] is True
+    assert not d["sue_ok"] and not d["dsue_ok"]
+
+
+def test_street_eps_depth_merges_near_duplicate_fiscal_dates():
+    rows = _eps_rows(FISCALS[-11:])
+    rows.append({"announce_date": "2026-05-25", "fiscal_date": "2026-03-29",
+                 "match_method": "statement_window", "eps_actual": 1.0})
+    d = street_eps_depth(rows, "2026-06-30")
+    assert d["consecutive"] == 11
+    assert d["dup_fiscal"] == ["2026-03-31"]
 
 
 def test_three_table_ok_delegates_to_backfill_window(tmp_store, monkeypatch):
@@ -265,3 +289,27 @@ def test_report_three_table_gate_passes(tmp_store, tmp_path, monkeypatch):
     rc = verify_main(["report", "--targets", str(targets), "--out-dir",
                       str(tmp_path / "o"), "--date", "2026-09-28"])
     assert rc == 0
+
+
+def test_report_one_short_table_is_not_short_history(tmp_store, tmp_path, monkeypatch):
+    # income/cashflow reach 2019, balance only 2025: fixable, not a young company.
+    fiscals = quarter_ends("2019-03-31", "2025-03-31")
+    rows = [{"date": f, "symbol": "OLD", "period": "Q", "revenue": 1.0, "filingDate": f}
+            for f in fiscals]
+    tmp_store.upsert_income("OLD", rows)
+    tmp_store.upsert_cash_flow("OLD", rows)
+    tmp_store.upsert_balance_sheet("OLD", rows[-2:])
+    tmp_store.create_backfill_run("d9", ["OLD"], ["income", "balance", "cashflow"], {})
+    conn = tmp_store._get_conn()
+    with conn:
+        for ds in ("income", "balance", "cashflow"):
+            tmp_store.complete_job_in_conn(conn, "d9", "OLD", ds, "done")
+    targets = tmp_path / "t.json"
+    targets.write_text(json.dumps({"symbols": ["OLD"], "quarter_ends": ["2025-06-30"],
+                                   "by_quarter_end": {"2025-06-30": ["OLD"]}}))
+    monkeypatch.setattr("scripts.verify_prosperity_history._open_store", lambda: tmp_store)
+    verify_main(["report", "--targets", str(targets), "--run-id", "d9",
+                 "--out-dir", str(tmp_path / "o"), "--date", "x"])
+    doc = json.loads((tmp_path / "o" / "d9-coverage-x.json").read_text())
+    assert doc["gaps"]["three_table"][0]["reason"] == "gap_in_series"
+    assert doc["summary"]["three_table_fixable_symbols"] == ["OLD"]

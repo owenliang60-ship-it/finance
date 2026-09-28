@@ -419,8 +419,8 @@ def run_backfill(*, run_id: str, store: MarketStore, client: Any, lock: Any,
     rebuilt once at the end of the batch (R2-P2-3 — once per run, never per
     symbol). None means "leave the mirror alone", which is what every test
     wants and what keeps this function free of real-filesystem side effects;
-    `main()` passes the production path. The mirror is only rebuilt when a
-    `profile` job was actually collected.
+    `main()` passes the production path. The mirror is only rebuilt when the
+    run's grid carries `profile` jobs.
 
     `targets_override` replaces target selection with an externally frozen
     list (`--targets-file`); `--resume` still trusts the manifest grid.
@@ -456,6 +456,7 @@ def run_backfill(*, run_id: str, store: MarketStore, client: Any, lock: Any,
             return EXIT_EMPTY_UNIVERSE
 
         targets = list(selection["targets"])
+        frozen_count = len(targets)
         candidates = selection["candidates"]
         if canary is not None:
             targets = targets[:canary]      # already lexicographic
@@ -486,10 +487,17 @@ def run_backfill(*, run_id: str, store: MarketStore, client: Any, lock: Any,
             "datasets": datasets,
         }
         if targets_override is not None:
-            params["targets_override_count"] = len(targets)
+            params["targets_override_count"] = frozen_count
             params.update(targets_meta or {})
         try:
             store.create_backfill_run(run_id, targets, datasets, params)
+            stored = store.get_backfill_run(run_id)["params"] or {}
+            stored_datasets = stored.get("datasets", list(DATASETS))
+            if not resume and stored_datasets != datasets:
+                # The manifest identity is the symbol set only; a rerun asking
+                # for other datasets would silently reuse the old grid.
+                raise ValueError("run {!r} was frozen with datasets {}, not {}".format(
+                    run_id, stored_datasets, datasets))
         except ValueError as exc:
             print("backfill: {} (exit {})".format(exc, EXIT_EMPTY_UNIVERSE))
             return EXIT_EMPTY_UNIVERSE
@@ -525,7 +533,11 @@ def _drive(*, run_id: str, store: MarketStore, client: Any, targets: List[str],
     processed_datasets = 0
     fetch_failed_events = 0
     collected_symbols = 0
-    profile_collected = False
+    # Rebuild the mirror whenever this run's grid carries profile jobs — also
+    # on a resume where a crashed predecessor collected every profile.
+    has_profile_jobs = store._get_conn().execute(
+        "SELECT 1 FROM fundamental_backfill_jobs WHERE run_id = ? AND dataset = 'profile' "
+        "LIMIT 1", [run_id]).fetchone() is not None
 
     for index, symbol in enumerate(targets, start=1):
         claimed = store.claim_pending_jobs(run_id, symbol)
@@ -549,7 +561,6 @@ def _drive(*, run_id: str, store: MarketStore, client: Any, targets: List[str],
             dataset_keys=claimed)
 
         collected_symbols += 1
-        profile_collected = profile_collected or "profile" in claimed_set
         for dataset, status in statuses.items():
             if dataset not in claimed_set:
                 continue
@@ -573,7 +584,7 @@ def _drive(*, run_id: str, store: MarketStore, client: Any, targets: List[str],
                       CIRCUIT_BREAKER_FAILURE_RATIO, index))
             return EXIT_PARTIAL
 
-    if profile_collected and profiles_mirror_path is not None:
+    if collected_symbols and has_profile_jobs and profiles_mirror_path is not None:
         _refresh_profiles_mirror(store, profiles_mirror_path)
 
     prog = store.run_progress(run_id)

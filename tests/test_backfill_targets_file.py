@@ -115,3 +115,35 @@ def test_parse_args_targets_file_and_datasets(tmp_path):
         parse_args(["--run-id", "x", "--datasets", "income,estimates"])
     with pytest.raises(SystemExit):
         parse_args(["--run-id", "x", "--verify-only", "--targets-file", str(f)])
+
+
+def test_rerun_with_other_datasets_is_refused(tmp_store):
+    run_backfill(run_id="r4", store=tmp_store, client=FakeClient(), lock=FakeLock(),
+                 targets_override=["ABC"], datasets=("income",))
+    rc = run_backfill(run_id="r4", store=tmp_store, client=FakeClient(), lock=FakeLock(),
+                      targets_override=["ABC"], datasets=STATEMENT_DATASETS)
+    assert rc == 2
+    assert _grid(tmp_store, "r4") == {("ABC", "income")}
+
+
+def test_targets_override_count_is_the_frozen_list_not_the_canary(tmp_store):
+    run_backfill(run_id="r5", store=tmp_store, client=FakeClient(), lock=FakeLock(),
+                 targets_override=["AAA", "BBB", "CCC"], datasets=("income",), canary=1)
+    assert tmp_store.get_backfill_run("r5")["params"]["targets_override_count"] == 3
+
+
+def test_resume_rebuilds_mirror_when_grid_has_profile_jobs(tmp_store, tmp_path,
+                                                            monkeypatch):
+    mirror = tmp_path / "profiles.json"
+    rebuilt = []
+    monkeypatch.setattr("scripts.backfill_extended_fundamentals.rebuild_profiles_json",
+                        lambda store, path: rebuilt.append(path))
+    run_backfill(run_id="r6", store=tmp_store, client=FakeClient(status="fetch_failed"),
+                 lock=FakeLock(), targets_override=["ABC"])
+    # a crashed predecessor collected the profile; only statements remain
+    conn = tmp_store._get_conn()
+    with conn:
+        tmp_store.complete_job_in_conn(conn, "r6", "ABC", "profile", "done")
+    run_backfill(run_id="r6", store=tmp_store, client=FakeClient(), lock=FakeLock(),
+                 resume=True, profiles_mirror_path=mirror)
+    assert rebuilt == [mirror]

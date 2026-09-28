@@ -49,6 +49,12 @@ SUE_MIN_QUARTERS = 11
 SUE_FULL_QUARTERS = 13
 DSUE_MIN_QUARTERS = SUE_MIN_QUARTERS + 1
 SPLIT_MATCH_TOLERANCE = 0.15
+# Two fiscal dates this close are one quarter (52/53-week filers: the estimate
+# and the income statement can date the same quarter a few days apart).
+SAME_QUARTER_DAYS = 20
+# The newest mapped quarter must be the season just reported, or at most one
+# season behind a late filer; anything older means the recent run is broken.
+LATEST_FISCAL_MAX_AGE_DAYS = 91 + 120
 
 # "The company simply has no longer history" vs everything that is ours to fix.
 INHERENT_GAP_REASONS = {"short_history"}
@@ -75,29 +81,44 @@ def street_eps_depth(rows: List[Dict[str, Any]], as_of: str) -> Dict[str, Any]:
     """Consecutive mapped street-EPS quarters announced by `as_of`.
 
     Only rows with an announced actual count; unmapped rows (no fiscal date)
-    lower `mapped_ratio` but never extend the run. Counted from the newest
-    fiscal quarter back while adjacent fiscal dates are ≤ the quarter-gap cap.
+    lower `mapped_ratio` but never extend the run. Fiscal dates within
+    SAME_QUARTER_DAYS of each other are one quarter (reported as duplicates).
+    Counted from the newest fiscal quarter back while adjacent quarters are ≤
+    the quarter-gap cap; if the newest one is older than
+    LATEST_FISCAL_MAX_AGE_DAYS the run is `stale` and nothing is computable.
     """
     known = _known_eps_rows(rows, as_of)
     mapped = [r for r in known if r.get("fiscal_date")]
-    counts: Dict[str, int] = {}
+    quarters: List[List[str]] = []          # newest first; each = same-quarter dates
+    for f in sorted({r["fiscal_date"][:10] for r in mapped}, reverse=True):
+        if quarters and (date.fromisoformat(quarters[-1][-1])
+                         - date.fromisoformat(f)).days <= SAME_QUARTER_DAYS:
+            quarters[-1].append(f)
+        else:
+            quarters.append([f])
+    per_date: Dict[str, int] = {}
     for r in mapped:
-        counts[r["fiscal_date"][:10]] = counts.get(r["fiscal_date"][:10], 0) + 1
-    fiscals = sorted(counts, reverse=True)
-    consecutive = 1 if fiscals else 0
+        per_date[r["fiscal_date"][:10]] = per_date.get(r["fiscal_date"][:10], 0) + 1
+    dup = sorted(q[0] for q in quarters if len(q) > 1 or per_date[q[0]] > 1)
+    heads = [q[0] for q in quarters]
+    consecutive = 1 if heads else 0
     gap_max = _gap_max_days()
-    for newer, older in zip(fiscals, fiscals[1:]):
+    for newer, older in zip(heads, heads[1:]):
         if (date.fromisoformat(newer) - date.fromisoformat(older)).days > gap_max:
             break
         consecutive += 1
+    stale = bool(heads) and (date.fromisoformat(as_of[:10])
+                             - date.fromisoformat(heads[0])).days > LATEST_FISCAL_MAX_AGE_DAYS
+    usable = 0 if stale else consecutive
     return {
         "consecutive": consecutive,
-        "sue_ok": consecutive >= SUE_MIN_QUARTERS,
-        "sue_full": consecutive >= SUE_FULL_QUARTERS,
-        "dsue_ok": consecutive >= DSUE_MIN_QUARTERS,
-        "latest_fiscal": fiscals[0] if fiscals else None,
+        "stale": stale,
+        "sue_ok": usable >= SUE_MIN_QUARTERS,
+        "sue_full": usable >= SUE_FULL_QUARTERS,
+        "dsue_ok": usable >= DSUE_MIN_QUARTERS,
+        "latest_fiscal": heads[0] if heads else None,
         "mapped_ratio": (len(mapped) / len(known)) if known else None,
-        "dup_fiscal": sorted(f for f, n in counts.items() if n > 1),
+        "dup_fiscal": dup,
     }
 
 
@@ -133,12 +154,15 @@ def split_suspects(rows: List[Dict[str, Any]], splits: List[Dict[str, Any]],
 
 
 def gap_reason(statement_dates: List[str], job_status: Optional[str],
-               requested_quarters: int, window_start: str) -> str:
-    """Why a symbol lacks its three-table window at some as-of date.
+               window_start: str) -> str:
+    """Why a symbol lacks a window at some as-of date.
 
-    `statement_dates`: fiscal dates on hand (known by the as-of); `job_status`:
-    the worst backfill job status across the three datasets (None = never in
-    the manifest); `window_start`: earliest fiscal date the window needs.
+    `statement_dates`: fiscal dates on hand in ANY statement table, known by
+    the as-of (the union: one short table must not make an old company look
+    young); `job_status`: the worst backfill job status across the three
+    datasets (None = never in the manifest); `window_start`: earliest fiscal
+    date the window needs. Only a completed collection whose earliest filing
+    is after `window_start` is `short_history`.
     """
     if job_status is None:
         return "not_attempted"
@@ -146,21 +170,25 @@ def gap_reason(statement_dates: List[str], job_status: Optional[str],
         return "fetch_failed"
     if job_status == "provider_empty" or not statement_dates:
         return "provider_empty"
-    if len(statement_dates) < requested_quarters and min(statement_dates) > window_start:
+    if min(statement_dates) > window_start:
         return "short_history"
     return "gap_in_series"
 
 
 def eps_gap_reason(depth: Dict[str, Any], statement_fiscals: List[str],
-                   unmapped_rows: List[Dict[str, Any]]) -> str:
+                   unmapped_rows: List[Dict[str, Any]], job_status: Optional[str],
+                   window_start: str) -> str:
     """Why a symbol falls short of the SUE minimum at some as-of date.
 
-    `statement_fiscals`: income-statement fiscal dates known by the as-of — if
-    even the filings are shorter than the SUE window, the company is simply
-    too young (`short_history`).
+    `statement_fiscals` / `job_status`: known statement fiscal dates and the
+    worst statement job status, as for `gap_reason`; `window_start`: earliest
+    fiscal date the SUE window needs. Filings that are shorter than the window
+    make the company too young (`short_history`) only when the statement
+    collection itself completed; otherwise the statement gap is ours to fix.
     """
     if len(statement_fiscals) < SUE_MIN_QUARTERS:
-        return "short_history"
+        reason = gap_reason(statement_fiscals, job_status, window_start)
+        return "short_history" if reason == "short_history" else "statements_" + reason
     if depth["latest_fiscal"] is None and not unmapped_rows:
         return "no_earnings_rows"
     if unmapped_rows:

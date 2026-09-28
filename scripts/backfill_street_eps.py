@@ -7,6 +7,8 @@ estimates already in `fmp_estimates`; no new estimate pulls) →
 `match_method='none'` rows from the income statement's fiscal dates
 (`statement_window`).
 
+Empty payloads are recorded in `empty` and retried on every rerun.
+
 Safety mirrors `backfill_extended_fundamentals.py`: the shared
 `market_db_writer` lock (busy → exit 75, nothing touched), a per-targets-file
 progress file for resume, and a breaker once 50 symbols have been tried with
@@ -111,10 +113,15 @@ def run_street_eps(*, targets_file, store: MarketStore, client: Any, lock: Any,
     targets_sha = hashlib.sha256(Path(targets_file).read_bytes()).hexdigest()
 
     if dry_run:
-        progress = _load_progress(Path(progress_path), targets_sha) or {"done": []}
-        pending = [s for s in targets if s not in set(progress["done"])]
+        progress = _load_progress(Path(progress_path), targets_sha)
+        if progress is None and not remap_only:
+            print("street_eps: {} belongs to a different targets file (exit {})".format(
+                progress_path, EXIT_EMPTY_UNIVERSE))
+            return EXIT_EMPTY_UNIVERSE
+        done = set(progress["done"]) if progress else set()
+        pending = [s for s in targets if s not in done]
         print("street_eps DRY RUN targets={} pending={} remap_only={}".format(
-            len(targets), len(pending), remap_only))
+            len(targets), len(targets) if remap_only else len(pending), remap_only))
         return EXIT_OK
 
     if not lock.acquire():
@@ -134,7 +141,9 @@ def run_street_eps(*, targets_file, store: MarketStore, client: Any, lock: Any,
             print("street_eps: {} belongs to a different targets file (exit {})".format(
                 progress_path, EXIT_EMPTY_UNIVERSE))
             return EXIT_EMPTY_UNIVERSE
-        finished = set(progress["done"]) | set(progress["empty"])
+        # Empty payloads are retried on every rerun: a vendor hiccup must not
+        # park a symbol as "nothing to fetch" forever.
+        finished = set(progress["done"])
         tried = failed = rows = remapped = 0
         for symbol in targets:
             if symbol in finished:
@@ -144,7 +153,11 @@ def run_street_eps(*, targets_file, store: MarketStore, client: Any, lock: Any,
                 result = _fetch_one(store, client, symbol)
                 remapped += store.remap_unmatched_earnings(
                     symbol, statement_fiscal_dates(store, symbol))
-                progress[result["status"]].append(symbol)
+                bucket = progress[result["status"]]
+                if symbol not in bucket:
+                    bucket.append(symbol)
+                if result["status"] == "done" and symbol in progress["empty"]:
+                    progress["empty"].remove(symbol)
                 progress["failed"].pop(symbol, None)
                 rows += result["rows"]
             except KeyboardInterrupt:

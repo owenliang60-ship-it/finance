@@ -202,3 +202,33 @@ def test_wrapper_provider_empty_is_not_a_failure(tmp_store, tmp_path):
                         progress_path=progress)
     assert rc == 0
     assert json.loads(progress.read_text())["empty"] == ["ABC"]
+
+
+def test_remap_guard_treats_near_dates_as_one_quarter(tmp_store):
+    tmp_store.replace_fmp_earnings("ABC", [
+        {"announce_date": "2024-04-25", "fiscal_date": "2024-03-31",
+         "match_method": "estimates_window", "eps_actual": 1.0},
+        _none_row("2024-05-10")])
+    assert tmp_store.remap_unmatched_earnings("ABC", ["2024-03-30"]) == 0
+
+
+def test_wrapper_retries_empty_symbols_on_rerun(tmp_store, tmp_path):
+    progress = tmp_path / "progress.json"
+    targets = _targets(tmp_path, ["ABC"])
+    run_street_eps(targets_file=targets, store=tmp_store, client=FakeEarningsClient(),
+                   lock=FakeLock(), progress_path=progress)
+    retry = FakeEarningsClient({"ABC": [_vendor("2019-05-01", 1.0)]})
+    run_street_eps(targets_file=targets, store=tmp_store, client=retry,
+                   lock=FakeLock(), progress_path=progress)
+    assert retry.calls == [("ABC", EARNINGS_LIMIT)]
+    doc = json.loads(progress.read_text())
+    assert doc["done"] == ["ABC"] and doc["empty"] == []
+
+
+def test_dry_run_refuses_foreign_progress_like_the_real_run(tmp_store, tmp_path, capsys):
+    progress = tmp_path / "progress.json"
+    run_street_eps(targets_file=_targets(tmp_path, ["ABC"]), store=tmp_store,
+                   client=FakeEarningsClient(), lock=FakeLock(), progress_path=progress)
+    rc = run_street_eps(targets_file=_targets(tmp_path, ["ABC", "XYZ"]), store=tmp_store,
+                        client=None, lock=FakeLock(), progress_path=progress, dry_run=True)
+    assert rc == 2

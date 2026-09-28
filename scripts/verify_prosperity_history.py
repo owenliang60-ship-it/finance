@@ -37,6 +37,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.data.market_store import MarketStore  # noqa: E402
 from src.data.prosperity_history import (  # noqa: E402
     INHERENT_GAP_REASONS,
+    SUE_MIN_QUARTERS,
     arrival_day,
     eps_gap_reason,
     freeze_coverage,
@@ -51,7 +52,6 @@ from scripts.backfill_extended_fundamentals import (  # noqa: E402
     ASOF_WINDOW_TABLES,
     DAYS_PER_QUARTER,
     DEFAULT_ASOF_QUARTERS,
-    HISTORICAL_LIMIT_QUARTERS_CAP,
     STATEMENT_DATASETS,
 )
 from config.settings import FUNDAMENTAL_QUARTER_GAP_MAX_DAYS  # noqa: E402
@@ -126,9 +126,9 @@ class _SymbolData:
                 out.append(r["date"][:10])
         return out
 
-    def three_table_known(self, as_of: str) -> List[str]:
-        sets = [set(self.known_dates(rows, as_of)) for rows in self.tables.values()]
-        return sorted(set.intersection(*sets)) if sets else []
+    def any_table_known(self, as_of: str) -> List[str]:
+        return sorted({d for rows in self.tables.values()
+                       for d in self.known_dates(rows, as_of)})
 
 
 def _job_status(store: MarketStore, run_ids: List[str]) -> Dict[str, str]:
@@ -161,10 +161,12 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
     dup_fiscal: Dict[str, List[str]] = {}
     splits_out: Dict[tuple, Dict[str, Any]] = {}
     window_span = DEFAULT_ASOF_QUARTERS * DAYS_PER_QUARTER + FUNDAMENTAL_QUARTER_GAP_MAX_DAYS
+    eps_span = SUE_MIN_QUARTERS * DAYS_PER_QUARTER + FUNDAMENTAL_QUARTER_GAP_MAX_DAYS
 
     for qe in sorted(by_qe):
         members = by_qe[qe]
         window_start = (date.fromisoformat(qe) - timedelta(days=window_span)).isoformat()
+        eps_start = (date.fromisoformat(qe) - timedelta(days=eps_span)).isoformat()
         ok3 = sue = full = dsue = 0
         mapping: Dict[str, int] = {}
         reasons3: Dict[str, int] = {}
@@ -175,8 +177,7 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
             if three_table_ok(store, sym, qe):
                 ok3 += 1
             else:
-                reason = gap_reason(data.three_table_known(qe), jobs.get(sym),
-                                    HISTORICAL_LIMIT_QUARTERS_CAP, window_start)
+                reason = gap_reason(data.any_table_known(qe), jobs.get(sym), window_start)
                 reasons3[reason] = reasons3.get(reason, 0) + 1
                 gaps3.append({"quarter_end": qe, "symbol": sym, "reason": reason,
                               "inherent": reason in INHERENT_GAP_REASONS})
@@ -196,7 +197,8 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
                 splits_out[(sym, sp["split_date"])] = dict(sp, symbol=sym)
             if not depth["sue_ok"]:
                 unmapped = [r for r in known if not r.get("fiscal_date")]
-                reason = eps_gap_reason(depth, data.known_dates(data.income, qe), unmapped)
+                reason = eps_gap_reason(depth, data.known_dates(data.income, qe), unmapped,
+                                        jobs.get(sym), eps_start)
                 reasons_eps[reason] = reasons_eps.get(reason, 0) + 1
                 gaps_eps.append({"quarter_end": qe, "symbol": sym, "reason": reason,
                                  "consecutive": depth["consecutive"],
@@ -234,7 +236,9 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
         "definitions": {
             "three_table_gate": "has_asof_window (8 contiguous quarters, all three tables, "
                                 "known by accepted_date/filing_date) >= 95% of members",
-            "sue": "consecutive mapped quarters announced by qe: SUE >= 11, full 13, dSUE >= 12",
+            "sue": "consecutive mapped quarters announced by qe (fiscal dates <=20d apart "
+                   "are one quarter; newest must be <=211d before qe): SUE >= 11, "
+                   "full 13, dSUE >= 12",
             "freeze_season": "fiscal quarter ending in (qe-85d, qe+7d], arrival = income "
                              "accepted_date (fallback filing_date) minus qe",
         },
