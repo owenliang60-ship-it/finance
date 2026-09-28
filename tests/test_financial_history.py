@@ -479,7 +479,7 @@ class TestReviewFixes:
                                     live=_Live("TST", tmp_path / "src", FakeClient(), enabled=True))
         assert [p for p in h["periods"] if p["kind"] == "estimate"][0]["period_end"] == "2026-09-29"
         assert h["status"] == "complete"
-        assert any("尚未发布" in w for w in h["warnings"])
+        assert any("发布日在 as_of 之后" in w for w in h["warnings"])
 
     def test_ended_quarter_unverifiable_is_gap(self, tmp_path):
         h = build_financial_history("TST", as_of=date(2026, 10, 5), db_path=self._ended_unseen_db(tmp_path))
@@ -509,7 +509,7 @@ class TestSecondReviewFixes:
         assert actual[-1]["period_end"] == "2026-09-29" and actual[-1]["revenue"] == 1310.0
         assert [p for p in h["periods"] if p["kind"] == "estimate"][0]["period_end"] == "2026-12-30"
         assert h["status"] == "partial"
-        assert not any("尚未发布" in w for w in h["warnings"])
+        assert not any("发布日在 as_of 之后" in w for w in h["warnings"])
 
     def test_empty_live_response_is_not_evidence(self, tmp_path):
         class FakeClient:
@@ -520,8 +520,8 @@ class TestSecondReviewFixes:
                                     db_path=make_db(tmp_path, estimates=_std_estimates()),
                                     live=_Live("TST", tmp_path / "src", FakeClient(), enabled=True))
         assert h["status"] == "partial"
-        assert any("无证据" in g for g in h["gaps"])
-        assert not any("尚未发布" in w for w in h["warnings"])
+        assert any("无该季证据" in g for g in h["gaps"])
+        assert not any("发布日在 as_of 之后" in w for w in h["warnings"])
 
     def test_currency_change_blocks_qoq_and_labels_rows(self, tmp_path):
         db = make_db(tmp_path, estimates=_std_estimates())
@@ -549,3 +549,41 @@ class TestSecondReviewFixes:
         h = build(db)
         assert h["status"] == "partial"
         assert any(g.startswith("净利润缺失 23 季") for g in h["gaps"])
+
+
+class TestPerQuarterEvidence:
+    """Latest actual 6/30; pending ended quarter 9/29; as_of 10/05."""
+
+    def _run(self, tmp_path, rows):
+        class FakeClient:
+            def get_earnings(self, symbol, limit):
+                return rows
+
+            def get_income_statement(self, symbol, period, limit):
+                return []
+
+        return build_financial_history("TST", as_of=date(2026, 10, 5),
+                                       db_path=make_db(tmp_path, estimates=_std_estimates()),
+                                       live=_Live("TST", tmp_path / "src", FakeClient(), enabled=True))
+
+    def test_previous_quarter_release_is_not_evidence(self, tmp_path):
+        h = self._run(tmp_path, [{"date": "2026-07-25", "epsActual": 1.0, "revenueActual": 1230.0}])
+        assert h["status"] == "partial"
+        assert any("无该季证据" in g for g in h["gaps"])
+        assert not any("发布日在 as_of 之后" in w for w in h["warnings"])
+
+    def test_far_future_schedule_is_not_evidence(self, tmp_path):
+        h = self._run(tmp_path, [{"date": "2027-01-25", "epsActual": None, "revenueActual": None}])
+        assert h["status"] == "partial"
+        assert any("无该季证据" in g for g in h["gaps"])
+
+    def test_past_release_date_with_null_actuals_is_not_evidence(self, tmp_path):
+        # vendor has the 10/02 date but no numbers yet: could be reported, unverified
+        h = self._run(tmp_path, [{"date": "2026-10-02", "epsActual": None, "revenueActual": None}])
+        assert h["status"] == "partial"
+
+    def test_matched_future_schedule_confirms_not_reported(self, tmp_path):
+        h = self._run(tmp_path, [{"date": "2026-10-20", "epsActual": None, "revenueActual": None},
+                                 {"date": "2026-07-25", "epsActual": 1.0, "revenueActual": 1230.0}])
+        assert h["status"] == "complete"
+        assert any("FY2026 Q3" in w and "发布日在 as_of 之后" in w for w in h["warnings"])

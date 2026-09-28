@@ -611,14 +611,20 @@ def build_financial_history(
     ended_unseen = [r["fiscal_date"] for r in estimate_rows
                     if last_end and _day(r["fiscal_date"])
                     and last_end + timedelta(days=SAME_QUARTER_DAYS) < _day(r["fiscal_date"]) < as_of]
-    ended_verified = False
+    # fiscal dates confirmed "scheduled, not yet reported" by a live row matched to that quarter
+    confirmed_pending: List[date] = []
     if ended_unseen:
         from src.data.fmp_forward_ingestion import match_fiscal_date
         raw = live.call("earnings", "get_earnings", limit=12) or []
-        # Only a row dated after the last reported quarter is evidence about the
-        # pending one (scheduled date or fresh actuals); an empty or stale list is not.
-        ended_verified = any(_day(r.get("date")) and _day(r.get("date")) > last_end for r in raw)
         pool = sorted({r["fiscal_date"] for r in estimate_rows} | {a["period_end"] for a in actuals})
+        # Evidence is per quarter: a future-dated release matched to that fiscal
+        # quarter. Other quarters' releases, empty or stale lists prove nothing.
+        for r in raw:
+            ann = _day(r.get("date"))
+            fd = _day(match_fiscal_date(ann.isoformat(), pool)) if ann else None
+            if (fd and ann > as_of and r.get("epsActual") is None and r.get("revenueActual") is None
+                    and any(abs((fd - _day(u)).days) <= SAME_QUARTER_DAYS for u in ended_unseen)):
+                confirmed_pending.append(fd)
         by_date = {e["announce_date"]: e for e in earnings}
         for r in raw:
             ann = _day(r.get("date"))
@@ -820,12 +826,16 @@ def build_financial_history(
             age = (as_of - _day(snapshot_meta["snapshot_date"])).days
             if age > SNAPSHOT_STALE_DAYS:
                 warnings.append(f"预测快照已 {age} 天未更新")
-        if any(e["period_ended_unreported"] for e in estimates):
-            if ended_verified:
-                warnings.append("首个预测季已过期末，实时 FMP 财报日历显示尚未发布，仍按共识预测展示")
+        for e in estimates:
+            if not e["period_ended_unreported"]:
+                continue
+            end = _day(e["period_end"])
+            label = f"FY{e['fiscal_year']} {e['fiscal_quarter']}（期末 {e['period_end']}）"
+            if any(abs((end - c).days) <= SAME_QUARTER_DAYS for c in confirmed_pending):
+                warnings.append(f"{label} 已过期末，实时 FMP 财报日历显示其发布日在 as_of 之后，仍按共识预测展示")
             else:
-                gaps.append("首个预测季已过期末，库内未见其财报且实时核实未执行/失败/无证据；"
-                            "若公司本周已发布，图中该季仍是财报前共识")
+                gaps.append(f"{label} 已过期末，库内未见其财报且实时核实未执行/失败/无该季证据；"
+                            "若公司已发布，图中该季仍是财报前共识")
         if street_mode and estimates:
             warnings.append("银行/券商营收预测为街口径净营收共识，与历史净营收同口径")
 
