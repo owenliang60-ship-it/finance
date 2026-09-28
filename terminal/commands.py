@@ -75,9 +75,19 @@ def analyze_ticker(
     ctx_path = write_data_context(data_pkg, research_dir)
     result["research_dir"] = str(research_dir)
     result["data_context_path"] = str(ctx_path)
+    info = data_pkg.info or {}
+
+    # 2b. Five-year price + quarterly fundamentals, frozen before any agent
+    # reads data_context.md (the profiler prompt embeds it below).
+    from terminal.financial_history import prepare_financial_history
+    from terminal.deep_pipeline import append_financial_history_context
+    fh = prepare_financial_history(symbol, research_dir, industry=info.get("industry"))
+    append_financial_history_context(ctx_path, fh)
+    result["financial_history"] = {
+        k: fh.get(k) for k in ("status", "png_path", "md_path", "csv_path", "gaps", "warnings")
+    }
 
     # 3. Research queries
-    info = data_pkg.info or {}
     result["research_queries"] = prepare_research_queries(
         symbol=symbol,
         company_name=info.get("companyName", symbol),

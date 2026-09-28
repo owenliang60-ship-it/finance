@@ -10,6 +10,18 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
+@pytest.fixture(autouse=True)
+def _stub_financial_history(monkeypatch):
+    """analyze_ticker tests must not read the real market.db or call live FMP."""
+    def fake(symbol, research_dir, **kwargs):
+        md = Path(research_dir) / "financial_history.md"
+        md.write_text("# stub\n\n- 状态：**blocked**\n", encoding="utf-8")
+        return {"status": "blocked", "png_path": None, "md_path": str(md), "csv_path": None,
+                "gaps": ["stub"], "warnings": []}
+
+    monkeypatch.setattr("terminal.financial_history.prepare_financial_history", fake)
+
+
 class TestResearchDir:
     """Test that company_db creates research subdir."""
 

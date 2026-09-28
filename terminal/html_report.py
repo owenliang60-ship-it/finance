@@ -509,6 +509,29 @@ body {
   .header h1 { font-size: 28px; }
 }
 
+/* Financial history chart (PDF: own landscape page so figures stay legible) */
+.fh-figure { margin: 12px 0 16px; }
+.fh-figure img { width: 100%; height: auto; border: 1px solid var(--border); }
+.fh-figure figcaption { font-family: 'Crimson Pro', serif; font-size: 13px;
+  color: var(--text-dim); margin-top: 6px; }
+.fh-data table { font-size: 11px; line-height: 1.4; }
+.fh-data th, .fh-data td { padding: 4px 6px; white-space: nowrap; }
+.fh-status { display: inline-block; padding: 2px 10px; border-radius: 3px; font-size: 11px;
+  font-weight: 600; letter-spacing: 1px; }
+.fh-status.complete { background: var(--green-dim); color: var(--green); }
+.fh-status.partial { background: var(--amber-dim); color: var(--amber); }
+.fh-status.blocked { background: var(--red-dim); color: var(--red); }
+@page fh-landscape { size: A4 landscape; margin: 8mm; }
+@media print {
+  .layout { display: block; }  /* named pages need block flow, not flex */
+  .container { max-width: none; }
+  .fh-data table { font-size: 8px; }
+  .fh-data th, .fh-data td { padding: 3px 4px; }
+  .fh-figure { page: fh-landscape; break-before: page; break-after: page; margin: 0; }
+  .fh-figure img { border: none; }
+  #sec-financials { page-break-inside: auto; }
+}
+
 /* Print */
 @media print {
   .toc { display: none; }
@@ -1109,6 +1132,7 @@ def build_toc() -> str:
     """Build table of contents sidebar."""
     items = [
         ("sec-overview", "0. \u516c\u53f8\u753b\u50cf"),
+        ("sec-financials", "0.5 \u80a1\u4ef7\u4e0e\u4e1a\u7ee9"),
         ("sec-lenses", "I. \u4e94\u7ef4\u900f\u955c"),
         ("sec-debate", "II. \u6838\u5fc3\u8fa9\u8bba"),
         ("sec-memo", "III. \u6295\u8d44\u5907\u5fd8\u5f55"),
@@ -1141,6 +1165,43 @@ def build_overview_section(research_dir: Path) -> str:
     parts.append(md_to_html(text))
     parts.append('    </div>')
     parts.append('  </div>')
+    parts.append('</div>')
+    return "\n".join(parts)
+
+
+def build_financials_section(research_dir: Path) -> str:
+    """Section 0.5: five-year price / quarterly fundamentals chart frozen in Phase 0.
+
+    The PNG is embedded as base64 so the HTML stays a single portable file.
+    """
+    import base64
+    from terminal.financial_history import load_frozen_history
+
+    fh = load_frozen_history(research_dir)
+    if fh is None:
+        return ""
+    status = fh.get("status", "blocked")
+    parts = ['<div class="section" id="sec-financials">']
+    parts.append('  <div class="section-label">Section 0.5</div>')
+    parts.append('  <div class="section-title">\u80a1\u4ef7\u4e0e\u4e1a\u7ee9 &mdash; '
+                 '<span>5Y Price, Quarterly QoQ &amp; Next-4Q Consensus</span></div>')
+    parts.append('  <p><span class="fh-status ' + html.escape(status) + '">'
+                 + html.escape(status.upper()) + '</span> &nbsp;as_of '
+                 + html.escape(str(fh.get("as_of"))) + '</p>')
+    png = fh.get("png_path")
+    if png:
+        data = base64.b64encode(Path(png).read_bytes()).decode("ascii")
+        name = html.escape(Path(png).name)
+        parts.append('  <figure class="fh-figure">')
+        parts.append('    <img alt="' + html.escape(fh["symbol"]) + ' price and fundamentals" '
+                     'src="data:image/png;base64,' + data + '">')
+        parts.append('    <figcaption>\u539f\u56fe\uff1a<a href="' + name + '">' + name
+                     + '</a>\uff1b\u53ef\u590d\u7b97\u6570\u636e financial_history.csv</figcaption>')
+        parts.append('  </figure>')
+    body = re.sub(r"^# .*\n", "", fh.get("markdown", ""), count=1)
+    parts.append('  <div class="section-card fh-data"><div class="prose">')
+    parts.append(md_to_html(body))
+    parts.append('  </div></div>')
     parts.append('</div>')
     return "\n".join(parts)
 
@@ -1576,6 +1637,7 @@ def compile_html_report(
     header_html = build_header(symbol, research_dir)
     toc_html = build_toc()
     overview_html = build_overview_section(research_dir)
+    financials_html = build_financials_section(research_dir)
     lenses_html = build_lenses_section(research_dir)
     debate_html = build_debate_section(debate)
     memo_html = build_memo_section(memo)
@@ -1597,6 +1659,7 @@ def compile_html_report(
     doc += '<div class="container">\n'
     doc += header_html + '\n'
     doc += overview_html + '\n'
+    doc += financials_html + '\n'
     doc += lenses_html + '\n'
     doc += debate_html + '\n'
     doc += memo_html + '\n'

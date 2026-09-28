@@ -49,6 +49,44 @@ def write_data_context(data_package: Any, research_dir: Path) -> Path:
     return path
 
 
+def append_financial_history_context(ctx_path: Path, fh_result: Dict[str, Any]) -> None:
+    """Append the frozen five-year quarterly table to data_context.md.
+
+    Every later agent reads data_context.md, so all of them quote the same
+    frozen QoQ numbers instead of recomputing their own.
+    """
+    md_path = Path(fh_result["md_path"])
+    body = md_path.read_text(encoding="utf-8") if md_path.exists() else ""
+    body = re.sub(r"^# .*\n", "", body, count=1)
+    body = re.sub(r"^## ", "#### ", body, flags=re.M)
+    header = (
+        "\n\n## 五年季度业绩与未来四季共识（Phase 0 冻结数据，同 financial_history.md）\n\n"
+        "引用季度营收/净利润增长、季度股价收益时只用本节数字，不另行口算；"
+        "预测净利润口径未核实，与历史 GAAP 不可直接比较。\n"
+    )
+    with ctx_path.open("a", encoding="utf-8") as f:
+        f.write(header + body)
+
+
+def financial_history_report_md(research_dir: Path) -> str:
+    """Report section body built only from the Phase 0 frozen files."""
+    from terminal.financial_history import load_frozen_history
+
+    fh = load_frozen_history(research_dir)
+    if fh is None:
+        return ""
+    lines = [f"**数据状态**: {fh['status']}（as_of {fh['as_of']}；数据在 Phase 0 冻结，汇编时不重新取数）", ""]
+    if fh.get("png_path"):
+        lines += [f"![{fh['symbol']} 五年股价与季度业绩]({Path(fh['png_path']).name})", "",
+                  f"原图：`{Path(fh['png_path']).name}`；可复算数据：`financial_history.csv`", ""]
+    else:
+        lines += ["**未生成图表**（见下方缺口）", ""]
+    body = re.sub(r"^# .*\n", "", fh.get("markdown", ""), count=1)
+    body = re.sub(r"^## ", "### ", body, flags=re.M)
+    lines.append(body)
+    return "\n".join(lines)
+
+
 def prepare_research_queries(
     symbol: str,
     company_name: str,
@@ -144,6 +182,8 @@ def build_lens_agent_prompt(
 - `{research_dir}/competitive.md` — 竞争格局、同行对比
 - `{research_dir}/street.md` — 分析师共识、目标价、多空争论、做空数据
 
+`data_context.md` 末尾的「五年季度业绩与未来四季共识」一节是 Phase 0 冻结数据（同 `financial_history.md`，图 `price_fundamentals_5y_4q.png`）。引用季度营收/净利润 QoQ、未来四季共识和季度股价收益时只用这些数字，不自行重算；分析时区分已公布实际与共识预测，点出小基数造成的极端 QoQ、GAAP 净利润里的一次性项目（重估、减值、税项），以及预测净利润口径未核实、快照早于财报等警示。
+
 文件缺失或为空则跳过，用已有数据继续。**数据缺失时写"该数据未提供"并跳过相关分析维度，绝不编造具体数字。**
 
 **关键要求**：company_profile.md 中有针对 **{lens_dict["lens_name"]}** 透镜的个性化指引（适用度、焦点调整、弱化/忽略、补充关注），请严格遵循这些指引调整你的分析重点。
@@ -198,7 +238,7 @@ def build_synthesis_agent_prompt(research_dir: Path, symbol: str) -> str:
 - `{rd}/company_profile.md` — 公司原型、价值驱动因素、各透镜个性化指引
 
 **数据上下文：**
-- `{rd}/data_context.md` — 财务数据、比率、技术指标、宏观环境
+- `{rd}/data_context.md` — 财务数据、比率、技术指标、宏观环境；末尾「五年季度业绩与未来四季共识」是 Phase 0 冻结数据（同 `financial_history.md`），辩论和备忘录引用季度增长、共识预测时只用这些数字，不重新口算另一套 QoQ
 
 **五维透镜分析（最重要 — 必须逐篇精读，这是你做综合研判的核心输入）：**
 - `{rd}/lens_quality_compounder.md` — 质量复利透镜
@@ -1000,6 +1040,13 @@ def compile_deep_report(symbol: str, research_dir: Path) -> str:
     if company_profile:
         sections.append("## 0. 公司画像")
         sections.append(company_profile)
+        sections.append("")
+
+    # 0.5 股价与业绩（Phase 0 冻结数据）
+    fh_md = financial_history_report_md(research_dir)
+    if fh_md:
+        sections.append("## 0.5 股价与业绩：五年历史 + 未来四季共识")
+        sections.append(fh_md)
         sections.append("")
 
     # I. 五维透镜分析
