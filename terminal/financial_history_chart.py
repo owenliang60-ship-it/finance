@@ -21,6 +21,9 @@ import pandas as pd  # noqa: E402
 from matplotlib.patches import Patch  # noqa: E402
 from matplotlib.ticker import FuncFormatter  # noqa: E402
 
+from terminal.financial_history import NA_REASONS, format_money  # noqa: E402
+from terminal.report_fonts import FONT_CANDIDATES  # noqa: E402
+
 INCOME_QOQ_CLIP = 200.0
 REVENUE_QOQ_CLIP = 200.0
 
@@ -38,40 +41,19 @@ RED_EST = "#E9A4A4"
 GRID = "#D9E1EA"
 GRAY = "#8A94A3"
 
-_FONT_CANDIDATES = (
-    "/System/Library/Fonts/PingFang.ttc",
-    "/System/Library/Fonts/STHeiti Medium.ttc",
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-    "/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
-)
-
-
 def pick_font() -> fm.FontProperties:
-    for candidate in _FONT_CANDIDATES:
+    for candidate in FONT_CANDIDATES["bold"]:
         if Path(candidate).exists():
             return fm.FontProperties(fname=candidate)
     raise RuntimeError("找不到 CJK 字体，中文会缺字；请安装 Noto Sans CJK / PingFang")
 
 
 def _money(value: Optional[float], currency: Optional[str]) -> str:
-    if value is None:
-        return "—"
-    sym = "$" if currency in (None, "USD") else ""
-    sign = "-" if value < 0 else ""
-    v = abs(value)
-    if v >= 1e9:
-        return f"{sign}{sym}{v / 1e9:.2f}B"
-    return f"{sign}{sym}{v / 1e6:.0f}M" if v >= 1e7 else f"{sign}{sym}{v / 1e6:.1f}M"
+    return format_money(value, currency)
 
 
-_NA = {
-    "no_base": "无基期", "gap": "缺季", "missing": "缺数据", "zero_base": "基期0",
-    "nonpositive_base": "基期≤0", "basis_break": "口径切换",
-}
+def _na(reason: Optional[str]) -> str:
+    return NA_REASONS.get(reason or "", reason or "")
 
 
 class _Axis:
@@ -174,16 +156,16 @@ def _bar_panel(ax, axis: _Axis, rows: List[Dict[str, Any]], font, *, metric: str
             color_txt = pos_a if v >= 0 else RED
         else:
             if is_rev:
-                head = "n/a\n" + _NA.get(r["revenue_na_reason"] or "", "")
+                head = "n/a\n" + _na(r["revenue_na_reason"])
                 color_txt = GRAY
             else:
                 kind = r["income_change_type"]
                 pct = r.get("income_change_pct")
                 head = {"loss_narrowed": f"亏损收窄\n{abs(pct or 0):.0f}%" if pct is not None else "",
                         "loss_widened": f"亏损扩大\n{abs(pct or 0):.0f}%" if pct is not None else "",
-                        "turned_profit": "扭亏", "turned_loss": "转亏"}.get(
-                    kind, "n/a\n" + _NA.get(kind or "", ""))
-                color_txt = {"loss_narrowed": PURPLE, "turned_profit": PURPLE,
+                        "turned_profit": "扭亏", "turned_loss": "转亏", "breakeven": "亏损归零"}.get(
+                    kind, "n/a\n" + _na(kind))
+                color_txt = {"loss_narrowed": PURPLE, "turned_profit": PURPLE, "breakeven": PURPLE,
                              "loss_widened": RED, "turned_loss": RED}.get(kind, GRAY)
                 ax.scatter([x], [0], marker="D", s=24, color=color_txt, zorder=4)
             y, va = span * 0.03, "bottom"

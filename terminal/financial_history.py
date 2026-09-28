@@ -21,9 +21,11 @@ import json
 import logging
 import math
 import sqlite3
+from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -104,16 +106,21 @@ def _adjacent(prev_end: date, cur_end: date) -> bool:
     return ADJACENT_MIN_DAYS <= (cur_end - prev_end).days <= ADJACENT_MAX_DAYS
 
 
-def _money(value: Optional[float]) -> str:
+def format_money(value: Optional[float], currency: Optional[str] = "USD") -> str:
+    """Shared by financial_history.md and the PNG so both read identically."""
     if value is None:
         return "—"
+    sym = "$" if currency in (None, "USD") else ""
     sign = "-" if value < 0 else ""
     v = abs(value)
     if v >= 1e9:
-        return f"{sign}{v / 1e9:,.2f}B"
+        return f"{sign}{sym}{v / 1e9:,.2f}B"
     if v >= 1e6:
-        return f"{sign}{v / 1e6:,.1f}M"
-    return f"{sign}{v:,.0f}"
+        return f"{sign}{sym}{v / 1e6:,.1f}M"
+    return f"{sign}{sym}{v:,.0f}"
+
+
+_money = format_money
 
 
 def _pct(value: Optional[float]) -> str:
@@ -140,6 +147,8 @@ def income_change(prev: Optional[float], cur: Optional[float]) -> Tuple[str, Opt
         return "turned_loss", None
     if prev < 0 < cur:
         return "turned_profit", None
+    if prev < 0 and cur == 0:
+        return "breakeven", None
     delta = (abs(cur) / abs(prev) - 1.0) * 100.0          # prev < 0, cur <= 0
     return ("loss_widened" if delta > 0 else "loss_narrowed"), delta
 
@@ -155,6 +164,8 @@ def income_change_label(change_type: str, pct: Optional[float]) -> str:
         return "扭亏"
     if change_type == "turned_loss":
         return "转亏"
+    if change_type == "breakeven":
+        return "亏损归零"
     return "n/a " + NA_REASONS.get(change_type, change_type)
 
 
@@ -316,7 +327,10 @@ def quarterly_price_returns(
                 base_date, base = rows[0]
                 flags.append("partial")
             end_date, end = rows[-1]
-            if q == last_q and as_of < q.end_time.date():
+            q_close = q.end_time.date()
+            while q_close.weekday() >= 5:
+                q_close -= timedelta(days=1)
+            if q == last_q and (as_of < q.end_time.date() or end_date < q_close):
                 flags.append("QTD")
             out.append({
                 "quarter": str(q),
@@ -542,7 +556,7 @@ def build_financial_history(
     window_start_q = pd.Timestamp(as_of).to_period("Q") - (4 * years - 1)
     base_q = window_start_q - 1
 
-    with _connect_ro(Path(db_path)) as conn:
+    with closing(_connect_ro(Path(db_path))) as conn:
         income_db = _rows(conn, """
             SELECT date, fiscal_year, period, filing_date, accepted_date, reported_currency,
                    revenue, net_income, eps, eps_diluted
@@ -586,6 +600,35 @@ def build_financial_history(
 
     actuals = [a for a in actuals if not _announced(a) or _announced(a) <= as_of]
     reported_ends = [_day(a["period_end"]) for a in actuals]
+
+    # market.db earnings/income refresh weekly: a quarter that ended before
+    # as_of but is not in the DB may have been reported this week.
+    last_end = max(reported_ends) if reported_ends else None
+    ended_unseen = [r["fiscal_date"] for r in estimate_rows
+                    if last_end and _day(r["fiscal_date"])
+                    and last_end + timedelta(days=SAME_QUARTER_DAYS) < _day(r["fiscal_date"]) < as_of]
+    ended_verified = False
+    if ended_unseen:
+        from src.data.fmp_forward_ingestion import match_fiscal_date
+        raw = live.call("earnings", "get_earnings", limit=12)
+        if raw is not None:
+            ended_verified = True
+            pool = sorted({r["fiscal_date"] for r in estimate_rows} | {a["period_end"] for a in actuals})
+            seen = {e["announce_date"] for e in earnings}
+            for r in raw:
+                ann = _day(r.get("date"))
+                if (ann is None or ann > as_of or ann.isoformat() in seen
+                        or (r.get("epsActual") is None and r.get("revenueActual") is None)):
+                    continue
+                earnings.append({
+                    "announce_date": ann.isoformat(),
+                    "fiscal_date": match_fiscal_date(ann.isoformat(), pool),
+                    "match_method": "fmp_live:earnings", "eps_actual": _num(r.get("epsActual")),
+                    "eps_estimated": _num(r.get("epsEstimated")),
+                    "revenue_actual": _num(r.get("revenueActual")),
+                    "revenue_estimated": _num(r.get("revenueEstimated")), "last_updated": None,
+                })
+            earnings.sort(key=lambda e: e["announce_date"])
     announced_missing = [
         e for e in earnings
         if _day(e["fiscal_date"]) and (e["eps_actual"] is not None or e["revenue_actual"] is not None)
@@ -748,11 +791,12 @@ def build_financial_history(
                 "net_income_source": (snapshot_meta or {}).get("source"),
                 "period_ended_unreported": _day(r["fiscal_date"]) < as_of,
             })
-        if estimates and latest.get("revenue"):
-            ratio = (estimates[0]["revenue"] or 0) / latest["revenue"]
+        first_rev = next((e["revenue"] for e in estimates if e["revenue"] is not None), None)
+        if first_rev is not None and latest.get("revenue"):
+            ratio = first_rev / latest["revenue"]
             if not ESTIMATE_SCALE_RANGE[0] <= ratio <= ESTIMATE_SCALE_RANGE[1]:
                 gaps.append(
-                    f"首个预测季营收是最新实际的 {ratio:.2f} 倍，疑似币种/单位不一致，预测已剔除")
+                    f"预测营收是最新实际的 {ratio:.2f} 倍，疑似币种/单位不一致，预测已剔除")
                 estimates = []
         if len(estimates) < forecast_quarters:
             gaps.append(f"未来预测只有 {len(estimates)}/{forecast_quarters} 季，未用年度数外推补齐")
@@ -765,7 +809,11 @@ def build_financial_history(
             if age > SNAPSHOT_STALE_DAYS:
                 warnings.append(f"预测快照已 {age} 天未更新")
         if any(e["period_ended_unreported"] for e in estimates):
-            warnings.append("首个预测季已过期末但尚未披露，仍按共识预测展示")
+            if ended_verified:
+                warnings.append("首个预测季已过期末，实时 FMP 财报日历显示尚未发布，仍按共识预测展示")
+            else:
+                gaps.append("首个预测季已过期末，库内未见其财报且实时核实未执行/失败；"
+                            "若公司本周已发布，图中该季仍是财报前共识")
         if street_mode and estimates:
             warnings.append("银行/券商营收预测为街口径净营收共识，与历史净营收同口径")
 
@@ -824,7 +872,7 @@ def build_financial_history(
         warnings.append(f"股价只到 {prices[-1][0].isoformat()}，距 as_of 超过 {PRICE_STALE_DAYS} 天")
     prices, split_fixes = apply_recorded_splits(prices, splits)
     warnings.extend(split_fixes)
-    gaps.extend(detect_split_like_jumps(prices))
+    warnings.extend(detect_split_like_jumps(prices))
     price_q = quarterly_price_returns(prices, window_start_q, as_of) if prices else []
     window_prices = [(d, c) for d, c in prices if pd.Timestamp(d).to_period("Q") >= window_start_q]
     base_prices = [(d, c) for d, c in prices if pd.Timestamp(d).to_period("Q") == base_q]
@@ -996,7 +1044,7 @@ def prepare_financial_history(
     """
     research_dir = Path(research_dir)
     research_dir.mkdir(parents=True, exist_ok=True)
-    as_of = as_of or date.today()
+    as_of = as_of or datetime.now(ZoneInfo("America/New_York")).date()
     if db_path is None:
         from config.settings import MARKET_DB_PATH
         db_path = MARKET_DB_PATH

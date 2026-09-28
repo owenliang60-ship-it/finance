@@ -524,10 +524,11 @@ body {
 @page fh-landscape { size: A4 landscape; margin: 8mm; }
 @media print {
   .layout { display: block; }  /* named pages need block flow, not flex */
-  .container { max-width: none; }
   .fh-data table { font-size: 8px; }
   .fh-data th, .fh-data td { padding: 3px 4px; }
-  .fh-figure { page: fh-landscape; break-before: page; break-after: page; margin: 0; }
+  /* widen only the chart block to the landscape page (container stays 900px) */
+  .fh-figure { page: fh-landscape; break-before: page; break-after: page;
+    width: 1000px; margin: 0 0 0 -32px; }
   .fh-figure img { border: none; }
   #sec-financials { page-break-inside: auto; }
 }
@@ -1128,17 +1129,18 @@ def build_header(symbol: str, research_dir: Path) -> str:
     return "\n".join(parts)
 
 
-def build_toc() -> str:
+def build_toc(has_financials: bool = False) -> str:
     """Build table of contents sidebar."""
     items = [
         ("sec-overview", "0. \u516c\u53f8\u753b\u50cf"),
-        ("sec-financials", "0.5 \u80a1\u4ef7\u4e0e\u4e1a\u7ee9"),
         ("sec-lenses", "I. \u4e94\u7ef4\u900f\u955c"),
         ("sec-debate", "II. \u6838\u5fc3\u8fa9\u8bba"),
         ("sec-memo", "III. \u6295\u8d44\u5907\u5fd8\u5f55"),
         ("sec-oprms", "IV. OPRMS \u8bc4\u7ea7"),
         ("sec-alpha", "V. \u6c42\u5bfc\u601d\u7ef4"),
     ]
+    if has_financials:
+        items.insert(1, ("sec-financials", "0.5 \u80a1\u4ef7\u4e0e\u4e1a\u7ee9"))
     parts = ['<div class="toc">']
     parts.append('  <div class="toc-label">CONTENTS</div>')
     for anchor, label in items:
@@ -1635,9 +1637,9 @@ def compile_html_report(
 
     # Build sections
     header_html = build_header(symbol, research_dir)
-    toc_html = build_toc()
     overview_html = build_overview_section(research_dir)
     financials_html = build_financials_section(research_dir)
+    toc_html = build_toc(has_financials=bool(financials_html))
     lenses_html = build_lenses_section(research_dir)
     debate_html = build_debate_section(debate)
     memo_html = build_memo_section(memo)

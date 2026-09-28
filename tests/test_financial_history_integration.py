@@ -79,3 +79,11 @@ def test_html_embeds_png_and_pdf_gets_landscape_page(frozen_research_dir):
     pages = weasyprint.HTML(filename=str(html_path)).render().pages
     landscape = [p for p in pages if p.width > p.height]
     assert len(landscape) == 1
+
+
+def test_toc_has_no_dead_financials_link_without_manifest(tmp_path):
+    from terminal.html_report import compile_html_report
+
+    (tmp_path / "memo.md").write_text("## Memo\n### 执行摘要\nBUY", encoding="utf-8")
+    doc = compile_html_report("OLD", tmp_path, date="2026-09-28").read_text(encoding="utf-8")
+    assert 'href="#sec-financials"' not in doc and 'id="sec-financials"' not in doc

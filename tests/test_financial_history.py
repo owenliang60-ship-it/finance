@@ -409,3 +409,79 @@ class TestPrepare:
         assert out["status"] == "blocked"
         assert out["png_path"] is None
         assert "空壳" in out["gaps"][0]
+
+
+class TestReviewFixes:
+    def test_loss_to_zero_is_breakeven_not_narrowed_100(self):
+        assert income_change(-50.0, 0.0) == ("breakeven", None)
+        assert income_change_label("breakeven", None) == "亏损归零"
+
+    def test_quarter_end_close_missing_is_still_qtd(self):
+        # as_of on 9/30 (Wed) but the 9/30 close is not in yet
+        prices = [(date(2026, 6, 30), 100.0), (date(2026, 9, 29), 110.0)]
+        out = quarterly_price_returns(prices, pd.Period("2026Q3", "Q"), date(2026, 9, 30))
+        assert out[-1]["flags"] == ["QTD"]
+        prices.append((date(2026, 9, 30), 111.0))
+        out = quarterly_price_returns(prices, pd.Period("2026Q3", "Q"), date(2026, 9, 30))
+        assert out[-1]["flags"] == []
+
+    def test_null_forecast_revenue_keeps_forecasts(self, tmp_path):
+        est = _std_estimates()
+        est[1] = (est[1][0], est[1][1], None, est[1][3])       # 2026-09-29 revenue missing
+        h = build(make_db(tmp_path, estimates=est))
+        fc = [p for p in h["periods"] if p["kind"] == "estimate"]
+        assert len(fc) == 4 and fc[0]["revenue"] is None
+        assert fc[0]["revenue_na_reason"] == "missing"
+        assert not any("币种" in g for g in h["gaps"])
+
+    def test_split_like_move_is_warning_not_gap(self, tmp_path):
+        db = make_db(tmp_path, estimates=_std_estimates())
+        conn = sqlite3.connect(db)
+        conn.execute("UPDATE daily_price SET close = close / 2 WHERE date >= '2026-05-01'")
+        conn.commit()
+        conn.close()
+        h = build(db)
+        assert h["status"] == "complete"
+        assert any("疑似未复权" in w for w in h["warnings"])
+
+    def _ended_unseen_db(self, tmp_path):
+        # latest DB actual 2026-06-30; snapshot has 2026-09-29 which ended before as_of 10/05
+        return make_db(tmp_path, estimates=_std_estimates())
+
+    def test_ended_quarter_reported_this_week_found_live(self, tmp_path):
+        db = self._ended_unseen_db(tmp_path)
+
+        class FakeClient:
+            def get_earnings(self, symbol, limit):
+                return [{"date": "2026-10-02", "epsActual": 1.4, "revenueActual": 1310.0},
+                        {"date": "2027-01-20", "epsActual": None, "revenueActual": None}]
+
+            def get_income_statement(self, symbol, period, limit):
+                return []                                  # 10-Q not filed yet
+
+        h = build_financial_history("TST", as_of=date(2026, 10, 5), db_path=db,
+                                    live=_Live("TST", tmp_path / "src", FakeClient(), enabled=True))
+        actual = [p for p in h["periods"] if p["kind"] == "actual"]
+        assert actual[-1]["period_end"] == "2026-09-29"
+        assert actual[-1]["revenue"] == 1310.0 and actual[-1]["net_income"] is None
+        fc = [p for p in h["periods"] if p["kind"] == "estimate"]
+        assert fc[0]["period_end"] == "2026-12-30"
+        assert h["status"] == "partial"                    # net income still missing
+
+    def test_ended_quarter_not_yet_reported_is_warning(self, tmp_path):
+        db = self._ended_unseen_db(tmp_path)
+
+        class FakeClient:
+            def get_earnings(self, symbol, limit):
+                return [{"date": "2026-10-20", "epsActual": None, "revenueActual": None}]
+
+        h = build_financial_history("TST", as_of=date(2026, 10, 5), db_path=db,
+                                    live=_Live("TST", tmp_path / "src", FakeClient(), enabled=True))
+        assert [p for p in h["periods"] if p["kind"] == "estimate"][0]["period_end"] == "2026-09-29"
+        assert h["status"] == "complete"
+        assert any("尚未发布" in w for w in h["warnings"])
+
+    def test_ended_quarter_unverifiable_is_gap(self, tmp_path):
+        h = build_financial_history("TST", as_of=date(2026, 10, 5), db_path=self._ended_unseen_db(tmp_path))
+        assert h["status"] == "partial"
+        assert any("实时核实未执行" in g for g in h["gaps"])
