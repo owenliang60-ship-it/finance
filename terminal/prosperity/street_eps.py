@@ -9,6 +9,10 @@ the ratio (`eps_split_rescaled`); GAAP → street untouched
 (`gaap_split_basis_break`); otherwise earlier quarters are blanked
 (`eps_split_unconfirmed`). Single-quarter steps keep strong growth from masking
 the jump (APH). market.db is never changed.
+
+Breaks are found on the full stored series, then applied to the quarters announced by
+as_of, the same retrospective basis as the price rescale; when the evidence needs
+quarters announced after as_of the affected quarters also get `eps_split_retrospective`.
 """
 from __future__ import annotations
 
@@ -21,6 +25,7 @@ from terminal.prosperity.config import EPS_QUARTERS, EPS_STATEMENT_MATCH_DAYS
 from terminal.prosperity.types import EpsQuarter
 
 CLUSTER_GAP = 2   # boundaries this close with the same ratio are one break seen by overlapping windows
+FULL_HISTORY = "9999-12-31"   # split evidence reads the whole stored series, like the price rescale
 
 
 def _d(value: str) -> date:
@@ -49,13 +54,11 @@ def _clusters(fiscals: List[str], issues: Sequence[Mapping]) -> List[Tuple[froze
     return out
 
 
-def _rescale(quarters: List[dict], issues: Sequence[Mapping]) -> Tuple[List[float], List[bool], List[List[str]]]:
-    """Per quarter: divisor to the post-split basis, blanked flag, labels (actual and estimate share them)."""
-    divisor, blank = [1.0] * len(quarters), [False] * len(quarters)
-    labels: List[List[str]] = [list(q["issues"]) for q in quarters]
-    fiscals = [q["fiscal_date"] for q in quarters]
+def _breaks(fiscals: List[str], issues: Sequence[Mapping]) -> List[Tuple[str, str, str, float, str]]:
+    """Per break: (fiscal before, boundary fiscal, verdict, ratio, last evidence fiscal)."""
+    out = []
     for ratios, members, evidence in _clusters(fiscals, issues):
-        verdict, boundary = "unconfirmed", members[0]
+        verdict, boundary, r = "unconfirmed", members[0], 1.0
         if len(ratios) == 1:
             r = next(iter(ratios))
             log_r = math.log(r)
@@ -71,26 +74,42 @@ def _rescale(quarters: List[dict], issues: Sequence[Mapping]) -> Tuple[List[floa
             elif abs(g) > abs(s) and abs(g - log_r) < abs(g):
                 verdict = "gaap"
         cut = fiscals.index(boundary)
-        if verdict == "street":
-            for k in range(cut):
-                divisor[k] *= r
-                labels[k].append("eps_split_rescaled")
-        elif verdict == "gaap":
-            for k in (cut - 1, cut):
-                labels[k].append("gaap_split_basis_break")
-        else:
-            for k in range(cut):
-                blank[k] = True
-                labels[k].append("eps_split_unconfirmed")
+        out.append((fiscals[cut - 1], boundary, verdict, r, evidence[boundary]["evidence"][-1]["fiscal_date"]))
+    return out
+
+
+def _rescale(quarters: List[dict], breaks) -> Tuple[List[float], List[bool], List[List[str]]]:
+    """Per visible quarter: divisor to the post-split basis, blanked flag, labels (actual and estimate share them).
+
+    Breaks are judged on the full stored series, so a replay before three post-break quarters were
+    announced still gets the unit its prices are on (Codex M4 review F1, 2026-09-29).
+    """
+    divisor, blank = [1.0] * len(quarters), [False] * len(quarters)
+    labels: List[List[str]] = [list(q["issues"]) for q in quarters]
+    last_visible = quarters[-1]["fiscal_date"] if quarters else ""
+    for before, boundary, verdict, r, evidence_end in breaks:
+        retrospective = ["eps_split_retrospective"] if evidence_end > last_visible else []
+        for k, q in enumerate(quarters):
+            if verdict == "gaap":
+                if q["fiscal_date"] in (before, boundary):
+                    labels[k].append("gaap_split_basis_break")
+            elif q["fiscal_date"] < boundary:
+                if verdict == "street":
+                    divisor[k] *= r
+                    labels[k].extend(["eps_split_rescaled"] + retrospective)
+                else:
+                    blank[k] = True
+                    labels[k].extend(["eps_split_unconfirmed"] + retrospective)
     return divisor, blank, labels
 
 
 def announced_eps(earnings: Sequence[Mapping], income_rows: Sequence[Mapping], splits: Sequence[Mapping],
                   as_of: str) -> Tuple[EpsQuarter, ...]:
     rows = [r for r in earnings if r.get("match_method") != "none"]
+    stored = sorted(resolve_eps_quarters(rows, FULL_HISTORY)["quarters"], key=lambda q: q["fiscal_date"])
+    audit = split_basis_audit(stored, list(income_rows), list(splits))
     quarters = sorted(resolve_eps_quarters(rows, as_of)["quarters"], key=lambda q: q["fiscal_date"])
-    audit = split_basis_audit(quarters, list(income_rows), list(splits))
-    divisor, blank, labels = _rescale(quarters, audit["issues"])
+    divisor, blank, labels = _rescale(quarters, _breaks([q["fiscal_date"] for q in stored], audit["issues"]))
 
     def basis(value, k):
         return None if blank[k] or value is None else value / divisor[k]

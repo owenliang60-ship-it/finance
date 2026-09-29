@@ -92,6 +92,23 @@ def test_unadjusted_price_split_is_rescaled_in_memory():
     assert q.price_asof == 241.16 and "price_split_rescaled" not in q.flags
 
 
+def test_replayed_price_and_ttm_eps_share_the_post_split_unit():
+    # Codex M4 review F1 (KLAC, 2024-12-31): price 63.012 was divided by 10 while TTM EPS mixed units (18.753)
+    from tests.test_prosperity_street_eps import KLAC
+    from tests.prosperity_fixtures import gaap_rows
+    closes = [("2024-12-30", 630.12), ("2024-12-31", 630.12)] + KLAC_CLOSES
+    base = replace(_usd_history(), **{k: v for k, v in vars(hist(rows=[
+        ("2024-03-31", "2024", "Q1", "2024-05-01 16:00:00"), ("2024-06-30", "2024", "Q2", "2024-07-31 16:00:00"),
+        ("2024-09-30", "2024", "Q3", "2024-10-30 16:00:00")])).items() if k in ("income", "balance", "cashflow")})
+    statements = {r["date"]: r for r in base.income}
+    income = [dict(statements.get(g["date"], {}), **g) for g in gaap_rows(KLAC, 10.0, "2024-06-30")]
+    h = replace(base, earnings=KLAC, income=income, closes=closes,
+                splits=[{"date": "2026-06-12", "numerator": 10.0, "denominator": 1.0}])
+    p = build_packet(h, "2024-12-31", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[])
+    assert abs(p.price_asof - 63.012) < 1e-9 and "price_split_rescaled" in p.flags
+    assert abs(p.consensus.ttm_eps - (0.616 + 0.526 + 0.660 + 0.733)) < 1e-9
+
+
 def test_non_finite_split_metadata_is_ignored_not_fatal():
     # Codex M4 review F6: numerator=inf used to raise OverflowError and drop the whole symbol
     bad = [{"date": "2026-06-12", "numerator": float("inf"), "denominator": 1.0},

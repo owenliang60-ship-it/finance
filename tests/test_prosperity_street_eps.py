@@ -142,3 +142,26 @@ def test_rescale_and_blank_apply_to_vendor_estimates_too():
     blank = {x.fiscal_date: x for x in announced_eps(rows, income, two_ratios, "2026-09-26")}
     assert blank["2024-06-30"].eps_actual is None and blank["2024-06-30"].eps_estimated is None
     assert "eps_split_unconfirmed" in blank["2024-06-30"].labels
+
+
+def test_replay_before_three_post_break_quarters_uses_the_full_stored_series():
+    # Codex M4 review F1: KLAC replayed to 2024-12-31 mixed 0.733 (new unit) with three old-unit quarters,
+    # while the price was already on the post-split basis. The split evidence is retrospective by nature.
+    income, split = gaap_rows(KLAC, 10.0, "2024-06-30"), [SPLIT("2026-06-12", 10.0)]
+    for as_of, last in (("2024-09-30", "2024-06-30"), ("2024-12-31", "2024-09-30"), ("2025-03-31", "2024-12-31")):
+        got = announced_eps(KLAC, income, split, as_of)
+        assert got[-1].fiscal_date == last                                 # still only what was announced by as_of
+        assert all(1 / 3 < b.eps_actual / a.eps_actual < 3 for a, b in zip(got, got[1:]))
+        assert all({"eps_split_rescaled", "eps_split_retrospective"} <= set(x.labels)
+                   for x in got if x.fiscal_date <= "2024-06-30")
+    ttm = sum(x.eps_actual for x in announced_eps(KLAC, income, split, "2024-12-31")[-4:])
+    assert ttm == pytest.approx(0.616 + 0.526 + 0.660 + 0.733)
+    late = announced_eps(KLAC, income, split, "2025-06-30")                # evidence fully visible by now
+    assert all("eps_split_rescaled" in x.labels and "eps_split_retrospective" not in x.labels
+               for x in late if x.fiscal_date <= "2024-06-30")
+
+
+def test_unconfirmed_break_after_as_of_still_blanks_the_visible_quarters():
+    income = gaap_rows(KLAC, 10.0, "2024-06-30")
+    early = announced_eps(KLAC, income, [SPLIT("2026-06-12", 10.0), SPLIT("2025-01-01", 9.0)], "2024-09-30")
+    assert early and all(x.eps_actual is None and "eps_split_unconfirmed" in x.labels for x in early)
