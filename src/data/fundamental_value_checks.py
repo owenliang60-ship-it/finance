@@ -13,6 +13,7 @@ only half of the run.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 FLOW_FIELDS: Tuple[str, ...] = ("revenue", "cost_of_revenue", "gross_profit", "net_income",
@@ -20,6 +21,13 @@ FLOW_FIELDS: Tuple[str, ...] = ("revenue", "cost_of_revenue", "gross_profit", "n
 
 Q8_TOLERANCE = 0.01
 Q10_UNIT_BAND = (500.0, 2000.0)
+Q11_REVENUE_RATIO = 3.0
+Q11_GROSS_MARGIN_DELTA = 0.15
+Q11_COST_RATIO, Q11_COST_REVENUE_RATIO = 2.0, 1.3
+Q14_NONSTANDARD = ((0, 85), (97, 99), (110, 114))   # period_days ranges (inclusive)
+Q14_LONG_GAP_DAYS = 150
+Q17_GOODWILL_SHARE, Q17_ASSET_RATIO = 0.10, 1.3
+E2_MIN_ABS_EPS, E2_RATIO = 0.05, 1.8
 
 
 @dataclass(frozen=True)
@@ -86,9 +94,54 @@ def _hard_checks(rows: List[Mapping[str, Any]]) -> List[ValueIssue]:
     return issues
 
 
+def _soft_checks(rows: List[Mapping[str, Any]]) -> List[ValueIssue]:
+    issues: List[ValueIssue] = []
+    for prev, cur in zip(rows, rows[1:]):
+        d = cur["date"][:10]
+        days = (date.fromisoformat(d) - date.fromisoformat(prev["date"][:10])).days
+        if any(lo <= days <= hi for lo, hi in Q14_NONSTANDARD):
+            issues.append(ValueIssue("q14_nonstandard_quarter", "soft", d, detail={"period_days": days}))
+        elif days >= Q14_LONG_GAP_DAYS:
+            issues.append(ValueIssue("q14_long_gap", "soft", d, detail={"period_days": days}))
+        p_rev, c_rev = _num(prev.get("revenue")), _num(cur.get("revenue"))
+        if p_rev and c_rev and p_rev > 0 and c_rev > 0:
+            ratio = c_rev / p_rev
+            if (ratio > Q11_REVENUE_RATIO or ratio < 1 / Q11_REVENUE_RATIO) and not _unit_step(p_rev, c_rev):
+                issues.append(ValueIssue("q11_revenue_jump", "soft", d, detail={"ratio": ratio}))
+            p_gp, c_gp = _num(prev.get("gross_profit")), _num(cur.get("gross_profit"))
+            if p_gp is not None and c_gp is not None \
+                    and abs(c_gp / c_rev - p_gp / p_rev) > Q11_GROSS_MARGIN_DELTA:
+                issues.append(ValueIssue("q11_gross_margin_jump", "soft", d,
+                                         detail={"from": p_gp / p_rev, "to": c_gp / c_rev}))
+            p_cor, c_cor = _num(prev.get("cost_of_revenue")), _num(cur.get("cost_of_revenue"))
+            if p_cor and c_cor and p_cor > 0 and c_cor / p_cor > Q11_COST_RATIO and ratio < Q11_COST_REVENUE_RATIO:
+                issues.append(ValueIssue("q11_cost_jump", "soft", d,
+                                         detail={"cost_ratio": c_cor / p_cor, "revenue_ratio": ratio}))
+        p_gw, c_gw = _num(prev.get("goodwill_and_intangible_assets")), _num(cur.get("goodwill_and_intangible_assets"))
+        p_ta, c_ta = _num(prev.get("total_assets")), _num(cur.get("total_assets"))
+        if p_ta and p_ta > 0 and ((p_gw is not None and c_gw is not None and c_gw - p_gw > Q17_GOODWILL_SHARE * p_ta)
+                                  or (c_ta is not None and c_ta / p_ta > Q17_ASSET_RATIO)):
+            issues.append(ValueIssue("q17_acquisition_suspect", "soft", d,
+                                     detail={"goodwill_delta": None if p_gw is None or c_gw is None else c_gw - p_gw,
+                                             "total_assets_ratio": None if c_ta is None else c_ta / p_ta}))
+    return issues
+
+
 def check_quarter_values(quarters: Sequence[Mapping[str, Any]]) -> List[ValueIssue]:
     rows = sorted(quarters, key=lambda r: r["date"][:10])
-    return _hard_checks(rows)
+    return _hard_checks(rows) + _soft_checks(rows)
+
+
+def check_consensus_jump(base: Mapping[str, float], current: Mapping[str, float]) -> List[ValueIssue]:
+    """E2: week-over-week consensus jump per matched fiscal date (caller nulls the field)."""
+    issues = []
+    for fiscal in sorted(set(base) & set(current)):
+        b, c = _num(base[fiscal]), _num(current[fiscal])
+        if b is None or c is None or max(abs(b), abs(c)) < E2_MIN_ABS_EPS:
+            continue
+        if b * c < 0 or b == 0 or c == 0 or not (1 / E2_RATIO <= c / b <= E2_RATIO):
+            issues.append(ValueIssue("e2_consensus_jump", "hard", fiscal, detail={"base": b, "current": c}))
+    return issues
 
 
 def apply_hard_issues(quarters: Sequence[Mapping[str, Any]], issues: Sequence[ValueIssue]) -> List[Dict[str, Any]]:

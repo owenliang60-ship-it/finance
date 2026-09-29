@@ -1,4 +1,5 @@
-from src.data.fundamental_value_checks import FLOW_FIELDS, apply_hard_issues, check_quarter_values
+from src.data.fundamental_value_checks import (FLOW_FIELDS, apply_hard_issues, check_consensus_jump,
+                                               check_quarter_values)
 
 
 def q(date, **kw):
@@ -62,3 +63,42 @@ def test_q13_currency_change_nulls_older_quarters_in_other_currency():
     issues = [i for i in check_quarter_values(rows) if i.code == "q13_currency_change"]
     assert sorted(i.fiscal_date for i in issues) == ["2025-03-31", "2025-06-30"]
     assert all(i.severity == "hard" and i.null_fields == FLOW_FIELDS for i in issues)
+
+
+def test_q11_soft_jumps_do_not_null():
+    rows = [q("2025-03-31"), q("2025-06-30", revenue=400.0, cost_of_revenue=160.0, gross_profit=240.0)]
+    issues = check_quarter_values(rows)
+    jump = [i for i in issues if i.code == "q11_revenue_jump"]
+    assert jump and jump[0].severity == "soft" and jump[0].null_fields == ()
+    fixed = apply_hard_issues(rows, issues)
+    assert fixed[1]["revenue"] == 400.0 and "q11_revenue_jump" in fixed[1]["_labels"]
+
+
+def test_q11_gross_margin_jump_over_15pp():
+    rows = [q("2025-03-31"), q("2025-06-30", cost_of_revenue=20.0, gross_profit=80.0)]
+    assert ("q11_gross_margin_jump", "2025-06-30") in codes(check_quarter_values(rows))
+
+
+def test_q14_labels_nonstandard_and_long_gaps():
+    rows = [q("2024-12-28"), q("2025-04-05"), q("2025-06-28"), q("2025-12-27")]  # 98d, 84d, 182d
+    got = {(i.code, i.fiscal_date): i.detail.get("period_days")
+           for i in check_quarter_values(rows) if i.code.startswith("q14")}
+    assert got == {("q14_nonstandard_quarter", "2025-04-05"): 98,
+                   ("q14_nonstandard_quarter", "2025-06-28"): 84,
+                   ("q14_long_gap", "2025-12-27"): 182}
+
+
+def test_q17_acquisition_suspect_soft():
+    rows = [q("2025-03-31"), q("2025-06-30", goodwill_and_intangible_assets=120.0, total_assets=560.0)]
+    hit = [i for i in check_quarter_values(rows) if i.code == "q17_acquisition_suspect"]
+    assert hit and hit[0].severity == "soft" and hit[0].fiscal_date == "2025-06-30"
+
+
+def test_e2_flags_ratio_outside_band_and_sign_flip():
+    base = {"2026-09-30": 1.00, "2026-12-31": 1.10, "2027-03-31": 0.50}
+    cur = {"2026-09-30": 1.05, "2026-12-31": 2.20, "2027-03-31": -0.40}
+    assert sorted(i.fiscal_date for i in check_consensus_jump(base, cur)) == ["2026-12-31", "2027-03-31"]
+
+
+def test_e2_ignores_tiny_eps_noise():
+    assert check_consensus_jump({"2026-09-30": 0.01}, {"2026-09-30": 0.04}) == []
