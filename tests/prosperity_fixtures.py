@@ -95,3 +95,17 @@ def gaap_rows(rows, divisor_before=1.0, last_pre=None, gaap_multiplier_before=1.
         out.append({"date": r["fiscal_date"],
                     "eps_diluted": scale * adjusted * (gaap_multiplier_before if pre else 1.0)})
     return out
+
+
+import math
+
+
+def closes_series(start, end, start_price, drift=0.001, phase=0.0):
+    out, d, t = [], date.fromisoformat(start), 0
+    while d <= date.fromisoformat(end):
+        if d.weekday() < 5:
+            out.append((d.isoformat(),
+                        round(start_price * (1 + drift) ** t * (1 + 0.02 * math.sin(t / 3 + phase)), 4)))
+            t += 1
+        d += timedelta(days=1)
+    return out
