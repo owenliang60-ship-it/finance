@@ -1,5 +1,6 @@
 # 给CC：景气三项输入质量修复验收
 
+> 最新状态见第9节：CC反馈P1/P2已修复，代码1bf1d496；第1–8节为首轮交付记录。
 状态：**代码已完成并提交隔离分支；待CC验收，未合并、推送或部署。** 本次修复使用逻辑，不把供应商可疑原值直接改成“正确数据”。
 
 ## 1. 审查入口与已批准目标
@@ -108,3 +109,57 @@ git diff fea08a09..96bae1fb -- src/data/prosperity_quality.py src/data/prosperit
 - 未实现全部M4/M6、NTM口径适配、每周归档调度或正式候选榜；后续必须接入本次纯函数与归档模式，不能绕过它们直接读原值。
 - 现有自动pull的并发一致性问题、AEM/BIP来源日期回写风险仍是此前单独事项。本次保留的独立验收快照不受普通pull路径覆盖。
 - SUE缺失的股票在未来M6可按已有规则使用其他因子并标记；是否满足最低历史和有效权重门槛仍需实际排名内核判断，本次不承诺全部新股进入主榜。
+
+
+## 9. CC验收意见闭环：最新交付（2026-09-29）
+
+**代码提交：`1bf1d496e580ed986e00766b812c749677802e76`，同一分支；P1/P2均已修复，尚未merge/push/部署。** 本节数字和接口说明覆盖上面首轮记录；CC原始意见在主仓库`docs/handoffs/2026-09-29-prosperity-quality-guards-cc-review.md`。
+
+### P1：只接受小整数拆股记录
+
+- 分子和分母均必须是1–20之间的整数，且不相等；接受SQLite的2.0等整值浮点，拒绝bool、NaN、小数、非正数和大于20的数。
+- 不靠split_type，不把903/500等大分数约分后放行。被排除的事件保留在`ignored_split_events`，全部不合格时状态为`no_eligible_split_events`，不宣称已确认“没有拆股”。这也意味着真实但超出该比例协议的事件需另行核实。
+- DELL、FTV、LH完整真实窗口夹具在改前均复现误拦，改后无此疑点；ANET、KLAC、ORLY、APH、MNST真实拆股边界仍被识别。FISV仍有一个由合格整数拆股记录支持的历史疑点，位于当前依赖窗口外，不阻断当前SUE。
+
+### P2：历史已有日期的公告下界
+
+三个函数新增**可选keyword-only**参数，原调用兼容，但CC的M4历史路径必须传入EPS行才能启用这项新保护：
+
+```python
+statement_availability(row, *, earnings_rows=None)
+statement_known_on(row, *, observed_at=None, earnings_rows=None)
+arrival_day(tables, qe, *, earnings_rows=None)
+```
+
+同财季±20天、actual为有限实数（0有效）、公告日在财季末之后的行中，取最早公告日。仅当原始公开日期本来合法时，使用max(原公开日期, 最早公告日)；未知公开日期仍None。返回的`reported_public_date`保留原可信字段日期，`earnings_floor`标下界，延后时添加`statement_date_before_earnings`原因。
+
+当前observed路径明确忽略这项历史下界，继续以归档观测证据工作。报告的known_dates/当期锚/冻结到达均已接入；`public_date_floor_adjustments`列出调整证据。此规则是基于现有资料的保守历史限制，不声称法律上所有公司必定先发业绩再提交文件，也不证明供应商公告日期永远正确。
+
+真实回归：ASML2022-06-30的7/2延到7/20；HALO2025-09-30的10/3延到11/3。另覆盖未知不得填、最早而非最新、0 actual、预排null/NaN/非法日期不作证据、其他财季不匹配、当前模式不变，以及report当期锚和arrival_day集成。
+
+### 已同步Boss决定
+
+北极星已明确：质量层只检测，不做换算；M4在同断点所有匹配拆股比例一致确认时于内存换算、挂`eps_split_rescaled`，未确认的断点前季度记缺失并挂`eps_split_unconfirmed`，market.db不改。这部分M4逻辑由CC按其plan实现，本轮没有抢做。
+
+同财季冲突继续整段依赖窗口拦截，代码未改变，不放宽为1%容差。现有函数仅容忍浮点噪声（rel_tol=1e-9、abs_tol=1e-12）。`depth_ok/consecutive`仍表示日期深度，不表示冲突季度有可信数值，列为已知展示限制。
+
+### 最终验证与实际数字
+
+- 相关 **162 passed**；Python3.10语法通过。
+- 全量 **4464 passed / 4 skipped / 12 failed**，301.78秒；12项为原有广度数据/晨报分类基线失败，没有新增失败。
+- 1个独立reviewer复审：**86 passed**，无新增阻断，未修改代码或生产数据。
+- 同一9/29观测快照、915只成员，三表仍872；SUE **799→802**（87.65%），恢复**DELL/FTV/LH**；ΔSUE **791→795**（86.89%），额外恢复DHR；三表与SUE联合 **788→791**（86.45%）。
+- SUE的冲突原因仍59只，拆股疑似原因8→5；没有放松冲突窗口规则，没有因小数比例被过滤而修改原EPS。
+- 当前report rc0；历史report rc1，20期历史时间证据仍未过90%，6/30仍765/933=81.99%。六个历史季的冻结到达统计因公告下界略微延后，真实结果已保存，不当作当前榜的新阻塞。
+- 生产写入0，API调用0，保留快照SHA仍为3caffdb7e7c2d2d9c5124fcbf364e46cf32d51307dde3d9ea49bf8ecf54800e2。
+
+新证据目录：`/Users/owen/CC workspace/Finance/reports/prosperity/quality-guards-cc-fixes-20260929/`，含current/historical两份`*-1bf1d496`报告、`current-factor-delta.json`逐票前后结果、`full-tests.log`、`validation-manifest.json`（工件SHA/退出码）。
+
+CC复核本轮增量：
+
+```bash
+cd /Users/owen/.codex/worktrees/d9-recovery/Finance
+git diff b7dc04be..1bf1d496 -- src/data/prosperity_quality.py src/data/prosperity_history.py scripts/verify_prosperity_history.py tests/test_prosperity_quality.py docs/design/prosperity-engine-north-star.md
+```
+
+原§7的专项命令仍有效，现预期162 passed。重跑报告请取新的输出文件名，不覆盖本次证据。待Boss单独批准merge，再分别push/部署。
