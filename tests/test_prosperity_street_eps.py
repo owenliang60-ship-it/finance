@@ -131,3 +131,14 @@ def test_high_growth_does_not_hide_a_street_break():
     assert abs(got["2024-12-31"].eps_actual - 0.275) < 1e-9 and "eps_split_rescaled" in got["2024-12-31"].labels
     assert got["2025-03-31"].eps_actual == 0.315
     assert not any("gaap_split_basis_break" in x.labels for x in got.values())
+
+
+def test_rescale_and_blank_apply_to_vendor_estimates_too():
+    rows = [dict(r, eps_estimated=r["eps_actual"] * 0.95) for r in KLAC]      # market.db: estimate on the actual's basis
+    income = gaap_rows(KLAC, 10.0, "2024-06-30")
+    got = {x.fiscal_date: x for x in announced_eps(rows, income, [SPLIT("2026-06-12", 10.0)], "2026-09-26")}
+    assert abs(got["2024-06-30"].eps_estimated - 0.627) < 1e-9 and abs(got["2024-09-30"].eps_estimated - 0.69635) < 1e-9
+    two_ratios = [SPLIT("2026-06-12", 10.0), SPLIT("2025-01-01", 9.0)]           # ambiguous ratio → unconfirmed
+    blank = {x.fiscal_date: x for x in announced_eps(rows, income, two_ratios, "2026-09-26")}
+    assert blank["2024-06-30"].eps_actual is None and blank["2024-06-30"].eps_estimated is None
+    assert "eps_split_unconfirmed" in blank["2024-06-30"].labels

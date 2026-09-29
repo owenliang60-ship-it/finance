@@ -113,9 +113,15 @@ def _values(rows: Sequence[Mapping], fiscals: Sequence[str], period: str = "Q") 
     return out
 
 
-def _previous_snapshot(by_snap: Dict[str, List[Mapping]], snap: str) -> Optional[str]:
-    earlier = [s for s in by_snap if s < snap]
-    return max(earlier) if earlier else None
+def _last_seen(by_snap: Dict[str, List[Mapping]], snap: str, fiscals: Sequence[str], period: str = "Q") -> Dict[str, float]:
+    """Each fiscal's value in the newest earlier snapshot that has it (a missing week cannot hide a jump)."""
+    out: Dict[str, float] = {}
+    for s in sorted((s for s in by_snap if s < snap), reverse=True):
+        for f, v in _values(by_snap[s], [f for f in fiscals if f not in out], period).items():
+            out[f] = v
+        if len(out) == len(fiscals):
+            break
+    return out
 
 
 def _quarter_sum(rows: Sequence[Mapping], anchor: str, announced: Sequence[EpsQuarter]):
@@ -137,7 +143,8 @@ def _fy_blend(rows: Sequence[Mapping], anchor: str):
     fy = sorted((r for r in rows if r.get("period_type") == "FY" and r.get("eps_avg") is not None),
                 key=lambda r: r["fiscal_date"])
     fy1 = next((r for r in fy if _d(r["fiscal_date"]) >= a + timedelta(days=QUARTER_DAYS - ESTIMATE_MATCH_DAYS)), None)
-    if fy1 is None:
+    # FY1 must be the fiscal year in progress: it ends within a year of the anchor.
+    if fy1 is None or _d(fy1["fiscal_date"]) > a + timedelta(days=FY_STEP_DAYS + FY_STEP_TOLERANCE):
         return None
     fy2 = next((r for r in fy if abs((_d(r["fiscal_date"]) - _d(fy1["fiscal_date"])).days - FY_STEP_DAYS)
                 <= FY_STEP_TOLERANCE), None)
@@ -159,7 +166,6 @@ def ntm_eps(estimates: Sequence[Mapping], announced: Sequence[EpsQuarter], as_of
     if reason:
         return NtmResult(None, None, (), snap, reason)
     rows = by_snap[snap]
-    prev = _previous_snapshot(by_snap, snap)
     cands, reason = _quarter_sum(rows, anchor, known)
     if cands:
         quarters = tuple((r["fiscal_date"][:10], r["eps_avg"], r.get("num_analysts_eps")) for r in cands)
@@ -173,7 +179,7 @@ def ntm_eps(estimates: Sequence[Mapping], announced: Sequence[EpsQuarter], as_of
         quarters = tuple((r["fiscal_date"][:10], r["eps_avg"], r.get("num_analysts_eps")) for r in (fy1, fy2))
         fiscals, period = [q[0] for q in quarters], "FY"
         result = NtmResult(w * fy1["eps_avg"] + (1 - w) * fy2["eps_avg"], "ntm_fy_blend", quarters, snap, None)
-    if prev and check_consensus_jump(_values(by_snap[prev], fiscals, period), _values(rows, fiscals, period)):
+    if check_consensus_jump(_last_seen(by_snap, snap, fiscals, period), _values(rows, fiscals, period)):
         return NtmResult(None, result.basis, result.quarters, snap, "e2_consensus_jump")
     return result
 
@@ -199,10 +205,12 @@ def revision_inputs(estimates: Sequence[Mapping], announced: Sequence[EpsQuarter
     fixed = [f for f in fixed if f in _values(by_snap[snap], [f])]
     if len(fixed) < 2:
         return RevisionResult(None, weeks, tuple(fixed), base, snap, "revision_set_too_small")
-    path = sorted(s for s in by_snap if base <= s <= snap)
-    for a, b in zip(path, path[1:]):
-        if check_consensus_jump(_values(by_snap[a], fixed), _values(by_snap[b], fixed)):
+    seen = _values(by_snap[base], fixed)
+    for s in sorted(x for x in by_snap if base < x <= snap):
+        now = _values(by_snap[s], fixed)
+        if check_consensus_jump(seen, now):
             return RevisionResult(None, weeks, tuple(fixed), base, snap, "e2_consensus_jump")
+        seen.update(now)
     delta = sum(_values(by_snap[snap], fixed).values()) - sum(_values(by_snap[base], fixed).values())
     return RevisionResult(delta, weeks, tuple(fixed), base, snap, None)
 

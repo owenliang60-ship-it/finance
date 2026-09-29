@@ -5,7 +5,9 @@ income ``date``). Every rule returns stable issue codes; hard issues name the
 fields the reader must null, soft issues are badges only. Nothing here reads
 or writes a database, and inputs are never mutated.
 
-Q10 deliberately widens the research threshold [800, 1200] to [500, 2000]:
+Q10 nulls the minority unit run (ties: the run holding the newest quarter), so a
+replay slice whose newest quarter is the mis-scaled one still keeps the older
+correct quarters. It deliberately widens the research threshold [800, 1200] to [500, 2000]:
 YPF's mis-scaled 2025 quarters entered at 1/1052 and re-entered at 1428
 (real growth on top of the ×1000 unit jump), so the original band caught
 only half of the run.
@@ -79,7 +81,8 @@ def _hard_checks(rows: List[Mapping[str, Any]]) -> List[ValueIssue]:
         p, c = _num(prev.get("revenue")), _num(cur.get("revenue"))
         index.append(index[-1] + _unit_step(p, c))
         ratios.append(c / p if p and c and p > 0 and c > 0 else None)
-    base = index[-1] if rows else 0
+    # The run holding most quarters is the reporting unit; ties keep the newest quarter's run.
+    base = max(set(index), key=lambda i: (index.count(i), i == index[-1])) if rows else 0
     for r, idx, ratio in zip(rows, index, ratios):
         if idx != base:
             issues.append(ValueIssue("q10_unit_scale", "hard", r["date"][:10], FLOW_FIELDS,

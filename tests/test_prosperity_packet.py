@@ -71,3 +71,30 @@ def test_build_packets_reuses_cache_and_isolates_symbol_errors(tmp_path, monkeyp
     assert meta["members_resolved"] == 2 and meta["membership_basis"] == "extended_membership"
     inputs.build_packets(store, "2026-09-19", mode="replay", cache=cache, with_beta=False)
     assert calls.count("AAA") == 1
+
+
+def test_consensus_without_any_estimate_is_not_labelled_strict():
+    h = _usd_history()
+    h.earnings = [dict(r, eps_estimated=None) for r in EARN]
+    p = build_packet(h, "2026-03-07", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[])
+    assert p.consensus.pre_announce.source is None and p.pit["consensus"] == "approximate"
+
+
+KLAC_CLOSES = [("2026-06-10", 2400.0), ("2026-06-11", 2411.64), ("2026-06-12", 254.54), ("2026-06-15", 256.0)]   # market.db
+
+
+def test_unadjusted_price_split_is_rescaled_in_memory():
+    h = replace(_usd_history(), closes=KLAC_CLOSES, splits=[{"date": "2026-06-12", "numerator": 10.0, "denominator": 1.0}])
+    p = build_packet(h, "2026-06-11", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[])
+    assert abs(p.price_asof - 241.164) < 1e-9 and "price_split_rescaled" in p.flags
+    adjusted = replace(h, closes=[("2026-06-11", 241.16), ("2026-06-12", 254.54)])
+    q = build_packet(adjusted, "2026-06-11", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[])
+    assert q.price_asof == 241.16 and "price_split_rescaled" not in q.flags
+
+
+def test_requested_non_members_are_reported(tmp_path):
+    import terminal.prosperity.inputs as inputs
+    store = MarketStore(db_path=seed_db(tmp_path / "m.db"), read_only=True)
+    packets, meta = inputs.build_packets(store, "2026-09-26", mode="live", observed_at="2026-09-26",
+                                         symbols=["AAA", "ZZZ"], with_beta=False)
+    assert [p.symbol for p in packets] == ["AAA"] and meta["requested_not_members"] == ["ZZZ"]

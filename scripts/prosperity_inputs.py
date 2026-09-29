@@ -69,7 +69,7 @@ def _summary(args, packets, meta, leaks) -> Dict[str, Any]:
             eps_labels.update(e.labels)
     complete = lambda qs: all("balance_unavailable" not in q.labels and "cashflow_unavailable" not in q.labels
                               for q in qs)
-    named = args.symbols.split(",") if args.symbols else DEFAULT_NAMED
+    named = [s.strip() for s in args.symbols.split(",")] if args.symbols else DEFAULT_NAMED
     flat = [(p.symbol, msg) for p, msgs in leaks for msg in msgs]
     return {
         "as_of": args.as_of, "mode": args.mode, "db_path": args.db, "observed_at": args.observed_at,
@@ -86,7 +86,7 @@ def _summary(args, packets, meta, leaks) -> Dict[str, Any]:
         "quality_code_counts": dict(quality.most_common()),
         "pit_counts": dict(Counter(p.pit_basis for p in packets)),
         "future_leak_count": len(flat), "future_leak_examples": [f"{s}: {m}" for s, m in flat[:20]],
-        "errors": meta["errors"], "load_seconds": meta["load_seconds"], "build_seconds": meta["build_seconds"],
+        "errors": meta["errors"], "requested_not_members": meta["requested_not_members"], "load_seconds": meta["load_seconds"], "build_seconds": meta["build_seconds"],
         "named_cases": {p.symbol: _named_case(p) for p in packets if p.symbol in named},
     }
 
@@ -98,7 +98,7 @@ def _markdown(s: Dict[str, Any]) -> str:
                 "ntm_available", "pre_announce_available", "revision_available", "unit_unverified",
                 "future_leak_count"):
         lines.append(f"| {key} | {s[key]} |")
-    lines += ["", f"- 单股错误：{len(s['errors'])}", f"- 点时等级：{s['pit_counts']}",
+    lines += ["", f"- 单股错误：{len(s['errors'])}", f"- 请求但当期不是成员：{s['requested_not_members'] or '无'}", f"- 点时等级：{s['pit_counts']}",
               f"- EPS 标签：{s['eps_label_counts']}", f"- 质量码：{s['quality_code_counts']}", "",
               "## 点名样本", "", "| 代码 | 当前财季 | 季度 | EPS 窗口 | NTM | flags |", "|---|---|---|---|---|---|"]
     for sym, c in sorted(s["named_cases"].items()):

@@ -114,3 +114,30 @@ def test_build_consensus_gates_per_share_inputs_on_unit():
     assert blocked.missing_reasons["ntm"] == "unit_unverified"
     ok = build_consensus(unit_ok=True, **kw)
     assert abs(ok.ntm.value - 10.01455) < 1e-9 and ok.unit_factor == 1.0
+
+
+def test_fy_blend_rejects_a_fiscal_year_beyond_the_next_twelve_months():
+    eps = [eq("2025-09-30", "2025-10-30", 1.0), eq("2025-12-31", "2026-01-30", 1.0),
+           eq("2026-03-31", "2026-04-30", 1.0), eq("2026-06-30", "2026-07-30", 1.0)]
+    rows = [est("2026-09-26", "2026-09-30", 1.1, 8), est("2026-09-26", "2026-12-31", 1.2, 5),
+            est("2026-09-26", "2027-03-31", 1.3, 2), est("2026-09-26", "2027-06-30", 1.4, 1),
+            est("2026-09-26", "2027-12-31", 5.6, 6, period="FY"),                # in-progress FY2026 missing
+            est("2026-09-26", "2028-12-31", 7.0, 4, period="FY")]
+    got = ntm_eps(rows, eps, "2026-09-26")
+    assert got.value is None and got.missing_reason == "ntm_thin_coverage"
+
+
+def test_revision_jump_across_a_snapshot_missing_the_quarter_is_caught():
+    eps = [eq("2026-06-30", "2026-07-30", 1.0)]
+    rows = [est("2026-08-29", "2026-09-30", 1.0), est("2026-08-29", "2026-12-31", 1.0),
+            est("2026-09-12", "2026-12-31", 1.0),                                # 09-30 absent this week
+            est("2026-09-26", "2026-09-30", 3.0), est("2026-09-26", "2026-12-31", 1.0)]
+    got = revision_inputs(rows, eps, "2026-09-26")
+    assert got.delta_eps is None and got.missing_reason == "e2_consensus_jump"
+
+
+def test_ntm_jump_check_uses_the_last_snapshot_that_had_each_quarter():
+    two_weeks_ago = [est("2026-08-01", r["fiscal_date"], r["eps_avg"] / 3, r["num_analysts_eps"]) for r in NVDA_EST]
+    last_week = [est("2026-08-08", "2027-07-26", 3.1, 11)]                      # lacks the NTM quarters
+    got = ntm_eps(two_weeks_ago + last_week + NVDA_EST, NVDA_EPS, "2026-08-15")
+    assert got.value is None and got.missing_reason == "e2_consensus_jump"

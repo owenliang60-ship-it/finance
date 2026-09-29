@@ -102,3 +102,10 @@ def test_e2_flags_ratio_outside_band_and_sign_flip():
 
 def test_e2_ignores_tiny_eps_noise():
     assert check_consensus_jump({"2026-09-30": 0.01}, {"2026-09-30": 0.04}) == []
+
+
+def test_q10_minority_run_is_nulled_even_when_it_is_the_newest():
+    # replay slice whose newest complete quarter is the mis-scaled one (YPF-style ×1/1000)
+    revs = [("2024-09-30", 5.06e12), ("2024-12-31", 4.84e12), ("2025-03-31", 4.6e9)]
+    rows = [q(d, revenue=r, cost_of_revenue=r * 0.6, gross_profit=r * 0.4) for d, r in revs]
+    assert [i.fiscal_date for i in check_quarter_values(rows) if i.code == "q10_unit_scale"] == ["2025-03-31"]

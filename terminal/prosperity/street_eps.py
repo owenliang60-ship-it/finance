@@ -49,8 +49,9 @@ def _clusters(fiscals: List[str], issues: Sequence[Mapping]) -> List[Tuple[froze
     return out
 
 
-def _rescale(quarters: List[dict], issues: Sequence[Mapping]) -> Tuple[List[Optional[float]], List[List[str]]]:
-    eps = [q["eps_actual"] for q in quarters]
+def _rescale(quarters: List[dict], issues: Sequence[Mapping]) -> Tuple[List[float], List[bool], List[List[str]]]:
+    """Per quarter: divisor to the post-split basis, blanked flag, labels (actual and estimate share them)."""
+    divisor, blank = [1.0] * len(quarters), [False] * len(quarters)
     labels: List[List[str]] = [list(q["issues"]) for q in quarters]
     fiscals = [q["fiscal_date"] for q in quarters]
     for ratios, members, evidence in _clusters(fiscals, issues):
@@ -72,17 +73,16 @@ def _rescale(quarters: List[dict], issues: Sequence[Mapping]) -> Tuple[List[Opti
         cut = fiscals.index(boundary)
         if verdict == "street":
             for k in range(cut):
-                if eps[k] is not None:
-                    eps[k] = eps[k] / r
+                divisor[k] *= r
                 labels[k].append("eps_split_rescaled")
         elif verdict == "gaap":
             for k in (cut - 1, cut):
                 labels[k].append("gaap_split_basis_break")
         else:
             for k in range(cut):
-                eps[k] = None
+                blank[k] = True
                 labels[k].append("eps_split_unconfirmed")
-    return eps, labels
+    return divisor, blank, labels
 
 
 def announced_eps(earnings: Sequence[Mapping], income_rows: Sequence[Mapping], splits: Sequence[Mapping],
@@ -90,13 +90,17 @@ def announced_eps(earnings: Sequence[Mapping], income_rows: Sequence[Mapping], s
     rows = [r for r in earnings if r.get("match_method") != "none"]
     quarters = sorted(resolve_eps_quarters(rows, as_of)["quarters"], key=lambda q: q["fiscal_date"])
     audit = split_basis_audit(quarters, list(income_rows), list(splits))
-    eps, labels = _rescale(quarters, audit["issues"])
+    divisor, blank, labels = _rescale(quarters, audit["issues"])
+
+    def basis(value, k):
+        return None if blank[k] or value is None else value / divisor[k]
+
     out = []
-    for q, value, tags in zip(quarters, eps, labels):
+    for k, (q, tags) in enumerate(zip(quarters, labels)):
         first = next((r for r in rows if r.get("announce_date") == q["announce_date"] and r.get("fiscal_date")
                       and abs((_d(r["fiscal_date"]) - _d(q["fiscal_date"])).days) <= EPS_STATEMENT_MATCH_DAYS), {})
-        out.append(EpsQuarter(q["fiscal_date"], q["announce_date"][:10], value, first.get("eps_estimated"),
-                              tuple(dict.fromkeys(tags))))
+        out.append(EpsQuarter(q["fiscal_date"], q["announce_date"][:10], basis(q["eps_actual"], k),
+                              basis(first.get("eps_estimated"), k), tuple(dict.fromkeys(tags))))
     return tuple(out)
 
 

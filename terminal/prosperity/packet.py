@@ -1,6 +1,8 @@
 """Assemble one point-in-time input packet; pure except for the pandas beta helper."""
 from __future__ import annotations
 
+import math
+from bisect import bisect_left
 from dataclasses import asdict
 from datetime import date, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -15,6 +17,7 @@ from terminal.prosperity.street_eps import aligned_eps_window, announced_eps
 from terminal.prosperity.types import InputPacket, SymbolHistory
 
 SEASON_SHIFT_DAYS = 7          # same season bucketing as prosperity_history.SEASON_SHIFT_DAYS
+PRICE_SPLIT_TOLERANCE = math.log(1.25)   # same match band as prosperity_quality.split_basis_audit
 BETA_CLOSES = 400              # compute_beta uses the last 126 returns; keep a margin for gaps
 
 
@@ -37,6 +40,29 @@ def _quarter_bucket(fiscal: Optional[str]) -> Optional[str]:
     return f"{shifted.year}Q{(shifted.month - 1) // 3 + 1}"
 
 
+def _split_adjusted(closes: Sequence[Tuple[str, float]], splits: Sequence[dict]) -> Tuple[List[Tuple[str, float]], bool]:
+    """Divide closes before a split date by its ratio when the stored series still jumps there.
+
+    Same principle as the street EPS rescale (Boss 2026-09-29): only a price jump
+    at the split date matching the ratio counts as confirmation; market.db is untouched.
+    """
+    out, changed = list(closes), False
+    for s in splits:
+        num, den, day = s.get("numerator"), s.get("denominator"), (s.get("date") or "")[:10]
+        if not (day and all(isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 1 and v == int(v)
+                            for v in (num, den)) and num != den and (max(num, den) <= 20 or min(num, den) == 1)):
+            continue
+        i = bisect_left(closes, day, key=lambda c: c[0][:10])        # closes are date-sorted
+        if i == 0 or i == len(closes) or not (closes[i - 1][1] and closes[i][1]) \
+                or closes[i - 1][1] <= 0 or closes[i][1] <= 0:
+            continue
+        jump, log_r = math.log(closes[i - 1][1] / closes[i][1]), math.log(num / den)
+        if abs(jump - log_r) <= min(PRICE_SPLIT_TOLERANCE, 0.25 * abs(log_r)):
+            out = [(d, p / (num / den) if d[:10] < day else p) for d, p in out]
+            changed = True
+    return out, changed
+
+
 def _series(closes: Sequence[Tuple[str, float]], as_of: str) -> pd.Series:
     prior = [(d, v) for d, v in closes if d[:10] <= as_of[:10]][-BETA_CLOSES:]
     return pd.Series([v for _, v in prior], index=[d for d, _ in prior], dtype=float)
@@ -45,6 +71,7 @@ def _series(closes: Sequence[Tuple[str, float]], as_of: str) -> pd.Series:
 def build_packet(history: SymbolHistory, as_of: str, *, mode: str, membership_basis: str,
                  benchmark_closes: Sequence[Tuple[str, float]], observed_at: Optional[str] = None,
                  identity_unverified: bool = False, with_beta: bool = True) -> InputPacket:
+    closes, price_rescaled = _split_adjusted(history.closes, history.splits)
     visible = visible_statements(history, as_of, mode, observed_at)
     qb = build_quarters(visible, as_of)
     announced = announced_eps(history.earnings, history.income, history.splits, as_of)
@@ -53,20 +80,22 @@ def build_packet(history: SymbolHistory, as_of: str, *, mode: str, membership_ba
     currency = qb.quarters[-1].reported_currency if qb.quarters else None
     unit_ok = unit_verified(currency, history.is_adr)
     consensus = build_consensus(estimates=estimates, announced=announced, current_eps=window[-1] if window else None,
-                                closes=history.closes, as_of=as_of, unit_ok=unit_ok)
-    price, price_date = _last_on_or_before(history.closes, as_of, PRICE_MAX_STALENESS_DAYS)
+                                closes=closes, as_of=as_of, unit_ok=unit_ok)
+    price, price_date = _last_on_or_before(closes, as_of, PRICE_MAX_STALENESS_DAYS)
     mcap, mcap_date = _last_on_or_before(history.market_caps, as_of, MCAP_MAX_STALENESS_DAYS)
     beta = None
-    if with_beta and history.closes and benchmark_closes:
-        beta = compute_beta(_series(history.closes, as_of), _series(benchmark_closes, as_of))
+    if with_beta and closes and benchmark_closes:
+        beta = compute_beta(_series(closes, as_of), _series(benchmark_closes, as_of))
     live = mode == "live"
     pit = {"statements": visible.pit,
            "street_eps": "live" if live else "approximate",
-           "consensus": "live" if live else ("approximate" if consensus.pre_announce.source == "vendor_estimate"
-                                             else "strict")}
+           # strict only when the pre-announcement consensus came from our own weekly snapshots
+           "consensus": "live" if live else ("strict" if consensus.pre_announce.source == "local_snapshot"
+                                             else "approximate")}
     flags = list(qb.flags)
     for flag, on in ((eps_reason, eps_reason is not None), ("unit_unverified", not unit_ok),
-                     ("price_missing", price is None), ("identity_unverified", identity_unverified)):
+                     ("price_missing", price is None), ("price_split_rescaled", price_rescaled),
+                     ("identity_unverified", identity_unverified)):
         if on and flag not in flags:
             flags.append(flag)
     latest = qb.quarters[-1] if qb.quarters else None

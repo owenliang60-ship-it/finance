@@ -18,7 +18,8 @@ def build_packets(store: MarketStore, as_of: str, *, mode: str, observed_at: Opt
                   with_beta: bool = True) -> Tuple[List[InputPacket], Dict[str, Any]]:
     cache = {} if cache is None else cache
     members, basis, unverified = resolve_members(store, as_of)
-    wanted = [s for s in members if symbols is None or s in set(symbols)]
+    requested = None if symbols is None else {s.strip() for s in symbols if s.strip()}
+    wanted = [s for s in members if requested is None or s in requested]
     with_vintage = mode == "replay" and as_of[:10] >= STRICT_STATEMENTS_FROM
     load_s = build_s = 0.0
     if BENCHMARK_KEY not in cache:
@@ -39,4 +40,5 @@ def build_packets(store: MarketStore, as_of: str, *, mode: str, observed_at: Opt
         except Exception as exc:   # isolate one bad symbol; surfaced via meta["errors"] and CLI exit 3
             errors[sym] = f"{type(exc).__name__}: {exc}"
     return packets, {"members_resolved": len(members), "membership_basis": basis, "errors": errors,
+                     "requested_not_members": sorted((requested or set()) - set(members)),
                      "load_seconds": round(load_s, 3), "build_seconds": round(build_s, 3)}
