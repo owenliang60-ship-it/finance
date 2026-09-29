@@ -1,5 +1,5 @@
 """Synthetic builders for prosperity engine tests (values cite market.db where noted)."""
-from terminal.prosperity.types import EpsQuarter
+from terminal.prosperity.types import EpsQuarter, SymbolHistory
 
 
 def est(snap, fiscal, eps, n=10, period="Q"):
@@ -38,3 +38,32 @@ def seed_db(path) -> Path:
     w.upsert_historical_market_cap("AAA", [{"date": "2021-12-31", "market_cap": 2e10},
                                            {"date": "2026-09-25", "market_cap": 3e10}])
     return Path(path)
+
+
+QTRS = [("2025-03-31", "2025", "Q1", "2025-05-01 16:00:00"), ("2025-06-30", "2025", "Q2", "2025-07-31 16:00:00"),
+        ("2025-09-30", "2025", "Q3", "2025-10-30 16:00:00"), ("2025-12-31", "2025", "Q4", "2026-02-20 16:00:00")]
+
+
+def _meta(d, fy, p, acc, cur="USD"):
+    return {"date": d, "fiscal_year": fy, "period": p, "reported_currency": cur,
+            "filing_date": acc[:10], "accepted_date": acc}
+
+
+def inc(d, fy, p, acc, rev=100.0):
+    return {**_meta(d, fy, p, acc), "revenue": rev, "cost_of_revenue": rev * 0.4,
+            "gross_profit": rev * 0.6, "net_income": rev * 0.1}
+
+
+def bs(d, fy, p, acc):
+    return {**_meta(d, fy, p, acc), "goodwill_and_intangible_assets": 50.0, "total_assets": 500.0}
+
+
+def cf(d, fy, p, acc):
+    return {**_meta(d, fy, p, acc), "operating_cash_flow": 20.0, "capital_expenditure": -5.0,
+            "free_cash_flow": 15.0}
+
+
+def hist(rows=QTRS, earnings=()):
+    return SymbolHistory(symbol="AAA", income=[inc(*r) for r in rows], balance=[bs(*r) for r in rows],
+                         cashflow=[cf(*r) for r in rows], vintage={}, earnings=list(earnings),
+                         estimates=[], splits=[], closes=[], market_caps=[], profile=None, is_adr=False)
