@@ -2,7 +2,7 @@ from dataclasses import replace
 
 from src.data.market_store import MarketStore
 from terminal.prosperity.packet import build_packet, packet_leaks
-from tests.prosperity_fixtures import closes_series, er, hist, seed_db
+from tests.prosperity_fixtures import QTRS, closes_series, er, hist, seed_db
 
 EARN = [er("2025-03-31", "2025-04-30", 1.0, 0.9), er("2025-06-30", "2025-07-30", 1.1, 1.0),
         er("2025-09-30", "2025-10-29", 1.2, 1.1), er("2025-12-31", "2026-02-19", 1.3, 1.2)]
@@ -116,6 +116,19 @@ def test_leak_check_reads_the_observation_date_not_only_the_public_date():
     late = replace(p.quarters[-1], observed_on="2026-03-07")
     assert packet_leaks(p) == []
     assert any("observed_on" in x for x in packet_leaks(replace(p, quarters=p.quarters[:-1] + (late,))))
+
+
+def test_reported_this_week_follows_the_aligned_results_announcement():
+    # Codex M4 review F4: DCI (released 8/26, 10-K accepted 9/25) and AMX (observation-date fallback) were flagged
+    build = lambda h, as_of: build_packet(h, as_of, mode="replay", membership_basis="approximate_mcap",
+                                          benchmark_closes=[])
+    late = QTRS[:3] + [("2025-12-31", "2025", "Q4", "2026-03-05 16:00:00")]      # filed two weeks after release
+    h = replace(_usd_history(), **{k: v for k, v in vars(hist(rows=late)).items()
+                                   if k in ("income", "balance", "cashflow")})
+    p = build(h, "2026-03-06")
+    assert p.current_fiscal == "2025-12-31" and p.quarters[-1].available_on == "2026-03-05"
+    assert p.reported_this_week is False                                        # results came out 2026-02-19
+    assert build(_usd_history(), "2026-02-25").reported_this_week is True        # 6 days after the release
 
 
 def test_non_finite_split_metadata_is_ignored_not_fatal():

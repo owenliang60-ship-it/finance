@@ -98,9 +98,8 @@ def build_packet(history: SymbolHistory, as_of: str, *, mode: str, membership_ba
                      ("identity_unverified", identity_unverified)):
         if on and flag not in flags:
             flags.append(flag)
-    latest = qb.quarters[-1] if qb.quarters else None
-    reported = bool(latest and latest.available_on
-                    and 0 <= (_d(as_of) - _d(latest.available_on)).days < 7)
+    # Results release of the current fiscal quarter, not the filing or observation date (review F4)
+    reported = bool(window and 0 <= (_d(as_of) - _d(window[-1].announce_date)).days < 7)
     archive = {
         "eps_window": [[q.fiscal_date, q.announce_date, q.eps_actual, list(q.labels)] for q in window],
         "pre_announce": asdict(consensus.pre_announce),
