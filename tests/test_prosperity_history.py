@@ -386,8 +386,10 @@ def test_three_table_coverage_ninety_percent_boundary(tmp_store, tmp_path, monke
 
 def test_report_one_short_table_is_not_short_history(tmp_store, tmp_path, monkeypatch):
     # income/cashflow reach 2019, balance only 2025: fixable, not a young company.
+    from datetime import date, timedelta
     fiscals = quarter_ends("2019-03-31", "2025-03-31")
-    rows = [{"date": f, "symbol": "OLD", "period": "Q", "revenue": 1.0, "filingDate": f}
+    rows = [{"date": f, "symbol": "OLD", "period": "Q", "revenue": 1.0,
+             "filingDate": (date.fromisoformat(f) + timedelta(days=30)).isoformat()}
             for f in fiscals]
     tmp_store.upsert_income("OLD", rows)
     tmp_store.upsert_cash_flow("OLD", rows)
@@ -444,3 +446,17 @@ def test_first_market_cap_is_not_listing_evidence(report_store, tmp_path, monkey
     eps = {(g["quarter_end"], g["symbol"]): g for g in doc["gaps"]["street_eps"]}
     assert eps[("2025-06-30", "BBB")]["reason"] == "statements_history_depth_unknown"
     assert doc["summary"]["eps_fixable_symbols"] == ["BBB"]
+
+
+def test_conflicting_current_eps_is_not_usable():
+    rows = _eps_rows(FISCALS[-13:])
+    rows.append(dict(rows[-1], announce_date="2026-05-25", eps_actual=99.0))
+    result = street_eps_depth(rows, "2026-06-30", "2026-03-31")
+    assert not result["sue_ok"]
+    assert result["sue_missing"] == "eps_conflicting_quarter"
+
+
+def test_placeholder_date_does_not_count_as_arrival():
+    rows = [{"date": "2026-03-31", "accepted_date": "2026-03-31 00:00:00",
+             "filing_date": "2026-03-31"}]
+    assert arrival_day({"i": rows, "b": rows, "c": rows}, "2026-03-31") is None

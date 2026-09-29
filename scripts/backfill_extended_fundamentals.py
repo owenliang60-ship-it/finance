@@ -239,13 +239,20 @@ def has_asof_window(store: MarketStore, symbol: str, as_of: str,
             (sym, window_start.isoformat(), as_of_date.isoformat(),
              as_of_date.isoformat(), quarters),
         ).fetchall()
-        if len(rows) < quarters:
+        if not has_contiguous_window([r["date"] for r in rows], as_of, quarters):
             return False
-        dates = [_parse_date(r["date"]) for r in rows]   # newest first
-        for newer, older in zip(dates, dates[1:]):
-            if (newer - older).days > FUNDAMENTAL_QUARTER_GAP_MAX_DAYS:
-                return False
     return True
+
+
+def has_contiguous_window(fiscal_dates: List[str], as_of: str,
+                          quarters: int = DEFAULT_ASOF_QUARTERS) -> bool:
+    """The shared continuity kernel; callers decide which rows are known."""
+    end = _parse_date(as_of)
+    start = end - timedelta(days=quarters * DAYS_PER_QUARTER + FUNDAMENTAL_QUARTER_GAP_MAX_DAYS)
+    dates = sorted({_parse_date(d) for d in fiscal_dates if start < _parse_date(d) <= end},
+                   reverse=True)[:quarters]
+    return len(dates) == quarters and all(
+        (a - b).days <= FUNDAMENTAL_QUARTER_GAP_MAX_DAYS for a, b in zip(dates, dates[1:]))
 
 
 def deepen_limit_quarters(base_limit: int, as_of: str,

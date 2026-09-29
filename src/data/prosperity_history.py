@@ -11,6 +11,10 @@ import statistics
 from datetime import date
 from typing import Any, Dict, List, Optional
 
+from src.data.prosperity_quality import (
+    resolve_eps_quarters, split_basis_audit, statement_known_on,
+)
+
 QUARTER_END_MONTH_DAYS = {3: 31, 6: 30, 9: 30, 12: 31}
 
 
@@ -123,12 +127,14 @@ def _sue_at(series: List[tuple], i: int) -> Optional[str]:
 
 
 def street_eps_depth(rows: List[Dict[str, Any]], as_of: str,
-                     current_fiscal: Optional[str] = None) -> Dict[str, Any]:
+                     current_fiscal: Optional[str] = None, *,
+                     income_rows: Optional[List[Dict]] = None,
+                     splits: Optional[List[Dict]] = None) -> Dict[str, Any]:
     """Street EPS depth and SUE computability at `as_of`.
 
     Only announced actuals count; unmapped rows lower `mapped_ratio` but never
     extend the run. Fiscal dates within SAME_QUARTER_DAYS are one quarter
-    (reported in `dup_fiscal`; the latest announcement wins). `current_fiscal`
+    (reported in `dup_fiscal`; conflicting actuals are unavailable). `current_fiscal`
     is the season the three statement tables had reached by `as_of`: every
     factor is judged at that quarter, so depth and SUE are measured from the
     EPS quarter aligned with it (±SAME_QUARTER_DAYS). EPS announced for later
@@ -143,16 +149,31 @@ def street_eps_depth(rows: List[Dict[str, Any]], as_of: str,
     known = _known_eps_rows(rows, as_of)
     mapped = sorted((r for r in known if r.get("fiscal_date")),
                     key=lambda r: (r["fiscal_date"][:10], r["announce_date"]))
-    groups: List[List[Dict[str, Any]]] = []          # newest quarter first
-    for r in reversed(mapped):
-        if groups and (_d(groups[-1][-1]["fiscal_date"])
-                       - _d(r["fiscal_date"])).days <= SAME_QUARTER_DAYS:
-            groups[-1].append(r)
-        else:
-            groups.append([r])
-    dup = sorted(g[0]["fiscal_date"][:10] for g in groups if len(g) > 1)
-    series = [(g[0]["fiscal_date"][:10],
-               max(g, key=lambda r: r["announce_date"])["eps_actual"]) for g in groups]
+    resolved = resolve_eps_quarters(rows, as_of)
+    quarters = resolved["quarters"]
+    dup = resolved["dup_fiscal"]
+    series = [(q["fiscal_date"], q["eps_actual"]) for q in quarters]
+    split_audit = split_basis_audit(quarters, income_rows or [], splits or [])
+
+    def quality_reason(index):
+        if index is None or index >= len(series):
+            return None
+        # The current YoY and prior eight YoYs define the actual dependencies.
+        required = set(range(index, min(index + 9, len(series))))
+        for k in list(required):
+            for j in range(k + 1, len(series)):
+                if abs((_d(series[k][0]) - _d(series[j][0])).days - YEAR_DAYS) <= SAME_QUARTER_DAYS:
+                    required.add(j)
+                    break
+        for k in sorted(required):
+            if quarters[k]["issues"]:
+                return quarters[k]["issues"][0]
+        fiscals = [series[k][0] for k in required]
+        for issue in split_audit["issues"]:
+            if min(fiscals) < issue["boundary_fiscal"] <= max(fiscals):
+                return "eps_split_basis_suspect"
+        return None
+
     heads = [f for f, _ in series]
 
     latest = heads[0] if heads else None
@@ -179,8 +200,9 @@ def street_eps_depth(rows: List[Dict[str, Any]], as_of: str,
     elif stale:
         sue_missing = "stale"
     else:
-        sue_missing = _sue_at(series, anchor)
+        sue_missing = quality_reason(anchor) or _sue_at(series, anchor)
     sue_ok = sue_missing is None
+    dsue_missing = sue_missing if not sue_ok else (quality_reason(anchor + 1) or _sue_at(series, anchor + 1))
     return {
         "consecutive": consecutive,
         "stale": stale,
@@ -188,7 +210,10 @@ def street_eps_depth(rows: List[Dict[str, Any]], as_of: str,
         "depth_ok": run >= SUE_MIN_QUARTERS,
         "depth_full": run >= SUE_FULL_QUARTERS,
         "sue_ok": sue_ok,
-        "dsue_ok": sue_ok and _sue_at(series, anchor + 1) is None,
+        "dsue_ok": dsue_missing is None,
+        "dsue_missing": dsue_missing,
+        "quality_issues": resolved["issues"] + split_audit["issues"],
+        "split_check": split_audit,
         "sue_missing": sue_missing,
         "latest_fiscal": latest,
         "anchor_fiscal": heads[anchor] if anchor is not None else None,
@@ -271,6 +296,8 @@ def eps_gap_reason(depth: Dict[str, Any], statement_fiscals: List[str],
     over the income statement; `window_start`: earliest fiscal date the SUE
     window needs; `unmapped_rows`: announced actuals without a fiscal date.
     """
+    if (depth.get("sue_missing") or "").startswith("eps_"):
+        return depth["sue_missing"]
     if len(statement_fiscals) < SUE_MIN_QUARTERS:
         reason = gap_reason(statement_fiscals, job_status, window_start,
                             listed_after, listed_by)
@@ -312,8 +339,7 @@ def _prev_quarter_end(qe: str) -> date:
 
 def _known_on(row: Dict[str, Any]) -> Optional[str]:
     """accepted_date (date part), falling back to filing_date."""
-    accepted = (row.get("accepted_date") or "")[:10]
-    return accepted or (row.get("filing_date") or "")[:10] or None
+    return statement_known_on(row)
 
 
 def arrival_day(tables: Dict[str, List[Dict[str, Any]]], qe: str) -> Optional[int]:

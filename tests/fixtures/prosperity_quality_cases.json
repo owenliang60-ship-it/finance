@@ -1,0 +1,2071 @@
+{
+  "source_sha256": "3caffdb7e7c2d2d9c5124fcbf364e46cf32d51307dde3d9ea49bf8ecf54800e2",
+  "cases": {
+    "ORLY": {
+      "earnings": [
+        {
+          "announce_date": "2021-02-10",
+          "fiscal_date": "2020-12-29",
+          "eps_actual": 5.4,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2021-04-28",
+          "fiscal_date": "2021-03-29",
+          "eps_actual": 7.06,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2021-07-28",
+          "fiscal_date": "2021-06-29",
+          "eps_actual": 8.33,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2021-10-27",
+          "fiscal_date": "2021-09-29",
+          "eps_actual": 8.07,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-02-09",
+          "fiscal_date": "2021-12-29",
+          "eps_actual": 7.64,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-04-27",
+          "fiscal_date": "2022-03-29",
+          "eps_actual": 7.17,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-07-27",
+          "fiscal_date": "2022-06-29",
+          "eps_actual": 8.78,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-10-26",
+          "fiscal_date": "2022-09-29",
+          "eps_actual": 9.17,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-02-08",
+          "fiscal_date": "2022-12-29",
+          "eps_actual": 8.37,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-04-26",
+          "fiscal_date": "2023-03-29",
+          "eps_actual": 8.28,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-07-26",
+          "fiscal_date": "2023-06-29",
+          "eps_actual": 10.22,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-10-25",
+          "fiscal_date": "2023-09-29",
+          "eps_actual": 10.73,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-02-07",
+          "fiscal_date": "2023-12-30",
+          "eps_actual": 9.26,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-04-24",
+          "fiscal_date": "2024-03-31",
+          "eps_actual": 9.2,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-07-24",
+          "fiscal_date": "2024-06-30",
+          "eps_actual": 10.55,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-10-23",
+          "fiscal_date": "2024-09-30",
+          "eps_actual": 11.41,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-02-05",
+          "fiscal_date": "2024-12-31",
+          "eps_actual": 0.66,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-04-23",
+          "fiscal_date": "2025-03-31",
+          "eps_actual": 0.62,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-07-23",
+          "fiscal_date": "2025-06-30",
+          "eps_actual": 0.78,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-10-22",
+          "fiscal_date": "2025-09-30",
+          "eps_actual": 0.85,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-02-04",
+          "fiscal_date": "2025-12-31",
+          "eps_actual": 0.71,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-04-29",
+          "fiscal_date": "2026-03-31",
+          "eps_actual": 0.72,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-07-29",
+          "fiscal_date": "2026-06-30",
+          "eps_actual": 0.86,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-10-28",
+          "fiscal_date": "2026-09-30",
+          "eps_actual": null,
+          "match_method": "estimates_window"
+        }
+      ],
+      "income": [
+        {
+          "date": "2020-03-31",
+          "eps_diluted": 0.28,
+          "accepted_date": "2020-05-08 16:34:06",
+          "filing_date": "2020-05-08"
+        },
+        {
+          "date": "2020-06-30",
+          "eps_diluted": 0.5,
+          "accepted_date": "2020-08-07 19:05:59",
+          "filing_date": "2020-08-07"
+        },
+        {
+          "date": "2020-09-30",
+          "eps_diluted": 0.49,
+          "accepted_date": "2020-11-06 16:31:20",
+          "filing_date": "2020-11-06"
+        },
+        {
+          "date": "2020-12-31",
+          "eps_diluted": 0.38,
+          "accepted_date": "2021-02-26 16:38:17",
+          "filing_date": "2021-02-26"
+        },
+        {
+          "date": "2021-03-31",
+          "eps_diluted": 0.49,
+          "accepted_date": "2021-05-07 16:31:21",
+          "filing_date": "2021-05-07"
+        },
+        {
+          "date": "2021-06-30",
+          "eps_diluted": 0.58,
+          "accepted_date": "2021-08-06 16:31:25",
+          "filing_date": "2021-08-06"
+        },
+        {
+          "date": "2021-09-30",
+          "eps_diluted": 0.56,
+          "accepted_date": "2021-11-08 16:31:14",
+          "filing_date": "2021-11-08"
+        },
+        {
+          "date": "2021-12-31",
+          "eps_diluted": 0.53,
+          "accepted_date": "2022-02-28 16:36:38",
+          "filing_date": "2022-02-28"
+        },
+        {
+          "date": "2022-03-31",
+          "eps_diluted": 0.5,
+          "accepted_date": "2022-05-09 16:33:01",
+          "filing_date": "2022-05-09"
+        },
+        {
+          "date": "2022-06-30",
+          "eps_diluted": 0.61,
+          "accepted_date": "2022-08-08 16:32:40",
+          "filing_date": "2022-08-08"
+        },
+        {
+          "date": "2022-09-30",
+          "eps_diluted": 0.64,
+          "accepted_date": "2022-11-08 16:31:16",
+          "filing_date": "2022-11-08"
+        },
+        {
+          "date": "2022-12-31",
+          "eps_diluted": 0.59,
+          "accepted_date": "2023-02-28 16:31:13",
+          "filing_date": "2023-02-28"
+        },
+        {
+          "date": "2023-03-31",
+          "eps_diluted": 0.58,
+          "accepted_date": "2023-05-09 16:32:39",
+          "filing_date": "2023-05-09"
+        },
+        {
+          "date": "2023-06-30",
+          "eps_diluted": 0.72,
+          "accepted_date": "2023-08-08 16:30:48",
+          "filing_date": "2023-08-08"
+        },
+        {
+          "date": "2023-09-30",
+          "eps_diluted": 0.75,
+          "accepted_date": "2023-11-08 16:30:50",
+          "filing_date": "2023-11-08"
+        },
+        {
+          "date": "2023-12-31",
+          "eps_diluted": 0.65,
+          "accepted_date": "2024-02-07 16:30:52",
+          "filing_date": "2024-02-07"
+        },
+        {
+          "date": "2024-03-31",
+          "eps_diluted": 0.64,
+          "accepted_date": "2024-05-09 16:31:02",
+          "filing_date": "2024-05-09"
+        },
+        {
+          "date": "2024-06-30",
+          "eps_diluted": 0.74,
+          "accepted_date": "2024-07-24 16:30:48",
+          "filing_date": "2024-07-24"
+        },
+        {
+          "date": "2024-09-30",
+          "eps_diluted": 0.7605,
+          "accepted_date": "2024-11-08 16:31:04",
+          "filing_date": "2024-11-08"
+        },
+        {
+          "date": "2024-12-31",
+          "eps_diluted": 0.6335,
+          "accepted_date": "2025-02-28 16:27:19",
+          "filing_date": "2025-02-28"
+        },
+        {
+          "date": "2025-03-31",
+          "eps_diluted": 0.623,
+          "accepted_date": "2025-05-09 16:02:47",
+          "filing_date": "2025-05-09"
+        },
+        {
+          "date": "2025-06-30",
+          "eps_diluted": 0.78,
+          "accepted_date": "2025-08-08 16:43:00",
+          "filing_date": "2025-08-08"
+        },
+        {
+          "date": "2025-09-30",
+          "eps_diluted": 0.85,
+          "accepted_date": "2025-11-07 16:34:28",
+          "filing_date": "2025-11-07"
+        },
+        {
+          "date": "2025-12-31",
+          "eps_diluted": 0.71,
+          "accepted_date": "2026-02-27 16:04:13",
+          "filing_date": "2026-02-27"
+        },
+        {
+          "date": "2026-03-31",
+          "eps_diluted": 0.72,
+          "accepted_date": "2026-05-08 16:37:22",
+          "filing_date": "2026-05-08"
+        },
+        {
+          "date": "2026-06-30",
+          "eps_diluted": 0.86,
+          "accepted_date": "2026-08-07 16:31:12",
+          "filing_date": "2026-08-07"
+        }
+      ],
+      "splits": [
+        {
+          "symbol": "ORLY",
+          "date": "1997-09-02",
+          "numerator": 2.0,
+          "denominator": 1.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:36:53Z"
+        },
+        {
+          "symbol": "ORLY",
+          "date": "1999-12-01",
+          "numerator": 2.0,
+          "denominator": 1.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:36:53Z"
+        },
+        {
+          "symbol": "ORLY",
+          "date": "2005-06-16",
+          "numerator": 2.0,
+          "denominator": 1.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:36:53Z"
+        },
+        {
+          "symbol": "ORLY",
+          "date": "2025-06-10",
+          "numerator": 15.0,
+          "denominator": 1.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:36:53Z"
+        }
+      ]
+    },
+    "ANET": {
+      "earnings": [
+        {
+          "announce_date": "2021-02-18",
+          "fiscal_date": "2020-12-29",
+          "eps_actual": 0.62,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2021-05-04",
+          "fiscal_date": "2021-03-29",
+          "eps_actual": 0.63,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2021-08-02",
+          "fiscal_date": "2021-06-29",
+          "eps_actual": 0.68,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2021-11-01",
+          "fiscal_date": "2021-09-29",
+          "eps_actual": 0.74,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-02-14",
+          "fiscal_date": "2021-12-29",
+          "eps_actual": 0.82,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-05-02",
+          "fiscal_date": "2022-03-29",
+          "eps_actual": 0.84,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-08-01",
+          "fiscal_date": "2022-06-29",
+          "eps_actual": 1.08,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-10-31",
+          "fiscal_date": "2022-09-29",
+          "eps_actual": 1.25,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-02-13",
+          "fiscal_date": "2022-12-29",
+          "eps_actual": 1.41,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-05-01",
+          "fiscal_date": "2023-03-29",
+          "eps_actual": 1.43,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-07-31",
+          "fiscal_date": "2023-06-29",
+          "eps_actual": 1.58,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-10-30",
+          "fiscal_date": "2023-09-29",
+          "eps_actual": 1.83,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-02-12",
+          "fiscal_date": "2023-12-30",
+          "eps_actual": 2.08,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-05-06",
+          "fiscal_date": "2024-03-31",
+          "eps_actual": 1.99,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-07-29",
+          "fiscal_date": "2024-06-30",
+          "eps_actual": 2.1,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-11-07",
+          "fiscal_date": "2024-09-30",
+          "eps_actual": 0.6,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-02-18",
+          "fiscal_date": "2024-12-31",
+          "eps_actual": 0.65,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-05-06",
+          "fiscal_date": "2025-03-31",
+          "eps_actual": 0.65,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-08-05",
+          "fiscal_date": "2025-06-30",
+          "eps_actual": 0.73,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-11-04",
+          "fiscal_date": "2025-09-30",
+          "eps_actual": 0.75,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-02-12",
+          "fiscal_date": "2025-12-31",
+          "eps_actual": 0.82,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-05-05",
+          "fiscal_date": "2026-03-31",
+          "eps_actual": 0.87,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-08-04",
+          "fiscal_date": "2026-06-30",
+          "eps_actual": 1.02,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-11-03",
+          "fiscal_date": "2026-09-30",
+          "eps_actual": null,
+          "match_method": "estimates_window"
+        }
+      ],
+      "income": [
+        {
+          "date": "2020-03-31",
+          "eps_diluted": 0.11,
+          "accepted_date": "2020-05-05 19:21:42",
+          "filing_date": "2020-05-06"
+        },
+        {
+          "date": "2020-06-30",
+          "eps_diluted": 0.11,
+          "accepted_date": "2020-08-04 19:48:51",
+          "filing_date": "2020-08-05"
+        },
+        {
+          "date": "2020-09-30",
+          "eps_diluted": 0.13,
+          "accepted_date": "2020-11-02 18:19:25",
+          "filing_date": "2020-11-03"
+        },
+        {
+          "date": "2020-12-31",
+          "eps_diluted": 0.14,
+          "accepted_date": "2021-02-18 19:04:33",
+          "filing_date": "2021-02-19"
+        },
+        {
+          "date": "2021-03-31",
+          "eps_diluted": 0.14,
+          "accepted_date": "2021-05-05 20:18:57",
+          "filing_date": "2021-05-06"
+        },
+        {
+          "date": "2021-06-30",
+          "eps_diluted": 0.15,
+          "accepted_date": "2021-08-02 18:35:00",
+          "filing_date": "2021-08-03"
+        },
+        {
+          "date": "2021-09-30",
+          "eps_diluted": 0.18,
+          "accepted_date": "2021-11-01 21:21:14",
+          "filing_date": "2021-11-02"
+        },
+        {
+          "date": "2021-12-31",
+          "eps_diluted": 0.19,
+          "accepted_date": "2022-02-14 19:10:53",
+          "filing_date": "2022-02-15"
+        },
+        {
+          "date": "2022-03-31",
+          "eps_diluted": 0.21,
+          "accepted_date": "2022-05-02 18:57:58",
+          "filing_date": "2022-05-03"
+        },
+        {
+          "date": "2022-06-30",
+          "eps_diluted": 0.24,
+          "accepted_date": "2022-08-01 18:31:00",
+          "filing_date": "2022-08-02"
+        },
+        {
+          "date": "2022-09-30",
+          "eps_diluted": 0.28,
+          "accepted_date": "2022-10-31 18:20:47",
+          "filing_date": "2022-11-01"
+        },
+        {
+          "date": "2022-12-31",
+          "eps_diluted": 0.34,
+          "accepted_date": "2023-02-13 18:10:10",
+          "filing_date": "2023-02-14"
+        },
+        {
+          "date": "2023-03-31",
+          "eps_diluted": 0.35,
+          "accepted_date": "2023-05-01 18:24:42",
+          "filing_date": "2023-05-02"
+        },
+        {
+          "date": "2023-06-30",
+          "eps_diluted": 0.39,
+          "accepted_date": "2023-07-31 17:47:39",
+          "filing_date": "2023-08-01"
+        },
+        {
+          "date": "2023-09-30",
+          "eps_diluted": 0.43,
+          "accepted_date": "2023-10-30 18:05:46",
+          "filing_date": "2023-10-31"
+        },
+        {
+          "date": "2023-12-31",
+          "eps_diluted": 0.48,
+          "accepted_date": "2024-02-12 18:01:35",
+          "filing_date": "2024-02-13"
+        },
+        {
+          "date": "2024-03-31",
+          "eps_diluted": 0.5,
+          "accepted_date": "2024-05-07 18:11:10",
+          "filing_date": "2024-05-08"
+        },
+        {
+          "date": "2024-06-30",
+          "eps_diluted": 0.52,
+          "accepted_date": "2024-07-30 18:00:23",
+          "filing_date": "2024-07-31"
+        },
+        {
+          "date": "2024-09-30",
+          "eps_diluted": 0.58,
+          "accepted_date": "2024-11-07 17:52:31",
+          "filing_date": "2024-11-08"
+        },
+        {
+          "date": "2024-12-31",
+          "eps_diluted": 0.62,
+          "accepted_date": "2025-02-18 19:50:17",
+          "filing_date": "2025-02-19"
+        },
+        {
+          "date": "2025-03-31",
+          "eps_diluted": 0.64,
+          "accepted_date": "2025-05-06 18:07:56",
+          "filing_date": "2025-05-07"
+        },
+        {
+          "date": "2025-06-30",
+          "eps_diluted": 0.7,
+          "accepted_date": "2025-08-05 18:02:14",
+          "filing_date": "2025-08-06"
+        },
+        {
+          "date": "2025-09-30",
+          "eps_diluted": 0.67,
+          "accepted_date": "2025-11-04 17:51:43",
+          "filing_date": "2025-11-05"
+        },
+        {
+          "date": "2025-12-31",
+          "eps_diluted": 0.75,
+          "accepted_date": "2026-02-13 19:12:46",
+          "filing_date": "2026-02-17"
+        },
+        {
+          "date": "2026-03-31",
+          "eps_diluted": 0.8,
+          "accepted_date": "2026-05-05 17:55:04",
+          "filing_date": "2026-05-06"
+        },
+        {
+          "date": "2026-06-30",
+          "eps_diluted": 0.95,
+          "accepted_date": "2026-08-04 18:08:09",
+          "filing_date": "2026-08-05"
+        }
+      ],
+      "splits": [
+        {
+          "symbol": "ANET",
+          "date": "2021-11-18",
+          "numerator": 4.0,
+          "denominator": 1.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T08:50:15Z"
+        },
+        {
+          "symbol": "ANET",
+          "date": "2024-12-04",
+          "numerator": 4.0,
+          "denominator": 1.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T08:50:15Z"
+        }
+      ]
+    },
+    "KLAC": {
+      "earnings": [
+        {
+          "announce_date": "2021-02-03",
+          "fiscal_date": "2020-12-31",
+          "eps_actual": 3.24,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2021-04-29",
+          "fiscal_date": "2021-03-31",
+          "eps_actual": 3.85,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2021-07-29",
+          "fiscal_date": "2021-06-30",
+          "eps_actual": 4.43,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2021-10-27",
+          "fiscal_date": "2021-09-30",
+          "eps_actual": 4.64,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-01-27",
+          "fiscal_date": "2021-12-31",
+          "eps_actual": 5.59,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-04-28",
+          "fiscal_date": "2022-03-31",
+          "eps_actual": 5.13,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-07-28",
+          "fiscal_date": "2022-06-30",
+          "eps_actual": 5.81,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-10-26",
+          "fiscal_date": "2022-09-30",
+          "eps_actual": 7.06,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-01-26",
+          "fiscal_date": "2022-12-31",
+          "eps_actual": 7.38,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-04-26",
+          "fiscal_date": "2023-03-31",
+          "eps_actual": 5.49,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-07-27",
+          "fiscal_date": "2023-06-30",
+          "eps_actual": 5.4,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-10-25",
+          "fiscal_date": "2023-09-30",
+          "eps_actual": 5.74,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-01-25",
+          "fiscal_date": "2023-12-31",
+          "eps_actual": 6.16,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-04-25",
+          "fiscal_date": "2024-03-31",
+          "eps_actual": 5.26,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-07-25",
+          "fiscal_date": "2024-06-30",
+          "eps_actual": 6.6,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-10-30",
+          "fiscal_date": "2024-09-30",
+          "eps_actual": 0.733,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-01-31",
+          "fiscal_date": "2024-12-31",
+          "eps_actual": 0.82,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-04-30",
+          "fiscal_date": "2025-03-31",
+          "eps_actual": 0.84,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-07-31",
+          "fiscal_date": "2025-06-30",
+          "eps_actual": 0.94,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-10-29",
+          "fiscal_date": "2025-09-30",
+          "eps_actual": 0.88,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-01-29",
+          "fiscal_date": "2025-12-31",
+          "eps_actual": 0.89,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-04-29",
+          "fiscal_date": "2026-03-31",
+          "eps_actual": 0.94,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-07-28",
+          "fiscal_date": "2026-06-30",
+          "eps_actual": 1.05,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-10-28",
+          "fiscal_date": "2026-09-30",
+          "eps_actual": null,
+          "match_method": "estimates_window"
+        }
+      ],
+      "income": [
+        {
+          "date": "2020-03-31",
+          "eps_diluted": 0.05,
+          "accepted_date": "2020-05-06 16:26:18",
+          "filing_date": "2020-05-06"
+        },
+        {
+          "date": "2020-06-30",
+          "eps_diluted": 0.263,
+          "accepted_date": "2020-08-07 18:36:10",
+          "filing_date": "2020-08-07"
+        },
+        {
+          "date": "2020-09-30",
+          "eps_diluted": 0.2690000000000001,
+          "accepted_date": "2020-10-30 16:36:28",
+          "filing_date": "2020-10-30"
+        },
+        {
+          "date": "2020-12-31",
+          "eps_diluted": 0.294,
+          "accepted_date": "2021-02-04 16:39:37",
+          "filing_date": "2021-02-04"
+        },
+        {
+          "date": "2021-03-31",
+          "eps_diluted": 0.36600000000000005,
+          "accepted_date": "2021-04-30 16:25:01",
+          "filing_date": "2021-04-30"
+        },
+        {
+          "date": "2021-06-30",
+          "eps_diluted": 0.41,
+          "accepted_date": "2021-08-06 16:53:10",
+          "filing_date": "2021-08-06"
+        },
+        {
+          "date": "2021-09-30",
+          "eps_diluted": 0.696,
+          "accepted_date": "2021-10-28 16:45:50",
+          "filing_date": "2021-10-28"
+        },
+        {
+          "date": "2021-12-31",
+          "eps_diluted": 0.47100000000000003,
+          "accepted_date": "2022-01-28 16:24:00",
+          "filing_date": "2022-01-28"
+        },
+        {
+          "date": "2022-03-31",
+          "eps_diluted": 0.48300000000000004,
+          "accepted_date": "2022-04-29 16:31:51",
+          "filing_date": "2022-04-29"
+        },
+        {
+          "date": "2022-06-30",
+          "eps_diluted": 0.54,
+          "accepted_date": "2022-08-05 16:13:39",
+          "filing_date": "2022-08-05"
+        },
+        {
+          "date": "2022-09-30",
+          "eps_diluted": 0.72,
+          "accepted_date": "2022-10-28 16:25:39",
+          "filing_date": "2022-10-28"
+        },
+        {
+          "date": "2022-12-31",
+          "eps_diluted": 0.6890000000000001,
+          "accepted_date": "2023-01-27 16:25:28",
+          "filing_date": "2023-01-27"
+        },
+        {
+          "date": "2023-03-31",
+          "eps_diluted": 0.503,
+          "accepted_date": "2023-04-28 16:28:31",
+          "filing_date": "2023-04-28"
+        },
+        {
+          "date": "2023-06-30",
+          "eps_diluted": 0.497,
+          "accepted_date": "2023-08-04 16:09:10",
+          "filing_date": "2023-08-04"
+        },
+        {
+          "date": "2023-09-30",
+          "eps_diluted": 0.541,
+          "accepted_date": "2023-10-27 16:04:58",
+          "filing_date": "2023-10-27"
+        },
+        {
+          "date": "2023-12-31",
+          "eps_diluted": 0.42800000000000005,
+          "accepted_date": "2024-01-26 16:10:28",
+          "filing_date": "2024-01-26"
+        },
+        {
+          "date": "2024-03-31",
+          "eps_diluted": 0.443,
+          "accepted_date": "2024-04-26 16:05:41",
+          "filing_date": "2024-04-26"
+        },
+        {
+          "date": "2024-06-30",
+          "eps_diluted": 0.618,
+          "accepted_date": "2024-08-05 16:07:58",
+          "filing_date": "2024-08-05"
+        },
+        {
+          "date": "2024-09-30",
+          "eps_diluted": 0.7010000000000001,
+          "accepted_date": "2024-10-31 16:04:59",
+          "filing_date": "2024-10-31"
+        },
+        {
+          "date": "2024-12-31",
+          "eps_diluted": 0.613,
+          "accepted_date": "2025-01-31 16:05:22",
+          "filing_date": "2025-01-31"
+        },
+        {
+          "date": "2025-03-31",
+          "eps_diluted": 0.8160000000000001,
+          "accepted_date": "2025-05-01 16:03:49",
+          "filing_date": "2025-05-01"
+        },
+        {
+          "date": "2025-06-30",
+          "eps_diluted": 0.9060000000000001,
+          "accepted_date": "2025-08-08 16:10:51",
+          "filing_date": "2025-08-08"
+        },
+        {
+          "date": "2025-09-30",
+          "eps_diluted": 0.8470000000000001,
+          "accepted_date": "2025-10-31 16:07:19",
+          "filing_date": "2025-10-31"
+        },
+        {
+          "date": "2025-12-31",
+          "eps_diluted": 0.868,
+          "accepted_date": "2026-01-30 16:07:31",
+          "filing_date": "2026-01-30"
+        },
+        {
+          "date": "2026-03-31",
+          "eps_diluted": 0.91,
+          "accepted_date": "2026-04-29 16:06:15",
+          "filing_date": "2026-04-29"
+        },
+        {
+          "date": "2026-06-30",
+          "eps_diluted": 1.04,
+          "accepted_date": "2026-08-06 16:35:27",
+          "filing_date": "2026-08-06"
+        }
+      ],
+      "splits": [
+        {
+          "symbol": "KLAC",
+          "date": "1983-01-10",
+          "numerator": 2.0,
+          "denominator": 1.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:35:55Z"
+        },
+        {
+          "symbol": "KLAC",
+          "date": "1983-12-09",
+          "numerator": 2.0,
+          "denominator": 1.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:35:55Z"
+        },
+        {
+          "symbol": "KLAC",
+          "date": "1984-12-17",
+          "numerator": 3.0,
+          "denominator": 2.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:35:55Z"
+        },
+        {
+          "symbol": "KLAC",
+          "date": "1995-10-02",
+          "numerator": 2.0,
+          "denominator": 1.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:35:55Z"
+        },
+        {
+          "symbol": "KLAC",
+          "date": "2000-01-19",
+          "numerator": 2.0,
+          "denominator": 1.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:35:55Z"
+        },
+        {
+          "symbol": "KLAC",
+          "date": "2026-06-12",
+          "numerator": 10.0,
+          "denominator": 1.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:35:55Z"
+        }
+      ]
+    },
+    "BHP": {
+      "earnings": [
+        {
+          "announce_date": "2021-08-16",
+          "fiscal_date": "2021-06-30",
+          "eps_actual": 2.93,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2022-01-04",
+          "fiscal_date": "2021-12-31",
+          "eps_actual": 3.72,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2022-08-16",
+          "fiscal_date": "2022-06-30",
+          "eps_actual": 8.46,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2023-02-20",
+          "fiscal_date": "2022-12-31",
+          "eps_actual": 2.55,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2023-02-21",
+          "fiscal_date": null,
+          "eps_actual": 2.55,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2023-12-26",
+          "fiscal_date": null,
+          "eps_actual": 2.55,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2024-02-19",
+          "fiscal_date": "2023-12-31",
+          "eps_actual": 1.34,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-03-18",
+          "fiscal_date": "2023-12-31",
+          "eps_actual": 0.36,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-04-17",
+          "fiscal_date": "2023-12-31",
+          "eps_actual": 0.3651,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-08-26",
+          "fiscal_date": "2024-06-30",
+          "eps_actual": 2.75,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-02-17",
+          "fiscal_date": "2024-12-31",
+          "eps_actual": 1.74,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2025-08-18",
+          "fiscal_date": "2025-06-30",
+          "eps_actual": 2.12,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-02-16",
+          "fiscal_date": "2025-12-31",
+          "eps_actual": 2.24,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-08-17",
+          "fiscal_date": "2026-06-30",
+          "eps_actual": 2.76,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2027-02-23",
+          "fiscal_date": null,
+          "eps_actual": null,
+          "match_method": "none"
+        }
+      ],
+      "income": [
+        {
+          "date": "2020-06-30",
+          "eps_diluted": 1.22,
+          "accepted_date": "2020-09-22 06:29:37",
+          "filing_date": "2020-09-22"
+        },
+        {
+          "date": "2020-12-31",
+          "eps_diluted": 1.6,
+          "accepted_date": "2020-12-30 19:00:00",
+          "filing_date": "2020-12-31"
+        },
+        {
+          "date": "2021-06-30",
+          "eps_diluted": 2.94,
+          "accepted_date": "2021-09-21 06:06:58",
+          "filing_date": "2021-09-21"
+        },
+        {
+          "date": "2021-12-31",
+          "eps_diluted": 3.34,
+          "accepted_date": "2021-12-30 19:00:00",
+          "filing_date": "2021-12-31"
+        },
+        {
+          "date": "2022-06-30",
+          "eps_diluted": 4.64,
+          "accepted_date": "2022-09-06 07:32:57",
+          "filing_date": "2022-09-06"
+        },
+        {
+          "date": "2022-12-31",
+          "eps_diluted": 2.54,
+          "accepted_date": "2023-02-21 06:25:53",
+          "filing_date": "2023-02-21"
+        },
+        {
+          "date": "2023-06-30",
+          "eps_diluted": 2.54,
+          "accepted_date": "2023-09-05 07:56:11",
+          "filing_date": "2023-09-05"
+        },
+        {
+          "date": "2023-12-31",
+          "eps_diluted": 0.36,
+          "accepted_date": "2023-12-30 19:00:00",
+          "filing_date": "2023-12-31"
+        },
+        {
+          "date": "2024-06-30",
+          "eps_diluted": 2.74,
+          "accepted_date": "2024-08-30 06:09:53",
+          "filing_date": "2024-08-30"
+        },
+        {
+          "date": "2024-12-31",
+          "eps_diluted": 1.74,
+          "accepted_date": "2025-02-18 08:18:29",
+          "filing_date": "2025-02-18"
+        },
+        {
+          "date": "2025-06-30",
+          "eps_diluted": 1.82,
+          "accepted_date": "2025-08-22 06:06:43",
+          "filing_date": "2025-08-22"
+        },
+        {
+          "date": "2025-12-31",
+          "eps_diluted": 2.22,
+          "accepted_date": "2026-02-17 06:29:39",
+          "filing_date": "2026-02-17"
+        },
+        {
+          "date": "2026-06-30",
+          "eps_diluted": 1.66,
+          "accepted_date": "2026-07-17 06:28:25",
+          "filing_date": "2026-07-17"
+        }
+      ],
+      "splits": []
+    },
+    "FER": {
+      "earnings": [
+        {
+          "announce_date": "2021-03-31",
+          "fiscal_date": "2020-12-31",
+          "eps_actual": -0.13828,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2021-05-06",
+          "fiscal_date": null,
+          "eps_actual": -0.18805,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2021-06-30",
+          "fiscal_date": null,
+          "eps_actual": -0.14759,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2021-07-27",
+          "fiscal_date": null,
+          "eps_actual": -0.14231,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2021-09-30",
+          "fiscal_date": "2021-06-30",
+          "eps_actual": 0.1222,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2021-10-28",
+          "fiscal_date": null,
+          "eps_actual": 0.1274,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2021-12-31",
+          "fiscal_date": null,
+          "eps_actual": 2.01,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2022-02-24",
+          "fiscal_date": null,
+          "eps_actual": 2.01,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2022-03-31",
+          "fiscal_date": "2021-12-31",
+          "eps_actual": 0.03871,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2022-07-28",
+          "fiscal_date": null,
+          "eps_actual": 0.07322,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2022-09-30",
+          "fiscal_date": "2022-06-30",
+          "eps_actual": 0.3298,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2022-12-31",
+          "fiscal_date": null,
+          "eps_actual": -0.16102,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2023-02-28",
+          "fiscal_date": null,
+          "eps_actual": 0.2047,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2023-03-31",
+          "fiscal_date": "2022-12-31",
+          "eps_actual": 2.57,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2023-06-30",
+          "fiscal_date": null,
+          "eps_actual": -2.29091,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2023-07-27",
+          "fiscal_date": null,
+          "eps_actual": 2.57,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2023-09-30",
+          "fiscal_date": "2023-06-30",
+          "eps_actual": 0.262,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2023-12-31",
+          "fiscal_date": null,
+          "eps_actual": 0.2613,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2024-02-27",
+          "fiscal_date": "2023-12-31",
+          "eps_actual": 0.4069,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2024-05-13",
+          "fiscal_date": null,
+          "eps_actual": null,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2024-07-30",
+          "fiscal_date": null,
+          "eps_actual": 0.3011,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2024-07-31",
+          "fiscal_date": "2024-06-30",
+          "eps_actual": 0.3052,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-10-29",
+          "fiscal_date": "2024-09-30",
+          "eps_actual": 2.15,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-02-25",
+          "fiscal_date": "2024-12-31",
+          "eps_actual": 2.03,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-02-28",
+          "fiscal_date": null,
+          "eps_actual": 2.02,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2025-05-12",
+          "fiscal_date": "2025-03-30",
+          "eps_actual": 0.4111,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-05-13",
+          "fiscal_date": null,
+          "eps_actual": null,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2025-07-28",
+          "fiscal_date": "2025-06-30",
+          "eps_actual": 0.4415,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-07-29",
+          "fiscal_date": "2025-06-30",
+          "eps_actual": 0.883,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-10-28",
+          "fiscal_date": "2025-09-30",
+          "eps_actual": 0.2811,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-02-25",
+          "fiscal_date": "2025-12-31",
+          "eps_actual": 0.587,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-05-07",
+          "fiscal_date": null,
+          "eps_actual": null,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2026-07-28",
+          "fiscal_date": "2026-06-30",
+          "eps_actual": 0.4115,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-10-27",
+          "fiscal_date": null,
+          "eps_actual": null,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2027-03-04",
+          "fiscal_date": null,
+          "eps_actual": null,
+          "match_method": "none"
+        }
+      ],
+      "income": [
+        {
+          "date": "2020-06-30",
+          "eps_diluted": -0.15,
+          "accepted_date": "2020-06-30 00:00:00",
+          "filing_date": "2020-06-30"
+        },
+        {
+          "date": "2020-12-31",
+          "eps_diluted": 0.12,
+          "accepted_date": "2020-12-31 00:00:00",
+          "filing_date": "2020-12-31"
+        },
+        {
+          "date": "2021-06-30",
+          "eps_diluted": -0.12,
+          "accepted_date": "2021-06-30 00:00:00",
+          "filing_date": "2021-06-30"
+        },
+        {
+          "date": "2021-12-31",
+          "eps_diluted": 0.11,
+          "accepted_date": "2021-12-31 00:00:00",
+          "filing_date": "2021-12-31"
+        },
+        {
+          "date": "2022-06-30",
+          "eps_diluted": 0.07,
+          "accepted_date": "2022-06-30 00:00:00",
+          "filing_date": "2022-06-30"
+        },
+        {
+          "date": "2022-12-31",
+          "eps_diluted": 0.19,
+          "accepted_date": "2022-12-31 00:00:00",
+          "filing_date": "2022-12-31"
+        },
+        {
+          "date": "2023-06-30",
+          "eps_diluted": 2.36,
+          "accepted_date": "2023-06-30 00:00:00",
+          "filing_date": "2023-06-30"
+        },
+        {
+          "date": "2023-12-31",
+          "eps_diluted": 0.37,
+          "accepted_date": "2023-12-31 00:00:00",
+          "filing_date": "2023-12-31"
+        },
+        {
+          "date": "2024-06-30",
+          "eps_diluted": 0.28,
+          "accepted_date": "2024-06-30 00:00:00",
+          "filing_date": "2024-06-30"
+        },
+        {
+          "date": "2024-12-31",
+          "eps_diluted": 1.95,
+          "accepted_date": "2024-12-31 00:00:00",
+          "filing_date": "2024-12-31"
+        },
+        {
+          "date": "2025-06-30",
+          "eps_diluted": 0.74,
+          "accepted_date": "2025-06-30 00:00:00",
+          "filing_date": "2025-06-30"
+        },
+        {
+          "date": "2025-09-30",
+          "eps_diluted": 0.24,
+          "accepted_date": "2025-10-28 16:44:26",
+          "filing_date": "2025-10-28"
+        },
+        {
+          "date": "2025-12-31",
+          "eps_diluted": 0.5,
+          "accepted_date": "2025-12-31 00:00:00",
+          "filing_date": "2025-12-31"
+        },
+        {
+          "date": "2026-03-31",
+          "eps_diluted": 0.0,
+          "accepted_date": "2026-03-31 00:00:00",
+          "filing_date": "2026-03-31"
+        },
+        {
+          "date": "2026-06-30",
+          "eps_diluted": 0.36,
+          "accepted_date": "2026-07-28 16:58:46",
+          "filing_date": "2026-07-28"
+        }
+      ],
+      "splits": [
+        {
+          "symbol": "FER",
+          "date": "2014-07-02",
+          "numerator": 509.0,
+          "denominator": 500.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:35:09Z"
+        },
+        {
+          "symbol": "FER",
+          "date": "2014-11-04",
+          "numerator": 128.0,
+          "denominator": 125.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:35:09Z"
+        },
+        {
+          "symbol": "FER",
+          "date": "2021-11-03",
+          "numerator": 88.0,
+          "denominator": 87.0,
+          "split_type": "stock-split",
+          "source": "fmp",
+          "fetched_at": "2026-09-26T10:35:09Z"
+        }
+      ]
+    },
+    "COIN": {
+      "earnings": [
+        {
+          "announce_date": "2021-03-23",
+          "fiscal_date": "2020-12-31",
+          "eps_actual": 0.4371,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2021-05-13",
+          "fiscal_date": "2021-03-29",
+          "eps_actual": 3.09,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2021-08-10",
+          "fiscal_date": "2021-06-29",
+          "eps_actual": 6.42,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2021-11-09",
+          "fiscal_date": "2021-09-29",
+          "eps_actual": 1.62,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-02-24",
+          "fiscal_date": "2021-12-29",
+          "eps_actual": 3.32,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-05-10",
+          "fiscal_date": "2022-03-29",
+          "eps_actual": -1.98,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-08-09",
+          "fiscal_date": "2022-06-29",
+          "eps_actual": -4.95,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2022-11-03",
+          "fiscal_date": "2022-09-29",
+          "eps_actual": -2.43,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-02-21",
+          "fiscal_date": "2022-12-29",
+          "eps_actual": -2.46,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-05-04",
+          "fiscal_date": "2023-03-29",
+          "eps_actual": 0.15,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-08-03",
+          "fiscal_date": "2023-06-29",
+          "eps_actual": -0.42,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2023-11-02",
+          "fiscal_date": "2023-09-29",
+          "eps_actual": -0.01,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-02-15",
+          "fiscal_date": "2023-12-30",
+          "eps_actual": 1.04,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-05-02",
+          "fiscal_date": "2024-03-31",
+          "eps_actual": 1.65,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-08-01",
+          "fiscal_date": "2024-06-30",
+          "eps_actual": 1.07,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-10-30",
+          "fiscal_date": "2024-09-30",
+          "eps_actual": 0.62,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-02-13",
+          "fiscal_date": "2024-12-31",
+          "eps_actual": 3.39,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-02-14",
+          "fiscal_date": "2024-12-31",
+          "eps_actual": 4.66,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-05-08",
+          "fiscal_date": "2025-03-31",
+          "eps_actual": 0.24,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-07-31",
+          "fiscal_date": "2025-06-30",
+          "eps_actual": 5.14,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-10-30",
+          "fiscal_date": "2025-09-30",
+          "eps_actual": 1.44,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-02-12",
+          "fiscal_date": "2025-12-31",
+          "eps_actual": -2.49,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-05-07",
+          "fiscal_date": "2026-03-31",
+          "eps_actual": -0.24,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-07-30",
+          "fiscal_date": "2026-06-30",
+          "eps_actual": -1.36,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-10-29",
+          "fiscal_date": "2026-09-30",
+          "eps_actual": null,
+          "match_method": "estimates_window"
+        }
+      ],
+      "income": [
+        {
+          "date": "2020-03-31",
+          "eps_diluted": 0.16,
+          "accepted_date": "2020-03-31 00:00:00",
+          "filing_date": "2020-03-31"
+        },
+        {
+          "date": "2020-06-30",
+          "eps_diluted": 0.16,
+          "accepted_date": "2020-06-30 00:00:00",
+          "filing_date": "2020-06-30"
+        },
+        {
+          "date": "2020-09-30",
+          "eps_diluted": 0.0938,
+          "accepted_date": "2020-09-29 20:00:00",
+          "filing_date": "2020-09-30"
+        },
+        {
+          "date": "2020-12-31",
+          "eps_diluted": 1.42,
+          "accepted_date": "2020-12-30 19:00:00",
+          "filing_date": "2020-12-31"
+        },
+        {
+          "date": "2021-03-31",
+          "eps_diluted": 1.95,
+          "accepted_date": "2021-05-13 21:12:24",
+          "filing_date": "2021-05-14"
+        },
+        {
+          "date": "2021-06-30",
+          "eps_diluted": 6.42,
+          "accepted_date": "2021-08-10 19:28:18",
+          "filing_date": "2021-08-11"
+        },
+        {
+          "date": "2021-09-30",
+          "eps_diluted": 1.62,
+          "accepted_date": "2021-11-09 20:07:39",
+          "filing_date": "2021-11-10"
+        },
+        {
+          "date": "2021-12-31",
+          "eps_diluted": 3.62,
+          "accepted_date": "2022-02-24 20:57:05",
+          "filing_date": "2022-02-25"
+        },
+        {
+          "date": "2022-03-31",
+          "eps_diluted": -1.98,
+          "accepted_date": "2022-05-10 16:20:44",
+          "filing_date": "2022-05-10"
+        },
+        {
+          "date": "2022-06-30",
+          "eps_diluted": -4.98,
+          "accepted_date": "2022-08-09 16:31:36",
+          "filing_date": "2022-08-09"
+        },
+        {
+          "date": "2022-09-30",
+          "eps_diluted": -2.43,
+          "accepted_date": "2022-11-03 16:15:08",
+          "filing_date": "2022-11-03"
+        },
+        {
+          "date": "2022-12-31",
+          "eps_diluted": -2.5,
+          "accepted_date": "2023-02-21 16:37:42",
+          "filing_date": "2023-02-21"
+        },
+        {
+          "date": "2023-03-31",
+          "eps_diluted": -0.34,
+          "accepted_date": "2023-05-04 16:18:08",
+          "filing_date": "2023-05-04"
+        },
+        {
+          "date": "2023-06-30",
+          "eps_diluted": -0.42,
+          "accepted_date": "2023-08-03 16:13:52",
+          "filing_date": "2023-08-03"
+        },
+        {
+          "date": "2023-09-30",
+          "eps_diluted": -0.0095,
+          "accepted_date": "2023-11-02 16:17:17",
+          "filing_date": "2023-11-02"
+        },
+        {
+          "date": "2023-12-31",
+          "eps_diluted": 1.05,
+          "accepted_date": "2024-02-15 16:34:25",
+          "filing_date": "2024-02-15"
+        },
+        {
+          "date": "2024-03-31",
+          "eps_diluted": 4.4,
+          "accepted_date": "2024-05-02 16:11:54",
+          "filing_date": "2024-05-02"
+        },
+        {
+          "date": "2024-06-30",
+          "eps_diluted": 0.14,
+          "accepted_date": "2024-08-01 16:15:55",
+          "filing_date": "2024-08-01"
+        },
+        {
+          "date": "2024-09-30",
+          "eps_diluted": 0.28,
+          "accepted_date": "2024-10-30 16:15:11",
+          "filing_date": "2024-10-30"
+        },
+        {
+          "date": "2024-12-31",
+          "eps_diluted": 4.68,
+          "accepted_date": "2025-02-13 16:16:43",
+          "filing_date": "2025-02-13"
+        },
+        {
+          "date": "2025-03-31",
+          "eps_diluted": 0.24,
+          "accepted_date": "2025-05-08 16:17:45",
+          "filing_date": "2025-05-08"
+        },
+        {
+          "date": "2025-06-30",
+          "eps_diluted": 5.14,
+          "accepted_date": "2025-07-31 16:16:44",
+          "filing_date": "2025-07-31"
+        },
+        {
+          "date": "2025-09-30",
+          "eps_diluted": 1.5,
+          "accepted_date": "2025-10-30 16:12:04",
+          "filing_date": "2025-10-30"
+        },
+        {
+          "date": "2025-12-31",
+          "eps_diluted": -2.49,
+          "accepted_date": "2026-02-12 16:29:17",
+          "filing_date": "2026-02-12"
+        },
+        {
+          "date": "2026-03-31",
+          "eps_diluted": -1.49,
+          "accepted_date": "2026-05-07 16:20:01",
+          "filing_date": "2026-05-07"
+        },
+        {
+          "date": "2026-06-30",
+          "eps_diluted": -1.36,
+          "accepted_date": "2026-07-30 16:15:28",
+          "filing_date": "2026-07-30"
+        }
+      ],
+      "splits": []
+    },
+    "DEO": {
+      "earnings": [
+        {
+          "announce_date": "2021-01-28",
+          "fiscal_date": "2020-12-31",
+          "eps_actual": 3.7,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2021-07-29",
+          "fiscal_date": null,
+          "eps_actual": 2.66,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2021-08-03",
+          "fiscal_date": "2021-06-30",
+          "eps_actual": 1.84,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2021-12-31",
+          "fiscal_date": null,
+          "eps_actual": 3.36,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2022-01-27",
+          "fiscal_date": "2021-12-31",
+          "eps_actual": 4.57,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2022-07-28",
+          "fiscal_date": null,
+          "eps_actual": 3.19,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2022-08-04",
+          "fiscal_date": "2022-06-30",
+          "eps_actual": 2.23,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2022-12-31",
+          "fiscal_date": null,
+          "eps_actual": 4.75,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2023-01-26",
+          "fiscal_date": "2022-12-31",
+          "eps_actual": 4.86,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2023-08-01",
+          "fiscal_date": "2023-06-30",
+          "eps_actual": 3.32,
+          "match_method": "statement_window"
+        },
+        {
+          "announce_date": "2023-08-03",
+          "fiscal_date": null,
+          "eps_actual": 3.06,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2023-12-30",
+          "fiscal_date": null,
+          "eps_actual": 3.93,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2024-01-30",
+          "fiscal_date": "2023-12-31",
+          "eps_actual": 4.31,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-07-30",
+          "fiscal_date": "2024-06-30",
+          "eps_actual": 2.84,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-08-06",
+          "fiscal_date": "2024-06-30",
+          "eps_actual": 2.97,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2024-12-31",
+          "fiscal_date": null,
+          "eps_actual": 3.47,
+          "match_method": "none"
+        },
+        {
+          "announce_date": "2025-02-04",
+          "fiscal_date": "2024-12-31",
+          "eps_actual": 3.91,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2025-08-05",
+          "fiscal_date": "2025-06-30",
+          "eps_actual": 2.64,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-02-25",
+          "fiscal_date": "2025-12-31",
+          "eps_actual": 3.8,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2026-08-06",
+          "fiscal_date": "2026-06-30",
+          "eps_actual": 2.8,
+          "match_method": "estimates_window"
+        },
+        {
+          "announce_date": "2027-01-28",
+          "fiscal_date": null,
+          "eps_actual": null,
+          "match_method": "none"
+        }
+      ],
+      "income": [
+        {
+          "date": "2020-06-30",
+          "eps_diluted": -0.8,
+          "accepted_date": "2020-08-04 06:32:30",
+          "filing_date": "2020-08-04"
+        },
+        {
+          "date": "2020-12-31",
+          "eps_diluted": 2.68,
+          "accepted_date": "2020-12-30 19:00:00",
+          "filing_date": "2020-12-31"
+        },
+        {
+          "date": "2021-06-30",
+          "eps_diluted": 1.84,
+          "accepted_date": "2021-07-29 11:03:57",
+          "filing_date": "2021-07-29"
+        },
+        {
+          "date": "2021-12-31",
+          "eps_diluted": 3.36,
+          "accepted_date": "2021-12-31 00:00:00",
+          "filing_date": "2021-12-31"
+        },
+        {
+          "date": "2022-06-30",
+          "eps_diluted": 2.24,
+          "accepted_date": "2022-07-28 07:21:27",
+          "filing_date": "2022-07-28"
+        },
+        {
+          "date": "2022-12-31",
+          "eps_diluted": 3.88,
+          "accepted_date": "2022-12-31 00:00:00",
+          "filing_date": "2022-12-31"
+        },
+        {
+          "date": "2023-06-30",
+          "eps_diluted": 2.44,
+          "accepted_date": "2023-08-01 12:42:13",
+          "filing_date": "2023-08-01"
+        },
+        {
+          "date": "2023-12-31",
+          "eps_diluted": 3.96,
+          "accepted_date": "2023-12-29 19:00:00",
+          "filing_date": "2023-12-31"
+        },
+        {
+          "date": "2024-06-30",
+          "eps_diluted": 3.0,
+          "accepted_date": "2024-08-01 07:01:13",
+          "filing_date": "2024-08-01"
+        },
+        {
+          "date": "2024-12-31",
+          "eps_diluted": 3.48,
+          "accepted_date": "2024-12-31 00:00:00",
+          "filing_date": "2024-12-31"
+        },
+        {
+          "date": "2025-06-30",
+          "eps_diluted": 0.76,
+          "accepted_date": "2025-08-14 08:17:28",
+          "filing_date": "2025-08-14"
+        },
+        {
+          "date": "2025-12-31",
+          "eps_diluted": 3.56,
+          "accepted_date": "2026-02-25 09:46:42",
+          "filing_date": "2026-02-25"
+        },
+        {
+          "date": "2026-06-30",
+          "eps_diluted": -0.44,
+          "accepted_date": "2026-08-18 06:05:30",
+          "filing_date": "2026-08-18"
+        }
+      ],
+      "splits": []
+    }
+  }
+}
