@@ -39,7 +39,9 @@ def _earn_row(announce_date, fiscal_date="2026-06-30",
     return {
         "announce_date": announce_date, "fiscal_date": fiscal_date,
         "match_method": match_method, "eps_actual": eps_actual,
-        "eps_estimated": 1.1, "revenue_actual": 1e9, "revenue_estimated": 0.95e9,
+        "eps_estimated": 1.1,
+        "revenue_actual": 1e9 if eps_actual is not None else None,
+        "revenue_estimated": 0.95e9,
         "last_updated": "2026-07-12T00:00:00Z",
     }
 
@@ -132,6 +134,47 @@ def test_earnings_replace_rolls_back_on_bad_row(store):
         ])
     got = store.get_fmp_earnings("TESTCO")
     assert {r["announce_date"] for r in got} == {"2026-07-24"}  # 原状态保留
+
+
+@pytest.mark.parametrize("incoming, expected", [
+    ({"eps_actual": None, "revenue_actual": None}, (2.15, 2676021200.0)),
+    ({"eps_actual": 0.0, "revenue_actual": None}, (0.0, 2676021200.0)),
+    ({"eps_actual": None, "revenue_actual": 0.0}, (2.15, 0.0)),
+    ({"eps_actual": 2.2, "revenue_actual": 2800000000.0}, (2.2, 2800000000.0)),
+])
+def test_earnings_refresh_preserves_known_actuals_only_for_nulls(store, incoming, expected):
+    old = {**_earn_row("2024-10-29", fiscal_date="2024-09-30", eps_actual=2.15),
+           "revenue_actual": 2676021200.0}
+    store.replace_fmp_earnings("FER", [old])
+    refresh = {**old, **incoming, "eps_estimated": 0.2558,
+               "last_updated": "2026-09-29T03:47:57Z"}
+    for _ in range(2):  # A later refresh must not delete the protected actual row.
+        store.replace_fmp_earnings("FER", [refresh])
+        got = store.get_fmp_earnings("FER")[0]
+        assert (got["eps_actual"], got["revenue_actual"]) == expected
+        assert got["eps_estimated"] == 0.2558
+        assert got["last_updated"] == refresh["last_updated"]
+        assert got["fiscal_date"] == "2024-09-30"
+    assert refresh == {**old, **incoming, "eps_estimated": 0.2558,
+                       "last_updated": "2026-09-29T03:47:57Z"}
+
+
+def test_earnings_revenue_only_report_is_not_a_scheduled_placeholder(store):
+    old = {**_earn_row("2026-07-24", eps_actual=None), "revenue_actual": 0.0}
+    store.replace_fmp_earnings("TESTCO", [old])
+    store.replace_fmp_earnings("TESTCO", [])
+    assert store.get_fmp_earnings("TESTCO")[0]["revenue_actual"] == 0.0
+    store.replace_fmp_earnings("TESTCO", [{**old, "revenue_actual": None}])
+    assert store.get_fmp_earnings("TESTCO")[0]["revenue_actual"] == 0.0
+
+
+def test_earnings_first_report_fills_missing_actuals(store):
+    old = _earn_row("2026-07-24", eps_actual=None)
+    store.replace_fmp_earnings("TESTCO", [old])
+    store.replace_fmp_earnings("TESTCO", [
+        {**old, "eps_actual": 0.0, "revenue_actual": 10.0}])
+    got = store.get_fmp_earnings("TESTCO")[0]
+    assert (got["eps_actual"], got["revenue_actual"]) == (0.0, 10.0)
 
 
 # 6. 两行空 raw_asset、不同 raw_row_index 都存活

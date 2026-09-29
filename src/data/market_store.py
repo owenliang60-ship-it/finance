@@ -2122,10 +2122,11 @@ class MarketStore:
         return [dict(r) for r in conn.execute(query, params).fetchall()]
 
     def replace_fmp_earnings(self, symbol: str, rows: List[Dict]) -> int:
-        """先清删该股 eps_actual IS NULL 的预排幽灵行，再 upsert，同一事务。
+        """先清删该股 EPS/营收 actual 均为空的预排幽灵行，再 upsert，同一事务。
 
         同 PK 且新行映射更弱（fiscal_date=NULL）时保留既有非空 fiscal 映射，
         只更新 actual 值（Task 5 冻结行为：weekly 重跑不得把已匹配行降级为 none）。
+        供应商缺失 actual 不撤销已有事实：逐字段保留非空旧值，0 仍是有效新值。
         """
         _validate_table("fmp_earnings")
         sym = symbol.upper()
@@ -2135,20 +2136,27 @@ class MarketStore:
         conn = self._get_conn()
         with conn:
             conn.execute(
-                "DELETE FROM fmp_earnings WHERE symbol = ? AND eps_actual IS NULL",
+                "DELETE FROM fmp_earnings WHERE symbol = ? "
+                "AND eps_actual IS NULL AND revenue_actual IS NULL",
                 [sym],
             )
             for row in rows:
                 data = {**row, "symbol": sym}
-                if data.get("fiscal_date") is None:
+                if (data.get("fiscal_date") is None or data.get("eps_actual") is None
+                        or data.get("revenue_actual") is None):
                     existing = conn.execute(
-                        "SELECT fiscal_date, match_method FROM fmp_earnings "
+                        "SELECT fiscal_date, match_method, eps_actual, revenue_actual "
+                        "FROM fmp_earnings "
                         "WHERE symbol = ? AND announce_date = ?",
                         [sym, data["announce_date"]],
                     ).fetchone()
-                    if existing and existing["fiscal_date"] is not None:
-                        data["fiscal_date"] = existing["fiscal_date"]
-                        data["match_method"] = existing["match_method"]
+                    if existing:
+                        if data.get("fiscal_date") is None and existing["fiscal_date"] is not None:
+                            data["fiscal_date"] = existing["fiscal_date"]
+                            data["match_method"] = existing["match_method"]
+                        for field in ("eps_actual", "revenue_actual"):
+                            if data.get(field) is None and existing[field] is not None:
+                                data[field] = existing[field]
                 self._insert_validated(conn, "fmp_earnings", data)
         return len(rows)
 

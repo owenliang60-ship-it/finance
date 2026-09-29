@@ -204,6 +204,21 @@ def test_wrapper_provider_empty_is_not_a_failure(tmp_store, tmp_path):
     assert json.loads(progress.read_text())["empty"] == ["ABC"]
 
 
+def test_wrapper_vendor_null_does_not_erase_reported_actuals(tmp_store, tmp_path):
+    tmp_store.replace_fmp_earnings("FER", [{
+        "announce_date": "2024-10-29", "fiscal_date": "2024-09-30",
+        "match_method": "estimates_window", "eps_actual": 2.15,
+        "revenue_actual": 2676021200.0}])
+    client = FakeEarningsClient({"FER": [_vendor("2024-10-29", None)]})
+    rc = run_street_eps(targets_file=_targets(tmp_path, ["FER"]), store=tmp_store,
+                        client=client, lock=FakeLock(),
+                        progress_path=tmp_path / "progress.json")
+    assert rc == 0
+    got = _by_announce(tmp_store, "FER")["2024-10-29"]
+    assert (got["eps_actual"], got["revenue_actual"]) == (2.15, 2676021200.0)
+    assert (got["fiscal_date"], got["match_method"]) == ("2024-09-30", "estimates_window")
+
+
 def test_remap_guard_treats_near_dates_as_one_quarter(tmp_store):
     tmp_store.replace_fmp_earnings("ABC", [
         {"announce_date": "2024-04-25", "fiscal_date": "2024-03-31",
