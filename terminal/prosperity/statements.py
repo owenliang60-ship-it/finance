@@ -76,7 +76,7 @@ def visible_statements(history: SymbolHistory, as_of: str, mode: str,
         return VisibleStatements(current, "live", observed_at[:10])
     if mode != "replay":
         raise ValueError(f"unknown mode: {mode!r}")
-    if as_of[:10] >= STRICT_STATEMENTS_FROM and history.vintage:
+    if as_of[:10] >= STRICT_STATEMENTS_FROM:   # no vintage means no proof, never today's tables (review F5)
         return VisibleStatements({t: _latest_vintage(history.vintage.get(t, []), as_of) for t in TABLES},
                                  "strict", None)
     return VisibleStatements(current, "approximate", None, tuple(history.earnings))
@@ -107,7 +107,8 @@ def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
             if r["date"][:10] <= bound and known and known <= bound:
                 seen[t][r["date"]] = (r, known, basis, labels)
     if not visible.rows.get("income"):
-        return QuarterBuild((), None, ("no_statements", "no_current_fiscal"))
+        missing = ("strict_vintage_missing",) if visible.pit == "strict" else ()
+        return QuarterBuild((), None, ("no_statements", "no_current_fiscal") + missing)
     income = [v[0] for v in sorted(seen["income"].values(), key=lambda v: v[0]["date"])]
     try:
         aligned = {t: _statement_by_income_date(income, [v[0] for v in seen[t].values()], t)

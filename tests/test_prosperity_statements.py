@@ -97,6 +97,14 @@ def test_quarters_carry_the_observation_date_that_proves_them():
     assert {q.observed_on for q in _build(hist(), "2026-03-31").quarters} == {None}      # approximate replay
 
 
+def test_strict_replay_without_vintage_is_missing_not_current_tables():
+    # Codex M4 review F5: an empty vintage silently fell back to today's restated tables
+    vis = visible_statements(hist(), "2026-09-29", mode="replay")
+    assert vis.pit == "strict" and not any(vis.rows.values())
+    qb = _build(hist(), "2026-09-29")
+    assert qb.quarters == () and "strict_vintage_missing" in qb.flags
+
+
 def test_hard_quality_issue_nulls_field_and_keeps_quarter():
     h = hist()
     h.income[1]["gross_profit"] = 90.0
