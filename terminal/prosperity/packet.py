@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
+from src.data.prosperity_quality import split_ratio_eligible
 from src.indicators.beta import compute_beta
 from terminal.prosperity.config import MCAP_MAX_STALENESS_DAYS, PIT_RANK, PRICE_MAX_STALENESS_DAYS
 from terminal.prosperity.consensus import build_consensus, unit_verified
@@ -49,8 +50,7 @@ def _split_adjusted(closes: Sequence[Tuple[str, float]], splits: Sequence[dict])
     out, changed = list(closes), False
     for s in splits:
         num, den, day = s.get("numerator"), s.get("denominator"), (s.get("date") or "")[:10]
-        if not (day and all(isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 1 and v == int(v)
-                            for v in (num, den)) and num != den and (max(num, den) <= 20 or min(num, den) == 1)):
+        if not (day and split_ratio_eligible(num, den)):
             continue
         i = bisect_left(closes, day, key=lambda c: c[0][:10])        # closes are date-sorted
         if i == 0 or i == len(closes) or not (closes[i - 1][1] and closes[i][1]) \

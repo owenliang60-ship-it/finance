@@ -92,6 +92,15 @@ def test_unadjusted_price_split_is_rescaled_in_memory():
     assert q.price_asof == 241.16 and "price_split_rescaled" not in q.flags
 
 
+def test_non_finite_split_metadata_is_ignored_not_fatal():
+    # Codex M4 review F6: numerator=inf used to raise OverflowError and drop the whole symbol
+    bad = [{"date": "2026-06-12", "numerator": float("inf"), "denominator": 1.0},
+           {"date": "2026-06-12", "numerator": 10.0, "denominator": float("nan")}]
+    h = replace(_usd_history(), closes=KLAC_CLOSES, splits=bad)
+    p = build_packet(h, "2026-06-11", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[])
+    assert p.price_asof == 2411.64 and "price_split_rescaled" not in p.flags
+
+
 def test_requested_non_members_are_reported(tmp_path):
     import terminal.prosperity.inputs as inputs
     store = MarketStore(db_path=seed_db(tmp_path / "m.db"), read_only=True)
