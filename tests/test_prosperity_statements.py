@@ -71,6 +71,32 @@ def test_replay_after_strict_boundary_reads_vintage_versions():
     assert visible_statements(h, "2026-09-29", mode="live", observed_at="2026-09-29").pit == "live"
 
 
+def _vintage(h, stamp):
+    return {t: [dict(r, _observed_at=stamp) for r in rows]
+            for t, rows in (("income", h.income), ("balance", h.balance), ("cashflow", h.cashflow))}
+
+
+def test_strict_bound_compares_instants_not_strings():
+    # Codex M4 review F3: '…T00:00:00+00:00' sorts before '…T00:00:00Z', so a next-midnight version leaked in
+    h = replace(hist(), vintage=_vintage(hist(), "2026-09-30T00:00:00+00:00"))
+    assert _build(h, "2026-09-29").quarters == ()
+    assert len(_build(h, "2026-09-30").quarters) == 4
+
+
+def test_newest_strict_version_is_chosen_by_instant_across_formats():
+    vint = _vintage(hist(), "2026-09-29T10:00:00Z")
+    newer = dict(vint["income"][-1], _observed_at="2026-09-29T10:00:00.500000+00:00", revenue=77.0)
+    h = replace(hist(), vintage={**vint, "income": vint["income"] + [newer]})
+    assert visible_statements(h, "2026-09-29", mode="replay").rows["income"][-1]["revenue"] == 77.0
+
+
+def test_quarters_carry_the_observation_date_that_proves_them():
+    h = replace(hist(), vintage=_vintage(hist(), "2026-09-28T13:04:27+00:00"))
+    assert {q.observed_on for q in _build(h, "2026-09-29").quarters} == {"2026-09-28"}
+    assert {q.observed_on for q in _build(h, "2026-09-29", "live", "2026-09-29").quarters} == {"2026-09-29"}
+    assert {q.observed_on for q in _build(hist(), "2026-03-31").quarters} == {None}      # approximate replay
+
+
 def test_hard_quality_issue_nulls_field_and_keeps_quarter():
     h = hist()
     h.income[1]["gross_profit"] = 90.0

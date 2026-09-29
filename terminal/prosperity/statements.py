@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Mapping, Optional, Tuple
 
 from src.data.fundamental_value_checks import apply_hard_issues, check_quarter_values
@@ -44,14 +44,27 @@ def _d(value: str) -> date:
     return date.fromisoformat(value[:10])
 
 
+def _utc(stamp: str) -> datetime:
+    """Parse an observation timestamp as an instant; 'Z' and '+00:00' spell the same UTC offset.
+
+    Compared as text, '…T00:00:00+00:00' sorts before '…T00:00:00Z' (Codex M4 review F3).
+    Python 3.10's fromisoformat does not accept 'Z', hence the replace. Naive stamps are refused.
+    """
+    moment = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    if moment.tzinfo is None:
+        raise ValueError(f"observed_at without a UTC offset: {stamp!r}")
+    return moment.astimezone(timezone.utc)
+
+
 def _latest_vintage(rows: List[dict], as_of: str) -> List[dict]:
     """Newest version per fiscal date observed before the end of `as_of` (exclusive next-midnight bound)."""
-    bound = (_d(as_of) + timedelta(days=1)).isoformat() + "T00:00:00Z"
-    best: Dict[str, dict] = {}
+    bound = datetime.combine(_d(as_of) + timedelta(days=1), datetime.min.time(), timezone.utc)
+    best: Dict[str, Tuple[datetime, dict]] = {}
     for r in rows:
-        if r["_observed_at"] < bound and (r["date"] not in best or r["_observed_at"] > best[r["date"]]["_observed_at"]):
-            best[r["date"]] = r
-    return sorted(best.values(), key=lambda r: r["date"])
+        seen = _utc(r["_observed_at"])
+        if seen < bound and (r["date"] not in best or seen > best[r["date"]][0]):
+            best[r["date"]] = (seen, r)
+    return sorted((r for _, r in best.values()), key=lambda r: r["date"])
 
 
 def visible_statements(history: SymbolHistory, as_of: str, mode: str,
@@ -77,7 +90,7 @@ def _known(row: dict, visible: VisibleStatements) -> Tuple[Optional[str], Option
         if "statement_date_before_earnings" in avail["issues"]:
             return known, "earnings_floor", ("statement_date_before_earnings",)
         return known, avail["source"], ()
-    observed = row["_observed_at"][:10] if visible.pit == "strict" else visible.observed_at
+    observed = _utc(row["_observed_at"]).date().isoformat() if visible.pit == "strict" else visible.observed_at
     known = statement_known_on(row, observed_at=observed)
     public = statement_availability(row)
     if known and public["public_available_at"] and public["public_available_at"] <= known:
@@ -129,8 +142,12 @@ def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
                 labels.extend(l for l in parts[t][3] if l not in labels)
         present = [p for p in parts.values() if p]
         latest = max(present, key=lambda p: p[1])
+        if visible.pit == "strict":
+            observed_on = max(_utc(p[0]["_observed_at"]) for p in present).date().isoformat()
+        else:
+            observed_on = visible.observed_at
         merged.append(row)
-        meta.append((r, latest[1], latest[2], labels))
+        meta.append((r, latest[1], latest[2], labels, observed_on))
     fixed = apply_hard_issues(merged, check_quarter_values(merged))
     days = [None] + [(_d(b["date"]) - _d(a["date"])).days for a, b in zip(fixed, fixed[1:])]
     quarters = tuple(
@@ -141,8 +158,8 @@ def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
                       operating_cash_flow=row["operating_cash_flow"],
                       capital_expenditure=row["capital_expenditure"], free_cash_flow=row["free_cash_flow"],
                       labels=tuple(labels) + tuple(l for l in row["_labels"] if l not in labels),
-                      nulled=row["_nulled"])
-        for row, gap, (src, known, basis, labels) in zip(fixed, days, meta))[-STATEMENT_QUARTERS:]
+                      nulled=row["_nulled"], observed_on=observed_on)
+        for row, gap, (src, known, basis, labels, observed_on) in zip(fixed, days, meta))[-STATEMENT_QUARTERS:]
     flags = []
     gaps = [q.period_days for q in quarters if q.period_days is not None]
     if gaps and statistics.median(gaps) >= SEMIANNUAL_MEDIAN_GAP_DAYS:

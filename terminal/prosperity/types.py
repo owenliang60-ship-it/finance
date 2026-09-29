@@ -71,6 +71,7 @@ class QuarterInputs:
     free_cash_flow: Optional[float]
     labels: Tuple[str, ...]
     nulled: Tuple[str, ...]
+    observed_on: Optional[str] = None   # UTC date an archive/live read proved the row; None in approximate replay
 
 
 @dataclass

@@ -109,6 +109,15 @@ def test_replayed_price_and_ttm_eps_share_the_post_split_unit():
     assert abs(p.consensus.ttm_eps - (0.616 + 0.526 + 0.660 + 0.733)) < 1e-9
 
 
+def test_leak_check_reads_the_observation_date_not_only_the_public_date():
+    # Codex M4 review F3: strict available_on is the (earlier) public date, so a late observation went unchecked
+    p = build_packet(_usd_history(), "2026-03-06", mode="replay", membership_basis="approximate_mcap",
+                     benchmark_closes=[])
+    late = replace(p.quarters[-1], observed_on="2026-03-07")
+    assert packet_leaks(p) == []
+    assert any("observed_on" in x for x in packet_leaks(replace(p, quarters=p.quarters[:-1] + (late,))))
+
+
 def test_non_finite_split_metadata_is_ignored_not_fatal():
     # Codex M4 review F6: numerator=inf used to raise OverflowError and drop the whole symbol
     bad = [{"date": "2026-06-12", "numerator": float("inf"), "denominator": 1.0},

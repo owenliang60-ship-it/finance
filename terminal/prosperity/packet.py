@@ -132,6 +132,7 @@ def packet_leaks(packet: InputPacket) -> List[str]:
     for q in packet.quarters:
         check(f"quarter {q.fiscal_date} fiscal_date", q.fiscal_date)
         check(f"quarter {q.fiscal_date} available_on", q.available_on)
+        check(f"quarter {q.fiscal_date} observed_on", q.observed_on)
     for e in packet.eps:
         check(f"eps {e.fiscal_date} announce_date", e.announce_date)
     check("price_date", packet.price_date)
