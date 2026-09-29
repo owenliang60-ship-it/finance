@@ -1,7 +1,7 @@
 """Data structures of the M4 input packet (immutable except SymbolHistory)."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 
@@ -88,6 +88,8 @@ class SymbolHistory:
     market_caps: List[Tuple[str, float]]
     profile: Optional[dict]
     is_adr: Optional[bool]
+    # statement → [(date removed from the current table, archived_at)]; strict replay only
+    removed: Dict[str, List[Tuple[str, str]]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

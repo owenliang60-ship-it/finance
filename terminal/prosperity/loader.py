@@ -5,7 +5,7 @@ import json
 from typing import FrozenSet, List, Tuple
 
 from src.data.market_store import MarketStore
-from terminal.prosperity.config import BETA_BENCHMARK, LIVE_MEMBERSHIP_FROM
+from terminal.prosperity.config import BETA_BENCHMARK, DATE_REMOVING_REPAIRS, LIVE_MEMBERSHIP_FROM
 from terminal.prosperity.types import SymbolHistory
 
 
@@ -26,7 +26,7 @@ def _closes(rows, key: str) -> List[Tuple[str, float]]:
 def load_history(store: MarketStore, symbol: str, *, with_vintage: bool) -> SymbolHistory:
     conn = store._get_conn()
     by_date = lambda rows: sorted(rows, key=lambda r: r["date"])
-    vintage = {}
+    vintage, removed = {}, {}
     if with_vintage:
         for r in conn.execute("SELECT statement, observed_at, filing_date, accepted_date, payload "
                               "FROM fundamental_vintage WHERE symbol = ? ORDER BY fiscal_date, observed_at",
@@ -40,6 +40,13 @@ def load_history(store: MarketStore, symbol: str, *, with_vintage: bool) -> Symb
                     row[key] = r[key]
             row["_observed_at"] = r["observed_at"]
             vintage.setdefault(r["statement"], []).append(row)
+        statement_of = {table: name for name, table in MarketStore._VINTAGE_STATEMENT_TABLES.items()}
+        marks = ",".join("?" * len(DATE_REMOVING_REPAIRS))
+        for r in conn.execute("SELECT source_table, original_date, archived_at FROM fundamental_current_archive "
+                              f"WHERE symbol = ? AND reason IN ({marks}) ORDER BY archived_at",
+                              (symbol, *DATE_REMOVING_REPAIRS)).fetchall():
+            if r["source_table"] in statement_of:
+                removed.setdefault(statement_of[r["source_table"]], []).append((r["original_date"], r["archived_at"]))
     estimates = [dict(r) for r in conn.execute(
         "SELECT * FROM fmp_estimates WHERE symbol = ? AND snapshot_kind = 'weekly' "
         "ORDER BY snapshot_date, fiscal_date, period_type", (symbol,)).fetchall()]
@@ -60,6 +67,7 @@ def load_history(store: MarketStore, symbol: str, *, with_vintage: bool) -> Symb
         market_caps=_closes(caps, "market_cap"),
         profile=json.loads(prof["payload"]) if prof else None,
         is_adr=bool(sm["is_adr"]) if sm else None,
+        removed=removed,
     )
 
 

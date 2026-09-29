@@ -30,3 +30,6 @@ STALE_FISCAL_DAYS = 120
 # scripts/morning_report.py BETA_BENCHMARK
 BETA_BENCHMARK = "SPY"
 PIT_RANK = {"approximate": 0, "strict": 1, "live": 2}
+# fundamental_current_archive reasons whose original_date left the current table (2026-09-29 snapshot:
+# 7 + 8 income dates, none still current); period-label and source-refresh repairs rewrite in place
+DATE_REMOVING_REPAIRS = ("equivalent_fiscal_alias", "reviewed_fiscal_repair")

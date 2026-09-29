@@ -40,3 +40,22 @@ def test_load_history_converts_vintage_payload_to_snake_case(tmp_path):
     row = h.vintage["income"][0]
     assert row["revenue"] == 99.0 and row["reported_currency"] == "USD"
     assert row["_observed_at"] == "2026-09-28T13:04:27Z"
+
+
+def test_load_history_reads_date_removing_repairs_as_tombstones(tmp_path):
+    # Codex M4 review F2: repaired alias dates stay in the append-only vintage; the repair archive says when they left
+    path = seed_db(tmp_path / "m.db")
+    w = MarketStore(db_path=path)
+    rows = [("equivalent_fiscal_alias", "income_quarterly", "2024-10-30", "2026-09-29T03:11:58.851349Z"),
+            ("reviewed_fiscal_repair", "balance_sheet_quarterly", "2025-01-31", "2026-09-05T02:00:00Z"),
+            ("reviewed_fiscal_period_label", "income_quarterly", "2025-03-31", "2026-09-05T02:00:00Z"),  # in place
+            ("metrics_recomputed", "metrics_quarterly", "2025-03-31", "2026-09-05T02:00:00Z")]
+    with w._get_conn() as conn:
+        for reason, table, day, at in rows:
+            conn.execute("INSERT INTO fundamental_current_archive (operation_id, archived_at, source_table, symbol, "
+                         "original_date, reason, context, payload) VALUES (?,?,?,?,?,?,?,?)",
+                         ("op", at, table, "AAA", day, reason, "{}", "{}"))
+    h = load_history(MarketStore(db_path=path, read_only=True), "AAA", with_vintage=True)
+    assert h.removed == {"income": [("2024-10-30", "2026-09-29T03:11:58.851349Z")],
+                         "balance": [("2025-01-31", "2026-09-05T02:00:00Z")]}
+    assert load_history(MarketStore(db_path=path, read_only=True), "AAA", with_vintage=False).removed == {}

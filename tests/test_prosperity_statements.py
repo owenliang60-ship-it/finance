@@ -119,8 +119,51 @@ def test_semiannual_reporter_flag():
     assert "semiannual_reporter" in _build(hist(rows), "2026-03-31").flags     # BHP-like
 
 
-def test_alignment_conflict_fails_closed():
+def test_alignment_conflict_drops_only_the_conflicting_quarters():
+    # Codex M4 review F2: one bad quarter used to empty the whole symbol
     h = hist()
-    h.balance[0]["period"] = "Q2"
+    h.balance[0]["period"] = "Q2"          # 2025-03-31 now disagrees with income, and Q2 has two balance rows
     qb = _build(h, "2026-03-31")
-    assert qb.quarters == () and qb.current_fiscal is None and "statement_alignment_conflict" in qb.flags
+    assert [q.fiscal_date for q in qb.quarters] == ["2025-09-30", "2025-12-31"]
+    assert qb.current_fiscal == "2025-12-31" and "statement_alignment_conflict" in qb.flags
+    assert qb.dropped == ("2025-03-31", "2025-06-30")
+
+
+def test_duplicate_fiscal_quarter_in_income_alone_is_not_a_second_quarter():
+    h = hist()
+    alias = dict(h.income[2], date="2025-10-27")    # balance / cash flow keep one Q3 row within the 120-day match
+    qb = _build(replace(h, income=h.income + [alias]), "2026-03-31")
+    assert [q.fiscal_date for q in qb.quarters] == ["2025-03-31", "2025-06-30", "2025-12-31"]
+    assert "statement_alignment_conflict" in qb.flags and qb.dropped == ("2025-09-30", "2025-10-27")
+
+
+Q3_ALIAS = "2025-10-27"      # AEM-like: FY Q3 first stored under a wrong date, later repaired to the quarter end
+
+
+def _aliased(repair_at, removed_at=None):
+    """Vintage where Q3 was observed under Q3_ALIAS, then under 2025-09-30 at `repair_at`."""
+    vint = _vintage(hist(), "2026-09-04T15:03:34Z")
+    for rows in vint.values():
+        rows.append(dict(rows[2], _observed_at=repair_at))
+        rows[2] = dict(rows[2], date=Q3_ALIAS)
+    removed = {} if removed_at is None else {t: [(Q3_ALIAS, removed_at)] for t in vint}
+    return replace(hist(), vintage=vint, removed=removed)
+
+
+def test_strict_replay_drops_dates_removed_by_a_recorded_repair():
+    # Codex M4 review F2 (AEM/BIP/MDLN/P/SNA): the append-only vintage kept both the wrong and the repaired date
+    qb = _build(_aliased("2026-09-29T03:11:58.849639Z", "2026-09-29T03:11:58.851349Z"), "2026-09-29")
+    assert [q.fiscal_date for q in qb.quarters] == ["2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31"]
+    assert "statement_alignment_conflict" not in qb.flags
+
+
+def test_repair_takes_effect_only_from_when_it_was_recorded():
+    h = _aliased("2026-10-05T01:00:00Z", "2026-10-05T01:00:00.100000Z")
+    assert _build(h, "2026-09-29").quarters[2].fiscal_date == Q3_ALIAS      # the wrong date was the record then
+    assert _build(h, "2026-10-05").quarters[2].fiscal_date == "2025-09-30"
+
+
+def test_unrepaired_duplicate_in_strict_replay_drops_only_that_quarter():
+    qb = _build(_aliased("2026-09-29T03:11:58.849639Z"), "2026-09-29")
+    assert [q.fiscal_date for q in qb.quarters] == ["2025-03-31", "2025-06-30", "2025-12-31"]
+    assert "statement_alignment_conflict" in qb.flags

@@ -10,8 +10,9 @@ from __future__ import annotations
 import statistics
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
+from src.data.fiscal_repair import _fiscal_key
 from src.data.fundamental_value_checks import apply_hard_issues, check_quarter_values
 from src.data.metrics_calculator import _statement_by_income_date
 from src.data.prosperity_quality import statement_availability, statement_known_on
@@ -38,6 +39,7 @@ class QuarterBuild:
     quarters: Tuple[QuarterInputs, ...]
     current_fiscal: Optional[str]
     flags: Tuple[str, ...]
+    dropped: Tuple[str, ...] = ()      # income dates left out for conflicting fiscal identity
 
 
 def _d(value: str) -> date:
@@ -56,15 +58,26 @@ def _utc(stamp: str) -> datetime:
     return moment.astimezone(timezone.utc)
 
 
-def _latest_vintage(rows: List[dict], as_of: str) -> List[dict]:
-    """Newest version per fiscal date observed before the end of `as_of` (exclusive next-midnight bound)."""
+def _latest_vintage(rows: List[dict], as_of: str, removed: Sequence[Tuple[str, str]] = ()) -> List[dict]:
+    """Newest version per fiscal date observed before the end of `as_of` (exclusive next-midnight bound).
+
+    The vintage is append-only, so a date a repair removed from the current table (e.g. a
+    fiscal alias) would live on; it is dropped from the repair's archived_at onward unless it
+    was observed again later (Codex M4 review F2).
+    """
     bound = datetime.combine(_d(as_of) + timedelta(days=1), datetime.min.time(), timezone.utc)
     best: Dict[str, Tuple[datetime, dict]] = {}
     for r in rows:
         seen = _utc(r["_observed_at"])
         if seen < bound and (r["date"] not in best or seen > best[r["date"]][0]):
             best[r["date"]] = (seen, r)
-    return sorted((r for _, r in best.values()), key=lambda r: r["date"])
+    gone: Dict[str, datetime] = {}
+    for day, archived_at in removed:
+        at = _utc(archived_at)
+        if at < bound:
+            gone[day[:10]] = max(at, gone.get(day[:10], at))
+    kept = [r for seen, r in best.values() if not (r["date"][:10] in gone and gone[r["date"][:10]] > seen)]
+    return sorted(kept, key=lambda r: r["date"])
 
 
 def visible_statements(history: SymbolHistory, as_of: str, mode: str,
@@ -77,7 +90,8 @@ def visible_statements(history: SymbolHistory, as_of: str, mode: str,
     if mode != "replay":
         raise ValueError(f"unknown mode: {mode!r}")
     if as_of[:10] >= STRICT_STATEMENTS_FROM:   # no vintage means no proof, never today's tables (review F5)
-        return VisibleStatements({t: _latest_vintage(history.vintage.get(t, []), as_of) for t in TABLES},
+        return VisibleStatements({t: _latest_vintage(history.vintage.get(t, []), as_of, history.removed.get(t, ()))
+                                  for t in TABLES},
                                  "strict", None)
     return VisibleStatements(current, "approximate", None, tuple(history.earnings))
 
@@ -98,6 +112,39 @@ def _known(row: dict, visible: VisibleStatements) -> Tuple[Optional[str], Option
     return known, "observed_snapshot", ()
 
 
+def _fiscal_or_none(row: dict):
+    try:
+        return _fiscal_key(row)
+    except ValueError:          # malformed identity: the per-quarter alignment below rejects it
+        return None
+
+
+def _align(income: List[dict], counterparts: Mapping[str, List[dict]]):
+    """Align balance/cash flow to each income date; a conflict drops only that quarter (review F2).
+
+    Two income dates with one fiscal identity are both dropped: the 120-day fiscal match would
+    otherwise let a stale alias survive as a second quarter. Returns (income, aligned, dropped).
+    """
+    by_key: Dict[tuple, List[str]] = {}
+    for r in income:
+        key = _fiscal_or_none(r)
+        if key is not None:
+            by_key.setdefault(key, []).append(r["date"])
+    dropped: Set[str] = {d for dates in by_key.values() if len(dates) > 1 for d in dates}
+    aligned: Dict[str, Dict[str, dict]] = {t: {} for t in counterparts}
+    for inc in income:
+        if inc["date"] in dropped:
+            continue
+        try:
+            found = {t: _statement_by_income_date([inc], rows, t) for t, rows in counterparts.items()}
+        except ValueError:
+            dropped.add(inc["date"])
+            continue
+        for t, index in found.items():
+            aligned[t].update(index)
+    return [r for r in income if r["date"] not in dropped], aligned, tuple(sorted(d[:10] for d in dropped))
+
+
 def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
     bound = as_of[:10]
     seen: Dict[str, Dict[str, Tuple[dict, str, Optional[str], Tuple[str, ...]]]] = {t: {} for t in TABLES}
@@ -110,11 +157,8 @@ def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
         missing = ("strict_vintage_missing",) if visible.pit == "strict" else ()
         return QuarterBuild((), None, ("no_statements", "no_current_fiscal") + missing)
     income = [v[0] for v in sorted(seen["income"].values(), key=lambda v: v[0]["date"])]
-    try:
-        aligned = {t: _statement_by_income_date(income, [v[0] for v in seen[t].values()], t)
-                   for t in ("balance", "cashflow")}
-    except ValueError:
-        return QuarterBuild((), None, ("statement_alignment_conflict",))
+    income, aligned, dropped = _align(income, {t: [v[0] for v in seen[t].values()] for t in ("balance", "cashflow")})
+    conflict = ("statement_alignment_conflict",) if dropped else ()
 
     def entry(t, inc_date):
         if t == "income":
@@ -124,7 +168,7 @@ def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
 
     complete = [r["date"] for r in income if entry("balance", r["date"]) and entry("cashflow", r["date"])]
     if not complete:
-        return QuarterBuild((), None, ("no_current_fiscal",))
+        return QuarterBuild((), None, ("no_current_fiscal",) + conflict, dropped)
     current = max(complete)
     merged, meta = [], []
     for r in income:
@@ -161,10 +205,10 @@ def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
                       labels=tuple(labels) + tuple(l for l in row["_labels"] if l not in labels),
                       nulled=row["_nulled"], observed_on=observed_on)
         for row, gap, (src, known, basis, labels, observed_on) in zip(fixed, days, meta))[-STATEMENT_QUARTERS:]
-    flags = []
+    flags = list(conflict)
     gaps = [q.period_days for q in quarters if q.period_days is not None]
     if gaps and statistics.median(gaps) >= SEMIANNUAL_MEDIAN_GAP_DAYS:
         flags.append("semiannual_reporter")
     if (_d(bound) - _d(current)).days > STALE_FISCAL_DAYS:
         flags.append("stale_current_fiscal")
-    return QuarterBuild(quarters, current[:10], tuple(flags))
+    return QuarterBuild(quarters, current[:10], tuple(flags), dropped)

@@ -109,6 +109,7 @@ def build_packet(history: SymbolHistory, as_of: str, *, mode: str, membership_ba
         "revision": asdict(consensus.revision),
         "unit_factor": consensus.unit_factor,
         "market_cap_date": mcap_date,
+        "statement_conflicts": list(qb.dropped),
     }
     profile = history.profile or {}
     return InputPacket(
