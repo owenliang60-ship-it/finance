@@ -24,7 +24,7 @@ from terminal.prosperity.inputs import build_packets  # noqa: E402
 from terminal.prosperity.packet import packet_leaks, packet_to_dict  # noqa: E402
 
 DEFAULT_NAMED = ("KLAC", "ANET", "ORLY", "APH", "MNST", "DELL", "FTV", "LH", "BKNG", "CMG",
-                 "BHP", "FER", "ASML", "NVDA", "YPF", "TSM")
+                 "BHP", "FER", "ASML", "WLK", "NVDA", "YPF", "TSM")
 MIN_QUARTERS, MIN_EPS = 8, 13
 
 

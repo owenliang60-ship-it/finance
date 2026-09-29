@@ -1,0 +1,90 @@
+{
+  "as_of": "2026-05-02",
+  "build_seconds": 0.005,
+  "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
+  "eps_label_counts": {},
+  "eps_window_ge_13": 0,
+  "errors": {},
+  "flag_counts": {
+    "stale_current_fiscal": 1
+  },
+  "future_leak_count": 0,
+  "future_leak_examples": [],
+  "load_seconds": 0.004,
+  "members_resolved": 915,
+  "membership_basis": "approximate_mcap",
+  "mode": "replay",
+  "named_cases": {
+    "WLK": {
+      "current_fiscal": "2025-12-31",
+      "eps": [
+        [
+          "2024-12-31",
+          0.06,
+          []
+        ],
+        [
+          "2025-03-31",
+          -0.31,
+          []
+        ],
+        [
+          "2025-06-30",
+          -0.09,
+          []
+        ],
+        [
+          "2025-09-30",
+          -0.29,
+          []
+        ],
+        [
+          "2025-12-31",
+          -0.25,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 5,
+      "flags": [
+        "stale_current_fiscal"
+      ],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-02-26",
+        "fiscal_date": "2025-12-31",
+        "labels": [
+          "q11_gross_margin_jump"
+        ]
+      },
+      "membership_basis": "approximate_mcap",
+      "ntm": {
+        "basis": null,
+        "missing_reason": "no_current_snapshot",
+        "quarters": [],
+        "value": null
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "approximate",
+        "statements": "approximate",
+        "street_eps": "approximate"
+      },
+      "quarters": 16
+    }
+  },
+  "ntm_available": 0,
+  "observed_at": null,
+  "packets_built": 1,
+  "pit_counts": {
+    "approximate": 1
+  },
+  "pre_announce_available": 1,
+  "quality_code_counts": {
+    "q11_gross_margin_jump": 1
+  },
+  "quarters_ge_8": 1,
+  "revision_available": 0,
+  "unit_unverified": 0,
+  "with_current_fiscal": 1
+}

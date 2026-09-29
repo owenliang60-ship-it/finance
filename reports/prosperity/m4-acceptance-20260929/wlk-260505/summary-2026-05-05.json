@@ -1,0 +1,93 @@
+{
+  "as_of": "2026-05-05",
+  "build_seconds": 0.005,
+  "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
+  "eps_label_counts": {},
+  "eps_window_ge_13": 0,
+  "errors": {},
+  "flag_counts": {},
+  "future_leak_count": 0,
+  "future_leak_examples": [],
+  "load_seconds": 0.004,
+  "members_resolved": 927,
+  "membership_basis": "approximate_mcap",
+  "mode": "replay",
+  "named_cases": {
+    "WLK": {
+      "current_fiscal": "2026-04-02",
+      "eps": [
+        [
+          "2024-12-31",
+          0.06,
+          []
+        ],
+        [
+          "2025-03-31",
+          -0.31,
+          []
+        ],
+        [
+          "2025-06-30",
+          -0.09,
+          []
+        ],
+        [
+          "2025-09-30",
+          -0.29,
+          []
+        ],
+        [
+          "2025-12-31",
+          -0.25,
+          []
+        ],
+        [
+          "2026-04-02",
+          -0.77,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 6,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "earnings_floor",
+        "available_on": "2026-05-05",
+        "fiscal_date": "2026-04-02",
+        "labels": [
+          "statement_date_before_earnings",
+          "q11_gross_margin_jump"
+        ]
+      },
+      "membership_basis": "approximate_mcap",
+      "ntm": {
+        "basis": null,
+        "missing_reason": "no_current_snapshot",
+        "quarters": [],
+        "value": null
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "approximate",
+        "statements": "approximate",
+        "street_eps": "approximate"
+      },
+      "quarters": 16
+    }
+  },
+  "ntm_available": 0,
+  "observed_at": null,
+  "packets_built": 1,
+  "pit_counts": {
+    "approximate": 1
+  },
+  "pre_announce_available": 1,
+  "quality_code_counts": {
+    "q11_gross_margin_jump": 2,
+    "statement_date_before_earnings": 1
+  },
+  "quarters_ge_8": 1,
+  "revision_available": 0,
+  "unit_unverified": 0,
+  "with_current_fiscal": 1
+}

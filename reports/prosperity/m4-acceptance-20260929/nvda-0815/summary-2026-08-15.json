@@ -1,0 +1,161 @@
+{
+  "as_of": "2026-08-15",
+  "build_seconds": 0.015,
+  "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
+  "eps_label_counts": {},
+  "eps_window_ge_13": 1,
+  "errors": {},
+  "flag_counts": {},
+  "future_leak_count": 0,
+  "future_leak_examples": [],
+  "load_seconds": 0.004,
+  "members_resolved": 954,
+  "membership_basis": "approximate_mcap",
+  "mode": "replay",
+  "named_cases": {
+    "NVDA": {
+      "current_fiscal": "2026-04-26",
+      "eps": [
+        [
+          "2022-07-25",
+          0.05,
+          []
+        ],
+        [
+          "2022-10-25",
+          0.06,
+          []
+        ],
+        [
+          "2023-01-25",
+          0.09,
+          []
+        ],
+        [
+          "2023-04-25",
+          0.11,
+          []
+        ],
+        [
+          "2023-07-25",
+          0.27,
+          []
+        ],
+        [
+          "2023-10-25",
+          0.4,
+          []
+        ],
+        [
+          "2024-01-26",
+          0.52,
+          []
+        ],
+        [
+          "2024-04-25",
+          0.61,
+          []
+        ],
+        [
+          "2024-07-26",
+          0.68,
+          []
+        ],
+        [
+          "2024-10-27",
+          0.81,
+          []
+        ],
+        [
+          "2025-01-26",
+          0.89,
+          []
+        ],
+        [
+          "2025-04-27",
+          0.81,
+          []
+        ],
+        [
+          "2025-07-27",
+          1.05,
+          []
+        ],
+        [
+          "2025-10-26",
+          1.3,
+          []
+        ],
+        [
+          "2026-01-25",
+          1.62,
+          []
+        ],
+        [
+          "2026-04-26",
+          1.87,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 16,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-05-20",
+        "fiscal_date": "2026-04-26",
+        "labels": []
+      },
+      "membership_basis": "approximate_mcap",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-07-26",
+            2.0835,
+            26
+          ],
+          [
+            "2026-10-26",
+            2.35755,
+            25
+          ],
+          [
+            "2027-01-26",
+            2.67497,
+            11
+          ],
+          [
+            "2027-04-26",
+            2.89853,
+            11
+          ]
+        ],
+        "value": 10.01455
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "approximate",
+        "statements": "approximate",
+        "street_eps": "approximate"
+      },
+      "quarters": 16
+    }
+  },
+  "ntm_available": 1,
+  "observed_at": null,
+  "packets_built": 1,
+  "pit_counts": {
+    "approximate": 1
+  },
+  "pre_announce_available": 1,
+  "quality_code_counts": {
+    "q11_gross_margin_jump": 1,
+    "q17_acquisition_suspect": 1
+  },
+  "quarters_ge_8": 1,
+  "revision_available": 1,
+  "unit_unverified": 0,
+  "with_current_fiscal": 1
+}

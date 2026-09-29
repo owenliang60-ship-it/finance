@@ -1,0 +1,332 @@
+{
+  "as_of": "2026-09-29",
+  "build_seconds": 0.01,
+  "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
+  "eps_label_counts": {
+    "eps_split_rescaled": 8
+  },
+  "eps_window_ge_13": 2,
+  "errors": {},
+  "flag_counts": {},
+  "future_leak_count": 0,
+  "future_leak_examples": [],
+  "load_seconds": 0.021,
+  "members_resolved": 915,
+  "membership_basis": "extended_membership",
+  "mode": "replay",
+  "named_cases": {
+    "KLAC": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2022-09-30",
+          0.706,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2022-12-31",
+          0.738,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-03-31",
+          0.549,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-06-30",
+          0.54,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-09-30",
+          0.5740000000000001,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-12-31",
+          0.616,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-03-31",
+          0.526,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-06-30",
+          0.6599999999999999,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-09-30",
+          0.733,
+          []
+        ],
+        [
+          "2024-12-31",
+          0.82,
+          []
+        ],
+        [
+          "2025-03-31",
+          0.84,
+          []
+        ],
+        [
+          "2025-06-30",
+          0.94,
+          []
+        ],
+        [
+          "2025-09-30",
+          0.88,
+          []
+        ],
+        [
+          "2025-12-31",
+          0.89,
+          []
+        ],
+        [
+          "2026-03-31",
+          0.94,
+          []
+        ],
+        [
+          "2026-06-30",
+          1.05,
+          []
+        ]
+      ],
+      "eps_labels": {
+        "2022-09-30": [
+          "eps_split_rescaled"
+        ],
+        "2022-12-31": [
+          "eps_split_rescaled"
+        ],
+        "2023-03-31": [
+          "eps_split_rescaled"
+        ],
+        "2023-06-30": [
+          "eps_split_rescaled"
+        ],
+        "2023-09-30": [
+          "eps_split_rescaled"
+        ],
+        "2023-12-31": [
+          "eps_split_rescaled"
+        ],
+        "2024-03-31": [
+          "eps_split_rescaled"
+        ],
+        "2024-06-30": [
+          "eps_split_rescaled"
+        ]
+      },
+      "eps_window": 16,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-08-06",
+        "fiscal_date": "2026-06-30",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-09-30",
+            1.18341,
+            15
+          ],
+          [
+            "2026-12-30",
+            1.37396,
+            15
+          ],
+          [
+            "2027-03-30",
+            1.44587,
+            6
+          ],
+          [
+            "2027-06-30",
+            1.53682,
+            6
+          ]
+        ],
+        "value": 5.54006
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "strict",
+        "statements": "strict",
+        "street_eps": "approximate"
+      },
+      "quarters": 16
+    },
+    "NVDA": {
+      "current_fiscal": "2026-07-26",
+      "eps": [
+        [
+          "2022-10-25",
+          0.06,
+          []
+        ],
+        [
+          "2023-01-25",
+          0.09,
+          []
+        ],
+        [
+          "2023-04-25",
+          0.11,
+          []
+        ],
+        [
+          "2023-07-25",
+          0.27,
+          []
+        ],
+        [
+          "2023-10-25",
+          0.4,
+          []
+        ],
+        [
+          "2024-01-26",
+          0.52,
+          []
+        ],
+        [
+          "2024-04-25",
+          0.61,
+          []
+        ],
+        [
+          "2024-07-26",
+          0.68,
+          []
+        ],
+        [
+          "2024-10-27",
+          0.81,
+          []
+        ],
+        [
+          "2025-01-26",
+          0.89,
+          []
+        ],
+        [
+          "2025-04-27",
+          0.81,
+          []
+        ],
+        [
+          "2025-07-27",
+          1.05,
+          []
+        ],
+        [
+          "2025-10-26",
+          1.3,
+          []
+        ],
+        [
+          "2026-01-25",
+          1.62,
+          []
+        ],
+        [
+          "2026-04-26",
+          1.87,
+          []
+        ],
+        [
+          "2026-07-26",
+          2.22,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 16,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-08-26",
+        "fiscal_date": "2026-07-26",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-10-26",
+            2.47017,
+            28
+          ],
+          [
+            "2027-01-26",
+            2.72895,
+            26
+          ],
+          [
+            "2027-04-26",
+            3.16587,
+            18
+          ],
+          [
+            "2027-07-26",
+            3.63263,
+            12
+          ]
+        ],
+        "value": 11.99762
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "strict",
+        "statements": "strict",
+        "street_eps": "approximate"
+      },
+      "quarters": 16
+    }
+  },
+  "ntm_available": 2,
+  "observed_at": null,
+  "packets_built": 2,
+  "pit_counts": {
+    "approximate": 2
+  },
+  "pre_announce_available": 2,
+  "quality_code_counts": {
+    "q17_acquisition_suspect": 1
+  },
+  "quarters_ge_8": 2,
+  "revision_available": 2,
+  "unit_unverified": 0,
+  "with_current_fiscal": 2
+}
