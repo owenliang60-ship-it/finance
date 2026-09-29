@@ -98,3 +98,36 @@ def test_aligned_window_ends_at_current_fiscal_and_ignores_later_announcements()
     window, reason = aligned_eps_window(got, "2026-03-28")
     assert reason is None and window[-1].fiscal_date == "2026-03-31" and len(window) == 12
     assert aligned_eps_window(got, "2026-12-31") == ((), "eps_behind_current")
+
+
+# market.db 2026-09-29 snapshot, street eps_actual vs income eps_diluted
+REAL_FISCALS = ["2022-09-29", "2022-12-29", "2023-03-29", "2023-06-29", "2023-09-29", "2023-12-30", "2024-03-31",
+                "2024-06-30", "2024-09-30", "2024-12-31", "2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31",
+                "2026-03-31", "2026-06-30"]
+
+
+def _real(street, gaap):
+    return seq(list(zip(REAL_FISCALS, street))), [{"date": f, "eps_diluted": g} for f, g in zip(REAL_FISCALS, gaap)]
+
+
+def test_one_break_reported_at_adjacent_boundaries_is_rescaled_once():
+    # MNST: Codex flags both 2024-12-31 and 2025-03-31 for the same 2:1 break (GAAP Q4 dip)
+    rows, income = _real([0.3, 0.29, 0.38, 0.39, 0.41, 0.38, 0.42, 0.41, 0.4, 0.19, 0.23, 0.26, 0.28, 0.25, 0.29, 0.3],
+                         [0.15, 0.145, 0.19, 0.195, 0.215, 0.175, 0.21, 0.205, 0.19, 0.14, 0.225, 0.25, 0.265, 0.23,
+                          0.29, 0.3])
+    got = {x.fiscal_date: x for x in announced_eps(rows, income, [SPLIT("2023-03-28", 2.0), SPLIT("2026-08-11", 2.0)],
+                                                   "2026-09-29")}
+    assert abs(got["2022-09-29"].eps_actual - 0.15) < 1e-9 and abs(got["2024-09-30"].eps_actual - 0.2) < 1e-9
+    assert got["2024-12-31"].eps_actual == 0.19 and got["2024-12-31"].labels == ()
+
+
+def test_high_growth_does_not_hide_a_street_break():
+    # APH: street halves at 2025-03-31 while GAAP is flat; 2025 growth offsets the jump in 3-quarter medians
+    rows, income = _real([0.4, 0.39, 0.35, 0.36, 0.39, 0.41, 0.4, 0.44, 0.5, 0.55, 0.315, 0.405, 0.51, 0.97, 1.06, 0.68],
+                         [0.2, 0.205, 0.18, 0.185, 0.21, 0.21, 0.22, 0.205, 0.24, 0.295, 0.29, 0.43, 0.485, 0.465,
+                          0.36, 0.69])
+    got = {x.fiscal_date: x for x in announced_eps(rows, income, [SPLIT("2024-06-12", 2.0), SPLIT("2026-09-03", 2.0)],
+                                                   "2026-09-29")}
+    assert abs(got["2024-12-31"].eps_actual - 0.275) < 1e-9 and "eps_split_rescaled" in got["2024-12-31"].labels
+    assert got["2025-03-31"].eps_actual == 0.315
+    assert not any("gaap_split_basis_break" in x.labels for x in got.values())

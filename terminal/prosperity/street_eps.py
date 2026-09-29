@@ -1,16 +1,18 @@
 """Street EPS series: Codex dedup/conflict and split detection, then M4's in-memory rescale.
 
-Boss 2026-09-29: the quality layer only detects. Here, when every split matched
-at one boundary has the same ratio and street EPS itself shows that jump, the
-quarters before the boundary are divided by the ratio (`eps_split_rescaled`);
-a GAAP-only break leaves street untouched (`gaap_split_basis_break`); anything
-else blanks the earlier quarters (`eps_split_unconfirmed`). market.db is never
-changed.
+Boss 2026-09-29: the quality layer only detects. Here, adjacent boundaries with
+the same ratio are one break (overlapping windows often report it twice, e.g.
+MNST); the break sits where the single-quarter street/GAAP jump best matches
+the ratio. At that boundary, whichever series jumps more in that one quarter,
+and by about the ratio, is the broken one: street → earlier quarters divided by
+the ratio (`eps_split_rescaled`); GAAP → street untouched
+(`gaap_split_basis_break`); otherwise earlier quarters are blanked
+(`eps_split_unconfirmed`). Single-quarter steps keep strong growth from masking
+the jump (APH). market.db is never changed.
 """
 from __future__ import annotations
 
 import math
-import statistics
 from datetime import date
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -18,43 +20,58 @@ from src.data.prosperity_quality import resolve_eps_quarters, split_basis_audit
 from terminal.prosperity.config import EPS_QUARTERS, EPS_STATEMENT_MATCH_DAYS
 from terminal.prosperity.types import EpsQuarter
 
-LEVEL_QUARTERS = 3   # quarters each side used to judge which series broke
+CLUSTER_GAP = 2   # boundaries this close with the same ratio are one break seen by overlapping windows
 
 
 def _d(value: str) -> date:
     return date.fromisoformat(value[:10])
 
 
-def _level(values: Sequence[Optional[float]]) -> Optional[float]:
-    vals = [abs(v) for v in values if v is not None and v != 0]
-    return statistics.median(vals) if vals else None
+def _steps(issue: Mapping) -> Tuple[float, float]:
+    """Single-quarter log jumps (street, GAAP) across the boundary, from Codex's evidence block."""
+    before, after = issue["evidence"][2], issue["evidence"][3]
+    return (math.log(abs(before["street_eps"] / after["street_eps"])),
+            math.log(abs(before["gaap_eps_diluted"] / after["gaap_eps_diluted"])))
+
+
+def _clusters(fiscals: List[str], issues: Sequence[Mapping]) -> List[Tuple[frozenset, List[str], Dict[str, Mapping]]]:
+    by_boundary: Dict[str, List[Mapping]] = {}
+    for issue in issues:
+        by_boundary.setdefault(issue["boundary_fiscal"], []).append(issue)
+    out: List[Tuple[frozenset, List[str], Dict[str, Mapping]]] = []
+    for b in sorted(by_boundary, key=fiscals.index):
+        ratios = frozenset(round(i["split_ratio"], 6) for i in by_boundary[b])
+        if out and out[-1][0] == ratios and fiscals.index(b) - fiscals.index(out[-1][1][-1]) <= CLUSTER_GAP:
+            out[-1][1].append(b)
+        else:
+            out.append((ratios, [b], {}))
+        out[-1][2][b] = by_boundary[b][0]
+    return out
 
 
 def _rescale(quarters: List[dict], issues: Sequence[Mapping]) -> Tuple[List[Optional[float]], List[List[str]]]:
     eps = [q["eps_actual"] for q in quarters]
     labels: List[List[str]] = [list(q["issues"]) for q in quarters]
-    ratios: Dict[str, set] = {}
-    for issue in issues:
-        ratios.setdefault(issue["boundary_fiscal"], set()).add(round(issue["split_ratio"], 6))
     fiscals = [q["fiscal_date"] for q in quarters]
-    original = list(eps)
-    for boundary, found in ratios.items():
+    for ratios, members, evidence in _clusters(fiscals, issues):
+        verdict, boundary = "unconfirmed", members[0]
+        if len(ratios) == 1:
+            r = next(iter(ratios))
+            log_r = math.log(r)
+
+            def misfit(b):
+                s, g = _steps(evidence[b])
+                return min(abs(s - g - log_r), abs(s - g + log_r))
+
+            boundary = min(members, key=misfit)
+            s, g = _steps(evidence[boundary])
+            if abs(s) > abs(g) and abs(s - log_r) < abs(s):
+                verdict = "street"
+            elif abs(g) > abs(s) and abs(g - log_r) < abs(g):
+                verdict = "gaap"
         cut = fiscals.index(boundary)
-        before = range(cut)
-        verdict = "unconfirmed"
-        if len(found) == 1:
-            r = next(iter(found))
-            pre = _level([original[k] for k in range(max(0, cut - LEVEL_QUARTERS), cut)])
-            post = _level([original[k] for k in range(cut, min(len(original), cut + LEVEL_QUARTERS))])
-            if pre and post:
-                log_l, log_r = math.log(pre / post), math.log(r)
-                street, gaap, opposite = abs(log_l - log_r), abs(log_l), abs(log_l + log_r)
-                if street < min(gaap, opposite):
-                    verdict = "street"
-                elif gaap < opposite:
-                    verdict = "gaap"
         if verdict == "street":
-            for k in before:
+            for k in range(cut):
                 if eps[k] is not None:
                     eps[k] = eps[k] / r
                 labels[k].append("eps_split_rescaled")
@@ -62,7 +79,7 @@ def _rescale(quarters: List[dict], issues: Sequence[Mapping]) -> Tuple[List[Opti
             for k in (cut - 1, cut):
                 labels[k].append("gaap_split_basis_break")
         else:
-            for k in before:
+            for k in range(cut):
                 eps[k] = None
                 labels[k].append("eps_split_unconfirmed")
     return eps, labels
