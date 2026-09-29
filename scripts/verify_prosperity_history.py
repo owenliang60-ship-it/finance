@@ -3,7 +3,7 @@
 Subcommands:
     targets  — union of the as-of $10B+ members at every quarter end → JSON,
                the frozen `--targets-file` for the backfill runners.
-    report   — per quarter end: three-table window pass rate (gate ≥95%),
+    report   — per quarter end: three-table window pass rate (gate ≥90%),
                street EPS SUE computability, mapping sources, gap reasons
                (inherent vs fixable), duplicate fiscals, split suspects and
                the day-60 / 95% / day-80 freeze-parameter recheck.
@@ -58,7 +58,7 @@ from config.settings import FUNDAMENTAL_QUARTER_GAP_MAX_DAYS  # noqa: E402
 
 DEFAULT_TARGETS_PATH = PROJECT_ROOT / "data" / "prosperity" / "d9_targets.json"
 DEFAULT_REPORT_DIR = PROJECT_ROOT / "reports" / "prosperity"
-THREE_TABLE_GATE = 0.95
+THREE_TABLE_GATE = 0.90
 # Best outcome across runs wins per dataset; the worst dataset stands for the symbol.
 JOB_RANK = {"done": 0, "provider_empty": 1, "skipped": 1, "fetch_failed": 2,
             "in_progress": 3, "pending": 3}
@@ -255,6 +255,7 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
     fixable_eps = sorted({g["symbol"] for g in gaps_eps if not g["inherent"]})
     fixable_three = sorted({g["symbol"] for g in gaps3 if not g["inherent"]})
     return {
+        "minimum_three_table_coverage": THREE_TABLE_GATE,
         "quarter_ends": quarters,
         "gaps": {"three_table": gaps3, "street_eps": gaps_eps},
         "dup_fiscal": [{"symbol": s, "fiscal_dates": f} for s, f in sorted(dup_fiscal.items())],
@@ -269,7 +270,7 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
         "street_eps_threshold": "pending_boss",
         "definitions": {
             "three_table_gate": "has_asof_window (8 contiguous quarters, all three tables, "
-                                "known by accepted_date/filing_date) >= 95% of members",
+                                "known by accepted_date/filing_date) >= {:.0%} of members".format(THREE_TABLE_GATE),
             "street_eps_depth": "consecutive mapped quarters announced by qe (fiscal dates "
                                 "<=20d apart are one quarter) reaching the newest quarter "
                                 "all three statements had by qe: depth >= 11, full 13",
@@ -292,9 +293,10 @@ def _render_md(doc: Dict[str, Any]) -> str:
              "生成 {} · 代码 {} · run_id {}".format(doc["generated_at"], doc["code_sha"],
                                                   ", ".join(doc["run_ids"]) or "—"), "",
              "street EPS 数值门槛：**待 Boss 定**（本报告只给数字）。", "",
+             "三表历史覆盖率门槛：**{:.0%}**。".format(doc["minimum_three_table_coverage"]), "",
              "## 逐季末", "",
              "| 季末 | 成员 | 三表合格 | 门槛 | EPS 深度≥11 | 深度≥13 | SUE 可算 | ΔSUE 可算 "
-             "| 三表到达 第60天 | 第80天 | 首次≥95% |",
+             "| 三表到达 第60天 | 第80天 | 财报季就绪首次≥95% |",
              "|---|---|---|---|---|---|---|---|---|---|---|"]
     for q in doc["quarter_ends"]:
         n = q["members"] or 1

@@ -64,7 +64,7 @@ flowchart TD
 
 ## 验收标准（Boss 不看代码也能判断）
 
-1. **三表**：20 个季末里每一个季末，身份合规成员中 ≥95% 在当日有 ≥8 季连续三表。
+1. **三表**：20 个季末里每一个季末，身份合规成员中 ≥90% 在当日有 ≥8 季连续三表。
 2. **street EPS**：报告逐季末给出 SUE 可计算率（截至当日已公告、已映射财季、连续 ≥11 季；完整窗口 13 季；ΔSUE 再多 1 季），并列出映射率、同财季重复、拆股口径可疑名单。北极星没给这一项的数值门槛，**由 Boss 看报告拍板**。
 3. **缺口**：两项的缺口都逐只列原因，分成"上市历史本来不足"与"采集不足 / `provider_empty` / 失败"两类；后一类要么补上，要么写明为什么补不上。
 4. **数据完整**：云端补数后 `PRAGMA quick_check` = ok；本地 `./sync_to_cloud.sh --pull` 后 quick_check = ok（顺带修好当前损坏的本地副本）。
@@ -184,7 +184,7 @@ def test_members_union_uses_canonical_codes(tmp_store):
 
 **Interfaces:**
 - Consumes: Task 2 的 targets JSON、Task 3 全部函数、`fundamental_backfill_jobs`（取 job 状态）
-- Produces: `report --targets data/prosperity/d9_targets.json --run-id <id> --out-dir reports/prosperity/`，写 `d9-coverage-<date>.json` + `.md`。内容：逐季末三表合格率（分母 = 该季末身份合规成员）、SUE 可算率 / 完整窗口率 / ΔSUE 可算率、映射来源占比（`estimates_window` / `statement_window` / none）、缺口逐只原因、拆股可疑与同财季重复清单、冻结参数复核（逐季末：季末后第 60 天与第 80 天时"当前财季已到达该季"的成员比例）；以及北极星门槛（三表 ≥95%）逐季末 PASS/FAIL
+- Produces: `report --targets data/prosperity/d9_targets.json --run-id <id> --out-dir reports/prosperity/`，写 `d9-coverage-<date>.json` + `.md`。内容：逐季末三表合格率（分母 = 该季末身份合规成员）、SUE 可算率 / 完整窗口率 / ΔSUE 可算率、映射来源占比（`estimates_window` / `statement_window` / none）、缺口逐只原因、拆股可疑与同财季重复清单、冻结参数复核（逐季末：季末后第 60 天与第 80 天时"当前财季已到达该季"的成员比例）；以及北极星门槛（三表 ≥90%）逐季末 PASS/FAIL
 - 退出码：三表门槛全部 PASS → 0，否则 1（street EPS 无数值门槛，不影响退出码，报告里显式写"待 Boss 定"）
 - [ ] Step 1: 失败测试：两只票、两个季末的小夹具，断言 JSON 各字段数值与门槛判断；三表不达标时退出码为 1
 - [ ] Step 2: FAIL
@@ -247,10 +247,12 @@ def test_wrapper_breaker_and_lock(tmp_store, failing_client, busy_lock, tmp_path
 
 ## 自审
 
-1. **spec 覆盖**：P2 三表 40 季 → T1+T6；P2 earnings 按实际缺口补 → T5+T6 第 6–8 步；P3 三表 ≥95% → T4；P3 street EPS 深度 / 映射 / 重复 / 拆股 / SUE 可算率 → T3+T4；原因分两类 → T3 `gap_reason`；本地重拉 + quick_check → T6 第 9 步；复核 60 / 95% / 80 → T4。均有对应。
+1. **spec 覆盖**：P2 三表 40 季 → T1+T6；P2 earnings 按实际缺口补 → T5+T6 第 6–8 步；P3 三表 ≥90% → T4；P3 street EPS 深度 / 映射 / 重复 / 拆股 / SUE 可算率 → T3+T4；原因分两类 → T3 `gap_reason`；本地重拉 + quick_check → T6 第 9 步；复核 60 / 95% / 80 → T4。均有对应。
 2. **占位符**：T5 的第三个测试只写了"…"，执行时按括号里的场景写全（busy lock → 75 不写库；50 只后失败率 >20% → 1）。其余无 TBD。
 3. **类型一致**：`load_targets_file` T1 定义、T5 使用；`has_asof_window` 签名 `(store, symbol, as_of, quarters=8)` 与现有代码一致；`approximate_members_as_of` 用 M1 签名。
 
 **待 Boss 确认的新增点**：①只采三表（不采 profile / ratios）；②street EPS 没有数值门槛，看完报告再定；③T6 第 7 步的 remap 会改写现有约 16,000 行 `none` 行里能匹配上的那部分（只补空缺的财季映射，不动数值）。
 
 执行：默认主线程 inline，每个任务一个 checkpoint；不开 subagent。
+
+2026-09-29 Boss批准：三表历史覆盖率门槛改为90%，停止以补齐长尾来追逐95%；仍如实保留未解决的来源错误。财报季冻结就绪比例不是此门槛，本次不改。

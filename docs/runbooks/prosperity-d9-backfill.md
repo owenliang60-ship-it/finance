@@ -66,7 +66,9 @@ python3 scripts/verify_prosperity_history.py report --targets data/prosperity/d9
     --run-id d9-canary-YYYYMMDD --run-id d9-full-YYYYMMDD --date after-statements-$(date +%F)
 ```
 
-看三表门槛和 street EPS 缺口的分布。这一步**不写**缺口清单。
+三表覆盖率验收门槛为 **90%**（Boss 2026-09-29批准），逐季末判定并报告真实覆盖率；street EPS 缺口继续披露。这一步**不写**缺口清单。
+
+采集完整性与覆盖率分开记录：ASML等明确失败不能改成done；覆盖率通过后可以继续后续开发与只读准备，不再为了原95%反复补长尾。remap和street EPS补数仍按下述生产写入确认边界执行。
 
 ## 7. remap（写库，不调 API）→ 冻结 street EPS 缺口清单（只读）
 

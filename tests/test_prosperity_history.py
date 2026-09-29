@@ -298,7 +298,7 @@ def _run_report(store, tmp_path, monkeypatch, extra=()):
 
 def test_report_quarter_metrics_and_gate(report_store, tmp_path, monkeypatch):
     rc, doc, out_dir = _run_report(report_store, tmp_path, monkeypatch)
-    assert rc == 1                                   # 50% < 95% three-table gate
+    assert rc == 1                                   # 50% < 90% three-table gate
     q = {row["quarter_end"]: row for row in doc["quarter_ends"]}
     jun = q["2025-06-30"]
     assert jun["members"] == 2
@@ -359,6 +359,29 @@ def test_report_three_table_gate_passes(tmp_store, tmp_path, monkeypatch):
     rc = verify_main(["report", "--targets", str(targets), "--out-dir",
                       str(tmp_path / "o"), "--date", "2026-09-28"])
     assert rc == 0
+
+
+@pytest.mark.parametrize("covered,expected_rc", [(18, 0), (17, 1)])
+def test_three_table_coverage_ninety_percent_boundary(tmp_store, tmp_path, monkeypatch,
+                                                     covered, expected_rc):
+    symbols = ["C{:02d}".format(i) for i in range(20)]
+    for symbol in symbols[:covered]:
+        _seed_statements_filed(tmp_store, symbol,
+                               quarter_ends("2022-09-30", "2025-03-31"), 40)
+    targets = tmp_path / "targets.json"
+    targets.write_text(json.dumps({"symbols": symbols,
+                                   "by_quarter_end": {"2025-06-30": symbols}}))
+    monkeypatch.setattr("scripts.verify_prosperity_history._open_store", lambda: tmp_store)
+    rc = verify_main(["report", "--targets", str(targets), "--out-dir", str(tmp_path),
+                      "--date", "boundary"])
+    doc = json.loads((tmp_path / "d9-coverage-boundary.json").read_text())
+    assert rc == expected_rc
+    assert doc["minimum_three_table_coverage"] == 0.90
+    assert "90% of members" in doc["definitions"]["three_table_gate"]
+    assert doc["quarter_ends"][0]["three_table_pass"] is (expected_rc == 0)
+    # Earnings-season readiness is a different metric and stays at 95%.
+    from src.data.prosperity_history import FREEZE_COVERAGE
+    assert FREEZE_COVERAGE == 0.95
 
 
 def test_report_one_short_table_is_not_short_history(tmp_store, tmp_path, monkeypatch):
