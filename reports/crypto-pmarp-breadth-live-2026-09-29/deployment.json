@@ -1,0 +1,49 @@
+{
+  "status": "LIVE",
+  "runtime": "3fddc43425106c29b3df0647f1a00d2834cc6d19",
+  "previous_runtime": "828c9b848a2d6811d9a186ebe4b653aeceed2683",
+  "deployed_at": "2026-09-29T02:16:42.431722+00:00",
+  "backup": "/root/workspace/Quant/backups/crypto-pmarp-breadth-20260929T015315Z",
+  "cron": "6 8 * * * /root/workspace/Quant/scanners/run_daily_scan.sh",
+  "timezone": "Asia/Shanghai",
+  "crontab_unchanged": true,
+  "entrypoints_unchanged": true,
+  "production_tests": "319 passed in 17.47s",
+  "manual_breadth_messages": 1,
+  "manual_trend_messages": 0,
+  "delivery": {
+    "status": "sent",
+    "as_of": "2026-09-28",
+    "acknowledgments": [
+      {
+        "message_id": 1931,
+        "telegram_date": 1790648121,
+        "ok": true
+      }
+    ],
+    "receipt": "/root/workspace/Quant/results/daily_rankings/delivery_receipts/2026-09-28-breadth-ok.json",
+    "text_sha256": "df0c0969ff91c63ddfcb02acd84c19d31104e64056ffb1863c93211845b5b197",
+    "current": {
+      "date": "2026-09-28",
+      "eligible_count": 525,
+      "warmup_count": 19,
+      "valid_count": 506,
+      "strong_count": 18,
+      "weak_count": 3,
+      "strong_pct": 3.5573122529644268,
+      "weak_pct": 0.5928853754940712
+    },
+    "strong_percentile": 71.5068493150685,
+    "weak_percentile": 28.493150684931507
+  },
+  "independent_verification": {
+    "status": "PASS",
+    "symbols": 610,
+    "raw_bars_used": 328313,
+    "daily_rows_verified": 366,
+    "historical_days": 365,
+    "error_count": 0
+  },
+  "input_archive_sha256": "8dddf09f272e23da0e2b29a82f8cc967ea854b813a73b1307b3f5b1c264b6ced",
+  "next_natural_run": "2026-09-30 08:06 Asia/Shanghai (not yet observed)"
+}

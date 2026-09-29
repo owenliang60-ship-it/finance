@@ -1,6 +1,9 @@
 # Crypto daily PMARP breadth
 
-Implementation branch: `codex/crypto-pmarp-breadth`. Deployment requires approval.
+Status: **LIVE**, deployed on 2026-09-29. Runtime `3fddc434`.
+Uses the existing daily Quant job at **08:06 Asia/Shanghai**; breadth follows
+the trend reports. Deployment and first catch-up evidence:
+`docs/audit/2026-09-29-crypto-pmarp-breadth-live.md`.
 Aligned with north-star technical analysis / market-environment observation.
 This report describes participation, not a trading signal or position rule.
 
