@@ -165,3 +165,20 @@ def test_unconfirmed_break_after_as_of_still_blanks_the_visible_quarters():
     income = gaap_rows(KLAC, 10.0, "2024-06-30")
     early = announced_eps(KLAC, income, [SPLIT("2026-06-12", 10.0), SPLIT("2025-01-01", 9.0)], "2024-09-30")
     assert early and all(x.eps_actual is None and "eps_split_unconfirmed" in x.labels for x in early)
+
+
+def test_boundary_matching_tolerates_a_later_alias_of_the_same_quarter():
+    # code review: the full-history grouping can name the boundary quarter by a later alias date
+    rows = KLAC + [er("2024-10-02", "2025-09-01", 0.733)]         # same quarter and value, announced later
+    got = {x.fiscal_date: x for x in announced_eps(rows, gaap_rows(KLAC, 10.0, "2024-06-30"),
+                                                   [SPLIT("2026-06-12", 10.0)], "2024-12-31")}
+    assert got["2024-09-30"].eps_actual == 0.733 and "eps_split_rescaled" not in got["2024-09-30"].labels
+    assert abs(got["2024-06-30"].eps_actual - 0.66) < 1e-9
+
+
+def test_break_seen_at_as_of_survives_later_rows_that_hide_it_in_full_history():
+    # code review: a conflicting duplicate announced after as_of drops a pre-break quarter from the full audit
+    rows = KLAC + [er("2024-03-31", "2025-08-15", 9.99)]
+    got = announced_eps(rows, gaap_rows(KLAC, 10.0, "2024-06-30"), [SPLIT("2026-06-12", 10.0)], "2025-06-30")
+    assert all(1 / 3 < b.eps_actual / a.eps_actual < 3 for a, b in zip(got, got[1:]))
+    assert all("eps_split_rescaled" in x.labels for x in got if x.fiscal_date <= "2024-06-30")

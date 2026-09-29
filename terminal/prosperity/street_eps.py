@@ -20,7 +20,7 @@ import math
 from datetime import date
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
-from src.data.prosperity_quality import resolve_eps_quarters, split_basis_audit
+from src.data.prosperity_quality import SAME_QUARTER_DAYS, resolve_eps_quarters, split_basis_audit
 from terminal.prosperity.config import EPS_QUARTERS, EPS_STATEMENT_MATCH_DAYS
 from terminal.prosperity.types import EpsQuarter
 
@@ -86,14 +86,17 @@ def _rescale(quarters: List[dict], breaks) -> Tuple[List[float], List[bool], Lis
     """
     divisor, blank = [1.0] * len(quarters), [False] * len(quarters)
     labels: List[List[str]] = [list(q["issues"]) for q in quarters]
-    last_visible = quarters[-1]["fiscal_date"] if quarters else ""
+    last_visible = quarters[-1]["fiscal_date"] if quarters else None
+    # Full-history and as_of groupings may name one quarter by different dates within SAME_QUARTER_DAYS
+    gap = lambda a, b: (_d(a) - _d(b)).days
     for before, boundary, verdict, r, evidence_end in breaks:
-        retrospective = ["eps_split_retrospective"] if evidence_end > last_visible else []
+        late = last_visible is None or gap(evidence_end, last_visible) > SAME_QUARTER_DAYS
+        retrospective = ["eps_split_retrospective"] if late else []
         for k, q in enumerate(quarters):
             if verdict == "gaap":
-                if q["fiscal_date"] in (before, boundary):
+                if any(abs(gap(q["fiscal_date"], x)) <= SAME_QUARTER_DAYS for x in (before, boundary)):
                     labels[k].append("gaap_split_basis_break")
-            elif q["fiscal_date"] < boundary:
+            elif gap(boundary, q["fiscal_date"]) > SAME_QUARTER_DAYS:
                 if verdict == "street":
                     divisor[k] *= r
                     labels[k].extend(["eps_split_rescaled"] + retrospective)
@@ -106,10 +109,18 @@ def _rescale(quarters: List[dict], breaks) -> Tuple[List[float], List[bool], Lis
 def announced_eps(earnings: Sequence[Mapping], income_rows: Sequence[Mapping], splits: Sequence[Mapping],
                   as_of: str) -> Tuple[EpsQuarter, ...]:
     rows = [r for r in earnings if r.get("match_method") != "none"]
+
+    def breaks_in(series):
+        return _breaks([q["fiscal_date"] for q in series],
+                       split_basis_audit(series, list(income_rows), list(splits))["issues"])
+
     stored = sorted(resolve_eps_quarters(rows, FULL_HISTORY)["quarters"], key=lambda q: q["fiscal_date"])
-    audit = split_basis_audit(stored, list(income_rows), list(splits))
     quarters = sorted(resolve_eps_quarters(rows, as_of)["quarters"], key=lambda q: q["fiscal_date"])
-    divisor, blank, labels = _rescale(quarters, _breaks([q["fiscal_date"] for q in stored], audit["issues"]))
+    # Later rows can also hide a break (a conflicting duplicate blanks a pre-break quarter), so a
+    # break the as_of series shows on its own still counts (code review 2026-09-29)
+    full = breaks_in(stored)
+    near = lambda b: any(abs((_d(b[1]) - _d(f[1])).days) <= SAME_QUARTER_DAYS for f in full)
+    divisor, blank, labels = _rescale(quarters, full + [b for b in breaks_in(quarters) if not near(b)])
 
     def basis(value, k):
         return None if blank[k] or value is None else value / divisor[k]

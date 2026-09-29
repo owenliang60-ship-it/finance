@@ -131,12 +131,22 @@ def _align(income: List[dict], counterparts: Mapping[str, List[dict]]):
         if key is not None:
             by_key.setdefault(key, []).append(r["date"])
     dropped: Set[str] = {d for dates in by_key.values() if len(dates) > 1 for d in dates}
+    # A malformed counterpart identity would make every per-quarter call raise; isolate it to its date
+    valid: Dict[str, List[dict]] = {}
+    for t, rows in counterparts.items():
+        valid[t] = []
+        for r in rows:
+            try:
+                _fiscal_key(r)
+                valid[t].append(r)
+            except ValueError:
+                dropped.update(inc["date"] for inc in income if inc["date"][:10] == r["date"][:10])
     aligned: Dict[str, Dict[str, dict]] = {t: {} for t in counterparts}
     for inc in income:
         if inc["date"] in dropped:
             continue
         try:
-            found = {t: _statement_by_income_date([inc], rows, t) for t, rows in counterparts.items()}
+            found = {t: _statement_by_income_date([inc], rows, t) for t, rows in valid.items()}
         except ValueError:
             dropped.add(inc["date"])
             continue
@@ -158,7 +168,6 @@ def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
         return QuarterBuild((), None, ("no_statements", "no_current_fiscal") + missing)
     income = [v[0] for v in sorted(seen["income"].values(), key=lambda v: v[0]["date"])]
     income, aligned, dropped = _align(income, {t: [v[0] for v in seen[t].values()] for t in ("balance", "cashflow")})
-    conflict = ("statement_alignment_conflict",) if dropped else ()
 
     def entry(t, inc_date):
         if t == "income":
@@ -168,7 +177,8 @@ def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
 
     complete = [r["date"] for r in income if entry("balance", r["date"]) and entry("cashflow", r["date"])]
     if not complete:
-        return QuarterBuild((), None, ("no_current_fiscal",) + conflict, dropped)
+        return QuarterBuild((), None, ("no_current_fiscal",) + (("statement_alignment_conflict",) if dropped else ()),
+                            dropped)
     current = max(complete)
     merged, meta = [], []
     for r in income:
@@ -205,7 +215,10 @@ def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
                       labels=tuple(labels) + tuple(l for l in row["_labels"] if l not in labels),
                       nulled=row["_nulled"], observed_on=observed_on)
         for row, gap, (src, known, basis, labels, observed_on) in zip(fixed, days, meta))[-STATEMENT_QUARTERS:]
-    flags = list(conflict)
+    # Report only conflicts that would have fallen inside the packet's window had they not been dropped
+    span = sorted({r["date"][:10] for r in income if r["date"] <= current} | set(dropped))[-STATEMENT_QUARTERS:]
+    dropped = tuple(d for d in dropped if d in span)
+    flags = ["statement_alignment_conflict"] if dropped else []
     gaps = [q.period_days for q in quarters if q.period_days is not None]
     if gaps and statistics.median(gaps) >= SEMIANNUAL_MEDIAN_GAP_DAYS:
         flags.append("semiannual_reporter")

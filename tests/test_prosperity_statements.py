@@ -137,6 +137,30 @@ def test_duplicate_fiscal_quarter_in_income_alone_is_not_a_second_quarter():
     assert "statement_alignment_conflict" in qb.flags and qb.dropped == ("2025-09-30", "2025-10-27")
 
 
+def test_malformed_counterpart_identity_drops_only_its_quarter():
+    # code review: one cash flow row with an invalid fiscal year made every per-quarter alignment raise
+    h = hist()
+    h.cashflow[0]["fiscal_year"] = "FY2025"
+    qb = _build(h, "2026-03-31")
+    assert [q.fiscal_date for q in qb.quarters] == ["2025-06-30", "2025-09-30", "2025-12-31"]
+    assert qb.dropped == ("2025-03-31",) and "statement_alignment_conflict" in qb.flags
+
+
+def _quarters(n):
+    ends, filed = ["03-31", "06-30", "09-30", "12-31"], ["05", "08", "11", "02"]
+    return [(f"{2022 + i // 4}-{ends[i % 4]}", str(2022 + i // 4), f"Q{i % 4 + 1}",
+             f"{2022 + i // 4 + (i % 4 == 3)}-{filed[i % 4]}-01 16:00:00") for i in range(n)]
+
+
+def test_conflicts_older_than_the_packet_window_are_not_reported():
+    # code review: a 2022 conflict flagged a symbol whose 16 packet quarters are all clean
+    h = hist(_quarters(18))                       # 2022Q1 … 2026Q2
+    h.balance[0]["period"] = "Q2"                 # conflicts at 2022-03-31 and 2022-06-30 only
+    qb = _build(h, "2026-09-26")
+    assert len(qb.quarters) == 16 and qb.quarters[0].fiscal_date == "2022-09-30"
+    assert qb.dropped == () and "statement_alignment_conflict" not in qb.flags
+
+
 Q3_ALIAS = "2025-10-27"      # AEM-like: FY Q3 first stored under a wrong date, later repaired to the quarter end
 
 
