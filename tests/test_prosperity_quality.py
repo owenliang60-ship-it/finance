@@ -248,7 +248,8 @@ def test_freeze_arrival_uses_earnings_floor():
 
 @pytest.mark.parametrize('num,den,eligible', [
     (2.0, 1.0, 1), (3, 2, 1), (5, 4, 1), (4, 5, 1), (20, 1, 1), (1, 20, 1),
-    (20, 20, 0), (21, 1, 0), (903, 500, 0), (239, 200, 0), (1.25, 1, 0),
+    (25, 1, 1), (50, 1, 1), (1, 50, 1), (21, 1, 1),          # one leg is 1: BKNG 25:1, CMG 50:1, reverse 1:50
+    (20, 20, 0), (21, 2, 0), (903, 500, 0), (239, 200, 0), (239, 100, 0), (1.25, 1, 0),
     (True, 2, 0), (float('nan'), 1, 0), (2, 0, 0),
 ])
 def test_only_small_integer_split_legs_are_eligible(num, den, eligible):

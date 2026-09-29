@@ -134,9 +134,12 @@ def split_basis_audit(quarters: list[dict], income_rows: list[dict], splits: lis
     events, ignored_events = [], []
     for s in splits:
         num, den = s.get('numerator'), s.get('denominator')
+        # Integer legs, and either both small (3:2, 10:1) or one leg 1 (25:1, 1:50);
+        # spin-off adjustment factors such as 903/500 or 239/100 never qualify.
         if (_date(s.get('date')) and all(isinstance(v, (int, float)) and not isinstance(v, bool)
-                                       and math.isfinite(v) and 1 <= v <= 20 and v == int(v)
-                                       for v in (num, den)) and num != den):
+                                       and math.isfinite(v) and v >= 1 and v == int(v)
+                                       for v in (num, den)) and num != den
+                and (max(num, den) <= 20 or min(num, den) == 1)):
             events.append(dict(s, ratio=num / den))
         else:
             ignored_events.append({'date': s.get('date'), 'numerator': num, 'denominator': den,

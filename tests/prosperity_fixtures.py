@@ -67,3 +67,31 @@ def hist(rows=QTRS, earnings=()):
     return SymbolHistory(symbol="AAA", income=[inc(*r) for r in rows], balance=[bs(*r) for r in rows],
                          cashflow=[cf(*r) for r in rows], vintage={}, earnings=list(earnings),
                          estimates=[], splits=[], closes=[], market_caps=[], profile=None, is_adr=False)
+
+
+from datetime import date, timedelta
+
+
+def er(fiscal, announce, eps, est=None, method="estimates_window"):
+    return {"fiscal_date": fiscal, "announce_date": announce, "eps_actual": eps,
+            "eps_estimated": est, "match_method": method}
+
+
+def seq(points):
+    """(fiscal_date, eps) → earnings rows announced 30 days after quarter end."""
+    return [er(f, (date.fromisoformat(f) + timedelta(days=30)).isoformat(), e) for f, e in points]
+
+
+def gaap_rows(rows, divisor_before=1.0, last_pre=None, gaap_multiplier_before=1.0, scale=0.8):
+    """Income rows whose GAAP EPS is 0.8 × fully adjusted street EPS (FMP income is usually fully adjusted).
+
+    divisor_before: street quarters up to last_pre are in pre-split units, so adjusted = street / divisor.
+    gaap_multiplier_before: simulate a GAAP series that itself was left unadjusted before last_pre.
+    """
+    out = []
+    for r in rows:
+        pre = last_pre is not None and r["fiscal_date"] <= last_pre
+        adjusted = r["eps_actual"] / divisor_before if pre else r["eps_actual"]
+        out.append({"date": r["fiscal_date"],
+                    "eps_diluted": scale * adjusted * (gaap_multiplier_before if pre else 1.0)})
+    return out
