@@ -337,12 +337,13 @@ def _prev_quarter_end(qe: str) -> date:
     return date(year, month, QUARTER_END_MONTH_DAYS[month])
 
 
-def _known_on(row: Dict[str, Any]) -> Optional[str]:
+def _known_on(row: Dict[str, Any], earnings_rows=None) -> Optional[str]:
     """accepted_date (date part), falling back to filing_date."""
-    return statement_known_on(row)
+    return statement_known_on(row, earnings_rows=earnings_rows)
 
 
-def arrival_day(tables: Dict[str, List[Dict[str, Any]]], qe: str) -> Optional[int]:
+def arrival_day(tables: Dict[str, List[Dict[str, Any]]], qe: str, *,
+                earnings_rows: Optional[List[Dict]] = None) -> Optional[int]:
     """Days after `qe` when this season's quarter was known in ALL three tables.
 
     `tables`: statement rows per table. A fiscal quarter arrives when the last
@@ -354,7 +355,7 @@ def arrival_day(tables: Dict[str, List[Dict[str, Any]]], qe: str) -> Optional[in
     known: List[Dict[str, str]] = []
     for rows in tables.values():
         known.append({r["date"][:10]: k for r in rows
-                      if lo < r["date"][:10] <= hi and (k := _known_on(r))})
+                      if lo < r["date"][:10] <= hi and (k := _known_on(r, earnings_rows))})
     if not known:
         return None
     common = set.intersection(*(set(k) for k in known))

@@ -199,3 +199,85 @@ def test_split_only_blocks_the_factor_that_crosses_boundary():
         splits=[{'date': '2023-06-01', 'numerator': 10, 'denominator': 1}])
     assert result['sue_ok'] and not result['dsue_ok']
     assert result['dsue_missing'] == 'eps_split_basis_suspect'
+
+
+@pytest.mark.parametrize('symbol', ['DELL', 'FTV', 'LH'])
+def test_spinoff_adjustment_is_not_split_evidence(symbol):
+    case = CASES[symbol]
+    quarters = resolve_eps_quarters(case['earnings'], '2026-09-29')['quarters']
+    assert split_basis_audit(quarters, case['income'], case['splits'])['issues'] == []
+
+
+@pytest.mark.parametrize('symbol,boundary', [('APH', '2025-03-31'), ('MNST', '2024-12-31')])
+def test_additional_real_stock_splits_still_detected(symbol, boundary):
+    case = CASES[symbol]
+    quarters = resolve_eps_quarters(case['earnings'], '2026-09-29')['quarters']
+    assert any(i['boundary_fiscal'] == boundary for i in
+               split_basis_audit(quarters, case['income'], case['splits'])['issues'])
+
+
+@pytest.mark.parametrize('symbol,fiscal,expected', [
+    ('ASML', '2022-06-30', '2022-07-20'), ('HALO', '2025-09-30', '2025-11-03')])
+def test_public_date_cannot_precede_same_quarter_report(symbol, fiscal, expected):
+    case = CASES[symbol]
+    row = next(r for r in case['income'] if r['date'] == fiscal)
+    result = statement_availability(row, earnings_rows=case['earnings'])
+    assert result['public_available_at'] == expected
+    assert 'statement_date_before_earnings' in result['issues']
+
+
+def test_earnings_floor_does_not_fill_unknown_and_does_not_delay_current_mode():
+    eps = [{'fiscal_date': '2025-09-30', 'announce_date': '2025-11-03', 'eps_actual': 1.0},
+           {'fiscal_date': '2025-09-30', 'announce_date': '2025-11-04', 'eps_actual': 2.0},
+           {'fiscal_date': '2025-09-30', 'announce_date': '2025-10-01', 'eps_actual': None}]
+    unknown = {'date': '2025-09-30', 'accepted_date': '2025-09-30'}
+    assert statement_availability(unknown, earnings_rows=eps)['public_available_at'] is None
+    valid = dict(unknown, accepted_date='2025-10-03')
+    assert statement_known_on(valid, earnings_rows=eps) == '2025-11-03'
+    assert statement_known_on(valid, earnings_rows=eps, observed_at='2025-10-20') == '2025-10-03'
+    later = dict(valid, accepted_date='2025-11-06')
+    assert statement_known_on(later, earnings_rows=eps) == '2025-11-06'
+
+
+def test_freeze_arrival_uses_earnings_floor():
+    from src.data.prosperity_history import arrival_day
+    row = {'date': '2025-09-30', 'accepted_date': '2025-10-03'}
+    eps = [{'fiscal_date': '2025-09-30', 'announce_date': '2025-11-03', 'eps_actual': 1.0}]
+    assert arrival_day({'i': [row], 'b': [row], 'c': [row]}, '2025-09-30', earnings_rows=eps) == 34
+
+
+@pytest.mark.parametrize('num,den,eligible', [
+    (2.0, 1.0, 1), (3, 2, 1), (5, 4, 1), (4, 5, 1), (20, 1, 1), (1, 20, 1),
+    (20, 20, 0), (21, 1, 0), (903, 500, 0), (239, 200, 0), (1.25, 1, 0),
+    (True, 2, 0), (float('nan'), 1, 0), (2, 0, 0),
+])
+def test_only_small_integer_split_legs_are_eligible(num, den, eligible):
+    result = split_basis_audit([], [], [{'date': '2025-01-01', 'numerator': num, 'denominator': den}])
+    assert result['eligible_split_events'] == eligible
+
+
+def test_earliest_valid_same_quarter_earnings_floor_and_zero_actual():
+    row = {'date': '2025-09-30', 'filing_date': '2025-10-01'}
+    eps = [{'fiscal_date': '2025-09-29', 'announce_date': '2025-11-03', 'eps_actual': 0.0},
+           {'fiscal_date': '2025-09-30', 'announce_date': '2025-11-10', 'eps_actual': 1.0},
+           {'fiscal_date': '2025-06-30', 'announce_date': '2025-07-20', 'eps_actual': 1.0},
+           {'fiscal_date': '2025-09-30', 'announce_date': 'bad', 'eps_actual': 1.0},
+           {'fiscal_date': '2025-09-30', 'announce_date': '2025-10-03', 'eps_actual': float('nan')}]
+    assert statement_availability(row, earnings_rows=eps)['public_available_at'] == '2025-11-03'
+
+
+def test_report_anchor_uses_same_earnings_floor(tmp_path):
+    from src.data.market_store import MarketStore
+    from scripts.verify_prosperity_history import _SymbolData
+    s = MarketStore(tmp_path / 'm.db')
+    row = {'date': '2022-06-30', 'acceptedDate': '2022-07-02', 'filingDate': '2022-07-02'}
+    for write in (s.upsert_income, s.upsert_balance_sheet, s.upsert_cash_flow):
+        write('ASML', [row])
+    s.replace_fmp_earnings('ASML', [{'fiscal_date': '2022-06-30', 'announce_date': '2022-07-20',
+                                  'eps_actual': 1.0, 'match_method': 'statement_window'}])
+    historical = _SymbolData(s, 'ASML')
+    assert historical.current_fiscal('2022-07-10') is None
+    assert historical.current_fiscal('2022-07-20') == '2022-06-30'
+    observed = _SymbolData(s, 'ASML', observed_at='2022-07-10')
+    assert observed.current_fiscal('2022-07-10') == '2022-06-30'
+    s.close()

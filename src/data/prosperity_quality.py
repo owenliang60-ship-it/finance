@@ -19,14 +19,36 @@ def _date(value):
         return None
 
 
-def statement_availability(row: dict) -> dict:
+def _earliest_earnings_day(fiscal: date, earnings_rows: list[dict]) -> date | None:
+    days = []
+    for r in earnings_rows:
+        f, a, eps = _date(r.get('fiscal_date')), _date(r.get('announce_date')), r.get('eps_actual')
+        if (f and a and a > f and abs((f - fiscal).days) <= SAME_QUARTER_DAYS
+                and isinstance(eps, (int, float)) and not isinstance(eps, bool) and math.isfinite(eps)):
+            days.append(a)
+    return min(days) if days else None
+
+
+def statement_availability(row: dict, *, earnings_rows: list[dict] | None = None) -> dict:
+    """Validated public date, optionally floored at the earliest reported EPS.
+
+    This is a conservative historical lower bound using the stored evidence,
+    not proof that every filing legally follows a separate earnings release.
+    An announcement never fills an unknown public date.
+    """
     fiscal = _date(row.get('date'))
     rejected = []
     if fiscal:
         for key in ('accepted_date', 'filing_date'):
             day = _date(row.get(key))
             if day and day > fiscal:
-                return {'public_available_at': day.isoformat(), 'source': key,
+                floor = _earliest_earnings_day(fiscal, earnings_rows or [])
+                available = max(day, floor) if floor else day
+                if available > day:
+                    rejected.append('statement_date_before_earnings')
+                return {'public_available_at': available.isoformat(), 'source': key,
+                        'reported_public_date': day.isoformat(),
+                        'earnings_floor': floor.isoformat() if floor else None,
                         'issues': rejected}
             if row.get(key):
                 rejected.append(key + '_invalid_or_placeholder')
@@ -34,8 +56,11 @@ def statement_availability(row: dict) -> dict:
             'issues': rejected + ['statement_availability_unknown']}
 
 
-def statement_known_on(row: dict, *, observed_at: str | None = None) -> str | None:
-    public = statement_availability(row)['public_available_at']
+def statement_known_on(row: dict, *, observed_at: str | None = None,
+                       earnings_rows: list[dict] | None = None) -> str | None:
+    # An observed archive is independent evidence: do not delay it to a
+    # possibly later stored earnings event. The floor is historical-only.
+    public = statement_availability(row, earnings_rows=earnings_rows if observed_at is None else None)['public_available_at']
     if observed_at is None:
         return public
     observed, fiscal = _date(observed_at), _date(row.get('date'))
@@ -106,16 +131,21 @@ def split_basis_audit(quarters: list[dict], income_rows: list[dict], splits: lis
             continue
         pairs.append({'fiscal_date': q['fiscal_date'], 'ratio': eps / gaap,
                       'street_eps': eps, 'gaap_eps_diluted': gaap})
-    events = []
+    events, ignored_events = [], []
     for s in splits:
         num, den = s.get('numerator'), s.get('denominator')
-        if (_date(s.get('date')) and all(isinstance(v, (int, float)) and math.isfinite(v) and v > 0
+        if (_date(s.get('date')) and all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                                       and math.isfinite(v) and 1 <= v <= 20 and v == int(v)
                                        for v in (num, den)) and num != den):
             events.append(dict(s, ratio=num / den))
+        else:
+            ignored_events.append({'date': s.get('date'), 'numerator': num, 'denominator': den,
+                                   'reason': 'not_small_integer_split_ratio'})
     base = {'issues': [], 'paired_quarters': len(pairs), 'total_quarters': len(quarters),
+            'eligible_split_events': len(events), 'ignored_split_events': ignored_events,
             'basis': 'retrospective_stored_series_diagnostic'}
     if not events:
-        return dict(base, status='split_metadata_unknown')
+        return dict(base, status='no_eligible_split_events' if splits else 'split_metadata_unknown')
     if len(pairs) < 6:
         return dict(base, status='insufficient_basis_pairs')
     windows = 0

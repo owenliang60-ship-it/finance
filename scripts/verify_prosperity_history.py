@@ -114,6 +114,7 @@ class _SymbolData:
 
     def __init__(self, store: MarketStore, symbol: str, observed_at=None):
         self.observed_at = observed_at
+        self._public_dates = {}
         conn = store._get_conn()
         self.tables = {
             t: [dict(r) for r in conn.execute(
@@ -148,10 +149,17 @@ class _SymbolData:
         listed_after = ipo if ipo and (not first or first >= ipo) else None
         return listed_after, listed_by
 
+    def public_availability(self, row):
+        key = (row["date"], row.get("accepted_date"), row.get("filing_date"))
+        if key not in self._public_dates:
+            self._public_dates[key] = statement_availability(row, earnings_rows=self.earnings)
+        return self._public_dates[key]
+
     def known_dates(self, rows, as_of: str) -> List[str]:
         out = []
         for r in rows:
-            known = statement_known_on(r, observed_at=self.observed_at)
+            known = (statement_known_on(r, observed_at=self.observed_at) if self.observed_at
+                     else self.public_availability(r)["public_available_at"])
             if r["date"][:10] <= as_of and known and known <= as_of:
                 out.append(r["date"][:10])
         return out
@@ -221,7 +229,7 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
                               "reason": "statement_availability_unknown"}
                              for t, rows in data.tables.items() for r in rows
                              if window_start < r["date"] <= qe
-                             and statement_availability(r)["public_available_at"] is None]
+                             and data.public_availability(r)["public_available_at"] is None]
             if table_ok:
                 ok3 += 1
             else:
@@ -251,6 +259,10 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
             joint += bool(table_ok and depth["sue_ok"])
             quality.append({"as_of": qe, "symbol": sym,
                             "statement_issues": unknown_times,
+                            "public_date_floor_adjustments": [dict(table=t, fiscal_date=r["date"],
+                                **data.public_availability(r)) for t, rows in data.tables.items()
+                                for r in rows if window_start < r["date"] <= qe and
+                                "statement_date_before_earnings" in data.public_availability(r)["issues"]],
                             "eps_issues": depth["quality_issues"],
                             "split_check_status": depth["split_check"]["status"],
                             "split_paired_quarters": depth["split_check"]["paired_quarters"]})
@@ -276,7 +288,7 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
                                  "inherent": reason in INHERENT_GAP_REASONS,
                                  "requires_review": reason.startswith("eps_") or reason == "statement_availability_unknown"})
             if observed_at is None:
-                arrivals.append(arrival_day(data.tables, qe))
+                arrivals.append(arrival_day(data.tables, qe, earnings_rows=data.earnings))
 
         n = len(members)
         pct3 = (ok3 / n) if n else 0.0

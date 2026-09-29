@@ -211,3 +211,10 @@ def test_real_partial_split_boundary(symbol, boundary):
 - 归档输入边复制到私有临时文件边SHA核验，SQLite以immutable/query_only读取同一私有副本，隔离源WAL和并发替换。
 - 新拆股疑点进入报告正式摘要；SUE窗口外的旧冲突只诊断，不永久封禁股票。
 - 已新增真实7只股票最小fixture，以及占位日期/观测时点/冲突/小拆股误报/源WAL注入回归。旧历史报告的弱日期fixture已改成真实的+30天发布日期，保持原测试只验证缺季原因。
+
+
+## CC复核闭环（2026-09-29）
+
+- P1：只接受分子、分母均为1–20整数且不相等的拆股记录，不看split_type；不化简大分子/分母来绕过约束。不合格事件在ignored_split_events保留，新增no_eligible_split_events状态。DELL/FTV/LH真实完整窗口反例先失败后通过；真实ANET/KLAC/ORLY/APH/MNST保持识别。
+- P2：statement_availability/statement_known_on与arrival_day新增可选keyword-only earnings_rows。历史有效公开日期受同财季最早有效actual公告日下界约束；未知日期不填补，当前归档模式不应用该下界。报告known_dates/anchor/freeze统一传入同一symbol的EPS；新增公告下界调整明细。
+- Boss决定的内存换算属于CC后续M4实现，质量层依然只检测；北极星已同步该职责。整段EPS冲突保护保持现有行为，不放宽为1%容差。
