@@ -1,6 +1,6 @@
 {
   "as_of": "2024-07-01",
-  "build_seconds": 0.006,
+  "build_seconds": 0.005,
   "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
   "eps_label_counts": {},
   "eps_window_ge_13": 0,
@@ -11,7 +11,7 @@
   },
   "future_leak_count": 0,
   "future_leak_examples": [],
-  "load_seconds": 0.004,
+  "load_seconds": 0.003,
   "members_resolved": 799,
   "membership_basis": "approximate_mcap",
   "mode": "replay",
@@ -35,7 +35,7 @@
       },
       "nulled": {},
       "pit": {
-        "consensus": "strict",
+        "consensus": "approximate",
         "statements": "approximate",
         "street_eps": "approximate"
       },
@@ -51,6 +51,7 @@
   "pre_announce_available": 0,
   "quality_code_counts": {},
   "quarters_ge_8": 0,
+  "requested_not_members": [],
   "revision_available": 0,
   "unit_unverified": 1,
   "with_current_fiscal": 0

@@ -84,6 +84,7 @@
     "q11_gross_margin_jump": 1
   },
   "quarters_ge_8": 1,
+  "requested_not_members": [],
   "revision_available": 0,
   "unit_unverified": 0,
   "with_current_fiscal": 1

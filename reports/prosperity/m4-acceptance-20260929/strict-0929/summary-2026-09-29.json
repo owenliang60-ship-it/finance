@@ -7,10 +7,12 @@
   },
   "eps_window_ge_13": 2,
   "errors": {},
-  "flag_counts": {},
+  "flag_counts": {
+    "price_split_rescaled": 1
+  },
   "future_leak_count": 0,
   "future_leak_examples": [],
-  "load_seconds": 0.021,
+  "load_seconds": 0.02,
   "members_resolved": 915,
   "membership_basis": "extended_membership",
   "mode": "replay",
@@ -142,7 +144,9 @@
         ]
       },
       "eps_window": 16,
-      "flags": [],
+      "flags": [
+        "price_split_rescaled"
+      ],
       "last_quarter": {
         "availability_basis": "accepted_date",
         "available_on": "2026-08-06",
@@ -326,6 +330,7 @@
     "q17_acquisition_suspect": 1
   },
   "quarters_ge_8": 2,
+  "requested_not_members": [],
   "revision_available": 2,
   "unit_unverified": 0,
   "with_current_fiscal": 2

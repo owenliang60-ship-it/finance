@@ -1,6 +1,6 @@
 {
   "as_of": "2021-12-31",
-  "build_seconds": 4.014,
+  "build_seconds": 3.796,
   "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
   "eps_label_counts": {
     "eps_conflicting_quarter": 51
@@ -13,13 +13,14 @@
     "no_current_fiscal": 73,
     "no_statements": 1,
     "price_missing": 35,
+    "price_split_rescaled": 3,
     "semiannual_reporter": 35,
     "stale_current_fiscal": 73,
     "unit_unverified": 184
   },
   "future_leak_count": 0,
   "future_leak_examples": [],
-  "load_seconds": 3.472,
+  "load_seconds": 3.244,
   "members_resolved": 848,
   "membership_basis": "approximate_mcap",
   "mode": "replay",
@@ -259,7 +260,7 @@
       },
       "nulled": {},
       "pit": {
-        "consensus": "strict",
+        "consensus": "approximate",
         "statements": "approximate",
         "street_eps": "approximate"
       },
@@ -481,7 +482,9 @@
       ],
       "eps_labels": {},
       "eps_window": 16,
-      "flags": [],
+      "flags": [
+        "price_split_rescaled"
+      ],
       "last_quarter": {
         "availability_basis": "accepted_date",
         "available_on": "2021-11-03",
@@ -738,7 +741,7 @@
       },
       "nulled": {},
       "pit": {
-        "consensus": "strict",
+        "consensus": "approximate",
         "statements": "approximate",
         "street_eps": "approximate"
       },
@@ -938,7 +941,9 @@
       ],
       "eps_labels": {},
       "eps_window": 16,
-      "flags": [],
+      "flags": [
+        "price_split_rescaled"
+      ],
       "last_quarter": {
         "availability_basis": "accepted_date",
         "available_on": "2021-10-28",
@@ -1501,6 +1506,35 @@
         "street_eps": "approximate"
       },
       "quarters": 13
+    },
+    "WLK": {
+      "current_fiscal": "2021-09-30",
+      "eps": [],
+      "eps_labels": {},
+      "eps_window": 0,
+      "flags": [
+        "eps_behind_current"
+      ],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2021-11-03",
+        "fiscal_date": "2021-09-30",
+        "labels": []
+      },
+      "membership_basis": "approximate_mcap",
+      "ntm": {
+        "basis": null,
+        "missing_reason": "no_ttm_anchor",
+        "quarters": [],
+        "value": null
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "approximate",
+        "statements": "approximate",
+        "street_eps": "approximate"
+      },
+      "quarters": 16
     }
   },
   "ntm_available": 0,
@@ -1527,6 +1561,7 @@
     "statement_date_before_earnings": 192
   },
   "quarters_ge_8": 703,
+  "requested_not_members": [],
   "revision_available": 0,
   "unit_unverified": 184,
   "with_current_fiscal": 775

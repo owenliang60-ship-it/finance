@@ -1,0 +1,420 @@
+{
+  "as_of": "2025-12-31",
+  "build_seconds": 0.024,
+  "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
+  "eps_label_counts": {
+    "eps_split_rescaled": 11
+  },
+  "eps_window_ge_13": 3,
+  "errors": {},
+  "flag_counts": {
+    "price_split_rescaled": 3
+  },
+  "future_leak_count": 0,
+  "future_leak_examples": [],
+  "load_seconds": 0.011,
+  "members_resolved": 882,
+  "membership_basis": "approximate_mcap",
+  "mode": "replay",
+  "named_cases": {
+    "BKNG": {
+      "current_fiscal": "2025-09-30",
+      "eps": [
+        [
+          "2021-12-29",
+          0.63,
+          []
+        ],
+        [
+          "2022-03-29",
+          0.16,
+          []
+        ],
+        [
+          "2022-06-29",
+          0.76,
+          []
+        ],
+        [
+          "2022-09-29",
+          2.12,
+          []
+        ],
+        [
+          "2022-12-29",
+          0.99,
+          []
+        ],
+        [
+          "2023-03-29",
+          0.46,
+          []
+        ],
+        [
+          "2023-06-29",
+          1.5,
+          []
+        ],
+        [
+          "2023-09-29",
+          2.89,
+          []
+        ],
+        [
+          "2023-12-30",
+          1.28,
+          []
+        ],
+        [
+          "2024-03-31",
+          0.816,
+          []
+        ],
+        [
+          "2024-06-30",
+          1.68,
+          []
+        ],
+        [
+          "2024-09-30",
+          3.36,
+          []
+        ],
+        [
+          "2024-12-31",
+          1.66,
+          []
+        ],
+        [
+          "2025-03-31",
+          0.99,
+          []
+        ],
+        [
+          "2025-06-30",
+          2.22,
+          []
+        ],
+        [
+          "2025-09-30",
+          3.98,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 16,
+      "flags": [
+        "price_split_rescaled"
+      ],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2025-10-28",
+        "fiscal_date": "2025-09-30",
+        "labels": []
+      },
+      "membership_basis": "approximate_mcap",
+      "ntm": {
+        "basis": null,
+        "missing_reason": "no_current_snapshot",
+        "quarters": [],
+        "value": null
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "approximate",
+        "statements": "approximate",
+        "street_eps": "approximate"
+      },
+      "quarters": 16
+    },
+    "CRWD": {
+      "current_fiscal": "2025-10-31",
+      "eps": [
+        [
+          "2022-01-30",
+          0.075,
+          []
+        ],
+        [
+          "2022-04-30",
+          0.0775,
+          []
+        ],
+        [
+          "2022-07-30",
+          0.09,
+          []
+        ],
+        [
+          "2022-10-30",
+          0.1,
+          []
+        ],
+        [
+          "2023-01-30",
+          -0.0425,
+          []
+        ],
+        [
+          "2023-04-30",
+          0.1425,
+          []
+        ],
+        [
+          "2023-07-30",
+          0.185,
+          []
+        ],
+        [
+          "2023-10-30",
+          0.205,
+          []
+        ],
+        [
+          "2024-01-30",
+          0.2375,
+          []
+        ],
+        [
+          "2024-04-30",
+          0.2325,
+          []
+        ],
+        [
+          "2024-07-30",
+          0.26,
+          []
+        ],
+        [
+          "2024-10-31",
+          0.23,
+          []
+        ],
+        [
+          "2025-01-31",
+          0.2575,
+          []
+        ],
+        [
+          "2025-04-30",
+          0.1825,
+          []
+        ],
+        [
+          "2025-07-31",
+          0.2325,
+          []
+        ],
+        [
+          "2025-10-31",
+          0.24,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 16,
+      "flags": [
+        "price_split_rescaled"
+      ],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2025-12-02",
+        "fiscal_date": "2025-10-31",
+        "labels": []
+      },
+      "membership_basis": "approximate_mcap",
+      "ntm": {
+        "basis": null,
+        "missing_reason": "no_current_snapshot",
+        "quarters": [],
+        "value": null
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "approximate",
+        "statements": "approximate",
+        "street_eps": "approximate"
+      },
+      "quarters": 16
+    },
+    "KLAC": {
+      "current_fiscal": "2025-09-30",
+      "eps": [
+        [
+          "2021-12-31",
+          0.5589999999999999,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2022-03-31",
+          0.513,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2022-06-30",
+          0.581,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2022-09-30",
+          0.706,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2022-12-31",
+          0.738,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-03-31",
+          0.549,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-06-30",
+          0.54,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-09-30",
+          0.5740000000000001,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-12-31",
+          0.616,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-03-31",
+          0.526,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-06-30",
+          0.6599999999999999,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-09-30",
+          0.733,
+          []
+        ],
+        [
+          "2024-12-31",
+          0.82,
+          []
+        ],
+        [
+          "2025-03-31",
+          0.84,
+          []
+        ],
+        [
+          "2025-06-30",
+          0.94,
+          []
+        ],
+        [
+          "2025-09-30",
+          0.88,
+          []
+        ]
+      ],
+      "eps_labels": {
+        "2021-12-31": [
+          "eps_split_rescaled"
+        ],
+        "2022-03-31": [
+          "eps_split_rescaled"
+        ],
+        "2022-06-30": [
+          "eps_split_rescaled"
+        ],
+        "2022-09-30": [
+          "eps_split_rescaled"
+        ],
+        "2022-12-31": [
+          "eps_split_rescaled"
+        ],
+        "2023-03-31": [
+          "eps_split_rescaled"
+        ],
+        "2023-06-30": [
+          "eps_split_rescaled"
+        ],
+        "2023-09-30": [
+          "eps_split_rescaled"
+        ],
+        "2023-12-31": [
+          "eps_split_rescaled"
+        ],
+        "2024-03-31": [
+          "eps_split_rescaled"
+        ],
+        "2024-06-30": [
+          "eps_split_rescaled"
+        ]
+      },
+      "eps_window": 16,
+      "flags": [
+        "price_split_rescaled"
+      ],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2025-10-31",
+        "fiscal_date": "2025-09-30",
+        "labels": []
+      },
+      "membership_basis": "approximate_mcap",
+      "ntm": {
+        "basis": null,
+        "missing_reason": "no_current_snapshot",
+        "quarters": [],
+        "value": null
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "approximate",
+        "statements": "approximate",
+        "street_eps": "approximate"
+      },
+      "quarters": 16
+    }
+  },
+  "ntm_available": 0,
+  "observed_at": null,
+  "packets_built": 3,
+  "pit_counts": {
+    "approximate": 3
+  },
+  "pre_announce_available": 3,
+  "quality_code_counts": {},
+  "quarters_ge_8": 3,
+  "requested_not_members": [],
+  "revision_available": 0,
+  "unit_unverified": 0,
+  "with_current_fiscal": 3
+}

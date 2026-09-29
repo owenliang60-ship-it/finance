@@ -1,6 +1,6 @@
 {
   "as_of": "2026-08-15",
-  "build_seconds": 0.015,
+  "build_seconds": 0.012,
   "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
   "eps_label_counts": {},
   "eps_window_ge_13": 1,
@@ -155,6 +155,7 @@
     "q17_acquisition_suspect": 1
   },
   "quarters_ge_8": 1,
+  "requested_not_members": [],
   "revision_available": 1,
   "unit_unverified": 0,
   "with_current_fiscal": 1

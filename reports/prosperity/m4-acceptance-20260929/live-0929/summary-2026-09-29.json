@@ -1,6 +1,6 @@
 {
   "as_of": "2026-09-29",
-  "build_seconds": 3.021,
+  "build_seconds": 2.634,
   "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
   "eps_label_counts": {
     "eps_conflicting_quarter": 102,
@@ -10,13 +10,14 @@
   "errors": {},
   "flag_counts": {
     "eps_behind_current": 6,
+    "price_split_rescaled": 3,
     "semiannual_reporter": 27,
     "stale_current_fiscal": 19,
     "unit_unverified": 151
   },
   "future_leak_count": 0,
   "future_leak_examples": [],
-  "load_seconds": 3.777,
+  "load_seconds": 3.486,
   "members_resolved": 915,
   "membership_basis": "extended_membership",
   "mode": "live",
@@ -754,7 +755,9 @@
       ],
       "eps_labels": {},
       "eps_window": 16,
-      "flags": [],
+      "flags": [
+        "price_split_rescaled"
+      ],
       "last_quarter": {
         "availability_basis": "accepted_date",
         "available_on": "2026-08-04",
@@ -1304,80 +1307,6 @@
       },
       "quarters": 16
     },
-    "HALO": {
-      "current_fiscal": "2026-06-30",
-      "eps": [
-        [
-          "2024-12-31",
-          1.26,
-          []
-        ],
-        [
-          "2025-03-31",
-          1.11,
-          []
-        ],
-        [
-          "2025-06-30",
-          1.54,
-          []
-        ],
-        [
-          "2025-09-30",
-          1.72,
-          []
-        ],
-        [
-          "2025-12-31",
-          -0.24,
-          []
-        ],
-        [
-          "2026-03-31",
-          1.6,
-          []
-        ],
-        [
-          "2026-06-30",
-          2.28,
-          []
-        ]
-      ],
-      "eps_labels": {},
-      "eps_window": 7,
-      "flags": [],
-      "last_quarter": {
-        "availability_basis": "accepted_date",
-        "available_on": "2026-08-06",
-        "fiscal_date": "2026-06-30",
-        "labels": []
-      },
-      "membership_basis": "extended_membership",
-      "ntm": {
-        "basis": "ntm_fy_blend",
-        "missing_reason": null,
-        "quarters": [
-          [
-            "2026-12-31",
-            8.41429,
-            4
-          ],
-          [
-            "2027-12-31",
-            10.29833,
-            4
-          ]
-        ],
-        "value": 9.35631
-      },
-      "nulled": {},
-      "pit": {
-        "consensus": "live",
-        "statements": "live",
-        "street_eps": "live"
-      },
-      "quarters": 8
-    },
     "KLAC": {
       "current_fiscal": "2026-06-30",
       "eps": [
@@ -1505,7 +1434,9 @@
         ]
       },
       "eps_window": 16,
-      "flags": [],
+      "flags": [
+        "price_split_rescaled"
+      ],
       "last_quarter": {
         "availability_basis": "accepted_date",
         "available_on": "2026-08-06",
@@ -2454,7 +2385,7 @@
       "quarters": 16
     }
   },
-  "ntm_available": 759,
+  "ntm_available": 758,
   "observed_at": "2026-09-29",
   "packets_built": 915,
   "pit_counts": {
@@ -2478,6 +2409,7 @@
     "q9_negative_revenue": 36
   },
   "quarters_ge_8": 895,
+  "requested_not_members": [],
   "revision_available": 737,
   "unit_unverified": 151,
   "with_current_fiscal": 915
