@@ -1,0 +1,2416 @@
+{
+  "as_of": "2026-09-29",
+  "build_seconds": 4.02,
+  "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
+  "eps_label_counts": {
+    "eps_conflicting_quarter": 102,
+    "eps_split_rescaled": 44
+  },
+  "eps_window_ge_13": 861,
+  "errors": {},
+  "flag_counts": {
+    "eps_behind_current": 6,
+    "price_split_rescaled": 3,
+    "semiannual_reporter": 27,
+    "stale_current_fiscal": 19,
+    "unit_unverified": 151
+  },
+  "future_leak_count": 0,
+  "future_leak_examples": [],
+  "load_seconds": 3.667,
+  "members_resolved": 915,
+  "membership_basis": "extended_membership",
+  "mode": "live",
+  "named_cases": {
+    "ANET": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2022-09-29",
+          0.3125,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2022-12-29",
+          0.3525,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-03-29",
+          0.3575,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-06-29",
+          0.395,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-09-29",
+          0.4575,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-12-30",
+          0.52,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-03-31",
+          0.4975,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-06-30",
+          0.525,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-09-30",
+          0.6,
+          []
+        ],
+        [
+          "2024-12-31",
+          0.65,
+          []
+        ],
+        [
+          "2025-03-31",
+          0.65,
+          []
+        ],
+        [
+          "2025-06-30",
+          0.73,
+          []
+        ],
+        [
+          "2025-09-30",
+          0.75,
+          []
+        ],
+        [
+          "2025-12-31",
+          0.82,
+          []
+        ],
+        [
+          "2026-03-31",
+          0.87,
+          []
+        ],
+        [
+          "2026-06-30",
+          1.02,
+          []
+        ]
+      ],
+      "eps_labels": {
+        "2022-09-29": [
+          "eps_split_rescaled"
+        ],
+        "2022-12-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-03-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-06-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-09-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-12-30": [
+          "eps_split_rescaled"
+        ],
+        "2024-03-31": [
+          "eps_split_rescaled"
+        ],
+        "2024-06-30": [
+          "eps_split_rescaled"
+        ]
+      },
+      "eps_window": 16,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-08-04",
+        "fiscal_date": "2026-06-30",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-09-30",
+            1.07688,
+            17
+          ],
+          [
+            "2026-12-30",
+            1.14913,
+            16
+          ],
+          [
+            "2027-03-30",
+            1.17138,
+            8
+          ],
+          [
+            "2027-06-30",
+            1.27286,
+            7
+          ]
+        ],
+        "value": 4.67025
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "APH": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2022-09-29",
+          0.2,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2022-12-29",
+          0.195,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-03-29",
+          0.175,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-06-29",
+          0.18,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-09-29",
+          0.195,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-12-30",
+          0.205,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-03-31",
+          0.2,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-06-30",
+          0.22,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-09-30",
+          0.25,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-12-31",
+          0.275,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2025-03-31",
+          0.315,
+          []
+        ],
+        [
+          "2025-06-30",
+          0.405,
+          []
+        ],
+        [
+          "2025-09-30",
+          0.51,
+          []
+        ],
+        [
+          "2025-12-31",
+          0.97,
+          []
+        ],
+        [
+          "2026-03-31",
+          1.06,
+          []
+        ],
+        [
+          "2026-06-30",
+          0.68,
+          []
+        ]
+      ],
+      "eps_labels": {
+        "2022-09-29": [
+          "eps_split_rescaled"
+        ],
+        "2022-12-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-03-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-06-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-09-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-12-30": [
+          "eps_split_rescaled"
+        ],
+        "2024-03-31": [
+          "eps_split_rescaled"
+        ],
+        "2024-06-30": [
+          "eps_split_rescaled"
+        ],
+        "2024-09-30": [
+          "eps_split_rescaled"
+        ],
+        "2024-12-31": [
+          "eps_split_rescaled"
+        ]
+      },
+      "eps_window": 16,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-07-31",
+        "fiscal_date": "2026-06-30",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-09-30",
+            0.71465,
+            9
+          ],
+          [
+            "2026-12-30",
+            0.7333,
+            9
+          ],
+          [
+            "2027-03-30",
+            0.69185,
+            6
+          ],
+          [
+            "2027-06-30",
+            0.79323,
+            3
+          ]
+        ],
+        "value": 2.93303
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "ASML": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2022-06-27",
+          3.85,
+          []
+        ],
+        [
+          "2022-09-27",
+          4.25,
+          []
+        ],
+        [
+          "2022-12-27",
+          5.11,
+          []
+        ],
+        [
+          "2023-03-27",
+          5.74,
+          []
+        ],
+        [
+          "2023-06-27",
+          5.49,
+          []
+        ],
+        [
+          "2023-09-27",
+          5.1,
+          []
+        ],
+        [
+          "2023-12-28",
+          5.64,
+          []
+        ],
+        [
+          "2024-03-31",
+          3.31,
+          []
+        ],
+        [
+          "2024-06-30",
+          4.36,
+          []
+        ],
+        [
+          "2024-12-31",
+          7.14,
+          []
+        ],
+        [
+          "2025-03-31",
+          6.31,
+          []
+        ],
+        [
+          "2025-06-30",
+          6.84,
+          []
+        ],
+        [
+          "2025-09-30",
+          6.41,
+          []
+        ],
+        [
+          "2025-12-31",
+          8.55,
+          []
+        ],
+        [
+          "2026-03-31",
+          8.37,
+          []
+        ],
+        [
+          "2026-06-30",
+          8.68,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 16,
+      "flags": [
+        "unit_unverified"
+      ],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-07-15",
+        "fiscal_date": "2026-06-30",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": "unit_unverified",
+        "quarters": [
+          [
+            "2026-09-30",
+            10.34784,
+            8
+          ],
+          [
+            "2026-12-30",
+            12.78852,
+            8
+          ],
+          [
+            "2027-03-30",
+            11.90599,
+            3
+          ],
+          [
+            "2027-06-30",
+            12.8618,
+            4
+          ]
+        ],
+        "value": null
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "BHP": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2012-06-30",
+          1.41,
+          []
+        ],
+        [
+          "2013-06-30",
+          2.54,
+          []
+        ],
+        [
+          "2013-12-31",
+          0.8,
+          []
+        ],
+        [
+          "2014-06-30",
+          -0.44275,
+          []
+        ],
+        [
+          "2015-06-30",
+          -0.88335,
+          []
+        ],
+        [
+          "2020-06-30",
+          1.22,
+          []
+        ],
+        [
+          "2021-06-30",
+          2.93,
+          []
+        ],
+        [
+          "2021-12-31",
+          3.72,
+          []
+        ],
+        [
+          "2022-06-30",
+          8.46,
+          []
+        ],
+        [
+          "2022-12-31",
+          2.55,
+          []
+        ],
+        [
+          "2023-12-31",
+          null,
+          [
+            "eps_conflicting_quarter"
+          ]
+        ],
+        [
+          "2024-06-30",
+          2.75,
+          []
+        ],
+        [
+          "2024-12-31",
+          1.74,
+          []
+        ],
+        [
+          "2025-06-30",
+          2.12,
+          []
+        ],
+        [
+          "2025-12-31",
+          2.24,
+          []
+        ],
+        [
+          "2026-06-30",
+          2.76,
+          []
+        ]
+      ],
+      "eps_labels": {
+        "2023-12-31": [
+          "eps_conflicting_quarter"
+        ]
+      },
+      "eps_window": 16,
+      "flags": [
+        "semiannual_reporter",
+        "unit_unverified"
+      ],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-07-17",
+        "fiscal_date": "2026-06-30",
+        "labels": [
+          "q14_long_gap"
+        ]
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "ntm_fy_blend",
+        "missing_reason": "unit_unverified",
+        "quarters": [
+          [
+            "2027-06-30",
+            4.89408,
+            4
+          ],
+          [
+            "2028-06-30",
+            4.8753,
+            3
+          ]
+        ],
+        "value": null
+      },
+      "nulled": {
+        "2019-06-30": [
+          "gross_profit:q8_gross_profit_identity",
+          "cost_of_revenue:q8_gross_profit_identity",
+          "gross_profit:q9_gross_profit_exceeds_revenue"
+        ],
+        "2020-06-30": [
+          "gross_profit:q8_gross_profit_identity",
+          "cost_of_revenue:q8_gross_profit_identity",
+          "gross_profit:q9_gross_profit_exceeds_revenue"
+        ],
+        "2021-06-30": [
+          "gross_profit:q8_gross_profit_identity",
+          "cost_of_revenue:q8_gross_profit_identity",
+          "gross_profit:q9_gross_profit_exceeds_revenue"
+        ],
+        "2022-06-30": [
+          "gross_profit:q8_gross_profit_identity",
+          "cost_of_revenue:q8_gross_profit_identity",
+          "gross_profit:q9_gross_profit_exceeds_revenue"
+        ],
+        "2023-06-30": [
+          "gross_profit:q8_gross_profit_identity",
+          "cost_of_revenue:q8_gross_profit_identity",
+          "gross_profit:q9_gross_profit_exceeds_revenue"
+        ],
+        "2024-06-30": [
+          "gross_profit:q8_gross_profit_identity",
+          "cost_of_revenue:q8_gross_profit_identity",
+          "gross_profit:q9_gross_profit_exceeds_revenue"
+        ],
+        "2025-06-30": [
+          "gross_profit:q9_gross_profit_exceeds_revenue",
+          "cost_of_revenue:q9_negative_cost_of_revenue",
+          "gross_profit:q9_negative_cost_of_revenue"
+        ]
+      },
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "BKNG": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2022-09-29",
+          2.12,
+          []
+        ],
+        [
+          "2022-12-29",
+          0.99,
+          []
+        ],
+        [
+          "2023-03-29",
+          0.46,
+          []
+        ],
+        [
+          "2023-06-29",
+          1.5,
+          []
+        ],
+        [
+          "2023-09-29",
+          2.89,
+          []
+        ],
+        [
+          "2023-12-30",
+          1.28,
+          []
+        ],
+        [
+          "2024-03-31",
+          0.816,
+          []
+        ],
+        [
+          "2024-06-30",
+          1.68,
+          []
+        ],
+        [
+          "2024-09-30",
+          3.36,
+          []
+        ],
+        [
+          "2024-12-31",
+          1.66,
+          []
+        ],
+        [
+          "2025-03-31",
+          0.99,
+          []
+        ],
+        [
+          "2025-06-30",
+          2.22,
+          []
+        ],
+        [
+          "2025-09-30",
+          3.98,
+          []
+        ],
+        [
+          "2025-12-31",
+          1.95,
+          []
+        ],
+        [
+          "2026-03-31",
+          1.14,
+          []
+        ],
+        [
+          "2026-06-30",
+          2.54,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 16,
+      "flags": [
+        "price_split_rescaled"
+      ],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-08-04",
+        "fiscal_date": "2026-06-30",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-09-30",
+            4.48149,
+            18
+          ],
+          [
+            "2026-12-30",
+            2.31351,
+            18
+          ],
+          [
+            "2027-03-30",
+            1.40275,
+            8
+          ],
+          [
+            "2027-06-30",
+            2.92063,
+            8
+          ]
+        ],
+        "value": 11.11838
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "CMG": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2022-09-29",
+          0.19,
+          []
+        ],
+        [
+          "2022-12-29",
+          0.17,
+          []
+        ],
+        [
+          "2023-03-29",
+          0.21,
+          []
+        ],
+        [
+          "2023-06-29",
+          0.25,
+          []
+        ],
+        [
+          "2023-09-29",
+          0.23,
+          []
+        ],
+        [
+          "2023-12-30",
+          0.21,
+          []
+        ],
+        [
+          "2024-03-31",
+          0.27,
+          []
+        ],
+        [
+          "2024-06-30",
+          0.34,
+          []
+        ],
+        [
+          "2024-09-30",
+          0.27,
+          []
+        ],
+        [
+          "2024-12-31",
+          0.25,
+          []
+        ],
+        [
+          "2025-03-31",
+          0.29,
+          []
+        ],
+        [
+          "2025-06-30",
+          0.33,
+          []
+        ],
+        [
+          "2025-09-30",
+          0.29,
+          []
+        ],
+        [
+          "2025-12-31",
+          0.25,
+          []
+        ],
+        [
+          "2026-03-31",
+          0.24,
+          []
+        ],
+        [
+          "2026-06-30",
+          0.33,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 16,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-07-31",
+        "fiscal_date": "2026-06-30",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-09-30",
+            0.29072,
+            23
+          ],
+          [
+            "2026-12-30",
+            0.28461,
+            22
+          ],
+          [
+            "2027-03-30",
+            0.31028,
+            12
+          ],
+          [
+            "2027-06-30",
+            0.38256,
+            10
+          ]
+        ],
+        "value": 1.26817
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "DELL": {
+      "current_fiscal": "2026-07-31",
+      "eps": [
+        [
+          "2022-10-30",
+          2.3,
+          []
+        ],
+        [
+          "2023-01-30",
+          1.8,
+          []
+        ],
+        [
+          "2023-04-29",
+          1.31,
+          []
+        ],
+        [
+          "2023-07-30",
+          1.74,
+          []
+        ],
+        [
+          "2023-10-30",
+          1.88,
+          []
+        ],
+        [
+          "2024-01-31",
+          2.2,
+          []
+        ],
+        [
+          "2024-04-30",
+          1.27,
+          []
+        ],
+        [
+          "2024-08-01",
+          1.89,
+          []
+        ],
+        [
+          "2024-11-01",
+          2.15,
+          []
+        ],
+        [
+          "2025-01-31",
+          2.68,
+          []
+        ],
+        [
+          "2025-05-02",
+          1.55,
+          []
+        ],
+        [
+          "2025-08-01",
+          2.32,
+          []
+        ],
+        [
+          "2025-10-31",
+          2.59,
+          []
+        ],
+        [
+          "2026-01-30",
+          3.89,
+          []
+        ],
+        [
+          "2026-05-01",
+          4.86,
+          []
+        ],
+        [
+          "2026-07-31",
+          7.04,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 16,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-09-08",
+        "fiscal_date": "2026-07-31",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "ntm_fy_blend",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2027-01-30",
+            25.89357,
+            13
+          ],
+          [
+            "2028-01-30",
+            30.92899,
+            8
+          ]
+        ],
+        "value": 28.411279999999998
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "FER": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2020-06-30",
+          -0.191,
+          []
+        ],
+        [
+          "2020-12-31",
+          -0.13828,
+          []
+        ],
+        [
+          "2021-06-30",
+          0.1222,
+          []
+        ],
+        [
+          "2021-12-31",
+          0.03871,
+          []
+        ],
+        [
+          "2022-06-30",
+          0.3298,
+          []
+        ],
+        [
+          "2022-12-31",
+          2.57,
+          []
+        ],
+        [
+          "2023-06-30",
+          0.262,
+          []
+        ],
+        [
+          "2023-12-31",
+          0.4069,
+          []
+        ],
+        [
+          "2024-06-30",
+          0.3052,
+          []
+        ],
+        [
+          "2024-09-30",
+          2.15,
+          []
+        ],
+        [
+          "2024-12-31",
+          2.03,
+          []
+        ],
+        [
+          "2025-03-30",
+          0.4111,
+          []
+        ],
+        [
+          "2025-06-30",
+          null,
+          [
+            "eps_conflicting_quarter"
+          ]
+        ],
+        [
+          "2025-09-30",
+          0.2811,
+          []
+        ],
+        [
+          "2025-12-31",
+          0.587,
+          []
+        ],
+        [
+          "2026-06-30",
+          0.4115,
+          []
+        ]
+      ],
+      "eps_labels": {
+        "2025-06-30": [
+          "eps_conflicting_quarter"
+        ]
+      },
+      "eps_window": 16,
+      "flags": [
+        "semiannual_reporter",
+        "unit_unverified"
+      ],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-07-28",
+        "fiscal_date": "2026-06-30",
+        "labels": [
+          "q11_gross_margin_jump"
+        ]
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "ntm_fy_blend",
+        "missing_reason": "unit_unverified",
+        "quarters": [
+          [
+            "2026-12-31",
+            0.95147,
+            2
+          ],
+          [
+            "2027-12-31",
+            1.11508,
+            2
+          ]
+        ],
+        "value": null
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "FTV": {
+      "current_fiscal": "2026-07-03",
+      "eps": [
+        [
+          "2022-09-25",
+          0.79,
+          []
+        ],
+        [
+          "2022-12-25",
+          0.88,
+          []
+        ],
+        [
+          "2023-03-25",
+          0.75,
+          []
+        ],
+        [
+          "2023-06-25",
+          0.85,
+          []
+        ],
+        [
+          "2023-09-25",
+          0.85,
+          []
+        ],
+        [
+          "2023-12-26",
+          0.98,
+          []
+        ],
+        [
+          "2024-03-31",
+          0.83,
+          []
+        ],
+        [
+          "2024-07-03",
+          0.93,
+          []
+        ],
+        [
+          "2024-10-03",
+          0.97,
+          []
+        ],
+        [
+          "2024-12-31",
+          1.17,
+          []
+        ],
+        [
+          "2025-03-28",
+          0.85,
+          []
+        ],
+        [
+          "2025-06-27",
+          0.58,
+          []
+        ],
+        [
+          "2025-09-26",
+          0.68,
+          []
+        ],
+        [
+          "2025-12-31",
+          0.9,
+          []
+        ],
+        [
+          "2026-04-03",
+          0.7,
+          []
+        ],
+        [
+          "2026-07-03",
+          0.74,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 16,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-07-29",
+        "fiscal_date": "2026-07-03",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-10-03",
+            0.70471,
+            9
+          ],
+          [
+            "2027-01-03",
+            0.87497,
+            9
+          ],
+          [
+            "2027-04-03",
+            0.74917,
+            7
+          ],
+          [
+            "2027-07-03",
+            0.79361,
+            3
+          ]
+        ],
+        "value": 3.1224600000000002
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "KLAC": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2022-09-30",
+          0.706,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2022-12-31",
+          0.738,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-03-31",
+          0.549,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-06-30",
+          0.54,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-09-30",
+          0.5740000000000001,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-12-31",
+          0.616,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-03-31",
+          0.526,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-06-30",
+          0.6599999999999999,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-09-30",
+          0.733,
+          []
+        ],
+        [
+          "2024-12-31",
+          0.82,
+          []
+        ],
+        [
+          "2025-03-31",
+          0.84,
+          []
+        ],
+        [
+          "2025-06-30",
+          0.94,
+          []
+        ],
+        [
+          "2025-09-30",
+          0.88,
+          []
+        ],
+        [
+          "2025-12-31",
+          0.89,
+          []
+        ],
+        [
+          "2026-03-31",
+          0.94,
+          []
+        ],
+        [
+          "2026-06-30",
+          1.05,
+          []
+        ]
+      ],
+      "eps_labels": {
+        "2022-09-30": [
+          "eps_split_rescaled"
+        ],
+        "2022-12-31": [
+          "eps_split_rescaled"
+        ],
+        "2023-03-31": [
+          "eps_split_rescaled"
+        ],
+        "2023-06-30": [
+          "eps_split_rescaled"
+        ],
+        "2023-09-30": [
+          "eps_split_rescaled"
+        ],
+        "2023-12-31": [
+          "eps_split_rescaled"
+        ],
+        "2024-03-31": [
+          "eps_split_rescaled"
+        ],
+        "2024-06-30": [
+          "eps_split_rescaled"
+        ]
+      },
+      "eps_window": 16,
+      "flags": [
+        "price_split_rescaled"
+      ],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-08-06",
+        "fiscal_date": "2026-06-30",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-09-30",
+            1.18341,
+            15
+          ],
+          [
+            "2026-12-30",
+            1.37396,
+            15
+          ],
+          [
+            "2027-03-30",
+            1.44587,
+            6
+          ],
+          [
+            "2027-06-30",
+            1.53682,
+            6
+          ]
+        ],
+        "value": 5.54006
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "LH": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2022-09-29",
+          4.68,
+          []
+        ],
+        [
+          "2022-12-29",
+          4.14,
+          []
+        ],
+        [
+          "2023-03-29",
+          3.82,
+          []
+        ],
+        [
+          "2023-06-29",
+          3.42,
+          []
+        ],
+        [
+          "2023-09-29",
+          3.38,
+          []
+        ],
+        [
+          "2023-12-30",
+          3.3,
+          []
+        ],
+        [
+          "2024-03-31",
+          3.68,
+          []
+        ],
+        [
+          "2024-06-30",
+          3.94,
+          []
+        ],
+        [
+          "2024-09-30",
+          3.5,
+          []
+        ],
+        [
+          "2024-12-31",
+          3.45,
+          []
+        ],
+        [
+          "2025-03-31",
+          3.84,
+          []
+        ],
+        [
+          "2025-06-30",
+          4.35,
+          []
+        ],
+        [
+          "2025-09-30",
+          4.18,
+          []
+        ],
+        [
+          "2025-12-31",
+          4.07,
+          []
+        ],
+        [
+          "2026-03-31",
+          4.25,
+          []
+        ],
+        [
+          "2026-06-30",
+          4.99,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 16,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-08-05",
+        "fiscal_date": "2026-06-30",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-09-30",
+            4.65233,
+            10
+          ],
+          [
+            "2026-12-30",
+            4.44745,
+            9
+          ],
+          [
+            "2027-03-30",
+            4.61032,
+            6
+          ],
+          [
+            "2027-06-30",
+            5.2216,
+            3
+          ]
+        ],
+        "value": 18.9317
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "MNST": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2022-09-29",
+          0.15,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2022-12-29",
+          0.145,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-03-29",
+          0.19,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-06-29",
+          0.195,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-09-29",
+          0.205,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-12-30",
+          0.19,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-03-31",
+          0.21,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-06-30",
+          0.205,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-09-30",
+          0.2,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-12-31",
+          0.19,
+          []
+        ],
+        [
+          "2025-03-31",
+          0.23,
+          []
+        ],
+        [
+          "2025-06-30",
+          0.26,
+          []
+        ],
+        [
+          "2025-09-30",
+          0.28,
+          []
+        ],
+        [
+          "2025-12-31",
+          0.25,
+          []
+        ],
+        [
+          "2026-03-31",
+          0.29,
+          []
+        ],
+        [
+          "2026-06-30",
+          0.3,
+          []
+        ]
+      ],
+      "eps_labels": {
+        "2022-09-29": [
+          "eps_split_rescaled"
+        ],
+        "2022-12-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-03-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-06-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-09-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-12-30": [
+          "eps_split_rescaled"
+        ],
+        "2024-03-31": [
+          "eps_split_rescaled"
+        ],
+        "2024-06-30": [
+          "eps_split_rescaled"
+        ],
+        "2024-09-30": [
+          "eps_split_rescaled"
+        ]
+      },
+      "eps_window": 16,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-08-06",
+        "fiscal_date": "2026-06-30",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-09-30",
+            0.29958,
+            9
+          ],
+          [
+            "2026-12-30",
+            0.27692,
+            9
+          ],
+          [
+            "2027-03-30",
+            0.31827,
+            6
+          ],
+          [
+            "2027-06-30",
+            0.33949,
+            3
+          ]
+        ],
+        "value": 1.23426
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "NVDA": {
+      "current_fiscal": "2026-07-26",
+      "eps": [
+        [
+          "2022-10-25",
+          0.06,
+          []
+        ],
+        [
+          "2023-01-25",
+          0.09,
+          []
+        ],
+        [
+          "2023-04-25",
+          0.11,
+          []
+        ],
+        [
+          "2023-07-25",
+          0.27,
+          []
+        ],
+        [
+          "2023-10-25",
+          0.4,
+          []
+        ],
+        [
+          "2024-01-26",
+          0.52,
+          []
+        ],
+        [
+          "2024-04-25",
+          0.61,
+          []
+        ],
+        [
+          "2024-07-26",
+          0.68,
+          []
+        ],
+        [
+          "2024-10-27",
+          0.81,
+          []
+        ],
+        [
+          "2025-01-26",
+          0.89,
+          []
+        ],
+        [
+          "2025-04-27",
+          0.81,
+          []
+        ],
+        [
+          "2025-07-27",
+          1.05,
+          []
+        ],
+        [
+          "2025-10-26",
+          1.3,
+          []
+        ],
+        [
+          "2026-01-25",
+          1.62,
+          []
+        ],
+        [
+          "2026-04-26",
+          1.87,
+          []
+        ],
+        [
+          "2026-07-26",
+          2.22,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 16,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-08-26",
+        "fiscal_date": "2026-07-26",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-10-26",
+            2.47017,
+            28
+          ],
+          [
+            "2027-01-26",
+            2.72895,
+            26
+          ],
+          [
+            "2027-04-26",
+            3.16587,
+            18
+          ],
+          [
+            "2027-07-26",
+            3.63263,
+            12
+          ]
+        ],
+        "value": 11.99762
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "ORLY": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2022-09-29",
+          0.6113333333333333,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2022-12-29",
+          0.5579999999999999,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-03-29",
+          0.5519999999999999,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-06-29",
+          0.6813333333333333,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-09-29",
+          0.7153333333333334,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2023-12-30",
+          0.6173333333333333,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-03-31",
+          0.6133333333333333,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-06-30",
+          0.7033333333333334,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-09-30",
+          0.7606666666666667,
+          [
+            "eps_split_rescaled"
+          ]
+        ],
+        [
+          "2024-12-31",
+          0.66,
+          []
+        ],
+        [
+          "2025-03-31",
+          0.62,
+          []
+        ],
+        [
+          "2025-06-30",
+          0.78,
+          []
+        ],
+        [
+          "2025-09-30",
+          0.85,
+          []
+        ],
+        [
+          "2025-12-31",
+          0.71,
+          []
+        ],
+        [
+          "2026-03-31",
+          0.72,
+          []
+        ],
+        [
+          "2026-06-30",
+          0.86,
+          []
+        ]
+      ],
+      "eps_labels": {
+        "2022-09-29": [
+          "eps_split_rescaled"
+        ],
+        "2022-12-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-03-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-06-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-09-29": [
+          "eps_split_rescaled"
+        ],
+        "2023-12-30": [
+          "eps_split_rescaled"
+        ],
+        "2024-03-31": [
+          "eps_split_rescaled"
+        ],
+        "2024-06-30": [
+          "eps_split_rescaled"
+        ],
+        "2024-09-30": [
+          "eps_split_rescaled"
+        ]
+      },
+      "eps_window": 16,
+      "flags": [],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-08-07",
+        "fiscal_date": "2026-06-30",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "quarter_sum",
+        "missing_reason": null,
+        "quarters": [
+          [
+            "2026-09-30",
+            0.92691,
+            15
+          ],
+          [
+            "2026-12-30",
+            0.78057,
+            14
+          ],
+          [
+            "2027-03-30",
+            0.79728,
+            8
+          ],
+          [
+            "2027-06-30",
+            0.9602,
+            6
+          ]
+        ],
+        "value": 3.46496
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "TSM": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2022-09-30",
+          1.79,
+          []
+        ],
+        [
+          "2022-12-31",
+          1.82,
+          []
+        ],
+        [
+          "2023-03-31",
+          1.4,
+          []
+        ],
+        [
+          "2023-06-30",
+          1.13,
+          []
+        ],
+        [
+          "2023-09-30",
+          1.26,
+          []
+        ],
+        [
+          "2023-12-31",
+          1.46,
+          []
+        ],
+        [
+          "2024-03-31",
+          1.34,
+          []
+        ],
+        [
+          "2024-06-30",
+          1.47,
+          []
+        ],
+        [
+          "2024-09-30",
+          1.95,
+          []
+        ],
+        [
+          "2024-12-31",
+          2.19,
+          []
+        ],
+        [
+          "2025-03-31",
+          2.14,
+          []
+        ],
+        [
+          "2025-06-30",
+          2.5,
+          []
+        ],
+        [
+          "2025-09-30",
+          2.92,
+          []
+        ],
+        [
+          "2025-12-31",
+          3.09,
+          []
+        ],
+        [
+          "2026-03-31",
+          3.49,
+          []
+        ],
+        [
+          "2026-06-30",
+          4.31,
+          []
+        ]
+      ],
+      "eps_labels": {},
+      "eps_window": 16,
+      "flags": [
+        "unit_unverified"
+      ],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-08-14",
+        "fiscal_date": "2026-06-30",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "ntm_fy_blend",
+        "missing_reason": "unit_unverified",
+        "quarters": [
+          [
+            "2026-12-31",
+            532.86464,
+            11
+          ],
+          [
+            "2027-12-31",
+            696.48714,
+            11
+          ]
+        ],
+        "value": null
+      },
+      "nulled": {},
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    },
+    "YPF": {
+      "current_fiscal": "2026-06-30",
+      "eps": [
+        [
+          "2022-06-29",
+          2.01,
+          []
+        ],
+        [
+          "2022-09-29",
+          1.72,
+          []
+        ],
+        [
+          "2022-12-29",
+          1.2,
+          []
+        ],
+        [
+          "2023-03-29",
+          0.87,
+          []
+        ],
+        [
+          "2023-06-29",
+          0.86,
+          []
+        ],
+        [
+          "2023-09-29",
+          null,
+          [
+            "eps_conflicting_quarter"
+          ]
+        ],
+        [
+          "2023-12-30",
+          -4.75,
+          []
+        ],
+        [
+          "2024-06-30",
+          1.32,
+          []
+        ],
+        [
+          "2024-09-30",
+          null,
+          [
+            "eps_conflicting_quarter"
+          ]
+        ],
+        [
+          "2024-12-31",
+          null,
+          [
+            "eps_conflicting_quarter"
+          ]
+        ],
+        [
+          "2025-03-31",
+          null,
+          [
+            "eps_conflicting_quarter"
+          ]
+        ],
+        [
+          "2025-06-30",
+          null,
+          [
+            "eps_conflicting_quarter"
+          ]
+        ],
+        [
+          "2025-09-30",
+          null,
+          [
+            "eps_conflicting_quarter"
+          ]
+        ],
+        [
+          "2025-12-31",
+          -1.67,
+          []
+        ],
+        [
+          "2026-03-31",
+          null,
+          [
+            "eps_conflicting_quarter"
+          ]
+        ],
+        [
+          "2026-06-30",
+          3.07,
+          []
+        ]
+      ],
+      "eps_labels": {
+        "2023-09-29": [
+          "eps_conflicting_quarter"
+        ],
+        "2024-09-30": [
+          "eps_conflicting_quarter"
+        ],
+        "2024-12-31": [
+          "eps_conflicting_quarter"
+        ],
+        "2025-03-31": [
+          "eps_conflicting_quarter"
+        ],
+        "2025-06-30": [
+          "eps_conflicting_quarter"
+        ],
+        "2025-09-30": [
+          "eps_conflicting_quarter"
+        ],
+        "2026-03-31": [
+          "eps_conflicting_quarter"
+        ]
+      },
+      "eps_window": 16,
+      "flags": [
+        "unit_unverified"
+      ],
+      "last_quarter": {
+        "availability_basis": "accepted_date",
+        "available_on": "2026-08-17",
+        "fiscal_date": "2026-06-30",
+        "labels": []
+      },
+      "membership_basis": "extended_membership",
+      "ntm": {
+        "basis": "ntm_fy_blend",
+        "missing_reason": "unit_unverified",
+        "quarters": [
+          [
+            "2026-12-31",
+            10441.38181,
+            3
+          ],
+          [
+            "2027-12-31",
+            9005.59368,
+            4
+          ]
+        ],
+        "value": null
+      },
+      "nulled": {
+        "2025-03-31": [
+          "revenue:q10_unit_scale",
+          "cost_of_revenue:q10_unit_scale",
+          "gross_profit:q10_unit_scale",
+          "net_income:q10_unit_scale",
+          "operating_cash_flow:q10_unit_scale",
+          "capital_expenditure:q10_unit_scale",
+          "free_cash_flow:q10_unit_scale"
+        ],
+        "2025-06-30": [
+          "revenue:q10_unit_scale",
+          "cost_of_revenue:q10_unit_scale",
+          "gross_profit:q10_unit_scale",
+          "net_income:q10_unit_scale",
+          "operating_cash_flow:q10_unit_scale",
+          "capital_expenditure:q10_unit_scale",
+          "free_cash_flow:q10_unit_scale"
+        ]
+      },
+      "pit": {
+        "consensus": "live",
+        "statements": "live",
+        "street_eps": "live"
+      },
+      "quarters": 16
+    }
+  },
+  "ntm_available": 758,
+  "observed_at": "2026-09-29",
+  "packets_built": 915,
+  "pit_counts": {
+    "live": 915
+  },
+  "pre_announce_available": 735,
+  "quality_code_counts": {
+    "balance_unavailable": 83,
+    "cashflow_unavailable": 34,
+    "q10_unit_scale": 14,
+    "q11_cost_jump": 171,
+    "q11_gross_margin_jump": 1013,
+    "q11_revenue_jump": 121,
+    "q13_currency_change": 441,
+    "q14_long_gap": 367,
+    "q14_nonstandard_quarter": 127,
+    "q17_acquisition_suspect": 451,
+    "q8_gross_profit_identity": 50,
+    "q9_gross_profit_exceeds_revenue": 29,
+    "q9_negative_cost_of_revenue": 48,
+    "q9_negative_revenue": 36
+  },
+  "quarters_ge_8": 895,
+  "requested_not_members": [],
+  "revision_available": 737,
+  "unit_unverified": 151,
+  "with_current_fiscal": 915
+}
