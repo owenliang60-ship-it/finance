@@ -145,6 +145,24 @@ def test_message_shows_date_counts_two_percentiles_and_tie_convention():
     assert len(text)<4000
 
 
+@pytest.mark.parametrize('weak_rank,alert', [(89.9,False),(90.0,False),(90.1,True),(100.0,True)])
+def test_weak_percentile_alert_is_strict_and_prominent(weak_rank,alert):
+    report=breadth.build_report(Market(),ASOF)
+    report['strong_percentile']=100.0
+    report['weak_percentile']=weak_rank
+    # Trigger is the weak historical percentile, not the raw breadth percentage.
+    report['current']['weak_pct']=0.5 if alert else 95.0
+    text=breadth.message(report)
+    weak_line=next(line for line in text.splitlines() if '极弱 ≤2：' in line)
+    if alert:
+        assert text.startswith('*🚨🚨 极弱宽度高位警报 | 一年分位 > P90 🚨🚨*\n')
+        assert weak_line.startswith('*极弱 ≤2：') and weak_line.endswith('*')
+        assert f'P{weak_rank:.1f}' in weak_line
+    else:
+        assert '🚨' not in text
+        assert not weak_line.startswith('*')
+
+
 def test_run_dry_run_saves_artifacts_without_sending(tmp_path,monkeypatch):
     report=breadth.build_report(Market(),ASOF)
     sent=[]

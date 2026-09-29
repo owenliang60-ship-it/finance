@@ -32,6 +32,14 @@ The comparison excludes today, uses calendar days (crypto trades every day),
 and uses unrounded breadth values. Ties count fully: an all-zero historical
 series gives P100 for zero today. Both raw breadth and percentile are shown.
 
+When the **weak breadth's unrounded trailing-year percentile is strictly
+greater than 90**, the daily message starts with a bold 🚨 warning and the
+entire weak breadth row is bold (the existing Telegram Markdown transport).
+Exactly P90 does not trigger. The trigger is not the raw weak percentage or
+the strong percentile. Every qualifying daily report carries the warning,
+not only the first crossing; existing same-day delivery receipts still apply.
+This presentation alert does not change the indicator or its tie convention.
+
 A gap, duplicate, malformed/nonpositive close, invalid PMARP, absent lifecycle,
 or zero valid denominator stops numeric publication. New-coin warmup is
 explicitly counted; failures never silently reduce the denominator. A pending

@@ -185,12 +185,16 @@ def build_report(market, as_of):
 
 def message(report):
     current = report['current']
+    weak_alert = report['weak_percentile'] > 90
     lines = [f"*Crypto 日线PMARP市场宽度 | {report['as_of']} UTC*",
              '历史逐日Crypto USDT永续池 · 含BTC · 全池等权',
              f"有效 {current['valid_count']}/{current['eligible_count']} · 新币预热 {current['warmup_count']}"]
+    if weak_alert:
+        lines.insert(0, '*🚨🚨 极弱宽度高位警报 | 一年分位 > P90 🚨🚨*')
     for side, label in [('strong','极强 ≥98'),('weak','极弱 ≤2')]:
-        lines.append(f"{label}：{current[side+'_count']}/{current['valid_count']} = "
-                     f"{current[side+'_pct']:.2f}% | 一年分位 P{report[side+'_percentile']:.1f}")
+        line = (f"{label}：{current[side+'_count']}/{current['valid_count']} = "
+                f"{current[side+'_pct']:.2f}% | 一年分位 P{report[side+'_percentile']:.1f}")
+        lines.append(f'*{line}*' if side == 'weak' and weak_alert else line)
     lines += [f"对比 {report['comparison_start']} 至 {report['comparison_end']}，此前365日，不含当天。",
               '分位=历史宽度≤今日的天数占比；并列计入（连续为0也可能P100）。',
               'EMA20 / PMARP150 · 先看今日占比；分位仅表示历史排名，并列会抬高排名。']
