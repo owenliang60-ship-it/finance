@@ -96,3 +96,100 @@ def test_pairing_differs_when_the_year_ago_quarter_is_missing():
     assert ours.pairing_differs["gm_level"] is False
     assert ours.values["ours"]["revenue_yoy"] is None and ours.missing["ours"]["revenue_yoy"] == "no_yoy_base"
     assert ours.values["site"]["revenue_yoy"] == pytest.approx(0.0)           # position takes quarters[-5]
+
+
+# ---- Task 3: comparison and cause classification ----
+
+def compare_one(values=None, series=None, repairs=(), quarters=None, ours_missing=""):
+    site = s1.load_site_rows(fixture(("2026-06-30", [site_row(values=values, series=series, repairs=repairs)])))[0]
+    ours = None if ours_missing else s1.our_side(quarters or flat_quarters(), aligned_by="asof")
+    return {(c.factor, c.basis): c for c in s1.compare(site, ours, missing_reason=ours_missing)}
+
+
+def test_matching_row_passes_every_factor_on_both_bases():
+    out = compare_one()
+    assert len(out) == 12
+    assert all(c.counted and c.passed and c.category == "match" for c in out.values())
+    assert {c.fiscal_date for c in out.values()} == {Q8[-1]}
+
+
+def test_diff_is_ours_minus_site_and_the_bound_is_strict():
+    out = compare_one(values={"gm_pct": 50.4, "gm_yoy_pp": 0.5})
+    assert out[("gm_level", "site")].passed and out[("gm_level", "site")].diff == pytest.approx(-0.4)
+    assert not out[("gm_yoy", "site")].passed                     # |diff| = 0.5 is not < 0.5
+
+
+def test_inputs_agree_but_factor_differs_is_unexplained():
+    assert compare_one(values={"revenue_yoy_pct": 3.0})[("revenue_yoy", "site")].category == "unexplained"
+
+
+def test_input_difference_names_field_and_quarter():
+    rev = [100.0] * 8
+    rev[3] = 97.0                                                  # their year-ago revenue differs
+    c = compare_one(values={"revenue_yoy_pct": 3.1}, series={"rev": rev})[("revenue_yoy", "site")]
+    assert (c.category, c.detail) == ("input_diff", f"rev@{Q8[3]}")
+
+
+def test_input_tolerance_absorbs_rounding():
+    rev = [100.0] * 8
+    rev[3] = 100.05                                                # one-decimal rounding on their side
+    c = compare_one(values={"revenue_yoy_pct": 3.0}, series={"rev": rev})[("revenue_yoy", "site")]
+    assert c.category == "unexplained"
+
+
+def test_site_repair_explains_only_known_fields():
+    known = compare_one(values={"gm_pct": 55.0}, repairs=[(Q8[-1], "gross_margin")])
+    unknown = compare_one(values={"gm_pct": 55.0}, repairs=[(Q8[-1], "mystery")])
+    assert known[("gm_level", "site")].category == "site_repaired"
+    assert unknown[("gm_level", "site")].category == "unexplained"
+
+
+def test_quarter_sequence_mismatch():
+    qs = [q for i, q in enumerate(flat_quarters(9)) if i != 4]     # ours lacks 2025-06-30
+    c = compare_one(values={"revenue_yoy_pct": 5.0}, quarters=qs)[("revenue_yoy", "site")]
+    assert c.category == "quarter_sequence"
+
+
+def test_our_missing_value_carries_the_engine_reason():
+    qs = flat_quarters()
+    qs[-1] = qin(Q8[-1], rev=100e6, fcfm=0.0)                        # FCF exactly 0: placeholder
+    c = compare_one(quarters=qs)[("fcf_margin_yoy", "site")]
+    assert (c.counted, c.passed, c.category, c.detail) == (True, False, "ours_missing", "fcf_zero_placeholder")
+
+
+def test_quarter_not_found_fails_every_counted_factor():
+    out = compare_one(ours_missing="quarter_not_found")
+    assert len(out) == 12
+    assert all(c.counted and not c.passed and (c.category, c.detail) == ("ours_missing", "quarter_not_found")
+               for c in out.values())
+
+
+def test_site_null_is_not_counted():
+    c = compare_one(values={"fcf_margin_yoy_pp": None})[("fcf_margin_yoy", "site")]
+    assert (c.counted, c.category, c.detail) == (False, "site_missing", "ours_has_value")
+
+
+def test_basis_only_day_adjust():
+    qs = flat_quarters()
+    qs[-1] = qin(Q8[-1], rev=100e6, days=98)                         # 14-week quarter
+    out = compare_one(quarters=qs)
+    assert out[("revenue_yoy", "site")].passed
+    assert out[("revenue_yoy", "ours")].category == "basis_only_day_adjust"
+
+
+def test_basis_only_pairing():
+    qs = [q for i, q in enumerate(flat_quarters()) if i != 3]
+    out = compare_one(quarters=qs, series={"q": [q.fiscal_date for q in qs]})
+    assert out[("revenue_yoy", "site")].passed
+    c = out[("revenue_yoy", "ours")]
+    assert (c.category, c.our_value) == ("basis_only_pairing", None)
+
+
+def test_basis_split_is_judged_per_factor():
+    # drop 2025-03-31: the current quarter keeps its year-ago base, only the prior quarter loses one
+    qs = [q for i, q in enumerate(flat_quarters(9)) if i != 3]
+    qs[-1] = qin(qs[-1].fiscal_date, rev=100e6, days=98)
+    out = compare_one(quarters=qs, series={"q": [q.fiscal_date for q in qs]})
+    assert out[("revenue_yoy", "site")].passed and out[("revenue_accel", "site")].passed
+    assert out[("revenue_yoy", "ours")].category == "basis_only_day_adjust"
+    assert out[("revenue_accel", "ours")].category == "basis_only_pairing"
