@@ -144,15 +144,16 @@ def eps_q(fiscal, eps, labels=()):
     return EpsQuarter(fiscal, announce, eps, None, tuple(labels))
 
 
-def cons(pre=None, price_pre=None, ntm=None, ttm=None, delta=None, missing=None):
+def cons(pre=None, price_pre=None, ntm=None, ttm=None, delta=None, missing=None, rev_quarters=4):
     missing = dict(missing or {})
+    fixed = tuple(qends(rev_quarters, "2027-06-30")) if delta is not None else ()
     return ConsensusInputs(
         pre_announce=PreAnnouncement(pre, None if pre is None else "local_snapshot", None, price_pre,
                                      None if pre is not None else missing.get("pre_announce", "no_pre_announce_snapshot")),
         ntm=NtmResult(ntm, None if ntm is None else "quarter_sum", (), None,
                       None if ntm is not None else missing.get("ntm", "no_current_snapshot")),
         ttm_eps=ttm, ttm_quarters=(),
-        revision=RevisionResult(delta, 4, (), None, None,
+        revision=RevisionResult(delta, 4, fixed, None, None,
                                 None if delta is not None else missing.get("revision", "no_base_snapshot")),
         unit_factor=None if missing else 1.0, missing_reasons=missing)
 

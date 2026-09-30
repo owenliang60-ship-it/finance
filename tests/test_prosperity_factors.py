@@ -166,6 +166,14 @@ def test_surprise_revision_and_pe_inputs_are_price_scaled():
     assert v["pe_ttm"] == pytest.approx(80.0 / 4.8) and v["ntm_growth"] == pytest.approx(6.0 / 4.8 - 1)
 
 
+def test_revision_is_scaled_to_four_quarters():          # Boss 2026-09-30 ①
+    qs, eps = [qin(f) for f in qends(4)], [eps_q(f, 1.2) for f in qends(4)]
+    two = expectation_factors(pkt(qs, eps, cons(delta=-0.5, rev_quarters=2), price=80.0)).values
+    assert two["revision"] == pytest.approx(-0.5 * 4 / 2 / 80.0 * 100)
+    three = expectation_factors(pkt(qs, eps, cons(delta=0.3, rev_quarters=3), price=80.0)).values
+    assert three["revision"] == pytest.approx(0.3 * 4 / 3 / 80.0 * 100)
+
+
 def test_expectation_missing_reasons_come_from_m4():
     qs, eps = [qin(f) for f in qends(4)], [eps_q(f, 1.2) for f in qends(4)]
     blocked = expectation_factors(pkt(qs, eps, cons(missing={"pre_announce": "unit_unverified",

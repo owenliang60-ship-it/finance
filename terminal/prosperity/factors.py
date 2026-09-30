@@ -330,7 +330,8 @@ def expectation_factors(packet: InputPacket) -> FactorOut:
 
     reason = (reasons.get("revision") or c.revision.missing_reason
               or ("revision_missing" if c.revision.delta_eps is None else None) or ("price_missing" if price is None else None))
-    revision = (None, reason) if reason else (c.revision.delta_eps / price * 100, None)
+    # Scaled to 4 quarters: sum × 4 ÷ fixed quarters (2–4), Boss 2026-09-30 ①
+    revision = (None, reason) if reason else (c.revision.delta_eps * 4 / len(c.revision.quarters) / price * 100, None)
 
     reason = reasons.get("ntm") or c.ntm.missing_reason or ("ntm_missing" if c.ntm.value is None else None)
     ntm = (None, reason) if reason else (c.ntm.value, None)
