@@ -13,6 +13,7 @@ from datetime import date
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from src.data.prosperity_history import SAME_QUARTER_DAYS, YEAR_DAYS, sue_dependencies, sue_value
+from terminal.prosperity.schemes import SCORING_FACTORS
 from terminal.prosperity.types import EpsQuarter, InputPacket, QuarterInputs
 
 QUARTER_GAP = (60, 120)          # adjacent quarter: fiscal dates 60–120 days apart
@@ -26,6 +27,8 @@ EPS_BLOCKING_LABELS = ("eps_conflicting_quarter", "eps_invalid_announcement_time
                        "eps_split_unconfirmed")
 EPS_KEYS = ("eps_sue", "eps_accel", "eps_ttm_leg", "eps_yoy_pct")
 EXPECTATION_KEYS = ("surprise", "revision", "ntm_eps", "ttm_eps", "ep_ntm", "pe_ntm", "pe_ttm", "ntm_growth")
+AUX_KEYS = ("net_margin_yoy", "gm_slope", "ntm_eps", "ttm_eps", "ep_ntm", "pe_ntm", "pe_ttm", "ntm_growth",
+            "eps_yoy_pct", "eps_ttm_leg", "revenue_ttm_leg", "beta", "price")
 STATEMENT_KEYS = ("revenue_yoy", "revenue_accel", "gm_level", "gm_yoy", "fcf_margin_yoy", "net_margin_yoy",
                   "gm_slope", "revenue_ttm_leg")
 
@@ -35,6 +38,24 @@ class FactorOut:
     values: Mapping[str, Optional[float]]
     missing: Mapping[str, str]            # only keys whose value is None
     labels: Tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class FactorRow:
+    """One member on one as_of: raw scoring values and gate/display values, independent of any scheme."""
+    symbol: str
+    as_of: str
+    current_fiscal: Optional[str]
+    sector: Optional[str]
+    industry: Optional[str]
+    disclosed_quarters: int
+    listing_days: Optional[int]           # raw age; each scheme applies its own new-listing threshold
+    values: Mapping[str, Optional[float]]
+    missing: Mapping[str, str]
+    aux: Mapping[str, Optional[float]]
+    labels: Tuple[str, ...]
+    packet_flags: Tuple[str, ...]
+    pit_basis: str
 
 
 def _d(value: str) -> date:
@@ -330,3 +351,33 @@ def expectation_factors(packet: InputPacket) -> FactorOut:
                  "pe_ntm": derived(px, ntm, "nonpositive_ntm"),
                  "pe_ttm": derived(px, ttm, "nonpositive_ttm"),
                  "ntm_growth": ratio if ratio[1] else (ratio[0] - 1, None)})
+
+
+def compute_factor_row(packet: InputPacket) -> FactorRow:
+    parts = (statement_factors(packet.quarters), eps_factors(packet.eps), expectation_factors(packet))
+    values: Dict[str, Optional[float]] = {}
+    missing: Dict[str, str] = {}
+    for part in parts:
+        values.update(part.values)
+        missing.update(part.missing)
+    # D-1 B: mean of the revenue and EPS TTM legs, ×100; either leg missing blanks the factor
+    leg = next((k for k in ("revenue_ttm_leg", "eps_ttm_leg") if values[k] is None), None)
+    if leg:
+        values["growth_4q"], missing["growth_4q"] = None, missing[leg]
+    else:
+        values["growth_4q"] = (values["revenue_ttm_leg"] + values["eps_ttm_leg"]) / 2 * 100
+    values.update(beta=packet.beta, price=packet.price_asof)
+    labels = [lab for part in parts for lab in part.labels]
+    listing_days = None
+    if packet.listing_date:
+        listing_days = (_d(packet.as_of) - _d(packet.listing_date)).days
+    else:
+        labels.append("listing_date_unknown")
+    scoring = {f: values[f] for f in SCORING_FACTORS}
+    return FactorRow(
+        symbol=packet.symbol, as_of=packet.as_of, current_fiscal=packet.current_fiscal,
+        sector=packet.sector, industry=packet.industry, disclosed_quarters=len(packet.quarters),
+        listing_days=listing_days, values=scoring,
+        missing={f: missing[f] for f, v in scoring.items() if v is None},
+        aux={k: values[k] for k in AUX_KEYS}, labels=tuple(dict.fromkeys(labels)),
+        packet_flags=tuple(packet.flags), pit_basis=packet.pit_basis)

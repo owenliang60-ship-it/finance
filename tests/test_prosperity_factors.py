@@ -3,7 +3,8 @@ from dataclasses import replace
 
 import pytest
 
-from terminal.prosperity.factors import eps_factors, expectation_factors, statement_factors
+from terminal.prosperity.factors import AUX_KEYS, compute_factor_row, eps_factors, expectation_factors, statement_factors
+from terminal.prosperity.schemes import SCORING_FACTORS
 from tests.prosperity_fixtures import cons, eps_q, pkt, qends, qin
 
 D8 = qends(8)
@@ -174,3 +175,33 @@ def test_expectation_missing_reasons_come_from_m4():
     assert blocked.values["ntm_eps"] is None and blocked.values["pe_ntm"] is None
     no_price = expectation_factors(pkt(qs, eps, cons(pre=1.0, price_pre=None, delta=0.1), price=None))
     assert no_price.missing["surprise"] == "price_missing" and no_price.missing["revision"] == "price_missing"
+
+def test_factor_row_splits_scoring_values_from_aux():
+    dates = qends(8)
+    qs = [qin(f, rev=r) for f, r in zip(dates, [100] * 4 + [120] * 4)]
+    eps = [eps_q(f, e) for f, e in zip(dates, [1.0] * 4 + [1.5] * 4)]
+    row = compute_factor_row(pkt(qs, eps, cons(pre=1.4, price_pre=50.0, ntm=7.0, ttm=6.0, delta=0.1)))
+    assert tuple(row.values) == SCORING_FACTORS and set(row.aux) == set(AUX_KEYS)
+    assert row.values["growth_4q"] == pytest.approx(((1.2 ** 0.25 - 1) + (1.5 ** 0.25 - 1)) / 2 * 100)
+    assert row.values["eps_sue"] is None and row.missing["eps_sue"] == "few_sigma_obs"     # 8 quarters only
+    assert row.values["surprise"] == pytest.approx((1.5 - 1.4) / 50.0 * 100)
+    assert (row.aux["ntm_eps"], row.aux["ttm_eps"]) == (7.0, 6.0)
+    assert row.disclosed_quarters == 8 and row.listing_days > 730 and row.current_fiscal == dates[-1]
+    assert set(row.missing) == {f for f, v in row.values.items() if v is None}
+
+
+def test_growth_4q_missing_when_eps_ttm_turns_positive():
+    dates = qends(8)
+    qs = [qin(f, rev=r) for f, r in zip(dates, [100] * 4 + [120] * 4)]
+    eps = [eps_q(f, e) for f, e in zip(dates, [-1.0, -1.0, 0.5, 0.2] + [0.5] * 4)]
+    row = compute_factor_row(pkt(qs, eps))
+    assert row.values["growth_4q"] is None and row.missing["growth_4q"] == "eps_ttm_turnaround"
+    assert "eps_ttm_turnaround" in row.labels
+
+
+def test_listing_days_is_raw_age_and_the_threshold_lives_in_the_scheme():
+    qs = [qin(f) for f in qends(6)]
+    assert compute_factor_row(pkt(qs, listing_date="2025-03-28")).listing_days == 547      # as_of 2026-09-26
+    assert compute_factor_row(pkt(qs, listing_date="2024-09-25")).listing_days == 731
+    unknown = compute_factor_row(pkt(qs, listing_date=None))
+    assert unknown.listing_days is None and "listing_date_unknown" in unknown.labels
