@@ -227,3 +227,156 @@ def composite(z: Mapping[str, float], scheme: Scheme) -> Tuple[Optional[float], 
 def base_score(comp: float, scheme: Scheme) -> float:
     c = scheme.composite_clip
     return (max(-c, min(c, comp)) + c) / (2 * c) * 100
+
+
+GRADE_ORDER = {"STRICT": 0, "FULL": 1, "BELOW": 2}
+
+
+@dataclass(frozen=True)
+class ScoredRow:
+    symbol: str
+    status: str                                # ranked / observe / excluded
+    observe_reason: Optional[str]
+    values: Mapping[str, Optional[float]]      # the scheme's factors after exemptions
+    missing: Mapping[str, str]                 # scheme factors without a z → why
+    z: Mapping[str, float]
+    weights: Mapping[str, float]               # renormalized over factors with a z
+    contributions: Mapping[str, float]
+    coverage: float
+    composite: Optional[float]
+    base: Optional[float]
+    trend_adj: Optional[float]
+    score: Optional[float]
+    grade: Optional[str]
+    demotions: Tuple[str, ...]
+    within: Optional[float]
+    family_scores: Mapping[str, Optional[float]]
+    rank: Optional[int]
+    badges: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BoardResult:
+    scheme_id: str
+    scheme_hash: str
+    code_version: str
+    as_of: str
+    params: ParamsPackage
+    params_bootstrap: bool
+    rows: Tuple[ScoredRow, ...]
+    counts: Mapping[str, int]
+
+
+def is_new_listing(row: FactorRow, scheme: Scheme) -> bool:
+    """Listed fewer than the scheme's days ago; an unknown listing date is not new (D-2)."""
+    return row.listing_days is not None and row.listing_days < scheme.new_listing_days
+
+
+def grade(score: float, row: FactorRow, scheme: Scheme) -> Tuple[str, Tuple[str, ...], Tuple[str, ...]]:
+    """(grade, demotions, badges). Every failed gate is listed, not just the first."""
+    g = "STRICT" if score >= scheme.grade_strict else "FULL" if score >= scheme.grade_full else "BELOW"
+    demotions, badges = [], []
+    new = is_new_listing(row, scheme)
+    for gate in scheme.gates:
+        if gate == "net_margin_down":
+            nm = row.aux.get("net_margin_yoy")
+            if not new and nm is not None and nm < 0:
+                demotions.append("net_margin_down")
+        elif gate == "new_listing" and new:
+            rev, gm = row.values.get("revenue_yoy"), row.values.get("gm_level")   # raw, before exemptions
+            if not (rev is not None and rev >= scheme.new_listing_min_revenue_yoy and gm is not None
+                    and gm >= scheme.new_listing_min_gm and score >= scheme.new_listing_min_score):
+                demotions.append("new_listing_gate")
+        elif gate == "ntm_not_above_ttm":
+            ntm, ttm = row.aux.get("ntm_eps"), row.aux.get("ttm_eps")
+            if ntm is None or ttm is None:
+                badges.append("ntm_gate_unknown")          # unverifiable: no penalty
+            elif ntm <= ttm:
+                demotions.append("ntm_not_above_ttm")
+    return ("BELOW" if demotions else g), tuple(demotions), tuple(badges)
+
+
+def _family_scores(z: Mapping[str, float], scheme: Scheme) -> Dict[str, Optional[float]]:
+    out = {}
+    for family in dict.fromkeys(FACTOR_SPECS[f].family for f in _factors(scheme)):
+        members = {f: w for f, w in scheme.weights if FACTOR_SPECS[f].family == family and f in z}
+        out[family] = (base_score(sum(z[f] * w for f, w in members.items()) / sum(members.values()), scheme)
+                       if members else None)
+    return out
+
+
+def _pct(values: Sequence[float], pct: float) -> float:
+    return statistics.quantiles(values, n=100, method="inclusive")[int(pct) - 1]
+
+
+def score_board(rows: Sequence[FactorRow], scheme: Scheme, *, frozen: Optional[ParamsPackage], as_of: str,
+                code_version: str) -> BoardResult:
+    _check_rows(rows, as_of)
+    z, used, boot = standardize(rows, scheme, frozen=frozen, as_of=as_of, code_version=code_version)
+    by_symbol = {r.symbol: r for r in rows}
+    out: Dict[str, dict] = {}
+    for row in rows:
+        ok, reason = rankable(row, scheme)
+        values, missing = usable_values(row, scheme)
+        rec = dict(symbol=row.symbol, status="ranked", observe_reason=None, values=values, missing=dict(missing),
+                   z={}, weights={}, contributions={}, coverage=_coverage(values, scheme), composite=None,
+                   base=None, trend_adj=None, score=None, grade=None, demotions=(), within=None,
+                   family_scores={}, rank=None, badges=["industry_unknown"] if not row.industry else [])
+        out[row.symbol] = rec
+        if not ok:
+            rec.update(status="excluded" if reason == "universe_excluded" else "observe", observe_reason=reason)
+            continue
+        zs = z[row.symbol]
+        for f, v in values.items():
+            if v is not None and f not in zs:
+                rec["missing"][f] = "degenerate_cross_section"
+        comp, weights = composite(zs, scheme)
+        if comp is None:
+            rec.update(status="observe", observe_reason="no_scorable_factor")
+            continue
+        slope = _slope(row)
+        bonus = slope_bonus(slope, used.slope_bounds, scheme.slope_tiers)
+        base = base_score(comp, scheme)
+        g, demotions, badges = grade(base + bonus, row, scheme)
+        rec.update(z=zs, weights=weights, contributions={f: zs[f] * w for f, w in weights.items()},
+                   composite=comp, base=base, trend_adj=bonus, score=base + bonus, grade=g, demotions=demotions,
+                   family_scores=_family_scores(zs, scheme))
+        if boot:
+            rec["badges"].append("params_bootstrap")
+        if slope is None or used.slope_bounds is None:
+            rec["badges"].append("gm_slope_missing")
+        rec["badges"].extend(badges)
+
+    ranked = [s for s, r in out.items() if r["status"] == "ranked"]
+    sectors: Dict[str, list] = {}
+    for s in ranked:
+        if by_symbol[s].sector:
+            sectors.setdefault(by_symbol[s].sector, []).append(s)
+    for members in sectors.values():
+        if len(members) < scheme.group_min_members:
+            continue
+        # PE guard (D-5): NTM E/P in the sector's lowest pct (richest valuation) with a negative raw revision or surprise
+        ep = {s: by_symbol[s].aux.get("ep_ntm") for s in members if by_symbol[s].aux.get("ep_ntm") is not None}
+        if len(ep) >= scheme.group_min_members:
+            cut = _pct(list(ep.values()), scheme.pe_redflag_pct)
+            for s, v in ep.items():
+                raw = by_symbol[s].values
+                if v <= cut and any(raw.get(f) is not None and raw[f] < 0 for f in ("revision", "surprise")):
+                    out[s]["badges"].append("pe_redflag")
+                    if scheme.pe_redflag_demotes:
+                        out[s].update(grade="BELOW", demotions=out[s]["demotions"] + ("pe_redflag",))
+        # Within-sector base score on this board's sector cross-section; reference only
+        zs, _, _ = standardize([by_symbol[s] for s in members], scheme, frozen=None, as_of=as_of,
+                               code_version=code_version)
+        for s in members:
+            comp = composite(zs[s], scheme)[0]
+            out[s]["within"] = None if comp is None else base_score(comp, scheme)
+
+    ranked.sort(key=lambda s: (GRADE_ORDER[out[s]["grade"]], -out[s]["score"], s))
+    for i, s in enumerate(ranked, 1):
+        out[s]["rank"] = i
+    rest = lambda status: sorted(s for s, r in out.items() if r["status"] == status)
+    order = ranked + rest("observe") + rest("excluded")
+    scored = tuple(ScoredRow(**{**out[s], "badges": tuple(dict.fromkeys(out[s]["badges"]))}) for s in order)
+    counts = {k: sum(r.status == k for r in scored) for k in ("ranked", "observe", "excluded")}
+    return BoardResult(scheme.scheme_id, scheme_hash(scheme), code_version, as_of, used, boot, scored, counts)
