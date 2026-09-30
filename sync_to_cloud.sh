@@ -254,8 +254,9 @@ pull_from_cloud() {
 
     # 1. 云端 market.db 一致快照（先于 canonical 预取：本地 DB 不会领先 canonical）
     check_local_market_db_publishable          # fail fast, before any cloud or transfer work
-    check_file_size "$LOCAL_DIR/data/market.db" "$REMOTE_DIR/data/market.db" "market.db" "pull"
     snapshot_remote_market_db
+    # Size-gate the snapshot: with no checkpoint the live main file omits the WAL's pages
+    check_file_size "$LOCAL_DIR/data/market.db" "$_REMOTE_SNAP" "market.db" "pull"
 
     # 1b. PREFETCH canonical reviewed_current.csv + manifest 到 temp，*先于* 拉本地 market.db
     #     (design finding P2): 若 canonical 拉取失败就中止，绝不让本地 DB 领先于 canonical

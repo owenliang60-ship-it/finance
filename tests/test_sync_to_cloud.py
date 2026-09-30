@@ -138,6 +138,11 @@ class TestMarketDbPull:
         assert 'mv "$_LOCAL_PULL_TMP" "$LOCAL_DIR/data/market.db"' in pull
         assert 'rsync -avz "$REMOTE/data/market.db"' not in text
         assert "PRAGMA wal_checkpoint" not in pull
+        # without a checkpoint the live main file understates the DB: size-gate the snapshot instead
+        body = pull[pull.index("pull_from_cloud() {"):]
+        gate = 'check_file_size "$LOCAL_DIR/data/market.db" "$_REMOTE_SNAP" "market.db" "pull"'
+        assert gate in body and body.index("snapshot_remote_market_db") < body.index(gate)
+        assert '"$REMOTE_DIR/data/market.db" "market.db" "pull"' not in text
 
     def test_snapshot_block_copies_wal_pages_and_prints_the_file_sha(self, tmp_path):
         import hashlib
@@ -154,9 +159,12 @@ class TestMarketDbPull:
         snap = data / ".pull-snapshot-1.db"
         out = subprocess.run([sys.executable, "-", str(data), str(snap)], input=code,
                              capture_output=True, text=True)
+        main_size = (data / "market.db").stat().st_size        # before close: closing checkpoints the WAL
         live.close()
         assert out.returncode == 0, out.stderr
         assert out.stdout.strip() == hashlib.sha256(snap.read_bytes()).hexdigest()
+        # the live main file alone is far smaller than the data it holds (why the size gate uses the snapshot)
+        assert main_size * 2 < snap.stat().st_size
         assert sqlite3.connect(snap).execute("SELECT count(*) FROM t").fetchone()[0] == 5000
 
     def test_local_check_rejects_a_truncated_download(self, tmp_path):
