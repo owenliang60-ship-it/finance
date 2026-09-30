@@ -16,6 +16,8 @@ REMOTE_HOST="aliyun"
 REMOTE_DIR="/root/workspace/Finance"
 REMOTE="$REMOTE_HOST:$REMOTE_DIR"
 PYTHON="$LOCAL_DIR/.venv/bin/python"
+# Absolute: launchd's PATH has no /usr/sbin, and a missing lsof must not read as "not in use"
+LSOF="/usr/sbin/lsof"
 
 # ── 颜色 (非 TTY 时禁用，避免日志污染) ──
 if [ -t 1 ]; then
@@ -55,10 +57,18 @@ release_lock() {
 # A3: canonical-CSV prefetch temp dir (script-global so the EXIT trap can clean it
 # even when `set -e` aborts pull_from_cloud before its own rm).
 _CC_TMP=""
-# market.db pull: the cloud snapshot is always removed; a local download that never
-# replaced market.db is kept as market.db.failed-pull-<time> for diagnosis.
+# market.db pull: the cloud snapshot is always removed. A complete download that failed
+# validation is kept as market.db.failed-pull-<time> (newest FAILED_PULL_KEEP only); a clone
+# or partial transfer carries no evidence and is deleted.
 _REMOTE_SNAP=""
 _LOCAL_PULL_TMP=""
+_PULL_DOWNLOADED=""
+FAILED_PULL_KEEP=2
+archive_failed_pull() {
+    mv "$_LOCAL_PULL_TMP" "$LOCAL_DIR/data/market.db.failed-pull-$(date +%Y%m%d-%H%M%S)"
+    ls -1t "$LOCAL_DIR"/data/market.db.failed-pull-????????-?????? 2>/dev/null \
+        | tail -n +$((FAILED_PULL_KEEP + 1)) | while read -r old; do rm -f "$old"; done
+}
 cleanup() {
     local rc=$?
     release_lock || true
@@ -68,8 +78,12 @@ cleanup() {
     if [ -n "$_REMOTE_SNAP" ]; then
         ssh "$REMOTE_HOST" "rm -f '$_REMOTE_SNAP' '$_REMOTE_SNAP-wal' '$_REMOTE_SNAP-shm'" || true
     fi
-    if [ -n "$_LOCAL_PULL_TMP" ] && [ -f "$_LOCAL_PULL_TMP" ]; then
-        mv "$_LOCAL_PULL_TMP" "$LOCAL_DIR/data/market.db.failed-pull-$(date +%Y%m%d-%H%M%S)" || true
+    if [ -n "$_LOCAL_PULL_TMP" ]; then
+        if [ -n "$_PULL_DOWNLOADED" ] && [ -f "$_LOCAL_PULL_TMP" ]; then
+            archive_failed_pull || true
+        else
+            rm -f "$_LOCAL_PULL_TMP" || true
+        fi
         rm -f "$_LOCAL_PULL_TMP-wal" "$_LOCAL_PULL_TMP-shm" || true
     fi
     return "$rc"
@@ -139,6 +153,27 @@ check_file_size() {
 # （2026-09-30：本地 historical_market_cap 指向文件末尾之外的页，quick_check 失败，健康检查却显示正常）。
 # SQLite 在线备份在一个读事务里拷贝，云端写入进行中也一致；不再对云端真库做 wal_checkpoint。
 REMOTE_SHA=""
+
+# issue 059: publish only when no local process holds market.db or its sidecars, and the
+# local WAL is empty (P3: nothing writes market.db locally)
+check_local_market_db_publishable() {
+    if [ ! -x "$LSOF" ]; then
+        error "找不到 $LSOF，无法确认本地 market.db 未被占用，中止 pull"
+        exit 1
+    fi
+    local f
+    for f in "$LOCAL_DIR/data/market.db" "$LOCAL_DIR/data/market.db-wal" "$LOCAL_DIR/data/market.db-shm"; do
+        if [ -e "$f" ] && "$LSOF" "$f" >/dev/null 2>&1; then
+            error "本地 $(basename "$f") 正被进程打开，拒绝替换；关闭后重试（issue 059）"
+            exit 1
+        fi
+    done
+    if [ -s "$LOCAL_DIR/data/market.db-wal" ]; then
+        error "本地 market.db-wal 非空（本地不应写 market.db），拒绝替换，请先排查"
+        exit 1
+    fi
+}
+
 snapshot_remote_market_db() {
     info "云端生成 market.db 一致快照..."
     _REMOTE_SNAP="$REMOTE_DIR/data/.pull-snapshot-$$.db"
@@ -148,11 +183,12 @@ data, snap = sys.argv[1:]
 for old in glob.glob(os.path.join(data, '.pull-snapshot-*.db*')):   # left behind by a killed pull
     if time.time() - os.path.getmtime(old) > 7200:
         os.remove(old)
-live = os.path.join(data, 'market.db')
-need = os.path.getsize(live) * 1.5
+src = sqlite3.connect('file:' + os.path.join(data, 'market.db') + '?mode=ro', uri=True)
+# page_count sees the WAL's pages too, which the main file size misses
+size = src.execute('PRAGMA page_count').fetchone()[0] * src.execute('PRAGMA page_size').fetchone()[0]
 free = shutil.disk_usage(data).free
-assert free > need, f'not enough space for the snapshot: free {free} < {need:.0f}'
-src = sqlite3.connect('file:' + live + '?mode=ro', uri=True)
+if free <= size * 1.5:
+    sys.exit(f'not enough space for the snapshot: free {free} <= {size * 1.5:.0f}')
 dst = sqlite3.connect(snap)
 src.backup(dst)
 dst.close()
@@ -160,7 +196,8 @@ src.close()
 chk = sqlite3.connect(snap)                  # our own temp file: a read-write open is harmless
 ok = chk.execute('PRAGMA quick_check').fetchone()[0]
 chk.close()
-assert ok == 'ok', f'snapshot quick_check: {ok}'
+if ok != 'ok':
+    sys.exit(f'snapshot quick_check: {ok}')
 h = hashlib.sha256()
 with open(snap, 'rb') as f:
     for block in iter(lambda: f.read(1 << 20), b''):
@@ -173,12 +210,18 @@ PY")
 download_market_db() {
     info "拉取 market.db 快照..."
     _LOCAL_PULL_TMP="$LOCAL_DIR/data/market.db.pull-$$"
+    rm -f "$_LOCAL_PULL_TMP"
+    # APFS clone of the current copy as rsync's delta basis; without it rsync copies everything
     if [ -f "$LOCAL_DIR/data/market.db" ]; then
-        cp -c "$LOCAL_DIR/data/market.db" "$_LOCAL_PULL_TMP"   # APFS clone as rsync's delta basis
+        cp -c "$LOCAL_DIR/data/market.db" "$_LOCAL_PULL_TMP" 2>/dev/null || rm -f "$_LOCAL_PULL_TMP"
     fi
     rsync -az "$REMOTE_HOST:$_REMOTE_SNAP" "$_LOCAL_PULL_TMP"
-    ssh "$REMOTE_HOST" "rm -f '$_REMOTE_SNAP' '$_REMOTE_SNAP-wal' '$_REMOTE_SNAP-shm'"
-    _REMOTE_SNAP=""
+    _PULL_DOWNLOADED=1
+    if ssh "$REMOTE_HOST" "rm -f '$_REMOTE_SNAP' '$_REMOTE_SNAP-wal' '$_REMOTE_SNAP-shm'"; then
+        _REMOTE_SNAP=""
+    else
+        warn "云端快照删除失败，退出时重试；超过 2 小时的残留由下次 pull 清理"
+    fi
     local got_sha
     got_sha=$(shasum -a 256 "$_LOCAL_PULL_TMP" | awk '{print $1}')
     if [ "$got_sha" != "$REMOTE_SHA" ]; then
@@ -196,15 +239,12 @@ PY
         error "market.db 本地 quick_check 失败，保留现有本地库"
         exit 1
     fi
-    # P3: nothing writes market.db locally, so a non-empty WAL means something did; replacing
-    # the file under it would pair that WAL with the new pages
-    if [ -s "$LOCAL_DIR/data/market.db-wal" ]; then
-        error "本地 market.db-wal 非空（本地不应写 market.db），拒绝替换，请先排查"
-        exit 1
-    fi
+    check_local_market_db_publishable
+    # Sidecars are empty and unheld: drop them before the swap so none pairs with the new file
+    rm -f "$LOCAL_DIR/data/market.db-wal" "$LOCAL_DIR/data/market.db-shm"
     mv "$_LOCAL_PULL_TMP" "$LOCAL_DIR/data/market.db"
     _LOCAL_PULL_TMP=""
-    rm -f "$LOCAL_DIR/data/market.db-wal" "$LOCAL_DIR/data/market.db-shm"
+    _PULL_DOWNLOADED=""
     info "market.db 已原子替换（sha256 与云端快照一致，quick_check ok）"
 }
 
@@ -213,6 +253,7 @@ pull_from_cloud() {
     info "=== Pull: 从云端拉取数据 ==="
 
     # 1. 云端 market.db 一致快照（先于 canonical 预取：本地 DB 不会领先 canonical）
+    check_local_market_db_publishable          # fail fast, before any cloud or transfer work
     check_file_size "$LOCAL_DIR/data/market.db" "$REMOTE_DIR/data/market.db" "market.db" "pull"
     snapshot_remote_market_db
 

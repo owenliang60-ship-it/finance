@@ -116,3 +116,61 @@ class TestPoolCountDisplaysExtendedMembershipCount:
             )
             assert result.returncode == 0, (code, result.stderr)
             assert "3 只" in result.stdout, (code, result.stdout)
+
+
+def _heredoc(opener: str, closer: str) -> str:
+    """Python source of the heredoc that starts right after `opener` in the script."""
+    text = SCRIPT_PATH.read_text(encoding="utf-8")
+    start = text.index(opener) + len(opener)
+    return text[start:text.index(closer, start)]
+
+
+class TestMarketDbPull:
+    """issue 059 / 2026-09-30: never rsync the live cloud DB; publish only a validated snapshot."""
+
+    def test_pull_publishes_only_a_validated_snapshot(self):
+        text = SCRIPT_PATH.read_text(encoding="utf-8")
+        pull = text[text.index("# ── market.db 云端→本地"):text.index("\n# ── Push:")]
+        assert "src.backup(dst)" in pull
+        assert 'shasum -a 256 "$_LOCAL_PULL_TMP"' in pull
+        assert pull.count("PRAGMA quick_check") == 2
+        assert 'LSOF="/usr/sbin/lsof"' in text and '"$LSOF" "$f"' in pull
+        assert 'mv "$_LOCAL_PULL_TMP" "$LOCAL_DIR/data/market.db"' in pull
+        assert 'rsync -avz "$REMOTE/data/market.db"' not in text
+        assert "PRAGMA wal_checkpoint" not in pull
+
+    def test_snapshot_block_copies_wal_pages_and_prints_the_file_sha(self, tmp_path):
+        import hashlib
+        code = _heredoc("'$_REMOTE_SNAP' <<'PY'\n", '\nPY")')
+        data = tmp_path / "data"
+        data.mkdir()
+        live = sqlite3.connect(data / "market.db")
+        live.execute("PRAGMA journal_mode=WAL")
+        live.execute("PRAGMA wal_autocheckpoint=0")
+        live.execute("CREATE TABLE t (x INTEGER)")
+        live.executemany("INSERT INTO t VALUES (?)", [(i,) for i in range(5000)])
+        live.commit()
+        assert (data / "market.db-wal").stat().st_size > 0          # committed rows still only in the WAL
+        snap = data / ".pull-snapshot-1.db"
+        out = subprocess.run([sys.executable, "-", str(data), str(snap)], input=code,
+                             capture_output=True, text=True)
+        live.close()
+        assert out.returncode == 0, out.stderr
+        assert out.stdout.strip() == hashlib.sha256(snap.read_bytes()).hexdigest()
+        assert sqlite3.connect(snap).execute("SELECT count(*) FROM t").fetchone()[0] == 5000
+
+    def test_local_check_rejects_a_truncated_download(self, tmp_path):
+        code = _heredoc('"$PYTHON" - "$_LOCAL_PULL_TMP" <<\'PY\'\n', "\nPY\n")
+        good = tmp_path / "good.db"
+        conn = sqlite3.connect(good)
+        conn.execute("CREATE TABLE t (x TEXT)")
+        conn.executemany("INSERT INTO t VALUES (?)", [("x" * 500,) for _ in range(2000)])
+        conn.commit()
+        conn.close()
+        run = lambda path: subprocess.run([sys.executable, "-", str(path)], input=code,
+                                          capture_output=True, text=True)
+        assert run(good).returncode == 0
+        bad = tmp_path / "bad.db"
+        raw = good.read_bytes()
+        bad.write_bytes(raw[:len(raw) - 8 * 4096])                 # the 2026-09-30 failure: pages past EOF
+        assert run(bad).returncode != 0
