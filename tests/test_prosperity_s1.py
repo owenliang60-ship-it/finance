@@ -55,3 +55,44 @@ def test_load_site_rows_keeps_nulls_and_maps_repair_fields():
     r = s1.load_site_rows(fixture(("2026-06-30", [row])))[0]
     assert r.values["fcf_margin_yoy"] is None
     assert r.repairs == ((Q8[-1], "gm"), (Q8[-2], "mystery"))
+
+
+# ---- Task 2: our side of the same fiscal quarter ----
+
+def test_match_index_pairs_the_same_fiscal_quarter_within_20_days():
+    qs = flat_quarters()
+    assert s1.match_index(qs, Q8[-1]) == 7
+    assert s1.match_index(qs, "2026-06-12") == 7          # 18 days apart still pairs
+    assert s1.match_index(qs, Q8[-2]) == 6                # ours is a quarter ahead: trim to index 6
+    assert s1.match_index(qs, "2026-09-30") is None       # ours is behind
+
+
+def test_timing_status():
+    assert s1.timing_status("2026-06-30", "2026-06-25") == "match"
+    assert s1.timing_status("2026-06-30", "2026-03-31") == "ours_ahead"
+    assert s1.timing_status("2026-03-31", "2026-06-30") == "ours_behind"
+    assert s1.timing_status(None, "2026-06-30") == "ours_none"
+
+
+def test_our_side_computes_both_bases_and_input_series():
+    qs = [qin(f, rev=r * 1e6) for f, r in zip(Q8, [100, 100, 100, 100, 100, 110, 130, 140])]
+    qs[-1] = qin(Q8[-1], rev=140e6, gm=0.6, nm=0.08, fcfm=0.25, days=98)
+    ours = s1.our_side(qs, aligned_by="asof")
+    assert (ours.fiscal_date, ours.aligned_by) == (Q8[-1], "asof")
+    assert len(ours.pairing_differs) == 6 and not any(ours.pairing_differs.values())
+    assert ours.values["site"]["revenue_yoy"] == pytest.approx(40.0)          # unadjusted 140 vs 100
+    assert ours.values["ours"]["revenue_yoy"] == pytest.approx(30.0)          # 140 × 91/98 = 130 vs 100
+    assert ours.values["site"]["gm_yoy"] == pytest.approx(10.0)
+    assert len(ours.quarters) == 8
+    q = ours.quarters[-1]
+    assert (q.fiscal_date, q.rev) == (Q8[-1], pytest.approx(140.0))            # millions
+    assert (q.gm, q.fcfm, q.nim) == (pytest.approx(60.0), pytest.approx(25.0), pytest.approx(8.0))
+
+
+def test_pairing_differs_when_the_year_ago_quarter_is_missing():
+    qs = [q for i, q in enumerate(flat_quarters()) if i != 3]
+    ours = s1.our_side(qs, aligned_by="asof")
+    assert ours.pairing_differs["revenue_yoy"] is True and ours.pairing_differs["revenue_accel"] is True
+    assert ours.pairing_differs["gm_level"] is False
+    assert ours.values["ours"]["revenue_yoy"] is None and ours.missing["ours"]["revenue_yoy"] == "no_yoy_base"
+    assert ours.values["site"]["revenue_yoy"] == pytest.approx(0.0)           # position takes quarters[-5]
