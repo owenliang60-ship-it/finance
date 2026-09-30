@@ -1,0 +1,295 @@
+{
+  "NVDA": {
+    "current_fiscal": "2026-07-26",
+    "cli_current_fiscal": "2026-07-26",
+    "base": "2025-07-27",
+    "days": [
+      91,
+      91
+    ],
+    "factors": {
+      "revenue_yoy": {
+        "independent": 105.85114348672526,
+        "cli": 105.85114348672526,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      },
+      "gm_yoy": {
+        "independent": 2.551638826699886,
+        "cli": 2.551638826699886,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      },
+      "fcf_margin_yoy": {
+        "independent": -6.576681834175385,
+        "cli": -6.576681834175385,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true,
+        "raw": {
+          "2026-07-26": [
+            21400000000.0,
+            -2677000000.0
+          ],
+          "2025-07-27": [
+            13470000000.0,
+            -1895000000.0
+          ]
+        }
+      },
+      "eps_sue": {
+        "independent": 4.349987743078009,
+        "cli": 4.349987743078009,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      }
+    }
+  },
+  "MSFT": {
+    "current_fiscal": "2026-06-30",
+    "cli_current_fiscal": "2026-06-30",
+    "base": "2025-06-30",
+    "days": [
+      91,
+      91
+    ],
+    "factors": {
+      "revenue_yoy": {
+        "independent": 17.74702057796209,
+        "cli": 17.74702057796209,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      },
+      "gm_yoy": {
+        "independent": -1.3879259151045744,
+        "cli": -1.3879259151045744,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      },
+      "fcf_margin_yoy": {
+        "independent": -11.628604687827995,
+        "cli": -11.628604687827995,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true,
+        "raw": {
+          "2026-06-30": [
+            19639000000.0,
+            -35802000000.0
+          ],
+          "2025-06-30": [
+            25568000000.0,
+            -17079000000.0
+          ]
+        }
+      },
+      "eps_sue": {
+        "independent": 4.094818716693165,
+        "cli": 4.094818716693165,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      }
+    }
+  },
+  "AAPL": {
+    "current_fiscal": "2026-06-27",
+    "cli_current_fiscal": "2026-06-27",
+    "base": "2025-06-28",
+    "days": [
+      91,
+      91
+    ],
+    "factors": {
+      "revenue_yoy": {
+        "independent": 16.356501765281383,
+        "cli": 16.356501765281383,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      },
+      "gm_yoy": {
+        "independent": 3.565501300761561,
+        "cli": 3.565501300761561,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      },
+      "fcf_margin_yoy": {
+        "independent": 3.2144874600684403,
+        "cli": 3.2144874600684403,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true,
+        "raw": {
+          "2026-06-27": [
+            31914000000.0,
+            -2455000000.0
+          ],
+          "2025-06-28": [
+            24405000000.0,
+            -3462000000.0
+          ]
+        }
+      },
+      "eps_sue": {
+        "independent": 3.923387394070683,
+        "cli": 3.923387394070683,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      }
+    }
+  },
+  "COST": {
+    "current_fiscal": "2026-08-30",
+    "cli_current_fiscal": "2026-08-30",
+    "base": "2025-08-31",
+    "days": [
+      112,
+      112
+    ],
+    "factors": {
+      "revenue_yoy": {
+        "independent": 11.104275964529453,
+        "cli": 11.104275964529453,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      },
+      "gm_yoy": {
+        "independent": -0.1689086682365044,
+        "cli": -0.1689086682365044,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      },
+      "fcf_margin_yoy": {
+        "independent": 0.3895696059612579,
+        "cli": 0.3895696059612579,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true,
+        "raw": {
+          "2026-08-30": [
+            2485000000.0,
+            -2207000000.0
+          ],
+          "2025-08-31": [
+            1901000000.0,
+            -1966000000.0
+          ]
+        }
+      },
+      "eps_sue": {
+        "independent": null,
+        "cli": null,
+        "cli_missing": "no_yoy_pair",
+        "abs_diff": null,
+        "compared": true,
+        "match": true,
+        "independent_reason": "no year-ago EPS within 365\u00b120 days",
+        "detail": [
+          [
+            "2026-08-10",
+            "2025-05-11",
+            456
+          ],
+          [
+            "2026-08-10",
+            "2025-08-31",
+            344
+          ],
+          [
+            "2026-08-10",
+            "2025-11-23",
+            260
+          ],
+          [
+            "2026-08-10",
+            "2026-02-15",
+            176
+          ],
+          [
+            "2026-08-10",
+            "2026-05-10",
+            92
+          ]
+        ]
+      }
+    }
+  },
+  "JPM": {
+    "current_fiscal": "2026-06-30",
+    "cli_current_fiscal": "2026-06-30",
+    "base": "2025-06-30",
+    "days": [
+      91,
+      91
+    ],
+    "factors": {
+      "revenue_yoy": {
+        "independent": 17.944903738879205,
+        "cli": 17.944903738879205,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      },
+      "gm_yoy": {
+        "independent": 6.388567913910734,
+        "cli": 6.388567913910734,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": true,
+        "match": true
+      },
+      "fcf_margin_yoy": {
+        "independent": -72.9228482994502,
+        "cli": null,
+        "cli_missing": "fcf_zero_placeholder",
+        "abs_diff": null,
+        "compared": false,
+        "match": false,
+        "raw": {
+          "2026-06-30": [
+            -25283000000.0,
+            0.0
+          ],
+          "2025-06-30": [
+            29547000000.0,
+            0.0
+          ]
+        }
+      },
+      "eps_sue": {
+        "independent": 6.536161041151403,
+        "cli": 6.536161041151403,
+        "cli_missing": null,
+        "abs_diff": 0.0,
+        "compared": false,
+        "match": true
+      }
+    }
+  }
+}

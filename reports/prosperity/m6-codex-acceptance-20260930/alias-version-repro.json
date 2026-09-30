@@ -1,0 +1,13 @@
+{
+  "method": "physically change copied config in TemporaryDirectory; actual repository unchanged",
+  "before_members": [
+    "COR"
+  ],
+  "after_members": [
+    "ABC",
+    "COR"
+  ],
+  "code_version_before": "c453bf09028a8e6f",
+  "code_version_after": "c453bf09028a8e6f",
+  "stale_frozen_params_accepted": true
+}

@@ -24,7 +24,7 @@
 .venv/bin/python independent_check.py --db "$DB" --board live-0929/board-F1-2026-09-29.jsonl > independent_check.json
 ```
 
-`code_version` = `c453bf09028a8e6f`（code review 修复后重跑；修复前 `633a9e810722aedc` 的四个方案榜单与修复后逐行比对，分数、评级、排名、徽章完全相同，只有回放中 33 只无财报股票的 EPS 缺失原因由 `eps_behind_current` 改为 `no_current_fiscal`）。board JSONL 未提交（体积大，可用上面命令重建）；summary JSON/MD 已提交。
+`code_version` = `ee4495acd0715621`（Codex 验收 P2 修复后重跑，8 份榜单与 `c453bf09028a8e6f` 逐字节相同；此前 code review 修复后重跑：修复前 `633a9e810722aedc` 的四个方案榜单与修复后逐行比对，分数、评级、排名、徽章完全相同，只有回放中 33 只无财报股票的 EPS 缺失原因由 `eps_behind_current` 改为 `no_current_fiscal`）。board JSONL 未提交（体积大，可用上面命令重建）；summary JSON/MD 已提交。
 
 ### 第 3 条 live（as_of 2026-09-29）：通过
 
@@ -98,3 +98,11 @@ CLI 用 `MarketStore(db_path=..., read_only=True)`，`tests/test_prosperity_scor
 | 8 未使用的常量与 min_quarters 进哈希 | `FAMILIES`、`EXPECTATION_KEYS` 删除；min_quarters 是北极星"登记所需历史"的一部分，保留在哈希里 | 部分采纳 |
 | 9 rankable/usable 重复计算 | 成立但无影响（全流程 8–10 秒） | 未改 |
 | 10 因子行失败的点名样本被记成"非成员" | 成立 | 非成员改按建包结果判断；加测试 |
+
+## Codex 独立验收（2026-09-30，`reports/prosperity/m6-codex-acceptance-20260930/`）
+
+主体全部通过，包括不调用内核的打分独立复算（5,832 个排名行，最大差 2.8e-14）。另报 1 个 P2：
+
+- **P2 别名配置未进版本哈希**：`src/data/symbol_aliases.py` 读 `config/symbol_aliases.json` 决定回放成员，JSON 不在 `code_version` 范围，改别名后版本不变、旧冻结包照样通过。核实成立（哈希范围内其余模块在景气读取路径上不再读其他配置文件）。
+- **修复**：`CODE_VERSION_SOURCES` 加入 `config/symbol_aliases.json`；新测试在临时目录改别名 JSON，断言版本变化且旧冻结包被 `params_code_mismatch` 拒绝（修复前失败、修复后通过）。景气测试 246 passed。live 与回放重跑，8 份榜单与修复前逐字节相同，summary 只有 `code_version` 与耗时不同。
+

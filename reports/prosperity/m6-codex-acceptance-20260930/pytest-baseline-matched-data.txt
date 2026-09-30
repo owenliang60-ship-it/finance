@@ -1,0 +1,163 @@
+2026-09-30 10:48:31,212 - WARNING - FMP tools registered but unavailable (missing FMP_API_KEY or import failed)
+2026-09-30 10:48:31,212 - INFO - Loaded 16/16 FRED tools (provider: FRED - free macro data)
+2026-09-30 10:48:31,212 - INFO - MarketData tools registered but unavailable (missing MARKETDATA_API_KEY)
+Baseline source 31fcdf38, dependency paths redirected to same worktree datasets; no files modified
+Matching failure nodes 12
+FFFFFFFFFFFF                                                             [100%]
+=================================== FAILURES ===================================
+___________________ test_load_event_dates_s1_active_snapshot ___________________
+tests/test_breadth_buy_quality.py:110: in test_load_event_dates_s1_active_snapshot
+    events = load_event_dates(signal="S1", universe="active")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/run_breadth_buy_quality.py:49: in load_event_dates
+    daily = pd.read_csv(DAILY_BREADTH_PATH, parse_dates=["date"])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:873: in read_csv
+    return _read(filepath_or_buffer, kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:300: in _read
+    parser = TextFileReader(filepath_or_buffer, **kwds)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:1645: in __init__
+    self._engine = self._make_engine(f, self.engine)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:1904: in _make_engine
+    self.handles = get_handle(
+.venv/lib/python3.13/site-packages/pandas/io/common.py:926: in get_handle
+    handle = open(
+E   FileNotFoundError: [Errno 2] No such file or directory: '/Users/owen/CC workspace/Finance/.worktrees/prosperity-m5-m6/data/breadth_study_1b/daily_breadth.csv'
+_______________ test_load_event_dates_s1_with_delisted_snapshot ________________
+tests/test_breadth_buy_quality.py:126: in test_load_event_dates_s1_with_delisted_snapshot
+    events = load_event_dates(signal="S1", universe="with_delisted_partial")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/run_breadth_buy_quality.py:49: in load_event_dates
+    daily = pd.read_csv(DAILY_BREADTH_PATH, parse_dates=["date"])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:873: in read_csv
+    return _read(filepath_or_buffer, kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:300: in _read
+    parser = TextFileReader(filepath_or_buffer, **kwds)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:1645: in __init__
+    self._engine = self._make_engine(f, self.engine)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:1904: in _make_engine
+    self.handles = get_handle(
+.venv/lib/python3.13/site-packages/pandas/io/common.py:926: in get_handle
+    handle = open(
+E   FileNotFoundError: [Errno 2] No such file or directory: '/Users/owen/CC workspace/Finance/.worktrees/prosperity-m5-m6/data/breadth_study_1b/daily_breadth.csv'
+___________________ test_load_event_dates_s2_active_snapshot ___________________
+tests/test_breadth_buy_quality.py:142: in test_load_event_dates_s2_active_snapshot
+    events = load_event_dates(signal="S2", universe="active")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/run_breadth_buy_quality.py:49: in load_event_dates
+    daily = pd.read_csv(DAILY_BREADTH_PATH, parse_dates=["date"])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:873: in read_csv
+    return _read(filepath_or_buffer, kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:300: in _read
+    parser = TextFileReader(filepath_or_buffer, **kwds)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:1645: in __init__
+    self._engine = self._make_engine(f, self.engine)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:1904: in _make_engine
+    self.handles = get_handle(
+.venv/lib/python3.13/site-packages/pandas/io/common.py:926: in get_handle
+    handle = open(
+E   FileNotFoundError: [Errno 2] No such file or directory: '/Users/owen/CC workspace/Finance/.worktrees/prosperity-m5-m6/data/breadth_study_1b/daily_breadth.csv'
+_______________ test_load_event_dates_s2_with_delisted_snapshot ________________
+tests/test_breadth_buy_quality.py:158: in test_load_event_dates_s2_with_delisted_snapshot
+    events = load_event_dates(signal="S2", universe="with_delisted_partial")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/run_breadth_buy_quality.py:49: in load_event_dates
+    daily = pd.read_csv(DAILY_BREADTH_PATH, parse_dates=["date"])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:873: in read_csv
+    return _read(filepath_or_buffer, kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:300: in _read
+    parser = TextFileReader(filepath_or_buffer, **kwds)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:1645: in __init__
+    self._engine = self._make_engine(f, self.engine)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:1904: in _make_engine
+    self.handles = get_handle(
+.venv/lib/python3.13/site-packages/pandas/io/common.py:926: in get_handle
+    handle = open(
+E   FileNotFoundError: [Errno 2] No such file or directory: '/Users/owen/CC workspace/Finance/.worktrees/prosperity-m5-m6/data/breadth_study_1b/daily_breadth.csv'
+_______________________ test_events_csv_columns_and_rows _______________________
+tests/test_breadth_buy_quality.py:175: in test_events_csv_columns_and_rows
+    run_buy_quality_pipeline(output_dir=tmp_path)
+scripts/run_breadth_buy_quality.py:115: in run_buy_quality_pipeline
+    events = load_event_dates(signal=signal, universe=universe)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/run_breadth_buy_quality.py:49: in load_event_dates
+    daily = pd.read_csv(DAILY_BREADTH_PATH, parse_dates=["date"])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:873: in read_csv
+    return _read(filepath_or_buffer, kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:300: in _read
+    parser = TextFileReader(filepath_or_buffer, **kwds)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:1645: in __init__
+    self._engine = self._make_engine(f, self.engine)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/pandas/io/parsers/readers.py:1904: in _make_engine
+    self.handles = get_handle(
+.venv/lib/python3.13/site-packages/pandas/io/common.py:926: in get_handle
+    handle = open(
+E   FileNotFoundError: [Errno 2] No such file or directory: '/Users/owen/CC workspace/Finance/.worktrees/prosperity-m5-m6/data/breadth_study_1b/daily_breadth.csv'
+________________ test_load_target_closes_respects_sample_window ________________
+tests/test_breadth_buy_quality.py:199: in test_load_target_closes_respects_sample_window
+    assert closes.index.min() >= pd.Timestamp(SAMPLE_START)
+E   AssertionError: assert NaT >= Timestamp('2021-02-01 00:00:00')
+E    +  where NaT = min()
+E    +    where min = DatetimeIndex([], dtype='datetime64[s]', name='date', freq=None).min
+E    +      where DatetimeIndex([], dtype='datetime64[s]', name='date', freq=None) = Series([], Name: close, dtype: int64).index
+E    +  and   Timestamp('2021-02-01 00:00:00') = <class 'pandas.Timestamp'>('2021-02-01')
+E    +    where <class 'pandas.Timestamp'> = pd.Timestamp
+_________________________ test_all_days_baseline_shape _________________________
+tests/test_breadth_buy_quality.py:206: in test_all_days_baseline_shape
+    assert "rank_pct" in baseline.columns
+E   AssertionError: assert 'rank_pct' in RangeIndex(start=0, stop=0, step=1)
+E    +  where RangeIndex(start=0, stop=0, step=1) = Empty DataFrame\nColumns: []\nIndex: [].columns
+____ TestFormatSectionD.test_missing_industry_uses_bucket_not_unclassified _____
+tests/test_morning_report.py:385: in test_missing_industry_uses_bucket_not_unclassified
+    assert "计算芯片/GPU加速器" in result
+E   AssertionError: assert '计算芯片/GPU加速器' in '*D. Dollar Volume*\n成交额 Top 2:\n标的 | 概念(L2) | 排名 | 排名变化 | 成交额 | 价格\n  NVDA NVIDIA | AI算力/云 | #1 | — | $25.0B | $890\n  XYZ1 Unknown Co | 其他 | #2 | — | $1.0B | $10'
+___ TestFormatSectionD.test_dv_section_is_flat_with_l2_column_in_rank_order ____
+tests/test_morning_report.py:408: in test_dv_section_is_flat_with_l2_column_in_rank_order
+    assert "计算芯片/GPU加速器" in result
+E   AssertionError: assert '计算芯片/GPU加速器' in '*D. Dollar Volume*\n成交额 Top 2:\n标的 | 概念(L2) | 排名 | 排名变化 | 成交额 | 价格\n  NVDA NVIDIA | AI算力/云 | #1 | — | $25.0B | $890\n  MU Micron Technology | 半导体链 | #2 | — | $5.0B | $110'
+_________________ TestLayeredSections.test_dv_layered_section __________________
+tests/test_morning_report.py:521: in test_dv_layered_section
+    assert "存储芯片" in result
+E   AssertionError: assert '存储芯片' in '*2. 量能加速 (DV >1.5x)*\n标的 | 概念 | 倍数 | 5d/20d | 市值\n半导体链 (1):\n  MU Micron Technology | 半导体链 | 1.8x | $900M/$500M | $160.0B'
+_ TestLayeredSections.test_layered_dv_groups_mu_under_l2_memory_chip_not_legacy_semi _
+tests/test_morning_report.py:719: in test_layered_dv_groups_mu_under_l2_memory_chip_not_legacy_semi
+    assert "存储芯片 (" in result
+E   AssertionError: assert '存储芯片 (' in '*2. 量能加速 (DV >1.5x)*\n标的 | 概念 | 倍数 | 5d/20d | 市值\n半导体链 (1):\n  MU Micron Technology | 半导体链 | 1.8x | $900M/$500M | $160.0B'
+_ TestLayeredSections.test_rows_by_layer_and_bucket_no_silent_drop_for_unregistered _
+tests/test_morning_report.py:759: in test_rows_by_layer_and_bucket_no_silent_drop_for_unregistered
+    assert legacy_label not in CONCEPT_BUCKET_ORDER  # precondition: truly an extra
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: assert '其他' not in ['AI算力/云', '半导体链', '数据中心电力', '通信/网络设备', '互联网/广告', '软件/SaaS', ...]
+=========================== short test summary info ============================
+FAILED tests/test_breadth_buy_quality.py::test_load_event_dates_s1_active_snapshot
+FAILED tests/test_breadth_buy_quality.py::test_load_event_dates_s1_with_delisted_snapshot
+FAILED tests/test_breadth_buy_quality.py::test_load_event_dates_s2_active_snapshot
+FAILED tests/test_breadth_buy_quality.py::test_load_event_dates_s2_with_delisted_snapshot
+FAILED tests/test_breadth_buy_quality.py::test_events_csv_columns_and_rows - ...
+FAILED tests/test_breadth_buy_quality.py::test_load_target_closes_respects_sample_window
+FAILED tests/test_breadth_buy_quality.py::test_all_days_baseline_shape - Asse...
+FAILED tests/test_morning_report.py::TestFormatSectionD::test_missing_industry_uses_bucket_not_unclassified
+FAILED tests/test_morning_report.py::TestFormatSectionD::test_dv_section_is_flat_with_l2_column_in_rank_order
+FAILED tests/test_morning_report.py::TestLayeredSections::test_dv_layered_section
+FAILED tests/test_morning_report.py::TestLayeredSections::test_layered_dv_groups_mu_under_l2_memory_chip_not_legacy_semi
+FAILED tests/test_morning_report.py::TestLayeredSections::test_rows_by_layer_and_bucket_no_silent_drop_for_unregistered
+12 failed in 0.28s

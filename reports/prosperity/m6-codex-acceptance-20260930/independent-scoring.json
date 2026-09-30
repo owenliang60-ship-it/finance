@@ -1,0 +1,50 @@
+{
+  "live/F1": {
+    "rows_checked": 915,
+    "ranked_checked": 864,
+    "max_abs_diff": 2.842170943040401e-14,
+    "status": "PASS"
+  },
+  "live/F1-rank": {
+    "rows_checked": 915,
+    "ranked_checked": 864,
+    "max_abs_diff": 0,
+    "status": "PASS"
+  },
+  "live/F1-exfin": {
+    "rows_checked": 915,
+    "ranked_checked": 687,
+    "max_abs_diff": 1.4210854715202004e-14,
+    "status": "PASS"
+  },
+  "live/F0": {
+    "rows_checked": 915,
+    "ranked_checked": 890,
+    "max_abs_diff": 2.842170943040401e-14,
+    "status": "PASS"
+  },
+  "replay/F1": {
+    "rows_checked": 817,
+    "ranked_checked": 669,
+    "max_abs_diff": 2.842170943040401e-14,
+    "status": "PASS"
+  },
+  "replay/F1-rank": {
+    "rows_checked": 817,
+    "ranked_checked": 669,
+    "max_abs_diff": 0,
+    "status": "PASS"
+  },
+  "replay/F1-exfin": {
+    "rows_checked": 817,
+    "ranked_checked": 529,
+    "max_abs_diff": 1.4210854715202004e-14,
+    "status": "PASS"
+  },
+  "replay/F0": {
+    "rows_checked": 817,
+    "ranked_checked": 660,
+    "max_abs_diff": 0,
+    "status": "PASS"
+  }
+}

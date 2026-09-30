@@ -1,0 +1,114 @@
+........................................................................ [  1%]
+........................................................................ [  3%]
+........................................................................ [  4%]
+........................................................................ [  6%]
+........................................................................ [  7%]
+........................................................................ [  9%]
+........................................................................ [ 11%]
+........................................................................ [ 12%]
+........................................................................ [ 14%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+........................................................................ [ 18%]
+........................................................................ [ 20%]
+........................................................................ [ 22%]
+........................................................................ [ 23%]
+........................................................................ [ 25%]
+........................................................................ [ 26%]
+........................................................................ [ 28%]
+........................................................................ [ 29%]
+........................................................................ [ 31%]
+........................................................................ [ 33%]
+........................................................................ [ 34%]
+........................................................................ [ 36%]
+........................................................................ [ 37%]
+........................................................................ [ 39%]
+........................................................................ [ 40%]
+........................................................................ [ 42%]
+........................................................................ [ 44%]
+........................................................................ [ 45%]
+........................................................................ [ 47%]
+........................................................................ [ 48%]
+........................................................................ [ 50%]
+........................................................................ [ 51%]
+........................................................................ [ 53%]
+........................................................................ [ 55%]
+........................................................................ [ 56%]
+........................................................................ [ 58%]
+........................................................................ [ 59%]
+........................................................................ [ 61%]
+........................................................................ [ 62%]
+........................................................................ [ 64%]
+........................................................................ [ 66%]
+........................................................................ [ 67%]
+...............................................F........................ [ 69%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 73%]
+........................................................................ [ 75%]
+........................................................................ [ 77%]
+........................................................................ [ 78%]
+........................................................................ [ 80%]
+........................................................................ [ 81%]
+........................................................................ [ 83%]
+........................................................................ [ 84%]
+........................................................................ [ 86%]
+........................................................................ [ 88%]
+........................................................................ [ 89%]
+........................................................................ [ 91%]
+........................................................................ [ 92%]
+........................................................................ [ 94%]
+........................................................................ [ 96%]
+........................................................................ [ 97%]
+........................................................................ [ 99%]
+.......................................                                  [100%]
+=================================== FAILURES ===================================
+_ TestVolumeConcentrationFreezeDateParity.test_frozen_date_matches_research_csv_across_six_fields _
+tests/test_morning_report.py:2828: in test_frozen_date_matches_research_csv_across_six_fields
+    assert payload["share_sm_pct"] == pytest.approx(top50_sm_ref, abs=tol), (
+E   AssertionError: (47.82090163626441, 47.80391692200165)
+E   assert 47.82090163626441 == 47.80391692200165 ± 1.0e-06
+E     
+E     comparison failed
+E     Obtained: 47.82090163626441
+E     Expected: 47.80391692200165 ± 1.0e-06
+=============================== warnings summary ===============================
+tests/pipeline/test_signal_engine.py::test_rank_pct_and_zscore_are_cross_sectional_per_date
+tests/pipeline/test_signal_engine.py::test_rank_pct_and_zscore_are_cross_sectional_per_date
+tests/pipeline/test_signal_engine.py::test_weighted_sum_and_rank_average_combo
+tests/pipeline/test_signal_engine.py::test_weighted_sum_and_rank_average_combo
+tests/pipeline/test_signal_engine.py::test_builtin_factors_produce_scores
+  /Users/owen/CC workspace/Finance/src/indicators/rs_rating.py:128: RuntimeWarning: invalid value encountered in cast
+    result_df["rs_rank"] = np.clip(np.floor(pct * 100).astype(int), 0, 99)
+
+tests/test_extended_universe_manager.py::TestGetExtendedOnlySymbols::test_excludes_pool_symbols
+  /Users/owen/CC workspace/Finance/tests/test_extended_universe_manager.py:191: DeprecationWarning: get_extended_only_symbols() is deprecated — use src.data.extended_price_fetcher.get_yfinance_price_targets(); removed at Stop G phase 2
+    result = get_extended_only_symbols()
+
+tests/test_extended_universe_manager.py::TestGetExtendedOnlySymbols::test_returns_all_when_pool_empty
+  /Users/owen/CC workspace/Finance/tests/test_extended_universe_manager.py:206: DeprecationWarning: get_extended_only_symbols() is deprecated — use src.data.extended_price_fetcher.get_yfinance_price_targets(); removed at Stop G phase 2
+    result = get_extended_only_symbols()
+
+tests/test_market_store_concepts.py::test_symbol_concept_edges_fk_concept_required
+tests/test_market_store_concepts.py::test_upsert_company_concepts_with_theme_ids
+tests/test_market_store_concepts.py::test_upsert_company_concepts_allows_null_secondary_tertiary
+tests/test_market_store_concepts.py::test_upsert_company_concepts_update_replaces_row
+tests/test_market_store_concepts.py::test_get_company_concepts_skips_missing_symbols
+tests/test_market_store_concepts.py::test_get_company_concept_coverage
+tests/test_market_store_concepts.py::test_upsert_rejects_theme_ids_pointing_to_non_level3
+tests/test_market_store_concepts.py::test_upsert_rejects_theme_ids_pointing_to_unknown_concept
+  /Users/owen/CC workspace/Finance/tests/test_market_store_concepts.py:25: DeprecationWarning: upsert_concept_themes is deprecated in v2 — themes live in concepts table as level=3 and are referenced via company_concept_tags.theme_ids
+    store.upsert_concept_themes([
+
+tests/test_market_store_concepts.py::test_upsert_concept_themes
+  /Users/owen/CC workspace/Finance/tests/test_market_store_concepts.py:122: DeprecationWarning: upsert_concept_themes is deprecated in v2 — themes live in concepts table as level=3 and are referenced via company_concept_tags.theme_ids
+    assert store.upsert_concept_themes([
+
+tests/test_market_store_concepts.py::test_rebuild_concept_tree_atomic_with_fk_themes_present
+  /Users/owen/CC workspace/Finance/tests/test_market_store_concepts.py:293: DeprecationWarning: upsert_concept_themes is deprecated in v2 — themes live in concepts table as level=3 and are referenced via company_concept_tags.theme_ids
+    store.upsert_concept_themes([{"theme_id": "hbm", "label": "HBM",
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_morning_report.py::TestVolumeConcentrationFreezeDateParity::test_frozen_date_matches_research_csv_across_six_fields
+1 failed, 4574 passed, 17 warnings in 510.72s (0:08:30)

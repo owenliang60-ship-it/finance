@@ -1,7 +1,7 @@
-"""Engine code version: a hash of every source file that can change a factor, sample or rank.
+"""Engine code version: a hash of every source and config file that can change a factor, sample or rank.
 
 Scope = the engine package plus the read/compute-path modules outside it (statement
-alignment, membership and reads, beta, settings). A new in-repo import from any hashed
+alignment, membership and reads, beta, settings) and the config files they read. A new in-repo import from any hashed
 file must be added to `CODE_VERSION_SOURCES` or to `CODE_VERSION_EXCLUDED` with a reason;
 tests/test_prosperity_schemes.py enforces this. Frozen parameter packages are checked
 against the full version (Boss D-8, 2026-09-29).
@@ -23,6 +23,7 @@ CODE_VERSION_SOURCES = (
     "src/data/fiscal_repair.py",           # _fiscal_key, used inside that alignment
     "src/data/market_store.py",            # membership resolution and every read
     "src/data/symbol_aliases.py",          # replay members via approximate_members_as_of
+    "config/symbol_aliases.json",          # the alias table it reads: an edit changes replay membership
     "src/indicators/beta.py",              # packet beta
     "config/settings.py",                  # SUE constants and FUNDAMENTAL_QUARTER_GAP_MAX_DAYS
 )

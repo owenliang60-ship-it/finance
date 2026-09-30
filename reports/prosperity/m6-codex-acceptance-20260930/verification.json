@@ -1,0 +1,78 @@
+{
+  "reviewed_head": "00edb0e7",
+  "baseline_head": "31fcdf38",
+  "code_version": "c453bf09028a8e6f",
+  "snapshot_sha256": "3caffdb7e7c2d2d9c5124fcbf364e46cf32d51307dde3d9ea49bf8ecf54800e2",
+  "targeted_tests": {
+    "passed": 232,
+    "seconds": 1.47
+  },
+  "live": {
+    "members": 915,
+    "errors": 0,
+    "future_leaks": 0,
+    "seconds": 9.5
+  },
+  "replay": {
+    "members": 817,
+    "errors": 0,
+    "future_leaks": 0,
+    "seconds": 11.0
+  },
+  "boards_byte_identical_to_prior_acceptance": 8,
+  "independent_raw_factor_comparisons": 18,
+  "independent_scored_rows": 5832,
+  "independent_scoring_max_abs_diff": 2.842170943040401e-14,
+  "d9_report_fields_identical_to_pre_refactor": true,
+  "d9_run_ids": [
+    "d9-full-20260928"
+  ],
+  "findings": [
+    {
+      "priority": "P2",
+      "file": "terminal/prosperity/version.py",
+      "line": 25,
+      "summary": "config/symbol_aliases.json can change historical membership without changing code_version; stale frozen parameter package is accepted"
+    }
+  ],
+  "subagents": {
+    "count": 2,
+    "roles": [
+      "factors and schemes review",
+      "kernel and version boundaries review"
+    ]
+  },
+  "python_310_grammar_files": 18,
+  "full_branch_tests": {
+    "passed": 4623,
+    "failed": 12,
+    "skipped": 4,
+    "seconds": 281.4
+  },
+  "full_baseline_tests": {
+    "passed": 4574,
+    "failed": 1,
+    "skipped": 0,
+    "seconds": 510.72
+  },
+  "matched_data_failure_reproduction": {
+    "source": "main 31fcdf38",
+    "nodes": [
+      "tests/test_breadth_buy_quality.py::test_all_days_baseline_shape",
+      "tests/test_breadth_buy_quality.py::test_events_csv_columns_and_rows",
+      "tests/test_breadth_buy_quality.py::test_load_event_dates_s1_active_snapshot",
+      "tests/test_breadth_buy_quality.py::test_load_event_dates_s1_with_delisted_snapshot",
+      "tests/test_breadth_buy_quality.py::test_load_event_dates_s2_active_snapshot",
+      "tests/test_breadth_buy_quality.py::test_load_event_dates_s2_with_delisted_snapshot",
+      "tests/test_breadth_buy_quality.py::test_load_target_closes_respects_sample_window",
+      "tests/test_morning_report.py::TestFormatSectionD::test_dv_section_is_flat_with_l2_column_in_rank_order",
+      "tests/test_morning_report.py::TestFormatSectionD::test_missing_industry_uses_bucket_not_unclassified",
+      "tests/test_morning_report.py::TestLayeredSections::test_dv_layered_section",
+      "tests/test_morning_report.py::TestLayeredSections::test_layered_dv_groups_mu_under_l2_memory_chip_not_legacy_semi",
+      "tests/test_morning_report.py::TestLayeredSections::test_rows_by_layer_and_bucket_no_silent_drop_for_unregistered"
+    ],
+    "failures": 12,
+    "seconds": 0.28,
+    "failure_node_sets_identical": true
+  }
+}

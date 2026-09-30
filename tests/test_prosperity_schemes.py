@@ -83,7 +83,7 @@ def test_industry_patterns_keep_payment_networks_and_exchanges():
 
 def _tree(root: Path):
     for rel in CODE_VERSION_SOURCES:
-        path = root / rel / "a.py" if not rel.endswith(".py") else root / rel
+        path = root / rel if Path(rel).suffix else root / rel / "a.py"      # files (.py, .json) vs package dirs
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("x = 1\n")
 
@@ -120,7 +120,7 @@ def test_every_local_import_is_hashed_or_explicitly_excluded():
     def covered(rel):
         return rel in CODE_VERSION_EXCLUDED or any(rel == s or rel.startswith(s + "/") for s in CODE_VERSION_SOURCES)
 
-    files = [p for s in CODE_VERSION_SOURCES
+    files = [p for s in CODE_VERSION_SOURCES if not Path(s).suffix or s.endswith(".py")    # config files import nothing
              for p in ((REPO_ROOT / s).rglob("*.py") if not s.endswith(".py") else [REPO_ROOT / s])]
     missing = set()
     for path in files:
@@ -132,3 +132,21 @@ def test_every_local_import_is_hashed_or_explicitly_excluded():
             if not covered(rel):
                 missing.add(f"{path.relative_to(REPO_ROOT)} -> {rel}")
     assert not missing, sorted(missing)
+
+
+def test_alias_config_moves_the_version_and_stale_frozen_params_are_refused(tmp_path):
+    """Aliases decide replay membership, so an alias edit must invalidate frozen packages (Codex P2)."""
+    from terminal.prosperity.kernel import estimate_params, standardize
+    from tests.prosperity_fixtures import frow, full_values
+
+    _tree(tmp_path)
+    aliases = tmp_path / "config/symbol_aliases.json"
+    aliases.write_text('{"schema_version": 1, "aliases": [{"from": "ABC", "to": "COR"}]}')
+    before = code_version(tmp_path)
+    rows = [frow(f"S{i}", full_values(i)) for i in range(8)]
+    frozen = estimate_params(rows, get_scheme("F1"), as_of="2026-09-26", code_version=before)
+    aliases.write_text('{"schema_version": 1, "aliases": []}')
+    after = code_version(tmp_path)
+    assert after != before
+    with pytest.raises(ValueError, match="params_code_mismatch"):
+        standardize(rows, get_scheme("F1"), frozen=frozen, as_of="2026-09-26", code_version=after)

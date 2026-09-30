@@ -1,6 +1,6 @@
 {
   "as_of": "2026-09-29",
-  "code_version": "c453bf09028a8e6f",
+  "code_version": "ee4495acd0715621",
   "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
   "eps_split_retrospective_symbols": [],
   "errors": {},
@@ -5115,7 +5115,7 @@
       }
     }
   },
-  "seconds": 8.3,
+  "seconds": 8.5,
   "surprise_source_counts": {
     "local_snapshot": 722,
     "vendor_estimate": 12
