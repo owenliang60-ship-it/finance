@@ -98,8 +98,17 @@ def test_report_distinguishes_historical_dates_from_observed_snapshot(tmp_path):
     _seed_statements_filed(s, 'X', FISCALS[-13:], 0)
     s.replace_fmp_earnings('X', _eps_rows(FISCALS[-13:]))
     t = {'by_quarter_end': {'2026-06-30': ['X']}}
+    # Placeholder filing dates: each quarter's results release now dates it (Boss 2026-09-30)
     historical = build_report(s, t, [])
     q = historical['quarter_ends'][0]
+    assert (q['raw_three_table_ok'], q['three_table_ok'], q['sue_ok']) == (1, 1, 1)
+    dated = historical['quality_issues'][0]['public_date_from_earnings']      # the audit shows which
+    assert dated and all(d['source'] == 'earnings_announcement' for d in dated)
+    # Releases without an actual are no evidence: the quarter still has no trusted date
+    bare = MarketStore(tmp_path / 'bare.db')
+    _seed_statements_filed(bare, 'X', FISCALS[-13:], 0)
+    bare.replace_fmp_earnings('X', [dict(r, eps_actual=None) for r in _eps_rows(FISCALS[-13:])])
+    q = build_report(bare, t, [])['quarter_ends'][0]
     assert q['raw_three_table_ok'] == 1 and q['three_table_ok'] == 0
     assert q['sue_ok'] == 0  # no trusted current-quarter anchor
     assert q['street_eps_gap_reasons'] == {'statement_availability_unknown': 1}
@@ -226,17 +235,52 @@ def test_public_date_cannot_precede_same_quarter_report(symbol, fiscal, expected
     assert 'statement_date_before_earnings' in result['issues']
 
 
-def test_earnings_floor_does_not_fill_unknown_and_does_not_delay_current_mode():
+def test_earnings_announcement_fills_placeholder_dates_only_on_the_historical_path():
     eps = [{'fiscal_date': '2025-09-30', 'announce_date': '2025-11-03', 'eps_actual': 1.0},
            {'fiscal_date': '2025-09-30', 'announce_date': '2025-11-04', 'eps_actual': 2.0},
            {'fiscal_date': '2025-09-30', 'announce_date': '2025-10-01', 'eps_actual': None}]
     unknown = {'date': '2025-09-30', 'accepted_date': '2025-09-30'}
-    assert statement_availability(unknown, earnings_rows=eps)['public_available_at'] is None
+    filled = statement_availability(unknown, earnings_rows=eps)
+    assert (filled['public_available_at'], filled['source']) == ('2025-11-03', 'earnings_announcement')
+    assert filled['issues'] == ['accepted_date_invalid_or_placeholder', 'statement_date_from_earnings']
+    assert statement_availability(unknown)['public_available_at'] is None           # no earnings evidence given
+    # an observed archive never takes the stored earnings date (current and strict reads)
+    assert statement_known_on(unknown, earnings_rows=eps, observed_at='2025-12-01') == '2025-12-01'
     valid = dict(unknown, accepted_date='2025-10-03')
     assert statement_known_on(valid, earnings_rows=eps) == '2025-11-03'
     assert statement_known_on(valid, earnings_rows=eps, observed_at='2025-10-20') == '2025-10-03'
     later = dict(valid, accepted_date='2025-11-06')
     assert statement_known_on(later, earnings_rows=eps) == '2025-11-06'
+
+
+@pytest.mark.parametrize('row,eps,expected', [
+    # market.db 2026-09-30: FMP stamps both dates on the fiscal day; the results release is real
+    ({'date': '2019-06-30', 'filing_date': '2019-06-30', 'accepted_date': '2019-06-30 00:00:00'},
+     {'fiscal_date': '2019-06-29', 'announce_date': '2019-08-01', 'eps_actual': 0.01}, '2019-08-01'),      # SHOP
+    ({'date': '2022-07-31', 'filing_date': '2022-07-31', 'accepted_date': '2022-07-31 00:00:00'},
+     {'fiscal_date': '2022-08-01', 'announce_date': '2022-09-01', 'eps_actual': 0.97}, '2022-09-01'),      # AVGO
+])
+def test_placeholder_dates_fall_back_to_the_results_release(row, eps, expected):
+    assert statement_availability(row, earnings_rows=[eps])['public_available_at'] == expected
+    assert statement_known_on(row, earnings_rows=[eps]) == expected
+
+
+def test_placeholder_dates_without_a_same_quarter_release_stay_unknown():
+    row = {'date': '2022-07-31', 'filing_date': '2022-07-31'}
+    eps = [{'fiscal_date': '2022-05-01', 'announce_date': '2022-06-09', 'eps_actual': 9.07},     # prior quarter
+           {'fiscal_date': '2022-07-31', 'announce_date': '2022-09-01', 'eps_actual': None}]     # no actual
+    result = statement_availability(row, earnings_rows=eps)
+    assert result['public_available_at'] is None
+    assert result['issues'] == ['filing_date_invalid_or_placeholder', 'statement_availability_unknown']
+
+
+def test_earlier_of_two_valid_dates_wins_over_a_later_amendment():
+    # market.db 2026-09-30, CRM: the stored acceptance is an amendment a year after the 10-K filing
+    row = {'date': '2021-01-31', 'filing_date': '2021-03-17', 'accepted_date': '2022-02-24 16:13:45'}
+    result = statement_availability(row)
+    assert (result['public_available_at'], result['source']) == ('2021-03-17', 'filing_date')
+    eps = [{'fiscal_date': '2021-01-31', 'announce_date': '2021-02-25', 'eps_actual': 1.04}]
+    assert statement_known_on(row, earnings_rows=eps) == '2021-03-17'           # release floor is earlier
 
 
 def test_freeze_arrival_uses_earnings_floor():

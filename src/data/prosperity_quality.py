@@ -34,24 +34,38 @@ def statement_availability(row: dict, *, earnings_rows: list[dict] | None = None
 
     This is a conservative historical lower bound using the stored evidence,
     not proof that every filing legally follows a separate earnings release.
-    An announcement never fills an unknown public date.
+    With two valid dates the earlier wins: a later acceptance is an amendment
+    and must not hide a quarter already public. The stored values may be the
+    amended ones; approximate replay already reads the latest values for every
+    quarter, so this dates the quarter, not the version. Only when both dates are
+    placeholders does the same quarter's results release stand in (tagged
+    `statement_date_from_earnings`); that needs `earnings_rows`, which only the
+    historical path passes (Boss 2026-09-30: FMP placeholders hid ~4,267
+    member quarters from replay).
     """
     fiscal = _date(row.get('date'))
-    rejected = []
+    rejected, valid = [], []
     if fiscal:
         for key in ('accepted_date', 'filing_date'):
             day = _date(row.get(key))
             if day and day > fiscal:
-                floor = _earliest_earnings_day(fiscal, earnings_rows or [])
-                available = max(day, floor) if floor else day
-                if available > day:
-                    rejected.append('statement_date_before_earnings')
-                return {'public_available_at': available.isoformat(), 'source': key,
-                        'reported_public_date': day.isoformat(),
-                        'earnings_floor': floor.isoformat() if floor else None,
-                        'issues': rejected}
-            if row.get(key):
+                valid.append((day, key))
+            elif row.get(key) and not valid:
                 rejected.append(key + '_invalid_or_placeholder')
+        floor = _earliest_earnings_day(fiscal, earnings_rows or [])
+        if valid:
+            day, key = min(valid)
+            available = max(day, floor) if floor else day
+            if available > day:
+                rejected.append('statement_date_before_earnings')
+            return {'public_available_at': available.isoformat(), 'source': key,
+                    'reported_public_date': day.isoformat(),
+                    'earnings_floor': floor.isoformat() if floor else None,
+                    'issues': rejected}
+        if floor:
+            return {'public_available_at': floor.isoformat(), 'source': 'earnings_announcement',
+                    'reported_public_date': None, 'earnings_floor': floor.isoformat(),
+                    'issues': rejected + ['statement_date_from_earnings']}
     return {'public_available_at': None, 'source': None,
             'issues': rejected + ['statement_availability_unknown']}
 

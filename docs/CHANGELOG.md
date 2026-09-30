@@ -8,6 +8,7 @@
 
 | 里程碑 | 日期 | 增量 |
 |--------|------|------|
+| **美股景气引擎 M7 S1 对拍** | 2026-09-30 | 与原站 47 期共有 6 因子逐行比对：2021 年后原站口径 96.0% 达标（门槛 95%），258 条不达标全部归因、原因不明 0，独立抽检 10/10；途中修复可用日期兜底（占位申报日期用同季财报发布日，2024-08-17 回放正式排名 669→755）与一家公司只看一个代码（`reports/prosperity/m7-s1-20260930/`） |
 | **美股景气引擎 M0–M6（数据前置 + 点时输入包 + 方案注册表 + 因子与打分内核）** | 2026-09-30 | 替代 Premium 的景气引擎前半段：D9 历史补数与质量护栏、M4 点时输入包、M5 冻结方案注册表（F1 / F1-rank / F1-exfin / F0，scheme_hash + code_version）、M6 纯函数因子与打分内核 + 只读验收 CLI；CC 与 Codex 双独立验收；尚未接 cron，M7 对拍起为 MVP 余下部分（`docs/design/prosperity-engine-north-star.md`） |
 | **Extended Primary Universe — Stop A implementation** | 2026-08-19 | Extended `$10B+` 成为唯一默认 base；security master + PIT membership/vintage + coverage/manifest；基本面共享采集内核；价格 FMP-overlay/yfinance-base 双腿；Core 软退役兼容层（待 Stop B–G 独立审批上线） |
 | Phase 1: Valuation → Finance 合并 + Desk 骨架 | 2026-02-06 | — |

@@ -191,3 +191,21 @@ def test_unrepaired_duplicate_in_strict_replay_drops_only_that_quarter():
     qb = _build(_aliased("2026-09-29T03:11:58.849639Z"), "2026-09-29")
     assert [q.fiscal_date for q in qb.quarters] == ["2025-03-31", "2025-06-30", "2025-12-31"]
     assert "statement_alignment_conflict" in qb.flags
+
+
+def test_quarter_dated_by_its_results_release_carries_a_label():
+    # FMP placeholder dates (both on the fiscal day); the release dates the quarter (Boss 2026-09-30)
+    from datetime import date, timedelta
+    from terminal.prosperity.statements import VisibleStatements, build_quarters
+    fiscals = ["2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31"]
+    rows = {t: [{"date": f, "fiscal_year": f[:4], "period": f"Q{i + 1}", "reported_currency": "USD",
+                 "filing_date": f, "accepted_date": f + " 00:00:00", "revenue": 100.0, "gross_profit": 60.0,
+                 "operating_cash_flow": 20.0, "capital_expenditure": -5.0, "free_cash_flow": 15.0,
+                 "total_assets": 500.0}
+                for i, f in enumerate(fiscals)] for t in ("income", "balance", "cashflow")}
+    earnings = tuple({"fiscal_date": f, "eps_actual": 1.0,
+                      "announce_date": (date.fromisoformat(f) + timedelta(days=30)).isoformat()} for f in fiscals)
+    qb = build_quarters(VisibleStatements(rows, "approximate", None, earnings), "2026-03-31")
+    assert [q.fiscal_date for q in qb.quarters] == fiscals
+    assert all("statement_date_from_earnings" in q.labels for q in qb.quarters)
+    assert qb.quarters[-1].availability_basis == "earnings_announcement"
