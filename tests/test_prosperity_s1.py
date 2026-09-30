@@ -193,3 +193,67 @@ def test_basis_split_is_judged_per_factor():
     assert out[("revenue_yoy", "site")].passed and out[("revenue_accel", "site")].passed
     assert out[("revenue_yoy", "ours")].category == "basis_only_day_adjust"
     assert out[("revenue_accel", "ours")].category == "basis_only_pairing"
+
+
+# ---- Task 4: summary ----
+
+def comp(board, factor="revenue_yoy", basis="site", passed=True, counted=True, category="match"):
+    return s1.Comparison(board=board, symbol="AAA", site_symbol="AAA", fiscal_date="2026-06-30", factor=factor,
+                         basis=basis, site_value=1.0 if counted else None, our_value=1.0,
+                         diff=0.0 if passed else 1.0, counted=counted, passed=passed,
+                         category=category, detail="", aligned_by="asof")
+
+
+def test_summarize_gates_on_the_site_basis_since_2021():
+    comps = ([comp("2021-03-31")] * 19 + [comp("2021-03-31", passed=False, category="input_diff")]
+             + [comp("2020-12-31", passed=False, category="unexplained")] * 5
+             + [comp("2021-03-31", basis="ours", passed=False, category="basis_only_day_adjust")] * 10
+             + [comp("2021-03-31", counted=False, passed=False, category="site_missing")] * 3)
+    timing = [("2021-03-31", "AAA", "match", "asof"), ("2021-03-31", "BBB", "ours_ahead", "trimmed"),
+              ("2020-12-31", "AAA", "match", "asof")]
+    excluded = [("2021-03-31", "MARA", "not_in_our_data"), ("2020-12-31", "MARA", "not_in_our_data")]
+    s = s1.summarize(comps, site_rows={"2020-12-31": 2, "2021-03-31": 3}, excluded=excluded,
+                     errors=[("2021-03-31", "CCC", "ValueError: bad row")], timing=timing, since="2021-01-01")
+    g = s["gate"]
+    assert (g["boards"], g["counted"], g["passed"], g["pass"]) == (1, 20, 19, True)
+    assert g["rate"] == pytest.approx(0.95)
+    assert s["by_factor"]["revenue_yoy"] == {"counted": 20, "passed": 19, "rate": pytest.approx(0.95)}
+    assert s["by_board"]["2021-03-31"] == {"site_rows": 3, "compared": 1, "excluded": 1, "errors": 1,
+                                           "reconciled": True, "counted": 20, "passed": 19,
+                                           "rate": pytest.approx(0.95)}
+    assert s["by_board"]["2020-12-31"]["reconciled"] is True and s["reconciled"] is True
+    assert s["categories"]["site"] == {"match": 19, "input_diff": 1, "site_missing": 3}
+    assert s["categories"]["ours"] == {"basis_only_day_adjust": 10}
+    assert s["timing"] == {"match": 1, "ours_ahead": 1} and s["aligned_by"] == {"asof": 1, "trimmed": 1}
+    assert (s["pre_since"]["counted"], s["pre_since"]["passed"]) == (5, 0)
+    assert s["excluded"] == {"symbols": {"MARA": "not_in_our_data"}, "rows_all": 2, "rows_since": 1,
+                             "list": [{"board": "2021-03-31", "site_symbol": "MARA", "reason": "not_in_our_data"},
+                                      {"board": "2020-12-31", "site_symbol": "MARA", "reason": "not_in_our_data"}]}
+    assert s["errors"] == [{"board": "2021-03-31", "site_symbol": "CCC", "message": "ValueError: bad row"}]
+
+
+def test_gate_fails_below_95_percent():
+    comps = [comp("2022-06-30")] * 18 + [comp("2022-06-30", passed=False, category="unexplained")] * 2
+    s = s1.summarize(comps, site_rows={"2022-06-30": 1}, excluded=[], errors=[], timing=[], since="2021-01-01")
+    assert s["gate"]["pass"] is False and s["gate"]["rate"] == pytest.approx(0.9)
+
+
+def test_failure_list_names_rows_without_values():
+    s = s1.summarize([comp("2022-06-30", passed=False, category="input_diff")], site_rows={"2022-06-30": 1},
+                     excluded=[], errors=[], timing=[], since="2021-01-01")
+    assert s["failures"] == [{"board": "2022-06-30", "symbol": "AAA", "site_symbol": "AAA",
+                              "factor": "revenue_yoy", "category": "input_diff", "detail": ""}]
+    assert "site_value" not in json.dumps(s) and "our_value" not in json.dumps(s)
+
+
+def test_summary_markdown_lists_gate_and_failures():
+    s = s1.summarize([comp("2022-06-30", passed=False, category="input_diff")], site_rows={"2022-06-30": 1},
+                     excluded=[], errors=[], timing=[], since="2021-01-01")
+    md = s1.summary_markdown(s)
+    assert "未达标" in md and "| 2022-06-30 | AAA | revenue_yoy | input_diff |" in md
+
+
+def test_a_board_whose_rows_do_not_add_up_is_not_reconciled():
+    s = s1.summarize([comp("2022-06-30")], site_rows={"2022-06-30": 2}, excluded=[], errors=[], timing=[],
+                     since="2021-01-01")
+    assert s["by_board"]["2022-06-30"]["reconciled"] is False and s["reconciled"] is False
