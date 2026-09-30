@@ -1,0 +1,735 @@
+{
+ "live-0929/F1": {
+  "factor_changes": {
+   "eps_sue": [
+    9,
+    [
+     "AMCR",
+     "AZO",
+     "COST",
+     "ETR",
+     "GSK",
+     "KR",
+     "PAG",
+     "PEP",
+     "TECK"
+    ]
+   ],
+   "eps_accel": [
+    8,
+    [
+     "AZO",
+     "COST",
+     "ETR",
+     "GSK",
+     "KR",
+     "PAG",
+     "PEP",
+     "TECK"
+    ]
+   ],
+   "revision": [
+    2,
+    [
+     "CRH",
+     "ESLT"
+    ]
+   ]
+  },
+  "missing_transitions": {
+   "eps_sue: few_sigma_obs -> None": 4,
+   "eps_accel: few_sigma_obs -> None": 3,
+   "eps_sue: no_yoy_pair -> None": 1,
+   "eps_accel: no_yoy_pair -> None": 1
+  },
+  "badges": {
+   "+ntm_loss": 25,
+   "+pe_redflag": 7,
+   "-pe_redflag": 1,
+   "+params_bootstrap": 2,
+   "+gm_slope_missing": 1
+  },
+  "status_changes": 2,
+  "grade_changes": [
+   [
+    "FSLR",
+    "FULL",
+    "BELOW"
+   ],
+   [
+    "COST",
+    "BELOW",
+    "FULL"
+   ],
+   [
+    "AMCR",
+    null,
+    "FULL"
+   ],
+   [
+    "ETR",
+    null,
+    "BELOW"
+   ]
+  ],
+  "max_abs_score_change": 8.2464,
+  "top40_in": [],
+  "top40_out": [],
+  "top10_main": [
+   "SNDK",
+   "MU",
+   "PR",
+   "SQM",
+   "OXY",
+   "ASND",
+   "INSM",
+   "ASTS",
+   "CNQ",
+   "CVX"
+  ],
+  "top10_new": [
+   "SNDK",
+   "MU",
+   "PR",
+   "SQM",
+   "OXY",
+   "ASND",
+   "INSM",
+   "ASTS",
+   "CNQ",
+   "CVX"
+  ]
+ },
+ "live-0929/F1-rank": {
+  "factor_changes": {
+   "eps_sue": [
+    9,
+    [
+     "AMCR",
+     "AZO",
+     "COST",
+     "ETR",
+     "GSK",
+     "KR",
+     "PAG",
+     "PEP",
+     "TECK"
+    ]
+   ],
+   "eps_accel": [
+    8,
+    [
+     "AZO",
+     "COST",
+     "ETR",
+     "GSK",
+     "KR",
+     "PAG",
+     "PEP",
+     "TECK"
+    ]
+   ],
+   "revision": [
+    2,
+    [
+     "CRH",
+     "ESLT"
+    ]
+   ]
+  },
+  "missing_transitions": {
+   "eps_sue: few_sigma_obs -> None": 4,
+   "eps_accel: few_sigma_obs -> None": 3,
+   "eps_sue: no_yoy_pair -> None": 1,
+   "eps_accel: no_yoy_pair -> None": 1
+  },
+  "badges": {
+   "+ntm_loss": 25,
+   "+pe_redflag": 7,
+   "-pe_redflag": 1,
+   "+params_bootstrap": 2,
+   "+gm_slope_missing": 1
+  },
+  "status_changes": 2,
+  "grade_changes": [
+   [
+    "COST",
+    "BELOW",
+    "FULL"
+   ],
+   [
+    "AMCR",
+    null,
+    "FULL"
+   ],
+   [
+    "ETR",
+    null,
+    "BELOW"
+   ]
+  ],
+  "max_abs_score_change": 11.5898,
+  "top40_in": [],
+  "top40_out": [],
+  "top10_main": [
+   "SNDK",
+   "OXY",
+   "SQM",
+   "PR",
+   "CNQ",
+   "INSM",
+   "MPC",
+   "MU",
+   "VLO",
+   "FANG"
+  ],
+  "top10_new": [
+   "SNDK",
+   "OXY",
+   "SQM",
+   "PR",
+   "CNQ",
+   "INSM",
+   "MPC",
+   "MU",
+   "VLO",
+   "FANG"
+  ]
+ },
+ "live-0929/F1-exfin": {
+  "factor_changes": {
+   "eps_sue": [
+    9,
+    [
+     "AMCR",
+     "AZO",
+     "COST",
+     "ETR",
+     "GSK",
+     "KR",
+     "PAG",
+     "PEP",
+     "TECK"
+    ]
+   ],
+   "eps_accel": [
+    8,
+    [
+     "AZO",
+     "COST",
+     "ETR",
+     "GSK",
+     "KR",
+     "PAG",
+     "PEP",
+     "TECK"
+    ]
+   ],
+   "revision": [
+    2,
+    [
+     "CRH",
+     "ESLT"
+    ]
+   ]
+  },
+  "missing_transitions": {
+   "eps_sue: few_sigma_obs -> None": 4,
+   "eps_accel: few_sigma_obs -> None": 3,
+   "eps_sue: no_yoy_pair -> None": 1,
+   "eps_accel: no_yoy_pair -> None": 1
+  },
+  "badges": {
+   "+ntm_loss": 22,
+   "+pe_redflag": 6,
+   "+params_bootstrap": 1
+  },
+  "status_changes": 1,
+  "grade_changes": [
+   [
+    "COST",
+    "BELOW",
+    "FULL"
+   ],
+   [
+    "AMCR",
+    null,
+    "FULL"
+   ]
+  ],
+  "max_abs_score_change": 7.5517,
+  "top40_in": [],
+  "top40_out": [],
+  "top10_main": [
+   "SNDK",
+   "SQM",
+   "MU",
+   "PR",
+   "OXY",
+   "ASND",
+   "INSM",
+   "ASTS",
+   "CNQ",
+   "CVX"
+  ],
+  "top10_new": [
+   "SNDK",
+   "SQM",
+   "MU",
+   "PR",
+   "OXY",
+   "ASND",
+   "INSM",
+   "ASTS",
+   "CNQ",
+   "CVX"
+  ]
+ },
+ "live-0929/F0": {
+  "factor_changes": {
+   "eps_sue": [
+    9,
+    [
+     "AMCR",
+     "AZO",
+     "COST",
+     "ETR",
+     "GSK",
+     "KR",
+     "PAG",
+     "PEP",
+     "TECK"
+    ]
+   ],
+   "eps_accel": [
+    8,
+    [
+     "AZO",
+     "COST",
+     "ETR",
+     "GSK",
+     "KR",
+     "PAG",
+     "PEP",
+     "TECK"
+    ]
+   ],
+   "revision": [
+    2,
+    [
+     "CRH",
+     "ESLT"
+    ]
+   ]
+  },
+  "missing_transitions": {
+   "eps_sue: few_sigma_obs -> None": 4,
+   "eps_accel: few_sigma_obs -> None": 3,
+   "eps_sue: no_yoy_pair -> None": 1,
+   "eps_accel: no_yoy_pair -> None": 1
+  },
+  "badges": {
+   "+ntm_loss": 24,
+   "+pe_redflag": 6
+  },
+  "status_changes": 0,
+  "grade_changes": [],
+  "max_abs_score_change": 0.0,
+  "top40_in": [],
+  "top40_out": [],
+  "top10_main": [
+   "MU",
+   "SNDK",
+   "SQM",
+   "ASTS",
+   "PR",
+   "INSM",
+   "OXY",
+   "LNG",
+   "FRO",
+   "CNQ"
+  ],
+  "top10_new": [
+   "MU",
+   "SNDK",
+   "SQM",
+   "ASTS",
+   "PR",
+   "INSM",
+   "OXY",
+   "LNG",
+   "FRO",
+   "CNQ"
+  ]
+ },
+ "replay-240817/F1": {
+  "factor_changes": {
+   "eps_sue": [
+    6,
+    [
+     "AEM",
+     "AMCR",
+     "BIP",
+     "DPZ",
+     "KR",
+     "PEP"
+    ]
+   ],
+   "eps_accel": [
+    6,
+    [
+     "AEM",
+     "AMCR",
+     "BIP",
+     "DPZ",
+     "KR",
+     "PEP"
+    ]
+   ],
+   "surprise": [
+    3,
+    [
+     "AMCR",
+     "FERG",
+     "KR"
+    ]
+   ],
+   "growth_4q": [
+    3,
+    [
+     "AMCR",
+     "FERG",
+     "KR"
+    ]
+   ]
+  },
+  "missing_transitions": {
+   "eps_accel: no_yoy_pair -> None": 3,
+   "surprise: no_current_eps -> None": 3,
+   "eps_sue: eps_behind_current -> None": 2,
+   "growth_4q: eps_behind_current -> None": 3,
+   "eps_accel: eps_behind_current -> None": 2,
+   "eps_sue: no_yoy_pair -> None": 1
+  },
+  "badges": {
+   "+ntm_gate_unknown": 1,
+   "+gm_slope_missing": 1,
+   "+params_bootstrap": 1
+  },
+  "status_changes": 1,
+  "grade_changes": [
+   [
+    "AMCR",
+    "BELOW",
+    "FULL"
+   ],
+   [
+    "BIP",
+    null,
+    "BELOW"
+   ]
+  ],
+  "max_abs_score_change": 12.5076,
+  "top40_in": [],
+  "top40_out": [],
+  "top10_main": [
+   "ALNY",
+   "LEGN",
+   "LI",
+   "NTRA",
+   "BMNR",
+   "NVDA",
+   "NU",
+   "NEM",
+   "ANET",
+   "AEM"
+  ],
+  "top10_new": [
+   "ALNY",
+   "LEGN",
+   "LI",
+   "NTRA",
+   "BMNR",
+   "NVDA",
+   "NU",
+   "NEM",
+   "ANET",
+   "CCJ"
+  ]
+ },
+ "replay-240817/F1-rank": {
+  "factor_changes": {
+   "eps_sue": [
+    6,
+    [
+     "AEM",
+     "AMCR",
+     "BIP",
+     "DPZ",
+     "KR",
+     "PEP"
+    ]
+   ],
+   "eps_accel": [
+    6,
+    [
+     "AEM",
+     "AMCR",
+     "BIP",
+     "DPZ",
+     "KR",
+     "PEP"
+    ]
+   ],
+   "surprise": [
+    3,
+    [
+     "AMCR",
+     "FERG",
+     "KR"
+    ]
+   ],
+   "growth_4q": [
+    3,
+    [
+     "AMCR",
+     "FERG",
+     "KR"
+    ]
+   ]
+  },
+  "missing_transitions": {
+   "surprise: no_current_eps -> None": 3,
+   "eps_sue: eps_behind_current -> None": 2,
+   "growth_4q: eps_behind_current -> None": 3,
+   "eps_accel: eps_behind_current -> None": 2,
+   "eps_accel: no_yoy_pair -> None": 3,
+   "eps_sue: no_yoy_pair -> None": 1
+  },
+  "badges": {
+   "+ntm_gate_unknown": 1,
+   "+gm_slope_missing": 1,
+   "+params_bootstrap": 1
+  },
+  "status_changes": 1,
+  "grade_changes": [
+   [
+    "FERG",
+    "FULL",
+    "BELOW"
+   ],
+   [
+    "BIP",
+    null,
+    "BELOW"
+   ]
+  ],
+  "max_abs_score_change": 8.3341,
+  "top40_in": [],
+  "top40_out": [],
+  "top10_main": [
+   "ALNY",
+   "NTRA",
+   "NEM",
+   "AEM",
+   "CCJ",
+   "BMRN",
+   "STX",
+   "CHDN",
+   "LI",
+   "B"
+  ],
+  "top10_new": [
+   "ALNY",
+   "NTRA",
+   "NEM",
+   "CCJ",
+   "BMRN",
+   "STX",
+   "CHDN",
+   "AEM",
+   "LI",
+   "B"
+  ]
+ },
+ "replay-240817/F1-exfin": {
+  "factor_changes": {
+   "eps_sue": [
+    6,
+    [
+     "AEM",
+     "AMCR",
+     "BIP",
+     "DPZ",
+     "KR",
+     "PEP"
+    ]
+   ],
+   "eps_accel": [
+    6,
+    [
+     "AEM",
+     "AMCR",
+     "BIP",
+     "DPZ",
+     "KR",
+     "PEP"
+    ]
+   ],
+   "surprise": [
+    3,
+    [
+     "AMCR",
+     "FERG",
+     "KR"
+    ]
+   ],
+   "growth_4q": [
+    3,
+    [
+     "AMCR",
+     "FERG",
+     "KR"
+    ]
+   ]
+  },
+  "missing_transitions": {
+   "eps_accel: no_yoy_pair -> None": 3,
+   "surprise: no_current_eps -> None": 3,
+   "eps_sue: eps_behind_current -> None": 2,
+   "growth_4q: eps_behind_current -> None": 3,
+   "eps_accel: eps_behind_current -> None": 2,
+   "eps_sue: no_yoy_pair -> None": 1
+  },
+  "badges": {},
+  "status_changes": 0,
+  "grade_changes": [
+   [
+    "CASY",
+    "STRICT",
+    "FULL"
+   ],
+   [
+    "PAYX",
+    "STRICT",
+    "FULL"
+   ],
+   [
+    "AMCR",
+    "BELOW",
+    "FULL"
+   ]
+  ],
+  "max_abs_score_change": 12.2216,
+  "top40_in": [
+   "SPOT"
+  ],
+  "top40_out": [
+   "WSM"
+  ],
+  "top10_main": [
+   "ALNY",
+   "LEGN",
+   "NTRA",
+   "LI",
+   "NVDA",
+   "ANET",
+   "NEM",
+   "CCJ",
+   "AEM",
+   "FTI"
+  ],
+  "top10_new": [
+   "ALNY",
+   "LEGN",
+   "NTRA",
+   "LI",
+   "NVDA",
+   "NEM",
+   "ANET",
+   "CCJ",
+   "FTI",
+   "FSLR"
+  ]
+ },
+ "replay-240817/F0": {
+  "factor_changes": {
+   "eps_sue": [
+    6,
+    [
+     "AEM",
+     "AMCR",
+     "BIP",
+     "DPZ",
+     "KR",
+     "PEP"
+    ]
+   ],
+   "eps_accel": [
+    6,
+    [
+     "AEM",
+     "AMCR",
+     "BIP",
+     "DPZ",
+     "KR",
+     "PEP"
+    ]
+   ],
+   "surprise": [
+    3,
+    [
+     "AMCR",
+     "FERG",
+     "KR"
+    ]
+   ],
+   "growth_4q": [
+    3,
+    [
+     "AMCR",
+     "FERG",
+     "KR"
+    ]
+   ]
+  },
+  "missing_transitions": {
+   "eps_accel: no_yoy_pair -> None": 3,
+   "eps_sue: no_yoy_pair -> None": 1,
+   "surprise: no_current_eps -> None": 3,
+   "eps_sue: eps_behind_current -> None": 2,
+   "growth_4q: eps_behind_current -> None": 3,
+   "eps_accel: eps_behind_current -> None": 2
+  },
+  "badges": {},
+  "status_changes": 0,
+  "grade_changes": [],
+  "max_abs_score_change": 0.0,
+  "top40_in": [],
+  "top40_out": [],
+  "top10_main": [
+   "ALNY",
+   "BMNR",
+   "CG",
+   "MU",
+   "NTRA",
+   "NVDA",
+   "LEGN",
+   "LI",
+   "COIN",
+   "NEM"
+  ],
+  "top10_new": [
+   "ALNY",
+   "BMNR",
+   "CG",
+   "MU",
+   "NTRA",
+   "NVDA",
+   "LEGN",
+   "LI",
+   "COIN",
+   "NEM"
+  ]
+ }
+}
