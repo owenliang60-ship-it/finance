@@ -29,6 +29,18 @@ def test_packet_for_usd_name_has_aligned_inputs_and_no_leaks():
     assert packet_leaks(p) == []
 
 
+def test_eps_dated_weeks_off_the_period_end_still_aligns_by_statement_date():     # Boss 2026-09-30 ④
+    drift = [er("2025-03-09", "2025-04-30", 1.0, 0.9), er("2025-06-09", "2025-07-30", 1.1, 1.0),
+             er("2025-09-09", "2025-10-29", 1.2, 1.1), er("2025-12-09", "2026-02-19", 1.3, 1.2)]   # 21–22 days early
+    p = build_packet(replace(_usd_history(), earnings=drift), "2026-03-07", mode="replay",
+                     membership_basis="approximate_mcap", benchmark_closes=BENCH)
+    assert "eps_behind_current" not in p.flags and len(p.eps) == 4
+    assert (p.eps[-1].fiscal_date, p.eps[-1].statement_fiscal) == ("2025-12-09", "2025-12-31")
+    assert [q.statement_fiscal for q in p.eps] == [r[0] for r in QTRS]
+    assert p.archive["eps_window"][-1] == ["2025-12-09", "2026-02-19", 1.3, [], "2025-12-31"]
+    assert (p.consensus.pre_announce.source, p.consensus.pre_announce.value) == ("vendor_estimate", 1.2)
+
+
 def test_live_mode_labels_every_source_live():
     p = build_packet(_usd_history(), "2026-03-07", mode="live", observed_at="2026-03-07", membership_basis="approximate_mcap",
                      benchmark_closes=BENCH)

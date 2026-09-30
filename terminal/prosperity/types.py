@@ -12,6 +12,12 @@ class EpsQuarter:
     eps_actual: Optional[float]
     eps_estimated: Optional[float]
     labels: Tuple[str, ...] = ()
+    statement_fiscal: Optional[str] = None   # paired three-statement quarter end (Boss 2026-09-30 ④)
+
+    @property
+    def period_end(self) -> str:
+        """Date used for quarter arithmetic: the paired statement date, else FMP's fiscal_date."""
+        return self.statement_fiscal or self.fiscal_date
 
 
 @dataclass(frozen=True)

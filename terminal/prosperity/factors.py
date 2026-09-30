@@ -258,8 +258,8 @@ def eps_factors(eps: Sequence[EpsQuarter], empty_reason: str = "eps_behind_curre
     if not eps:
         return FactorOut({k: None for k in EPS_KEYS}, {k: empty_reason for k in EPS_KEYS})
     newest = list(reversed(eps))
-    heads = [q.fiscal_date for q in newest]
-    series = [(q.fiscal_date, q.eps_actual) for q in newest]
+    heads = [q.period_end for q in newest]
+    series = [(q.period_end, q.eps_actual) for q in newest]
     labels: List[str] = []
 
     def blocked(i: int) -> Optional[str]:
@@ -276,7 +276,7 @@ def eps_factors(eps: Sequence[EpsQuarter], empty_reason: str = "eps_behind_curre
         return (None, reason) if reason else sue_value(series, i)
 
     sue0 = sue(0)
-    if len(eps) < 2 or not QUARTER_GAP[0] <= _gap(eps[-1].fiscal_date, eps[-2].fiscal_date) <= QUARTER_GAP[1]:
+    if len(eps) < 2 or not QUARTER_GAP[0] <= _gap(eps[-1].period_end, eps[-2].period_end) <= QUARTER_GAP[1]:
         accel = (None, "no_prior_quarter")
     else:
         sue1 = sue(1)
@@ -284,7 +284,7 @@ def eps_factors(eps: Sequence[EpsQuarter], empty_reason: str = "eps_behind_curre
         accel = (None, reason) if reason else (sue0[0] - sue1[0], None)
 
     last = eps[-8:]
-    if len(last) < 8 or not contiguous([q.fiscal_date for q in last]) or any(q.eps_actual is None for q in last):
+    if len(last) < 8 or not contiguous([q.period_end for q in last]) or any(q.eps_actual is None for q in last):
         ttm_leg = (None, "ttm_needs_8_quarters")
     else:
         before, recent = sum(q.eps_actual for q in last[:4]), sum(q.eps_actual for q in last[4:])
@@ -296,7 +296,7 @@ def eps_factors(eps: Sequence[EpsQuarter], empty_reason: str = "eps_behind_curre
         else:
             ttm_leg = ((recent / before) ** 0.25 - 1, None)
 
-    b = year_base([q.fiscal_date for q in eps], len(eps) - 1)
+    b = year_base([q.period_end for q in eps], len(eps) - 1)
     cur = eps[-1].eps_actual
     if b is None:
         yoy = (None, "no_yoy_base")
