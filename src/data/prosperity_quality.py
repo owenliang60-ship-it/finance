@@ -35,7 +35,9 @@ def statement_availability(row: dict, *, earnings_rows: list[dict] | None = None
     This is a conservative historical lower bound using the stored evidence,
     not proof that every filing legally follows a separate earnings release.
     With two valid dates the earlier wins: a later acceptance is an amendment
-    and must not hide a quarter already public. Only when both dates are
+    and must not hide a quarter already public. The stored values may be the
+    amended ones; approximate replay already reads the latest values for every
+    quarter, so this dates the quarter, not the version. Only when both dates are
     placeholders does the same quarter's results release stand in (tagged
     `statement_date_from_earnings`); that needs `earnings_rows`, which only the
     historical path passes (Boss 2026-09-30: FMP placeholders hid ~4,267

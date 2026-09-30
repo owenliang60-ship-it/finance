@@ -263,6 +263,10 @@ def build_report(store: MarketStore, targets: Dict[str, Any],
                                 **data.public_availability(r)) for t, rows in data.tables.items()
                                 for r in rows if window_start < r["date"] <= qe and
                                 "statement_date_before_earnings" in data.public_availability(r)["issues"]],
+                            "public_date_from_earnings": [dict(table=t, fiscal_date=r["date"],
+                                **data.public_availability(r)) for t, rows in data.tables.items()
+                                for r in rows if window_start < r["date"] <= qe and
+                                "statement_date_from_earnings" in data.public_availability(r)["issues"]],
                             "eps_issues": depth["quality_issues"],
                             "split_check_status": depth["split_check"]["status"],
                             "split_paired_quarters": depth["split_check"]["paired_quarters"]})

@@ -103,6 +103,8 @@ def _known(row: dict, visible: VisibleStatements) -> Tuple[Optional[str], Option
         known = statement_known_on(row, earnings_rows=list(visible.earnings_rows))
         if "statement_date_before_earnings" in avail["issues"]:
             return known, "earnings_floor", ("statement_date_before_earnings",)
+        if "statement_date_from_earnings" in avail["issues"]:      # placeholder dates, dated by the release
+            return known, avail["source"], ("statement_date_from_earnings",)
         return known, avail["source"], ()
     observed = _utc(row["_observed_at"]).date().isoformat() if visible.pit == "strict" else visible.observed_at
     known = statement_known_on(row, observed_at=observed)
