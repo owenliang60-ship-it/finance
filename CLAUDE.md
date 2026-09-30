@@ -22,7 +22,7 @@
 | Desk | 目录 | 职能 |
 |------|------|------|
 | **Data Desk** | `src/`, `data/`, `scripts/`, `config/` | 数据采集 + 存储 + 验证 + 云端 cron |
-| **Terminal** | `terminal/` | 编排中枢 + 分析流水线 + 宏观 + 工具注册 + dashboard + concept registry |
+| **Terminal** | `terminal/` | 编排中枢 + 分析流水线 + 宏观 + 工具注册 + dashboard + concept registry + 景气引擎 |
 | **Knowledge Base** | `knowledge/` | OPRMS + 6 lens + debate + memo + alpha + meta + options strategies |
 | **Backtest Desk** | `backtest/`, `forge/` | 回测引擎 + 因子研究 + 事件研究 + 择时 + 广度研究 + Forge 锻造 |
 | **Options Desk** | `terminal/options/`, `knowledge/options/` | IV / 链分析 / BS / scenario analyzer / 24 playbooks |
@@ -130,7 +130,7 @@ API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`�
 |------|------|
 | `docs/design/north-star.md` | **战略方向**（四层金字塔 + CIO-A/B 拆分） |
 | `ARCHITECTURE.md` | **物理实现**（代码组织 + 数据流 + 部署 + cron + extension points） |
-| `docs/design/` | 子系统设计（options / portfolio / theme / trend tracker / company_db） |
+| `docs/design/` | 子系统设计（options / portfolio / theme / trend tracker / company_db / 景气引擎 `prosperity-engine-north-star.md`） |
 | `docs/plans/` | 历史执行计划（按日期，不归档） |
 | `docs/issues/` | 踩坑记录（编号制） |
 | `docs/postmortems/` | 事后分析 |
