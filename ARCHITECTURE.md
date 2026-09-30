@@ -59,7 +59,7 @@
 | `dashboard.py` + `pdf_report.py` + `html_report.py` | 报告渲染 |
 | `concept_classifier.py` + `company_concepts.py` | Concept Registry（公司业务标签体系） |
 | `company_db.py` + `company_store.py` | Per-ticker 知识库 + SQLite 写入抽象 |
-| `prosperity/` | 景气引擎包：M4 点时输入包（只读 market.db；`scripts/prosperity_inputs.py` 为 CLI），M3 数值检查在 `src/data/fundamental_value_checks.py` |
+| `prosperity/` | 景气引擎包：M4 点时输入包（只读 market.db；`scripts/prosperity_inputs.py` 为 CLI），M3 数值检查在 `src/data/fundamental_value_checks.py`；M5 方案注册表（`schemes.py`、`version.py`）+ M6 因子与打分内核（`factors.py`、`kernel.py`，纯函数；`scripts/prosperity_score.py` 为只读验收 CLI） |
 
 > **Concept Registry** 详见 `docs/plans/2026-04-28-company-concept-registry-phase1.md`；周频自动对齐（A3 weekly-sync）见 `docs/plans/2026-06-01-a3-weekly-concept-sync-{design,plan}.md` + runbook `docs/runbooks/a3-llm-queue-review.md`
 > **Options Module** 详见 `docs/design/options_module_top_level_architecture.md`

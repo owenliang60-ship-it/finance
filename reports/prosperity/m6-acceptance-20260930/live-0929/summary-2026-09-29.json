@@ -1,0 +1,5123 @@
+{
+  "as_of": "2026-09-29",
+  "code_version": "633a9e810722aedc",
+  "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
+  "eps_split_retrospective_symbols": [],
+  "errors": {},
+  "future_leak_count": 0,
+  "future_leak_examples": [],
+  "members_resolved": 915,
+  "mode": "live",
+  "named_cases": {
+    "AAPL": {
+      "aux": {
+        "beta": 0.4784612751333618,
+        "ep_ntm": 0.02743475226787364,
+        "eps_ttm_leg": 0.047175338353559804,
+        "eps_yoy_pct": 28.6624203821656,
+        "gm_slope": 0.509373402436954,
+        "net_margin_yoy": 2.304959353961415,
+        "ntm_eps": 9.28392,
+        "ntm_growth": 0.06345017182130586,
+        "pe_ntm": 36.45011955041452,
+        "pe_ttm": 38.76288589879546,
+        "price": 338.3999938964844,
+        "revenue_ttm_leg": 0.03384832369947799,
+        "ttm_eps": 8.73
+      },
+      "current_fiscal": "2026-06-27",
+      "industry": "Consumer Electronics",
+      "labels": [],
+      "listing_days": 16727,
+      "missing": {},
+      "packet_flags": [],
+      "schemes": {
+        "F0": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0000000000000002,
+          "demotions": [],
+          "grade": "FULL",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 139,
+          "score": 56.27826993666682,
+          "status": "ranked",
+          "values": {
+            "fcf_margin_yoy": 3.2144874600684403,
+            "gm_level": 50.056206987945195,
+            "gm_yoy": 3.565501300761561,
+            "revenue_accel": -0.2386806506416086,
+            "revenue_yoy": 16.356501765281383
+          },
+          "within": 48.985440868676584
+        },
+        "F1": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [],
+          "grade": "FULL",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 103,
+          "score": 60.814669612985945,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 1.040420530123654,
+            "eps_sue": 3.923387394070683,
+            "fcf_margin_yoy": 3.2144874600684403,
+            "gm_level": 50.056206987945195,
+            "gm_yoy": 3.565501300761561,
+            "growth_4q": 4.05118310265189,
+            "revenue_accel": -0.2386806506416086,
+            "revenue_yoy": 16.356501765281383,
+            "revision": 0.02517139525305538,
+            "surprise": 0.03799047872497706
+          },
+          "within": 51.372156268633454
+        },
+        "F1-exfin": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [],
+          "grade": "FULL",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 100,
+          "score": 60.19566595590356,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 1.040420530123654,
+            "eps_sue": 3.923387394070683,
+            "fcf_margin_yoy": 3.2144874600684403,
+            "gm_level": 50.056206987945195,
+            "gm_yoy": 3.565501300761561,
+            "growth_4q": 4.05118310265189,
+            "revenue_accel": -0.2386806506416086,
+            "revenue_yoy": 16.356501765281383,
+            "revision": 0.02517139525305538,
+            "surprise": 0.03799047872497706
+          },
+          "within": 51.372156268633454
+        },
+        "F1-rank": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [],
+          "grade": "STRICT",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 100,
+          "score": 67.45831415196717,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 1.040420530123654,
+            "eps_sue": 3.923387394070683,
+            "fcf_margin_yoy": 3.2144874600684403,
+            "gm_level": 50.056206987945195,
+            "gm_yoy": 3.565501300761561,
+            "growth_4q": 4.05118310265189,
+            "revenue_accel": -0.2386806506416086,
+            "revenue_yoy": 16.356501765281383,
+            "revision": 0.02517139525305538,
+            "surprise": 0.03799047872497706
+          },
+          "within": 55.32386761847439
+        }
+      },
+      "sector": "Technology",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": 1.040420530123654,
+        "eps_sue": 3.923387394070683,
+        "fcf_margin_yoy": 3.2144874600684403,
+        "gm_level": 50.056206987945195,
+        "gm_yoy": 3.565501300761561,
+        "growth_4q": 4.05118310265189,
+        "revenue_accel": -0.2386806506416086,
+        "revenue_yoy": 16.356501765281383,
+        "revision": 0.02517139525305538,
+        "surprise": 0.03799047872497706
+      }
+    },
+    "ANET": {
+      "aux": {
+        "beta": 2.0135522252920084,
+        "ep_ntm": 0.022790601413872916,
+        "eps_ttm_leg": 0.07097686049641316,
+        "eps_yoy_pct": 39.726027397260275,
+        "gm_slope": -0.24976529972377073,
+        "net_margin_yoy": -0.35750548157621154,
+        "ntm_eps": 4.67025,
+        "ntm_growth": 0.34978323699421976,
+        "pe_ntm": 43.87773634579419,
+        "pe_ttm": 59.225432996805004,
+        "price": 204.9199981689453,
+        "revenue_ttm_leg": 0.07309479874684155,
+        "ttm_eps": 3.46
+      },
+      "current_fiscal": "2026-06-30",
+      "industry": "Computer Hardware",
+      "labels": [],
+      "listing_days": 4498,
+      "missing": {},
+      "packet_flags": [],
+      "schemes": {
+        "F0": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0000000000000002,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 764,
+          "score": 40.97824807867737,
+          "status": "ranked",
+          "values": {
+            "fcf_margin_yoy": -18.645602364518247,
+            "gm_level": 62.92782554270844,
+            "gm_yoy": -2.3207230784816844,
+            "revenue_accel": 2.5602595859921777,
+            "revenue_yoy": 37.68595791001452
+          },
+          "within": 44.49432019708532
+        },
+        "F1": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 353,
+          "score": 53.99260945295879,
+          "status": "ranked",
+          "values": {
+            "eps_accel": -0.22593611928769342,
+            "eps_sue": 8.612022360273942,
+            "fcf_margin_yoy": -18.645602364518247,
+            "gm_level": 62.92782554270844,
+            "gm_yoy": -2.3207230784816844,
+            "growth_4q": 7.203582962162736,
+            "revenue_accel": 2.5602595859921777,
+            "revenue_yoy": 37.68595791001452,
+            "revision": 0.002444856551223435,
+            "surprise": 0.072545838065877
+          },
+          "within": 56.232341384935715
+        },
+        "F1-exfin": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 305,
+          "score": 53.68082735037532,
+          "status": "ranked",
+          "values": {
+            "eps_accel": -0.22593611928769342,
+            "eps_sue": 8.612022360273942,
+            "fcf_margin_yoy": -18.645602364518247,
+            "gm_level": 62.92782554270844,
+            "gm_yoy": -2.3207230784816844,
+            "growth_4q": 7.203582962162736,
+            "revenue_accel": 2.5602595859921777,
+            "revenue_yoy": 37.68595791001452,
+            "revision": 0.002444856551223435,
+            "surprise": 0.072545838065877
+          },
+          "within": 56.232341384935715
+        },
+        "F1-rank": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 421,
+          "score": 50.52904225585138,
+          "status": "ranked",
+          "values": {
+            "eps_accel": -0.22593611928769342,
+            "eps_sue": 8.612022360273942,
+            "fcf_margin_yoy": -18.645602364518247,
+            "gm_level": 62.92782554270844,
+            "gm_yoy": -2.3207230784816844,
+            "growth_4q": 7.203582962162736,
+            "revenue_accel": 2.5602595859921777,
+            "revenue_yoy": 37.68595791001452,
+            "revision": 0.002444856551223435,
+            "surprise": 0.072545838065877
+          },
+          "within": 51.49860312192733
+        }
+      },
+      "sector": "Technology",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": -0.22593611928769342,
+        "eps_sue": 8.612022360273942,
+        "fcf_margin_yoy": -18.645602364518247,
+        "gm_level": 62.92782554270844,
+        "gm_yoy": -2.3207230784816844,
+        "growth_4q": 7.203582962162736,
+        "revenue_accel": 2.5602595859921777,
+        "revenue_yoy": 37.68595791001452,
+        "revision": 0.002444856551223435,
+        "surprise": 0.072545838065877
+      }
+    },
+    "BHP": {
+      "aux": {
+        "beta": 1.8032270199719236,
+        "ep_ntm": null,
+        "eps_ttm_leg": null,
+        "eps_yoy_pct": 30.188679245283,
+        "gm_slope": null,
+        "net_margin_yoy": -4.057432408673682,
+        "ntm_eps": null,
+        "ntm_growth": null,
+        "pe_ntm": null,
+        "pe_ttm": null,
+        "price": 84.58000183105469,
+        "revenue_ttm_leg": null,
+        "ttm_eps": null
+      },
+      "current_fiscal": "2026-06-30",
+      "industry": "Industrial Materials",
+      "labels": [
+        "semiannual_period"
+      ],
+      "listing_days": 16997,
+      "missing": {
+        "eps_accel": "no_prior_quarter",
+        "eps_sue": "eps_conflicting_quarter",
+        "gm_yoy": "gross_profit_missing",
+        "growth_4q": "ttm_needs_8_quarters",
+        "revenue_accel": "no_prior_quarter",
+        "revision": "unit_unverified",
+        "surprise": "unit_unverified"
+      },
+      "packet_flags": [
+        "semiannual_reporter",
+        "unit_unverified"
+      ],
+      "schemes": {
+        "F0": {
+          "badges": [],
+          "coverage": 0.37931034482758624,
+          "demotions": [],
+          "grade": null,
+          "missing": {
+            "gm_yoy": "gross_profit_missing",
+            "revenue_accel": "no_prior_quarter"
+          },
+          "observe_reason": "low_coverage",
+          "rank": null,
+          "score": null,
+          "status": "observe",
+          "values": {
+            "fcf_margin_yoy": 1.791859251255481,
+            "gm_level": 35.780024882660044,
+            "gm_yoy": null,
+            "revenue_accel": null,
+            "revenue_yoy": 18.689411945104652
+          },
+          "within": null
+        },
+        "F1": {
+          "badges": [],
+          "coverage": 0.23,
+          "demotions": [],
+          "grade": null,
+          "missing": {
+            "eps_accel": "no_prior_quarter",
+            "eps_sue": "eps_conflicting_quarter",
+            "gm_yoy": "gross_profit_missing",
+            "growth_4q": "ttm_needs_8_quarters",
+            "revenue_accel": "no_prior_quarter",
+            "revision": "unit_unverified",
+            "surprise": "unit_unverified"
+          },
+          "observe_reason": "low_coverage",
+          "rank": null,
+          "score": null,
+          "status": "observe",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": 1.791859251255481,
+            "gm_level": 35.780024882660044,
+            "gm_yoy": null,
+            "growth_4q": null,
+            "revenue_accel": null,
+            "revenue_yoy": 18.689411945104652,
+            "revision": null,
+            "surprise": null
+          },
+          "within": null
+        },
+        "F1-exfin": {
+          "badges": [],
+          "coverage": 0.23,
+          "demotions": [],
+          "grade": null,
+          "missing": {
+            "eps_accel": "no_prior_quarter",
+            "eps_sue": "eps_conflicting_quarter",
+            "gm_yoy": "gross_profit_missing",
+            "growth_4q": "ttm_needs_8_quarters",
+            "revenue_accel": "no_prior_quarter",
+            "revision": "unit_unverified",
+            "surprise": "unit_unverified"
+          },
+          "observe_reason": "low_coverage",
+          "rank": null,
+          "score": null,
+          "status": "observe",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": 1.791859251255481,
+            "gm_level": 35.780024882660044,
+            "gm_yoy": null,
+            "growth_4q": null,
+            "revenue_accel": null,
+            "revenue_yoy": 18.689411945104652,
+            "revision": null,
+            "surprise": null
+          },
+          "within": null
+        },
+        "F1-rank": {
+          "badges": [],
+          "coverage": 0.23,
+          "demotions": [],
+          "grade": null,
+          "missing": {
+            "eps_accel": "no_prior_quarter",
+            "eps_sue": "eps_conflicting_quarter",
+            "gm_yoy": "gross_profit_missing",
+            "growth_4q": "ttm_needs_8_quarters",
+            "revenue_accel": "no_prior_quarter",
+            "revision": "unit_unverified",
+            "surprise": "unit_unverified"
+          },
+          "observe_reason": "low_coverage",
+          "rank": null,
+          "score": null,
+          "status": "observe",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": 1.791859251255481,
+            "gm_level": 35.780024882660044,
+            "gm_yoy": null,
+            "growth_4q": null,
+            "revenue_accel": null,
+            "revenue_yoy": 18.689411945104652,
+            "revision": null,
+            "surprise": null
+          },
+          "within": null
+        }
+      },
+      "sector": "Basic Materials",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": null,
+        "eps_sue": null,
+        "fcf_margin_yoy": 1.791859251255481,
+        "gm_level": 35.780024882660044,
+        "gm_yoy": null,
+        "growth_4q": null,
+        "revenue_accel": null,
+        "revenue_yoy": 18.689411945104652,
+        "revision": null,
+        "surprise": null
+      }
+    },
+    "COIN": {
+      "aux": {
+        "beta": 2.275810501806594,
+        "ep_ntm": 0.0034084677140831096,
+        "eps_ttm_leg": null,
+        "eps_yoy_pct": -126.45914396887162,
+        "gm_slope": 0.8448898903167047,
+        "net_margin_yoy": -124.90058922977204,
+        "ntm_eps": 0.65371,
+        "ntm_growth": null,
+        "pe_ntm": 293.3869656057469,
+        "pe_ttm": null,
+        "price": 191.7899932861328,
+        "revenue_ttm_leg": -0.02735049016798119,
+        "ttm_eps": -2.6500000000000004
+      },
+      "current_fiscal": "2026-06-30",
+      "industry": "Financial - Data & Stock Exchanges",
+      "labels": [],
+      "listing_days": 1994,
+      "missing": {
+        "eps_accel": "eps_conflicting_quarter",
+        "eps_sue": "eps_conflicting_quarter",
+        "fcf_margin_yoy": "fcf_zero_placeholder",
+        "growth_4q": "ttm_needs_8_quarters",
+        "revision": "e2_consensus_jump"
+      },
+      "packet_flags": [],
+      "schemes": {
+        "F0": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 0.839080459770115,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {
+            "fcf_margin_yoy": "fcf_zero_placeholder"
+          },
+          "observe_reason": null,
+          "rank": 292,
+          "score": 60.40877781860317,
+          "status": "ranked",
+          "values": {
+            "fcf_margin_yoy": null,
+            "gm_level": 84.4443096614287,
+            "gm_yoy": 12.852653725847276,
+            "revenue_accel": 12.03147809202526,
+            "revenue_yoy": -18.51045412527852
+          },
+          "within": 50.76652214588441
+        },
+        "F1": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 0.52,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {
+            "eps_accel": "eps_conflicting_quarter",
+            "eps_sue": "eps_conflicting_quarter",
+            "fcf_margin_yoy": "fcf_zero_placeholder",
+            "growth_4q": "ttm_needs_8_quarters",
+            "revision": "e2_consensus_jump"
+          },
+          "observe_reason": null,
+          "rank": 387,
+          "score": 51.111695822981915,
+          "status": "ranked",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": null,
+            "gm_level": 84.4443096614287,
+            "gm_yoy": 12.852653725847276,
+            "growth_4q": null,
+            "revenue_accel": 12.03147809202526,
+            "revenue_yoy": -18.51045412527852,
+            "revision": null,
+            "surprise": -0.7085327165639597
+          },
+          "within": 45.046638609841935
+        },
+        "F1-exfin": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 0.52,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {
+            "eps_accel": "eps_conflicting_quarter",
+            "eps_sue": "eps_conflicting_quarter",
+            "fcf_margin_yoy": "fcf_zero_placeholder",
+            "growth_4q": "ttm_needs_8_quarters",
+            "revision": "e2_consensus_jump"
+          },
+          "observe_reason": null,
+          "rank": 330,
+          "score": 51.25669541129116,
+          "status": "ranked",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": null,
+            "gm_level": 84.4443096614287,
+            "gm_yoy": 12.852653725847276,
+            "growth_4q": null,
+            "revenue_accel": 12.03147809202526,
+            "revenue_yoy": -18.51045412527852,
+            "revision": null,
+            "surprise": -0.7085327165639597
+          },
+          "within": 48.95171542641889
+        },
+        "F1-rank": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 0.52,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {
+            "eps_accel": "eps_conflicting_quarter",
+            "eps_sue": "eps_conflicting_quarter",
+            "fcf_margin_yoy": "fcf_zero_placeholder",
+            "growth_4q": "ttm_needs_8_quarters",
+            "revision": "e2_consensus_jump"
+          },
+          "observe_reason": null,
+          "rank": 322,
+          "score": 67.59623920106381,
+          "status": "ranked",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": null,
+            "gm_level": 84.4443096614287,
+            "gm_yoy": 12.852653725847276,
+            "growth_4q": null,
+            "revenue_accel": 12.03147809202526,
+            "revenue_yoy": -18.51045412527852,
+            "revision": null,
+            "surprise": -0.7085327165639597
+          },
+          "within": 56.727781257590415
+        }
+      },
+      "sector": "Financial Services",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": null,
+        "eps_sue": null,
+        "fcf_margin_yoy": null,
+        "gm_level": 84.4443096614287,
+        "gm_yoy": 12.852653725847276,
+        "growth_4q": null,
+        "revenue_accel": 12.03147809202526,
+        "revenue_yoy": -18.51045412527852,
+        "revision": null,
+        "surprise": -0.7085327165639597
+      }
+    },
+    "COST": {
+      "aux": {
+        "beta": -0.23887456823089465,
+        "ep_ntm": 0.024433039068994952,
+        "eps_ttm_leg": 0.03330695093056524,
+        "eps_yoy_pct": null,
+        "gm_slope": -0.008264973019124898,
+        "net_margin_yoy": 0.10256510695003396,
+        "ntm_eps": 22.54974,
+        "ntm_growth": 0.08621098265895966,
+        "pe_ntm": 40.9281873276657,
+        "pe_ttm": 44.456646575633734,
+        "price": 922.9199829101562,
+        "revenue_ttm_leg": 0.024258294270104175,
+        "ttm_eps": 20.759999999999998
+      },
+      "current_fiscal": "2026-08-30",
+      "industry": "Discount Stores",
+      "labels": [],
+      "listing_days": 14692,
+      "missing": {
+        "eps_accel": "no_yoy_pair",
+        "eps_sue": "no_yoy_pair"
+      },
+      "packet_flags": [],
+      "schemes": {
+        "F0": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 1.0000000000000002,
+          "demotions": [],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 647,
+          "score": 45.46135369644674,
+          "status": "ranked",
+          "values": {
+            "fcf_margin_yoy": 0.3895696059612579,
+            "gm_level": 12.736750833133105,
+            "gm_yoy": -0.1689086682365044,
+            "revenue_accel": -0.48025057609233457,
+            "revenue_yoy": 11.104275964529453
+          },
+          "within": 45.97082102564692
+        },
+        "F1": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 0.72,
+          "demotions": [],
+          "grade": "BELOW",
+          "missing": {
+            "eps_accel": "no_yoy_pair",
+            "eps_sue": "no_yoy_pair"
+          },
+          "observe_reason": null,
+          "rank": 545,
+          "score": 45.893123441208,
+          "status": "ranked",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": 0.3895696059612579,
+            "gm_level": 12.736750833133105,
+            "gm_yoy": -0.1689086682365044,
+            "growth_4q": 2.8782622600334706,
+            "revenue_accel": -0.48025057609233457,
+            "revenue_yoy": 11.104275964529453,
+            "revision": -0.009141637580970335,
+            "surprise": 0.022477063916902636
+          },
+          "within": 46.78662768405107
+        },
+        "F1-exfin": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 0.72,
+          "demotions": [],
+          "grade": "BELOW",
+          "missing": {
+            "eps_accel": "no_yoy_pair",
+            "eps_sue": "no_yoy_pair"
+          },
+          "observe_reason": null,
+          "rank": 451,
+          "score": 45.83766547468303,
+          "status": "ranked",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": 0.3895696059612579,
+            "gm_level": 12.736750833133105,
+            "gm_yoy": -0.1689086682365044,
+            "growth_4q": 2.8782622600334706,
+            "revenue_accel": -0.48025057609233457,
+            "revenue_yoy": 11.104275964529453,
+            "revision": -0.009141637580970335,
+            "surprise": 0.022477063916902636
+          },
+          "within": 46.78662768405107
+        },
+        "F1-rank": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 0.72,
+          "demotions": [],
+          "grade": "BELOW",
+          "missing": {
+            "eps_accel": "no_yoy_pair",
+            "eps_sue": "no_yoy_pair"
+          },
+          "observe_reason": null,
+          "rank": 622,
+          "score": 40.352959970620276,
+          "status": "ranked",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": 0.3895696059612579,
+            "gm_level": 12.736750833133105,
+            "gm_yoy": -0.1689086682365044,
+            "growth_4q": 2.8782622600334706,
+            "revenue_accel": -0.48025057609233457,
+            "revenue_yoy": 11.104275964529453,
+            "revision": -0.009141637580970335,
+            "surprise": 0.022477063916902636
+          },
+          "within": 44.855408601810446
+        }
+      },
+      "sector": "Consumer Defensive",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": null,
+        "eps_sue": null,
+        "fcf_margin_yoy": 0.3895696059612579,
+        "gm_level": 12.736750833133105,
+        "gm_yoy": -0.1689086682365044,
+        "growth_4q": 2.8782622600334706,
+        "revenue_accel": -0.48025057609233457,
+        "revenue_yoy": 11.104275964529453,
+        "revision": -0.009141637580970335,
+        "surprise": 0.022477063916902636
+      }
+    },
+    "CRWV": {
+      "aux": {
+        "beta": 3.2688724446046558,
+        "ep_ntm": -0.03768449525685195,
+        "eps_ttm_leg": null,
+        "eps_yoy_pct": null,
+        "gm_slope": -1.619214102835495,
+        "net_margin_yoy": -0.3568641055603834,
+        "ntm_eps": -3.20582,
+        "ntm_growth": null,
+        "pe_ntm": null,
+        "pe_ttm": null,
+        "price": 85.06999969482422,
+        "revenue_ttm_leg": 0.21122189809992054,
+        "ttm_eps": -2.7779800000000003
+      },
+      "current_fiscal": "2026-06-30",
+      "industry": "Software - Infrastructure",
+      "labels": [],
+      "listing_days": 550,
+      "missing": {
+        "eps_accel": "few_sigma_obs",
+        "eps_sue": "few_sigma_obs",
+        "fcf_margin_yoy": "fcf_outlier",
+        "growth_4q": "ttm_needs_8_quarters"
+      },
+      "packet_flags": [],
+      "schemes": {
+        "F0": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 0.839080459770115,
+          "demotions": [
+            "new_listing_gate"
+          ],
+          "grade": "BELOW",
+          "missing": {
+            "fcf_margin_yoy": "fcf_outlier"
+          },
+          "observe_reason": null,
+          "rank": 529,
+          "score": 47.50501142537736,
+          "status": "ranked",
+          "values": {
+            "fcf_margin_yoy": null,
+            "gm_level": 65.86407766990291,
+            "gm_yoy": -8.355076873182938,
+            "revenue_accel": 0.6324118613434422,
+            "revenue_yoy": 112.32070238161987
+          },
+          "within": 52.76896893128822
+        },
+        "F1": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 0.5700000000000001,
+          "demotions": [
+            "new_listing_gate",
+            "ntm_not_above_ttm"
+          ],
+          "grade": "BELOW",
+          "missing": {
+            "eps_accel": "few_sigma_obs",
+            "eps_sue": "few_sigma_obs",
+            "fcf_margin_yoy": "fcf_outlier",
+            "growth_4q": "ttm_needs_8_quarters"
+          },
+          "observe_reason": null,
+          "rank": 439,
+          "score": 49.01494489282333,
+          "status": "ranked",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": null,
+            "gm_level": 65.86407766990291,
+            "gm_yoy": -8.355076873182938,
+            "growth_4q": null,
+            "revenue_accel": 0.6324118613434422,
+            "revenue_yoy": 112.32070238161987,
+            "revision": -0.06655695333621232,
+            "surprise": 0.19473863249801568
+          },
+          "within": 57.96964048483153
+        },
+        "F1-exfin": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 0.5700000000000001,
+          "demotions": [
+            "new_listing_gate",
+            "ntm_not_above_ttm"
+          ],
+          "grade": "BELOW",
+          "missing": {
+            "eps_accel": "few_sigma_obs",
+            "eps_sue": "few_sigma_obs",
+            "fcf_margin_yoy": "fcf_outlier",
+            "growth_4q": "ttm_needs_8_quarters"
+          },
+          "observe_reason": null,
+          "rank": 341,
+          "score": 50.192299496320636,
+          "status": "ranked",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": null,
+            "gm_level": 65.86407766990291,
+            "gm_yoy": -8.355076873182938,
+            "growth_4q": null,
+            "revenue_accel": 0.6324118613434422,
+            "revenue_yoy": 112.32070238161987,
+            "revision": -0.06655695333621232,
+            "surprise": 0.19473863249801568
+          },
+          "within": 57.96964048483153
+        },
+        "F1-rank": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 0.5700000000000001,
+          "demotions": [
+            "new_listing_gate",
+            "ntm_not_above_ttm"
+          ],
+          "grade": "BELOW",
+          "missing": {
+            "eps_accel": "few_sigma_obs",
+            "eps_sue": "few_sigma_obs",
+            "fcf_margin_yoy": "fcf_outlier",
+            "growth_4q": "ttm_needs_8_quarters"
+          },
+          "observe_reason": null,
+          "rank": 642,
+          "score": 39.540931266437724,
+          "status": "ranked",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": null,
+            "gm_level": 65.86407766990291,
+            "gm_yoy": -8.355076873182938,
+            "growth_4q": null,
+            "revenue_accel": 0.6324118613434422,
+            "revenue_yoy": 112.32070238161987,
+            "revision": -0.06655695333621232,
+            "surprise": 0.19473863249801568
+          },
+          "within": 46.009038631101575
+        }
+      },
+      "sector": "Technology",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": null,
+        "eps_sue": null,
+        "fcf_margin_yoy": null,
+        "gm_level": 65.86407766990291,
+        "gm_yoy": -8.355076873182938,
+        "growth_4q": null,
+        "revenue_accel": 0.6324118613434422,
+        "revenue_yoy": 112.32070238161987,
+        "revision": -0.06655695333621232,
+        "surprise": 0.19473863249801568
+      }
+    },
+    "FER": {
+      "aux": {
+        "beta": 1.119881418797093,
+        "ep_ntm": null,
+        "eps_ttm_leg": null,
+        "eps_yoy_pct": null,
+        "gm_slope": null,
+        "net_margin_yoy": -6.595046097179707,
+        "ntm_eps": null,
+        "ntm_growth": null,
+        "pe_ntm": null,
+        "pe_ttm": null,
+        "price": 55.77000045776367,
+        "revenue_ttm_leg": null,
+        "ttm_eps": null
+      },
+      "current_fiscal": "2026-06-30",
+      "industry": "Engineering & Construction",
+      "labels": [],
+      "listing_days": 5160,
+      "missing": {
+        "eps_accel": "no_prior_quarter",
+        "eps_sue": "eps_conflicting_quarter",
+        "growth_4q": "ttm_needs_8_quarters",
+        "revenue_accel": "period_days_out_of_range",
+        "revenue_yoy": "period_days_out_of_range",
+        "revision": "unit_unverified",
+        "surprise": "unit_unverified"
+      },
+      "packet_flags": [
+        "semiannual_reporter",
+        "unit_unverified"
+      ],
+      "schemes": {
+        "F0": {
+          "badges": [],
+          "coverage": 0.37931034482758624,
+          "demotions": [],
+          "grade": null,
+          "missing": {
+            "revenue_accel": "period_days_out_of_range",
+            "revenue_yoy": "period_days_out_of_range"
+          },
+          "observe_reason": "low_coverage",
+          "rank": null,
+          "score": null,
+          "status": "observe",
+          "values": {
+            "fcf_margin_yoy": 13.37716645844409,
+            "gm_level": 10.444586258242927,
+            "gm_yoy": 0.8003705500307987,
+            "revenue_accel": null,
+            "revenue_yoy": null
+          },
+          "within": null
+        },
+        "F1": {
+          "badges": [],
+          "coverage": 0.25,
+          "demotions": [],
+          "grade": null,
+          "missing": {
+            "eps_accel": "no_prior_quarter",
+            "eps_sue": "eps_conflicting_quarter",
+            "growth_4q": "ttm_needs_8_quarters",
+            "revenue_accel": "period_days_out_of_range",
+            "revenue_yoy": "period_days_out_of_range",
+            "revision": "unit_unverified",
+            "surprise": "unit_unverified"
+          },
+          "observe_reason": "low_coverage",
+          "rank": null,
+          "score": null,
+          "status": "observe",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": 13.37716645844409,
+            "gm_level": 10.444586258242927,
+            "gm_yoy": 0.8003705500307987,
+            "growth_4q": null,
+            "revenue_accel": null,
+            "revenue_yoy": null,
+            "revision": null,
+            "surprise": null
+          },
+          "within": null
+        },
+        "F1-exfin": {
+          "badges": [],
+          "coverage": 0.25,
+          "demotions": [],
+          "grade": null,
+          "missing": {
+            "eps_accel": "no_prior_quarter",
+            "eps_sue": "eps_conflicting_quarter",
+            "growth_4q": "ttm_needs_8_quarters",
+            "revenue_accel": "period_days_out_of_range",
+            "revenue_yoy": "period_days_out_of_range",
+            "revision": "unit_unverified",
+            "surprise": "unit_unverified"
+          },
+          "observe_reason": "low_coverage",
+          "rank": null,
+          "score": null,
+          "status": "observe",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": 13.37716645844409,
+            "gm_level": 10.444586258242927,
+            "gm_yoy": 0.8003705500307987,
+            "growth_4q": null,
+            "revenue_accel": null,
+            "revenue_yoy": null,
+            "revision": null,
+            "surprise": null
+          },
+          "within": null
+        },
+        "F1-rank": {
+          "badges": [],
+          "coverage": 0.25,
+          "demotions": [],
+          "grade": null,
+          "missing": {
+            "eps_accel": "no_prior_quarter",
+            "eps_sue": "eps_conflicting_quarter",
+            "growth_4q": "ttm_needs_8_quarters",
+            "revenue_accel": "period_days_out_of_range",
+            "revenue_yoy": "period_days_out_of_range",
+            "revision": "unit_unverified",
+            "surprise": "unit_unverified"
+          },
+          "observe_reason": "low_coverage",
+          "rank": null,
+          "score": null,
+          "status": "observe",
+          "values": {
+            "eps_accel": null,
+            "eps_sue": null,
+            "fcf_margin_yoy": 13.37716645844409,
+            "gm_level": 10.444586258242927,
+            "gm_yoy": 0.8003705500307987,
+            "growth_4q": null,
+            "revenue_accel": null,
+            "revenue_yoy": null,
+            "revision": null,
+            "surprise": null
+          },
+          "within": null
+        }
+      },
+      "sector": "Industrials",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": null,
+        "eps_sue": null,
+        "fcf_margin_yoy": 13.37716645844409,
+        "gm_level": 10.444586258242927,
+        "gm_yoy": 0.8003705500307987,
+        "growth_4q": null,
+        "revenue_accel": null,
+        "revenue_yoy": null,
+        "revision": null,
+        "surprise": null
+      }
+    },
+    "JPM": {
+      "aux": {
+        "beta": 0.5862706006789208,
+        "ep_ntm": 0.07413275876134844,
+        "eps_ttm_leg": 0.04864975866004273,
+        "eps_yoy_pct": 53.0241935483871,
+        "gm_slope": 1.0009598397658226,
+        "net_margin_yoy": 4.218526893832372,
+        "ntm_eps": 24.952345,
+        "ntm_growth": 0.07414313387860538,
+        "pe_ntm": 13.489313182303732,
+        "pe_ttm": 14.489453135509713,
+        "price": 336.5899963378906,
+        "revenue_ttm_leg": 0.01956069297306451,
+        "ttm_eps": 23.23
+      },
+      "current_fiscal": "2026-06-30",
+      "industry": "Banks - Diversified",
+      "labels": [],
+      "listing_days": 16997,
+      "missing": {
+        "fcf_margin_yoy": "fcf_zero_placeholder"
+      },
+      "packet_flags": [],
+      "schemes": {
+        "F0": {
+          "badges": [
+            "params_bootstrap",
+            "gm_slope_missing"
+          ],
+          "coverage": 0.6206896551724139,
+          "demotions": [],
+          "grade": "FULL",
+          "missing": {
+            "fcf_margin_yoy": "industry_exempt",
+            "gm_level": "industry_exempt",
+            "gm_yoy": "industry_exempt"
+          },
+          "observe_reason": null,
+          "rank": 205,
+          "score": 52.053305766564215,
+          "status": "ranked",
+          "values": {
+            "fcf_margin_yoy": null,
+            "gm_level": null,
+            "gm_yoy": null,
+            "revenue_accel": 11.045749806767803,
+            "revenue_yoy": 17.944903738879205
+          },
+          "within": 51.24901924555986
+        },
+        "F1": {
+          "badges": [
+            "params_bootstrap",
+            "gm_slope_missing"
+          ],
+          "coverage": 0.75,
+          "demotions": [],
+          "grade": "STRICT",
+          "missing": {
+            "fcf_margin_yoy": "industry_exempt",
+            "gm_level": "industry_exempt",
+            "gm_yoy": "industry_exempt"
+          },
+          "observe_reason": null,
+          "rank": 36,
+          "score": 71.95775194639916,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 4.1407870068651995,
+            "eps_sue": 6.536161041151403,
+            "fcf_margin_yoy": null,
+            "gm_level": null,
+            "gm_yoy": null,
+            "growth_4q": 3.410522581655362,
+            "revenue_accel": 11.045749806767803,
+            "revenue_yoy": 17.944903738879205,
+            "revision": 0.013211919689781455,
+            "surprise": 0.5989657152756382
+          },
+          "within": 70.15225587702109
+        },
+        "F1-exfin": {
+          "badges": [],
+          "coverage": 0.75,
+          "demotions": [],
+          "grade": null,
+          "missing": {
+            "fcf_margin_yoy": "industry_exempt",
+            "gm_level": "industry_exempt",
+            "gm_yoy": "industry_exempt"
+          },
+          "observe_reason": "universe_excluded",
+          "rank": null,
+          "score": null,
+          "status": "excluded",
+          "values": {
+            "eps_accel": 4.1407870068651995,
+            "eps_sue": 6.536161041151403,
+            "fcf_margin_yoy": null,
+            "gm_level": null,
+            "gm_yoy": null,
+            "growth_4q": 3.410522581655362,
+            "revenue_accel": 11.045749806767803,
+            "revenue_yoy": 17.944903738879205,
+            "revision": 0.013211919689781455,
+            "surprise": 0.5989657152756382
+          },
+          "within": null
+        },
+        "F1-rank": {
+          "badges": [
+            "params_bootstrap",
+            "gm_slope_missing"
+          ],
+          "coverage": 0.75,
+          "demotions": [],
+          "grade": "STRICT",
+          "missing": {
+            "fcf_margin_yoy": "industry_exempt",
+            "gm_level": "industry_exempt",
+            "gm_yoy": "industry_exempt"
+          },
+          "observe_reason": null,
+          "rank": 38,
+          "score": 79.95978904017139,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 4.1407870068651995,
+            "eps_sue": 6.536161041151403,
+            "fcf_margin_yoy": null,
+            "gm_level": null,
+            "gm_yoy": null,
+            "growth_4q": 3.410522581655362,
+            "revenue_accel": 11.045749806767803,
+            "revenue_yoy": 17.944903738879205,
+            "revision": 0.013211919689781455,
+            "surprise": 0.5989657152756382
+          },
+          "within": 78.26919798615106
+        }
+      },
+      "sector": "Financial Services",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": 4.1407870068651995,
+        "eps_sue": 6.536161041151403,
+        "fcf_margin_yoy": null,
+        "gm_level": 66.49527043414989,
+        "gm_yoy": 6.388567913910734,
+        "growth_4q": 3.410522581655362,
+        "revenue_accel": 11.045749806767803,
+        "revenue_yoy": 17.944903738879205,
+        "revision": 0.013211919689781455,
+        "surprise": 0.5989657152756382
+      }
+    },
+    "KLAC": {
+      "aux": {
+        "beta": 3.1091007723473365,
+        "ep_ntm": 0.02928614502101038,
+        "eps_ttm_leg": 0.030595241325825695,
+        "eps_yoy_pct": 11.70212765957448,
+        "gm_slope": 0.17987528015247167,
+        "net_margin_yoy": -0.6211640559602358,
+        "ntm_eps": 5.54006,
+        "ntm_growth": 0.4734202127659577,
+        "pe_ntm": 34.145839245232956,
+        "pe_ttm": 50.31116972578333,
+        "price": 189.1699981689453,
+        "revenue_ttm_leg": 0.028087671832030425,
+        "ttm_eps": 3.76
+      },
+      "current_fiscal": "2026-06-30",
+      "industry": "Semiconductors",
+      "labels": [],
+      "listing_days": 16792,
+      "missing": {},
+      "packet_flags": [
+        "price_split_rescaled"
+      ],
+      "schemes": {
+        "F0": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0000000000000002,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 604,
+          "score": 46.34369578129014,
+          "status": "ranked",
+          "values": {
+            "fcf_margin_yoy": -11.191705964013202,
+            "gm_level": 61.364692707370715,
+            "gm_yoy": -0.6074492720852476,
+            "revenue_accel": 3.7145200179892868,
+            "revenue_yoy": 15.208012244148428
+          },
+          "within": 45.52321615806219
+        },
+        "F1": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 515,
+          "score": 46.82026567042222,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 0.3613783431676869,
+            "eps_sue": 1.277522290021965,
+            "fcf_margin_yoy": -11.191705964013202,
+            "gm_level": 61.364692707370715,
+            "gm_yoy": -0.6074492720852476,
+            "growth_4q": 2.934145657892806,
+            "revenue_accel": 3.7145200179892868,
+            "revenue_yoy": 15.208012244148428,
+            "revision": 0.004324152920218799,
+            "surprise": 0.023962431156569597
+          },
+          "within": 44.41721296237878
+        },
+        "F1-exfin": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 389,
+          "score": 48.333491529255916,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 0.3613783431676869,
+            "eps_sue": 1.277522290021965,
+            "fcf_margin_yoy": -11.191705964013202,
+            "gm_level": 61.364692707370715,
+            "gm_yoy": -0.6074492720852476,
+            "growth_4q": 2.934145657892806,
+            "revenue_accel": 3.7145200179892868,
+            "revenue_yoy": 15.208012244148428,
+            "revision": 0.004324152920218799,
+            "surprise": 0.023962431156569597
+          },
+          "within": 44.41721296237878
+        },
+        "F1-rank": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 444,
+          "score": 49.291669919826276,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 0.3613783431676869,
+            "eps_sue": 1.277522290021965,
+            "fcf_margin_yoy": -11.191705964013202,
+            "gm_level": 61.364692707370715,
+            "gm_yoy": -0.6074492720852476,
+            "growth_4q": 2.934145657892806,
+            "revenue_accel": 3.7145200179892868,
+            "revenue_yoy": 15.208012244148428,
+            "revision": 0.004324152920218799,
+            "surprise": 0.023962431156569597
+          },
+          "within": 41.97562657085518
+        }
+      },
+      "sector": "Technology",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": 0.3613783431676869,
+        "eps_sue": 1.277522290021965,
+        "fcf_margin_yoy": -11.191705964013202,
+        "gm_level": 61.364692707370715,
+        "gm_yoy": -0.6074492720852476,
+        "growth_4q": 2.934145657892806,
+        "revenue_accel": 3.7145200179892868,
+        "revenue_yoy": 15.208012244148428,
+        "revision": 0.004324152920218799,
+        "surprise": 0.023962431156569597
+      }
+    },
+    "MSFT": {
+      "aux": {
+        "beta": 0.9840172117141339,
+        "ep_ntm": 0.03855928665985342,
+        "eps_ttm_leg": 0.06091928018360582,
+        "eps_yoy_pct": 29.863013698630148,
+        "gm_slope": -0.26176460985358724,
+        "net_margin_yoy": 4.110740149103492,
+        "ntm_eps": 19.63516,
+        "ntm_growth": 0.13629398148148142,
+        "pe_ntm": 25.934089725813447,
+        "pe_ttm": 29.46875007064254,
+        "price": 509.2200012207031,
+        "revenue_ttm_leg": 0.041785597945021236,
+        "ttm_eps": 17.28
+      },
+      "current_fiscal": "2026-06-30",
+      "industry": "Software - Infrastructure",
+      "labels": [],
+      "listing_days": 14810,
+      "missing": {},
+      "packet_flags": [],
+      "schemes": {
+        "F0": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0000000000000002,
+          "demotions": [],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 766,
+          "score": 40.92310580219591,
+          "status": "ranked",
+          "values": {
+            "fcf_margin_yoy": -11.628604687827995,
+            "gm_level": 67.1969957892164,
+            "gm_yoy": -1.3879259151045744,
+            "revenue_accel": -0.5500136469116086,
+            "revenue_yoy": 17.74702057796209
+          },
+          "within": 43.32861060469367
+        },
+        "F1": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 464,
+          "score": 48.25452721016879,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 0.8581461552385798,
+            "eps_sue": 4.094818716693165,
+            "fcf_margin_yoy": -11.628604687827995,
+            "gm_level": 67.1969957892164,
+            "gm_yoy": -1.3879259151045744,
+            "growth_4q": 5.135243906431352,
+            "revenue_accel": -0.5500136469116086,
+            "revenue_yoy": 17.74702057796209,
+            "revision": 0.001616197317518665,
+            "surprise": 0.1277742468539469
+          },
+          "within": 49.79596978946177
+        },
+        "F1-exfin": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 404,
+          "score": 47.44156848491357,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 0.8581461552385798,
+            "eps_sue": 4.094818716693165,
+            "fcf_margin_yoy": -11.628604687827995,
+            "gm_level": 67.1969957892164,
+            "gm_yoy": -1.3879259151045744,
+            "growth_4q": 5.135243906431352,
+            "revenue_accel": -0.5500136469116086,
+            "revenue_yoy": 17.74702057796209,
+            "revision": 0.001616197317518665,
+            "surprise": 0.1277742468539469
+          },
+          "within": 49.79596978946177
+        },
+        "F1-rank": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 470,
+          "score": 47.89326596620377,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 0.8581461552385798,
+            "eps_sue": 4.094818716693165,
+            "fcf_margin_yoy": -11.628604687827995,
+            "gm_level": 67.1969957892164,
+            "gm_yoy": -1.3879259151045744,
+            "growth_4q": 5.135243906431352,
+            "revenue_accel": -0.5500136469116086,
+            "revenue_yoy": 17.74702057796209,
+            "revision": 0.001616197317518665,
+            "surprise": 0.1277742468539469
+          },
+          "within": 46.51594882538816
+        }
+      },
+      "sector": "Technology",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": 0.8581461552385798,
+        "eps_sue": 4.094818716693165,
+        "fcf_margin_yoy": -11.628604687827995,
+        "gm_level": 67.1969957892164,
+        "gm_yoy": -1.3879259151045744,
+        "growth_4q": 5.135243906431352,
+        "revenue_accel": -0.5500136469116086,
+        "revenue_yoy": 17.74702057796209,
+        "revision": 0.001616197317518665,
+        "surprise": 0.1277742468539469
+      }
+    },
+    "NVDA": {
+      "aux": {
+        "beta": 1.8773380863159086,
+        "ep_ntm": 0.05242340295377086,
+        "eps_ttm_leg": 0.18458711657950588,
+        "eps_yoy_pct": 111.42857142857143,
+        "gm_slope": 0.6769002150836364,
+        "net_margin_yoy": 5.506085852295698,
+        "ntm_eps": 11.99762,
+        "ntm_growth": 0.7115007132667615,
+        "pe_ntm": 19.07544996424291,
+        "pe_ttm": 32.64764621968616,
+        "price": 228.86,
+        "revenue_ttm_leg": 0.16368438893179516,
+        "ttm_eps": 7.010000000000001
+      },
+      "current_fiscal": "2026-07-26",
+      "industry": "Semiconductors",
+      "labels": [],
+      "listing_days": 10112,
+      "missing": {},
+      "packet_flags": [],
+      "schemes": {
+        "F0": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0000000000000002,
+          "demotions": [],
+          "grade": "STRICT",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 45,
+          "score": 66.82838014588734,
+          "status": "ranked",
+          "values": {
+            "fcf_margin_yoy": -6.576681834175385,
+            "gm_level": 74.97531723844068,
+            "gm_yoy": 2.551638826699886,
+            "revenue_accel": 20.623509697973034,
+            "revenue_yoy": 105.85114348672526
+          },
+          "within": 68.14332504954209
+        },
+        "F1": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [],
+          "grade": "STRICT",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 50,
+          "score": 67.32434964139699,
+          "status": "ranked",
+          "values": {
+            "eps_accel": -2.6788473391433207,
+            "eps_sue": 4.349987743078009,
+            "fcf_margin_yoy": -6.576681834175385,
+            "gm_level": 74.97531723844068,
+            "gm_yoy": 2.551638826699886,
+            "growth_4q": 17.41357527556505,
+            "revenue_accel": 20.623509697973034,
+            "revenue_yoy": 105.85114348672526,
+            "revision": 0.39814296950100475,
+            "surprise": 0.061882187279981404
+          },
+          "within": 61.033164119348434
+        },
+        "F1-exfin": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [],
+          "grade": "STRICT",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 47,
+          "score": 66.7223613591332,
+          "status": "ranked",
+          "values": {
+            "eps_accel": -2.6788473391433207,
+            "eps_sue": 4.349987743078009,
+            "fcf_margin_yoy": -6.576681834175385,
+            "gm_level": 74.97531723844068,
+            "gm_yoy": 2.551638826699886,
+            "growth_4q": 17.41357527556505,
+            "revenue_accel": 20.623509697973034,
+            "revenue_yoy": 105.85114348672526,
+            "revision": 0.39814296950100475,
+            "surprise": 0.061882187279981404
+          },
+          "within": 61.033164119348434
+        },
+        "F1-rank": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [],
+          "grade": "STRICT",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 71,
+          "score": 71.63655838280756,
+          "status": "ranked",
+          "values": {
+            "eps_accel": -2.6788473391433207,
+            "eps_sue": 4.349987743078009,
+            "fcf_margin_yoy": -6.576681834175385,
+            "gm_level": 74.97531723844068,
+            "gm_yoy": 2.551638826699886,
+            "growth_4q": 17.41357527556505,
+            "revenue_accel": 20.623509697973034,
+            "revenue_yoy": 105.85114348672526,
+            "revision": 0.39814296950100475,
+            "surprise": 0.061882187279981404
+          },
+          "within": 64.49180339870225
+        }
+      },
+      "sector": "Technology",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": -2.6788473391433207,
+        "eps_sue": 4.349987743078009,
+        "fcf_margin_yoy": -6.576681834175385,
+        "gm_level": 74.97531723844068,
+        "gm_yoy": 2.551638826699886,
+        "growth_4q": 17.41357527556505,
+        "revenue_accel": 20.623509697973034,
+        "revenue_yoy": 105.85114348672526,
+        "revision": 0.39814296950100475,
+        "surprise": 0.061882187279981404
+      }
+    },
+    "TSM": {
+      "aux": {
+        "beta": 2.2817885171802557,
+        "ep_ntm": null,
+        "eps_ttm_leg": 0.11988851474193796,
+        "eps_yoy_pct": 72.39999999999999,
+        "gm_slope": 1.391686630105102,
+        "net_margin_yoy": 12.966970563748852,
+        "ntm_eps": null,
+        "ntm_growth": null,
+        "pe_ntm": null,
+        "pe_ttm": null,
+        "price": 452.88,
+        "revenue_ttm_leg": 0.06960507451345488,
+        "ttm_eps": null
+      },
+      "current_fiscal": "2026-06-30",
+      "industry": "Semiconductors",
+      "labels": [],
+      "listing_days": 10582,
+      "missing": {
+        "revision": "unit_unverified",
+        "surprise": "unit_unverified"
+      },
+      "packet_flags": [
+        "unit_unverified"
+      ],
+      "schemes": {
+        "F0": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0000000000000002,
+          "demotions": [],
+          "grade": "FULL",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 84,
+          "score": 60.921547753319544,
+          "status": "ranked",
+          "values": {
+            "fcf_margin_yoy": 1.4697430070554276,
+            "gm_level": 67.7207074098243,
+            "gm_yoy": 9.102835335529377,
+            "revenue_accel": 0.9131211744243899,
+            "revenue_yoy": 36.04539340666872
+          },
+          "within": 55.96608556117524
+        },
+        "F1": {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "coverage": 0.9,
+          "demotions": [],
+          "grade": "STRICT",
+          "missing": {
+            "revision": "unit_unverified",
+            "surprise": "unit_unverified"
+          },
+          "observe_reason": null,
+          "rank": 37,
+          "score": 71.76379265733274,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 2.478794889168259,
+            "eps_sue": 6.172625560265403,
+            "fcf_margin_yoy": 1.4697430070554276,
+            "gm_level": 67.7207074098243,
+            "gm_yoy": 9.102835335529377,
+            "growth_4q": 9.474679462769641,
+            "revenue_accel": 0.9131211744243899,
+            "revenue_yoy": 36.04539340666872,
+            "revision": null,
+            "surprise": null
+          },
+          "within": 62.32633255214451
+        },
+        "F1-exfin": {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "coverage": 0.9,
+          "demotions": [],
+          "grade": "STRICT",
+          "missing": {
+            "revision": "unit_unverified",
+            "surprise": "unit_unverified"
+          },
+          "observe_reason": null,
+          "rank": 34,
+          "score": 70.75842730409992,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 2.478794889168259,
+            "eps_sue": 6.172625560265403,
+            "fcf_margin_yoy": 1.4697430070554276,
+            "gm_level": 67.7207074098243,
+            "gm_yoy": 9.102835335529377,
+            "growth_4q": 9.474679462769641,
+            "revenue_accel": 0.9131211744243899,
+            "revenue_yoy": 36.04539340666872,
+            "revision": null,
+            "surprise": null
+          },
+          "within": 62.32633255214451
+        },
+        "F1-rank": {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "coverage": 0.9,
+          "demotions": [],
+          "grade": "STRICT",
+          "missing": {
+            "revision": "unit_unverified",
+            "surprise": "unit_unverified"
+          },
+          "observe_reason": null,
+          "rank": 44,
+          "score": 78.38168132659084,
+          "status": "ranked",
+          "values": {
+            "eps_accel": 2.478794889168259,
+            "eps_sue": 6.172625560265403,
+            "fcf_margin_yoy": 1.4697430070554276,
+            "gm_level": 67.7207074098243,
+            "gm_yoy": 9.102835335529377,
+            "growth_4q": 9.474679462769641,
+            "revenue_accel": 0.9131211744243899,
+            "revenue_yoy": 36.04539340666872,
+            "revision": null,
+            "surprise": null
+          },
+          "within": 69.82035097553897
+        }
+      },
+      "sector": "Technology",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": 2.478794889168259,
+        "eps_sue": 6.172625560265403,
+        "fcf_margin_yoy": 1.4697430070554276,
+        "gm_level": 67.7207074098243,
+        "gm_yoy": 9.102835335529377,
+        "growth_4q": 9.474679462769641,
+        "revenue_accel": 0.9131211744243899,
+        "revenue_yoy": 36.04539340666872,
+        "revision": null,
+        "surprise": null
+      }
+    },
+    "V": {
+      "aux": {
+        "beta": 0.004915349870225725,
+        "ep_ntm": 0.03936014680039276,
+        "eps_ttm_leg": 0.0365616225102503,
+        "eps_yoy_pct": 11.409395973154357,
+        "gm_slope": -0.17924512706984244,
+        "net_margin_yoy": -3.448939226985864,
+        "ntm_eps": 14.4743,
+        "ntm_growth": 0.11943542150038677,
+        "pe_ntm": 25.40640930714266,
+        "pe_ttm": 28.44083451155259,
+        "price": 367.739990234375,
+        "revenue_ttm_leg": 0.03420482064562269,
+        "ttm_eps": 12.93
+      },
+      "current_fiscal": "2026-06-30",
+      "industry": "Financial - Credit Services",
+      "labels": [],
+      "listing_days": 6768,
+      "missing": {},
+      "packet_flags": [],
+      "schemes": {
+        "F0": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 1.0000000000000002,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 778,
+          "score": 40.47534231843011,
+          "status": "ranked",
+          "values": {
+            "fcf_margin_yoy": -9.268107674619095,
+            "gm_level": 76.46350898306542,
+            "gm_yoy": -4.140108791216917,
+            "revenue_accel": -2.6893672321580695,
+            "revenue_yoy": 14.362957137239473
+          },
+          "within": 45.43093259939438
+        },
+        "F1": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 1.0,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 723,
+          "score": 40.39276544025942,
+          "status": "ranked",
+          "values": {
+            "eps_accel": -1.8848182201922659,
+            "eps_sue": 2.4045924858949737,
+            "fcf_margin_yoy": -9.268107674619095,
+            "gm_level": 76.46350898306542,
+            "gm_yoy": -4.140108791216917,
+            "growth_4q": 3.5383221577936497,
+            "revenue_accel": -2.6893672321580695,
+            "revenue_yoy": 14.362957137239473,
+            "revision": -0.002392995114399232,
+            "surprise": 0.024527625299975146
+          },
+          "within": 44.32290392476972
+        },
+        "F1-exfin": {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "coverage": 1.0,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 576,
+          "score": 39.992167186912354,
+          "status": "ranked",
+          "values": {
+            "eps_accel": -1.8848182201922659,
+            "eps_sue": 2.4045924858949737,
+            "fcf_margin_yoy": -9.268107674619095,
+            "gm_level": 76.46350898306542,
+            "gm_yoy": -4.140108791216917,
+            "growth_4q": 3.5383221577936497,
+            "revenue_accel": -2.6893672321580695,
+            "revenue_yoy": 14.362957137239473,
+            "revision": -0.002392995114399232,
+            "surprise": 0.024527625299975146
+          },
+          "within": 43.025437719155704
+        },
+        "F1-rank": {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "coverage": 1.0,
+          "demotions": [
+            "net_margin_down"
+          ],
+          "grade": "BELOW",
+          "missing": {},
+          "observe_reason": null,
+          "rank": 742,
+          "score": 32.13019625379083,
+          "status": "ranked",
+          "values": {
+            "eps_accel": -1.8848182201922659,
+            "eps_sue": 2.4045924858949737,
+            "fcf_margin_yoy": -9.268107674619095,
+            "gm_level": 76.46350898306542,
+            "gm_yoy": -4.140108791216917,
+            "growth_4q": 3.5383221577936497,
+            "revenue_accel": -2.6893672321580695,
+            "revenue_yoy": 14.362957137239473,
+            "revision": -0.002392995114399232,
+            "surprise": 0.024527625299975146
+          },
+          "within": 38.958104116566325
+        }
+      },
+      "sector": "Financial Services",
+      "surprise_source": "local_snapshot",
+      "values": {
+        "eps_accel": -1.8848182201922659,
+        "eps_sue": 2.4045924858949737,
+        "fcf_margin_yoy": -9.268107674619095,
+        "gm_level": 76.46350898306542,
+        "gm_yoy": -4.140108791216917,
+        "growth_4q": 3.5383221577936497,
+        "revenue_accel": -2.6893672321580695,
+        "revenue_yoy": 14.362957137239473,
+        "revision": -0.002392995114399232,
+        "surprise": 0.024527625299975146
+      }
+    }
+  },
+  "named_not_members": [],
+  "observed_at": "2026-09-29",
+  "packets_built": 915,
+  "params_bootstrap": true,
+  "raw_factor_coverage": {
+    "eps_accel": 793,
+    "eps_sue": 807,
+    "fcf_margin_yoy": 828,
+    "gm_level": 910,
+    "gm_yoy": 900,
+    "growth_4q": 755,
+    "revenue_accel": 872,
+    "revenue_yoy": 900,
+    "revision": 737,
+    "surprise": 734
+  },
+  "raw_label_counts": {
+    "eps_ttm_turnaround": 13,
+    "eps_turnaround": 15,
+    "listing_date_unknown": 14,
+    "semiannual_period": 20
+  },
+  "raw_missing_reason_counts": {
+    "eps_accel": {
+      "eps_behind_current": 6,
+      "eps_conflicting_quarter": 52,
+      "few_sigma_obs": 32,
+      "no_prior_quarter": 23,
+      "no_yoy_pair": 9
+    },
+    "eps_sue": {
+      "eps_behind_current": 6,
+      "eps_conflicting_quarter": 59,
+      "few_sigma_obs": 32,
+      "no_yoy_pair": 11
+    },
+    "fcf_margin_yoy": {
+      "fcf_outlier": 19,
+      "fcf_zero_placeholder": 57,
+      "free_cash_flow_missing": 1,
+      "no_yoy_base": 6,
+      "nonpositive_revenue": 3,
+      "revenue_missing": 1
+    },
+    "gm_level": {
+      "gross_profit_missing": 2,
+      "nonpositive_revenue": 3
+    },
+    "gm_yoy": {
+      "gross_profit_missing": 5,
+      "no_yoy_base": 6,
+      "nonpositive_revenue": 3,
+      "revenue_missing": 1
+    },
+    "growth_4q": {
+      "eps_behind_current": 3,
+      "eps_ttm_nonpositive": 30,
+      "eps_ttm_turnaround": 12,
+      "nonpositive_base": 2,
+      "period_days_out_of_range": 15,
+      "ttm_needs_8_quarters": 98
+    },
+    "revenue_accel": {
+      "no_prior_quarter": 23,
+      "no_yoy_base": 6,
+      "nonpositive_base": 2,
+      "period_days_out_of_range": 3,
+      "prior_yoy_missing": 8,
+      "revenue_missing": 1
+    },
+    "revenue_yoy": {
+      "no_yoy_base": 6,
+      "nonpositive_base": 2,
+      "period_days_out_of_range": 6,
+      "revenue_missing": 1
+    },
+    "revision": {
+      "e2_consensus_jump": 8,
+      "no_base_snapshot": 14,
+      "no_current_snapshot": 4,
+      "revision_set_too_small": 1,
+      "unit_unverified": 151
+    },
+    "surprise": {
+      "eps_missing_value": 1,
+      "no_current_eps": 3,
+      "no_pre_announce_snapshot": 22,
+      "pre_announce_snapshot_stale": 4,
+      "unit_unverified": 151
+    }
+  },
+  "scheme_hashes": {
+    "F0": "8a5f1685b88139f8",
+    "F1": "3f268258d997bbdc",
+    "F1-exfin": "ae1a0f9df6555408",
+    "F1-rank": "0c2c2949bf3574c2"
+  },
+  "schemes": {
+    "F0": {
+      "badge_counts": {
+        "gm_slope_missing": 176,
+        "params_bootstrap": 890,
+        "pe_redflag": 76
+      },
+      "counts": {
+        "excluded": 0,
+        "observe": 25,
+        "ranked": 890
+      },
+      "demotion_counts": {
+        "net_margin_down": 345,
+        "new_listing_gate": 13
+      },
+      "factor_coverage": {
+        "fcf_margin_yoy": 713,
+        "gm_level": 758,
+        "gm_yoy": 749,
+        "revenue_accel": 872,
+        "revenue_yoy": 900
+      },
+      "grades": {
+        "BELOW": 630,
+        "FULL": 204,
+        "STRICT": 56
+      },
+      "missing_reason_counts": {
+        "fcf_margin_yoy": {
+          "fcf_outlier": 17,
+          "fcf_zero_placeholder": 22,
+          "free_cash_flow_missing": 1,
+          "industry_exempt": 153,
+          "no_yoy_base": 6,
+          "nonpositive_revenue": 2,
+          "revenue_missing": 1
+        },
+        "gm_level": {
+          "gross_profit_missing": 2,
+          "industry_exempt": 153,
+          "nonpositive_revenue": 2
+        },
+        "gm_yoy": {
+          "gross_profit_missing": 4,
+          "industry_exempt": 153,
+          "no_yoy_base": 6,
+          "nonpositive_revenue": 2,
+          "revenue_missing": 1
+        },
+        "revenue_accel": {
+          "no_prior_quarter": 23,
+          "no_yoy_base": 6,
+          "nonpositive_base": 2,
+          "period_days_out_of_range": 3,
+          "prior_yoy_missing": 8,
+          "revenue_missing": 1
+        },
+        "revenue_yoy": {
+          "no_yoy_base": 6,
+          "nonpositive_base": 2,
+          "period_days_out_of_range": 6,
+          "revenue_missing": 1
+        }
+      },
+      "observe_reasons": {
+        "insufficient_quarters": 7,
+        "low_coverage": 18
+      },
+      "scheme_hash": "8a5f1685b88139f8",
+      "top": [
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 98.5,
+            "growth": 100.0,
+            "quality": 100.0
+          },
+          "grade": "STRICT",
+          "rank": 1,
+          "score": 110.0,
+          "sector": "Technology",
+          "symbol": "MU"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 89.1,
+            "growth": 100.0,
+            "quality": 100.0
+          },
+          "grade": "STRICT",
+          "rank": 2,
+          "score": 110.0,
+          "sector": "Technology",
+          "symbol": "SNDK"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 71.6,
+            "growth": 100.0,
+            "quality": 98.8
+          },
+          "grade": "STRICT",
+          "rank": 3,
+          "score": 99.78,
+          "sector": "Basic Materials",
+          "symbol": "SQM"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 100.0,
+            "growth": 100.0,
+            "quality": 0.0
+          },
+          "grade": "STRICT",
+          "rank": 4,
+          "score": 99.41,
+          "sector": "Communication Services",
+          "symbol": "ASTS"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 67.4,
+            "growth": 71.1,
+            "quality": 100.0
+          },
+          "grade": "STRICT",
+          "rank": 5,
+          "score": 97.44,
+          "sector": "Energy",
+          "symbol": "PR"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 71.4,
+            "growth": 100.0,
+            "quality": 94.9
+          },
+          "grade": "STRICT",
+          "rank": 6,
+          "score": 94.93,
+          "sector": "Healthcare",
+          "symbol": "INSM"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 67.6,
+            "growth": 56.9,
+            "quality": 97.2
+          },
+          "grade": "STRICT",
+          "rank": 7,
+          "score": 87.12,
+          "sector": "Energy",
+          "symbol": "OXY"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 50.2,
+            "growth": 53.5,
+            "quality": 100.0
+          },
+          "grade": "STRICT",
+          "rank": 8,
+          "score": 86.16,
+          "sector": "Energy",
+          "symbol": "LNG"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 59.4,
+            "growth": 96.2,
+            "quality": 77.3
+          },
+          "grade": "STRICT",
+          "rank": 9,
+          "score": 82.09,
+          "sector": "Industrials",
+          "symbol": "FRO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 79.9,
+            "growth": 84.9,
+            "quality": 65.9
+          },
+          "grade": "STRICT",
+          "rank": 10,
+          "score": 81.42,
+          "sector": "Energy",
+          "symbol": "CNQ"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 51.7,
+            "growth": 85.1,
+            "quality": 89.0
+          },
+          "grade": "STRICT",
+          "rank": 11,
+          "score": 81.21,
+          "sector": "Basic Materials",
+          "symbol": "TECK"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 65.1,
+            "growth": 69.3,
+            "quality": 88.8
+          },
+          "grade": "STRICT",
+          "rank": 12,
+          "score": 80.79,
+          "sector": "Energy",
+          "symbol": "FANG"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 52.4,
+            "growth": 43.7,
+            "quality": 100.0
+          },
+          "grade": "STRICT",
+          "rank": 13,
+          "score": 80.62,
+          "sector": "Industrials",
+          "symbol": "CSX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 100.0,
+            "growth": 100.0,
+            "quality": 31.2
+          },
+          "grade": "STRICT",
+          "rank": 14,
+          "score": 79.47,
+          "sector": "Financial Services",
+          "symbol": "TPG"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 78.3,
+            "growth": 82.0,
+            "quality": 62.6
+          },
+          "grade": "STRICT",
+          "rank": 15,
+          "score": 78.94,
+          "sector": "Energy",
+          "symbol": "DVN"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 61.2,
+            "growth": 100.0,
+            "quality": 74.8
+          },
+          "grade": "STRICT",
+          "rank": 16,
+          "score": 78.63,
+          "sector": "Industrials",
+          "symbol": "BE"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 39.9,
+            "growth": 100.0,
+            "quality": 96.1
+          },
+          "grade": "STRICT",
+          "rank": 17,
+          "score": 78.39,
+          "sector": "Healthcare",
+          "symbol": "ASND"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 49.2,
+            "growth": 56.4,
+            "quality": 92.5
+          },
+          "grade": "STRICT",
+          "rank": 18,
+          "score": 76.79,
+          "sector": "Basic Materials",
+          "symbol": "ALB"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 62.2,
+            "growth": 100.0,
+            "quality": 61.7
+          },
+          "grade": "STRICT",
+          "rank": 19,
+          "score": 76.39,
+          "sector": "Technology",
+          "symbol": "SITM"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 51.8,
+            "growth": 50.0,
+            "quality": 90.8
+          },
+          "grade": "STRICT",
+          "rank": 20,
+          "score": 76.3,
+          "sector": "Financial Services",
+          "symbol": "IVZ"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 68.7,
+            "growth": 100.0,
+            "quality": 46.1
+          },
+          "grade": "STRICT",
+          "rank": 21,
+          "score": 75.17,
+          "sector": "Energy",
+          "symbol": "SUN"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 36.8,
+            "growth": 100.0,
+            "quality": 90.2
+          },
+          "grade": "STRICT",
+          "rank": 22,
+          "score": 73.58,
+          "sector": "Financial Services",
+          "symbol": "CRBG"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 51.1,
+            "growth": 62.2,
+            "quality": 78.5
+          },
+          "grade": "STRICT",
+          "rank": 23,
+          "score": 73.31,
+          "sector": "Basic Materials",
+          "symbol": "SCCO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 58.2,
+            "growth": 43.8,
+            "quality": 77.6
+          },
+          "grade": "STRICT",
+          "rank": 24,
+          "score": 73.21,
+          "sector": "Energy",
+          "symbol": "TRGP"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 42.2,
+            "growth": 50.3,
+            "quality": 93.5
+          },
+          "grade": "STRICT",
+          "rank": 25,
+          "score": 72.95,
+          "sector": "Financial Services",
+          "symbol": "COF"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 49.5,
+            "growth": 36.5,
+            "quality": 90.4
+          },
+          "grade": "STRICT",
+          "rank": 26,
+          "score": 72.89,
+          "sector": "Communication Services",
+          "symbol": "CHTR"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 51.1,
+            "growth": 56.9,
+            "quality": 89.0
+          },
+          "grade": "STRICT",
+          "rank": 27,
+          "score": 72.41,
+          "sector": "Technology",
+          "symbol": "FORM"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 46.4,
+            "growth": 36.7,
+            "quality": 90.5
+          },
+          "grade": "STRICT",
+          "rank": 28,
+          "score": 71.54,
+          "sector": "Consumer Cyclical",
+          "symbol": "SBUX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 72.0,
+            "growth": 51.5,
+            "quality": 52.5
+          },
+          "grade": "STRICT",
+          "rank": 29,
+          "score": 71.31,
+          "sector": "Financial Services",
+          "symbol": "GS"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 51.1,
+            "growth": 67.0,
+            "quality": 69.8
+          },
+          "grade": "STRICT",
+          "rank": 30,
+          "score": 70.77,
+          "sector": "Technology",
+          "symbol": "STX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 50.4,
+            "growth": 42.2,
+            "quality": 81.0
+          },
+          "grade": "STRICT",
+          "rank": 31,
+          "score": 70.71,
+          "sector": "Communication Services",
+          "symbol": "VIV"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 65.5,
+            "growth": 68.8,
+            "quality": 71.3
+          },
+          "grade": "STRICT",
+          "rank": 32,
+          "score": 70.2,
+          "sector": "Energy",
+          "symbol": "CVX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 50.3,
+            "growth": 40.0,
+            "quality": 89.8
+          },
+          "grade": "STRICT",
+          "rank": 33,
+          "score": 69.65,
+          "sector": "Financial Services",
+          "symbol": "STT"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 48.8,
+            "growth": 44.1,
+            "quality": 78.0
+          },
+          "grade": "STRICT",
+          "rank": 34,
+          "score": 69.11,
+          "sector": "Energy",
+          "symbol": "KMI"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 48.3,
+            "growth": 89.0,
+            "quality": 59.6
+          },
+          "grade": "STRICT",
+          "rank": 35,
+          "score": 69.04,
+          "sector": "Basic Materials",
+          "symbol": "WPM"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 52.4,
+            "growth": 93.9,
+            "quality": 62.0
+          },
+          "grade": "STRICT",
+          "rank": 36,
+          "score": 68.71,
+          "sector": "Technology",
+          "symbol": "PLTR"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 64.8,
+            "growth": 85.2,
+            "quality": 50.6
+          },
+          "grade": "STRICT",
+          "rank": 37,
+          "score": 68.71,
+          "sector": "Energy",
+          "symbol": "ET"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 64.1,
+            "growth": 70.3,
+            "quality": 57.1
+          },
+          "grade": "STRICT",
+          "rank": 38,
+          "score": 68.45,
+          "sector": "Energy",
+          "symbol": "MPC"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 63.4,
+            "growth": 70.2,
+            "quality": 57.2
+          },
+          "grade": "STRICT",
+          "rank": 39,
+          "score": 68.13,
+          "sector": "Energy",
+          "symbol": "PSX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 63.6,
+            "growth": 60.3,
+            "quality": 70.7
+          },
+          "grade": "STRICT",
+          "rank": 40,
+          "score": 67.79,
+          "sector": "Energy",
+          "symbol": "EQNR"
+        }
+      ],
+      "top_sector_share": {
+        "sector": "Energy",
+        "share": 0.35
+      }
+    },
+    "F1": {
+      "badge_counts": {
+        "gm_slope_missing": 153,
+        "ntm_gate_unknown": 134,
+        "params_bootstrap": 864,
+        "pe_redflag": 77
+      },
+      "counts": {
+        "excluded": 0,
+        "observe": 51,
+        "ranked": 864
+      },
+      "demotion_counts": {
+        "net_margin_down": 332,
+        "new_listing_gate": 11,
+        "ntm_not_above_ttm": 117
+      },
+      "factor_coverage": {
+        "eps_accel": 793,
+        "eps_sue": 807,
+        "fcf_margin_yoy": 713,
+        "gm_level": 758,
+        "gm_yoy": 749,
+        "growth_4q": 755,
+        "revenue_accel": 872,
+        "revenue_yoy": 900,
+        "revision": 737,
+        "surprise": 734
+      },
+      "grades": {
+        "BELOW": 597,
+        "FULL": 204,
+        "STRICT": 63
+      },
+      "missing_reason_counts": {
+        "eps_accel": {
+          "eps_behind_current": 6,
+          "eps_conflicting_quarter": 52,
+          "few_sigma_obs": 32,
+          "no_prior_quarter": 23,
+          "no_yoy_pair": 9
+        },
+        "eps_sue": {
+          "eps_behind_current": 6,
+          "eps_conflicting_quarter": 59,
+          "few_sigma_obs": 32,
+          "no_yoy_pair": 11
+        },
+        "fcf_margin_yoy": {
+          "fcf_outlier": 17,
+          "fcf_zero_placeholder": 22,
+          "free_cash_flow_missing": 1,
+          "industry_exempt": 153,
+          "no_yoy_base": 6,
+          "nonpositive_revenue": 2,
+          "revenue_missing": 1
+        },
+        "gm_level": {
+          "gross_profit_missing": 2,
+          "industry_exempt": 153,
+          "nonpositive_revenue": 2
+        },
+        "gm_yoy": {
+          "gross_profit_missing": 4,
+          "industry_exempt": 153,
+          "no_yoy_base": 6,
+          "nonpositive_revenue": 2,
+          "revenue_missing": 1
+        },
+        "growth_4q": {
+          "eps_behind_current": 3,
+          "eps_ttm_nonpositive": 30,
+          "eps_ttm_turnaround": 12,
+          "nonpositive_base": 2,
+          "period_days_out_of_range": 15,
+          "ttm_needs_8_quarters": 98
+        },
+        "revenue_accel": {
+          "no_prior_quarter": 23,
+          "no_yoy_base": 6,
+          "nonpositive_base": 2,
+          "period_days_out_of_range": 3,
+          "prior_yoy_missing": 8,
+          "revenue_missing": 1
+        },
+        "revenue_yoy": {
+          "no_yoy_base": 6,
+          "nonpositive_base": 2,
+          "period_days_out_of_range": 6,
+          "revenue_missing": 1
+        },
+        "revision": {
+          "e2_consensus_jump": 8,
+          "no_base_snapshot": 14,
+          "no_current_snapshot": 4,
+          "revision_set_too_small": 1,
+          "unit_unverified": 151
+        },
+        "surprise": {
+          "eps_missing_value": 1,
+          "no_current_eps": 3,
+          "no_pre_announce_snapshot": 22,
+          "pre_announce_snapshot_stale": 4,
+          "unit_unverified": 151
+        }
+      },
+      "observe_reasons": {
+        "insufficient_quarters": 7,
+        "low_coverage": 44
+      },
+      "scheme_hash": "3f268258d997bbdc",
+      "top": [
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 88.5,
+            "expectation": 58.5,
+            "growth": 100.0,
+            "quality": 92.3
+          },
+          "grade": "STRICT",
+          "rank": 1,
+          "score": 100.89,
+          "sector": "Technology",
+          "symbol": "SNDK"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 52.1,
+            "expectation": 68.5,
+            "growth": 100.0,
+            "quality": 74.6
+          },
+          "grade": "STRICT",
+          "rank": 2,
+          "score": 90.13,
+          "sector": "Technology",
+          "symbol": "MU"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 80.0,
+            "expectation": 100.0,
+            "growth": 60.3,
+            "quality": 89.5
+          },
+          "grade": "STRICT",
+          "rank": 3,
+          "score": 89.76,
+          "sector": "Energy",
+          "symbol": "PR"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 70.0,
+            "expectation": null,
+            "growth": 92.3,
+            "quality": 77.7
+          },
+          "grade": "STRICT",
+          "rank": 4,
+          "score": 89.58,
+          "sector": "Basic Materials",
+          "symbol": "SQM"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 82.4,
+            "expectation": 100.0,
+            "growth": 74.1,
+            "quality": 70.3
+          },
+          "grade": "STRICT",
+          "rank": 5,
+          "score": 89.53,
+          "sector": "Energy",
+          "symbol": "OXY"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 58.1,
+            "expectation": null,
+            "growth": 100.0,
+            "quality": 86.0
+          },
+          "grade": "STRICT",
+          "rank": 6,
+          "score": 87.79,
+          "sector": "Healthcare",
+          "symbol": "ASND"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 69.8,
+            "expectation": 63.7,
+            "growth": 99.9,
+            "quality": 85.2
+          },
+          "grade": "STRICT",
+          "rank": 7,
+          "score": 87.13,
+          "sector": "Healthcare",
+          "symbol": "INSM"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 100.0,
+            "expectation": 0.0,
+            "growth": 100.0,
+            "quality": 25.3
+          },
+          "grade": "STRICT",
+          "rank": 8,
+          "score": 85.26,
+          "sector": "Communication Services",
+          "symbol": "ASTS"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 90.5,
+            "expectation": null,
+            "growth": 82.9,
+            "quality": 56.8
+          },
+          "grade": "STRICT",
+          "rank": 9,
+          "score": 84.61,
+          "sector": "Energy",
+          "symbol": "CNQ"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 87.4,
+            "expectation": 80.9,
+            "growth": 93.9,
+            "quality": 59.9
+          },
+          "grade": "STRICT",
+          "rank": 10,
+          "score": 83.83,
+          "sector": "Energy",
+          "symbol": "CVX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 77.8,
+            "expectation": 99.9,
+            "growth": 43.8,
+            "quality": 91.2
+          },
+          "grade": "STRICT",
+          "rank": 11,
+          "score": 83.18,
+          "sector": "Energy",
+          "symbol": "LNG"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 74.9,
+            "expectation": 100.0,
+            "growth": 85.0,
+            "quality": 52.6
+          },
+          "grade": "STRICT",
+          "rank": 12,
+          "score": 82.46,
+          "sector": "Energy",
+          "symbol": "MPC"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 75.7,
+            "expectation": 76.5,
+            "growth": 67.0,
+            "quality": 80.3
+          },
+          "grade": "STRICT",
+          "rank": 13,
+          "score": 80.33,
+          "sector": "Energy",
+          "symbol": "FANG"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 60.8,
+            "expectation": 49.1,
+            "growth": 95.9,
+            "quality": 59.0
+          },
+          "grade": "STRICT",
+          "rank": 14,
+          "score": 79.69,
+          "sector": "Technology",
+          "symbol": "STX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 82.3,
+            "expectation": 53.2,
+            "growth": 77.3,
+            "quality": 48.3
+          },
+          "grade": "STRICT",
+          "rank": 15,
+          "score": 79.38,
+          "sector": "Financial Services",
+          "symbol": "GS"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "gm_slope_missing",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 77.7,
+            "expectation": null,
+            "growth": 80.7,
+            "quality": null
+          },
+          "grade": "STRICT",
+          "rank": 16,
+          "score": 79.1,
+          "sector": "Financial Services",
+          "symbol": "SAN"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 86.1,
+            "expectation": 73.7,
+            "growth": 76.2,
+            "quality": 49.8
+          },
+          "grade": "STRICT",
+          "rank": 17,
+          "score": 78.79,
+          "sector": "Energy",
+          "symbol": "XOM"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 68.8,
+            "expectation": 100.0,
+            "growth": 78.3,
+            "quality": 52.5
+          },
+          "grade": "STRICT",
+          "rank": 18,
+          "score": 77.73,
+          "sector": "Energy",
+          "symbol": "PSX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 60.4,
+            "expectation": 53.7,
+            "growth": 99.7,
+            "quality": 76.9
+          },
+          "grade": "STRICT",
+          "rank": 19,
+          "score": 77.65,
+          "sector": "Industrials",
+          "symbol": "BE"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 82.9,
+            "expectation": 50.0,
+            "growth": 82.7,
+            "quality": 51.2
+          },
+          "grade": "STRICT",
+          "rank": 20,
+          "score": 77.64,
+          "sector": "Basic Materials",
+          "symbol": "LYB"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 80.9,
+            "expectation": 73.4,
+            "growth": 80.5,
+            "quality": 47.0
+          },
+          "grade": "STRICT",
+          "rank": 21,
+          "score": 77.55,
+          "sector": "Energy",
+          "symbol": "ET"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 63.7,
+            "expectation": 46.2,
+            "growth": 100.0,
+            "quality": 53.8
+          },
+          "grade": "STRICT",
+          "rank": 22,
+          "score": 77.54,
+          "sector": "Technology",
+          "symbol": "SITM"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 80.3,
+            "expectation": 46.5,
+            "growth": 93.1,
+            "quality": 42.2
+          },
+          "grade": "STRICT",
+          "rank": 23,
+          "score": 77.25,
+          "sector": "Technology",
+          "symbol": "MTSI"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 60.4,
+            "expectation": 100.0,
+            "growth": 70.0,
+            "quality": 54.1
+          },
+          "grade": "STRICT",
+          "rank": 24,
+          "score": 76.31,
+          "sector": "Energy",
+          "symbol": "VLO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 71.1,
+            "expectation": 42.9,
+            "growth": 100.0,
+            "quality": 52.2
+          },
+          "grade": "STRICT",
+          "rank": 25,
+          "score": 75.92,
+          "sector": "Technology",
+          "symbol": "AVGO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 65.0,
+            "expectation": 50.5,
+            "growth": 69.9,
+            "quality": 66.2
+          },
+          "grade": "STRICT",
+          "rank": 26,
+          "score": 75.33,
+          "sector": "Financial Services",
+          "symbol": "IVZ"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 50.8,
+            "expectation": null,
+            "growth": 75.9,
+            "quality": 72.8
+          },
+          "grade": "STRICT",
+          "rank": 27,
+          "score": 75.27,
+          "sector": "Basic Materials",
+          "symbol": "TECK"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 78.5,
+            "expectation": null,
+            "growth": 81.6,
+            "quality": 41.2
+          },
+          "grade": "STRICT",
+          "rank": 28,
+          "score": 74.47,
+          "sector": "Energy",
+          "symbol": "EC"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 76.3,
+            "expectation": 85.0,
+            "growth": 97.6,
+            "quality": 38.0
+          },
+          "grade": "STRICT",
+          "rank": 29,
+          "score": 73.98,
+          "sector": "Communication Services",
+          "symbol": "OMC"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 83.2,
+            "expectation": 71.7,
+            "growth": 71.9,
+            "quality": 61.7
+          },
+          "grade": "STRICT",
+          "rank": 30,
+          "score": 73.28,
+          "sector": "Energy",
+          "symbol": "COP"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 53.3,
+            "expectation": null,
+            "growth": 71.9,
+            "quality": 77.9
+          },
+          "grade": "STRICT",
+          "rank": 31,
+          "score": 72.37,
+          "sector": "Technology",
+          "symbol": "FORM"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 62.7,
+            "expectation": 100.0,
+            "growth": 69.3,
+            "quality": 48.5
+          },
+          "grade": "STRICT",
+          "rank": 32,
+          "score": 72.31,
+          "sector": "Energy",
+          "symbol": "DINO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 59.2,
+            "expectation": null,
+            "growth": 95.2,
+            "quality": 51.8
+          },
+          "grade": "STRICT",
+          "rank": 33,
+          "score": 72.28,
+          "sector": "Industrials",
+          "symbol": "FRO"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 72.0,
+            "expectation": null,
+            "growth": 87.4,
+            "quality": 54.1
+          },
+          "grade": "STRICT",
+          "rank": 34,
+          "score": 72.18,
+          "sector": "Technology",
+          "symbol": "UMC"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 79.2,
+            "expectation": 25.2,
+            "growth": 73.8,
+            "quality": 56.6
+          },
+          "grade": "STRICT",
+          "rank": 35,
+          "score": 72.15,
+          "sector": "Basic Materials",
+          "symbol": "DOW"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "gm_slope_missing"
+          ],
+          "family_scores": {
+            "accel": 69.8,
+            "expectation": 63.7,
+            "growth": 77.2,
+            "quality": null
+          },
+          "grade": "STRICT",
+          "rank": 36,
+          "score": 71.96,
+          "sector": "Financial Services",
+          "symbol": "JPM"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 60.1,
+            "expectation": null,
+            "growth": 83.3,
+            "quality": 52.6
+          },
+          "grade": "STRICT",
+          "rank": 37,
+          "score": 71.76,
+          "sector": "Technology",
+          "symbol": "TSM"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 67.9,
+            "expectation": 46.0,
+            "growth": 84.3,
+            "quality": 45.1
+          },
+          "grade": "STRICT",
+          "rank": 38,
+          "score": 70.93,
+          "sector": "Technology",
+          "symbol": "AMD"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 81.0,
+            "expectation": 67.0,
+            "growth": 64.4,
+            "quality": 41.6
+          },
+          "grade": "STRICT",
+          "rank": 39,
+          "score": 70.77,
+          "sector": "Energy",
+          "symbol": "DVN"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 51.1,
+            "expectation": 50.4,
+            "growth": 61.8,
+            "quality": 71.2
+          },
+          "grade": "STRICT",
+          "rank": 40,
+          "score": 70.08,
+          "sector": "Basic Materials",
+          "symbol": "SCCO"
+        }
+      ],
+      "top_sector_share": {
+        "sector": "Energy",
+        "share": 0.375
+      }
+    },
+    "F1-exfin": {
+      "badge_counts": {
+        "gm_slope_missing": 15,
+        "ntm_gate_unknown": 107,
+        "params_bootstrap": 687,
+        "pe_redflag": 55
+      },
+      "counts": {
+        "excluded": 199,
+        "observe": 29,
+        "ranked": 687
+      },
+      "demotion_counts": {
+        "net_margin_down": 270,
+        "new_listing_gate": 10,
+        "ntm_not_above_ttm": 72
+      },
+      "factor_coverage": {
+        "eps_accel": 618,
+        "eps_sue": 628,
+        "fcf_margin_yoy": 678,
+        "gm_level": 713,
+        "gm_yoy": 705,
+        "growth_4q": 586,
+        "revenue_accel": 679,
+        "revenue_yoy": 702,
+        "revision": 582,
+        "surprise": 579
+      },
+      "grades": {
+        "BELOW": 453,
+        "FULL": 181,
+        "STRICT": 53
+      },
+      "missing_reason_counts": {
+        "eps_accel": {
+          "eps_behind_current": 4,
+          "eps_conflicting_quarter": 38,
+          "few_sigma_obs": 27,
+          "no_prior_quarter": 20,
+          "no_yoy_pair": 9
+        },
+        "eps_sue": {
+          "eps_behind_current": 4,
+          "eps_conflicting_quarter": 45,
+          "few_sigma_obs": 28,
+          "no_yoy_pair": 11
+        },
+        "fcf_margin_yoy": {
+          "fcf_outlier": 14,
+          "fcf_zero_placeholder": 15,
+          "free_cash_flow_missing": 1,
+          "no_yoy_base": 5,
+          "nonpositive_revenue": 2,
+          "revenue_missing": 1
+        },
+        "gm_level": {
+          "gross_profit_missing": 1,
+          "nonpositive_revenue": 2
+        },
+        "gm_yoy": {
+          "gross_profit_missing": 3,
+          "no_yoy_base": 5,
+          "nonpositive_revenue": 2,
+          "revenue_missing": 1
+        },
+        "growth_4q": {
+          "eps_behind_current": 2,
+          "eps_ttm_nonpositive": 28,
+          "eps_ttm_turnaround": 11,
+          "nonpositive_base": 2,
+          "period_days_out_of_range": 12,
+          "ttm_needs_8_quarters": 75
+        },
+        "revenue_accel": {
+          "no_prior_quarter": 20,
+          "no_yoy_base": 5,
+          "nonpositive_base": 2,
+          "period_days_out_of_range": 3,
+          "prior_yoy_missing": 6,
+          "revenue_missing": 1
+        },
+        "revenue_yoy": {
+          "no_yoy_base": 5,
+          "nonpositive_base": 2,
+          "period_days_out_of_range": 6,
+          "revenue_missing": 1
+        },
+        "revision": {
+          "e2_consensus_jump": 7,
+          "no_base_snapshot": 14,
+          "no_current_snapshot": 2,
+          "revision_set_too_small": 1,
+          "unit_unverified": 110
+        },
+        "surprise": {
+          "eps_missing_value": 1,
+          "no_current_eps": 2,
+          "no_pre_announce_snapshot": 20,
+          "pre_announce_snapshot_stale": 4,
+          "unit_unverified": 110
+        }
+      },
+      "observe_reasons": {
+        "insufficient_quarters": 6,
+        "low_coverage": 23
+      },
+      "scheme_hash": "ae1a0f9df6555408",
+      "top": [
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 91.0,
+            "expectation": 57.7,
+            "growth": 100.0,
+            "quality": 92.2
+          },
+          "grade": "STRICT",
+          "rank": 1,
+          "score": 101.55,
+          "sector": "Technology",
+          "symbol": "SNDK"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 70.5,
+            "expectation": null,
+            "growth": 92.3,
+            "quality": 79.8
+          },
+          "grade": "STRICT",
+          "rank": 2,
+          "score": 90.34,
+          "sector": "Basic Materials",
+          "symbol": "SQM"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 54.0,
+            "expectation": 66.5,
+            "growth": 100.0,
+            "quality": 75.6
+          },
+          "grade": "STRICT",
+          "rank": 3,
+          "score": 90.1,
+          "sector": "Technology",
+          "symbol": "MU"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 79.7,
+            "expectation": 100.0,
+            "growth": 59.5,
+            "quality": 89.4
+          },
+          "grade": "STRICT",
+          "rank": 4,
+          "score": 89.07,
+          "sector": "Energy",
+          "symbol": "PR"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 82.1,
+            "expectation": 100.0,
+            "growth": 72.0,
+            "quality": 70.9
+          },
+          "grade": "STRICT",
+          "rank": 5,
+          "score": 88.35,
+          "sector": "Energy",
+          "symbol": "OXY"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 57.4,
+            "expectation": null,
+            "growth": 100.0,
+            "quality": 86.3
+          },
+          "grade": "STRICT",
+          "rank": 6,
+          "score": 87.18,
+          "sector": "Healthcare",
+          "symbol": "ASND"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 70.3,
+            "expectation": 63.1,
+            "growth": 97.9,
+            "quality": 85.4
+          },
+          "grade": "STRICT",
+          "rank": 7,
+          "score": 86.79,
+          "sector": "Healthcare",
+          "symbol": "INSM"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 100.0,
+            "expectation": 0.0,
+            "growth": 100.0,
+            "quality": 26.6
+          },
+          "grade": "STRICT",
+          "rank": 8,
+          "score": 85.67,
+          "sector": "Communication Services",
+          "symbol": "ASTS"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 90.5,
+            "expectation": null,
+            "growth": 81.5,
+            "quality": 57.3
+          },
+          "grade": "STRICT",
+          "rank": 9,
+          "score": 84.28,
+          "sector": "Energy",
+          "symbol": "CNQ"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 88.4,
+            "expectation": 77.1,
+            "growth": 93.9,
+            "quality": 60.5
+          },
+          "grade": "STRICT",
+          "rank": 10,
+          "score": 83.95,
+          "sector": "Energy",
+          "symbol": "CVX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 76.7,
+            "expectation": 98.0,
+            "growth": 43.1,
+            "quality": 93.3
+          },
+          "grade": "STRICT",
+          "rank": 11,
+          "score": 82.91,
+          "sector": "Energy",
+          "symbol": "LNG"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 74.7,
+            "expectation": 100.0,
+            "growth": 83.8,
+            "quality": 53.0
+          },
+          "grade": "STRICT",
+          "rank": 12,
+          "score": 82.02,
+          "sector": "Energy",
+          "symbol": "MPC"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 75.5,
+            "expectation": 72.8,
+            "growth": 65.7,
+            "quality": 80.4
+          },
+          "grade": "STRICT",
+          "rank": 13,
+          "score": 79.55,
+          "sector": "Energy",
+          "symbol": "FANG"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 60.5,
+            "expectation": 48.8,
+            "growth": 92.9,
+            "quality": 59.5
+          },
+          "grade": "STRICT",
+          "rank": 14,
+          "score": 78.81,
+          "sector": "Technology",
+          "symbol": "STX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 86.9,
+            "expectation": 69.7,
+            "growth": 74.3,
+            "quality": 50.0
+          },
+          "grade": "STRICT",
+          "rank": 15,
+          "score": 78.19,
+          "sector": "Energy",
+          "symbol": "XOM"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 63.9,
+            "expectation": 46.3,
+            "growth": 100.0,
+            "quality": 53.9
+          },
+          "grade": "STRICT",
+          "rank": 16,
+          "score": 77.53,
+          "sector": "Technology",
+          "symbol": "SITM"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 68.9,
+            "expectation": 100.0,
+            "growth": 77.4,
+            "quality": 52.9
+          },
+          "grade": "STRICT",
+          "rank": 17,
+          "score": 77.49,
+          "sector": "Energy",
+          "symbol": "PSX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 60.7,
+            "expectation": 53.2,
+            "growth": 98.3,
+            "quality": 77.1
+          },
+          "grade": "STRICT",
+          "rank": 18,
+          "score": 77.33,
+          "sector": "Industrials",
+          "symbol": "BE"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 81.0,
+            "expectation": 46.4,
+            "growth": 92.7,
+            "quality": 41.4
+          },
+          "grade": "STRICT",
+          "rank": 19,
+          "score": 77.12,
+          "sector": "Technology",
+          "symbol": "MTSI"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 83.7,
+            "expectation": 49.7,
+            "growth": 79.8,
+            "quality": 51.3
+          },
+          "grade": "STRICT",
+          "rank": 20,
+          "score": 77.03,
+          "sector": "Basic Materials",
+          "symbol": "LYB"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 80.5,
+            "expectation": 72.8,
+            "growth": 79.2,
+            "quality": 46.8
+          },
+          "grade": "STRICT",
+          "rank": 21,
+          "score": 76.91,
+          "sector": "Energy",
+          "symbol": "ET"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 60.3,
+            "expectation": 100.0,
+            "growth": 68.7,
+            "quality": 54.4
+          },
+          "grade": "STRICT",
+          "rank": 22,
+          "score": 75.92,
+          "sector": "Energy",
+          "symbol": "VLO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 71.0,
+            "expectation": 43.3,
+            "growth": 100.0,
+            "quality": 52.2
+          },
+          "grade": "STRICT",
+          "rank": 23,
+          "score": 75.72,
+          "sector": "Technology",
+          "symbol": "AVGO"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 51.0,
+            "expectation": null,
+            "growth": 74.6,
+            "quality": 74.6
+          },
+          "grade": "STRICT",
+          "rank": 24,
+          "score": 75.4,
+          "sector": "Basic Materials",
+          "symbol": "TECK"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 82.6,
+            "expectation": 68.9,
+            "growth": 70.0,
+            "quality": 62.7
+          },
+          "grade": "STRICT",
+          "rank": 25,
+          "score": 74.48,
+          "sector": "Energy",
+          "symbol": "COP"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 78.0,
+            "expectation": null,
+            "growth": 79.0,
+            "quality": 40.2
+          },
+          "grade": "STRICT",
+          "rank": 26,
+          "score": 73.19,
+          "sector": "Energy",
+          "symbol": "EC"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 60.4,
+            "expectation": null,
+            "growth": 98.2,
+            "quality": 51.1
+          },
+          "grade": "STRICT",
+          "rank": 27,
+          "score": 72.98,
+          "sector": "Industrials",
+          "symbol": "FRO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 75.1,
+            "expectation": 79.7,
+            "growth": 97.7,
+            "quality": 37.1
+          },
+          "grade": "STRICT",
+          "rank": 28,
+          "score": 72.87,
+          "sector": "Communication Services",
+          "symbol": "OMC"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 53.4,
+            "expectation": null,
+            "growth": 69.8,
+            "quality": 80.3
+          },
+          "grade": "STRICT",
+          "rank": 29,
+          "score": 72.33,
+          "sector": "Technology",
+          "symbol": "FORM"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 63.0,
+            "expectation": 100.0,
+            "growth": 68.8,
+            "quality": 48.6
+          },
+          "grade": "STRICT",
+          "rank": 30,
+          "score": 72.19,
+          "sector": "Energy",
+          "symbol": "DINO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 78.5,
+            "expectation": 27.5,
+            "growth": 71.4,
+            "quality": 57.2
+          },
+          "grade": "STRICT",
+          "rank": 31,
+          "score": 71.67,
+          "sector": "Basic Materials",
+          "symbol": "DOW"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 52.0,
+            "expectation": 49.7,
+            "growth": 62.2,
+            "quality": 72.9
+          },
+          "grade": "STRICT",
+          "rank": 32,
+          "score": 70.95,
+          "sector": "Basic Materials",
+          "symbol": "SCCO"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 71.3,
+            "expectation": null,
+            "growth": 84.1,
+            "quality": 54.6
+          },
+          "grade": "STRICT",
+          "rank": 33,
+          "score": 70.95,
+          "sector": "Technology",
+          "symbol": "UMC"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 59.8,
+            "expectation": null,
+            "growth": 80.8,
+            "quality": 52.5
+          },
+          "grade": "STRICT",
+          "rank": 34,
+          "score": 70.76,
+          "sector": "Technology",
+          "symbol": "TSM"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 81.3,
+            "expectation": 65.1,
+            "growth": 63.9,
+            "quality": 40.1
+          },
+          "grade": "STRICT",
+          "rank": 35,
+          "score": 70.17,
+          "sector": "Energy",
+          "symbol": "DVN"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 67.5,
+            "expectation": 45.9,
+            "growth": 82.0,
+            "quality": 44.3
+          },
+          "grade": "STRICT",
+          "rank": 36,
+          "score": 69.87,
+          "sector": "Technology",
+          "symbol": "AMD"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 69.9,
+            "expectation": 42.6,
+            "growth": 77.4,
+            "quality": 60.9
+          },
+          "grade": "STRICT",
+          "rank": 37,
+          "score": 69.19,
+          "sector": "Consumer Cyclical",
+          "symbol": "BURL"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 54.3,
+            "expectation": 47.0,
+            "growth": 88.7,
+            "quality": 48.8
+          },
+          "grade": "STRICT",
+          "rank": 38,
+          "score": 68.49,
+          "sector": "Industrials",
+          "symbol": "HWM"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 71.8,
+            "expectation": null,
+            "growth": 62.7,
+            "quality": 48.1
+          },
+          "grade": "STRICT",
+          "rank": 39,
+          "score": 68.17,
+          "sector": "Energy",
+          "symbol": "E"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 68.3,
+            "expectation": null,
+            "growth": 64.2,
+            "quality": 50.5
+          },
+          "grade": "STRICT",
+          "rank": 40,
+          "score": 68.0,
+          "sector": "Energy",
+          "symbol": "SHEL"
+        }
+      ],
+      "top_sector_share": {
+        "sector": "Energy",
+        "share": 0.425
+      }
+    },
+    "F1-rank": {
+      "badge_counts": {
+        "gm_slope_missing": 153,
+        "ntm_gate_unknown": 134,
+        "params_bootstrap": 864,
+        "pe_redflag": 77
+      },
+      "counts": {
+        "excluded": 0,
+        "observe": 51,
+        "ranked": 864
+      },
+      "demotion_counts": {
+        "net_margin_down": 332,
+        "new_listing_gate": 11,
+        "ntm_not_above_ttm": 117
+      },
+      "factor_coverage": {
+        "eps_accel": 793,
+        "eps_sue": 807,
+        "fcf_margin_yoy": 713,
+        "gm_level": 758,
+        "gm_yoy": 749,
+        "growth_4q": 755,
+        "revenue_accel": 872,
+        "revenue_yoy": 900,
+        "revision": 737,
+        "surprise": 734
+      },
+      "grades": {
+        "BELOW": 573,
+        "FULL": 170,
+        "STRICT": 121
+      },
+      "missing_reason_counts": {
+        "eps_accel": {
+          "eps_behind_current": 6,
+          "eps_conflicting_quarter": 52,
+          "few_sigma_obs": 32,
+          "no_prior_quarter": 23,
+          "no_yoy_pair": 9
+        },
+        "eps_sue": {
+          "eps_behind_current": 6,
+          "eps_conflicting_quarter": 59,
+          "few_sigma_obs": 32,
+          "no_yoy_pair": 11
+        },
+        "fcf_margin_yoy": {
+          "fcf_outlier": 17,
+          "fcf_zero_placeholder": 22,
+          "free_cash_flow_missing": 1,
+          "industry_exempt": 153,
+          "no_yoy_base": 6,
+          "nonpositive_revenue": 2,
+          "revenue_missing": 1
+        },
+        "gm_level": {
+          "gross_profit_missing": 2,
+          "industry_exempt": 153,
+          "nonpositive_revenue": 2
+        },
+        "gm_yoy": {
+          "gross_profit_missing": 4,
+          "industry_exempt": 153,
+          "no_yoy_base": 6,
+          "nonpositive_revenue": 2,
+          "revenue_missing": 1
+        },
+        "growth_4q": {
+          "eps_behind_current": 3,
+          "eps_ttm_nonpositive": 30,
+          "eps_ttm_turnaround": 12,
+          "nonpositive_base": 2,
+          "period_days_out_of_range": 15,
+          "ttm_needs_8_quarters": 98
+        },
+        "revenue_accel": {
+          "no_prior_quarter": 23,
+          "no_yoy_base": 6,
+          "nonpositive_base": 2,
+          "period_days_out_of_range": 3,
+          "prior_yoy_missing": 8,
+          "revenue_missing": 1
+        },
+        "revenue_yoy": {
+          "no_yoy_base": 6,
+          "nonpositive_base": 2,
+          "period_days_out_of_range": 6,
+          "revenue_missing": 1
+        },
+        "revision": {
+          "e2_consensus_jump": 8,
+          "no_base_snapshot": 14,
+          "no_current_snapshot": 4,
+          "revision_set_too_small": 1,
+          "unit_unverified": 151
+        },
+        "surprise": {
+          "eps_missing_value": 1,
+          "no_current_eps": 3,
+          "no_pre_announce_snapshot": 22,
+          "pre_announce_snapshot_stale": 4,
+          "unit_unverified": 151
+        }
+      },
+      "observe_reasons": {
+        "insufficient_quarters": 7,
+        "low_coverage": 44
+      },
+      "scheme_hash": "0c2c2949bf3574c2",
+      "top": [
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 92.7,
+            "expectation": 81.7,
+            "growth": 92.9,
+            "quality": 91.7
+          },
+          "grade": "STRICT",
+          "rank": 1,
+          "score": 100.73,
+          "sector": "Technology",
+          "symbol": "SNDK"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 91.0,
+            "expectation": 91.1,
+            "growth": 80.0,
+            "quality": 87.6
+          },
+          "grade": "STRICT",
+          "rank": 2,
+          "score": 96.86,
+          "sector": "Energy",
+          "symbol": "OXY"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 86.9,
+            "expectation": null,
+            "growth": 82.8,
+            "quality": 85.9
+          },
+          "grade": "STRICT",
+          "rank": 3,
+          "score": 95.25,
+          "sector": "Basic Materials",
+          "symbol": "SQM"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 90.7,
+            "expectation": 91.0,
+            "growth": 68.3,
+            "quality": 90.6
+          },
+          "grade": "STRICT",
+          "rank": 4,
+          "score": 94.0,
+          "sector": "Energy",
+          "symbol": "PR"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 92.2,
+            "expectation": null,
+            "growth": 85.2,
+            "quality": 77.9
+          },
+          "grade": "STRICT",
+          "rank": 5,
+          "score": 91.89,
+          "sector": "Energy",
+          "symbol": "CNQ"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 86.7,
+            "expectation": 61.1,
+            "growth": 88.2,
+            "quality": 87.6
+          },
+          "grade": "STRICT",
+          "rank": 6,
+          "score": 90.64,
+          "sector": "Healthcare",
+          "symbol": "INSM"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 89.8,
+            "expectation": 92.2,
+            "growth": 86.2,
+            "quality": 72.3
+          },
+          "grade": "STRICT",
+          "rank": 7,
+          "score": 90.61,
+          "sector": "Energy",
+          "symbol": "MPC"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 60.9,
+            "expectation": 86.2,
+            "growth": 92.3,
+            "quality": 89.2
+          },
+          "grade": "STRICT",
+          "rank": 8,
+          "score": 89.93,
+          "sector": "Technology",
+          "symbol": "MU"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 82.6,
+            "expectation": 91.4,
+            "growth": 75.9,
+            "quality": 75.7
+          },
+          "grade": "STRICT",
+          "rank": 9,
+          "score": 89.74,
+          "sector": "Energy",
+          "symbol": "VLO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 90.2,
+            "expectation": 81.1,
+            "growth": 77.4,
+            "quality": 83.0
+          },
+          "grade": "STRICT",
+          "rank": 10,
+          "score": 89.66,
+          "sector": "Energy",
+          "symbol": "FANG"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 74.3,
+            "expectation": 62.8,
+            "growth": 88.5,
+            "quality": 80.9
+          },
+          "grade": "STRICT",
+          "rank": 11,
+          "score": 89.08,
+          "sector": "Technology",
+          "symbol": "STX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 87.9,
+            "expectation": 91.5,
+            "growth": 82.6,
+            "quality": 72.5
+          },
+          "grade": "STRICT",
+          "rank": 12,
+          "score": 88.81,
+          "sector": "Energy",
+          "symbol": "PSX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 91.7,
+            "expectation": 86.1,
+            "growth": 85.6,
+            "quality": 80.9
+          },
+          "grade": "STRICT",
+          "rank": 13,
+          "score": 88.61,
+          "sector": "Energy",
+          "symbol": "CVX"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 79.7,
+            "expectation": 65.8,
+            "growth": 78.0,
+            "quality": 79.1
+          },
+          "grade": "STRICT",
+          "rank": 14,
+          "score": 87.65,
+          "sector": "Financial Services",
+          "symbol": "IVZ"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 87.6,
+            "expectation": null,
+            "growth": 90.3,
+            "quality": 61.1
+          },
+          "grade": "STRICT",
+          "rank": 15,
+          "score": 86.47,
+          "sector": "Industrials",
+          "symbol": "FRO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 91.3,
+            "expectation": 49.9,
+            "growth": 78.1,
+            "quality": 58.3
+          },
+          "grade": "STRICT",
+          "rank": 16,
+          "score": 84.92,
+          "sector": "Financial Services",
+          "symbol": "GS"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 87.4,
+            "expectation": null,
+            "growth": 77.9,
+            "quality": 67.5
+          },
+          "grade": "STRICT",
+          "rank": 17,
+          "score": 84.74,
+          "sector": "Energy",
+          "symbol": "SHEL"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 85.0,
+            "expectation": 35.7,
+            "growth": 90.2,
+            "quality": 73.3
+          },
+          "grade": "STRICT",
+          "rank": 18,
+          "score": 84.69,
+          "sector": "Technology",
+          "symbol": "SITM"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 65.5,
+            "expectation": null,
+            "growth": 77.4,
+            "quality": 84.2
+          },
+          "grade": "STRICT",
+          "rank": 19,
+          "score": 84.62,
+          "sector": "Basic Materials",
+          "symbol": "TECK"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 88.6,
+            "expectation": 48.0,
+            "growth": 79.3,
+            "quality": 76.2
+          },
+          "grade": "STRICT",
+          "rank": 20,
+          "score": 84.61,
+          "sector": "Basic Materials",
+          "symbol": "DOW"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 68.5,
+            "expectation": 56.2,
+            "growth": 82.3,
+            "quality": 83.5
+          },
+          "grade": "STRICT",
+          "rank": 21,
+          "score": 84.33,
+          "sector": "Basic Materials",
+          "symbol": "SCCO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 90.6,
+            "expectation": 55.4,
+            "growth": 84.3,
+            "quality": 61.8
+          },
+          "grade": "STRICT",
+          "rank": 22,
+          "score": 84.0,
+          "sector": "Energy",
+          "symbol": "ET"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 81.6,
+            "expectation": null,
+            "growth": 80.6,
+            "quality": 68.9
+          },
+          "grade": "STRICT",
+          "rank": 23,
+          "score": 83.75,
+          "sector": "Energy",
+          "symbol": "BP"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 89.0,
+            "expectation": 49.7,
+            "growth": 78.0,
+            "quality": 72.4
+          },
+          "grade": "STRICT",
+          "rank": 24,
+          "score": 83.63,
+          "sector": "Basic Materials",
+          "symbol": "LYB"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 83.3,
+            "expectation": 92.0,
+            "growth": 73.1,
+            "quality": 67.4
+          },
+          "grade": "STRICT",
+          "rank": 25,
+          "score": 83.12,
+          "sector": "Energy",
+          "symbol": "DINO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 90.4,
+            "expectation": 84.9,
+            "growth": 76.9,
+            "quality": 79.5
+          },
+          "grade": "STRICT",
+          "rank": 26,
+          "score": 83.07,
+          "sector": "Energy",
+          "symbol": "COP"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 86.6,
+            "expectation": null,
+            "growth": 74.6,
+            "quality": 65.8
+          },
+          "grade": "STRICT",
+          "rank": 27,
+          "score": 82.82,
+          "sector": "Energy",
+          "symbol": "E"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 67.0,
+            "expectation": null,
+            "growth": 81.4,
+            "quality": 84.4
+          },
+          "grade": "STRICT",
+          "rank": 28,
+          "score": 82.63,
+          "sector": "Technology",
+          "symbol": "FORM"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 89.5,
+            "expectation": null,
+            "growth": 83.0,
+            "quality": 51.3
+          },
+          "grade": "STRICT",
+          "rank": 29,
+          "score": 82.35,
+          "sector": "Energy",
+          "symbol": "EC"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 84.5,
+            "expectation": 70.6,
+            "growth": 68.5,
+            "quality": 59.0
+          },
+          "grade": "STRICT",
+          "rank": 30,
+          "score": 81.92,
+          "sector": "Industrials",
+          "symbol": "EXPD"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 86.5,
+            "expectation": null,
+            "growth": 77.5,
+            "quality": 72.7
+          },
+          "grade": "STRICT",
+          "rank": 31,
+          "score": 81.77,
+          "sector": "Energy",
+          "symbol": "CVE"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 90.6,
+            "expectation": 85.3,
+            "growth": 71.2,
+            "quality": 55.3
+          },
+          "grade": "STRICT",
+          "rank": 32,
+          "score": 81.41,
+          "sector": "Energy",
+          "symbol": "DVN"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 68.9,
+            "expectation": 90.4,
+            "growth": 48.4,
+            "quality": 92.1
+          },
+          "grade": "STRICT",
+          "rank": 33,
+          "score": 80.69,
+          "sector": "Energy",
+          "symbol": "LNG"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 78.2,
+            "expectation": null,
+            "growth": 83.2,
+            "quality": 73.8
+          },
+          "grade": "STRICT",
+          "rank": 34,
+          "score": 80.67,
+          "sector": "Technology",
+          "symbol": "VIAV"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 82.5,
+            "expectation": null,
+            "growth": 62.1,
+            "quality": 80.2
+          },
+          "grade": "STRICT",
+          "rank": 35,
+          "score": 80.41,
+          "sector": "Financial Services",
+          "symbol": "FUTU"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 84.7,
+            "expectation": 70.9,
+            "growth": 85.7,
+            "quality": 62.8
+          },
+          "grade": "STRICT",
+          "rank": 36,
+          "score": 80.17,
+          "sector": "Industrials",
+          "symbol": "PWR"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "ntm_gate_unknown"
+          ],
+          "family_scores": {
+            "accel": 86.0,
+            "expectation": null,
+            "growth": 77.7,
+            "quality": 74.2
+          },
+          "grade": "STRICT",
+          "rank": 37,
+          "score": 79.98,
+          "sector": "Energy",
+          "symbol": "PBR"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "gm_slope_missing"
+          ],
+          "family_scores": {
+            "accel": 84.1,
+            "expectation": 78.9,
+            "growth": 75.5,
+            "quality": null
+          },
+          "grade": "STRICT",
+          "rank": 38,
+          "score": 79.96,
+          "sector": "Financial Services",
+          "symbol": "JPM"
+        },
+        {
+          "badges": [
+            "params_bootstrap",
+            "pe_redflag"
+          ],
+          "family_scores": {
+            "accel": 78.9,
+            "expectation": 42.9,
+            "growth": 71.7,
+            "quality": 81.9
+          },
+          "grade": "STRICT",
+          "rank": 39,
+          "score": 79.9,
+          "sector": "Financial Services",
+          "symbol": "MCO"
+        },
+        {
+          "badges": [
+            "params_bootstrap"
+          ],
+          "family_scores": {
+            "accel": 90.6,
+            "expectation": 54.3,
+            "growth": 81.1,
+            "quality": 49.7
+          },
+          "grade": "STRICT",
+          "rank": 40,
+          "score": 79.9,
+          "sector": "Energy",
+          "symbol": "XOM"
+        }
+      ],
+      "top_sector_share": {
+        "sector": "Energy",
+        "share": 0.5
+      }
+    }
+  },
+  "seconds": 8.3,
+  "surprise_source_counts": {
+    "local_snapshot": 722,
+    "vendor_estimate": 12
+  }
+}
