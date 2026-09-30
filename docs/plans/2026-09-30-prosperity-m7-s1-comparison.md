@@ -643,3 +643,4 @@ def test_cli_refuses_a_private_dir_git_would_track(tmp_path):
 - 2026-09-30 v1.1：采纳外部审查 3 条 P2，均已复现核实。①明细目录检查改为查目标所属仓库的真实忽略状态（`private_dir_problem`），从 worktree 指向主仓库 `reports/` 的路径不再放行。②`pairing_differs` 改为逐因子判断：只有上季缺基期、当季 98 天时，营收同比不再被误标成配对差异（新增测试）。③剔除改为逐行 (期, 原站代码, 原因) 保留，汇总分全期与计分期，并逐期对账（原站行数 = 已比对 + 剔除 + 报错），对不上时退出码 3。D-1、D-2 仍待 Boss 批注
 - 2026-09-30 v1.2：Boss 批注 D-1、D-2 均按推荐（A），并说"开始实现"
 - 2026-09-30 v1.3（实现中）：Boss 定"同一公司多个代码只看一个"。M7 不再写死 BRK.A，改为读 `security_master.share_class_of`（与我们池子剔除次要股类用同一条规则）：映射后的代码是次要股类就按 `duplicate_share_class` 剔除，GOOGL→GOOG、BRK.A→BRK.B 由此生效。归因细节比 plan 多写了日期：`quarter_sequence` 的说明带双方季度日期，`site_repaired` 带字段与季度
+- 2026-09-30 v1.4（验收）：首次运行 92.9% 未达标，按计划停下报 Boss。Boss 批准三项后重跑达标 96.0%：一家公司只看一个代码（v1.3）；本地库截断损坏重新拉取、pull 改快照（另一分支）；可用日期兜底（分支 `fix/availability-earnings-fallback` 合入本分支，代码版本由 `ee4495acd0715621` 变为 `30b78e8ca5060e7a`，所以验收标准第 9 条"code_version 不变"不再适用，已在 README 说明）。上市前历史、银行口径、FMP 数据漂移这几类差异，Boss 确认接受并写入 README

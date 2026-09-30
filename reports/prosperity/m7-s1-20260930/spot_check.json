@@ -1,0 +1,134 @@
+[
+  {
+    "board": "2025-06-30",
+    "symbol": "NVDA",
+    "kind": "pass",
+    "fiscal_date": "2025-04-27",
+    "base_quarter": "2024-04-28",
+    "factor": "revenue_yoy",
+    "tool_value": 69.18292121025955,
+    "recomputed": 69.18292121025955,
+    "match": true,
+    "failed_factors": []
+  },
+  {
+    "board": "2025-06-30",
+    "symbol": "NVDA",
+    "kind": "pass",
+    "fiscal_date": "2025-04-27",
+    "base_quarter": "2024-04-28",
+    "factor": "gm_yoy",
+    "tool_value": -17.8282122966855,
+    "recomputed": -17.8282122966855,
+    "match": true,
+    "failed_factors": []
+  },
+  {
+    "board": "2023-12-31",
+    "symbol": "MSFT",
+    "kind": "pass",
+    "fiscal_date": "2023-09-30",
+    "base_quarter": "2022-09-30",
+    "factor": "revenue_yoy",
+    "tool_value": 12.758868361198683,
+    "recomputed": 12.758868361198683,
+    "match": true,
+    "failed_factors": []
+  },
+  {
+    "board": "2023-12-31",
+    "symbol": "MSFT",
+    "kind": "pass",
+    "fiscal_date": "2023-09-30",
+    "base_quarter": "2022-09-30",
+    "factor": "gm_yoy",
+    "tool_value": 1.9843592886607837,
+    "recomputed": 1.9843592886607837,
+    "match": true,
+    "failed_factors": []
+  },
+  {
+    "board": "2024-06-30",
+    "symbol": "AMZN",
+    "kind": "pass",
+    "fiscal_date": "2024-03-31",
+    "base_quarter": "2023-03-31",
+    "factor": "revenue_yoy",
+    "tool_value": 12.527677884388888,
+    "recomputed": 12.527677884388888,
+    "match": true,
+    "failed_factors": []
+  },
+  {
+    "board": "2024-06-30",
+    "symbol": "AMZN",
+    "kind": "pass",
+    "fiscal_date": "2024-03-31",
+    "base_quarter": "2023-03-31",
+    "factor": "gm_yoy",
+    "tool_value": 2.5473181878867024,
+    "recomputed": 2.5473181878867024,
+    "match": true,
+    "failed_factors": []
+  },
+  {
+    "board": "2021-03-31",
+    "symbol": "MA",
+    "kind": "fail",
+    "fiscal_date": "2020-12-31",
+    "base_quarter": "2019-12-31",
+    "factor": "revenue_yoy",
+    "tool_value": -6.660625283189847,
+    "recomputed": -6.660625283189847,
+    "match": true,
+    "failed_factors": [
+      "gm_level",
+      "gm_yoy"
+    ]
+  },
+  {
+    "board": "2021-03-31",
+    "symbol": "MA",
+    "kind": "fail",
+    "fiscal_date": "2020-12-31",
+    "base_quarter": "2019-12-31",
+    "factor": "gm_yoy",
+    "tool_value": 0.0,
+    "recomputed": 0.0,
+    "match": true,
+    "failed_factors": [
+      "gm_level",
+      "gm_yoy"
+    ]
+  },
+  {
+    "board": "2025-09-30",
+    "symbol": "HOOD",
+    "kind": "fail",
+    "fiscal_date": "2025-06-30",
+    "base_quarter": "2024-06-30",
+    "factor": "revenue_yoy",
+    "tool_value": 45.01466275659824,
+    "recomputed": 45.01466275659824,
+    "match": true,
+    "failed_factors": [
+      "gm_level",
+      "gm_yoy"
+    ]
+  },
+  {
+    "board": "2025-09-30",
+    "symbol": "HOOD",
+    "kind": "fail",
+    "fiscal_date": "2025-06-30",
+    "base_quarter": "2024-06-30",
+    "factor": "gm_yoy",
+    "tool_value": -0.16501160863339237,
+    "recomputed": -0.16501160863339237,
+    "match": true,
+    "failed_factors": [
+      "gm_level",
+      "gm_yoy"
+    ]
+  }
+]

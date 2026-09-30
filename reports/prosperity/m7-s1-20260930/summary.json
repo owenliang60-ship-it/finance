@@ -1,0 +1,3255 @@
+{
+  "aligned_by": {
+    "asof": 1061,
+    "none": 2,
+    "rebuilt": 30
+  },
+  "boards_in_fixture": 47,
+  "by_board": {
+    "2015-03-31": {
+      "compared": 44,
+      "counted": 264,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 5,
+      "rate": 0.01893939393939394,
+      "reconciled": true,
+      "site_rows": 46
+    },
+    "2015-06-30": {
+      "compared": 43,
+      "counted": 258,
+      "errors": 0,
+      "excluded": 3,
+      "passed": 6,
+      "rate": 0.023255813953488372,
+      "reconciled": true,
+      "site_rows": 46
+    },
+    "2015-09-30": {
+      "compared": 44,
+      "counted": 264,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 0,
+      "rate": 0.0,
+      "reconciled": true,
+      "site_rows": 46
+    },
+    "2015-12-31": {
+      "compared": 43,
+      "counted": 258,
+      "errors": 0,
+      "excluded": 4,
+      "passed": 0,
+      "rate": 0.0,
+      "reconciled": true,
+      "site_rows": 47
+    },
+    "2016-03-31": {
+      "compared": 44,
+      "counted": 264,
+      "errors": 0,
+      "excluded": 4,
+      "passed": 0,
+      "rate": 0.0,
+      "reconciled": true,
+      "site_rows": 48
+    },
+    "2016-06-30": {
+      "compared": 43,
+      "counted": 258,
+      "errors": 0,
+      "excluded": 3,
+      "passed": 0,
+      "rate": 0.0,
+      "reconciled": true,
+      "site_rows": 46
+    },
+    "2016-09-30": {
+      "compared": 45,
+      "counted": 269,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 7,
+      "rate": 0.026022304832713755,
+      "reconciled": true,
+      "site_rows": 47
+    },
+    "2016-12-31": {
+      "compared": 46,
+      "counted": 276,
+      "errors": 0,
+      "excluded": 4,
+      "passed": 46,
+      "rate": 0.16666666666666666,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2017-03-31": {
+      "compared": 46,
+      "counted": 275,
+      "errors": 0,
+      "excluded": 3,
+      "passed": 46,
+      "rate": 0.16727272727272727,
+      "reconciled": true,
+      "site_rows": 49
+    },
+    "2017-06-30": {
+      "compared": 46,
+      "counted": 276,
+      "errors": 0,
+      "excluded": 3,
+      "passed": 45,
+      "rate": 0.16304347826086957,
+      "reconciled": true,
+      "site_rows": 49
+    },
+    "2017-09-30": {
+      "compared": 44,
+      "counted": 262,
+      "errors": 0,
+      "excluded": 4,
+      "passed": 51,
+      "rate": 0.1946564885496183,
+      "reconciled": true,
+      "site_rows": 48
+    },
+    "2017-12-31": {
+      "compared": 45,
+      "counted": 270,
+      "errors": 0,
+      "excluded": 5,
+      "passed": 223,
+      "rate": 0.825925925925926,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2018-03-31": {
+      "compared": 48,
+      "counted": 287,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 281,
+      "rate": 0.9790940766550522,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2018-06-30": {
+      "compared": 45,
+      "counted": 267,
+      "errors": 0,
+      "excluded": 3,
+      "passed": 265,
+      "rate": 0.9925093632958801,
+      "reconciled": true,
+      "site_rows": 48
+    },
+    "2018-09-30": {
+      "compared": 47,
+      "counted": 279,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 269,
+      "rate": 0.96415770609319,
+      "reconciled": true,
+      "site_rows": 49
+    },
+    "2018-12-31": {
+      "compared": 47,
+      "counted": 280,
+      "errors": 0,
+      "excluded": 3,
+      "passed": 276,
+      "rate": 0.9857142857142858,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2019-03-31": {
+      "compared": 48,
+      "counted": 285,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 281,
+      "rate": 0.9859649122807017,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2019-06-30": {
+      "compared": 46,
+      "counted": 273,
+      "errors": 0,
+      "excluded": 3,
+      "passed": 264,
+      "rate": 0.967032967032967,
+      "reconciled": true,
+      "site_rows": 49
+    },
+    "2019-09-30": {
+      "compared": 48,
+      "counted": 286,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 281,
+      "rate": 0.9825174825174825,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2019-12-31": {
+      "compared": 49,
+      "counted": 294,
+      "errors": 0,
+      "excluded": 1,
+      "passed": 289,
+      "rate": 0.9829931972789115,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2020-03-31": {
+      "compared": 48,
+      "counted": 284,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 281,
+      "rate": 0.9894366197183099,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2020-06-30": {
+      "compared": 47,
+      "counted": 278,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 274,
+      "rate": 0.9856115107913669,
+      "reconciled": true,
+      "site_rows": 49
+    },
+    "2020-09-30": {
+      "compared": 48,
+      "counted": 287,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 273,
+      "rate": 0.9512195121951219,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2020-12-31": {
+      "compared": 44,
+      "counted": 262,
+      "errors": 0,
+      "excluded": 4,
+      "passed": 241,
+      "rate": 0.9198473282442748,
+      "reconciled": true,
+      "site_rows": 48
+    },
+    "2021-03-31": {
+      "compared": 46,
+      "counted": 271,
+      "errors": 0,
+      "excluded": 3,
+      "passed": 251,
+      "rate": 0.9261992619926199,
+      "reconciled": true,
+      "site_rows": 49
+    },
+    "2021-06-30": {
+      "compared": 45,
+      "counted": 264,
+      "errors": 0,
+      "excluded": 5,
+      "passed": 231,
+      "rate": 0.875,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2021-09-30": {
+      "compared": 48,
+      "counted": 286,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 248,
+      "rate": 0.8671328671328671,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2021-12-31": {
+      "compared": 48,
+      "counted": 285,
+      "errors": 0,
+      "excluded": 1,
+      "passed": 274,
+      "rate": 0.9614035087719298,
+      "reconciled": true,
+      "site_rows": 49
+    },
+    "2022-03-31": {
+      "compared": 48,
+      "counted": 282,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 277,
+      "rate": 0.9822695035460993,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2022-06-30": {
+      "compared": 48,
+      "counted": 287,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 275,
+      "rate": 0.9581881533101045,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2022-09-30": {
+      "compared": 48,
+      "counted": 288,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 281,
+      "rate": 0.9756944444444444,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2022-12-31": {
+      "compared": 48,
+      "counted": 288,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 281,
+      "rate": 0.9756944444444444,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2023-03-31": {
+      "compared": 48,
+      "counted": 285,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 275,
+      "rate": 0.9649122807017544,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2023-06-30": {
+      "compared": 47,
+      "counted": 281,
+      "errors": 0,
+      "excluded": 3,
+      "passed": 278,
+      "rate": 0.9893238434163701,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2023-09-30": {
+      "compared": 48,
+      "counted": 285,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 277,
+      "rate": 0.9719298245614035,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2023-12-31": {
+      "compared": 47,
+      "counted": 282,
+      "errors": 0,
+      "excluded": 3,
+      "passed": 279,
+      "rate": 0.9893617021276596,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2024-03-31": {
+      "compared": 47,
+      "counted": 277,
+      "errors": 0,
+      "excluded": 3,
+      "passed": 270,
+      "rate": 0.9747292418772563,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2024-06-30": {
+      "compared": 48,
+      "counted": 286,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 281,
+      "rate": 0.9825174825174825,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2024-09-30": {
+      "compared": 48,
+      "counted": 287,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 281,
+      "rate": 0.9790940766550522,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2024-12-31": {
+      "compared": 45,
+      "counted": 268,
+      "errors": 0,
+      "excluded": 5,
+      "passed": 263,
+      "rate": 0.9813432835820896,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2025-03-31": {
+      "compared": 48,
+      "counted": 282,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 277,
+      "rate": 0.9822695035460993,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2025-06-30": {
+      "compared": 47,
+      "counted": 278,
+      "errors": 0,
+      "excluded": 1,
+      "passed": 265,
+      "rate": 0.9532374100719424,
+      "reconciled": true,
+      "site_rows": 48
+    },
+    "2025-09-30": {
+      "compared": 47,
+      "counted": 277,
+      "errors": 0,
+      "excluded": 2,
+      "passed": 265,
+      "rate": 0.9566787003610109,
+      "reconciled": true,
+      "site_rows": 49
+    },
+    "2025-12-31": {
+      "compared": 49,
+      "counted": 289,
+      "errors": 0,
+      "excluded": 1,
+      "passed": 272,
+      "rate": 0.9411764705882353,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2026-03-31": {
+      "compared": 49,
+      "counted": 286,
+      "errors": 0,
+      "excluded": 1,
+      "passed": 268,
+      "rate": 0.9370629370629371,
+      "reconciled": true,
+      "site_rows": 50
+    },
+    "2026-06-30": {
+      "compared": 48,
+      "counted": 283,
+      "errors": 0,
+      "excluded": 1,
+      "passed": 278,
+      "rate": 0.9823321554770318,
+      "reconciled": true,
+      "site_rows": 49
+    },
+    "2026-09-02": {
+      "compared": 48,
+      "counted": 281,
+      "errors": 0,
+      "excluded": 1,
+      "passed": 273,
+      "rate": 0.9715302491103203,
+      "reconciled": true,
+      "site_rows": 49
+    }
+  },
+  "by_factor": {
+    "fcf_margin_yoy": {
+      "counted": 1025,
+      "passed": 948,
+      "rate": 0.9248780487804878
+    },
+    "gm_level": {
+      "counted": 1087,
+      "passed": 1050,
+      "rate": 0.9659613615455381
+    },
+    "gm_yoy": {
+      "counted": 1087,
+      "passed": 1026,
+      "rate": 0.9438822447102115
+    },
+    "net_margin_yoy": {
+      "counted": 1093,
+      "passed": 1068,
+      "rate": 0.9771271729185728
+    },
+    "revenue_accel": {
+      "counted": 1093,
+      "passed": 1061,
+      "rate": 0.970722781335773
+    },
+    "revenue_yoy": {
+      "counted": 1093,
+      "passed": 1067,
+      "rate": 0.9762122598353157
+    }
+  },
+  "categories": {
+    "ours": {
+      "basis_only_day_adjust": 520,
+      "basis_only_pairing": 2,
+      "input_diff": 62,
+      "match": 5723,
+      "ours_missing": 166,
+      "quarter_sequence": 3,
+      "site_missing": 80,
+      "site_repaired": 2
+    },
+    "site": {
+      "input_diff": 62,
+      "match": 6220,
+      "ours_missing": 123,
+      "quarter_sequence": 71,
+      "site_missing": 80,
+      "site_repaired": 2
+    }
+  },
+  "code_version": "30b78e8ca5060e7a",
+  "errors": [],
+  "excluded": {
+    "list": [
+      {
+        "board": "2015-03-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "CELG"
+      },
+      {
+        "board": "2015-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2015-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2015-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "TWC"
+      },
+      {
+        "board": "2015-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "AGN"
+      },
+      {
+        "board": "2015-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2015-09-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "CELG"
+      },
+      {
+        "board": "2015-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "AGN"
+      },
+      {
+        "board": "2015-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2015-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "CELG"
+      },
+      {
+        "board": "2015-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "UTX"
+      },
+      {
+        "board": "2016-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2016-03-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "CELG"
+      },
+      {
+        "board": "2016-03-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "UTX"
+      },
+      {
+        "board": "2016-03-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "AGN"
+      },
+      {
+        "board": "2016-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "AGN"
+      },
+      {
+        "board": "2016-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2016-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "LNKD"
+      },
+      {
+        "board": "2016-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2016-09-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "AGN"
+      },
+      {
+        "board": "2016-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "AGN"
+      },
+      {
+        "board": "2016-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "CELG"
+      },
+      {
+        "board": "2016-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2016-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "X"
+      },
+      {
+        "board": "2017-03-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "X"
+      },
+      {
+        "board": "2017-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2017-03-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "AGN"
+      },
+      {
+        "board": "2017-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "CELG"
+      },
+      {
+        "board": "2017-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2017-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "AABA"
+      },
+      {
+        "board": "2017-09-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "KITE"
+      },
+      {
+        "board": "2017-09-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "AGN"
+      },
+      {
+        "board": "2017-09-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "UTX"
+      },
+      {
+        "board": "2017-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2017-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2017-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "CELG"
+      },
+      {
+        "board": "2017-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "TWX"
+      },
+      {
+        "board": "2017-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "AET"
+      },
+      {
+        "board": "2017-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "AABA"
+      },
+      {
+        "board": "2018-03-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "CELG"
+      },
+      {
+        "board": "2018-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2018-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2018-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "TWX"
+      },
+      {
+        "board": "2018-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "AABA"
+      },
+      {
+        "board": "2018-09-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "TLRY"
+      },
+      {
+        "board": "2018-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2018-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "AET"
+      },
+      {
+        "board": "2018-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "UTX"
+      },
+      {
+        "board": "2018-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2019-03-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "CELG"
+      },
+      {
+        "board": "2019-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2019-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "BYND"
+      },
+      {
+        "board": "2019-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "AGN"
+      },
+      {
+        "board": "2019-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2019-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2019-09-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "AABA"
+      },
+      {
+        "board": "2019-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2020-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2020-03-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "UTX"
+      },
+      {
+        "board": "2020-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2020-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "BYND"
+      },
+      {
+        "board": "2020-09-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "NKLA"
+      },
+      {
+        "board": "2020-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2020-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "PLUG"
+      },
+      {
+        "board": "2020-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "AI"
+      },
+      {
+        "board": "2020-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2020-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "WORK"
+      },
+      {
+        "board": "2021-03-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "RIOT"
+      },
+      {
+        "board": "2021-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2021-03-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "PLUG"
+      },
+      {
+        "board": "2021-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2021-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "BB"
+      },
+      {
+        "board": "2021-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "WISH"
+      },
+      {
+        "board": "2021-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "CLOV"
+      },
+      {
+        "board": "2021-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "SPCE"
+      },
+      {
+        "board": "2021-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2021-09-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "SPRT"
+      },
+      {
+        "board": "2021-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2022-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2022-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2022-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2022-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2022-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2022-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2022-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2022-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2023-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2023-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2023-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2023-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2023-06-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "AI"
+      },
+      {
+        "board": "2023-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2023-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2023-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "MARA"
+      },
+      {
+        "board": "2023-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2023-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2024-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2024-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2024-03-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "MARA"
+      },
+      {
+        "board": "2024-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2024-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2024-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2024-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2024-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "SOUN"
+      },
+      {
+        "board": "2024-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2024-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2024-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "RGTI"
+      },
+      {
+        "board": "2024-12-31",
+        "reason": "not_in_our_data",
+        "site_symbol": "MARA"
+      },
+      {
+        "board": "2025-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "BRK.A"
+      },
+      {
+        "board": "2025-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2025-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2025-09-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2025-09-30",
+        "reason": "not_in_our_data",
+        "site_symbol": "RGTI"
+      },
+      {
+        "board": "2025-12-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2026-03-31",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2026-06-30",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      },
+      {
+        "board": "2026-09-02",
+        "reason": "duplicate_share_class",
+        "site_symbol": "GOOGL"
+      }
+    ],
+    "rows_all": 117,
+    "rows_since": 50,
+    "symbols": {
+      "AABA": "not_in_our_data",
+      "AET": "not_in_our_data",
+      "AGN": "not_in_our_data",
+      "AI": "not_in_our_data",
+      "BB": "not_in_our_data",
+      "BRK.A": "duplicate_share_class",
+      "BYND": "not_in_our_data",
+      "CELG": "not_in_our_data",
+      "CLOV": "not_in_our_data",
+      "GOOGL": "duplicate_share_class",
+      "KITE": "not_in_our_data",
+      "LNKD": "not_in_our_data",
+      "MARA": "not_in_our_data",
+      "NKLA": "not_in_our_data",
+      "PLUG": "not_in_our_data",
+      "RGTI": "not_in_our_data",
+      "RIOT": "not_in_our_data",
+      "SOUN": "not_in_our_data",
+      "SPCE": "not_in_our_data",
+      "SPRT": "not_in_our_data",
+      "TLRY": "not_in_our_data",
+      "TWC": "not_in_our_data",
+      "TWX": "not_in_our_data",
+      "UTX": "not_in_our_data",
+      "WISH": "not_in_our_data",
+      "WORK": "not_in_our_data",
+      "X": "not_in_our_data"
+    }
+  },
+  "failures": [
+    {
+      "board": "2021-03-31",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_level",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "input_diff",
+      "detail": "gm@2020-12-31",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "input_diff",
+      "detail": "gm@2020-12-31",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-06-30 site 2019-12-31",
+      "factor": "revenue_yoy",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-06-30 site 2019-12-31",
+      "factor": "revenue_accel",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-06-30 site 2019-12-31",
+      "factor": "gm_yoy",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-06-30 site 2019-12-31",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-06-30 site 2019-12-31",
+      "factor": "net_margin_yoy",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2019-12-31",
+      "factor": "revenue_yoy",
+      "site_symbol": "RBLX",
+      "symbol": "RBLX"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2019-12-31",
+      "factor": "revenue_accel",
+      "site_symbol": "RBLX",
+      "symbol": "RBLX"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2019-12-31",
+      "factor": "gm_yoy",
+      "site_symbol": "RBLX",
+      "symbol": "RBLX"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2019-12-31",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "RBLX",
+      "symbol": "RBLX"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2019-12-31",
+      "factor": "net_margin_yoy",
+      "site_symbol": "RBLX",
+      "symbol": "RBLX"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-10-31 site 2020-01-31",
+      "factor": "revenue_yoy",
+      "site_symbol": "SNOW",
+      "symbol": "SNOW"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-10-31 site 2020-01-31",
+      "factor": "revenue_accel",
+      "site_symbol": "SNOW",
+      "symbol": "SNOW"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-10-31 site 2020-01-31",
+      "factor": "gm_yoy",
+      "site_symbol": "SNOW",
+      "symbol": "SNOW"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-10-31 site 2020-01-31",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "SNOW",
+      "symbol": "SNOW"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-10-31 site 2020-01-31",
+      "factor": "net_margin_yoy",
+      "site_symbol": "SNOW",
+      "symbol": "SNOW"
+    },
+    {
+      "board": "2021-03-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2020-03-31",
+      "factor": "revenue_yoy",
+      "site_symbol": "ABNB",
+      "symbol": "ABNB"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "ours_missing",
+      "detail": "prior_yoy_missing",
+      "factor": "revenue_accel",
+      "site_symbol": "ABNB",
+      "symbol": "ABNB"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2020-03-31",
+      "factor": "gm_yoy",
+      "site_symbol": "ABNB",
+      "symbol": "ABNB"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "ABNB",
+      "symbol": "ABNB"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2020-03-31",
+      "factor": "net_margin_yoy",
+      "site_symbol": "ABNB",
+      "symbol": "ABNB"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_level",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_level",
+      "site_symbol": "C",
+      "symbol": "C"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "C",
+      "symbol": "C"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-03-31",
+      "factor": "revenue_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-03-31",
+      "factor": "revenue_accel",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-03-31",
+      "factor": "gm_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-03-31",
+      "factor": "net_margin_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_level",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "input_diff",
+      "detail": "gm@2021-03-31",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "input_diff",
+      "detail": "gm@2021-03-31",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2020-03-31",
+      "factor": "revenue_yoy",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2020-03-31",
+      "factor": "revenue_accel",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2020-03-31",
+      "factor": "gm_yoy",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2020-03-31",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-09-30 site 2020-03-31",
+      "factor": "net_margin_yoy",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-03-31",
+      "factor": "revenue_yoy",
+      "site_symbol": "RBLX",
+      "symbol": "RBLX"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-03-31",
+      "factor": "revenue_accel",
+      "site_symbol": "RBLX",
+      "symbol": "RBLX"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-03-31",
+      "factor": "gm_yoy",
+      "site_symbol": "RBLX",
+      "symbol": "RBLX"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-03-31",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "RBLX",
+      "symbol": "RBLX"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-03-31",
+      "factor": "net_margin_yoy",
+      "site_symbol": "RBLX",
+      "symbol": "RBLX"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2020-01-31 site 2020-04-30",
+      "factor": "revenue_yoy",
+      "site_symbol": "SNOW",
+      "symbol": "SNOW"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2020-01-31 site 2020-04-30",
+      "factor": "revenue_accel",
+      "site_symbol": "SNOW",
+      "symbol": "SNOW"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2020-01-31 site 2020-04-30",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "SNOW",
+      "symbol": "SNOW"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2020-01-31 site 2020-04-30",
+      "factor": "net_margin_yoy",
+      "site_symbol": "SNOW",
+      "symbol": "SNOW"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "input_diff",
+      "detail": "fcfm@2021-03-31",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "SQ",
+      "symbol": "XYZ"
+    },
+    {
+      "board": "2021-06-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "revenue_yoy",
+      "site_symbol": "ABNB",
+      "symbol": "ABNB"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "revenue_accel",
+      "site_symbol": "ABNB",
+      "symbol": "ABNB"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "gm_yoy",
+      "site_symbol": "ABNB",
+      "symbol": "ABNB"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "ABNB",
+      "symbol": "ABNB"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "net_margin_yoy",
+      "site_symbol": "ABNB",
+      "symbol": "ABNB"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "revenue_yoy",
+      "site_symbol": "AFRM",
+      "symbol": "AFRM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "revenue_accel",
+      "site_symbol": "AFRM",
+      "symbol": "AFRM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "gm_yoy",
+      "site_symbol": "AFRM",
+      "symbol": "AFRM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "AFRM",
+      "symbol": "AFRM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "net_margin_yoy",
+      "site_symbol": "AFRM",
+      "symbol": "AFRM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_level",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_level",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "input_diff",
+      "detail": "gm@2021-06-30",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "input_diff",
+      "detail": "gm@2021-06-30",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "quarter_not_found",
+      "factor": "revenue_yoy",
+      "site_symbol": "MXIM",
+      "symbol": "MXIM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "quarter_not_found",
+      "factor": "revenue_accel",
+      "site_symbol": "MXIM",
+      "symbol": "MXIM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "quarter_not_found",
+      "factor": "gm_level",
+      "site_symbol": "MXIM",
+      "symbol": "MXIM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "quarter_not_found",
+      "factor": "gm_yoy",
+      "site_symbol": "MXIM",
+      "symbol": "MXIM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "quarter_not_found",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "MXIM",
+      "symbol": "MXIM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "quarter_not_found",
+      "factor": "net_margin_yoy",
+      "site_symbol": "MXIM",
+      "symbol": "MXIM"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "revenue_yoy",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "revenue_accel",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "gm_yoy",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2019-12-31 site 2020-06-30",
+      "factor": "net_margin_yoy",
+      "site_symbol": "PLTR",
+      "symbol": "PLTR"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -5: ours 2020-01-31 site 2020-04-30",
+      "factor": "revenue_accel",
+      "site_symbol": "SNOW",
+      "symbol": "SNOW"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "input_diff",
+      "detail": "fcfm@2021-06-30",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "SQ",
+      "symbol": "XYZ"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "revenue_yoy",
+      "site_symbol": "UPST",
+      "symbol": "UPST"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "revenue_accel",
+      "site_symbol": "UPST",
+      "symbol": "UPST"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "gm_yoy",
+      "site_symbol": "UPST",
+      "symbol": "UPST"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "UPST",
+      "symbol": "UPST"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "net_margin_yoy",
+      "site_symbol": "UPST",
+      "symbol": "UPST"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_level",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2021-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2021-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2021-12-31",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_level",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2021-12-31",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2021-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2021-12-31",
+      "category": "ours_missing",
+      "detail": "prior_yoy_missing",
+      "factor": "revenue_accel",
+      "site_symbol": "LCID",
+      "symbol": "LCID"
+    },
+    {
+      "board": "2021-12-31",
+      "category": "input_diff",
+      "detail": "gm@2021-09-30",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2021-12-31",
+      "category": "input_diff",
+      "detail": "gm@2021-09-30",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2021-12-31",
+      "category": "input_diff",
+      "detail": "fcfm@2021-09-30",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "SQ",
+      "symbol": "XYZ"
+    },
+    {
+      "board": "2021-12-31",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_level",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2021-12-31",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2021-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2022-03-31",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2022-03-31",
+      "category": "input_diff",
+      "detail": "gm@2021-12-31",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2022-03-31",
+      "category": "input_diff",
+      "detail": "gm@2021-12-31",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2022-03-31",
+      "category": "ours_missing",
+      "detail": "prior_yoy_missing",
+      "factor": "revenue_accel",
+      "site_symbol": "UPST",
+      "symbol": "UPST"
+    },
+    {
+      "board": "2022-03-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2022-06-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2022-06-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "C",
+      "symbol": "C"
+    },
+    {
+      "board": "2022-06-30",
+      "category": "input_diff",
+      "detail": "rev@2022-03-31",
+      "factor": "revenue_yoy",
+      "site_symbol": "COP",
+      "symbol": "COP"
+    },
+    {
+      "board": "2022-06-30",
+      "category": "input_diff",
+      "detail": "rev@2022-03-31",
+      "factor": "revenue_accel",
+      "site_symbol": "COP",
+      "symbol": "COP"
+    },
+    {
+      "board": "2022-06-30",
+      "category": "input_diff",
+      "detail": "gm@2022-03-31",
+      "factor": "gm_level",
+      "site_symbol": "COP",
+      "symbol": "COP"
+    },
+    {
+      "board": "2022-06-30",
+      "category": "input_diff",
+      "detail": "gm@2022-03-31",
+      "factor": "gm_yoy",
+      "site_symbol": "COP",
+      "symbol": "COP"
+    },
+    {
+      "board": "2022-06-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2022-06-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2022-06-30",
+      "category": "input_diff",
+      "detail": "gm@2022-03-31",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2022-06-30",
+      "category": "input_diff",
+      "detail": "gm@2022-03-31",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2022-06-30",
+      "category": "input_diff",
+      "detail": "fcfm@2021-03-31",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "SQ",
+      "symbol": "XYZ"
+    },
+    {
+      "board": "2022-06-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2022-09-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2022-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2022-09-30",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2022-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2022-09-30",
+      "category": "input_diff",
+      "detail": "gm@2022-06-30",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2022-09-30",
+      "category": "input_diff",
+      "detail": "gm@2022-06-30",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2022-09-30",
+      "category": "input_diff",
+      "detail": "fcfm@2021-06-30",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "SQ",
+      "symbol": "XYZ"
+    },
+    {
+      "board": "2022-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2022-12-31",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2022-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2022-12-31",
+      "category": "input_diff",
+      "detail": "gm@2022-09-30",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2022-12-31",
+      "category": "input_diff",
+      "detail": "gm@2022-09-30",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2022-12-31",
+      "category": "ours_missing",
+      "detail": "gross_profit_missing",
+      "factor": "gm_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2022-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2023-03-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2023-03-31",
+      "category": "ours_missing",
+      "detail": "quarter_not_found",
+      "factor": "revenue_yoy",
+      "site_symbol": "FRC",
+      "symbol": "FRC"
+    },
+    {
+      "board": "2023-03-31",
+      "category": "ours_missing",
+      "detail": "quarter_not_found",
+      "factor": "revenue_accel",
+      "site_symbol": "FRC",
+      "symbol": "FRC"
+    },
+    {
+      "board": "2023-03-31",
+      "category": "ours_missing",
+      "detail": "quarter_not_found",
+      "factor": "gm_level",
+      "site_symbol": "FRC",
+      "symbol": "FRC"
+    },
+    {
+      "board": "2023-03-31",
+      "category": "ours_missing",
+      "detail": "quarter_not_found",
+      "factor": "gm_yoy",
+      "site_symbol": "FRC",
+      "symbol": "FRC"
+    },
+    {
+      "board": "2023-03-31",
+      "category": "ours_missing",
+      "detail": "quarter_not_found",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "FRC",
+      "symbol": "FRC"
+    },
+    {
+      "board": "2023-03-31",
+      "category": "ours_missing",
+      "detail": "quarter_not_found",
+      "factor": "net_margin_yoy",
+      "site_symbol": "FRC",
+      "symbol": "FRC"
+    },
+    {
+      "board": "2023-03-31",
+      "category": "input_diff",
+      "detail": "gm@2022-12-31",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2023-03-31",
+      "category": "input_diff",
+      "detail": "gm@2022-12-31",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2023-03-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2023-06-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2023-06-30",
+      "category": "input_diff",
+      "detail": "gm@2023-03-31",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2023-06-30",
+      "category": "input_diff",
+      "detail": "gm@2023-03-31",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2023-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2023-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2023-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2022-03-31 site 2022-06-30",
+      "factor": "revenue_yoy",
+      "site_symbol": "KVUE",
+      "symbol": "KVUE"
+    },
+    {
+      "board": "2023-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2022-03-31 site 2022-06-30",
+      "factor": "revenue_accel",
+      "site_symbol": "KVUE",
+      "symbol": "KVUE"
+    },
+    {
+      "board": "2023-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2022-03-31 site 2022-06-30",
+      "factor": "gm_yoy",
+      "site_symbol": "KVUE",
+      "symbol": "KVUE"
+    },
+    {
+      "board": "2023-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2022-03-31 site 2022-06-30",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "KVUE",
+      "symbol": "KVUE"
+    },
+    {
+      "board": "2023-09-30",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2022-03-31 site 2022-06-30",
+      "factor": "net_margin_yoy",
+      "site_symbol": "KVUE",
+      "symbol": "KVUE"
+    },
+    {
+      "board": "2023-09-30",
+      "category": "input_diff",
+      "detail": "gm@2023-06-30",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2023-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2023-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2023-12-31",
+      "category": "input_diff",
+      "detail": "gm@2023-09-30",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2024-03-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2024-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2022-09-30 site 2022-12-31",
+      "factor": "revenue_yoy",
+      "site_symbol": "RDDT",
+      "symbol": "RDDT"
+    },
+    {
+      "board": "2024-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -1: ours 2023-06-30 site 2023-09-30",
+      "factor": "revenue_accel",
+      "site_symbol": "RDDT",
+      "symbol": "RDDT"
+    },
+    {
+      "board": "2024-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2022-09-30 site 2022-12-31",
+      "factor": "gm_yoy",
+      "site_symbol": "RDDT",
+      "symbol": "RDDT"
+    },
+    {
+      "board": "2024-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2022-09-30 site 2022-12-31",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "RDDT",
+      "symbol": "RDDT"
+    },
+    {
+      "board": "2024-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2022-09-30 site 2022-12-31",
+      "factor": "net_margin_yoy",
+      "site_symbol": "RDDT",
+      "symbol": "RDDT"
+    },
+    {
+      "board": "2024-03-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2024-06-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2024-06-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2024-06-30",
+      "category": "input_diff",
+      "detail": "gm@2024-03-31",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2024-06-30",
+      "category": "input_diff",
+      "detail": "gm@2024-03-31",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2024-06-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2024-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2024-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2024-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2024-09-30",
+      "category": "input_diff",
+      "detail": "gm@2024-06-30",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2024-09-30",
+      "category": "input_diff",
+      "detail": "gm@2024-06-30",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2024-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "WFC",
+      "symbol": "WFC"
+    },
+    {
+      "board": "2024-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2024-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2024-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2024-12-31",
+      "category": "input_diff",
+      "detail": "gm@2024-09-30",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2024-12-31",
+      "category": "input_diff",
+      "detail": "gm@2024-09-30",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2025-03-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2025-03-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2025-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -5: ours 2023-06-30 site 2023-09-30",
+      "factor": "revenue_accel",
+      "site_symbol": "GEV",
+      "symbol": "GEV"
+    },
+    {
+      "board": "2025-03-31",
+      "category": "input_diff",
+      "detail": "gm@2024-12-31",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2025-03-31",
+      "category": "input_diff",
+      "detail": "gm@2024-12-31",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "APP",
+      "symbol": "APP"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "revenue_yoy",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "revenue_accel",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "gm_yoy",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "net_margin_yoy",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "input_diff",
+      "detail": "gm@2025-03-31",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "input_diff",
+      "detail": "gm@2025-03-31",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "revenue_yoy",
+      "site_symbol": "QBTS",
+      "symbol": "QBTS"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "revenue_accel",
+      "site_symbol": "QBTS",
+      "symbol": "QBTS"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "gm_yoy",
+      "site_symbol": "QBTS",
+      "symbol": "QBTS"
+    },
+    {
+      "board": "2025-06-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "net_margin_yoy",
+      "site_symbol": "QBTS",
+      "symbol": "QBTS"
+    },
+    {
+      "board": "2025-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "APP",
+      "symbol": "APP"
+    },
+    {
+      "board": "2025-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2025-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BMNR",
+      "symbol": "BMNR"
+    },
+    {
+      "board": "2025-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2025-09-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "revenue_yoy",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-09-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "revenue_accel",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-09-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "gm_yoy",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-09-30",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "net_margin_yoy",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-09-30",
+      "category": "input_diff",
+      "detail": "gm@2025-06-30",
+      "factor": "gm_level",
+      "site_symbol": "HOOD",
+      "symbol": "HOOD"
+    },
+    {
+      "board": "2025-09-30",
+      "category": "input_diff",
+      "detail": "gm@2025-06-30",
+      "factor": "gm_yoy",
+      "site_symbol": "HOOD",
+      "symbol": "HOOD"
+    },
+    {
+      "board": "2025-09-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2025-09-30",
+      "category": "input_diff",
+      "detail": "gm@2025-06-30",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "APP",
+      "symbol": "APP"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "input_diff",
+      "detail": "gm@2025-09-30",
+      "factor": "gm_level",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "input_diff",
+      "detail": "gm@2025-09-30",
+      "factor": "gm_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "revenue_yoy",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "revenue_accel",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "gm_yoy",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "net_margin_yoy",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "input_diff",
+      "detail": "gm@2025-09-30",
+      "factor": "gm_level",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "input_diff",
+      "detail": "gm@2025-09-30",
+      "factor": "gm_yoy",
+      "site_symbol": "MA",
+      "symbol": "MA"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2024-03-31 site 2024-09-30",
+      "factor": "revenue_yoy",
+      "site_symbol": "SNDK",
+      "symbol": "SNDK"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2024-03-31 site 2024-09-30",
+      "factor": "revenue_accel",
+      "site_symbol": "SNDK",
+      "symbol": "SNDK"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2024-03-31 site 2024-09-30",
+      "factor": "gm_yoy",
+      "site_symbol": "SNDK",
+      "symbol": "SNDK"
+    },
+    {
+      "board": "2025-12-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2024-03-31 site 2024-09-30",
+      "factor": "net_margin_yoy",
+      "site_symbol": "SNDK",
+      "symbol": "SNDK"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "input_diff",
+      "detail": "rev@2025-12-31",
+      "factor": "revenue_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "input_diff",
+      "detail": "rev@2025-12-31",
+      "factor": "revenue_accel",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "input_diff",
+      "detail": "gm@2025-12-31",
+      "factor": "gm_level",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "input_diff",
+      "detail": "gm@2025-12-31",
+      "factor": "gm_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "input_diff",
+      "detail": "nim@2025-12-31",
+      "factor": "net_margin_yoy",
+      "site_symbol": "COIN",
+      "symbol": "COIN"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "revenue_yoy",
+      "site_symbol": "CRCL",
+      "symbol": "CRCL"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "revenue_accel",
+      "site_symbol": "CRCL",
+      "symbol": "CRCL"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "gm_yoy",
+      "site_symbol": "CRCL",
+      "symbol": "CRCL"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "CRCL",
+      "symbol": "CRCL"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "ours_missing",
+      "detail": "no_yoy_base",
+      "factor": "net_margin_yoy",
+      "site_symbol": "CRCL",
+      "symbol": "CRCL"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2024-09-30 site 2024-12-31",
+      "factor": "revenue_yoy",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "ours_missing",
+      "detail": "prior_yoy_missing",
+      "factor": "revenue_accel",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -4: ours 2024-09-30 site 2024-12-31",
+      "factor": "net_margin_yoy",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "input_diff",
+      "detail": "gm@2025-12-31",
+      "factor": "gm_level",
+      "site_symbol": "LLY",
+      "symbol": "LLY"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "input_diff",
+      "detail": "gm@2025-12-31",
+      "factor": "gm_yoy",
+      "site_symbol": "LLY",
+      "symbol": "LLY"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "quarter_sequence",
+      "detail": "offset -5: ours 2024-03-31 site 2024-09-30",
+      "factor": "revenue_accel",
+      "site_symbol": "SNDK",
+      "symbol": "SNDK"
+    },
+    {
+      "board": "2026-03-31",
+      "category": "input_diff",
+      "detail": "fcfm@2025-12-31",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "VRT",
+      "symbol": "VRT"
+    },
+    {
+      "board": "2026-06-30",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "APP",
+      "symbol": "APP"
+    },
+    {
+      "board": "2026-06-30",
+      "category": "quarter_sequence",
+      "detail": "offset -5: ours 2024-09-30 site 2024-12-31",
+      "factor": "revenue_accel",
+      "site_symbol": "CRWV",
+      "symbol": "CRWV"
+    },
+    {
+      "board": "2026-06-30",
+      "category": "input_diff",
+      "detail": "fcfm@2026-03-31",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "HOOD",
+      "symbol": "HOOD"
+    },
+    {
+      "board": "2026-06-30",
+      "category": "site_repaired",
+      "detail": "gm@2026-03-31",
+      "factor": "gm_level",
+      "site_symbol": "NBIS",
+      "symbol": "NBIS"
+    },
+    {
+      "board": "2026-06-30",
+      "category": "site_repaired",
+      "detail": "gm@2026-03-31",
+      "factor": "gm_yoy",
+      "site_symbol": "NBIS",
+      "symbol": "NBIS"
+    },
+    {
+      "board": "2026-09-02",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "APP",
+      "symbol": "APP"
+    },
+    {
+      "board": "2026-09-02",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "BAC",
+      "symbol": "BAC"
+    },
+    {
+      "board": "2026-09-02",
+      "category": "input_diff",
+      "detail": "rev@2026-06-30",
+      "factor": "revenue_yoy",
+      "site_symbol": "HOOD",
+      "symbol": "HOOD"
+    },
+    {
+      "board": "2026-09-02",
+      "category": "input_diff",
+      "detail": "rev@2026-06-30",
+      "factor": "revenue_accel",
+      "site_symbol": "HOOD",
+      "symbol": "HOOD"
+    },
+    {
+      "board": "2026-09-02",
+      "category": "input_diff",
+      "detail": "gm@2026-06-30",
+      "factor": "gm_level",
+      "site_symbol": "HOOD",
+      "symbol": "HOOD"
+    },
+    {
+      "board": "2026-09-02",
+      "category": "input_diff",
+      "detail": "gm@2026-06-30",
+      "factor": "gm_yoy",
+      "site_symbol": "HOOD",
+      "symbol": "HOOD"
+    },
+    {
+      "board": "2026-09-02",
+      "category": "input_diff",
+      "detail": "nim@2026-06-30",
+      "factor": "net_margin_yoy",
+      "site_symbol": "HOOD",
+      "symbol": "HOOD"
+    },
+    {
+      "board": "2026-09-02",
+      "category": "ours_missing",
+      "detail": "fcf_zero_placeholder",
+      "factor": "fcf_margin_yoy",
+      "site_symbol": "JPM",
+      "symbol": "JPM"
+    }
+  ],
+  "fixture_asof": "2026-09-02",
+  "gate": {
+    "boards": 23,
+    "counted": 6478,
+    "pass": true,
+    "passed": 6220,
+    "rate": 0.9601728928681692,
+    "since": "2021-01-01",
+    "threshold_pct": 95
+  },
+  "ours_basis": {
+    "counted": 6478,
+    "passed": 5723,
+    "rate": 0.883451682618092
+  },
+  "pre_since": {
+    "boards": 24,
+    "categories": {
+      "input_diff": 24,
+      "match": 3704,
+      "ours_missing": 2814,
+      "quarter_sequence": 14,
+      "site_missing": 32
+    },
+    "counted": 6556,
+    "passed": 3704,
+    "rate": 0.5649786455155583
+  },
+  "reconciled": true,
+  "seconds": 22.6,
+  "timing": {
+    "match": 1061,
+    "ours_behind": 31,
+    "ours_none": 1
+  }
+}
