@@ -1,11 +1,14 @@
 """M7 S1 independent spot check (plan Task 6 Step 5): sqlite3 and csv only, no engine or M7 import.
 
-For five (board, symbol) pairs, recompute the site-basis revenue YoY and gross-margin YoY
-straight from income_quarterly by position ([i-4], no day-count adjustment) at the quarter
-the tool aligned to, and compare with the tool's own value in the private rows.csv.
+For five (board, symbol) pairs: find our quarter on its own (the income_quarterly date
+closest to the site's latest_q, within 20 days) and check the tool aligned to the same one;
+check each pick's pass/fail label against the tool's result; then recompute the site-basis
+revenue YoY and gross-margin YoY by position ([i-4], no day-count adjustment) and compare
+with the tool's value in the private rows.csv.
 Writes spot_check.json next to this file with our values only (never the site's).
-Usage: python spot_check.py <rows.csv> <market.db>
+Usage: python spot_check.py <rows.csv> <market.db> <site fixture json>
 """
+from datetime import date
 import csv
 import json
 import sqlite3
@@ -19,7 +22,13 @@ PICKS = [  # three pairs where every factor matched, two with a failed factor
 FACTORS = ("revenue_yoy", "gm_yoy")
 
 
-def main(rows_path: str, db_path: str) -> int:
+def _gap(a: str, b: str) -> int:
+    return abs((date.fromisoformat(a[:10]) - date.fromisoformat(b[:10])).days)
+
+
+def main(rows_path: str, db_path: str, fixture_path: str) -> int:
+    latest = {(b["asof"][:10], x["symbol"]): x["latest_q"][:10]
+              for b in json.load(open(fixture_path))["boards"] for x in b["rows"]}
     tool = {}
     for r in csv.DictReader(open(rows_path)):
         if r["basis"] == "site":
@@ -30,6 +39,11 @@ def main(rows_path: str, db_path: str) -> int:
         fiscal = tool[(board, sym, FACTORS[0])]["fiscal_date"]
         failed = [f for (b, s, f), r in tool.items() if b == board and s == sym and r["counted"] == "True"
                   and r["passed"] == "False"]
+        dates = [d[:10] for (d,) in conn.execute("SELECT date FROM income_quarterly WHERE symbol = ?", (sym,))]
+        near = sorted((_gap(d, latest[(board, sym)]), d) for d in dates if _gap(d, latest[(board, sym)]) <= 20)
+        aligned_ok = bool(near) and near[0][1] == fiscal
+        label_ok = (kind == "pass") == (not failed)
+        all_ok &= aligned_ok and label_ok
         rows = conn.execute("SELECT date, revenue, gross_profit FROM income_quarterly WHERE symbol = ? "
                             "AND date <= ? ORDER BY date", (sym, fiscal)).fetchall()
         cur, base = rows[-1], rows[-5]
@@ -42,11 +56,14 @@ def main(rows_path: str, db_path: str) -> int:
             all_ok &= ok
             out.append({"board": board, "symbol": sym, "kind": kind, "fiscal_date": fiscal,
                         "base_quarter": base[0][:10], "factor": f, "tool_value": ours,
-                        "recomputed": recomputed[f], "match": ok, "failed_factors": failed})
+                        "recomputed": recomputed[f], "match": ok, "aligned_independently": aligned_ok,
+                        "label_consistent": label_ok, "failed_factors": failed})
     Path(__file__).with_name("spot_check.json").write_text(json.dumps(out, indent=2))
-    print(f"{sum(o['match'] for o in out)}/{len(out)} match")
+    print(f"{sum(o['match'] for o in out)}/{len(out)} values match; "
+          f"{sum(o['aligned_independently'] for o in out[::2])}/{len(PICKS)} quarters aligned independently; "
+          f"{sum(o['label_consistent'] for o in out[::2])}/{len(PICKS)} labels consistent")
     return 0 if all_ok else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main(*sys.argv[1:3]))
+    sys.exit(main(*sys.argv[1:4]))

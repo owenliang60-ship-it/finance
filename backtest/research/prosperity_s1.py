@@ -83,11 +83,13 @@ def _at(values, i):
 
 def load_site_rows(data: Mapping, share_class_of: Optional[Mapping[str, str]] = None) -> List[SiteRow]:
     """Expand every board's rows. `share_class_of` (security_master: secondary → primary ticker)
-    marks a secondary class as a duplicate: one ticker per issuer (Boss 2026-09-30), the same
-    rule that keeps it out of our pool; e.g. GOOGL and BRK.A sit on every board with GOOG and BRK.B."""
+    marks a secondary class as a duplicate when its primary is on the same board: one ticker per
+    issuer (Boss 2026-09-30), the rule that keeps it out of our pool; e.g. GOOGL and BRK.A sit on
+    every board with GOOG and BRK.B. Alone on a board, a secondary class is still compared."""
     secondary = share_class_of or {}
     out = []
     for board in data["boards"]:
+        on_board = {our_symbol(row["symbol"]) for row in board["rows"]}
         for row in board["rows"]:
             dates = [d[:10] for d in row.get("q_series") or []]
             quarters = tuple(SeriesQuarter(d, **{name: _at(row.get(key), i) for name, key in _SERIES})
@@ -100,7 +102,8 @@ def load_site_rows(data: Mapping, share_class_of: Optional[Mapping[str, str]] = 
                                latest_q=row["latest_q"][:10], filed=row.get("filed"),
                                values={engine: row.get(site) for site, engine in FACTORS},
                                quarters=quarters, repairs=repairs,
-                               skip_reason="duplicate_share_class" if ours in secondary else None))
+                               skip_reason="duplicate_share_class"
+                               if secondary.get(ours) in on_board else None))
     return out
 
 

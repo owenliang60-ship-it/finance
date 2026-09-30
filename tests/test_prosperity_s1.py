@@ -39,12 +39,12 @@ def flat_quarters(n=8):
 
 def test_load_site_rows_maps_symbols_and_factor_keys():
     data = fixture(("2026-06-30", [site_row("SQ"), site_row("BRK.B"), site_row("BRK.A"), site_row("GOOGL"),
-                                   site_row("MSFT")]))
+                                   site_row("MSFT"), site_row("GOOG")]))
     # security_master.share_class_of: one ticker per issuer (Boss 2026-09-30)
     rows = s1.load_site_rows(data, share_class_of={"BRK-A": "BRK-B", "GOOGL": "GOOG"})
     assert [(r.site_symbol, r.symbol, r.skip_reason) for r in rows] == [
         ("SQ", "XYZ", None), ("BRK.B", "BRK-B", None), ("BRK.A", "BRK-A", "duplicate_share_class"),
-        ("GOOGL", "GOOGL", "duplicate_share_class"), ("MSFT", "MSFT", None)]
+        ("GOOGL", "GOOGL", "duplicate_share_class"), ("MSFT", "MSFT", None), ("GOOG", "GOOG", None)]
     r = rows[-1]
     assert (r.board, r.latest_q) == ("2026-06-30", Q8[-1])
     assert r.values == {"revenue_yoy": 0.0, "revenue_accel": 0.0, "gm_level": 50.0, "gm_yoy": 0.0,
@@ -52,6 +52,11 @@ def test_load_site_rows_maps_symbols_and_factor_keys():
     assert [q.fiscal_date for q in r.quarters] == Q8
     last = r.quarters[-1]
     assert (last.rev, last.gm, last.fcfm, last.nim) == (100.0, 50.0, 20.0, 10.0)
+
+
+def test_secondary_class_is_kept_when_its_primary_is_not_on_the_board():
+    rows = s1.load_site_rows(fixture(("2026-06-30", [site_row("GOOGL")])), share_class_of={"GOOGL": "GOOG"})
+    assert rows[0].skip_reason is None                   # the issuer would otherwise vanish from the check
 
 
 def test_load_site_rows_keeps_nulls_and_maps_repair_fields():
@@ -320,6 +325,7 @@ def test_cli_end_to_end_read_only(tmp_path, monkeypatch):
     assert s["failures"] == [{"board": "2026-07-15", "symbol": "AAA", "site_symbol": "AAA", "factor": "gm_level",
                               "category": "unexplained", "detail": ""}]
     assert "61.0" not in (report / "summary.json").read_text() + (report / "summary.md").read_text()
+    assert len(s["s1_tool_version"]) == 16 and s["s1_tool_version"] != s["code_version"]
     rows = list(csv.DictReader((private / "rows.csv").open()))
     assert len(rows) == 24 and any(r["site_value"] == "61.0" for r in rows)
 
@@ -344,3 +350,30 @@ def test_cli_refuses_a_private_dir_git_would_track(tmp_path):
     code = cli.main(["--fixture", str(tmp_path / "f.json"), "--db", str(tmp_path / "m.db"),
                      "--private-dir", str(target), "--report-dir", str(tmp_path / "report")])
     assert code == 4 and not target.exists()
+
+
+def test_cli_reads_the_vintage_for_boards_in_the_strict_window(tmp_path, monkeypatch):
+    db = seed_db(tmp_path / "m.db")
+    seen = []
+
+    def fake(store, sym, with_vintage):
+        seen.append((sym, with_vintage))
+        return _history(sym)
+
+    monkeypatch.setattr(cli, "load_history", fake)
+    path = tmp_path / "fixture.json"
+    path.write_text(json.dumps(fixture(("2026-09-02", [site_row("AAA")]), ("2026-09-30", [site_row("AAA")]))))
+    cli.main(["--fixture", str(path), "--db", str(db), "--private-dir", str(tmp_path / "p"),
+              "--report-dir", str(tmp_path / "r")])
+    assert seen == [("AAA", False), ("AAA", True)]          # strict replay from STRICT_STATEMENTS_FROM on
+
+
+def test_cli_rejects_a_malformed_fixture(tmp_path):
+    db = seed_db(tmp_path / "m.db")
+    bad = site_row("AAA")
+    del bad["latest_q"]
+    path = tmp_path / "fixture.json"
+    path.write_text(json.dumps(fixture(("2026-09-02", [bad]))))
+    code = cli.main(["--fixture", str(path), "--db", str(db), "--private-dir", str(tmp_path / "p"),
+                     "--report-dir", str(tmp_path / "r")])
+    assert code == 4 and not (tmp_path / "r").exists()

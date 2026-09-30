@@ -37,6 +37,8 @@ from terminal.prosperity.version import code_version  # noqa: E402
 
 # Our quarter not yet visible on the board date: replay again up to this many days later (plan D-2 A)
 REBUILD_DAYS = 120
+# The comparison tool's own version; code_version() covers only the engine
+S1_TOOL_SOURCES = ("backtest/research/prosperity_s1.py", "scripts/prosperity_s1.py")
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -90,13 +92,18 @@ def _packet(history: SymbolHistory, as_of: str) -> InputPacket:
                         with_beta=False)
 
 
+def _strict(board: str) -> bool:
+    """Same rule as terminal/prosperity/inputs.py: replay from STRICT_STATEMENTS_FROM on reads the vintage."""
+    return board >= STRICT_STATEMENTS_FROM
+
+
 def _aligned(history: SymbolHistory, row: SiteRow, packet: InputPacket) -> Tuple[Sequence[QuarterInputs], str]:
     """Our quarters ending at the site's latest_q, and how they were found (D-2 A)."""
     idx = match_index(packet.quarters, row.latest_q)
     if idx is not None:
         return packet.quarters[:idx + 1], "asof" if idx == len(packet.quarters) - 1 else "trimmed"
-    # Stay on the approximate replay: from STRICT_STATEMENTS_FROM on, statements come from the vintage
-    last = date.fromisoformat(STRICT_STATEMENTS_FROM) - timedelta(days=1)
+    # Rebuild in the board's own mode: an approximate board stays before STRICT_STATEMENTS_FROM
+    last = date.today() if _strict(row.board) else date.fromisoformat(STRICT_STATEMENTS_FROM) - timedelta(days=1)
     later = min(date.fromisoformat(row.board) + timedelta(days=REBUILD_DAYS), last).isoformat()
     if later <= row.board:
         return (), "none"
@@ -116,12 +123,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             raise ValueError(problem)
         if not Path(args.fixture).is_file():
             raise ValueError(f"fixture not found: {args.fixture}")
+        data = json.loads(Path(args.fixture).read_text())
     except ValueError as exc:
         print(f"invalid arguments: {exc}", file=sys.stderr)
         return 4
-    data = json.loads(Path(args.fixture).read_text())
     store = MarketStore(db_path=Path(args.db), read_only=True)
-    rows = load_site_rows(data, share_class_of=_share_class_of(store))
+    try:
+        rows = load_site_rows(data, share_class_of=_share_class_of(store))
+    except (KeyError, TypeError, ValueError) as exc:
+        print(f"invalid fixture: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 4
     histories = {}
     comparisons, excluded, errors, timing = [], [], [], []
     for row in rows:
@@ -129,9 +140,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             excluded.append((row.board, row.site_symbol, row.skip_reason))
             continue
         try:
-            if row.symbol not in histories:
-                histories[row.symbol] = load_history(store, row.symbol, with_vintage=False)
-            history = histories[row.symbol]
+            key = (row.symbol, _strict(row.board))
+            if key not in histories:
+                histories[key] = load_history(store, row.symbol, with_vintage=key[1])
+            history = histories[key]
             if not history.income:
                 excluded.append((row.board, row.site_symbol, "not_in_our_data"))
                 continue
@@ -148,6 +160,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     summary = summarize(comparisons, site_rows=Counter(r.board for r in rows), excluded=excluded, errors=errors,
                         timing=timing, since=args.since)
     summary.update(fixture_asof=data.get("asof"), boards_in_fixture=len(data["boards"]), code_version=code_version(),
+                   s1_tool_version=code_version(sources=S1_TOOL_SOURCES),
                    seconds=round(time.perf_counter() - started, 1))
     private = Path(args.private_dir)
     private.mkdir(parents=True, exist_ok=True)
