@@ -460,3 +460,39 @@ def test_placeholder_date_does_not_count_as_arrival():
     rows = [{"date": "2026-03-31", "accepted_date": "2026-03-31 00:00:00",
              "filing_date": "2026-03-31"}]
     assert arrival_day({"i": rows, "b": rows, "c": rows}, "2026-03-31") is None
+
+
+import statistics
+
+from src.data.prosperity_history import sue_dependencies, sue_value
+
+D = [0.1, 0.2, 0.1, 0.2, 0.1, 0.2, 0.1, 0.2, 0.3]
+
+
+def _series(diffs):
+    """(fiscal_date, eps) newest first: four base quarters of 1.0, then YoY changes `diffs` (oldest first)."""
+    dates = FISCALS[-(4 + len(diffs)):]
+    eps = [1.0] * 4
+    for d in diffs:
+        eps.append(eps[-4] + d)
+    return list(zip(dates, eps))[::-1]
+
+
+def test_sue_value_is_yoy_change_over_prior_sample_sigma():
+    s = _series(D)                                                     # 13 quarters
+    value, reason = sue_value(s, 0)
+    assert reason is None and value == pytest.approx(0.3 / statistics.stdev(D[:8]))   # ddof=1, current excluded
+    value1, reason1 = sue_value(s, 1)
+    assert reason1 is None and value1 == pytest.approx(0.2 / statistics.stdev(D[:7]))  # 7 prior YoYs ≥ 6
+
+
+def test_sue_value_reasons_keep_existing_codes():
+    assert sue_value(_series([0.1] * 5), 0) == (None, "few_sigma_obs")
+    assert sue_value(_series([0.1] * 9), 0) == (None, "zero_sigma")
+    assert sue_value(_series(D)[:3], 0) == (None, "no_yoy_pair")
+
+
+def test_sue_dependencies_are_current_eight_prior_and_their_bases():
+    heads = [f for f, _ in _series([0.1] * 3 + D)]                     # 16 quarters
+    assert sue_dependencies(heads, 0) == set(range(0, 13))
+    assert sue_dependencies(heads, 1) == set(range(1, 14))

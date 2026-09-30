@@ -9,7 +9,7 @@ matching — those are imported from their owners.
 import math
 import statistics
 from datetime import date
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from src.data.prosperity_quality import (
     resolve_eps_quarters, split_basis_audit, statement_known_on,
@@ -95,11 +95,26 @@ def _known_eps_rows(rows, as_of: str):
             and r.get("eps_actual") is not None]
 
 
-def _sue_at(series: List[tuple], i: int) -> Optional[str]:
-    """None when SUE is computable at series[i], else why not.
+def sue_dependencies(fiscals: Sequence[str], index: int) -> Set[int]:
+    """Positions SUE at fiscals[index] reads: it and the eight before it, plus each one's YoY base.
+
+    `fiscals` is newest first; YoY bases are matched by date (365 ± SAME_QUARTER_DAYS).
+    """
+    required = set(range(index, min(index + 9, len(fiscals))))
+    for k in list(required):
+        for j in range(k + 1, len(fiscals)):
+            if abs((_d(fiscals[k]) - _d(fiscals[j])).days - YEAR_DAYS) <= SAME_QUARTER_DAYS:
+                required.add(j)
+                break
+    return required
+
+
+def sue_value(series: Sequence[Tuple[str, Optional[float]]], i: int) -> Tuple[Optional[float], Optional[str]]:
+    """(SUE, None) at series[i], else (None, why not).
 
     `series`: (fiscal_date, eps) newest first, one entry per quarter. YoY pairs
-    are matched by date (365 ± SAME_QUARTER_DAYS), never by position.
+    are matched by date (365 ± SAME_QUARTER_DAYS), never by position. Callers
+    exclude quarters with missing values through `sue_dependencies` first.
     """
     def yoy(k):
         if k >= len(series):
@@ -113,17 +128,18 @@ def _sue_at(series: List[tuple], i: int) -> Optional[str]:
                 break
         return None
 
-    if yoy(i) is None:
-        return "no_yoy_pair"
+    current = yoy(i)
+    if current is None:
+        return None, "no_yoy_pair"
     prior = [v for v in (yoy(k) for k in range(i + 1, i + 1 + SUE_SIGMA_WINDOW))
              if v is not None]
     if len(prior) < SUE_SIGMA_MIN_OBS:
-        return "few_sigma_obs"
+        return None, "few_sigma_obs"
     sigma = statistics.stdev(prior)
     scale = max(1.0, max(abs(v) for v in prior))
     if not math.isfinite(sigma) or sigma <= 1e-9 * scale:
-        return "zero_sigma"
-    return None
+        return None, "zero_sigma"
+    return current / sigma, None
 
 
 def street_eps_depth(rows: List[Dict[str, Any]], as_of: str,
@@ -159,12 +175,7 @@ def street_eps_depth(rows: List[Dict[str, Any]], as_of: str,
         if index is None or index >= len(series):
             return None
         # The current YoY and prior eight YoYs define the actual dependencies.
-        required = set(range(index, min(index + 9, len(series))))
-        for k in list(required):
-            for j in range(k + 1, len(series)):
-                if abs((_d(series[k][0]) - _d(series[j][0])).days - YEAR_DAYS) <= SAME_QUARTER_DAYS:
-                    required.add(j)
-                    break
+        required = sue_dependencies([f for f, _ in series], index)
         for k in sorted(required):
             if quarters[k]["issues"]:
                 return quarters[k]["issues"][0]
@@ -200,9 +211,9 @@ def street_eps_depth(rows: List[Dict[str, Any]], as_of: str,
     elif stale:
         sue_missing = "stale"
     else:
-        sue_missing = quality_reason(anchor) or _sue_at(series, anchor)
+        sue_missing = quality_reason(anchor) or sue_value(series, anchor)[1]
     sue_ok = sue_missing is None
-    dsue_missing = sue_missing if not sue_ok else (quality_reason(anchor + 1) or _sue_at(series, anchor + 1))
+    dsue_missing = sue_missing if not sue_ok else (quality_reason(anchor + 1) or sue_value(series, anchor + 1)[1])
     return {
         "consecutive": consecutive,
         "stale": stale,
