@@ -24,7 +24,7 @@
 .venv/bin/python independent_check.py --db "$DB" --board live-0929/board-F1-2026-09-29.jsonl > independent_check.json
 ```
 
-`code_version` = `633a9e810722aedc`。board JSONL 未提交（体积大，可用上面命令重建）；summary JSON/MD 已提交。
+`code_version` = `c453bf09028a8e6f`（code review 修复后重跑；修复前 `633a9e810722aedc` 的四个方案榜单与修复后逐行比对，分数、评级、排名、徽章完全相同，只有回放中 33 只无财报股票的 EPS 缺失原因由 `eps_behind_current` 改为 `no_current_fiscal`）。board JSONL 未提交（体积大，可用上面命令重建）；summary JSON/MD 已提交。
 
 ### 第 3 条 live（as_of 2026-09-29）：通过
 
@@ -76,8 +76,25 @@
 
 ### 第 7 条 耗时
 
-live 8.3 秒，回放 10.5 秒（含建包），远低于 5 分钟。
+live 8.3 秒，回放 10.0 秒（含建包），远低于 5 分钟。
 
 ### 第 8 条 不写库
 
 CLI 用 `MarketStore(db_path=..., read_only=True)`，`tests/test_prosperity_score_cli.py::test_cli_scores_all_schemes_read_only` 断言通过。
+
+## code review high（2026-09-30）
+
+10 条，逐条核实后：
+
+| # | 结论 | 处理 |
+|---|---|---|
+| 1 `--as-of 20260929` 在 Python 3.11+ 被接受，原样字符串让泄漏检查失效 | 成立（复现：退出 0） | 两个 CLI 只接受 YYYY-MM-DD，否则退出 4；加测试 |
+| 2 revision 分子随固定季度数（2–4）变化 | 成立但属口径：live 737 只里 734 只是 4 季，3 只 2–3 季；北极星定义即"固定财季一致预期变化 ÷ 股价" | 未改，交 Boss 定是否按 4 季折算 |
+| 3 冻结包的 as_of/版本没有记进 BoardResult | 成立（M8 存档需要） | BoardResult 加 `frozen_as_of`、`frozen_params_version`；加测试 |
+| 4 读取参数包不校验内容哈希 | 成立 | `params_from_dict` 重算，不符抛 `params_version_mismatch`；加测试 |
+| 5 listing_date 规则与 `_listing_evidence` 在 NULL 市值行上可能分歧 | 快照里 NULL 市值行为 0；写法为计划 D-2 A 批准 | 未改 |
+| 6 PE 护栏里预期亏损股（E/P 为负）总落在最低分位 | 成立但属口径：F1 的 77 个红旗里 15 个是 E/P 为负 | 未改，交 Boss 定 |
+| 7 无当前财季时 EPS 缺失原因误记 `eps_behind_current` | 成立 | 改为 `no_current_fiscal`；加测试 |
+| 8 未使用的常量与 min_quarters 进哈希 | `FAMILIES`、`EXPECTATION_KEYS` 删除；min_quarters 是北极星"登记所需历史"的一部分，保留在哈希里 | 部分采纳 |
+| 9 rankable/usable 重复计算 | 成立但无影响（全流程 8–10 秒） | 未改 |
+| 10 因子行失败的点名样本被记成"非成员" | 成立 | 非成员改按建包结果判断；加测试 |

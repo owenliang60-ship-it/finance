@@ -37,3 +37,10 @@ def test_cli_opens_database_read_only(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "MarketStore", spy)
     cli.main(_args(tmp_path, db))
     assert seen["read_only"] is True
+
+
+def test_cli_rejects_non_canonical_dates(tmp_path):
+    db = seed_db(tmp_path / "m.db")
+    args = _args(tmp_path, db)
+    args[args.index("--as-of") + 1] = "20260926"
+    assert cli.main(args) == 4

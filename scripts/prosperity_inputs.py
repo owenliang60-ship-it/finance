@@ -112,9 +112,12 @@ def _markdown(s: Dict[str, Any]) -> str:
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
     try:
-        date.fromisoformat(args.as_of)
+        # Python 3.11+ also parses 20260929; the raw string would then slip past every date comparison
+        for value in (args.as_of, args.observed_at):
+            if value is not None and date.fromisoformat(value).isoformat() != value:
+                raise ValueError(f"dates must be YYYY-MM-DD, got {value}")
         if args.mode == "live":
-            if not args.observed_at or args.as_of < date.fromisoformat(args.observed_at).isoformat():
+            if not args.observed_at or args.as_of < args.observed_at:
                 raise ValueError("live mode needs --observed-at on or before --as-of")
     except ValueError as exc:
         print(f"invalid arguments: {exc}", file=sys.stderr)

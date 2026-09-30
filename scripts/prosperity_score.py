@@ -135,9 +135,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     started = time.perf_counter()
     args = parse_args(argv)
     try:
-        date.fromisoformat(args.as_of)
+        # Python 3.11+ also parses 20260929; the raw string would then slip past every date comparison
+        for value in (args.as_of, args.observed_at):
+            if value is not None and date.fromisoformat(value).isoformat() != value:
+                raise ValueError(f"dates must be YYYY-MM-DD, got {value}")
         if args.mode == "live":
-            if not args.observed_at or args.as_of < date.fromisoformat(args.observed_at).isoformat():
+            if not args.observed_at or args.as_of < args.observed_at:
                 raise ValueError("live mode needs --observed-at on or before --as-of")
         scheme_ids = [s.strip() for s in args.schemes.split(",")] if args.schemes else list(SCHEMES)
         unknown = [s for s in scheme_ids if s not in SCHEMES]
@@ -193,7 +196,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "schemes": {sid: _scheme_summary(b, rows_by_symbol) for sid, b in boards.items()},
         "scheme_hashes": {sid: scheme_hash(SCHEMES[sid]) for sid in scheme_ids},
         "named_cases": {r.symbol: _named_case(r, by_packet[r.symbol], boards) for r in rows if r.symbol in named},
-        "named_not_members": sorted(set(named) - set(rows_by_symbol)),
+        "named_not_members": sorted(set(named) - {p.symbol for p in packets}),
         "seconds": round(time.perf_counter() - started, 1),
     })
     (out / f"summary-{args.as_of}.json").write_text(json.dumps(summary, indent=2, sort_keys=True, default=str))

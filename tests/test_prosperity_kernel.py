@@ -214,3 +214,18 @@ def test_excluded_rows_do_not_enter_the_cross_section():
     assert next(r for r in exfin.rows if r.symbol == "JPM").status == "excluded"
     base = score_board(rows[:6], get_scheme("F1-exfin"), frozen=None, as_of="2026-09-26", code_version="t")
     assert [r.score for r in exfin.rows if r.status == "ranked"] == [r.score for r in base.rows]
+
+
+def test_board_records_which_frozen_package_scored_it():
+    frozen = estimate_params(_week("2026-06-27"), F1, as_of="2026-06-27", code_version="t")
+    board = score_board(_week("2026-07-04"), F1, frozen=frozen, as_of="2026-07-04", code_version="t")
+    assert (board.frozen_as_of, board.frozen_params_version) == ("2026-06-27", frozen.params_version)
+    boot = score_board(_week("2026-07-04"), F1, frozen=None, as_of="2026-07-04", code_version="t")
+    assert (boot.frozen_as_of, boot.frozen_params_version) == (None, None)
+
+
+def test_stored_params_must_match_their_content_hash():
+    d = params_to_dict(estimate_params(_week("2026-09-26"), F1, as_of="2026-09-26", code_version="t"))
+    d["winsor"]["revenue_yoy"]["hi"] += 1.0                              # edited after it was stored
+    with pytest.raises(ValueError, match="params_version_mismatch"):
+        params_from_dict(d)

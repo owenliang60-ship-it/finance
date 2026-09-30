@@ -26,7 +26,6 @@ FCF_OUTLIER_PCT = 200.0          # original site patch: |FCF margin| or its chan
 EPS_BLOCKING_LABELS = ("eps_conflicting_quarter", "eps_invalid_announcement_time", "eps_invalid_actual",
                        "eps_split_unconfirmed")
 EPS_KEYS = ("eps_sue", "eps_accel", "eps_ttm_leg", "eps_yoy_pct")
-EXPECTATION_KEYS = ("surprise", "revision", "ntm_eps", "ttm_eps", "ep_ntm", "pe_ntm", "pe_ttm", "ntm_growth")
 AUX_KEYS = ("net_margin_yoy", "gm_slope", "ntm_eps", "ttm_eps", "ep_ntm", "pe_ntm", "pe_ttm", "ntm_growth",
             "eps_yoy_pct", "eps_ttm_leg", "revenue_ttm_leg", "beta", "price")
 STATEMENT_KEYS = ("revenue_yoy", "revenue_accel", "gm_level", "gm_yoy", "fcf_margin_yoy", "net_margin_yoy",
@@ -249,7 +248,7 @@ def statement_factors(quarters: Sequence[QuarterInputs], *, day_adjust: bool = T
     return _out(results, s.labels, {"fiscal_date": quarters[-1].fiscal_date})
 
 
-def eps_factors(eps: Sequence[EpsQuarter]) -> FactorOut:
+def eps_factors(eps: Sequence[EpsQuarter], empty_reason: str = "eps_behind_current") -> FactorOut:
     """Street EPS factors on M4's window (oldest first, aligned to the current fiscal quarter).
 
     A blocking label or blank value anywhere in a SUE dependency window blanks the factor;
@@ -257,7 +256,7 @@ def eps_factors(eps: Sequence[EpsQuarter]) -> FactorOut:
     and `gaap_split_basis_break` pass (D-9, Boss 2026-09-30); the retrospective one is surfaced.
     """
     if not eps:
-        return FactorOut({k: None for k in EPS_KEYS}, {k: "eps_behind_current" for k in EPS_KEYS})
+        return FactorOut({k: None for k in EPS_KEYS}, {k: empty_reason for k in EPS_KEYS})
     newest = list(reversed(eps))
     heads = [q.fiscal_date for q in newest]
     series = [(q.fiscal_date, q.eps_actual) for q in newest]
@@ -354,7 +353,9 @@ def expectation_factors(packet: InputPacket) -> FactorOut:
 
 
 def compute_factor_row(packet: InputPacket) -> FactorRow:
-    parts = (statement_factors(packet.quarters), eps_factors(packet.eps), expectation_factors(packet))
+    # M4 leaves the EPS window empty both when EPS lags the statements and when there is no current quarter
+    empty = "eps_behind_current" if packet.current_fiscal else "no_current_fiscal"
+    parts = (statement_factors(packet.quarters), eps_factors(packet.eps, empty), expectation_factors(packet))
     values: Dict[str, Optional[float]] = {}
     missing: Dict[str, str] = {}
     for part in parts:

@@ -17,7 +17,6 @@ from typing import Mapping, Optional, Sequence, Tuple
 
 SCORING_FACTORS = ("revenue_accel", "eps_accel", "revenue_yoy", "eps_sue", "growth_4q",
                    "gm_yoy", "gm_level", "fcf_margin_yoy", "surprise", "revision")
-FAMILIES = ("accel", "growth", "quality", "expectation")
 TRANSFORMS = ("winsor_z", "rank_z")
 GATES = ("net_margin_down", "new_listing", "ntm_not_above_ttm")
 # North star: the expectation family is capped (least verifiable locally, most decay evidence in large caps)

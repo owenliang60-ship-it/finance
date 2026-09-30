@@ -1,6 +1,6 @@
 {
   "as_of": "2024-08-17",
-  "code_version": "633a9e810722aedc",
+  "code_version": "c453bf09028a8e6f",
   "db_path": "/Users/owen/CC workspace/Finance/data/backups/prosperity/phase0-accepted-input-20260929/market.db",
   "eps_split_retrospective_symbols": [
     "ANET",
@@ -827,8 +827,8 @@
       "labels": [],
       "listing_days": 4387,
       "missing": {
-        "eps_accel": "eps_behind_current",
-        "eps_sue": "eps_behind_current",
+        "eps_accel": "no_current_fiscal",
+        "eps_sue": "no_current_fiscal",
         "fcf_margin_yoy": "no_statements",
         "gm_level": "no_statements",
         "gm_yoy": "no_statements",
@@ -874,8 +874,8 @@
           "demotions": [],
           "grade": null,
           "missing": {
-            "eps_accel": "eps_behind_current",
-            "eps_sue": "eps_behind_current",
+            "eps_accel": "no_current_fiscal",
+            "eps_sue": "no_current_fiscal",
             "fcf_margin_yoy": "no_statements",
             "gm_level": "no_statements",
             "gm_yoy": "no_statements",
@@ -909,8 +909,8 @@
           "demotions": [],
           "grade": null,
           "missing": {
-            "eps_accel": "eps_behind_current",
-            "eps_sue": "eps_behind_current",
+            "eps_accel": "no_current_fiscal",
+            "eps_sue": "no_current_fiscal",
             "fcf_margin_yoy": "no_statements",
             "gm_level": "no_statements",
             "gm_yoy": "no_statements",
@@ -944,8 +944,8 @@
           "demotions": [],
           "grade": null,
           "missing": {
-            "eps_accel": "eps_behind_current",
-            "eps_sue": "eps_behind_current",
+            "eps_accel": "no_current_fiscal",
+            "eps_sue": "no_current_fiscal",
             "fcf_margin_yoy": "no_statements",
             "gm_level": "no_statements",
             "gm_yoy": "no_statements",
@@ -1951,18 +1951,20 @@
   },
   "raw_missing_reason_counts": {
     "eps_accel": {
-      "eps_behind_current": 95,
+      "eps_behind_current": 62,
       "eps_conflicting_quarter": 19,
       "eps_split_unconfirmed": 1,
       "few_sigma_obs": 15,
+      "no_current_fiscal": 33,
       "no_prior_quarter": 14,
       "no_yoy_pair": 5
     },
     "eps_sue": {
-      "eps_behind_current": 95,
+      "eps_behind_current": 62,
       "eps_conflicting_quarter": 20,
       "eps_split_unconfirmed": 1,
       "few_sigma_obs": 16,
+      "no_current_fiscal": 33,
       "no_yoy_pair": 5
     },
     "fcf_margin_yoy": {
@@ -2750,18 +2752,20 @@
       },
       "missing_reason_counts": {
         "eps_accel": {
-          "eps_behind_current": 95,
+          "eps_behind_current": 62,
           "eps_conflicting_quarter": 19,
           "eps_split_unconfirmed": 1,
           "few_sigma_obs": 15,
+          "no_current_fiscal": 33,
           "no_prior_quarter": 14,
           "no_yoy_pair": 5
         },
         "eps_sue": {
-          "eps_behind_current": 95,
+          "eps_behind_current": 62,
           "eps_conflicting_quarter": 20,
           "eps_split_unconfirmed": 1,
           "few_sigma_obs": 16,
+          "no_current_fiscal": 33,
           "no_yoy_pair": 5
         },
         "fcf_margin_yoy": {
@@ -3553,18 +3557,20 @@
       },
       "missing_reason_counts": {
         "eps_accel": {
-          "eps_behind_current": 82,
+          "eps_behind_current": 55,
           "eps_conflicting_quarter": 12,
           "eps_split_unconfirmed": 1,
           "few_sigma_obs": 14,
+          "no_current_fiscal": 27,
           "no_prior_quarter": 12,
           "no_yoy_pair": 4
         },
         "eps_sue": {
-          "eps_behind_current": 82,
+          "eps_behind_current": 55,
           "eps_conflicting_quarter": 13,
           "eps_split_unconfirmed": 1,
           "few_sigma_obs": 16,
+          "no_current_fiscal": 27,
           "no_yoy_pair": 4
         },
         "fcf_margin_yoy": {
@@ -4350,18 +4356,20 @@
       },
       "missing_reason_counts": {
         "eps_accel": {
-          "eps_behind_current": 95,
+          "eps_behind_current": 62,
           "eps_conflicting_quarter": 19,
           "eps_split_unconfirmed": 1,
           "few_sigma_obs": 15,
+          "no_current_fiscal": 33,
           "no_prior_quarter": 14,
           "no_yoy_pair": 5
         },
         "eps_sue": {
-          "eps_behind_current": 95,
+          "eps_behind_current": 62,
           "eps_conflicting_quarter": 20,
           "eps_split_unconfirmed": 1,
           "few_sigma_obs": 16,
+          "no_current_fiscal": 33,
           "no_yoy_pair": 5
         },
         "fcf_margin_yoy": {
@@ -5118,7 +5126,7 @@
       }
     }
   },
-  "seconds": 10.5,
+  "seconds": 10.0,
   "surprise_source_counts": {
     "vendor_estimate": 614
   }

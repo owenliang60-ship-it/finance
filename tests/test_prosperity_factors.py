@@ -205,3 +205,9 @@ def test_listing_days_is_raw_age_and_the_threshold_lives_in_the_scheme():
     assert compute_factor_row(pkt(qs, listing_date="2024-09-25")).listing_days == 731
     unknown = compute_factor_row(pkt(qs, listing_date=None))
     assert unknown.listing_days is None and "listing_date_unknown" in unknown.labels
+
+
+def test_packet_without_current_fiscal_is_not_blamed_on_eps():
+    row = compute_factor_row(pkt([]))
+    assert row.missing["eps_sue"] == "no_current_fiscal" and row.missing["growth_4q"] == "no_statements"
+    assert eps_factors(()).missing["eps_sue"] == "eps_behind_current"

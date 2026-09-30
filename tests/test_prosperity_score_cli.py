@@ -34,3 +34,28 @@ def test_cli_rejects_unknown_scheme(tmp_path):
 def test_cli_fails_closed_on_leak(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "packet_leaks", lambda p: ["price_date later than as_of"])
     assert cli.main(_args(tmp_path, seed_db(tmp_path / "m.db"))) == 2
+
+
+def test_cli_rejects_non_canonical_dates(tmp_path):
+    """Python 3.11+ parses '20260926'; the raw string would then slip past every date comparison."""
+    db = seed_db(tmp_path / "m.db")
+    args = _args(tmp_path, db)
+    args[args.index("--as-of") + 1] = "20260926"
+    assert cli.main(args) == 4
+    args = _args(tmp_path, db)
+    args[args.index("--observed-at") + 1] = "20260926"
+    assert cli.main(args) == 4
+
+
+def test_named_case_whose_factor_row_failed_is_an_error_not_a_non_member(tmp_path, monkeypatch):
+    real = cli.compute_factor_row
+
+    def boom(p):
+        if p.symbol == "AAA":
+            raise RuntimeError("bad packet")
+        return real(p)
+
+    monkeypatch.setattr(cli, "compute_factor_row", boom)
+    assert cli.main(_args(tmp_path, seed_db(tmp_path / "m.db"), "--symbols", "AAA")) == 3
+    summary = json.loads((tmp_path / "out" / "summary-2026-09-26.json").read_text())
+    assert "AAA" in summary["errors"] and summary["named_not_members"] == []

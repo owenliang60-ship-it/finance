@@ -55,16 +55,16 @@ def _check_rows(rows: Sequence[FactorRow], as_of: str) -> None:
         raise ValueError(f"row_as_of_mismatch: rows dated {stray[:3]} on a {as_of} board")
 
 
-def _package(scheme: Scheme, code_version: str, as_of: str, winsor: Mapping[str, WinsorParams],
+def _package(scheme_id: str, s_hash: str, code_version: str, as_of: str, winsor: Mapping[str, WinsorParams],
              reference: Mapping[str, Tuple[float, ...]], bounds: Optional[Tuple[float, ...]],
              n_rankable: int) -> ParamsPackage:
-    body = {"scheme_id": scheme.scheme_id, "scheme_hash": scheme_hash(scheme), "code_version": code_version,
+    body = {"scheme_id": scheme_id, "scheme_hash": s_hash, "code_version": code_version,
             "as_of": as_of, "winsor": {f: asdict(p) for f, p in winsor.items()},
             "reference": {f: list(v) for f, v in reference.items()},
             "slope_bounds": None if bounds is None else list(bounds), "n_rankable": n_rankable}
     version = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:16]
-    return ParamsPackage(scheme.scheme_id, body["scheme_hash"], code_version, as_of, dict(winsor),
-                         dict(reference), bounds, n_rankable, version)
+    return ParamsPackage(scheme_id, s_hash, code_version, as_of, dict(winsor), dict(reference), bounds,
+                         n_rankable, version)
 
 
 def params_to_dict(p: ParamsPackage) -> dict:
@@ -75,11 +75,14 @@ def params_to_dict(p: ParamsPackage) -> dict:
 
 
 def params_from_dict(d: Mapping) -> ParamsPackage:
-    return ParamsPackage(
-        d["scheme_id"], d["scheme_hash"], d["code_version"], d["as_of"],
-        {f: WinsorParams(**w) for f, w in d["winsor"].items()},
-        {f: tuple(v) for f, v in d["reference"].items()},
-        None if d["slope_bounds"] is None else tuple(d["slope_bounds"]), d["n_rankable"], d["params_version"])
+    """Rebuild a stored package; its content must still hash to the stored params_version."""
+    p = _package(d["scheme_id"], d["scheme_hash"], d["code_version"], d["as_of"],
+                 {f: WinsorParams(**w) for f, w in d["winsor"].items()},
+                 {f: tuple(v) for f, v in d["reference"].items()},
+                 None if d["slope_bounds"] is None else tuple(d["slope_bounds"]), d["n_rankable"])
+    if p.params_version != d["params_version"]:
+        raise ValueError(f"params_version_mismatch: stored {d['params_version']}, content {p.params_version}")
+    return p
 
 
 def winsor_params(values: Sequence[float], k: float) -> WinsorParams:
@@ -167,8 +170,8 @@ def estimate_params(rows: Sequence[FactorRow], scheme: Scheme, *, as_of: str, co
             if p.sigma > 0:
                 winsor[f] = p
     slopes = [s for s in (_slope(r) for r in ranked) if s is not None]
-    return _package(scheme, code_version, as_of, winsor, reference, slope_bounds(slopes, scheme.slope_tiers),
-                    len(ranked))
+    return _package(scheme.scheme_id, scheme_hash(scheme), code_version, as_of, winsor, reference,
+                    slope_bounds(slopes, scheme.slope_tiers), len(ranked))
 
 
 def standardize(rows: Sequence[FactorRow], scheme: Scheme, *, frozen: Optional[ParamsPackage], as_of: str,
@@ -196,8 +199,9 @@ def standardize(rows: Sequence[FactorRow], scheme: Scheme, *, frozen: Optional[P
                     out[f] = source[f]
             return out
 
-        used = _package(scheme, code_version, as_of, pick(frozen.winsor, current.winsor),
-                        pick(frozen.reference, current.reference), frozen.slope_bounds, current.n_rankable)
+        used = _package(scheme.scheme_id, scheme_hash(scheme), code_version, as_of,
+                        pick(frozen.winsor, current.winsor), pick(frozen.reference, current.reference),
+                        frozen.slope_bounds, current.n_rankable)
     z: Dict[str, Dict[str, float]] = {}
     for row in rows:
         if not rankable(row, scheme)[0]:
@@ -261,10 +265,12 @@ class BoardResult:
     scheme_hash: str
     code_version: str
     as_of: str
-    params: ParamsPackage
+    params: ParamsPackage                      # what scored this board: frozen quarterly + this board's weekly
     params_bootstrap: bool
     rows: Tuple[ScoredRow, ...]
     counts: Mapping[str, int]
+    frozen_as_of: Optional[str] = None         # the frozen package behind `params`, when one was used
+    frozen_params_version: Optional[str] = None
 
 
 def is_new_listing(row: FactorRow, scheme: Scheme) -> bool:
@@ -379,4 +385,5 @@ def score_board(rows: Sequence[FactorRow], scheme: Scheme, *, frozen: Optional[P
     order = ranked + rest("observe") + rest("excluded")
     scored = tuple(ScoredRow(**{**out[s], "badges": tuple(dict.fromkeys(out[s]["badges"]))}) for s in order)
     counts = {k: sum(r.status == k for r in scored) for k in ("ranked", "observe", "excluded")}
-    return BoardResult(scheme.scheme_id, scheme_hash(scheme), code_version, as_of, used, boot, scored, counts)
+    return BoardResult(scheme.scheme_id, scheme_hash(scheme), code_version, as_of, used, boot, scored, counts,
+                       frozen.as_of if frozen else None, frozen.params_version if frozen else None)
