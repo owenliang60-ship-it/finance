@@ -114,3 +114,5 @@ class InputPacket:
     pit_basis: str
     flags: Tuple[str, ...]
     archive: Mapping[str, Any]
+    # profile ipoDate unless market-cap history predates it (then untrusted); static, not sliced by as_of
+    listing_date: Optional[str] = None

@@ -111,6 +111,10 @@ def build_packet(history: SymbolHistory, as_of: str, *, mode: str, membership_ba
         "statement_conflicts": list(qb.dropped),
     }
     profile = history.profile or {}
+    # Same rule as scripts/verify_prosperity_history.py _listing_evidence (D-2 A, Boss 2026-09-29)
+    ipo = (profile.get("ipoDate") or "")[:10] or None
+    first_cap = history.market_caps[0][0] if history.market_caps else None
+    listing_date = ipo if ipo and (first_cap is None or first_cap >= ipo) else None
     return InputPacket(
         symbol=history.symbol, as_of=as_of[:10], membership_basis=membership_basis,
         sector=profile.get("sector"), industry=profile.get("industry"),
@@ -118,7 +122,8 @@ def build_packet(history: SymbolHistory, as_of: str, *, mode: str, membership_ba
         data_age_days=(_d(as_of) - _d(qb.current_fiscal)).days if qb.current_fiscal else None,
         reported_this_week=reported, quarters=qb.quarters, eps=window, consensus=consensus,
         price_asof=price, price_date=price_date, market_cap_asof=mcap, beta=beta,
-        pit=pit, pit_basis=min(pit.values(), key=PIT_RANK.__getitem__), flags=tuple(flags), archive=archive)
+        pit=pit, pit_basis=min(pit.values(), key=PIT_RANK.__getitem__), flags=tuple(flags), archive=archive,
+        listing_date=listing_date)
 
 
 def packet_leaks(packet: InputPacket) -> List[str]:

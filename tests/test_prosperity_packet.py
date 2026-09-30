@@ -146,3 +146,14 @@ def test_requested_non_members_are_reported(tmp_path):
     packets, meta = inputs.build_packets(store, "2026-09-26", mode="live", observed_at="2026-09-26",
                                          symbols=["AAA", "ZZZ"], with_beta=False)
     assert [p.symbol for p in packets] == ["AAA"] and meta["requested_not_members"] == ["ZZZ"]
+
+
+def test_listing_date_comes_from_profile_unless_market_cap_history_predates_it():
+    h = replace(_usd_history(), profile={"sector": "Technology", "ipoDate": "2024-05-01"},
+                market_caps=[("2024-05-02", 1e10), ("2026-03-06", 3e10)])
+    build = lambda x: build_packet(x, "2026-03-07", mode="replay", membership_basis="approximate_mcap",
+                                   benchmark_closes=[])
+    assert build(h).listing_date == "2024-05-01"
+    relisted = replace(h, market_caps=[("2019-01-02", 5e9)] + h.market_caps)   # vendor ipoDate later than trading history
+    assert build(relisted).listing_date is None
+    assert build(replace(h, profile={"sector": "Technology"})).listing_date is None

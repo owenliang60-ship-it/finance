@@ -54,7 +54,7 @@ def _named_case(p) -> Dict[str, Any]:
         "ntm": {"value": p.consensus.ntm.value, "basis": p.consensus.ntm.basis,
                 "quarters": [list(q) for q in p.consensus.ntm.quarters],
                 "missing_reason": p.consensus.ntm.missing_reason},
-        "flags": list(p.flags), "pit": dict(p.pit),
+        "flags": list(p.flags), "pit": dict(p.pit), "listing_date": p.listing_date,
     }
 
 
@@ -82,6 +82,7 @@ def _summary(args, packets, meta, leaks) -> Dict[str, Any]:
         "pre_announce_available": sum(p.consensus.pre_announce.value is not None for p in packets),
         "revision_available": sum(p.consensus.revision.delta_eps is not None for p in packets),
         "unit_unverified": sum("unit_unverified" in p.flags for p in packets),
+        "listing_date_known": sum(p.listing_date is not None for p in packets),
         "flag_counts": dict(flags.most_common()), "eps_label_counts": dict(eps_labels.most_common()),
         "quality_code_counts": dict(quality.most_common()),
         "pit_counts": dict(Counter(p.pit_basis for p in packets)),
@@ -96,7 +97,7 @@ def _markdown(s: Dict[str, Any]) -> str:
     lines += ["| 指标 | 数量 |", "|---|---|"]
     for key in ("members_resolved", "packets_built", "with_current_fiscal", "quarters_ge_8", "eps_window_ge_13",
                 "ntm_available", "pre_announce_available", "revision_available", "unit_unverified",
-                "future_leak_count"):
+                "listing_date_known", "future_leak_count"):
         lines.append(f"| {key} | {s[key]} |")
     lines += ["", f"- 单股错误：{len(s['errors'])}", f"- 请求但当期不是成员：{s['requested_not_members'] or '无'}", f"- 点时等级：{s['pit_counts']}",
               f"- EPS 标签：{s['eps_label_counts']}", f"- 质量码：{s['quality_code_counts']}", "",
