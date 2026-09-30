@@ -5,8 +5,10 @@ from datetime import date, timedelta
 
 import pytest
 
+import scripts.prosperity_s1 as cli
 from backtest.research import prosperity_s1 as s1
-from tests.prosperity_fixtures import qends, qin
+from terminal.prosperity.types import SymbolHistory
+from tests.prosperity_fixtures import bs, cf, inc, qends, qin, seed_db
 
 Q8 = qends(8)                      # 2024-09-30 … 2026-06-30
 FLAT = {"revenue_yoy_pct": 0.0, "revenue_yoy_accel": 0.0, "gm_pct": 50.0, "gm_yoy_pp": 0.0,
@@ -257,3 +259,79 @@ def test_a_board_whose_rows_do_not_add_up_is_not_reconciled():
     s = s1.summarize([comp("2022-06-30")], site_rows={"2022-06-30": 2}, excluded=[], errors=[], timing=[],
                      since="2021-01-01")
     assert s["by_board"]["2022-06-30"]["reconciled"] is False and s["reconciled"] is False
+
+
+# ---- Task 5: read-only CLI ----
+
+Q12 = qends(12)
+
+
+def _history(symbol):
+    rows = []
+    if symbol == "AAA":
+        for f in Q12:
+            accepted = (date.fromisoformat(f) + timedelta(days=30)).isoformat() + " 16:00:00"
+            rows.append((f, f[:4], f"Q{(int(f[5:7]) - 1) // 3 + 1}", accepted))
+    return SymbolHistory(symbol=symbol, income=[inc(*r, rev=100e6) for r in rows],
+                         balance=[bs(*r) for r in rows], cashflow=[cf(*r) for r in rows], vintage={},
+                         earnings=[], estimates=[], splits=[], closes=[], market_caps=[], profile=None,
+                         is_adr=False)
+
+
+def _cli_fixture(tmp_path):
+    series = {"q": Q12[-8:], "gm": [60.0] * 8, "fcfm": [1.5e-5] * 8}   # inc(): gross 60%; cf(): FCF fixed at 15
+    behind = [site_row("AAA", values={"gm_pct": 61.0}, series=series)]
+    live = [site_row("AAA", values={"gm_pct": 60.0}, series=series), site_row("ZZZ")]
+    path = tmp_path / "fixture.json"
+    path.write_text(json.dumps(fixture(("2026-07-15", behind), ("2026-09-02", live))))
+    return path
+
+
+def test_cli_end_to_end_read_only(tmp_path, monkeypatch):
+    db = seed_db(tmp_path / "m.db")
+    seen, real = {}, cli.MarketStore
+
+    def spy(db_path=None, read_only=False):
+        seen["read_only"] = read_only
+        return real(db_path=db_path, read_only=read_only)
+
+    monkeypatch.setattr(cli, "MarketStore", spy)
+    monkeypatch.setattr(cli, "load_history", lambda store, sym, with_vintage: _history(sym))
+    private, report = tmp_path / "private", tmp_path / "report"
+    code = cli.main(["--fixture", str(_cli_fixture(tmp_path)), "--db", str(db), "--private-dir", str(private),
+                     "--report-dir", str(report)])
+    assert code == 5 and seen["read_only"] is True                  # 11 / 12 = 91.7% < 95%
+    s = json.loads((report / "summary.json").read_text())
+    assert (s["gate"]["counted"], s["gate"]["passed"]) == (12, 11)
+    assert s["timing"] == {"ours_behind": 1, "match": 1}             # 2026-06-30 files on 07-30
+    assert s["aligned_by"] == {"rebuilt": 1, "asof": 1}
+    assert s["excluded"] == {"symbols": {"ZZZ": "not_in_our_data"}, "rows_all": 1, "rows_since": 1,
+                             "list": [{"board": "2026-09-02", "site_symbol": "ZZZ", "reason": "not_in_our_data"}]}
+    assert s["reconciled"] is True and s["by_board"]["2026-09-02"]["site_rows"] == 2
+    assert s["failures"] == [{"board": "2026-07-15", "symbol": "AAA", "site_symbol": "AAA", "factor": "gm_level",
+                              "category": "unexplained", "detail": ""}]
+    assert "61.0" not in (report / "summary.json").read_text() + (report / "summary.md").read_text()
+    rows = list(csv.DictReader((private / "rows.csv").open()))
+    assert len(rows) == 24 and any(r["site_value"] == "61.0" for r in rows)
+
+
+def _git_repo(tmp_path):
+    """A throwaway repository ignoring only /ignored/ (stands in for the main checkout seen from a worktree)."""
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (repo / ".gitignore").write_text("/ignored/\n")
+    return repo
+
+
+def test_private_dir_check_follows_the_owning_repository(tmp_path):
+    repo = _git_repo(tmp_path)
+    assert cli.private_dir_problem(repo / "reports" / "s1-private") is not None     # tracked location
+    assert cli.private_dir_problem(repo / "ignored" / "s1") is None                   # ignored by that repo
+    assert cli.private_dir_problem(tmp_path / "outside") is None                      # not in any repository
+
+
+def test_cli_refuses_a_private_dir_git_would_track(tmp_path):
+    target = _git_repo(tmp_path) / "reports" / "s1-private"
+    code = cli.main(["--fixture", str(tmp_path / "f.json"), "--db", str(tmp_path / "m.db"),
+                     "--private-dir", str(target), "--report-dir", str(tmp_path / "report")])
+    assert code == 4 and not target.exists()
