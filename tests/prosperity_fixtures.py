@@ -166,3 +166,23 @@ def pkt(quarters, eps=(), consensus=None, *, symbol="AAA", as_of="2026-09-26", p
                        price_asof=price, price_date=as_of if price is not None else None, market_cap_asof=None,
                        beta=None, pit={}, pit_basis="live", flags=tuple(flags), archive={},
                        listing_date=listing_date)          # listing_date: D-2 方案 A
+
+
+from terminal.prosperity.factors import FactorRow
+from terminal.prosperity.schemes import SCORING_FACTORS
+
+OK_AUX = {"net_margin_yoy": 1.0, "ntm_eps": 5.0, "ttm_eps": 4.0, "gm_slope": None, "ep_ntm": None}
+
+
+def full_values(i):
+    """Distinct values per factor; a higher i is higher on every factor."""
+    return {f: float(i + k) for k, f in enumerate(SCORING_FACTORS)}
+
+
+def frow(symbol, values, *, sector="Technology", industry="Semiconductors", disclosed=8,
+         listing_days=5000, aux=None, flags=(), as_of="2026-09-26"):
+    vals = {f: values.get(f) for f in SCORING_FACTORS}
+    return FactorRow(symbol=symbol, as_of=as_of, current_fiscal="2026-06-30", sector=sector, industry=industry,
+                     disclosed_quarters=disclosed, listing_days=listing_days, values=vals,
+                     missing={f: "test_missing" for f, v in vals.items() if v is None},
+                     aux={**OK_AUX, **(aux or {})}, labels=(), packet_flags=tuple(flags), pit_basis="live")
