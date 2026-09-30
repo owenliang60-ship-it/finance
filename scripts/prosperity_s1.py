@@ -19,7 +19,7 @@ from collections import Counter
 from dataclasses import asdict, fields
 from datetime import date, timedelta
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -78,6 +78,13 @@ def private_dir_problem(path: Path) -> Optional[str]:
     return f"{unsure}: {ignored.stderr.strip()}"
 
 
+def _share_class_of(store: MarketStore) -> Dict[str, str]:
+    """security_master's secondary share classes (ticker → primary), the rule that keeps them out of our pool."""
+    rows = store._get_conn().execute("SELECT symbol, share_class_of FROM security_master "
+                                     "WHERE share_class_of IS NOT NULL AND share_class_of != ''").fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
 def _packet(history: SymbolHistory, as_of: str) -> InputPacket:
     return build_packet(history, as_of, mode="replay", membership_basis="s1_fixture", benchmark_closes=(),
                         with_beta=False)
@@ -113,8 +120,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"invalid arguments: {exc}", file=sys.stderr)
         return 4
     data = json.loads(Path(args.fixture).read_text())
-    rows = load_site_rows(data)
     store = MarketStore(db_path=Path(args.db), read_only=True)
+    rows = load_site_rows(data, share_class_of=_share_class_of(store))
     histories = {}
     comparisons, excluded, errors, timing = [], [], [], []
     for row in rows:

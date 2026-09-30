@@ -38,11 +38,13 @@ def flat_quarters(n=8):
 # ---- Task 1: the original site's rows ----
 
 def test_load_site_rows_maps_symbols_and_factor_keys():
-    data = fixture(("2026-06-30", [site_row("SQ"), site_row("BRK.B"), site_row("BRK.A"), site_row("MSFT")]))
-    rows = s1.load_site_rows(data)
+    data = fixture(("2026-06-30", [site_row("SQ"), site_row("BRK.B"), site_row("BRK.A"), site_row("GOOGL"),
+                                   site_row("MSFT")]))
+    # security_master.share_class_of: one ticker per issuer (Boss 2026-09-30)
+    rows = s1.load_site_rows(data, share_class_of={"BRK-A": "BRK-B", "GOOGL": "GOOG"})
     assert [(r.site_symbol, r.symbol, r.skip_reason) for r in rows] == [
         ("SQ", "XYZ", None), ("BRK.B", "BRK-B", None), ("BRK.A", "BRK-A", "duplicate_share_class"),
-        ("MSFT", "MSFT", None)]
+        ("GOOGL", "GOOGL", "duplicate_share_class"), ("MSFT", "MSFT", None)]
     r = rows[-1]
     assert (r.board, r.latest_q) == ("2026-06-30", Q8[-1])
     assert r.values == {"revenue_yoy": 0.0, "revenue_accel": 0.0, "gm_level": 50.0, "gm_yoy": 0.0,
@@ -281,7 +283,7 @@ def _history(symbol):
 def _cli_fixture(tmp_path):
     series = {"q": Q12[-8:], "gm": [60.0] * 8, "fcfm": [1.5e-5] * 8}   # inc(): gross 60%; cf(): FCF fixed at 15
     behind = [site_row("AAA", values={"gm_pct": 61.0}, series=series)]
-    live = [site_row("AAA", values={"gm_pct": 60.0}, series=series), site_row("ZZZ")]
+    live = [site_row("AAA", values={"gm_pct": 60.0}, series=series), site_row("ZZZ"), site_row("AAA.B")]
     path = tmp_path / "fixture.json"
     path.write_text(json.dumps(fixture(("2026-07-15", behind), ("2026-09-02", live))))
     return path
@@ -289,6 +291,10 @@ def _cli_fixture(tmp_path):
 
 def test_cli_end_to_end_read_only(tmp_path, monkeypatch):
     db = seed_db(tmp_path / "m.db")
+    conn = cli.MarketStore(db_path=db)._get_conn()
+    with conn:                                                       # AAA-B is AAA's secondary share class
+        conn.execute("INSERT INTO security_master (symbol, is_adr, share_class_of, eligible, reason, updated_at) "
+                     "VALUES ('AAA-B', 0, 'AAA', 0, 'secondary_share_class', 't')")
     seen, real = {}, cli.MarketStore
 
     def spy(db_path=None, read_only=False):
@@ -305,9 +311,12 @@ def test_cli_end_to_end_read_only(tmp_path, monkeypatch):
     assert (s["gate"]["counted"], s["gate"]["passed"]) == (12, 11)
     assert s["timing"] == {"ours_behind": 1, "match": 1}             # 2026-06-30 files on 07-30
     assert s["aligned_by"] == {"rebuilt": 1, "asof": 1}
-    assert s["excluded"] == {"symbols": {"ZZZ": "not_in_our_data"}, "rows_all": 1, "rows_since": 1,
-                             "list": [{"board": "2026-09-02", "site_symbol": "ZZZ", "reason": "not_in_our_data"}]}
-    assert s["reconciled"] is True and s["by_board"]["2026-09-02"]["site_rows"] == 2
+    assert s["excluded"] == {"symbols": {"ZZZ": "not_in_our_data", "AAA.B": "duplicate_share_class"},
+                             "rows_all": 2, "rows_since": 2,
+                             "list": [{"board": "2026-09-02", "site_symbol": "ZZZ", "reason": "not_in_our_data"},
+                                      {"board": "2026-09-02", "site_symbol": "AAA.B",
+                                       "reason": "duplicate_share_class"}]}
+    assert s["reconciled"] is True and s["by_board"]["2026-09-02"]["site_rows"] == 3
     assert s["failures"] == [{"board": "2026-07-15", "symbol": "AAA", "site_symbol": "AAA", "factor": "gm_level",
                               "category": "unexplained", "detail": ""}]
     assert "61.0" not in (report / "summary.json").read_text() + (report / "summary.md").read_text()

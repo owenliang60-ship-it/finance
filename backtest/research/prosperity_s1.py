@@ -26,8 +26,6 @@ FACTORS: Tuple[Tuple[str, str], ...] = (
     ("net_margin_yoy_pp", "net_margin_yoy"),
 )
 SYMBOL_MAP = {"SQ": "XYZ"}                      # Block renamed its ticker to XYZ in 2025
-# Same issuer and statements as BRK.B, which sits on every board BRK.A does after 2021
-SKIP = {"BRK.A": "duplicate_share_class"}
 # dq.repairs field → input series; unknown fields are kept as-is and never explain a difference
 REPAIR_FIELDS = {"revenue": "rev", "gross_margin": "gm", "fcf_margin": "fcfm", "net_margin": "nim"}
 _SERIES = (("rev", "rev_abs_series"), ("gm", "gm_series"), ("fcfm", "fcfm_series"), ("nim", "nim_series"))
@@ -83,7 +81,11 @@ def _at(values, i):
     return values[i] if values is not None and i < len(values) else None
 
 
-def load_site_rows(data: Mapping) -> List[SiteRow]:
+def load_site_rows(data: Mapping, share_class_of: Optional[Mapping[str, str]] = None) -> List[SiteRow]:
+    """Expand every board's rows. `share_class_of` (security_master: secondary → primary ticker)
+    marks a secondary class as a duplicate: one ticker per issuer (Boss 2026-09-30), the same
+    rule that keeps it out of our pool; e.g. GOOGL and BRK.A sit on every board with GOOG and BRK.B."""
+    secondary = share_class_of or {}
     out = []
     for board in data["boards"]:
         for row in board["rows"]:
@@ -93,10 +95,12 @@ def load_site_rows(data: Mapping) -> List[SiteRow]:
             repairs = tuple((r["quarter"][:10], REPAIR_FIELDS.get(r["field"], r["field"]))
                             for r in (row.get("dq") or {}).get("repairs") or [])
             sym = row["symbol"]
-            out.append(SiteRow(board=board["asof"][:10], site_symbol=sym, symbol=our_symbol(sym),
+            ours = our_symbol(sym)
+            out.append(SiteRow(board=board["asof"][:10], site_symbol=sym, symbol=ours,
                                latest_q=row["latest_q"][:10], filed=row.get("filed"),
                                values={engine: row.get(site) for site, engine in FACTORS},
-                               quarters=quarters, repairs=repairs, skip_reason=SKIP.get(sym)))
+                               quarters=quarters, repairs=repairs,
+                               skip_reason="duplicate_share_class" if ours in secondary else None))
     return out
 
 
