@@ -16,12 +16,15 @@ quarters announced after as_of the affected quarters also get `eps_split_retrosp
 """
 from __future__ import annotations
 
+import heapq
 import math
+from collections import Counter
+from dataclasses import replace
 from datetime import date
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from src.data.prosperity_quality import SAME_QUARTER_DAYS, resolve_eps_quarters, split_basis_audit
-from terminal.prosperity.config import EPS_QUARTERS, EPS_STATEMENT_MATCH_DAYS
+from terminal.prosperity.config import EPS_QUARTERS, EPS_STATEMENT_MATCH_DAYS, EPS_STATEMENT_PAIR_DAYS
 from terminal.prosperity.types import EpsQuarter
 
 CLUSTER_GAP = 2   # boundaries this close with the same ratio are one break seen by overlapping windows
@@ -134,12 +137,30 @@ def announced_eps(earnings: Sequence[Mapping], income_rows: Sequence[Mapping], s
     return tuple(out)
 
 
+def pair_statement_dates(series: Sequence[EpsQuarter], statement_fiscals: Sequence[str]) -> Tuple[EpsQuarter, ...]:
+    """Attach the statement quarter each EPS quarter reports (Boss 2026-09-30 ④).
+
+    FMP dates some 52/53-week reporters' EPS weeks off the period end (COST 2026-08-10 vs statement
+    2026-08-30), which breaks 365 ± 20 year-on-year pairing. The nearest statement date within
+    EPS_STATEMENT_PAIR_DAYS pairs, one to one; a tie, a statement two EPS quarters both sit nearest,
+    or nothing in range leaves the quarter on FMP's date. fiscal_date itself is kept for consensus matching.
+    """
+    ends = sorted({s[:10] for s in statement_fiscals})
+    picks = []
+    for q in series:
+        gaps = heapq.nsmallest(2, ((abs((_d(s) - _d(q.fiscal_date)).days), s) for s in ends))
+        unique = len(gaps) == 1 or (len(gaps) == 2 and gaps[1][0] > gaps[0][0])
+        picks.append(gaps[0][1] if unique and gaps[0][0] <= EPS_STATEMENT_PAIR_DAYS else None)
+    taken = Counter(p for p in picks if p)
+    return tuple(replace(q, statement_fiscal=p if p and taken[p] == 1 else None) for q, p in zip(series, picks))
+
+
 def aligned_eps_window(series: Sequence[EpsQuarter], current_fiscal: Optional[str],
                        n: int = EPS_QUARTERS) -> Tuple[Tuple[EpsQuarter, ...], Optional[str]]:
     if current_fiscal is None:
         return (), "no_current_fiscal"
     ends = [i for i, q in enumerate(series)
-            if abs((_d(q.fiscal_date) - _d(current_fiscal)).days) <= EPS_STATEMENT_MATCH_DAYS]
+            if abs((_d(q.period_end) - _d(current_fiscal)).days) <= EPS_STATEMENT_MATCH_DAYS]
     if not ends:
         return (), "eps_behind_current"
     end = ends[-1]

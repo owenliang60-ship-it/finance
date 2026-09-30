@@ -195,6 +195,35 @@ def test_pe_redflag_is_a_badge_unless_the_scheme_demotes():
     assert p0.grade == "BELOW" and "pe_redflag" in p0.demotions
 
 
+def test_expected_losses_stay_out_of_the_pe_percentile():          # Boss 2026-09-30 ②
+    rows = [frow(f"P{i}", {**full_values(i), "revision": -1.0 if i == 0 else 1.0 + i},
+                 aux={"ep_ntm": 0.01 * (i + 1)}) for i in range(5)]
+    rows += [frow("L0", {**full_values(5), "revision": -1.0}, aux={"ep_ntm": -0.02}),
+             frow("L1", {**full_values(6), "revision": 1.0}, aux={"ep_ntm": -0.01}),
+             frow("Z0", {**full_values(7), "revision": 1.0}, aux={"ep_ntm": 0.0})]
+    board = score_board(rows, F1, frozen=None, as_of="2026-09-26", code_version="t")
+    by = {r.symbol: r for r in board.rows}
+    # cut is taken over the five positive E/P only, so the richest profitable name is flagged
+    assert "pe_redflag" in by["P0"].badges
+    assert "ntm_loss" in by["L0"].badges and "pe_redflag" in by["L0"].badges
+    assert "ntm_loss" in by["L1"].badges and "pe_redflag" not in by["L1"].badges
+    assert "ntm_loss" in by["Z0"].badges and "pe_redflag" not in by["Z0"].badges
+    assert all("ntm_loss" not in by[f"P{i}"].badges for i in range(5))
+
+
+def test_expected_loss_flag_needs_no_sector_percentile():
+    rows = [frow(f"S{i}", full_values(i)) for i in range(6)]
+    rows += [frow("SOLO", {**full_values(3), "surprise": -0.1}, sector="Energy", aux={"ep_ntm": -0.03}),
+             frow("NOSEC", {**full_values(4), "revision": -1.0}, sector=None, aux={"ep_ntm": -0.01})]
+    by = {r.symbol: r for r in score_board(rows, F1, frozen=None, as_of="2026-09-26", code_version="t").rows}
+    assert {"ntm_loss", "pe_redflag"} <= set(by["SOLO"].badges)
+    assert {"ntm_loss", "pe_redflag"} <= set(by["NOSEC"].badges)
+    demoting = score_board(rows, replace(F1, pe_redflag_demotes=True), frozen=None, as_of="2026-09-26",
+                           code_version="t")
+    solo = next(r for r in demoting.rows if r.symbol == "SOLO")
+    assert solo.grade == "BELOW" and "pe_redflag" in solo.demotions
+
+
 def test_scored_rows_carry_scheme_level_values_and_reasons():
     rows = [frow(f"S{i}", {**full_values(i), "revision": 1.0}) for i in range(6)]
     rows.append(frow("JPM", {**full_values(9), "revision": 1.0}, industry="Banks - Diversified"))

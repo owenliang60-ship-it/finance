@@ -14,7 +14,7 @@ from src.indicators.beta import compute_beta
 from terminal.prosperity.config import MCAP_MAX_STALENESS_DAYS, PIT_RANK, PRICE_MAX_STALENESS_DAYS
 from terminal.prosperity.consensus import build_consensus, unit_verified
 from terminal.prosperity.statements import build_quarters, visible_statements
-from terminal.prosperity.street_eps import aligned_eps_window, announced_eps
+from terminal.prosperity.street_eps import aligned_eps_window, announced_eps, pair_statement_dates
 from terminal.prosperity.types import InputPacket, SymbolHistory
 
 SEASON_SHIFT_DAYS = 7          # same season bucketing as prosperity_history.SEASON_SHIFT_DAYS
@@ -74,7 +74,8 @@ def build_packet(history: SymbolHistory, as_of: str, *, mode: str, membership_ba
     closes, price_rescaled = _split_adjusted(history.closes, history.splits)
     visible = visible_statements(history, as_of, mode, observed_at)
     qb = build_quarters(visible, as_of)
-    announced = announced_eps(history.earnings, history.income, history.splits, as_of)
+    announced = pair_statement_dates(announced_eps(history.earnings, history.income, history.splits, as_of),
+                                     [q.fiscal_date for q in qb.quarters])
     window, eps_reason = aligned_eps_window(announced, qb.current_fiscal)
     estimates = [r for r in history.estimates if r["snapshot_date"][:10] <= as_of[:10]]
     currency = qb.quarters[-1].reported_currency if qb.quarters else None
@@ -101,7 +102,8 @@ def build_packet(history: SymbolHistory, as_of: str, *, mode: str, membership_ba
     # Results release of the current fiscal quarter, not the filing or observation date (review F4)
     reported = bool(window and 0 <= (_d(as_of) - _d(window[-1].announce_date)).days < 7)
     archive = {
-        "eps_window": [[q.fiscal_date, q.announce_date, q.eps_actual, list(q.labels)] for q in window],
+        "eps_window": [[q.fiscal_date, q.announce_date, q.eps_actual, list(q.labels), q.statement_fiscal]
+                       for q in window],
         "pre_announce": asdict(consensus.pre_announce),
         "ntm": asdict(consensus.ntm),
         "ttm": {"eps": consensus.ttm_eps, "quarters": list(consensus.ttm_quarters)},

@@ -5,7 +5,8 @@ import pytest
 
 from terminal.prosperity.factors import AUX_KEYS, compute_factor_row, eps_factors, expectation_factors, statement_factors
 from terminal.prosperity.schemes import SCORING_FACTORS
-from tests.prosperity_fixtures import cons, eps_q, pkt, qends, qin
+from terminal.prosperity.street_eps import pair_statement_dates
+from tests.prosperity_fixtures import COST_STATEMENTS, cons, cost_eps, eps_q, pkt, qends, qin
 
 D8 = qends(8)
 
@@ -134,6 +135,15 @@ def test_retrospective_split_quarters_are_usable_and_labelled():          # D-9,
     assert "eps_split_retrospective" not in eps_factors(_eps(D)).labels
 
 
+def test_drifting_eps_dates_pair_year_on_year_by_statement_date():          # Boss 2026-09-30 ④
+    raw = eps_factors(cost_eps())            # FMP 2026-08-10 vs 2025-08-31: 344 days, outside 365 ± 20
+    assert raw.values["eps_sue"] is None and raw.missing["eps_sue"] == "no_yoy_pair"
+    paired = eps_factors(pair_statement_dates(cost_eps(), COST_STATEMENTS))
+    moved = eps_factors([replace(q, fiscal_date=d) for q, d in zip(cost_eps(), COST_STATEMENTS)])
+    assert paired.values["eps_sue"] is not None and paired.values["eps_accel"] is not None
+    assert paired.values == moved.values and paired.missing == moved.missing
+
+
 def test_empty_eps_window_is_behind_current():
     out = eps_factors(())
     assert out.values["eps_sue"] is None and out.missing["eps_sue"] == "eps_behind_current"
@@ -164,6 +174,14 @@ def test_surprise_revision_and_pe_inputs_are_price_scaled():
     assert (v["ntm_eps"], v["ttm_eps"]) == (6.0, 4.8)
     assert v["ep_ntm"] == pytest.approx(6.0 / 80.0) and v["pe_ntm"] == pytest.approx(80.0 / 6.0)
     assert v["pe_ttm"] == pytest.approx(80.0 / 4.8) and v["ntm_growth"] == pytest.approx(6.0 / 4.8 - 1)
+
+
+def test_revision_is_scaled_to_four_quarters():          # Boss 2026-09-30 ①
+    qs, eps = [qin(f) for f in qends(4)], [eps_q(f, 1.2) for f in qends(4)]
+    two = expectation_factors(pkt(qs, eps, cons(delta=-0.5, rev_quarters=2), price=80.0)).values
+    assert two["revision"] == pytest.approx(-0.5 * 4 / 2 / 80.0 * 100)
+    three = expectation_factors(pkt(qs, eps, cons(delta=0.3, rev_quarters=3), price=80.0)).values
+    assert three["revision"] == pytest.approx(0.3 * 4 / 3 / 80.0 * 100)
 
 
 def test_expectation_missing_reasons_come_from_m4():

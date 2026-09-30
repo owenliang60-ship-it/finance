@@ -18,6 +18,9 @@ MCAP_MAX_STALENESS_DAYS = 10
 # North-star: estimates match fiscal quarters within ±10 days; EPS ↔ statements within ±20 (Codex SAME_QUARTER_DAYS)
 ESTIMATE_MATCH_DAYS = 10
 EPS_STATEMENT_MATCH_DAYS = 20
+# Boss 2026-09-30 ④: an EPS quarter pairs with the nearest statement quarter within half a quarter
+# (2026-09-29 snapshot: COST drifts up to 22 days, BIP 37; quarters are ≥84 days apart)
+EPS_STATEMENT_PAIR_DAYS = 45
 # Enough history for 4-quarter growth and SUE's 8 prior YoY pairs plus bases
 STATEMENT_QUARTERS = 16
 EPS_QUARTERS = 16

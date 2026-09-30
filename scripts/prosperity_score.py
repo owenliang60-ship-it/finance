@@ -101,14 +101,15 @@ def _markdown(s: Dict[str, Any]) -> str:
              f"- 数据库：`{s['db_path']}`", f"- code_version：`{s['code_version']}`",
              f"- 成员 {s['members_resolved']}，建包 {s['packets_built']}，单股错误 {len(s['errors'])}，"
              f"泄漏 {s['future_leak_count']}，参数自举 {s['params_bootstrap']}，耗时 {s['seconds']}s", "",
-             "## 各方案", "", "| 方案 | hash | 排名/观察/剔除 | STRICT/FULL/BELOW | 降级原因 | pe_redflag | 前40最大行业 |",
-             "|---|---|---|---|---|---|---|"]
+             "## 各方案", "", "| 方案 | hash | 排名/观察/剔除 | STRICT/FULL/BELOW | 降级原因 | pe_redflag | 预期亏损 | 前40最大行业 |",
+             "|---|---|---|---|---|---|---|---|"]
     for sid, x in s["schemes"].items():
         c, g = x["counts"], x["grades"]
         top = x["top_sector_share"]
         lines.append(f"| {sid} | `{x['scheme_hash']}` | {c['ranked']}/{c['observe']}/{c['excluded']} | "
                      f"{g.get('STRICT', 0)}/{g.get('FULL', 0)}/{g.get('BELOW', 0)} | {x['demotion_counts']} | "
-                     f"{x['badge_counts'].get('pe_redflag', 0)} | {top['sector']} {top['share']} |")
+                     f"{x['badge_counts'].get('pe_redflag', 0)} | {x['badge_counts'].get('ntm_loss', 0)} | "
+                     f"{top['sector']} {top['share']} |")
     lines += ["", "## 观察原因", ""] + [f"- {sid}: {x['observe_reasons']}" for sid, x in s["schemes"].items()]
     lines += ["", "## 因子覆盖（原始 / F1 方案口径）", "", "| 因子 | 原始 | F1 | 主要缺失原因（原始） |", "|---|---|---|---|"]
     f1 = s["schemes"].get("F1", {}).get("factor_coverage", {})

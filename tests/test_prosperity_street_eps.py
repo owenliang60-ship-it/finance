@@ -1,7 +1,7 @@
 import pytest
 
-from terminal.prosperity.street_eps import aligned_eps_window, announced_eps
-from tests.prosperity_fixtures import er, gaap_rows, seq
+from terminal.prosperity.street_eps import aligned_eps_window, announced_eps, pair_statement_dates
+from tests.prosperity_fixtures import COST_EPS, COST_STATEMENTS, cost_eps, eq, er, gaap_rows, seq
 
 SPLIT = lambda d, n, m=1.0: {"date": d, "numerator": n, "denominator": m}
 # market.db street series; vendor re-adjusted only the newest quarters after each split
@@ -182,3 +182,30 @@ def test_break_seen_at_as_of_survives_later_rows_that_hide_it_in_full_history():
     got = announced_eps(rows, gaap_rows(KLAC, 10.0, "2024-06-30"), [SPLIT("2026-06-12", 10.0)], "2025-06-30")
     assert all(1 / 3 < b.eps_actual / a.eps_actual < 3 for a, b in zip(got, got[1:]))
     assert all("eps_split_rescaled" in x.labels for x in got if x.fiscal_date <= "2024-06-30")
+
+
+def test_eps_quarters_pair_with_the_statement_quarter_they_report():          # Boss 2026-09-30 ④
+    paired = pair_statement_dates(cost_eps(), COST_STATEMENTS)
+    assert [q.statement_fiscal for q in paired] == COST_STATEMENTS
+    assert [q.fiscal_date for q in paired] == [f for f, _ in COST_EPS]          # FMP date kept for consensus
+
+
+def test_pairing_is_one_to_one_within_half_a_quarter():
+    eps = (eq("2025-12-01", "2026-01-20", 1.0), eq("2026-01-20", "2026-02-20", 1.1), eq("2026-05-19", "2026-06-20", 1.2))
+    paired = pair_statement_dates(eps, ["2025-12-31", "2026-03-31", "2026-06-30"])
+    # the first two both sit nearest 2025-12-31 → neither pairs; 2026-05-19 is 42 days from 2026-06-30 → pairs
+    assert [q.statement_fiscal for q in paired] == [None, None, "2026-06-30"]
+    near = pair_statement_dates((eq("2026-05-10", "2026-06-20", 1.0),), ["2026-06-30", "2026-03-31"])
+    assert near[0].statement_fiscal == "2026-03-31"                             # 40 vs 51 days: nearest wins
+    tie = pair_statement_dates((eq("2026-02-14", "2026-03-20", 1.0),), ["2025-12-31", "2026-03-31"])
+    assert tie[0].statement_fiscal is None                                      # 45 days either way
+    assert pair_statement_dates((eq("2026-05-17", "2026-06-20", 1.0),), ["2026-06-30"])[0].statement_fiscal \
+        == "2026-06-30"                                                         # 44 days
+    assert pair_statement_dates((eq("2026-05-10", "2026-06-20", 1.0),), ["2026-06-30"])[0].statement_fiscal \
+        is None                                                                 # 51 days: too far
+
+
+def test_window_aligns_on_the_paired_statement_date():
+    assert aligned_eps_window(cost_eps()[:9], "2024-09-01") == ((), "eps_behind_current")   # 22 days off
+    window, reason = aligned_eps_window(pair_statement_dates(cost_eps()[:9], COST_STATEMENTS), "2024-09-01")
+    assert reason is None and window[-1].fiscal_date == "2024-08-10" and len(window) == 9

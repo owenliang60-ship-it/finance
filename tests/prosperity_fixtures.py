@@ -144,15 +144,16 @@ def eps_q(fiscal, eps, labels=()):
     return EpsQuarter(fiscal, announce, eps, None, tuple(labels))
 
 
-def cons(pre=None, price_pre=None, ntm=None, ttm=None, delta=None, missing=None):
+def cons(pre=None, price_pre=None, ntm=None, ttm=None, delta=None, missing=None, rev_quarters=4):
     missing = dict(missing or {})
+    fixed = tuple(qends(rev_quarters, "2027-06-30")) if delta is not None else ()
     return ConsensusInputs(
         pre_announce=PreAnnouncement(pre, None if pre is None else "local_snapshot", None, price_pre,
                                      None if pre is not None else missing.get("pre_announce", "no_pre_announce_snapshot")),
         ntm=NtmResult(ntm, None if ntm is None else "quarter_sum", (), None,
                       None if ntm is not None else missing.get("ntm", "no_current_snapshot")),
         ttm_eps=ttm, ttm_quarters=(),
-        revision=RevisionResult(delta, 4, (), None, None,
+        revision=RevisionResult(delta, 4, fixed, None, None,
                                 None if delta is not None else missing.get("revision", "no_base_snapshot")),
         unit_factor=None if missing else 1.0, missing_reasons=missing)
 
@@ -186,3 +187,18 @@ def frow(symbol, values, *, sector="Technology", industry="Semiconductors", disc
                      disclosed_quarters=disclosed, listing_days=listing_days, values=vals,
                      missing={f: "test_missing" for f, v in vals.items() if v is None},
                      aux={**OK_AUX, **(aux or {})}, labels=(), packet_flags=tuple(flags), pit_basis="live")
+
+
+# market.db 2026-09-29 snapshot: COST fmp_earnings fiscal_date / eps_actual and income_quarterly.date
+COST_EPS = [("2022-08-22", 4.2), ("2022-11-22", 3.1), ("2023-02-22", 3.3), ("2023-05-22", 2.93),
+            ("2023-08-22", 4.86), ("2023-11-23", 3.58), ("2024-02-15", 3.92), ("2024-05-10", 3.78),
+            ("2024-08-10", 5.15), ("2024-11-24", 4.04), ("2025-02-16", 4.02), ("2025-05-11", 4.28),
+            ("2025-08-31", 5.87), ("2025-11-23", 4.5), ("2026-02-15", 4.58), ("2026-05-10", 4.93),
+            ("2026-08-10", 6.75)]
+COST_STATEMENTS = ["2022-08-31", "2022-11-20", "2023-02-12", "2023-05-07", "2023-08-31", "2023-11-26",
+                   "2024-02-18", "2024-05-12", "2024-09-01", "2024-11-24", "2025-02-16", "2025-05-11",
+                   "2025-08-31", "2025-11-23", "2026-02-15", "2026-05-10", "2026-08-30"]
+
+
+def cost_eps():
+    return tuple(eq(f, "2026-09-24", e) for f, e in COST_EPS)

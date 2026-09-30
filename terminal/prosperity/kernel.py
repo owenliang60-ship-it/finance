@@ -354,6 +354,24 @@ def score_board(rows: Sequence[FactorRow], scheme: Scheme, *, frozen: Optional[P
         rec["badges"].extend(badges)
 
     ranked = [s for s, r in out.items() if r["status"] == "ranked"]
+
+    def negative(s: str) -> bool:
+        raw = by_symbol[s].values
+        return any(raw.get(f) is not None and raw[f] < 0 for f in ("revision", "surprise"))
+
+    def redflag(s: str) -> None:
+        out[s]["badges"].append("pe_redflag")
+        if scheme.pe_redflag_demotes:
+            out[s].update(grade="BELOW", demotions=out[s]["demotions"] + ("pe_redflag",))
+
+    # Expected losses (NTM E/P ≤ 0) stay out of the valuation percentile: badge, and flagged on their own
+    # with a negative revision or surprise, whatever the sector size (Boss 2026-09-30 ②)
+    for s in ranked:
+        v = by_symbol[s].aux.get("ep_ntm")
+        if v is not None and v <= 0:
+            out[s]["badges"].append("ntm_loss")
+            if negative(s):
+                redflag(s)
     sectors: Dict[str, list] = {}
     for s in ranked:
         if by_symbol[s].sector:
@@ -361,16 +379,14 @@ def score_board(rows: Sequence[FactorRow], scheme: Scheme, *, frozen: Optional[P
     for members in sectors.values():
         if len(members) < scheme.group_min_members:
             continue
-        # PE guard (D-5): NTM E/P in the sector's lowest pct (richest valuation) with a negative raw revision or surprise
-        ep = {s: by_symbol[s].aux.get("ep_ntm") for s in members if by_symbol[s].aux.get("ep_ntm") is not None}
+        # PE guard (D-5): positive NTM E/P in the sector's lowest pct (richest valuation) with a negative raw
+        # revision or surprise
+        ep = {s: v for s in members if (v := by_symbol[s].aux.get("ep_ntm")) is not None and v > 0}
         if len(ep) >= scheme.group_min_members:
             cut = _pct(list(ep.values()), scheme.pe_redflag_pct)
             for s, v in ep.items():
-                raw = by_symbol[s].values
-                if v <= cut and any(raw.get(f) is not None and raw[f] < 0 for f in ("revision", "surprise")):
-                    out[s]["badges"].append("pe_redflag")
-                    if scheme.pe_redflag_demotes:
-                        out[s].update(grade="BELOW", demotions=out[s]["demotions"] + ("pe_redflag",))
+                if v <= cut and negative(s):
+                    redflag(s)
         # Within-sector base score on this board's sector cross-section; reference only
         zs, _, _ = standardize([by_symbol[s] for s in members], scheme, frozen=None, as_of=as_of,
                                code_version=code_version)
