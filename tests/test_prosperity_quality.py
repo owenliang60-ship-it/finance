@@ -99,8 +99,11 @@ def test_report_distinguishes_historical_dates_from_observed_snapshot(tmp_path):
     s.replace_fmp_earnings('X', _eps_rows(FISCALS[-13:]))
     t = {'by_quarter_end': {'2026-06-30': ['X']}}
     # Placeholder filing dates: each quarter's results release now dates it (Boss 2026-09-30)
-    q = build_report(s, t, [])['quarter_ends'][0]
+    historical = build_report(s, t, [])
+    q = historical['quarter_ends'][0]
     assert (q['raw_three_table_ok'], q['three_table_ok'], q['sue_ok']) == (1, 1, 1)
+    dated = historical['quality_issues'][0]['public_date_from_earnings']      # the audit shows which
+    assert dated and all(d['source'] == 'earnings_announcement' for d in dated)
     # Releases without an actual are no evidence: the quarter still has no trusted date
     bare = MarketStore(tmp_path / 'bare.db')
     _seed_statements_filed(bare, 'X', FISCALS[-13:], 0)
