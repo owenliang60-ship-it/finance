@@ -25,6 +25,8 @@ def test_cli_scores_all_schemes_read_only(tmp_path, monkeypatch):
     counts = summary["schemes"]["F1"]["counts"]
     assert counts["ranked"] + counts["observe"] + counts["excluded"] == summary["packets_built"]
     assert (tmp_path / "out" / "board-F1-2026-09-26.jsonl").exists()
+    md = (tmp_path / "out" / "summary-2026-09-26.md").read_text()
+    assert "| pe_redflag | 预期亏损 |" in md                     # Boss 2026-09-30 ②: loss flags need no percentile
 
 
 def test_cli_rejects_unknown_scheme(tmp_path):

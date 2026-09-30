@@ -16,6 +16,7 @@ quarters announced after as_of the affected quarters also get `eps_split_retrosp
 """
 from __future__ import annotations
 
+import heapq
 import math
 from collections import Counter
 from dataclasses import replace
@@ -147,9 +148,9 @@ def pair_statement_dates(series: Sequence[EpsQuarter], statement_fiscals: Sequen
     ends = sorted({s[:10] for s in statement_fiscals})
     picks = []
     for q in series:
-        gaps = sorted((abs((_d(s) - _d(q.fiscal_date)).days), s) for s in ends)
-        unique = len(gaps) == 1 or (len(gaps) > 1 and gaps[1][0] > gaps[0][0])
-        picks.append(gaps[0][1] if gaps and unique and gaps[0][0] <= EPS_STATEMENT_PAIR_DAYS else None)
+        gaps = heapq.nsmallest(2, ((abs((_d(s) - _d(q.fiscal_date)).days), s) for s in ends))
+        unique = len(gaps) == 1 or (len(gaps) == 2 and gaps[1][0] > gaps[0][0])
+        picks.append(gaps[0][1] if unique and gaps[0][0] <= EPS_STATEMENT_PAIR_DAYS else None)
     taken = Counter(p for p in picks if p)
     return tuple(replace(q, statement_fiscal=p if p and taken[p] == 1 else None) for q, p in zip(series, picks))
 

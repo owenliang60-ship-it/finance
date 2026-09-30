@@ -1,9 +1,7 @@
 import pytest
 
-from dataclasses import replace
-
 from terminal.prosperity.street_eps import aligned_eps_window, announced_eps, pair_statement_dates
-from tests.prosperity_fixtures import eq, er, gaap_rows, seq
+from tests.prosperity_fixtures import COST_EPS, COST_STATEMENTS, cost_eps, eq, er, gaap_rows, seq
 
 SPLIT = lambda d, n, m=1.0: {"date": d, "numerator": n, "denominator": m}
 # market.db street series; vendor re-adjusted only the newest quarters after each split
@@ -184,21 +182,6 @@ def test_break_seen_at_as_of_survives_later_rows_that_hide_it_in_full_history():
     got = announced_eps(rows, gaap_rows(KLAC, 10.0, "2024-06-30"), [SPLIT("2026-06-12", 10.0)], "2025-06-30")
     assert all(1 / 3 < b.eps_actual / a.eps_actual < 3 for a, b in zip(got, got[1:]))
     assert all("eps_split_rescaled" in x.labels for x in got if x.fiscal_date <= "2024-06-30")
-
-
-# market.db 2026-09-29 snapshot: COST fmp_earnings fiscal_date / eps_actual and income_quarterly.date
-COST_EPS = [("2022-08-22", 4.2), ("2022-11-22", 3.1), ("2023-02-22", 3.3), ("2023-05-22", 2.93),
-            ("2023-08-22", 4.86), ("2023-11-23", 3.58), ("2024-02-15", 3.92), ("2024-05-10", 3.78),
-            ("2024-08-10", 5.15), ("2024-11-24", 4.04), ("2025-02-16", 4.02), ("2025-05-11", 4.28),
-            ("2025-08-31", 5.87), ("2025-11-23", 4.5), ("2026-02-15", 4.58), ("2026-05-10", 4.93),
-            ("2026-08-10", 6.75)]
-COST_STATEMENTS = ["2022-08-31", "2022-11-20", "2023-02-12", "2023-05-07", "2023-08-31", "2023-11-26",
-                   "2024-02-18", "2024-05-12", "2024-09-01", "2024-11-24", "2025-02-16", "2025-05-11",
-                   "2025-08-31", "2025-11-23", "2026-02-15", "2026-05-10", "2026-08-30"]
-
-
-def cost_eps():
-    return tuple(eq(f, "2026-09-24", e) for f, e in COST_EPS)
 
 
 def test_eps_quarters_pair_with_the_statement_quarter_they_report():          # Boss 2026-09-30 ④

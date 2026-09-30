@@ -5,9 +5,8 @@ import pytest
 
 from terminal.prosperity.factors import AUX_KEYS, compute_factor_row, eps_factors, expectation_factors, statement_factors
 from terminal.prosperity.schemes import SCORING_FACTORS
-from tests.prosperity_fixtures import cons, eps_q, pkt, qends, qin
-from tests.test_prosperity_street_eps import COST_STATEMENTS, cost_eps
 from terminal.prosperity.street_eps import pair_statement_dates
+from tests.prosperity_fixtures import COST_STATEMENTS, cons, cost_eps, eps_q, pkt, qends, qin
 
 D8 = qends(8)
 
