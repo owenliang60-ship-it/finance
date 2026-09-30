@@ -109,3 +109,60 @@ def closes_series(start, end, start_price, drift=0.001, phase=0.0):
             t += 1
         d += timedelta(days=1)
     return out
+
+
+from datetime import date, timedelta
+
+from terminal.prosperity.types import (ConsensusInputs, EpsQuarter, InputPacket, NtmResult,
+                                       PreAnnouncement, QuarterInputs, RevisionResult)
+
+_QEND = {3: 31, 6: 30, 9: 30, 12: 31}
+
+
+def qends(n, last="2026-06-30"):
+    """n calendar quarter ends, oldest first, ending at `last`."""
+    y, m, out = int(last[:4]), int(last[5:7]), []
+    for _ in range(n):
+        out.append(date(y, m, _QEND[m]).isoformat())
+        y, m = (y - 1, 12) if m == 3 else (y, m - 3)
+    return out[::-1]
+
+
+def qin(fiscal, rev=100.0, gm=0.5, nm=0.1, fcfm=0.2, days=91, capex=-5.0, labels=()):
+    """QuarterInputs; margins are fractions of revenue."""
+    part = lambda frac: None if rev is None or frac is None else rev * frac
+    gp = part(gm)
+    return QuarterInputs(fiscal_date=fiscal, fiscal_year=fiscal[:4], period="Q", period_days=days,
+                         reported_currency="USD", available_on=fiscal, availability_basis="accepted_date",
+                         revenue=rev, cost_of_revenue=None if gp is None else rev - gp, gross_profit=gp,
+                         net_income=part(nm), operating_cash_flow=None, capital_expenditure=capex,
+                         free_cash_flow=part(fcfm), labels=tuple(labels), nulled=())
+
+
+def eps_q(fiscal, eps, labels=()):
+    announce = (date.fromisoformat(fiscal) + timedelta(days=30)).isoformat()
+    return EpsQuarter(fiscal, announce, eps, None, tuple(labels))
+
+
+def cons(pre=None, price_pre=None, ntm=None, ttm=None, delta=None, missing=None):
+    missing = dict(missing or {})
+    return ConsensusInputs(
+        pre_announce=PreAnnouncement(pre, None if pre is None else "local_snapshot", None, price_pre,
+                                     None if pre is not None else missing.get("pre_announce", "no_pre_announce_snapshot")),
+        ntm=NtmResult(ntm, None if ntm is None else "quarter_sum", (), None,
+                      None if ntm is not None else missing.get("ntm", "no_current_snapshot")),
+        ttm_eps=ttm, ttm_quarters=(),
+        revision=RevisionResult(delta, 4, (), None, None,
+                                None if delta is not None else missing.get("revision", "no_base_snapshot")),
+        unit_factor=None if missing else 1.0, missing_reasons=missing)
+
+
+def pkt(quarters, eps=(), consensus=None, *, symbol="AAA", as_of="2026-09-26", price=100.0,
+        sector="Technology", industry="Semiconductors", flags=(), listing_date="2000-01-01"):
+    return InputPacket(symbol=symbol, as_of=as_of, membership_basis="extended_membership", sector=sector,
+                       industry=industry, current_fiscal=quarters[-1].fiscal_date if quarters else None,
+                       quarter_bucket=None, data_age_days=None, reported_this_week=False,
+                       quarters=tuple(quarters), eps=tuple(eps), consensus=consensus or cons(),
+                       price_asof=price, price_date=as_of if price is not None else None, market_cap_asof=None,
+                       beta=None, pit={}, pit_basis="live", flags=tuple(flags), archive={},
+                       listing_date=listing_date)          # listing_date: D-2 方案 A
