@@ -1,7 +1,10 @@
+import statistics
+from dataclasses import replace
+
 import pytest
 
-from terminal.prosperity.factors import statement_factors
-from tests.prosperity_fixtures import qends, qin
+from terminal.prosperity.factors import eps_factors, expectation_factors, statement_factors
+from tests.prosperity_fixtures import cons, eps_q, pkt, qends, qin
 
 D8 = qends(8)
 
@@ -69,3 +72,105 @@ def test_revenue_ttm_leg_uses_two_contiguous_four_quarter_windows():
     out = statement_factors(_qs([100] * 4 + [120] * 4))
     assert out.values["revenue_ttm_leg"] == pytest.approx(1.2 ** 0.25 - 1)
     assert statement_factors(_qs([100] * 7)).missing["revenue_ttm_leg"] == "ttm_needs_8_quarters"
+
+D = [0.1, 0.2, 0.1, 0.2, 0.1, 0.2, 0.1, 0.2, 0.3]
+
+
+def _eps(diffs, last="2026-06-30"):
+    dates = qends(4 + len(diffs), last)
+    vals = [1.0] * 4
+    for d in diffs:
+        vals.append(vals[-4] + d)
+    return [eps_q(f, e) for f, e in zip(dates, vals)]
+
+
+def test_sue_and_delta_sue_follow_north_star_formula():
+    out = eps_factors(_eps(D))
+    sue0 = 0.3 / statistics.stdev(D[:8])
+    sue1 = 0.2 / statistics.stdev(D[:7])
+    assert out.values["eps_sue"] == pytest.approx(sue0)
+    assert out.values["eps_accel"] == pytest.approx(sue0 - sue1)
+
+
+def test_conflict_inside_window_blocks_the_whole_factor_not_just_one_quarter():
+    eps = _eps(D)
+    eps[4] = replace(eps[4], eps_actual=None, labels=("eps_conflicting_quarter",))
+    out = eps_factors(eps)                  # dropping the quarter would still leave 7 σ observations
+    assert out.values["eps_sue"] is None and out.missing["eps_sue"] == "eps_conflicting_quarter"
+    assert out.values["eps_accel"] is None
+
+
+def test_conflict_outside_sue_window_only_blocks_delta_sue():
+    eps = _eps([0.1] * 3 + D)               # 16 quarters
+    eps[2] = replace(eps[2], eps_actual=None, labels=("eps_conflicting_quarter",))
+    out = eps_factors(eps)
+    assert out.values["eps_sue"] is not None
+    assert out.values["eps_accel"] is None and out.missing["eps_accel"] == "eps_conflicting_quarter"
+
+
+def test_delta_sue_needs_the_adjacent_prior_quarter():
+    eps = _eps([0.1] * 3 + D)               # 16 quarters
+    del eps[-2]                             # previous quarter missing: eps[-2] is now ~182 days back
+    out = eps_factors(eps)                  # both SUEs would still be computable by position
+    assert out.values["eps_sue"] is not None
+    assert out.values["eps_accel"] is None and out.missing["eps_accel"] == "no_prior_quarter"
+
+
+def test_rescaled_split_quarters_are_usable_but_unconfirmed_ones_block():
+    eps = [replace(q, labels=("eps_split_rescaled",)) if i < 5 else q for i, q in enumerate(_eps(D))]
+    assert eps_factors(eps).values["eps_sue"] is not None
+    eps[1] = replace(eps[1], eps_actual=None, labels=("eps_split_unconfirmed",))
+    assert eps_factors(eps).missing["eps_sue"] == "eps_split_unconfirmed"
+
+
+def test_retrospective_split_quarters_are_usable_and_labelled():          # D-9, Boss 2026-09-30
+    eps = [replace(q, labels=("eps_split_rescaled", "eps_split_retrospective")) if i < 5 else q
+           for i, q in enumerate(_eps(D))]
+    eps[6] = replace(eps[6], labels=("gaap_split_basis_break",))
+    out = eps_factors(eps)
+    assert out.values["eps_sue"] is not None and out.values["eps_accel"] is not None
+    assert "eps_split_retrospective" in out.labels
+    assert "eps_split_retrospective" not in eps_factors(_eps(D)).labels
+
+
+def test_empty_eps_window_is_behind_current():
+    out = eps_factors(())
+    assert out.values["eps_sue"] is None and out.missing["eps_sue"] == "eps_behind_current"
+
+
+def test_eps_ttm_leg_turnaround_and_loss():
+    dates = qends(8)
+    grow = [eps_q(f, e) for f, e in zip(dates, [1, 1, 1, 1, 1.5, 1.5, 1.5, 1.5])]
+    assert eps_factors(grow).values["eps_ttm_leg"] == pytest.approx(1.5 ** 0.25 - 1)
+    turn = eps_factors([eps_q(f, e) for f, e in zip(dates, [-1, -1, 0.5, 0.2, 0.5, 0.5, 0.5, 0.5])])
+    assert turn.missing["eps_ttm_leg"] == "eps_ttm_turnaround" and "eps_ttm_turnaround" in turn.labels
+    loss = eps_factors([eps_q(f, e) for f, e in zip(dates, [1, 1, 1, 1, -1, -1, 0.5, 0.5])])
+    assert loss.missing["eps_ttm_leg"] == "eps_ttm_nonpositive"
+
+
+def test_single_quarter_eps_turnaround_is_a_display_label():
+    dates = qends(5)
+    out = eps_factors([eps_q(f, e) for f, e in zip(dates, [-0.2, 0.1, 0.1, 0.1, 0.3])])
+    assert out.values["eps_yoy_pct"] is None and "eps_turnaround" in out.labels
+
+
+def test_surprise_revision_and_pe_inputs_are_price_scaled():
+    p = pkt([qin(f) for f in qends(4)], [eps_q(f, 1.2) for f in qends(4)],
+            cons(pre=1.0, price_pre=50.0, ntm=6.0, ttm=4.8, delta=-0.5), price=80.0)
+    v = expectation_factors(p).values
+    assert v["surprise"] == pytest.approx(0.2 / 50.0 * 100)
+    assert v["revision"] == pytest.approx(-0.5 / 80.0 * 100)
+    assert (v["ntm_eps"], v["ttm_eps"]) == (6.0, 4.8)
+    assert v["ep_ntm"] == pytest.approx(6.0 / 80.0) and v["pe_ntm"] == pytest.approx(80.0 / 6.0)
+    assert v["pe_ttm"] == pytest.approx(80.0 / 4.8) and v["ntm_growth"] == pytest.approx(6.0 / 4.8 - 1)
+
+
+def test_expectation_missing_reasons_come_from_m4():
+    qs, eps = [qin(f) for f in qends(4)], [eps_q(f, 1.2) for f in qends(4)]
+    blocked = expectation_factors(pkt(qs, eps, cons(missing={"pre_announce": "unit_unverified",
+                                                             "ntm": "unit_unverified",
+                                                             "revision": "unit_unverified"})))
+    assert blocked.missing["surprise"] == "unit_unverified" and blocked.missing["revision"] == "unit_unverified"
+    assert blocked.values["ntm_eps"] is None and blocked.values["pe_ntm"] is None
+    no_price = expectation_factors(pkt(qs, eps, cons(pre=1.0, price_pre=None, delta=0.1), price=None))
+    assert no_price.missing["surprise"] == "price_missing" and no_price.missing["revision"] == "price_missing"

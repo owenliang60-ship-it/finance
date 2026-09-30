@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
-from src.data.prosperity_history import SAME_QUARTER_DAYS, YEAR_DAYS
-from terminal.prosperity.types import QuarterInputs
+from src.data.prosperity_history import SAME_QUARTER_DAYS, YEAR_DAYS, sue_dependencies, sue_value
+from terminal.prosperity.types import EpsQuarter, InputPacket, QuarterInputs
 
 QUARTER_GAP = (60, 120)          # adjacent quarter: fiscal dates 60–120 days apart
 QUARTER_DAYS = (60, 120)         # period_days a quarterly row may carry for day-count adjustment
@@ -21,6 +21,11 @@ HALF_YEAR_DAYS = (150, 200)      # semiannual reporters pair unadjusted
 ADJUST_DAYS = 91
 FCF_OUTLIER_PCT = 200.0          # original site patch: |FCF margin| or its change above 200 is noise
 
+# Any of these in a SUE dependency window blanks the whole factor; M4 blanks their values too
+EPS_BLOCKING_LABELS = ("eps_conflicting_quarter", "eps_invalid_announcement_time", "eps_invalid_actual",
+                       "eps_split_unconfirmed")
+EPS_KEYS = ("eps_sue", "eps_accel", "eps_ttm_leg", "eps_yoy_pct")
+EXPECTATION_KEYS = ("surprise", "revision", "ntm_eps", "ttm_eps", "ep_ntm", "pe_ntm", "pe_ttm", "ntm_growth")
 STATEMENT_KEYS = ("revenue_yoy", "revenue_accel", "gm_level", "gm_yoy", "fcf_margin_yoy", "net_margin_yoy",
                   "gm_slope", "revenue_ttm_leg")
 
@@ -221,3 +226,107 @@ def statement_factors(quarters: Sequence[QuarterInputs], *, day_adjust: bool = T
         "revenue_ttm_leg": s.revenue_ttm_leg(),
     }
     return _out(results, s.labels, {"fiscal_date": quarters[-1].fiscal_date})
+
+
+def eps_factors(eps: Sequence[EpsQuarter]) -> FactorOut:
+    """Street EPS factors on M4's window (oldest first, aligned to the current fiscal quarter).
+
+    A blocking label or blank value anywhere in a SUE dependency window blanks the factor;
+    the quarter is never dropped to re-form σ. `eps_split_rescaled`, `eps_split_retrospective`
+    and `gaap_split_basis_break` pass (D-9, Boss 2026-09-30); the retrospective one is surfaced.
+    """
+    if not eps:
+        return FactorOut({k: None for k in EPS_KEYS}, {k: "eps_behind_current" for k in EPS_KEYS})
+    newest = list(reversed(eps))
+    heads = [q.fiscal_date for q in newest]
+    series = [(q.fiscal_date, q.eps_actual) for q in newest]
+    labels: List[str] = []
+
+    def blocked(i: int) -> Optional[str]:
+        for k in sorted(sue_dependencies(heads, i)):
+            hit = next((lab for lab in newest[k].labels if lab in EPS_BLOCKING_LABELS), None)
+            if hit:
+                return hit
+            if newest[k].eps_actual is None:
+                return "eps_missing_value"
+        return None
+
+    def sue(i: int) -> Tuple[Optional[float], Optional[str]]:
+        reason = blocked(i)
+        return (None, reason) if reason else sue_value(series, i)
+
+    sue0 = sue(0)
+    if len(eps) < 2 or not QUARTER_GAP[0] <= _gap(eps[-1].fiscal_date, eps[-2].fiscal_date) <= QUARTER_GAP[1]:
+        accel = (None, "no_prior_quarter")
+    else:
+        sue1 = sue(1)
+        reason = sue0[1] or sue1[1]
+        accel = (None, reason) if reason else (sue0[0] - sue1[0], None)
+
+    last = eps[-8:]
+    if len(last) < 8 or not contiguous([q.fiscal_date for q in last]) or any(q.eps_actual is None for q in last):
+        ttm_leg = (None, "ttm_needs_8_quarters")
+    else:
+        before, recent = sum(q.eps_actual for q in last[:4]), sum(q.eps_actual for q in last[4:])
+        if recent <= 0:
+            ttm_leg = (None, "eps_ttm_nonpositive")
+        elif before <= 0:
+            ttm_leg = (None, "eps_ttm_turnaround")
+            labels.append("eps_ttm_turnaround")
+        else:
+            ttm_leg = ((recent / before) ** 0.25 - 1, None)
+
+    b = year_base([q.fiscal_date for q in eps], len(eps) - 1)
+    cur = eps[-1].eps_actual
+    if b is None:
+        yoy = (None, "no_yoy_base")
+    elif cur is None or eps[b].eps_actual is None:
+        yoy = (None, "eps_missing_value")
+    elif eps[b].eps_actual > 0:
+        yoy = ((cur - eps[b].eps_actual) / eps[b].eps_actual * 100, None)
+    elif cur > 0:
+        yoy = (None, "eps_turnaround")
+        labels.append("eps_turnaround")
+    else:
+        yoy = (None, "nonpositive_base")
+
+    if any("eps_split_retrospective" in q.labels for q in eps):
+        labels.append("eps_split_retrospective")
+    return _out({"eps_sue": sue0, "eps_accel": accel, "eps_ttm_leg": ttm_leg, "eps_yoy_pct": yoy}, labels)
+
+
+def expectation_factors(packet: InputPacket) -> FactorOut:
+    """Surprise and revision as % of price, plus the NTM/TTM inputs for the gate and PE guard."""
+    c = packet.consensus
+    reasons = c.missing_reasons
+    price = packet.price_asof if packet.price_asof is not None and packet.price_asof > 0 else None
+    current = packet.eps[-1].eps_actual if packet.eps else None
+    pre = c.pre_announce
+
+    reason = (reasons.get("pre_announce") or pre.missing_reason or ("pre_announce_missing" if pre.value is None else None)
+              or ("eps_missing_value" if current is None else None)
+              or ("price_missing" if not pre.price_pre_announce or pre.price_pre_announce <= 0 else None))
+    surprise = (None, reason) if reason else ((current - pre.value) / pre.price_pre_announce * 100, None)
+
+    reason = (reasons.get("revision") or c.revision.missing_reason
+              or ("revision_missing" if c.revision.delta_eps is None else None) or ("price_missing" if price is None else None))
+    revision = (None, reason) if reason else (c.revision.delta_eps / price * 100, None)
+
+    reason = reasons.get("ntm") or c.ntm.missing_reason or ("ntm_missing" if c.ntm.value is None else None)
+    ntm = (None, reason) if reason else (c.ntm.value, None)
+    reason = reasons.get("ttm") or ("ttm_incomplete" if c.ttm_eps is None else None)
+    ttm = (None, reason) if reason else (c.ttm_eps, None)
+
+    def derived(num, den, positive):
+        """num / den from two (value, reason) pairs; `positive` names the reason when den ≤ 0."""
+        if num[1] or den[1]:
+            return None, num[1] or den[1]
+        return (None, positive) if den[0] <= 0 else (num[0] / den[0], None)
+
+    px = (price, None if price is not None else "price_missing")
+    ratio = derived(ntm, ttm, "nonpositive_ttm")
+    return _out({"surprise": surprise, "revision": revision, "ntm_eps": ntm, "ttm_eps": ttm,
+                 "ep_ntm": derived(ntm, px, "price_missing"),
+                 "pe_ntm": derived(px, ntm, "nonpositive_ntm"),
+                 "pe_ttm": derived(px, ttm, "nonpositive_ttm"),
+                 "ntm_growth": ratio if ratio[1] else (ratio[0] - 1, None)})
