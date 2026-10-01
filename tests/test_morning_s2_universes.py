@@ -164,3 +164,110 @@ def test_calculation_is_read_only(cohort_db, tmp_path):
     before = (tmp_path / 'market.db').read_bytes()
     mr.build_market_timing_factor_report()
     assert (tmp_path / 'market.db').read_bytes() == before
+
+
+
+def test_old_foreign_listing_snapshot_uses_reviewed_mapping(cohort_db):
+    conn, as_of = cohort_db
+    conn.execute("UPDATE daily_price SET symbol='TSEM' WHERE symbol='SOXX0'")
+    conn.execute("UPDATE fmp_etf_holdings_snapshot SET raw_asset='TSEM.TA', symbol=NULL, "
+                 "included=0, filter_reason='foreign_listing_unmapped' WHERE raw_asset='SOXX0'")
+    conn.commit()
+    result = mr.build_market_timing_factor_report()['breadth_s2_by_universe']['SOXX']
+    assert result['current'] == .8
+    assert result['symbols_expected'] == 10
+    assert conn.execute("SELECT filter_reason FROM fmp_etf_holdings_snapshot WHERE raw_asset='TSEM.TA'").fetchone()[0] == 'foreign_listing_unmapped'
+
+
+@pytest.fixture
+def legacy_fer(cohort_db):
+    import json
+    conn, old_day = cohort_db
+    day = '2026-09-26'
+    for table in ['fmp_forward_runs', 'fmp_etf_holdings_snapshot']:
+        conn.execute(f"UPDATE {table} SET snapshot_date=?", (day,))
+    conn.execute("UPDATE daily_price SET date=date(date, ?) ",
+                 (f"+{(pd.Timestamp('2026-09-30')-pd.Timestamp(old_day)).days} days",))
+    conn.execute("UPDATE daily_price SET symbol='FER' WHERE symbol='QQQ0'")
+    for column in ['name TEXT', 'weight_pct REAL', 'market_value REAL', 'updated_at TEXT']:
+        conn.execute('ALTER TABLE fmp_etf_holdings_snapshot ADD COLUMN '+column)
+    raw = {'asset': '', 'name': 'Ferrovial NV', 'securityCusip': 'N3168P101', 'isin': '',
+           'weightPercentage': .16852654, 'marketValue': 845097803.16,
+           'updatedAt': '2026-09-25 18:23:12'}
+    conn.execute("UPDATE fmp_etf_holdings_snapshot SET raw_asset='',symbol=NULL,included=0, "
+        "filter_reason='unrecognized_asset',name=?,weight_pct=?,market_value=?,updated_at=? WHERE raw_asset='QQQ0'",
+        (raw['name'],raw['weightPercentage'],raw['marketValue'],raw['updatedAt']))
+    conn.execute("CREATE TABLE fmp_fund_disclosure_holdings(basket_symbol TEXT,holding_date TEXT,source_kind TEXT, "
+        "raw_symbol TEXT,name TEXT,raw_payload_json TEXT,fetched_at TEXT,composition_available_date TEXT)")
+    conn.execute("INSERT INTO fmp_fund_disclosure_holdings VALUES ('QQQ',?,'live','',?,?,'2026-09-26T04:18:33Z',?)",
+        (day,raw['name'],json.dumps(raw),day))
+    conn.commit()
+    return conn
+
+
+def test_missing_symbol_recovers_only_from_same_snapshot_raw_evidence(legacy_fer):
+    report=mr.build_market_timing_factor_report()
+    qqq=report['breadth_s2_by_universe']['QQQ']
+    assert qqq['current'] == .6
+    assert qqq['symbols_expected'] == 10
+    assert legacy_fer.execute("SELECT symbol FROM fmp_etf_holdings_snapshot WHERE name='Ferrovial NV'").fetchone()[0] is None
+
+
+@pytest.mark.parametrize('change', [
+    "DELETE FROM fmp_fund_disclosure_holdings",
+    "UPDATE fmp_fund_disclosure_holdings SET holding_date='2026-09-19'",
+    "UPDATE fmp_fund_disclosure_holdings SET fetched_at='2026-10-01T00:00:00Z'",
+    "UPDATE fmp_etf_holdings_snapshot SET weight_pct=999 WHERE name='Ferrovial NV'",
+    "INSERT INTO fmp_fund_disclosure_holdings SELECT * FROM fmp_fund_disclosure_holdings",
+])
+def test_untrusted_fer_evidence_keeps_pool_unavailable(legacy_fer, change):
+    legacy_fer.execute(change);legacy_fer.commit()
+    assert mr.build_market_timing_factor_report()['breadth_s2_by_universe']['QQQ']['current'] is None
+
+
+def test_missing_membership_reason_visible_on_all_surfaces(cohort_db):
+    conn,day=cohort_db
+    conn.execute("UPDATE fmp_etf_holdings_snapshot SET symbol=NULL,included=0,filter_reason='foreign_listing_unmapped',raw_asset='UNKNOWN.TA' WHERE raw_asset='SOXX0'")
+    conn.commit()
+    report=mr.build_market_timing_factor_report()
+    row=next(r for r in report['rows'] if r['symbol']=='SOXX')
+    assert row['breadth_s2_coverage'] == 'N/A'
+    signals={'as_of':day,'market_timing_factor':report}
+    for surface in [mr.format_section_market_timing_factor(signals),
+                    str(mr.build_morning_visual_sections(signals, {})),
+                    str(mr.build_html_payload(signals, {}, day))]:
+        assert 'UNKNOWN.TA' in surface
+        assert '成分识别异常' in surface
+
+
+def test_bad_recovery_config_does_not_disable_healthy_pools(cohort_db, monkeypatch, tmp_path):
+    conn, day = cohort_db
+    conn.execute("UPDATE fmp_etf_holdings_snapshot SET raw_asset='TSEM.TA',symbol=NULL,"
+                 "included=0,filter_reason='foreign_listing_unmapped' WHERE raw_asset='SOXX0'")
+    conn.commit()
+    monkeypatch.setattr(mr, 'PROJECT_ROOT', tmp_path)
+    pools = mr.build_market_timing_factor_report()['breadth_s2_by_universe']
+    assert pools['SOXX']['current'] is None
+    assert pools['SPY']['current'] == .2
+    assert pools['QQQ']['current'] == .6
+    assert pools['Extended']['current'] == .4
+
+
+def test_image_renders_two_complete_failure_messages(cohort_db, monkeypatch, tmp_path):
+    conn, day = cohort_db
+    conn.execute("UPDATE fmp_etf_holdings_snapshot SET raw_asset='UNKNOWN.TA',symbol=NULL,"
+                 "included=0,filter_reason='foreign_listing_unmapped' WHERE raw_asset IN ('QQQ0','SOXX0')")
+    conn.commit()
+    signals = {'as_of': day, 'market_timing_factor': mr.build_market_timing_factor_report()}
+    drawn = []
+    original = mr._draw_fit
+
+    def capture(draw, xy, text, font, fill, max_width):
+        drawn.append(mr._fit_text(draw, text, font, max_width))
+        return original(draw, xy, text, font, fill, max_width)
+
+    monkeypatch.setattr(mr, '_draw_fit', capture)
+    paths = mr.render_morning_report_images(signals, {}, tmp_path / 'images')
+    assert paths[0].is_file()
+    for symbol in ['QQQ', 'SOXX']:
+        assert '🔴 ' + symbol + ' S2 不可用：成分识别异常：UNKNOWN.TA' in drawn

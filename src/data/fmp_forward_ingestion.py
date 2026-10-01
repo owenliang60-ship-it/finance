@@ -398,6 +398,15 @@ def normalize_holdings(
                 filter_reason = "foreign_listing_unmapped"
         elif asset:
             symbol = asset
+        elif (basket.upper() == "QQQ" and "2026-09-18" <= snapshot_date <= "2026-12-31"
+              and name == "Ferrovial NV"
+              and (raw.get("securityCusip") or raw.get("cusip")) == "N3168P101"
+              and raw.get("cusip") in (None, "", "N3168P101")
+              and raw.get("isin") in (None, "", "NL0015001FS8")):
+            # Reviewed security, not a name-only guess. Keep raw_asset empty.
+            # Evidence: docs/references/index-pe-issuer-evidence-20260925/FER.json
+            # and index-pe-sec-issuer-evidence-20260911/FER.json (CUSIP + FER).
+            symbol = "FER"
 
         if filter_reason is None and symbol is not None:
             if symbol in secondary_to_primary:

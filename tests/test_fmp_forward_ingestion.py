@@ -332,3 +332,30 @@ def test_weekly_rerun_does_not_downgrade_stored_mapping(tmp_path):
     assert reported["fiscal_date"] == "2026-03-14"  # 既有映射保留
     assert reported["match_method"] == "estimates_window"
     store.close()
+
+
+FER_RAW = {"asset": "", "name": "Ferrovial NV", "securityCusip": "N3168P101",
+           "isin": "", "weightPercentage": .16852654, "marketValue": 845097803.16,
+           "updatedAt": "2026-09-25 18:23:12"}
+
+
+def test_reviewed_fer_missing_ticker_preserves_raw_identity():
+    raw = copy.deepcopy(FER_RAW)
+    row = normalize_holdings("QQQ", "2026-09-26", [raw], LISTING, GROUPS)[0]
+    assert (row["included"], row["symbol"], row["raw_asset"]) == (1, "FER", "")
+    assert raw == FER_RAW
+
+
+@pytest.mark.parametrize("change", [
+    {"name": "Other NV"}, {"securityCusip": "OTHER1234"},
+    {"securityCusip": ""}, {"cusip": "OTHER1234"}, {"isin": "US0000000000"},
+])
+def test_missing_ticker_never_resolved_by_name_alone(change):
+    row = normalize_holdings("QQQ", "2026-09-26", [{**FER_RAW, **change}], LISTING, GROUPS)[0]
+    assert row["included"] == 0
+
+
+@pytest.mark.parametrize("basket,day", [("SPY", "2026-09-26"),
+    ("QQQ", "2026-09-17"), ("QQQ", "2027-01-01")])
+def test_missing_ticker_correction_respects_review_scope(basket, day):
+    assert normalize_holdings(basket, day, [FER_RAW], LISTING, GROUPS)[0]["included"] == 0

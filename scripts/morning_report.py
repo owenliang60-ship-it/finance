@@ -1052,6 +1052,45 @@ def _compute_breadth_s2_status_from_price_frames(
     return result
 
 
+def _recover_breadth_member(conn, basket, snapshot, member):
+    """Apply the current normalizer to legacy exclusions, without changing DB rows."""
+    from src.data.fmp_forward_ingestion import normalize_holdings, load_basket_configs
+
+    reason = member["filter_reason"]
+    if reason == "foreign_listing_unmapped":
+        raw = {"asset": member["raw_asset"], "name": member.get("name")}
+    elif reason == "unrecognized_asset" and not member["raw_asset"]:
+        # Legacy weekly rows have no CUSIP. Bind the same-day physical payload
+        # to all stored source fields before using its security identifiers.
+        witnesses = conn.execute(
+            "SELECT raw_payload_json, fetched_at, composition_available_date "
+            "FROM fmp_fund_disclosure_holdings WHERE basket_symbol=? "
+            "AND holding_date=? AND source_kind='live' AND raw_symbol='' AND name=?",
+            (basket, snapshot, member.get("name")),
+        ).fetchall()
+        if len(witnesses) != 1:
+            return None
+        witness = witnesses[0]
+        fetched = pd.Timestamp(witness["fetched_at"])
+        if (fetched.tzinfo is None or fetched.tz_convert("UTC").date().isoformat() != snapshot
+                or not witness["composition_available_date"]
+                or witness["composition_available_date"] > snapshot):
+            return None
+        raw = json.loads(witness["raw_payload_json"])
+        if not isinstance(raw, dict):
+            return None
+        fields = {"raw_asset": "asset", "name": "name", "weight_pct": "weightPercentage",
+                  "market_value": "marketValue", "updated_at": "updatedAt"}
+        if any(k not in member or key not in raw or member[k] != raw[key]
+               for k, key in fields.items()):
+            return None
+    else:
+        return None
+    listing, groups, _ = load_basket_configs(PROJECT_ROOT / "config/baskets")
+    row = normalize_holdings(basket, snapshot, [raw], listing, groups)[0]
+    return row["symbol"] if row["included"] == 1 else None
+
+
 def _load_market_breadth_universes(as_of: str) -> dict:
     """Read current ETF securities and Extended base, without overlays or writes.
 
@@ -1068,6 +1107,7 @@ def _load_market_breadth_universes(as_of: str) -> dict:
         conn = sqlite3.connect(f"file:{DATA_DIR / 'market.db'}?mode=ro", uri=True)
     except sqlite3.Error:
         return {}
+    conn.row_factory = sqlite3.Row
     try:
         for symbol in MARKET_TIMING_TARGETS:
             try:
@@ -1083,18 +1123,29 @@ def _load_market_breadth_universes(as_of: str) -> dict:
                 if (pd.Timestamp(as_of) - pd.Timestamp(snapshot)).days > 14:
                     raise ValueError("holdings snapshot older than 14 days")
                 members = conn.execute(
-                    "SELECT raw_asset, symbol, included, filter_reason "
-                    "FROM fmp_etf_holdings_snapshot WHERE basket=? AND snapshot_date=?",
+                    "SELECT * FROM fmp_etf_holdings_snapshot WHERE basket=? AND snapshot_date=?",
                     (sources[symbol], snapshot),
                 ).fetchall()
                 symbols = set()
-                for raw_asset, member, included, reason in members:
+                for record in members:
+                    record = dict(record)
+                    raw_asset, member, included, reason = (
+                        record[k] for k in ("raw_asset", "symbol", "included", "filter_reason"))
                     if included == 1 and member:
                         symbols.add(member)
                     elif reason == "dual_class_secondary" and raw_asset:
                         symbols.add(raw_asset.strip().upper())
                     elif reason not in ("cash_or_fund", "swap", "futures", "derivative"):
-                        raise ValueError("unresolved equity constituent")
+                        label = raw_asset or record.get("name") or "未知成分"
+                        try:
+                            recovered = _recover_breadth_member(
+                                conn, sources[symbol], snapshot, record)
+                        except (sqlite3.Error, ValueError, TypeError, KeyError, OSError):
+                            recovered = None
+                        if recovered:
+                            symbols.add(recovered)
+                        else:
+                            raise ValueError("成分识别异常：" + label)
                 if not symbols:
                     raise ValueError("empty equity holdings snapshot")
                 universes[symbol] = {"symbols": sorted(symbols), "membership_as_of": snapshot}
@@ -1174,7 +1225,8 @@ def build_market_timing_factor_report() -> dict:
             "breadth_s2_upcross": bool(breadth.get("upcross")),
             "breadth_s2_as_of": breadth.get("as_of"),
             "breadth_s2_error": breadth.get("error"),
-            "breadth_s2_coverage": "{}/{}".format(breadth.get("symbols_latest", 0), len(symbols)),
+            "breadth_s2_coverage": (
+                "{}/{}".format(breadth.get("symbols_latest", 0), len(symbols)) if symbols else "N/A"),
         })
 
     alerts = []
@@ -1555,6 +1607,13 @@ def _format_s2_trigger(row: dict) -> str:
     return "YES" if row.get("breadth_s2_upcross") else "—"
 
 
+def _market_timing_issues(section: dict) -> list[str]:
+    return [
+        "{} S2 不可用：{}".format(row["symbol"], row["breadth_s2_error"])
+        for row in section.get("rows", []) if row.get("breadth_s2_error")
+    ]
+
+
 def format_section_market_timing_factor(market_signals: dict) -> str:
     section = market_signals.get("market_timing_factor", {}) if market_signals else {}
     lines = ["*0. 大盘择时因子*"]
@@ -1596,6 +1655,7 @@ def format_section_market_timing_factor(market_signals: dict) -> str:
             row.get("breadth_s2_coverage", "—"),
             breadth_cross,
         ))
+    lines.extend(_market_timing_issues(section))
     return "\n".join(lines)
 
 
@@ -2184,6 +2244,7 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
             timing.get("criteria"),
             _format_market_timing_as_of(timing),
             "信号日 {}".format(as_of),
+            "；".join(_market_timing_issues(timing)),
         ) if bit]
         tf_rows = timing.get("rows", [])
         if not tf_rows:
@@ -2367,7 +2428,8 @@ def build_morning_visual_sections(
                     _format_market_timing_as_of(timing),
                     as_of,
                 ),
-                "alerts": timing.get("alerts", []),
+                "alerts": [*timing.get("alerts", []),
+                           *[{"text": issue} for issue in _market_timing_issues(timing)]],
                 "blocks": [
                     {
                         "title": "SPY / QQQ / SOXX / Extended",
