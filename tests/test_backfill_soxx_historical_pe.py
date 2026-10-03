@@ -107,6 +107,68 @@ def test_market_cap_completeness_uses_exact_seven_day_asof_rule():
     assert not market_cap_complete(rows, trading, "2026-01-02", "2026-01-12")
 
 
+@pytest.mark.parametrize("to_date,complete", [
+    ("2026-10-02", True),  # Seven days since the cached Friday rate.
+    ("2026-10-03", False),  # Saturday PIT snapshot is already eight days old.
+])
+def test_fx_cache_checks_snapshot_date_beyond_trading_calendar(to_date, complete):
+    trading = ["2026-09-25", "2026-09-28", "2026-09-29", "2026-09-30",
+               "2026-10-01", "2026-10-02"]
+    rows = [{"currency": "TWD", "date": "2026-09-25",
+             "usd_per_unit": 0.0315, "source_symbol": "TWDUSD"}]
+    # Both windows have the same valid market-cap/trading-day coverage.
+    assert market_cap_complete(
+        [{"date": rows[0]["date"], "market_cap": rows[0]["usd_per_unit"]}],
+        trading, "2026-09-25", to_date)
+    assert backfill._fx_complete(rows, trading, "2026-09-25", to_date) is complete
+
+
+def test_fx_cache_cannot_use_future_rate_to_cover_weekend_snapshot():
+    trading = ["2026-09-25", "2026-10-02"]
+    rows = [{"currency": "EUR", "date": day, "usd_per_unit": 1.14,
+             "source_symbol": "EURUSD"}
+            for day in ("2026-09-25", "2026-10-05")]
+    assert not backfill._fx_complete(rows, trading, "2026-09-25", "2026-10-03")
+
+
+@pytest.mark.parametrize("allow_network", [False, True])
+def test_fx_stage_refreshes_weekend_stale_cache(allow_network):
+    state = _state()
+    state.trading_dates = ["2026-09-25", "2026-09-28", "2026-09-29",
+                           "2026-09-30", "2026-10-01", "2026-10-02"]
+    for row in state.income_by_symbol["TEST"]:
+        row["reported_currency"] = "TWD"
+    state.fx_by_currency["TWD"] = [{
+        "currency": "TWD", "date": "2026-09-25",
+        "usd_per_unit": 0.0315, "source_symbol": "TWDUSD",
+    }]
+    client = Mock()
+    client.get_historical_fx.return_value = [
+        {"date": "2026-09-25", "close": 0.0315},
+        {"date": "2026-10-02", "close": 0.0316},
+    ]
+    args = parse_args([
+        "--stage", "fx", "--from-date", "2026-09-25",
+        "--to-date", "2026-10-03", "--dry-run",
+        *(["--allow-network"] if allow_network else []),
+    ])
+    report = run_backfill(args, state, client=client if allow_network else None)
+    if allow_network:
+        client.get_historical_fx.assert_called_once_with(
+            "TWDUSD", "2026-09-18", "2026-10-03")
+        assert report["stages"]["fx"]["fetched"] == 1
+        assert backfill._fx_complete(
+            state.fx_by_currency["TWD"], state.trading_dates,
+            args.from_date, args.to_date)
+    else:
+        assert report["stages"]["fx"]["planned"] == ["TWD"]
+        assert report["planned_network_calls"] == [{
+            "stage": "fx", "currency": "TWD",
+            "from_date": "2026-09-18", "to_date": "2026-10-03",
+        }]
+        client.get_historical_fx.assert_not_called()
+
+
 def test_batch_fuse_is_strictly_greater_than_twenty_percent():
     assert not failure_rate_exceeded(2, 10)
     assert failure_rate_exceeded(3, 10)

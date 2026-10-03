@@ -834,7 +834,10 @@ def _fx_complete(
         return False
     proxy = [{"date": row["date"], "market_cap": row.get("usd_per_unit")}
              for row in rows]
-    return market_cap_complete(proxy, trading_dates, from_date, to_date)
+    # Weekly PIT runs on Saturday: Friday's calendar can still accept a rate
+    # that has crossed the seven-day limit by the actual snapshot date.
+    return (market_cap_complete(proxy, trading_dates, from_date, to_date)
+            and market_cap_complete(proxy, [to_date], from_date, to_date))
 
 
 def _run_fx(
