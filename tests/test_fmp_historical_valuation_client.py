@@ -62,6 +62,28 @@ def test_get_stock_splits_contract(client):
     request.assert_called_once_with("splits", {"symbol": "KLAC"})
 
 
+def test_reviewed_charter_merger_exchange_retains_ratio_and_raw_type(client):
+    raw = {"symbol": "CHTR", "date": "2016-05-18", "numerator": 4521,
+           "denominator": 5000, "splitType": None}
+    with patch.object(client, "_request", return_value=[raw]):
+        result = client.get_stock_splits("chtr")
+    assert result == [{**raw, "splitType": "merger-exchange",
+                       "sourceSplitType": None}]
+    assert raw["splitType"] is None
+
+
+@pytest.mark.parametrize("change", [
+    {"symbol": "OTHER"}, {"date": "2016-05-19"}, {"numerator": 4522},
+    {"denominator": 5001}, {"splitType": ""},
+])
+def test_charter_correction_does_not_accept_unreviewed_events(client, change):
+    raw = {"symbol": "CHTR", "date": "2016-05-18", "numerator": 4521,
+           "denominator": 5000, "splitType": None, **change}
+    with patch.object(client, "_request", return_value=[raw]):
+        with pytest.raises(FMPResponseError, match="CHTR"):
+            client.get_stock_splits("CHTR")
+
+
 @pytest.mark.parametrize(
     "method,args",
     [

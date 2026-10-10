@@ -38,6 +38,91 @@ def read(store, table, symbol="TEST"):
     return store._get_rows(table, symbol, limit=0)
 
 
+@pytest.mark.parametrize("table", TABLES)
+def test_aem_reviewed_period_end_keeps_raw_vintage(store, table):
+    dataset, legacy, field = TABLES[table]
+    raw = dict(date="2024-10-30", fiscalYear="2024", period="Q3",
+               reportedCurrency="USD", cik="0000002809", **{field: 100})
+    result = collect_fundamentals_for_symbol(
+        "AEM", client=Client([raw]), store=store,
+        observed_at="2026-10-10T07:00:00Z", dataset_keys=[dataset])
+    assert result == {dataset: "ok"}
+    assert read(store, table, "AEM")[0]["date"] == "2024-09-30"
+    assert store.known_as_of("AEM", dataset, "2026-10-10")[0]["date"] == "2024-10-30"
+    assert raw["date"] == "2024-10-30"
+    getattr(store, legacy)("AEM", [raw])
+    assert len(read(store, table, "AEM")) == 1
+
+
+@pytest.mark.parametrize("change", [
+    {"symbol": "OTHER"}, {"cik": "0000000000"}, {"period": "Q2"},
+    {"fiscal_year": "2023"}, {"reported_currency": "CAD"},
+    {"date": "2024-10-31"},
+])
+def test_period_end_correction_is_exactly_scoped(change):
+    from src.data.fiscal_repair import reviewed_statement_date
+    raw = dict(symbol="AEM", date="2024-10-30", fiscal_year="2024", period="Q3",
+               reported_currency="USD", cik="0000002809", **{})
+    raw.update(change)
+    assert reviewed_statement_date(raw) == raw
+
+
+def identity_plan(store, table="income_quarterly", changes=None):
+    from src.data.fiscal_repair import fiscal_group_hash
+    old = read(store, table)[0]
+    return {"table": table, "symbol": "TEST", "date": old["date"],
+            "row_hash": fiscal_group_hash([old]),
+            "changes": changes or {"period": "Q3"}}
+
+
+def test_reviewed_identity_update_archives_and_recomputes(store):
+    from src.data.fiscal_repair import apply_reviewed_identity_updates
+    seed(store, "income_quarterly", [row(revenue=100, netIncome=10)])
+    plan = identity_plan(store)
+    result = apply_reviewed_identity_updates(store, [plan])
+    assert result["rows_updated"] == 1
+    assert read(store, "income_quarterly")[0]["period"] == "Q3"
+    assert read(store, "metrics_quarterly")[0]["period"] == "Q3"
+    archived = store._get_conn().execute(
+        "SELECT payload FROM fundamental_current_archive WHERE reason='reviewed_identity_update'").fetchone()
+    assert json.loads(archived[0])["period"] == "Q1"
+
+
+def test_reviewed_identity_update_normalizes_symbol(store):
+    from src.data.fiscal_repair import apply_reviewed_identity_updates
+    seed(store, "income_quarterly", [row(revenue=100, netIncome=10)])
+    plan = identity_plan(store)
+    plan["symbol"] = "test"
+    assert apply_reviewed_identity_updates(store, [plan])["rows_updated"] == 1
+    assert read(store, "income_quarterly")[0]["period"] == "Q3"
+    assert read(store, "metrics_quarterly")[0]["symbol"] == "TEST"
+
+
+@pytest.mark.parametrize("failure", ["stale", "financial", "duplicate_date", "metrics", "duplicate_quarter"])
+def test_reviewed_identity_update_is_atomic_and_scoped(store, monkeypatch, failure):
+    from src.data import fiscal_repair as repair
+    seed(store, "income_quarterly", [row(revenue=100)])
+    seed(store, "balance_sheet_quarterly", [row(totalAssets=200)])
+    plans = [identity_plan(store), identity_plan(store, "balance_sheet_quarterly")]
+    if failure == "stale":
+        plans[1]["row_hash"] = "stale"
+    elif failure == "financial":
+        plans[1]["changes"] = {"total_assets": 999}
+    elif failure == "duplicate_date":
+        seed(store, "balance_sheet_quarterly", [dict(row("2025-10-03"), period="Q4")])
+        plans[1]["changes"] = {"date": "2025-10-03"}
+    elif failure == "duplicate_quarter":
+        seed(store, "balance_sheet_quarterly", [dict(row("2025-06-30"), period="Q3")])
+    else:
+        monkeypatch.setattr(repair, "_recompute_metrics_in_conn",
+                            lambda *args: (_ for _ in ()).throw(RuntimeError("metrics failed")))
+    before = {t: read(store, t) for t in TABLES}
+    with pytest.raises((ValueError, sqlite3.IntegrityError, RuntimeError)):
+        repair.apply_reviewed_identity_updates(store, plans)
+    assert {t: read(store, t) for t in TABLES} == before
+    assert store._get_conn().execute("SELECT COUNT(*) FROM fundamental_current_archive").fetchone()[0] == 0
+
+
 class Client:
     def __init__(self, rows):
         self.rows = rows

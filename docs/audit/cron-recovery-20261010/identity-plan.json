@@ -1,0 +1,101 @@
+[
+  {
+    "table": "income_quarterly",
+    "symbol": "CRH",
+    "date": "2024-03-31",
+    "row_hash": "38cb2c7e3c1166fa274777fbcad06e142c23de2f2e2516c1b416ab767f5c6b67",
+    "changes": {
+      "period": "Q1"
+    }
+  },
+  {
+    "table": "income_quarterly",
+    "symbol": "CRH",
+    "date": "2024-09-30",
+    "row_hash": "5c0baa3abfbdfe585cc359b08d051446a92aee51e8e80d944b2515d17caa9a43",
+    "changes": {
+      "period": "Q3"
+    }
+  },
+  {
+    "table": "income_quarterly",
+    "symbol": "CRH",
+    "date": "2025-09-30",
+    "row_hash": "d7173b928d7bca18f6b14f8f38a56c039e0c15b45810fd86b53043a84d80c451",
+    "changes": {
+      "period": "Q3"
+    }
+  },
+  {
+    "table": "balance_sheet_quarterly",
+    "symbol": "CRH",
+    "date": "2024-03-31",
+    "row_hash": "f85fd2ddcd125799359c0c2ee84d504c1f2a52a6f9c34d4039c36eb46521054e",
+    "changes": {
+      "period": "Q1"
+    }
+  },
+  {
+    "table": "balance_sheet_quarterly",
+    "symbol": "CRH",
+    "date": "2024-09-30",
+    "row_hash": "5eaee0a8e56b2214e0e564d10af4af75b723b8ebc8934afd824adbca313ee2df",
+    "changes": {
+      "period": "Q3"
+    }
+  },
+  {
+    "table": "balance_sheet_quarterly",
+    "symbol": "CRH",
+    "date": "2025-09-30",
+    "row_hash": "74bf796fa8f9b83088d28055bc107fffe29f0ee622cd0612e510a373dbda5910",
+    "changes": {
+      "period": "Q3"
+    }
+  },
+  {
+    "table": "cash_flow_quarterly",
+    "symbol": "CRH",
+    "date": "2024-03-31",
+    "row_hash": "ac55c1c77c12d817ce5d8e6787149e30133f4a9d8a3cba27f0efe3d74d62ddc7",
+    "changes": {
+      "period": "Q1"
+    }
+  },
+  {
+    "table": "cash_flow_quarterly",
+    "symbol": "CRH",
+    "date": "2024-09-30",
+    "row_hash": "dc204468d3bba11bb4a3bac9803fb705d16d7ff66a623ec51f1528f3c6fc4838",
+    "changes": {
+      "period": "Q3"
+    }
+  },
+  {
+    "table": "cash_flow_quarterly",
+    "symbol": "CRH",
+    "date": "2025-09-30",
+    "row_hash": "df4c8045752cbb291db742446c85bc1437abdfd58495a304df995eb73affd5e2",
+    "changes": {
+      "period": "Q3"
+    }
+  },
+  {
+    "table": "income_quarterly",
+    "symbol": "AEM",
+    "date": "2024-10-30",
+    "row_hash": "2a98f6312f4e5c14e3a4c71a8549844e5f4721c5c7ca807607309589ad346cfe",
+    "changes": {
+      "date": "2024-09-30"
+    }
+  },
+  {
+    "table": "balance_sheet_quarterly",
+    "symbol": "AEM",
+    "date": "2024-10-30",
+    "row_hash": "bacf7c19f0be0e9b6aa76f26ba8a28c016b1741fe7083ac087b243170db67ac5",
+    "changes": {
+      "date": "2024-09-30"
+    }
+  }
+]

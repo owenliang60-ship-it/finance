@@ -246,21 +246,35 @@ class FMPClient:
 
     def get_stock_splits(self, symbol: str) -> List[Dict]:
         """Company split events used by historical market-cap sanity checks."""
-        data = self._request("splits", {"symbol": _validated_symbol(symbol)})
+        symbol = _validated_symbol(symbol)
+        data = self._request("splits", {"symbol": symbol})
         if not isinstance(data, list):
             raise FMPResponseError("splits returned no valid list payload")
-        for row in data:
+        result = []
+        for index, row in enumerate(data):
             try:
                 if not isinstance(row, dict):
                     raise ValueError
+                # Reviewed parent-merger exchange, not an inferred stock split.
+                # https://www.nasdaqtrader.com/TraderNews.aspx?id=ETA2016-103
+                # Preserve the vendor's null; all other missing types still fail.
+                if (symbol == row.get("symbol") == "CHTR"
+                        and row.get("date") == "2016-05-18"
+                        and row.get("numerator") == 4521
+                        and row.get("denominator") == 5000
+                        and "splitType" in row and row["splitType"] is None):
+                    row = {**row, "splitType": "merger-exchange", "sourceSplitType": None}
                 _validated_iso_date(row["date"], "split date")
                 numerator = float(row["numerator"])
                 denominator = float(row["denominator"])
                 if numerator <= 0 or denominator <= 0 or not row.get("splitType"):
                     raise ValueError
             except (KeyError, TypeError, ValueError):
-                raise FMPResponseError("splits returned a malformed row") from None
-        return data
+                raise FMPResponseError(
+                    "splits returned a malformed row for {} at index {}".format(
+                        self._safe(symbol), index)) from None
+            result.append(row)
+        return result
 
     # ========== 股票池相关 ==========
 

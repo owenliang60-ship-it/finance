@@ -18,6 +18,23 @@ _NON_FINANCIAL = frozenset({
 })
 
 
+def reviewed_statement_date(row):
+    """Correct the reviewed AEM release-date alias in current/valuation inputs.
+
+    AEM's 2024 Q3 results were released October 30 for the quarter ended
+    September 30. Raw vintage payloads remain untouched. Evidence and the
+    one-time repair of existing current rows: docs/audit/2026-10-10-cron-recovery.md.
+    No rule is inferred for other fiscal quarters or issuer identities.
+    """
+    if (row.get("symbol") == "AEM" and row.get("cik") == "0000002809"
+            and row.get("date") == "2024-10-30"
+            and str(row.get("fiscal_year", row.get("fiscalYear"))) == "2024"
+            and row.get("period") == "Q3"
+            and row.get("reported_currency", row.get("reportedCurrency")) == "USD"):
+        return {**row, "date": "2024-09-30"}
+    return row
+
+
 def _json(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
@@ -207,4 +224,60 @@ def apply_fiscal_repairs(store, mappings):
 
         for symbol in sorted({plan["symbol"] for plan, _, _, _ in pending}):
             result["metrics_rows"] += _recompute_metrics_in_conn(store, conn, symbol, uuid4().hex)
+    return result
+
+
+def apply_reviewed_identity_updates(store, mappings):
+    """Correct explicitly reviewed current dates/labels, never financial values.
+
+    Caller holds the shared writer lock and creates a SQLite backup first.
+    Every old row must match its full hash. All changes, archival and metric
+    recomputation share one transaction; stale/replayed plans fail closed.
+    Vintage payloads and timestamps are not rewritten.
+    """
+    from datetime import date
+
+    mappings = [{**plan, "symbol": str(plan["symbol"]).strip().upper()} for plan in mappings]
+    result = {"rows_updated": 0, "metrics_rows": 0}
+    with store.transaction() as conn:
+        pending, seen = [], set()
+        for plan in mappings:
+            table, symbol, old_date = plan["table"], plan["symbol"], plan["date"]
+            changes = plan["changes"]
+            if table not in STATEMENT_TABLES or not changes or not set(changes) <= {
+                    "date", "period", "fiscal_year"}:
+                raise ValueError("reviewed identity update cannot change financial fields")
+            identity = table, symbol, old_date
+            if identity in seen:
+                raise ValueError("duplicate reviewed identity update")
+            seen.add(identity)
+            rows = [r for r in store._get_rows(table, symbol, limit=0) if r["date"] == old_date]
+            if len(rows) != 1 or fiscal_group_hash(rows) != plan["row_hash"]:
+                raise ValueError("current row hash differs from reviewed identity update")
+            updated = {**rows[0], **changes}
+            if date.fromisoformat(updated["date"]).isoformat() != updated["date"]:
+                raise ValueError("invalid reviewed date")
+            if _fiscal_key(updated) is None:
+                raise ValueError("reviewed identity must have a fiscal year and quarter")
+            pending.append((plan, rows[0]))
+
+        operation_id = hashlib.sha256(_json(mappings).encode("utf-8")).hexdigest()
+        for plan, old in pending:
+            _archive(conn, plan["table"], [old], operation_id,
+                     "reviewed_identity_update", {"plan": plan})
+            columns = sorted(plan["changes"])
+            cursor = conn.execute("UPDATE {} SET {} WHERE symbol = ? AND date = ?".format(
+                plan["table"], ", ".join(column + " = ?" for column in columns)),
+                [plan["changes"][column] for column in columns] + [plan["symbol"], plan["date"]])
+            if cursor.rowcount != 1:
+                raise ValueError("reviewed identity update did not change exactly one row")
+            result["rows_updated"] += 1
+
+        for table, symbol in {(p["table"], p["symbol"]) for p, _ in pending}:
+            keys = [_fiscal_key(r) for r in store._get_rows(table, symbol, limit=0)]
+            known = [key for key in keys if key is not None]
+            if len(known) != len(set(known)):
+                raise ValueError("reviewed update leaves duplicate fiscal quarters")
+        for symbol in sorted({plan["symbol"] for plan, _ in pending}):
+            result["metrics_rows"] += _recompute_metrics_in_conn(store, conn, symbol, operation_id)
     return result

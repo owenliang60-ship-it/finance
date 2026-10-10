@@ -604,6 +604,8 @@ def _run_fundamentals(
         if not rows:
             failures.append(symbol)
             continue
+        from src.data.fiscal_repair import reviewed_statement_date
+        rows = [reviewed_statement_date({**row, "symbol": symbol}) for row in rows]
         state.income_by_symbol[symbol] = list(rows)
         if store is not None:
             store.upsert_income(symbol, list(rows))

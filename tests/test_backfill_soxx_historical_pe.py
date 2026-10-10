@@ -85,6 +85,24 @@ def test_parse_args_naked_dry_run_disables_network(tmp_path):
     assert args.allow_network is False
 
 
+def test_fundamental_replay_uses_reviewed_date_without_mutating_provider():
+    raw = {"symbol": "AEM", "date": "2024-10-30", "fiscalYear": "2024",
+           "period": "Q3", "cik": "0000002809", "reportedCurrency": "USD",
+           "netIncome": 567100000, "acceptedDate": "2024-10-31 18:33:32"}
+    state = BackfillState(trading_dates=["2024-11-01"])
+    client = Mock()
+    client.get_income_statement.return_value = [raw]
+    store = Mock()
+    backfill._run_fundamentals(
+        Namespace(from_date="2024-01-01", to_date="2024-11-01"),
+        state, ["AEM"], client, store, {"stages": {}},
+        fuse_on_incompleteness=False)
+    corrected = {**raw, "date": "2024-09-30"}
+    assert state.income_by_symbol["AEM"] == [corrected]
+    store.upsert_income.assert_called_once_with("AEM", [corrected])
+    assert raw["date"] == "2024-10-30"
+
+
 def test_parse_args_rejects_bad_date_before_any_dependency():
     with pytest.raises(SystemExit):
         parse_args(["--stage", "all", "--from-date", "bad", "--dry-run"])
