@@ -1,0 +1,47 @@
+{
+  "history": [
+    {
+      "basket": "QQQ",
+      "rows": 261,
+      "latest": "2026-10-09"
+    },
+    {
+      "basket": "SOXX",
+      "rows": 255,
+      "latest": "2026-10-09"
+    },
+    {
+      "basket": "SPY",
+      "rows": 261,
+      "latest": "2026-10-09"
+    }
+  ],
+  "consensus": [
+    {
+      "basket": "IGV",
+      "latest": "2026-10-10"
+    },
+    {
+      "basket": "MAGS",
+      "latest": "2026-10-10"
+    },
+    {
+      "basket": "QQQ",
+      "latest": "2026-10-10"
+    },
+    {
+      "basket": "SOX",
+      "latest": "2026-10-10"
+    },
+    {
+      "basket": "SPY",
+      "latest": "2026-10-10"
+    },
+    {
+      "basket": "XLF",
+      "latest": "2026-10-10"
+    }
+  ],
+  "aem_crh_fetch_failures": [],
+  "local_snapshot_validated": true
+}

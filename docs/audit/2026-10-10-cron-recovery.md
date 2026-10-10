@@ -2,11 +2,25 @@
 
 ## Scope and current state
 
-Prepared in `codex/cron-recovery-oct10`, based on `db8ee59c`. Aligns with the
+Completed on 2026-10-10 in `codex/cron-recovery-oct10`, based on `db8ee59c`. Aligns with the
 north-star data layer: cloud-only market writer, raw vintage observations kept,
 reviewed current-data repair, shared collector and existing valuation gates.
-Production has **not** been changed by this repair task. Merge, push and cloud
-recovery await the project's separate promotion approval.
+Boss explicitly approved merge, push, deployment, repair and recomputation.
+Functional commit `dcdc799f` was fast-forwarded to local/origin/cloud main;
+cloud post-deployment tests: **95 passed**. The final recovery returned **rc=0**,
+both valuation verifiers passed, and SQLite `quick_check=ok`.
+
+| Product | Verified rows | Latest date |
+|---|---:|---|
+| SPY weekly history, both lines | 261 | 2026-10-09 |
+| QQQ weekly history, both lines | 261 | 2026-10-09 |
+| SOXX weekly history, both lines | 255 | 2026-10-09 |
+| Six consensus baskets | 6 in the new vintage | 2026-10-10 |
+
+Fundamental audit: **WARN / rc0**, **877/910 ready (96.37%)**, repair targets **0**.
+Premium was rebuilt through the existing publisher: **61 members**, unchanged
+membership, with refreshed readiness metadata. AEM and CRH no longer have
+`fetch_failed` coverage. Other vendor warnings remain explicit.
 
 The natural run completed forward ingestion for 2026-10-10. SPY and QQQ history
 failed without publishing candidate rows; their last points remain 2026-10-02.
@@ -74,7 +88,7 @@ hashes, financial-field changes, duplicate target rows/dates/quarters and failed
 metric recomputation. Changes, old-row archival and full metric recomputation
 commit together. Replaying a stale plan fails rather than assuming success.
 
-Production sequence after approval:
+Executed recovery sequence:
 
 1. Merge/push the reviewed patch and deploy under the existing shared writer lock.
 2. Under `market_db_writer`, take a consistent SQLite backup, recheck the 11
@@ -83,19 +97,63 @@ Production sequence after approval:
 3. Reuse `collect_fundamentals_for_symbol` for CRH's three statements at 40
    quarters and AEM's three at 8 quarters. Recompute their full metrics with the
    existing repair helper. Six requests before any retry; cap this phase at 12.
-4. Recover the SPY/QQQ five-year windows with new run IDs, then reverify SOXX
-   because shared source data may have changed. Recompute SOXX only if needed.
-   Run the six-basket valuation phase against the **already complete** 10/10
-   ingestion; do not resume/recollect the full ingestion.
+4. Recover SPY/QQQ with new run IDs, then reverify SOXX. SOXX required a source-only
+   recomputation, described below. Run the six-basket valuation phase against
+   the **already complete** 10/10 ingestion; no full ingestion was resumed.
 5. Require both valuation verifiers, read-only fundamental audit and SQLite
    `quick_check`. Preserve prior products and report any newly exposed blocker.
 
-Proposed recovery API hard cap: 1,000 requests total including targeted collection,
-history and retries; persist request reservations across attempts as in the
-existing September recovery wrapper. Primary expected demand is 613 SPY + 152
-QQQ split requests, with remaining budget for incomplete historical sources.
-Do not enlarge the budget or relax a gate to force a pass. No manual report
-send, cron change or unrelated production cleanup is part of this recovery.
+Recovery API hard cap: **1,000/1,000 requests**, including targeted collection,
+history and retries, reserved durably before every HTTP attempt. The limit was
+not increased. No manual report was sent, no cron was changed, and no unrelated
+production cleanup was performed.
+
+## Production recovery and independent checks
+
+- Initial preflight stopped before any data/API operation because free space
+  was 24MB below the existing backup gate. Only this task's temporary staging
+  and pytest-82 directory were removed; the gate was not weakened.
+- Consistent backup: 1,424,576,512 bytes, compressed to 363,153,439 bytes. Cloud
+  gzip round-trip and local decompression both matched SHA256
+  `32abca8537b5e03f84acd8ffc8c6830d7cdc3842f079bbdac399d4a08e009eaa`.
+  After recovery completed, identical compressed bytes were also verified and
+  the cloud copy was archived to the local long-term location
+  `data/backups/cron-recovery-20261010/` in the primary checkout. Its receipt is
+  retained both there and at cloud `data/cron-recovery-20261010/backup-local-archive.json`.
+  Historical run receipts retain the original cloud path; that file has moved.
+- The 11 frozen current-row hashes matched at execution. All old rows were
+  archived, labels/dates repaired, and metrics recomputed. The six targeted
+  statement requests succeeded through the shared collector.
+- All **234 original vintage rows** were independently extracted from the
+  backup and compared field-for-field with production after collection. They
+  are unchanged; current count is **300**, reflecting 66 appended observations.
+- SPY and QQQ completed under `index-pe-recovery-20261010-1-spy/qqq`.
+  SOXX's previous 10/9 MU TTM value no longer matched current raw-source visibility:
+  the 14:00 fundamental job had changed MU's latest `accepted_date` to 10/9.
+  The existing next-trading-day rule therefore uses the prior four visible
+  quarters on 10/9: $50.469bn, versus the old product's $84.969bn. SPY/QQQ
+  already agreed with the newly visible source selection.
+- The first automatic SOXX refresh stopped at request 1,000, with no candidate
+  weekly rows published. Its failed run and reports remain intact.
+- Attempt 2 reused the backup/checkpoint/ledger and invoked the existing
+  `run_backfill(client=None, store=...)` path. SPY/QQQ were recertified; SOXX's
+  whole window was rebuilt under `index-pe-recovery-20261010-2-soxx`. Identity,
+  quality, sanity quarantine, coverage, and transaction-internal independent
+  verification remained active. **Zero additional HTTP requests** were made.
+  The source-only wrapper replay was checked offline; the historical backfill
+  suite passed **52 tests**, and independent review passed the targeted offline
+  contracts. This did not relax a data gate or substitute unverified inputs.
+- Both history verification passes and the full forward verifier passed.
+  Final result: **complete / rc0 / quick_check ok / 1,000 requests**. Cloud evidence
+  is in `data/cron-recovery-20261010/attempt-2/`; the local copy is under
+  `reports/cron-recovery-20261010/production/cloud/` in the recovery worktree.
+- The standard `sync_to_cloud.sh --pull` completed with identical snapshot
+  SHA256, SQLite integrity and local health checks passing. Direct local SQL
+  confirmed all three histories through 10/9, six consensus baskets through
+  10/10, and no AEM/CRH `fetch_failed` rows. The derived Premium artifact was
+  copied atomically and validated separately (61 members, 877 ready).
+  Compact machine-readable evidence: `cron-recovery-20261010/production-summary.json`
+  and `cron-recovery-20261010/local-summary.json`.
 
 ## Verification
 

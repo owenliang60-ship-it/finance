@@ -1,0 +1,85 @@
+{
+  "history": [
+    {
+      "basket": "QQQ",
+      "rows": 261,
+      "first": "2021-10-15",
+      "latest": "2026-10-09",
+      "run_count": 1,
+      "run_id": "index-pe-recovery-20261010-1-qqq",
+      "missing_ttm": 0,
+      "missing_hindsight": 0
+    },
+    {
+      "basket": "SOXX",
+      "rows": 255,
+      "first": "2021-11-26",
+      "latest": "2026-10-09",
+      "run_count": 1,
+      "run_id": "index-pe-recovery-20261010-2-soxx",
+      "missing_ttm": 0,
+      "missing_hindsight": 0
+    },
+    {
+      "basket": "SPY",
+      "rows": 261,
+      "first": "2021-10-15",
+      "latest": "2026-10-09",
+      "run_count": 1,
+      "run_id": "index-pe-recovery-20261010-1-spy",
+      "missing_ttm": 0,
+      "missing_hindsight": 0
+    }
+  ],
+  "consensus": [
+    {
+      "basket": "IGV",
+      "snapshot_date": "2026-10-10",
+      "fwd_pe_ntm": 25.99706178017981
+    },
+    {
+      "basket": "MAGS",
+      "snapshot_date": "2026-10-10",
+      "fwd_pe_ntm": 25.684240269988802
+    },
+    {
+      "basket": "QQQ",
+      "snapshot_date": "2026-10-10",
+      "fwd_pe_ntm": 24.35374408368486
+    },
+    {
+      "basket": "SOX",
+      "snapshot_date": "2026-10-10",
+      "fwd_pe_ntm": 16.736589726167956
+    },
+    {
+      "basket": "SPY",
+      "snapshot_date": "2026-10-10",
+      "fwd_pe_ntm": 19.91921534594744
+    },
+    {
+      "basket": "XLF",
+      "snapshot_date": "2026-10-10",
+      "fwd_pe_ntm": 14.76989194654886
+    }
+  ],
+  "mu_ttm_visible": {
+    "SPY": 50469000000.0,
+    "QQQ": 50469000000.0,
+    "SOXX": 50469000000.0
+  },
+  "recovery": {
+    "status": "complete",
+    "as_of": "2026-10-10",
+    "request_limit": 1000,
+    "offline": true,
+    "backup": "/root/workspace/Finance/data/market.db.backup-20261010082053-cron-recovery-20261010.gz",
+    "exit_code": 0,
+    "quick_check": "ok",
+    "api_requests_used": 1000,
+    "elapsed_seconds": 378
+  },
+  "history_verifier": true,
+  "forward_verifier": true,
+  "original_vintage_rows_preserved": 234
+}
