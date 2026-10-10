@@ -25,6 +25,7 @@ from scripts.check_fundamental_quality import run_quality
 
 DAY = '2026-10-10'
 ATTEMPT = int(os.environ.get('RECOVERY_ATTEMPT', '1'))
+OFFLINE = os.environ.get('RECOVERY_OFFLINE') == '1'
 BASE_JOB = ROOT / 'data/cron-recovery-20261010'
 JOB = BASE_JOB / ('attempt-' + str(ATTEMPT))
 DB = ROOT / 'data/market.db'
@@ -104,7 +105,7 @@ def main():
         write_json(JOB/'result.json', {'status': 'busy', 'exit_code': 75})
         return 75
     client, store = None, None
-    result = {'status': 'running', 'as_of': DAY, 'request_limit': LIMIT}
+    result = {'status': 'running', 'as_of': DAY, 'request_limit': LIMIT, 'offline': OFFLINE}
     stop = threading.Event()
     started = time.monotonic()
     def progress():
@@ -170,6 +171,8 @@ def main():
             checkpoint['identity_completed'] = {'result': repaired, 'vintage_before': before, 'vintage_after': after}
             write_json(BASE_JOB/'checkpoint.json', checkpoint)
         if not checkpoint.get('statements_completed'):
+            if OFFLINE:
+                raise RuntimeError('Offline replay requires targeted statements already complete')
             STATE['stage'] = 'targeted_statements'
             client.max_requests = 12
             statuses = {}
@@ -195,7 +198,8 @@ def main():
             args = history.parse_args(['--baskets', basket, '--as-of', DAY,
                 '--years', '5', '--db', str(DB), '--max-api-requests', str(LIMIT),
                 '--run-id', 'index-pe-recovery-20261010-' + str(ATTEMPT) + '-' + basket.lower()])
-            report = history.run_backfill(args, client=client, store=store, conn=store._get_conn())
+            report = history.run_backfill(args, client=None if OFFLINE else client,
+                                          store=store, conn=store._get_conn())
             report['api_requests_used_total'] = client.request_count
             write_json(JOB/(basket.lower()+'-history.json'), report)
             if report['failed_baskets']:
@@ -207,7 +211,8 @@ def main():
             args = history.parse_args(['--baskets', 'SOXX', '--as-of', DAY,
                 '--years', '5', '--db', str(DB), '--max-api-requests', str(LIMIT),
                 '--run-id', 'index-pe-recovery-20261010-' + str(ATTEMPT) + '-soxx'])
-            report = history.run_backfill(args, client=client, store=store, conn=store._get_conn())
+            report = history.run_backfill(args, client=None if OFFLINE else client,
+                                          store=store, conn=store._get_conn())
             report['api_requests_used_total'] = client.request_count
             write_json(JOB/'soxx-history.json', report)
             if report['failed_baskets']:
