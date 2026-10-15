@@ -145,17 +145,17 @@ def test_message_shows_date_counts_two_percentiles_and_tie_convention():
     assert len(text)<4000
 
 
-@pytest.mark.parametrize('weak_rank,alert', [(89.9,False),(90.0,False),(90.1,True),(100.0,True)])
-def test_weak_percentile_alert_is_strict_and_prominent(weak_rank,alert):
+@pytest.mark.parametrize('weak_pct,weak_rank,alert', [(49.99,100.0,False),(50.0,0.0,True),(88.7,100.0,True)])
+def test_weak_raw_breadth_alert_is_inclusive_and_prominent(weak_pct,weak_rank,alert):
     report=breadth.build_report(Market(),ASOF)
     report['strong_percentile']=100.0
     report['weak_percentile']=weak_rank
-    # Trigger is the weak historical percentile, not the raw breadth percentage.
-    report['current']['weak_pct']=0.5 if alert else 95.0
+    # Trigger is the raw weak breadth percentage, not the historical percentile.
+    report['current']['weak_pct']=weak_pct
     text=breadth.message(report)
     weak_line=next(line for line in text.splitlines() if '极弱 ≤2：' in line)
     if alert:
-        assert text.startswith('*🚨🚨 极弱宽度高位警报 | 一年分位 > P90 🚨🚨*\n')
+        assert text.startswith('*🚨🚨 极弱宽度警报 | 极弱占比 ≥ 50% 🚨🚨*\n')
         assert weak_line.startswith('*极弱 ≤2：') and weak_line.endswith('*')
         assert f'P{weak_rank:.1f}' in weak_line
     else:

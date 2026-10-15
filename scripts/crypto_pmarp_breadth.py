@@ -24,6 +24,9 @@ PMARP_LOOKBACK = 150
 # Same kernel as the daily scanner. 365 seed bars before the first reported
 # day allow EMA stabilization before the 150-day comparison window.
 SEED_DAYS = 365
+# Raw weak breadth (%) that marks a market-wide capitulation; 2025-10 to
+# 2026-10 reached it twice (2025-10-10, 2026-02-05).
+WEAK_ALERT_PCT = 50
 
 
 MANIFEST_PATH = Path(__file__).resolve().parents[1]/'config/crypto_pmarp_breadth_sources.json'
@@ -185,12 +188,12 @@ def build_report(market, as_of):
 
 def message(report):
     current = report['current']
-    weak_alert = report['weak_percentile'] > 90
+    weak_alert = current['weak_pct'] >= WEAK_ALERT_PCT
     lines = [f"*Crypto 日线PMARP市场宽度 | {report['as_of']} UTC*",
              '历史逐日Crypto USDT永续池 · 含BTC · 全池等权',
              f"有效 {current['valid_count']}/{current['eligible_count']} · 新币预热 {current['warmup_count']}"]
     if weak_alert:
-        lines.insert(0, '*🚨🚨 极弱宽度高位警报 | 一年分位 > P90 🚨🚨*')
+        lines.insert(0, f'*🚨🚨 极弱宽度警报 | 极弱占比 ≥ {WEAK_ALERT_PCT}% 🚨🚨*')
     for side, label in [('strong','极强 ≥98'),('weak','极弱 ≤2')]:
         line = (f"{label}：{current[side+'_count']}/{current['valid_count']} = "
                 f"{current[side+'_pct']:.2f}% | 一年分位 P{report[side+'_percentile']:.1f}")

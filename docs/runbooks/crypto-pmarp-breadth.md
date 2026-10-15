@@ -32,13 +32,20 @@ The comparison excludes today, uses calendar days (crypto trades every day),
 and uses unrounded breadth values. Ties count fully: an all-zero historical
 series gives P100 for zero today. Both raw breadth and percentile are shown.
 
-When the **weak breadth's unrounded trailing-year percentile is strictly
-greater than 90**, the daily message starts with a bold 🚨 warning and the
-entire weak breadth row is bold (the existing Telegram Markdown transport).
-Exactly P90 does not trigger. The trigger is not the raw weak percentage or
-the strong percentile. Every qualifying daily report carries the warning,
-not only the first crossing; existing same-day delivery receipts still apply.
-This presentation alert does not change the indicator or its tie convention.
+When the **unrounded raw weak breadth is at least 50%** (`WEAK_ALERT_PCT`),
+the daily message starts with a bold 🚨 warning and the entire weak breadth
+row is bold (the existing Telegram Markdown transport). Exactly 50% triggers.
+The trigger is not the weak percentile or any strong-side value; both
+percentiles are still shown. Every qualifying daily report carries the
+warning, not only the first crossing; existing same-day delivery receipts
+still apply. This presentation alert does not change the indicator.
+
+Why raw, not percentile (changed 2026-10-15): the 2026-09-29 study's only
+rebound lead came from raw weak breadth at capitulation (2025-10-10 88.7%,
+2026-02-05 68.3%). The former P90 trigger fired near 4% raw weak breadth,
+a level without backtest support. 2025-09-27 to 2026-10-14 had 3 days at
+>=50% (2 episodes). The sample is one year and the threshold was chosen
+after seeing it: treat the alert as a prompt to look, not a trading signal.
 
 A gap, duplicate, malformed/nonpositive close, invalid PMARP, absent lifecycle,
 or zero valid denominator stops numeric publication. New-coin warmup is
