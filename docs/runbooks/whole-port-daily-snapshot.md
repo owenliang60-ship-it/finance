@@ -49,6 +49,33 @@ gaps. Existing Finance sync does not pull this separate database: copy it using
 SQLite's backup API to a temporary snapshot before transfer, not a live file copy.
 History has no automatic expiry or deletion.
 
+## Daily drawdown push
+
+`scripts/whole_port_drawdown.py` opens `history.db` read-only and sends one message
+per run to the private chat (`TELEGRAM_CHAT_ID`, same as Portfolio Intelligence).
+
+- Tracks Net Total, 美股, BTC and 独立团资金, found by label, not row position.
+- HWM = highest value in snapshots from 2026-09-23 through today. Every run recomputes
+  it from the append-only history: no stored state, no manual start value, so it
+  never falls. A tie keeps the earliest date.
+- Per item: current value, HWM and its date, gap to HWM in amount and percent
+  (`n/a` when HWM <= 0). Net Total also shows the room above the HWM x 0.8 line
+  (Tokamak 20% total-drawdown limit), or how far it is below that line.
+- The whole message is UNKNOWN with a reason when the database or table cannot be
+  read, today's Shanghai-date snapshot is missing, or any row has a missing or
+  duplicate tracked label or a non-numeric value. It never uses an earlier day.
+- Fixed last line: `按余额计，未扣除资金划转`.
+- stdout is `whole_port_drawdown sent ok` or `sent unknown: <reason>`, never amounts.
+  A failed Telegram send exits 1, so `cron_wrapper.sh` raises its alert.
+
+It runs in the same marked cron block, chained with `;` after the snapshot command,
+so it always starts after the 09:00 write attempt, including a failed one. It uses
+the main Finance `.env` for Telegram; the snapshot keeps its dedicated env.
+
+```sh
+0 9 * * * <snapshot command above>; /root/workspace/Finance/scripts/cron_wrapper.sh finance_whole_port_drawdown cron_whole_port_drawdown.log /usr/bin/python3 /root/workspace/Finance-jobs/whole-port-<commit>/scripts/whole_port_drawdown.py --db /root/workspace/Finance/data/whole_port/history.db
+```
+
 ## Deploy / rollback
 
 Run the snapshot tests and existing sheet reader tests, compile with cloud Python,
