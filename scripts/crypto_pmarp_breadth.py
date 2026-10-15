@@ -24,8 +24,8 @@ PMARP_LOOKBACK = 150
 # Same kernel as the daily scanner. 365 seed bars before the first reported
 # day allow EMA stabilization before the 150-day comparison window.
 SEED_DAYS = 365
-# Raw weak breadth (%) that marks a market-wide capitulation; 2025-10 to
-# 2026-10 reached it twice (2025-10-10, 2026-02-05).
+# Raw weak breadth (%) that marks a market-wide capitulation; 2025-09-27 to
+# 2026-10-14 reached it on 3 days in 2 episodes (2025-10-10/11, 2026-02-05).
 WEAK_ALERT_PCT = 50
 
 
