@@ -113,3 +113,29 @@ Never restore a stale full crontab over later unrelated changes.
 - First scheduled observation: **2026-09-23 09:00 UTC+8**. Natural execution was
   still pending at installation verification (07:57); not claimed as completed.
 - Work is retained on `codex/whole-port-daily-snapshot`; no main merge or Git push.
+
+## Drawdown deployment evidence — 2026-10-15
+
+- Snapshot branch merged into local `main` first (`81b10664`, not pushed); drawdown
+  built on `codex/whole-port-drawdown`. Runtime revision
+  `a2ab7c04266fa072b2f7e1b84de0515e1d7f2d08`, installed as
+  `/root/workspace/Finance-jobs/whole-port-a2ab7c04`.
+- Archive SHA-256 matched on both hosts:
+  `8688b4c053e867c733e013478f99f24a67630e659ec35c9c64d287e8b9a1f5a7`.
+- Local: drawdown, snapshot, Telegram and sheet reader tests → **105 passed**; full
+  suite 4752 passed, 12 failed (known live-data failures of a bare worktree, outside
+  this change). Cloud Python 3.10: `py_compile` passed; drawdown, snapshot, sheet
+  reader, PI and Telegram routing tests → **131 passed**.
+- `/code-review high`: 9 findings. Fixed: per-item UNKNOWN, trimmed label match,
+  snapshot time in header, shared timezone, runbook wording. Not changed: writer-side
+  label checks (would stop history), transfer-driven HWM (accepted balance basis,
+  stated in footer), manual near-midnight date skew, `-0.0%` (not reproducible).
+- Manual run through the real cron wrapper in a minimal cron environment against
+  production `history.db`: `sent ok`, rc 0; Boss accepted the private-chat message.
+- Live crontab equalled the backup before install; installed crontab exactly matched
+  the candidate; 39 lines; only the Whole Port block comment and its 09:00 line
+  changed; the snapshot command is unchanged.
+- Backup: `/root/workspace/Finance/data/whole_port/crontab-before-drawdown-20261015T094318.txt`.
+  Candidate: `/root/workspace/Finance/data/whole_port/crontab-candidate-drawdown-20261015T094954.txt`.
+- First scheduled push: **2026-10-16 09:00 UTC+8**, pending at installation; not
+  claimed as completed. No Git push.
