@@ -26,7 +26,8 @@ Finance cron wrapper provides job locking and start/end/failure logs.
 ```
 
 The dedicated env contains only `PORTFOLIO_SHEET_ID` (mode 0600); the data directory
-is 0700. No outbound notifications; cron failures are recorded in the log.
+is 0700. The snapshot job sends no notifications; cron failures are recorded in the
+log. The drawdown push below is a separate job with its own env.
 No changes to `market.db`, `company.db`, Google Sheet, or existing PI behavior.
 
 ## History and inspection
@@ -48,6 +49,36 @@ or `already_recorded`; no balances or source URL in logs. Inspect dates to ident
 gaps. Existing Finance sync does not pull this separate database: copy it using
 SQLite's backup API to a temporary snapshot before transfer, not a live file copy.
 History has no automatic expiry or deletion.
+
+## Daily drawdown push
+
+`scripts/whole_port_drawdown.py` opens `history.db` read-only and sends one message
+per run to the private chat (`TELEGRAM_CHAT_ID`, same as Portfolio Intelligence).
+
+- Tracks Net Total, 美股, BTC and 独立团资金, found by label, not row position.
+- HWM = highest value in snapshots from 2026-09-23 through today. Every run recomputes
+  it from the append-only history: no stored state, no manual start value, so it
+  never falls. A tie keeps the earliest date.
+- Per item: current value, HWM and its date, gap to HWM in amount and percent
+  (`n/a` when HWM <= 0). Net Total also shows the room above the HWM x 0.8 line
+  (Tokamak 20% total-drawdown limit), or how far it is below that line.
+- The header shows today's snapshot capture time. Labels match after trimming spaces.
+- The whole message is UNKNOWN with a reason when the database or table cannot be
+  read or today's Shanghai-date snapshot is missing. It never uses an earlier day.
+- One item is UNKNOWN with a reason when any row has that label missing or
+  duplicated, a non-numeric value, or unparseable cells. The other items, including
+  the Net Total line, still report.
+- Fixed last line: `按余额计，未扣除资金划转`.
+- stdout is `whole_port_drawdown sent ok` or `sent unknown: <reason>`, never amounts.
+  A failed Telegram send exits 1, so `cron_wrapper.sh` raises its alert.
+
+It runs in the same marked cron block, chained with `;` after the snapshot command,
+so it always starts after the 09:00 write attempt, including a failed one. It uses
+the main Finance `.env` for Telegram; the snapshot keeps its dedicated env.
+
+```sh
+0 9 * * * <snapshot command above>; /root/workspace/Finance/scripts/cron_wrapper.sh finance_whole_port_drawdown cron_whole_port_drawdown.log /usr/bin/python3 /root/workspace/Finance-jobs/whole-port-<commit>/scripts/whole_port_drawdown.py --db /root/workspace/Finance/data/whole_port/history.db
+```
 
 ## Deploy / rollback
 
@@ -82,3 +113,29 @@ Never restore a stale full crontab over later unrelated changes.
 - First scheduled observation: **2026-09-23 09:00 UTC+8**. Natural execution was
   still pending at installation verification (07:57); not claimed as completed.
 - Work is retained on `codex/whole-port-daily-snapshot`; no main merge or Git push.
+
+## Drawdown deployment evidence — 2026-10-15
+
+- Snapshot branch merged into local `main` first (`81b10664`, not pushed); drawdown
+  built on `codex/whole-port-drawdown`. Runtime revision
+  `a2ab7c04266fa072b2f7e1b84de0515e1d7f2d08`, installed as
+  `/root/workspace/Finance-jobs/whole-port-a2ab7c04`.
+- Archive SHA-256 matched on both hosts:
+  `8688b4c053e867c733e013478f99f24a67630e659ec35c9c64d287e8b9a1f5a7`.
+- Local: drawdown, snapshot, Telegram and sheet reader tests → **105 passed**; full
+  suite 4752 passed, 12 failed (known live-data failures of a bare worktree, outside
+  this change). Cloud Python 3.10: `py_compile` passed; drawdown, snapshot, sheet
+  reader, PI and Telegram routing tests → **131 passed**.
+- `/code-review high`: 9 findings. Fixed: per-item UNKNOWN, trimmed label match,
+  snapshot time in header, shared timezone, runbook wording. Not changed: writer-side
+  label checks (would stop history), transfer-driven HWM (accepted balance basis,
+  stated in footer), manual near-midnight date skew, `-0.0%` (not reproducible).
+- Manual run through the real cron wrapper in a minimal cron environment against
+  production `history.db`: `sent ok`, rc 0; Boss accepted the private-chat message.
+- Live crontab equalled the backup before install; installed crontab exactly matched
+  the candidate; 39 lines; only the Whole Port block comment and its 09:00 line
+  changed; the snapshot command is unchanged.
+- Backup: `/root/workspace/Finance/data/whole_port/crontab-before-drawdown-20261015T094318.txt`.
+  Candidate: `/root/workspace/Finance/data/whole_port/crontab-candidate-drawdown-20261015T094954.txt`.
+- First scheduled push: **2026-10-16 09:00 UTC+8**, pending at installation; not
+  claimed as completed. No Git push.
