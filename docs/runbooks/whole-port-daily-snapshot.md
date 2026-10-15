@@ -26,7 +26,8 @@ Finance cron wrapper provides job locking and start/end/failure logs.
 ```
 
 The dedicated env contains only `PORTFOLIO_SHEET_ID` (mode 0600); the data directory
-is 0700. No outbound notifications; cron failures are recorded in the log.
+is 0700. The snapshot job sends no notifications; cron failures are recorded in the
+log. The drawdown push below is a separate job with its own env.
 No changes to `market.db`, `company.db`, Google Sheet, or existing PI behavior.
 
 ## History and inspection
@@ -61,9 +62,12 @@ per run to the private chat (`TELEGRAM_CHAT_ID`, same as Portfolio Intelligence)
 - Per item: current value, HWM and its date, gap to HWM in amount and percent
   (`n/a` when HWM <= 0). Net Total also shows the room above the HWM x 0.8 line
   (Tokamak 20% total-drawdown limit), or how far it is below that line.
+- The header shows today's snapshot capture time. Labels match after trimming spaces.
 - The whole message is UNKNOWN with a reason when the database or table cannot be
-  read, today's Shanghai-date snapshot is missing, or any row has a missing or
-  duplicate tracked label or a non-numeric value. It never uses an earlier day.
+  read or today's Shanghai-date snapshot is missing. It never uses an earlier day.
+- One item is UNKNOWN with a reason when any row has that label missing or
+  duplicated, a non-numeric value, or unparseable cells. The other items, including
+  the Net Total line, still report.
 - Fixed last line: `按余额计，未扣除资金划转`.
 - stdout is `whole_port_drawdown sent ok` or `sent unknown: <reason>`, never amounts.
   A failed Telegram send exits 1, so `cron_wrapper.sh` raises its alert.

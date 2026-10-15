@@ -38,7 +38,7 @@ def test_report_has_current_hwm_and_net_total_deadline(tmp_path):
         TODAY: cells(net=1100, us=500, btc=360, team=0),
     })
     assert job.build_message(db, TODAY) == ("ok", "\n".join([
-        "Whole Port 回撤 · 2026-10-15",
+        "Whole Port 回撤 · 2026-10-15（快照 09:00）",
         "",
         "Net Total",
         "当前 1,100 ｜ HWM 1,250（2026-09-30）",
@@ -85,22 +85,39 @@ def test_missing_today_is_unknown_and_never_uses_yesterday(tmp_path):
     assert text.endswith("按余额计，未扣除资金划转")
 
 
+def blocks(text):
+    return {b.splitlines()[0]: b for b in text.split("\n\n")[1:-1]}
+
+
 @pytest.mark.parametrize("bad_date", [TODAY, "2026-09-30"])
-@pytest.mark.parametrize("bad_rows, reason", [
-    ("not json", "无法解析"),
-    (cells(**{"美股": "#N/A"}), "美股"),
-    (cells(**{"BTC": None}), "BTC"),
-    (cells(**{"Net Total": True}), "Net Total"),
-    ([r for r in cells() if r[0] != "独立团资金"], "独立团资金"),
-    (cells() + [["BTC", 1]], "BTC"),
+@pytest.mark.parametrize("bad_rows, broken, reason", [
+    ("not json", job.TRACKED, "无法解析"),
+    (cells(**{"美股": "#N/A"}), ["美股"], "不是有效数字"),
+    (cells(**{"BTC": None}), ["BTC"], "不是有效数字"),
+    (cells(**{"Net Total": True}), ["Net Total"], "不是有效数字"),
+    ([r for r in cells() if r[0] != "独立团资金"], ["独立团资金"], "出现 0 次"),
+    (cells() + [["BTC", 1]], ["BTC"], "出现 2 次"),
 ])
-def test_any_bad_row_is_unknown(tmp_path, bad_date, bad_rows, reason):
+def test_bad_value_marks_only_its_item_unknown(tmp_path, bad_date, bad_rows, broken, reason):
     snapshots = {"2026-09-30": cells(), TODAY: cells()}
     snapshots[bad_date] = bad_rows
     status, text = job.build_message(make_db(tmp_path / "h.db", snapshots), TODAY)
     assert status.startswith("unknown: ")
-    assert bad_date in text and reason in text
-    assert "HWM" not in text
+    for label, block in blocks(text).items():
+        if label in broken:
+            assert block.splitlines()[1].startswith("UNKNOWN：%s 快照" % bad_date)
+            assert reason in block and "HWM" not in block
+        else:
+            assert "HWM" in block and "UNKNOWN" not in block
+    assert list(blocks(text)) == list(job.TRACKED)
+    assert text.endswith("按余额计，未扣除资金划转")
+
+
+def test_labels_match_after_trimming_spaces(tmp_path):
+    db = make_db(tmp_path / "h.db", {TODAY: [[" 美股 ", 1] if r[0] == "美股" else r for r in cells()]})
+    status, text = job.build_message(db, TODAY)
+    assert status == "ok"
+    assert blocks(text)["美股"].splitlines()[1] == "当前 1 ｜ HWM 1（2026-10-15）"
 
 
 def test_missing_db_is_unknown_and_not_created(tmp_path):
