@@ -1,10 +1,10 @@
 # 动量多空1号实盘 — 研究与复用证据
 
-日期：2026-10-19（Asia/Singapore）。状态：独立交叉核对及文本复核已完成；架构待审批。范围：冻结策略落到真实执行，不重新优化参数。方案建议与事实分列。
+日期：2026-10-19（Asia/Singapore）。状态：已合并Kiro、DSH和Boss本轮修订；当前设计为A-lite。本文保留早期研究证据，最终执行边界以north-star.md v2为准。范围：冻结策略落到真实执行，不重新优化参数。
 
 ## 1. 结论
 
-建议采用Finance专用Python执行器，借鉴成熟框架的恢复和对账方式。成熟框架仍须适配本策略的组合调仓、成本翻倍止损、冷却及时钟；不能因支持Binance就判定可以直接上线。NautilusTrader作为正式备选。
+采用Finance专用A-lite：每周调仓与每分钟守护，共用小模块和SQLite，原生止损在交易所运行。首期无常驻用户流或框架迁移；成熟系统只作为参考。Boss确认普通开/加/减/平全部市价、并发提交，止损触发后市价退出。
 
 最重要的工程差距不是评分，而是成交状态、交易所保护单与账户事实。主分支目前没有币安实盘执行链。冻结研究未模拟强平，所以不能从历史回撤推出实盘损失上限。
 
@@ -31,7 +31,7 @@
 |`src/indicators/fisher.py:46`|递归Fisher内核|实盘另验应生效周是否完整，不能只merge_asof|
 |`scripts/crypto_holding_policy.py:50,75,109`|周锚点、排名、入场资格|冻结副本一致，但方向读取缺过期周检查|
 |`scripts/crypto_trend_market.py:192,252,336`|历史生命周期重建/当前池/行情读取|current_catalog不等于历史候选集合|
-|冻结`source/stop_engine.py:9`|成交后均价纯函数|拟迁入正常源码并对拍；不从reports直接生产import|
+|冻结`source/stop_engine.py:9`|成交后均价纯函数|用于独立核对entryPrice和冻结金样本；不从reports直接生产import，不建重复成本主账|
 |`src/telegram_bot.py`|私人通知通道|通知失败不改变成交状态；业务执行不依赖消息送达|
 
 main `scripts/crypto_momentum_backtest.py:49`只有fisher/both/balanced。冻结shared版本的AsymmetricFisher仍需`source/run_study.py:10`的wrapper才得到空100%＋多50%；`stop100`还需`threshold=1.0/execution=ohlc`。只运行旧CLI或asymmetric会跑错策略。
@@ -48,9 +48,19 @@ main `scripts/crypto_momentum_backtest.py:49`只有fisher/both/balanced。冻结
 
 超时和部分503响应可能代表已接受但结果未知，应先查订单或用户流。429继续施压可能触发418。官方demo与生产使用不同端点；测试成功不能替代生产能力验收。[官方General Info](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/general-info)
 
-用户流有生命周期和重连要求；账户事件只推送变化的持仓，不能把未出现的币归零。条件状态、普通委托和成交需关联核对。[官方用户数据流](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/user-data-streams)
+用户流有生命周期和重连要求，账户事件只推送变化持仓。A-lite首期不部署用户流；改用REST查询加成交补拉，仍须处理遗漏/延迟，不能把查询不到或不完整结果当归零。[官方用户数据流](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/user-data-streams)
 
 官方网页有版本混杂：旧事件独立URL可能跳转主页，综合页仍列已退役事件；必须用变更日志、实际接口和固定协议夹具交叉核对。不能以HTTP 200或菜单存在当作语义通过。具体生产请求协议在适配器验收时固定。
+
+### 本轮核对：-4130、数量型止损与并发
+
+当前官方USD-M错误码页面没有列出-4130；此结果只代表本次未在该页核实，不能证明该错误不存在。Kiro指出的旧closePosition共存假设值得移除，但“改成reduceOnly就一定能共存”也缺证据。官方列有-2022和-4118，说明已有订单可能与新reduceOnly冲突。[官方错误码](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/error-code)
+
+本轮选择quantity＋reduceOnly的STOP_MARKET为首选，把能力试验提前到第一阶段，不继续以“双closePosition可共存”为固定上线门。首选更替方法仍须测试新旧完整数量保护、正常平仓与保护的冲突、缩量/撤单行为；失败不自动先撤后挂。[协议验收](protocol-validation.md)
+
+普通batchOrders单批最多5单，撮合顺序不保证。网络并发与数据库单写者并不冲突；API限频还取决于账户、同IP其他流量和查询开销，不能只凭20个槽位推断必然够用。设计已取消逐币60秒串行与IOC价差上限。
+
+entryPrice与breakEvenPrice是不同字段。以交易所entryPrice为成本主来源是简化方向，其加减仓/费用/资金费语义须通过demo并与冻结纯函数独立对拍；本次未实测。
 
 ## 5. 保证金研究
 
@@ -95,7 +105,7 @@ Controller产动作，Executor管理执行；Connector先跟踪订单再发请�
 |先撤旧止损后新单失败|保护更替状态可恢复；明确无保护窗口与受影响币处置|
 |旧止损触发同时加仓成交|取消剩余加仓，等待终态，对账；残仓按已批准故障权限退出|
 |本地以为平仓但交易所尚未成交|核对实际仓位归零后结束周期，清理旧保护再允许后续新周期|
-|用户流静默丢事件|新鲜度监测、REST快照与成交补拉；差异暂停新增|
+|分钟守护漏跑或REST延迟|主机任务失败提示、快照与成交补拉；差异暂停新增，原生保护留存|
 |全池缺数据却仍产榜单|完整性门在评分前阻止；不能用缩小后的池悄悄重排|
 |缺最新Fisher周却沿用旧值|比较应生效周而非仅检查非空|
 |未知状态触发逐币全平|账户级处置范围门，不用循环绕过Boss全平确认|
@@ -109,6 +119,6 @@ Round 1：本地冻结规则与三个参考架构，满足≥3架构、≥10术�
 
 Round 2：补强Algo迁移、保护单不能直接改单、503未知状态、保证金/强平、Fisher过期周与主分支缺口。公开API做了只读样例验证。
 
-Round 3：独立交叉核对已完成，9项挑战及逐项处理记录到review.md。文档混杂与参考系统不适合继承的行为已识别；依赖实际行为的保护单更替和账户权限仍列上线阻塞验收，不伪装为已验证。
+Round 3：早期独立交叉核对9项已落实；DSH二次审计和Kiro审阅促成本次A-lite修订，处置记录见review.md。文档混杂与参考系统不适合继承的行为已识别；原生保护、entryPrice和账户能力提前验收，不伪装为已验证。
 
 未验证：账户身份/产品资格、签名权限、实际保证金档位、生产IP连接、原生保护更替与触发、真实成交质量、通知送达。没有代码实现或部署证据。
