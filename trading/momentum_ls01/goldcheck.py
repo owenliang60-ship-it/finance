@@ -119,3 +119,125 @@ def run_goldcheck(frozen_dir, weekly_sources=()):
     return dict(strategy_id='momentum-ls-01',rule_version='2026-10-19.v2',
                 status='PASS' if all(c['status']=='PASS' for c in checks.values()) else 'BLOCKED',
                 integrity={k:v for k,v in e['provenance'].items() if k!='sha256'},checks=checks)
+
+
+def compare_reports(expected, actual):
+    a,b = expected['periods']['14d'],actual['periods']['14d']
+    if set(a['pool']) != set(b['pool']):
+        raise ValueError('GC5 pool mismatch')
+    ar,br = ({r['symbol']:r for r in p['rows']} for p in (a,b))
+    if set(ar)!=set(br):
+        raise ValueError('GC5 row coverage mismatch')
+    for symbol,r in ar.items():
+        q=br[symbol]
+        if r['status']!=q['status']:
+            raise ValueError('GC5 status mismatch: '+symbol)
+        if r['status']=='ok' and not np.isclose(r['score'],q['score'],rtol=0,atol=1e-10):
+            raise ValueError('GC5 score mismatch: '+symbol)
+    if [r['symbol'] for r in a['ranked']] != [r['symbol'] for r in b['ranked']]:
+        raise ValueError('GC5 ranking mismatch')
+    expected_ranks=directional_rankings(a['rows'])
+    if expected_ranks!=directional_rankings(b['rows']):
+        raise ValueError('GC5 directional ranking mismatch')
+    return dict(status='PASS',pool=len(ar),unavailable=[s for s,r in ar.items() if r['status']!='ok'],
+                directional_rankings=expected_ranks)
+
+
+def check_market_replay(replay_dir, reports_dir, weekly_sources):
+    """Replay public inputs through the actual adapter. All HTTP is forbidden.
+
+    replay_dir contains copied cloud trend_cache and sliced daily CSV evidence.
+    Temporary cache writes never mutate either source directory.
+    """
+    import shutil
+    import tempfile
+    from unittest.mock import patch
+    from scripts.crypto_trend_rankings import build_report
+    from .binance import Endpoints, ExchangeError
+    from .market_public import PublicMarket
+    from .prepare import prepare
+
+    root=Path(replay_dir).resolve()
+    manifest=json.loads((root/'manifest.json').read_text())
+    if not manifest.get('sha256'):
+        raise ValueError('GC5 missing source manifest')
+    hashes=dict(manifest['sha256'])
+    supplement=root/'supplement_manifest.json'
+    if supplement.is_file():
+        extra=json.loads(supplement.read_text())['sha256']
+        if set(extra)&set(hashes):raise ValueError('GC5 duplicate supplement paths')
+        hashes.update(extra)
+    for name,h in hashes.items():
+        path=(root/name).resolve()
+        if not path.is_relative_to(root) or not path.is_file() or sha256(path)!=h:
+            raise ValueError('GC5 source hash mismatch: '+name)
+    weekly=load_weekly(weekly_sources)
+    checks=[]
+
+    class ReplayClient:
+        env='prod'
+        def __init__(self,day):self.day=day
+        def request(self,method,path,params=None,**kwargs):
+            if method!='GET':raise ValueError('GC5 writes forbidden')
+            if path==Endpoints.EXCHANGE_INFO:
+                return json.loads((root/'trend_cache'/('catalog_'+self.day+'.json')).read_text())
+            if path!=Endpoints.KLINES or params['interval']!='1d':
+                raise ValueError('GC5 uncached request '+path)
+            p=root/'daily'/(params['symbol']+'.csv')
+            if p.is_file():return replay_daily(p,params)
+            saved=root/'supplement'/(params['symbol']+'.json')
+            if not saved.is_file() or str(saved.relative_to(root)) not in hashes:
+                raise ValueError('GC5 missing daily evidence: '+params['symbol'])
+            payload=json.loads(saved.read_text())
+            if 'error_code' in payload:
+                raise ExchangeError('REJECTED','recorded public response',code=payload['error_code'])
+            return [r for r in payload['rows'] if params['startTime']<=r[0]<=params['endTime']][-params['limit']:]
+
+    with tempfile.TemporaryDirectory(prefix='mls01-gc5-') as tmp:
+        cache=Path(tmp)/'trend_cache';shutil.copytree(root/'trend_cache',cache)
+        with patch('scripts.crypto_trend_market.requests.get',side_effect=ValueError('GC5 network forbidden; missing archive evidence')), patch('scripts.crypto_trend_market.time.sleep',lambda _:None):
+            for day in ('2026-09-20','2026-09-27','2026-10-04','2026-10-11'):
+                source=Path(reports_dir)/('crypto_trend_top10_'+day+'.json')
+                expected=json.loads(source.read_text())
+                as_of=pd.Timestamp(day,tz='UTC')
+                market=PublicMarket(ReplayClient(day),cache,as_of)
+                actual=build_report(market,as_of,periods=(14,))
+                result=compare_reports(expected,actual)
+                if result['unavailable']:
+                    # Matching an old incomplete report never authorizes live preparation.
+                    try:prepare(market,weekly,as_of+pd.Timedelta(days=1,hours=4))
+                    except ValueError as exc:
+                        if 'incomplete candidate signal pool' not in str(exc):raise
+                    else:raise ValueError('GC5 incomplete inputs incorrectly permitted live preparation')
+                    result['live_prepare']='BLOCKED_BY_D5'
+                else:
+                    ready=prepare(market,weekly,as_of+pd.Timedelta(days=1,hours=4))
+                    if ready['short_ranked']!=result['directional_rankings']['short'] or ready['long_ranked']!=result['directional_rankings']['long']:
+                        raise ValueError('GC5 prepared directional ranking mismatch')
+                    result['live_prepare']='READY'
+                    result['short_ranked']=ready['short_ranked'];result['long_ranked']=ready['long_ranked']
+                result.update(day=day,report_sha256=sha256(source))
+                checks.append(result)
+    return dict(status='PASS',days=checks,source_manifest_sha256=sha256(root/'manifest.json'),
+                supplement_manifest_sha256=sha256(supplement) if supplement.is_file() else None,
+                note='Historical unavailable rows must match; they are not a live readiness pass.')
+
+
+def replay_daily(path,params):
+    frame=pd.read_csv(path)
+    times=pd.to_datetime(frame.timestamp,utc=True).astype('datetime64[ns, UTC]')
+    milliseconds=times.astype('int64')//1_000_000
+    frame=frame[(milliseconds>=params['startTime']) & (milliseconds<=params['endTime'])].tail(params['limit'])
+    rows=[]
+    for r in frame.itertuples():
+        ms=int(pd.Timestamp(r.timestamp).timestamp()*1000)
+        rows.append([ms,str(r.open),str(r.high),str(r.low),str(r.close),str(r.volume),ms+86400000-1,str(r.quote_volume)])
+    return rows
+
+
+def directional_rankings(rows):
+    """Independent rule expression for published evidence; do not call LivePolicy."""
+    eligible=[r for r in rows if r['status']=='ok' and r['symbol']!='BTCUSDT']
+    ranked=sorted(eligible,key=lambda r:(-r['score'],r['symbol']))
+    return dict(short=[r['symbol'] for r in ranked if r['return']<0 and r['slope']<0],
+                long=[r['symbol'] for r in ranked if r['return']>0 and r['slope']>0 and r['drawdown']<=.30])
