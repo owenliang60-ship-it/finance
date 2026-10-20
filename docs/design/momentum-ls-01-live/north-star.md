@@ -313,4 +313,4 @@ entryPrice 以币安读回为主。本地成交独立核对冻结语义：加仓
 
 本项目属于 Finance 主架构中的 Trading/Risk 执行分支。数据和分析只读复用。不把交易塞进日报，不改 market.db 和 company.db 的所有权。详见[主北极星](../north-star.md)。
 
-需求 R1–R17 映射见 [requirements.md](requirements.md)。运行实现、账户能力、demo 和实盘验收均未完成。文档修订不等于上线通过。
+需求 R1–R17 映射见 [requirements.md](requirements.md)。2026-10-20：阶段 1 离线实现已完成，GC1–GC6 通过，专项 105 项通过；demo 和实盘验收未完成，门 1 尚未通过。阶段 2 未开始。证据与剩余项见 [protocol-results.md](protocol-results.md)。代码和离线验证不等于上线通过。
