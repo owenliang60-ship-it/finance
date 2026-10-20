@@ -96,3 +96,5 @@ New-entry eligibility requires TRADING, PERPETUAL, USDT quote and delivery stric
 ## Evidence and remaining gate
 
 Offline tests cover an independent RFC 4231 signature vector, signing bytes, permission checks, write gates, unknown outcomes/no retry, header budget, rollover, shared cooldown/ban, clock skew, parent/child preservation and Decimal boundaries. They do not establish real endpoint support, protection replacement behavior, simultaneous reduce-only semantics or account permissions. Those remain Task 1.4 / stage 3 gates.
+
+Position zero proof (2026-10-20): `GET /fapi/v2/positionRisk` may return explicit zero rows and is separately allowed as `POSITION_RISK_V2`. `v3/positionRisk` returns only symbols with positions or open orders. A missing row is never zero proof; probe preflight and cleanup require explicit V2 rows for tested symbols. Source: official Trade page, Position Information V2 / V3.

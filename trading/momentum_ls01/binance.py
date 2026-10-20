@@ -28,6 +28,7 @@ class Endpoints:
     ALGO_ORDER = '/fapi/v1/algoOrder'
     OPEN_ALGO_ORDERS = '/fapi/v1/openAlgoOrders'
     POSITION_RISK = '/fapi/v3/positionRisk'
+    POSITION_RISK_V2 = '/fapi/v2/positionRisk'
     ACCOUNT = '/fapi/v3/account'
     POSITION_MODE = '/fapi/v1/positionSide/dual'
     MULTI_ASSETS_MODE = '/fapi/v1/multiAssetsMargin'
@@ -41,7 +42,7 @@ class Endpoints:
 PUBLIC = {Endpoints.TIME, Endpoints.EXCHANGE_INFO, Endpoints.KLINES,
           Endpoints.TICKER_24HR, Endpoints.TICKER_PRICE, Endpoints.MARK_PRICE}
 READABLE = PUBLIC | {Endpoints.ORDER, Endpoints.OPEN_ORDERS, Endpoints.ALGO_ORDER,
-                     Endpoints.OPEN_ALGO_ORDERS, Endpoints.POSITION_RISK,
+                     Endpoints.OPEN_ALGO_ORDERS, Endpoints.POSITION_RISK, Endpoints.POSITION_RISK_V2,
                      Endpoints.ACCOUNT, Endpoints.POSITION_MODE, Endpoints.MULTI_ASSETS_MODE,
                      Endpoints.SYMBOL_CONFIG, Endpoints.USER_TRADES, Endpoints.INCOME}
 WRITABLE = {'POST': {Endpoints.ORDER, Endpoints.ALGO_ORDER, Endpoints.LEVERAGE, Endpoints.MARGIN_TYPE},
