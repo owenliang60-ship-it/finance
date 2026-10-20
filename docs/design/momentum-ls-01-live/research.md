@@ -1,6 +1,6 @@
 # 动量多空1号实盘 — 研究与复用证据
 
-日期：2026-10-19（Asia/Singapore）。状态：已合并Kiro、DSH和Boss本轮修订；当前设计为A-lite。本文保留早期研究证据，最终执行边界以north-star.md v2为准。范围：冻结策略落到真实执行，不重新优化参数。
+日期：2026-10-19（Asia/Singapore）。状态：已合并Kiro、DSH和Boss本轮修订；当前设计为A-lite。本文保留早期研究证据，最终执行边界以north-star.md v3为准。范围：冻结策略落到真实执行，不重新优化参数。
 
 ## 1. 结论
 
@@ -10,7 +10,7 @@
 
 ## 2. 本次核验事实
 
-- 冻结版本：momentum-ls-01 / 2026-10-19.v1。
+- 冻结版本：momentum-ls-01 / 2026-10-19.v1（本节核验对象）。2026-10-19 Boss 已把研究基准升级为 v2（计入历史资金费，交易规则不变）；v2 规则与冻结包在主 checkout `docs/runbooks/momentum-ls-01.md` 和 `reports/momentum-ls-01/2026-10-19.v2/`，本 worktree 尚未同步，集成时须同步。
 - 原工作区：`/Users/owen/CC workspace/Finance`；本设计worktree：`/Users/owen/.codex/worktrees/momentum-ls-01-live/Finance`。
 - 对原工作区`reports/momentum-ls-01/2026-10-19/manifest.json`逐项复算SHA256：33/33匹配，规则文件哈希匹配。
 - 发布包SHA256：`a9dfb0d44f3a63e3507e94b07309214f0f28e9a1574775337acdf1f4ac89c373`，与`releases/SHA256SUMS`相符。
@@ -34,7 +34,7 @@
 |冻结`source/stop_engine.py:9`|成交后均价纯函数|用于独立核对entryPrice和冻结金样本；不从reports直接生产import，不建重复成本主账|
 |`src/telegram_bot.py`|私人通知通道|通知失败不改变成交状态；业务执行不依赖消息送达|
 
-main `scripts/crypto_momentum_backtest.py:49`只有fisher/both/balanced。冻结shared版本的AsymmetricFisher仍需`source/run_study.py:10`的wrapper才得到空100%＋多50%；`stop100`还需`threshold=1.0/execution=ohlc`。只运行旧CLI或asymmetric会跑错策略。
+main `scripts/crypto_momentum_backtest.py:49`只有fisher/both/balanced。冻结shared版本的AsymmetricFisher仍需`source/run_study.py:10`的wrapper才得到空100%＋多50%；`stop100`还需`threshold=1.0/execution=ohlc`。只运行旧CLI或asymmetric会跑错策略。v2 正式主结果取 `with_funding` 路径（原止损参数即 stop100），实盘对照组也以它为准。
 
 冻结Fisher适配的`merge_asof`只检查方向非空，不能证明应更新周没有缺失。实盘需要显式`expected_week_close/effective_at`门，保留旧研究工件不改。
 
@@ -58,7 +58,7 @@ main `scripts/crypto_momentum_backtest.py:49`只有fisher/both/balanced。冻结
 
 本轮选择quantity＋reduceOnly的STOP_MARKET为首选，把能力试验提前到第一阶段，不继续以“双closePosition可共存”为固定上线门。首选更替方法仍须测试新旧完整数量保护、正常平仓与保护的冲突、缩量/撤单行为；失败不自动先撤后挂。[协议验收](protocol-validation.md)
 
-普通batchOrders单批最多5单，撮合顺序不保证。网络并发与数据库单写者并不冲突；API限频还取决于账户、同IP其他流量和查询开销，不能只凭20个槽位推断必然够用。设计已取消逐币60秒串行与IOC价差上限。
+普通batchOrders单批最多5单，撮合顺序不保证。v3只用独立请求，不用batchOrders。网络并发与数据库单写者并不冲突；API限频还取决于账户、同IP其他流量和查询开销，不能只凭20个槽位推断必然够用。设计已取消逐币60秒串行与IOC价差上限。
 
 entryPrice与breakEvenPrice是不同字段。以交易所entryPrice为成本主来源是简化方向，其加减仓/费用/资金费语义须通过demo并与冻结纯函数独立对拍；本次未实测。
 

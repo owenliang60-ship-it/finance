@@ -1,4 +1,4 @@
-# 动量多空1号实盘术语 — A-lite
+# 动量多空1号实盘术语 — A-lite（v3）
 
 日期：2026-10-19。
 
@@ -25,5 +25,12 @@
 |未知提交|请求可能成功但响应丢失；查询恢复，不按超时重发|
 |冷却/持仓周期|从零到非零再回零的策略状态与退出限制；必须靠事实恢复|
 |前向观察|冻结规则后真实发生的新结果；与反复用于定参的历史样本分开|
+|波A / 波B|周调仓的两波（待 D4 确认）：波A 并发发出全部减仓和平仓；收敛并检查可用保证金后，波B 并发发出全部开仓和加仓|
+|准备|周一锚点前（默认11:00新加坡）冻结本周候选、方向和输入哈希；只读，不下单|
+|越线即退|挂或换保护时价格已达止损线：视为止损已触发，直接 reduceOnly MARKET 全平|
+|轻核对 / 全量核对|守护每分钟只看仓位、保护、挂单和账户保证金率；每整点及调仓前再核对成交、资金流水、账户模式、key 权限和合约状态|
+|固定发布目录|实盘从 `Finance-jobs/momentum-ls-01-<commit>` 运行，不跟随 06:25 自动 git pull；换版本需 Boss 批准|
+|单次停新增 / 持久暂停|前者只影响本次运行；后者需 CLI resume 先对账才能清除。两者都不阻挡止损残仓退出和越线即退|
+|flat-start 对照|冻结引擎 v2 `with_funding` 从实盘上线锚点空仓起跑的回放，用于实盘偏差比较；不是冻结的连续账户|
 
 依据：[官方交易接口](https://developers.binance.com/en/docs/catalog/core-trading-derivatives-trading-usd-s-m-futures/api/rest-api/trade)、[官方错误码](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/error-code)。entryPrice的业务语义须先通过协议验收。
