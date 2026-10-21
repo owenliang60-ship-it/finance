@@ -17,15 +17,15 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from src.indicators.bbwp import analyze_bbwp
-from src.indicators.pmarp import analyze_pmarp
+from src.indicators.pmarp import analyze_pmarp, DEFAULT_PMARP_EMA_PERIOD, DEFAULT_PMARP_LOOKBACK
 from src.indicators.rvol import analyze_rvol
 
 
 @dataclass(frozen=True)
 class DualEngineConfig:
     ema_period: int = 144
-    pmarp_ema_period: int = 20
-    pmarp_lookback: int = 150
+    pmarp_ema_period: int = DEFAULT_PMARP_EMA_PERIOD
+    pmarp_lookback: int = DEFAULT_PMARP_LOOKBACK
     bbwp_period: int = 13
     bbwp_std: float = 1.0
     bbwp_lookback: int = 252

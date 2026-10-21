@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import ttest_1samp
 
-from src.indicators.pmarp import calculate_pmarp
+from src.indicators.pmarp import DEFAULT_PMARP_EMA_PERIOD, DEFAULT_PMARP_LOOKBACK, calculate_pmarp
 from src.indicators.rvol import calculate_rvol_series
 
 
@@ -17,8 +17,8 @@ class RVOLSignalStatsConfig:
     study_start_date: str = "2021-07-01"
     rvol_lookback: int = 150
     rvol_threshold: float = 2.0
-    pmarp_ema_period: int = 20
-    pmarp_lookback: int = 150
+    pmarp_ema_period: int = DEFAULT_PMARP_EMA_PERIOD
+    pmarp_lookback: int = DEFAULT_PMARP_LOOKBACK
     pmarp_up_threshold: float = 2.0
     flat_move_threshold: float = 0.01
     pmarp_low_cutoff: float = 30.0

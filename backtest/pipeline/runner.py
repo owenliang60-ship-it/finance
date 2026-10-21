@@ -85,6 +85,8 @@ class PipelineRunner:
         spec_snapshot = artifact_dir / "spec.yaml"
         spec_snapshot.write_text(self.spec_path.read_text(encoding="utf-8"), encoding="utf-8")
 
+        (artifact_dir / "resolved_spec.json").write_text(self.spec.to_json(), encoding="utf-8")
+
         split_manifest = artifact_dir / "split.json"
         split_manifest.write_text(
             json.dumps(self.build_period_split(), ensure_ascii=False, indent=2, sort_keys=True),

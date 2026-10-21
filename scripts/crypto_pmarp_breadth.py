@@ -14,18 +14,20 @@ import sys
 import numpy as np
 import pandas as pd
 
+from src.indicators.pmarp import DEFAULT_PMARP_EMA_PERIOD, DEFAULT_PMARP_LOOKBACK
 from scripts.crypto_beta_scanner import daily_frame
 from scripts.crypto_trend_market import TrendMarket, eligible_metadata, fetch_daily_or_confirm_unopened
 from scripts.crypto_trend_rankings import atomic_text, utc_day
 
 LOOKBACK_DAYS = 365
-EMA_PERIOD = 20
-PMARP_LOOKBACK = 150
+EMA_PERIOD = DEFAULT_PMARP_EMA_PERIOD
+PMARP_LOOKBACK = DEFAULT_PMARP_LOOKBACK
 # Same kernel as the daily scanner. 365 seed bars before the first reported
-# day allow EMA stabilization before the 150-day comparison window.
+# day allow EMA stabilization before the 120-day comparison window.
 SEED_DAYS = 365
-# Raw weak breadth (%) that marks a market-wide capitulation; 2025-09-27 to
-# 2026-10-14 reached it on 3 days in 2 episodes (2025-10-10/11, 2026-02-05).
+# Raw weak breadth (%) alert. Historical EMA20/150 calibration over
+# 2025-09-27..2026-10-14 reached it on 3 days in 2 episodes; those counts
+# are not a claim about the new EMA30/120 configuration.
 WEAK_ALERT_PCT = 50
 
 
@@ -102,7 +104,7 @@ def symbol_history(frame, meta, start, end, calculator):
     if len(scores) != len(closes):
         raise ValueError(meta['symbol']+': PMARP输出长度错误')
     scores = pd.Series(np.asarray(scores, dtype=float), index=frame.index)
-    # Only first 150 actual listing bars are legitimately unavailable.
+    # Only first PMARP_LOOKBACK actual listing bars are legitimately unavailable.
     mature = scores.iloc[PMARP_LOOKBACK:]
     if not np.isfinite(mature).all() or not mature.between(0, 100).all():
         raise ValueError(meta['symbol']+': PMARP计算异常')
@@ -133,7 +135,7 @@ def build_report(market, as_of):
         try:
             frame = fetch_daily_or_confirm_unopened(
                 market,meta,start,end,limit=1000,
-                required_history='breadth_731_ema20_pmarp150')
+                required_history=f'breadth_731_ema{EMA_PERIOD}_pmarp{PMARP_LOOKBACK}')
             if frame is None:
                 unopened.append(symbol)
                 continue
@@ -188,6 +190,7 @@ def build_report(market, as_of):
 
 def message(report):
     current = report['current']
+    parameters = report['parameters']
     weak_alert = current['weak_pct'] >= WEAK_ALERT_PCT
     lines = [f"*Crypto 日线PMARP市场宽度 | {report['as_of']} UTC*",
              '历史逐日Crypto USDT永续池 · 含BTC · 全池等权',
@@ -200,7 +203,7 @@ def message(report):
         lines.append(f'*{line}*' if side == 'weak' and weak_alert else line)
     lines += [f"对比 {report['comparison_start']} 至 {report['comparison_end']}，此前365日，不含当天。",
               '分位=历史宽度≤今日的天数占比；并列计入（连续为0也可能P100）。',
-              'EMA20 / PMARP150 · 先看今日占比；分位仅表示历史排名，并列会抬高排名。']
+              f"EMA{parameters['ema_period']} / PMARP{parameters['pmarp_lookback']} · 先看今日占比；分位仅表示历史排名，并列会抬高排名。"]
     return '\n'.join(lines)
 
 

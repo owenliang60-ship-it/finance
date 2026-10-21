@@ -8,6 +8,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
+from src.indicators.pmarp import DEFAULT_PMARP_EMA_PERIOD, DEFAULT_PMARP_LOOKBACK
+
 
 class SpecValidationError(ValueError):
     """Raised when a pipeline spec is invalid."""
@@ -178,9 +180,14 @@ class FactorInput:
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "FactorInput":
+        params = dict(payload.get("params", {}))
+        if str(payload["name"]) == "PMARP":
+            # Persist effective defaults so artifact hashes change with the signal definition.
+            params.setdefault("ema_period", DEFAULT_PMARP_EMA_PERIOD)
+            params.setdefault("lookback", DEFAULT_PMARP_LOOKBACK)
         return cls(
             name=str(payload["name"]),
-            params=dict(payload.get("params", {})),
+            params=params,
             transform=payload.get("transform", "raw"),
             weight=float(payload.get("weight", 1.0)),
             direction=payload.get("direction", "higher_is_better"),

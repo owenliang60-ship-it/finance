@@ -119,8 +119,10 @@ class TestAnalyzePmarpSignals:
         """Mid-range PMARP should have no crossovers"""
         # Gentle oscillation around mean
         closes = [100 + 5 * np.sin(i / 10) for i in range(200)]
+        closes[-2:] = [100, 100]  # End in the middle, away from either boundary.
         df = _make_df(closes)
         result = analyze_pmarp(df)
+        assert 2 < result["previous"] < 98 and 2 < result["current"] < 98
         assert result["crossover_98_up"] == False
         assert result["crossover_98_down"] == False
         assert result["crossover_2_down"] == False

@@ -7,6 +7,13 @@ the trend reports. Deployment and first catch-up evidence:
 Aligned with north-star technical analysis / market-environment observation.
 This report describes participation, not a trading signal or position rule.
 
+## Parameter migration (2026-10-21)
+
+The reviewed branch uses **EMA30 / previous120**. The existing live deployment
+listed above remains20/150 until the coordinated Finance+Quant rollout.
+See `docs/runbooks/pmarp-defaults-30-120.md`; do not deploy only one side.
+Historical20/150 research and raw OHLCV snapshots remain unchanged.
+
 ## Definition
 
 For the last closed UTC day, take all historical Crypto USDT perpetuals
@@ -16,8 +23,8 @@ Top100, volume, price or direction filters. A contract settling intraday is
 excluded on that day. A newly listed partial first day follows Binance's
 native daily bar convention.
 
-Reuse Quant's `calculate_pmarp` with EMA20 and 150 prior daily PMAR values.
-The first 150 actual listing bars are warmup, outside the valid denominator.
+Reuse Quant's `calculate_pmarp` with EMA30 and120 prior daily PMAR values.
+The first120 actual listing bars are warmup, outside the valid denominator.
 Fetch 365 seed days before the first breadth date. This fixes the EMA seed
 for each dated report; it uses the same kernel/parameters as the scanner,
 but does not copy its Top50 universe or its shorter downloaded price window.
@@ -40,7 +47,7 @@ percentiles are still shown. Every qualifying daily report carries the
 warning, not only the first crossing; existing same-day delivery receipts
 still apply. This presentation alert does not change the indicator.
 
-Why raw, not percentile (changed 2026-10-15): the 2026-09-29 study's only
+Historical EMA20/150 calibration — why raw, not percentile (changed 2026-10-15): the 2026-09-29 study's only
 rebound lead came from raw weak breadth at capitulation (2025-10-10 88.7%,
 2026-02-05 68.3%). The former P90 trigger fired near 4% raw weak breadth,
 a level without backtest support. 2025-09-27 to 2026-10-14 had 3 days at

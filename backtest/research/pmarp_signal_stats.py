@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import ttest_1samp
 
-from src.indicators.pmarp import calculate_pmarp
+from src.indicators.pmarp import DEFAULT_PMARP_EMA_PERIOD, DEFAULT_PMARP_LOOKBACK, calculate_pmarp
 
 
 @dataclass(frozen=True)
@@ -16,8 +16,8 @@ class PMARPSignalStatsConfig:
     study_start_date: str = "2021-07-01"
     is_end_date: str = "2023-12-31"
     oos_start_date: str = "2024-01-01"
-    ema_period: int = 20
-    pmarp_lookback: int = 150
+    ema_period: int = DEFAULT_PMARP_EMA_PERIOD
+    pmarp_lookback: int = DEFAULT_PMARP_LOOKBACK
 
 
 @dataclass(frozen=True)

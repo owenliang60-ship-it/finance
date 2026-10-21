@@ -20,7 +20,7 @@ from backtest.factor_study.event_study import EventStudyResult, run_event_study
 from backtest.factor_study.forward_returns import build_excess_return_matrix
 from backtest.factor_study.report import _apply_bh_fdr
 from backtest.factor_study.signals import SignalDefinition, SignalType, detect_signals
-from src.indicators.pmarp import calculate_pmarp
+from src.indicators.pmarp import DEFAULT_PMARP_EMA_PERIOD, DEFAULT_PMARP_LOOKBACK, calculate_pmarp
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,8 +38,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mcap-threshold", type=float, default=10e9)
     parser.add_argument("--benchmark", default="SPY")
     parser.add_argument("--horizons", default="7,30,60")
-    parser.add_argument("--ema-period", type=int, default=20)
-    parser.add_argument("--lookback", type=int, default=150)
+    parser.add_argument("--ema-period", type=int, default=DEFAULT_PMARP_EMA_PERIOD)
+    parser.add_argument("--lookback", type=int, default=DEFAULT_PMARP_LOOKBACK)
     parser.add_argument(
         "--output-dir",
         default=None,

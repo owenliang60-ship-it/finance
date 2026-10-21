@@ -18,7 +18,7 @@ def meta(symbol, start='2020-01-01', end='2100-01-01', kind='COIN'):
                 deliveryDate=int(pd.Timestamp(end, tz='UTC').timestamp()*1000))
 
 
-def indicator(prices, ema_period=20, lookback=150):
+def indicator(prices, ema_period=30, lookback=120):
     # Independent mathematical oracle (recursive EMA, NumPy comparison).
     values = np.asarray(prices, dtype=float)
     ema = np.empty(len(values)); ema[0] = values[0]
@@ -79,8 +79,8 @@ def test_percentile_excludes_today_and_uses_right_inclusive_ties():
     with pytest.raises(ValueError): breadth.percentile(1,[np.nan])
 
 
-def test_new_listing_enters_only_after_150_previous_daily_bars():
-    start=str((ASOF-150*DAY).date())
+def test_new_listing_enters_only_after_120_previous_daily_bars():
+    start=str((ASOF-120*DAY).date())
     result=breadth.build_report(Market([meta('BTCUSDT'),meta('NEWUSDT',start=start)]),ASOF)
     assert result['history'][-2]['valid_count']==1
     assert result['history'][-2]['warmup_count']==1
@@ -121,7 +121,7 @@ def test_future_candles_and_prelisting_padding_cannot_enter_calculation():
 def test_thresholds_are_inclusive_and_percentile_uses_fraction_not_rounded_display():
     market=Market()
     market.scanner.calculate_pmarp=lambda prices,**kw: pd.Series(
-        [np.nan]*150+[98 if prices.iloc[-1]>1 else 2]*(len(prices)-150))
+        [np.nan]*kw['lookback']+[98 if prices.iloc[-1]>1 else 2]*(len(prices)-kw['lookback']))
     result=breadth.build_report(market,ASOF)
     assert result['history'][-1]['strong_count']==1
     assert result['history'][-1]['weak_count']==1
@@ -167,7 +167,7 @@ def test_run_dry_run_saves_artifacts_without_sending(tmp_path,monkeypatch):
     report=breadth.build_report(Market(),ASOF)
     sent=[]
     scanner=SimpleNamespace(send_telegram_alert=lambda text:sent.append(text) or True,
-                            CONFIG={'ema_period':20,'lookback':150})
+                            CONFIG={'ema_period':30,'lookback':120})
     monkeypatch.setattr(breadth,'BreadthMarket',lambda *a,**k:Market())
     result=breadth.run(tmp_path,tmp_path,dry_run=True,scanner=scanner,as_of=ASOF)
     assert result['as_of']==report['as_of'] and not sent
@@ -177,7 +177,7 @@ def test_run_dry_run_saves_artifacts_without_sending(tmp_path,monkeypatch):
 def test_failure_artifact_is_unavailable_and_send_failure_propagates(tmp_path,monkeypatch):
     sent=[]
     scanner=SimpleNamespace(send_telegram_alert=lambda text:sent.append(text) or True,
-                            CONFIG={'ema_period':20,'lookback':150})
+                            CONFIG={'ema_period':30,'lookback':120})
     monkeypatch.setattr(breadth,'BreadthMarket',lambda *a,**k:Market())
     def fail(*a,**k):raise ValueError('missing historical metadata')
     monkeypatch.setattr(breadth,'build_report',fail)

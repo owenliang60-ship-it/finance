@@ -14,6 +14,7 @@ from typing import Dict, Optional, Type
 import pandas as pd
 
 from backtest.factor_study.protocol import Factor, FactorMeta
+from src.indicators.pmarp import DEFAULT_PMARP_EMA_PERIOD, DEFAULT_PMARP_LOOKBACK
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ class PMARPFactor(Factor):
             score_name="current",
             score_range=(0, 100),
             higher_is_stronger=True,
-            min_data_days=170,
+            min_data_days=DEFAULT_PMARP_EMA_PERIOD + DEFAULT_PMARP_LOOKBACK,
         )
 
     def compute(
@@ -282,7 +283,7 @@ class CryptoPMARPFactor(Factor):
             score_name="current",
             score_range=(0, 100),
             higher_is_stronger=True,
-            min_data_days=170,
+            min_data_days=DEFAULT_PMARP_EMA_PERIOD + DEFAULT_PMARP_LOOKBACK,
         )
 
     def compute(

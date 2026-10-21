@@ -1,6 +1,6 @@
 """
 PMARP 指标 (Price Moving Average Ratio Percentile)
-Price/EMA(20) 的 N 日百分位排名
+Price/EMA(30) 的 N 日百分位排名
 
 公式:
     PMAR = Price / EMA(Price, period)
@@ -18,11 +18,15 @@ import pandas as pd
 import numpy as np
 from typing import Optional, Dict, Tuple
 
+# Shared live/default research configuration; explicit historical overrides remain valid.
+DEFAULT_PMARP_EMA_PERIOD = 30
+DEFAULT_PMARP_LOOKBACK = 120
+
 
 def calculate_pmarp(
     prices: pd.Series,
-    ema_period: int = 20,
-    lookback: int = 150
+    ema_period: int = DEFAULT_PMARP_EMA_PERIOD,
+    lookback: int = DEFAULT_PMARP_LOOKBACK
 ) -> pd.Series:
     """
     计算 PMARP (Price Moving Average Ratio Percentile)
@@ -36,8 +40,8 @@ def calculate_pmarp(
 
     Args:
         prices: 收盘价序列 (必须按时间正序，最早在前)
-        ema_period: EMA 周期 (默认 20)
-        lookback: 回看周期 (默认 150)
+        ema_period: EMA 周期 (默认 30)
+        lookback: 回看周期 (默认 120)
 
     Returns:
         PMARP 序列 (0-100)
@@ -100,7 +104,7 @@ def check_pmarp_crossover(
         return prev_value > threshold and curr_value <= threshold
 
 
-def analyze_pmarp(df: pd.DataFrame, ema_period: int = 20, lookback: int = 150) -> Dict:
+def analyze_pmarp(df: pd.DataFrame, ema_period: int = DEFAULT_PMARP_EMA_PERIOD, lookback: int = DEFAULT_PMARP_LOOKBACK) -> Dict:
     """
     分析单只股票的 PMARP
 

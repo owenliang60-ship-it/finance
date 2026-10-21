@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
+from src.indicators.pmarp import DEFAULT_PMARP_EMA_PERIOD, DEFAULT_PMARP_LOOKBACK
 from backtest.adapters.us_stocks import USStocksAdapter
 from backtest.factor_study.report import _apply_bh_fdr
 from backtest.research.daily_event_returns import build_close_forward_return_matrices
@@ -35,8 +36,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--study-start", default="2021-07-01")
     parser.add_argument("--rvol-lookback", type=int, default=150)
     parser.add_argument("--rvol-threshold", type=float, default=2.0)
-    parser.add_argument("--pmarp-ema-period", type=int, default=20)
-    parser.add_argument("--pmarp-lookback", type=int, default=150)
+    parser.add_argument("--pmarp-ema-period", type=int, default=DEFAULT_PMARP_EMA_PERIOD)
+    parser.add_argument("--pmarp-lookback", type=int, default=DEFAULT_PMARP_LOOKBACK)
     parser.add_argument("--flat-move-threshold", type=float, default=0.01)
     parser.add_argument("--pmarp-low-cutoff", type=float, default=30.0)
     parser.add_argument("--pmarp-high-cutoff", type=float, default=60.0)

@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 from backtest.pipeline.factors._base import PipelineFactor
 from backtest.pipeline.primitives.pit_data import PitData
-from src.indicators.pmarp import analyze_pmarp
+from src.indicators.pmarp import DEFAULT_PMARP_EMA_PERIOD, DEFAULT_PMARP_LOOKBACK, analyze_pmarp
 
 
 class PMARPPipelineFactor(PipelineFactor):
@@ -17,8 +17,8 @@ class PMARPPipelineFactor(PipelineFactor):
         as_of_date: str,
         params: Dict[str, Any],
     ) -> Dict[str, float]:
-        ema_period = int(params.get("ema_period", 20))
-        lookback = int(params.get("lookback", 150))
+        ema_period = int(params.get("ema_period", DEFAULT_PMARP_EMA_PERIOD))
+        lookback = int(params.get("lookback", DEFAULT_PMARP_LOOKBACK))
         window = max(ema_period + lookback + 5, 180)
         price_dict = pit_data.bulk_price_windows(
             symbols,

@@ -15,13 +15,14 @@ logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
+from src.indicators.pmarp import DEFAULT_PMARP_EMA_PERIOD, DEFAULT_PMARP_LOOKBACK
 from backtest.adapters.us_stocks import USStocksAdapter
 from backtest.factor_study.report import _apply_bh_fdr
-from backtest.research import (
+from backtest.research.daily_event_returns import build_t1open_excess_return_matrices
+from backtest.research.pmarp_bbwp_study import (
     PMARPBBWPStudyConfig,
     build_cohorts_from_feature_frames,
     build_feature_frames,
-    build_t1open_excess_return_matrices,
     compare_event_groups,
     filter_events_by_date,
     run_labeled_event_study,
@@ -34,6 +35,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--study-start", default="2021-07-01")
     parser.add_argument("--is-end", default="2023-12-31")
     parser.add_argument("--oos-start", default="2024-01-01")
+    parser.add_argument("--pmarp-ema-period", type=int, default=DEFAULT_PMARP_EMA_PERIOD)
+    parser.add_argument("--pmarp-lookback", type=int, default=DEFAULT_PMARP_LOOKBACK)
     parser.add_argument("--bbwp-period", type=int, default=20)
     parser.add_argument("--bbwp-std", type=float, default=2.0)
     parser.add_argument("--bbwp-lookback", type=int, default=150)
@@ -67,6 +70,8 @@ def main() -> None:
         study_start_date=args.study_start,
         is_end_date=args.is_end,
         oos_start_date=args.oos_start,
+        pmarp_ema_period=args.pmarp_ema_period,
+        pmarp_lookback=args.pmarp_lookback,
         bbwp_period=args.bbwp_period,
         bbwp_std=args.bbwp_std,
         bbwp_lookback=args.bbwp_lookback,
@@ -107,6 +112,8 @@ def main() -> None:
         universe_rows.append(
             {
                 "universe": universe,
+                "pmarp_ema_period": config.pmarp_ema_period,
+                "pmarp_lookback": config.pmarp_lookback,
                 "symbols_loaded": len(price_dict),
                 "symbols_with_features": len(feature_frames),
                 "benchmark_rows": len(benchmark_df),
@@ -206,6 +213,7 @@ def main() -> None:
         "",
         f"- Generated at: {datetime.now().isoformat(timespec='seconds')}",
         f"- Output dir: `{output_dir}`",
+        f"- PMARP: EMA{config.pmarp_ema_period}, lookback={config.pmarp_lookback}",
         "",
         "## Files",
         "",
