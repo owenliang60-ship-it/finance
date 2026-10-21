@@ -2,7 +2,9 @@
 
 Implementation branch: `feat/pmarp-defaults-30-120`, based on main `df1778a7`.
 User requested all scanner/backtest defaults to match the2026-10-21 study.
-**Prepared and verified; not merged/pushed/deployed.** Existing live remains20/150.
+**LIVE: merged, pushed and deployed to Finance+Quant on2026-10-21 at04:37 UTC.**
+Runtime change commit: `dea9952b`. Both live defaults are30/120.
+Deployment evidence: `docs/audit/2026-10-21-pmarp-default-deployment.md`.
 
 ## Effective configuration
 
@@ -26,7 +28,7 @@ no computed PMARP cache is reused. Do not delete historical prices/results.
 Quant matures from120 prior bars, whereas Finance's existing minimum-input
 check requires30+120 total bars; those existing API semantics are preserved.
 
-## Coordinated rollout (requires merge/deployment authorization)
+## Coordinated rollout procedure
 
 1. Deploy the reviewed Finance commit after merge/push approval using the
    existing repository deployment workflow. Avoid the running Quant job;
@@ -69,8 +71,9 @@ clear them or publish a correction without explicit message authorization.
 - Main regression covers parameter computation,150-bar minimum input, timing,
   new-listing120-bar Crypto warmup, actual backtest/Forge parameter validator,
   pipeline provenance, morning/scanner consumers and migration dry-run/backup.
-- Cloud migration was actually dry-run against the hash-pinned source, with
-  zero changes and zero API/Telegram calls.
+- Cloud migration was dry-run and then applied after explicit user approval.
+ 31 cloud checks passed with network blocked and synthetic data only;
+ no API/Telegram calls were made.
 - Independent review found a Forge parameter-key regression during work; it
   was reproduced and fixed by keeping the manifest's existing key set.
 - Legacy `terminal/freshness.py` Timing refresher has an unrelated pre-existing

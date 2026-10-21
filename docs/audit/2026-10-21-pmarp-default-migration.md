@@ -1,6 +1,8 @@
 # PMARP default migration review and validation
 
-Status: implemented in `feat/pmarp-defaults-30-120`, pending merge and coordinated deployment. No live changes.
+Status: implemented in `feat/pmarp-defaults-30-120`; merged and deployed after
+explicit user approval on2026-10-21. This document records pre-deployment
+validation; live evidence is in `2026-10-21-pmarp-default-deployment.md`.
 
 ## Changed behavior
 
@@ -24,6 +26,7 @@ Quant source `/root/workspace/Quant/scanners/binance_pmarp_scanner.py`:
 - proposed SHA256:371785c1d0298bb57878add9467b67a1710cde6bbb73da27ef60fc802b3a75a8
 - changed lines:3; proposed EMA30/lookback120; status:ready.
 
-The tool was executed on the actual cloud source without `--apply`: no writes, imports of the scanner, API calls or Telegram sends. Cloud Finance remains main@df1778a7; Quant remains20/150 until rollout. Deployment/rollback steps are in `docs/runbooks/pmarp-defaults-30-120.md`.
+The tool was executed on the actual cloud source without `--apply`: no writes, imports of the scanner, API calls or Telegram sends. At that dry-run, cloud Finance remained main@df1778a7 and Quant remained20/150.
+The subsequent authorized rollout changed both to30/120. Deployment/rollback steps are in `docs/runbooks/pmarp-defaults-30-120.md`.
 
 Unrelated existing `terminal/freshness.py` Timing-refresh interface issue was noted during inventory and not changed. This migration does not claim to fix that UI refresh path.

@@ -9,9 +9,10 @@ This report describes participation, not a trading signal or position rule.
 
 ## Parameter migration (2026-10-21)
 
-The reviewed branch uses **EMA30 / previous120**. The existing live deployment
-listed above remains20/150 until the coordinated Finance+Quant rollout.
-See `docs/runbooks/pmarp-defaults-30-120.md`; do not deploy only one side.
+Finance and Quant are now live on **EMA30 / previous120**, deployed together
+on2026-10-21 at04:37 UTC (runtime commit `dea9952b`). The deployment listed
+at the top is the original rollout; the new default supersedes its parameters.
+See `docs/runbooks/pmarp-defaults-30-120.md`; keep both sides aligned.
 Historical20/150 research and raw OHLCV snapshots remain unchanged.
 
 ## Definition
