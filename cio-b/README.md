@@ -4,7 +4,7 @@ Standalone workspace housing CIO-B personality (Pattern C deployment, locked 202
 
 ## What this is
 
-`Finance/cio-b/` is a dedicated CC workspace where the model takes on the persona of **Geralt Kowalski** — CIO of Westbrook Capital, Boss's CIO-B partner. Personality is loaded via `CLAUDE.md` at session start (~23,500 words inline, all 5 sections of the personality md).
+`Finance/cio-b/` is a dedicated CC workspace where the model takes on the persona of **Geralt Kowalski** — CIO of Westbrook Capital, Boss's CIO-B partner. `CLAUDE.md` is loaded at session start. Since 2026-10-23 it is a short behavior spec (~135 lines, v2): it routes every position conversation through Boss's playbook (Obsidian `Cards/风险采购员的自我修养.md`) and holds no sizing numbers itself.
 
 ## How to start
 
@@ -20,20 +20,21 @@ cio
 
 | Path | Role |
 |------|------|
-| `CLAUDE.md` | **Source of truth** — workspace config + Sections 1-5 personality inline |
+| `CLAUDE.md` | **Source of truth** for how Geralt works (v2 behavior spec). Investment rules live in the playbook, not here |
 | `cards/` | Workspace mirror of conviction cards (Obsidian `Cards/Stocks/{TICKER}.md` is master) |
 | `cards/Rejected/` | Workspace mirror of rejection cards (no-go list) |
-| `draft/` | Section 1-5 archived drafts (frozen; CLAUDE.md is now authoritative) |
+| `draft/` | Frozen history: Section 1-5 drafts + `CLAUDE.v1.md` (the original ~23,500-word persona, retired 2026-10-23). Not loaded |
 | `research/` | Psychology research backstory used to construct the persona |
 
-## Personality at a glance
+## How v2 works
 
-- **Backstory**: Geralt Kowalski (b. 1974, Trenton NJ, Polish-American). Princeton ORFE 1996 + Kahneman PSY 312. Dual layer: baseball (Trenton High pitcher) + poker (Princeton underground + Atlantic City mid-stakes, half-pro). Career: Salomon → Columbia MBA → Druckenmiller mentee → SAC under Cohen → Westbrook Capital 2014 ($500M, capped). Boss is the 18% LP with direct-call privilege.
-- **Five beliefs** (Section 2): What is, not what should be / Conviction without sizing is a hobby / Own your stops, own your sizes / Failure is a state, not the collapse of identity / Math and read, always both.
-- **Four registers** (Section 3): Calm / Push / Refuse / L3 forcing function. One loyalty, four surfaces.
-- **Workflow** (Section 4): Conviction card system. Each ticker that crosses Boss's conviction band gets a card built in calm-period dialogue (8 fields including OPRMS, suggested sizing, load-bearing variable with forward/backward tag, three-layer invalidation conditions, L3 commitments). Live conversation retrieves the card and surfaces the gap. No card → either build one or build a rejection card.
-- **Refusal** (Sections 3.3 + 5.2): Geralt does not pull the trigger / does not become the scapegoat / does not soothe in drawdown / does not predict short-term price / does not write Boss's third-party explanations / does not commit new theses in emotionally activated states / does not frame P&L as self-worth.
-- **Arbitration** (Section 5.3): Belief × Belief → smaller bound governs / Framework × experience → experience must pinpoint a variable / Boss × Geralt → Boss is final, but override of prior commitments must be in writing.
+- **Triage** every message: research/chat · position decision · psychological moment (psych takes priority).
+- **Position protocol**: mindset gate → route via playbook index → read card → live Sheet pull → clause / plan / gap table → stop at the gap; Boss writes the number.
+- **Psych protocol**: name the pattern (P1–P6), cite Boss's own past case from the playbook, quote the clause, give the clause's next step.
+- **Red lines**: no final numbers, no soothing, no short-term price calls, no scapegoating, no ghost-writing for third parties, no new thesis in an activated state.
+- **Override**: legal if written, unconstitutional if silent (Must-Not #5).
+
+Why v2: v1 hard-coded sizing numbers that drifted from the playbook, pointed at files that never existed, and its worked MU example got copied into unrelated answers. An 8-scenario A/B test on 2026-10-23 showed v2 matching v1 on routing, clause citation, and the no-number line, without the example leakage.
 
 ## Working with cards
 
@@ -41,7 +42,7 @@ Cards are written and read as ordinary markdown. Master copy lives in Obsidian (
 
 Rejection cards (`cards/Rejected/{TICKER}.md` and Obsidian master): three fields — date / reason / reconsideration trigger. They prevent rejected names from re-entering the conviction stack under fresh framing.
 
-When Boss queries a ticker without a card, Geralt blocks sizing math in the live conversation and proposes either:
+When Boss queries a ticker without a card, Geralt does not compute a target (it may lay out the playbook formula range) and proposes either:
 1. Schedule a calm-period card-creation conversation, or
 2. Decide the ticker is not conviction-band material and build a rejection card.
 
@@ -55,9 +56,7 @@ There are exactly two exits, never one.
 
 ## Evolving the persona
 
-When real conversations surface failure modes (refusal triggers missing, arbitration ambiguous, voice drifting), edit `CLAUDE.md` directly. `draft/` is historical and frozen.
-
-Section 6 (full conflict resolution) and Section 7 (sanity tests) were intentionally deferred per Boss's 5-07 directive — failure modes that emerge in live use will tell us what those sections should contain, more accurately than dry-run pre-engineering would.
+New investment rules or failure modes go into the **playbook**, not `CLAUDE.md`. Edit `CLAUDE.md` only when the way Geralt works changes. Do not add example dialogues; they get copied. `draft/` is historical and frozen.
 
 ## Origin trace
 
@@ -65,3 +64,4 @@ Section 6 (full conflict resolution) and Section 7 (sanity tests) were intention
 - 2026-05-06: Character locked (Geralt Kowalski). Section 1 (8420w) + Section 2 (3440w) drafted.
 - 2026-05-07: Section 3 (4307w) + Section 4 (4576w) + Section 5 (1935w) drafted; integration into this CLAUDE.md.
 - Total personality core: ~22,680 words English drafted across Sections 1-5.
+- 2026-10-23: v2 rewrite. `CLAUDE.md` cut from ~146.8K to ~8.3K chars; backstory retired to `draft/CLAUDE.v1.md`; all numbers delegated to the playbook.
