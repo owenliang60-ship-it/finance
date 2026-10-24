@@ -17,7 +17,7 @@ import sys
 import time
 from collections import Counter
 from dataclasses import asdict, fields
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -89,7 +89,9 @@ def _share_class_of(store: MarketStore) -> Dict[str, str]:
 
 def _packet(history: SymbolHistory, as_of: str) -> InputPacket:
     return build_packet(history, as_of, mode="replay", membership_basis="s1_fixture", benchmark_closes=(),
-                        with_beta=False)
+                        with_beta=False,
+                        cutoff=datetime.combine(date.fromisoformat(as_of) + timedelta(days=1),
+                                                datetime.min.time(), timezone.utc))
 
 
 def _strict(board: str) -> bool:

@@ -4,6 +4,7 @@
 # 所有权规则:
 #   company.db    — 本地独占写入，push 到云端
 #   market.db     — 云端独占写入，pull 到本地
+#   prosperity.db + .state/ — 云端匹配快照，pull 到本地（未部署时显式跳过）
 #   universe.json — 双端各有新增，merge 取并集
 #   fundamental/  — 云端生成，pull 到本地
 #
@@ -12,6 +13,7 @@
 set -e
 
 LOCAL_DIR="/Users/owen/CC workspace/Finance"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REMOTE_HOST="aliyun"
 REMOTE_DIR="/root/workspace/Finance"
 REMOTE="$REMOTE_HOST:$REMOTE_DIR"
@@ -292,6 +294,15 @@ pull_from_cloud() {
         rm -rf "$_CC_TMP"
         _CC_TMP=""               # placed successfully; nothing left for the trap to clean
         info "canonical CSV 已就位（DB 与 canonical 同步更新）"
+    fi
+
+    # Result DB and immutable freeze evidence travel together. The helper sends
+    # its snapshot implementation over SSH stdin; no new remote script is needed.
+    # Failure keeps the previous valid local copy and must not skip the steps below.
+    if ! "$PYTHON" "$SCRIPT_DIR/scripts/sync_prosperity.py" \
+        --host "$REMOTE_HOST" --remote-db "$REMOTE_DIR/data/prosperity.db" \
+        --db "$LOCAL_DIR/data/prosperity.db" --lsof "$LSOF"; then
+        warn "prosperity.db 拉取失败，保留本地旧副本；其余 pull 步骤继续"
     fi
 
     # 3. rsync fundamental/ 云端→本地 (--delete 清理云端已删除的过期文件)

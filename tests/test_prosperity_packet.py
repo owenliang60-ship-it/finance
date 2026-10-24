@@ -1,3 +1,4 @@
+from tests.prosperity_fixtures import replay_cutoff
 from dataclasses import replace
 
 from src.data.market_store import MarketStore
@@ -19,7 +20,7 @@ BENCH = closes_series("2025-06-01", "2026-03-06", 500.0, drift=0.0005, phase=0.4
 
 def test_packet_for_usd_name_has_aligned_inputs_and_no_leaks():
     p = build_packet(_usd_history(), "2026-03-07", mode="replay", membership_basis="approximate_mcap",
-                     benchmark_closes=BENCH)
+                     benchmark_closes=BENCH, cutoff=replay_cutoff("2026-03-07"))
     assert p.current_fiscal == "2025-12-31" and p.quarter_bucket == "2025Q4" and p.data_age_days == 66
     assert p.eps[-1].fiscal_date == "2025-12-31"
     assert (p.consensus.pre_announce.source, p.consensus.pre_announce.value) == ("vendor_estimate", 1.2)
@@ -33,7 +34,7 @@ def test_eps_dated_weeks_off_the_period_end_still_aligns_by_statement_date():   
     drift = [er("2025-03-09", "2025-04-30", 1.0, 0.9), er("2025-06-09", "2025-07-30", 1.1, 1.0),
              er("2025-09-09", "2025-10-29", 1.2, 1.1), er("2025-12-09", "2026-02-19", 1.3, 1.2)]   # 21–22 days early
     p = build_packet(replace(_usd_history(), earnings=drift), "2026-03-07", mode="replay",
-                     membership_basis="approximate_mcap", benchmark_closes=BENCH)
+                     membership_basis="approximate_mcap", benchmark_closes=BENCH, cutoff=replay_cutoff("2026-03-07"))
     assert "eps_behind_current" not in p.flags and len(p.eps) == 4
     assert (p.eps[-1].fiscal_date, p.eps[-1].statement_fiscal) == ("2025-12-09", "2025-12-31")
     assert [q.statement_fiscal for q in p.eps] == [r[0] for r in QTRS]
@@ -43,7 +44,7 @@ def test_eps_dated_weeks_off_the_period_end_still_aligns_by_statement_date():   
 
 def test_live_mode_labels_every_source_live():
     p = build_packet(_usd_history(), "2026-03-07", mode="live", observed_at="2026-03-07", membership_basis="approximate_mcap",
-                     benchmark_closes=BENCH)
+                     benchmark_closes=BENCH, cutoff=replay_cutoff("2026-03-07"))
     assert p.pit_basis == "live" and set(p.pit.values()) == {"live"}
 
 
@@ -52,7 +53,7 @@ def test_non_usd_reporter_gets_unit_unverified_but_keeps_ratios():
     for table in (h.income, h.balance, h.cashflow):
         for r in table:
             r["reported_currency"] = "EUR"
-    p = build_packet(h, "2026-03-07", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[])
+    p = build_packet(h, "2026-03-07", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[], cutoff=replay_cutoff("2026-03-07"))
     assert "unit_unverified" in p.flags and p.consensus.pre_announce.value is None
     assert p.consensus.missing_reasons["pre_announce"] == "unit_unverified"
     assert p.quarters[-1].revenue == 100.0 and p.beta is None
@@ -60,7 +61,7 @@ def test_non_usd_reporter_gets_unit_unverified_but_keeps_ratios():
 
 def test_leak_detector_catches_future_price_date():
     p = build_packet(_usd_history(), "2026-03-07", mode="replay", membership_basis="approximate_mcap",
-                     benchmark_closes=BENCH)
+                     benchmark_closes=BENCH, cutoff=replay_cutoff("2026-03-07"))
     assert packet_leaks(replace(p, price_date="2026-03-09"))
 
 
@@ -78,17 +79,17 @@ def test_build_packets_reuses_cache_and_isolates_symbol_errors(tmp_path, monkeyp
     monkeypatch.setattr(inputs, "load_history", spy)
     cache = {}
     packets, meta = inputs.build_packets(store, "2026-09-26", mode="live", observed_at="2026-09-26", cache=cache,
-                                         with_beta=False)
+                                         with_beta=False, cutoff=replay_cutoff("2026-09-26"))
     assert [p.symbol for p in packets] == ["AAA"] and meta["errors"] == {"BBB": "ValueError: boom"}
     assert meta["members_resolved"] == 2 and meta["membership_basis"] == "extended_membership"
-    inputs.build_packets(store, "2026-09-19", mode="replay", cache=cache, with_beta=False)
+    inputs.build_packets(store, "2026-09-19", mode="replay", cache=cache, with_beta=False, cutoff=replay_cutoff("2026-09-19"))
     assert calls.count("AAA") == 1
 
 
 def test_consensus_without_any_estimate_is_not_labelled_strict():
     h = _usd_history()
     h.earnings = [dict(r, eps_estimated=None) for r in EARN]
-    p = build_packet(h, "2026-03-07", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[])
+    p = build_packet(h, "2026-03-07", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[], cutoff=replay_cutoff("2026-03-07"))
     assert p.consensus.pre_announce.source is None and p.pit["consensus"] == "approximate"
 
 
@@ -97,10 +98,10 @@ KLAC_CLOSES = [("2026-06-10", 2400.0), ("2026-06-11", 2411.64), ("2026-06-12", 2
 
 def test_unadjusted_price_split_is_rescaled_in_memory():
     h = replace(_usd_history(), closes=KLAC_CLOSES, splits=[{"date": "2026-06-12", "numerator": 10.0, "denominator": 1.0}])
-    p = build_packet(h, "2026-06-11", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[])
+    p = build_packet(h, "2026-06-11", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[], cutoff=replay_cutoff("2026-06-11"))
     assert abs(p.price_asof - 241.164) < 1e-9 and "price_split_rescaled" in p.flags
     adjusted = replace(h, closes=[("2026-06-11", 241.16), ("2026-06-12", 254.54)])
-    q = build_packet(adjusted, "2026-06-11", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[])
+    q = build_packet(adjusted, "2026-06-11", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[], cutoff=replay_cutoff("2026-06-11"))
     assert q.price_asof == 241.16 and "price_split_rescaled" not in q.flags
 
 
@@ -116,7 +117,7 @@ def test_replayed_price_and_ttm_eps_share_the_post_split_unit():
     income = [dict(statements.get(g["date"], {}), **g) for g in gaap_rows(KLAC, 10.0, "2024-06-30")]
     h = replace(base, earnings=KLAC, income=income, closes=closes,
                 splits=[{"date": "2026-06-12", "numerator": 10.0, "denominator": 1.0}])
-    p = build_packet(h, "2024-12-31", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[])
+    p = build_packet(h, "2024-12-31", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[], cutoff=replay_cutoff("2024-12-31"))
     assert abs(p.price_asof - 63.012) < 1e-9 and "price_split_rescaled" in p.flags
     assert abs(p.consensus.ttm_eps - (0.616 + 0.526 + 0.660 + 0.733)) < 1e-9
 
@@ -124,7 +125,7 @@ def test_replayed_price_and_ttm_eps_share_the_post_split_unit():
 def test_leak_check_reads_the_observation_date_not_only_the_public_date():
     # Codex M4 review F3: strict available_on is the (earlier) public date, so a late observation went unchecked
     p = build_packet(_usd_history(), "2026-03-06", mode="replay", membership_basis="approximate_mcap",
-                     benchmark_closes=[])
+                     benchmark_closes=[], cutoff=replay_cutoff("2026-03-06"))
     late = replace(p.quarters[-1], observed_on="2026-03-07")
     assert packet_leaks(p) == []
     assert any("observed_on" in x for x in packet_leaks(replace(p, quarters=p.quarters[:-1] + (late,))))
@@ -133,7 +134,7 @@ def test_leak_check_reads_the_observation_date_not_only_the_public_date():
 def test_reported_this_week_follows_the_aligned_results_announcement():
     # Codex M4 review F4: DCI (released 8/26, 10-K accepted 9/25) and AMX (observation-date fallback) were flagged
     build = lambda h, as_of: build_packet(h, as_of, mode="replay", membership_basis="approximate_mcap",
-                                          benchmark_closes=[])
+                                          benchmark_closes=[], cutoff=replay_cutoff(as_of))
     late = QTRS[:3] + [("2025-12-31", "2025", "Q4", "2026-03-05 16:00:00")]      # filed two weeks after release
     h = replace(_usd_history(), **{k: v for k, v in vars(hist(rows=late)).items()
                                    if k in ("income", "balance", "cashflow")})
@@ -148,7 +149,7 @@ def test_non_finite_split_metadata_is_ignored_not_fatal():
     bad = [{"date": "2026-06-12", "numerator": float("inf"), "denominator": 1.0},
            {"date": "2026-06-12", "numerator": 10.0, "denominator": float("nan")}]
     h = replace(_usd_history(), closes=KLAC_CLOSES, splits=bad)
-    p = build_packet(h, "2026-06-11", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[])
+    p = build_packet(h, "2026-06-11", mode="replay", membership_basis="approximate_mcap", benchmark_closes=[], cutoff=replay_cutoff("2026-06-11"))
     assert p.price_asof == 2411.64 and "price_split_rescaled" not in p.flags
 
 
@@ -156,7 +157,7 @@ def test_requested_non_members_are_reported(tmp_path):
     import terminal.prosperity.inputs as inputs
     store = MarketStore(db_path=seed_db(tmp_path / "m.db"), read_only=True)
     packets, meta = inputs.build_packets(store, "2026-09-26", mode="live", observed_at="2026-09-26",
-                                         symbols=["AAA", "ZZZ"], with_beta=False)
+                                         symbols=["AAA", "ZZZ"], with_beta=False, cutoff=replay_cutoff("2026-09-26"))
     assert [p.symbol for p in packets] == ["AAA"] and meta["requested_not_members"] == ["ZZZ"]
 
 
@@ -164,7 +165,7 @@ def test_listing_date_comes_from_profile_unless_market_cap_history_predates_it()
     h = replace(_usd_history(), profile={"sector": "Technology", "ipoDate": "2024-05-01"},
                 market_caps=[("2024-05-02", 1e10), ("2026-03-06", 3e10)])
     build = lambda x: build_packet(x, "2026-03-07", mode="replay", membership_basis="approximate_mcap",
-                                   benchmark_closes=[])
+                                   benchmark_closes=[], cutoff=replay_cutoff("2026-03-07"))
     assert build(h).listing_date == "2024-05-01"
     relisted = replace(h, market_caps=[("2019-01-02", 5e9)] + h.market_caps)   # vendor ipoDate later than trading history
     assert build(relisted).listing_date is None

@@ -329,6 +329,8 @@ def score_board(rows: Sequence[FactorRow], scheme: Scheme, *, frozen: Optional[P
                    base=None, trend_adj=None, score=None, grade=None, demotions=(), within=None,
                    family_scores={}, rank=None, badges=["industry_unknown"] if not row.industry else [])
         out[row.symbol] = rec
+        if "forward_stale" in row.packet_flags:
+            rec["badges"].append("forward_stale")
         if not ok:
             rec.update(status="excluded" if reason == "universe_excluded" else "observe", observe_reason=reason)
             continue

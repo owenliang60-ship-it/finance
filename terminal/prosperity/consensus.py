@@ -5,11 +5,11 @@ function applies its own as_of / announce-date bound.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from src.data.fundamental_value_checks import check_consensus_jump
-from terminal.prosperity.config import (ESTIMATE_MATCH_DAYS, FIRST_WEEKLY_SNAPSHOT, NTM_MIN_ANALYSTS,
+from terminal.prosperity.config import (ESTIMATE_MATCH_DAYS, FIRST_WEEKLY_SNAPSHOT, FORWARD_STALE_DAYS, NTM_MIN_ANALYSTS,
                                         PRE_ANNOUNCE_MAX_STALENESS_DAYS, PRICE_MAX_STALENESS_DAYS,
                                         REVISION_LONG_WEEKS, REVISION_LONG_WINDOW_FROM, REVISION_SHORT_WEEKS,
                                         SNAPSHOT_MAX_STALENESS_DAYS)
@@ -23,6 +23,30 @@ FY_STEP_DAYS, FY_STEP_TOLERANCE = 365, 20
 
 def _d(value: str) -> date:
     return date.fromisoformat(value[:10])
+
+
+def _instant(value) -> datetime:
+    """Compare aware instants, never ISO strings (offset spellings can differ)."""
+    moment = value if isinstance(value, datetime) else datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise ValueError('forward cutoff/completed_at requires a timezone')
+    return moment.astimezone(timezone.utc)
+
+
+def _eligible_estimates(estimates: Sequence[Mapping], cutoff) -> List[Mapping]:
+    bound = _instant(cutoff)
+    eligible = []
+    for row in estimates:
+        if (row.get('snapshot_kind') != 'weekly' or row.get('forward_run_kind') != 'weekly'
+                or row.get('forward_run_status') != 'complete'):
+            continue
+        try:
+            complete = _instant(row.get('forward_completed_at'))
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if complete <= bound:
+            eligible.append(row)
+    return eligible
 
 
 def unit_verified(reported_currency: Optional[str], is_adr: Optional[bool]) -> bool:
@@ -40,7 +64,8 @@ def _close_before(closes: Sequence[Tuple[str, float]], bound: str, max_age: int)
 
 
 def pre_announcement_consensus(quarter: EpsQuarter, estimates: Sequence[Mapping],
-                               closes: Sequence[Tuple[str, float]]) -> PreAnnouncement:
+                               closes: Sequence[Tuple[str, float]], *, cutoff) -> PreAnnouncement:
+    estimates = _eligible_estimates(estimates, cutoff)
     announce = quarter.announce_date[:10]
     price = _close_before(closes, announce, PRICE_MAX_STALENESS_DAYS)
     if announce <= FIRST_WEEKLY_SNAPSHOT:
@@ -93,7 +118,7 @@ def _current_snapshot(by_snap: Dict[str, List[Mapping]], as_of: str) -> Tuple[Op
     if not snaps:
         return None, "no_current_snapshot"
     snap = max(snaps)
-    if (_d(as_of) - _d(snap)).days > SNAPSHOT_MAX_STALENESS_DAYS:
+    if (_d(as_of) - _d(snap)).days > FORWARD_STALE_DAYS:
         return snap, "snapshot_stale"
     return snap, None
 
@@ -155,8 +180,9 @@ def _fy_blend(rows: Sequence[Mapping], anchor: str):
     return fy1, fy2, w
 
 
-def ntm_eps(estimates: Sequence[Mapping], announced: Sequence[EpsQuarter], as_of: str) -> NtmResult:
+def ntm_eps(estimates: Sequence[Mapping], announced: Sequence[EpsQuarter], as_of: str, *, cutoff) -> NtmResult:
     """North-star NTM: the 4 unannounced quarters after the last announced one."""
+    estimates = _eligible_estimates(estimates, cutoff)
     known = _announced_by(announced, as_of)
     if not known:
         return NtmResult(None, None, (), None, "no_ttm_anchor")
@@ -184,8 +210,9 @@ def ntm_eps(estimates: Sequence[Mapping], announced: Sequence[EpsQuarter], as_of
     return result
 
 
-def revision_inputs(estimates: Sequence[Mapping], announced: Sequence[EpsQuarter], as_of: str) -> RevisionResult:
+def revision_inputs(estimates: Sequence[Mapping], announced: Sequence[EpsQuarter], as_of: str, *, cutoff) -> RevisionResult:
     """Consensus change on a fixed quarter set taken from the base snapshot."""
+    estimates = _eligible_estimates(estimates, cutoff)
     weeks = REVISION_LONG_WEEKS if as_of[:10] >= REVISION_LONG_WINDOW_FROM else REVISION_SHORT_WEEKS
     by_snap = _weekly(estimates)
     snap, reason = _current_snapshot(by_snap, as_of)
@@ -217,20 +244,32 @@ def revision_inputs(estimates: Sequence[Mapping], announced: Sequence[EpsQuarter
 
 def build_consensus(*, estimates: Sequence[Mapping], announced: Sequence[EpsQuarter],
                     current_eps: Optional[EpsQuarter], closes: Sequence[Tuple[str, float]],
-                    as_of: str, unit_ok: bool) -> ConsensusInputs:
-    pre = (pre_announcement_consensus(current_eps, estimates, closes) if current_eps is not None
+                    as_of: str, unit_ok: bool, cutoff, forward_runs_available: bool) -> ConsensusInputs:
+    # Filter the complete history before every use: revision bases and jump checks
+    # must obey the same admission rule as the newest snapshot.
+    estimates = _eligible_estimates(estimates, cutoff) if forward_runs_available else []
+    snap, reason = _current_snapshot(_weekly(estimates), as_of)
+    stale = bool(snap and reason is None
+                 and (_d(as_of) - _d(snap)).days >= SNAPSHOT_MAX_STALENESS_DAYS)
+    pre = (pre_announcement_consensus(current_eps, estimates, closes, cutoff=cutoff) if current_eps is not None
            else PreAnnouncement(None, None, None, None, "no_current_eps"))
-    ntm = ntm_eps(estimates, announced, as_of)
+    ntm = ntm_eps(estimates, announced, as_of, cutoff=cutoff)
     ttm, ttm_q = ttm_eps(_announced_by(announced, as_of))
-    rev = revision_inputs(estimates, announced, as_of)
+    rev = revision_inputs(estimates, announced, as_of, cutoff=cutoff)
+    if not forward_runs_available:
+        missing = 'forward_runs_unavailable'
+        ntm = NtmResult(None, None, (), None, missing)
+        rev = RevisionResult(None, rev.window_weeks, (), None, None, missing)
+        if pre.source != 'vendor_estimate':
+            pre = PreAnnouncement(None, None, None, pre.price_pre_announce, missing)
     if not unit_ok:
         return ConsensusInputs(
             PreAnnouncement(None, pre.source, pre.snapshot_date, pre.price_pre_announce, "unit_unverified"),
             NtmResult(None, ntm.basis, ntm.quarters, ntm.snapshot_date, "unit_unverified"), None, ttm_q,
             RevisionResult(None, rev.window_weeks, rev.quarters, rev.base_snapshot, rev.current_snapshot,
                            "unit_unverified"),
-            None, {k: "unit_unverified" for k in ("pre_announce", "ntm", "ttm", "revision")})
+            None, {k: "unit_unverified" for k in ("pre_announce", "ntm", "ttm", "revision")}, stale)
     reasons = {k: v for k, v in (("pre_announce", pre.missing_reason), ("ntm", ntm.missing_reason),
                                  ("ttm", None if ttm is not None else "ttm_incomplete"),
                                  ("revision", rev.missing_reason)) if v}
-    return ConsensusInputs(pre, ntm, ttm, ttm_q, rev, 1.0, reasons)
+    return ConsensusInputs(pre, ntm, ttm, ttm_q, rev, 1.0, reasons, stale)

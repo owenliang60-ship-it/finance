@@ -1,0 +1,46 @@
+[INFO] === Pull: 从云端拉取数据 ===
+[INFO] 云端生成 market.db 一致快照...
+[INFO] 云端快照 quick_check ok（sha256 fb560c2d38d6…）
+[INFO] 预取 concept_registry canonical CSV...
+[INFO] 拉取 market.db 快照...
+[INFO] market.db 已原子替换（sha256 与云端快照一致，quick_check ok）
+[INFO] canonical CSV 已就位（DB 与 canonical 同步更新）
+2026-10-24 12:26:56,033 - WARNING - FMP tools registered but unavailable (missing FMP_API_KEY or import failed)
+2026-10-24 12:26:56,033 - INFO - FRED tools registered but unavailable (missing FRED_API_KEY - get free key at https://fred.stlouisfed.org/)
+2026-10-24 12:26:56,033 - INFO - MarketData tools registered but unavailable (missing MARKETDATA_API_KEY)
+[SKIP] prosperity.db 云端未部署，保留本地副本
+[INFO] 拉取 fundamental/...
+Transfer starting: 23 files
+./
+profiles.json
+profiles.json.backup-20261024011133-preprofiles
+
+sent 11448 bytes  received 1862189 bytes  18736370000 bytes/sec
+total size is 41034626  speedup is 21.90
+[INFO] 合并 universe.json (云端→本地)...
+2026-10-24 12:27:03,463 - INFO - Loaded 14/14 FMP tools (provider: FMP)
+2026-10-24 12:27:03,463 - INFO - Loaded 16/16 FRED tools (provider: FRED - free macro data)
+2026-10-24 12:27:03,464 - INFO - Loaded 3/3 MarketData tools (provider: MarketData.app - options data)
+2026-10-24 12:27:03,467 - INFO - merge_universe: 无新增 symbol (总计 220)
+合并完成: 新增 0 个 symbol
+[INFO] 本地健康检查...
+2026-10-24 12:27:03,742 - INFO - Loaded 14/14 FMP tools (provider: FMP)
+2026-10-24 12:27:03,743 - INFO - Loaded 16/16 FRED tools (provider: FRED - free macro data)
+2026-10-24 12:27:03,743 - INFO - Loaded 3/3 MarketData tools (provider: MarketData.app - options data)
+=== 数据健康检查: PASS ===
+  [OK] 池完整性: 股票池 220 只
+  [OK] 基本面覆盖率: 219/220 (100%)
+  [OK] 基本面新鲜度: 更新于 2026-10-24 01:12:24 (0 天前)
+  [OK] 池新鲜度: 更新于 2026-10-24 (0 天前)
+  [OK] company.db: 正常, 13 个表
+  [OK] market.db: 正常, 43 个表
+  [OK] mdb价格覆盖率: 220/220 (100%)
+  [OK] mdb价格新鲜度: 最新: 2026-10-23, ~1 交易日前
+  [OK] mdb基本面覆盖率: 214/220 (97%)
+  [OK] mdb IV覆盖率: 201/220 (91%)
+  [OK] mdb IV新鲜度: 最新: 2026-10-24, ~0 交易日前
+  [OK] 扩展覆盖率: 892/894 (100%, 三表齐全)
+[INFO] 健康检查通过
+[INFO] === Pull 完成 ===
+
+[INFO] 同步完成!
