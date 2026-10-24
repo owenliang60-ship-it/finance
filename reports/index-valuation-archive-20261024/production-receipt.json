@@ -1,0 +1,46 @@
+{
+  "status": "complete",
+  "base": "9f229c7192cf94e5dbd9da48bab7b077b2e6f738",
+  "target": "1a3cd3228590a4a2b5b669fab6f2b1a960409711",
+  "started_at": "2026-10-24T08:18:44.313356+00:00",
+  "market_data_http_requests": 0,
+  "phase": "complete",
+  "backup": {
+    "path": "/root/workspace/Finance/data/market.db.backup-20261024081845-pre-index-valuation-archive",
+    "bytes": 1455824896,
+    "sha256": "3c4e3744f554147096550b3dc8d50833c295a168d749a3b43fd642a784d8cac4",
+    "quick_check": "ok"
+  },
+  "before": {
+    "basket_weekly_pe_history": {
+      "rows": 779,
+      "sha256": "d6903278e41fffb3b4fbf90bee40e918ab0e9daf50ac2df96e2fd1437d920157"
+    },
+    "basket_pe_backfill_runs": {
+      "rows": 607,
+      "sha256": "817215eb8b2cec0fe3b276fd531145e9d966eabb2b2e91570d9b75db4e8afea4"
+    },
+    "fmp_basket_valuation": {
+      "rows": 84,
+      "sha256": "9a07332ebb2e72d7f76bf946b37c387a9d57f8a0a76fb882d9f4c5210c0f6481"
+    }
+  },
+  "after": {
+    "basket_weekly_pe_history": {
+      "rows": 779,
+      "sha256": "d6903278e41fffb3b4fbf90bee40e918ab0e9daf50ac2df96e2fd1437d920157"
+    },
+    "basket_pe_backfill_runs": {
+      "rows": 607,
+      "sha256": "817215eb8b2cec0fe3b276fd531145e9d966eabb2b2e91570d9b75db4e8afea4"
+    },
+    "fmp_basket_valuation": {
+      "rows": 84,
+      "sha256": "9a07332ebb2e72d7f76bf946b37c387a9d57f8a0a76fb882d9f4c5210c0f6481"
+    }
+  },
+  "production_head": "1a3cd3228590a4a2b5b669fab6f2b1a960409711",
+  "historical_data_unchanged": true,
+  "crontab_unchanged": true,
+  "finished_at": "2026-10-24T08:20:44.018372+00:00"
+}
