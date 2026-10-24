@@ -1,0 +1,146 @@
+{
+  "ok": true,
+  "snapshot_date": "2026-10-24",
+  "run_kind": "weekly",
+  "universe": {
+    "expected": 995,
+    "covered_4q": 961,
+    "pct": 96.58,
+    "missing": [
+      "03032",
+      "07709",
+      "2602335D",
+      "AMRO",
+      "ARGX",
+      "BNT",
+      "BTI",
+      "BUD",
+      "CNA",
+      "COKE",
+      "DB",
+      "DRAM",
+      "DXYZ",
+      "ERIE",
+      "ESLT",
+      "HSBC",
+      "IHG",
+      "L",
+      "LAMR",
+      "LYG",
+      "MICC",
+      "MT",
+      "NGG",
+      "NWG",
+      "PSO",
+      "QQQ",
+      "RTO",
+      "SNY",
+      "SPY",
+      "SSL",
+      "TEST",
+      "UL",
+      "VOD",
+      "VYLR"
+    ],
+    "known_structural_missing": [
+      "03032",
+      "07709",
+      "2602335D",
+      "AMRO",
+      "BNT",
+      "DRAM",
+      "DXYZ",
+      "QQQ",
+      "SPY",
+      "TEST",
+      "VYLR"
+    ],
+    "structural_candidates": [],
+    "unexpected_missing": [
+      "ARGX",
+      "BTI",
+      "BUD",
+      "CNA",
+      "COKE",
+      "DB",
+      "ERIE",
+      "ESLT",
+      "HSBC",
+      "IHG",
+      "L",
+      "LAMR",
+      "LYG",
+      "MICC",
+      "MT",
+      "NGG",
+      "NWG",
+      "PSO",
+      "RTO",
+      "SNY",
+      "SSL",
+      "UL",
+      "VOD"
+    ]
+  },
+  "holdings": {
+    "SPY": {
+      "rows": 505,
+      "included": 501,
+      "blank_assets": 1,
+      "filter_reasons": {
+        "dual_class_secondary": 3,
+        "cash_or_fund": 1
+      }
+    },
+    "QQQ": {
+      "rows": 106,
+      "included": 100,
+      "blank_assets": 5,
+      "filter_reasons": {
+        "dual_class_secondary": 1,
+        "futures": 2,
+        "cash_or_fund": 3
+      }
+    },
+    "SOX": {
+      "rows": 33,
+      "included": 30,
+      "blank_assets": 3,
+      "filter_reasons": {
+        "cash_or_fund": 3
+      }
+    },
+    "IGV": {
+      "rows": 109,
+      "included": 106,
+      "blank_assets": 3,
+      "filter_reasons": {
+        "cash_or_fund": 3
+      }
+    },
+    "XLF": {
+      "rows": 80,
+      "included": 76,
+      "blank_assets": 3,
+      "filter_reasons": {
+        "cash_or_fund": 3,
+        "futures": 1
+      }
+    }
+  },
+  "earnings": {
+    "rows": 86920,
+    "matched": 69320,
+    "unmatched": 14803,
+    "recent_actual": 1276,
+    "unresolved_run_wide": []
+  },
+  "estimates": {
+    "weekly_rows": 16104,
+    "backfill_rows": 0
+  },
+  "warnings": [
+    "structural valid-empty set drift vs previous completed weekly run: prev=['03032', '07709', '2602335D', 'AMRO', 'BNT', 'DRAM', 'DXYZ', 'QQQ', 'SAIL', 'SPY', 'TEST', 'VYLR'] now=['03032', '07709', '2602335D', 'AMRO', 'BNT', 'DRAM', 'DXYZ', 'QQQ', 'SPY', 'TEST', 'VYLR']"
+  ],
+  "failures": []
+}

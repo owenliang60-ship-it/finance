@@ -1,0 +1,4 @@
+# Local isolated databases; retain them on disk, never stage binary snapshots.
+*.db
+*.db-*
+recovery-data/

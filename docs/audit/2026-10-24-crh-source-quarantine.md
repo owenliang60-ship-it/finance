@@ -77,19 +77,101 @@ proof that the amounts were fabricated or what their replacement dates should be
    verification thresholds are not replaced or relaxed. Missing CRH history
    remains missing and must pass the existing per-point coverage gates.
 
+Scope: raw `known_as_of`/vintage intentionally still exposes the original
+observations; this patch does not rewrite strict historical replay. A later
+short-window collection can clear the coverage-detail warning when those old
+dates are absent. The archive, frozen configuration and PE report are the
+durable quarantine evidence, not a permanent coverage-status badge.
+
 ## Isolated evidence
 
 Artifacts are under `reports/cron-recovery-20261024/` in this worktree.
 The production connection used `mode=ro` and SQLite's backup API, including WAL.
 The frozen baseline is 1,451,376,640 bytes, SHA256
 `9156c84cf3d28e2fdb2a86b082160e3b942fd34b547f87fb485417fa776f73a3`.
-Cloud and downloaded-copy `quick_check` passed. The baseline is preserved;
-mutations target only the separate `trial.db`.
+Cloud and downloaded-copy `quick_check` passed. The baseline is preserved.
+`trial.db` is the separate ingestion replay; `recovery.db` is the clean copy
+for the exact five-row production proposal. All mutations stay in these copies.
 
 Initial replay: five rows archived, 42 metric rows recomputed, all three CRH
 statement collections returned `ok`, all 171 original CRH vintage rows matched
 field-for-field afterwards, and `quick_check=ok`. These are source-repair checks;
 whole-window and six-basket certification are recorded below when completed.
+
+The ingestion replay also triggered the existing writer's financially equivalent
+2012 cash-flow date canonicalization (9/30 → 12/31), with its normal archive.
+That extra operation is **not** in the production proposal. The separate
+`recovery.db` starts again from the frozen baseline, applies only the five-row
+plan, and rebuilds SPY from already stored sources with `client=None`. Final
+acceptance compares all symbols in all three current statement tables against
+the baseline minus those five exact rows, requires exact CRH vintage equality,
+and matches every new quarantine archive payload to its original baseline row.
+The redundant historical calculation on the ingestion-test `trial.db` was
+stopped before candidate publication; that copy is evidence of ingestion only,
+not a completed historical certification. `recovery.db` is the acceptance run.
+
+The 17 other symbols that SPY would request after its preliminary source stage
+were fetched serially with a 20-request ceiling (17 used). In a second isolated
+SQLite database, 16 responses passed the real current writer; INFO returned an
+explicit empty response. No additional fiscal conflict was found. Those inputs
+were not written to production or used as an implicit fallback in the trial.
+Combined isolated-investigation requests: 20 (3 CRH + 17 other income requests),
+excluding the two requests in the preceding diagnostic turn.
+
+Initial independent review: 212 related tests passed; all five frozen rows
+matched the baseline and provider payloads field-for-field; the other 37 CRH
+income rows were retained. Local initial repair suite: 160 passed. Additional
+historical/valuation suite: 256 passed. The same 160-test repair suite passed
+on cloud Python 3.10 in `/tmp/finance-crh-oct24-code` (22.39 seconds), with no
+production source or database edits.
+
+Full repository regression: `python -m pytest tests -q --tb=short` returned
+**4,877 passed, 4 skipped, 17 warnings in 387.38s**. Warnings are from existing
+RS rank casting and deprecated universe/concept helpers. Tests use separate
+local fixture copies, not the baseline or recovery databases.
+
+Read-only quality audit at 2026-10-24T05:00:00Z has identical per-symbol records
+before/after: 856/894 fundamental-ready and 142 pre-existing repair targets.
+Both reports remain `FAIL`; this is **no regression**, not a claim that all
+unrelated source-quality problems are resolved. CRH remains fundamental-ready.
+Evidence: `quality-comparison.json` and the two complete quality reports.
+
+## Final isolated acceptance
+
+Functional commit: `8a42c29a`. The exact five-row proposal in `recovery.db`
+completed with **zero HTTP requests**. SPY's five-year run
+`index-pe-recovery-trial-20261024-spy` completed in 875.46 seconds with 261
+published TTM and hindsight points and no failed basket. Its candidate
+transaction's existing independent verifier passed before commit.
+
+| Product in isolated copy | Rows | Latest date |
+|---|---:|---|
+| SPY historical weekly PE | 261 | 2026-10-23 |
+| QQQ historical weekly PE | 261 | 2026-10-23 |
+| SOXX historical weekly PE | 257 | 2026-10-23 |
+| Consensus NTM baskets | 6 | 2026-10-24 |
+
+All-three history certification passed before and after the PIT phase. The
+six-basket candidate transaction and the full forward verifier returned success,
+with empty failure lists. SOX/IGV auxiliary blend lines remain NULL/partial;
+the valid-empty-set drift warning is retained. These are not claims that every
+auxiliary source is complete.
+
+Independent final source assertions passed: all symbols in all three current
+statement tables equal the baseline minus the five exact targets; CRH's 171
+vintage rows are exactly unchanged, with no additions; every quarantine archive
+contains its full baseline row and frozen plan; SQLite `quick_check=ok`; the
+baseline SHA256 is unchanged. A separate reviewer also used bidirectional SQL
+comparisons and recomputed the archive/plan hashes independently.
+
+Reproducible local acceptance scripts: `run_isolated_recovery.py` and
+`verify_trial.py` under the artifact directory. Compact receipt:
+`trial-summary.json` (despite the legacy filename, this certifies `recovery.db`).
+Full outputs are `recovery-spy-history.json`, `trial-history-before-pit.json`,
+`trial-pit-valuation.json`, `trial-pit-verifier.json`, and
+`trial-history-final.json`. Two subagents were used: primary evidence research
+and independent implementation/acceptance review. Parent checked the source,
+diff and actual command outputs.
 
 ## Production approval boundary
 
@@ -98,3 +180,26 @@ message delivery is authorized by the current isolated-verification approval.
 After acceptance, submit the reviewed patch, exact hash plan, backup/lock steps,
 request budget and whole-window/PIT verification results for Boss's approval.
 Do not restore an entire old database over unrelated concurrent data.
+
+Proposed production sequence, pending that approval:
+
+1. Acquire `market_db_writer` **before deployment**, and hold it through repair
+   and final verification. Confirm free space and create a consistent SQLite
+   backup using the existing backup helper. Recheck all five complete-row hashes
+   against the frozen plan, then deploy the reviewed commit and configuration
+   while still holding the lock. Scheduled writers must not see mixed versions.
+2. Call `apply_reviewed_statement_quarantine` with the frozen plan. Require five
+   archival removals, unchanged raw vintage, and successful metric recomputation.
+   Do **not** replay the full three-statement ingestion experiment in production.
+3. Reuse `run_backfill(client=None, store=..., conn=...)` with a fresh run ID,
+   `SPY`, `as_of=2026-10-24`, five years. HTTP budget **0**. Missing inputs that
+   prevent certification stop recovery; do not increase a budget or loosen gates.
+4. Certify SPY/QQQ/SOXX against that window. If already-complete other baskets no
+   longer reconcile with current sources, stop and report the new blocker.
+5. Run only the valuation phase for the already-complete 10/24 forward ingestion,
+   then the full forward verifier and final historical verifier. No ingestion
+   resume and no replacement of an immutable pre-existing PIT vintage.
+6. Require SQLite `quick_check`, exact current-statement difference of those five
+   rows only, original archive payload/hash agreement, and unchanged raw vintage.
+   Preserve the original failure manifests and all unrelated data. No cron edits
+   or manual report/message sends are part of this proposal.

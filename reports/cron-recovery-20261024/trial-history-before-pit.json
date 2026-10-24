@@ -1,0 +1,361 @@
+{
+  "as_of": "2026-10-24",
+  "requested_window": [
+    "2021-10-24",
+    "2026-10-24"
+  ],
+  "baskets": {
+    "SPY": {
+      "manifest_run_id": "index-pe-recovery-trial-20261024-spy",
+      "manifest_window": [
+        "2021-10-24",
+        "2026-10-24"
+      ],
+      "expected_weeks": 261,
+      "composition_floor": "2021-05-28",
+      "history_available_from": null,
+      "rows": 261,
+      "date_range": [
+        "2021-10-29",
+        "2026-10-23"
+      ],
+      "published_ttm": 261,
+      "published_hindsight": 261,
+      "quality_tiers": [
+        "actual_only",
+        "latest_consensus_tail"
+      ],
+      "market_cap_staleness_days": 7,
+      "sampled": [
+        "2021-10-29",
+        "2021-12-03",
+        "2022-01-14",
+        "2022-02-18",
+        "2022-03-25",
+        "2022-05-06",
+        "2022-06-10",
+        "2022-07-15",
+        "2022-08-19",
+        "2022-09-30",
+        "2022-11-04",
+        "2022-12-09",
+        "2023-01-20",
+        "2023-02-24",
+        "2023-03-31",
+        "2023-05-12",
+        "2023-06-16",
+        "2023-07-21",
+        "2023-09-01",
+        "2023-10-06",
+        "2023-11-10",
+        "2023-12-15",
+        "2024-01-26",
+        "2024-03-01",
+        "2024-04-05",
+        "2024-05-17",
+        "2024-06-21",
+        "2024-07-26",
+        "2024-09-06",
+        "2024-10-11",
+        "2024-11-15",
+        "2024-12-20",
+        "2025-01-31",
+        "2025-03-07",
+        "2025-04-11",
+        "2025-05-23",
+        "2025-06-27",
+        "2025-08-01",
+        "2025-09-12",
+        "2025-10-17",
+        "2025-11-21",
+        "2026-01-02",
+        "2026-02-06",
+        "2026-03-13",
+        "2026-04-17",
+        "2026-05-29",
+        "2026-07-02",
+        "2026-08-07",
+        "2026-09-18",
+        "2026-10-23"
+      ],
+      "raw_source_reconciliation": {
+        "errors": [],
+        "reconciled_market_caps": 23473,
+        "reconciled_ttm_incomes": 23459,
+        "declined_ttm_incomes": 0,
+        "reconciled_hindsight_incomes": 18299,
+        "declined_hindsight_incomes": 5010
+      }
+    },
+    "QQQ": {
+      "manifest_run_id": "index-pe-2026-10-24-e7505c98",
+      "manifest_window": [
+        "2021-10-24",
+        "2026-10-24"
+      ],
+      "expected_weeks": 261,
+      "composition_floor": "2021-05-26",
+      "history_available_from": null,
+      "rows": 261,
+      "date_range": [
+        "2021-10-29",
+        "2026-10-23"
+      ],
+      "published_ttm": 261,
+      "published_hindsight": 261,
+      "quality_tiers": [
+        "actual_only",
+        "latest_consensus_tail"
+      ],
+      "market_cap_staleness_days": 7,
+      "sampled": [
+        "2021-10-29",
+        "2021-12-03",
+        "2022-01-14",
+        "2022-02-18",
+        "2022-03-25",
+        "2022-05-06",
+        "2022-06-10",
+        "2022-07-15",
+        "2022-08-19",
+        "2022-09-30",
+        "2022-11-04",
+        "2022-12-09",
+        "2023-01-20",
+        "2023-02-24",
+        "2023-03-31",
+        "2023-05-12",
+        "2023-06-16",
+        "2023-07-21",
+        "2023-09-01",
+        "2023-10-06",
+        "2023-11-10",
+        "2023-12-15",
+        "2024-01-26",
+        "2024-03-01",
+        "2024-04-05",
+        "2024-05-17",
+        "2024-06-21",
+        "2024-07-26",
+        "2024-09-06",
+        "2024-10-11",
+        "2024-11-15",
+        "2024-12-20",
+        "2025-01-31",
+        "2025-03-07",
+        "2025-04-11",
+        "2025-05-23",
+        "2025-06-27",
+        "2025-08-01",
+        "2025-09-12",
+        "2025-10-17",
+        "2025-11-21",
+        "2026-01-02",
+        "2026-02-06",
+        "2026-03-13",
+        "2026-04-17",
+        "2026-05-29",
+        "2026-07-02",
+        "2026-08-07",
+        "2026-09-18",
+        "2026-10-23"
+      ],
+      "raw_source_reconciliation": {
+        "errors": [],
+        "reconciled_market_caps": 4755,
+        "reconciled_ttm_incomes": 4721,
+        "declined_ttm_incomes": 0,
+        "reconciled_hindsight_incomes": 3712,
+        "declined_hindsight_incomes": 1008
+      }
+    },
+    "SOXX": {
+      "manifest_run_id": "index-pe-2026-10-24-e7505c98",
+      "manifest_window": [
+        "2021-10-24",
+        "2026-10-24"
+      ],
+      "expected_weeks": 257,
+      "composition_floor": "2021-11-24",
+      "history_available_from": "2021-09-20",
+      "rows": 257,
+      "date_range": [
+        "2021-11-26",
+        "2026-10-23"
+      ],
+      "published_ttm": 257,
+      "published_hindsight": 257,
+      "quality_tiers": [
+        "actual_only",
+        "latest_consensus_tail"
+      ],
+      "market_cap_staleness_days": 7,
+      "sampled": [
+        "2021-11-26",
+        "2021-12-31",
+        "2022-02-04",
+        "2022-03-18",
+        "2022-04-22",
+        "2022-05-27",
+        "2022-07-01",
+        "2022-08-12",
+        "2022-09-16",
+        "2022-10-21",
+        "2022-11-25",
+        "2022-12-30",
+        "2023-02-10",
+        "2023-03-17",
+        "2023-04-21",
+        "2023-05-26",
+        "2023-07-07",
+        "2023-08-11",
+        "2023-09-15",
+        "2023-10-20",
+        "2023-11-24",
+        "2024-01-05",
+        "2024-02-09",
+        "2024-03-15",
+        "2024-04-19",
+        "2024-05-31",
+        "2024-07-05",
+        "2024-08-09",
+        "2024-09-13",
+        "2024-10-25",
+        "2024-11-29",
+        "2025-01-03",
+        "2025-02-07",
+        "2025-03-14",
+        "2025-04-25",
+        "2025-05-30",
+        "2025-07-03",
+        "2025-08-08",
+        "2025-09-19",
+        "2025-10-24",
+        "2025-11-28",
+        "2026-01-02",
+        "2026-02-06",
+        "2026-03-20",
+        "2026-04-24",
+        "2026-05-29",
+        "2026-07-02",
+        "2026-08-14",
+        "2026-09-18",
+        "2026-10-23"
+      ],
+      "raw_source_reconciliation": {
+        "errors": [],
+        "reconciled_market_caps": 1419,
+        "reconciled_ttm_incomes": 1419,
+        "declined_ttm_incomes": 0,
+        "reconciled_hindsight_incomes": 1133,
+        "declined_hindsight_incomes": 273
+      }
+    }
+  },
+  "checks": [
+    {
+      "name": "read_only_connection",
+      "passed": true,
+      "detail": {
+        "write_probe_refused": true,
+        "sqlite_error": "attempt to write a readonly database",
+        "mode": "ro + query_only + single read transaction"
+      }
+    },
+    {
+      "name": "no_holding_weighted_columns",
+      "passed": true,
+      "detail": {
+        "forbidden_present": []
+      }
+    },
+    {
+      "name": "fx_allowlist_covers_basket_currencies",
+      "passed": true,
+      "detail": [
+        "CNY",
+        "EUR",
+        "KRW",
+        "TWD"
+      ]
+    },
+    {
+      "name": "security_alias_bindings",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "manifest_denominator",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "forced_refresh_provenance",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "expected_weekly_denominator",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "manifest_result_integrity",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "quality_tier_and_gate_consistency",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "company_identity_uniqueness",
+      "passed": true,
+      "detail": {
+        "members_with_identity": 154562,
+        "members_without_identity": 0,
+        "errors": []
+      }
+    },
+    {
+      "name": "materialised_evidence",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "aggregate_reconciliation",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "raw_source_spot_check",
+      "passed": true,
+      "detail": {
+        "errors": [],
+        "reconciled_market_caps": 29647,
+        "reconciled_ttm_incomes": 29599,
+        "declined_ttm_incomes": 0,
+        "reconciled_hindsight_incomes": 23144,
+        "declined_hindsight_incomes": 6291
+      }
+    },
+    {
+      "name": "methodology_version",
+      "passed": true,
+      "detail": {
+        "expected": "1.0",
+        "errors": []
+      }
+    },
+    {
+      "name": "duplicates_and_json",
+      "passed": true,
+      "detail": {
+        "duplicate_pk": 0,
+        "invalid_json": []
+      }
+    }
+  ],
+  "passed": true
+}

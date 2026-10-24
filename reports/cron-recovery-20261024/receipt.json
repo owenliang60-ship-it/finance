@@ -1,0 +1,7 @@
+{
+  "source": "/root/workspace/Finance/data/market.db",
+  "snapshot": "/tmp/finance-crh-oct24-inspection/baseline.db",
+  "bytes": 1451376640,
+  "sha256": "9156c84cf3d28e2fdb2a86b082160e3b942fd34b547f87fb485417fa776f73a3",
+  "quick_check": "ok"
+}

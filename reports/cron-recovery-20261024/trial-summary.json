@@ -1,0 +1,69 @@
+{
+  "status": "complete",
+  "history_api_requests": 0,
+  "quarantined_current_rows": 5,
+  "original_vintage_rows_unchanged": 171,
+  "archived_rows": 5,
+  "all_current_statements_equal_baseline_minus_five": {
+    "income_quarterly": {
+      "rows": 46615,
+      "sha256": "a8a391f17d617524d45889e8b26c766b83783239aab3f8548b746cbabed7a111"
+    },
+    "balance_sheet_quarterly": {
+      "rows": 44297,
+      "sha256": "8f43d1be4e93dc04166e9bf04f798ebb3bceffdf34254f27ee998565465352e1"
+    },
+    "cash_flow_quarterly": {
+      "rows": 44564,
+      "sha256": "c0deefe4af49a3d4a0e66ee0308214a15fa87e1a51f6484a40e4d1a336be772d"
+    }
+  },
+  "quick_check": "ok",
+  "history": [
+    {
+      "basket": "QQQ",
+      "rows": 261,
+      "first": "2021-10-29",
+      "latest": "2026-10-23"
+    },
+    {
+      "basket": "SOXX",
+      "rows": 257,
+      "first": "2021-11-26",
+      "latest": "2026-10-23"
+    },
+    {
+      "basket": "SPY",
+      "rows": 261,
+      "first": "2021-10-29",
+      "latest": "2026-10-23"
+    }
+  ],
+  "consensus": [
+    {
+      "basket": "IGV",
+      "latest": "2026-10-24"
+    },
+    {
+      "basket": "MAGS",
+      "latest": "2026-10-24"
+    },
+    {
+      "basket": "QQQ",
+      "latest": "2026-10-24"
+    },
+    {
+      "basket": "SOX",
+      "latest": "2026-10-24"
+    },
+    {
+      "basket": "SPY",
+      "latest": "2026-10-24"
+    },
+    {
+      "basket": "XLF",
+      "latest": "2026-10-24"
+    }
+  ],
+  "baseline_sha256_unchanged": "9156c84cf3d28e2fdb2a86b082160e3b942fd34b547f87fb485417fa776f73a3"
+}
