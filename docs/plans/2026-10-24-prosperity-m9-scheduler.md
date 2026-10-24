@@ -1,6 +1,6 @@
 # 景气引擎 M9 周更调度、季末冻结与历史回放 Implementation Plan
 
-**状态：2026-10-24 Boss 批准 D1–D4；同日按三轮审查修订（第一轮见 §14；第二轮见 §15；第三轮 1 项 P2 见 §16，Boss 已授权直接修订）。D5 已于同日定为 B + A，Task 8 已实现（未提交）。Boss 已授权实现 T0–T6。T0–T5 代码与合成测试已完成，T6 历史重建与独立验证已通过，本周 live（A8）等待基本面刷新；未提交、未部署。**
+**状态：2026-10-24 T0–T6 与 Task 8 完成。A8 live 验收通过，主窗口审查 1 项已修，merge main `f2ff1ee9` 并 push。T7（云端部署 + cron）未做，每步需 Boss 确认。D1–D5 决定与三轮审查记录见下文。**
 
 **Goal:** 让景气引擎每周六在云端自动算出四方案周榜，按规则冻结季末榜，并能用同一流程重建历史冻结榜。
 **Architecture:** 纯规则（冻结日历、覆盖率判断）放进内核包，进入 `code_version`；门控与编排放 `src/data/`，不进入 `code_version`。CLI 由 `cron_wrapper.sh` 调起，所有写入只经 M8 `ProsperityStore.save_batch`。发布阶段只留挂点，M10–M13 再接产物。
@@ -298,7 +298,7 @@ cron 两条（CST，`CRON_TZ=Asia/Shanghai`）：
 - [x] Step 2：跑，确认上述用例按预期原因失败。
 - [x] Step 3：loader 联查 `fmp_forward_runs`；consensus 按 §8.1 forward 规则选快照并返回 `forward_stale`；packet 把它写进 flags；inputs 传 cutoff；kernel 在 badges 初始化时，若 `"forward_stale" in row.packet_flags` 就加上该徽章。
 - [x] Step 4：景气全套测试通过；记录新旧 `code_version`。
-- [ ] Step 5：检查点。commit 需授权：`feat(prosperity): use completed forward snapshots and tolerate one missed week`。
+- [x] Step 5：检查点（合并为单个提交 3c5e85e1）。commit 需授权：`feat(prosperity): use completed forward snapshots and tolerate one missed week`。
 
 ### Task 1：冻结规则纯函数
 
@@ -328,7 +328,7 @@ def test_due_quarter_skips_frozen():
 - [x] Step 2：跑，确认因模块不存在而失败。
 - [x] Step 3：实现 §8.1；补覆盖率分母只含 F1 可排名行、`quarter_bucket` 为 None 计入分母不计入分子、跨年季度、漏冻结的旧季度先于新季度。
 - [x] Step 4：`pytest tests/test_prosperity_freeze.py tests/test_prosperity_schemes.py -q` 通过（后者检查 code_version 覆盖范围）。
-- [ ] Step 5：检查点。commit：`feat(prosperity-m9): quarter freeze calendar and coverage rule`。
+- [x] Step 5：检查点（合并为单个提交 3c5e85e1）。commit：`feat(prosperity-m9): quarter freeze calendar and coverage rule`。
 
 ### Task 2：门控
 
@@ -338,7 +338,7 @@ def test_due_quarter_skips_frozen():
 - [x] Step 2：跑，确认失败。
 - [x] Step 3：实现 §8.2，含 `input_health`。质量报告时间按 `after.as_of` 的 UTC 时刻换成 CST 日期再比较。
 - [x] Step 4：通过。
-- [ ] Step 5：检查点。commit：`feat(prosperity-m9): fail-closed weekly gates`。
+- [x] Step 5：检查点（合并为单个提交 3c5e85e1）。commit：`feat(prosperity-m9): fail-closed weekly gates`。
 
 ### Task 3：本周计算与状态机
 
@@ -358,7 +358,7 @@ def test_due_quarter_skips_frozen():
 - [x] Step 2：跑，确认失败。
 - [x] Step 3：实现 `run_week` 与运行记录。
 - [x] Step 4：通过；景气全套通过。
-- [ ] Step 5：检查点。commit：`feat(prosperity-m9): weekly run with separate compute and publish states`。
+- [x] Step 5：检查点（合并为单个提交 3c5e85e1）。commit：`feat(prosperity-m9): weekly run with separate compute and publish states`。
 
 ### Task 4：冻结链重建与版本切换
 
@@ -382,7 +382,7 @@ def test_due_quarter_skips_frozen():
 - [x] Step 2：跑，确认失败。
 - [x] Step 3：实现 `rebuild_freeze_chain` 和候选记录的保存、校验与恢复；复用 M8 `canonical` / `content_hash`，不重写内容哈希逻辑。`run_week` 开头按 §8.3 的完整性标准检查当前版本，需要时重建到上周。
 - [x] Step 4：通过。
-- [ ] Step 5：检查点。commit：`feat(prosperity-m9): rebuild the freeze chain per code version`。
+- [x] Step 5：检查点（合并为单个提交 3c5e85e1）。commit：`feat(prosperity-m9): rebuild the freeze chain per code version`。
 
 ### Task 5：CLI、cron 入口与备份
 
@@ -392,15 +392,15 @@ def test_due_quarter_skips_frozen():
 - [x] Step 2：跑，确认失败。
 - [x] Step 3：实现 CLI（含 `--quality-dir`、`--observed-at` 与 replay 日期限制）与剩余空间检查（`shutil.disk_usage`）。`run_prosperity.sh` 写库前用 sqlite backup API 备份 `prosperity.db`，连同其 `.state/candidates/` 保存为同一备份集合，校验后保留最新 2 份。`sync_to_cloud.sh --pull` 增加 prosperity.db 及匹配的候选状态：云端一致快照 → sha256 → 本地 quick_check 与候选记录校验 → 发布匹配副本；不得仅替换库而混用旧状态。先 grep 现有备份实现并复用（`scripts/build_company_concept_registry.py:1428 _backup_sqlite`）。
 - [x] Step 4：通过；`bash -n` 两个脚本。
-- [ ] Step 5：检查点。commit：`feat(prosperity-m9): weekly CLI, cron entry and backups`。
+- [x] Step 5：检查点（合并为单个提交 3c5e85e1）。commit：`feat(prosperity-m9): weekly CLI, cron entry and backups`。
 
 ### Task 6：真实数据验收（本地，只读）
 
 本周 live 验收在某个周六 15:05 CST 之后执行，此时 `finance_fundamental` 已结束（日志在 `logs/cron_fundamental.log`）。原因：live 要求快照的 CST 日期等于本周六，质量报告又必须在快照之前完成。
 
-- [ ] Step 1：先确认 `cron_fundamental.log` 本周已有结束行（OK 或 FAIL rc=1 都算）。从云端只读复制本周的质量报告（`data/quality/fundamentals-<UTC>.json`）到 `/tmp/m9-quality/`，记录源路径、文件时间、`after.as_of` 和 sha256。
-- [ ] Step 2：再用 `./sync_to_cloud.sh --pull` 拉 `market.db`，记下云端快照时刻和 sha256，确认报告 `after.as_of` 早于快照时刻。worktree 用 symlink 只读挂载 live 数据（见记忆 `project_worktree_needs_live_data_symlink`）。
-- [ ] Step 3：用 `--live --observed-at <快照时刻> --quality-dir /tmp/m9-quality --db /tmp/prosperity_research_m9.db` 跑一次。硬门控照常生效。四方案存库并读回比对（A8）。live 会先自动重建到上周，所以这一步同时产出全链，记录每季冻结日、方式、覆盖率、耗时、峰值 RSS、库体积（A7）。用实测体积复核 §2 的年容量（D5 已定 B + A，见 §1）。
+- [x] Step 1：先确认 `cron_fundamental.log` 本周已有结束行（OK 或 FAIL rc=1 都算）。从云端只读复制本周的质量报告（`data/quality/fundamentals-<UTC>.json`）到 `/tmp/m9-quality/`，记录源路径、文件时间、`after.as_of` 和 sha256。
+- [x] Step 2：再用 `./sync_to_cloud.sh --pull` 拉 `market.db`，记下云端快照时刻和 sha256，确认报告 `after.as_of` 早于快照时刻。worktree 用 symlink 只读挂载 live 数据（见记忆 `project_worktree_needs_live_data_symlink`）。
+- [x] Step 3（2026-10-24 通过，见报告「A8」节）：用 `--live --observed-at <快照时刻> --quality-dir /tmp/m9-quality --db /tmp/prosperity_research_m9.db` 跑一次。硬门控照常生效。四方案存库并读回比对（A8）。live 会先自动重建到上周，所以这一步同时产出全链，记录每季冻结日、方式、覆盖率、耗时、峰值 RSS、库体积（A7）。用实测体积复核 §2 的年容量（D5 已定 B + A，见 §1）。
 - [x] Step 4：独立核对脚本不 import `freeze.py`：用运行记录所引用、校验有效的全部已完成候选记录，重算 21 季的覆盖率与首次达标日，和库里的冻结日比较；再抽 3 季各 20 只，直接对固定快照查 SQL，核对 `quarter_bucket`（A9）。
 - [x] Step 5：`/code-review high`，修复成立的发现；再跑景气全套与全量测试，失败 ID 与基线对照。证据放 `reports/prosperity/m9-scheduler-<日期>/`。更新北极星 D1/D3 与 M9 完成度。
 
@@ -422,7 +422,7 @@ def test_due_quarter_skips_frozen():
   - `remove --manifest PATH`：校验清单后，在一个事务里删除版本 V 的行，再 `VACUUM`。执行前先做一次完整备份。保留集合由库内 live 周榜推出，不接受手动传入（A20）。
   - 移除不进 cron，每次由 Boss 手动确认后执行（A21）。
 - [x] Step 4：通过；景气全套 436 passed。真实 21 季库私有副本冒烟：export 168 s、verify 151 s、remove 156 s，峰值 RSS 约 0.68 GB。
-- [ ] Step 5：检查点。commit：`feat(prosperity-m9): gzip backups and per-version archive`。
+- [x] Step 5：检查点（合并为单个提交 3c5e85e1）。commit：`feat(prosperity-m9): gzip backups and per-version archive`。
 
 ### Task 7：部署（每一步单独请 Boss 确认）
 
