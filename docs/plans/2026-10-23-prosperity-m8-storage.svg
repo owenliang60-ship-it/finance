@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="1120" viewBox="0 0 1120 1120" role="img" aria-labelledby="title desc">
+<title id="title">景气 M8：保存榜单，供周更和网页读取</title>
+<desc id="desc">已有输入包和评分内核输出，经 M8 事务写入独立结果库。未来 M9 负责调度，M10 到 M13 负责输出。落库失败全部回滚，同键同内容跳过，同键不同内容报错。</desc>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="#454545"/></marker></defs>
+<rect width="1120" height="680" fill="#ffffff"/>
+<g font-family="PingFang SC, Microsoft YaHei, sans-serif" fill="#222222">
+<text x="40" y="52" font-size="28" font-weight="600">M8：让每期景气榜单可保存、可追溯</text>
+<text x="40" y="84" font-size="17">本次只建结果库与读写接口；评分公式保持现状。</text>
+<g fill="#f5f5f5" stroke="#777777" stroke-width="1">
+<rect x="40" y="124" width="270" height="112" rx="8"/>
+<rect x="416" y="124" width="280" height="112" rx="8" stroke-width="2"/>
+<rect x="802" y="124" width="278" height="112" rx="8"/>
+<rect x="416" y="292" width="280" height="110" rx="8" stroke-width="2"/>
+<rect x="40" y="292" width="270" height="110" rx="8"/>
+<rect x="802" y="292" width="278" height="110" rx="8"/>
+</g>
+<g font-size="20" text-anchor="middle">
+<text x="175" y="160">已有 M4–M6</text><text x="175" y="191" font-size="17">输入包 · 因子 · 评分 · 参数包</text><text x="175" y="218" font-size="15">复用现有结构</text>
+<text x="556" y="160">M8 存储接口</text><text x="556" y="191" font-size="17">身份校验 → 整批事务</text><text x="556" y="218" font-size="15">周榜与冻结榜分别保存</text>
+<text x="941" y="160">后续 M9 调度</text><text x="941" y="191" font-size="17">门控 · 周更 · 冻结 · 历史回放</text><text x="941" y="218" font-size="15">调用 M8，不复制评分逻辑</text>
+<text x="556" y="331">prosperity.db</text><text x="556" y="361" font-size="17">历史内容不可覆盖</text><text x="556" y="386" font-size="15">计算完成与发布完成分开记录</text>
+<text x="175" y="331">生产与研究分库</text><text x="175" y="361" font-size="17">生产：云端单写者</text><text x="175" y="386" font-size="15">研究：本地独立路径</text>
+<text x="941" y="331">后续 M10–M13 输出</text><text x="941" y="361" font-size="17">精选池 · 网页 · 体检 · 投递</text><text x="941" y="386" font-size="15">只读榜单；全部完成后确认发布</text>
+</g>
+<g fill="none" stroke="#454545" stroke-width="2" marker-end="url(#arrow)">
+<path d="M310 180 H404"/><path d="M802 180 H708"/><path d="M556 236 V280"/><path d="M696 346 H790"/>
+</g>
+<path d="M310 346 H416" stroke="#777777" stroke-width="1" fill="none"/>
+<text x="40" y="460" font-size="22" font-weight="600">一次写入，只有三种结果</text>
+<g font-size="18">
+<text x="52" y="504">① 新榜单：全部明细写完后一起提交。</text>
+<text x="52" y="543">② 同键、同内容：返回已有榜单，不重复写。</text>
+<text x="52" y="582">③ 同键、内容不同或中途出错：整批回滚，旧榜单保留。</text>
+</g>
+<text x="40" y="640" font-size="16">发布失败时：计算结果仍在库里。后续任务读取同一份榜单，重新生成输出。</text>
+</g>
+</svg>

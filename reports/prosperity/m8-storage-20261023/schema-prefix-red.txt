@@ -1,0 +1,24 @@
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_existing_user_objects_are_not_an_empty_new_database[CREATE TABLE sqliteXuser_data(x INTEGER); INSERT INTO sqliteXuser_data VALUES(42)] _
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-294/test_existing_user_objects_are1')
+ddl = 'CREATE TABLE sqliteXuser_data(x INTEGER); INSERT INTO sqliteXuser_data VALUES(42)'
+
+    @pytest.mark.parametrize('ddl', [
+        'CREATE VIEW other_app AS SELECT 42 AS answer',
+        'CREATE TABLE sqliteXuser_data(x INTEGER); INSERT INTO sqliteXuser_data VALUES(42)',
+    ])
+    def test_existing_user_objects_are_not_an_empty_new_database(tmp_path, ddl):
+        path = tmp_path / 'other-app.db'
+        with sqlite3.connect(path) as conn:
+            conn.executescript(ddl)
+        before = path.read_bytes()
+>       with pytest.raises(ValueError, match='schema'):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/test_prosperity_store.py:458: Failed
+=========================== short test summary info ============================
+FAILED tests/test_prosperity_store.py::test_existing_user_objects_are_not_an_empty_new_database[CREATE TABLE sqliteXuser_data(x INTEGER); INSERT INTO sqliteXuser_data VALUES(42)]
+1 failed, 1 passed, 41 deselected in 0.60s

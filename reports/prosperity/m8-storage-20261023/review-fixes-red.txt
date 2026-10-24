@@ -1,0 +1,64 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+________ test_view_only_existing_database_is_not_an_empty_new_database _________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-286/test_view_only_existing_databa0')
+
+    def test_view_only_existing_database_is_not_an_empty_new_database(tmp_path):
+        path = tmp_path / 'other-app.db'
+        with sqlite3.connect(path) as conn:
+            conn.execute('CREATE VIEW other_app AS SELECT 42 AS answer')
+        before = path.read_bytes()
+>       with pytest.raises(ValueError, match='schema'):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/test_prosperity_store.py:454: Failed
+__________ test_real_packet_with_negative_raw_listing_age_roundtrips ___________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-286/test_real_packet_with_negative0')
+
+    def test_real_packet_with_negative_raw_listing_age_roundtrips(tmp_path):
+        from tests.prosperity_fixtures import hist
+        from terminal.prosperity.packet import build_packet
+        from terminal.prosperity.factors import compute_factor_row
+        from terminal.prosperity.kernel import score_board
+        from terminal.prosperity.schemes import SCHEMES
+        from src.data.prosperity_storage import BoardMeta
+        from src.data.prosperity_store import ProsperityStore
+        history = hist()
+        history.profile = {'ipoDate': '2026-10-01'}
+        p = build_packet(history, '2026-09-26', mode='replay', membership_basis='explicit',
+                         benchmark_closes=[], with_beta=False)
+        f = compute_factor_row(p)
+        assert f.listing_days == -5
+        scheme = SCHEMES['F1']
+        result = score_board([f], scheme, frozen=None, as_of=p.as_of, code_version='test-v1')
+        meta = BoardMeta('weekly', None, None, '2026-10-23T09:00:00Z', '0'*40, 'replay', (p.symbol,), {},
+                         {'source_id': 'synthetic-real-packet', 'observed_at': None,
+                          'snapshot_sha256': None, 'profile_observed_at': None})
+>       b = prepare_board(meta, result, scheme, [p], [f], names={p.symbol: None})
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prosperity_storage.py:109: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/data/prosperity_storage.py:188: in prepare_board
+    validate_board(stored)
+src/data/prosperity_storage.py:348: in validate_board
+    integer(f.listing_days)
+src/data/prosperity_storage.py:107: in integer
+    require(type(value) is int and value >= minimum, 'invalid_integer')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+condition = False, reason = 'invalid_integer'
+
+    def require(condition, reason):
+        if not condition:
+>           raise ValueError(reason)
+E           ValueError: invalid_integer
+
+src/data/prosperity_storage.py:69: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_prosperity_store.py::test_view_only_existing_database_is_not_an_empty_new_database
+FAILED tests/test_prosperity_storage.py::test_real_packet_with_negative_raw_listing_age_roundtrips
+2 failed in 0.67s

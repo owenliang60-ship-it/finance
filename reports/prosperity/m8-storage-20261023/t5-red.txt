@@ -1,0 +1,167 @@
+..........................FFFFFFF                                        [100%]
+=================================== FAILURES ===================================
+__________________ test_publish_retry_preserves_first_receipt __________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-279/test_publish_retry_preserves_f0')
+
+    def test_publish_retry_preserves_first_receipt(tmp_path):
+        batch = storage_batch()
+        path = tmp_path / 'publication.db'
+        with ProsperityStore(path, read_only=False) as store:
+            key = key_for(batch[0])
+>           assert store.publication_state(key) == PublicationState(False, None)
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'publication_state'
+
+tests/test_prosperity_store.py:232: AttributeError
+_________________ test_publication_failure_is_atomic[missing] __________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-279/test_publication_failure_is_at0')
+case = 'missing'
+
+    @pytest.mark.parametrize('case', ['missing', 'mixed', 'corrupt', 'early', 'naive'])
+    def test_publication_failure_is_atomic(tmp_path, case):
+        with ProsperityStore(tmp_path / 'failed-publish.db', read_only=False) as store:
+            keys = store.save_batch(storage_batch())
+            at = '2026-10-23T09:00:00Z'
+            if case == 'missing':
+                keys = [replace(keys[0], as_of='2026-09-19')]
+            elif case == 'mixed':
+                keys = [keys[0], replace(keys[1], as_of='2026-09-19')]
+            elif case == 'corrupt':
+                store._conn.execute('DELETE FROM score WHERE board_id=2 AND row_index=0')
+            elif case == 'early':
+                at = '2026-09-26T08:00:00Z'
+            elif case == 'naive':
+                at = '2026-10-23T09:00:00'
+            with pytest.raises(ValueError):
+>               store.mark_published(keys, published_at=at)
+                ^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'ProsperityStore' object has no attribute 'mark_published'
+
+tests/test_prosperity_store.py:261: AttributeError
+__________________ test_publication_failure_is_atomic[mixed] ___________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-279/test_publication_failure_is_at1')
+case = 'mixed'
+
+    @pytest.mark.parametrize('case', ['missing', 'mixed', 'corrupt', 'early', 'naive'])
+    def test_publication_failure_is_atomic(tmp_path, case):
+        with ProsperityStore(tmp_path / 'failed-publish.db', read_only=False) as store:
+            keys = store.save_batch(storage_batch())
+            at = '2026-10-23T09:00:00Z'
+            if case == 'missing':
+                keys = [replace(keys[0], as_of='2026-09-19')]
+            elif case == 'mixed':
+                keys = [keys[0], replace(keys[1], as_of='2026-09-19')]
+            elif case == 'corrupt':
+                store._conn.execute('DELETE FROM score WHERE board_id=2 AND row_index=0')
+            elif case == 'early':
+                at = '2026-09-26T08:00:00Z'
+            elif case == 'naive':
+                at = '2026-10-23T09:00:00'
+            with pytest.raises(ValueError):
+>               store.mark_published(keys, published_at=at)
+                ^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'ProsperityStore' object has no attribute 'mark_published'
+
+tests/test_prosperity_store.py:261: AttributeError
+_________________ test_publication_failure_is_atomic[corrupt] __________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-279/test_publication_failure_is_at2')
+case = 'corrupt'
+
+    @pytest.mark.parametrize('case', ['missing', 'mixed', 'corrupt', 'early', 'naive'])
+    def test_publication_failure_is_atomic(tmp_path, case):
+        with ProsperityStore(tmp_path / 'failed-publish.db', read_only=False) as store:
+            keys = store.save_batch(storage_batch())
+            at = '2026-10-23T09:00:00Z'
+            if case == 'missing':
+                keys = [replace(keys[0], as_of='2026-09-19')]
+            elif case == 'mixed':
+                keys = [keys[0], replace(keys[1], as_of='2026-09-19')]
+            elif case == 'corrupt':
+                store._conn.execute('DELETE FROM score WHERE board_id=2 AND row_index=0')
+            elif case == 'early':
+                at = '2026-09-26T08:00:00Z'
+            elif case == 'naive':
+                at = '2026-10-23T09:00:00'
+            with pytest.raises(ValueError):
+>               store.mark_published(keys, published_at=at)
+                ^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'ProsperityStore' object has no attribute 'mark_published'
+
+tests/test_prosperity_store.py:261: AttributeError
+__________________ test_publication_failure_is_atomic[early] ___________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-279/test_publication_failure_is_at3')
+case = 'early'
+
+    @pytest.mark.parametrize('case', ['missing', 'mixed', 'corrupt', 'early', 'naive'])
+    def test_publication_failure_is_atomic(tmp_path, case):
+        with ProsperityStore(tmp_path / 'failed-publish.db', read_only=False) as store:
+            keys = store.save_batch(storage_batch())
+            at = '2026-10-23T09:00:00Z'
+            if case == 'missing':
+                keys = [replace(keys[0], as_of='2026-09-19')]
+            elif case == 'mixed':
+                keys = [keys[0], replace(keys[1], as_of='2026-09-19')]
+            elif case == 'corrupt':
+                store._conn.execute('DELETE FROM score WHERE board_id=2 AND row_index=0')
+            elif case == 'early':
+                at = '2026-09-26T08:00:00Z'
+            elif case == 'naive':
+                at = '2026-10-23T09:00:00'
+            with pytest.raises(ValueError):
+>               store.mark_published(keys, published_at=at)
+                ^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'ProsperityStore' object has no attribute 'mark_published'
+
+tests/test_prosperity_store.py:261: AttributeError
+__________________ test_publication_failure_is_atomic[naive] ___________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-279/test_publication_failure_is_at4')
+case = 'naive'
+
+    @pytest.mark.parametrize('case', ['missing', 'mixed', 'corrupt', 'early', 'naive'])
+    def test_publication_failure_is_atomic(tmp_path, case):
+        with ProsperityStore(tmp_path / 'failed-publish.db', read_only=False) as store:
+            keys = store.save_batch(storage_batch())
+            at = '2026-10-23T09:00:00Z'
+            if case == 'missing':
+                keys = [replace(keys[0], as_of='2026-09-19')]
+            elif case == 'mixed':
+                keys = [keys[0], replace(keys[1], as_of='2026-09-19')]
+            elif case == 'corrupt':
+                store._conn.execute('DELETE FROM score WHERE board_id=2 AND row_index=0')
+            elif case == 'early':
+                at = '2026-09-26T08:00:00Z'
+            elif case == 'naive':
+                at = '2026-10-23T09:00:00'
+            with pytest.raises(ValueError):
+>               store.mark_published(keys, published_at=at)
+                ^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'ProsperityStore' object has no attribute 'mark_published'
+
+tests/test_prosperity_store.py:261: AttributeError
+____________________ test_state_validates_board_and_receipt ____________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-279/test_state_validates_board_and0')
+
+    def test_state_validates_board_and_receipt(tmp_path):
+        with ProsperityStore(tmp_path / 'state.db', read_only=False) as store:
+            keys = store.save_batch(storage_batch())
+>           store.mark_published(keys, published_at='2026-10-23T09:00:00Z')
+            ^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'mark_published'
+
+tests/test_prosperity_store.py:269: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_prosperity_store.py::test_publish_retry_preserves_first_receipt
+FAILED tests/test_prosperity_store.py::test_publication_failure_is_atomic[missing]
+FAILED tests/test_prosperity_store.py::test_publication_failure_is_atomic[mixed]
+FAILED tests/test_prosperity_store.py::test_publication_failure_is_atomic[corrupt]
+FAILED tests/test_prosperity_store.py::test_publication_failure_is_atomic[early]
+FAILED tests/test_prosperity_store.py::test_publication_failure_is_atomic[naive]
+FAILED tests/test_prosperity_store.py::test_state_validates_board_and_receipt
+7 failed, 26 passed in 4.42s

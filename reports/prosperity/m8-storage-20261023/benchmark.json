@@ -1,0 +1,71 @@
+{
+  "synthetic_only": true,
+  "stocks": 1000,
+  "schemes": 4,
+  "weeks": 8,
+  "rows": {
+    "board": 32,
+    "input_set": 8,
+    "stock_input": 8000,
+    "stock_period": 32000,
+    "factor_value": 320000,
+    "score": 32000,
+    "scheme": 4,
+    "params": 32,
+    "publication": 0
+  },
+  "checkpoint_bytes": 94838784,
+  "wal_bytes_before_checkpoint": 12141672,
+  "annual_52_week_plus_4_freeze_bytes_linear_estimate": 663871488.0,
+  "all_boards_read_after_reopen_seconds": 35.18741279200185,
+  "timings": [
+    {
+      "week": 1,
+      "fixture_seconds": 2.14865191699937,
+      "write_seconds": 10.75805183290504,
+      "read_seconds": 5.328121709055267
+    },
+    {
+      "week": 2,
+      "fixture_seconds": 2.917355875018984,
+      "write_seconds": 10.538581124972552,
+      "read_seconds": 5.145751875010319
+    },
+    {
+      "week": 3,
+      "fixture_seconds": 2.7302790000103414,
+      "write_seconds": 10.297797042061575,
+      "read_seconds": 5.0208317909855396
+    },
+    {
+      "week": 4,
+      "fixture_seconds": 2.7604742919793352,
+      "write_seconds": 10.080408166977577,
+      "read_seconds": 4.915087208035402
+    },
+    {
+      "week": 5,
+      "fixture_seconds": 2.8335788749391213,
+      "write_seconds": 10.43376820802223,
+      "read_seconds": 4.896068208036013
+    },
+    {
+      "week": 6,
+      "fixture_seconds": 2.768169749993831,
+      "write_seconds": 9.81423266697675,
+      "read_seconds": 4.730037500034086
+    },
+    {
+      "week": 7,
+      "fixture_seconds": 2.626657708082348,
+      "write_seconds": 9.764178792014718,
+      "read_seconds": 4.752959582954645
+    },
+    {
+      "week": 8,
+      "fixture_seconds": 2.5746666670311242,
+      "write_seconds": 9.69336499995552,
+      "read_seconds": 4.714208957972005
+    }
+  ]
+}

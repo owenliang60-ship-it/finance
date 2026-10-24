@@ -1,0 +1,50 @@
+.......................FFF                                               [100%]
+=================================== FAILURES ===================================
+______________ test_weekly_board_is_not_a_frozen_parameter_source ______________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-277/test_weekly_board_is_not_a_fro0')
+
+    def test_weekly_board_is_not_a_frozen_parameter_source(tmp_path):
+        with ProsperityStore(tmp_path / 'research.db', read_only=False) as store:
+            key = store.save_batch(storage_batch())[0]
+>           assert store.get_frozen_params(scheme_hash=key.scheme_hash, code_version=key.code_version,
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+                                           as_of=key.as_of, effective_at='2026-09-26T08:30:00Z') is None
+E           AttributeError: 'ProsperityStore' object has no attribute 'get_frozen_params'
+
+tests/test_prosperity_store.py:178: AttributeError
+_______ test_freeze_restore_respects_version_date_and_effective_instant ________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-277/test_freeze_restore_respects_v0')
+
+    def test_freeze_restore_respects_version_date_and_effective_instant(tmp_path):
+        batch = storage_batch(freeze=True)
+        with ProsperityStore(tmp_path / 'frozen.db', read_only=False) as store:
+            keys = store.save_batch(batch)
+            opts = dict(scheme_hash=keys[0].scheme_hash, code_version=keys[0].code_version,
+                        as_of='2026-10-03', effective_at='2026-09-26T08:30:00Z')
+>           assert store.get_frozen_params(**opts) == batch[4].board.params
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'get_frozen_params'
+
+tests/test_prosperity_store.py:188: AttributeError
+_______________ test_frozen_dependency_roundtrip_and_corruption ________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-277/test_frozen_dependency_roundtr0')
+
+    def test_frozen_dependency_roundtrip_and_corruption(tmp_path):
+        initial = storage_batch(freeze=True)
+        with ProsperityStore(tmp_path / 'dependency.db', read_only=False) as store:
+            store.save_batch(initial)
+>           frozen = {b.board.scheme_id: store.get_frozen_params(scheme_hash=b.board.scheme_hash,
+                                         ^^^^^^^^^^^^^^^^^^^^^^^
+                      code_version=b.board.code_version, as_of='2026-10-03', effective_at='2026-10-03T08:00:00Z')
+                      for b in initial[:4]}
+E           AttributeError: 'ProsperityStore' object has no attribute 'get_frozen_params'
+
+tests/test_prosperity_store.py:213: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_prosperity_store.py::test_weekly_board_is_not_a_frozen_parameter_source
+FAILED tests/test_prosperity_store.py::test_freeze_restore_respects_version_date_and_effective_instant
+FAILED tests/test_prosperity_store.py::test_frozen_dependency_roundtrip_and_corruption
+3 failed, 23 passed in 3.39s

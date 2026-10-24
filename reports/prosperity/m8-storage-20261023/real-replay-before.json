@@ -1,0 +1,42 @@
+{
+  "members": 817,
+  "packets": 817,
+  "build_errors": 0,
+  "build_seconds": 13.1,
+  "prepare_failures": {},
+  "write_seconds": 21.4,
+  "idempotent_keys": true,
+  "read_seconds": 3.9,
+  "round_trip_equal": true,
+  "rows": {
+    "board": 4,
+    "stock_period": 3268,
+    "factor_value": 32680,
+    "score": 3268,
+    "params": 4,
+    "scheme": 4
+  },
+  "db_bytes": 26329088,
+  "table_bytes": {
+    "stock_period": 22056960,
+    "factor_value": 2269184,
+    "sqlite_autoindex_factor_value_1": 876544,
+    "score": 716800,
+    "params": 126976,
+    "sqlite_autoindex_stock_period_1": 53248,
+    "sqlite_autoindex_score_1": 53248,
+    "sqlite_autoindex_score_2": 49152,
+    "score_rank": 45056,
+    "board": 28672,
+    "scheme": 20480,
+    "sqlite_schema": 12288,
+    "sqlite_autoindex_scheme_1": 4096,
+    "sqlite_autoindex_params_1": 4096,
+    "sqlite_autoindex_board_1": 4096,
+    "publication": 4096,
+    "board_history": 4096
+  },
+  "avg_input_json_bytes": 5452.223990208078,
+  "avg_factor_meta_bytes": 547.9718482252142,
+  "max_quarters_in_input": 16
+}

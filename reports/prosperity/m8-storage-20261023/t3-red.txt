@@ -1,0 +1,333 @@
+......FFFFFFFFFFFFFFFFF                                                  [100%]
+=================================== FAILURES ===================================
+____________________ test_round_trip_after_close_and_retry _____________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_round_trip_after_close_an0')
+
+    def test_round_trip_after_close_and_retry(tmp_path):
+        path, batch = tmp_path / 'research.db', storage_batch()
+        with ProsperityStore(path, read_only=False) as store:
+>           keys = store.save_batch(batch)
+                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:64: AttributeError
+_____________________ test_sql_zero_roundtrip_and_retry[0] _____________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_sql_zero_roundtrip_and_re0')
+zero = 0
+
+    @pytest.mark.parametrize('zero', [0, 0.0, -0.0])
+    def test_sql_zero_roundtrip_and_retry(tmp_path, zero):
+        b = storage_batch()[0]
+        rows = (replace(b.board.rows[0], trend_adj=zero),) + b.board.rows[1:]
+        b = replace(b, board=replace(b.board, rows=rows))
+        path = tmp_path / 'zero.db'
+        with ProsperityStore(path, read_only=False) as store:
+>           key = store.save_batch([b])[0]
+                  ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:81: AttributeError
+____________________ test_sql_zero_roundtrip_and_retry[0.0] ____________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_sql_zero_roundtrip_and_re1')
+zero = 0.0
+
+    @pytest.mark.parametrize('zero', [0, 0.0, -0.0])
+    def test_sql_zero_roundtrip_and_retry(tmp_path, zero):
+        b = storage_batch()[0]
+        rows = (replace(b.board.rows[0], trend_adj=zero),) + b.board.rows[1:]
+        b = replace(b, board=replace(b.board, rows=rows))
+        path = tmp_path / 'zero.db'
+        with ProsperityStore(path, read_only=False) as store:
+>           key = store.save_batch([b])[0]
+                  ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:81: AttributeError
+___________________ test_sql_zero_roundtrip_and_retry[-0.0] ____________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_sql_zero_roundtrip_and_re2')
+zero = -0.0
+
+    @pytest.mark.parametrize('zero', [0, 0.0, -0.0])
+    def test_sql_zero_roundtrip_and_retry(tmp_path, zero):
+        b = storage_batch()[0]
+        rows = (replace(b.board.rows[0], trend_adj=zero),) + b.board.rows[1:]
+        b = replace(b, board=replace(b.board, rows=rows))
+        path = tmp_path / 'zero.db'
+        with ProsperityStore(path, read_only=False) as store:
+>           key = store.save_batch([b])[0]
+                  ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:81: AttributeError
+________ test_conflict_rolls_back_new_boards_and_preserves_first_audit _________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_conflict_rolls_back_new_b0')
+
+    def test_conflict_rolls_back_new_boards_and_preserves_first_audit(tmp_path):
+        batch = storage_batch()
+        with ProsperityStore(tmp_path / 'conflict.db', read_only=False) as store:
+>           key = store.save_batch(batch[:1])[0]
+                  ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:91: AttributeError
+__________ test_failure_on_third_board_rolls_back_every_new_table_row __________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_failure_on_third_board_ro0')
+
+    def test_failure_on_third_board_rolls_back_every_new_table_row(tmp_path):
+        path = tmp_path / 'atomic.db'
+        with ProsperityStore(path, read_only=False) as store:
+            old = storage_batch(as_of='2026-09-19')
+>           keys = store.save_batch(old)
+                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:107: AttributeError
+_ test_corrupt_detail_fails_read_and_same_content_retry[DELETE FROM score WHERE row_index=0] _
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_corrupt_detail_fails_read0')
+sql = 'DELETE FROM score WHERE row_index=0'
+
+    @pytest.mark.parametrize('sql', [
+        'DELETE FROM score WHERE row_index=0',
+        'DELETE FROM factor_value WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_value=999 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_present=0 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET in_scheme=0',
+        'UPDATE params SET payload_json=\'{}\'',
+        'UPDATE stock_period SET sector=\'other\'',
+        'UPDATE score SET row_index=row_index+100',
+    ])
+    def test_corrupt_detail_fails_read_and_same_content_retry(tmp_path, sql):
+        path, batch = tmp_path / 'corrupt.db', storage_batch()
+        with ProsperityStore(path, read_only=False) as store:
+>           keys = store.save_batch(batch)
+                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:132: AttributeError
+_ test_corrupt_detail_fails_read_and_same_content_retry[DELETE FROM factor_value WHERE factor='revenue_yoy'] _
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_corrupt_detail_fails_read1')
+sql = "DELETE FROM factor_value WHERE factor='revenue_yoy'"
+
+    @pytest.mark.parametrize('sql', [
+        'DELETE FROM score WHERE row_index=0',
+        'DELETE FROM factor_value WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_value=999 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_present=0 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET in_scheme=0',
+        'UPDATE params SET payload_json=\'{}\'',
+        'UPDATE stock_period SET sector=\'other\'',
+        'UPDATE score SET row_index=row_index+100',
+    ])
+    def test_corrupt_detail_fails_read_and_same_content_retry(tmp_path, sql):
+        path, batch = tmp_path / 'corrupt.db', storage_batch()
+        with ProsperityStore(path, read_only=False) as store:
+>           keys = store.save_batch(batch)
+                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:132: AttributeError
+_ test_corrupt_detail_fails_read_and_same_content_retry[UPDATE factor_value SET raw_value=999 WHERE factor='revenue_yoy'] _
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_corrupt_detail_fails_read2')
+sql = "UPDATE factor_value SET raw_value=999 WHERE factor='revenue_yoy'"
+
+    @pytest.mark.parametrize('sql', [
+        'DELETE FROM score WHERE row_index=0',
+        'DELETE FROM factor_value WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_value=999 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_present=0 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET in_scheme=0',
+        'UPDATE params SET payload_json=\'{}\'',
+        'UPDATE stock_period SET sector=\'other\'',
+        'UPDATE score SET row_index=row_index+100',
+    ])
+    def test_corrupt_detail_fails_read_and_same_content_retry(tmp_path, sql):
+        path, batch = tmp_path / 'corrupt.db', storage_batch()
+        with ProsperityStore(path, read_only=False) as store:
+>           keys = store.save_batch(batch)
+                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:132: AttributeError
+_ test_corrupt_detail_fails_read_and_same_content_retry[UPDATE factor_value SET raw_present=0 WHERE factor='revenue_yoy'] _
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_corrupt_detail_fails_read3')
+sql = "UPDATE factor_value SET raw_present=0 WHERE factor='revenue_yoy'"
+
+    @pytest.mark.parametrize('sql', [
+        'DELETE FROM score WHERE row_index=0',
+        'DELETE FROM factor_value WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_value=999 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_present=0 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET in_scheme=0',
+        'UPDATE params SET payload_json=\'{}\'',
+        'UPDATE stock_period SET sector=\'other\'',
+        'UPDATE score SET row_index=row_index+100',
+    ])
+    def test_corrupt_detail_fails_read_and_same_content_retry(tmp_path, sql):
+        path, batch = tmp_path / 'corrupt.db', storage_batch()
+        with ProsperityStore(path, read_only=False) as store:
+>           keys = store.save_batch(batch)
+                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:132: AttributeError
+_ test_corrupt_detail_fails_read_and_same_content_retry[UPDATE factor_value SET in_scheme=0] _
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_corrupt_detail_fails_read4')
+sql = 'UPDATE factor_value SET in_scheme=0'
+
+    @pytest.mark.parametrize('sql', [
+        'DELETE FROM score WHERE row_index=0',
+        'DELETE FROM factor_value WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_value=999 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_present=0 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET in_scheme=0',
+        'UPDATE params SET payload_json=\'{}\'',
+        'UPDATE stock_period SET sector=\'other\'',
+        'UPDATE score SET row_index=row_index+100',
+    ])
+    def test_corrupt_detail_fails_read_and_same_content_retry(tmp_path, sql):
+        path, batch = tmp_path / 'corrupt.db', storage_batch()
+        with ProsperityStore(path, read_only=False) as store:
+>           keys = store.save_batch(batch)
+                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:132: AttributeError
+_ test_corrupt_detail_fails_read_and_same_content_retry[UPDATE params SET payload_json='{}'] _
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_corrupt_detail_fails_read5')
+sql = "UPDATE params SET payload_json='{}'"
+
+    @pytest.mark.parametrize('sql', [
+        'DELETE FROM score WHERE row_index=0',
+        'DELETE FROM factor_value WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_value=999 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_present=0 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET in_scheme=0',
+        'UPDATE params SET payload_json=\'{}\'',
+        'UPDATE stock_period SET sector=\'other\'',
+        'UPDATE score SET row_index=row_index+100',
+    ])
+    def test_corrupt_detail_fails_read_and_same_content_retry(tmp_path, sql):
+        path, batch = tmp_path / 'corrupt.db', storage_batch()
+        with ProsperityStore(path, read_only=False) as store:
+>           keys = store.save_batch(batch)
+                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:132: AttributeError
+_ test_corrupt_detail_fails_read_and_same_content_retry[UPDATE stock_period SET sector='other'] _
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_corrupt_detail_fails_read6')
+sql = "UPDATE stock_period SET sector='other'"
+
+    @pytest.mark.parametrize('sql', [
+        'DELETE FROM score WHERE row_index=0',
+        'DELETE FROM factor_value WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_value=999 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_present=0 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET in_scheme=0',
+        'UPDATE params SET payload_json=\'{}\'',
+        'UPDATE stock_period SET sector=\'other\'',
+        'UPDATE score SET row_index=row_index+100',
+    ])
+    def test_corrupt_detail_fails_read_and_same_content_retry(tmp_path, sql):
+        path, batch = tmp_path / 'corrupt.db', storage_batch()
+        with ProsperityStore(path, read_only=False) as store:
+>           keys = store.save_batch(batch)
+                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:132: AttributeError
+_ test_corrupt_detail_fails_read_and_same_content_retry[UPDATE score SET row_index=row_index+100] _
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_corrupt_detail_fails_read7')
+sql = 'UPDATE score SET row_index=row_index+100'
+
+    @pytest.mark.parametrize('sql', [
+        'DELETE FROM score WHERE row_index=0',
+        'DELETE FROM factor_value WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_value=999 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET raw_present=0 WHERE factor=\'revenue_yoy\'',
+        'UPDATE factor_value SET in_scheme=0',
+        'UPDATE params SET payload_json=\'{}\'',
+        'UPDATE stock_period SET sector=\'other\'',
+        'UPDATE score SET row_index=row_index+100',
+    ])
+    def test_corrupt_detail_fails_read_and_same_content_retry(tmp_path, sql):
+        path, batch = tmp_path / 'corrupt.db', storage_batch()
+        with ProsperityStore(path, read_only=False) as store:
+>           keys = store.save_batch(batch)
+                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:132: AttributeError
+_____________ test_cross_version_coexists_and_readonly_cannot_save _____________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_cross_version_coexists_an0')
+
+    def test_cross_version_coexists_and_readonly_cannot_save(tmp_path):
+        path = tmp_path / 'versions.db'
+        with ProsperityStore(path, read_only=False) as store:
+>           keys = store.save_batch(storage_batch())
+                   ^^^^^^^^^^^^^^^^
+E           AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:143: AttributeError
+_________ test_detached_board_is_revalidated_and_freeze_requires_pair __________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_detached_board_is_revalid0')
+
+    def test_detached_board_is_revalidated_and_freeze_requires_pair(tmp_path):
+        with ProsperityStore(tmp_path / 'invalid.db', read_only=False) as store:
+            batch = storage_batch(freeze=True)
+            with pytest.raises(ValueError, match='weekly'):
+>               store.save_batch(batch[4:])
+                ^^^^^^^^^^^^^^^^
+E               AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:155: AttributeError
+__________________ test_missing_frozen_reference_is_rejected ___________________
+
+tmp_path = PosixPath('/private/var/folders/2l/zx_jrc9x1011qzy728_j6l5w0000gn/T/pytest-of-owen/pytest-275/test_missing_frozen_reference_0')
+
+    def test_missing_frozen_reference_is_rejected(tmp_path):
+        first = storage_batch(freeze=True)
+        frozen = {b.board.scheme_id: b.board.params for b in first[4:]}
+        next_batch = storage_batch(as_of='2026-10-03', frozen=frozen)
+        with ProsperityStore(tmp_path / 'missing-reference.db', read_only=False) as store:
+            with pytest.raises(ValueError, match='frozen'):
+>               store.save_batch(next_batch)
+                ^^^^^^^^^^^^^^^^
+E               AttributeError: 'ProsperityStore' object has no attribute 'save_batch'
+
+tests/test_prosperity_store.py:171: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_prosperity_store.py::test_round_trip_after_close_and_retry
+FAILED tests/test_prosperity_store.py::test_sql_zero_roundtrip_and_retry[0]
+FAILED tests/test_prosperity_store.py::test_sql_zero_roundtrip_and_retry[0.0]
+FAILED tests/test_prosperity_store.py::test_sql_zero_roundtrip_and_retry[-0.0]
+FAILED tests/test_prosperity_store.py::test_conflict_rolls_back_new_boards_and_preserves_first_audit
+FAILED tests/test_prosperity_store.py::test_failure_on_third_board_rolls_back_every_new_table_row
+FAILED tests/test_prosperity_store.py::test_corrupt_detail_fails_read_and_same_content_retry[DELETE FROM score WHERE row_index=0]
+FAILED tests/test_prosperity_store.py::test_corrupt_detail_fails_read_and_same_content_retry[DELETE FROM factor_value WHERE factor='revenue_yoy']
+FAILED tests/test_prosperity_store.py::test_corrupt_detail_fails_read_and_same_content_retry[UPDATE factor_value SET raw_value=999 WHERE factor='revenue_yoy']
+FAILED tests/test_prosperity_store.py::test_corrupt_detail_fails_read_and_same_content_retry[UPDATE factor_value SET raw_present=0 WHERE factor='revenue_yoy']
+FAILED tests/test_prosperity_store.py::test_corrupt_detail_fails_read_and_same_content_retry[UPDATE factor_value SET in_scheme=0]
+FAILED tests/test_prosperity_store.py::test_corrupt_detail_fails_read_and_same_content_retry[UPDATE params SET payload_json='{}']
+FAILED tests/test_prosperity_store.py::test_corrupt_detail_fails_read_and_same_content_retry[UPDATE stock_period SET sector='other']
+FAILED tests/test_prosperity_store.py::test_corrupt_detail_fails_read_and_same_content_retry[UPDATE score SET row_index=row_index+100]
+FAILED tests/test_prosperity_store.py::test_cross_version_coexists_and_readonly_cannot_save
+FAILED tests/test_prosperity_store.py::test_detached_board_is_revalidated_and_freeze_requires_pair
+FAILED tests/test_prosperity_store.py::test_missing_frozen_reference_is_rejected
+17 failed, 6 passed in 1.17s

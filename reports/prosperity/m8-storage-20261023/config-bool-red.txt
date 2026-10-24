@@ -1,0 +1,76 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+_______ test_boolean_cannot_impersonate_numeric_configuration[threshold] _______
+
+case = 'threshold'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111f92c40>
+
+    @pytest.mark.parametrize('case', ['threshold', 'weight', 'factor_spec'])
+    def test_boolean_cannot_impersonate_numeric_configuration(case, monkeypatch):
+        from terminal.prosperity.schemes import SCHEMES, FACTOR_SPECS
+        from terminal.prosperity.kernel import score_board
+        packets, factors, _, meta = storage_inputs()
+        scheme = SCHEMES['F1']
+        if case == 'threshold':
+            scheme = replace(scheme, grade_strict=True)
+        elif case == 'weight':
+            scheme = replace(scheme, weights=(('revenue_yoy', True),))
+        else:
+            monkeypatch.setitem(FACTOR_SPECS, 'revenue_yoy', replace(FACTOR_SPECS['revenue_yoy'], min_quarters=True))
+        result = score_board(factors, scheme, frozen=None, as_of='2026-09-26', code_version='test-v1')
+>       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/test_prosperity_storage.py:128: Failed
+________ test_boolean_cannot_impersonate_numeric_configuration[weight] _________
+
+case = 'weight'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1121448a0>
+
+    @pytest.mark.parametrize('case', ['threshold', 'weight', 'factor_spec'])
+    def test_boolean_cannot_impersonate_numeric_configuration(case, monkeypatch):
+        from terminal.prosperity.schemes import SCHEMES, FACTOR_SPECS
+        from terminal.prosperity.kernel import score_board
+        packets, factors, _, meta = storage_inputs()
+        scheme = SCHEMES['F1']
+        if case == 'threshold':
+            scheme = replace(scheme, grade_strict=True)
+        elif case == 'weight':
+            scheme = replace(scheme, weights=(('revenue_yoy', True),))
+        else:
+            monkeypatch.setitem(FACTOR_SPECS, 'revenue_yoy', replace(FACTOR_SPECS['revenue_yoy'], min_quarters=True))
+        result = score_board(factors, scheme, frozen=None, as_of='2026-09-26', code_version='test-v1')
+>       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/test_prosperity_storage.py:128: Failed
+______ test_boolean_cannot_impersonate_numeric_configuration[factor_spec] ______
+
+case = 'factor_spec'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x111f57770>
+
+    @pytest.mark.parametrize('case', ['threshold', 'weight', 'factor_spec'])
+    def test_boolean_cannot_impersonate_numeric_configuration(case, monkeypatch):
+        from terminal.prosperity.schemes import SCHEMES, FACTOR_SPECS
+        from terminal.prosperity.kernel import score_board
+        packets, factors, _, meta = storage_inputs()
+        scheme = SCHEMES['F1']
+        if case == 'threshold':
+            scheme = replace(scheme, grade_strict=True)
+        elif case == 'weight':
+            scheme = replace(scheme, weights=(('revenue_yoy', True),))
+        else:
+            monkeypatch.setitem(FACTOR_SPECS, 'revenue_yoy', replace(FACTOR_SPECS['revenue_yoy'], min_quarters=True))
+        result = score_board(factors, scheme, frozen=None, as_of='2026-09-26', code_version='test-v1')
+>       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/test_prosperity_storage.py:128: Failed
+=========================== short test summary info ============================
+FAILED tests/test_prosperity_storage.py::test_boolean_cannot_impersonate_numeric_configuration[threshold]
+FAILED tests/test_prosperity_storage.py::test_boolean_cannot_impersonate_numeric_configuration[weight]
+FAILED tests/test_prosperity_storage.py::test_boolean_cannot_impersonate_numeric_configuration[factor_spec]
+3 failed in 0.85s

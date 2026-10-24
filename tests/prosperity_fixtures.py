@@ -202,3 +202,68 @@ COST_STATEMENTS = ["2022-08-31", "2022-11-20", "2023-02-12", "2023-05-07", "2023
 
 def cost_eps():
     return tuple(eq(f, "2026-09-24", e) for f, e in COST_EPS)
+
+
+def storage_inputs(*, as_of='2026-09-26', code_version='test-v1', count=12, frozen=None):
+    """Real packet/FactorRow/BoardResult shapes, with no external data or credentials."""
+    from dataclasses import asdict, replace
+    from src.data.prosperity_storage import BoardMeta
+    from terminal.prosperity.factors import compute_factor_row
+    from terminal.prosperity.kernel import score_board
+    from terminal.prosperity.schemes import SCHEMES
+
+    packets = []
+    for i in range(count):
+        ends = qends(16)
+        quarters = [qin(d, rev=100 + 3*j + (i+1)*j*j/20,
+                        gm=.35 + .002*j*(1+i/8), nm=.08 + j*.0002,
+                        fcfm=.1 + j*.001*(i+1)) for j, d in enumerate(ends)]
+        eps = [replace(eps_q(d, 1 + j*.05 + (i+1)*j*j*.001), statement_fiscal=d)
+               for j, d in enumerate(ends)]
+        if i == 0:
+            quarters = quarters[-4:]   # observe: insufficient history
+        c = cons(pre=eps[-1].eps_actual - .01*(i+1), price_pre=80+i,
+                 ntm=15+i, ttm=12+i*.7, delta=.03*(i+1))
+        if i == count-1:
+            c = replace(c, ntm=NtmResult(None, None, (), None, 'no_current_snapshot'),
+                        missing_reasons={'ntm': 'no_current_snapshot'})
+        p = pkt(quarters, eps, c, symbol=f'S{i:04d}', as_of=as_of,
+                industry='Banks - Diversified' if i == 1 else 'Semiconductors',
+                flags=('identity_unverified',) if i == 2 else ())
+        archive = {
+            'eps_window': [[q.fiscal_date, q.announce_date, q.eps_actual, list(q.labels), q.statement_fiscal]
+                           for q in p.eps],
+            'pre_announce': asdict(c.pre_announce), 'ntm': asdict(c.ntm),
+            'ttm': {'eps': c.ttm_eps, 'quarters': list(c.ttm_quarters)},
+            'revision': asdict(c.revision), 'unit_factor': c.unit_factor,
+            'market_cap_date': None, 'statement_conflicts': [],
+        }
+        packets.append(replace(p, archive=archive,
+                               pit={'statements': 'live', 'street_eps': 'live', 'consensus': 'live'}))
+    factors = [compute_factor_row(p) for p in packets]
+    boards = [score_board(factors, scheme, as_of=as_of, code_version=code_version,
+                          frozen=None if frozen is None else frozen[scheme.scheme_id])
+              for scheme in SCHEMES.values()]
+    meta = BoardMeta('weekly', None, None, as_of+'T09:00:00Z', '0'*40, 'live',
+                     tuple(p.symbol for p in packets), {},
+                     {'source_id': 'synthetic-fixture', 'observed_at': as_of+'T08:00:00Z',
+                      'snapshot_sha256': None, 'profile_observed_at': None})
+    return packets, factors, boards, meta
+
+
+def storage_batch(*, as_of='2026-09-26', code_version='test-v1', freeze=False, count=12, frozen=None,
+                  quarter_label='2026Q2', frozen_at=None):
+    from dataclasses import replace
+    from src.data.prosperity_storage import prepare_board
+    from terminal.prosperity.schemes import SCHEMES
+
+    packets, factors, boards, meta = storage_inputs(as_of=as_of, code_version=code_version,
+                                                    count=count, frozen=frozen)
+    result = tuple(prepare_board(meta, b, SCHEMES[b.scheme_id], packets, factors,
+                                 names={p.symbol: 'Synthetic '+p.symbol for p in packets}) for b in boards)
+    if freeze:
+        result += tuple(replace(b, meta=replace(b.meta, board_type='quarter_final',
+                                               quarter_label=quarter_label,
+                                               frozen_at=frozen_at or as_of+'T08:30:00Z'))
+                        for b in result)
+    return result
