@@ -6,6 +6,8 @@ the shared market.db writer lock; this module owns SQLite atomicity only.
 import hashlib
 import json
 import re
+from functools import lru_cache
+from pathlib import Path
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -16,6 +18,78 @@ STATEMENT_TABLES = frozenset({
 _NON_FINANCIAL = frozenset({
     "symbol", "date", "fiscal_year", "period", "filing_date", "accepted_date",
 })
+
+
+@lru_cache(maxsize=1)
+def _reviewed_quarantines():
+    path = Path(__file__).resolve().parents[2] / "config/reviewed_statement_quarantines.json"
+    return {(r["table"], r["symbol"], r["date"]): r
+            for r in json.loads(path.read_text())}
+
+
+def reviewed_statement_quarantine(table, row):
+    """Identify only frozen, reviewed unusable inputs; changed inputs stop.
+
+    Accept raw provider and persisted shapes, comparing every persisted field
+    (NULL included). Integer/SQLite REAL representations compare numerically.
+    No replacement financial value or historical availability is inferred.
+    """
+    if row.get("symbol") != "CRH" or table not in STATEMENT_TABLES:
+        return None
+    rule = _reviewed_quarantines().get((table, row["symbol"], row.get("date")))
+    if rule is None:
+        return None
+    from src.data.market_store import _camel_to_snake
+    normalized = {_camel_to_snake(k): v for k, v in row.items()}
+    normalized["fiscal_year"] = str(normalized.get("fiscal_year"))
+    changed = [key for key, value in rule["expected"].items()
+               if normalized.get(key) != value or
+               (isinstance(normalized.get(key), bool) and not isinstance(value, bool))]
+    if normalized.get("period") not in rule["allowed_periods"]:
+        changed.append("period")
+    if changed:
+        raise ValueError("reviewed quarantine source changed: {} fields={}".format(
+            rule["id"], ",".join(sorted(changed))))
+    return rule["id"]
+
+
+def apply_reviewed_statement_quarantine(store, mappings):
+    """Archive exact reviewed current rows, then recompute metrics atomically.
+
+    The caller owns backup and writer lock. No vintage is changed. A stale or
+    replayed plan fails; a row outside the reviewed source list cannot be removed.
+    """
+    result = {"rows_quarantined": 0, "metrics_rows": 0, "rule_ids": []}
+    with store.transaction() as conn:
+        pending, seen = [], set()
+        for plan in mappings:
+            table, symbol, day = plan["table"], plan["symbol"], plan["date"]
+            if table not in STATEMENT_TABLES:
+                raise ValueError("invalid quarantine statement table")
+            identity = table, symbol, day
+            if identity in seen:
+                raise ValueError("duplicate reviewed quarantine mapping")
+            seen.add(identity)
+            rows = [r for r in store._get_rows(table, symbol, limit=0) if r["date"] == day]
+            if len(rows) != 1 or fiscal_group_hash(rows) != plan["row_hash"]:
+                raise ValueError("current row hash differs from reviewed quarantine")
+            rule_id = reviewed_statement_quarantine(table, rows[0])
+            if rule_id is None:
+                raise ValueError("row is not a reviewed source quarantine")
+            pending.append((plan, rows[0], rule_id))
+        operation_id = hashlib.sha256(_json(mappings).encode()).hexdigest()
+        for plan, old, rule_id in pending:
+            _archive(conn, plan["table"], [old], operation_id,
+                     "reviewed_source_quarantine", {"plan": plan, "rule_id": rule_id})
+            cursor = conn.execute("DELETE FROM {} WHERE symbol=? AND date=?".format(plan["table"]),
+                                  (plan["symbol"], plan["date"]))
+            if cursor.rowcount != 1:
+                raise ValueError("quarantine did not remove exactly one archived row")
+            result["rows_quarantined"] += 1
+            result["rule_ids"].append(rule_id)
+        for symbol in sorted({p["symbol"] for p, _, _ in pending}):
+            result["metrics_rows"] += _recompute_metrics_in_conn(store, conn, symbol, operation_id)
+    return result
 
 
 def reviewed_statement_date(row):
@@ -148,7 +222,9 @@ def write_statement_in_conn(store, conn, table, rows):
             old_key = _fiscal_key(old)
             if old["date"] == incoming["date"]:
                 if old_key is not None and old_key != key:
-                    raise ValueError("conflicting fiscal identity at an existing date")
+                    raise ValueError("conflicting fiscal identity at an existing date: "
+                                     "{} {} {} stored={} incoming={}".format(
+                                         table, symbol, old["date"], old_key, key))
                 continue  # Same-date restatement retains the established semantics.
             if old_key != key:
                 continue

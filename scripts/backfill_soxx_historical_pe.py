@@ -588,6 +588,12 @@ def _run_fundamentals(
     requests a run made: 60 empty responses to 60 requests is a total outage,
     and dividing it by 500 untouched members would report 12% and publish.
     """
+    from src.data.fiscal_repair import reviewed_statement_quarantine
+    for symbol in symbols:
+        for row in state.income_by_symbol.get(symbol, []):
+            if reviewed_statement_quarantine("income_quarterly", {**row, "symbol": symbol}):
+                raise ValueError("current source requires reviewed quarantine: {} {}".format(
+                    symbol, row["date"]))
     missing = [symbol for symbol in symbols if not fundamentals_complete(
         state.income_by_symbol.get(symbol, []), args.from_date, args.to_date,
         state.trading_dates)]
@@ -599,6 +605,7 @@ def _run_fundamentals(
         return
     failures = []
     fetched = 0
+    quarantines = []
     for symbol in missing:
         rows = client.get_income_statement(symbol, period="quarter", limit=40)
         if not rows:
@@ -606,7 +613,18 @@ def _run_fundamentals(
             continue
         from src.data.fiscal_repair import reviewed_statement_date
         rows = [reviewed_statement_date({**row, "symbol": symbol}) for row in rows]
+        accepted = []
+        for row in rows:
+            rule = reviewed_statement_quarantine("income_quarterly", row)
+            if rule:
+                quarantines.append({"rule_id": rule, "row": row})
+            else:
+                accepted.append(row)
+        rows = accepted
         state.income_by_symbol[symbol] = list(rows)
+        if not rows:
+            failures.append(symbol)
+            continue
         if store is not None:
             store.upsert_income(symbol, list(rows))
         fetched += 1
@@ -624,6 +642,7 @@ def _run_fundamentals(
         "rows_available": sum(bool(state.income_by_symbol.get(symbol))
                               for symbol in symbols),
         "empty_responses": failures,
+        "reviewed_quarantines": quarantines,
         "incomplete": final_incomplete,
         "failed": final_incomplete}
 

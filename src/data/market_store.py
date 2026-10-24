@@ -1102,7 +1102,9 @@ class MarketStore:
         Returns:
             Prepared rows, in input order, minus any row with no `date`.
         """
-        from src.data.fiscal_repair import STATEMENT_TABLES, reviewed_statement_date
+        from src.data.fiscal_repair import (
+            STATEMENT_TABLES, reviewed_statement_date, reviewed_statement_quarantine,
+        )
         conn = self._get_conn()
         valid_cols = _get_table_columns(table, conn)
         prepared = []
@@ -1115,6 +1117,10 @@ class MarketStore:
             data["symbol"] = symbol.upper()
             if table in STATEMENT_TABLES:
                 data = reviewed_statement_date(data)
+                quarantine = reviewed_statement_quarantine(table, data)
+                if quarantine:
+                    logger.warning("Excluded reviewed source quarantine: %s", quarantine)
+                    continue
 
             if "date" not in data or not data["date"]:
                 continue

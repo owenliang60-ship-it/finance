@@ -1,0 +1,32 @@
+[
+  {
+    "table": "income_quarterly",
+    "symbol": "CRH",
+    "date": "2023-09-30",
+    "row_hash": "063b2b21733fb3a3b060c3c92ea8b559f8751551fb02896764163a62235cf6eb"
+  },
+  {
+    "table": "income_quarterly",
+    "symbol": "CRH",
+    "date": "2008-03-31",
+    "row_hash": "a07e01f68e3f6f9c841a106742710ce12b275514aa8eec37303c699fc91c11c0"
+  },
+  {
+    "table": "income_quarterly",
+    "symbol": "CRH",
+    "date": "2007-09-30",
+    "row_hash": "b2d6c9796c0c13b9515eddc5cbf572dd3439f1703288a13016399a0dfbfc34b4"
+  },
+  {
+    "table": "balance_sheet_quarterly",
+    "symbol": "CRH",
+    "date": "2023-09-30",
+    "row_hash": "58f575bc4aeb39a3dfc1b2b618789988836109932fcc7910f6e9fd78e070bab9"
+  },
+  {
+    "table": "cash_flow_quarterly",
+    "symbol": "CRH",
+    "date": "2023-09-30",
+    "row_hash": "32d4493e78f2c87b2a660b9edef654468785605b018f1d97f5b21148d3dc9b38"
+  }
+]

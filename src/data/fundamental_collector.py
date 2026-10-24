@@ -184,6 +184,10 @@ def _collect_one_dataset(symbol: str, dataset: str, *, client: Any,
     write_status = "provider_empty" if not rows else status
 
     try:
+        from src.data.fiscal_repair import reviewed_statement_quarantine
+        quarantines = [rule for row in rows
+                       if (rule := reviewed_statement_quarantine(table, {**row, "symbol": symbol}))]
+        detail = ("reviewed_source_quarantines: " + ",".join(sorted(set(quarantines)))) if quarantines else None
         with store.transaction() as conn:
             if write_status == "ok":
                 written = store.write_symbol_dataset_in_conn(
@@ -202,9 +206,10 @@ def _collect_one_dataset(symbol: str, dataset: str, *, client: Any,
                 "symbol": symbol,
                 "dataset": table,
                 "status": write_status,
+                "detail": detail,
             }])
             if job_writer is not None:
-                job_writer(conn, dataset, write_status, detail=None)
+                job_writer(conn, dataset, write_status, detail=detail)
     except Exception as exc:
         logger.warning("write rolled back for %s/%s: %s", symbol, dataset,
                        _safe_detail(exc))
