@@ -10,8 +10,13 @@ FIRST_WEEKLY_SNAPSHOT = "2026-07-13"
 REVISION_LONG_WINDOW_FROM = "2026-10-12"
 REVISION_SHORT_WEEKS = 4
 REVISION_LONG_WEEKS = 13
-# Weekly cadence: a snapshot older than one week is stale (north-star NTM contract)
+# M9 D3: 0–6 days current, 7–14 days usable with a stale badge, >14 missing.
 SNAPSHOT_MAX_STALENESS_DAYS = 7
+FORWARD_STALE_DAYS = 14
+# M9 quarter freeze: first eligible Saturday from day 60; force at/after day 80.
+FREEZE_START_DAYS = 60
+FREEZE_FORCE_DAYS = 80
+FREEZE_COVERAGE = 0.95
 PRE_ANNOUNCE_MAX_STALENESS_DAYS = 14
 PRICE_MAX_STALENESS_DAYS = 7
 MCAP_MAX_STALENESS_DAYS = 10

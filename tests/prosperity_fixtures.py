@@ -4,7 +4,9 @@ from terminal.prosperity.types import EpsQuarter, SymbolHistory
 
 def est(snap, fiscal, eps, n=10, period="Q"):
     return {"snapshot_date": snap, "fiscal_date": fiscal, "period_type": period,
-            "snapshot_kind": "weekly", "eps_avg": eps, "num_analysts_eps": n}
+            "snapshot_kind": "weekly", "eps_avg": eps, "num_analysts_eps": n,
+            "forward_run_kind": "weekly", "forward_run_status": "complete",
+            "forward_completed_at": snap + "T06:00:00Z"}
 
 
 def eq(fiscal, announce, eps):
@@ -35,8 +37,14 @@ def seed_db(path) -> Path:
          "snapshot_kind": "weekly", "eps_avg": 1.0},
         {"snapshot_date": "2026-07-13", "fiscal_date": "2026-09-30", "period_type": "Q",
          "snapshot_kind": "backfill", "eps_avg": 9.9}])
+    conn.execute("INSERT INTO fmp_forward_runs (snapshot_date,run_kind,status,target_universe_json,"
+                 "target_count,started_at,completed_at) VALUES (?,?,?,?,?,?,?)",
+                 ('2026-09-26', 'weekly', 'complete', '["AAA"]', 1,
+                  '2026-09-26T01:00:00Z', '2026-09-26T06:00:00Z'))
+    conn.commit()
     w.upsert_historical_market_cap("AAA", [{"date": "2021-12-31", "market_cap": 2e10},
                                            {"date": "2026-09-25", "market_cap": 3e10}])
+    w.close()
     return Path(path)
 
 
@@ -70,6 +78,10 @@ def hist(rows=QTRS, earnings=()):
 
 
 from datetime import date, timedelta
+
+
+def replay_cutoff(as_of):
+    return (date.fromisoformat(as_of) + timedelta(days=1)).isoformat() + 'T00:00:00Z'
 
 
 def er(fiscal, announce, eps, est=None, method="estimates_window"):

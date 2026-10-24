@@ -15,7 +15,7 @@ import sys
 import time
 from collections import Counter, defaultdict
 from dataclasses import asdict
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -39,7 +39,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--as-of", required=True)
     p.add_argument("--mode", choices=("live", "replay"), default="replay")
-    p.add_argument("--observed-at", help="observation date of the database contents (required for live)")
+    p.add_argument("--observed-at", help="aware observation timestamp (required for live); YYYY-MM-DD means UTC midnight")
     p.add_argument("--db", default=str(PROJECT_ROOT / "data" / "market.db"))
     p.add_argument("--out-dir", required=True)
     p.add_argument("--schemes", help="comma-separated scheme ids (default: all)")
@@ -137,12 +137,24 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
     try:
         # Python 3.11+ also parses 20260929; the raw string would then slip past every date comparison
-        for value in (args.as_of, args.observed_at):
-            if value is not None and date.fromisoformat(value).isoformat() != value:
-                raise ValueError(f"dates must be YYYY-MM-DD, got {value}")
+        if date.fromisoformat(args.as_of).isoformat() != args.as_of:
+            raise ValueError(f"dates must be YYYY-MM-DD, got {args.as_of}")
+        cutoff = datetime.combine(date.fromisoformat(args.as_of) + timedelta(days=1),
+                                  datetime.min.time(), timezone.utc)
+        if args.observed_at is not None:
+            if len(args.observed_at) == 10:
+                if date.fromisoformat(args.observed_at).isoformat() != args.observed_at:
+                    raise ValueError("observation dates must be YYYY-MM-DD")
+                observed = datetime.combine(date.fromisoformat(args.observed_at), datetime.min.time(), timezone.utc)
+            else:
+                observed = datetime.fromisoformat(args.observed_at.replace('Z', '+00:00'))
+                if observed.tzinfo is None or observed.utcoffset() is None:
+                    raise ValueError("observation timestamp requires a timezone")
+            args.observed_at = observed.astimezone(timezone.utc).isoformat()
         if args.mode == "live":
-            if not args.observed_at or args.as_of < args.observed_at:
+            if not args.observed_at or args.as_of < args.observed_at[:10]:
                 raise ValueError("live mode needs --observed-at on or before --as-of")
+            cutoff = observed.astimezone(timezone.utc)
         scheme_ids = [s.strip() for s in args.schemes.split(",")] if args.schemes else list(SCHEMES)
         unknown = [s for s in scheme_ids if s not in SCHEMES]
         if unknown:
@@ -152,7 +164,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 4
     version = code_version()
     store = MarketStore(db_path=Path(args.db), read_only=True)
-    packets, meta = build_packets(store, args.as_of, mode=args.mode,
+    packets, meta = build_packets(store, args.as_of, mode=args.mode, cutoff=cutoff,
                                   observed_at=args.observed_at if args.mode == "live" else None,
                                   with_beta=not args.no_beta)
     leaks = [(p.symbol, found) for p in packets if (found := packet_leaks(p))]

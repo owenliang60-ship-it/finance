@@ -13,7 +13,7 @@ from terminal.prosperity.types import InputPacket
 BENCHMARK_KEY = ("__benchmark__", False)
 
 
-def build_packets(store: MarketStore, as_of: str, *, mode: str, observed_at: Optional[str] = None,
+def build_packets(store: MarketStore, as_of: str, *, mode: str, cutoff, observed_at: Optional[str] = None,
                   symbols: Optional[Sequence[str]] = None, cache: Optional[Dict] = None,
                   with_beta: bool = True) -> Tuple[List[InputPacket], Dict[str, Any]]:
     cache = {} if cache is None else cache
@@ -33,7 +33,7 @@ def build_packets(store: MarketStore, as_of: str, *, mode: str, observed_at: Opt
                 cache[key] = load_history(store, sym, with_vintage=with_vintage)
                 load_s += time.perf_counter() - t0
             t0 = time.perf_counter()
-            packets.append(build_packet(cache[key], as_of, mode=mode, membership_basis=basis,
+            packets.append(build_packet(cache[key], as_of, mode=mode, cutoff=cutoff, membership_basis=basis,
                                         benchmark_closes=cache[BENCHMARK_KEY], observed_at=observed_at,
                                         identity_unverified=sym in unverified, with_beta=with_beta))
             build_s += time.perf_counter() - t0

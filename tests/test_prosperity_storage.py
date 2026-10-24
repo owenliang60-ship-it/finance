@@ -1,3 +1,4 @@
+from tests.prosperity_fixtures import replay_cutoff
 from dataclasses import replace
 import math
 
@@ -98,7 +99,7 @@ def test_real_packet_with_negative_raw_listing_age_roundtrips(tmp_path):
     history = hist()
     history.profile = {'ipoDate': '2026-10-01'}
     p = build_packet(history, '2026-09-26', mode='replay', membership_basis='explicit',
-                     benchmark_closes=[], with_beta=False)
+                     benchmark_closes=[], with_beta=False, cutoff=replay_cutoff('2026-09-26'))
     f = compute_factor_row(p)
     assert f.listing_days == -5
     scheme = SCHEMES['F1']

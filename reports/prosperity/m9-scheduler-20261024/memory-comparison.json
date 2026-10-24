@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "boards_compared": 8,
+  "comparison": "M8 content hash with original audit metadata; only cache lifetime changed",
+  "full_chain_peak_before": 2687942656,
+  "largest_quarter_peak_after": 1772060672,
+  "probe_seconds": 74.28,
+  "source_sha256": "39caa73e5aadc89e23d55e0ab405db56988d3449e1607a7fbc86339cbf6e7ef7"
+}

@@ -57,6 +57,7 @@ class ConsensusInputs:
     revision: RevisionResult
     unit_factor: Optional[float]
     missing_reasons: Mapping[str, str]
+    forward_stale: bool = False
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,7 @@ class SymbolHistory:
     is_adr: Optional[bool]
     # statement → [(date removed from the current table, archived_at)]; strict replay only
     removed: Dict[str, List[Tuple[str, str]]] = field(default_factory=dict)
+    forward_runs_available: bool = False
 
 
 @dataclass(frozen=True)

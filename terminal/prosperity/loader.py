@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from typing import FrozenSet, List, Tuple
 
 from src.data.market_store import MarketStore
@@ -47,9 +48,23 @@ def load_history(store: MarketStore, symbol: str, *, with_vintage: bool) -> Symb
                               (symbol, *DATE_REMOVING_REPAIRS)).fetchall():
             if r["source_table"] in statement_of:
                 removed.setdefault(statement_of[r["source_table"]], []).append((r["original_date"], r["archived_at"]))
-    estimates = [dict(r) for r in conn.execute(
-        "SELECT * FROM fmp_estimates WHERE symbol = ? AND snapshot_kind = 'weekly' "
-        "ORDER BY snapshot_date, fiscal_date, period_type", (symbol,)).fetchall()]
+    # Forward is optional: a missing/unreadable manifest must not discard this
+    # member's statements. Keep run metadata for per-cutoff filtering in the kernel.
+    forward_runs_available = False
+    estimates = []
+    try:
+        forward_runs_available = conn.execute(
+            "SELECT 1 FROM fmp_forward_runs WHERE run_kind='weekly' LIMIT 1").fetchone() is not None
+        if forward_runs_available:
+            estimates = [dict(r) for r in conn.execute(
+                "SELECT e.*, r.run_kind AS forward_run_kind, r.status AS forward_run_status, "
+                "r.completed_at AS forward_completed_at FROM fmp_estimates e "
+                "LEFT JOIN fmp_forward_runs r ON r.snapshot_date=e.snapshot_date AND r.run_kind='weekly' "
+                "WHERE e.symbol=? AND e.snapshot_kind='weekly' "
+                "ORDER BY e.snapshot_date,e.fiscal_date,e.period_type", (symbol,)).fetchall()]
+    except sqlite3.Error:
+        forward_runs_available = False
+        estimates = []
     caps = [dict(r) for r in conn.execute(
         "SELECT date, market_cap FROM historical_market_cap WHERE symbol = ? ORDER BY date", (symbol,)).fetchall()]
     prof = conn.execute("SELECT payload FROM company_profile WHERE symbol = ?", (symbol,)).fetchone()
@@ -68,6 +83,7 @@ def load_history(store: MarketStore, symbol: str, *, with_vintage: bool) -> Symb
         profile=json.loads(prof["payload"]) if prof else None,
         is_adr=bool(sm["is_adr"]) if sm else None,
         removed=removed,
+        forward_runs_available=forward_runs_available,
     )
 
 

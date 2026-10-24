@@ -68,7 +68,7 @@ def _series(closes: Sequence[Tuple[str, float]], as_of: str) -> pd.Series:
     return pd.Series([v for _, v in prior], index=[d for d, _ in prior], dtype=float)
 
 
-def build_packet(history: SymbolHistory, as_of: str, *, mode: str, membership_basis: str,
+def build_packet(history: SymbolHistory, as_of: str, *, mode: str, cutoff, membership_basis: str,
                  benchmark_closes: Sequence[Tuple[str, float]], observed_at: Optional[str] = None,
                  identity_unverified: bool = False, with_beta: bool = True) -> InputPacket:
     closes, price_rescaled = _split_adjusted(history.closes, history.splits)
@@ -81,7 +81,8 @@ def build_packet(history: SymbolHistory, as_of: str, *, mode: str, membership_ba
     currency = qb.quarters[-1].reported_currency if qb.quarters else None
     unit_ok = unit_verified(currency, history.is_adr)
     consensus = build_consensus(estimates=estimates, announced=announced, current_eps=window[-1] if window else None,
-                                closes=closes, as_of=as_of, unit_ok=unit_ok)
+                                closes=closes, as_of=as_of, unit_ok=unit_ok, cutoff=cutoff,
+                                forward_runs_available=history.forward_runs_available)
     price, price_date = _last_on_or_before(closes, as_of, PRICE_MAX_STALENESS_DAYS)
     mcap, mcap_date = _last_on_or_before(history.market_caps, as_of, MCAP_MAX_STALENESS_DAYS)
     beta = None
@@ -94,6 +95,8 @@ def build_packet(history: SymbolHistory, as_of: str, *, mode: str, membership_ba
            "consensus": "live" if live else ("strict" if consensus.pre_announce.source == "local_snapshot"
                                              else "approximate")}
     flags = list(qb.flags)
+    if consensus.forward_stale:
+        flags.append("forward_stale")
     for flag, on in ((eps_reason, eps_reason is not None), ("unit_unverified", not unit_ok),
                      ("price_missing", price is None), ("price_split_rescaled", price_rescaled),
                      ("identity_unverified", identity_unverified)):

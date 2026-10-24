@@ -182,3 +182,20 @@ class TestMarketDbPull:
         raw = good.read_bytes()
         bad.write_bytes(raw[:len(raw) - 8 * 4096])                 # the 2026-09-30 failure: pages past EOF
         assert run(bad).returncode != 0
+
+
+def test_prosperity_pull_failure_does_not_abort_remaining_pull(tmp_path):
+    """A failed prosperity pull keeps the local copy and lets fundamental/universe/health run."""
+    text = SCRIPT_PATH.read_text(encoding="utf-8")
+    start = text.index("    # Result DB and immutable freeze evidence travel together.")
+    block = text[start:text.index("    # 3. rsync fundamental/", start)]
+    fake = tmp_path / "python"
+    fake.write_text("#!/bin/sh\nexit 1\n")
+    fake.chmod(0o755)
+    script = ("set -e\nwarn() { echo \"[WARN] $1\"; }\n"
+              f"PYTHON={fake}\nSCRIPT_DIR=/x\nREMOTE_HOST=h\nREMOTE_DIR=/r\nLOCAL_DIR=/l\nLSOF=/l\n"
+              + block + "echo REACHED_NEXT_STEP\n")
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert "REACHED_NEXT_STEP" in result.stdout
+    assert "[WARN]" in result.stdout

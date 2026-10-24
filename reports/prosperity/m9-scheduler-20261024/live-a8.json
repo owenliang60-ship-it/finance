@@ -1,0 +1,1335 @@
+{
+  "outcome": {
+    "exit_code": 0,
+    "keys": [
+      {
+        "board_type": "weekly",
+        "as_of": "2026-10-24",
+        "scheme_hash": "3f268258d997bbdc",
+        "code_version": "1d24cbda444df7fa"
+      },
+      {
+        "board_type": "weekly",
+        "as_of": "2026-10-24",
+        "scheme_hash": "0c2c2949bf3574c2",
+        "code_version": "1d24cbda444df7fa"
+      },
+      {
+        "board_type": "weekly",
+        "as_of": "2026-10-24",
+        "scheme_hash": "ae1a0f9df6555408",
+        "code_version": "1d24cbda444df7fa"
+      },
+      {
+        "board_type": "weekly",
+        "as_of": "2026-10-24",
+        "scheme_hash": "8a5f1685b88139f8",
+        "code_version": "1d24cbda444df7fa"
+      }
+    ],
+    "error": "",
+    "detail": {
+      "publication": "publication_not_configured",
+      "gates": [
+        {
+          "name": "integrity",
+          "status": "pass",
+          "detail": {
+            "result": [
+              "ok"
+            ]
+          }
+        },
+        {
+          "name": "fundamental_refreshed",
+          "status": "pass",
+          "detail": {
+            "path": "/tmp/m9-quality/fundamentals-20261024T060001Z.json",
+            "as_of": "2026-10-24T07:00:29+00:00",
+            "ratio": 0.9608501118568232
+          }
+        },
+        {
+          "name": "input_health",
+          "status": "pass",
+          "detail": {
+            "members": 894,
+            "errors": {},
+            "ranked": 841,
+            "denominator": 841,
+            "member_floor": {
+              "ranked": 841,
+              "previous_ranked": 871
+            }
+          }
+        },
+        {
+          "name": "forward",
+          "status": "pass",
+          "detail": {
+            "status": "complete",
+            "completed_at": "2026-10-24T04:15:55.637130+00:00"
+          }
+        }
+      ],
+      "chain_keys": [
+        {
+          "board_type": "weekly",
+          "as_of": "2021-09-04",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2021-09-04",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2021-09-04",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2021-09-04",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2021-09-04",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2021-09-04",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2021-09-04",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2021-09-04",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2021-12-04",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2021-12-04",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2021-12-04",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2021-12-04",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2021-12-04",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2021-12-04",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2021-12-04",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2021-12-04",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-03-19",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-03-19",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-03-19",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-03-19",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-03-19",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-03-19",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-03-19",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-03-19",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-06-04",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-06-04",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-06-04",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-06-04",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-06-04",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-06-04",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-06-04",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-06-04",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-09-03",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-09-03",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-09-03",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-09-03",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-09-03",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-09-03",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-09-03",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-09-03",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-12-03",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-12-03",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-12-03",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2022-12-03",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-12-03",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-12-03",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-12-03",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2022-12-03",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-03-25",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-03-25",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-03-25",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-03-25",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-03-25",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-03-25",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-03-25",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-03-25",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-06-03",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-06-03",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-06-03",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-06-03",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-06-03",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-06-03",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-06-03",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-06-03",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-09-02",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-09-02",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-09-02",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-09-02",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-09-02",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-09-02",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-09-02",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-09-02",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-12-02",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-12-02",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-12-02",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2023-12-02",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-12-02",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-12-02",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-12-02",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2023-12-02",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-03-23",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-03-23",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-03-23",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-03-23",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-03-23",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-03-23",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-03-23",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-03-23",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-06-01",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-06-01",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-06-01",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-06-01",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-06-01",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-06-01",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-06-01",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-06-01",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-08-31",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-08-31",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-08-31",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-08-31",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-08-31",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-08-31",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-08-31",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-08-31",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-11-30",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-11-30",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-11-30",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2024-11-30",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-11-30",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-11-30",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-11-30",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2024-11-30",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-03-22",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-03-22",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-03-22",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-03-22",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-03-22",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-03-22",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-03-22",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-03-22",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-05-31",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-05-31",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-05-31",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-05-31",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-05-31",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-05-31",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-05-31",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-05-31",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-08-30",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-08-30",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-08-30",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-08-30",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-08-30",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-08-30",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-08-30",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-08-30",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-11-29",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-11-29",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-11-29",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2025-11-29",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-11-29",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-11-29",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-11-29",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2025-11-29",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2026-03-21",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2026-03-21",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2026-03-21",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2026-03-21",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2026-03-21",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2026-03-21",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2026-03-21",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2026-03-21",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2026-05-30",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2026-05-30",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2026-05-30",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2026-05-30",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2026-05-30",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2026-05-30",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2026-05-30",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2026-05-30",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2026-08-29",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2026-08-29",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2026-08-29",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "weekly",
+          "as_of": "2026-08-29",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2026-08-29",
+          "scheme_hash": "3f268258d997bbdc",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2026-08-29",
+          "scheme_hash": "0c2c2949bf3574c2",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2026-08-29",
+          "scheme_hash": "ae1a0f9df6555408",
+          "code_version": "1d24cbda444df7fa"
+        },
+        {
+          "board_type": "quarter_final",
+          "as_of": "2026-08-29",
+          "scheme_hash": "8a5f1685b88139f8",
+          "code_version": "1d24cbda444df7fa"
+        }
+      ]
+    }
+  },
+  "source": "/Users/owen/CC workspace/Finance/.worktrees/prosperity-m9/data/m9-acceptance/market-live-20261024.db",
+  "source_sha256": "36ddf0eb008dea69001562ebe6f0a8f69bf2c9846825028b7620ca7c8d51e69a",
+  "source_unchanged": true,
+  "code_version": "1d24cbda444df7fa",
+  "db": "/Users/owen/CC workspace/Finance/.worktrees/prosperity-m9/data/m9-acceptance/prosperity_live_a8.db",
+  "seconds": 1445.72,
+  "db_bytes": 319590400,
+  "peak_rss_bytes": 1799323648,
+  "saves": [
+    {
+      "as_of": "2021-09-04",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2021-12-04",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2022-03-19",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2022-06-04",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2022-09-03",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2022-12-03",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2023-03-25",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2023-06-03",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2023-09-02",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2023-12-02",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2024-03-23",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2024-06-01",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2024-08-31",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2024-11-30",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2025-03-22",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2025-05-31",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2025-08-30",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2025-11-29",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2026-03-21",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2026-05-30",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2026-08-29",
+      "boards": 8,
+      "round_trip_equal": true
+    },
+    {
+      "as_of": "2026-10-24",
+      "boards": 4,
+      "round_trip_equal": true
+    }
+  ],
+  "quarters": [
+    {
+      "quarter_label": "2021Q2",
+      "as_of": "2021-09-04",
+      "frozen_at": "2021-09-05T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":142,\"ranked\":706}"
+    },
+    {
+      "quarter_label": "2021Q3",
+      "as_of": "2021-12-04",
+      "frozen_at": "2021-12-05T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":134,\"ranked\":692}"
+    },
+    {
+      "quarter_label": "2021Q4",
+      "as_of": "2022-03-19",
+      "frozen_at": "2022-03-20T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":116,\"ranked\":703}"
+    },
+    {
+      "quarter_label": "2022Q1",
+      "as_of": "2022-06-04",
+      "frozen_at": "2022-06-05T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":87,\"ranked\":677}"
+    },
+    {
+      "quarter_label": "2022Q2",
+      "as_of": "2022-09-03",
+      "frozen_at": "2022-09-04T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":82,\"ranked\":661}"
+    },
+    {
+      "quarter_label": "2022Q3",
+      "as_of": "2022-12-03",
+      "frozen_at": "2022-12-04T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":74,\"ranked\":676}"
+    },
+    {
+      "quarter_label": "2022Q4",
+      "as_of": "2023-03-25",
+      "frozen_at": "2023-03-26T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":62,\"ranked\":667}"
+    },
+    {
+      "quarter_label": "2023Q1",
+      "as_of": "2023-06-03",
+      "frozen_at": "2023-06-04T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":71,\"ranked\":683}"
+    },
+    {
+      "quarter_label": "2023Q2",
+      "as_of": "2023-09-02",
+      "frozen_at": "2023-09-03T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":65,\"ranked\":709}"
+    },
+    {
+      "quarter_label": "2023Q3",
+      "as_of": "2023-12-02",
+      "frozen_at": "2023-12-03T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":58,\"ranked\":708}"
+    },
+    {
+      "quarter_label": "2023Q4",
+      "as_of": "2024-03-23",
+      "frozen_at": "2024-03-24T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":66,\"ranked\":752}"
+    },
+    {
+      "quarter_label": "2024Q1",
+      "as_of": "2024-06-01",
+      "frozen_at": "2024-06-02T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":55,\"ranked\":751}"
+    },
+    {
+      "quarter_label": "2024Q2",
+      "as_of": "2024-08-31",
+      "frozen_at": "2024-09-01T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":62,\"ranked\":765}"
+    },
+    {
+      "quarter_label": "2024Q3",
+      "as_of": "2024-11-30",
+      "frozen_at": "2024-12-01T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":81,\"ranked\":788}"
+    },
+    {
+      "quarter_label": "2024Q4",
+      "as_of": "2025-03-22",
+      "frozen_at": "2025-03-23T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":74,\"ranked\":748}"
+    },
+    {
+      "quarter_label": "2025Q1",
+      "as_of": "2025-05-31",
+      "frozen_at": "2025-06-01T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":69,\"ranked\":772}"
+    },
+    {
+      "quarter_label": "2025Q2",
+      "as_of": "2025-08-30",
+      "frozen_at": "2025-08-31T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":69,\"ranked\":806}"
+    },
+    {
+      "quarter_label": "2025Q3",
+      "as_of": "2025-11-29",
+      "frozen_at": "2025-11-30T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":79,\"ranked\":813}"
+    },
+    {
+      "quarter_label": "2025Q4",
+      "as_of": "2026-03-21",
+      "frozen_at": "2026-03-22T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":60,\"ranked\":802}"
+    },
+    {
+      "quarter_label": "2026Q1",
+      "as_of": "2026-05-30",
+      "frozen_at": "2026-05-31T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":71,\"ranked\":856}"
+    },
+    {
+      "quarter_label": "2026Q2",
+      "as_of": "2026-08-29",
+      "frozen_at": "2026-08-30T00:00:00Z",
+      "counts_json": "{\"excluded\":0,\"observe\":62,\"ranked\":871}"
+    }
+  ]
+}
