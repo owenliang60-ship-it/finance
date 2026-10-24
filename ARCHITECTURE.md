@@ -234,7 +234,7 @@ python -m scripts.query_basket_ttm_pe --basket SOXX --from-date 2021-09-20
 
 > **SOXX historical TTM PE** 不属于上述周频 forward cron：它使用 GAAP `net_income`、历史 disclosure 固定权重与历史市值 sanity gate，是一次性研究序列；未增加或修改任何 crontab 行。
 
-> **三指数周频估值（2026-09-12 已部署）**：`basket_weekly_pe_history` + `basket_pe_backfill_runs` 保存三篮子整窗产品与认证记录，C1 将候选/清理/终态/认证原子提交；`fmp_basket_valuation` 保存六篮子冻结 PIT 共识估值。沿用 `run_forward_data.sh` 与 `market_db_writer`，顺序 ingestion → 历史源/产品刷新 → PIT → 最终 verifier；不得把 Phase 1 的 95–105min 旧 SLO 当作升级后预算。首次生产773周双线、10期60条PIT，15项历史认证及1646值独立SQL通过；晨报 `terminal/index_valuation_chart.py` 只读生成1800px三面板PNG，嵌入`0d`，HTML/PDF复用。预测共识不保证GAAP等价、不是官网P/E；hindsight actual-only与估算尾部分线标示。首次新wrapper自然运行/晨报自然投递待观察；真正使用live的新调仓另过身份门（issue077）。运维见 `docs/runbooks/index-pe-weekly-window.md`，本次完整证据见 `docs/audit/2026-09-12-index-pe-rollout.md`。
+> **三指数周频估值（2026-10-24 已归档）**：`run_forward_data.sh` 仅保留个股预期/原始快照 ingestion 与 data-stage verifier；停止历史整窗、六篮子派生估值和估值认证。晨报不再生成或展示 `0d` 图表。`basket_weekly_pe_history`、`basket_pe_backfill_runs`、`fmp_basket_valuation` 及原始源表保留，历史内容不宣称仍与当前源一致。代码以 Git tag 固定归档，参考实现保留原路径；公共估值写入 CLI 已停用。见 `archive/index-valuation/README.md`。旧生产证据仍见 `docs/audit/2026-09-12-index-pe-rollout.md`。
 
 ---
 

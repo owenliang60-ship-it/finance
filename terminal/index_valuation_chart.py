@@ -1,4 +1,7 @@
-"""Read-only five-year weekly valuation chart; never fetches or writes data."""
+"""Archived offline chart viewer (2026-10-24); no production report consumer.
+
+Never fetches or writes market data. See archive/index-valuation/README.md.
+"""
 
 import argparse
 import json

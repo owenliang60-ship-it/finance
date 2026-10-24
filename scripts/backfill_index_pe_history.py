@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Five-year weekly GAAP P/E backfill for SPY, QQQ and SOXX.
+"""ARCHIVED 2026-10-24: five-year weekly GAAP P/E research implementation.
+
+Public CLI disabled. See archive/index-valuation/README.md before any restoration.
 
 A wrapper around the audited SOXX historical backfill: source snapshots,
 fundamentals, market cap, splits, market-cap sanity and FX all run through
@@ -618,7 +620,8 @@ def run_backfill(
     return report
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def _archived_main(argv: Optional[List[str]] = None) -> int:
+    """Retained reference runner for isolated historical tests, not operations."""
     args = parse_args(argv)
     conn: Optional[sqlite3.Connection] = None
     store: Optional[MarketStore] = None
@@ -650,6 +653,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             store.close()
         elif conn is not None:
             conn.close()
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parse_args(argv)  # Preserve --help and argument diagnostics without side effects.
+    print("ERROR: index valuation is archived; see archive/index-valuation/README.md", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":

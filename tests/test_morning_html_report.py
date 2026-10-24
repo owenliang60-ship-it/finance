@@ -106,7 +106,7 @@ def test_image_block_is_embedded_and_escaped(tmp_path):
     path=tmp_path/'chart.png'
     Image.new('RGB',(10,10),'white').save(path)
     output=compile_morning_html_report({'blocks':[{
-        'type':'image','heading':'0d. 三指数估值','path':str(path),
+        'type':'image','heading':'测试图片','path':str(path),
         'alt':'<test>"','caption':'A&B <caption>'}]},'2026-09-11',tmp_path)
     text=output.read_text()
     assert 'data:image/png;base64,' in text
@@ -115,16 +115,18 @@ def test_image_block_is_embedded_and_escaped(tmp_path):
     assert 'A&amp;B &lt;caption&gt;' in text
 
 
-def test_valuation_block_is_between_concentration_and_pmarp():
+def test_retired_valuation_block_is_ignored_between_existing_sections():
     payload=build_html_payload({'index_valuation_chart':{
         'path':'chart.png','caption':'共识口径'}},None,'2026-09-11')
     headings=[b['heading'] for b in payload['blocks']]
-    assert headings.index('0b. 成交集中度') < headings.index('0d. 三指数估值') < headings.index('1. PMARP 信号')
+    assert '0d. 三指数估值' not in headings
+    assert headings.index('0b. 成交集中度') < headings.index('1. PMARP 信号')
 
 
-def test_valuation_preserves_existing_compass_section():
+def test_retirement_preserves_existing_compass_section():
     payload=build_html_payload({
         'selection_compass':{'available':False,'reason':'insufficient_coverage','coverage':{}},
         'index_valuation_chart':{'path':'chart.png','caption':'共识口径'}},None,'2026-09-11')
     headings=[b['heading'] for b in payload['blocks']]
-    assert headings.index('0b. 成交集中度') < headings.index('0c. 选股罗盘') < headings.index('0d. 三指数估值') < headings.index('1. PMARP 信号')
+    assert '0d. 三指数估值' not in headings
+    assert headings.index('0b. 成交集中度') < headings.index('0c. 选股罗盘') < headings.index('1. PMARP 信号')

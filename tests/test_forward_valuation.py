@@ -20,6 +20,12 @@ ACTUAL = ["2025-12-31", "2026-03-31", "2026-06-30"]
 SYMBOLS = ["AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "TSLA"]
 
 
+def _reference_valuation_main(argv):
+    """Exercise retained kernels directly; the public valuation CLI is retired."""
+    from scripts.update_fmp_forward import parse_args, run_valuation_phase
+    return run_valuation_phase(parse_args(argv))[0]
+
+
 def estimates(income=25.0):
     return [
         {
@@ -291,8 +297,8 @@ def test_pit_commit_is_atomic_idempotent_and_frozen(store):
     assert store.get_fmp_basket_valuation("XLF", SNAP)[0]["fwd_pe_ntm"] == 10
 
 
-def test_valuation_phase_cli_never_constructs_a_client(store, monkeypatch):
-    from scripts.update_fmp_forward import main
+def test_archived_valuation_reference_never_constructs_a_client(store, monkeypatch):
+    main = _reference_valuation_main
     from importlib import import_module
 
     fmp_client = import_module("src.data.fmp_client")
@@ -325,7 +331,7 @@ def test_valuation_phase_cli_never_constructs_a_client(store, monkeypatch):
 
 
 def test_phase2_full_verifier_reads_nonempty_evidence(store):
-    from scripts.update_fmp_forward import main
+    main = _reference_valuation_main
     from scripts.verify_fmp_forward import verify_run
 
     args = [
@@ -349,7 +355,7 @@ def test_phase2_full_verifier_reads_nonempty_evidence(store):
 
 
 def test_partial_valuation_never_commits_a_complete_snapshot(store):
-    from scripts.update_fmp_forward import main
+    main = _reference_valuation_main
 
     with store._get_conn() as conn:
         conn.execute("DELETE FROM income_quarterly WHERE symbol='AAPL'")
@@ -388,7 +394,7 @@ def test_valuation_phase_rejects_ingestion_repair_flags(extra):
 
 
 def test_blend_gap_does_not_suppress_certified_ntm(store):
-    from scripts.update_fmp_forward import main
+    main = _reference_valuation_main
 
     with store._get_conn() as conn:
         conn.execute("DELETE FROM fmp_earnings WHERE symbol='AAPL'")

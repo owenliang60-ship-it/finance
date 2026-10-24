@@ -92,7 +92,7 @@ API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`�
 
 完整 cron 见 `ARCHITECTURE.md`。本地 launchd `com.finance.sync-pull` 每天 09:00 auto-pull。
 
-三指数 PE 于 2026-09-12 部署：SPY/QQQ 各261周、SOXX251周 TTM/后视镜，六篮子10期 PIT 共识估值 → 晨报 `0d` 只读 PNG（HTML/PDF 共用）。共识与 GAAP 实际口径差异必须显式标注；首次新周频入口/自然晨报投递仍待观察，未来真正使用 live 的调仓须另过发行人证据门（issue077）。运行/恢复见 `docs/runbooks/index-pe-weekly-window.md`。
+三指数估值于 2026-10-24 归档下线：停止历史整窗重算、六篮子派生估值和晨报 `0d` 栏目。个股预期与原始快照采集继续运行，历史代码和数据保留。归档与恢复要求见 `archive/index-valuation/README.md`；旧 runbook 仅作历史参考。
 
 ---
 

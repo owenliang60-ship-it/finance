@@ -1,5 +1,8 @@
 """Weekly index-basket P/E points: one valuation date, two comparable lines.
 
+Archived production feature (2026-10-24). Reference implementation only;
+see archive/index-valuation/README.md.
+
 Plan 2026-07-19 §3.1-§3.3. This module turns the audited daily evidence into
 the rows that land in ``basket_weekly_pe_history``:
 

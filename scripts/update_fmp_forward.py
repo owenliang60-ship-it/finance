@@ -97,7 +97,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         epilog=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=["weekly", "backfill"], required=True)
     parser.add_argument("--phase", choices=["data", "valuation"], default="data",
-                        help="valuation reads a frozen weekly snapshot; no API calls")
+                        help="data is active; valuation was archived on 2026-10-24")
     parser.add_argument("--snapshot-date", type=_iso_date, default=None,
                         help="default today; injectable for tests/replay")
     parser.add_argument("--backfill-start", type=_iso_date, default=None,
@@ -837,9 +837,8 @@ def run_valuation_phase(args):
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
     if args.phase == "valuation":
-        rc, report = run_valuation_phase(args)
-        print(json.dumps(report, ensure_ascii=False, sort_keys=True))
-        return rc
+        print("ERROR: index valuation is archived; see archive/index-valuation/README.md", file=sys.stderr)
+        return 2
 
     from config.settings import FMP_FORWARD_API_CALL_INTERVAL
     from src.data.fmp_client import FMPClient

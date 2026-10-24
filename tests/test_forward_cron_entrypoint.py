@@ -124,30 +124,35 @@ def test_script_contains_no_secret_literal():
     assert 'source "$ENV_FILE"' in content
 
 
-def test_source_refresh_precedes_frozen_pit_and_both_verifiers(env_project):
+def test_archived_valuation_is_absent_from_weekly_pipeline(env_project):
     project, log = env_project
     assert _run(project).returncode == 0
     lines = log.read_text().splitlines()
     assert [line.split()[0] for line in lines] == [
         "yfinance",
         "fmp",
-        "history",
-        "valuation",
         "verify_pit",
-        "verify_history",
     ]
-    assert "--sample 50" in lines[-1]
-    assert "--scheduled" in lines[2].split()   # cron history run uses auto-label backup retention
+    assert "--stage data" in lines[-1]
     wrapper = (SCRIPT.parent / "cron_wrapper.sh").read_text()
     assert "market_db_writer" in wrapper
 
 
 @pytest.mark.parametrize(
     "stage,rc",
-    [("history", 6), ("valuation", 7), ("verify_pit", 8), ("verify_history", 9)],
+    [("verify_pit", 8)],
 )
 def test_each_downstream_failure_propagates_and_stops_pipeline(env_project, stage, rc):
     project, log = env_project
     result = _run(project, {"FAKE_" + stage.upper() + "_RC": str(rc)})
     assert result.returncode == rc
     assert log.read_text().splitlines()[-1].startswith(stage + " args=")
+
+
+def test_retired_downstream_failures_do_not_run(env_project):
+    project, log = env_project
+    result = _run(project, {"FAKE_HISTORY_RC":"6", "FAKE_VALUATION_RC":"7",
+                            "FAKE_VERIFY_HISTORY_RC":"9"})
+    assert result.returncode == 0
+    assert [line.split()[0] for line in log.read_text().splitlines()] == [
+        "yfinance", "fmp", "verify_pit"]

@@ -2307,13 +2307,6 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
             ),
         })
 
-    chart = (market_signals or {}).get("index_valuation_chart")
-    if chart:
-        block = {"heading": "0d. 三指数估值", "subtitle": chart.get("caption", "")}
-        if chart.get("path"):
-            block.update(type="image", path=chart["path"],
-                         alt="SPY QQQ SOXX 五年周频：GAAP TTM、后视镜 NTM、真实 PIT NTM（分析师共识）")
-        blocks.append(block)
     blocks.append({"heading": "1. PMARP 信号"})
 
     # PMARP — signal -> cap-tier sub-blocks (columns one-to-one with text)
@@ -2523,14 +2516,6 @@ def build_morning_visual_sections(
                 ),
                 "blocks": [],
             })
-        chart = market_signals.get("index_valuation_chart")
-        if chart:
-            section = {"slug": "00d_index_valuation", "title": "0d. 三指数估值",
-                       "subtitle": chart.get("caption", ""), "blocks": []}
-            if chart.get("path"):
-                section.update(type="image", path=chart["path"])
-            sections.append(section)
-
         pmarp = market_signals.get("pmarp", {})
         _pmarp_cols = ["标的", "概念", "信号", "当前", "变化", "市值", "β6M"]
         _pmarp_widths = [300, 320, 140, 130, 170, 150, 120]
@@ -3257,22 +3242,6 @@ def run_dollar_volume(as_of: str | None = None) -> dict:
                 "warning": "数据不可用：采集或完整性验证失败"}
 
 
-def _prepare_index_valuation_chart(as_of, output_dir=None):
-    """Read certified valuation data and produce one reusable attachment."""
-    try:
-        from config.settings import MARKET_DB_PATH
-        from terminal.index_valuation_chart import load_chart_data, render_chart, FOOTNOTE
-        data = load_chart_data(Path(MARKET_DB_PATH), as_of)
-        output = Path(output_dir) if output_dir else Path("reports/rendered")
-        path = render_chart(data, output / f"index_pe_weekly_{as_of}.png")
-        available = any(p["history"] or p["pit"] for p in data["panels"])
-        return {"path": str(path), "available": available,
-                "caption": FOOTNOTE if available else "估值数据尚未准备；完成回填与认证后显示曲线。"}
-    except Exception as exc:
-        logger.warning("三指数估值图暂不可用: %s", exc)
-        return {"path": None, "available": False, "caption": "估值图暂不可用；其余晨报正常展示。"}
-
-
 def _deliver_morning_report(market_signals, dv_result, daily_msg, image_delivery,
                             image_report, image_output_dir, photo_safe, as_of,
                             no_telegram=False):
@@ -3285,8 +3254,6 @@ def _deliver_morning_report(market_signals, dv_result, daily_msg, image_delivery
     branches via the real _send_group_* helpers.
     """
     market_signals = dict(market_signals or {})
-    if image_report or image_delivery == "html":
-        market_signals["index_valuation_chart"] = _prepare_index_valuation_chart(as_of, image_output_dir)
     # ── 新增 HTML 分支（仅 image_delivery == "html"）──
     if image_delivery == "html":
         try:

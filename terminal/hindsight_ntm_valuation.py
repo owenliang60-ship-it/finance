@@ -1,5 +1,8 @@
 """Ex-post ("hindsight") NTM GAAP earnings for historical index baskets.
 
+Archived production feature (2026-10-24). Reference implementation only;
+see archive/index-valuation/README.md.
+
 This module is deliberately **not** point-in-time. For a historical valuation
 date ``t`` it sums the *next* four continuous fiscal quarters of GAAP net
 income per member — data that did not exist at ``t``. It answers "what did the

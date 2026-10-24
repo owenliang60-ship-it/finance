@@ -1,5 +1,8 @@
 """Six-basket PIT valuation from frozen analyst consensus, not certified GAAP.
 
+Archived production feature (2026-10-24). Reference implementation only;
+see archive/index-valuation/README.md.
+
 No network or writes here. Rule A NTM uses four forecast quarters; blend uses
 three street actual EPS observations times visible diluted shares plus one
 forecast NI. Historical current-profile market caps are never substituted.

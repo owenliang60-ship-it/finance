@@ -1212,7 +1212,7 @@ def test_cli_scheduled_flag_selects_backup_policy(tmp_path, monkeypatch, flags, 
     monkeypatch.setattr(soxx_backfill, "_backup_sqlite",
                         lambda path, lbl, keep=None: calls.append((lbl, keep)) or None)
     _m0_stub_after_backup(monkeypatch, stores)
-    assert backfill.main(["--db", str(db), *flags]) == 2
+    assert backfill._archived_main(["--db", str(db), *flags]) == 2
     assert calls == [(label, keep)]
     assert stores == [db]
 
@@ -1251,7 +1251,7 @@ def test_every_real_backup_failure_returns_2_before_market_store(
     stores = []
     _m0_stub_after_backup(monkeypatch, stores)
     inject(monkeypatch)
-    assert backfill.main(["--db", str(db), "--scheduled"]) == 2
+    assert backfill._archived_main(["--db", str(db), "--scheduled"]) == 2
     assert stores == []                               # MarketStore never constructed
     assert "backup" in capsys.readouterr().err
     assert [p.name for p in tmp_path.iterdir() if ".partial" in p.name] == []
