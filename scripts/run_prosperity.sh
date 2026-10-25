@@ -4,6 +4,9 @@ set -euo pipefail
 PROJECT_DIR="${FINANCE_PROJECT_DIR:-/root/workspace/Finance}"
 LOCK_DIR="${FINANCE_CRON_LOCK_DIR:-/tmp/finance-cron-locks}"
 PYTHON="${FINANCE_PYTHON:-$PROJECT_DIR/.venv/bin/python}"
+if [[ ! -x "$PYTHON" ]]; then
+    PYTHON="python3"
+fi
 job_lock="$(readlink /proc/$$/fd/9 2>/dev/null || true)"
 resource_lock="$(readlink /proc/$$/fd/8 2>/dev/null || true)"
 if [[ "$job_lock" != "$LOCK_DIR/finance_prosperity.lock" ]]; then
