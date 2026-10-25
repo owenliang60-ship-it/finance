@@ -24,7 +24,9 @@ _NON_FINANCIAL = frozenset({
 # dates (one-year neighbours two years apart), period ends from SEC 10-Q/10-K
 # report dates (KR, ACI, AGL, LB) or the calendar quarter end of December
 # fiscal-year foreign issuers (AEM, TECK, RIO half-year, BEP):
-# docs/audit/2026-10-25-isolated-statement-dates.md.
+# docs/audit/2026-10-25-isolated-statement-dates.md. PGR 2026Q2 balance: FMP
+# once dated it at the month end before the 10-Q quarter end (SEC report date
+# 2026-06-30): docs/audit/2026-10-25-pgr-balance-dates.md.
 REVIEWED_STATEMENT_DATES = {
     ("AEM", "0000002809", "2024-10-30", "2024", "Q3", "USD"): "2024-09-30",
     ("AEM", "0000002809", "2023-01-27", "2022", "Q4", "USD"): "2022-12-31",
@@ -35,6 +37,7 @@ REVIEWED_STATEMENT_DATES = {
     ("ACI", "0001646972", "2023-05-23", "2023", "Q1", "USD"): "2023-06-17",
     ("AGL", "0001831097", "2021-02-18", "2020", "Q4", "USD"): "2020-12-31",
     ("LB", "0001995807", "2024-08-03", "2024", "Q2", "USD"): "2024-06-30",
+    ("PGR", "0000080661", "2026-05-31", "2026", "Q2", "USD"): "2026-06-30",
 }
 
 

@@ -432,6 +432,7 @@ def test_single_statement_alias_preserves_cross_statement_metrics(store, entry, 
     ("TECK", "0000886986", "2024-10-23", "2024", "Q3", "CAD", "2024-09-30"),
     ("KR", "0000056873", "2021-04-28", "2021", "Q1", "USD", "2021-05-22"),
     ("AEM", "0000002809", "2023-01-27", "2022", "Q4", "USD", "2022-12-31"),
+    ("PGR", "0000080661", "2026-05-31", "2026", "Q2", "USD", "2026-06-30"),
 ])
 def test_isolated_statement_dates_are_corrected(symbol, cik, raw_date, year, period, currency, period_end):
     from src.data.fiscal_repair import reviewed_statement_date
@@ -444,7 +445,7 @@ def test_isolated_statement_dates_are_corrected(symbol, cik, raw_date, year, per
 def test_every_reviewed_statement_date_fires():
     # an exact-match key with a typo would silently never correct anything
     from src.data.fiscal_repair import REVIEWED_STATEMENT_DATES, reviewed_statement_date
-    assert len(REVIEWED_STATEMENT_DATES) == 9
+    assert len(REVIEWED_STATEMENT_DATES) == 10
     for (symbol, cik, raw_date, year, period, currency), period_end in REVIEWED_STATEMENT_DATES.items():
         raw = dict(symbol=symbol, cik=cik, date=raw_date, fiscalYear=year,
                    period=period, reportedCurrency=currency)
