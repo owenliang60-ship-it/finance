@@ -27,7 +27,7 @@ SEC EDGAR CIK 0000906107：2026-08-12 由 Equity Residential 改名 Vivmark Resi
 
 - `config/symbol_aliases.json`：EQR → VMRK，rename，verified。
 - `config/share_class_overrides.json`：CIK 0000906107 → VMRK，以后 bootstrap 重判也得到同样结论。
-- 存量：同一脚本把 VMRK 设为 ok、EQR 设为 secondary_share_class。
+- 存量：同一脚本把 VMRK 设为 ok、EQR 设为 secondary_share_class，再用共享 collector 在 VMRK 名下重拉三表 40 季（3 次 FMP 请求）。原因：VMRK 只有利润表；资产负债表、现金流量表和 vintage 都在 EQR 名下，不重拉的话 VMRK 进池后缺两张表。采集失败可用 `--collect-only` 单独重试。
 
 ## 3. 上市前市值
 
@@ -40,3 +40,15 @@ SEC EDGAR CIK 0000906107：2026-08-12 由 Equity Residential 改名 Vivmark Resi
 - `rows_updated=16`，`metrics_rows=269`，`quick_check` ok；孤立日期检测 8 → 0。
 - VMRK：live 合格；2021-09-04、2024-08-31、2026-08-29 回放池都有。
 - 同一 plan 重跑：哈希不符，拒绝，不改库。
+
+## 代码审查（/code-review high，2026-10-25）
+
+| # | 问题 | 处理 |
+|---|---|---|
+| 1 | 别名翻成 VMRK 后，资产负债表、现金流量表和 vintage 仍在 EQR 名下 | 已修：脚本在 VMRK 名下重拉三表 |
+| 2 | 脚本默认写本地 `market.db`，会被下一次 pull 覆盖 | 已修：默认改为云端路径 |
+| 3 | 日期修复先提交，VMRK 一步失败后无法重跑 | 已修：VMRK 前置检查移到改库之前；采集失败用 `--collect-only` 重试 |
+| 7 | 新测试只覆盖 9 条日期更正中的 3 条 | 已修：逐条测试全部 9 条 |
+| 4 | 价格表如果被缩短，上市前过滤会静默缩小回放池 | 未改，记入数据管线优化 |
+| 5 | 另外三处读 `historical_market_cap` 的地方（bootstrap、广扫、晨报）仍读到假市值 | 未改，不影响景气，记入数据管线优化 |
+| 6 | 每次调用多扫一遍价格表，约 +0.65 秒，一次回放约 +13 秒 | 未改，耗时可接受 |

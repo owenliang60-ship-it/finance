@@ -439,3 +439,13 @@ def test_isolated_statement_dates_are_corrected(symbol, cik, raw_date, year, per
                reportedCurrency=currency, cik=cik)
     assert reviewed_statement_date(raw) == {**raw, "date": period_end}
     assert reviewed_statement_date({**raw, "period": "Q4" if period != "Q4" else "Q1"})["date"] == raw_date
+
+
+def test_every_reviewed_statement_date_fires():
+    # an exact-match key with a typo would silently never correct anything
+    from src.data.fiscal_repair import REVIEWED_STATEMENT_DATES, reviewed_statement_date
+    assert len(REVIEWED_STATEMENT_DATES) == 9
+    for (symbol, cik, raw_date, year, period, currency), period_end in REVIEWED_STATEMENT_DATES.items():
+        raw = dict(symbol=symbol, cik=cik, date=raw_date, fiscalYear=year,
+                   period=period, reportedCurrency=currency)
+        assert reviewed_statement_date(raw)["date"] == period_end
