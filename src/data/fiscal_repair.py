@@ -18,21 +18,37 @@ _NON_FINANCIAL = frozenset({
 })
 
 
-def reviewed_statement_date(row):
-    """Correct the reviewed AEM release-date alias in current/valuation inputs.
+# Reviewed provider dates: (symbol, cik, provider date, fiscal_year, period,
+# currency) -> period end. Only exact matches change; no rule is inferred.
+# AEM 2024Q3: docs/audit/2026-10-10-cron-recovery.md. The rest are isolated
+# dates (one-year neighbours two years apart), period ends from SEC 10-Q/10-K
+# report dates (KR, ACI, AGL, LB) or the calendar quarter end of December
+# fiscal-year foreign issuers (AEM, TECK, RIO half-year, BEP):
+# docs/audit/2026-10-25-isolated-statement-dates.md.
+REVIEWED_STATEMENT_DATES = {
+    ("AEM", "0000002809", "2024-10-30", "2024", "Q3", "USD"): "2024-09-30",
+    ("AEM", "0000002809", "2023-01-27", "2022", "Q4", "USD"): "2022-12-31",
+    ("TECK", "0000886986", "2024-10-23", "2024", "Q3", "CAD"): "2024-09-30",
+    ("RIO", "0000863064", "2017-05-31", "2017", "Q2", "USD"): "2017-06-30",
+    ("BEP", "0001533232", "2018-08-03", "2018", "Q2", "USD"): "2018-06-30",
+    ("KR", "0000056873", "2021-04-28", "2021", "Q1", "USD"): "2021-05-22",
+    ("ACI", "0001646972", "2023-05-23", "2023", "Q1", "USD"): "2023-06-17",
+    ("AGL", "0001831097", "2021-02-18", "2020", "Q4", "USD"): "2020-12-31",
+    ("LB", "0001995807", "2024-08-03", "2024", "Q2", "USD"): "2024-06-30",
+}
 
-    AEM's 2024 Q3 results were released October 30 for the quarter ended
-    September 30. Raw vintage payloads remain untouched. Evidence and the
-    one-time repair of existing current rows: docs/audit/2026-10-10-cron-recovery.md.
-    No rule is inferred for other fiscal quarters or issuer identities.
+
+def reviewed_statement_date(row):
+    """Correct reviewed provider dates in current/valuation inputs.
+
+    Raw vintage payloads remain untouched. Rows already stored under a wrong
+    date need the one-time `apply_reviewed_identity_updates` repair.
     """
-    if (row.get("symbol") == "AEM" and row.get("cik") == "0000002809"
-            and row.get("date") == "2024-10-30"
-            and str(row.get("fiscal_year", row.get("fiscalYear"))) == "2024"
-            and row.get("period") == "Q3"
-            and row.get("reported_currency", row.get("reportedCurrency")) == "USD"):
-        return {**row, "date": "2024-09-30"}
-    return row
+    key = (row.get("symbol"), row.get("cik"), row.get("date"),
+           str(row.get("fiscal_year", row.get("fiscalYear"))), row.get("period"),
+           row.get("reported_currency", row.get("reportedCurrency")))
+    period_end = REVIEWED_STATEMENT_DATES.get(key)
+    return {**row, "date": period_end} if period_end else row
 
 
 def _json(value):

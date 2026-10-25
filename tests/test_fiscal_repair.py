@@ -426,3 +426,16 @@ def test_single_statement_alias_preserves_cross_statement_metrics(store, entry, 
     compute_metrics("TEST", store)  # The ordinary update path must not undo the repair.
     assert store.get_metrics("TEST")[0] == metrics
     assert store._get_conn().execute("SELECT count(*) FROM fundamental_current_archive").fetchone()[0] == archives
+
+
+@pytest.mark.parametrize("symbol,cik,raw_date,year,period,currency,period_end", [
+    ("TECK", "0000886986", "2024-10-23", "2024", "Q3", "CAD", "2024-09-30"),
+    ("KR", "0000056873", "2021-04-28", "2021", "Q1", "USD", "2021-05-22"),
+    ("AEM", "0000002809", "2023-01-27", "2022", "Q4", "USD", "2022-12-31"),
+])
+def test_isolated_statement_dates_are_corrected(symbol, cik, raw_date, year, period, currency, period_end):
+    from src.data.fiscal_repair import reviewed_statement_date
+    raw = dict(symbol=symbol, date=raw_date, fiscalYear=year, period=period,
+               reportedCurrency=currency, cik=cik)
+    assert reviewed_statement_date(raw) == {**raw, "date": period_end}
+    assert reviewed_statement_date({**raw, "period": "Q4" if period != "Q4" else "Q1"})["date"] == raw_date

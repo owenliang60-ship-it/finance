@@ -106,12 +106,12 @@
       "evidence": "historical_market_cap same-day within 2% on 100% of 1268 overlapping days; Carnival plc ADS quoted at the combined Carnival Corporation & plc market cap; CUK last mcap 2026-05-06"
     },
     {
-      "alias": "VMRK",
-      "canonical": "EQR",
-      "kind": "duplicate",
-      "status": "pending_verification",
-      "reviewed_at": "2026-09-27",
-      "evidence": "historical_market_cap same-day within 2% on 100% of 1260 overlapping days since 2021-08-30; EQR last mcap 2026-09-04, VMRK continues; VMRK has no security_master row. Possibly a 2026-09 ticker change, unverified — EQR kept canonical because it holds the security_master row and statements"
+      "alias": "EQR",
+      "canonical": "VMRK",
+      "kind": "rename",
+      "status": "verified",
+      "reviewed_at": "2026-10-25",
+      "evidence": "SEC EDGAR CIK 0000906107: name Equity Residential until 2026-08-12, now Vivmark Residential, ticker VMRK. historical_market_cap same-day within 2% on 100% of 1260 overlapping days; EQR last mcap 2026-09-04"
     },
     {
       "alias": "WRK",
