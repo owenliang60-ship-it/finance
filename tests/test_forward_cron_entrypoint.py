@@ -134,7 +134,7 @@ def test_weekly_pipeline_runs_yfinance_fmp_then_verifier(env_project):
         "splits",
     ]
     assert "--stage data" in lines[-2]
-    assert "--days 14" in lines[-1]
+    assert "--days 35" in lines[-1]
     wrapper = (SCRIPT.parent / "cron_wrapper.sh").read_text()
     assert "market_db_writer" in wrapper
 

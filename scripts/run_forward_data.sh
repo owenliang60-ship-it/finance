@@ -29,4 +29,4 @@ SNAPSHOT_DATE="$(date +%F)"
 "$PYTHON" scripts/verify_fmp_forward.py --stage data --run-kind weekly \
   --snapshot-date "$SNAPSHOT_DATE"
 # Split history for prosperity/financial charts (was a side effect of index PE).
-"$PYTHON" scripts/refresh_stock_splits.py --days 14
+"$PYTHON" scripts/refresh_stock_splits.py --days 35
