@@ -531,3 +531,18 @@ class TestNonScreenerSourcePreservation:
         ]
         result = _get_analysis_stocks(stocks)
         assert len(result) == 2
+
+
+def test_refresh_universe_does_not_prune_fundamentals_when_stocks_exit():
+    """profiles.json is shared with the Extended pool; a Core exit must not trigger cleanup."""
+    save_universe([{"symbol": "OLD", "companyName": "Old Co", "marketCap": 50e9,
+                    "sector": "Technology", "industry": "Software", "source": "screener"}])
+    with mock.patch("src.data.pool_manager.fmp_client") as mock_fmp, \
+         mock.patch("src.data.pool_manager.cleanup_stale_data") as cleanup:
+        mock_fmp.get_large_cap_stocks.return_value = [
+            {"symbol": "AAPL", "companyName": "Apple Inc", "marketCap": 3_500e9,
+             "sector": "Technology", "industry": "Consumer Electronics"},
+        ]
+        _, _, exited = refresh_universe()
+    assert "OLD" in exited
+    cleanup.assert_not_called()

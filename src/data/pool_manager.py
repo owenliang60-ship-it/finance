@@ -224,10 +224,8 @@ def refresh_universe() -> Tuple[List[Dict], List[str], List[str]]:
     # 保存新股票池
     save_universe(new_stocks)
 
-    # 清理已退出股票的残留数据
-    if exited:
-        new_symbol_list = [s.get("symbol") for s in new_stocks if s.get("symbol")]
-        cleanup_stale_data(new_symbol_list)
+    # 不再按 Core 池清理 data/fundamental：profiles.json 现由 Extended 池共用，
+    # 按 Core 清理会误删约 89% 条目（2026-10-25，每周触发熔断）。
 
     return new_stocks, list(entered), list(exited)
 
