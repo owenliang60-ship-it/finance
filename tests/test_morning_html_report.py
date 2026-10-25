@@ -113,20 +113,3 @@ def test_image_block_is_embedded_and_escaped(tmp_path):
     assert str(tmp_path) not in text
     assert '&lt;test&gt;&quot;' in text
     assert 'A&amp;B &lt;caption&gt;' in text
-
-
-def test_retired_valuation_block_is_ignored_between_existing_sections():
-    payload=build_html_payload({'index_valuation_chart':{
-        'path':'chart.png','caption':'共识口径'}},None,'2026-09-11')
-    headings=[b['heading'] for b in payload['blocks']]
-    assert '0d. 三指数估值' not in headings
-    assert headings.index('0b. 成交集中度') < headings.index('1. PMARP 信号')
-
-
-def test_retirement_preserves_existing_compass_section():
-    payload=build_html_payload({
-        'selection_compass':{'available':False,'reason':'insufficient_coverage','coverage':{}},
-        'index_valuation_chart':{'path':'chart.png','caption':'共识口径'}},None,'2026-09-11')
-    headings=[b['heading'] for b in payload['blocks']]
-    assert '0d. 三指数估值' not in headings
-    assert headings.index('0b. 成交集中度') < headings.index('0c. 选股罗盘') < headings.index('1. PMARP 信号')

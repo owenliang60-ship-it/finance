@@ -3,7 +3,6 @@
 用法:
     python scripts/verify_fmp_forward.py --stage data --snapshot-date YYYY-MM-DD
     python scripts/verify_fmp_forward.py --stage data --run-kind backfill --snapshot-date YYYY-MM-DD
-    python scripts/verify_fmp_forward.py --stage full --snapshot-date YYYY-MM-DD
     python scripts/verify_fmp_forward.py --stage data --snapshot-date YYYY-MM-DD --json
 
 原则:
@@ -29,7 +28,6 @@ from src.data.fmp_forward_ingestion import (
 )
 
 BASKETS = ("SPY", "QQQ", "SOX", "IGV", "XLF")
-FULL_BASKETS = ("SPY", "QQQ", "SOX", "MAGS", "IGV", "XLF")
 REQUIRED_FUTURE_QUARTERS = 4
 RECENT_ACTUAL_WINDOW_DAYS = 120
 CRITICAL_FAILURE_RATE = 0.20  # 镜像 writer 的 run-wide earnings gate（round-8）
@@ -48,7 +46,7 @@ def _iso_date(value: str) -> str:
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Read-only verifier for the FMP forward data layer")
-    parser.add_argument("--stage", choices=["data", "full"], default="data")
+    parser.add_argument("--stage", choices=["data"], default="data")
     parser.add_argument("--run-kind", choices=["weekly", "backfill"],
                         default="weekly")
     parser.add_argument("--snapshot-date", type=_iso_date, required=True)
@@ -95,8 +93,7 @@ def _previous_completed_weekly_empty(conn, snapshot_date: str) -> Tuple[bool, se
 
 def verify_run(db_path: Path, data_root: Path, snapshot_date: str,
                run_kind: str = "weekly", stage: str = "data",
-               min_quarter_coverage_pct: float = 90.0,
-               config_dir: Optional[Path] = None) -> Tuple[int, Dict]:
+               min_quarter_coverage_pct: float = 90.0) -> Tuple[int, Dict]:
     report: Dict = {
         "ok": False,
         "snapshot_date": snapshot_date,
@@ -321,29 +318,6 @@ def verify_run(db_path: Path, data_root: Path, snapshot_date: str,
             report["estimates"]["rows_per_symbol"] = round(
                 depth["n"] / depth["syms"], 1) if depth["syms"] else 0.0
 
-        # ---- Stage full：Phase 2 契约（6 篮子 + 合法 JSON）----
-        if stage == "full":
-            b_rows = conn.execute(
-                "SELECT * FROM fmp_basket_valuation "
-                "WHERE snapshot_date = ?",
-                [snapshot_date],
-            ).fetchall()
-            present = {r["basket"] for r in b_rows}
-            missing_baskets = sorted(set(FULL_BASKETS) - present)
-            if missing_baskets:
-                failures.append(
-                    f"stage=full requires six basket valuation rows; "
-                    f"missing: {missing_baskets}")
-            if run_kind != "weekly":
-                failures.append("PIT valuation requires weekly snapshots")
-            elif not missing_baskets:
-                from terminal.forward_valuation import verify_forward_valuations, CONFIG_DIR
-                try:
-                    failures.extend(verify_forward_valuations(
-                        conn, snapshot_date, [dict(r) for r in b_rows],
-                        config_dir or CONFIG_DIR))
-                except (ValueError, KeyError, TypeError, sqlite3.Error) as exc:
-                    failures.append(f"basket valuation verification failed: {exc}")
     finally:
         conn.close()
 

@@ -78,8 +78,6 @@ API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`�
 
 `data_health.py`（11 项检查） + `data_guardian.py`（快照） + `data_validator.py`（一致性）。
 
-历史篮子估值另有 `verify_basket_ttm_pe.py`：只读逐日复算 disclosure → GAAP TTM income → FX → sanity-clean HMC → 两种 PE。source snapshot 先过 25–31 个 eligible equity rows 与 99.5%–100.5% raw weight 阻塞门，证券 alias 区分 raw-first fallback 与 CUSIP/ISIN-backed authoritative correction。`basket_ttm_valuation` 是固定调仓权重 retrospective proxy，不是官方 SOXX PE/历史 forward PE；当前一次性运行，**没有 cron**。
-
 ### 云端定时任务
 
 | 时间 | 频率 | 任务 |
@@ -92,7 +90,7 @@ API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`�
 
 完整 cron 见 `ARCHITECTURE.md`。本地 launchd `com.finance.sync-pull` 每天 09:00 auto-pull。
 
-三指数估值于 2026-10-24 归档下线：停止历史整窗重算、六篮子派生估值和晨报 `0d` 栏目。个股预期与原始快照采集继续运行，历史代码和数据保留。归档与恢复要求见 `archive/index-valuation/README.md`；旧 runbook 仅作历史参考。
+三指数估值已于 2026-10-25 整体删除（代码、表、cron）。ETF 成分快照 `fmp_etf_holdings_snapshot` 保留，只服务晨报 SPY/QQQ/SOXX 宽度。
 
 ---
 

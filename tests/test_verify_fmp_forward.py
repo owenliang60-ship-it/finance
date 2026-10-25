@@ -305,24 +305,6 @@ def test_stage_data_does_not_require_basket_valuation(db, tmp_path):
     assert rc == 0
 
 
-def test_stage_full_requires_six_basket_rows(db, tmp_path):
-    _seed(db, ["AAA"], covered=["AAA"])
-    rc, report = verify_run(db, db.parent, SNAP, stage="full")
-    assert rc == 1
-    assert any("basket" in f for f in report["failures"])
-
-    store = MarketStore(db)
-    for basket in ("SPY", "QQQ", "SOX", "MAGS", "IGV", "XLF"):
-        store.upsert_fmp_basket_valuation({
-            "basket": basket, "snapshot_date": SNAP, "fwd_pe_blend": 25.0,
-            "fwd_pe_ntm": 23.0, "members_json": json.dumps([]),
-        })
-    store.close()
-    rc2, report2 = verify_run(db, db.parent, SNAP, stage="full")
-    assert rc2 == 1  # six empty JSON arrays are not certified valuations
-    assert any("basket" in failure for failure in report2["failures"])
-
-
 def test_report_shape_stable(db, tmp_path):
     _seed(db, ["AAA"], covered=["AAA"])
     rc, report = verify_run(db, db.parent, SNAP)
