@@ -8,6 +8,7 @@
 
 | 里程碑 | 日期 | 增量 |
 |--------|------|------|
+| **景气 T7 部署（进行中）+ 数据修复** | 2026-10-25 | 云端 `run_prosperity.sh` python3 兜底；首次冻结链重建 OK（4818 s，峰值 1.47 GB，21/21 冻结日一致）；修 8 个孤立错财季日期、EQR→VMRK 改名、回放池忽略上市前补出的市值（BMNR、UHAL-B），云端已执行（`docs/audit/2026-10-25-isolated-statement-dates.md`）；新版本重建与 cron 待做 |
 | **美股景气引擎 M8 存储 + M9 调度** | 2026-10-24 | M8 `prosperity.db` 九表不可覆盖存储；M9 周更调度（硬门控 + forward 软门控两档过期）、季末冻结链与持久候选证据、计算/发布分状态、gzip 匹配备份、云端只留两个 code_version 的手动归档（D5）；A8 本周 live 四门控 pass、22 批读回一致，云端 Python 3.10 景气全套通过；merge main `f2ff1ee9`，云端 cron 未装（T7）（`reports/prosperity/m9-scheduler-20261024/`） |
 | **美股景气引擎 M7 S1 对拍** | 2026-09-30 | 与原站 47 期共有 6 因子逐行比对：2021 年后原站口径 96.0% 达标（门槛 95%），258 条不达标全部归因、原因不明 0，独立抽检 10/10；途中修复可用日期兜底（占位申报日期用同季财报发布日，2024-08-17 回放正式排名 669→755）与一家公司只看一个代码（`reports/prosperity/m7-s1-20260930/`） |
 | **美股景气引擎 M0–M6（数据前置 + 点时输入包 + 方案注册表 + 因子与打分内核）** | 2026-09-30 | 替代 Premium 的景气引擎前半段：D9 历史补数与质量护栏、M4 点时输入包、M5 冻结方案注册表（F1 / F1-rank / F1-exfin / F0，scheme_hash + code_version）、M6 纯函数因子与打分内核 + 只读验收 CLI；CC 与 Codex 双独立验收；尚未接 cron，M7 对拍起为 MVP 余下部分（`docs/design/prosperity-engine-north-star.md`） |

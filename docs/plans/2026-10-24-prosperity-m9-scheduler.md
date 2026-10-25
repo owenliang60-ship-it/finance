@@ -1,6 +1,6 @@
 # 景气引擎 M9 周更调度、季末冻结与历史回放 Implementation Plan
 
-**状态：2026-10-24 T0–T6 与 Task 8 完成。A8 live 验收通过，主窗口审查 1 项已修，merge main `f2ff1ee9` 并 push。T7（云端部署 + cron）未做，每步需 Boss 确认。D1–D5 决定与三轮审查记录见下文。**
+**状态：2026-10-24 T0–T6 与 Task 8 完成。A8 live 验收通过，主窗口审查 1 项已修，merge main `f2ff1ee9` 并 push。2026-10-25 T7 进行中：步骤 1–2 完成（另做数据修复，见 Task 7 记录）；新 `code_version` 重建与 cron 未做。D1–D5 决定与三轮审查记录见下文。**
 
 **Goal:** 让景气引擎每周六在云端自动算出四方案周榜，按规则冻结季末榜，并能用同一流程重建历史冻结榜。
 **Architecture:** 纯规则（冻结日历、覆盖率判断）放进内核包，进入 `code_version`；门控与编排放 `src/data/`，不进入 `code_version`。CLI 由 `cron_wrapper.sh` 调起，所有写入只经 M8 `ProsperityStore.save_batch`。发布阶段只留挂点，M10–M13 再接产物。
@@ -432,6 +432,20 @@ def test_due_quarter_skips_frozen():
 2. 云端 git pull 后，手动跑一次 `--rebuild-chain`（避开 06:00–08:30），核对冻结日与本地一致。
 3. 安装两条 cron（§8.4），不动其他条目；crontab 先备份。
 4. 首个自然周六 16:30 后核对 A10。
+
+**2026-10-25 执行记录**
+
+| 步骤 | 结果 |
+|---|---|
+| 部署前修复 | `run_prosperity.sh` 没有 `.venv` 时退回 `python3`（云端无 `.venv`），新增 `tests/test_run_prosperity_wrapper.py`；main `111d4a10` |
+| 1 | merge `docs/m9-closeout`，push main `63e88550` |
+| 2 | 云端 pull 后 `--rebuild-chain`（`code_version` `1d24cbda444df7fa`）：OK 4818 s，峰值 RSS 1.47 GB，最低可用内存 1316 MB，无 swap；21/21 冻结日与本地验收一致；结果库 308 MB，备份 1 份 |
+| 数据修复 | 该版本 F1 季末榜 18 张含 BMNR、UHAL-B（上市前补出的市值）。另修 8 个孤立错财季日期、EQR→VMRK 改名。main `fe8f5c8c`，云端 `apply_isolated_date_repair.py` 执行：16 行日期更正并归档、VMRK 合格并重拉三表 40 季、quick_check ok；备份 `data/backups/fix1025/`。证据 `docs/audit/2026-10-25-isolated-statement-dates.md` |
+| 2'（待做） | 新 `code_version` `f845b4ab159b2142` 重建冻结链，核对冻结日变化只出在受影响股票、BMNR 不在任何季末榜 |
+| 3（待做） | 装两条 cron |
+| 4（待做） | 首个自然周六 2026-10-31 核对 A10 |
+
+云端剩余 7.2 GB，低于本节前提 8 GB；新版本重建约增 0.4 GB。`fix1025` 备份 gzip 后约可回收 1 GB。
 
 ## 11. 执行命令
 
