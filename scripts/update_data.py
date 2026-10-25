@@ -229,6 +229,16 @@ def _resolve_correlation_symbols(*, wide: bool = False, market_store=None,
     return load_overlay_tier(store=company_store)
 
 
+def _fund_symbols(store) -> set:
+    """security_master rows flagged ETF or fund; empty set when the table is unavailable."""
+    try:
+        rows = store._get_conn().execute(
+            "SELECT symbol FROM security_master WHERE is_etf=1 OR is_fund=1").fetchall()
+    except Exception:
+        return set()
+    return {str(r[0]).upper() for r in rows}
+
+
 def run_fundamental_update(*, scope: str, symbols=None, store=None, client=None,
                            as_of=None, limit_quarters: int = 8,
                            profiles_mirror_path=None) -> int:
@@ -445,6 +455,13 @@ def main():
 
         store = get_store()
         target_symbols = _resolve_target_symbols(args.scope, symbols)
+        if not symbols:
+            # ETFs/funds have no forward EPS on Yahoo; each one only logs a 404.
+            funds = _fund_symbols(store)
+            skipped = sorted(set(target_symbols) & funds)
+            target_symbols = [s for s in target_symbols if s not in funds]
+            if skipped:
+                print(f"Skip ETF/fund: {skipped}")
         print(f"Scope: {args.scope}, target {len(target_symbols)} symbols")
         success = 0
         failed = []

@@ -112,3 +112,32 @@ def test_scope_choices_include_base_and_events():
     from scripts.update_data import FUNDAMENTAL_SCOPE_CHOICES
     assert set(FUNDAMENTAL_SCOPE_CHOICES) == {"core", "extended", "all", "base", "events"}
     assert FUNDAMENTAL_SCOPE_CHOICES[0] == "core"           # default stays core
+
+
+def test_fund_symbols_reads_security_master_flags(tmp_path):
+    import sqlite3
+    from scripts.update_data import _fund_symbols
+
+    class Store:
+        def __init__(self, path):
+            self.conn = sqlite3.connect(path)
+        def _get_conn(self):
+            return self.conn
+
+    db = tmp_path / "m.db"
+    store = Store(str(db))
+    store.conn.execute("CREATE TABLE security_master (symbol TEXT, is_etf INT, is_fund INT)")
+    store.conn.executemany("INSERT INTO security_master VALUES (?,?,?)",
+                           [("SPY", 1, 0), ("VFIAX", 0, 1), ("AAPL", 0, 0)])
+    assert _fund_symbols(store) == {"SPY", "VFIAX"}
+
+
+def test_fund_symbols_is_empty_without_security_master(tmp_path):
+    import sqlite3
+    from scripts.update_data import _fund_symbols
+
+    class Store:
+        def _get_conn(self):
+            return sqlite3.connect(str(tmp_path / "empty.db"))
+
+    assert _fund_symbols(Store()) == set()
