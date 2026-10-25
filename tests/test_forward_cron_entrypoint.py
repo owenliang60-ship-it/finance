@@ -39,6 +39,7 @@ sys.exit(int(os.environ.get("FAKE_FMP_RC", "0")))
 """)
     for filename, stage in (
         ("verify_fmp_forward.py", "verify_pit"),
+        ("refresh_stock_splits.py", "splits"),
     ):
         (project / "scripts" / filename).write_text(f"""
 import os, sys
@@ -130,15 +131,17 @@ def test_weekly_pipeline_runs_yfinance_fmp_then_verifier(env_project):
         "yfinance",
         "fmp",
         "verify_pit",
+        "splits",
     ]
-    assert "--stage data" in lines[-1]
+    assert "--stage data" in lines[-2]
+    assert "--days 14" in lines[-1]
     wrapper = (SCRIPT.parent / "cron_wrapper.sh").read_text()
     assert "market_db_writer" in wrapper
 
 
 @pytest.mark.parametrize(
     "stage,rc",
-    [("verify_pit", 8)],
+    [("verify_pit", 8), ("splits", 9)],
 )
 def test_each_downstream_failure_propagates_and_stops_pipeline(env_project, stage, rc):
     project, log = env_project

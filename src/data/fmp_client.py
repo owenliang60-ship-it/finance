@@ -276,6 +276,25 @@ class FMPClient:
             result.append(row)
         return result
 
+    def get_splits_calendar(self, from_date: str, to_date: str) -> List[Dict]:
+        """Split events from the splits-calendar endpoint for [from_date, to_date].
+
+        The endpoint silently caps long windows (a 5-month query lost its first
+        two months on 2026-10-25), so callers should keep windows to about a week.
+        Raises FMPResponseError on a missing or malformed payload.
+        """
+        params = {"from": _validated_iso_date(from_date, "from_date"),
+                  "to": _validated_iso_date(to_date, "to_date")}
+        data = self._request("splits-calendar", params)
+        if not isinstance(data, list):
+            raise FMPResponseError("splits-calendar returned no valid list payload")
+        result = []
+        for row in data:
+            if not isinstance(row, dict) or not row.get("symbol") or not row.get("date"):
+                raise FMPResponseError("splits-calendar returned a malformed row")
+            result.append(row)
+        return result
+
     # ========== 股票池相关 ==========
 
     def get_large_cap_stocks(

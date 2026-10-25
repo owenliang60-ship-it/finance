@@ -28,3 +28,5 @@ SNAPSHOT_DATE="$(date +%F)"
 # Preserve per-stock EPS/earnings and holdings snapshots used by other desks.
 "$PYTHON" scripts/verify_fmp_forward.py --stage data --run-kind weekly \
   --snapshot-date "$SNAPSHOT_DATE"
+# Split history for prosperity/financial charts (was a side effect of index PE).
+"$PYTHON" scripts/refresh_stock_splits.py --days 14
