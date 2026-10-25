@@ -161,8 +161,9 @@ class TestUpdateExtendedPrices:
         assert "XOM" in result["failed"]
 
     def test_incremental_start_date_for_existing_symbols(self):
+        from datetime import date
         mock_store = MagicMock()
-        mock_store.get_daily_prices.return_value = [{"date": "2026-03-27"}]
+        mock_store.get_daily_prices.return_value = [{"date": date.today().isoformat()}]
         mock_store.upsert_daily_prices_df.return_value = 5
         mock_frames = {"XOM": pd.DataFrame({"date": ["2026-03-27"], "close": [100]})}
 
@@ -177,3 +178,35 @@ class TestUpdateExtendedPrices:
             period=None,
             start="2026-03-20",
         )
+
+
+def test_incremental_skips_symbols_with_stale_prices():
+    from datetime import date, timedelta
+    old = (date.today() - timedelta(days=60)).isoformat()
+    fresh = (date.today() - timedelta(days=2)).isoformat()
+    mock_store = MagicMock()
+    mock_store.get_daily_prices.side_effect = lambda sym, limit=0: (
+        [{"date": old}] if sym == "WBD" else [{"date": fresh}])
+    mock_store.upsert_daily_prices_df.return_value = 1
+    frames = {"XOM": pd.DataFrame({"date": [fresh], "close": [100]})}
+    with patch("src.data.market_store.get_store", return_value=mock_store), \
+         patch("src.data.extended_price_fetcher._yf_download_ohlcv", return_value=frames) as dl:
+        result = update_extended_prices(symbols=["WBD", "XOM"], start_date=fresh)
+    dl.assert_called_once_with(["XOM"], period=None, start=fresh)
+    assert result["stale"] == ["WBD"]
+    assert result["failed"] == []
+    assert result["success"] == 1
+
+
+def test_stale_symbols_are_still_tried_without_start_date():
+    from datetime import date, timedelta
+    old = (date.today() - timedelta(days=60)).isoformat()
+    mock_store = MagicMock()
+    mock_store.get_daily_prices.return_value = [{"date": old}]
+    mock_store.upsert_daily_prices_df.return_value = 1
+    frames = {"WBD": pd.DataFrame({"date": [old], "close": [10]})}
+    with patch("src.data.market_store.get_store", return_value=mock_store), \
+         patch("src.data.extended_price_fetcher._yf_download_ohlcv", return_value=frames) as dl:
+        result = update_extended_prices(symbols=["WBD"])
+    assert dl.call_args.args[0] == ["WBD"]
+    assert result["stale"] == []

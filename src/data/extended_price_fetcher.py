@@ -250,6 +250,12 @@ def get_yfinance_price_targets(store=None) -> List[str]:
     return sorted(({s.upper() for s in base} | legacy_core) - fmp_tier)
 
 
+# Incremental runs skip symbols whose newest price is older than this; they are
+# almost always delisted and only add "possibly delisted" errors (2026-10-25:
+# 82 of 2938 broad symbols). Backfill and full_backfill still try them.
+STALE_PRICE_SKIP_DAYS = 30
+
+
 def update_extended_prices(
     full_backfill: bool = False,
     symbols: Optional[List[str]] = None,
@@ -261,6 +267,8 @@ def update_extended_prices(
         full_backfill: Force 5-year backfill for all symbols.
         symbols: Override symbol list (default: get_yfinance_price_targets()).
         start_date: Optional incremental start date for symbols with existing history.
+            With it set, symbols whose newest stored price is older than
+            STALE_PRICE_SKIP_DAYS before today are skipped and reported in "stale".
 
     Returns:
         Stats dict with total, success, failed, rows_inserted.
@@ -280,24 +288,35 @@ def update_extended_prices(
     # Partition symbols into backfill vs incremental
     backfill_symbols = []
     incremental_symbols = []
+    stale_symbols = []
+    stale_before = None
+    if start_date:
+        from datetime import date, timedelta
+        stale_before = (date.today() - timedelta(days=STALE_PRICE_SKIP_DAYS)).isoformat()
 
     if full_backfill:
         backfill_symbols = symbols
     else:
         for sym in symbols:
             rows = store.get_daily_prices(sym, limit=1)
-            if rows:
-                incremental_symbols.append(sym)
-            else:
+            if not rows:
                 backfill_symbols.append(sym)
+            elif stale_before and str(rows[0].get("date", "")) < stale_before:
+                stale_symbols.append(sym)
+            else:
+                incremental_symbols.append(sym)
 
     logger.info(
-        "Backfill: %d symbols, Incremental: %d symbols",
-        len(backfill_symbols), len(incremental_symbols),
+        "Backfill: %d symbols, Incremental: %d symbols, Skipped stale: %d",
+        len(backfill_symbols), len(incremental_symbols), len(stale_symbols),
     )
+    if stale_symbols:
+        logger.warning("Skipped stale (no price for %d+ days): %d symbols %s",
+                       STALE_PRICE_SKIP_DAYS, len(stale_symbols), stale_symbols[:20])
 
     all_frames = {}
-    stats = {"total": len(symbols), "success": 0, "failed": [], "rows_inserted": 0}
+    stats = {"total": len(symbols), "success": 0, "failed": [], "rows_inserted": 0,
+             "stale": stale_symbols}
 
     # Backfill batch (5-year history)
     if backfill_symbols:
@@ -334,7 +353,8 @@ def update_extended_prices(
             logger.error("Failed to upsert %s: %s", sym, e)
             stats["failed"].append(sym)
 
-    stats["failed"].extend(sorted(set(symbols) - set(all_frames.keys()) - set(stats["failed"])))
+    stats["failed"].extend(sorted(
+        set(symbols) - set(all_frames.keys()) - set(stats["failed"]) - set(stale_symbols)))
 
     logger.info(
         "Extended price update complete: %d/%d success, %d failed, %d rows",
