@@ -1408,6 +1408,8 @@ def _build_display_tags(row: dict, concepts_by_id: dict[str, str]) -> str:
 
 AUTO_BACKUP_PREFIX = "auto-"
 BACKUP_SPACE_FACTOR = 1.5
+MANUAL_BACKUP_GZIP_DAYS = 3     # non-auto backups older than this are gzipped
+MANUAL_BACKUP_EXPIRE_DAYS = 14  # ... and deleted after this (Boss 2026-10-25)
 
 
 def _backup_timestamp() -> str:
@@ -1497,18 +1499,20 @@ def _backup_sqlite(db_path: Path, label: str, keep: int | None = None) -> Path |
     logger.info("WAL-safe backup %s -> %s", db_path, final)
     if keep is not None:
         _prune_auto_backups(db_path, label, final, stamp, keep)
+        _age_manual_backups(db_path, stamp)
     return final
 
 
 def _prune_auto_backups(db_path: Path, label: str, final: Path, stamp: str, keep: int) -> None:
     """Keep `final` + the newest keep-1 older same-label backups; drop the rest,
     including future-stamped files (clock skew) and >24h-old orphaned temp files
-    from hard-killed runs. Failures are logged, not raised: the backup is already
-    published and the space gate is the backstop."""
+    from hard-killed runs. Older kept backups are gzipped; `final` stays raw because
+    _restore_sqlite opens it directly. Failures are logged, not raised: the backup
+    is already published and the space gate is the backstop."""
     import re
     import time
     name, lab = re.escape(db_path.name), re.escape(label)
-    backup_re = re.compile(rf"^{name}\.backup-(\d{{14}})-{lab}$")
+    backup_re = re.compile(rf"^{name}\.backup-(\d{{14}})-{lab}(?:\.gz)?$")
     partial_re = re.compile(rf"^{name}\.backup-\d{{14}}-{lab}\.[^.]+\.partial(-journal|-wal|-shm)?$")
     older, doomed = [], []
     stale_before = time.time() - 86400
@@ -1519,13 +1523,72 @@ def _prune_auto_backups(db_path: Path, label: str, final: Path, stamp: str, keep
         elif partial_re.match(p.name) and p.stat().st_mtime < stale_before:
             doomed.append(p)
     older.sort()
-    doomed += older[:max(len(older) - (keep - 1), 0)]
+    cut = max(len(older) - (keep - 1), 0)
+    doomed += older[:cut]
     for old in sorted(doomed):
         try:
             old.unlink()
             logger.info("pruned %s (label=%s keep=%d)", old, label, keep)
         except OSError as exc:
             logger.error("backup prune failed for %s: %s", old, exc)
+    for kept in older[cut:]:
+        if kept.suffix != ".gz":
+            _gzip_backup(kept)
+
+
+def _gzip_backup(path: Path) -> None:
+    """Replace `path` with `path.gz` (temp file + rename, then drop the raw file and
+    empty sidecars). Skips when a non-empty -wal could still hold pages. Failures
+    are logged and leave the raw backup in place."""
+    import gzip
+    wal = path.with_name(path.name + "-wal")
+    if wal.exists() and wal.stat().st_size > 0:
+        logger.error("backup gzip skipped for %s: non-empty -wal", path)
+        return
+    target = path.with_name(path.name + ".gz")
+    tmp = path.with_name(path.name + ".gz.partial")
+    try:
+        with path.open("rb") as src, gzip.open(tmp, "wb", compresslevel=6) as dst:
+            shutil.copyfileobj(src, dst, 1024 * 1024)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, target)
+        path.unlink()
+        for suffix in ("-wal", "-shm", "-journal"):
+            path.with_name(path.name + suffix).unlink(missing_ok=True)
+        logger.info("gzipped backup %s -> %s", path, target)
+    except Exception as exc:
+        tmp.unlink(missing_ok=True)
+        logger.error("backup gzip failed for %s: %s", path, exc)
+
+
+def _age_manual_backups(db_path: Path, stamp: str) -> None:
+    """Scheduled-run housekeeping for non-auto backups of this db (issue046: manual
+    rollback points filled the disk twice). Older than MANUAL_BACKUP_GZIP_DAYS ->
+    gzip; older than MANUAL_BACKUP_EXPIRE_DAYS -> delete with sidecars. Age comes
+    from the name's UTC stamp. Failures are logged, not raised."""
+    import re
+    now = datetime.strptime(stamp, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+    manual_re = re.compile(
+        rf"^{re.escape(db_path.name)}\.backup-(\d{{14}})-(?!{re.escape(AUTO_BACKUP_PREFIX)})[A-Za-z0-9_-]+(\.gz)?$")
+    for p in sorted(db_path.parent.iterdir()):
+        m = manual_re.match(p.name)
+        if not m:
+            continue
+        try:
+            made = datetime.strptime(m.group(1), "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        age_days = (now - made).total_seconds() / 86400
+        if age_days > MANUAL_BACKUP_EXPIRE_DAYS:
+            try:
+                p.unlink()
+                for suffix in ("-wal", "-shm", "-journal"):
+                    p.with_name(p.name + suffix).unlink(missing_ok=True)
+                logger.info("expired manual backup %s (%.1f days)", p, age_days)
+            except OSError as exc:
+                logger.error("manual backup expiry failed for %s: %s", p, exc)
+        elif age_days > MANUAL_BACKUP_GZIP_DAYS and not m.group(2):
+            _gzip_backup(p)
 
 
 def apply_reviewed_csv(

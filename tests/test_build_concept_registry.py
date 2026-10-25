@@ -1133,7 +1133,7 @@ def test_backup_prunes_auto_label_to_keep(tmp_path, monkeypatch):
     _m0_fixed_ts(monkeypatch, "20260104000000")
     new = _backup_sqlite(db, "auto-x", keep=2)
     left = sorted(p.name for p in tmp_path.glob("market.db.backup-*"))
-    assert left == ["market.db.backup-20260103000000-auto-x",
+    assert left == ["market.db.backup-20260103000000-auto-x.gz",
                     "market.db.backup-20260104000000-auto-x"]
     assert new.name == "market.db.backup-20260104000000-auto-x"
 
@@ -1186,9 +1186,8 @@ def test_backup_prune_scope_is_exact(tmp_path, monkeypatch):
     from scripts.build_company_concept_registry import _backup_sqlite
     db = _m0_live_db(tmp_path / "m+k.db")   # regex metacharacter in db name
     keep_files = [
-        "m+k.db.backup-20200101000000-auto-x.gz",
         "m+k.db.backup-20200101000000-auto-x.gz.json",
-        "m+k.db.backup-20200101000000-pre-weekly-sync",
+        "m+k.db.backup-20260103000000-pre-weekly-sync",   # 1 day old: below ageing
         "m+k.db.backup-20200101000000-auto-y",
         "m+k.db.before-x",
         "mmk.db.backup-20200101000000-auto-x",
@@ -1260,7 +1259,7 @@ def test_backup_future_timestamp_does_not_occupy_a_keep_slot(tmp_path, monkeypat
     future.write_bytes(b"clock-skew")
     _m0_fixed_ts(monkeypatch, "20260104000000")
     new = _backup_sqlite(db, "auto-x", keep=2)
-    assert new.exists() and prev.exists()
+    assert new.exists() and prev.with_name(prev.name + ".gz").exists()
     assert not future.exists()
 
 
@@ -1574,3 +1573,106 @@ def test_reclassify_csv_writes_full_manifest(tmp_path):
         )
     )
     assert set(manifest["symbols"]) == {"MANUALCO", "LLMFAIL"}
+
+
+# --- 2026-10-25 data pipeline slim-down: gzip older auto backups, expire manual ones ---
+
+def _gz_ok(path):
+    import gzip
+    with gzip.open(path, "rb") as f:
+        return f.read()
+
+
+def test_backup_gzips_older_kept_auto_backup(tmp_path, monkeypatch):
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    (tmp_path / "market.db.backup-20260101000000-auto-x").write_bytes(b"old1")
+    (tmp_path / "market.db.backup-20260102000000-auto-x").write_bytes(b"old2")
+    _m0_fixed_ts(monkeypatch, "20260103000000")
+    new = _backup_sqlite(db, "auto-x", keep=2)
+    left = sorted(p.name for p in tmp_path.glob("market.db.backup-*"))
+    assert left == ["market.db.backup-20260102000000-auto-x.gz",
+                    "market.db.backup-20260103000000-auto-x"]
+    assert _gz_ok(tmp_path / "market.db.backup-20260102000000-auto-x.gz") == b"old2"
+    assert new.exists()   # newest stays raw so _restore_sqlite can open it
+
+
+def test_backup_prunes_gzipped_auto_backups_too(tmp_path, monkeypatch):
+    import gzip
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    for ts in ("20260101000000", "20260102000000"):
+        with gzip.open(tmp_path / f"market.db.backup-{ts}-auto-x.gz", "wb") as f:
+            f.write(b"old")
+    _m0_fixed_ts(monkeypatch, "20260103000000")
+    _backup_sqlite(db, "auto-x", keep=2)
+    left = sorted(p.name for p in tmp_path.glob("market.db.backup-*"))
+    assert left == ["market.db.backup-20260102000000-auto-x.gz",
+                    "market.db.backup-20260103000000-auto-x"]
+
+
+def test_scheduled_backup_ages_out_manual_backups(tmp_path, monkeypatch):
+    import gzip
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    names = {
+        "fresh": "market.db.backup-20260929000000-pre-fix",      # 2 days old: untouched
+        "aging": "market.db.backup-20260925000000-pre-fix",      # 6 days old: gzip
+        "old": "market.db.backup-20260910000000-pre-fix",        # 21 days old: delete
+        "old_gz": "market.db.backup-20260901000000-pre-fix.gz",  # 30 days old: delete
+    }
+    for key, name in names.items():
+        if name.endswith(".gz"):
+            with gzip.open(tmp_path / name, "wb") as f:
+                f.write(b"x")
+        else:
+            (tmp_path / name).write_bytes(key.encode())
+    (tmp_path / (names["old"] + "-shm")).write_bytes(b"")
+    _m0_fixed_ts(monkeypatch, "20261001000000")
+    _backup_sqlite(db, "auto-x", keep=2)
+    left = sorted(p.name for p in tmp_path.iterdir() if ".backup-" in p.name)
+    assert left == ["market.db.backup-20260925000000-pre-fix.gz",
+                    "market.db.backup-20260929000000-pre-fix",
+                    "market.db.backup-20261001000000-auto-x"]
+    assert _gz_ok(tmp_path / "market.db.backup-20260925000000-pre-fix.gz") == b"aging"
+
+
+def test_manual_backup_call_does_not_age_out_anything(tmp_path, monkeypatch):
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    old = tmp_path / "market.db.backup-20200101000000-pre-fix"
+    old.write_bytes(b"x")
+    _m0_fixed_ts(monkeypatch, "20261001000000")
+    _backup_sqlite(db, "pre-weekly-sync")
+    assert old.exists()
+
+
+def test_backup_ageing_only_touches_this_db(tmp_path, monkeypatch):
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    others = ["company.db.backup-20200101000000-pre-fix",
+              "market.db.pre-quality-recovery-20200101.gz",
+              "market.db.backup-2020-pre-fix"]
+    for name in others:
+        (tmp_path / name).write_bytes(b"keep")
+    _m0_fixed_ts(monkeypatch, "20261001000000")
+    _backup_sqlite(db, "auto-x", keep=1)
+    for name in others:
+        assert (tmp_path / name).exists(), name
+
+
+def test_backup_gzip_failure_is_logged_and_keeps_raw(tmp_path, monkeypatch, caplog):
+    import gzip
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    raw = tmp_path / "market.db.backup-20260102000000-auto-x"
+    raw.write_bytes(b"old")
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(gzip, "open", boom)
+    _m0_fixed_ts(monkeypatch, "20260103000000")
+    with caplog.at_level("ERROR"):
+        new = _backup_sqlite(db, "auto-x", keep=2)
+    assert new.exists() and raw.exists()
+    assert not list(tmp_path.glob("*.gz*"))
+    assert "gzip" in caplog.text
