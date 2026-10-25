@@ -1,0 +1,19 @@
+{
+  "relabel": [
+    {
+      "table": "balance_sheet_quarterly",
+      "symbol": "PGR",
+      "date": "2026-05-31",
+      "row_hash": "586d6ac3c7b57512c5b3940c37dfb971feaa04cadb2de8be93a7b1647c19b63b",
+      "changes": {"date": "2026-06-30"}
+    }
+  ],
+  "remove": [
+    {
+      "table": "balance_sheet_quarterly",
+      "symbol": "PGR",
+      "date": "2026-08-31",
+      "row_hash": "dd5e1a510c47961e19d1683c578152e5c29cac82cc6ba32cf08fc1421c8065f7"
+    }
+  ]
+}
