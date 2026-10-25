@@ -1439,7 +1439,9 @@ def _backup_sqlite(db_path: Path, label: str, keep: int | None = None) -> Path |
     M0 (plan 2026-09-26, issue046): refuses when free disk < logical size
     (page_count*page_size, which includes WAL) x1.5; writes a private temp file,
     quick_checks it, then publishes with os.link (never overwrites). With `keep`,
-    prunes older backups of the same `auto-` label, never the one just made.
+    prunes older backups of the same `auto-` label (never the one just made) and
+    gzips the older kept ones; it also ages out every non-auto backup of this db
+    (gzip after MANUAL_BACKUP_GZIP_DAYS, delete after MANUAL_BACKUP_EXPIRE_DAYS).
     Every backup-phase failure surfaces as RuntimeError (original chained).
     """
     if keep is not None and (not label.startswith(AUTO_BACKUP_PREFIX) or keep < 1):
@@ -1537,21 +1539,44 @@ def _prune_auto_backups(db_path: Path, label: str, final: Path, stamp: str, keep
 
 
 def _gzip_backup(path: Path) -> None:
-    """Replace `path` with `path.gz` (temp file + rename, then drop the raw file and
-    empty sidecars). Skips when a non-empty -wal could still hold pages. Failures
-    are logged and leave the raw backup in place."""
+    """Replace `path` with `path.gz`. The raw file is removed only after the .gz is
+    fsynced and reads back to the same SHA256. Skips when free disk < raw size or a
+    non-empty -wal could still hold pages. Failures are logged and leave the raw
+    backup in place."""
     import gzip
+    import hashlib
     wal = path.with_name(path.name + "-wal")
     if wal.exists() and wal.stat().st_size > 0:
-        logger.error("backup gzip skipped for %s: non-empty -wal", path)
+        logger.warning("backup gzip skipped for %s: non-empty -wal", path)
+        return
+    size = path.stat().st_size
+    if shutil.disk_usage(path.parent).free < size:
+        logger.warning("backup gzip skipped for %s: free disk < %d bytes", path, size)
         return
     target = path.with_name(path.name + ".gz")
     tmp = path.with_name(path.name + ".gz.partial")
     try:
-        with path.open("rb") as src, gzip.open(tmp, "wb", compresslevel=6) as dst:
-            shutil.copyfileobj(src, dst, 1024 * 1024)
+        src_hash = hashlib.sha256()
+        with path.open("rb") as src, tmp.open("wb") as raw_out:
+            with gzip.GzipFile(fileobj=raw_out, mode="wb", compresslevel=6) as dst:
+                for block in iter(lambda: src.read(1024 * 1024), b""):
+                    src_hash.update(block)
+                    dst.write(block)
+            raw_out.flush()
+            os.fsync(raw_out.fileno())
+        check = hashlib.sha256()
+        with gzip.open(tmp, "rb") as f:
+            for block in iter(lambda: f.read(1024 * 1024), b""):
+                check.update(block)
+        if check.hexdigest() != src_hash.hexdigest():
+            raise RuntimeError("gzip read-back sha256 mismatch")
         os.chmod(tmp, 0o644)
         os.replace(tmp, target)
+        dir_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
         path.unlink()
         for suffix in ("-wal", "-shm", "-journal"):
             path.with_name(path.name + suffix).unlink(missing_ok=True)
@@ -1582,7 +1607,7 @@ def _age_manual_backups(db_path: Path, stamp: str) -> None:
         if age_days > MANUAL_BACKUP_EXPIRE_DAYS:
             try:
                 p.unlink()
-                for suffix in ("-wal", "-shm", "-journal"):
+                for suffix in ("-wal", "-shm", "-journal", ".json"):
                     p.with_name(p.name + suffix).unlink(missing_ok=True)
                 logger.info("expired manual backup %s (%.1f days)", p, age_days)
             except OSError as exc:

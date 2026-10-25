@@ -587,7 +587,7 @@ COMMIT;
 ### 9.2 回滚步骤
 
 1. 恢复 backup：
-   - `cp data/market.db.backup-<ts>-phase6 data/market.db`（WAL-safe 拷贝的 backup，直接 cp 回去即可）
+   - `cp data/market.db.backup-<ts>-phase6 data/market.db`（WAL-safe 拷贝的 backup，直接 cp 回去即可）；若只剩 `.gz`（2026-10-25 起较旧备份会自动压缩），先 `gunzip -c data/market.db.backup-<ts>-<label>.gz > data/market.db.restore`，`sqlite3 data/market.db.restore 'pragma quick_check'` 为 ok 后再替换
    - `cp data/fundamental/profiles.json.backup-<ts>-preprofiles data/fundamental/profiles.json`
 2. revert v2 改动：`git revert <commits>` 或 checkout 旧版 `terminal/company_concepts.py` / `terminal/concept_classifier.py` / `scripts/build_company_concept_registry.py`
 3. 晨报回到 14 bucket legacy fallback（验证：跑 `scripts/morning_report.py --dry-run` 看输出）

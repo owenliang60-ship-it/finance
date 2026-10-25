@@ -1669,10 +1669,50 @@ def test_backup_gzip_failure_is_logged_and_keeps_raw(tmp_path, monkeypatch, capl
     raw.write_bytes(b"old")
     def boom(*a, **k):
         raise OSError("disk full")
-    monkeypatch.setattr(gzip, "open", boom)
+    monkeypatch.setattr(gzip, "GzipFile", boom)
     _m0_fixed_ts(monkeypatch, "20260103000000")
     with caplog.at_level("ERROR"):
         new = _backup_sqlite(db, "auto-x", keep=2)
     assert new.exists() and raw.exists()
     assert not list(tmp_path.glob("*.gz*"))
     assert "gzip" in caplog.text
+
+
+def test_manual_expiry_removes_gz_receipt(tmp_path, monkeypatch):
+    from scripts.build_company_concept_registry import _backup_sqlite
+    db = _m0_live_db(tmp_path / "market.db")
+    gz = tmp_path / "market.db.backup-20260901000000-pre-fix.gz"
+    gz.write_bytes(b"x")
+    receipt = tmp_path / "market.db.backup-20260901000000-pre-fix.gz.json"
+    receipt.write_text("{}")
+    _m0_fixed_ts(monkeypatch, "20261001000000")
+    _backup_sqlite(db, "auto-x", keep=2)
+    assert not gz.exists() and not receipt.exists()
+
+
+def test_backup_gzip_readback_mismatch_keeps_raw(tmp_path, monkeypatch, caplog):
+    import hashlib
+    import scripts.build_company_concept_registry as mod
+    raw = tmp_path / "market.db.backup-20260102000000-auto-x"
+    raw.write_bytes(b"old")
+    real = hashlib.sha256
+    calls = {"n": 0}
+    def fake(*a, **k):
+        calls["n"] += 1
+        return real(b"tamper") if calls["n"] == 2 else real(*a, **k)
+    monkeypatch.setattr(hashlib, "sha256", fake)
+    with caplog.at_level("ERROR"):
+        mod._gzip_backup(raw)
+    assert raw.exists() and not list(tmp_path.glob("*.gz*"))
+    assert "mismatch" in caplog.text
+
+
+def test_backup_gzip_skips_when_disk_is_short(tmp_path, monkeypatch):
+    import collections
+    import scripts.build_company_concept_registry as mod
+    raw = tmp_path / "market.db.backup-20260102000000-auto-x"
+    raw.write_bytes(b"old" * 100)
+    usage = collections.namedtuple("usage", "total used free")
+    monkeypatch.setattr(mod.shutil, "disk_usage", lambda _p: usage(1, 1, 10))
+    mod._gzip_backup(raw)
+    assert raw.exists() and not list(tmp_path.glob("*.gz*"))
