@@ -90,7 +90,7 @@ API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`�
 
 完整 cron 见 `ARCHITECTURE.md`。本地 launchd `com.finance.sync-pull` 每天 09:00 auto-pull。
 
-三指数估值已于 2026-10-25 整体删除（代码、表、cron）。ETF 成分快照 `fmp_etf_holdings_snapshot` 保留，只服务晨报 SPY/QQQ/SOXX 宽度。
+三指数估值代码已于 2026-10-25 删除。ETF 成分快照 `fmp_etf_holdings_snapshot` 保留，服务晨报 SPY/QQQ/SOXX 宽度；`fmp_stock_splits`、`historical_market_cap` 仍被景气引擎和广扫使用。云端 PE 专用表（`basket_*`、`fmp_basket_valuation`、`fmp_fund_disclosure_holdings`、`fx_daily`）尚未删除。
 
 ---
 

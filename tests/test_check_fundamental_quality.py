@@ -157,11 +157,16 @@ def _failed_balance(*a, **k):
     return {'income': 'ok', 'balance': 'fetch_failed', 'cashflow': 'ok', 'profile': 'ok', 'ratios': 'ok'}
 
 
+def _ok(*a, **k):
+    return dict.fromkeys(['income', 'balance', 'cashflow', 'profile', 'ratios'], 'ok')
+
+
 def test_repeat_source_failure_is_warn_not_fail(module, monkeypatch):
-    monkeypatch.setattr(module, 'collect_fundamentals_for_symbol', _failed_balance)
-    monkeypatch.setattr(module, 'compute_all_metrics', lambda *a, **k: pytest.fail('computed'))
-    before = audit(verification=['PGR'], issues={'PGR': ['statement_fetch_failed']})
-    after = audit(issues={'PGR': ['statement_fetch_failed', 'retry_timer_active']})
+    calls = iter([_failed_balance(), _ok()])
+    monkeypatch.setattr(module, 'collect_fundamentals_for_symbol', lambda *a, **k: next(calls))
+    monkeypatch.setattr(module, 'compute_all_metrics', lambda *a, **k: {'OK': 8})
+    before = audit(verification=['PGR', 'OK'], issues={'PGR': ['statement_fetch_failed'], 'OK': []})
+    after = audit(issues={'PGR': ['statement_fetch_failed', 'retry_timer_active'], 'OK': []})
     reports = iter([before, after])
     report = module.run_quality(object(), client=object(), repair=True, lock=Lock(),
                                 auditor=lambda *a, **k: next(reports))
@@ -187,10 +192,48 @@ def test_first_source_failure_still_fails(module, monkeypatch):
 def test_known_failure_does_not_mask_a_new_one(module, monkeypatch):
     monkeypatch.setattr(module, 'collect_fundamentals_for_symbol', _failed_balance)
     monkeypatch.setattr(module, 'compute_all_metrics', lambda *a, **k: pytest.fail('computed'))
-    before = audit(verification=['A', 'B'], issues={'A': ['statement_provider_empty'], 'B': []})
-    after = audit(issues={'A': ['statement_provider_empty'], 'B': ['statement_fetch_failed']})
+    before = audit(verification=['A', 'B'], issues={'A': ['statement_fetch_failed'], 'B': []})
+    after = audit(issues={'A': ['statement_fetch_failed'], 'B': ['statement_fetch_failed']})
     reports = iter([before, after])
     report = module.run_quality(object(), client=object(), repair=True, lock=Lock(),
                                 auditor=lambda *a, **k: next(reports))
     assert report['exit_code'] == 1
     assert [e['symbol'] for e in report['known_errors']] == ['A']
+
+
+def test_exception_is_never_a_known_error(module, monkeypatch):
+    def boom(symbol, **k):
+        if symbol == 'A':
+            raise RuntimeError('401 invalid api key')
+        return _ok()
+    monkeypatch.setattr(module, 'collect_fundamentals_for_symbol', boom)
+    monkeypatch.setattr(module, 'compute_all_metrics', lambda *a, **k: {'B': 8})
+    before = audit(verification=['A', 'B'], issues={'A': ['statement_fetch_failed'], 'B': []})
+    reports = iter([before, audit(issues={'A': ['statement_fetch_failed'], 'B': []})])
+    report = module.run_quality(object(), client=object(), repair=True, lock=Lock(),
+                                auditor=lambda *a, **k: next(reports))
+    assert report['exit_code'] == 1
+    assert report['known_errors'] == []
+
+
+def test_different_failure_kind_is_not_known(module, monkeypatch):
+    calls = iter([_failed_balance(), _ok()])
+    monkeypatch.setattr(module, 'collect_fundamentals_for_symbol', lambda *a, **k: next(calls))
+    monkeypatch.setattr(module, 'compute_all_metrics', lambda *a, **k: {'B': 8})
+    before = audit(verification=['A', 'B'], issues={'A': ['statement_provider_empty'], 'B': []})
+    reports = iter([before, audit(issues={'A': ['statement_fetch_failed'], 'B': []})])
+    report = module.run_quality(object(), client=object(), repair=True, lock=Lock(),
+                                auditor=lambda *a, **k: next(reports))
+    assert report['exit_code'] == 1
+
+
+def test_all_requests_failing_is_fail_even_if_each_was_known(module, monkeypatch):
+    monkeypatch.setattr(module, 'collect_fundamentals_for_symbol', _failed_balance)
+    monkeypatch.setattr(module, 'compute_all_metrics', lambda *a, **k: pytest.fail('computed'))
+    before = audit(verification=['A', 'B'],
+                   issues={'A': ['statement_fetch_failed'], 'B': ['statement_fetch_failed']})
+    reports = iter([before, audit(issues={'A': ['statement_fetch_failed'], 'B': ['statement_fetch_failed']})])
+    report = module.run_quality(object(), client=object(), repair=True, lock=Lock(),
+                                auditor=lambda *a, **k: next(reports))
+    assert report['exit_code'] == 1
+    assert len(report['known_errors']) == 2

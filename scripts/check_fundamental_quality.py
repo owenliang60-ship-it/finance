@@ -30,9 +30,22 @@ from src.data.metrics_calculator import compute_all_metrics
 # successful financial statement fetch can be claimed to have resolved.
 _NON_REPAIR_ISSUES = {'quarter_gap', 'missing_quarters', 'event_evidence_unknown'}
 # A collection error is "known" when the pre-repair audit already recorded the same
-# source failure (a previous run hit it). Known errors stay visible as WARN; only
-# new errors, metric failures and still-due repairs fail the run (2026-10-25).
-_KNOWN_SOURCE_ISSUES = {'statement_fetch_failed', 'statement_provider_empty'}
+# kind of source failure for that symbol (a previous run hit it). Known errors stay
+# visible as WARN; new errors, exceptions, metric failures and still-due repairs
+# fail the run. A run where every request failed always fails (outage, bad key).
+_KNOWN_STATUS_ISSUE = {'fetch_failed': 'statement_fetch_failed',
+                       'provider_empty': 'statement_provider_empty'}
+
+
+def _is_known_error(error, before):
+    statuses = error.get('statuses')
+    if error['stage'] != 'collection' or not statuses:
+        return False
+    bad = {v for k, v in statuses.items() if k in ('income', 'balance', 'cashflow') and v != 'ok'}
+    if not bad or any(v not in _KNOWN_STATUS_ISSUE for v in bad):
+        return False
+    prior = set(before['symbols'][error['symbol']]['issues'])
+    return all(_KNOWN_STATUS_ISSUE[v] in prior for v in bad)
 
 
 def _remaining_issues(audit, symbol):
@@ -94,10 +107,10 @@ def run_quality(store, *, repair=False, client=None, lock=None, as_of=None,
         # Persistent issues that the auditor explicitly puts into cooldown remain
         # WARN/unresolved, never truly_resolved. Only errors or still-due work
         # fail this run; a current source with no newer filing is not an API error.
-        known_errors = [e for e in errors if e['stage'] == 'collection'
-                        and set(before['symbols'][e['symbol']]['issues']) & _KNOWN_SOURCE_ISSUES]
+        known_errors = [e for e in errors if _is_known_error(e, before)]
         new_errors = [e for e in errors if e not in known_errors]
-        rc = 1 if new_errors or after['repair_targets'] else 0
+        all_requests_failed = bool(selected) and not requested_ok
+        rc = 1 if new_errors or all_requests_failed or after['repair_targets'] else 0
         return {
             'schema_version': 1, 'mode': 'repair',
             'status': 'FAIL' if rc else after['status'], 'exit_code': rc,

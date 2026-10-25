@@ -205,23 +205,7 @@ def legacy_fer(cohort_db):
     return conn
 
 
-def test_missing_symbol_recovers_only_from_same_snapshot_raw_evidence(legacy_fer):
-    report=mr.build_market_timing_factor_report()
-    qqq=report['breadth_s2_by_universe']['QQQ']
-    assert qqq['current'] == .6
-    assert qqq['symbols_expected'] == 10
-    assert legacy_fer.execute("SELECT symbol FROM fmp_etf_holdings_snapshot WHERE name='Ferrovial NV'").fetchone()[0] is None
-
-
-@pytest.mark.parametrize('change', [
-    "DELETE FROM fmp_fund_disclosure_holdings",
-    "UPDATE fmp_fund_disclosure_holdings SET holding_date='2026-09-19'",
-    "UPDATE fmp_fund_disclosure_holdings SET fetched_at='2026-10-01T00:00:00Z'",
-    "UPDATE fmp_etf_holdings_snapshot SET weight_pct=999 WHERE name='Ferrovial NV'",
-    "INSERT INTO fmp_fund_disclosure_holdings SELECT * FROM fmp_fund_disclosure_holdings",
-])
-def test_untrusted_fer_evidence_keeps_pool_unavailable(legacy_fer, change):
-    legacy_fer.execute(change);legacy_fer.commit()
+def test_cusipless_unrecognized_row_keeps_pool_unavailable(legacy_fer):
     assert mr.build_market_timing_factor_report()['breadth_s2_by_universe']['QQQ']['current'] is None
 
 

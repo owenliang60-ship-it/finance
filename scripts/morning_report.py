@@ -1053,37 +1053,16 @@ def _compute_breadth_s2_status_from_price_frames(
 
 
 def _recover_breadth_member(conn, basket, snapshot, member):
-    """Apply the current normalizer to legacy exclusions, without changing DB rows."""
+    """Apply the current normalizer to legacy exclusions, without changing DB rows.
+
+    Only foreign_listing_unmapped rows are recoverable. The CUSIP-less
+    unrecognized_asset fallback read fmp_fund_disclosure_holdings, retired with
+    index valuation on 2026-10-25; such rows now keep the pool unavailable."""
     from src.data.fmp_forward_ingestion import normalize_holdings, load_basket_configs
 
     reason = member["filter_reason"]
     if reason == "foreign_listing_unmapped":
         raw = {"asset": member["raw_asset"], "name": member.get("name")}
-    elif reason == "unrecognized_asset" and not member["raw_asset"]:
-        # Legacy weekly rows have no CUSIP. Bind the same-day physical payload
-        # to all stored source fields before using its security identifiers.
-        witnesses = conn.execute(
-            "SELECT raw_payload_json, fetched_at, composition_available_date "
-            "FROM fmp_fund_disclosure_holdings WHERE basket_symbol=? "
-            "AND holding_date=? AND source_kind='live' AND raw_symbol='' AND name=?",
-            (basket, snapshot, member.get("name")),
-        ).fetchall()
-        if len(witnesses) != 1:
-            return None
-        witness = witnesses[0]
-        fetched = pd.Timestamp(witness["fetched_at"])
-        if (fetched.tzinfo is None or fetched.tz_convert("UTC").date().isoformat() != snapshot
-                or not witness["composition_available_date"]
-                or witness["composition_available_date"] > snapshot):
-            return None
-        raw = json.loads(witness["raw_payload_json"])
-        if not isinstance(raw, dict):
-            return None
-        fields = {"raw_asset": "asset", "name": "name", "weight_pct": "weightPercentage",
-                  "market_value": "marketValue", "updated_at": "updatedAt"}
-        if any(k not in member or key not in raw or member[k] != raw[key]
-               for k, key in fields.items()):
-            return None
     else:
         return None
     listing, groups, _ = load_basket_configs(PROJECT_ROOT / "config/baskets")

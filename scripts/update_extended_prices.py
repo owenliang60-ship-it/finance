@@ -113,11 +113,12 @@ def main() -> None:
 
     elapsed = time.time() - start
     logger.info(
-        "Done in %.1fs — %d/%d success, %d failed, %d rows upserted",
+        "Done in %.1fs — %d/%d success, %d failed, %d stale skipped, %d rows upserted",
         elapsed,
         result["success"],
         result["total"],
         len(result["failed"]),
+        len(result.get("stale", [])),
         result["rows_inserted"],
     )
     if result["failed"]:

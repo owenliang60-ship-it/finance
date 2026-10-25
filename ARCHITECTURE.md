@@ -153,7 +153,7 @@
 
 | 数据库/文件 | 所有权 | 主要内容 | 同步 |
 |-------------|--------|---------|------|
-| `market.db` | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, security_master, extended_membership, company_profile, fundamental_vintage, coverage_status, fundamental_backfill_runs/jobs, iv_daily, options_snapshots, forward_estimates/metadata, fmp_estimates, fmp_earnings, fmp_etf_holdings_snapshot, fmp_forward_runs, historical_market_cap, fmp_stock_splits, broad_scan_hits, concepts(*), company_concept_tags | pull 到本地 |
+| `market.db` | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, security_master, extended_membership, company_profile, fundamental_vintage, coverage_status, fundamental_backfill_runs/jobs, iv_daily, options_snapshots, forward_estimates/metadata, fmp_estimates, fmp_earnings, fmp_etf_holdings_snapshot, fmp_forward_runs, historical_market_cap, fmp_stock_splits, fx_daily, fmp_fund_disclosure_holdings（PE 遗留，待删）, basket_*（PE 遗留，待删）, fmp_basket_valuation（PE 遗留，待删）, broad_scan_hits, concepts(*), company_concept_tags | pull 到本地 |
 | `reports/concept_registry/reviewed_current.csv` (+ manifest) | 云端独占写入 | concept registry canonical 快照（与 `company_concept_tags` symbol 集锁步；A3 weekly-sync 维护） | pull 到本地（仅 pull） |
 | `company.db` | 本地独占写入 | companies, oprms_ratings, analyses, kill_conditions, holdings, watchlist, transactions, portfolio_cash, option_positions, option_transactions | push 到云端 |
 | `universe.json` | 双端（退役过渡） | 冻结 Core 定义；不再承载默认 base | 双向 merge，Stop G 后归档 |
@@ -215,7 +215,7 @@
 
 > **晨报「0b 成交集中度」context 小节**：市场级 Top50 成交额占比 + 名单换手率的平滑值与 1 年分位 + regime 标签，报告时现算（`market.db` 只读），定位为纯 context 展示、不进策略层；研究依据见 `docs/research/2026-07-24-volume-concentration-signal-stat-study.md`。
 
-> **三指数估值（2026-10-25 已删除）**：代码、表和估值阶段全部移除。`run_forward_data.sh` 只做个股预期/ETF 成分采集与 data-stage verifier；ETF 成分只服务晨报宽度。删除前的表导出在云端 `data/archive/index-pe-tables-20261025.sql.gz`。
+> **三指数估值（2026-10-25 删除代码）**：PE 模块和估值阶段已移除。`run_forward_data.sh` 只做个股预期/ETF 成分采集与 data-stage verifier；ETF 成分服务晨报宽度。PE 专用表仍在云端，尚未导出删除。
 
 ---
 

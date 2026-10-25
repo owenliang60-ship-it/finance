@@ -252,8 +252,10 @@ def get_yfinance_price_targets(store=None) -> List[str]:
 
 # Incremental runs skip symbols whose newest price is older than this; they are
 # almost always delisted and only add "possibly delisted" errors (2026-10-25:
-# 82 of 2938 broad symbols). Backfill and full_backfill still try them.
+# 82 of 2938 broad symbols). Every Monday they are retried from their last price,
+# so a long halt or outage heals within a week. full_backfill still tries them.
 STALE_PRICE_SKIP_DAYS = 30
+STALE_PRICE_RETRY_WEEKDAY = 0  # Monday
 
 
 def update_extended_prices(
@@ -289,10 +291,12 @@ def update_extended_prices(
     backfill_symbols = []
     incremental_symbols = []
     stale_symbols = []
+    retry_symbols = []
     stale_before = None
     if start_date:
         from datetime import date, timedelta
         stale_before = (date.today() - timedelta(days=STALE_PRICE_SKIP_DAYS)).isoformat()
+        retry_stale = date.today().weekday() == STALE_PRICE_RETRY_WEEKDAY
 
     if full_backfill:
         backfill_symbols = symbols
@@ -302,7 +306,10 @@ def update_extended_prices(
             if not rows:
                 backfill_symbols.append(sym)
             elif stale_before and str(rows[0].get("date", "")) < stale_before:
-                stale_symbols.append(sym)
+                if retry_stale:
+                    retry_symbols.append((sym, str(rows[0]["date"])))
+                else:
+                    stale_symbols.append(sym)
             else:
                 incremental_symbols.append(sym)
 
@@ -342,6 +349,15 @@ def update_extended_prices(
         failed = set(incremental_symbols) - set(frames.keys())
         if failed:
             logger.warning("Incremental failed for %d symbols: %s", len(failed), sorted(failed)[:10])
+
+    # Weekly retry of stale symbols from their own last stored date
+    if retry_symbols:
+        retry_start = min(d for _, d in retry_symbols)
+        names = [sym for sym, _ in retry_symbols]
+        logger.info("Retrying %d stale symbols from %s", len(names), retry_start)
+        frames = _yf_download_ohlcv(names, period=None, start=retry_start)
+        all_frames.update(frames)
+        stale_symbols.extend(sorted(set(names) - set(frames.keys())))
 
     # Upsert to market.db
     for sym, df in all_frames.items():

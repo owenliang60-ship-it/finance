@@ -180,8 +180,10 @@ class TestUpdateExtendedPrices:
         )
 
 
-def test_incremental_skips_symbols_with_stale_prices():
+def test_incremental_skips_symbols_with_stale_prices(monkeypatch):
     from datetime import date, timedelta
+    import src.data.extended_price_fetcher as fetcher
+    monkeypatch.setattr(fetcher, "STALE_PRICE_RETRY_WEEKDAY", (date.today().weekday() + 1) % 7)
     old = (date.today() - timedelta(days=60)).isoformat()
     fresh = (date.today() - timedelta(days=2)).isoformat()
     mock_store = MagicMock()
@@ -210,3 +212,26 @@ def test_stale_symbols_are_still_tried_without_start_date():
         result = update_extended_prices(symbols=["WBD"])
     assert dl.call_args.args[0] == ["WBD"]
     assert result["stale"] == []
+
+
+def test_stale_symbols_are_retried_weekly_from_their_last_price(monkeypatch):
+    from datetime import date, timedelta
+    import src.data.extended_price_fetcher as fetcher
+    monkeypatch.setattr(fetcher, "STALE_PRICE_RETRY_WEEKDAY", date.today().weekday())
+    old = (date.today() - timedelta(days=45)).isoformat()
+    fresh = (date.today() - timedelta(days=2)).isoformat()
+    mock_store = MagicMock()
+    mock_store.get_daily_prices.side_effect = lambda sym, limit=0: (
+        [{"date": old}] if sym in ("HALT", "GONE") else [{"date": fresh}])
+    mock_store.upsert_daily_prices_df.return_value = 1
+    calls = []
+    def dl(symbols, period=None, start=None):
+        calls.append((list(symbols), start))
+        return {s: pd.DataFrame({"date": [fresh], "close": [1]}) for s in symbols if s != "GONE"}
+    with patch("src.data.market_store.get_store", return_value=mock_store), \
+         patch("src.data.extended_price_fetcher._yf_download_ohlcv", side_effect=dl):
+        result = update_extended_prices(symbols=["GONE", "HALT", "XOM"], start_date=fresh)
+    assert calls == [(["XOM"], fresh), (["GONE", "HALT"], old)]
+    assert result["success"] == 2
+    assert result["stale"] == ["GONE"]
+    assert result["failed"] == []

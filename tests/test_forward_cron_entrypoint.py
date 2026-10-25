@@ -31,16 +31,14 @@ exit "${{FAKE_YF_RC:-0}}"
     (project / "scripts").mkdir(parents=True)
     (project / "scripts" / "update_fmp_forward.py").write_text(f"""
 import os, sys
-stage = "valuation" if "valuation" in sys.argv else "fmp"
+stage = "fmp"
 with open({str(log)!r}, "a") as f:
     f.write(stage + " args=" + " ".join(sys.argv[1:]) +
             " interpreter=" + os.environ.get("FAKE_INTERPRETER_NAME", "python3") + "\\n")
-sys.exit(int(os.environ.get("FAKE_VALUATION_RC" if stage == "valuation" else "FAKE_FMP_RC", "0")))
+sys.exit(int(os.environ.get("FAKE_FMP_RC", "0")))
 """)
     for filename, stage in (
-        ("backfill_index_pe_history.py", "history"),
         ("verify_fmp_forward.py", "verify_pit"),
-        ("verify_index_pe_history.py", "verify_history"),
     ):
         (project / "scripts" / filename).write_text(f"""
 import os, sys
@@ -124,7 +122,7 @@ def test_script_contains_no_secret_literal():
     assert 'source "$ENV_FILE"' in content
 
 
-def test_archived_valuation_is_absent_from_weekly_pipeline(env_project):
+def test_weekly_pipeline_runs_yfinance_fmp_then_verifier(env_project):
     project, log = env_project
     assert _run(project).returncode == 0
     lines = log.read_text().splitlines()
@@ -147,12 +145,3 @@ def test_each_downstream_failure_propagates_and_stops_pipeline(env_project, stag
     result = _run(project, {"FAKE_" + stage.upper() + "_RC": str(rc)})
     assert result.returncode == rc
     assert log.read_text().splitlines()[-1].startswith(stage + " args=")
-
-
-def test_retired_downstream_failures_do_not_run(env_project):
-    project, log = env_project
-    result = _run(project, {"FAKE_HISTORY_RC":"6", "FAKE_VALUATION_RC":"7",
-                            "FAKE_VERIFY_HISTORY_RC":"9"})
-    assert result.returncode == 0
-    assert [line.split()[0] for line in log.read_text().splitlines()] == [
-        "yfinance", "fmp", "verify_pit"]
