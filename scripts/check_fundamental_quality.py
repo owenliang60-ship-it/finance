@@ -4,7 +4,7 @@
 No message transport and no raw data deletion. --repair uses the shared writer
 lock; --no-lock verifies cron_wrapper's inherited lock. JSON records unresolved
 quality independently from HTTP success. Exit 0=completed without actionable
-errors (may WARN), 1=unresolved data/repair backlog, 2=execution error, 75=busy.
+errors (may WARN; repeat source failures are WARN), 1=new errors or repair backlog, 2=execution error, 75=busy.
 """
 from __future__ import annotations
 
@@ -29,6 +29,10 @@ from src.data.metrics_calculator import compute_all_metrics
 # These describe applicability / missing event evidence, not repairs that a
 # successful financial statement fetch can be claimed to have resolved.
 _NON_REPAIR_ISSUES = {'quarter_gap', 'missing_quarters', 'event_evidence_unknown'}
+# A collection error is "known" when the pre-repair audit already recorded the same
+# source failure (a previous run hit it). Known errors stay visible as WARN; only
+# new errors, metric failures and still-due repairs fail the run (2026-10-25).
+_KNOWN_SOURCE_ISSUES = {'statement_fetch_failed', 'statement_provider_empty'}
 
 
 def _remaining_issues(audit, symbol):
@@ -90,7 +94,10 @@ def run_quality(store, *, repair=False, client=None, lock=None, as_of=None,
         # Persistent issues that the auditor explicitly puts into cooldown remain
         # WARN/unresolved, never truly_resolved. Only errors or still-due work
         # fail this run; a current source with no newer filing is not an API error.
-        rc = 1 if errors or after['repair_targets'] else 0
+        known_errors = [e for e in errors if e['stage'] == 'collection'
+                        and set(before['symbols'][e['symbol']]['issues']) & _KNOWN_SOURCE_ISSUES]
+        new_errors = [e for e in errors if e not in known_errors]
+        rc = 1 if new_errors or after['repair_targets'] else 0
         return {
             'schema_version': 1, 'mode': 'repair',
             'status': 'FAIL' if rc else after['status'], 'exit_code': rc,
@@ -98,6 +105,7 @@ def run_quality(store, *, repair=False, client=None, lock=None, as_of=None,
             'requests_successful': requested_ok, 'truly_resolved': resolved,
             'periodic_verified': periodic_verified, 'unresolved': unresolved,
             'deferred_by_budget': candidates[max_targets:], 'errors': errors,
+            'known_errors': known_errors,
         }
     finally:
         if repair:
@@ -166,7 +174,8 @@ def main(argv=None):
                        repair_due=len(assessment.get('repair_targets', [])),
                        issue_counts={k: len(v) for k, v in assessment.get('issues', {}).items()})
         for field in ('requested', 'requests_successful', 'truly_resolved',
-                      'periodic_verified', 'unresolved', 'deferred_by_budget', 'errors'):
+                      'periodic_verified', 'unresolved', 'deferred_by_budget', 'errors',
+                      'known_errors'):
             if field in report:
                 summary[field + '_count'] = len(report[field])
         print(json.dumps(summary, ensure_ascii=False, sort_keys=True), flush=True)

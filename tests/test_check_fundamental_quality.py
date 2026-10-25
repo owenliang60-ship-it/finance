@@ -151,3 +151,46 @@ def test_real_sqlite_collector_metrics_and_reaudit_resolve_stale_aligned_rows(mo
     assert second['requested']==[]
     assert client.calls==5
     store.close()
+
+
+def _failed_balance(*a, **k):
+    return {'income': 'ok', 'balance': 'fetch_failed', 'cashflow': 'ok', 'profile': 'ok', 'ratios': 'ok'}
+
+
+def test_repeat_source_failure_is_warn_not_fail(module, monkeypatch):
+    monkeypatch.setattr(module, 'collect_fundamentals_for_symbol', _failed_balance)
+    monkeypatch.setattr(module, 'compute_all_metrics', lambda *a, **k: pytest.fail('computed'))
+    before = audit(verification=['PGR'], issues={'PGR': ['statement_fetch_failed']})
+    after = audit(issues={'PGR': ['statement_fetch_failed', 'retry_timer_active']})
+    reports = iter([before, after])
+    report = module.run_quality(object(), client=object(), repair=True, lock=Lock(),
+                                auditor=lambda *a, **k: next(reports))
+    assert report['exit_code'] == 0
+    assert report['status'] == 'WARN'
+    assert [e['symbol'] for e in report['errors']] == ['PGR']
+    assert [e['symbol'] for e in report['known_errors']] == ['PGR']
+    assert report['unresolved'] == ['PGR']
+
+
+def test_first_source_failure_still_fails(module, monkeypatch):
+    monkeypatch.setattr(module, 'collect_fundamentals_for_symbol', _failed_balance)
+    monkeypatch.setattr(module, 'compute_all_metrics', lambda *a, **k: pytest.fail('computed'))
+    before = audit(verification=['PGR'], issues={'PGR': ['earnings_hint']})
+    after = audit(issues={'PGR': ['statement_fetch_failed']})
+    reports = iter([before, after])
+    report = module.run_quality(object(), client=object(), repair=True, lock=Lock(),
+                                auditor=lambda *a, **k: next(reports))
+    assert report['exit_code'] == 1
+    assert report['known_errors'] == []
+
+
+def test_known_failure_does_not_mask_a_new_one(module, monkeypatch):
+    monkeypatch.setattr(module, 'collect_fundamentals_for_symbol', _failed_balance)
+    monkeypatch.setattr(module, 'compute_all_metrics', lambda *a, **k: pytest.fail('computed'))
+    before = audit(verification=['A', 'B'], issues={'A': ['statement_provider_empty'], 'B': []})
+    after = audit(issues={'A': ['statement_provider_empty'], 'B': ['statement_fetch_failed']})
+    reports = iter([before, after])
+    report = module.run_quality(object(), client=object(), repair=True, lock=Lock(),
+                                auditor=lambda *a, **k: next(reports))
+    assert report['exit_code'] == 1
+    assert [e['symbol'] for e in report['known_errors']] == ['A']
