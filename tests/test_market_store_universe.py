@@ -321,3 +321,24 @@ def test_approximate_alias_cannot_revive_stale_canonical(tmp_store):
     _seed_hmcap(tmp_store, "LIVE", "2025-06-30", 12e9)
     out = tmp_store.approximate_members_as_of("2025-06-30", aliases=[_RENAME])
     assert out["symbols"] == ["LIVE"] and "COR" in out["stale_excluded"]
+
+
+def _seed_price(store, symbol, date):
+    conn = store._get_conn()
+    conn.execute("INSERT INTO daily_price (symbol, date, close) VALUES (?, ?, 1.0)", (symbol, date))
+    conn.commit()
+
+
+def test_approximate_ignores_market_cap_before_first_price(tmp_store):
+    # BMNR-type vendor backfill: $10B+ caps years before the stock has any price
+    _seed_hmcap(tmp_store, "BACKFILL", "2024-08-28", 16e9)
+    _seed_price(tmp_store, "BACKFILL", "2025-06-05")
+    _seed_hmcap(tmp_store, "BACKFILL", "2025-06-05", 15e9)
+    assert "BACKFILL" not in tmp_store.approximate_members_as_of("2024-08-31", aliases=[])["symbols"]
+    assert "BACKFILL" in tmp_store.approximate_members_as_of("2025-06-10", aliases=[])["symbols"]
+
+
+def test_approximate_keeps_caps_of_symbol_without_prices(tmp_store):
+    # delisted names often have no daily_price at all; dropping them would add survivorship bias
+    _seed_hmcap(tmp_store, "DELISTED", "2022-03-01", 20e9)
+    assert "DELISTED" in tmp_store.approximate_members_as_of("2022-03-05", aliases=[])["symbols"]

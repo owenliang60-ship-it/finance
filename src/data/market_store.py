@@ -3548,15 +3548,22 @@ class MarketStore:
         window_start = (date.fromisoformat(as_of[:10])
                         - timedelta(days=max_staleness_days)).isoformat()
         conn = self._get_conn()
+        # Market caps dated before a symbol's first price are vendor backfill
+        # (BMNR shows $10B+ from 2021 but listed at ~$30M in 2025); symbols with
+        # no price at all keep every row so delisted names still count.
         qualifying_rows = conn.execute(
             """
+            WITH first_price AS (
+                SELECT symbol, MIN(date) AS first_date FROM daily_price GROUP BY symbol
+            )
             SELECT symbol, date FROM (
-                SELECT symbol, date, market_cap,
+                SELECT h.symbol, h.date, h.market_cap,
                        ROW_NUMBER() OVER (
-                           PARTITION BY symbol ORDER BY date DESC
+                           PARTITION BY h.symbol ORDER BY h.date DESC
                        ) AS rn
-                FROM historical_market_cap
-                WHERE date <= ?
+                FROM historical_market_cap h
+                LEFT JOIN first_price f ON f.symbol = h.symbol
+                WHERE h.date <= ? AND (f.first_date IS NULL OR h.date >= f.first_date)
             )
             WHERE rn = 1 AND market_cap >= ?
             """,

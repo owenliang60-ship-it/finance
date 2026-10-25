@@ -76,9 +76,11 @@ def test_production_config_covers_scanned_duplicates():
         ("ABC", "COR"), ("ANTM", "ELV"), ("BLL", "BALL"), ("FLT", "CPAY"),
         ("PEAK", "DOC"), ("CDAY", "DAY"), ("FI", "FISV"), ("GPS", "GAP"),
         ("MMC", "MRSH"), ("PKI", "RVTY"), ("DISCA", "WBD"), ("DISCK", "WBD"),
-        ("CUK", "CCL"), ("VMRK", "EQR"), ("WRK", "SW"),
+        ("CUK", "CCL"), ("EQR", "VMRK"), ("WRK", "SW"),
     }
     assert set(pairs) == expected
-    assert pairs[("VMRK", "EQR")]["status"] == "pending_verification"
+    # SEC EDGAR: Equity Residential renamed Vivmark Residential (VMRK) on 2026-08-12
+    assert pairs[("EQR", "VMRK")]["kind"] == "rename"
+    assert pairs[("EQR", "VMRK")]["status"] == "verified"
     assert pairs[("WRK", "SW")]["kind"] == "merger"
     assert pairs[("WRK", "SW")]["effective_date"] == "2024-07-05"

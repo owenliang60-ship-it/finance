@@ -1,0 +1,146 @@
+[
+  {
+    "table": "income_quarterly",
+    "symbol": "ACI",
+    "date": "2023-05-23",
+    "row_hash": "27d55c3192ff38c64e01156e02470394a47d52cf934d5f2fd1b067a62abd6f7f",
+    "changes": {
+      "date": "2023-06-17"
+    }
+  },
+  {
+    "table": "income_quarterly",
+    "symbol": "AEM",
+    "date": "2023-01-27",
+    "row_hash": "8f5a572030c45d1240e19823c2b50294d395615219d3a7d51ae0af5dfb3561b7",
+    "changes": {
+      "date": "2022-12-31"
+    }
+  },
+  {
+    "table": "balance_sheet_quarterly",
+    "symbol": "AEM",
+    "date": "2023-01-27",
+    "row_hash": "6577d8f67238de2ccb39eceedb64815d7a571055680b83cf0b31dc311bed378b",
+    "changes": {
+      "date": "2022-12-31"
+    }
+  },
+  {
+    "table": "cash_flow_quarterly",
+    "symbol": "AEM",
+    "date": "2023-01-27",
+    "row_hash": "a7267bbb73aa5c7efff109d41c3243bd6c3e400e45e67d50198020d812348915",
+    "changes": {
+      "date": "2022-12-31"
+    }
+  },
+  {
+    "table": "income_quarterly",
+    "symbol": "AGL",
+    "date": "2021-02-18",
+    "row_hash": "1137c2561119153d8dd30f62459788c76296fbb96fb9cabad6fe57a9d6af796a",
+    "changes": {
+      "date": "2020-12-31"
+    }
+  },
+  {
+    "table": "balance_sheet_quarterly",
+    "symbol": "AGL",
+    "date": "2021-02-18",
+    "row_hash": "28aabfd1351a789ab48eb71a56d56f0390ff65d903cfbb0220db30fa6c3296c1",
+    "changes": {
+      "date": "2020-12-31"
+    }
+  },
+  {
+    "table": "cash_flow_quarterly",
+    "symbol": "AGL",
+    "date": "2021-02-18",
+    "row_hash": "0a12b2ed63ce4fea844f3c75f246068bc3c6a99136829a7d03a42ea86f08ce27",
+    "changes": {
+      "date": "2020-12-31"
+    }
+  },
+  {
+    "table": "income_quarterly",
+    "symbol": "BEP",
+    "date": "2018-08-03",
+    "row_hash": "9dadfe413910763120adc67cb54caf3ae5c55706f4726422e6076f1f8a409c78",
+    "changes": {
+      "date": "2018-06-30"
+    }
+  },
+  {
+    "table": "balance_sheet_quarterly",
+    "symbol": "BEP",
+    "date": "2018-08-03",
+    "row_hash": "b35d60ba8eb6ea25d051aea280bf2a2c1b5269fad46bea63920e480531f63211",
+    "changes": {
+      "date": "2018-06-30"
+    }
+  },
+  {
+    "table": "cash_flow_quarterly",
+    "symbol": "BEP",
+    "date": "2018-08-03",
+    "row_hash": "7dd3cd5ada25f1b5cffef56adc0459bd4f1ce5250d13c27e59f4e21d5e20e935",
+    "changes": {
+      "date": "2018-06-30"
+    }
+  },
+  {
+    "table": "income_quarterly",
+    "symbol": "KR",
+    "date": "2021-04-28",
+    "row_hash": "2d5e42cd3d1ba6a0a336733be733ca3daaff94f05fce08d870829bf24176b8b4",
+    "changes": {
+      "date": "2021-05-22"
+    }
+  },
+  {
+    "table": "income_quarterly",
+    "symbol": "LB",
+    "date": "2024-08-03",
+    "row_hash": "eb0d708355d65f46bc1ec7adea9480a2985d628509629f49dcc6304bcb765ef5",
+    "changes": {
+      "date": "2024-06-30"
+    }
+  },
+  {
+    "table": "income_quarterly",
+    "symbol": "RIO",
+    "date": "2017-05-31",
+    "row_hash": "27a31028e3ac66b9c28149f57fb306456456c66a4b053db87d2acb6c7dd418c6",
+    "changes": {
+      "date": "2017-06-30"
+    }
+  },
+  {
+    "table": "balance_sheet_quarterly",
+    "symbol": "RIO",
+    "date": "2017-05-31",
+    "row_hash": "0d819c76beb87c3e72980864af6f90628b77abec78f853658fc7adf2f0df69f9",
+    "changes": {
+      "date": "2017-06-30"
+    }
+  },
+  {
+    "table": "cash_flow_quarterly",
+    "symbol": "RIO",
+    "date": "2017-05-31",
+    "row_hash": "9ca8413a774c189d64fedc650a6b2d7cc175c6ab8ee100c451557e641c19ffd6",
+    "changes": {
+      "date": "2017-06-30"
+    }
+  },
+  {
+    "table": "income_quarterly",
+    "symbol": "TECK",
+    "date": "2024-10-23",
+    "row_hash": "35c8b571322bcfe370bfc378ab9b345a856ac548bc53a602e574e5731996da23",
+    "changes": {
+      "date": "2024-09-30"
+    }
+  }
+]
