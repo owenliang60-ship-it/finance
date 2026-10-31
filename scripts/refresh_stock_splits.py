@@ -11,10 +11,13 @@
    market_store, so the prosperity code_version is unaffected.
 
 A fetched history must also keep every split date already stored; an empty
-or shrunken reply is refused instead of deleting rows.
+or shrunken reply is refused instead of deleting rows. The one exception is
+REVIEWED_GAPS: for a symbol outside the base, losing exactly the reviewed
+dates saves the fetched rows plus those stored dates, and the symbol is
+reported under "skipped" (with a log warning).
 
-Exit 0 = done, 1 = calendar or per-symbol failure (no partial calendar is
-trusted), 2 = setup error.
+Exit 0 = done (including "skipped"), 1 = calendar or per-symbol failure (no
+partial calendar is trusted), 2 = setup error.
 """
 from __future__ import annotations
 
@@ -34,6 +37,16 @@ WINDOW_DAYS = 7
 # The endpoint returns at most ~848 rows, newest first (measured 2026-10-25);
 # the busiest 7-day window in 2026 had 133. Reaching this means a cut window.
 WINDOW_ROW_LIMIT = 500
+
+# Tracked symbols outside the base whose FMP history is known to drop exactly
+# these stored split dates. For that exact loss the stored rows are kept, the
+# fetched rows (e.g. PARA's new 2026-10-27 split) are added, and the symbol is
+# reported under "skipped". Any other difference, or the symbol being in the
+# base, still fails. This repeats on every refresh while FMP still drops the
+# dates; remove the entry once FMP returns them itself.
+REVIEWED_GAPS = {
+    "PARA": frozenset({"2024-09-19", "2025-07-08", "2026-05-08"}),  # reviewed 2026-10-31
+}
 
 
 def _norm(symbol) -> str:
@@ -56,16 +69,21 @@ def calendar_events(client, start: date, end: date) -> dict:
     return events
 
 
-def _replace(store, client, symbol, required_dates=()):
+def _replace(store, client, symbol, required_dates=(), reviewed_loss=frozenset()):
+    """Save the fetched history; return (rows saved, reviewed dates kept from the store)."""
     rows = client.get_stock_splits(symbol)
     got = {str(r.get("date")) for r in rows}
     missing = set(required_dates) - got
     if missing:
         raise RuntimeError(f"history lacks calendar split(s) {sorted(missing)}")
-    lost = {str(r["date"]) for r in store.get_stock_splits(symbol)} - got
+    stored = store.get_stock_splits(symbol)
+    lost = {str(r["date"]) for r in stored} - got
+    if lost and lost == reviewed_loss:
+        rows = rows + [r for r in stored if str(r["date"]) in lost]
+        return store.replace_stock_splits(symbol, rows), lost
     if lost:
         raise RuntimeError(f"history drops stored split(s) {sorted(lost)}")
-    return store.replace_stock_splits(symbol, rows)
+    return store.replace_stock_splits(symbol, rows), set()
 
 
 def load_checked(path: Path) -> set:
@@ -90,25 +108,30 @@ def refresh_splits(store, client, *, days: int, today: date, base_symbols,
     fetched = {_norm(s) for s in checked}
     tracked = {**base, **known}
     targets = sorted(tracked[k] for k in events if k in tracked)
-    refreshed, failed = {}, {}
+    reviewed = {_norm(s): dates for s, dates in REVIEWED_GAPS.items()}
+    refreshed, failed, skipped = {}, {}, {}
     for symbol in targets:
+        key = _norm(symbol)
+        loss = frozenset() if key in base else reviewed.get(key, frozenset())
         try:
-            refreshed[symbol] = _replace(store, client, symbol, events[_norm(symbol)])
+            refreshed[symbol], kept = _replace(store, client, symbol, events[key], loss)
             checked.add(symbol)
+            if kept:
+                skipped[symbol] = f"history drops reviewed split(s) {sorted(kept)}; stored rows kept"
         except Exception as exc:  # one bad symbol must not hide the others
             failed[symbol] = str(exc)[:200]
     never = sorted(s for k, s in base.items() if k not in known and k not in fetched
                    and s not in refreshed and s not in failed)
     for symbol in never[:max_new]:
         try:
-            refreshed[symbol] = _replace(store, client, symbol)
+            refreshed[symbol], _ = _replace(store, client, symbol)
             checked.add(symbol)
         except Exception as exc:
             failed[symbol] = str(exc)[:200]
     return {"calendar_symbols": len(events), "targets": targets,
             "coverage_fetched": min(len(never), max_new),
             "coverage_remaining": max(len(never) - max_new, 0),
-            "refreshed": refreshed, "failed": failed}
+            "refreshed": refreshed, "failed": failed, "skipped": skipped}
 
 
 def main(argv=None) -> int:
@@ -141,6 +164,8 @@ def main(argv=None) -> int:
     finally:
         save_checked(state, checked)
     print(json.dumps(result, sort_keys=True))
+    for symbol, reason in sorted(result["skipped"].items()):
+        logger.warning("split refresh kept stored rows for %s: %s", symbol, reason)
     return 1 if result["failed"] else 0
 
 

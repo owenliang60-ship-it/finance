@@ -127,3 +127,75 @@ def test_checked_state_round_trips(tmp_path):
     assert mod.load_checked(path) == set()
     mod.save_checked(path, {"B", "A"})
     assert mod.load_checked(path) == {"A", "B"}
+
+
+def _gap_case(tmp_path, monkeypatch, history, stored=("2024-09-19",)):
+    monkeypatch.setattr(mod, "REVIEWED_GAPS", {"OLD": frozenset({"2024-09-19"})})
+    store = MarketStore(tmp_path / "market.db")
+    store.replace_stock_splits("OLD", [_split("OLD", d) for d in stored])
+    client = Client([_split("OLD", "2026-10-20")], {"OLD": [_split("OLD", d) for d in history]})
+    return store, client
+
+
+def test_reviewed_gap_outside_base_keeps_old_rows_and_adds_new_split(tmp_path, monkeypatch):
+    store, client = _gap_case(tmp_path, monkeypatch, ["2026-10-20"])
+    result = _run(store, client, ["B"], max_new=0)
+    assert client.fetched == ["OLD"]                    # still checked every time
+    assert result["failed"] == {}
+    assert "reviewed" in result["skipped"]["OLD"]
+    assert result["refreshed"] == {"OLD": 2}
+    assert [r["date"] for r in store.get_stock_splits("OLD")] == ["2024-09-19", "2026-10-20"]
+    # While FMP still drops the date, each refresh keeps it and reports it again.
+    result = _run(store, client, ["B"], max_new=0)
+    assert "reviewed" in result["skipped"]["OLD"] and result["refreshed"] == {"OLD": 2}
+    assert [r["date"] for r in store.get_stock_splits("OLD")] == ["2024-09-19", "2026-10-20"]
+
+
+def test_reviewed_gap_inside_base_still_fails(tmp_path, monkeypatch):
+    store, client = _gap_case(tmp_path, monkeypatch, ["2026-10-20"])
+    result = _run(store, client, ["OLD"])
+    assert "drops stored" in result["failed"]["OLD"]
+    assert result["skipped"] == {}
+
+
+def test_any_other_loss_still_fails(tmp_path, monkeypatch):
+    store, client = _gap_case(tmp_path, monkeypatch, ["2026-10-20"],
+                              stored=("2022-01-01", "2024-09-19"))
+    result = _run(store, client, ["B"])
+    assert "drops stored" in result["failed"]["OLD"]
+    assert result["skipped"] == {}
+    assert len(store.get_stock_splits("OLD")) == 2
+
+
+def test_fixed_vendor_history_refreshes_normally(tmp_path, monkeypatch):
+    store, client = _gap_case(tmp_path, monkeypatch, ["2024-09-19", "2026-10-20"])
+    result = _run(store, client, ["B"], max_new=0)
+    assert result["refreshed"] == {"OLD": 2}
+    assert result["failed"] == {} and result["skipped"] == {}
+
+
+def test_reviewed_symbol_without_calendar_event_is_not_reported(tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, "REVIEWED_GAPS", {"OLD": frozenset({"2024-09-19"})})
+    store = MarketStore(tmp_path / "market.db")
+    store.replace_stock_splits("OLD", [_split("OLD", "2024-09-19")])
+    client = Client([], {})
+    result = _run(store, client, ["B"], max_new=0)
+    assert client.fetched == []
+    assert result["skipped"] == {}
+
+
+@pytest.mark.parametrize("failed,expected", [({}, 0), ({"A": "boom"}, 1)])
+def test_main_logs_skipped_and_exits_on_failed_only(monkeypatch, tmp_path, caplog, failed, expected):
+    import config.settings
+    import src.data.market_store
+    import src.data.universe_resolver
+    monkeypatch.setattr(src.data.market_store, "get_store", lambda: object())
+    monkeypatch.setattr(src.data.universe_resolver, "current_base_universe", lambda store: ["A"])
+    monkeypatch.setattr(config.settings, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(mod, "refresh_splits", lambda *a, **k: {
+        "calendar_symbols": 1, "targets": ["A", "OLD"], "coverage_fetched": 0,
+        "coverage_remaining": 0, "refreshed": {}, "failed": failed,
+        "skipped": {"OLD": "history drops reviewed split(s)"}})
+    with caplog.at_level("WARNING"):
+        assert mod.main([]) == expected
+    assert any("OLD" in r.getMessage() and r.levelname == "WARNING" for r in caplog.records)
