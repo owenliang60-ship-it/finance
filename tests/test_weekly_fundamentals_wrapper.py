@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import subprocess
+import time
 
 import pytest
 
@@ -39,11 +40,15 @@ exit '''+str(premium_rc))
              FINANCE_RUN_UPDATE_DATA=str(update),FINANCE_PYTHON=str(python),
              FINANCE_QUALITY_CHECKER=str(tmp_path/'check.py'),FINANCE_QUALITY_REPORT=str(report),
              FINANCE_PREMIUM_BUILDER=str(tmp_path/'build.py'))
+    started=time.time()
     result=subprocess.run([str(SCRIPT)],env=env,text=True,capture_output=True)
     assert result.returncode==expected_rc
     lines=trace.read_text().splitlines()
     assert [line.split()[0] for line in lines]==steps
     if 'quality' in steps:
-        assert lines[1]=='quality --repair --no-lock --max-targets 1000 --call-interval 1 --deadline-minutes 100 --report '+str(report)
+        args = lines[1].split()
+        assert args[:8] == ['quality','--repair','--no-lock','--max-targets','1000','--call-interval','1','--deadline-epoch']
+        assert abs(int(args[8]) - (started + 125*60)) <= 5
+        assert args[9:] == ['--report', str(report)]
     if quality_rc==1 and premium_rc==0 and update_rc==0:
         assert 'quality unresolved' in result.stdout

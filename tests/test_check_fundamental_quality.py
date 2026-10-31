@@ -85,17 +85,32 @@ def test_deadline_stops_new_symbols_and_fails_visibly(module, monkeypatch):
         return dict.fromkeys(['income','balance','cashflow','profile','ratios'], 'ok')
     monkeypatch.setattr(module, 'collect_fundamentals_for_symbol', collect)
     monkeypatch.setattr(module, 'compute_all_metrics', lambda *a, **k: {'A':8,'B':8})
-    ticks = iter([0, 0, 5, 11])
+    ticks = iter([0, 5, 11])
     report=module.run_quality(object(), client=object(), repair=True, lock=Lock(), max_targets=10,
                               auditor=lambda *a, **k: next(reports),
-                              deadline_seconds=10, clock=lambda: next(ticks))
+                              deadline_at=10, clock=lambda: next(ticks))
     assert called == ['A','B']
     assert report['requested'] == ['A','B']
     assert report['periodic_verified'] == ['A','B']
-    assert report['deferred_by_budget'] == ['C']
+    assert report['deferred_by_deadline'] == ['C']
+    assert report['deferred_by_budget'] == []
     assert report['deadline_hit'] is True
     assert report['exit_code'] == 1
     assert report['status'] == 'FAIL'
+
+
+def test_deadline_and_budget_deferrals_are_reported_separately(module, monkeypatch):
+    reports = iter([audit([], ['A','B','C','D']), audit(issues=dict.fromkeys('ABCD', []))])
+    monkeypatch.setattr(module, 'collect_fundamentals_for_symbol',
+                        lambda *a, **k: dict.fromkeys(['income','balance','cashflow','profile','ratios'], 'ok'))
+    monkeypatch.setattr(module, 'compute_all_metrics', lambda *a, **k: {'A':8,'B':8})
+    ticks = iter([0, 5, 11])
+    report=module.run_quality(object(), client=object(), repair=True, lock=Lock(), max_targets=3,
+                              auditor=lambda *a, **k: next(reports),
+                              deadline_at=10, clock=lambda: next(ticks))
+    assert report['requested'] == ['A','B']
+    assert report['deferred_by_deadline'] == ['C']
+    assert report['deferred_by_budget'] == ['D']
 
 
 def test_no_deadline_hit_is_reported_false(module, monkeypatch):
@@ -105,8 +120,9 @@ def test_no_deadline_hit_is_reported_false(module, monkeypatch):
     monkeypatch.setattr(module, 'compute_all_metrics', lambda *a, **k: {'A':8})
     report=module.run_quality(object(), client=object(), repair=True, lock=Lock(),
                               auditor=lambda *a, **k: next(reports),
-                              deadline_seconds=10, clock=lambda: 0)
+                              deadline_at=10, clock=lambda: 0)
     assert report['deadline_hit'] is False
+    assert report['deferred_by_deadline'] == []
     assert report['exit_code'] == 0
 
 
@@ -161,8 +177,8 @@ def test_cli_call_interval_sets_repair_client_pacing(module, monkeypatch, argv, 
     assert seen['client'].call_interval == expected
 
 
-@pytest.mark.parametrize('argv,expected', [([], None), (['--deadline-minutes', '100'], 6000.0)])
-def test_cli_deadline_minutes_reaches_run_quality(module, monkeypatch, argv, expected):
+@pytest.mark.parametrize('argv,expected', [([], None), (['--deadline-epoch', '1793427900'], 1793427900.0)])
+def test_cli_deadline_epoch_reaches_run_quality(module, monkeypatch, argv, expected):
     class Store:
         def close(self): pass
     seen = {}
@@ -173,15 +189,16 @@ def test_cli_deadline_minutes_reaches_run_quality(module, monkeypatch, argv, exp
     monkeypatch.setattr(module, 'MarketStore', lambda **k: Store())
     monkeypatch.setattr(module, 'run_quality', run)
     assert module.main(['--repair'] + argv) == 0
-    assert seen['deadline_seconds'] == expected
+    assert seen['deadline_at'] == expected
 
 
 @pytest.mark.parametrize('argv', [['--repair', '--call-interval', '0'], ['--repair', '--call-interval', '-1'],
                                   ['--repair', '--call-interval', 'inf'], ['--repair', '--call-interval', 'nan'],
                                   ['--call-interval', '1'],
-                                  ['--repair', '--deadline-minutes', '0'], ['--repair', '--deadline-minutes', 'inf'],
-                                  ['--deadline-minutes', '100']])
-def test_cli_rejects_invalid_call_interval(module, monkeypatch, argv):
+                                  ['--repair', '--deadline-epoch', '0'], ['--repair', '--deadline-epoch', '-1'],
+                                  ['--repair', '--deadline-epoch', 'inf'], ['--repair', '--deadline-epoch', 'nan'],
+                                  ['--deadline-epoch', '1793427900']])
+def test_cli_rejects_invalid_repair_pacing_flags(module, monkeypatch, argv):
     monkeypatch.setattr(module, 'MarketStore', lambda **k: pytest.fail('store opened'))
     with pytest.raises(SystemExit): module.main(argv)
 

@@ -8,6 +8,9 @@ PYTHON="${FINANCE_PYTHON:-$PROJECT_DIR/.venv/bin/python}"
 PREMIUM_BUILDER="${FINANCE_PREMIUM_BUILDER:-$PROJECT_DIR/scripts/build_premium_pool.py}"
 QUALITY_CHECKER="${FINANCE_QUALITY_CHECKER:-$PROJECT_DIR/scripts/check_fundamental_quality.py}"
 QUALITY_REPORT="${FINANCE_QUALITY_REPORT:-$PROJECT_DIR/data/quality/fundamentals-$(date -u +%Y%m%dT%H%M%SZ).json}"
+# Repair starts no new symbol 125 minutes after this job starts (about 16:05
+# for the 14:00 cron), so market_db_writer is free before the 16:30 prosperity run.
+REPAIR_DEADLINE_EPOCH=$(( $(date +%s) + 125 * 60 ))
 
 if [ ! -x "$PYTHON" ]; then
   PYTHON="python3"
@@ -16,8 +19,8 @@ fi
 cd "$PROJECT_DIR"
 "$RUN_UPDATE_DATA" --fundamental
 quality_rc=0
-"$PYTHON" "$QUALITY_CHECKER" --repair --no-lock --max-targets 1000 --call-interval 1 --deadline-minutes 100 \
-  --report "$QUALITY_REPORT" || quality_rc=$?
+"$PYTHON" "$QUALITY_CHECKER" --repair --no-lock --max-targets 1000 --call-interval 1 \
+  --deadline-epoch "$REPAIR_DEADLINE_EPOCH" --report "$QUALITY_REPORT" || quality_rc=$?
 # Data-quality faults stay visible, but do not redefine the existing 95% gate.
 # Store/lock/execution errors cannot support a valid build and stop here.
 case "$quality_rc" in

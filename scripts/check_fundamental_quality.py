@@ -4,7 +4,8 @@
 No message transport and no raw data deletion. --repair uses the shared writer
 lock; --no-lock verifies cron_wrapper's inherited lock. JSON records unresolved
 quality independently from HTTP success. Exit 0=completed without actionable
-errors (may WARN; repeat source failures are WARN), 1=new errors or repair backlog, 2=execution error, 75=busy.
+errors (may WARN; repeat source failures are WARN), 1=new errors, repair backlog
+or a --deadline-epoch cut (deadline_hit), 2=execution error, 75=busy.
 """
 from __future__ import annotations
 
@@ -56,7 +57,7 @@ def _remaining_issues(audit, symbol):
 
 def run_quality(store, *, repair=False, client=None, lock=None, as_of=None,
                 max_targets=50, refresh_days=30, auditor=None,
-                deadline_seconds=None, clock=time.monotonic):
+                deadline_at=None, clock=time.time):
     if max_targets < 1:
         raise ValueError('max_targets must be positive')
     if repair and lock is None:
@@ -75,17 +76,18 @@ def run_quality(store, *, repair=False, client=None, lock=None, as_of=None,
         repairs = before['repair_targets']
         verification = [s for s in before['verification_targets'] if s not in repairs]
         candidates = repairs + verification
-        selected = candidates[:max_targets]
+        budgeted = candidates[:max_targets]
+        selected = budgeted
         errors = []
         requested_ok = []
         # The step holds market_db_writer, so a slow provider must not keep it
-        # past later Saturday jobs. Unstarted symbols become a visible backlog.
-        started = clock()
+        # past later Saturday jobs. deadline_at is a Unix time; unstarted symbols
+        # become a visible backlog.
         deadline_hit = False
-        for index, symbol in enumerate(selected):
-            if deadline_seconds is not None and clock() - started >= deadline_seconds:
+        for index, symbol in enumerate(budgeted):
+            if deadline_at is not None and clock() >= deadline_at:
                 deadline_hit = True
-                selected = selected[:index]
+                selected = budgeted[:index]
                 break
             try:
                 statuses = collect_fundamentals_for_symbol(
@@ -128,7 +130,8 @@ def run_quality(store, *, repair=False, client=None, lock=None, as_of=None,
             'before': before, 'after': after, 'requested': selected,
             'requests_successful': requested_ok, 'truly_resolved': resolved,
             'periodic_verified': periodic_verified, 'unresolved': unresolved,
-            'deferred_by_budget': candidates[len(selected):], 'errors': errors,
+            'deferred_by_budget': candidates[max_targets:],
+            'deferred_by_deadline': budgeted[len(selected):], 'errors': errors,
             'known_errors': known_errors, 'deadline_hit': deadline_hit,
         }
     finally:
@@ -163,13 +166,13 @@ def main(argv=None):
     parser.add_argument('--refresh-days', type=int, default=30)
     parser.add_argument('--call-interval', type=float,
                         help='seconds between FMP requests for --repair (default: global API_CALL_INTERVAL)')
-    parser.add_argument('--deadline-minutes', type=float,
-                        help='stop starting new --repair symbols after this many minutes (default: none)')
+    parser.add_argument('--deadline-epoch', type=float,
+                        help='Unix time after which --repair starts no new symbol (default: none)')
     parser.add_argument('--report', type=Path)
     args = parser.parse_args(argv)
     if args.max_targets < 1 or args.refresh_days < 1:
         parser.error('max-targets and refresh-days must be positive')
-    for flag, value in (('call-interval', args.call_interval), ('deadline-minutes', args.deadline_minutes)):
+    for flag, value in (('call-interval', args.call_interval), ('deadline-epoch', args.deadline_epoch)):
         if value is None:
             continue
         if not args.repair:
@@ -200,8 +203,7 @@ def main(argv=None):
             client = fmp_client if args.call_interval is None else FMPClient(call_interval=args.call_interval)
         report = run_quality(store, repair=args.repair, client=client, lock=lock,
                              as_of=args.as_of, max_targets=args.max_targets,
-                             refresh_days=args.refresh_days,
-                             deadline_seconds=None if args.deadline_minutes is None else args.deadline_minutes * 60)
+                             refresh_days=args.refresh_days, deadline_at=args.deadline_epoch)
         if args.report:
             write_report(report, args.report)
         assessment = report.get('after', report.get('audit', {}))
@@ -210,8 +212,8 @@ def main(argv=None):
                        repair_due=len(assessment.get('repair_targets', [])),
                        issue_counts={k: len(v) for k, v in assessment.get('issues', {}).items()})
         for field in ('requested', 'requests_successful', 'truly_resolved',
-                      'periodic_verified', 'unresolved', 'deferred_by_budget', 'errors',
-                      'known_errors'):
+                      'periodic_verified', 'unresolved', 'deferred_by_budget',
+                      'deferred_by_deadline', 'errors', 'known_errors'):
             if field in report:
                 summary[field + '_count'] = len(report[field])
         if 'deadline_hit' in report:
