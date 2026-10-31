@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -156,8 +157,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.max_targets < 1 or args.refresh_days < 1:
         parser.error('max-targets and refresh-days must be positive')
-    if args.call_interval is not None and not args.call_interval > 0:
-        parser.error('call-interval must be positive')
+    if args.call_interval is not None:
+        if not args.repair:
+            parser.error('call-interval applies only to --repair')
+        if not (math.isfinite(args.call_interval) and args.call_interval > 0):
+            parser.error('call-interval must be a positive finite number')
     if args.repair and args.as_of:
         try:
             supplied = datetime.fromisoformat(args.as_of.replace('Z', '+00:00'))

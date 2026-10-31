@@ -39,7 +39,7 @@
 
 | 源 | Plan | 用途 | 限流 |
 |----|------|------|------|
-| FMP | 升级 plan | 基本面 + 价格 + 分析师 grades + 内部交易 + news；quarterly forward EPS estimates/earnings/ETF holdings（周频 PIT）；SOXX historical disclosure/FX/splits（一次性 GAAP TTM PE proxy） | 2s（forward 线独立 `FMP_FORWARD_API_CALL_INTERVAL`） |
+| FMP | 升级 plan | 基本面 + 价格 + 分析师 grades + 内部交易 + news；quarterly forward EPS estimates/earnings/ETF holdings（周频 PIT）；SOXX historical disclosure/FX/splits（一次性 GAAP TTM PE proxy） | 2s（forward 线独立 `FMP_FORWARD_API_CALL_INTERVAL`；周六基本面质量修复 1s） |
 | yfinance | Free | Forward estimates（对拍参照线，四周 review 前保留）+ 扩展池 batch 价格 | 1s |
 | FRED | Free | 16 宏观序列 | 120/min |
 | MarketData.app | Starter | 期权链 + IV + PI live quote（**单 IP 绑定云端**） | — |
@@ -85,7 +85,7 @@ API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`�
 | 06:25 | 日频 | git auto-pull |
 | 06:30 | Tue-Sat | 量价 + DV + IV + social 一次性更新 |
 | 08:00 | Tue-Sat | 晨报推送 |
-| 08:30 / 09:00 / 10:00 / 10:45 | Sat | 池刷新 / 扩展池 / 基本面 / 前瞻预期（yfinance → FMP forward 串行，共用 `market_db_writer` 资源锁） |
+| 08:30 / 09:00 / 10:45 / 14:00 | Sat | 池刷新 / 扩展池 / 前瞻预期（yfinance → FMP forward 串行）/ 基本面 + 质量修复（后两项共用 `market_db_writer` 资源锁） |
 | 22:00 / 23:00 SGT | Mon-Fri | Portfolio Intelligence 推送 |
 
 完整 cron 见 `ARCHITECTURE.md`。本地 launchd `com.finance.sync-pull` 每天 09:00 auto-pull。

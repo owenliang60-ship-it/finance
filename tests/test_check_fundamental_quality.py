@@ -128,9 +128,12 @@ def test_cli_call_interval_sets_repair_client_pacing(module, monkeypatch, argv, 
     assert seen['client'].call_interval == expected
 
 
-def test_cli_rejects_nonpositive_call_interval(module, monkeypatch):
+@pytest.mark.parametrize('argv', [['--repair', '--call-interval', '0'], ['--repair', '--call-interval', '-1'],
+                                  ['--repair', '--call-interval', 'inf'], ['--repair', '--call-interval', 'nan'],
+                                  ['--call-interval', '1']])
+def test_cli_rejects_invalid_call_interval(module, monkeypatch, argv):
     monkeypatch.setattr(module, 'MarketStore', lambda **k: pytest.fail('store opened'))
-    with pytest.raises(SystemExit): module.main(['--repair', '--call-interval', '0'])
+    with pytest.raises(SystemExit): module.main(argv)
 
 
 def test_real_sqlite_collector_metrics_and_reaudit_resolve_stale_aligned_rows(module, tmp_path, monkeypatch):
