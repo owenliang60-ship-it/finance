@@ -21,7 +21,7 @@ remain invalid; explicit `next_retry_at` failure timers still compare exact time
 
 `requests_successful` is not `truly_resolved`. If the source still returns an old statement, the report retains the issue, marks it unresolved and uses the seven-day recheck cooldown. Known incomplete history is never rewritten as healthy. The 1000 budget covers every due security each week, including earnings-season waves (2026-10-31: 636 due after the 2026-06-30 quarter crossed 120 days); pool growth beyond the budget creates a visible backlog rather than silently claiming this cadence was met.
 
-The weekly wrapper passes `--call-interval 1`; manual runs without it keep the global 2s interval. Measured from the cloud on 2026-10-31: five datasets take ~5.0s per symbol at 1s (each request ~1s, so a shorter interval gains little), so a full base pass takes roughly 75–80 minutes after the Core update. This is an estimate, not a bound: there is no deadline, and FMP 429s, timeouts or an outage stretch it (each failing dataset can retry for ~90s). The step holds `market_db_writer` throughout, so an overrun makes the 16:30 prosperity run exit75 with an alert; check this log first if that happens. The Core update precedes it, so the weekly job moved away from the old 10:45 collision window.
+The weekly wrapper passes `--call-interval 1`; manual runs without it keep the global 2s interval. Measured from the cloud on 2026-10-31: five datasets take ~5.0s per symbol at 1s (each request ~1s, so a shorter interval gains little), so a full base pass takes roughly 75–80 minutes after the Core update. FMP 429s, timeouts or an outage stretch that (each failing dataset can retry for ~90s), and the step holds `market_db_writer` throughout. The wrapper therefore passes `--deadline-minutes 100`: after 100 minutes no new symbol starts (the symbol in flight finishes), the rest go to `deferred_by_budget`, the report sets `deadline_hit: true` and the run exits1. The deadline bounds only this repair loop, not the Core update before it. With the usual ~26-minute Core update, repair starts ~14:26 and ends by about 16:06–16:15 even if FMP is slow, before the 16:30 prosperity run. Earnings-hint symbols sit early in the queue, so a cut run has already fetched the names most likely to have a new quarter. The Core update precedes it, so the weekly job moved away from the old 10:45 collision window.
 
 ## Commands
 
@@ -45,7 +45,7 @@ The manual command self-locks. Never pass `--no-lock` by hand: that option requi
 Weekly reports: `data/quality/fundamentals-<UTC timestamp>.json`, containing before/after, full universe, per-symbol issues/evidence, selected targets, successes, true resolutions, periodic verifications, unresolved cases, budget deferrals and errors. Report writes are atomic. Logs contain compact counts and the report path.
 
 - **0**: audit/repair completed with no currently actionable repair errors; the report may still be **WARN**, never silently CLEAN, for structural/source-pending/cooldown/unknown-evidence cases.
-- **1**: due repair backlog or collection/metrics errors remain.
+- **1**: due repair backlog or collection/metrics errors remain, or the repair deadline cut the run short (`deadline_hit`).
 - **2**: execution/store/report error; no valid completion claim.
 - **75**: writer lock occupied; no mutation.
 

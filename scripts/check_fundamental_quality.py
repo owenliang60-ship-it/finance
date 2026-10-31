@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -54,7 +55,8 @@ def _remaining_issues(audit, symbol):
 
 
 def run_quality(store, *, repair=False, client=None, lock=None, as_of=None,
-                max_targets=50, refresh_days=30, auditor=None):
+                max_targets=50, refresh_days=30, auditor=None,
+                deadline_seconds=None, clock=time.monotonic):
     if max_targets < 1:
         raise ValueError('max_targets must be positive')
     if repair and lock is None:
@@ -76,7 +78,15 @@ def run_quality(store, *, repair=False, client=None, lock=None, as_of=None,
         selected = candidates[:max_targets]
         errors = []
         requested_ok = []
-        for symbol in selected:
+        # The step holds market_db_writer, so a slow provider must not keep it
+        # past later Saturday jobs. Unstarted symbols become a visible backlog.
+        started = clock()
+        deadline_hit = False
+        for index, symbol in enumerate(selected):
+            if deadline_seconds is not None and clock() - started >= deadline_seconds:
+                deadline_hit = True
+                selected = selected[:index]
+                break
             try:
                 statuses = collect_fundamentals_for_symbol(
                     symbol, store=store, client=client, limit_quarters=8,
@@ -111,15 +121,15 @@ def run_quality(store, *, repair=False, client=None, lock=None, as_of=None,
         known_errors = [e for e in errors if _is_known_error(e, before)]
         new_errors = [e for e in errors if e not in known_errors]
         all_requests_failed = bool(selected) and not requested_ok
-        rc = 1 if new_errors or all_requests_failed or after['repair_targets'] else 0
+        rc = 1 if new_errors or all_requests_failed or after['repair_targets'] or deadline_hit else 0
         return {
             'schema_version': 1, 'mode': 'repair',
             'status': 'FAIL' if rc else after['status'], 'exit_code': rc,
             'before': before, 'after': after, 'requested': selected,
             'requests_successful': requested_ok, 'truly_resolved': resolved,
             'periodic_verified': periodic_verified, 'unresolved': unresolved,
-            'deferred_by_budget': candidates[max_targets:], 'errors': errors,
-            'known_errors': known_errors,
+            'deferred_by_budget': candidates[len(selected):], 'errors': errors,
+            'known_errors': known_errors, 'deadline_hit': deadline_hit,
         }
     finally:
         if repair:
@@ -153,15 +163,19 @@ def main(argv=None):
     parser.add_argument('--refresh-days', type=int, default=30)
     parser.add_argument('--call-interval', type=float,
                         help='seconds between FMP requests for --repair (default: global API_CALL_INTERVAL)')
+    parser.add_argument('--deadline-minutes', type=float,
+                        help='stop starting new --repair symbols after this many minutes (default: none)')
     parser.add_argument('--report', type=Path)
     args = parser.parse_args(argv)
     if args.max_targets < 1 or args.refresh_days < 1:
         parser.error('max-targets and refresh-days must be positive')
-    if args.call_interval is not None:
+    for flag, value in (('call-interval', args.call_interval), ('deadline-minutes', args.deadline_minutes)):
+        if value is None:
+            continue
         if not args.repair:
-            parser.error('call-interval applies only to --repair')
-        if not (math.isfinite(args.call_interval) and args.call_interval > 0):
-            parser.error('call-interval must be a positive finite number')
+            parser.error(flag + ' applies only to --repair')
+        if not (math.isfinite(value) and value > 0):
+            parser.error(flag + ' must be a positive finite number')
     if args.repair and args.as_of:
         try:
             supplied = datetime.fromisoformat(args.as_of.replace('Z', '+00:00'))
@@ -186,7 +200,8 @@ def main(argv=None):
             client = fmp_client if args.call_interval is None else FMPClient(call_interval=args.call_interval)
         report = run_quality(store, repair=args.repair, client=client, lock=lock,
                              as_of=args.as_of, max_targets=args.max_targets,
-                             refresh_days=args.refresh_days)
+                             refresh_days=args.refresh_days,
+                             deadline_seconds=None if args.deadline_minutes is None else args.deadline_minutes * 60)
         if args.report:
             write_report(report, args.report)
         assessment = report.get('after', report.get('audit', {}))
@@ -199,6 +214,8 @@ def main(argv=None):
                       'known_errors'):
             if field in report:
                 summary[field + '_count'] = len(report[field])
+        if 'deadline_hit' in report:
+            summary['deadline_hit'] = report['deadline_hit']
         print(json.dumps(summary, ensure_ascii=False, sort_keys=True), flush=True)
         return report['exit_code']
     except Exception as exc:

@@ -44,6 +44,6 @@ exit '''+str(premium_rc))
     lines=trace.read_text().splitlines()
     assert [line.split()[0] for line in lines]==steps
     if 'quality' in steps:
-        assert lines[1]=='quality --repair --no-lock --max-targets 1000 --call-interval 1 --report '+str(report)
+        assert lines[1]=='quality --repair --no-lock --max-targets 1000 --call-interval 1 --deadline-minutes 100 --report '+str(report)
     if quality_rc==1 and premium_rc==0 and update_rc==0:
         assert 'quality unresolved' in result.stdout
