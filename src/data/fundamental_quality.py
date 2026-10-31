@@ -515,11 +515,14 @@ def _evaluate_symbol(symbol: str, *, store: Any, cov_map: Dict[str, Dict[str, An
     repair_eligible = bool(candidates) and not blocked
     deferred_reasons = _unique(deferred_reasons)
 
-    bucket = 2
+    bucket = 3
     if any(reason in _MISSING_METRICS_REASONS for reason in candidates):
         bucket = 0
     elif any(reason in _FAILED_REASONS for reason in candidates):
         bucket = 1
+    elif ISSUE_EARNINGS_HINT in candidates:
+        # The provider has announced a newer quarter, so a fetch is likely to land it.
+        bucket = 2
     success_sort = (0, oldest_success.timestamp()) if oldest_success else (1, 0.0)
 
     record = {

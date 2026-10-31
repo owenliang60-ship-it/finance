@@ -587,6 +587,26 @@ def test_repair_targets_sort_missing_metrics_then_failed_then_other(run_audit, t
     assert "STALE" in report["repair_targets"]
 
 
+def test_earnings_hint_outranks_other_stale_repairs(run_audit, tmp_store):
+    # STALE has the older successful check, so the old order put it first.
+    _seed_ready(tmp_store, "STALE", latest="2026-03-31", fy=2026, q=1,
+                last_success_at="2026-06-01T00:00:00Z", last_attempt_at="2026-06-01T00:00:00Z")
+    _seed_ready(tmp_store, "HINT", latest="2026-03-31", fy=2026, q=1,
+                last_success_at=SUCCESS_OLD, last_attempt_at=SUCCESS_OLD)
+    _seed_earnings(tmp_store, "HINT", announce_date="2026-08-05",
+                   fiscal_date="2026-06-30", last_updated="2026-08-22T00:00:00Z")
+    _seed_ready(tmp_store, "MISSING", per_table={"income": {"status": "ok"}})
+    tmp_store._get_conn().execute("DELETE FROM income_quarterly WHERE symbol = 'MISSING'")
+    tmp_store._get_conn().commit()
+    _seed_coverage(tmp_store, "MISSING", "income_quarterly", status="ok",
+                   last_attempt_at="2026-06-01T00:00:00Z",
+                   last_success_at="2026-06-01T00:00:00Z")
+    report = run_audit(["HINT", "MISSING", "STALE"], refresh_days=400)
+    assert "earnings_hint" in _record(report, "HINT")["issues"]
+    assert "earnings_hint" not in _record(report, "STALE")["issues"]
+    assert report["repair_targets"] == ["MISSING", "HINT", "STALE"]
+
+
 def test_audit_performs_no_writes(run_audit, tmp_store):
     _seed_ready(tmp_store, "HEALTHY", latest="2026-03-31", fy=2026, q=1,
                 last_success_at=SUCCESS_OLD, last_attempt_at=SUCCESS_OLD)

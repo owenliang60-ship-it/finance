@@ -16,7 +16,7 @@ fi
 cd "$PROJECT_DIR"
 "$RUN_UPDATE_DATA" --fundamental
 quality_rc=0
-"$PYTHON" "$QUALITY_CHECKER" --repair --no-lock --max-targets 200 \
+"$PYTHON" "$QUALITY_CHECKER" --repair --no-lock --max-targets 1000 --call-interval 1 \
   --report "$QUALITY_REPORT" || quality_rc=$?
 # Data-quality faults stay visible, but do not redefine the existing 95% gate.
 # Store/lock/execution errors cannot support a valid build and stop here.

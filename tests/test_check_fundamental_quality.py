@@ -111,6 +111,28 @@ def test_cli_historical_repair_rejected_before_writes(module, monkeypatch):
     with pytest.raises(SystemExit): module.main(['--repair','--as-of',yesterday])
 
 
+@pytest.mark.parametrize('argv,expected', [([], 2), (['--call-interval', '1'], 1.0)])
+def test_cli_call_interval_sets_repair_client_pacing(module, monkeypatch, argv, expected):
+    fmp_client = importlib.import_module('src.data.fmp_client')
+    class Store:
+        def close(self): pass
+    seen = {}
+    def run(store, **kwargs):
+        seen['client'] = kwargs['client']
+        return {'schema_version': 1, 'mode': 'repair', 'status': 'WARN', 'exit_code': 0, 'after': {}}
+    monkeypatch.setattr(module, 'FileLock', Lock)
+    monkeypatch.setattr(module, 'MarketStore', lambda **k: Store())
+    monkeypatch.setattr(module, 'run_quality', run)
+    assert module.main(['--repair'] + argv) == 0
+    assert isinstance(seen['client'], fmp_client.FMPClient)
+    assert seen['client'].call_interval == expected
+
+
+def test_cli_rejects_nonpositive_call_interval(module, monkeypatch):
+    monkeypatch.setattr(module, 'MarketStore', lambda **k: pytest.fail('store opened'))
+    with pytest.raises(SystemExit): module.main(['--repair', '--call-interval', '0'])
+
+
 def test_real_sqlite_collector_metrics_and_reaudit_resolve_stale_aligned_rows(module, tmp_path, monkeypatch):
     from src.data.market_store import MarketStore
     import src.data.fundamental_quality as fq

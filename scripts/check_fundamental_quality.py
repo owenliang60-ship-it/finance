@@ -150,10 +150,14 @@ def main(argv=None):
     parser.add_argument('--as-of')
     parser.add_argument('--max-targets', type=int, default=50)
     parser.add_argument('--refresh-days', type=int, default=30)
+    parser.add_argument('--call-interval', type=float,
+                        help='seconds between FMP requests for --repair (default: global API_CALL_INTERVAL)')
     parser.add_argument('--report', type=Path)
     args = parser.parse_args(argv)
     if args.max_targets < 1 or args.refresh_days < 1:
         parser.error('max-targets and refresh-days must be positive')
+    if args.call_interval is not None and not args.call_interval > 0:
+        parser.error('call-interval must be positive')
     if args.repair and args.as_of:
         try:
             supplied = datetime.fromisoformat(args.as_of.replace('Z', '+00:00'))
@@ -174,8 +178,8 @@ def main(argv=None):
         store = MarketStore(read_only=not args.repair)
         client = None
         if args.repair:
-            from src.data.fmp_client import fmp_client
-            client = fmp_client
+            from src.data.fmp_client import FMPClient, fmp_client
+            client = fmp_client if args.call_interval is None else FMPClient(call_interval=args.call_interval)
         report = run_quality(store, repair=args.repair, client=client, lock=lock,
                              as_of=args.as_of, max_targets=args.max_targets,
                              refresh_days=args.refresh_days)

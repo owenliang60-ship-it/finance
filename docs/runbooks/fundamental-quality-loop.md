@@ -1,6 +1,6 @@
 # Fundamental quality — weekly audit, repair and verification
 
-Runs every Saturday **14:00 Asia/Shanghai**, inside `finance_fundamental`, immediately before Premium. This replaces the earlier narrow Premium preparer in the weekly wrapper. Daily jobs and the 10:45 forward job are unchanged. Boss chose weekly/14:00/200 on 2026-09-19.
+Runs every Saturday **14:00 Asia/Shanghai**, inside `finance_fundamental`, immediately before Premium. This replaces the earlier narrow Premium preparer in the weekly wrapper. Daily jobs and the 10:45 forward job are unchanged. Boss chose weekly/14:00/200 on 2026-09-19; on 2026-10-31 Boss raised the budget to 1000 (above the ~900-symbol base) at a 1s request interval.
 
 ## What it checks
 
@@ -10,7 +10,7 @@ Quarter gaps, short history and absent/stale earnings evidence remain explicit w
 
 ## Repair and rolling verification
 
-Repair candidates take priority. Spare budget is filled with the oldest successfully checked securities (at least7 days since all required sources were checked), up to **200 total symbols per run**, including periodic checks. Source requests use the existing five-dataset collector, eight-quarter limit and vintage history; metrics use the existing calculator. The same auditor reruns afterwards against a consistent SQLite read snapshot.
+Repair candidates take priority, in this order: missing statements/metrics, due source failures, cached earnings hints (the provider announced a newer quarter), then other repairs by oldest successful check. Spare budget is filled with the oldest successfully checked securities (at least7 days since all required sources were checked), up to **1000 total symbols per run**, including periodic checks. Source requests use the existing five-dataset collector, eight-quarter limit and vintage history; metrics use the existing calculator. The same auditor reruns afterwards against a consistent SQLite read snapshot.
 
 The seven-day successful-check cooldown counts **UTC calendar dates**, for both
 repair eligibility and periodic verification. A check on the previous Saturday
@@ -19,9 +19,9 @@ later in the day. This prevents selecting around a still-active cooldown and
 then failing the same batch when it expires during collection. Future timestamps
 remain invalid; explicit `next_retry_at` failure timers still compare exact times.
 
-`requests_successful` is not `truly_resolved`. If the source still returns an old statement, the report retains the issue, marks it unresolved and uses the seven-day recheck cooldown. Known incomplete history is never rewritten as healthy. At roughly919 base securities and a weekly Core refresh, this budget supports about a month of rolling checks; heavier repair demand or pool growth creates a visible backlog rather than silently claiming this cadence was met.
+`requests_successful` is not `truly_resolved`. If the source still returns an old statement, the report retains the issue, marks it unresolved and uses the seven-day recheck cooldown. Known incomplete history is never rewritten as healthy. The 1000 budget covers every due security each week, including earnings-season waves (2026-10-31: 636 due after the 2026-06-30 quarter crossed 120 days); pool growth beyond the budget creates a visible backlog rather than silently claiming this cadence was met.
 
-Worst-case additional request budget:200 ×5 datasets ×2s ≈33 minutes, excluding retries/latency. The Core update precedes it, so the weekly job moved away from the old 10:45 collision window.
+The weekly wrapper passes `--call-interval 1`; manual runs without it keep the global 2s interval. Measured from the cloud on 2026-10-31: five datasets take ~5.0s per symbol at 1s (each request ~1s, so a shorter interval gains little). A full ~900-symbol pass is ~75–82 minutes after the ~26-minute Core update, finishing around 15:50, ahead of the 16:30 prosperity run. If it ever overruns, prosperity exits75 on the shared writer lock and the 20:30 run retries. The Core update precedes it, so the weekly job moved away from the old 10:45 collision window.
 
 ## Commands
 
