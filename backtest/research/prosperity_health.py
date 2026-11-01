@@ -360,3 +360,65 @@ def ic_summary(ics: Sequence[float], *, lag: int) -> dict:
 
 def monotonic(means: Sequence[Optional[float]]) -> bool:
     return all(m is not None for m in means) and all(a > b for a, b in zip(means, means[1:]))
+
+
+# ---------------------------------------------------------------------------
+# Structure: concentration, turnover, failure cases, short-history factors
+# ---------------------------------------------------------------------------
+
+UNKNOWN_SECTOR = '未知'
+
+
+def concentration(view: BoardView, symbols: Sequence[str]) -> dict:
+    sectors = {r.symbol: r.sector or UNKNOWN_SECTOR for r in view.rows}
+    counts: Dict[str, int] = {}
+    for s in symbols:
+        counts[sectors.get(s, UNKNOWN_SECTOR)] = counts.get(sectors.get(s, UNKNOWN_SECTOR), 0) + 1
+    if not counts:
+        return {'top_sector': None, 'max_share': None, 'hhi': None}
+    n = len(symbols)
+    top = min(counts, key=lambda k: (-counts[k], k))
+    return {'top_sector': top, 'max_share': counts[top] / n, 'hhi': sum((c / n) ** 2 for c in counts.values())}
+
+
+def turnover(previous: Sequence[str], current: Sequence[str]) -> Optional[float]:
+    if not previous:
+        return None
+    return 1 - len(set(previous) & set(current)) / len(set(previous))
+
+
+def failure_cases(pairs: Sequence[Tuple[BoardView, PeriodResult]], *, limit: int = 10) -> List[dict]:
+    cases = []
+    for v, res in pairs:
+        if res.status != 'complete':
+            continue
+        for r in v.rows:
+            if r.status != 'ranked' or r.grade != 'STRICT':
+                continue
+            ret = res.returns.get(r.symbol, (None, ''))[0]
+            if ret is None:
+                continue
+            cases.append({'as_of': v.as_of, 'symbol': r.symbol, 'sector': r.sector, 'return': ret,
+                          'excess': ret - res.baseline, 'score': r.score, 'rank': r.rank,
+                          'badges': list(r.badges), 'family_scores': dict(r.family_scores),
+                          'breakdown': {f: dict(x) for f, x in r.breakdown.items()}})
+    return sorted(cases, key=lambda c: (c['return'], c['as_of'], c['symbol']))[:limit]
+
+
+def short_history(views: Sequence[BoardView], scheme) -> List[dict]:
+    from terminal.prosperity.schemes import FACTOR_SPECS
+    factors = [f for f, _ in scheme.weights if FACTOR_SPECS[f].family == 'expectation']
+    if not factors or not views:
+        return [{'factor': f, 'periods': 0, 'latest_coverage': None, 'verdict': 'UNKNOWN'} for f in factors]
+    latest = max(views, key=lambda v: v.as_of)
+
+    def has_z(r: Row, f: str) -> bool:
+        return (r.breakdown.get(f) or {}).get('z') is not None
+
+    out = []
+    for f in factors:
+        periods = sum(any(has_z(r, f) for r in ranked_rows(v)) for v in views)
+        ranked = ranked_rows(latest)
+        cov = sum(has_z(r, f) for r in ranked) / len(ranked) if ranked else None
+        out.append({'factor': f, 'periods': periods, 'latest_coverage': cov, 'verdict': 'UNKNOWN'})
+    return out

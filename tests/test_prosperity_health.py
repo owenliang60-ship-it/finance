@@ -228,3 +228,44 @@ def test_constant_returns_give_no_ic():
         warnings.simplefilter('error')
         out = evaluate_board(view([row(f'R{i}', i + 1) for i in range(12)]), book(closes), horizon=1)
     assert out.ic is None and out.spread == pytest.approx(0.0)
+
+
+def test_top_concentration_and_turnover():
+    from backtest.research.prosperity_health import concentration, top_symbols, turnover
+    rows = [row(f'S{i}', i + 1, sector='Energy' if i < 30 else 'Technology') for i in range(50)]
+    rows[5] = row('S5', 6, grade='BELOW')
+    top = top_symbols(view(rows))
+    assert len(top) == 40 and 'S5' not in top and top[-1] == 'S40'
+    c = concentration(view(rows), top)
+    assert c == pytest.approx({'top_sector': 'Energy', 'max_share': 29 / 40,
+                               'hhi': (29 / 40) ** 2 + (11 / 40) ** 2})
+    assert turnover(top, top[10:]) == pytest.approx(10 / 40)
+
+
+def test_failures_are_worst_strict_three_quarter_returns_with_breakdown():
+    from backtest.research.prosperity_health import evaluate_board, failure_cases
+    s = CAL.index('2026-09-28')
+    br = {'revenue_accel': {'raw': 0.3, 'z': 1.2, 'weight': 0.22, 'contribution': 0.264}}
+    rows = [row('W', 1, grade='STRICT', breakdown=br), row('F', 2, grade='FULL'), row('G', 3, grade='STRICT')]
+    rows += [row(f'R{i}', i + 4) for i in range(7)]
+    rets = {'W': -0.30, 'F': -0.40, 'G': 0.10, **{f'R{i}': 0.0 for i in range(7)}}
+    v = view(rows)
+    res = evaluate_board(v, book({k: stepped(x, s) for k, x in rets.items()}), horizon=3)
+    out = failure_cases([(v, res)], limit=10)
+    assert [f['symbol'] for f in out] == ['W', 'G']
+    assert out[0]['return'] == pytest.approx(-0.30) and out[0]['breakdown'] == br
+    assert out[0]['as_of'] == '2026-09-26' and out[0]['excess'] == pytest.approx(-0.30 - res.baseline)
+
+
+def test_expectation_factors_are_unknown_with_period_count():
+    from backtest.research.prosperity_health import short_history
+    from terminal.prosperity.schemes import SCHEMES
+    z = {'surprise': {'raw': 0.1, 'z': 0.5, 'weight': 0.05, 'contribution': 0.025},
+         'revision': {'raw': None, 'z': None, 'weight': None, 'contribution': None}}
+    nz = {'surprise': {'raw': None, 'z': None, 'weight': None, 'contribution': None}}
+    old = view([row('A', 1, breakdown=z), row('B', 2, breakdown=nz)], as_of='2026-05-30')
+    new = view([row('A', 1, breakdown=nz), row('B', 2, breakdown=nz)], as_of='2026-08-29')
+    assert short_history([old, new], SCHEMES['F1']) == [
+        {'factor': 'surprise', 'periods': 1, 'latest_coverage': 0.0, 'verdict': 'UNKNOWN'},
+        {'factor': 'revision', 'periods': 0, 'latest_coverage': 0.0, 'verdict': 'UNKNOWN'}]
+    assert short_history([old, new], SCHEMES['F0']) == []
