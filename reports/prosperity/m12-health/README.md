@@ -60,11 +60,14 @@ R=reports/prosperity/m12-health
 
 另记一处限制：早期几期 Premium 只数很少（2021-09-04 期 4 只，基本面可评估率 5.5%：点时截断后多数公司不足 5 个季度）。2021 年两期不在共同有效期内（动量缺失）；但 2022-03-19、2022-06-04、2022-09-03 三期只有 5–7 只，它们在共同有效期内，Premium 对照这几期的值波动大。报告第 3 章逐期列出 Premium 只数与覆盖率。
 
-## A9 · 回归
+## A9 · 回归 — 通过
 
 - `code_version()` = `13e5f9d5183f1b8e`，未变。
-- 景气全套：`pytest tests/test_prosperity_*.py tests/test_run_prosperity_wrapper.py -q` → 见下方最终记录。
-- 全量：见 `baseline-pytest.txt`、`branch-pytest.txt`、`failure-diff.txt`。
+- 景气全套：`pytest tests/test_prosperity_*.py tests/test_run_prosperity_wrapper.py -q` → **521 passed**（M10 时 492；+29 为 M12 新测试）。
+- 全量：同一解释器（`.venv` Python 3.13）、同一命令 `pytest -q -rfE --tb=no -p no:cacheprovider`。
+  基线 = main `4feaa8d2` 的 detached worktree：`baseline-pytest.txt` 12 failed / 4242 passed / 4 skipped。
+  本分支 `23427bae`：`branch-pytest.txt` 12 failed / 4271 passed / 4 skipped。
+  `failure-diff.txt`：**新增 0，消失 0**，共有 12 个。与 M10 验收列出的 12 个相同：7 个 `test_breadth_buy_quality`（裸 worktree 无研究数据文件）+ 5 个 `test_morning_report`（概念注册表依赖 live data），与 M12 无关。
 
 ## F1 结果摘要（供阅读，不作上线门槛）
 

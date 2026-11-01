@@ -1,0 +1,18 @@
+baseline: main 4feaa8d2 (detached worktree), branch: 23427bae; same interpreter .venv Python 3.13; pytest -q -rfE --tb=no -p no:cacheprovider
+baseline: 12 failed, 4242 passed, 4 skipped, 17 warnings in 318.63s (0:05:18)
+branch:   12 failed, 4271 passed, 4 skipped, 17 warnings in 286.78s (0:04:46)
+new failures: 0
+gone failures: 0
+common failures:
+FAILED tests/test_breadth_buy_quality.py::test_all_days_baseline_shape
+FAILED tests/test_breadth_buy_quality.py::test_events_csv_columns_and_rows
+FAILED tests/test_breadth_buy_quality.py::test_load_event_dates_s1_active_snapshot
+FAILED tests/test_breadth_buy_quality.py::test_load_event_dates_s1_with_delisted_snapshot
+FAILED tests/test_breadth_buy_quality.py::test_load_event_dates_s2_active_snapshot
+FAILED tests/test_breadth_buy_quality.py::test_load_event_dates_s2_with_delisted_snapshot
+FAILED tests/test_breadth_buy_quality.py::test_load_target_closes_respects_sample_window
+FAILED tests/test_morning_report.py::TestFormatSectionD::test_dv_section_is_flat_with_l2_column_in_rank_order
+FAILED tests/test_morning_report.py::TestFormatSectionD::test_missing_industry_uses_bucket_not_unclassified
+FAILED tests/test_morning_report.py::TestLayeredSections::test_dv_layered_section
+FAILED tests/test_morning_report.py::TestLayeredSections::test_layered_dv_groups_mu_under_l2_memory_chip_not_legacy_semi
+FAILED tests/test_morning_report.py::TestLayeredSections::test_rows_by_layer_and_bucket_no_silent_drop_for_unregistered

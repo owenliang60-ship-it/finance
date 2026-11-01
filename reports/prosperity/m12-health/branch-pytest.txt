@@ -1,0 +1,111 @@
+........................................................................ [  1%]
+........................................................................ [  3%]
+........................................................................ [  5%]
+........................................................................ [  6%]
+........................................................................ [  8%]
+........................................................................ [ 10%]
+........FFFFFFF......................................................... [ 11%]
+........................................................................ [ 13%]
+........................................................................ [ 15%]
+........................................................................ [ 16%]
+........................................................................ [ 18%]
+........................................................................ [ 20%]
+........................................................................ [ 21%]
+........................................................................ [ 23%]
+........................................................................ [ 25%]
+........................................................................ [ 26%]
+........................................................................ [ 28%]
+........................................................................ [ 30%]
+........................................................................ [ 31%]
+........................................................................ [ 33%]
+........................................................................ [ 35%]
+........................................................................ [ 36%]
+........................................................................ [ 38%]
+........................................................................ [ 40%]
+........................................................................ [ 41%]
+........................................................................ [ 43%]
+........................................................................ [ 45%]
+........................................................................ [ 47%]
+........................................................................ [ 48%]
+........................................................................ [ 50%]
+.................................................sss.................... [ 52%]
+........................................................................ [ 53%]
+........................................................................ [ 55%]
+........................................................................ [ 57%]
+........................................................................ [ 58%]
+........................................................................ [ 60%]
+...FF......F.......F..F................................................. [ 62%]
+......................................................s................. [ 63%]
+........................................................................ [ 65%]
+........................................................................ [ 67%]
+........................................................................ [ 68%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 73%]
+........................................................................ [ 75%]
+........................................................................ [ 77%]
+........................................................................ [ 78%]
+........................................................................ [ 80%]
+........................................................................ [ 82%]
+........................................................................ [ 83%]
+........................................................................ [ 85%]
+........................................................................ [ 87%]
+........................................................................ [ 89%]
+........................................................................ [ 90%]
+........................................................................ [ 92%]
+........................................................................ [ 94%]
+........................................................................ [ 95%]
+........................................................................ [ 97%]
+........................................................................ [ 99%]
+.......................................                                  [100%]
+=============================== warnings summary ===============================
+tests/pipeline/test_signal_engine.py::test_rank_pct_and_zscore_are_cross_sectional_per_date
+tests/pipeline/test_signal_engine.py::test_rank_pct_and_zscore_are_cross_sectional_per_date
+tests/pipeline/test_signal_engine.py::test_weighted_sum_and_rank_average_combo
+tests/pipeline/test_signal_engine.py::test_weighted_sum_and_rank_average_combo
+tests/pipeline/test_signal_engine.py::test_builtin_factors_produce_scores
+  /Users/owen/CC workspace/Finance/.worktrees/prosperity-m12/src/indicators/rs_rating.py:128: RuntimeWarning: invalid value encountered in cast
+    result_df["rs_rank"] = np.clip(np.floor(pct * 100).astype(int), 0, 99)
+
+tests/test_extended_universe_manager.py::TestGetExtendedOnlySymbols::test_excludes_pool_symbols
+  /Users/owen/CC workspace/Finance/.worktrees/prosperity-m12/tests/test_extended_universe_manager.py:191: DeprecationWarning: get_extended_only_symbols() is deprecated — use src.data.extended_price_fetcher.get_yfinance_price_targets(); removed at Stop G phase 2
+    result = get_extended_only_symbols()
+
+tests/test_extended_universe_manager.py::TestGetExtendedOnlySymbols::test_returns_all_when_pool_empty
+  /Users/owen/CC workspace/Finance/.worktrees/prosperity-m12/tests/test_extended_universe_manager.py:206: DeprecationWarning: get_extended_only_symbols() is deprecated — use src.data.extended_price_fetcher.get_yfinance_price_targets(); removed at Stop G phase 2
+    result = get_extended_only_symbols()
+
+tests/test_market_store_concepts.py::test_symbol_concept_edges_fk_concept_required
+tests/test_market_store_concepts.py::test_upsert_company_concepts_with_theme_ids
+tests/test_market_store_concepts.py::test_upsert_company_concepts_allows_null_secondary_tertiary
+tests/test_market_store_concepts.py::test_upsert_company_concepts_update_replaces_row
+tests/test_market_store_concepts.py::test_get_company_concepts_skips_missing_symbols
+tests/test_market_store_concepts.py::test_get_company_concept_coverage
+tests/test_market_store_concepts.py::test_upsert_rejects_theme_ids_pointing_to_non_level3
+tests/test_market_store_concepts.py::test_upsert_rejects_theme_ids_pointing_to_unknown_concept
+  /Users/owen/CC workspace/Finance/.worktrees/prosperity-m12/tests/test_market_store_concepts.py:25: DeprecationWarning: upsert_concept_themes is deprecated in v2 — themes live in concepts table as level=3 and are referenced via company_concept_tags.theme_ids
+    store.upsert_concept_themes([
+
+tests/test_market_store_concepts.py::test_upsert_concept_themes
+  /Users/owen/CC workspace/Finance/.worktrees/prosperity-m12/tests/test_market_store_concepts.py:122: DeprecationWarning: upsert_concept_themes is deprecated in v2 — themes live in concepts table as level=3 and are referenced via company_concept_tags.theme_ids
+    assert store.upsert_concept_themes([
+
+tests/test_market_store_concepts.py::test_rebuild_concept_tree_atomic_with_fk_themes_present
+  /Users/owen/CC workspace/Finance/.worktrees/prosperity-m12/tests/test_market_store_concepts.py:293: DeprecationWarning: upsert_concept_themes is deprecated in v2 — themes live in concepts table as level=3 and are referenced via company_concept_tags.theme_ids
+    store.upsert_concept_themes([{"theme_id": "hbm", "label": "HBM",
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_breadth_buy_quality.py::test_load_event_dates_s1_active_snapshot
+FAILED tests/test_breadth_buy_quality.py::test_load_event_dates_s1_with_delisted_snapshot
+FAILED tests/test_breadth_buy_quality.py::test_load_event_dates_s2_active_snapshot
+FAILED tests/test_breadth_buy_quality.py::test_load_event_dates_s2_with_delisted_snapshot
+FAILED tests/test_breadth_buy_quality.py::test_events_csv_columns_and_rows - ...
+FAILED tests/test_breadth_buy_quality.py::test_load_target_closes_respects_sample_window
+FAILED tests/test_breadth_buy_quality.py::test_all_days_baseline_shape - Asse...
+FAILED tests/test_morning_report.py::TestFormatSectionD::test_missing_industry_uses_bucket_not_unclassified
+FAILED tests/test_morning_report.py::TestFormatSectionD::test_dv_section_is_flat_with_l2_column_in_rank_order
+FAILED tests/test_morning_report.py::TestLayeredSections::test_dv_layered_section
+FAILED tests/test_morning_report.py::TestLayeredSections::test_layered_dv_groups_mu_under_l2_memory_chip_not_legacy_semi
+FAILED tests/test_morning_report.py::TestLayeredSections::test_rows_by_layer_and_bucket_no_silent_drop_for_unregistered
+12 failed, 4271 passed, 4 skipped, 17 warnings in 286.78s (0:04:46)
