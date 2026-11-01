@@ -3,13 +3,16 @@
 
 Read-only on both databases; writes only to --out. Plan:
 docs/plans/2026-11-01-prosperity-m12-health-report.md. Exit codes: 0 written; 3 a database is
-missing or a requested scheme has no quarter-end board for the code version (nothing written);
-4 invalid arguments (unknown scheme, --out is a non-directory).
+missing or a scheme has no quarter-end board for the code version (nothing written);
+4 invalid arguments (unknown scheme, --out is a non-directory); 6 an input database changed
+while it was read (nothing written).
+
+The BH family always covers all four registered schemes, whatever --schemes selects, so a
+subset run reports the same p_bh as the full run.
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 import time
@@ -24,20 +27,15 @@ if str(PROJECT_ROOT) not in sys.path:
 from backtest.research.prosperity_health import (PriceBook, apply_bh, board_view,  # noqa: E402
                                                  load_fundamentals, scheme_report)
 from backtest.research.prosperity_health_html import render  # noqa: E402
+from src.data.prosperity_backup import _sha  # noqa: E402
 from src.data.market_store import MarketStore  # noqa: E402
+from src.data.prosperity_storage import BoardKey  # noqa: E402
 from src.data.prosperity_store import ProsperityStore  # noqa: E402
 from terminal.prosperity.schemes import SCHEMES, scheme_hash  # noqa: E402
 from terminal.prosperity.version import code_version  # noqa: E402
 
 DEFAULT_SCHEMES = ('F1', 'F1-rank', 'F1-exfin', 'F0')
-
-
-def _sha(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, 'rb') as f:
-        for chunk in iter(lambda: f.read(1 << 20), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
+BH_SCHEMES = DEFAULT_SCHEMES                 # fixed BH family: every scheme, every run (review #4)
 
 
 def _json_default(value):
@@ -69,22 +67,22 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 3
     version = args.code_version or code_version()
     started = time.monotonic()
+    hashes = {'db': _sha(args.db), 'market': _sha(args.market_db)}       # before any read (review #7)
+    computed = list(dict.fromkeys([*BH_SCHEMES, *schemes]))
 
     with ProsperityStore(args.db, read_only=True) as store:
         boards, weekly = {}, {}
-        for sid in schemes:
+        for sid in computed:
             h = scheme_hash(SCHEMES[sid])
             keys = store.list_boards(scheme_hash=h, code_version=version, board_type='quarter_final')
             if not keys:
                 print(f'{sid}: no quarter_final board for code_version {version}', file=sys.stderr)
                 return 3
             boards[sid] = [board_view(store.get_board(k)) for k in keys]
-            live = []
-            for k in store.list_boards(scheme_hash=h, code_version=version, board_type='weekly'):
-                v = board_view(store.get_board(k))
-                if v.mode == 'live':
-                    live.append(v)
-            weekly[sid] = live
+            live = store._conn.execute(                                  # header only: skip replay boards
+                "SELECT as_of FROM board WHERE board_type='weekly' AND mode='live' AND scheme_hash=? "
+                'AND code_version=? ORDER BY as_of', (h, version)).fetchall()
+            weekly[sid] = [board_view(store.get_board(BoardKey('weekly', r[0], h, version))) for r in live]
 
     symbols = {r.symbol for views in boards.values() for v in views for r in v.rows if r.status != 'excluded'}
     market = MarketStore(db_path=args.market_db, read_only=True)
@@ -94,11 +92,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     finally:
         market.close()
 
+    if {'db': _sha(args.db), 'market': _sha(args.market_db)} != hashes:
+        print('an input database changed while it was read; nothing written', file=sys.stderr)
+        return 6
     memo: dict = {}
-    reports = {sid: scheme_report(boards[sid], weekly[sid], prices, fundamentals, memo=memo) for sid in schemes}
-    family = apply_bh(reports)
-    inputs = {'prosperity_db': str(args.db), 'prosperity_db_sha256': _sha(args.db),
-              'market_db': str(args.market_db), 'market_db_sha256': _sha(args.market_db),
+    every = {sid: scheme_report(boards[sid], weekly[sid], prices, fundamentals, memo=memo) for sid in computed}
+    family = apply_bh({sid: every[sid] for sid in BH_SCHEMES})
+    reports = {sid: every[sid] for sid in schemes}
+    inputs = {'prosperity_db': str(args.db), 'prosperity_db_sha256': hashes['db'],
+              'market_db': str(args.market_db), 'market_db_sha256': hashes['market'],
               'code_version': version, 'generated_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
               'elapsed_seconds': round(time.monotonic() - started, 1)}
     summary = {'generated_at': inputs['generated_at'], 'inputs': inputs, 'bh_family': family,

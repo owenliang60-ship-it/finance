@@ -62,3 +62,39 @@ def test_input_and_argument_errors_write_nothing(dbs, tmp_path):
                  '--code-version', 'other']) == 3
     assert main(['--db', str(tmp_path / 'missing.db'), '--market-db', str(market), '--out', str(out)]) == 3
     assert not out.exists()
+
+
+def test_scheme_subset_keeps_the_full_bh_family(dbs, tmp_path):
+    """Review #4: --schemes F1 must not shrink the BH family; all four schemes are always tested."""
+    out = tmp_path / 'one'
+    assert run(dbs, out, '--schemes', 'F1') == 0
+    summary = json.loads((out / 'summary.json').read_text())
+    assert list(summary['schemes']) == ['F1'] and summary['bh_family']['family'] == 24
+    assert (out / 'F1.html').exists() and not (out / 'F0.html').exists()
+
+
+def test_input_hashes_are_taken_before_reading(dbs, tmp_path, monkeypatch):
+    """Review #7: the recorded SHA256 must describe the data that was read, so hash first."""
+    import scripts.prosperity_health as cli
+    db, market = dbs
+    before = sha(db)
+    real = cli.PriceBook.load
+
+    def load_then_change(*args, **kwargs):
+        out = real(*args, **kwargs)
+        with open(db, 'ab') as f:                        # the file changes after it was read
+            f.write(b'\0' * 16)
+        return out
+    monkeypatch.setattr(cli.PriceBook, 'load', staticmethod(load_then_change))
+    assert run(dbs, tmp_path / 'out') == 6
+    assert not (tmp_path / 'out').exists()
+    assert sha(db) != before
+
+
+def test_period_status_is_shown_in_chinese(dbs, tmp_path):
+    """Review #8: plan §8.7 labels unfinished periods 进行中, not raw status codes."""
+    out = tmp_path / 'out'
+    assert run(dbs, out) == 0
+    html = (out / 'F1.html').read_text()
+    assert 'in_progress' not in html and 'not_started' not in html and '>complete<' not in html
+    assert '已满期' in html or '进行中' in html

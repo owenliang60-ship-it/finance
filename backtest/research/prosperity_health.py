@@ -99,6 +99,8 @@ class PriceBook:
                 lo = self.calendar[max(0, k - SPLIT_SEARCH_DAYS)]
                 hi = self.calendar[min(n - 1, k + SPLIT_SEARCH_DAYS)]
                 state, jump = _classify_split(dates, raw, lo, hi, f)
+                if state == 'adjusted' and jump in {j for j, _ in matched}:
+                    state = 'already_adjusted'           # a second record for the same jump (review #2)
                 events.append((symbol, fmp_date, f, state))
                 if state == 'adjusted':
                     matched.append((jump, f))
@@ -445,13 +447,15 @@ def momentum_top(view: BoardView, prices: PriceBook) -> Optional[Tuple[str, ...]
 
 
 def load_fundamentals(market, symbols: Iterable[str]) -> Dict[str, dict]:
-    return {s: {'income': market.get_income(s, limit=0), 'metrics': market.get_metrics(s, limit=0)}
+    return {s: {'income': market.get_income(s, limit=0), 'metrics': market.get_metrics(s, limit=0),
+                'earnings': market.get_fmp_earnings(s)}
             for s in sorted(set(symbols))}
 
 
-def _available_on(row: Mapping[str, Any]) -> Optional[str]:
-    value = row.get('accepted_date') or row.get('filing_date')
-    return str(value)[:10] if value else None
+def _available_on(row: Mapping[str, Any], earnings: Sequence[Mapping[str, Any]]) -> Optional[str]:
+    """The engine's replay rule: placeholder dates are rejected and dated by the EPS release."""
+    from src.data.prosperity_quality import statement_known_on
+    return statement_known_on(dict(row), earnings_rows=[dict(e) for e in earnings])
 
 
 class _PitFundamentalStore:
@@ -461,7 +465,8 @@ class _PitFundamentalStore:
         self._income: Dict[str, List[dict]] = {}
         self._metrics: Dict[str, List[dict]] = {}
         for s, f in fundamentals.items():
-            income = sorted((r for r in f.get('income', ()) if (_available_on(r) or '9999') <= as_of),
+            earnings = f.get('earnings', ())
+            income = sorted((r for r in f.get('income', ()) if (_available_on(r, earnings) or '9999') <= as_of),
                             key=lambda r: r['date'], reverse=True)
             known = {r['date'] for r in income}
             self._income[s] = income
@@ -650,11 +655,11 @@ def scheme_report(views: Sequence[BoardView], weekly: Sequence[BoardView], price
 
 
 def bh_adjust(p_values: Sequence[Optional[float]]) -> List[Optional[float]]:
-    """BH over a fixed family; tests without a p value count as p = 1 and stay unknown."""
-    from scipy.stats import false_discovery_control
-    if not p_values:
-        return []
-    adjusted = false_discovery_control([1.0 if p is None else float(p) for p in p_values], method='bh')
+    """BH over a fixed family; tests without a p value count as p = 1 and stay unknown.
+
+    Reuses the event-study helper (north star §4.3: reuse backtest/event_study/stats.py)."""
+    from backtest.event_study.stats import _apply_bh_fdr_to_p_values
+    adjusted = _apply_bh_fdr_to_p_values([1.0 if p is None else float(p) for p in p_values])
     return [None if p is None else float(a) for p, a in zip(p_values, adjusted)]
 
 

@@ -860,3 +860,18 @@ def test_input_and_argument_errors_write_nothing(dbs, tmp_path):
 | P2 | 第 2 章漏掉 ICIR | 北极星 §4.3 第 2 条"逐期 Spearman IC 与 ICIR" | 新增 `ic_summary`：ICIR = 均值 / 样本标准差，不年化，期数 < 5 或零方差为 None；进 summary、HTML、A7a |
 
 审查对三处提问的意见：Top 40 保留，第 3 章改用共同有效期（已改 §1、§8.5）；自写复权成立（按 P1 修正）；北极星两处修订在范围内。
+
+### 第二轮（2026-11-01，`/code-review high`，10 条，主线程逐条核实）
+
+| # | 意见 | 核实 | 处理 |
+|---|---|---|---|
+| 1 | Premium 点时截断信任 `accepted_date or filing_date`，占位日期（等于财季末）当成披露日 | **成立**。SAIL 2026-04-30 季、ARGX 2021-06-30 季：本模块给财季末当天，引擎 `statement_known_on` 给 2026-06-09 / 2021-10-28 | 改为调用引擎的 `statement_known_on`（带 `fmp_earnings`），不再自写规则；新增失败测试；重跑 Premium 对照 |
+| 2 | 两条拆股记录对上同一次跳变，会除两次 | **成立**（合成复现）；当前数据未触发 | 同一跳变只调整一次，后一条记 `already_adjusted`；新增测试 |
+| 3 | 无记录的 3:2、4:3、5:4 拆股不报 `split_suspect` | 成立但**不改**。F1 可排名股 2021-09 起在这三个比例 ±3% 内的单日变动约 1,275 次，绝大多数是财报大涨大跌；无记录时无法区分。有记录的任意比例已由规则 2 处理 | 写成测试固化当前行为并注明理由 |
+| 4 | `--schemes` 子集会缩小 BH 族，p_bh 变小 | **成立**（`--schemes F1` 时族 = 6） | BH 族始终包含全部 4 个方案，`--schemes` 只决定输出哪几份 HTML；runbook 写明；新增测试 |
+| 5 | `close_at` 往前找最多 5 天，`jumps` 从 `calendar[lo]` 起扫，中间的跳变会漏 | **不成立**。`close_at` 取的是 ≤ `calendar[lo]` 的最后一个收盘价，之后的任何跳变都落在 `(calendar[lo], calendar[t0]]` 内，扫描已覆盖 | 补测试证明（EARLY 样本被排除） |
+| 6 | 84 张 replay 周榜完整读取后才按 mode 过滤 | 成立，单张 0.64 s，约 54 s | 先查 `mode='live'` 的 as_of，只读 live 周榜 |
+| 7 | 输入 SHA256 在读取之后才算 | 成立 | 读前算一次、读后再算一次，不同则退出 6、不写文件；新增测试 |
+| 8 | 逐期明细显示 `in_progress` 等英文状态码 | 成立 | 显示为 已满期 / 进行中 / 未开始；新增测试 |
+| 9 | BH 另起一套 scipy 实现、`_sha` 复制 | 成立 | BH 改用 `backtest/event_study/stats._apply_bh_fdr_to_p_values`（北极星要求复用 stats.py），`_sha` 改用 `prosperity_backup._sha`；新增等价测试 |
+| 10 | runbook 没先拉云端 `market.db` | 成立（`Finance/CLAUDE.md`：查询前必须先 `--pull`） | runbook 第一步加 `./sync_to_cloud.sh --pull` |

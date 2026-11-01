@@ -125,8 +125,9 @@ cron 和周更入口都不会移除任何数据。空间不足时周更退出 6�
 ```bash
 PY="/Users/owen/CC workspace/Finance/.venv/bin/python"
 mkdir -p /tmp/health
+(cd "/Users/owen/CC workspace/Finance" && ./sync_to_cloud.sh --pull)  # 先拉云端 market.db（本地只是副本）
 "$PY" scripts/sync_prosperity.py --db /tmp/health/prosperity.db        # 云端结果库快照（约 170 MB 压缩包）
-sqlite3 "/Users/owen/CC workspace/Finance/data/market.db" ".backup /tmp/health/market.db"   # WAL 安全副本
+sqlite3 "/Users/owen/CC workspace/Finance/data/market.db" ".backup /tmp/health/market.db"   # WAL 安全副本，固定输入
 "$PY" scripts/prosperity_health.py --db /tmp/health/prosperity.db \
   --market-db /tmp/health/market.db --out /tmp/health/out            # 默认 F1,F1-rank,F1-exfin,F0
 ```
@@ -136,11 +137,13 @@ sqlite3 "/Users/owen/CC workspace/Finance/data/market.db" ".backup /tmp/health/m
 | 0 | 已写 `<方案>.html` 与 `summary.json` |
 | 3 | 库文件不存在，或某方案在该 `code_version` 下没有季末冻结榜（不写任何文件） |
 | 4 | 方案名不在注册表，或 `--out` 是已存在的非目录 |
+| 6 | 运行期间某个输入库被改写（运行前后 SHA256 不同），不写任何文件；对固定副本重跑 |
 
 怎么读：
 - 头部三条说明固定：不作上线门槛；价格收益不含分红；期数约 20、区间宽。先看头部的已满期数和收益覆盖率。
 - 第 1 章五档超额与 Q1−Q5 的区间用 Newey-West，lag 按实际重叠期数算（真实数据 1/2/3 季 = 1/2/3）。
   `p_bh` 是跨方案 BH-FDR，检验族固定 24 项（4 方案 × 3 持有期 × 价差与 IC），没有 p 值的项按 1 计入并显示 UNKNOWN。
+  `--schemes` 只决定输出哪几份 HTML，检验族始终包含全部 4 个方案，所以单出 F1 的 `p_bh` 与全量运行相同。
 - 第 3 章对照组只用共同有效期（动量从 2022-03 起才有），p 值是描述性的。
 - 附录 D 列出每条拆股记录的处理状态；`unresolved` 跨过的收益在附录 A 里记 `split_unresolved`。
 - 独立核对与复权敏感性：`reports/prosperity/m12-health/verify_health.py`（不 import 项目代码）。

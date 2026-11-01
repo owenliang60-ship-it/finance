@@ -373,3 +373,72 @@ def test_control_chapter_reports_premium_size_and_coverage_per_period():
     periods = scheme_report([v], [], book(closes), funds)['chapters']['对照组']['premium_periods']
     assert periods == [{'as_of': CAL[s0 - 1], 'members': 9, 'fundamental_ready': pytest.approx(9 / 45),
                         'beta_ready': pytest.approx(1.0)}]
+
+
+def test_premium_cut_rejects_placeholder_dates_like_the_engine():
+    """Review #1: an accepted/filing date on the fiscal end is a placeholder, not disclosure.
+
+    The engine's own rule (statement_known_on) dates such a quarter by its EPS release instead.
+    """
+    from backtest.research.prosperity_health import premium_members
+    accepted = ACCEPTED[:5] + ['2026-06-30']          # newest quarter: placeholder on the fiscal end
+    funds = {'A': quarter_rows([1.0, 1.0, 1.0, 1.0, 1.0, 1.5], accepted)}
+    funds['A']['earnings'] = [{'fiscal_date': '2026-06-30', 'announce_date': '2026-08-20', 'eps_actual': 1.5}]
+    rows = [row('A', 1, beta=1.5)]
+    assert premium_members(view(rows, as_of='2026-08-08'), funds, as_of='2026-08-08')['members'] == ()
+    assert premium_members(view(rows, as_of='2026-08-22'), funds, as_of='2026-08-22')['members'] == ('A',)
+
+
+def test_two_records_for_one_jump_adjust_it_once():
+    """Review #2: a duplicated split record must not divide the history twice."""
+    c = [(d, 100.0) for d in CAL[:250]] + [(d, 20.0) for d in CAL[250:]]
+    b = book({'C': c}, {'C': [(CAL[250], 5.0), (CAL[254], 5.0)]})
+    assert b.window_return('C', 240, 260) == (pytest.approx(0.0), 'ok')
+    assert b.adjustments == (('C', CAL[250], 5.0),)
+    assert [e[3] for e in b.split_events] == ['adjusted', 'already_adjusted']
+
+
+def test_unrecorded_small_ratio_step_counts_as_a_real_move():
+    """Review #3, kept by design: without a record, a 150→100 step is indistinguishable from an
+    earnings move (F1 ranked names had ~1,000 real daily moves near 3:2/4:3/5:4 since 2021-09),
+    so it is a return, not 'unknown'. Recorded splits of any ratio are resolved by rule 2."""
+    q = [(d, 150.0) for d in CAL[:250]] + [(d, 100.0) for d in CAL[250:]]
+    assert book({'Q': q}).window_return('Q', 240, 260) == (pytest.approx(-1 / 3), 'ok')
+
+
+def test_ordinary_large_move_is_not_split_suspect():
+    v = [(d, 100.0) for d in CAL[:250]] + [(d, 72.0) for d in CAL[250:]]      # −28%: not a split ratio
+    assert book({'V': v}).window_return('V', 240, 260) == (pytest.approx(-0.28), 'ok')
+
+
+def test_momentum_checks_jumps_back_to_the_close_actually_used():
+    """Review #5: close_at may reach up to 5 days early. A split-like jump between that close and
+    the nominal look-back day falls outside (calendar[lo], calendar[t0]] and was not checked."""
+    from backtest.research.prosperity_health import momentum_top
+    t0 = len(CAL) - 60
+    lo = t0 - 252
+    closes = {f'M{i:02d}': [(d, 10.0 * (1 + i / 100) if k >= lo + 1 else 10.0) for k, d in enumerate(CAL)]
+              for i in range(45)}
+    # GAP: 100 up to lo−3, an unrecorded 5:1 split at lo−2 (20), no close at lo−1 or lo, then 20 again.
+    # close_at(lo) = 20 (lo−2, after the split) → clean 12-1, the stock stays eligible.
+    # LATE: 100 up to lo−3, no close lo−2..lo−1, split at lo (20). close_at(lo) = 20 → clean.
+    # EARLY: 100 up to lo−4, no close lo−3..lo, split at lo+1 (20). close_at(lo) = 100 (lo−4) and the
+    #        jump is inside (lo, t0] → excluded. These three already behave; the review case is:
+    # MISS: 100 up to lo−4, split at lo−3 (20), no close lo−2..lo. close_at(lo) = 20, after the split
+    #       → also clean. So a close returned by close_at is always the last one ≤ calendar[lo], and any
+    #       jump after it lies in (calendar[lo], calendar[t0]]. The scan already covers it.
+    closes['EARLY'] = [(d, 100.0) for d in CAL[:lo - 3]] + [(d, 20.0) for d in CAL[lo + 1:]]
+    rows = [row(s, k + 1) for k, s in enumerate(sorted(closes))]
+    b = book(closes)
+    assert b.close_at('EARLY', lo) == 100.0
+    assert [j['kind'] for j in b.jumps('EARLY', lo, t0)] == ['split_suspect']
+    assert 'EARLY' not in momentum_top(view(rows, as_of=CAL[t0]), b)
+
+
+def test_bh_matches_the_event_study_helper():
+    """Review #9: reuse backtest/event_study/stats.py (north star §4.3) instead of a second BH."""
+    from backtest.event_study.stats import _apply_bh_fdr_to_p_values
+    from backtest.research.prosperity_health import bh_adjust
+    ps = [0.001, 0.04, None, 0.2, 0.03, None]
+    full = _apply_bh_fdr_to_p_values([1.0 if p is None else p for p in ps])
+    assert bh_adjust(ps) == [None if p is None else pytest.approx(a) for p, a in zip(ps, full)]

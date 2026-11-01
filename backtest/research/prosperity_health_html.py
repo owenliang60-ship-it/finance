@@ -53,6 +53,7 @@ code { font-size: 12px; }
 """
 
 DASH = '—'
+STATUS_LABELS = {'complete': '已满期', 'in_progress': '进行中', 'not_started': '未开始'}
 BAR_COLORS = ('var(--green)', '#7fbf7f', 'var(--text-dim)', '#e8a0a0', 'var(--red)')
 
 
@@ -196,7 +197,7 @@ def _ch_tiers(ch: Mapping[str, Any]) -> str:
         out.append(f'<h3>{hz} 季 · 五档单调：{"是" if c["monotonic"] else "否"}</h3>')
         out.append(table(['组', '期数', '平均超额', '95% 区间', 't', 'p', 'lag', 'p_bh'],
                          [r + ([''] if len(r) == 7 else []) for r in rows]))
-        detail = [[_e(p['as_of']), _e(p['status']), _e(p['start'] or DASH), _e(p['end'] or DASH),
+        detail = [[_e(p['as_of']), STATUS_LABELS.get(p['status'], _e(p['status'])), _e(p['start'] or DASH), _e(p['end'] or DASH),
                    pct(p['baseline']), *[pct(x) for x in p['tier_excess']], pct(p['spread']), num(p['ic']),
                    f'{p["coverage"].get("ranked", [0, 0])[0]}/{p["coverage"].get("ranked", [0, 0])[1]}'
                    if p['coverage'] else DASH] for p in c['periods']]
