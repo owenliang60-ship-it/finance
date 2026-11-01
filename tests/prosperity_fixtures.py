@@ -279,3 +279,24 @@ def storage_batch(*, as_of='2026-09-26', code_version='test-v1', freeze=False, c
                                                frozen_at=frozen_at or as_of+'T08:30:00Z'))
                         for b in result)
     return result
+
+
+def weekdays(end, n):
+    """The n weekdays ending on `end` (inclusive), ascending. Holidays are not modelled."""
+    from datetime import date, timedelta
+    d, out = date.fromisoformat(end), []
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append(d.isoformat())
+        d -= timedelta(days=1)
+    return out[::-1]
+
+
+def seed_prices(path, rows):
+    """rows: {symbol: [(date, close, volume), ...]}, written with MarketStore's own writer."""
+    w = MarketStore(db_path=path)
+    for symbol, points in rows.items():
+        w.upsert_daily_prices(symbol, [{'date': d, 'open': c, 'high': c, 'low': c, 'close': c, 'volume': v}
+                                       for d, c, v in points])
+    w.close()
+    return Path(path)
