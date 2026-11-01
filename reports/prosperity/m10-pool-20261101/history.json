@@ -25,7 +25,7 @@
         "2021-07-26",
         "2021-09-03"
       ],
-      "validation": "ValueError: pool coverage ratio invalid"
+      "validation": "ValueError: pool_coverage_below_floor: ranked 706/847 < 0.9"
     },
     {
       "as_of": "2021-12-04",
@@ -38,7 +38,7 @@
         "2021-10-22",
         "2021-12-03"
       ],
-      "validation": "ValueError: pool coverage ratio invalid"
+      "validation": "ValueError: pool_coverage_below_floor: ranked 691/825 < 0.9"
     },
     {
       "as_of": "2022-03-19",
@@ -51,7 +51,7 @@
         "2022-02-04",
         "2022-03-18"
       ],
-      "validation": "ValueError: pool coverage ratio invalid"
+      "validation": "ValueError: pool_coverage_below_floor: ranked 702/818 < 0.9"
     },
     {
       "as_of": "2022-06-04",
@@ -64,7 +64,7 @@
         "2022-04-22",
         "2022-06-03"
       ],
-      "validation": "ValueError: pool coverage ratio invalid"
+      "validation": "ValueError: pool_coverage_below_floor: ranked 677/764 < 0.9"
     },
     {
       "as_of": "2022-09-03",
@@ -77,7 +77,7 @@
         "2022-07-25",
         "2022-09-02"
       ],
-      "validation": "ValueError: pool coverage ratio invalid"
+      "validation": "ValueError: pool_coverage_below_floor: ranked 661/742 < 0.9"
     },
     {
       "as_of": "2022-12-03",

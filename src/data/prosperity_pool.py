@@ -12,14 +12,14 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import tempfile
 from typing import Any, Mapping, Optional, Sequence, Tuple
 
 from config.settings import DATA_DIR
+from src.data.prosperity_gates import CST, instant
 from src.data.prosperity_storage import content_hash
 from terminal.prosperity.schemes import SCHEMES, scheme_hash
-
-CST = timezone(timedelta(hours=8))
 
 POOL_NAME = '景气精选池'
 POOL_SCHEMA_VERSION = 1
@@ -33,6 +33,15 @@ LIQUIDITY_MIN_DAYS = 5
 LIQUIDITY_LOOKBACK_CALENDAR_DAYS = 70   # 30 trading days ≈ 42 calendar days, plus holiday slack
 LIQUIDITY_MAX_LAG_DAYS = 7
 COVERAGE_MIN = 0.90
+_TIMESTAMP = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})')
+
+
+class PoolCriteriaMismatch(RuntimeError):
+    """The file was built for another scheme/rule set. Distinct from RecursionError (also a RuntimeError)."""
+
+
+class PoolStale(TimeoutError):
+    """generated_at or as_of older than POOL_MAX_AGE_DAYS."""
 
 
 @dataclass(frozen=True)
@@ -84,9 +93,16 @@ def criteria_payload() -> dict:
                           'min_days': LIQUIDITY_MIN_DAYS, 'top': LIQUIDITY_TOP}}
 
 
+def _day(value: Any) -> date:
+    """YYYY-MM-DD only. Python 3.11+ also accepts '20261030'; the cloud's 3.10 does not."""
+    if not isinstance(value, str) or date.fromisoformat(value).isoformat() != value:
+        raise ValueError(f'invalid date: {value!r}')
+    return date.fromisoformat(value)
+
+
 def _window_error(as_of: str, start: str, end: str) -> Optional[str]:
     """The price window must belong to this board date: end ≤ as_of, at most 7 days stale."""
-    day, first, last = (date.fromisoformat(x) for x in (as_of, start, end))
+    day, first, last = (_day(x) for x in (as_of, start, end))
     if not first < last <= day:
         return 'window_order'
     if (day - last).days > LIQUIDITY_MAX_LAG_DAYS:
@@ -101,7 +117,7 @@ def _stat(covered: int, total: int) -> dict:
 
 
 def _utc(at: datetime) -> str:
-    return at.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+    return instant(at).isoformat().replace('+00:00', 'Z')
 
 
 def build_pool(stored, liquidity: LiquidityResult, *, generated_at: str) -> dict:
@@ -145,12 +161,12 @@ def build_pool(stored, liquidity: LiquidityResult, *, generated_at: str) -> dict
 
 
 def _parse_time(value: Any) -> datetime:
-    if not isinstance(value, str) or not value:
-        raise ValueError('missing timestamp')
-    parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-    if parsed.tzinfo is None:
-        raise ValueError('timestamp must include timezone')
-    return parsed.astimezone(timezone.utc)
+    if not isinstance(value, str) or not _TIMESTAMP.fullmatch(value):
+        raise ValueError(f'invalid timestamp: {value!r}')
+    try:
+        return instant(value)
+    except OverflowError:
+        raise ValueError(f'timestamp out of range: {value!r}') from None
 
 
 def _is_int(value) -> bool:
@@ -158,7 +174,12 @@ def _is_int(value) -> bool:
 
 
 def _finite(value) -> bool:
-    return type(value) in (int, float) and math.isfinite(value)
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:          # a 400-digit JSON integer
+        return False
 
 
 def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, check_freshness: bool = True) -> None:
@@ -168,19 +189,27 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
     if payload.get('schema_version') != POOL_SCHEMA_VERSION or payload.get('name') != POOL_NAME:
         raise ValueError('pool schema/name mismatch')
     if payload.get('criteria') != criteria_payload():
-        raise RuntimeError('pool criteria mismatch')
+        raise PoolCriteriaMismatch('pool criteria mismatch')
     as_of = payload.get('as_of')
-    if not isinstance(as_of, str) or date.fromisoformat(as_of).isoformat() != as_of:
-        raise ValueError('pool as_of invalid')
+    _day(as_of)
     generated = _parse_time(payload.get('generated_at'))
     if check_freshness:
         current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
         age = (current - generated).total_seconds()
-        board_age = (current.astimezone(CST).date() - date.fromisoformat(as_of)).days
+        board_age = (current.astimezone(CST).date() - _day(as_of)).days
         if age < -300 or board_age < 0:
             raise ValueError('pool generated_at/as_of in the future')
         if age > POOL_MAX_AGE_DAYS * 86400 or board_age > POOL_MAX_AGE_DAYS:
-            raise TimeoutError('pool snapshot stale')
+            raise PoolStale('pool snapshot stale')
+    source = payload.get('source')
+    if (not isinstance(source, dict) or source.get('board_type') != 'weekly'
+            or not isinstance(source.get('code_version'), str) or not source['code_version']
+            or not isinstance(source.get('content_hash'), str) or len(source['content_hash']) != 64
+            or any(c not in '0123456789abcdef' for c in source['content_hash'])):
+        raise ValueError('pool source invalid')
+    computed = _parse_time(source.get('computed_at'))
+    if computed > generated:
+        raise ValueError('pool generated before its board was computed')
     universe, coverage, members = payload.get('universe'), payload.get('coverage'), payload.get('members')
     if not isinstance(universe, dict) or universe.get('name') != 'extended':
         raise ValueError('pool universe invalid')
@@ -197,8 +226,11 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
         covered, total, ratio = stat.get('covered'), stat.get('total'), stat.get('ratio')
         if not _is_int(covered) or not _is_int(total) or total != count or not 0 <= covered <= total:
             raise ValueError('pool coverage counts invalid')
-        if not _finite(ratio) or not math.isclose(ratio, covered / total, abs_tol=1e-12) or ratio < COVERAGE_MIN:
+        if not _finite(ratio) or not math.isclose(ratio, covered / total, abs_tol=1e-12):
             raise ValueError('pool coverage ratio invalid')
+        if ratio < COVERAGE_MIN:
+            # Deterministic for this board: a publish-only retry cannot fix it (runbook exit 5).
+            raise ValueError(f'pool_coverage_below_floor: {key} {covered}/{total} < {COVERAGE_MIN}')
     eligible, selected = coverage.get('eligible'), coverage.get('selected')
     if (not _is_int(eligible) or not _is_int(selected) or not isinstance(members, list)
             or selected != len(members) or not 0 <= selected <= eligible <= coverage['ranked']['covered']):
@@ -219,8 +251,10 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
         if m.get('grade') not in POOL_GRADES:
             raise ValueError('pool member grade invalid')
         rank = m.get('rank')
-        if not _is_int(rank) or rank <= last_rank:
+        if not _is_int(rank) or rank <= last_rank or rank > coverage['ranked']['covered']:
             raise ValueError('pool member rank invalid or out of order')
+        if not all(m.get(k) is None or isinstance(m.get(k), str) for k in ('name', 'sector', 'industry')):
+            raise ValueError('pool member descriptive fields invalid')
         last_rank = rank
         dv_rank = m.get('dollar_volume_rank')
         if not _is_int(dv_rank) or not 1 <= dv_rank <= LIQUIDITY_TOP:
@@ -230,7 +264,9 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
         badges = m.get('badges')
         if not isinstance(badges, list) or not all(isinstance(b, str) for b in badges):
             raise ValueError('pool member badges invalid')
-        if not isinstance(m.get('family_scores'), dict):
+        families = m.get('family_scores')
+        if not isinstance(families, dict) or not all(
+                isinstance(k, str) and (v is None or _finite(v)) for k, v in families.items()):
             raise ValueError('pool member family scores invalid')
 
 
@@ -241,11 +277,11 @@ def load_prosperity_pool(path=POOL_PATH, *, now: Optional[datetime] = None) -> d
     try:
         payload = json.loads(target.read_text(encoding='utf-8'))
         validate_prosperity_pool(payload, now=now)
-    except RuntimeError:
+    except PoolCriteriaMismatch:
         return {'available': False, 'reason': 'prosperity_pool_criteria_mismatch', 'members': []}
-    except TimeoutError:
+    except PoolStale:
         return {'available': False, 'reason': 'prosperity_pool_stale', 'members': []}
-    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+    except (OSError, ValueError, TypeError, KeyError, OverflowError, RecursionError, json.JSONDecodeError):
         return {'available': False, 'reason': 'prosperity_pool_invalid', 'members': []}
     return {**payload, 'available': True, 'reason': None}
 

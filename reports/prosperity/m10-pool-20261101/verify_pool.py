@@ -20,9 +20,10 @@ def main():
     pool = json.loads(a.pool.read_text())
     pdb = sqlite3.connect(a.db.resolve().as_uri() + '?mode=ro', uri=True)
     mdb = sqlite3.connect(a.market_db.resolve().as_uri() + '?mode=ro', uri=True)
+    source = pool.get('source') or {}
     board = pdb.execute("SELECT board_id, members_json FROM board WHERE board_type='weekly' AND scheme_id='F1' "
-                        "AND mode='live' AND as_of=? AND code_version=?",
-                        (a.as_of, pool['source']['code_version'])).fetchall()
+                        "AND mode='live' AND as_of=? AND code_version=? AND content_hash=?",
+                        (a.as_of, source.get('code_version'), source.get('content_hash'))).fetchall()
     assert len(board) == 1, board
     board_id, members = board[0][0], json.loads(board[0][1])
     window = [r[0] for r in mdb.execute(

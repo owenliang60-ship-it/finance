@@ -66,7 +66,7 @@ from datetime import datetime, timezone
 from dataclasses import replace
 import json
 
-NOW = datetime(2026, 10, 31, 9, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 31, 9, 30, tzinfo=timezone.utc)
 
 
 def f1_board(as_of='2026-10-31'):
@@ -90,7 +90,7 @@ def test_pool_keeps_strict_full_inside_top_100_in_rank_order():
     from src.data.prosperity_pool import build_pool, validate_prosperity_pool
     board = f1_board()
     best = eligible(board)[0].symbol
-    pool = build_pool(board, liq(board, illiquid={best}), generated_at='2026-10-31T08:50:00Z')
+    pool = build_pool(board, liq(board, illiquid={best}), generated_at='2026-10-31T09:10:00Z')
     expected = [r.symbol for r in eligible(board) if r.symbol != best]
     assert [m['symbol'] for m in pool['members']] == expected
     assert pool['coverage']['eligible'] == len(eligible(board)) and pool['coverage']['selected'] == len(expected)
@@ -100,7 +100,7 @@ def test_pool_keeps_strict_full_inside_top_100_in_rank_order():
 def test_zero_eligible_is_a_valid_empty_pool():
     from src.data.prosperity_pool import build_pool, validate_prosperity_pool
     board = f1_board()
-    pool = build_pool(board, liq(board, illiquid=set(board.meta.members)), generated_at='2026-10-31T08:50:00Z')
+    pool = build_pool(board, liq(board, illiquid=set(board.meta.members)), generated_at='2026-10-31T09:10:00Z')
     assert pool['members'] == [] and pool['coverage']['selected'] == 0
     validate_prosperity_pool(pool, now=NOW)
 
@@ -110,7 +110,7 @@ def test_build_rejects_non_f1_board():
     from src.data.prosperity_pool import build_pool
     board = next(b for b in storage_batch(count=20, as_of='2026-10-31') if b.board.scheme_id == 'F0')
     with pytest.raises(ValueError, match='pool_source_invalid'):
-        build_pool(board, liq(board), generated_at='2026-10-31T08:50:00Z')
+        build_pool(board, liq(board), generated_at='2026-10-31T09:10:00Z')
 
 
 @pytest.mark.parametrize('kwargs', [
@@ -123,13 +123,13 @@ def test_build_rejects_liquidity_not_bound_to_board(kwargs):
     from src.data.prosperity_pool import build_pool
     board = f1_board()
     with pytest.raises(ValueError, match='pool_liquidity_mismatch'):
-        build_pool(board, liq(board, **kwargs), generated_at='2026-10-31T08:50:00Z')
+        build_pool(board, liq(board, **kwargs), generated_at='2026-10-31T09:10:00Z')
 
 
 def valid_pool():
     from src.data.prosperity_pool import build_pool
     board = f1_board()
-    return build_pool(board, liq(board), generated_at='2026-10-31T08:50:00Z')
+    return build_pool(board, liq(board), generated_at='2026-10-31T09:10:00Z')
 
 
 @pytest.mark.parametrize('mutate,reason', [
@@ -172,7 +172,7 @@ def test_publish_round_trip_and_pre_replace_failure_keeps_old_file(tmp_path, mon
         raise OSError('replace failed')
     monkeypatch.setattr(pool.os, 'replace', broken_replace)
     with pytest.raises(OSError):
-        publish_prosperity_pool({**good, 'generated_at': '2026-10-31T08:55:00Z'}, path, now=NOW)
+        publish_prosperity_pool({**good, 'generated_at': '2026-10-31T09:15:00Z'}, path, now=NOW)
     assert path.read_bytes() == before
     assert sorted(p.name for p in path.parent.iterdir()) == ['prosperity_pool.json']
 
@@ -185,11 +185,11 @@ def test_directory_fsync_failure_leaves_validated_new_file(tmp_path, monkeypatch
     def broken_fsync(directory):
         raise OSError('fsync failed')
     monkeypatch.setattr(pool, '_fsync_dir', broken_fsync)
-    newer = {**valid_pool(), 'generated_at': '2026-10-31T08:55:00Z'}
+    newer = {**valid_pool(), 'generated_at': '2026-10-31T09:15:00Z'}
     with pytest.raises(OSError):
         publish_prosperity_pool(newer, path, now=NOW)
     loaded = load_prosperity_pool(path, now=NOW)
-    assert loaded['available'] is True and loaded['generated_at'] == '2026-10-31T08:55:00Z'
+    assert loaded['available'] is True and loaded['generated_at'] == '2026-10-31T09:15:00Z'
     assert sorted(p.name for p in path.parent.iterdir()) == ['prosperity_pool.json']
 
 
@@ -290,3 +290,51 @@ def test_replay_week_never_writes_pool(live):
     seed_prices(db, {f'S{i:04d}': [(d, 10.0, 1000) for d in weekdays('2026-10-16', 35)] for i in range(20)})
     out, path, _ = run(tmp_path, db, quality, mode='replay', saturday='2026-10-17')
     assert out.exit_code == 0 and not path.exists()
+
+
+# ---- code review fixes (2026-11-01) ------------------------------------------------
+def huge_score():
+    payload = valid_pool()
+    payload['members'][0]['score'] = 10**400        # json writes the integer; math.isfinite overflows
+    return json.dumps(payload)
+
+
+@pytest.mark.parametrize('raw', [
+    huge_score,
+    lambda: json.dumps({**valid_pool(), 'generated_at': '9999-12-31T23:59:59-01:00'}),
+    lambda: '[' * 100000 + ']' * 100000,
+])
+def test_loader_fails_closed_on_overflow_and_recursion(tmp_path, raw):
+    from src.data.prosperity_pool import load_prosperity_pool
+    path = tmp_path / 'prosperity_pool.json'
+    path.write_text(raw())
+    assert load_prosperity_pool(path, now=NOW)['reason'] == 'prosperity_pool_invalid'
+
+
+@pytest.mark.parametrize('mutate', [
+    lambda p: p.pop('source'),
+    lambda p: p['source'].update(board_type='quarter_final'),
+    lambda p: p['source'].update(code_version=''),
+    lambda p: p['source'].update(content_hash='xyz'),
+    lambda p: p['source'].update(computed_at='2026-10-31T09:00:00'),
+    lambda p: p['members'][-1].update(rank=p['coverage']['ranked']['covered'] + 1),
+    lambda p: p['members'][0].update(name=7),
+    lambda p: p['members'][0]['family_scores'].update(accel='high'),
+    lambda p: p['coverage'].update(trading_window=['20260921', '20261030']),
+])
+def test_validator_checks_source_members_and_strict_dates(tmp_path, mutate):
+    from src.data.prosperity_pool import load_prosperity_pool
+    payload = valid_pool()
+    mutate(payload)
+    path = tmp_path / 'prosperity_pool.json'
+    path.write_text(json.dumps(payload, ensure_ascii=False))
+    assert load_prosperity_pool(path, now=NOW)['reason'] == 'prosperity_pool_invalid'
+
+
+def test_coverage_below_floor_is_named():
+    from src.data.prosperity_pool import validate_prosperity_pool
+    payload = valid_pool()
+    stat = payload['coverage']['ranked']
+    stat.update(covered=stat['total'] - 3, ratio=(stat['total'] - 3) / stat['total'])
+    with pytest.raises(ValueError, match='pool_coverage_below_floor'):
+        validate_prosperity_pool(payload, now=NOW)

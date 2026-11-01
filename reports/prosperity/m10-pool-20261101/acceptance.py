@@ -36,7 +36,7 @@ def main():
     p.add_argument('--db', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--live-as-of', default='2026-10-31')
-    p.add_argument('--now', default='2026-11-01T04:00:00Z')
+    p.add_argument('--now', default='2026-11-01T04:00:00Z')  # after the 10-31 board's computed_at
     a = p.parse_args()
     now = datetime.fromisoformat(a.now.replace('Z', '+00:00'))
     version, f1 = code_version(), scheme_hash(SCHEMES['F1'])
@@ -53,8 +53,8 @@ def main():
             history = []
             for key in store.list_boards(scheme_hash=f1, code_version=version, board_type='weekly'):
                 stored = store.get_board(key)
+                row = {'as_of': key.as_of, 'mode': stored.meta.mode}
                 stored = replace(stored, meta=replace(stored.meta, mode='live'))
-                row = {'as_of': key.as_of, 'mode': store.get_board(key).meta.mode}
                 try:
                     built = build_pool(stored, liquidity_ranks(market, stored.meta.members, key.as_of),
                                        generated_at=a.now)
