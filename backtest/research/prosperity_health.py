@@ -587,7 +587,8 @@ def scheme_report(views: Sequence[BoardView], weekly: Sequence[BoardView], price
                             'reasons': dict(sorted(reasons.items()))}
 
     overlap = [{'as_of': v.as_of, 'overlap': len(set(tops[i]) & set(moms[i])), 'top_n': len(tops[i]),
-                'momentum_n': len(moms[i])} for i, v in enumerate(views) if moms[i] is not None]
+                'momentum_n': len(moms[i]), 'top': list(tops[i]), 'momentum': list(moms[i])}
+               for i, v in enumerate(views) if moms[i] is not None]
     conc = [{'as_of': v.as_of, **concentration(v, tops[i])} for i, v in enumerate(views)]
     quarterly = [{'as_of': views[i].as_of, 'turnover': turnover(tops[i - 1], tops[i])} for i in range(1, len(views))]
     wk = sorted(weekly, key=lambda v: v.as_of)

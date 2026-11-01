@@ -348,3 +348,15 @@ def test_control_chapter_uses_common_periods_only():
     h1 = ctrl['horizons']['1']
     assert h1['top']['excess']['n'] == h1['momentum']['excess']['n'] == h1['premium']['excess']['n'] == 2
     assert rep['chapters']['分层前瞻收益']['1']['spread']['n'] == 3
+
+
+def test_overlap_chapter_lists_both_top_40s_for_independent_checks():
+    from backtest.research.prosperity_health import scheme_report
+    s0 = 261
+    closes = {f'R{i:02d}': [(d, 10.0 * (1 + 0.001 * i) ** k) for k, d in enumerate(CAL)] for i in range(45)}
+    rows = [row(s, k + 1) for k, s in enumerate(sorted(closes))]
+    v = view(rows, as_of=CAL[s0 - 1], frozen_at=CAL[s0 - 1] + 'T08:30:00Z')
+    period = scheme_report([v], [], book(closes), {})['chapters']['与价格动量的重叠度']['periods'][0]
+    assert period['top'] == [f'R{i:02d}' for i in range(40)]
+    assert period['momentum'] == [f'R{i:02d}' for i in range(44, 4, -1)]
+    assert period['overlap'] == 35
