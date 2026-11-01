@@ -48,6 +48,12 @@ def parse_args(argv, now):
     current = this_saturday(now())
     if args.db.resolve() == args.market_db.resolve():
         raise ValueError('result_database_must_differ_from_market')
+    if args.pool_path is not None:
+        pool = args.pool_path.resolve()
+        databases = {args.db.resolve(), args.market_db.resolve()}
+        # The pool file is replaced atomically; it must never land on (or beside, as a WAL/SHM) a database.
+        if pool in databases or any(pool == Path(str(d) + s) for d in databases for s in ('-wal', '-shm', '.state')):
+            raise ValueError('pool_path_must_differ_from_databases')
     if args.through and not args.rebuild_chain:
         raise ValueError('--through requires --rebuild-chain')
     if args.observed_at and not args.live:

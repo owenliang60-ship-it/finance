@@ -229,8 +229,10 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
         if not _finite(ratio) or not math.isclose(ratio, covered / total, abs_tol=1e-12):
             raise ValueError('pool coverage ratio invalid')
         if ratio < COVERAGE_MIN:
-            # Deterministic for this board: a publish-only retry cannot fix it (runbook exit 5).
-            raise ValueError(f'pool_coverage_below_floor: {key} {covered}/{total} < {COVERAGE_MIN}')
+            # ranked comes from the stored board, so a publish-only retry cannot change it.
+            # liquidity_ranked comes from market.db prices; backfilling them and retrying can fix it.
+            side = 'ranked' if key == 'ranked' else 'liquidity'
+            raise ValueError(f'pool_{side}_coverage_below_floor: {covered}/{total} < {COVERAGE_MIN}')
     eligible, selected = coverage.get('eligible'), coverage.get('selected')
     if (not _is_int(eligible) or not _is_int(selected) or not isinstance(members, list)
             or selected != len(members) or not 0 <= selected <= eligible <= coverage['ranked']['covered']):

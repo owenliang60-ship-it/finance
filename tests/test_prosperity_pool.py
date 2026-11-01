@@ -336,5 +336,29 @@ def test_coverage_below_floor_is_named():
     payload = valid_pool()
     stat = payload['coverage']['ranked']
     stat.update(covered=stat['total'] - 3, ratio=(stat['total'] - 3) / stat['total'])
-    with pytest.raises(ValueError, match='pool_coverage_below_floor'):
+    with pytest.raises(ValueError, match='pool_ranked_coverage_below_floor'):
         validate_prosperity_pool(payload, now=NOW)
+
+
+@pytest.mark.parametrize('key,reason', [
+    ('ranked', 'pool_ranked_coverage_below_floor'),
+    ('liquidity_ranked', 'pool_liquidity_coverage_below_floor'),
+])
+def test_coverage_floor_names_which_side_failed(key, reason):
+    from src.data.prosperity_pool import validate_prosperity_pool
+    payload = valid_pool()
+    stat = payload['coverage'][key]
+    stat.update(covered=stat['total'] - 3, ratio=(stat['total'] - 3) / stat['total'])
+    with pytest.raises(ValueError, match=reason):
+        validate_prosperity_pool(payload, now=NOW)
+
+
+def test_liquidity_coverage_failure_recovers_after_prices_arrive(live):
+    tmp_path, db, quality = live
+    days = weekdays('2026-10-23', 35)
+    seed_prices(db, {f'S{i:04d}': [(d, 10.0, 1000) for d in days] for i in range(17)})
+    out, path, published = run(tmp_path, db, quality)
+    assert out.exit_code == 5 and 'pool_liquidity_coverage_below_floor' in out.error and not path.exists()
+    seed_prices(db, {f'S{i:04d}': [(d, 10.0, 1000) for d in days] for i in range(17, 20)})
+    again, path, published = run(tmp_path, db, quality)
+    assert again.exit_code == 0 and set(again.keys) == set(out.keys) and all(published) and path.exists()

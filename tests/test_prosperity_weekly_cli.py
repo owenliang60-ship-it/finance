@@ -65,3 +65,16 @@ def test_cli_pool_path_configures_publisher(tmp_path, monkeypatch, extra, count)
                     now=lambda: NOW) == 0
     assert len(captured['publishers']) == count
     assert not (tmp_path / 'pool.json').exists()
+
+
+@pytest.mark.parametrize('target', ['market', 'result'])
+def test_cli_pool_path_must_not_be_a_database(tmp_path, monkeypatch, target):
+    from scripts import prosperity_weekly as cli
+    from tests.prosperity_fixtures import seed_db
+    db = seed_db(tmp_path / 'market.db')
+    before = db.read_bytes()
+    result = tmp_path / 'r.db'
+    pool = db if target == 'market' else result
+    assert cli.main(['--live', '--db', str(result), '--market-db', str(db),
+                     '--pool-path', str(tmp_path / '.' / pool.name)], now=lambda: NOW) == 4
+    assert db.read_bytes() == before and not result.exists()
