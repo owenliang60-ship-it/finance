@@ -8,11 +8,16 @@ from __future__ import annotations
 
 import bisect
 import math
+import statistics
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
+from scipy.stats import spearmanr
+from scipy.stats import t as t_dist
 
+from backtest.pipeline.primitives.evaluation import newey_west_tstat
 from terminal.financial_history import detect_split_like_jumps
 
 TOP_N = 40
@@ -185,3 +190,173 @@ class PriceBook:
         if any(j['kind'] == 'split_suspect' for j in self.jumps(symbol, start_i, end_i)):
             return None, 'split_suspect'
         return end / start - 1, 'ok'
+
+
+# ---------------------------------------------------------------------------
+# Board view
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Row:
+    symbol: str
+    status: str                      # ranked / observe / excluded
+    grade: Optional[str]
+    rank: Optional[int]
+    score: Optional[float]
+    sector: Optional[str]
+    pit_basis: str
+    beta: Optional[float]            # archived packet beta of the frozen board
+    breakdown: Mapping[str, Mapping[str, Optional[float]]]   # factor → {raw, z, weight, contribution}
+    family_scores: Mapping[str, Optional[float]]
+    badges: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BoardView:
+    scheme_id: str
+    scheme_hash: str
+    code_version: str
+    as_of: str
+    quarter_label: Optional[str]
+    frozen_at: Optional[str]
+    board_type: str
+    mode: str
+    rows: Tuple[Row, ...]
+
+
+def board_view(stored) -> BoardView:
+    stocks = {p['symbol']: p for p in stored.stocks}
+    rows = []
+    for r in stored.board.rows:
+        p = stocks.get(r.symbol, {})
+        factors = list(dict.fromkeys([*r.values, *r.z, *r.missing]))
+        breakdown = {f: {'raw': r.values.get(f), 'z': r.z.get(f), 'weight': r.weights.get(f),
+                         'contribution': r.contributions.get(f)} for f in factors}
+        rows.append(Row(symbol=r.symbol, status=r.status, grade=r.grade, rank=r.rank, score=r.score,
+                        sector=p.get('sector'), pit_basis=p.get('pit_basis', 'approximate'), beta=p.get('beta'),
+                        breakdown=breakdown, family_scores=dict(r.family_scores), badges=tuple(r.badges)))
+    b, m = stored.board, stored.meta
+    return BoardView(scheme_id=b.scheme_id, scheme_hash=b.scheme_hash, code_version=b.code_version,
+                     as_of=b.as_of, quarter_label=m.quarter_label, frozen_at=m.frozen_at,
+                     board_type=m.board_type, mode=m.mode, rows=tuple(rows))
+
+
+def universe(view: BoardView) -> List[Row]:
+    return [r for r in view.rows if r.status != 'excluded']
+
+
+def ranked_rows(view: BoardView) -> List[Row]:
+    return sorted((r for r in view.rows if r.status == 'ranked'), key=lambda r: r.rank)
+
+
+# ---------------------------------------------------------------------------
+# Per-board evaluation and statistics
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class PeriodResult:
+    as_of: str
+    horizon: int
+    status: str                      # complete / in_progress / not_started
+    start: Optional[str]
+    end: Optional[str]
+    start_i: Optional[int]
+    end_i: Optional[int]
+    returns: Mapping[str, Tuple[Optional[float], str]]
+    tiers: Mapping[str, int]
+    baseline: Optional[float]
+    tier_excess: Mapping[int, Optional[float]]
+    spread: Optional[float]
+    ic: Optional[float]
+    top: Tuple[str, ...]
+    top_excess: Optional[float]
+    coverage: Mapping[str, Tuple[int, int]]
+
+
+def assign_tiers(symbols_by_rank: Sequence[str]) -> Dict[str, int]:
+    n = len(symbols_by_rank)
+    return {s: i * TIERS // n for i, s in enumerate(symbols_by_rank)}
+
+
+def top_symbols(view: BoardView) -> Tuple[str, ...]:
+    return tuple(r.symbol for r in ranked_rows(view) if r.grade in POOL_GRADES)[:TOP_N]
+
+
+def _mean(values: Iterable[Optional[float]]) -> Optional[float]:
+    xs = [v for v in values if v is not None]
+    return statistics.fmean(xs) if xs else None
+
+
+def group_excess(returns: Mapping[str, Tuple[Optional[float], str]], symbols: Iterable[str],
+                 baseline: Optional[float]) -> Optional[float]:
+    mean = _mean(returns.get(s, (None, ''))[0] for s in symbols)
+    return None if mean is None or baseline is None else mean - baseline
+
+
+def window(prices: PriceBook, frozen_at: Optional[str], horizon: int):
+    """(status, start_i, end_i) for one board and holding period."""
+    start_i = prices.start_index(frozen_at) if frozen_at else None
+    if start_i is None:
+        return 'not_started', None, None
+    end_i = start_i + QUARTER_DAYS * horizon
+    if end_i >= len(prices.calendar):
+        return 'in_progress', start_i, len(prices.calendar) - 1
+    return 'complete', start_i, end_i
+
+
+def evaluate_board(view: BoardView, prices: PriceBook, *, horizon: int) -> PeriodResult:
+    status, start_i, end_i = window(prices, view.frozen_at, horizon)
+    if status == 'not_started':
+        return PeriodResult(view.as_of, horizon, status, None, None, None, None, {}, {}, None, {}, None, None,
+                            (), None, {})
+    members = universe(view)
+    returns = {r.symbol: prices.window_return(r.symbol, start_i, end_i) for r in members}
+    ranked = ranked_rows(view)
+    tiers = assign_tiers([r.symbol for r in ranked])
+    baseline = _mean(v for v, _ in returns.values())
+    tier_excess = {t: group_excess(returns, [s for s, k in tiers.items() if k == t], baseline)
+                   for t in range(TIERS)}
+    spread = (None if tier_excess[0] is None or tier_excess[TIERS - 1] is None
+              else tier_excess[0] - tier_excess[TIERS - 1])
+    valid = [(r.rank, returns[r.symbol][0]) for r in ranked if returns[r.symbol][0] is not None]
+    ic = None
+    if len(valid) >= MIN_IC_STOCKS and len({v for _, v in valid}) > 1:
+        ic = float(spearmanr([-k for k, _ in valid], [v for _, v in valid]).statistic)
+    top = top_symbols(view)
+    coverage = {'ranked': (len(valid), len(ranked)),
+                'universe': (sum(v is not None for v, _ in returns.values()), len(members))}
+    return PeriodResult(view.as_of, horizon, status, prices.calendar[start_i], prices.calendar[end_i],
+                        start_i, end_i, returns, tiers, baseline, tier_excess, spread, ic, top,
+                        group_excess(returns, top, baseline), coverage)
+
+
+def overlap_lag(windows: Sequence[Tuple[int, int]]) -> int:
+    """Largest number of later windows that start before an earlier window ends."""
+    ws = sorted(windows)
+    return max((sum(1 for s, _ in ws[i + 1:] if s < e) for i, (_, e) in enumerate(ws)), default=0)
+
+
+def interval(values: Sequence[float], *, lag: int) -> dict:
+    xs = [float(v) for v in values]
+    n = len(xs)
+    if n < MIN_PERIODS:
+        return {'n': n, 'mean': statistics.fmean(xs) if xs else None, 'lag': lag}
+    mean = statistics.fmean(xs)
+    t, p = newey_west_tstat(xs, lag)
+    if t == 0:
+        return {'n': n, 'mean': mean, 't': t, 'p': p, 'lag': lag}
+    se = mean / t
+    half = float(t_dist.ppf(0.975, n - 1)) * abs(se)
+    return {'n': n, 'mean': mean, 'se': se, 'lo': mean - half, 'hi': mean + half, 't': t, 'p': p, 'lag': lag}
+
+
+def ic_summary(ics: Sequence[float], *, lag: int) -> dict:
+    out = interval(ics, lag=lag)
+    sd = statistics.stdev(ics) if len(ics) >= 2 else None
+    out['sd'] = sd
+    out['icir'] = None if len(ics) < MIN_PERIODS or not sd else out['mean'] / sd
+    return out
+
+
+def monotonic(means: Sequence[Optional[float]]) -> bool:
+    return all(m is not None for m in means) and all(a > b for a, b in zip(means, means[1:]))

@@ -88,3 +88,143 @@ def test_unexplained_split_like_jump_is_unknown_and_large_moves_are_listed():
     assert b.window_return('Q', 251, 270)[1] == 'ok'
     assert b.window_return('V', 240, 260) == (pytest.approx(-0.6), 'ok')
     assert b.jumps('V', 240, 260) == [{'date': CAL[250], 'ratio': pytest.approx(0.4), 'kind': 'large_move'}]
+
+
+def row(symbol, rank=None, *, status='ranked', grade='FULL', sector='Technology', score=None,
+        pit='approximate', beta=None, breakdown=None):
+    from backtest.research.prosperity_health import Row
+    return Row(symbol=symbol, status=status, grade=grade if status == 'ranked' else None, rank=rank,
+               score=score if score is not None else (100.0 - rank if rank else None), sector=sector,
+               pit_basis=pit, beta=beta, breakdown=breakdown or {}, family_scores={}, badges=())
+
+
+def view(rows, *, as_of='2026-09-26', frozen_at='2026-09-27T00:00:00Z', board_type='quarter_final',
+         mode='replay'):
+    from backtest.research.prosperity_health import BoardView
+    return BoardView(scheme_id='F1', scheme_hash='h', code_version='v', as_of=as_of, quarter_label='2026Q2',
+                     frozen_at=frozen_at, board_type=board_type, mode=mode, rows=tuple(rows))
+
+
+def stepped(r, s):
+    """Flat at 10 through calendar index s, then 10 × (1 + r)."""
+    return [(d, 10.0 if k <= s else 10.0 * (1 + r)) for k, d in enumerate(CAL)]
+
+
+def test_tiers_are_fixed_by_rank():
+    from backtest.research.prosperity_health import assign_tiers
+    assert list(assign_tiers(list('abcdefghij')).values()) == [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+    assert list(assign_tiers(list('abcdefg')).values()) == [0, 0, 1, 2, 2, 3, 4]
+
+
+def test_board_tiers_baseline_excess_ic_and_top():
+    from backtest.research.prosperity_health import evaluate_board
+    s = CAL.index('2026-09-28')
+    rets = {f'R{i}': (10 - i) / 100 for i in range(10)}
+    rets.update(O1=0.0, O2=0.0)
+    closes = {k: stepped(v, s) for k, v in rets.items()}
+    closes['X'] = stepped(0.5, s)
+    rows = [row(f'R{i}', i + 1) for i in range(10)]
+    rows += [row('O1', status='observe'), row('O2', status='observe'), row('X', status='excluded')]
+    out = evaluate_board(view(rows), book(closes), horizon=1)
+    base = sum(rets.values()) / 12
+    assert out.status == 'complete' and out.start == '2026-09-28' and out.end == CAL[s + 63]
+    assert out.baseline == pytest.approx(base) and 'X' not in out.returns
+    assert out.tier_excess[0] == pytest.approx(0.095 - base)
+    assert out.tier_excess[4] == pytest.approx(0.015 - base)
+    assert out.spread == pytest.approx(0.08) and out.ic == pytest.approx(1.0)
+    assert out.top == tuple(f'R{i}' for i in range(10))
+    assert out.top_excess == pytest.approx(0.055 - base)
+    assert out.coverage == {'ranked': (10, 10), 'universe': (12, 12)}
+
+
+def test_unknown_return_keeps_its_tier_and_ic_needs_ten():
+    from backtest.research.prosperity_health import evaluate_board
+    s = CAL.index('2026-09-28')
+    closes = {f'R{i}': stepped((10 - i) / 100, s) for i in range(1, 10)}
+    rows = [row(f'R{i}', i + 1) for i in range(10)]
+    out = evaluate_board(view(rows), book(closes), horizon=1)
+    assert out.tiers['R0'] == 0 and out.returns['R0'] == (None, 'no_price')
+    assert out.tier_excess[0] == pytest.approx(0.09 - out.baseline)
+    assert out.ic is None and out.coverage['ranked'] == (9, 10)
+
+
+def test_unfinished_window_is_in_progress_and_future_freeze_not_started():
+    from backtest.research.prosperity_health import evaluate_board
+    s = len(CAL) - 100
+    closes = {f'R{i}': stepped(0.01 * i, s) for i in range(10)}
+    rows = [row(f'R{i}', i + 1) for i in range(10)]
+    out = evaluate_board(view(rows, frozen_at=CAL[s - 1] + 'T08:30:00Z'), book(closes), horizon=3)
+    assert out.status == 'in_progress' and out.start == CAL[s] and out.end == CAL[-1]
+    later = evaluate_board(view(rows, frozen_at=CAL[-1] + 'T08:30:00Z'), book(closes), horizon=1)
+    assert later.status == 'not_started' and later.tier_excess == {} and later.start is None
+
+
+def test_overlap_lag_counts_actual_overlap_on_uneven_starts():
+    """Review P2: freezes 50 trading days apart still overlap a 63-day window."""
+    from backtest.research.prosperity_health import overlap_lag
+    starts = [0, 63, 113, 189, 237]                  # gaps 63, 50, 76, 48
+    assert overlap_lag([(s, s + 63) for s in starts]) == 1
+    assert overlap_lag([(s, s + 126) for s in starts]) == 2
+    assert overlap_lag([(s, s + 189) for s in starts]) == 3
+    assert overlap_lag([(s, s + 63) for s in (0, 63, 126)]) == 0
+    assert overlap_lag([]) == 0
+
+
+def test_interval_uses_newey_west_with_the_given_lag():
+    from scipy.stats import t as t_dist
+    from backtest.pipeline.primitives.evaluation import newey_west_tstat
+    from backtest.research.prosperity_health import interval
+    xs = [0.02, -0.01, 0.03, 0.01, 0.00, 0.04, -0.02, 0.02]
+    t, p = newey_west_tstat(xs, 2)
+    mean = sum(xs) / len(xs)
+    se = mean / t
+    half = t_dist.ppf(0.975, len(xs) - 1) * se
+    assert interval(xs, lag=2) == pytest.approx(
+        {'n': 8, 'mean': mean, 'se': se, 'lo': mean - half, 'hi': mean + half, 't': t, 'p': p, 'lag': 2})
+    assert interval(xs[:4], lag=0) == {'n': 4, 'mean': pytest.approx(sum(xs[:4]) / 4), 'lag': 0}
+    assert interval([], lag=0) == {'n': 0, 'mean': None, 'lag': 0}
+
+
+def test_icir_is_mean_over_sample_sd_and_not_annualized():
+    import statistics
+    from backtest.research.prosperity_health import ic_summary
+    ics = [0.05, 0.02, -0.01, 0.04, 0.03, 0.06]
+    out = ic_summary(ics, lag=1)
+    assert out['sd'] == pytest.approx(statistics.stdev(ics))
+    assert out['icir'] == pytest.approx(statistics.fmean(ics) / statistics.stdev(ics))
+    assert out['lag'] == 1 and out['n'] == 6
+    assert ic_summary([0.03] * 6, lag=1)['icir'] is None
+    assert ic_summary(ics[:4], lag=1)['icir'] is None
+
+
+def test_monotonic_requires_strictly_falling_complete_tiers():
+    from backtest.research.prosperity_health import monotonic
+    assert monotonic([0.03, 0.01, 0.0, -0.01, -0.02])
+    assert not monotonic([0.03, 0.01, 0.01, -0.01, -0.02])
+    assert not monotonic([0.03, None, 0.0, -0.01, -0.02])
+
+
+def test_board_view_reads_a_stored_board():
+    from backtest.research.prosperity_health import board_view
+    from tests.prosperity_fixtures import storage_batch
+    stored = next(b for b in storage_batch(freeze=True) if b.meta.board_type == 'quarter_final'
+                  and b.board.scheme_id == 'F1')
+    v = board_view(stored)
+    assert v.board_type == 'quarter_final' and v.frozen_at == stored.meta.frozen_at
+    assert [r.symbol for r in v.rows] == [r.symbol for r in stored.board.rows]
+    ranked = [r for r in v.rows if r.status == 'ranked']
+    first = ranked[0]
+    src = next(r for r in stored.board.rows if r.symbol == first.symbol)
+    assert first.rank == src.rank and first.grade == src.grade
+    assert set(first.breakdown) == set(src.z) | set(src.missing)
+
+
+def test_constant_returns_give_no_ic():
+    import warnings
+    from backtest.research.prosperity_health import evaluate_board
+    s = CAL.index('2026-09-28')
+    closes = {f'R{i}': stepped(0.02, s) for i in range(12)}
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        out = evaluate_board(view([row(f'R{i}', i + 1) for i in range(12)]), book(closes), horizon=1)
+    assert out.ic is None and out.spread == pytest.approx(0.0)
