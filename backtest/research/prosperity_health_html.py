@@ -240,6 +240,11 @@ def _ch_controls(ch: Mapping[str, Any]) -> str:
             rows.append([label, str(ex.get('n', 0)), pct(g.get('mean_return')), pct(ex.get('mean')), ci(ex),
                          num(ex.get('t'), 2), pval(ex.get('p')), str(ex.get('lag', DASH))])
         out.append(table(['组', '期数', '平均收益', '平均超额', '95% 区间', 't', 'p', 'lag'], rows))
+    prem = [[_e(p['as_of']), str(p['members']), pct(p['fundamental_ready'], 1, signed=False),
+             pct(p['beta_ready'], 1, signed=False)] for p in ch.get('premium_periods', ())]
+    out.append('<details><summary>Premium 逐期只数与覆盖率</summary><p class="dim">基本面可评估率低的期'
+               '（早期历史季度不足 5 个）Premium 只数很少，该期对照不稳。</p>'
+               + table(['as_of', 'Premium 只数', '基本面可评估', 'beta 可用'], prem) + '</details>')
     return ''.join(out)
 
 

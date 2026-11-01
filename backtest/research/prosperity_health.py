@@ -540,6 +540,11 @@ def scheme_report(views: Sequence[BoardView], weekly: Sequence[BoardView], price
 
     tiers_ch, ic_ch, control_ch = {}, {}, {'common_periods': {}, 'common_range': {}, 'horizons': {},
                                            'premium_basis': 'approximate'}
+    control_ch['premium_periods'] = [
+        {'as_of': v.as_of, 'members': len(p['members']),
+         'fundamental_ready': ((p.get('coverage') or {}).get('fundamental_ready') or {}).get('ratio'),
+         'beta_ready': ((p.get('coverage') or {}).get('beta_ready') or {}).get('ratio')}
+        for v, p in zip(views, premiums)]
     coverage, unknown, large = {}, [], {}
     for h in HORIZONS:
         done = [(i, r) for i, r in enumerate(results[h]) if r.status == 'complete']

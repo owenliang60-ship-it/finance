@@ -360,3 +360,16 @@ def test_overlap_chapter_lists_both_top_40s_for_independent_checks():
     assert period['top'] == [f'R{i:02d}' for i in range(40)]
     assert period['momentum'] == [f'R{i:02d}' for i in range(44, 4, -1)]
     assert period['overlap'] == 35
+
+
+def test_control_chapter_reports_premium_size_and_coverage_per_period():
+    """Plan §8.5: the Premium gate is set to 0 for the look-back, so the actual coverage is reported."""
+    from backtest.research.prosperity_health import scheme_report
+    s0 = 261
+    closes = {f'R{i:02d}': [(d, 10.0 * (1 + 0.001 * i) ** k) for k, d in enumerate(CAL)] for i in range(45)}
+    funds = {s: quarter_rows([1.0, 1.0, 1.0, 1.0, 1.0, 1.5], ACCEPTED) for s in list(closes)[:9]}
+    rows = [row(s, k + 1, beta=1.5) for k, s in enumerate(sorted(closes))]
+    v = view(rows, as_of=CAL[s0 - 1], frozen_at=CAL[s0 - 1] + 'T08:30:00Z')
+    periods = scheme_report([v], [], book(closes), funds)['chapters']['对照组']['premium_periods']
+    assert periods == [{'as_of': CAL[s0 - 1], 'members': 9, 'fundamental_ready': pytest.approx(9 / 45),
+                        'beta_ready': pytest.approx(1.0)}]
