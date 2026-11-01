@@ -28,10 +28,10 @@ Plan：`docs/plans/2026-11-01-prosperity-m10-pool.md`；规则：北极星 §4.1
 ## A8 · 回归 — 通过
 
 - `code_version` 仍为 `13e5f9d5183f1b8e`。
-- 景气全套：`pytest tests/test_prosperity_*.py tests/test_run_prosperity_wrapper.py -q` → 474 passed。
+- 景气全套：`pytest tests/test_prosperity_*.py tests/test_run_prosperity_wrapper.py -q` → 492 passed（含两轮 code review 新增测试）。
 - 全量：同一 worktree、同一解释器（`.venv` Python 3.13）、同一命令 `pytest -q -rfE --tb=no -p no:cacheprovider`。
   基线 = 未改代码时的本 worktree（main `4324997d`）：`baseline-pytest.txt` 12 failed / 4188 passed / 4 skipped。
-  本分支：`branch-pytest.txt` 12 failed / 4224 passed / 4 skipped（+36 为 M10 新测试）。
+  本分支最终提交 `8a19b96d`：`branch-pytest.txt` 12 failed / 4242 passed / 4 skipped（+54 为 M10 新测试）。
   `failure-diff.txt`：**新增 0，消失 0**，共有 12：
 
 | 失败 nodeid | 原因 |

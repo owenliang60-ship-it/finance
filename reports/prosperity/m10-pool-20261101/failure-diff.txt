@@ -1,5 +1,5 @@
 baseline: 12 failed, 4188 passed, 4 skipped, 17 warnings in 331.94s (0:05:31)
-branch:   12 failed, 4224 passed, 4 skipped, 17 warnings in 306.66s (0:05:06)
+branch:   12 failed, 4242 passed, 4 skipped, 17 warnings in 296.68s (0:04:56)
 new failures (0):
 gone failures (0):
 shared failures (12):
