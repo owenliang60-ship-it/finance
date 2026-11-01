@@ -1,6 +1,6 @@
-# 景气 M9 周更运行与恢复
+# 景气 M9 周更运行与恢复（含 M10 精选池发布）
 
-代码位于 M9 worktree，尚未部署。正式部署须先决定计划 D5 的长期容量策略。
+M9 已部署（2026-10-26 装周六 16:30 / 20:30 两条 cron）。M10 精选池随 live 周更发布。
 
 ## 入口与所有权
 
@@ -47,10 +47,10 @@ cron 使用计划中的周六 16:30 / 20:30 CST 两个条目。所有 replay 入
 
 | 退出码 | 含义 | 处理 |
 |---|---|---|
-| 0 | 计算成功；无发布挂点也返回 0 | 查运行记录的 `publication_not_configured`，不当作已投递 |
+| 0 | 计算成功并已发布（`published` / `already_published`）；不传 `--pool-path` 时为 `publication_not_configured` | 只有 `published` 或 `already_published` 才表示池文件是本周的 |
 | 3 | 输入/基本面硬门控失败 | 修复输入证据后重试，不降低门槛 |
 | 4 | 日期、模式或参数错误 | 更正参数；当前周只能 live |
-| 5 | 已计算、发布失败 | 同周重试只发布，不重算 |
+| 5 | 已计算、发布未确认 | 同周重试只发布，不重算。池发布常见原因：`liquidity_window_short` / `liquidity_prices_stale`（价格没到或过期，先查 06:30 价格任务）、`pool coverage ratio invalid`（可排名或成交额覆盖率 <90%）、磁盘错误。池文件此时是上一版，或本周已校验的新版（`os.replace` 后目录 fsync 或 `mark_published` 失败）；读取端不会看到半写文件 |
 | 6 | 重建、空间、证据、恢复或运行故障 | 查 `.state/runs/` 的 error，保留候选记录 |
 | 75 | job/resource 锁忙 | 等待下一次入口，不并发绕过锁 |
 
@@ -100,7 +100,16 @@ cron 和周更入口都不会移除任何数据。空间不足时周更退出 6�
 实测（21 季单版本，307 MB，M 系列本机）：export 168 s，verify 151 s，remove 156 s，
 峰值 RSS 约 0.68 GB；移除后库为 0.1 MB，移除前备份 97 MB。
 
-## 发布边界
+## 发布边界（M10 起）
 
-当前发布挂点为空，M9 不生成池文件、网页或 Telegram 消息。
-未安装 cron、未 merge/push。M10–M13 接入后仍遵循全部发布成功才 `mark_published`。
+- cron 入口 `run_prosperity.sh` 固定传 `--pool-path data/pool/prosperity_pool.json`。
+  live 周更算完四张周榜后，发布挂点读 F1 周榜与 `market.db` 价格，生成池文件，
+  全部挂点成功后才 `mark_published`。
+- `--as-of` 与 `--rebuild-chain` 不调用挂点，不写池文件。
+- 直接运行 `scripts/prosperity_weekly.py` 不传 `--pool-path` 时不发布（本地验收即如此）。
+- 选池规则：F1 周榜 STRICT/FULL ∩ 周榜成员内最近 30 个交易日平均日成交额前 100，
+  合格的全进池（北极星 §4.1）。读取用 `src/data/prosperity_pool.load_prosperity_pool`，
+  不可用原因四种：`prosperity_pool_missing` / `_criteria_mismatch` / `_stale` / `_invalid`。
+- 池文件是派生产物，丢失或损坏时同周重跑入口即可重建（已发布的周会显示
+  `already_published` 而不重写；此时用本地 `build_pool` + `publish_prosperity_pool` 手动重建，需 Boss 确认）。
+- 网页、体检报告、Telegram（M11–M13）尚未接入。
