@@ -47,3 +47,34 @@ def test_cli_non_saturday_and_insufficient_space_never_creates(tmp_path, monkeyp
     monkeypatch.setattr(cli, 'check_space', no_space)
     assert cli.main(['--live', '--db', str(target)], now=lambda: NOW) == 6
     assert not target.exists()
+
+
+@pytest.mark.parametrize('extra,count', [([], 0), (['--pool-path', 'POOL'], 1)])
+def test_cli_pool_path_configures_publisher(tmp_path, monkeypatch, extra, count):
+    from scripts import prosperity_weekly as cli
+    from tests.prosperity_fixtures import seed_db
+    from src.data.prosperity_run import RunOutcome
+    captured = {}
+    def week(**kw):
+        captured.update(kw)
+        return RunOutcome(0)
+    monkeypatch.setattr(cli, 'run_week', week)
+    db = seed_db(tmp_path / 'market.db')
+    extra = [str(tmp_path / 'pool.json') if x == 'POOL' else x for x in extra]
+    assert cli.main(['--live', '--db', str(tmp_path / 'r.db'), '--market-db', str(db)] + extra,
+                    now=lambda: NOW) == 0
+    assert len(captured['publishers']) == count
+    assert not (tmp_path / 'pool.json').exists()
+
+
+@pytest.mark.parametrize('target', ['market', 'result'])
+def test_cli_pool_path_must_not_be_a_database(tmp_path, monkeypatch, target):
+    from scripts import prosperity_weekly as cli
+    from tests.prosperity_fixtures import seed_db
+    db = seed_db(tmp_path / 'market.db')
+    before = db.read_bytes()
+    result = tmp_path / 'r.db'
+    pool = db if target == 'market' else result
+    assert cli.main(['--live', '--db', str(result), '--market-db', str(db),
+                     '--pool-path', str(tmp_path / '.' / pool.name)], now=lambda: NOW) == 4
+    assert db.read_bytes() == before and not result.exists()

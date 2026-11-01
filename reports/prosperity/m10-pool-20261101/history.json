@@ -1,0 +1,304 @@
+{
+  "code_version": "13e5f9d5183f1b8e",
+  "f1_scheme_hash": "3f268258d997bbdc",
+  "market_db_sha256": "0f872769ea1fb88d80d512a3217cc8d83ee016bdb7dd42fc17022cdf2ed5555c",
+  "prosperity_db_sha256": "ca0aa05a7cfccf753799137d3bbe1df3d44004fe8f51e794533faf586ca09ef6",
+  "live": {
+    "as_of": "2026-10-31",
+    "selected": 45,
+    "strict": 17,
+    "eligible": 249,
+    "window": [
+      "2026-09-21",
+      "2026-10-30"
+    ]
+  },
+  "history": [
+    {
+      "as_of": "2021-09-04",
+      "mode": "replay",
+      "selected": 40,
+      "strict": 11,
+      "eligible": 278,
+      "ranked_ratio": 0.8335,
+      "window": [
+        "2021-07-26",
+        "2021-09-03"
+      ],
+      "validation": "ValueError: pool_ranked_coverage_below_floor: 706/847 < 0.9"
+    },
+    {
+      "as_of": "2021-12-04",
+      "mode": "replay",
+      "selected": 39,
+      "strict": 8,
+      "eligible": 254,
+      "ranked_ratio": 0.8376,
+      "window": [
+        "2021-10-22",
+        "2021-12-03"
+      ],
+      "validation": "ValueError: pool_ranked_coverage_below_floor: 691/825 < 0.9"
+    },
+    {
+      "as_of": "2022-03-19",
+      "mode": "replay",
+      "selected": 43,
+      "strict": 15,
+      "eligible": 235,
+      "ranked_ratio": 0.8582,
+      "window": [
+        "2022-02-04",
+        "2022-03-18"
+      ],
+      "validation": "ValueError: pool_ranked_coverage_below_floor: 702/818 < 0.9"
+    },
+    {
+      "as_of": "2022-06-04",
+      "mode": "replay",
+      "selected": 26,
+      "strict": 9,
+      "eligible": 223,
+      "ranked_ratio": 0.8861,
+      "window": [
+        "2022-04-22",
+        "2022-06-03"
+      ],
+      "validation": "ValueError: pool_ranked_coverage_below_floor: 677/764 < 0.9"
+    },
+    {
+      "as_of": "2022-09-03",
+      "mode": "replay",
+      "selected": 30,
+      "strict": 11,
+      "eligible": 188,
+      "ranked_ratio": 0.8908,
+      "window": [
+        "2022-07-25",
+        "2022-09-02"
+      ],
+      "validation": "ValueError: pool_ranked_coverage_below_floor: 661/742 < 0.9"
+    },
+    {
+      "as_of": "2022-12-03",
+      "mode": "replay",
+      "selected": 29,
+      "strict": 9,
+      "eligible": 210,
+      "ranked_ratio": 0.9013,
+      "window": [
+        "2022-10-21",
+        "2022-12-02"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2023-03-25",
+      "mode": "replay",
+      "selected": 29,
+      "strict": 9,
+      "eligible": 192,
+      "ranked_ratio": 0.915,
+      "window": [
+        "2023-02-10",
+        "2023-03-24"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2023-06-03",
+      "mode": "replay",
+      "selected": 36,
+      "strict": 11,
+      "eligible": 218,
+      "ranked_ratio": 0.9058,
+      "window": [
+        "2023-04-21",
+        "2023-06-02"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2023-09-02",
+      "mode": "replay",
+      "selected": 46,
+      "strict": 12,
+      "eligible": 261,
+      "ranked_ratio": 0.9173,
+      "window": [
+        "2023-07-24",
+        "2023-09-01"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2023-12-02",
+      "mode": "replay",
+      "selected": 41,
+      "strict": 13,
+      "eligible": 265,
+      "ranked_ratio": 0.9256,
+      "window": [
+        "2023-10-20",
+        "2023-12-01"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2024-03-23",
+      "mode": "replay",
+      "selected": 42,
+      "strict": 12,
+      "eligible": 270,
+      "ranked_ratio": 0.9205,
+      "window": [
+        "2024-02-09",
+        "2024-03-22"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2024-06-01",
+      "mode": "replay",
+      "selected": 47,
+      "strict": 11,
+      "eligible": 274,
+      "ranked_ratio": 0.9305,
+      "window": [
+        "2024-04-19",
+        "2024-05-31"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2024-08-31",
+      "mode": "replay",
+      "selected": 45,
+      "strict": 13,
+      "eligible": 280,
+      "ranked_ratio": 0.925,
+      "window": [
+        "2024-07-22",
+        "2024-08-30"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2024-11-30",
+      "mode": "replay",
+      "selected": 35,
+      "strict": 9,
+      "eligible": 274,
+      "ranked_ratio": 0.9079,
+      "window": [
+        "2024-10-18",
+        "2024-11-29"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2025-03-22",
+      "mode": "replay",
+      "selected": 48,
+      "strict": 13,
+      "eligible": 295,
+      "ranked_ratio": 0.9089,
+      "window": [
+        "2025-02-07",
+        "2025-03-21"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2025-05-31",
+      "mode": "replay",
+      "selected": 44,
+      "strict": 13,
+      "eligible": 248,
+      "ranked_ratio": 0.9168,
+      "window": [
+        "2025-04-17",
+        "2025-05-30"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2025-08-30",
+      "mode": "replay",
+      "selected": 45,
+      "strict": 9,
+      "eligible": 283,
+      "ranked_ratio": 0.9201,
+      "window": [
+        "2025-07-21",
+        "2025-08-29"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2025-11-29",
+      "mode": "replay",
+      "selected": 45,
+      "strict": 18,
+      "eligible": 290,
+      "ranked_ratio": 0.9115,
+      "window": [
+        "2025-10-17",
+        "2025-11-28"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2026-03-21",
+      "mode": "replay",
+      "selected": 46,
+      "strict": 10,
+      "eligible": 268,
+      "ranked_ratio": 0.9293,
+      "window": [
+        "2026-02-06",
+        "2026-03-20"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2026-05-30",
+      "mode": "replay",
+      "selected": 50,
+      "strict": 23,
+      "eligible": 309,
+      "ranked_ratio": 0.9224,
+      "window": [
+        "2026-04-17",
+        "2026-05-29"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2026-08-29",
+      "mode": "replay",
+      "selected": 43,
+      "strict": 14,
+      "eligible": 274,
+      "ranked_ratio": 0.9335,
+      "window": [
+        "2026-07-20",
+        "2026-08-28"
+      ],
+      "validation": "pass"
+    },
+    {
+      "as_of": "2026-10-31",
+      "mode": "live",
+      "selected": 45,
+      "strict": 17,
+      "eligible": 249,
+      "ranked_ratio": 0.9433,
+      "window": [
+        "2026-09-21",
+        "2026-10-30"
+      ],
+      "validation": "pass"
+    }
+  ]
+}

@@ -41,3 +41,9 @@ def test_falls_back_to_python3_without_venv(tmp_path):
 
 def test_prefers_venv_when_present(tmp_path):
     assert run(tmp_path, with_venv=True)[0] == 'venv'
+
+
+def test_cron_entry_passes_pool_path(tmp_path):
+    words = run(tmp_path, with_venv=False)
+    i = words.index('--pool-path')
+    assert words[i + 1] == str(tmp_path / 'data' / 'pool' / 'prosperity_pool.json')
