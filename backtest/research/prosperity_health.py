@@ -422,3 +422,246 @@ def short_history(views: Sequence[BoardView], scheme) -> List[dict]:
         cov = sum(has_z(r, f) for r in ranked) / len(ranked) if ranked else None
         out.append({'factor': f, 'periods': periods, 'latest_coverage': cov, 'verdict': 'UNKNOWN'})
     return out
+
+
+# ---------------------------------------------------------------------------
+# Controls: 12-1 momentum Top 40 and point-in-time Premium
+# ---------------------------------------------------------------------------
+
+def momentum_top(view: BoardView, prices: PriceBook) -> Optional[Tuple[str, ...]]:
+    t0 = bisect.bisect_right(prices.calendar, view.as_of) - 1
+    if t0 < MOMENTUM_LOOKBACK:
+        return None
+    lo, hi = t0 - MOMENTUM_LOOKBACK, t0 - MOMENTUM_SKIP
+    scored = []
+    for r in universe(view):
+        a, b = prices.close_at(r.symbol, lo), prices.close_at(r.symbol, hi)
+        if a is None or b is None or prices.unresolved_overlaps(r.symbol, lo, t0):
+            continue
+        if any(j['kind'] == 'split_suspect' for j in prices.jumps(r.symbol, lo, t0)):
+            continue
+        scored.append((-(b / a - 1), r.symbol))
+    return tuple(s for _, s in sorted(scored)[:TOP_N])
+
+
+def load_fundamentals(market, symbols: Iterable[str]) -> Dict[str, dict]:
+    return {s: {'income': market.get_income(s, limit=0), 'metrics': market.get_metrics(s, limit=0)}
+            for s in sorted(set(symbols))}
+
+
+def _available_on(row: Mapping[str, Any]) -> Optional[str]:
+    value = row.get('accepted_date') or row.get('filing_date')
+    return str(value)[:10] if value else None
+
+
+class _PitFundamentalStore:
+    """The three reads `build_premium_pool` makes, cut to quarters disclosed by `as_of`."""
+
+    def __init__(self, fundamentals: Mapping[str, dict], as_of: str):
+        self._income: Dict[str, List[dict]] = {}
+        self._metrics: Dict[str, List[dict]] = {}
+        for s, f in fundamentals.items():
+            income = sorted((r for r in f.get('income', ()) if (_available_on(r) or '9999') <= as_of),
+                            key=lambda r: r['date'], reverse=True)
+            known = {r['date'] for r in income}
+            self._income[s] = income
+            self._metrics[s] = sorted((m for m in f.get('metrics', ()) if m.get('date') in known),
+                                      key=lambda m: m['date'], reverse=True)
+
+    def get_coverage(self, dataset: str) -> Dict[str, str]:
+        return {s: 'ok' for s in self._income}
+
+    def get_income(self, symbol: str, limit: int = 8) -> List[dict]:
+        rows = self._income.get(symbol, [])
+        return rows[:limit] if limit > 0 else list(rows)
+
+    def get_metrics(self, symbol: str, limit: int = 8) -> List[dict]:
+        rows = self._metrics.get(symbol, [])
+        return rows[:limit] if limit > 0 else list(rows)
+
+
+def premium_members(view: BoardView, fundamentals: Mapping[str, dict], *, as_of: str) -> dict:
+    from terminal.selection_compass import build_premium_pool
+    members = universe(view)
+    symbols = [r.symbol for r in members]
+    store = _PitFundamentalStore({s: fundamentals[s] for s in symbols if s in fundamentals}, as_of)
+    result = build_premium_pool(store=store, symbols=symbols, as_of=as_of,
+                                beta_observations={r.symbol: r.beta for r in members},
+                                min_fundamental_coverage=0.0, min_beta_coverage=0.0)
+    chosen = tuple(m['symbol'] for m in result.get('members', ())) if result.get('available') else ()
+    return {'members': chosen, 'coverage': result.get('coverage'), 'basis': 'approximate'}
+
+
+# ---------------------------------------------------------------------------
+# Report assembly and BH-FDR
+# ---------------------------------------------------------------------------
+
+NOTES = ('不作上线门槛：体检报告只用来发现榜单的明显毛病，Boss 看完再拍板。',
+         '价格收益，不含分红：daily_price 收盘价，已处理有记录的拆股。',
+         '期数约 20，置信区间宽；p 值只作参考。')
+
+
+def _group_mean(returns: Mapping[str, Tuple[Optional[float], str]], symbols: Iterable[str]) -> Optional[float]:
+    return _mean(returns.get(s, (None, ''))[0] for s in symbols)
+
+
+def _series(points: Sequence[Tuple[PeriodResult, Optional[float]]], *, ic: bool = False) -> dict:
+    """Interval (or IC summary) over the periods that have a value; lag from those periods' windows."""
+    used = [(p, v) for p, v in points if v is not None]
+    lag = overlap_lag([(p.start_i, p.end_i) for p, _ in used])
+    values = [v for _, v in used]
+    out = ic_summary(values, lag=lag) if ic else interval(values, lag=lag)
+    out['as_of'] = [p.as_of for p, _ in used]
+    return out
+
+
+def _period_row(res: PeriodResult) -> dict:
+    return {'as_of': res.as_of, 'status': res.status, 'start': res.start, 'end': res.end,
+            'baseline': res.baseline, 'tier_excess': [res.tier_excess.get(t) for t in range(TIERS)],
+            'spread': res.spread, 'ic': res.ic, 'top_excess': res.top_excess,
+            'coverage': {k: list(v) for k, v in res.coverage.items()}}
+
+
+def scheme_report(views: Sequence[BoardView], weekly: Sequence[BoardView], prices: PriceBook,
+                  fundamentals: Mapping[str, dict], *, memo: Optional[dict] = None) -> dict:
+    from terminal.prosperity.schemes import SCHEMES
+    views = sorted(views, key=lambda v: v.as_of)
+    memo = {} if memo is None else memo
+    results = {h: [evaluate_board(v, prices, horizon=h) for v in views] for h in HORIZONS}
+    tops = [top_symbols(v) for v in views]
+    moms = [momentum_top(v, prices) for v in views]
+    premiums = []
+    for v in views:
+        members = universe(v)
+        key = (v.as_of, tuple((r.symbol, r.beta) for r in members))
+        if key not in memo:
+            memo[key] = premium_members(v, fundamentals, as_of=v.as_of)
+        premiums.append(memo[key])
+
+    tiers_ch, ic_ch, control_ch = {}, {}, {'common_periods': {}, 'common_range': {}, 'horizons': {},
+                                           'premium_basis': 'approximate'}
+    coverage, unknown, large = {}, [], {}
+    for h in HORIZONS:
+        done = [(i, r) for i, r in enumerate(results[h]) if r.status == 'complete']
+        means = [_series([(r, r.tier_excess.get(t)) for _, r in done]) for t in range(TIERS)]
+        tiers_ch[str(h)] = {'tiers': means, 'spread': _series([(r, r.spread) for _, r in done]),
+                            'top': _series([(r, r.top_excess) for _, r in done]),
+                            'monotonic': monotonic([m['mean'] for m in means]),
+                            'periods': [_period_row(r) for r in results[h]]}
+        ic_ch[str(h)] = {**_series([(r, r.ic) for _, r in done], ic=True),
+                         'series': [[r.as_of, r.ic] for r in results[h] if r.status == 'complete']}
+        rows = []
+        for i, r in done:
+            mom = moms[i]
+            groups = {'top': tops[i], 'momentum': mom, 'premium': premiums[i]['members']}
+            excess = {k: (None if g is None else group_excess(r.returns, g, r.baseline)) for k, g in groups.items()}
+            if all(x is not None for x in excess.values()):
+                raw = {k: _group_mean(r.returns, g) for k, g in groups.items()}
+                rows.append((r, excess, raw))
+        control_ch['common_periods'][str(h)] = len(rows)
+        control_ch['common_range'][str(h)] = [rows[0][0].as_of, rows[-1][0].as_of] if rows else None
+        control_ch['horizons'][str(h)] = {
+            **{k: {'mean_return': _mean(x[2][k] for x in rows), 'excess': _series([(x[0], x[1][k]) for x in rows])}
+               for k in ('top', 'momentum', 'premium')},
+            'universe': {'mean_return': _mean(x[0].baseline for x in rows), 'excess': 0.0 if rows else None},
+            'top_minus_momentum': {'excess': _series([(x[0], x[1]['top'] - x[1]['momentum']) for x in rows])},
+            'top_minus_premium': {'excess': _series([(x[0], x[1]['top'] - x[1]['premium']) for x in rows])},
+        }
+        ranked_valid = ranked_total = uni_valid = uni_total = 0
+        reasons: Dict[str, int] = {}
+        for i, r in done:
+            ranked_valid += r.coverage['ranked'][0]
+            ranked_total += r.coverage['ranked'][1]
+            uni_valid += r.coverage['universe'][0]
+            uni_total += r.coverage['universe'][1]
+            for row_ in ranked_rows(views[i]):
+                ret, why = r.returns[row_.symbol]
+                if ret is None:
+                    reasons[why] = reasons.get(why, 0) + 1
+                    unknown.append({'symbol': row_.symbol, 'as_of': r.as_of, 'horizon': h, 'reason': why,
+                                    'last_price_date': prices.last_date(row_.symbol)})
+                for j in prices.jumps(row_.symbol, r.start_i, r.end_i):
+                    if j['kind'] == 'large_move':
+                        large[(row_.symbol, j['date'])] = j['ratio']
+        coverage[str(h)] = {'ranked': [ranked_valid, ranked_total], 'universe': [uni_valid, uni_total],
+                            'reasons': dict(sorted(reasons.items()))}
+
+    overlap = [{'as_of': v.as_of, 'overlap': len(set(tops[i]) & set(moms[i])), 'top_n': len(tops[i]),
+                'momentum_n': len(moms[i])} for i, v in enumerate(views) if moms[i] is not None]
+    conc = [{'as_of': v.as_of, **concentration(v, tops[i])} for i, v in enumerate(views)]
+    quarterly = [{'as_of': views[i].as_of, 'turnover': turnover(tops[i - 1], tops[i])} for i in range(1, len(views))]
+    wk = sorted(weekly, key=lambda v: v.as_of)
+    wtops = [top_symbols(v) for v in wk]
+    weekly_turn = ({'n': len(wk)} if len(wk) < 2 else
+                   {'n': len(wk), 'series': [{'as_of': wk[i].as_of, 'turnover': turnover(wtops[i - 1], wtops[i])}
+                                             for i in range(1, len(wk))]})
+    if 'series' in weekly_turn:
+        weekly_turn['mean'] = _mean(x['turnover'] for x in weekly_turn['series'])
+    no_price: Dict[str, int] = {}
+    for v in views:
+        for r in universe(v):
+            if prices.last_date(r.symbol) is None:
+                no_price[r.symbol] = no_price.get(r.symbol, 0) + 1
+    members = {r.symbol for v in views for r in universe(v)}
+    ranked_all = [r for v in views for r in ranked_rows(v)]
+    first = views[0] if views else None
+    scheme = SCHEMES.get(first.scheme_id) if first else None
+    header = {
+        'scheme_id': first.scheme_id if first else None, 'scheme_hash': first.scheme_hash if first else None,
+        'code_version': first.code_version if first else None, 'periods': len(views),
+        'as_of_range': [views[0].as_of, views[-1].as_of] if views else None,
+        'complete': {str(h): sum(r.status == 'complete' for r in results[h]) for h in HORIZONS},
+        'in_progress': {str(h): sum(r.status == 'in_progress' for r in results[h]) for h in HORIZONS},
+        'approximate_share': (sum(r.pit_basis == 'approximate' for r in ranked_all) / len(ranked_all)
+                              if ranked_all else None),
+        'return_coverage': coverage, 'price_last_date': prices.calendar[-1] if prices.calendar else None,
+        'notes': list(NOTES),
+    }
+    return {
+        'header': header,
+        'chapters': {
+            CHAPTERS[0]: tiers_ch,
+            CHAPTERS[1]: ic_ch,
+            CHAPTERS[2]: control_ch,
+            CHAPTERS[3]: {'periods': overlap, 'mean_overlap': _mean(x['overlap'] for x in overlap),
+                          'mean_share': _mean(x['overlap'] / x['top_n'] for x in overlap if x['top_n'])},
+            CHAPTERS[4]: {'periods': conc, 'mean_max_share': _mean(x['max_share'] for x in conc),
+                          'mean_hhi': _mean(x['hhi'] for x in conc)},
+            CHAPTERS[5]: {'quarterly': quarterly, 'quarterly_mean': _mean(x['turnover'] for x in quarterly),
+                          'weekly': weekly_turn},
+            CHAPTERS[6]: failure_cases([(v, results[3][i]) for i, v in enumerate(views)]),
+            CHAPTERS[7]: short_history(views, scheme) if scheme else [],
+        },
+        'appendix': {
+            'unknown': unknown,
+            'no_price': [{'symbol': s, 'periods': n} for s, n in sorted(no_price.items())],
+            'large_moves': [{'symbol': s, 'date': d, 'ratio': x} for (s, d), x in sorted(large.items())],
+            'splits': [{'symbol': s, 'fmp_date': d, 'factor': f, 'state': st}
+                       for s, d, f, st in prices.split_events if s in members],
+            'adjustments': [{'symbol': s, 'date': d, 'factor': f} for s, d, f in prices.adjustments if s in members],
+        },
+    }
+
+
+def bh_adjust(p_values: Sequence[Optional[float]]) -> List[Optional[float]]:
+    """BH over a fixed family; tests without a p value count as p = 1 and stay unknown."""
+    from scipy.stats import false_discovery_control
+    if not p_values:
+        return []
+    adjusted = false_discovery_control([1.0 if p is None else float(p) for p in p_values], method='bh')
+    return [None if p is None else float(a) for p, a in zip(p_values, adjusted)]
+
+
+def apply_bh(reports: Mapping[str, dict]) -> dict:
+    tests = []
+    for rep in reports.values():
+        for h in HORIZONS:
+            tests.append(rep['chapters'][CHAPTERS[0]][str(h)]['spread'])
+            tests.append(rep['chapters'][CHAPTERS[1]][str(h)])
+    adjusted = bh_adjust([t.get('p') for t in tests])
+    for t, a in zip(tests, adjusted):
+        t['p_bh'] = a
+    family = {'family': len(tests), 'estimated': sum(t.get('p') is not None for t in tests)}
+    for rep in reports.values():
+        rep['header']['bh'] = dict(family)
+    return family

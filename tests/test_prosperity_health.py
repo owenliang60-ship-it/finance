@@ -269,3 +269,82 @@ def test_expectation_factors_are_unknown_with_period_count():
         {'factor': 'surprise', 'periods': 1, 'latest_coverage': 0.0, 'verdict': 'UNKNOWN'},
         {'factor': 'revision', 'periods': 0, 'latest_coverage': 0.0, 'verdict': 'UNKNOWN'}]
     assert short_history([old, new], SCHEMES['F0']) == []
+
+
+def test_momentum_12_1_skips_last_month_and_needs_a_year():
+    from backtest.research.prosperity_health import momentum_top
+    t0 = len(CAL) - 60
+    closes = {f'M{i:02d}': [(d, 10.0 if k < t0 - 200 else 10.0 * (1 + i / 100)) for k, d in enumerate(CAL)]
+              for i in range(45)}
+    closes['SPIKE'] = [(d, 10.0 if k < t0 - 10 else 17.0) for k, d in enumerate(CAL)]
+    rows = [row(s, k + 1) for k, s in enumerate(sorted(closes))]
+    top = momentum_top(view(rows, as_of=CAL[t0]), book(closes))
+    assert top == tuple(f'M{i:02d}' for i in range(44, 4, -1))
+    assert momentum_top(view(rows, as_of=CAL[200]), book(closes)) is None
+
+
+def quarter_rows(eps, accepted):
+    """Six fiscal quarters 2025Q1..2026Q2, newest first, as MarketStore.get_income returns them."""
+    ends = ['2025-03-31', '2025-06-30', '2025-09-30', '2025-12-31', '2026-03-31', '2026-06-30']
+    labels = [('2025', 'Q1'), ('2025', 'Q2'), ('2025', 'Q3'), ('2025', 'Q4'), ('2026', 'Q1'), ('2026', 'Q2')]
+    income = [{'date': d, 'fiscal_year': fy, 'period': p, 'eps_diluted': e, 'revenue': 100.0 + k,
+               'net_income': 10.0 + k, 'accepted_date': a + ' 16:00:00', 'filing_date': a}
+              for k, (d, (fy, p), e, a) in enumerate(zip(ends, labels, eps, accepted))]
+    metrics = [{'date': d, 'revenue_cagr_4q': 0.2, 'net_income_cagr_4q': 0.2} for d in ends]
+    return {'income': income[::-1], 'metrics': metrics[::-1]}
+
+
+ACCEPTED = ['2025-05-01', '2025-08-01', '2025-11-01', '2026-02-20', '2026-05-01', '2026-08-05']
+
+
+def test_premium_recomputed_point_in_time_with_archived_beta():
+    from backtest.research.prosperity_health import premium_members
+    funds = {'A': quarter_rows([1.0, 1.0, 1.0, 1.0, 1.0, 1.5], ACCEPTED),
+             'B': quarter_rows([1.0, 1.0, 1.0, 1.0, 1.0, 1.5], ACCEPTED)}
+    rows = [row('A', 1, beta=1.5), row('B', 2, beta=1.2)]
+    after = premium_members(view(rows, as_of='2026-08-08'), funds, as_of='2026-08-08')
+    assert after['members'] == ('A',) and after['basis'] == 'approximate'
+    before = premium_members(view(rows, as_of='2026-07-31'), funds, as_of='2026-07-31')
+    assert before['members'] == ()
+
+
+def test_bh_uses_the_fixed_family_and_keeps_missing_tests_unknown():
+    """Review P2: one estimated p = .04 in a family of 12 → .48, not .04."""
+    from backtest.research.prosperity_health import bh_adjust
+    out = bh_adjust([0.04] + [None] * 11)
+    assert out[0] == pytest.approx(0.48) and out[1:] == [None] * 11
+    assert bh_adjust([0.01, 0.04, None]) == [pytest.approx(0.03), pytest.approx(0.06), None]
+
+
+def test_scheme_report_and_bh_family():
+    from backtest.research.prosperity_health import CHAPTERS, apply_bh, scheme_report
+    s = CAL.index('2026-09-28')
+    closes = {f'R{i}': stepped((10 - i) / 100, s) for i in range(10)}
+    views = [view([row(f'R{i}', i + 1) for i in range(10)])]
+    rep = scheme_report(views, [], book(closes), {})
+    assert rep['header']['periods'] == 1 and rep['header']['complete'] == {'1': 1, '2': 1, '3': 1}
+    assert list(rep['chapters']) == list(CHAPTERS)
+    assert rep['chapters']['换手率']['weekly'] == {'n': 0}
+    assert rep['chapters']['对照组']['common_periods'] == {'1': 0, '2': 0, '3': 0}   # no fundamentals: Premium empty
+    assert set(rep['chapters']['IC']['3']) >= {'mean', 'sd', 'icir', 'lag', 'n'}
+    bh = apply_bh({'F1': rep, 'F0': scheme_report(views, [], book(closes), {})})
+    assert bh == {'family': 12, 'estimated': 0}
+
+
+def test_control_chapter_uses_common_periods_only():
+    """Momentum is missing for the early board, so it is left out of every control row."""
+    from backtest.research.prosperity_health import scheme_report
+    s0 = 261                                   # momentum needs 252 days; Premium needs a quarter ≤ 200 days old
+    early, late = CAL[s0 - 1], CAL[s0 + 63 - 1]
+    closes = {f'R{i}': [(d, 10.0 * (1 + 0.001 * i) ** k) for k, d in enumerate(CAL)] for i in range(45)}
+    funds = {s: quarter_rows([1.0, 1.0, 1.0, 1.0, 1.0, 1.5], ACCEPTED) for s in closes}
+    rows = [row(s, k + 1, beta=1.5) for k, s in enumerate(sorted(closes))]
+    views = [view(rows, as_of=CAL[100], frozen_at=CAL[100] + 'T08:30:00Z'),
+             view(rows, as_of=early, frozen_at=early + 'T08:30:00Z'),
+             view(rows, as_of=late, frozen_at=late + 'T08:30:00Z')]
+    rep = scheme_report(views, [], book(closes), funds)
+    ctrl = rep['chapters']['对照组']
+    assert ctrl['common_periods']['1'] == 2 and ctrl['common_range']['1'] == [early, late]
+    h1 = ctrl['horizons']['1']
+    assert h1['top']['excess']['n'] == h1['momentum']['excess']['n'] == h1['premium']['excess']['n'] == 2
+    assert rep['chapters']['分层前瞻收益']['1']['spread']['n'] == 3
