@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
 from src.data.market_store import MarketStore
 from src.data.prosperity_backup import backup_bundle, check_space
 from src.data.prosperity_gates import CST, instant
+from src.data.prosperity_pool import pool_publisher
 from src.data.prosperity_run import rebuild_freeze_chain, run_week, this_saturday, utcnow
 from src.data.prosperity_storage import canonical
 from src.data.prosperity_store import ProsperityStore
@@ -41,6 +42,8 @@ def parse_args(argv, now):
     p.add_argument('--observed-at')
     p.add_argument('--snapshot-sha256', help='optional SHA256 of the fixed input snapshot')
     p.add_argument('--backup-dir', type=Path, help='matched SQLite/state backups, retaining two sets')
+    p.add_argument('--pool-path', type=Path,
+                   help='publish the M10 pool file here after a live week; omitted = no publication')
     args = p.parse_args(argv)
     current = this_saturday(now())
     if args.db.resolve() == args.market_db.resolve():
@@ -88,9 +91,12 @@ def main(argv=None, *, now=utcnow):
                 if args.rebuild_chain:
                     out = rebuild_freeze_chain(through=args.through, **common)
                 else:
+                    publishers = () if args.pool_path is None else (
+                        pool_publisher(store=store, market=market, path=args.pool_path, now=now),)
                     out = run_week(saturday=this_saturday(now()).isoformat() if args.live else args.as_of,
                                    mode='live' if args.live else 'replay', quality_dir=args.quality_dir,
-                                   observed_at=args.observed_at, snapshot_sha256=args.snapshot_sha256, **common)
+                                   observed_at=args.observed_at, snapshot_sha256=args.snapshot_sha256,
+                                   publishers=publishers, **common)
         finally:
             market.close()
         if args.backup_dir and out.exit_code in (0, 5):

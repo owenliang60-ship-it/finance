@@ -191,3 +191,102 @@ def test_directory_fsync_failure_leaves_validated_new_file(tmp_path, monkeypatch
     loaded = load_prosperity_pool(path, now=NOW)
     assert loaded['available'] is True and loaded['generated_at'] == '2026-10-31T08:55:00Z'
     assert sorted(p.name for p in path.parent.iterdir()) == ['prosperity_pool.json']
+
+
+# ---- Task 3: live publish hook ------------------------------------------------------
+from src.data.prosperity_store import ProsperityStore
+
+LIVE_NOW = datetime(2026, 10, 24, 9, tzinfo=timezone.utc)
+
+
+def builder(market, as_of, **kwargs):
+    from tests.prosperity_fixtures import storage_inputs
+    packets, _, _, _ = storage_inputs(as_of=as_of, count=20)
+    packets = [replace(p, quarter_bucket='2026Q2') for p in packets]
+    return packets, {'members_resolved': len(packets), 'errors': {}}
+
+
+@pytest.fixture
+def live(tmp_path):
+    quality = tmp_path / 'quality'
+    quality.mkdir()
+    (quality / 'fundamentals-now.json').write_text(json.dumps({'after': {
+        'as_of': '2026-10-24T07:00:00Z', 'coverage': {'fundamental_ready': {'ratio': .96}}}}))
+    db = seed_db(tmp_path / 'market.db')
+    return tmp_path, db, quality
+
+
+def run(tmp_path, db, quality, mode='live', saturday='2026-10-24'):
+    from src.data.prosperity_pool import pool_publisher
+    from src.data.prosperity_run import run_week
+    path = tmp_path / 'pool' / 'prosperity_pool.json'
+    market = MarketStore(db_path=db, read_only=True)
+    try:
+        with ProsperityStore(tmp_path / 'result.db', read_only=False) as store:
+            out = run_week(saturday=saturday, mode=mode, market=market, store=store, quality_dir=quality,
+                           publishers=(pool_publisher(store=store, market=market, path=path, now=lambda: LIVE_NOW),),
+                           now=lambda: LIVE_NOW, version='test-m10', start_quarter='2026Q3',
+                           packet_builder=builder)
+            published = [store.publication_state(k).published_at for k in out.keys]
+    finally:
+        market.close()
+    return out, path, published
+
+
+def test_live_week_publishes_pool_then_marks(live):
+    from src.data.prosperity_pool import load_prosperity_pool
+    tmp_path, db, quality = live
+    seed_prices(db, {f'S{i:04d}': [(d, 10.0, 1000 * (i + 1)) for d in weekdays('2026-10-23', 35)]
+                     for i in range(20)})
+    out, path, published = run(tmp_path, db, quality)
+    assert out.exit_code == 0 and out.detail['publication'] == 'published'
+    assert all(published)
+    assert load_prosperity_pool(path, now=LIVE_NOW)['available'] is True
+
+
+def test_missing_prices_exit_5_then_retry_publishes_only(live):
+    tmp_path, db, quality = live
+    out, path, published = run(tmp_path, db, quality)
+    assert out.exit_code == 5 and 'liquidity_window_short' in out.error
+    assert not path.exists() and not any(published)
+    seed_prices(db, {f'S{i:04d}': [(d, 10.0, 1000) for d in weekdays('2026-10-23', 35)] for i in range(20)})
+    again, path, published = run(tmp_path, db, quality)
+    assert again.exit_code == 0 and set(again.keys) == set(out.keys) and all(published) and path.exists()
+
+
+def test_directory_fsync_failure_exits_5_then_retry_marks(live, monkeypatch):
+    import src.data.prosperity_pool as pool
+    from src.data.prosperity_pool import load_prosperity_pool
+    tmp_path, db, quality = live
+    seed_prices(db, {f'S{i:04d}': [(d, 10.0, 1000) for d in weekdays('2026-10-23', 35)] for i in range(20)})
+    real = pool._fsync_dir
+    def broken(directory):
+        raise OSError('fsync failed')
+    monkeypatch.setattr(pool, '_fsync_dir', broken)
+    out, path, published = run(tmp_path, db, quality)
+    assert out.exit_code == 5 and 'fsync failed' in out.error and not any(published)
+    assert load_prosperity_pool(path, now=LIVE_NOW)['available'] is True     # validated new file is visible
+    monkeypatch.setattr(pool, '_fsync_dir', real)
+    again, _, published = run(tmp_path, db, quality)
+    assert again.exit_code == 0 and again.detail['publication'] == 'published' and all(published)
+
+
+def test_mark_published_failure_exits_5_then_retry_marks(live, monkeypatch):
+    tmp_path, db, quality = live
+    seed_prices(db, {f'S{i:04d}': [(d, 10.0, 1000) for d in weekdays('2026-10-23', 35)] for i in range(20)})
+    real = ProsperityStore.mark_published
+    def broken(self, keys, *, published_at):
+        raise RuntimeError('mark failed')
+    monkeypatch.setattr(ProsperityStore, 'mark_published', broken)
+    out, path, published = run(tmp_path, db, quality)
+    assert out.exit_code == 5 and 'mark failed' in out.error and not any(published) and path.exists()
+    monkeypatch.setattr(ProsperityStore, 'mark_published', real)
+    again, _, published = run(tmp_path, db, quality)
+    assert again.exit_code == 0 and all(published)
+
+
+def test_replay_week_never_writes_pool(live):
+    tmp_path, db, quality = live
+    seed_prices(db, {f'S{i:04d}': [(d, 10.0, 1000) for d in weekdays('2026-10-16', 35)] for i in range(20)})
+    out, path, _ = run(tmp_path, db, quality, mode='replay', saturday='2026-10-17')
+    assert out.exit_code == 0 and not path.exists()

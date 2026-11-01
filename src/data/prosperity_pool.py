@@ -281,3 +281,25 @@ def publish_prosperity_pool(payload: dict, path=POOL_PATH, *, now: Optional[date
     finally:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
+
+
+def pool_publisher(*, store, market, path=POOL_PATH, now=None):
+    """M9 publish hook: build this week's pool from the stored F1 live board and publish it.
+
+    run_week calls it only for live weeks and marks the boards published after every hook succeeds.
+    """
+    clock = now or (lambda: datetime.now(timezone.utc))
+
+    def publish(keys):
+        sources = [k for k in keys if k.board_type == 'weekly'
+                   and k.scheme_hash == scheme_hash(SCHEMES[POOL_SCHEME_ID])]
+        if len(sources) != 1:
+            raise ValueError('pool_source_missing')
+        stored = store.get_board(sources[0])
+        if stored is None:
+            raise ValueError('pool_source_missing')
+        at = clock()
+        liquidity = liquidity_ranks(market, stored.meta.members, stored.board.as_of)
+        publish_prosperity_pool(build_pool(stored, liquidity, generated_at=_utc(at)), path, now=at)
+
+    return publish
