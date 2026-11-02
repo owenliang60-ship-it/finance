@@ -1,0 +1,44 @@
+as_of 2026-10-31  board_id 337  members 899  ranked 848  tier_cut 170
+SPY window 2026-09-21 .. 2026-10-30 (30 days); pool window ['2026-09-21', '2026-10-30']
+expected 36 (STRICT 17); pool 36
+differences: 0
+  #  1 SNDK   STRICT dv#7
+  #  8 CVX    STRICT dv#56
+  # 12 MU     STRICT dv#1
+  # 13 STX    STRICT dv#20
+  # 16 AVGO   STRICT dv#12
+  # 19 XOM    STRICT dv#44
+  # 23 VLO    STRICT dv#80
+  # 26 VRT    STRICT dv#71
+  # 28 LRCX   STRICT dv#29
+  # 34 AMD    STRICT dv#8
+  # 40 GLW    STRICT dv#84
+  # 43 TSM    STRICT dv#15
+  # 44 PLTR   STRICT dv#18
+  # 47 TXN    STRICT dv#54
+  # 49 COHR   STRICT dv#47
+  # 50 SMCI   STRICT dv#74
+  # 55 NVDA   STRICT dv#2
+  # 61 MDT    FULL   dv#36
+  # 67 HPE    FULL   dv#89
+  # 73 MRVL   FULL   dv#14
+  # 79 AMAT   FULL   dv#26
+  # 90 AAPL   FULL   dv#6
+  # 97 APP    FULL   dv#82
+  #101 ADI    FULL   dv#72
+  #104 CIEN   FULL   dv#97
+  #112 WFC    FULL   dv#83
+  #114 KLAC   FULL   dv#55
+  #117 ARM    FULL   dv#61
+  #119 ALAB   FULL   dv#76
+  #122 NU     FULL   dv#81
+  #123 CAT    FULL   dv#39
+  #139 NFLX   FULL   dv#30
+  #145 V      FULL   dv#34
+  #154 AMGN   FULL   dv#88
+  #157 SNOW   FULL   dv#69
+  #159 COST   FULL   dv#38
+
+Tamper acceptance (2026-11-02, copies in a temp dir):
+  last member rank → 171        → exit 1, differences: 1
+  drop member #6 (selected −1)  → exit 1, differences: 31

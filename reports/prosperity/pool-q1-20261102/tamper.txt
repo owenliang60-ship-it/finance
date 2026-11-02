@@ -1,0 +1,9 @@
+TER: rank 178, grade FULL, dollar-volume rank 96; real tier_cut 170, inflated ranked 899 → tier_cut 180
+written pool-20261031-ter.json: members 37
+validate_prosperity_pool: accepted (expected: the file alone is self-consistent)
+board_mismatch: 'ranked' (expected 'ranked')
+verify_pool.py: exit 1, differences: 3 (expected exit 1)
+  length differs: expected 36 pool 37
+  ranked differs: board 848 pool 899
+  tier_cut differs: board 170 pool 180
+A3b: pass
