@@ -110,7 +110,8 @@ cron 和周更入口都不会移除任何数据。空间不足时周更退出 6�
 - 选池规则：F1 周榜第一档（排名 ≤ ceil(可排名数 / 5)）∩ STRICT/FULL ∩ 周榜成员内最近 30 个交易日平均日成交额前 100，
   合格的全进池（北极星 §4.1）。读取用 `src/data/prosperity_pool.load_prosperity_pool`，
   不可用原因四种：`prosperity_pool_missing` / `_criteria_mismatch` / `_stale` / `_invalid`。
-  能读原榜的读取端另调 `board_mismatch(pool, stored)`，核对池文件自报的人数与切点（北极星 §4.1）。
+  能读原榜的读取端另调 `board_mismatch(pool, stored)` 核对池文件自报的榜级计数与切点，
+  再逐成员对照原榜核对排名和评级（`board_mismatch` 不查成员，北极星 §4.1）。
   2026-11-02 起规则含第一档；此前按旧规则生成的池文件读取时报 `_criteria_mismatch`（预期）。
 - 周榜一旦标记已发布，同周再跑只返回 `already_published`，**不会检查或重写池文件**。
   发布后池文件被删或损坏，读取端会报 `prosperity_pool_missing` / `_invalid`（fail-closed，不会读到错数据）；

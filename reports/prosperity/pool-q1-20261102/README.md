@@ -60,6 +60,20 @@ R=reports/prosperity/pool-q1-20261102
 - 篡改验收：基准副本改一期超额 +0.001 → 差异 1、退出 1；改 3 季区间下限 +0.001 → 差异 1、退出 1。
 - 价格收益不含分红；历史榜为事后回放（approximate）；18 期样本，区间宽。
 
-## A5 · 回归
+## A5 · 回归 — 通过
 
-见 `baseline-pytest.txt`、`branch-pytest.txt`、`failure-diff.txt`（Task 3 Step 2 生成）。
+- `code_version()` = `13e5f9d5183f1b8e`，未变。
+- 全量 `pytest -q -rfE --tb=no -p no:cacheprovider`（`.venv` Python 3.13）：
+  - 分支：`branch-pytest.txt`，12 failed / 4299 passed / 4 skipped（在审查修复前的 `312e9b9b` 上运行）。
+  - 基线：`baseline-pytest.txt` 复制自 `reports/prosperity/m12-health/branch-pytest.txt`（M12 在 `4b07d03d` 上的运行）。原因：自动权限拒绝在本会话新建 main worktree 跑全量。`4b07d03d..b539dd18` 之间没有 `.py` 改动（`git diff --stat 4b07d03d b539dd18 -- '*.py'` 为空），所以这份结果就是 main `b539dd18` 的基线。
+  - `failure-diff.txt`：**新增 0，消失 0**，共有 12 个。7 个 `test_breadth_buy_quality` 是裸 worktree 没有研究数据文件；5 个 `test_morning_report` 依赖 live 概念注册表。两组都与本改动无关。
+- 审查修复后重跑景气全套 `pytest tests/test_prosperity_*.py tests/test_run_prosperity_wrapper.py -q`：**550 passed**（M12 为 536；本改动新增 14 个）。修复只改 `prosperity_pool.py` 和它的测试，所以没有重跑全量。
+
+## 审查修复后重跑（2026-11-02，`/code-review high` 7 条，见 plan §14）
+
+- `criteria.tier` 去掉 `keep`，所以重新生成了 `pool-20261031.json`、`pool-20261031-ter.json`、`history.json`。
+- A2：仍为 36 只、STRICT 17、`tier_cut` 170、哈希前缀 `305f4393`。22 期只数不变。
+- A3：差异 0；两份篡改副本退出 1。
+- A3b：结果不变，`board_mismatch` 返回 `'ranked'`。
+- A4：从头重算 `returns-computed.json`，135 值差异 0；两份篡改基准退出 1。
+- 输入快照哈希前后不变。

@@ -26,6 +26,10 @@ from terminal.prosperity.schemes import SCHEMES, scheme_hash  # noqa: E402
 from terminal.prosperity.version import code_version  # noqa: E402
 
 TOL = 1e-12
+
+
+def _pct(x):
+    return '   None  ' if x is None else f'{x:+.6f}'      # an empty pool period has no excess
 STATS = ('n', 'mean', 'lo', 'hi', 't', 'p', 'wins')
 INTS = ('n', 'wins')
 
@@ -79,7 +83,7 @@ def compare(got, baseline):
             bad = bn != gn or (bx is None) != (gx is None) or (bx is not None and abs(bx - gx) > TOL)
             if bad:
                 diffs += 1
-            lines.append(f'{h}Q {as_of}  n {gn:>3} (base {bn:>3})  excess {gx:+.6f} (base {bx:+.6f})'
+            lines.append(f'{h}Q {as_of}  n {gn:>3} (base {bn:>3})  excess {_pct(gx)} (base {_pct(bx)})'
                          + ('  DIFF' if bad else ''))
         bs, gs = b['stats']['q1_liq'], got[h]['stats']
         for k in STATS:

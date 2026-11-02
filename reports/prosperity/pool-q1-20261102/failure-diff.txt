@@ -1,0 +1,5 @@
+baseline = main b539dd18 (Python files identical to 4b07d03d; copied from reports/prosperity/m12-health/branch-pytest.txt)
+branch = prosperity/pool-q1 312e9b9b
+new failures:
+gone failures:
+common: 12

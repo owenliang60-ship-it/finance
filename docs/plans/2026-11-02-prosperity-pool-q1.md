@@ -329,3 +329,17 @@ def test_board_mismatch_catches_what_the_file_alone_cannot():
 |---|---|---|---|---|
 | 1 | P2 | 切点用池文件自报的 `ranked.covered` 计算；改人数后档外股票能进池，M11 成员核对也放行 | 成立。10-31 真实榜：可排名 848、切点 170；自报改 899 后切点 180，排名 178 的 TER（FULL，成交额第 96）满足其余全部条件 | 新增 `board_mismatch`（§9.4）对照原榜重算四个字段；Task 1 新测试；A3b 真实负例，样本存为 `pool-20261031-ter.json` 供 M11 使用；`verify_pool.py` 比对 `ranked.covered`；Architecture、§2、§3、§6 改写"读取端不动"的说法；北极星 §4.1 加读取端规则；M11 plan 同步修订（`prosperity/m11-web` §15，Boss 让本会话一起改） |
 | 2 | P2 | A4 只比三个汇总均值和胜率，没比逐期值和区间 | 成立。`/tmp/m12-pool/q1_liq.json` 有 21 期逐期超额与完整统计，只数与 §2 一致 | Task 2 Step 1 把基准原样归档到 `trial/`，并写明丢失时的重建办法；Step 4 按 (horizon, as_of) 逐项比较，写明容差；两份基准篡改副本必须失败；A4 改写 |
+
+## 14. 实现后 `/code-review high` 修订（2026-11-02）
+
+审查对象：`prosperity/pool-q1` `312e9b9b` 对比 main。共 7 条，逐条核实后全部处理。
+
+| # | 问题 | 核实 | 处理 |
+|---|---|---|---|
+| 1 | 北极星 §4.1 写"成员名单用 `board_mismatch` 核对"、"M11 已经接入"，都不属实 | 成立：函数不查成员；M11 只有 plan | 北极星、runbook、ARCHITECTURE、CHANGELOG 改为"两步：`board_mismatch` 查榜级计数，读取端再逐成员核对"；M11 写成"plan 已写入，尚未实现"；docstring 写明不查成员 |
+| 2 | `board_mismatch` 不核对 as_of 和来源哈希，靠调用方先绑定榜 | 成立：改 as_of 或 content_hash 后返回 None | 函数开头先查 `as_of`、`content_hash`，各配一个负例。M11 plan 的榜级绑定在它之前，字段顺序不冲突 |
+| 3 | A5 的三份 pytest 证据未提交 | 成立 | 随本次修订提交；README 写明基线来源，以及 `4b07d03d..b539dd18` 无 `.py` 改动 |
+| 4 | `pool_returns.py` 遇到空池那一期会在格式化时崩溃 | 成立：输入 None 时抛 TypeError | 加 `_pct`；把一期改成 None 实测，报 DIFF、计 1 处差异，不再崩溃 |
+| 5 | `POOL_TIERS` 与 M12 `TIERS` 是两处常量，测试只用字面量 | 成立 | 新增 `test_tier_cut_equals_health_report_tier_zero_count`（`importorskip('scipy')`）：断言两常量相等，n = 1..1000 时 `tier_cut` 与 `assign_tiers` tier 0 只数一致 |
+| 6 | `criteria.tier.keep` 写进文件，但没有代码读它 | 成立 | 删去 `keep`，只留 `tiers`。池文件和 TER 样本按新 criteria 重新生成，A2–A4 全部重跑，结果不变 |
+| 7 | 需求文档 R9 仍写"Top N" | 成立 | R9 改为新规则，注明原"Top N"。§12 自审的 grep 漏了"Top N"；其余几处"Top N"指体检报告的 Top 40 对照组和风险描述，保留 |

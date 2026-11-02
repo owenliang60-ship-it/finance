@@ -96,7 +96,7 @@ def tier_cut(n_ranked: int) -> int:
 def criteria_payload() -> dict:
     return {'scheme_id': POOL_SCHEME_ID, 'scheme_hash': scheme_hash(SCHEMES[POOL_SCHEME_ID]),
             'grades': list(POOL_GRADES),
-            'tier': {'tiers': POOL_TIERS, 'keep': 1},
+            'tier': {'tiers': POOL_TIERS},
             'liquidity': {'metric': 'avg_dollar_volume', 'trading_days': LIQUIDITY_DAYS,
                           'min_days': LIQUIDITY_MIN_DAYS, 'top': LIQUIDITY_TOP}}
 
@@ -290,13 +290,18 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
 
 
 def board_mismatch(pool: dict, stored) -> Optional[str]:
-    """Fields the pool file reports about its board, recomputed from the board itself.
+    """Board-level counts the pool file reports, recomputed from the board itself.
 
     validate_prosperity_pool only proves the file is self-consistent: raising coverage.ranked
     raises tier_cut with it and lets a real out-of-tier row in. A reader that can open the board
     must call this too. Returns the first mismatched field name, or None. Assumes the pool already
-    passed validate_prosperity_pool and is bound to `stored` by as_of and content_hash.
+    passed validate_prosperity_pool. It does NOT check members: each member's presence, status,
+    rank and grade must still be compared with the board row by the caller.
     """
+    if pool['as_of'] != stored.board.as_of:
+        return 'as_of'
+    if pool['source']['content_hash'] != content_hash(stored):
+        return 'content_hash'
     universe, coverage = pool['universe'], pool['coverage']
     expected = _universe(stored.meta.members)
     if universe['count'] != expected['count'] or universe['symbols_sha256'] != expected['symbols_sha256']:

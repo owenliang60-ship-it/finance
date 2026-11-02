@@ -127,6 +127,17 @@ def test_tier_cut_matches_health_report_first_tier(n, cut):
     assert tier_cut(n) == cut
 
 
+def test_tier_cut_equals_health_report_tier_zero_count():
+    # review 2026-11-02: the pool's first tier must stay the health report's Q1; skipped where scipy is absent
+    pytest.importorskip('scipy')
+    from backtest.research.prosperity_health import TIERS, assign_tiers
+    from src.data.prosperity_pool import POOL_TIERS, tier_cut
+    assert POOL_TIERS == TIERS
+    for n in range(1, 1001):
+        tiers = assign_tiers([str(i) for i in range(n)])
+        assert tier_cut(n) == sum(t == 0 for t in tiers.values()), n
+
+
 def test_zero_eligible_is_a_valid_empty_pool():
     from src.data.prosperity_pool import build_pool, validate_prosperity_pool
     board = f1_board()
@@ -196,6 +207,14 @@ def test_board_mismatch_catches_what_the_file_alone_cannot():
     board = f1_board()
     pool = valid_pool()
     assert board_mismatch(pool, board) is None
+
+    bad = copy.deepcopy(pool)
+    bad['as_of'] = '2026-10-24'
+    assert board_mismatch(bad, board) == 'as_of'
+
+    bad = copy.deepcopy(pool)
+    bad['source']['content_hash'] = '0' * 64
+    assert board_mismatch(bad, board) == 'content_hash'
 
     bad = copy.deepcopy(pool)
     stat = bad['coverage']['ranked']

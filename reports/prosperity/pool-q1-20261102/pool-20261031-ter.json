@@ -11,8 +11,7 @@
       "FULL"
     ],
     "tier": {
-      "tiers": 5,
-      "keep": 1
+      "tiers": 5
     },
     "liquidity": {
       "metric": "avg_dollar_volume",
