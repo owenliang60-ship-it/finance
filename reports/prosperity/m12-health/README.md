@@ -70,7 +70,7 @@ R=reports/prosperity/m12-health
 - 景气全套：`pytest tests/test_prosperity_*.py tests/test_run_prosperity_wrapper.py -q` → **536 passed**（M10 时 492；+44 为 M12 新测试，含两轮审查修复新增 15 个）。
 - 全量：同一解释器（`.venv` Python 3.13）、同一命令 `pytest -q -rfE --tb=no -p no:cacheprovider`。
   基线 = main `4feaa8d2` 的 detached worktree：`baseline-pytest.txt` 12 failed / 4242 passed / 4 skipped。
-  本分支 `e28d835e`（审查修复后）：`branch-pytest.txt` 12 failed / 4280 passed / 4 skipped。
+  本分支 `4b07d03d`（第三轮审查修复后）：`branch-pytest.txt` 12 failed / 4286 passed / 4 skipped。
   `failure-diff.txt`：**新增 0，消失 0**，共有 12 个。与 M10 验收列出的 12 个相同：7 个 `test_breadth_buy_quality`（裸 worktree 无研究数据文件）+ 5 个 `test_morning_report`（概念注册表依赖 live data），与 M12 无关。
 
 ## F1 结果摘要（供阅读，不作上线门槛）

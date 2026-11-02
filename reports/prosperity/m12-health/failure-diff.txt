@@ -1,6 +1,6 @@
-baseline: main 4feaa8d2 (detached worktree), branch: e28d835e (after review fixes); same interpreter .venv Python 3.13; pytest -q -rfE --tb=no -p no:cacheprovider
+baseline: main 4feaa8d2 (detached worktree), branch: 4b07d03d (after second review); same interpreter .venv Python 3.13; pytest -q -rfE --tb=no -p no:cacheprovider
 baseline: 12 failed, 4242 passed, 4 skipped, 17 warnings in 318.63s (0:05:18)
-branch:   12 failed, 4280 passed, 4 skipped, 17 warnings in 303.07s (0:05:03)
+branch:   12 failed, 4286 passed, 4 skipped, 17 warnings in 316.14s (0:05:16)
 new failures: 0
 gone failures: 0
 common failures:
