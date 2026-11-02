@@ -1,10 +1,10 @@
 # 景气引擎 M11 网页最小版 Implementation Plan
 
-**状态：2026-11-02 Boss 批准（含选池第一档同步修订，Boss 确认新选池规则由其拍板）。第一轮审查 1 个 P1、3 个 P2 已修订（见 §13）；选池规则同步见 §14。开工顺序：选池第一档改动（`prosperity/pool-q1`）先合并 main，M11 再从新 main 开工。**
+**状态：2026-11-02 Boss 批准（含选池第一档同步修订，Boss 确认新选池规则由其拍板）。第一轮审查 1 个 P1、3 个 P2 已修订（见 §13）；选池规则同步见 §14；选池 plan 审查后追加"池文件计数对照原榜"（`board_mismatch`），见 §15（2026-11-02 Boss 让 finance-8b 会话一起改，并批准 §15）。开工顺序：选池第一档改动（`prosperity/pool-q1`）先合并 main，M11 再从新 main 开工。**
 
 **Goal:** 本地一条命令读 `prosperity.db` 快照，生成一个纯静态 HTML 榜单页：最新周榜 + 全部季末冻结榜，四个方案，靠目录链接切换方案和期数。
 **Architecture:** 新模块 `src/data/prosperity_web.py` 把每张榜整理成行视图，再渲染成一个 HTML 文件。CLI `scripts/prosperity_web.py` 加快照检查（拒绝 WAL、读前读后比 SHA256）。库只读，不进 `code_version`，不改打分，不碰云端。云端生成与 Telegram 投递属于 M13，直接调用本模块的两个函数。
-**Tech Stack:** Python 3.10 标准库、sqlite3、现有 M8 `ProsperityStore`、M10 `validate_prosperity_pool` / `criteria_payload`、pytest。页面无 JS、无外部资源。
+**Tech Stack:** Python 3.10 标准库、sqlite3、现有 M8 `ProsperityStore`、M10 `validate_prosperity_pool` / `criteria_payload` / `board_mismatch`（选池第一档改动新增）、pytest。页面无 JS、无外部资源。
 **Spec:** `docs/design/prosperity-engine-north-star.md` §4.2（网页榜单）、模块表 #12；需求 R10、S2"网页可访问"。
 **北极星对齐:** 主北极星第二层「分析层 · 基本面」；景气北极星第四层「输出」。完成 R10 的 MVP 部分。
 **基线:** 开工时以选池第一档改动（分支 `prosperity/pool-q1`）合并后的 main 为准，届时替换本行与 Task 5 的 `b539dd18`；当前分支从 main `b539dd18` 拉出，开工前 rebase。分支 `prosperity/m11-web`，worktree `.worktrees/prosperity-m11`。`code_version` `13e5f9d5183f1b8e`，F1 `scheme_hash` `3f268258d997bbdc`。
@@ -81,9 +81,10 @@ flowchart TD
 - **最大风险：页面显示的分数或评级和库里不一致，Boss 照着看错。** 应对：真实数据验收用独立脚本 `verify_web.py`，只用标准库 `sqlite3` + `html.parser`，不 import `src`/`terminal`，直接查表重建 72,580 行，与 HTML 逐行逐列比对（排名、代码、评级或观察原因、分数、四族小分、徽章集合、入池标记、成交额排名），目标差异 0；再做篡改验收（分数、成交额排名各一次）。
 - **第二风险：入池标记标错期或标错股票。** 应对分两层：
   - 期：只在 F1 最新周榜、且池文件 `as_of`、`criteria`、`source.code_version`、`source.content_hash` 四项都与该榜一致时才标。
+  - 计数（§15）：池文件自报的可排名数、第一档切点、合格数、股票池名单，用 `board_mismatch` 与原榜重算值比对。只靠文件自洽拦不住"改人数抬高切点，再塞档外股票"（选池 plan 审查复现：10-31 可排名 848 改 899，切点 170 变 180，排名 178 的 TER 混进来）。
   - 股票（审查 P2-2）：`source.content_hash` 只证明池文件来自哪张榜，不覆盖 `members`。所以逐成员核对：代码在榜内，`status == 'ranked'`，评级属于 STRICT/FULL，且 `rank`、`grade` 与榜内一致。
   - 任一不符就整张榜不标，并在榜头写"未标入池：原因"。池文件缺失或校验失败同样写明原因，不静默。
-  - 已知局限：M11 不读 `market.db`，所以不能复核"第一档 ∩ STRICT/FULL ∩ 成交额前 100 的股票是否都进了池"（完整性）。这由池模块的生成逻辑和选池改动的验收负责。"排名在第一档以内"由第 2 步的 `validate_prosperity_pool` 检查，M11 不另加。
+  - 已知局限：M11 不读 `market.db`，所以不能复核"第一档 ∩ STRICT/FULL ∩ 成交额前 100 的股票是否都进了池"（完整性）。这由池模块的生成逻辑和选池改动的验收负责。"排名在第一档以内"由第 2 步 `validate_prosperity_pool`（成员排名 ≤ 文件切点）加第 3b 步 `board_mismatch`（文件切点 = 原榜切点）共同保证。
 - **第三风险：读到正在写的库。** 应对：沿用 M12 的规则，CLI 只接受自包含快照：有 WAL 内容退出 4；读前读后 SHA256 不同退出 6；两种情况都不写文件。
 - **第四风险：输出覆盖输入（审查 P1）。** `--out` 与 `--db` 相同时，两次哈希都一致，最后 `os.replace` 会把库换成 HTML。应对：读任何输入之前，比较规范化路径（`Path.resolve()`）；`--out` 等于库文件、库的 `-wal` / `-shm` / `.state`、或池文件时退出 4，不写文件。照 `scripts/prosperity_weekly.py:51-56` 的同类检查写。
 - **未知徽章代码**：内核以后新增徽章时，页面按原代码显示，不丢弃；测试覆盖这一点。
@@ -96,7 +97,7 @@ flowchart TD
 | A1 | 单元测试 | `tests/test_prosperity_web.py`、`tests/test_prosperity_web_cli.py` 全部通过 |
 | A2 | 真实数据生成 | 11-01 快照生成成功，退出码 0；88 节；记录耗时、峰值内存、文件大小（≤12 MB） |
 | A3 | 独立核对 | `verify_web.py`：72,580 行全部比对，差异 0；HTML 副本改一处分数 → 差异 ≥1、退出 1；HTML 副本只改一个成交额排名 → 差异 ≥1、退出 1 |
-| A4 | 入池标记 | 用新规则池文件 `pool-q1-20261102/pool-20261031.json`：F1 10-31 节标 36 只，名单和成交额排名与池文件逐值一致。三种负例都应 0 只、榜头写原因：①池文件 as_of 改成 10-24；②把一个成员的代码换成榜内评级为 BELOW 的 `BMNR`，来源哈希不动；③把一个成员的评级 STRICT↔FULL 对调 |
+| A4 | 入池标记 | 用新规则池文件 `pool-q1-20261102/pool-20261031.json`：F1 10-31 节标 36 只，名单和成交额排名与池文件逐值一致。四种负例都应 0 只、榜头写原因：①池文件 as_of 改成 10-24；②把一个成员的代码换成榜内评级为 BELOW 的 `BMNR`，来源哈希不动；③把一个成员的评级 STRICT↔FULL 对调；④选池验收产物 `pool-q1-20261102/pool-20261031-ter.json`（可排名数改 899、切点改 180、加入排名 178 的 TER），榜头写"池文件与本榜不符（ranked）" |
 | A4b | 输出不覆盖输入 | `--out` 等于 `--db` 或 `--pool` 时退出 4，两个输入文件 SHA256 不变 |
 | A5 | 页面检查 | 无 `<script`；外部 src/href 0 处；Chrome headless 1200 px 截图：目录、F1 首节、折叠块、深色模式各一张 |
 | A6 | 全量测试 | 全套 pytest 与 main 基线对比，无新增失败 |
@@ -184,6 +185,7 @@ def render_page(pages: Sequence[BoardPage], *, generated_at: str, source: Mappin
 1. `pool is None` → `({}, '未标入池：未提供池文件')`。
 2. `validate_prosperity_pool(pool, check_freshness=False)` 抛错 → `({}, '未标入池：池文件校验失败（<异常类名>）')`。本地快照可能已过 8 天，所以不查新鲜度；与榜的绑定由第 3 步保证。
 3. 榜级绑定。以下任一不符 → `({}, '未标入池：池文件与本榜不符（<字段名>）')`，按此顺序检查，报第一个不符的字段：`stored` 是 F1 live 周榜（字段名 `board`）；`pool['as_of'] == stored.board.as_of`（`as_of`）；`pool['criteria'] == criteria_payload()`（`criteria`）；`pool['source']['code_version'] == stored.board.code_version`（`code_version`）；`pool['source']['content_hash'] == content_hash(stored)`（`content_hash`）。
+3b. 计数绑定（§15）。`field = board_mismatch(pool, stored)`；非 None → `({}, f'未标入池：池文件与本榜不符（{field}）')`。字段名取值 `universe` / `ranked` / `tier_cut` / `eligible`，由 `board_mismatch` 按此顺序返回第一个不符项。放在第 3 步之后，因为 `board_mismatch` 假定池文件已与本榜按 as_of 和 content_hash 绑定。
 4. 成员绑定（审查 P2-2）。对每个成员 `m`，在 `stored.board.rows` 里按代码找到行 `r`。以下任一不符 → `({}, '未标入池：池成员与本榜不符（<symbol>）')`，报第一个不符的成员：`r` 存在；`r.status == 'ranked'`；`r.grade in POOL_GRADES`；`m['rank'] == r.rank`；`m['grade'] == r.grade`。
 5. 全部一致 → `({m['symbol']: m['dollar_volume_rank'] for m in members}, f'入池 {len(members)} 只（第一档 ∩ STRICT/FULL ∩ 成交额前 100，as_of {as_of}）')`。
 
@@ -224,7 +226,7 @@ scripts/prosperity_web.py --db SNAPSHOT --out FILE.html [--pool POOL.json] [--co
 - Test: `tests/test_prosperity_web.py`
 
 **Interfaces:**
-- Consumes: `ProsperityStore.list_boards / get_board`（`src/data/prosperity_store.py:120-137`）；`StoredBoard.board.rows / .stocks / .factors / .meta`；`content_hash`（`src/data/prosperity_storage.py`）；`validate_prosperity_pool`、`criteria_payload`（`src/data/prosperity_pool.py:89,185`）；fixture `storage_batch`（`tests/prosperity_fixtures.py:266`）。
+- Consumes: `ProsperityStore.list_boards / get_board`（`src/data/prosperity_store.py:120-137`）；`StoredBoard.board.rows / .stocks / .factors / .meta`；`content_hash`（`src/data/prosperity_storage.py`）；`validate_prosperity_pool`、`criteria_payload`（`src/data/prosperity_pool.py:89,185`）；`board_mismatch(pool, stored) -> Optional[str]`（选池第一档改动新增，开工时在新 main 上 grep 核对行号）；fixture `storage_batch`（`tests/prosperity_fixtures.py:266`）。
 - Produces: 9.2 的 `pool_binding`、`board_page`、`load_pages`、`section_id`。
 
 - [ ] Step 1：写失败测试
@@ -316,6 +318,15 @@ def test_pool_members_must_match_the_board(pool_store):
     bad = copy.deepcopy(pool); m = bad['members'][0]
     m['grade'] = 'FULL' if m['grade'] == 'STRICT' else 'STRICT'
     assert pool_binding(bad, stored) == ({}, f"未标入池：池成员与本榜不符（{m['symbol']}）")
+
+def test_pool_counts_must_match_the_board(pool_store):
+    # §15: the file alone cannot prove its ranked count; board_mismatch recomputes it from the board
+    _, stored = boards(pool_store)
+    pool = pool_for(stored)
+    bad = copy.deepcopy(pool); stat = bad['coverage']['ranked']
+    stat.update(covered=stat['total'], ratio=1.0)        # 18 → 20; ceil(20/5) is still 4, so the file stays consistent
+    validate_prosperity_pool(bad, check_freshness=False)
+    assert pool_binding(bad, stored) == ({}, '未标入池：池文件与本榜不符（ranked）')
 
 def test_pool_note_only_on_f1_latest_weekly(pool_store):
     _, stored = boards(pool_store)
@@ -464,12 +475,12 @@ def test_unreadable_pool_is_reported_not_fatal(db, tmp_path):
 - Create: `reports/prosperity/m11-web-20261102/verify_web.py`、`README.md`、`verify.txt`、截图
 - Modify: `.gitignore`（加 `reports/prosperity/m11-web-*/out/`）、9 节列出的 4 份文档
 
-- [ ] Step 1：独立核对脚本 `verify_web.py`。只用 `sqlite3`、`json`、`html.parser`、`hashlib`，不 import 本仓库。它直接查 `board`、`score`、`stock_period`、`stock_input` 表，自己重建每节的期望行：排名、代码、评级或中文原因、分数 1 位小数、四族整数、徽章中文集合（规则照 9.1 自写一份）、入池标记与成交额排名（审查 P2-4）。入池部分自写一份绑定：读池 JSON，核对 as_of 与 `source.code_version`，并逐成员核对代码在 `score` 表、`status='ranked'`、评级与排名一致；按 symbol 取 `dollar_volume_rank`，与 HTML 该行"成交额排名"单元逐值比较，非入池行该单元必须为空。解析 HTML 后逐节逐行比对，输出 `checked N rows, M pool ranks; differences: K`，K>0 退出 1。`content_hash` 不在独立脚本里重算（它是 M8 规范化 JSON 的哈希，重写一份等于复制实现），由单元测试覆盖。
+- [ ] Step 1：独立核对脚本 `verify_web.py`。只用 `sqlite3`、`json`、`html.parser`、`hashlib`，不 import 本仓库。它直接查 `board`、`score`、`stock_period`、`stock_input` 表，自己重建每节的期望行：排名、代码、评级或中文原因、分数 1 位小数、四族整数、徽章中文集合（规则照 9.1 自写一份）、入池标记与成交额排名（审查 P2-4）。入池部分自写一份绑定：读池 JSON，核对 as_of 与 `source.code_version`；从 `score` 表自算可排名数 n、切点 `-(-n // 5)`、合格数（`rank ≤ 切点` 且评级 STRICT/FULL），从 `board.members_json` 自算成员数与 `sha256('\n'.join(sorted(members)))`，与池文件 `coverage.ranked.covered`、`coverage.tier_cut`、`coverage.eligible`、`universe` 比对（§15）；再逐成员核对代码在 `score` 表、`status='ranked'`、评级与排名一致；任一不符则该节期望 0 个 ✓；按 symbol 取 `dollar_volume_rank`，与 HTML 该行"成交额排名"单元逐值比较，非入池行该单元必须为空。解析 HTML 后逐节逐行比对，输出 `checked N rows, M pool ranks; differences: K`，K>0 退出 1。`content_hash` 不在独立脚本里重算（它是 M8 规范化 JSON 的哈希，重写一份等于复制实现），由单元测试覆盖。
 - [ ] Step 2：生成。`PY=…/.venv/bin/python`；`/usr/bin/time -l "$PY" scripts/prosperity_web.py --db /tmp/m12/prosperity.db --out reports/prosperity/m11-web-20261102/out/prosperity-web.html --pool reports/prosperity/pool-q1-20261102/pool-20261031.json`（选池改动验收产物，开工前确认存在）。记退出码、耗时、峰值 RSS、文件大小（A2）。
 - [ ] Step 3：核对与篡改（A3、A4、A4b）。
   - 跑 `verify_web.py` → 差异 0；F1 10-31 节 36 个 ✓。
   - HTML 篡改：副本改一个分数 → 差异 ≥1、退出 1；另一副本只改一个成交额排名 → 差异 ≥1、退出 1。
-  - 池文件负例，各复制一份重新生成：①as_of 改 2026-10-24；②一个成员代码换成 `BMNR`（10-31 F1 评级 BELOW），来源哈希不动；③一个成员评级 STRICT↔FULL 对调。三份都应 F1 首节 0 个 ✓、榜头写原因，核对脚本对三份也都通过。
+  - 池文件负例，各复制一份重新生成：①as_of 改 2026-10-24；②一个成员代码换成 `BMNR`（10-31 F1 评级 BELOW），来源哈希不动；③一个成员评级 STRICT↔FULL 对调；④直接用 `reports/prosperity/pool-q1-20261102/pool-20261031-ter.json`（不再复制修改）。四份都应 F1 首节 0 个 ✓、榜头写原因（④为 `ranked`），核对脚本对四份也都通过。
   - `--out` 指向快照库或池文件 → 退出 4，两个文件 SHA256 不变。
 - [ ] Step 4：页面检查（A5）。grep `<script` 与外部链接为 0；Chrome headless 截图 1200 px：页首目录、F1 首节、展开的折叠块、深色模式（`--force-dark-mode` 或加 `data-theme="dark"` 的副本）。
 - [ ] Step 5：文档。北极星 §4.2：载体改为"纯静态 HTML，无 JS，页内链接切换"（D1）；大小预算改为"全部行约 10 MB，电脑打开为主"（D2）；MVP 段补 D3–D5；模块表 #12 与现状表标 M11 本地生成器完成，云端生成与投递仍在 M13。runbook 加本地生成命令。ARCHITECTURE、CHANGELOG 各一行。
@@ -523,4 +534,21 @@ def test_unreadable_pool_is_reported_not_fatal(db, tmp_path):
 | Task 1 夹具说明 | 合成榜池 9 只 → 4 只（开工时复跑确认） |
 | Task 5 Step 2 | 基线换成开工时的 main |
 
-不变：`pool_binding` 的榜级和成员绑定规则；A4 三个负例（改 as_of、换 `BMNR`、对调评级）仍然成立，因为它们都不改成员的 `rank` 字段，新校验器会放行，由成员绑定拦下。M11 不读 `criteria` 的内部字段，只与 `criteria_payload()` 整体比较，所以规则变化不改 M11 代码。
+不变：`pool_binding` 的榜级和成员绑定规则；A4 三个负例（改 as_of、换 `BMNR`、对调评级）仍然成立，因为它们都不改成员的 `rank` 字段，新校验器会放行，由成员绑定拦下。M11 不读 `criteria` 的内部字段，只与 `criteria_payload()` 整体比较，所以规则变化不改 M11 代码。（本段"不改 M11 代码"已被 §15 更正。）
+
+## 15. 池文件计数对照原榜（2026-11-02）
+
+来源：选池第一档 plan 第一轮审查 P2-1（`prosperity/pool-q1` plan §13）。Boss 2026-11-02 让 finance-8b 会话把选池 plan 与本 plan 一起改。
+
+问题：新校验器只能证明池文件自洽。池文件把 `coverage.ranked` 从 848 改成 899、`tier_cut` 从 170 改成 180，再加入排名 178 的 TER（FULL，成交额第 96），TER 的排名、评级和 `source.content_hash` 都是真的。校验器和本 plan 原有的榜级、成员绑定全部放行，网页会给 TER 打 ✓。
+
+| 位置 | 改动 |
+|---|---|
+| Tech Stack、Task 1 Interfaces | 新增依赖 `board_mismatch(pool, stored) -> Optional[str]`（选池改动提供） |
+| §6 第二风险 | 新增"计数"一层；已知局限改为"第 2 步加第 3b 步共同保证第一档上限" |
+| §9.2 `pool_binding` | 新增第 3b 步：`board_mismatch` 非 None → `未标入池：池文件与本榜不符（<字段名>）` |
+| Task 1 测试 | 新增 `test_pool_counts_must_match_the_board`（合成榜 ranked 18 改 20，校验器放行，`pool_binding` 报 `ranked`）。合成榜上 ceil(18/5) = ceil(20/5)，抬高切点的完整攻击由 A4 ④ 用真实数据覆盖 |
+| A4、Task 4 Step 3 | 新增负例 ④：选池验收产物 `pool-20261031-ter.json` |
+| Task 4 Step 1 | `verify_web.py` 的独立绑定加计数比对，否则负例 ④ 下核对脚本会期望 37 个 ✓ |
+
+不变：页面结构、CLI、其他验收项。负例 ④ 的文件由选池改动 Task 2 生成，开工前确认存在。
