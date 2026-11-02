@@ -135,8 +135,8 @@ sqlite3 "/Users/owen/CC workspace/Finance/data/market.db" ".backup /tmp/health/m
 | 退出码 | 含义 |
 |---|---|
 | 0 | 已写 `<方案>.html` 与 `summary.json` |
-| 3 | 库文件不存在，或某方案在该 `code_version` 下没有季末冻结榜（不写任何文件） |
-| 4 | 方案名不在注册表，或 `--out` 是已存在的非目录 |
+| 3 | 库文件不存在、某方案在该 `code_version` 下没有季末冻结榜，或 `market.db` 没有 SPY 价格（不写任何文件） |
+| 4 | 方案名不在注册表，`--out` 是已存在的非目录，或输入库带非空 WAL（传 `sqlite3 .backup` 做的自包含快照） |
 | 6 | 运行期间某个输入库被改写（运行前后 SHA256 不同），不写任何文件；对固定副本重跑 |
 
 怎么读：

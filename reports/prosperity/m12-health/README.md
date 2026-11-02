@@ -41,7 +41,9 @@ R=reports/prosperity/m12-health
 
 `verify_health.py` 只用标准库 + sqlite3 + numpy，不 import `src`/`terminal`/`backtest`。交易日历用"一半成员有价格"规则（生产用 SPY），两者在全部窗口上**完全一致**。三态复权、收益与未知原因、基准、五档超额、Q1−Q5、Spearman IC、ICIR、标准差、NW lag 与 t、动量 Top 40、Top 40、重叠、HHI、换手、未知名单、拆股状态、24 项 BH 全部另写实现。
 
-`verify.txt`：**checked 632 values; differences: 0**。
+`verify.txt`：**checked 731 values; differences: 0**（第三轮审查后：另比对五档、价差、IC 的 t / p / se / 区间上下限，核对脚本自写 Student-t、不导入 scipy；F1 的 BH 用自算原始 p，其余 3 个方案的原始 p 取自 summary）。
+
+篡改验收：区间全改成 [−999, 999] → 42 处差异、退出 1；只改 F1 3 季价差的原始 p → 1 处、退出 1；p 与 p_bh 一起改 → 2 处、退出 1。
 
 ## A7b · 复权规则交叉检查 — 已报告（敏感性项，不设门槛）
 
@@ -65,7 +67,7 @@ R=reports/prosperity/m12-health
 ## A9 · 回归 — 通过
 
 - `code_version()` = `13e5f9d5183f1b8e`，未变。
-- 景气全套：`pytest tests/test_prosperity_*.py tests/test_run_prosperity_wrapper.py -q` → **530 passed**（M10 时 492；+38 为 M12 新测试，含审查修复后新增 9 个）。
+- 景气全套：`pytest tests/test_prosperity_*.py tests/test_run_prosperity_wrapper.py -q` → **536 passed**（M10 时 492；+44 为 M12 新测试，含两轮审查修复新增 15 个）。
 - 全量：同一解释器（`.venv` Python 3.13）、同一命令 `pytest -q -rfE --tb=no -p no:cacheprovider`。
   基线 = main `4feaa8d2` 的 detached worktree：`baseline-pytest.txt` 12 failed / 4242 passed / 4 skipped。
   本分支 `e28d835e`（审查修复后）：`branch-pytest.txt` 12 failed / 4280 passed / 4 skipped。
@@ -88,3 +90,8 @@ R=reports/prosperity/m12-health
 ## 审查修复后重跑（2026-11-01，`/code-review high` 10 条，见 plan §13 第二轮）
 
 同一份输入快照，修复提交 `9e79fb46` 后重跑：A6 生成 rc 0（229 s）；A7a `verify.txt` 632 值差异 0；A7b 敏感性不变（0.034 / 0.031 pp）；A8 Premium 47 只仍与生产一致。分档、IC、动量、结构章节的数字与修复前相同；只有 Premium 对照变化（见上方摘要）。
+
+## 第三轮审查后重跑（2026-11-02，4×P2，见 plan §13 第三轮）
+
+同一份输入快照（运行前后 SHA256 不变）：A6 生成 rc 0（244 s）；A7a 731 值差异 0；A7b 敏感性不变；A8 Premium 47 只与生产一致。`summary.json` 与上一版相比只有 `generated_at` 和 `elapsed_seconds` 变化，所有统计数字相同。
+CLI 新增两种拒绝：输入库带非空 WAL（退出 4，要求 `.backup` 自包含快照）；`market.db` 没有 SPY 价格（退出 3）。

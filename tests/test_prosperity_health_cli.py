@@ -98,3 +98,33 @@ def test_period_status_is_shown_in_chinese(dbs, tmp_path):
     html = (out / 'F1.html').read_text()
     assert 'in_progress' not in html and 'not_started' not in html and '>complete<' not in html
     assert '已满期' in html or '进行中' in html
+
+
+def test_input_with_a_non_empty_wal_is_refused(dbs, tmp_path):
+    """Second review #1: SQLite also reads committed WAL frames, which the main-file hash misses.
+    The CLI only accepts self-contained snapshots (no WAL content), so the hash covers every byte read."""
+    import sqlite3
+    db, market = dbs
+    conn = sqlite3.connect(market)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA wal_autocheckpoint=0')
+    conn.execute("UPDATE daily_price SET close = close * 2 WHERE symbol = 'S0000'")
+    conn.commit()                                   # committed, still only in market.db-wal
+    assert (market.parent / (market.name + '-wal')).stat().st_size > 0
+    out = tmp_path / 'out'
+    assert run(dbs, out) == 4
+    assert not out.exists()
+    conn.close()
+
+
+def test_missing_calendar_is_an_input_error(dbs, tmp_path):
+    """Second review #2: without SPY there is no calendar; every window would read as not started."""
+    import sqlite3
+    db, market = dbs
+    conn = sqlite3.connect(market)
+    conn.execute("DELETE FROM daily_price WHERE symbol = 'SPY'")
+    conn.commit()
+    conn.close()
+    out = tmp_path / 'out'
+    assert run(dbs, out) == 3
+    assert not out.exists()

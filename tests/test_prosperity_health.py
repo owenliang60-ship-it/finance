@@ -442,3 +442,41 @@ def test_bh_matches_the_event_study_helper():
     ps = [0.001, 0.04, None, 0.2, 0.03, None]
     full = _apply_bh_fdr_to_p_values([1.0 if p is None else p for p in ps])
     assert bh_adjust(ps) == [None if p is None else pytest.approx(a) for p, a in zip(ps, full)]
+
+
+def test_price_book_without_calendar_is_refused():
+    """Second review #2, library side: an empty calendar must not read as 'not started'."""
+    from backtest.research.prosperity_health import PriceBook
+    with pytest.raises(ValueError, match='empty_calendar'):
+        PriceBook(closes={'A': rising()}, splits={}, calendar=[])
+
+
+def _verifier():
+    import importlib.util
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / 'reports/prosperity/m12-health/verify_health.py'
+    spec = importlib.util.spec_from_file_location('m12_verify_health', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize('closes,splits,window,expected', [
+    ([(d, 100.0) for d in CAL[:250]] + [(d, 20.0) for d in CAL[250:]],
+     [(CAL[250], 5.0), (CAL[254], 5.0)], (240, 260), (0.0, 'ok')),             # two records, one 5:1 jump
+    ([(d, 100.0) for d in CAL[:250]] + [(d, 40.0) for d in CAL[250:]],
+     [(CAL[250], 2.0)], (240, 260), (None, 'split_unresolved')),                # 2:1 record, 100→40
+    ([(d, 100.0) for d in CAL[:250]] + [(d, 80.0) for d in CAL[250:]],
+     [(CAL[250], 1.25)], (240, 260), (0.0, 'ok')),                              # 5:4 record, 100→80
+])
+def test_production_and_verifier_agree_on_split_cases(closes, splits, window, expected):
+    """Second review #4: the independent verifier must handle the same cases as production."""
+    import numpy as np
+    v = _verifier()
+    prod = book({'X': closes}, {'X': splits}).window_return('X', *window)
+    dates = [d for d, _ in closes]
+    mine = v.Book({'X': (dates, np.array([c for _, c in closes], float))}, {'X': splits},
+                  list(CAL), v.classify_step).ret('X', *window)
+    for got in (prod, mine):
+        assert got[1] == expected[1]
+        assert (got[0] is None) if expected[0] is None else got[0] == pytest.approx(expected[0])

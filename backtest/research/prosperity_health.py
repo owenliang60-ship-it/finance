@@ -78,6 +78,8 @@ class PriceBook:
 
     def __init__(self, *, closes: Mapping[str, Sequence[Tuple[str, float]]],
                  splits: Mapping[str, Sequence[Tuple[str, float]]], calendar: Sequence[str]):
+        if not calendar:
+            raise ValueError('empty_calendar: no CALENDAR_SYMBOL prices')   # second review #2
         self.calendar = tuple(calendar)
         self._series: Dict[str, _Series] = {}
         self._unresolved: Dict[str, List[Tuple[str, str]]] = {}

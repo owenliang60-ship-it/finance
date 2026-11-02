@@ -4,8 +4,10 @@
 Read-only on both databases; writes only to --out. Plan:
 docs/plans/2026-11-01-prosperity-m12-health-report.md. Exit codes: 0 written; 3 a database is
 missing or a scheme has no quarter-end board for the code version (nothing written);
-4 invalid arguments (unknown scheme, --out is a non-directory); 6 an input database changed
-while it was read (nothing written).
+4 invalid arguments (unknown scheme, --out is a non-directory, or an input database has WAL
+content: pass a self-contained `.backup` snapshot so its SHA256 covers every byte SQLite reads);
+6 an input database changed while it was read (nothing written). 3 also covers an empty trading
+calendar (no SPY prices in market.db).
 
 The BH family always covers all four registered schemes, whatever --schemes selects, so a
 subset run reports the same p_bh as the full run.
@@ -35,6 +37,11 @@ from terminal.prosperity.schemes import SCHEMES, scheme_hash  # noqa: E402
 from terminal.prosperity.version import code_version  # noqa: E402
 
 DEFAULT_SCHEMES = ('F1', 'F1-rank', 'F1-exfin', 'F0')
+
+
+def _wal_bytes(path: Path) -> int:
+    wal = path.with_name(path.name + '-wal')
+    return wal.stat().st_size if wal.exists() else 0
 BH_SCHEMES = DEFAULT_SCHEMES                 # fixed BH family: every scheme, every run (review #4)
 
 
@@ -65,6 +72,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not path.is_file():
             print(f'database not found: {path}', file=sys.stderr)
             return 3
+        if _wal_bytes(path):
+            print(f'{path} has WAL content; pass a self-contained snapshot (sqlite3 .backup)', file=sys.stderr)
+            return 4
     version = args.code_version or code_version()
     started = time.monotonic()
     hashes = {'db': _sha(args.db), 'market': _sha(args.market_db)}       # before any read (review #7)
@@ -87,12 +97,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     symbols = {r.symbol for views in boards.values() for v in views for r in v.rows if r.status != 'excluded'}
     market = MarketStore(db_path=args.market_db, read_only=True)
     try:
-        prices = PriceBook.load(market, symbols)
+        try:
+            prices = PriceBook.load(market, symbols)
+        except ValueError as exc:                                    # empty calendar (no SPY prices)
+            print(f'market.db: {exc}', file=sys.stderr)
+            return 3
         fundamentals = load_fundamentals(market, symbols)
     finally:
         market.close()
 
-    if {'db': _sha(args.db), 'market': _sha(args.market_db)} != hashes:
+    if ({'db': _sha(args.db), 'market': _sha(args.market_db)} != hashes
+            or _wal_bytes(args.db) or _wal_bytes(args.market_db)):
         print('an input database changed while it was read; nothing written', file=sys.stderr)
         return 6
     memo: dict = {}

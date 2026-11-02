@@ -2,4 +2,5 @@ scheme F1; boards 21; calendars identical
 lags 1/2/3 q: [1, 2, 3]
 complete periods 1/2/3 q: [20, 19, 18]
 split states: {"adjusted": 8, "already_adjusted": 84, "unresolved": 16}
-checked 632 values; differences: 0
+BH: F1 uses recomputed raw p; the other 3 schemes use the summary raw p (not independently recomputed here)
+checked 731 values; differences: 0

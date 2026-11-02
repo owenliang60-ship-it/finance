@@ -1,13 +1,13 @@
 {
- "generated_at": "2026-11-01T16:01:42+00:00",
+ "generated_at": "2026-11-02T00:00:07+00:00",
  "inputs": {
   "prosperity_db": "/tmp/m12/prosperity.db",
   "prosperity_db_sha256": "ca0aa05a7cfccf753799137d3bbe1df3d44004fe8f51e794533faf586ca09ef6",
   "market_db": "/tmp/m12/market.db",
   "market_db_sha256": "e60d78c3e02ae94944d6023f49feb3860de46f2da23edb74aed5c28d24231051",
   "code_version": "13e5f9d5183f1b8e",
-  "generated_at": "2026-11-01T16:01:42+00:00",
-  "elapsed_seconds": 228.3
+  "generated_at": "2026-11-02T00:00:07+00:00",
+  "elapsed_seconds": 244.3
  },
  "bh_family": {
   "family": 24,

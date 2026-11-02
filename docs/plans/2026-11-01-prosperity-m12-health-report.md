@@ -875,3 +875,12 @@ def test_input_and_argument_errors_write_nothing(dbs, tmp_path):
 | 8 | 逐期明细显示 `in_progress` 等英文状态码 | 成立 | 显示为 已满期 / 进行中 / 未开始；新增测试 |
 | 9 | BH 另起一套 scipy 实现、`_sha` 复制 | 成立 | BH 改用 `backtest/event_study/stats._apply_bh_fdr_to_p_values`（北极星要求复用 stats.py），`_sha` 改用 `prosperity_backup._sha`；新增等价测试 |
 | 10 | runbook 没先拉云端 `market.db` | 成立（`Finance/CLAUDE.md`：查询前必须先 `--pull`） | runbook 第一步加 `./sync_to_cloud.sh --pull` |
+
+### 第三轮（2026-11-02，外部审查 `b04d6577`，4×P2，全部接受并复现）
+
+| # | 意见 | 复现 | 处理 |
+|---|---|---|---|
+| P2 | 输入哈希只算主 .db，漏掉 WAL 里已提交的更新 | 读取期间往 WAL 提交更新，主文件哈希不变，CLI 退出 0 | 输入库带非空 WAL 时拒绝（退出 4），要求传 `.backup` 自包含快照；读后再查一次 WAL；新增测试 |
+| P2 | 缺 SPY 日历时所有期显示"未开始"，照常退出 0 | 删 SPY 后 CLI 退出 0，已满期数为 0 | `PriceBook` 遇空日历抛 `empty_calendar`，CLI 退出 3、不写文件；库与 CLI 各一条测试 |
+| P2 | 独立核对不查 se、区间和原始 p，BH 也用报告自己的 p | 把区间改成 [−999, 999]，核对仍是 0 差异 | 核对脚本自写 Student-t（不导入 scipy，与 scipy 最大差 4e-15），逐项比对五档、价差、IC 的 t / p / se / lo / hi；F1 的 BH 用自算的原始 p。篡改验收：区间改 [−999, 999] → 42 处差异、rc 1；只改一个 p → 1 处、rc 1；p 和 p_bh 一起改 → 2 处、rc 1 |
+| P2 | 核对脚本对同一次跳变的两条拆股记录仍复权两次 | 两条 5:1 记录样本：生产 0%/ok，核对脚本 split_suspect | 核对脚本同一跳变只调一次；新增参数化测试，让生产与核对脚本跑同一组拆股样本（两条记录同一跳变、2:1 配 100→40、5:4 配 100→80），旧核对脚本在第一组上失败 |

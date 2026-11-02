@@ -28,6 +28,7 @@ TOP = 40
 SLACK = 5
 W = 5
 TOL = 1e-9
+INTERVAL_KEYS = ('t', 'p', 'se', 'lo', 'hi')     # second review #3: intervals and raw p are recomputed
 
 
 def connect(path):
@@ -129,6 +130,8 @@ class Book:
                 state, j = classifier(dates, raw, lo, hi, f)
                 if override and (s, fd) in override:
                     state, j = override[(s, fd)]
+                if state == 'adjusted' and any(j == jj for jj, _ in done):
+                    state, j = 'already_adjusted', None      # one jump, one adjustment (second review #4)
                 self.events[(s, fd)] = (f, state, j, lo, hi)
                 if state == 'adjusted':
                     done.append((j, f))
@@ -211,6 +214,71 @@ def nw_t(xs, lag):
     return float(x.mean() / math.sqrt(v / n))
 
 
+def _betacf(a, b, x):
+    """Continued fraction for the regularized incomplete beta (Numerical Recipes §6.4)."""
+    qab, qap, qam = a + b, a + 1, a - 1
+    c, d = 1.0, 1 - qab * x / qap
+    d = 1 / (d if abs(d) > 1e-300 else 1e-300)
+    h = d
+    for m in range(1, 300):
+        m2 = 2 * m
+        aa = m * (b - m) * x / ((qam + m2) * (a + m2))
+        d = 1 + aa * d
+        d = 1 / (d if abs(d) > 1e-300 else 1e-300)
+        c = 1 + aa / c if abs(1 + aa / c) > 1e-300 else 1e-300
+        h *= d * c
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))
+        d = 1 + aa * d
+        d = 1 / (d if abs(d) > 1e-300 else 1e-300)
+        c = 1 + aa / c if abs(1 + aa / c) > 1e-300 else 1e-300
+        delta = d * c
+        h *= delta
+        if abs(delta - 1) < 1e-15:
+            break
+    return h
+
+
+def betai(a, b, x):
+    if x <= 0:
+        return 0.0
+    if x >= 1:
+        return 1.0
+    lbt = math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b) + a * math.log(x) + b * math.log(1 - x)
+    if x < (a + 1) / (a + b + 2):
+        return math.exp(lbt) * _betacf(a, b, x) / a
+    return 1 - math.exp(lbt) * _betacf(b, a, 1 - x) / b
+
+
+def t_two_sided_p(t, df):
+    return betai(df / 2, 0.5, df / (df + t * t))
+
+
+def t_quantile_975(df):
+    """Solve P(|T| > q) = 0.05 by bisection on our own CDF."""
+    lo, hi = 0.0, 100.0
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        if t_two_sided_p(mid, df) > 0.05:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def full_stat(xs, lag):
+    """n, mean, lag, and for n >= 5: t, p, se, lo, hi — the production `interval` contract."""
+    stat = {'n': len(xs), 'mean': mean(xs), 'lag': lag}
+    if len(xs) >= 5:
+        tval = nw_t(xs, lag)
+        stat['t'] = tval
+        stat['p'] = 1.0 if tval == 0 else t_two_sided_p(tval, len(xs) - 1)
+        if tval != 0:
+            se = stat['mean'] / tval
+            half = t_quantile_975(len(xs) - 1) * abs(se)
+            stat.update(se=se, lo=stat['mean'] - half, hi=stat['mean'] + half)
+    return stat
+
+
 def lag_of(windows):
     ws = sorted(windows)
     return max((sum(1 for s, _ in ws[i + 1:] if s < e) for i, (_, e) in enumerate(ws)), default=0)
@@ -287,15 +355,18 @@ def recompute(boards, book):
             used = [r for r in rows if getter(r) is not None]
             lag = lag_of([(r['a'], r['e']) for r in used])
             xs = [getter(r) for r in used]
-            stat = {'n': len(xs), 'mean': mean(xs), 'lag': lag}
-            if len(xs) >= 5:
-                stat['t'] = nw_t(xs, lag)
+            stat = full_stat(xs, lag)
             if name == 'ic' and len(xs) >= 5:
                 sd = float(np.std(xs, ddof=1))
                 stat['sd'] = sd
                 stat['icir'] = stat['mean'] / sd if sd else None
             out[name][h] = stat
         out['tiers'][h] = [mean(r['tier_excess'][k] for r in rows) for k in range(5)]
+        tier_stats = []
+        for k in range(5):
+            used = [r for r in rows if r['tier_excess'][k] is not None]
+            tier_stats.append(full_stat([r['tier_excess'][k] for r in used], lag_of([(r['a'], r['e']) for r in used])))
+        out.setdefault('tier_stats', {})[h] = tier_stats
         out['lags'][h] = lag_of([(r['a'], r['e']) for r in rows])
     out['tops'], out['moms'] = tops, moms
     out['overlap'] = [(boards[i]['as_of'], len(set(tops[i]) & set(moms[i])))
@@ -350,13 +421,16 @@ def compare(ours, rep, boards, book, prod_events):
             d.num(f'h{h} {a} ic', m['ic'], t['ic'])
         for k in range(5):
             d.num(f'h{h} tier Q{k + 1} mean', ours['tiers'][h][k], tiers[str(h)]['tiers'][k]['mean'])
+            for key in INTERVAL_KEYS:
+                d.num(f'h{h} tier Q{k + 1} {key}', ours['tier_stats'][h][k].get(key),
+                      tiers[str(h)]['tiers'][k].get(key))
         for name, theirs_stat in (('spread', tiers[str(h)]['spread']), ('ic', ic[str(h)])):
             mine_stat = ours[name][h]
             d.eq(f'h{h} {name} n', mine_stat['n'], theirs_stat['n'])
             d.eq(f'h{h} {name} lag', mine_stat['lag'], theirs_stat['lag'])
             d.num(f'h{h} {name} mean', mine_stat['mean'], theirs_stat['mean'])
-            if 't' in mine_stat:
-                d.num(f'h{h} {name} NW t', mine_stat['t'], theirs_stat.get('t'))
+            for key in INTERVAL_KEYS:
+                d.num(f'h{h} {name} {key}', mine_stat.get(key), theirs_stat.get(key))
         d.num(f'h{h} ICIR', ours['ic'][h].get('icir'), ic[str(h)].get('icir'))
         d.num(f'h{h} IC sd', ours['ic'][h].get('sd'), ic[str(h)].get('sd'))
     theirs_unknown = {(u['symbol'], u['as_of'], u['horizon'], u['reason']) for u in rep['appendix']['unknown']}
@@ -401,18 +475,23 @@ def main():
     tests, ps = [], []
     for sid, r in summary['schemes'].items():
         for h in (1, 2, 3):
-            for t in (r['chapters']['分层前瞻收益'][str(h)]['spread'], r['chapters']['IC'][str(h)]):
+            pairs = ((r['chapters']['分层前瞻收益'][str(h)]['spread'], ours['spread'][h]),
+                     (r['chapters']['IC'][str(h)], ours['ic'][h]))
+            for t, mine in pairs:
                 tests.append(t)
-                ps.append(t.get('p'))
+                # F1: our own raw p (second review #3); other schemes are outside this check, so theirs
+                ps.append(mine.get('p') if sid == SCHEME else t.get('p'))
     for t, x in zip(tests, bh(ps)):
         d.num('BH p_bh', x, t.get('p_bh'))
     d.eq('BH family size', len(tests), fam['family'])
+    bh_note = (f'BH: {SCHEME} uses recomputed raw p; the other {len(summary["schemes"]) - 1} schemes use '
+               'the summary raw p (not independently recomputed here)')
     lines = [f'scheme {SCHEME}; boards {len(boards)}; {cal_note}',
              f'lags 1/2/3 q: {[ours["lags"][h] for h in (1, 2, 3)]}',
              f'complete periods 1/2/3 q: {[len(ours["periods"][h]) for h in (1, 2, 3)]}',
              f'split states: ' + json.dumps({s: sum(1 for v in book.events.values() if v[1] == s)
                                               for s in ('adjusted', 'already_adjusted', 'unresolved')}),
-             f'checked {d.checked} values; differences: {len(d.lines)}', *d.lines]
+             bh_note, f'checked {d.checked} values; differences: {len(d.lines)}', *d.lines]
     out.mkdir(parents=True, exist_ok=True)
     (out / 'verify.txt').write_text('\n'.join(lines) + '\n')
     print('\n'.join(lines[:6]))
