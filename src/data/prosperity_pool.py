@@ -1,4 +1,5 @@
-"""M10 景气精选池: F1 live weekly board ∩ top-100 average dollar volume → prosperity_pool.json.
+"""M10 景气精选池: F1 live weekly board, first tier (rank ≤ ceil(n/5)) ∩ STRICT/FULL ∩ top-100
+average dollar volume → prosperity_pool.json.
 
 Reads prosperity.db (one board) and market.db (daily_price) read-only. Not in code_version:
 pool selection never changes a score, only which already-scored rows are published.
@@ -28,6 +29,7 @@ POOL_PATH = Path(os.environ.get('FINANCE_PROSPERITY_POOL_PATH', str(DATA_DIR / '
 POOL_SCHEME_ID = 'F1'
 POOL_GRADES = ('STRICT', 'FULL')
 LIQUIDITY_TOP = 100
+POOL_TIERS = 5                           # first tier = top 1/5 of ranked rows, same as M12 assign_tiers
 LIQUIDITY_DAYS = 30
 LIQUIDITY_MIN_DAYS = 5
 LIQUIDITY_LOOKBACK_CALENDAR_DAYS = 70   # 30 trading days ≈ 42 calendar days, plus holiday slack
@@ -86,9 +88,15 @@ def liquidity_ranks(market, symbols: Sequence[str], as_of: str) -> LiquidityResu
     return LiquidityResult(as_of, window, averages, {s: i for i, s in enumerate(order, 1)})
 
 
+def tier_cut(n_ranked: int) -> int:
+    """Rank of the last first-tier row: ceil(n/5). Ranks are contiguous 1..n (prosperity_storage)."""
+    return -(-n_ranked // POOL_TIERS)
+
+
 def criteria_payload() -> dict:
     return {'scheme_id': POOL_SCHEME_ID, 'scheme_hash': scheme_hash(SCHEMES[POOL_SCHEME_ID]),
             'grades': list(POOL_GRADES),
+            'tier': {'tiers': POOL_TIERS},
             'liquidity': {'metric': 'avg_dollar_volume', 'trading_days': LIQUIDITY_DAYS,
                           'min_days': LIQUIDITY_MIN_DAYS, 'top': LIQUIDITY_TOP}}
 
@@ -120,6 +128,12 @@ def _utc(at: datetime) -> str:
     return instant(at).isoformat().replace('+00:00', 'Z')
 
 
+def _universe(members) -> dict:
+    symbols = sorted(set(members))
+    return {'name': 'extended', 'count': len(symbols),
+            'symbols_sha256': hashlib.sha256('\n'.join(symbols).encode('utf-8')).hexdigest()}
+
+
 def build_pool(stored, liquidity: LiquidityResult, *, generated_at: str) -> dict:
     board, meta = stored.board, stored.meta
     if (board.scheme_id != POOL_SCHEME_ID or meta.board_type != 'weekly' or meta.mode != 'live'
@@ -132,7 +146,8 @@ def build_pool(stored, liquidity: LiquidityResult, *, generated_at: str) -> dict
         raise ValueError('pool_liquidity_mismatch')
     stocks = {p['symbol']: p for p in stored.stocks}
     ranked = [r for r in board.rows if r.status == 'ranked']
-    graded = sorted((r for r in ranked if r.grade in POOL_GRADES), key=lambda r: r.rank)
+    cut = tier_cut(len(ranked))
+    graded = sorted((r for r in ranked if r.rank <= cut and r.grade in POOL_GRADES), key=lambda r: r.rank)
     selected = []
     for r in graded:
         dv_rank = liquidity.ranks.get(r.symbol)
@@ -144,17 +159,16 @@ def build_pool(stored, liquidity: LiquidityResult, *, generated_at: str) -> dict
             'industry': stock.get('industry'), 'rank': r.rank, 'grade': r.grade, 'score': r.score,
             'family_scores': dict(r.family_scores), 'badges': list(r.badges),
             'dollar_volume_rank': dv_rank, 'avg_dollar_volume': liquidity.averages[r.symbol]})
-    symbols = sorted(members)
+    universe = _universe(members)
     return {
         'schema_version': POOL_SCHEMA_VERSION, 'name': POOL_NAME, 'as_of': board.as_of,
         'generated_at': generated_at, 'criteria': criteria_payload(),
         'source': {'board_type': meta.board_type, 'code_version': board.code_version,
                    'computed_at': meta.computed_at, 'content_hash': content_hash(stored)},
-        'universe': {'name': 'extended', 'count': len(symbols),
-                     'symbols_sha256': hashlib.sha256('\n'.join(symbols).encode('utf-8')).hexdigest()},
-        'coverage': {'ranked': _stat(len(ranked), len(symbols)),
-                     'liquidity_ranked': _stat(len(liquidity.ranks), len(symbols)),
-                     'eligible': len(graded), 'selected': len(selected),
+        'universe': universe,
+        'coverage': {'ranked': _stat(len(ranked), universe['count']),
+                     'liquidity_ranked': _stat(len(liquidity.ranks), universe['count']),
+                     'tier_cut': cut, 'eligible': len(graded), 'selected': len(selected),
                      'trading_window': [window[0], window[-1]]},
         'members': selected,
     }
@@ -237,6 +251,9 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
     if (not _is_int(eligible) or not _is_int(selected) or not isinstance(members, list)
             or selected != len(members) or not 0 <= selected <= eligible <= coverage['ranked']['covered']):
         raise ValueError('pool selection counts invalid')
+    cut = coverage.get('tier_cut')
+    if not _is_int(cut) or cut != tier_cut(coverage['ranked']['covered']) or eligible > cut:
+        raise ValueError('pool tier cut invalid')
     window = coverage.get('trading_window')
     if not isinstance(window, list) or len(window) != 2 or not all(isinstance(d, str) for d in window):
         raise ValueError('pool trading window invalid')
@@ -253,7 +270,7 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
         if m.get('grade') not in POOL_GRADES:
             raise ValueError('pool member grade invalid')
         rank = m.get('rank')
-        if not _is_int(rank) or rank <= last_rank or rank > coverage['ranked']['covered']:
+        if not _is_int(rank) or rank <= last_rank or rank > cut:
             raise ValueError('pool member rank invalid or out of order')
         if not all(m.get(k) is None or isinstance(m.get(k), str) for k in ('name', 'sector', 'industry')):
             raise ValueError('pool member descriptive fields invalid')
@@ -270,6 +287,34 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
         if not isinstance(families, dict) or not all(
                 isinstance(k, str) and (v is None or _finite(v)) for k, v in families.items()):
             raise ValueError('pool member family scores invalid')
+
+
+def board_mismatch(pool: dict, stored) -> Optional[str]:
+    """Board-level counts the pool file reports, recomputed from the board itself.
+
+    validate_prosperity_pool only proves the file is self-consistent: raising coverage.ranked
+    raises tier_cut with it and lets a real out-of-tier row in. A reader that can open the board
+    must call this too. Returns the first mismatched field name, or None. Assumes the pool already
+    passed validate_prosperity_pool. It does NOT check members: each member's presence, status,
+    rank and grade must still be compared with the board row by the caller.
+    """
+    if pool['as_of'] != stored.board.as_of:
+        return 'as_of'
+    if pool['source']['content_hash'] != content_hash(stored):
+        return 'content_hash'
+    universe, coverage = pool['universe'], pool['coverage']
+    expected = _universe(stored.meta.members)
+    if universe['count'] != expected['count'] or universe['symbols_sha256'] != expected['symbols_sha256']:
+        return 'universe'
+    ranked = [r for r in stored.board.rows if r.status == 'ranked']
+    if coverage['ranked']['covered'] != len(ranked):
+        return 'ranked'
+    cut = tier_cut(len(ranked))
+    if coverage['tier_cut'] != cut:
+        return 'tier_cut'
+    if coverage['eligible'] != sum(r.rank <= cut and r.grade in POOL_GRADES for r in ranked):
+        return 'eligible'
+    return None
 
 
 def load_prosperity_pool(path=POOL_PATH, *, now: Optional[datetime] = None) -> dict:

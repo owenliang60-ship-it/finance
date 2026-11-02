@@ -1,4 +1,6 @@
 """M10 prosperity pool: liquidity ranks, pool file contract, live publish hook."""
+import copy
+
 import pytest
 
 from src.data.market_store import MarketStore
@@ -86,15 +88,54 @@ def eligible(board):
     return [r for r in board.board.rows if r.status == 'ranked' and r.grade in ('STRICT', 'FULL')]
 
 
-def test_pool_keeps_strict_full_inside_top_100_in_rank_order():
+def first_tier(board):
+    from src.data.prosperity_pool import tier_cut
+    cut = tier_cut(sum(r.status == 'ranked' for r in board.board.rows))
+    return [r for r in eligible(board) if r.rank <= cut]
+
+
+def test_pool_keeps_first_tier_strict_full_inside_top_100_in_rank_order():
     from src.data.prosperity_pool import build_pool, validate_prosperity_pool
     board = f1_board()
-    best = eligible(board)[0].symbol
+    tier = first_tier(board)
+    assert 0 < len(tier) < len(eligible(board))           # fixture: 4 of 9 STRICT/FULL in the first tier
+    best = tier[0].symbol
     pool = build_pool(board, liq(board, illiquid={best}), generated_at='2026-10-31T09:10:00Z')
-    expected = [r.symbol for r in eligible(board) if r.symbol != best]
+    expected = [r.symbol for r in tier if r.symbol != best]
     assert [m['symbol'] for m in pool['members']] == expected
-    assert pool['coverage']['eligible'] == len(eligible(board)) and pool['coverage']['selected'] == len(expected)
+    assert pool['coverage']['eligible'] == len(tier) and pool['coverage']['selected'] == len(expected)
+    assert pool['coverage']['tier_cut'] == 4
     validate_prosperity_pool(pool, now=NOW)
+
+
+def test_liquid_strict_full_outside_first_tier_never_enter():
+    from src.data.prosperity_pool import build_pool, validate_prosperity_pool
+    board = f1_board()
+    tier = {r.symbol for r in first_tier(board)}
+    outside = {r.symbol for r in eligible(board)} - tier
+    assert outside                                        # S/F names ranked 5–9, all inside the top 100
+    pool = build_pool(board, liq(board, illiquid=tier), generated_at='2026-10-31T09:10:00Z')
+    assert pool['members'] == [] and pool['coverage']['eligible'] == len(tier)
+    validate_prosperity_pool(pool, now=NOW)
+
+
+@pytest.mark.parametrize('n,cut', [(1, 1), (4, 1), (5, 1), (6, 2), (18, 4), (848, 170), (871, 175)])
+def test_tier_cut_matches_health_report_first_tier(n, cut):
+    # values equal tier-0 counts of backtest/research/prosperity_health.py assign_tiers (checked 2026-11-02);
+    # literal so the cloud suite does not need scipy
+    from src.data.prosperity_pool import tier_cut
+    assert tier_cut(n) == cut
+
+
+def test_tier_cut_equals_health_report_tier_zero_count():
+    # review 2026-11-02: the pool's first tier must stay the health report's Q1; skipped where scipy is absent
+    pytest.importorskip('scipy')
+    from backtest.research.prosperity_health import TIERS, assign_tiers
+    from src.data.prosperity_pool import POOL_TIERS, tier_cut
+    assert POOL_TIERS == TIERS
+    for n in range(1, 1001):
+        tiers = assign_tiers([str(i) for i in range(n)])
+        assert tier_cut(n) == sum(t == 0 for t in tiers.values()), n
 
 
 def test_zero_eligible_is_a_valid_empty_pool():
@@ -146,6 +187,10 @@ def valid_pool():
     (lambda p: p.update(as_of='2026-10-17'), 'prosperity_pool_stale'),
     (lambda p: p['coverage'].update(trading_window=['2026-09-14', '2026-10-23']), 'prosperity_pool_invalid'),
     (lambda p: p['coverage'].update(trading_window=['2026-09-21', '2026-11-02']), 'prosperity_pool_invalid'),
+    (lambda p: p['criteria']['tier'].update(tiers=4), 'prosperity_pool_criteria_mismatch'),
+    (lambda p: p['coverage'].update(tier_cut=p['coverage']['tier_cut'] + 1), 'prosperity_pool_invalid'),
+    (lambda p: p['coverage'].update(eligible=p['coverage']['tier_cut'] + 1), 'prosperity_pool_invalid'),
+    (lambda p: p['members'][-1].update(rank=p['coverage']['tier_cut'] + 1), 'prosperity_pool_invalid'),
 ])
 def test_loader_rejects(tmp_path, mutate, reason):
     from src.data.prosperity_pool import load_prosperity_pool
@@ -155,6 +200,42 @@ def test_loader_rejects(tmp_path, mutate, reason):
     path = tmp_path / 'prosperity_pool.json'
     path.write_text(json.dumps(payload, ensure_ascii=False))
     assert load_prosperity_pool(path, now=NOW)['reason'] == reason
+
+
+def test_board_mismatch_catches_what_the_file_alone_cannot():
+    from src.data.prosperity_pool import board_mismatch, build_pool, validate_prosperity_pool
+    board = f1_board()
+    pool = valid_pool()
+    assert board_mismatch(pool, board) is None
+
+    bad = copy.deepcopy(pool)
+    bad['as_of'] = '2026-10-24'
+    assert board_mismatch(bad, board) == 'as_of'
+
+    bad = copy.deepcopy(pool)
+    bad['source']['content_hash'] = '0' * 64
+    assert board_mismatch(bad, board) == 'content_hash'
+
+    bad = copy.deepcopy(pool)
+    stat = bad['coverage']['ranked']
+    stat.update(covered=stat['total'], ratio=1.0)        # 18 → 20; ceil(20/5) is still 4
+    validate_prosperity_pool(bad, now=NOW)               # self-consistent: the file alone passes
+    assert board_mismatch(bad, board) == 'ranked'
+
+    bad = copy.deepcopy(pool)
+    bad['universe']['symbols_sha256'] = '0' * 64
+    assert board_mismatch(bad, board) == 'universe'
+
+    bad = copy.deepcopy(pool)
+    bad['coverage']['tier_cut'] = 5
+    assert board_mismatch(bad, board) == 'tier_cut'
+
+    thin = build_pool(board, liq(board, illiquid={first_tier(board)[0].symbol}),
+                      generated_at='2026-10-31T09:10:00Z')   # selected 3, eligible 4
+    bad = copy.deepcopy(thin)
+    bad['coverage']['eligible'] = 3
+    validate_prosperity_pool(bad, now=NOW)
+    assert board_mismatch(bad, board) == 'eligible'
 
 
 def test_publish_round_trip_and_pre_replace_failure_keeps_old_file(tmp_path, monkeypatch):
