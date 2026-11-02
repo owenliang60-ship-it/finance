@@ -343,3 +343,9 @@ def test_board_mismatch_catches_what_the_file_alone_cannot():
 | 5 | `POOL_TIERS` 与 M12 `TIERS` 是两处常量，测试只用字面量 | 成立 | 新增 `test_tier_cut_equals_health_report_tier_zero_count`（`importorskip('scipy')`）：断言两常量相等，n = 1..1000 时 `tier_cut` 与 `assign_tiers` tier 0 只数一致 |
 | 6 | `criteria.tier.keep` 写进文件，但没有代码读它 | 成立 | 删去 `keep`，只留 `tiers`。池文件和 TER 样本按新 criteria 重新生成，A2–A4 全部重跑，结果不变 |
 | 7 | 需求文档 R9 仍写"Top N" | 成立 | R9 改为新规则，注明原"Top N"。§12 自审的 grep 漏了"Top N"；其余几处"Top N"指体检报告的 Top 40 对照组和风险描述，保留 |
+
+## 15. 第二轮实现审查（2026-11-02，审到 `23bdffef`）
+
+| # | 级别 | 问题 | 核实 | 处理 |
+|---|---|---|---|---|
+| 1 | P2 | 收益核对器把 NaN 当作零差异：`abs(NaN − x) > TOL` 恒为假 | 成立。CLI 复现：computed 的 3 季下限、单期超额改 NaN，差异 0、退出 0 | 新增 `_same`：None 只配 None，整数项严格比 int，浮点项先要求有限再比容差；六个非有限/类型负例都退出 1；从头重算，135 值差异 0 |

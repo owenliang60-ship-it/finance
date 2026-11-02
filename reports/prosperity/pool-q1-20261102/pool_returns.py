@@ -9,6 +9,7 @@ selection and the trial selection are the same names. Exit 1 on any difference.
 """
 import argparse
 import json
+import math
 from dataclasses import replace
 from pathlib import Path
 import sys
@@ -28,10 +29,22 @@ from terminal.prosperity.version import code_version  # noqa: E402
 TOL = 1e-12
 
 
-def _pct(x):
-    return '   None  ' if x is None else f'{x:+.6f}'      # an empty pool period has no excess
 STATS = ('n', 'mean', 'lo', 'hi', 't', 'p', 'wins')
 INTS = ('n', 'wins')
+
+
+def _pct(x):
+    return '   None  ' if x is None else f'{x:+.6f}'      # an empty pool period has no excess
+
+
+def _same(base, got, *, integer=False) -> bool:
+    """Equal within TOL. None only matches None (empty pool period); NaN/inf/bool/str never match."""
+    if base is None or got is None:
+        return base is None and got is None
+    if integer:
+        return type(base) is int and type(got) is int and base == got
+    ok = all(type(v) in (int, float) and math.isfinite(v) for v in (base, got))
+    return ok and abs(base - got) <= TOL
 
 
 def compute(db, market_db):
@@ -80,7 +93,7 @@ def compare(got, baseline):
             bn, gn = brows[as_of]['n_q1_liq'], grows[as_of]['n']
             bx, gx = brows[as_of]['q1_liq'], grows[as_of]['excess']
             checked += 2
-            bad = bn != gn or (bx is None) != (gx is None) or (bx is not None and abs(bx - gx) > TOL)
+            bad = not (_same(bn, gn, integer=True) and _same(bx, gx))
             if bad:
                 diffs += 1
             lines.append(f'{h}Q {as_of}  n {gn:>3} (base {bn:>3})  excess {_pct(gx)} (base {_pct(bx)})'
@@ -89,7 +102,7 @@ def compare(got, baseline):
         for k in STATS:
             checked += 1
             bv, gv = bs.get(k), gs.get(k)
-            bad = (bv != gv) if k in INTS else (bv is None) != (gv is None) or (bv is not None and abs(bv - gv) > TOL)
+            bad = not _same(bv, gv, integer=k in INTS)
             if bad:
                 diffs += 1
             lines.append(f'{h}Q {k:<4} {gv!r} (base {bv!r})' + ('  DIFF' if bad else ''))

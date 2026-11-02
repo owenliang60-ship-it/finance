@@ -78,6 +78,14 @@
 3Q wins 14 (base 14)
 checked 135 values; differences: 0
 
-Tamper acceptance (2026-11-02, --computed returns-computed.json, baseline copies in a temp dir):
-  2Q 2022-12-03 excess +0.001 → exit 1, differences: 1
-  3Q lo +0.001             → exit 1, differences: 1
+Tamper acceptance (2026-11-02, --computed returns-computed.json unless noted; copies in a temp dir):
+  baseline 2Q 2022-12-03 excess +0.001 → exit 1, differences: 1
+  baseline 3Q lo +0.001                → exit 1, differences: 1
+Non-finite and type checks (second review P2, 2026-11-02):
+  computed 3Q lo = NaN                 → exit 1, differences: 1
+  computed 2Q one period excess = NaN  → exit 1, differences: 1
+  computed 1Q p = inf                  → exit 1, differences: 1
+  computed 3Q wins = 14.0 (float)      → exit 1, differences: 1
+  baseline 3Q hi = NaN                 → exit 1, differences: 1
+  baseline 1Q one period excess = NaN  → exit 1, differences: 1
+  computed one period excess = None    → differences: 1 (no crash)

@@ -77,3 +77,11 @@ R=reports/prosperity/pool-q1-20261102
 - A3b：结果不变，`board_mismatch` 返回 `'ranked'`。
 - A4：从头重算 `returns-computed.json`，135 值差异 0；两份篡改基准退出 1。
 - 输入快照哈希前后不变。
+
+## 第二轮审查修复（2026-11-02，`23bdffef` 审查 1 个 P2）
+
+- 问题：`pool_returns.py` 用 `abs(a − b) > TOL` 判差异，NaN 让这个比较恒为假。`json.loads` 默认接受 NaN。把 computed 文件的 3 季区间下限或单期超额改成 NaN，仍输出差异 0、退出 0。已复现。
+- 修复：比较统一走 `_same`。None 只等于 None（空池期）。整数项要求两边都是 int 且相等。浮点项要求两边都是有限的 int/float，差值 ≤ 1e-12。NaN、inf、bool、str 一律算差异。
+- 负例（`returns.txt` 末尾）：computed 的 3 季下限 NaN、单期超额 NaN、1 季 p 为 inf、3 季跑赢次数写成 14.0；baseline 的 3 季上限 NaN、单期超额 NaN。六份都退出 1、差异 1。原有两份篡改仍退出 1；单期 None 计差异 1，不崩溃。
+- 用最终比较器从头重算 `returns-computed.json`：135 值差异 0。输入快照哈希不变。
+- `verify_pool.py` 只做精确相等比较（代码、排名、整数计数、哈希），没有容差比较，不受影响。
