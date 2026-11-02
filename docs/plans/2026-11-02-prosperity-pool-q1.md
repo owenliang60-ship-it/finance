@@ -1,6 +1,6 @@
 # 景气精选池选池规则：第一档 ∩ STRICT/FULL ∩ 成交额前 100 Implementation Plan
 
-**状态：2026-11-02 Boss 批准（含第一轮审查 2 个 P2 修订，见 §13；M11 plan §15 同步修订一并批准）。**
+**状态：已完成。2026-11-02 Boss 批准（含第一轮审查 2 个 P2 修订，见 §13；M11 plan §15 同步修订一并批准）；实现后两轮审查共 8 条已修（§14、§15）；merge main `1d35d702` 并 push。云端 11-07 首发核对见 runbook。**
 
 **Goal:** 精选池只收 F1 周榜第一档（排名前 20%）里、评级 STRICT/FULL、成交额前 100 的股票。
 **Architecture:** 只改 `src/data/prosperity_pool.py`：`build_pool` 多一道排名门，`criteria` 写明第一档，`validate_prosperity_pool` 拒收超出文件自报切点的成员；新增 `board_mismatch(pool, stored)`，用原榜重算可排名数、切点和合格数，供能读原榜的读取端（M11 `pool_binding`）核对。打分、`code_version`、`prosperity.db`、发布挂点都不动。

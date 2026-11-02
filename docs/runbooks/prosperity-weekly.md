@@ -120,6 +120,18 @@ cron 和周更入口都不会移除任何数据。空间不足时周更退出 6�
   隔几天手动重建时，若期间 `as_of` 之前的价格被回补或修正，成员可能与当周略有不同。
 - 网页与 Telegram（M11、M13）尚未接入。体检报告（M12）只在本地生成，见下节。
 
+### 首次发布核对（2026-11-07，M10 A9 + 第一档规则）
+
+main `1d35d702`（2026-11-02 push）第一次把发布挂点和第一档规则带到云端。云端此前停在 `ab572de`。全部只读：
+
+1. 11-03 06:25 自动 pull 之后：`git log -1` 为 `1d35d702` 或更新；`code_version` 仍为 `13e5f9d5183f1b8e`；`bash -n scripts/run_prosperity.sh` 无输出。
+2. 11-07 16:30 之后：`logs/cron_prosperity.log` 当次 OK；`prosperity_weekly.py` 打印的 JSON 里 `"detail": {"publication": "published"}`（`src/data/prosperity_run.py:332`）。
+3. `load_prosperity_pool()` 返回 `available=True`；`criteria.tier == {'tiers': 5}`；`coverage.tier_cut == ceil(coverage.ranked.covered / 5)`；`selected` 约 20–35（10-31 回放为 36）。
+4. `data/prosperity.db` 里 `publication` 表有 as_of 2026-11-07 的四张周榜（`SELECT COUNT(*) FROM publication p JOIN board b ON b.board_id=p.board_id WHERE b.as_of='2026-11-07' AND b.board_type='weekly'` = 4）。
+5. 20:30 那次运行的 JSON 是 `"publication": "already_published"`（`prosperity_run.py:325`）。
+
+任一项不符：不重跑、不手动发布，先记录现象再报 Boss。
+
 ## 体检报告（M12，本地）
 
 每个方案一份固定格式 HTML（北极星 §4.3 八章 + 附录）和一份 `summary.json`。两个库只读，
