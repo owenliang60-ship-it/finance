@@ -8,6 +8,7 @@
 
 | 里程碑 | 日期 | 增量 |
 |--------|------|------|
+| **美股景气引擎 M12 体检报告** | 2026-11-01 | 本地 `scripts/prosperity_health.py`：读季末冻结榜与 `market.db`（两库只读），每方案一份固定八章 HTML + `summary.json`；价格收益不含分红，拆股三态（调整 / 已复权 / 未决，未决跨窗记收益未知）；Newey-West lag 按实际重叠、ICIR、跨方案 24 项固定族 BH；对照组用共同有效期（动量 Top 40、点时 Premium、扩展池）；`code_version` 不变；F1 独立重算 632 值差异 0，Premium 适配器 10-31 与生产 47 只一致；云端生成与投递并入 M13（`reports/prosperity/m12-health/`） |
 | **美股景气引擎 M10 精选池文件** | 2026-11-01 | `data/pool/prosperity_pool.json`：F1 live 周榜 STRICT/FULL ∩ 周榜成员内 30 个交易日平均日成交额前 100，合格的全进池（Boss 2026-11-01，取代"取最多 N 只"；原站对比见北极星 §4.1）；作为 M9 发布挂点随 live 周更发布，校验含新鲜度双看、价格窗口绑定 as_of、覆盖率 ≥0.90，原子替换并定义替换后失败语义；`code_version` 不变；本地验收 10-31 池 45 只独立核对差异 0，云端首发核对（A9）在 2026-11-07（`reports/prosperity/m10-pool-20261101/`） |
 | **景气 T7 部署 + 数据修复** | 2026-10-25 | 云端 `run_prosperity.sh` python3 兜底；首次冻结链重建 OK（4818 s，峰值 1.47 GB，21/21 冻结日一致）；修 8 个孤立错财季日期、EQR→VMRK 改名、回放池忽略上市前补出的市值（BMNR、UHAL-B），云端已执行（`docs/audit/2026-10-25-isolated-statement-dates.md`）；10-26 按新 code_version 重建并装周六 cron，10-31 首个自然周六验收（A10）通过 |
 | **美股景气引擎 M8 存储 + M9 调度** | 2026-10-24 | M8 `prosperity.db` 九表不可覆盖存储；M9 周更调度（硬门控 + forward 软门控两档过期）、季末冻结链与持久候选证据、计算/发布分状态、gzip 匹配备份、云端只留两个 code_version 的手动归档（D5）；A8 本周 live 四门控 pass、22 批读回一致，云端 Python 3.10 景气全套通过；merge main `f2ff1ee9`，云端 cron 未装（T7）（`reports/prosperity/m9-scheduler-20261024/`） |
