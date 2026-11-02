@@ -185,7 +185,7 @@ def render_page(pages: Sequence[BoardPage], *, generated_at: str, source: Mappin
 1. `pool is None` → `({}, '未标入池：未提供池文件')`。
 2. `validate_prosperity_pool(pool, check_freshness=False)` 抛错 → `({}, '未标入池：池文件校验失败（<异常类名>）')`。本地快照可能已过 8 天，所以不查新鲜度；与榜的绑定由第 3 步保证。
 3. 榜级绑定。以下任一不符 → `({}, '未标入池：池文件与本榜不符（<字段名>）')`，按此顺序检查，报第一个不符的字段：`stored` 是 F1 live 周榜（字段名 `board`）；`pool['as_of'] == stored.board.as_of`（`as_of`）；`pool['criteria'] == criteria_payload()`（`criteria`）；`pool['source']['code_version'] == stored.board.code_version`（`code_version`）；`pool['source']['content_hash'] == content_hash(stored)`（`content_hash`）。
-3b. 计数绑定（§15）。`field = board_mismatch(pool, stored)`；非 None → `({}, f'未标入池：池文件与本榜不符（{field}）')`。字段名取值 `universe` / `ranked` / `tier_cut` / `eligible`，由 `board_mismatch` 按此顺序返回第一个不符项。放在第 3 步之后，因为 `board_mismatch` 假定池文件已与本榜按 as_of 和 content_hash 绑定。
+3b. 计数绑定（§15）。`field = board_mismatch(pool, stored)`；非 None → `({}, f'未标入池：池文件与本榜不符（{field}）')`。字段名取值 `as_of` / `content_hash` / `universe` / `ranked` / `tier_cut` / `eligible`，由 `board_mismatch` 按此顺序返回第一个不符项。放在第 3 步之后；第 3 步已先查 as_of 和 content_hash，所以正常情况下这里只会报后四项（选池改动审查后，`board_mismatch` 自己也查这两项，2026-11-02）。`board_mismatch` 不查成员，第 4 步照做。
 4. 成员绑定（审查 P2-2）。对每个成员 `m`，在 `stored.board.rows` 里按代码找到行 `r`。以下任一不符 → `({}, '未标入池：池成员与本榜不符（<symbol>）')`，报第一个不符的成员：`r` 存在；`r.status == 'ranked'`；`r.grade in POOL_GRADES`；`m['rank'] == r.rank`；`m['grade'] == r.grade`。
 5. 全部一致 → `({m['symbol']: m['dollar_volume_rank'] for m in members}, f'入池 {len(members)} 只（第一档 ∩ STRICT/FULL ∩ 成交额前 100，as_of {as_of}）')`。
 
