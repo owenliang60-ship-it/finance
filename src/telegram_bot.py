@@ -110,8 +110,13 @@ def send_document(
     caption: str = "",
     channel: str = "group",
     max_retries: int = 3,
+    timeout: int = 60,
 ) -> bool:
-    """Send a document such as a PDF to the selected Telegram channel."""
+    """Send a document such as a PDF to the selected Telegram channel.
+
+    timeout is the per-attempt upload timeout in seconds; large files (the ~10 MB
+    prosperity web page) need more than the default.
+    """
     path = Path(file_path)
     if not path.exists():
         logger.warning("[Telegram] 文件不存在: %s", file_path)
@@ -133,7 +138,7 @@ def send_document(
                 if caption:
                     data["caption"] = caption
                 resp = requests.post(
-                    url, data=data, files={"document": handle}, timeout=60
+                    url, data=data, files={"document": handle}, timeout=timeout
                 )
                 if not resp.ok:
                     raise RuntimeError(_telegram_response_error(resp))
