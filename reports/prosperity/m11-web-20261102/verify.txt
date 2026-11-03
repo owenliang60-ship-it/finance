@@ -1,0 +1,68 @@
+# M11 verify_web.py — 2026-11-03 (after CC review + Codex review fixes), snapshot /tmp/m12/prosperity.db sha256[:16] ca0aa05a7cfccf75
+
+## A3 main: out/prosperity-web.html + reports/prosperity/pool-q1-20261102/pool-20261031.json
+checked 72580 rows, 36 pool ranks; differences: 0
+exit=0
+
+## A3 tamper: one score +0.1 (SNDK, F1 10-31)
+DIFF F1-w-2026-10-31 SNDK: cells [5] page=['97.4'] db=['97.3']
+checked 72580 rows, 36 pool ranks; differences: 1
+exit=1
+
+## A3 tamper: one dollar-volume rank +1 (SNDK)
+DIFF F1-w-2026-10-31 SNDK: cells [12] page=['8'] db=['7']
+checked 72580 rows, 36 pool ranks; differences: 1
+exit=1
+
+## A3 tamper: all-approximate header removed from F1-q-2026-08-29
+DIFF F1-q-2026-08-29: all-approximate header (expected True)
+checked 72580 rows, 36 pool ranks; differences: 1
+exit=1
+
+## A4 negative n1-as-of: negatives/n1-as-of.json
+checked 72580 rows, 0 pool ranks; differences: 0
+exit=0
+
+## A4 negative n2-bmnr: negatives/n2-bmnr.json
+checked 72580 rows, 0 pool ranks; differences: 0
+exit=0
+
+## A4 negative n3-grade: negatives/n3-grade.json
+checked 72580 rows, 0 pool ranks; differences: 0
+exit=0
+
+## A4 negative n5-criteria: negatives/n5-criteria.json
+checked 72580 rows, 0 pool ranks; differences: 0
+exit=0
+
+## A4 negative n6-source-hash: negatives/n6-source-hash.json
+checked 72580 rows, 0 pool ranks; differences: 0
+exit=0
+
+## A4 negative n4-ter: reports/prosperity/pool-q1-20261102/pool-20261031-ter.json
+checked 72580 rows, 0 pool ranks; differences: 0
+exit=0
+
+## verifier with the wrong pool: main page (36 ticks) checked against n6-source-hash (expects 0)
+DIFF F1-w-2026-10-31: freshness note
+DIFF F1-w-2026-10-31: pool note (expected unmarked: content_hash)
+DIFF F1-w-2026-10-31 SNDK: cells ['length'] page=['1', 'SNDK', 'Sandisk Corporation', 'Technology', 'STRICT', '97.3', '100', '63', '85', '90', '', '✓', '7'] db=['1', 'SNDK', 'Sandisk Corporation', 'Technology', 'STRICT', '97.3', '100', '63', '85', '90', '']
+DIFF F1-w-2026-10-31 ASTS: cells ['length'] page=['2', 'ASTS', 'AST SpaceMobile, Inc.', 'Communication Services', 'STRICT', '94.1', '100', '100', '25', '0', '预期亏损PE红旗', '', ''] db=['2', 'ASTS', 'AST SpaceMobile, Inc.', 'Communication Services', 'STRICT', '94.1', '100', '100', '25', '0', '预期亏损PE红旗']
+DIFF F1-w-2026-10-31 PR: cells ['length'] page=['3', 'PR', 'Permian Resources Corporatio…', 'Energy', 'STRICT', '90.9', '60', '80', '90', '100', '', '', ''] db=['3', 'PR', 'Permian Resources Corporatio…', 'Energy', 'STRICT', '90.9', '60', '80', '90', '100', '']
+DIFF F1-w-2026-10-31 OXY: cells ['length'] page=['4', 'OXY', 'Occidental Petroleum Corpora…', 'Energy', 'STRICT', '90.4', '74', '82', '70', '100', '', '', ''] db=['4', 'OXY', 'Occidental Petroleum Corpora…', 'Energy', 'STRICT', '90.4', '74', '82', '70', '100', '']
+DIFF F1-w-2026-10-31 SQM: cells ['length'] page=['5', 'SQM', 'Sociedad Química y Minera de…', 'Basic Materials', 'STRICT', '89.5', '92', '70', '78', '—', 'NTM待验', '', ''] db=['5', 'SQM', 'Sociedad Química y Minera de…', 'Basic Materials', 'STRICT', '89.5', '92', '70', '78', '—', 'NTM待验']
+DIFF F1-w-2026-10-31 INSM: cells ['length'] page=['6', 'INSM', 'Insmed Incorporated', 'Healthcare', 'STRICT', '89.2', '100', '70', '85', '85', '', '', ''] db=['6', 'INSM', 'Insmed Incorporated', 'Healthcare', 'STRICT', '89.2', '100', '70', '85', '85', '']
+DIFF F1-w-2026-10-31 ASND: cells ['length'] page=['7', 'ASND', 'Ascendis Pharma A/S', 'Healthcare', 'STRICT', '87.8', '100', '58', '86', '—', 'NTM待验扭亏TTM扭亏', '', ''] db=['7', 'ASND', 'Ascendis Pharma A/S', 'Healthcare', 'STRICT', '87.8', '100', '58', '86', '—', 'NTM待验扭亏TTM扭亏']
+DIFF F1-w-2026-10-31 CVX: cells ['length'] page=['8', 'CVX', 'Chevron Corporation', 'Energy', 'STRICT', '85.1', '94', '87', '60', '95', '', '✓', '56'] db=['8', 'CVX', 'Chevron Corporation', 'Energy', 'STRICT', '85.1', '94', '87', '60', '95', '']
+DIFF F1-w-2026-10-31 CNQ: cells ['length'] page=['9', 'CNQ', 'Canadian Natural Resources L…', 'Energy', 'STRICT', '84.6', '83', '90', '57', '—', 'NTM待验', '', ''] db=['9', 'CNQ', 'Canadian Natural Resources L…', 'Energy', 'STRICT', '84.6', '83', '90', '57', '—', 'NTM待验']
+DIFF F1-w-2026-10-31 LNG: cells ['length'] page=['10', 'LNG', 'Cheniere Energy, Inc.', 'Energy', 'STRICT', '84.5', '44', '78', '92', '100', '', '', ''] db=['10', 'LNG', 'Cheniere Energy, Inc.', 'Energy', 'STRICT', '84.5', '44', '78', '92', '100', '']
+DIFF F1-w-2026-10-31 MPC: cells ['length'] page=['11', 'MPC', 'Marathon Petroleum Corporati…', 'Energy', 'STRICT', '82.9', '85', '75', '52', '100', '', '', ''] db=['11', 'MPC', 'Marathon Petroleum Corporati…', 'Energy', 'STRICT', '82.9', '85', '75', '52', '100', '']
+DIFF F1-w-2026-10-31 MU: cells ['length'] page=['12', 'MU', 'Micron Technology, Inc.', 'Technology', 'STRICT', '82.8', '100', '32', '90', '89', '', '✓', '1'] db=['12', 'MU', 'Micron Technology, Inc.', 'Technology', 'STRICT', '82.8', '100', '32', '90', '89', '']
+DIFF F1-w-2026-10-31 STX: cells ['length'] page=['13', 'STX', 'Seagate Technology Holdings …', 'Technology', 'STRICT', '82.2', '100', '53', '63', '64', '', '✓', '20'] db=['13', 'STX', 'Seagate Technology Holdings …', 'Technology', 'STRICT', '82.2', '100', '53', '63', '64', '']
+DIFF F1-w-2026-10-31 SITM: cells ['length'] page=['14', 'SITM', 'SiTime Corporation', 'Technology', 'STRICT', '82.2', '100', '63', '65', '67', '', '', ''] db=['14', 'SITM', 'SiTime Corporation', 'Technology', 'STRICT', '82.2', '100', '63', '65', '67', '']
+DIFF F1-w-2026-10-31 FANG: cells ['length'] page=['15', 'FANG', 'Diamondback Energy, Inc.', 'Energy', 'STRICT', '81.6', '67', '76', '80', '89', '', '', ''] db=['15', 'FANG', 'Diamondback Energy, Inc.', 'Energy', 'STRICT', '81.6', '67', '76', '80', '89', '']
+DIFF F1-w-2026-10-31 AVGO: cells ['length'] page=['16', 'AVGO', 'Broadcom Inc.', 'Technology', 'STRICT', '79.9', '100', '71', '52', '45', '', '✓', '12'] db=['16', 'AVGO', 'Broadcom Inc.', 'Technology', 'STRICT', '79.9', '100', '71', '52', '45', '']
+DIFF F1-w-2026-10-31 NWSA: cells ['length'] page=['17', 'NWSA', 'News Corporation', 'Communication Services', 'STRICT', '79.1', '80', '74', '67', '66', '', '', ''] db=['17', 'NWSA', 'News Corporation', 'Communication Services', 'STRICT', '79.1', '80', '74', '67', '66', '']
+DIFF F1-w-2026-10-31 SAN: cells ['length'] page=['18', 'SAN', 'Banco Santander, S.A.', 'Financial Services', 'STRICT', '79.0', '81', '78', '—', '—', '无毛利斜率NTM待验', '', ''] db=['18', 'SAN', 'Banco Santander, S.A.', 'Financial Services', 'STRICT', '79.0', '81', '78', '—', '—', '无毛利斜率NTM待验']
+checked 72580 rows, 0 pool ranks; differences: 901
+exit=1

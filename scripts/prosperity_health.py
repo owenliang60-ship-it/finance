@@ -29,7 +29,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from backtest.research.prosperity_health import (PriceBook, apply_bh, board_view,  # noqa: E402
                                                  load_fundamentals, scheme_report)
 from backtest.research.prosperity_health_html import render  # noqa: E402
-from src.data.prosperity_backup import _sha  # noqa: E402
+from src.data.prosperity_backup import _sha, wal_bytes as _wal_bytes  # noqa: E402
 from src.data.market_store import MarketStore  # noqa: E402
 from src.data.prosperity_storage import BoardKey  # noqa: E402
 from src.data.prosperity_store import ProsperityStore  # noqa: E402
@@ -39,9 +39,6 @@ from terminal.prosperity.version import code_version  # noqa: E402
 DEFAULT_SCHEMES = ('F1', 'F1-rank', 'F1-exfin', 'F0')
 
 
-def _wal_bytes(path: Path) -> int:
-    wal = path.with_name(path.name + '-wal')
-    return wal.stat().st_size if wal.exists() else 0
 BH_SCHEMES = DEFAULT_SCHEMES                 # fixed BH family: every scheme, every run (review #4)
 
 

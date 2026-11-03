@@ -1,0 +1,9 @@
+symlink alias → real -wal sidecar   rc 4 | real -wal created: False
+symlink alias with live WAL          rc 4 | live -wal bytes 16512 | html written: False
+unicode NFD sidecar                  rc 4 | any -wal created: False
+out = symlink to db                  rc 4
+out via directory symlink            rc 4
+out via ..                           rc 4
+out = hardlink to pool               rc 4
+out = case variant                   rc 4
+real db unchanged: True

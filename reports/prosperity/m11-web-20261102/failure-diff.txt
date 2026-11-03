@@ -1,0 +1,7 @@
+baseline = main f29a05ef + plan docs (5fabac95), run 2026-11-03 before any code change
+branch = prosperity/m11-web e4ff8e83 + Codex review fixes (working tree, committed with this file)
+baseline: 12 failed, 4300 passed, 4 skipped, 17 warnings in 329.38s (0:05:29)
+branch:   12 failed, 4336 passed, 4 skipped, 17 warnings in 333.42s (0:05:33)
+new failures:
+gone failures:
+common: 12
