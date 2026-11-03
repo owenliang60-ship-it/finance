@@ -25,21 +25,30 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.data.prosperity_backup import _sha  # noqa: E402
+from src.data.prosperity_backup import _sha, wal_bytes as _wal_bytes  # noqa: E402
 from src.data.prosperity_store import ProsperityStore  # noqa: E402
 from src.data.prosperity_web import load_pages, render_page  # noqa: E402
 from terminal.prosperity.version import code_version  # noqa: E402
 
 
-def _wal_bytes(path: Path) -> int:
-    wal = path.with_name(path.name + '-wal')
-    return wal.stat().st_size if wal.exists() else 0
+def _overwrites_input(out: Path, db: Path, pool: Optional[Path]) -> bool:
+    """True if writing `out` could replace the database, its -wal/-shm/.state, or the pool file.
 
-
-def _inputs(db: Path, pool: Optional[Path]) -> set:
-    base = db.resolve()
-    paths = {base, *(Path(str(base) + s) for s in ('-wal', '-shm', '.state'))}
-    return paths | ({pool.resolve()} if pool is not None else set())
+    Path strings are not enough (review 2026-11-03): macOS's default APFS is case-insensitive and a
+    hardlink has its own path. Existing files are compared by identity (samefile); a sidecar that
+    does not exist yet is matched by directory identity plus a case-insensitive name.
+    """
+    targets = [db, *(db.with_name(db.name + s) for s in ('-wal', '-shm', '.state'))]
+    if pool is not None:
+        targets.append(pool)
+    for target in targets:
+        if out.exists() and target.exists():
+            if os.path.samefile(out, target):
+                return True
+        elif (out.parent.exists() and target.parent.exists() and os.path.samefile(out.parent, target.parent)
+              and out.name.casefold() == target.name.casefold()):
+            return True
+    return False
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -54,7 +63,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if out.is_dir() or not out.parent.is_dir():
         print(f'--out must be a file in an existing directory: {args.out}', file=sys.stderr)
         return 4
-    if out in _inputs(args.db, args.pool):                     # review P1: never replace an input
+    if _overwrites_input(out, args.db, args.pool):             # review P1: never replace an input
         print(f'--out would overwrite an input: {args.out}', file=sys.stderr)
         return 4
     if not args.db.is_file():

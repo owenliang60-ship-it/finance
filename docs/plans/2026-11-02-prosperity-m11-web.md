@@ -7,7 +7,7 @@
 **Tech Stack:** Python 3.10 标准库、sqlite3、现有 M8 `ProsperityStore`、M10 `validate_prosperity_pool` / `criteria_payload` / `board_mismatch`（选池第一档改动新增）、pytest。页面无 JS、无外部资源。
 **Spec:** `docs/design/prosperity-engine-north-star.md` §4.2（网页榜单）、模块表 #12；需求 R10、S2"网页可访问"。
 **北极星对齐:** 主北极星第二层「分析层 · 基本面」；景气北极星第四层「输出」。完成 R10 的 MVP 部分。
-**基线:** 选池第一档改动已合并为 main `1d35d702`（2026-11-02 push）；开工前把本分支 rebase 到 `1d35d702`，并把本行与 Task 5 的 `b539dd18` 换成它；当前分支从 main `b539dd18` 拉出，开工前 rebase。分支 `prosperity/m11-web`，worktree `.worktrees/prosperity-m11`。`code_version` `13e5f9d5183f1b8e`，F1 `scheme_hash` `3f268258d997bbdc`。
+**基线:** 2026-11-03 开工时把本分支 rebase 到 main `f29a05ef`（`1d35d702` 选池第一档合并 + 文档提交）；A6 全量测试基线在 rebase 后、写代码前的 `5fabac95` 上跑。分支 `prosperity/m11-web`，worktree `.worktrees/prosperity-m11`。`code_version` `13e5f9d5183f1b8e`，F1 `scheme_hash` `3f268258d997bbdc`。
 
 ## 1. Boss 决定（2026-11-02）
 

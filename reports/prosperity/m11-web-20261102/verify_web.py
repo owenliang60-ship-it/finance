@@ -7,7 +7,7 @@ HTML with html.parser, and compares section by section, row by row, cell by cell
 content_hash is not recomputed here (it hashes M8's canonical JSON; rewriting it would copy the
 implementation); the unit tests cover that branch.
 
-Usage: verify_web.py --db SNAPSHOT --html PAGE [--pool POOL.json] [--code-version V]
+Usage: verify_web.py --db SNAPSHOT --html PAGE --code-version V [--pool POOL.json]
 Prints `checked N rows, M pool ranks; differences: K`; exit 1 when K > 0.
 """
 from __future__ import annotations
@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import sqlite3
 import sys
 from html.parser import HTMLParser
@@ -100,9 +101,9 @@ def boards(conn, version):
     out = []
     for sid in SCHEMES:
         q = ('SELECT board_id, board_type, as_of, mode, params_bootstrap, members_json FROM board '
-             'WHERE scheme_id=? AND code_version=? AND board_type=? ORDER BY as_of DESC')
-        weekly = conn.execute(q, (sid, version, 'weekly')).fetchall()[:1]
-        finals = conn.execute(q, (sid, version, 'quarter_final')).fetchall()
+             'WHERE scheme_id=? AND code_version=? AND board_type=? AND mode LIKE ? ORDER BY as_of DESC')
+        weekly = conn.execute(q, (sid, version, 'weekly', 'live')).fetchall()[:1]      # latest = live only
+        finals = conn.execute(q, (sid, version, 'quarter_final', '%')).fetchall()
         for b in weekly + finals:
             out.append({'scheme': sid, 'id': b[0], 'type': b[1], 'as_of': b[2], 'mode': b[3],
                         'boot': b[4], 'members': json.loads(b[5]),
@@ -131,7 +132,7 @@ def expected_rows(conn, board_id):
             'symbol': sym, 'status': status, 'grade': grade, 'rank': rank, 'name': name,
             'cells': ['—' if rank is None else str(rank), sym, None, sector or '—',
                       grade if status == 'ranked' else REASON.get(reason or '', reason or '—'),
-                      '—' if score is None else f'{score:.1f}',
+                      '—' if score is None else f'{math.floor(score * 10) / 10:.1f}',   # rounded down
                       *('—' if fam.get(k) is None else f'{fam[k]:.0f}' for k in FAMILIES),
                       ''.join(TEXT.get(c, c) for c in codes)],
             'badges': [('b' if c in RED else 'i', TEXT.get(c, c)) for c in codes],
@@ -176,7 +177,7 @@ def main(argv=None):
     ap.add_argument('--db', required=True)
     ap.add_argument('--html', required=True)
     ap.add_argument('--pool')
-    ap.add_argument('--code-version', default='13e5f9d5183f1b8e')
+    ap.add_argument('--code-version', required=True, help='the version the page was generated for')
     a = ap.parse_args(argv)
     pool = None
     if a.pool:

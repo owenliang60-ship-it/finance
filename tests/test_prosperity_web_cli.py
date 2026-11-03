@@ -91,3 +91,22 @@ def test_pool_hash_in_header(db, tmp_path):
     assert run(db, tmp_path / 'a.html', '--pool', str(pool)) == 0
     html = (tmp_path / 'a.html').read_text(encoding='utf-8')
     assert sha(pool)[:16] in html and '未标入池：池文件校验失败' in html
+
+
+def test_output_may_not_be_the_same_file_under_another_name(db, tmp_path):
+    # review 2026-11-03: macOS APFS is case-insensitive and a hardlink has a different path; compare files, not strings
+    import os
+    link = tmp_path / 'link.db'
+    os.link(db, link)
+    pool = tmp_path / 'pool.json'; pool.write_text('{}')
+    pool_link = tmp_path / 'pool-copy.json'
+    os.link(pool, pool_link)
+    before = (sha(db), sha(pool))
+    assert run(db, link) == 4                                         # hardlink to the database
+    assert run(db, pool_link, '--pool', str(pool)) == 4               # hardlink to the pool
+    # a case variant is refused on any volume: on macOS's default APFS it is the same file
+    assert run(db, tmp_path / 'PROSPERITY.DB') == 4
+    assert run(db, tmp_path / 'Prosperity.db-WAL') == 4               # sidecar that does not exist yet
+    assert run(db, tmp_path / 'POOL.JSON', '--pool', str(pool)) == 4
+    assert (sha(db), sha(pool)) == before
+    assert not (tmp_path / 'Prosperity.db-WAL').exists() and not (tmp_path / 'prosperity.db-wal').exists()

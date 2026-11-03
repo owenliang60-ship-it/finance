@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from html import escape
+import math
 from typing import List, Mapping, Optional, Sequence, Tuple
 
 from src.data.prosperity_pool import (LIQUIDITY_TOP, POOL_GRADES, POOL_SCHEME_ID, board_mismatch,
                                       criteria_payload, validate_prosperity_pool)
-from src.data.prosperity_storage import content_hash
+from src.data.prosperity_storage import BoardKey, content_hash
 from terminal.prosperity.schemes import SCHEMES, scheme_hash
 
 WEB_SCHEMES = ('F1', 'F1-rank', 'F1-exfin', 'F0')   # table-of-contents column order, same as M12 DEFAULT_SCHEMES
@@ -137,16 +138,21 @@ def pool_binding(pool: Optional[dict], stored) -> Tuple[Mapping[str, int], str]:
 
 def load_pages(store, *, code_version: str, pool: Optional[dict] = None,
                pool_error: Optional[str] = None) -> List[BoardPage]:
-    """Per scheme: the latest weekly board, then every quarter-end board, newest first.
+    """Per scheme: the latest live weekly board, then every quarter-end board, newest first.
 
-    Boards are read one at a time and dropped once converted. A scheme with no board is skipped.
+    A rebuilt chain also stores replay weekly boards; none of them is "latest" (review 2026-11-03),
+    so before the first live Saturday a scheme has no latest weekly section. Boards are read one at
+    a time and dropped once converted. A scheme with no board is skipped.
     """
     pages = []
     for sid in WEB_SCHEMES:
         h = scheme_hash(SCHEMES[sid])
-        weekly = store.list_boards(scheme_hash=h, code_version=code_version, board_type='weekly')
+        # list_boards has no mode filter; same header-only query as scripts/prosperity_health.py
+        live = store._conn.execute("SELECT MAX(as_of) FROM board WHERE board_type='weekly' AND mode='live' "
+                                   'AND scheme_hash=? AND code_version=?', (h, code_version)).fetchone()[0]
+        weekly = [BoardKey('weekly', live, h, code_version)] if live else []
         finals = store.list_boards(scheme_hash=h, code_version=code_version, board_type='quarter_final')
-        for key in weekly[-1:] + finals[::-1]:
+        for key in weekly + list(finals[::-1]):
             stored = store.get_board(key)
             if sid == POOL_SCHEME_ID and key.board_type == 'weekly':
                 ranks, note = ({}, '未标入池：' + pool_error) if pool_error else pool_binding(pool, stored)
@@ -196,6 +202,11 @@ def _num(value, digits):
     return '—' if value is None else f'{value:.{digits}f}'
 
 
+def _score(value) -> str:
+    """Rounded down to 0.1, so a shown score never crosses a grade line: 64.99 shows 64.9, not 65.0 (review)."""
+    return '—' if value is None else f'{math.floor(value * 10) / 10:.1f}'
+
+
 def _row_label(page: BoardPage) -> str:
     return LATEST if page.board_type == 'weekly' else (page.quarter_label or page.as_of)
 
@@ -213,7 +224,7 @@ def _cells(r: WebRow, *, pooled: bool) -> str:
     name_cell = f'<td title="{escape(name)}">{escape(short)}' if short != name else f'<td>{escape(short)}'
     grade = r.grade if r.status == 'ranked' else REASON_TEXT.get(r.observe_reason or '', r.observe_reason or '—')
     parts = [f'<td>{"—" if r.rank is None else r.rank}', f'<td>{escape(r.symbol)}', name_cell,
-             f'<td>{escape(r.sector or "—")}', f'<td>{escape(grade)}', f'<td>{_num(r.score, 1)}']
+             f'<td>{escape(r.sector or "—")}', f'<td>{escape(grade)}', f'<td>{_score(r.score)}']
     parts += [f'<td>{_num(r.family_scores.get(k), 0)}' for k, _ in FAMILIES]
     parts.append('<td>' + ''.join(_badge(b) for b in r.badges))
     if pooled:
@@ -234,7 +245,7 @@ def _table(rows: Sequence[WebRow], *, pooled: bool) -> str:
 
 def _section(page: BoardPage, peers: Sequence[BoardPage]) -> str:
     c = page.counts
-    pooled = page.pool_note is not None and page.pool_note.startswith('入池')
+    pooled = any(r.pool_rank is not None for r in page.rows)    # pool_binding marks rows only when bound
     title = f'{escape(page.scheme_id)} · {_TYPE_TEXT.get(page.board_type, page.board_type)} · {page.as_of}'
     meta = [f'季度 {escape(page.quarter_label)}' if page.quarter_label else None,
             f'冻结于 {escape(page.frozen_at)}' if page.frozen_at else None,
@@ -248,8 +259,9 @@ def _section(page: BoardPage, peers: Sequence[BoardPage]) -> str:
     if page.pool_note:
         out.append(f'<p class="note">{escape(page.pool_note)}</p>')
     out.append(f'<p class="m">同期其他方案：{links or "无"} · <a href="#toc">回目录</a></p>')
-    top = [r for r in page.rows if r.status == 'ranked' and r.grade in ('STRICT', 'FULL')]
-    rest = [r for r in page.rows if r not in top]
+    top, rest = [], []
+    for r in page.rows:
+        (top if r.status == 'ranked' and r.grade in ('STRICT', 'FULL') else rest).append(r)
     out.append(_table(top, pooled=pooled) if top else '<p class="m">本榜无 STRICT/FULL 行。</p>')
     if rest:
         out.append(f'<details><summary>其余 {len(rest)} 行（BELOW {c["BELOW"]} / 观察 {c["observe"]} / '
@@ -285,7 +297,7 @@ def render_page(pages: Sequence[BoardPage], *, generated_at: str, source: Mappin
 <h1>景气榜单</h1>
 <p class="m">生成于 {escape(generated_at)} · 库 SHA256 {escape(db[:16] or '—')} · code_version {escape(source.get('code_version') or '—')} · 池文件 {escape(pool[:16] or '无')}</p>
 <p class="m">方案 hash：{scheme_line}</p>
-<p class="m">评级：分数 ≥ {strict:g} 为 STRICT，≥ {full:g} 为 FULL，其余 BELOW；任一闸门不过降为 BELOW。分数 = 0–100 基础分 + 毛利斜率加减分。每张榜只展开 STRICT/FULL，BELOW、观察、排除行收在折叠块里。本页无脚本，用目录链接切换方案和期数。</p>
+<p class="m">评级：分数 ≥ {strict:g} 为 STRICT，≥ {full:g} 为 FULL，其余 BELOW；任一闸门不过降为 BELOW。分数 = 0–100 基础分 + 毛利斜率加减分，向下取一位小数。每张榜只展开 STRICT/FULL，BELOW、观察、排除行收在折叠块里。本页无脚本，用目录链接切换方案和期数。</p>
 <nav id="toc"><h2>目录</h2><div class="w"><table><thead><tr><th>期数</th>{head}</tr></thead><tbody>
 {chr(10).join(toc_rows)}
 </tbody></table></div></nav>

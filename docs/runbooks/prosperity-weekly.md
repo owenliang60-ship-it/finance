@@ -172,9 +172,12 @@ sqlite3 "/Users/owen/CC workspace/Finance/data/market.db" ".backup /tmp/health/m
 PY="/Users/owen/CC workspace/Finance/.venv/bin/python"
 mkdir -p /tmp/web
 "$PY" scripts/sync_prosperity.py --db /tmp/web/prosperity.db              # 云端结果库快照，自包含无 WAL
+scp aliyun:/root/workspace/Finance/data/pool/prosperity_pool.json /tmp/web/  # 池文件不随任何同步脚本到本地
 "$PY" scripts/prosperity_web.py --db /tmp/web/prosperity.db \
-  --out /tmp/web/prosperity-web.html --pool data/pool/prosperity_pool.json   # --pool 可省略
+  --out /tmp/web/prosperity-web.html --pool /tmp/web/prosperity_pool.json    # --pool 可省略
 ```
+
+池文件和库快照要在同一次拉取：库里有了新一周的周榜而池文件还是上周的，页面会写"未标入池：池文件与本榜不符（as_of）"，不标入池。
 
 | 退出码 | 含义 |
 |---|---|
@@ -187,4 +190,5 @@ mkdir -p /tmp/web
 - 只有 F1 最新周榜标入池（✓ 与成交额排名）。池文件必须和这张榜完全对得上：as_of、criteria、code_version、来源哈希、
   股票池、可排名数、第一档切点、合格数，以及每个成员的排名与评级。任一项不符就整张榜不标，榜头写"未标入池：原因"。
 - 本地快照常常超过 8 天，所以网页不查池文件新鲜度；入池标记只说明池文件属于这张榜。
-- 独立核对：`reports/prosperity/m11-web-20261102/verify_web.py`（只用标准库，不 import 项目代码）。
+- 独立核对：`/usr/bin/python3 -I reports/prosperity/m11-web-20261102/verify_web.py --db … --html … --code-version <页首的 code_version> [--pool …]`
+  （只用标准库，不 import 项目代码；`--code-version` 必填，取页首显示的值）。

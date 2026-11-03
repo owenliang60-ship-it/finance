@@ -41,6 +41,13 @@ def _sha(path):
     return h.hexdigest()
 
 
+def wal_bytes(path) -> int:
+    """Size of the database's -wal file (0 if absent). Read-only CLIs accept only self-contained
+    snapshots, so their SHA256 covers every byte SQLite reads (M12 health report, M11 web page)."""
+    wal = Path(path).with_name(Path(path).name + '-wal')
+    return wal.stat().st_size if wal.exists() else 0
+
+
 def check_space(db_path: Path) -> None:
     db_path = Path(db_path).absolute()
     if _pending(db_path).exists():

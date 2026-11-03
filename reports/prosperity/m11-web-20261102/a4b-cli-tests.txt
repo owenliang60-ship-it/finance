@@ -1,0 +1,9 @@
+test_writes_one_page_and_leaves_db_unchanged PASSED [ 12%]
+test_input_errors_write_nothing PASSED [ 25%]
+test_output_may_not_overwrite_an_input PASSED [ 37%]
+test_wal_content_is_refused PASSED     [ 50%]
+test_db_changed_while_reading PASSED   [ 62%]
+test_unreadable_pool_is_reported_not_fatal PASSED [ 75%]
+test_pool_hash_in_header PASSED        [ 87%]
+test_output_may_not_be_the_same_file_under_another_name PASSED [100%]
+============================== 8 passed in 3.95s ===============================

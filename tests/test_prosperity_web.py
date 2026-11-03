@@ -266,9 +266,9 @@ def test_numbers_and_missing_families(pages):
     f0 = next(p for p in pages if p.scheme_id == 'F0')
     r = next(r for r in f0.rows if r.status == 'ranked')
     section = html.split(f'<section id="{section_id(f0)}"')[1].split('</section>')[0]
+    from src.data.prosperity_web import _score
     cells = row_of(section, r.symbol)['cells']
-    assert cells[5] == f'{r.score:.1f}' and cells[6] == f"{r.family_scores['growth']:.0f}"
-    assert f'{r.score:.1f}' in cells and f"{r.family_scores['growth']:.0f}" in cells
+    assert cells[5] == _score(r.score) and cells[6] == f"{r.family_scores['growth']:.0f}"
     assert cells[9] == '—'                                          # F0 has no expectation family
 
 
@@ -308,3 +308,27 @@ def test_toc_marks_a_scheme_without_boards(pages):
 def test_dark_mode_tokens_present(pages):
     html = render_page(pages, generated_at='x', source={})
     assert 'prefers-color-scheme: dark' in html and ':root[data-theme="dark"]' in html
+
+
+# ---- review fixes (2026-11-03) -------------------------------------------------------
+def test_latest_weekly_is_the_live_board_not_a_replay(tmp_path):
+    # a rebuilt chain writes replay weekly boards; before the first live Saturday none of them is "latest"
+    from dataclasses import replace as dc_replace
+    db = tmp_path / 'replay.db'
+    with ProsperityStore(db, read_only=False) as s:
+        live = storage_batch(freeze=True, quarter_label='2026Q2')
+        s.save_batch(live)
+        replay = tuple(dc_replace(b, meta=dc_replace(b.meta, mode='replay', source_evidence={
+            **b.meta.source_evidence, 'observed_at': None}))
+            for b in storage_batch(as_of='2026-10-03', freeze=True, quarter_label='2026Q3'))
+        s.save_batch(replay)
+    with ProsperityStore(db) as s:
+        pages = load_pages(s, code_version='test-v1')
+    weekly = [p for p in pages if p.board_type == 'weekly']
+    assert [(p.as_of, p.mode) for p in weekly] == [('2026-09-26', 'live')] * 4
+
+
+def test_displayed_score_never_crosses_a_grade_line():
+    from src.data.prosperity_web import _score
+    assert _score(64.9897) == '64.9' and _score(49.9999) == '49.9' and _score(65.0) == '65.0'
+    assert _score(97.45) == '97.4' and _score(-0.05) == '-0.1' and _score(None) == '—'

@@ -1,15 +1,15 @@
-# M11 verify_web.py — 2026-11-03, snapshot /tmp/m12/prosperity.db sha256[:16] ca0aa05a7cfccf75
+# M11 verify_web.py — 2026-11-03 (after review fixes), snapshot /tmp/m12/prosperity.db sha256[:16] ca0aa05a7cfccf75
 
 ## A3 main: out/prosperity-web.html + reports/prosperity/pool-q1-20261102/pool-20261031.json
 checked 72580 rows, 36 pool ranks; differences: 0
 exit=0
 
-## A3 tamper: one score 97.4 -> 97.5 (SNDK, F1 10-31)
-DIFF F1-w-2026-10-31 SNDK: cells [5] page=['97.5'] db=['97.4']
+## A3 tamper: one score +0.1 (SNDK, F1 10-31)
+DIFF F1-w-2026-10-31 SNDK: cells [5] page=['97.4'] db=['97.3']
 checked 72580 rows, 36 pool ranks; differences: 1
 exit=1
 
-## A3 tamper: one dollar-volume rank 7 -> 8 (SNDK)
+## A3 tamper: one dollar-volume rank +1 (SNDK)
 DIFF F1-w-2026-10-31 SNDK: cells [12] page=['8'] db=['7']
 checked 72580 rows, 36 pool ranks; differences: 1
 exit=1
