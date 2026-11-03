@@ -1,0 +1,713 @@
+{
+ "schema_version": 1,
+ "name": "景气精选池",
+ "as_of": "2026-10-31",
+ "generated_at": "2026-11-01T04:00:00Z",
+ "criteria": {
+  "scheme_id": "F1",
+  "scheme_hash": "3f268258d997bbdc",
+  "grades": [
+   "STRICT",
+   "FULL"
+  ],
+  "tier": {
+   "tiers": 5
+  },
+  "liquidity": {
+   "metric": "avg_dollar_volume",
+   "trading_days": 30,
+   "min_days": 5,
+   "top": 100
+  }
+ },
+ "source": {
+  "board_type": "weekly",
+  "code_version": "13e5f9d5183f1b8e",
+  "computed_at": "2026-10-31T08:45:11.438263Z",
+  "content_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+ },
+ "universe": {
+  "name": "extended",
+  "count": 899,
+  "symbols_sha256": "3330334325006e055e3feb4293f90cce361267637ed3e25fba72799b80dc0463"
+ },
+ "coverage": {
+  "ranked": {
+   "covered": 848,
+   "total": 899,
+   "ratio": 0.9432703003337041
+  },
+  "liquidity_ranked": {
+   "covered": 898,
+   "total": 899,
+   "ratio": 0.9988876529477196
+  },
+  "tier_cut": 170,
+  "eligible": 170,
+  "selected": 36,
+  "trading_window": [
+   "2026-09-21",
+   "2026-10-30"
+  ]
+ },
+ "members": [
+  {
+   "symbol": "SNDK",
+   "name": "Sandisk Corporation",
+   "sector": "Technology",
+   "industry": "Computer Hardware",
+   "rank": 1,
+   "grade": "STRICT",
+   "score": 97.35073110926456,
+   "family_scores": {
+    "accel": 63.34878970392004,
+    "expectation": 89.89266133112199,
+    "growth": 100.0,
+    "quality": 84.8661061227835
+   },
+   "badges": [],
+   "dollar_volume_rank": 7,
+   "avg_dollar_volume": 12995343659.289034
+  },
+  {
+   "symbol": "CVX",
+   "name": "Chevron Corporation",
+   "sector": "Energy",
+   "industry": "Oil & Gas Integrated",
+   "rank": 8,
+   "grade": "STRICT",
+   "score": 85.19261631437207,
+   "family_scores": {
+    "accel": 87.28986944900097,
+    "expectation": 95.03270985761148,
+    "growth": 93.97532884987967,
+    "quality": 59.781169465986764
+   },
+   "badges": [],
+   "dollar_volume_rank": 56,
+   "avg_dollar_volume": 1635234725.397998
+  },
+  {
+   "symbol": "MU",
+   "name": "Micron Technology, Inc.",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 12,
+   "grade": "STRICT",
+   "score": 82.83137676045706,
+   "family_scores": {
+    "accel": 31.54495068103951,
+    "expectation": 89.37347284943482,
+    "growth": 100.0,
+    "quality": 90.3008197505331
+   },
+   "badges": [],
+   "dollar_volume_rank": 1,
+   "avg_dollar_volume": 25109195545.107
+  },
+  {
+   "symbol": "STX",
+   "name": "Seagate Technology Holdings plc",
+   "sector": "Technology",
+   "industry": "Computer Hardware",
+   "rank": 13,
+   "grade": "STRICT",
+   "score": 82.25832238655524,
+   "family_scores": {
+    "accel": 53.401567375492164,
+    "expectation": 63.78889596347174,
+    "growth": 100.0,
+    "quality": 63.31831751967434
+   },
+   "badges": [],
+   "dollar_volume_rank": 20,
+   "avg_dollar_volume": 3972951279.5876403
+  },
+  {
+   "symbol": "AVGO",
+   "name": "Broadcom Inc.",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 16,
+   "grade": "STRICT",
+   "score": 79.9694881749739,
+   "family_scores": {
+    "accel": 70.91480669816505,
+    "expectation": 44.780128883625835,
+    "growth": 100.0,
+    "quality": 51.80616811708201
+   },
+   "badges": [],
+   "dollar_volume_rank": 12,
+   "avg_dollar_volume": 7679460216.35634
+  },
+  {
+   "symbol": "XOM",
+   "name": "Exxon Mobil Corporation",
+   "sector": "Energy",
+   "industry": "Oil & Gas Integrated",
+   "rank": 19,
+   "grade": "STRICT",
+   "score": 78.6493693327508,
+   "family_scores": {
+    "accel": 85.9230065540881,
+    "expectation": 72.38995767752996,
+    "growth": 76.50604317620049,
+    "quality": 49.542033272827254
+   },
+   "badges": [],
+   "dollar_volume_rank": 44,
+   "avg_dollar_volume": 2080331220.831179
+  },
+  {
+   "symbol": "VLO",
+   "name": "Valero Energy Corporation",
+   "sector": "Energy",
+   "industry": "Oil & Gas Refining & Marketing",
+   "rank": 23,
+   "grade": "STRICT",
+   "score": 76.59283571798849,
+   "family_scores": {
+    "accel": 60.10078081674324,
+    "expectation": 100.0,
+    "growth": 70.1604282050621,
+    "quality": 53.90156148625985
+   },
+   "badges": [],
+   "dollar_volume_rank": 80,
+   "avg_dollar_volume": 1264049388.4787598
+  },
+  {
+   "symbol": "VRT",
+   "name": "Vertiv Holdings Co",
+   "sector": "Industrials",
+   "industry": "Electrical Equipment & Parts",
+   "rank": 26,
+   "grade": "STRICT",
+   "score": 75.28387998984952,
+   "family_scores": {
+    "accel": 67.8951291020675,
+    "expectation": 57.36211383544373,
+    "growth": 95.15152178193827,
+    "quality": 44.95566754400016
+   },
+   "badges": [],
+   "dollar_volume_rank": 71,
+   "avg_dollar_volume": 1379655807.7879999
+  },
+  {
+   "symbol": "LRCX",
+   "name": "Lam Research Corporation",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 28,
+   "grade": "STRICT",
+   "score": 75.08736227684983,
+   "family_scores": {
+    "accel": 67.5190038233001,
+    "expectation": 46.83888014047112,
+    "growth": 90.58087887739251,
+    "quality": 54.39023704571972
+   },
+   "badges": [],
+   "dollar_volume_rank": 29,
+   "avg_dollar_volume": 2839974409.9328966
+  },
+  {
+   "symbol": "AMD",
+   "name": "Advanced Micro Devices, Inc.",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 34,
+   "grade": "STRICT",
+   "score": 71.0329656402027,
+   "family_scores": {
+    "accel": 67.74553076384385,
+    "expectation": 48.01830260318246,
+    "growth": 84.65328915967496,
+    "quality": 44.49685145854649
+   },
+   "badges": [],
+   "dollar_volume_rank": 8,
+   "avg_dollar_volume": 12369866788.976095
+  },
+  {
+   "symbol": "GLW",
+   "name": "Corning Inc",
+   "sector": "Technology",
+   "industry": "Hardware, Equipment & Parts",
+   "rank": 40,
+   "grade": "STRICT",
+   "score": 68.9006639768975,
+   "family_scores": {
+    "accel": 69.24630679558601,
+    "expectation": 48.25983269379566,
+    "growth": 87.83837181337448,
+    "quality": 45.947847140202015
+   },
+   "badges": [],
+   "dollar_volume_rank": 84,
+   "avg_dollar_volume": 1216358398.5935771
+  },
+  {
+   "symbol": "TSM",
+   "name": "Taiwan Semiconductor Manufacturing Company Limited",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 43,
+   "grade": "STRICT",
+   "score": 68.00313984260086,
+   "family_scores": {
+    "accel": 46.1267995005852,
+    "expectation": null,
+    "growth": 79.04239536193856,
+    "quality": 63.78290969821756
+   },
+   "badges": [
+    "ntm_gate_unknown"
+   ],
+   "dollar_volume_rank": 15,
+   "avg_dollar_volume": 4727341681.822333
+  },
+  {
+   "symbol": "PLTR",
+   "name": "Palantir Technologies Inc.",
+   "sector": "Technology",
+   "industry": "Software - Infrastructure",
+   "rank": 44,
+   "grade": "STRICT",
+   "score": 67.8966064519984,
+   "family_scores": {
+    "accel": 41.948367077721066,
+    "expectation": 48.24647367566654,
+    "growth": 92.54770106016804,
+    "quality": 58.50288115671584
+   },
+   "badges": [],
+   "dollar_volume_rank": 18,
+   "avg_dollar_volume": 4332966045.9048605
+  },
+  {
+   "symbol": "TXN",
+   "name": "Texas Instruments Incorporated",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 47,
+   "grade": "STRICT",
+   "score": 66.67032775417233,
+   "family_scores": {
+    "accel": 54.19500943949942,
+    "expectation": 56.37097612259352,
+    "growth": 63.1949514037924,
+    "quality": 68.42596566780189
+   },
+   "badges": [],
+   "dollar_volume_rank": 54,
+   "avg_dollar_volume": 1859138747.6402283
+  },
+  {
+   "symbol": "COHR",
+   "name": "Coherent, Inc.",
+   "sector": "Technology",
+   "industry": "Hardware, Equipment & Parts",
+   "rank": 49,
+   "grade": "STRICT",
+   "score": 66.51955126181268,
+   "family_scores": {
+    "accel": 66.10352497999818,
+    "expectation": 56.99149309100896,
+    "growth": 79.68950944701425,
+    "quality": 31.109261502432574
+   },
+   "badges": [],
+   "dollar_volume_rank": 47,
+   "avg_dollar_volume": 1985457903.5767496
+  },
+  {
+   "symbol": "SMCI",
+   "name": "Super Micro Computer, Inc.",
+   "sector": "Technology",
+   "industry": "Computer Hardware",
+   "rank": 50,
+   "grade": "STRICT",
+   "score": 66.09068509848952,
+   "family_scores": {
+    "accel": 52.05495037545995,
+    "expectation": 100.0,
+    "growth": 84.88930747973325,
+    "quality": 39.618640892634275
+   },
+   "badges": [],
+   "dollar_volume_rank": 74,
+   "avg_dollar_volume": 1355738131.4412634
+  },
+  {
+   "symbol": "NVDA",
+   "name": "NVIDIA Corporation",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 55,
+   "grade": "STRICT",
+   "score": 65.18290278986629,
+   "family_scores": {
+    "accel": 39.76507776863094,
+    "expectation": 56.435410979307946,
+    "growth": 92.89825452711543,
+    "quality": 47.008432459120165
+   },
+   "badges": [],
+   "dollar_volume_rank": 2,
+   "avg_dollar_volume": 22514383377.55233
+  },
+  {
+   "symbol": "MDT",
+   "name": "Medtronic plc",
+   "sector": "Healthcare",
+   "industry": "Medical - Devices",
+   "rank": 61,
+   "grade": "FULL",
+   "score": 63.95581443854261,
+   "family_scores": {
+    "accel": 67.23836923101719,
+    "expectation": 46.99458335536797,
+    "growth": 53.397270722546196,
+    "quality": 54.81498262154372
+   },
+   "badges": [],
+   "dollar_volume_rank": 36,
+   "avg_dollar_volume": 2351172282.0251904
+  },
+  {
+   "symbol": "HPE",
+   "name": "Hewlett Packard Enterprise Company",
+   "sector": "Technology",
+   "industry": "Computer Hardware",
+   "rank": 67,
+   "grade": "FULL",
+   "score": 63.07633235230296,
+   "family_scores": {
+    "accel": 43.36092947497623,
+    "expectation": 79.95309688649586,
+    "growth": 73.13375016905982,
+    "quality": 47.85828918677498
+   },
+   "badges": [],
+   "dollar_volume_rank": 89,
+   "avg_dollar_volume": 1160983916.9484503
+  },
+  {
+   "symbol": "MRVL",
+   "name": "Marvell Technology, Inc.",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 73,
+   "grade": "FULL",
+   "score": 62.33969952428521,
+   "family_scores": {
+    "accel": 53.16333160710685,
+    "expectation": 50.72484029991542,
+    "growth": 56.753239346852745,
+    "quality": 46.53631051100178
+   },
+   "badges": [],
+   "dollar_volume_rank": 14,
+   "avg_dollar_volume": 5196469387.341863
+  },
+  {
+   "symbol": "AMAT",
+   "name": "Applied Materials, Inc.",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 79,
+   "grade": "FULL",
+   "score": 61.11090761307857,
+   "family_scores": {
+    "accel": 60.314385366183146,
+    "expectation": 53.02138606918242,
+    "growth": 70.34292494865535,
+    "quality": 46.38342657359848
+   },
+   "badges": [],
+   "dollar_volume_rank": 26,
+   "avg_dollar_volume": 3078496912.3577228
+  },
+  {
+   "symbol": "AAPL",
+   "name": "Apple Inc.",
+   "sector": "Technology",
+   "industry": "Consumer Electronics",
+   "rank": 90,
+   "grade": "FULL",
+   "score": 60.40641315495266,
+   "family_scores": {
+    "accel": 52.91336742318721,
+    "expectation": 45.614508579515025,
+    "growth": 62.47346503980533,
+    "quality": 50.33297674777616
+   },
+   "badges": [
+    "pe_redflag"
+   ],
+   "dollar_volume_rank": 6,
+   "avg_dollar_volume": 13175638103.171024
+  },
+  {
+   "symbol": "APP",
+   "name": "AppLovin Corporation",
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "rank": 97,
+   "grade": "FULL",
+   "score": 59.975943418789065,
+   "family_scores": {
+    "accel": 36.85807917812055,
+    "expectation": 38.27708775585585,
+    "growth": 77.55920042155977,
+    "quality": 57.217016416763
+   },
+   "badges": [],
+   "dollar_volume_rank": 82,
+   "avg_dollar_volume": 1232712026.2437541
+  },
+  {
+   "symbol": "ADI",
+   "name": "Analog Devices, Inc.",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 101,
+   "grade": "FULL",
+   "score": 59.62596992634076,
+   "family_scores": {
+    "accel": 50.78910632321427,
+    "expectation": 53.3540848838478,
+    "growth": 60.26466531299215,
+    "quality": 49.73989852373336
+   },
+   "badges": [],
+   "dollar_volume_rank": 72,
+   "avg_dollar_volume": 1374068627.9937744
+  },
+  {
+   "symbol": "CIEN",
+   "name": "Ciena Corporation",
+   "sector": "Technology",
+   "industry": "Communication Equipment",
+   "rank": 104,
+   "grade": "FULL",
+   "score": 59.54133645438647,
+   "family_scores": {
+    "accel": 46.509009061924665,
+    "expectation": 58.964565089121294,
+    "growth": 71.11128665671497,
+    "quality": 40.133363107144845
+   },
+   "badges": [],
+   "dollar_volume_rank": 97,
+   "avg_dollar_volume": 1070150434.1030192
+  },
+  {
+   "symbol": "WFC",
+   "name": "Wells Fargo & Company",
+   "sector": "Financial Services",
+   "industry": "Banks - Diversified",
+   "rank": 112,
+   "grade": "FULL",
+   "score": 58.95512066127439,
+   "family_scores": {
+    "accel": 54.20079680726357,
+    "expectation": 55.503694364110686,
+    "growth": 65.65230725667493,
+    "quality": null
+   },
+   "badges": [
+    "gm_slope_missing"
+   ],
+   "dollar_volume_rank": 83,
+   "avg_dollar_volume": 1220314133.904719
+  },
+  {
+   "symbol": "KLAC",
+   "name": "KLA Corporation",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 114,
+   "grade": "FULL",
+   "score": 58.56469616060216,
+   "family_scores": {
+    "accel": 63.12546929103298,
+    "expectation": 48.58221244504616,
+    "growth": 64.77159923425152,
+    "quality": 48.72432357584219
+   },
+   "badges": [],
+   "dollar_volume_rank": 55,
+   "avg_dollar_volume": 1851970882.3661144
+  },
+  {
+   "symbol": "ARM",
+   "name": "Arm Holdings plc American Depositary Shares",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 117,
+   "grade": "FULL",
+   "score": 58.410032140321306,
+   "family_scores": {
+    "accel": 49.92920260560135,
+    "expectation": null,
+    "growth": 45.78825321118412,
+    "quality": 78.2293282038939
+   },
+   "badges": [
+    "ntm_gate_unknown"
+   ],
+   "dollar_volume_rank": 61,
+   "avg_dollar_volume": 1523831101.799876
+  },
+  {
+   "symbol": "ALAB",
+   "name": "Astera Labs, Inc. Common Stock",
+   "sector": "Technology",
+   "industry": "Semiconductors",
+   "rank": 119,
+   "grade": "FULL",
+   "score": 58.18279237701403,
+   "family_scores": {
+    "accel": 56.39794956927947,
+    "expectation": 59.366372984571456,
+    "growth": 100.0,
+    "quality": 21.99032571919391
+   },
+   "badges": [],
+   "dollar_volume_rank": 76,
+   "avg_dollar_volume": 1321649005.4170775
+  },
+  {
+   "symbol": "NU",
+   "name": "Nu Holdings Ltd.",
+   "sector": "Financial Services",
+   "industry": "Banks - Regional",
+   "rank": 122,
+   "grade": "FULL",
+   "score": 58.061164580438216,
+   "family_scores": {
+    "accel": 45.75750680748486,
+    "expectation": 53.72354190373696,
+    "growth": 73.86130620778424,
+    "quality": null
+   },
+   "badges": [
+    "gm_slope_missing"
+   ],
+   "dollar_volume_rank": 81,
+   "avg_dollar_volume": 1242208813.4205165
+  },
+  {
+   "symbol": "CAT",
+   "name": "Caterpillar Inc.",
+   "sector": "Industrials",
+   "industry": "Agricultural - Machinery",
+   "rank": 123,
+   "grade": "FULL",
+   "score": 57.94996586130985,
+   "family_scores": {
+    "accel": 58.91927814494269,
+    "expectation": 56.13973671369854,
+    "growth": 65.1206650514124,
+    "quality": 48.71218129514535
+   },
+   "badges": [],
+   "dollar_volume_rank": 39,
+   "avg_dollar_volume": 2138361846.530013
+  },
+  {
+   "symbol": "NFLX",
+   "name": "Netflix, Inc.",
+   "sector": "Communication Services",
+   "industry": "Entertainment",
+   "rank": 139,
+   "grade": "FULL",
+   "score": 56.504536904410244,
+   "family_scores": {
+    "accel": 53.443808141844166,
+    "expectation": 44.98544364954477,
+    "growth": 50.53613676661596,
+    "quality": 48.55927463930211
+   },
+   "badges": [],
+   "dollar_volume_rank": 30,
+   "avg_dollar_volume": 2820554884.791781
+  },
+  {
+   "symbol": "V",
+   "name": "Visa Inc.",
+   "sector": "Financial Services",
+   "industry": "Financial - Credit Services",
+   "rank": 145,
+   "grade": "FULL",
+   "score": 56.26455123369529,
+   "family_scores": {
+    "accel": 55.17388796101436,
+    "expectation": 45.06376554860016,
+    "growth": 63.746734230062685,
+    "quality": 53.293174493845775
+   },
+   "badges": [],
+   "dollar_volume_rank": 34,
+   "avg_dollar_volume": 2378866851.5520163
+  },
+  {
+   "symbol": "AMGN",
+   "name": "Amgen Inc.",
+   "sector": "Healthcare",
+   "industry": "Drug Manufacturers - General",
+   "rank": 154,
+   "grade": "FULL",
+   "score": 55.56286966647091,
+   "family_scores": {
+    "accel": 49.270536147347705,
+    "expectation": 53.42743031794359,
+    "growth": 39.820312106154844,
+    "quality": 60.1173814050336
+   },
+   "badges": [],
+   "dollar_volume_rank": 88,
+   "avg_dollar_volume": 1163366236.8216755
+  },
+  {
+   "symbol": "SNOW",
+   "name": "Snowflake Inc.",
+   "sector": "Technology",
+   "industry": "Software - Application",
+   "rank": 157,
+   "grade": "FULL",
+   "score": 55.1646052436605,
+   "family_scores": {
+    "accel": 53.75860494234882,
+    "expectation": 47.85962951077259,
+    "growth": 63.54389876113312,
+    "quality": 49.9998437376849
+   },
+   "badges": [],
+   "dollar_volume_rank": 69,
+   "avg_dollar_volume": 1416692878.1840851
+  },
+  {
+   "symbol": "COST",
+   "name": "Costco Wholesale Corporation",
+   "sector": "Consumer Defensive",
+   "industry": "Discount Stores",
+   "rank": 159,
+   "grade": "FULL",
+   "score": 54.940186610390604,
+   "family_scores": {
+    "accel": 55.795669456892426,
+    "expectation": null,
+    "growth": 63.646499772975304,
+    "quality": 43.294934830186406
+   },
+   "badges": [],
+   "dollar_volume_rank": 38,
+   "avg_dollar_volume": 2167284561.5593667
+  }
+ ]
+}

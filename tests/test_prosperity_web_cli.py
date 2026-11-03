@@ -110,3 +110,31 @@ def test_output_may_not_be_the_same_file_under_another_name(db, tmp_path):
     assert run(db, tmp_path / 'POOL.JSON', '--pool', str(pool)) == 4
     assert (sha(db), sha(pool)) == before
     assert not (tmp_path / 'Prosperity.db-WAL').exists() and not (tmp_path / 'prosperity.db-wal').exists()
+
+
+def test_symlinked_database_is_checked_at_its_real_path(db, tmp_path):
+    # Codex P1: alias.db → real db; WAL and sidecar checks must follow the link, as SQLite does
+    import os
+    alias_dir = tmp_path / 'alias'; alias_dir.mkdir()
+    alias = alias_dir / 'alias.db'
+    os.symlink(db, alias)
+    before = sha(db)
+    assert run(alias, tmp_path / 'prosperity.db-wal') == 4              # real sidecar via the alias
+    assert run(alias, tmp_path / 'web.html') == 0                         # a normal run through the alias works
+    (tmp_path / 'prosperity.db-wal').write_bytes(b'x')                    # WAL next to the real file only
+    assert run(alias, tmp_path / 'web2.html') == 4 and not (tmp_path / 'web2.html').exists()
+    assert sha(db) == before
+
+
+def test_unicode_normalization_variants_of_a_sidecar_are_refused(tmp_path):
+    # Codex P2: APFS treats NFC and NFD names as the same file; casefold alone misses it
+    import unicodedata
+    from src.data.prosperity_store import ProsperityStore
+    nfc = tmp_path / unicodedata.normalize('NFC', 'café.db')
+    with ProsperityStore(nfc, read_only=False) as s:
+        s.save_batch(storage_batch(freeze=True, quarter_label='2026Q2'))
+    for extra in tmp_path.glob('*-wal'):
+        extra.unlink()
+    nfd_wal = tmp_path / (unicodedata.normalize('NFD', 'café.db') + '-wal')
+    assert run(nfc, nfd_wal) == 4
+    assert not any(p.name.endswith('-wal') for p in tmp_path.iterdir())

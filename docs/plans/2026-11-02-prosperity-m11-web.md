@@ -1,6 +1,6 @@
 # 景气引擎 M11 网页最小版 Implementation Plan
 
-**状态：2026-11-02 Boss 批准（含选池第一档同步修订，Boss 确认新选池规则由其拍板）。第一轮审查 1 个 P1、3 个 P2 已修订（见 §13）；选池规则同步见 §14；选池 plan 审查后追加"池文件计数对照原榜"（`board_mismatch`），见 §15（2026-11-02 Boss 让 finance-8b 会话一起改，并批准 §15）。开工顺序：选池第一档改动（`prosperity/pool-q1`）先合并 main，M11 再从新 main 开工。**
+**状态：2026-11-03 已实现，审查修订见 §16。2026-11-02 Boss 批准（含选池第一档同步修订，Boss 确认新选池规则由其拍板）。第一轮审查 1 个 P1、3 个 P2 已修订（见 §13）；选池规则同步见 §14；选池 plan 审查后追加"池文件计数对照原榜"（`board_mismatch`），见 §15（2026-11-02 Boss 让 finance-8b 会话一起改，并批准 §15）。开工顺序：选池第一档改动（`prosperity/pool-q1`）先合并 main，M11 再从新 main 开工。**
 
 **Goal:** 本地一条命令读 `prosperity.db` 快照，生成一个纯静态 HTML 榜单页：最新周榜 + 全部季末冻结榜，四个方案，靠目录链接切换方案和期数。
 **Architecture:** 新模块 `src/data/prosperity_web.py` 把每张榜整理成行视图，再渲染成一个 HTML 文件。CLI `scripts/prosperity_web.py` 加快照检查（拒绝 WAL、读前读后比 SHA256）。库只读，不进 `code_version`，不改打分，不碰云端。云端生成与 Telegram 投递属于 M13，直接调用本模块的两个函数。
@@ -552,3 +552,16 @@ def test_unreadable_pool_is_reported_not_fatal(db, tmp_path):
 | Task 4 Step 1 | `verify_web.py` 的独立绑定加计数比对，否则负例 ④ 下核对脚本会期望 37 个 ✓ |
 
 不变：页面结构、CLI、其他验收项。负例 ④ 的文件由选池改动 Task 2 生成，开工前确认存在。
+
+## 16. 实现后的审查修订（2026-11-03）
+
+CC `/code-review high` 10 条与 Codex 审查 3 条都已修，记录在 `reports/prosperity/m11-web-20261102/README.md`。改到本 plan 契约的有四处：
+
+| 位置 | 原文 | 现在 | 来源 |
+|---|---|---|---|
+| 9.1 徽章、9.2 `WebRow.badges` | 每行按 `pit_basis == 'approximate'` 加"近似PIT" | 整张榜每行都是 approximate 时，只在榜头写"本榜全部为近似 PIT"，行内不显示；混合榜仍逐行显示（`BoardPage.all_approximate`）。11-01 快照上 84 张季末榜全是 approximate，4 张 live 周榜全是 live | Boss 2026-11-03（Codex 建议），页面 11.35 → 10.25 MB |
+| 9.2 `load_pages` 第 1 步 | "最新周榜"= as_of 最大的周榜 | 只取 `mode='live'` 的最新周榜；没有就不放这一节 | CC 审查 |
+| 9.2 `render_page` 第 1 步 | 页首无入池说明 | 库中没有 F1 live 周榜时，页首写"未标入池：库中无 F1 live 周榜"，并附池文件错误；标了入池的榜头加"✓ 仅表示该期池文件与本榜匹配，未验证当前新鲜度。" | Codex P2 |
+| 9.2 `render_page` 第 4 步 | 分数 1 位小数（四舍五入） | 向下取一位小数，页首写明 | CC 审查（64.99 FULL 显示成 65.0） |
+
+CLI 的输出守卫（9.3 退出码 4）改为：`--db` 先解析符号链接；已存在的文件按 `samefile` 比较；尚不存在的 `-wal/-shm/.state` 按"同一目录 + NFC 规范化后不分大小写"比较（CC 审查：硬链接、大小写；Codex P1：符号链接 `--db`；Codex P2：Unicode NFC/NFD）。

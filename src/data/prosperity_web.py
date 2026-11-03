@@ -33,6 +33,7 @@ REASON_TEXT = {
 }
 RED_BADGES = {'pe_redflag', 'ntm_loss', 'net_margin_down', 'new_listing_gate', 'ntm_not_above_ttm'}
 _STATUS_ORDER = {'ranked': 0, 'observe': 1, 'excluded': 2}
+FRESHNESS_NOTE = '✓ 仅表示该期池文件与本榜匹配，未验证当前新鲜度。'
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class WebRow:
     observe_reason: Optional[str]
     family_scores: Mapping[str, Optional[float]]
     badges: Tuple[str, ...]            # kernel badges (minus BOARD_BADGES) → demotions → SHOWN_LABELS → 'approximate'
+                                       # ('approximate' only on a mixed board; see BoardPage.all_approximate)
     pool_rank: Optional[int]           # dollar-volume rank when the row is in the bound pool
 
 
@@ -64,6 +66,7 @@ class BoardPage:
     counts: Mapping[str, int]          # ranked / observe / excluded / STRICT / FULL / BELOW
     rows: Tuple[WebRow, ...]           # ranked by rank; then observe, then excluded, each by symbol
     pool_note: Optional[str]           # set only on the F1 latest weekly board
+    all_approximate: bool = False      # every row is approximate PIT: said once in the header (Boss 2026-11-03)
 
 
 def section_id(page: BoardPage) -> str:
@@ -86,10 +89,14 @@ def board_page(stored, *, pool_ranks: Optional[Mapping[str, int]] = None,
     stocks = {p['symbol']: p for p in stored.stocks}
     labels = {f.symbol: set(f.labels) for f in stored.factors}
     ordered = sorted(board.rows, key=lambda r: (_STATUS_ORDER[r.status], r.rank or 0, r.symbol))
+    # A replay board is approximate on every row: one header line instead of 70k badges (Boss 2026-11-03).
+    # A mixed board keeps the per-row badge, so a single approximate row is never hidden.
+    everyone = bool(ordered) and all(stocks[r.symbol].get('pit_basis') == 'approximate' for r in ordered)
     rows = tuple(WebRow(symbol=r.symbol, name=stocks[r.symbol].get('name'), sector=stocks[r.symbol].get('sector'),
                         status=r.status, rank=r.rank, grade=r.grade, score=r.score,
                         observe_reason=r.observe_reason, family_scores=dict(r.family_scores),
-                        badges=_badges(r, labels.get(r.symbol, set()), stocks[r.symbol].get('pit_basis')),
+                        badges=_badges(r, labels.get(r.symbol, set()),
+                                       None if everyone else stocks[r.symbol].get('pit_basis')),
                         pool_rank=pool_ranks.get(r.symbol))
                  for r in ordered)
     counts = {k: sum(r.status == k for r in rows) for k in _STATUS_ORDER}
@@ -97,7 +104,8 @@ def board_page(stored, *, pool_ranks: Optional[Mapping[str, int]] = None,
     return BoardPage(scheme_id=board.scheme_id, scheme_hash=board.scheme_hash, code_version=board.code_version,
                      board_type=meta.board_type, mode=meta.mode, as_of=board.as_of,
                      quarter_label=meta.quarter_label, frozen_at=meta.frozen_at,
-                     params_bootstrap=bool(board.params_bootstrap), counts=counts, rows=rows, pool_note=pool_note)
+                     params_bootstrap=bool(board.params_bootstrap), counts=counts, rows=rows, pool_note=pool_note,
+                     all_approximate=everyone)
 
 
 def pool_binding(pool: Optional[dict], stored) -> Tuple[Mapping[str, int], str]:
@@ -252,12 +260,15 @@ def _section(page: BoardPage, peers: Sequence[BoardPage]) -> str:
             _MODE_TEXT.get(page.mode, page.mode),
             f'可排名 {c["ranked"]}（STRICT {c["STRICT"]} / FULL {c["FULL"]} / BELOW {c["BELOW"]}）',
             f'观察 {c["observe"]}', f'排除 {c["excluded"]}',
-            '参数自举' if page.params_bootstrap else None]
+            '参数自举' if page.params_bootstrap else None,
+            '本榜全部为近似 PIT' if page.all_approximate else None]
     links = ' · '.join(f'<a href="#{section_id(p)}">{escape(p.scheme_id)}</a>' for p in peers)
     out = [f'<section id="{section_id(page)}">', f'<h2>{title}</h2>',
            '<p class="m">' + ' · '.join(m for m in meta if m) + '</p>']
     if page.pool_note:
         out.append(f'<p class="note">{escape(page.pool_note)}</p>')
+    if pooled:
+        out.append(f'<p class="m">{FRESHNESS_NOTE}</p>')
     out.append(f'<p class="m">同期其他方案：{links or "无"} · <a href="#toc">回目录</a></p>')
     top, rest = [], []
     for r in page.rows:
@@ -270,8 +281,13 @@ def _section(page: BoardPage, peers: Sequence[BoardPage]) -> str:
     return '\n'.join(out)
 
 
-def render_page(pages: Sequence[BoardPage], *, generated_at: str, source: Mapping[str, str]) -> str:
-    """One self-contained static page: no script, no external resource, anchors only."""
+def render_page(pages: Sequence[BoardPage], *, generated_at: str, source: Mapping[str, str],
+                pool_error: Optional[str] = None) -> str:
+    """One self-contained static page: no script, no external resource, anchors only.
+
+    Without an F1 live weekly board the pool check never ran; the page header says so (Codex P2),
+    together with any pool-file error, instead of leaving only a 无榜 cell in the table of contents.
+    """
     by_cell = {(_row_label(p), p.scheme_id): p for p in pages}
     labels = [LATEST] + sorted({_row_label(p) for p in pages} - {LATEST}, reverse=True)
     hashes = {p.scheme_id: p.scheme_hash for p in reversed(pages)}
@@ -287,6 +303,10 @@ def render_page(pages: Sequence[BoardPage], *, generated_at: str, source: Mappin
             cells.append(f'<td><a href="#{section_id(p)}">{p.as_of}</a></td>' if p else '<td class="m">无榜</td>')
         toc_rows.append(f'<tr><th>{escape(label)}</th>{"".join(cells)}</tr>')
     scheme_line = ' · '.join(f'{escape(s)} {escape(hashes.get(s, "无榜"))}' for s in WEB_SCHEMES)
+    pool_board = any(p.scheme_id == POOL_SCHEME_ID and p.board_type == 'weekly' for p in pages)
+    no_pool_board = '' if pool_board else (
+        '<p class="note">未标入池：库中无 F1 live 周榜' + (f'（池文件：{escape(pool_error)}）' if pool_error else '')
+        + '</p>\n')
     sections = '\n'.join(_section(p, [by_cell[(_row_label(p), s)] for s in WEB_SCHEMES
                                       if s != p.scheme_id and (_row_label(p), s) in by_cell]) for p in pages)
     return f"""<!doctype html>
@@ -298,7 +318,7 @@ def render_page(pages: Sequence[BoardPage], *, generated_at: str, source: Mappin
 <p class="m">生成于 {escape(generated_at)} · 库 SHA256 {escape(db[:16] or '—')} · code_version {escape(source.get('code_version') or '—')} · 池文件 {escape(pool[:16] or '无')}</p>
 <p class="m">方案 hash：{scheme_line}</p>
 <p class="m">评级：分数 ≥ {strict:g} 为 STRICT，≥ {full:g} 为 FULL，其余 BELOW；任一闸门不过降为 BELOW。分数 = 0–100 基础分 + 毛利斜率加减分，向下取一位小数。每张榜只展开 STRICT/FULL，BELOW、观察、排除行收在折叠块里。本页无脚本，用目录链接切换方案和期数。</p>
-<nav id="toc"><h2>目录</h2><div class="w"><table><thead><tr><th>期数</th>{head}</tr></thead><tbody>
+{no_pool_board}<nav id="toc"><h2>目录</h2><div class="w"><table><thead><tr><th>期数</th>{head}</tr></thead><tbody>
 {chr(10).join(toc_rows)}
 </tbody></table></div></nav>
 {sections}

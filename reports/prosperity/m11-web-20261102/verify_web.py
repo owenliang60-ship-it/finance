@@ -44,7 +44,7 @@ class Page(HTMLParser):
 
     def __init__(self):
         super().__init__()
-        self.sections, self.cur, self.body, self.badge = {}, None, False, None
+        self.sections, self.cur, self.body, self.badge, self.head = {}, None, False, None, []
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
@@ -72,6 +72,8 @@ class Page(HTMLParser):
 
     def handle_data(self, data):
         if self.cur is None:
+            if not self.sections:                              # page head, before the first board
+                self.head.append(data)
             return
         if not self.body:
             self.cur['header'].append(data)
@@ -93,7 +95,7 @@ def parse(path):
             r['cells'] = [c.strip() for c in r['cells']]
             r['badges'] = [(t, x.strip()) for t, x in r['badges']]
         s['header'] = ''.join(s['header'])
-    return p.sections
+    return {'__head__': {'header': ''.join(p.head)}, **p.sections}
 
 
 # ---- expectations -------------------------------------------------------------------
@@ -120,12 +122,14 @@ def expected_rows(conn, board_id):
         'JOIN stock_input si ON si.input_set_id=b.input_set_id AND si.symbol=s.symbol '
         'WHERE s.board_id=?', (board_id,)).fetchall()
     order = {'ranked': 0, 'observe': 1, 'excluded': 2}
+    everyone = bool(rows) and all(r[11] == 'approximate' for r in rows)   # whole board approximate → header only
     out = []
     for (sym, status, reason, score, grade, rank, fam, dem, badges, name, sector, pit, meta) in sorted(
             rows, key=lambda r: (order[r[1]], r[5] or 0, r[0])):
         labels = set(json.loads(meta)['labels'])
         codes = [b for b in json.loads(badges) if b != 'params_bootstrap'] + json.loads(dem)
-        codes += [x for x in SHOWN if x in labels] + (['approximate'] if pit == 'approximate' else [])
+        codes += [x for x in SHOWN if x in labels]
+        codes += ['approximate'] if pit == 'approximate' and not everyone else []
         codes = list(dict.fromkeys(codes))
         fam = json.loads(fam)
         out.append({
@@ -137,19 +141,28 @@ def expected_rows(conn, board_id):
                       ''.join(TEXT.get(c, c) for c in codes)],
             'badges': [('b' if c in RED else 'i', TEXT.get(c, c)) for c in codes],
         })
-    return out
+    return out, everyone
 
 
-def bind_pool(conn, pool, board, rows):
-    """Own binding: (symbol → dollar-volume rank, reason or None). Plan §9.2 steps 3–4 and §15."""
+def bind_pool(conn, pool, board, rows, criteria):
+    """Own binding: (symbol → dollar-volume rank, reason or None). Plan §9.2 steps 3–4 and §15.
+
+    `criteria` is the expected payload, written out by hand from plan §4.1 (not imported). The source
+    content_hash is compared with board.content_hash as stored; recomputing it would copy M8.
+    """
     if pool is None:
         return {}, 'no pool'
     try:
         if pool['as_of'] != board['as_of'] or board['mode'] != 'live':
             return {}, 'as_of/board'
-        version = conn.execute('SELECT code_version FROM board WHERE board_id=?', (board['id'],)).fetchone()[0]
+        if pool['criteria'] != criteria:
+            return {}, 'criteria'
+        version, stored_hash = conn.execute('SELECT code_version, content_hash FROM board WHERE board_id=?',
+                                            (board['id'],)).fetchone()
         if pool['source']['code_version'] != version:
             return {}, 'code_version'
+        if pool['source']['content_hash'] != stored_hash:
+            return {}, 'content_hash'
         ranked = [r for r in rows if r['status'] == 'ranked']
         cut = -(-len(ranked) // 5)
         eligible = sum(r['rank'] <= cut and r['grade'] in ('STRICT', 'FULL') for r in ranked)
@@ -167,8 +180,18 @@ def bind_pool(conn, pool, board, rows):
                     or not 1 <= m['dollar_volume_rank'] <= POOL_CRITERIA_TOP):
                 return {}, 'member ' + str(m['symbol'])
         return {m['symbol']: m['dollar_volume_rank'] for m in pool['members']}, None
-    except (KeyError, TypeError):
+    except (KeyError, TypeError, AttributeError):
         return {}, 'malformed'
+
+
+def expected_criteria(conn):
+    """Plan §4.1 pool criteria, typed out here; scheme_hash read from the scheme table for F1."""
+    f1 = conn.execute("SELECT scheme_hash FROM scheme WHERE scheme_id='F1'").fetchall()
+    if len(f1) != 1:
+        raise SystemExit('expected exactly one F1 scheme row')
+    return {'scheme_id': 'F1', 'scheme_hash': f1[0][0], 'grades': ['STRICT', 'FULL'], 'tier': {'tiers': 5},
+            'liquidity': {'metric': 'avg_dollar_volume', 'trading_days': 30, 'min_days': 5,
+                          'top': POOL_CRITERIA_TOP}}
 
 
 # ---- compare ------------------------------------------------------------------------
@@ -196,6 +219,11 @@ def main(argv=None):
             print('DIFF', msg)
 
     expected_boards = boards(conn, a.code_version)
+    criteria = expected_criteria(conn)
+    page_head = page.pop('__head__', {'header': ''})['header']
+    if not any(b['scheme'] == 'F1' and b['type'] == 'weekly' for b in expected_boards):
+        if '未标入池：库中无 F1 live 周榜' not in page_head:
+            diff('page header: no F1 live weekly board, but the page does not say the pool was not checked')
     if [b['section'] for b in expected_boards] != list(page):
         diff(f'sections: expected {len(expected_boards)}, page has {len(page)} (or order differs)')
     for b in expected_boards:
@@ -203,11 +231,15 @@ def main(argv=None):
         if sec is None:
             diff(f'{b["section"]}: missing')
             continue
-        rows = expected_rows(conn, b['id'])
+        rows, everyone = expected_rows(conn, b['id'])
         pooled_board = b['scheme'] == 'F1' and b['type'] == 'weekly'
-        marks, why = bind_pool(conn, pool, b, rows) if pooled_board else ({}, None)
+        marks, why = bind_pool(conn, pool, b, rows, criteria) if pooled_board else ({}, None)
         if bool(b['boot']) != ('参数自举' in sec['header']):
             diff(f'{b["section"]}: params_bootstrap header')
+        if everyone != ('本榜全部为近似 PIT' in sec['header']):
+            diff(f'{b["section"]}: all-approximate header (expected {everyone})')
+        if bool(marks) != ('未验证当前新鲜度' in sec['header']):
+            diff(f'{b["section"]}: freshness note')
         if pooled_board:
             note_ok = (f'入池 {len(marks)} 只' in sec['header']) if marks else ('未标入池' in sec['header'])
             if not note_ok:

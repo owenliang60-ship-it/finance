@@ -165,7 +165,7 @@ sqlite3 "/Users/owen/CC workspace/Finance/data/market.db" ".backup /tmp/health/m
 
 ## 网页榜单（M11，本地）
 
-一个纯静态 HTML：4 个方案的最新周榜加全部季末冻结榜，所有行都在，约 11 MB。无脚本，用页首目录切换方案和期数。
+一个纯静态 HTML：4 个方案的最新 live 周榜加全部季末冻结榜，所有行都在，约 10 MB。无脚本，用页首目录切换方案和期数。
 库只读，只写 `--out`。不进 `code_version`，不装 cron，不发 Telegram（云端生成与投递属 M13）。
 
 ```bash
@@ -183,12 +183,14 @@ scp aliyun:/root/workspace/Finance/data/pool/prosperity_pool.json /tmp/web/  # �
 |---|---|
 | 0 | 已写 HTML。`--pool` 读不到或不是合法 JSON 不算错误，F1 最新周榜榜头写原因 |
 | 3 | 库文件不存在，或该 `code_version` 下没有任何榜 |
-| 4 | `--out` 是目录或父目录不存在；`--out` 指向库、库的 `-wal`/`-shm`/`.state` 或 `--pool`；库带非空 WAL（传自包含快照） |
+| 4 | `--out` 是目录或父目录不存在；`--out` 是库、库的 `-wal`/`-shm`/`.state` 或 `--pool` 本身（硬链接、大小写或 Unicode 写法不同也算，`--db` 是符号链接时按真实路径判断）；库带非空 WAL（传自包含快照） |
 | 6 | 运行期间库被改写（读前读后 SHA256 不同），不写文件 |
 
 怎么读：
 - 只有 F1 最新周榜标入池（✓ 与成交额排名）。池文件必须和这张榜完全对得上：as_of、criteria、code_version、来源哈希、
   股票池、可排名数、第一档切点、合格数，以及每个成员的排名与评级。任一项不符就整张榜不标，榜头写"未标入池：原因"。
-- 本地快照常常超过 8 天，所以网页不查池文件新鲜度；入池标记只说明池文件属于这张榜。
+- 本地快照常常超过 8 天，所以网页不查池文件新鲜度；入池标记只说明池文件属于这张榜，榜头会写明这一点。
+- 库里没有 F1 live 周榜时（例如重建冻结链后、第一个 live 周六前），页首写"未标入池：库中无 F1 live 周榜"。
+- 整张榜都是近似 PIT（回放出来的季末榜）时，榜头写"本榜全部为近似 PIT"，行内不再逐行标。
 - 独立核对：`/usr/bin/python3 -I reports/prosperity/m11-web-20261102/verify_web.py --db … --html … --code-version <页首的 code_version> [--pool …]`
   （只用标准库，不 import 项目代码；`--code-version` 必填，取页首显示的值）。

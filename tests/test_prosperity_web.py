@@ -289,7 +289,7 @@ def test_text_is_escaped(pages):
 def test_pool_columns_only_on_noted_board(pages_with_pool):
     html = render_page(pages_with_pool, generated_at='x', source={})
     sections = html.split('<section id=')[1:]
-    assert '成交额排名' in sections[0] and sections[0].count('✓') == 4
+    assert '成交额排名' in sections[0] and sections[0].count('<td>✓') == 4
     assert all('成交额排名' not in s and '✓' not in s for s in sections[1:])
     marked = {r.symbol: r.pool_rank for r in pages_with_pool[0].rows if r.pool_rank}
     for symbol, rank in marked.items():
@@ -332,3 +332,63 @@ def test_displayed_score_never_crosses_a_grade_line():
     from src.data.prosperity_web import _score
     assert _score(64.9897) == '64.9' and _score(49.9999) == '49.9' and _score(65.0) == '65.0'
     assert _score(97.45) == '97.4' and _score(-0.05) == '-0.1' and _score(None) == '—'
+
+
+# ---- Codex review (2026-11-03) -------------------------------------------------------
+def _with_pit(stored, basis_of):
+    from dataclasses import replace as dc_replace
+    stocks = tuple({**p, 'pit_basis': basis_of(p['symbol'])} for p in stored.stocks)
+    return dc_replace(stored, stocks=stocks)
+
+
+def test_all_approximate_board_moves_the_badge_to_the_header(store):
+    # Boss 2026-11-03: a board that is approximate on every row says so once in the header
+    key = store.list_boards(scheme_hash=F1, code_version='test-v1', board_type='quarter_final')[-1]
+    page = board_page(_with_pit(store.get_board(key), lambda s: 'approximate'))
+    assert page.all_approximate is True
+    assert all('approximate' not in r.badges for r in page.rows)
+    html = render_page([page], generated_at='x', source={})
+    head = html.split('<section id=')[1].split('<div class="w">')[0]
+    assert '本榜全部为近似 PIT' in head and BADGE_TEXT['approximate'] not in html.split(head)[1]
+
+
+def test_mixed_board_keeps_the_badge_per_row(store):
+    key = store.list_boards(scheme_hash=F1, code_version='test-v1', board_type='quarter_final')[-1]
+    page = board_page(_with_pit(store.get_board(key), lambda s: 'approximate' if s == 'S0005' else 'live'))
+    assert page.all_approximate is False
+    assert [r.symbol for r in page.rows if 'approximate' in r.badges] == ['S0005']
+    assert '本榜全部为近似 PIT' not in render_page([page], generated_at='x', source={})
+
+
+def test_no_live_weekly_board_says_why_nothing_is_marked(tmp_path):
+    # Codex P2: a rebuilt chain before the first live Saturday has replay weekly + quarter-end boards only;
+    # the pool check never runs, and the page must say so instead of staying silent
+    from dataclasses import replace as dc_replace
+    db = tmp_path / 'finals.db'
+    with ProsperityStore(db, read_only=False) as s:
+        s.save_batch(tuple(dc_replace(b, meta=dc_replace(b.meta, mode='replay', source_evidence={
+            **b.meta.source_evidence, 'observed_at': None}))
+            for b in storage_batch(freeze=True, quarter_label='2026Q2')))
+    with ProsperityStore(db) as s:
+        for pool, pool_error in ((None, None), ({'any': 1}, None), (None, '池文件无法读取')):
+            pages = load_pages(s, code_version='test-v1', pool=pool, pool_error=pool_error)
+            html = render_page(pages, generated_at='x', source={}, pool_error=pool_error)
+            head = html.split('<nav id="toc">')[0]
+            assert '未标入池：库中无 F1 live 周榜' in head
+            assert (pool_error or '') in head
+
+
+def test_page_says_a_tick_does_not_mean_the_pool_is_fresh(pages_with_pool):
+    head = render_page(pages_with_pool, generated_at='x', source={}).split('<section id=')[1].split('<div class="w">')[0]
+    assert '✓ 仅表示该期池文件与本榜匹配，未验证当前新鲜度' in head
+
+
+def test_pool_criteria_or_source_hash_edits_mark_nothing(pool_store):
+    # Codex: the independent verifier did not check these two; assert zero ticks and the reason here
+    _, stored = boards(pool_store)
+    pool = pool_for(stored)
+    bad = copy.deepcopy(pool); bad['source']['content_hash'] = 'f' * 64
+    assert pool_binding(bad, stored) == ({}, '未标入池：池文件与本榜不符（content_hash）')
+    bad = copy.deepcopy(pool); bad['criteria']['liquidity']['top'] = 101
+    ranks, note = pool_binding(bad, stored)
+    assert ranks == {} and note.startswith('未标入池：池文件校验失败')
