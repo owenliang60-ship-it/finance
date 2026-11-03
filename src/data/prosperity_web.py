@@ -180,11 +180,13 @@ a{color:var(--accent)}.m{color:var(--muted);font-size:13px;margin:2px 0}
 table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 th,td{padding:4px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
 th{background:var(--head);font-weight:600;position:sticky;top:0}
-td.n{text-align:right}tr.p{background:var(--pool)}
+section td:nth-child(1),section td:nth-child(n+6):nth-child(-n+10),section td:nth-child(13){text-align:right}
+tr.p{background:var(--pool)}
 section{content-visibility:auto;contain-intrinsic-size:auto 1500px;margin:28px 0 0;padding-top:12px;
 border-top:2px solid var(--line)}
-.b{display:inline-block;padding:0 6px;margin:1px 2px 1px 0;border-radius:4px;background:var(--badge);font-size:12px}
-.b.r{background:var(--redbg);color:var(--red)}
+td i,td b{display:inline-block;padding:0 6px;margin:1px 2px 1px 0;border-radius:4px;background:var(--badge);
+font-size:12px;font-style:normal;font-weight:normal}
+td b{background:var(--redbg);color:var(--red)}
 .note{font-weight:600}details{margin:8px 0}summary{cursor:pointer;color:var(--accent)}
 nav .w td,nav .w th{text-align:center}
 """
@@ -199,25 +201,26 @@ def _row_label(page: BoardPage) -> str:
 
 
 def _badge(code: str) -> str:
-    cls = 'b r' if code in RED_BADGES else 'b'
-    return f'<span class="{cls}">{escape(BADGE_TEXT.get(code, code))}</span>'
+    tag = 'b' if code in RED_BADGES else 'i'          # short tags: 72k rows × ~2 badges (size budget A2)
+    return f'<{tag}>{escape(BADGE_TEXT.get(code, code))}</{tag}>'
 
 
 def _cells(r: WebRow, *, pooled: bool) -> str:
+    """One row on one line. </td> and </tr> are optional in HTML5 and omitted (A2 size budget);
+    alignment comes from column position in the CSS, not per-cell classes."""
     name = r.name or '—'
     short = name if len(name) <= NAME_CHARS else name[:NAME_CHARS] + '…'
-    name_cell = f'<td title="{escape(name)}">{escape(short)}</td>' if short != name else f'<td>{escape(short)}</td>'
+    name_cell = f'<td title="{escape(name)}">{escape(short)}' if short != name else f'<td>{escape(short)}'
     grade = r.grade if r.status == 'ranked' else REASON_TEXT.get(r.observe_reason or '', r.observe_reason or '—')
-    parts = [f'<td class="n">{"—" if r.rank is None else r.rank}</td>', f'<td>{escape(r.symbol)}</td>', name_cell,
-             f'<td>{escape(r.sector or "—")}</td>', f'<td class="g">{escape(grade)}</td>',
-             f'<td class="n">{_num(r.score, 1)}</td>']
-    parts += [f'<td class="n">{_num(r.family_scores.get(k), 0)}</td>' for k, _ in FAMILIES]
-    parts.append('<td>' + ''.join(_badge(b) for b in r.badges) + '</td>')
+    parts = [f'<td>{"—" if r.rank is None else r.rank}', f'<td>{escape(r.symbol)}', name_cell,
+             f'<td>{escape(r.sector or "—")}', f'<td>{escape(grade)}', f'<td>{_num(r.score, 1)}']
+    parts += [f'<td>{_num(r.family_scores.get(k), 0)}' for k, _ in FAMILIES]
+    parts.append('<td>' + ''.join(_badge(b) for b in r.badges))
     if pooled:
         marked = r.pool_rank is not None
-        parts += [f'<td>{"✓" if marked else ""}</td>', f'<td class="n">{r.pool_rank if marked else ""}</td>']
+        parts += [f'<td>{"✓" if marked else ""}', f'<td>{r.pool_rank if marked else ""}']
     cls = ' class="p"' if pooled and r.pool_rank is not None else ''
-    return f'<tr{cls}>' + ''.join(parts) + '</tr>'
+    return f'<tr{cls}>' + ''.join(parts)
 
 
 def _table(rows: Sequence[WebRow], *, pooled: bool) -> str:

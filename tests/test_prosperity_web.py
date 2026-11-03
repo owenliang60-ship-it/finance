@@ -182,6 +182,7 @@ def test_pool_error_is_written_on_the_f1_board(pool_store):
 # ---- Task 2: HTML renderer ----------------------------------------------------------
 import re
 from dataclasses import replace
+from html.parser import HTMLParser
 
 from src.data.prosperity_web import BADGE_TEXT, REASON_TEXT, render_page
 
@@ -197,8 +198,45 @@ def pages_with_pool(pool_store):
     return load_pages(pool_store, code_version='test-v1', pool=pool_for(stored))
 
 
-def row_html(html, symbol):
-    return next(tr for tr in re.findall(r'<tr[ >].*?</tr>', html, flags=re.S) if f'>{symbol}<' in tr)
+class BodyRows(HTMLParser):
+    """Body rows of the board tables. </td> and </tr> are omitted in the page, so a new <td>/<tr> starts a cell/row."""
+    def __init__(self):
+        super().__init__()
+        self.rows, self.body = [], False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'tbody':
+            self.body = True
+        elif self.body and tag == 'tr':
+            self.rows.append({'class': dict(attrs).get('class'), 'cells': [], 'badges': []})
+        elif self.body and tag == 'td':
+            self.rows[-1]['cells'].append('')
+        elif self.body and tag in ('i', 'b'):
+            self.rows[-1]['badges'].append([tag, ''])
+
+    def handle_endtag(self, tag):
+        if tag == 'tbody':
+            self.body = False
+
+    def handle_data(self, data):
+        if self.body and self.rows and self.rows[-1]['cells']:
+            self.rows[-1]['cells'][-1] += data
+            if self.rows[-1]['badges'] and len(self.rows[-1]['cells']) == 11:
+                self.rows[-1]['badges'][-1][1] += data
+
+
+def body_rows(html):
+    parser = BodyRows()
+    parser.feed(html)
+    parser.close()
+    for r in parser.rows:                    # the newline after a row lands in its last cell; browsers collapse it
+        r['cells'] = [c.strip() for c in r['cells']]
+        r['badges'] = [[t, text.strip()] for t, text in r['badges']]
+    return parser.rows
+
+
+def row_of(html, symbol):
+    return next(r for r in body_rows(html) if r['cells'][1] == symbol)
 
 
 def test_page_is_static_and_self_contained(pages):
@@ -218,8 +256,8 @@ def test_strict_full_open_others_folded(pages):
     html = render_page(pages, generated_at='x', source={})
     first = html.split('<section id=')[1]
     main, folded = first.split('<details>', 1)
-    assert all(g in ('STRICT', 'FULL') for g in re.findall(r'<td class="g">(\w+)', main))
-    assert re.findall(r'<td class="g">(\w+)', main)
+    grades = [r['cells'][4] for r in body_rows(main)]
+    assert grades and all(g in ('STRICT', 'FULL') for g in grades)
     assert '其余' in folded and REASON_TEXT['insufficient_quarters'] in folded
 
 
@@ -228,7 +266,8 @@ def test_numbers_and_missing_families(pages):
     f0 = next(p for p in pages if p.scheme_id == 'F0')
     r = next(r for r in f0.rows if r.status == 'ranked')
     section = html.split(f'<section id="{section_id(f0)}"')[1].split('</section>')[0]
-    cells = re.findall(r'<td[^>]*>(.*?)</td>', row_html(section, r.symbol))
+    cells = row_of(section, r.symbol)['cells']
+    assert cells[5] == f'{r.score:.1f}' and cells[6] == f"{r.family_scores['growth']:.0f}"
     assert f'{r.score:.1f}' in cells and f"{r.family_scores['growth']:.0f}" in cells
     assert cells[9] == '—'                                          # F0 has no expectation family
 
@@ -236,15 +275,15 @@ def test_numbers_and_missing_families(pages):
 def test_badges_in_chinese_unknown_codes_kept(pages):
     row = replace(pages[0].rows[0], badges=('pe_redflag', 'brand_new_code'))
     page = replace(pages[0], rows=(row,) + pages[0].rows[1:])
-    tr = row_html(render_page([page], generated_at='x', source={}), row.symbol)
-    assert BADGE_TEXT['pe_redflag'] in tr and 'brand_new_code' in tr
-    assert '<span class="b r"' in tr                                # red flag drawn red
+    badges = row_of(render_page([page], generated_at='x', source={}), row.symbol)['badges']
+    assert badges == [['b', BADGE_TEXT['pe_redflag']], ['i', 'brand_new_code']]   # <b> = red flag
 
 
 def test_text_is_escaped(pages):
     row = replace(pages[0].rows[0], name='A<b>&Co')
     html = render_page([replace(pages[0], rows=(row,))], generated_at='x', source={})
-    assert 'A&lt;b&gt;&amp;Co' in html and 'A<b>' not in html
+    assert 'A&lt;b&gt;&amp;Co' in html and 'A<b>&Co' not in html
+    assert row_of(html, row.symbol)['cells'][2] == 'A<b>&Co'
 
 
 def test_pool_columns_only_on_noted_board(pages_with_pool):
@@ -254,8 +293,10 @@ def test_pool_columns_only_on_noted_board(pages_with_pool):
     assert all('成交额排名' not in s and '✓' not in s for s in sections[1:])
     marked = {r.symbol: r.pool_rank for r in pages_with_pool[0].rows if r.pool_rank}
     for symbol, rank in marked.items():
-        cells = re.findall(r'<td[^>]*>(.*?)</td>', row_html(sections[0], symbol))
-        assert cells[-2:] == ['✓', str(rank)]
+        r = row_of(sections[0], symbol)
+        assert r['cells'][-2:] == ['✓', str(rank)] and r['class'] == 'p'
+    unmarked = [r for r in body_rows(sections[0]) if r['cells'][1] not in marked]
+    assert unmarked and all(r['cells'][-2:] == ['', ''] and r['class'] is None for r in unmarked)
 
 
 def test_toc_marks_a_scheme_without_boards(pages):
