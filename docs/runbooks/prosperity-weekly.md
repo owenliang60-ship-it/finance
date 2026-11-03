@@ -162,3 +162,29 @@ sqlite3 "/Users/owen/CC workspace/Finance/data/market.db" ".backup /tmp/health/m
 - 第 3 章对照组只用共同有效期（动量从 2022-03 起才有），p 值是描述性的。
 - 附录 D 列出每条拆股记录的处理状态；`unresolved` 跨过的收益在附录 A 里记 `split_unresolved`。
 - 独立核对与复权敏感性：`reports/prosperity/m12-health/verify_health.py`（不 import 项目代码）。
+
+## 网页榜单（M11，本地）
+
+一个纯静态 HTML：4 个方案的最新周榜加全部季末冻结榜，所有行都在，约 11 MB。无脚本，用页首目录切换方案和期数。
+库只读，只写 `--out`。不进 `code_version`，不装 cron，不发 Telegram（云端生成与投递属 M13）。
+
+```bash
+PY="/Users/owen/CC workspace/Finance/.venv/bin/python"
+mkdir -p /tmp/web
+"$PY" scripts/sync_prosperity.py --db /tmp/web/prosperity.db              # 云端结果库快照，自包含无 WAL
+"$PY" scripts/prosperity_web.py --db /tmp/web/prosperity.db \
+  --out /tmp/web/prosperity-web.html --pool data/pool/prosperity_pool.json   # --pool 可省略
+```
+
+| 退出码 | 含义 |
+|---|---|
+| 0 | 已写 HTML。`--pool` 读不到或不是合法 JSON 不算错误，F1 最新周榜榜头写原因 |
+| 3 | 库文件不存在，或该 `code_version` 下没有任何榜 |
+| 4 | `--out` 是目录或父目录不存在；`--out` 指向库、库的 `-wal`/`-shm`/`.state` 或 `--pool`；库带非空 WAL（传自包含快照） |
+| 6 | 运行期间库被改写（读前读后 SHA256 不同），不写文件 |
+
+怎么读：
+- 只有 F1 最新周榜标入池（✓ 与成交额排名）。池文件必须和这张榜完全对得上：as_of、criteria、code_version、来源哈希、
+  股票池、可排名数、第一档切点、合格数，以及每个成员的排名与评级。任一项不符就整张榜不标，榜头写"未标入池：原因"。
+- 本地快照常常超过 8 天，所以网页不查池文件新鲜度；入池标记只说明池文件属于这张榜。
+- 独立核对：`reports/prosperity/m11-web-20261102/verify_web.py`（只用标准库，不 import 项目代码）。
