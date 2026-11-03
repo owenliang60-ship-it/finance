@@ -7,7 +7,8 @@ render_page directly.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Mapping, Optional, Tuple
+from html import escape
+from typing import List, Mapping, Optional, Sequence, Tuple
 
 from src.data.prosperity_pool import (LIQUIDITY_TOP, POOL_GRADES, POOL_SCHEME_ID, board_mismatch,
                                       criteria_payload, validate_prosperity_pool)
@@ -153,3 +154,138 @@ def load_pages(store, *, code_version: str, pool: Optional[dict] = None,
             else:
                 pages.append(board_page(stored))
     return pages
+
+
+# ---- HTML ---------------------------------------------------------------------------
+NAME_CHARS = 28
+LATEST = '最新周榜'
+_TYPE_TEXT = {'weekly': '周榜', 'quarter_final': '季末冻结榜'}
+_MODE_TEXT = {'live': '实盘', 'replay': '回放'}
+
+_CSS = """
+:root{--bg:#fbfaf7;--fg:#1d1d1b;--muted:#6b6860;--line:#e4e1d8;--head:#f1eee6;--card:#ffffff;
+--accent:#2f5d8a;--red:#b3261e;--redbg:#fbe9e7;--badge:#ecebe6;--pool:#e6f0e6;color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#161615;--fg:#e8e6e1;--muted:#a19d94;
+--line:#34332f;--head:#22211f;--card:#1c1c1a;--accent:#8db4dc;--red:#f2b8b5;--redbg:#3b1f1d;--badge:#2b2a27;
+--pool:#1f3324;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#161615;--fg:#e8e6e1;--muted:#a19d94;--line:#34332f;--head:#22211f;--card:#1c1c1a;
+--accent:#8db4dc;--red:#f2b8b5;--redbg:#3b1f1d;--badge:#2b2a27;--pool:#1f3324;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:var(--bg);color:var(--fg);
+font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif}
+main{max-width:1280px;margin:0 auto}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:0 0 4px}
+a{color:var(--accent)}.m{color:var(--muted);font-size:13px;margin:2px 0}
+.w{overflow-x:auto;margin:8px 0;border:1px solid var(--line);border-radius:6px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:4px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{background:var(--head);font-weight:600;position:sticky;top:0}
+td.n{text-align:right}tr.p{background:var(--pool)}
+section{content-visibility:auto;contain-intrinsic-size:auto 1500px;margin:28px 0 0;padding-top:12px;
+border-top:2px solid var(--line)}
+.b{display:inline-block;padding:0 6px;margin:1px 2px 1px 0;border-radius:4px;background:var(--badge);font-size:12px}
+.b.r{background:var(--redbg);color:var(--red)}
+.note{font-weight:600}details{margin:8px 0}summary{cursor:pointer;color:var(--accent)}
+nav .w td,nav .w th{text-align:center}
+"""
+
+
+def _num(value, digits):
+    return '—' if value is None else f'{value:.{digits}f}'
+
+
+def _row_label(page: BoardPage) -> str:
+    return LATEST if page.board_type == 'weekly' else (page.quarter_label or page.as_of)
+
+
+def _badge(code: str) -> str:
+    cls = 'b r' if code in RED_BADGES else 'b'
+    return f'<span class="{cls}">{escape(BADGE_TEXT.get(code, code))}</span>'
+
+
+def _cells(r: WebRow, *, pooled: bool) -> str:
+    name = r.name or '—'
+    short = name if len(name) <= NAME_CHARS else name[:NAME_CHARS] + '…'
+    name_cell = f'<td title="{escape(name)}">{escape(short)}</td>' if short != name else f'<td>{escape(short)}</td>'
+    grade = r.grade if r.status == 'ranked' else REASON_TEXT.get(r.observe_reason or '', r.observe_reason or '—')
+    parts = [f'<td class="n">{"—" if r.rank is None else r.rank}</td>', f'<td>{escape(r.symbol)}</td>', name_cell,
+             f'<td>{escape(r.sector or "—")}</td>', f'<td class="g">{escape(grade)}</td>',
+             f'<td class="n">{_num(r.score, 1)}</td>']
+    parts += [f'<td class="n">{_num(r.family_scores.get(k), 0)}</td>' for k, _ in FAMILIES]
+    parts.append('<td>' + ''.join(_badge(b) for b in r.badges) + '</td>')
+    if pooled:
+        marked = r.pool_rank is not None
+        parts += [f'<td>{"✓" if marked else ""}</td>', f'<td class="n">{r.pool_rank if marked else ""}</td>']
+    cls = ' class="p"' if pooled and r.pool_rank is not None else ''
+    return f'<tr{cls}>' + ''.join(parts) + '</tr>'
+
+
+def _table(rows: Sequence[WebRow], *, pooled: bool) -> str:
+    heads = ['排名', '代码', '名称', '行业', '评级', '分数', *(label for _, label in FAMILIES), '徽章']
+    if pooled:
+        heads += ['入池', '成交额排名']
+    head = ''.join(f'<th>{h}</th>' for h in heads)
+    body = '\n'.join(_cells(r, pooled=pooled) for r in rows)
+    return f'<div class="w"><table><thead><tr>{head}</tr></thead><tbody>\n{body}\n</tbody></table></div>'
+
+
+def _section(page: BoardPage, peers: Sequence[BoardPage]) -> str:
+    c = page.counts
+    pooled = page.pool_note is not None and page.pool_note.startswith('入池')
+    title = f'{escape(page.scheme_id)} · {_TYPE_TEXT.get(page.board_type, page.board_type)} · {page.as_of}'
+    meta = [f'季度 {escape(page.quarter_label)}' if page.quarter_label else None,
+            f'冻结于 {escape(page.frozen_at)}' if page.frozen_at else None,
+            _MODE_TEXT.get(page.mode, page.mode),
+            f'可排名 {c["ranked"]}（STRICT {c["STRICT"]} / FULL {c["FULL"]} / BELOW {c["BELOW"]}）',
+            f'观察 {c["observe"]}', f'排除 {c["excluded"]}',
+            '参数自举' if page.params_bootstrap else None]
+    links = ' · '.join(f'<a href="#{section_id(p)}">{escape(p.scheme_id)}</a>' for p in peers)
+    out = [f'<section id="{section_id(page)}">', f'<h2>{title}</h2>',
+           '<p class="m">' + ' · '.join(m for m in meta if m) + '</p>']
+    if page.pool_note:
+        out.append(f'<p class="note">{escape(page.pool_note)}</p>')
+    out.append(f'<p class="m">同期其他方案：{links or "无"} · <a href="#toc">回目录</a></p>')
+    top = [r for r in page.rows if r.status == 'ranked' and r.grade in ('STRICT', 'FULL')]
+    rest = [r for r in page.rows if r not in top]
+    out.append(_table(top, pooled=pooled) if top else '<p class="m">本榜无 STRICT/FULL 行。</p>')
+    if rest:
+        out.append(f'<details><summary>其余 {len(rest)} 行（BELOW {c["BELOW"]} / 观察 {c["observe"]} / '
+                   f'排除 {c["excluded"]}）</summary>{_table(rest, pooled=pooled)}</details>')
+    out.append('</section>')
+    return '\n'.join(out)
+
+
+def render_page(pages: Sequence[BoardPage], *, generated_at: str, source: Mapping[str, str]) -> str:
+    """One self-contained static page: no script, no external resource, anchors only."""
+    by_cell = {(_row_label(p), p.scheme_id): p for p in pages}
+    labels = [LATEST] + sorted({_row_label(p) for p in pages} - {LATEST}, reverse=True)
+    hashes = {p.scheme_id: p.scheme_hash for p in reversed(pages)}
+    db = source.get('db_sha256') or ''
+    pool = source.get('pool_sha256') or ''
+    strict, full = SCHEMES[POOL_SCHEME_ID].grade_strict, SCHEMES[POOL_SCHEME_ID].grade_full
+    head = ''.join(f'<th>{escape(s)}</th>' for s in WEB_SCHEMES)
+    toc_rows = []
+    for label in labels:
+        cells = []
+        for sid in WEB_SCHEMES:
+            p = by_cell.get((label, sid))
+            cells.append(f'<td><a href="#{section_id(p)}">{p.as_of}</a></td>' if p else '<td class="m">无榜</td>')
+        toc_rows.append(f'<tr><th>{escape(label)}</th>{"".join(cells)}</tr>')
+    scheme_line = ' · '.join(f'{escape(s)} {escape(hashes.get(s, "无榜"))}' for s in WEB_SCHEMES)
+    sections = '\n'.join(_section(p, [by_cell[(_row_label(p), s)] for s in WEB_SCHEMES
+                                      if s != p.scheme_id and (_row_label(p), s) in by_cell]) for p in pages)
+    return f"""<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>景气榜单</title><style>{_CSS}</style></head>
+<body><main>
+<h1>景气榜单</h1>
+<p class="m">生成于 {escape(generated_at)} · 库 SHA256 {escape(db[:16] or '—')} · code_version {escape(source.get('code_version') or '—')} · 池文件 {escape(pool[:16] or '无')}</p>
+<p class="m">方案 hash：{scheme_line}</p>
+<p class="m">评级：分数 ≥ {strict:g} 为 STRICT，≥ {full:g} 为 FULL，其余 BELOW；任一闸门不过降为 BELOW。分数 = 0–100 基础分 + 毛利斜率加减分。每张榜只展开 STRICT/FULL，BELOW、观察、排除行收在折叠块里。本页无脚本，用目录链接切换方案和期数。</p>
+<nav id="toc"><h2>目录</h2><div class="w"><table><thead><tr><th>期数</th>{head}</tr></thead><tbody>
+{chr(10).join(toc_rows)}
+</tbody></table></div></nav>
+{sections}
+</main></body></html>
+"""
