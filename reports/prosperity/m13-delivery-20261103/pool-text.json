@@ -1,0 +1,56 @@
+{
+ "outcome": {
+  "status": "delivered",
+  "sent": [
+   "pool_text"
+  ],
+  "error": "",
+  "baseline": null
+ },
+ "message": [
+  "*景气精选池 2026-10-31*\n入池 36 只\n对比 2026-10-24\n新进（34）: AAPL, ADI, ALAB, AMAT, AMD, AMGN, APP, ARM, CAT, CIEN, COHR, COST, CVX, GLW, HPE, KLAC, LRCX, MDT, MRVL, NFLX, NU, NVDA, PLTR, SMCI, SNDK, SNOW, STX, TSM, TXN, V, VLO, VRT, WFC, XOM\n移出（1）: GONE\\_X"
+ ],
+ "pool_members": [
+  "AAPL",
+  "ADI",
+  "ALAB",
+  "AMAT",
+  "AMD",
+  "AMGN",
+  "APP",
+  "ARM",
+  "AVGO",
+  "CAT",
+  "CIEN",
+  "COHR",
+  "COST",
+  "CVX",
+  "GLW",
+  "HPE",
+  "KLAC",
+  "LRCX",
+  "MDT",
+  "MRVL",
+  "MU",
+  "NFLX",
+  "NU",
+  "NVDA",
+  "PLTR",
+  "SMCI",
+  "SNDK",
+  "SNOW",
+  "STX",
+  "TSM",
+  "TXN",
+  "V",
+  "VLO",
+  "VRT",
+  "WFC",
+  "XOM"
+ ],
+ "health": {
+  "code_version": "13e5f9d5183f1b8e",
+  "freeze_as_of": "2026-08-29",
+  "not_due": true
+ }
+}

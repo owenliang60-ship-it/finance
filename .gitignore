@@ -53,3 +53,4 @@ reports/rendered/
 
 # M11 web page acceptance output (~11 MB HTML each; regenerate with scripts/prosperity_web.py)
 reports/prosperity/m11-web-*/out/
+reports/prosperity/m13-delivery-*/out/

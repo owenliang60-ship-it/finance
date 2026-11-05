@@ -100,6 +100,19 @@ class TestSendDocument:
     def test_missing_file_returns_false(self):
         assert send_document("/nonexistent.pdf") is False
 
+    @patch("src.telegram_bot.TELEGRAM_BOT_TOKEN", "tok")
+    @patch("src.telegram_bot.TELEGRAM_CHAT_ID", "111")
+    @patch("src.telegram_bot.requests.post")
+    def test_upload_timeout_is_optional(self, mock_post, tmp_path):
+        page = tmp_path / "page.html"
+        page.write_text("x")
+        mock_post.return_value = MagicMock(ok=True)
+
+        assert send_document(str(page), channel="private", timeout=300) is True
+        assert mock_post.call_args.kwargs["timeout"] == 300
+        assert send_document(str(page), channel="private") is True
+        assert mock_post.call_args.kwargs["timeout"] == 60
+
     @patch("src.telegram_bot.TELEGRAM_BOT_TOKEN", "tok_secret")
     @patch("src.telegram_bot.TELEGRAM_GROUP_CHAT_ID", "222")
     @patch("src.telegram_bot.requests.post")
