@@ -229,3 +229,21 @@ data/prosperity-delivery/
 首次投递：台账为空时 `health` 记基线（当前最新冻结日），不发体检报告；JSON 输出的 `delivery.baseline` 写这个日期。
 首次投递必须在下一次冻结之前成功。做不到时，在首次投递前手工写 `ledger/<上周六>.json`：
 `{"as_of": "<上周六>", "items": {"health": {"freeze_as_of": "<上一个冻结日>", "baseline": true, "code_version": "<当前>"}}}`。
+
+## 晨报试运行段（M14）
+
+晨报 08:00 在 0c 选股罗盘之后加"0d. 景气池（试运行）"。Premium 照旧驱动 🔴 和 0c。
+
+- 读两个文件，都只读：`data/pool/prosperity_pool.json`（8 天新鲜度）、`data/prosperity.db`（按池文件里的 `as_of` 与 `source.code_version` 取 F1 live 周榜，做 `pool_binding` 两步核对）。
+- 本段显示"不可用（原因）"时，原因与排查：
+
+| 显示 | reason | 查什么 |
+|---|---|---|
+| 景气池尚未生成 / 已过期 / 条件版本不匹配 / 数据异常 | `prosperity_pool_*` | 上周六 16:30 周更是否发布（`logs/cron_prosperity.log` 的 `publication`） |
+| 库中没有对应周榜 | `prosperity_board_missing` | 池文件 `source.code_version` 的版本是否已被归档（D5） |
+| 与原榜不符 | `prosperity_pool_board_mismatch` | 晨报 JSON `market_signals.prosperity_compass` 里的 `binding_note` |
+| 景气库不可读 | `prosperity_db_unavailable` | 库文件与 `-wal`/`-shm` 权限；`error` 字段 |
+| EMA30 价格覆盖不足 / 当前市值数据不足 | 同名 | 与 0c 同一个门，查 `daily_price` / `historical_market_cap` |
+| 计算异常 / 显示异常 | `prosperity_compass_error` / 显示层 | 晨报日志 `prosperity compass unavailable` / `display failed` |
+
+合格为零（池 0 只）和命中为零都照常显示，不算不可用。本地没有池文件，本地跑晨报会显示"景气池尚未生成"。
