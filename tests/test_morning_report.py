@@ -4081,3 +4081,145 @@ class TestPremiumMorningHighlight:
         assert result["coverage"]["ema30_ready"] == {
             "covered": 0, "total": 1, "ratio": 0.0,
         }
+
+
+# --- M14 T3: 0d. 景气池（试运行） --------------------------------------------------------------
+
+_PROSPERITY_COLUMNS = ["标的", "排名", "评级", "分数", "成交额排名", "收盘", "EMA30", "当前市值", "Premium"]
+
+
+def _prosperity_hit(symbol, cap, *, rank=1, grade="STRICT", score=72.39, dv=3):
+    return {"symbol": symbol, "rank": rank, "grade": grade, "score": score, "dollar_volume_rank": dv,
+            "close": 110.0, "ema30": 100.0, "marketCap": cap}
+
+
+def _prosperity_payload(*, available=True, reason=None, hits=None, comparison=None, members=3,
+                        ema=(3, 3)):
+    return {
+        "available": available, "reason": reason, "hits": hits or [],
+        "coverage": {"ema30_ready": {"covered": ema[0], "total": ema[1], "ratio": 1.0}},
+        "comparison": comparison or {"status": "ok", "both": ["BIG"], "prosperity_only": ["NEW", "SMALL"],
+                                     "premium_only": ["OLD"]},
+        "pool": {"available": available, "reason": reason, "as_of": "2026-10-31",
+                 "generated_at": "2026-10-31T08:50:00Z", "member_count": members if available else 0},
+    }
+
+
+def _three_faces(payload):
+    ms = _make_market_signals()
+    ms["prosperity_compass"] = payload
+    text = mr.format_section_prosperity_compass(payload)
+    html = [b for b in mr.build_html_payload(ms, None, "2026-11-02")["blocks"]
+            if str(b.get("heading", "")).startswith("0d.")]
+    visual = [s for s in mr.build_morning_visual_sections(ms, None) if s["slug"] == "00d_prosperity_pool"]
+    return text, html, visual
+
+
+class TestProsperityCompassDisplay:
+    def test_missing_key_hides_the_section_on_all_faces(self):
+        ms = _make_market_signals()
+        assert mr.format_section_prosperity_compass(None) == ""
+        assert not [b for b in mr.build_html_payload(ms, None, "2026-11-02")["blocks"]
+                    if str(b.get("heading", "")).startswith("0d.")]
+        assert "00d_prosperity_pool" not in [s["slug"] for s in mr.build_morning_visual_sections(ms, None)]
+
+    def test_table_cells_match_on_all_three_faces(self):
+        payload = _prosperity_payload(hits=[
+            _prosperity_hit("SMALL", 20e9, rank=3, grade="FULL", score=64.99, dv=40),
+            _prosperity_hit("BIG", 2e12, rank=1, score=97.35, dv=7),
+        ])
+        text, html, visual = _three_faces(payload)
+        lines = text.splitlines()
+        assert lines[0] == "*0d. 景气池（试运行）*"
+        assert lines[1] == ("景气池 3 只（as_of 2026-10-31，第一档 ∩ STRICT/FULL ∩ 成交额前 100）"
+                            " | EMA30 3/3 | 收盘价 > EMA30 | 命中 2 只")
+        assert lines[2] == " | ".join(_PROSPERITY_COLUMNS)
+        expected = [["BIG", "1", "STRICT", "97.3", "7", "110.00", "100.00", "$2.0T", "是"],
+                    ["SMALL", "3", "FULL", "64.9", "40", "110.00", "100.00", "$20.0B", ""]]
+        assert [row.split(" | ") for row in lines[3:5]] == expected
+        assert lines[5:] == ["与 Premium：交集 1｜新增 2｜移出 1",
+                             "新增: NEW, SMALL", "移出: OLD"]
+        table, comp = html
+        assert table["heading"] == "0d. 景气池（试运行）" and table["subtitle"] == lines[1]
+        assert [list(r.values()) for r in table["rows"]] == expected and table["columns"] == _PROSPERITY_COLUMNS
+        assert comp["heading"] == "0d. 与 Premium 对比" and comp["subtitle"] == lines[5]
+        assert [list(r.values()) for r in comp["rows"]] == [["新增", "NEW, SMALL"], ["移出", "OLD"]]
+        (section,) = visual
+        assert section["title"] == "0d. 景气池（试运行）" and section["subtitle"] == lines[1]
+        hits_block, comp_block = section["blocks"]
+        assert [r["cells"] for r in hits_block["rows"]] == expected
+        assert len(hits_block["widths"]) == len(hits_block["columns"]) == 9
+        assert comp_block["title"] == lines[5]
+        assert [r["cells"] for r in comp_block["rows"]] == [["新增", "NEW, SMALL"], ["移出", "OLD"]]
+        assert len(comp_block["widths"]) == len(comp_block["columns"]) == 2
+
+    def test_unavailable_shows_reason_on_all_faces(self):
+        payload = _prosperity_payload(available=False, reason="prosperity_pool_board_mismatch",
+                                      comparison={"status": "prosperity_unavailable"})
+        text, html, visual = _three_faces(payload)
+        warning = "⚠️ 景气池（试运行）不可用（与原榜不符）"
+        assert text.splitlines() == ["*0d. 景气池（试运行）*", warning]
+        assert [b["subtitle"] for b in html] == [warning] and "rows" not in html[0]
+        assert visual[0]["subtitle"] == warning and visual[0]["blocks"] == []
+
+    @pytest.mark.parametrize("reason,label", [
+        ("prosperity_pool_missing", "景气池尚未生成"), ("prosperity_pool_stale", "景气池已过期"),
+        ("prosperity_board_missing", "库中没有对应周榜"), ("prosperity_db_unavailable", "景气库不可读"),
+        ("premium_pool_invalid", "景气池数据异常"), ("market_cap_unavailable", "当前市值数据不足"),
+        ("prosperity_compass_error", "计算异常"), ("weird", "暂时无法生成"),
+    ])
+    def test_reason_labels(self, reason, label):
+        text = mr.format_section_prosperity_compass({"available": False, "reason": reason})
+        assert text.splitlines()[1] == "⚠️ 景气池（试运行）不可用（{}）".format(label)
+
+    def test_zero_hits_still_shows_the_section_and_comparison(self):
+        text, html, visual = _three_faces(_prosperity_payload(hits=[]))
+        lines = text.splitlines()
+        assert lines[1].endswith("| 命中 0 只") and lines[2] == "与 Premium：交集 1｜新增 2｜移出 1"
+        assert [b["heading"] for b in html] == ["0d. 景气池（试运行）", "0d. 与 Premium 对比"]
+        assert html[0]["rows"] == [] and visual[0]["blocks"][0]["rows"] == []
+
+    def test_empty_pool_is_qualified_zero_not_unavailable(self):
+        payload = _prosperity_payload(members=0, ema=(0, 0), comparison={
+            "status": "ok", "both": [], "prosperity_only": [], "premium_only": ["OLD"]})
+        lines = mr.format_section_prosperity_compass(payload).splitlines()
+        assert lines[1].startswith("景气池 0 只（合格为零，as_of 2026-10-31）")
+        assert lines[-2:] == ["与 Premium：交集 0｜新增 0｜移出 1", "移出: OLD"]
+
+    def test_premium_unavailable_is_not_compared(self):
+        payload = _prosperity_payload(hits=[_prosperity_hit("BIG", 2e12)],
+                                      comparison={"status": "premium_unavailable"})
+        text, html, visual = _three_faces(payload)
+        assert text.splitlines()[-1] == "与 Premium：Premium 不可用，不比较"
+        assert html[1]["subtitle"] == "与 Premium：Premium 不可用，不比较" and html[1]["rows"] == []
+        assert [r["cells"][-1] for r in visual[0]["blocks"][0]["rows"]] == [""]
+
+    def test_long_lists_are_capped_at_fifteen(self):
+        many = ["S{:02d}".format(i) for i in range(20)]
+        payload = _prosperity_payload(comparison={"status": "ok", "both": [], "prosperity_only": many,
+                                                  "premium_only": []})
+        lines = mr.format_section_prosperity_compass(payload).splitlines()
+        assert lines[-1] == "新增: " + ", ".join(many[:15]) + " 等 20 只"
+
+    def test_malformed_payload_degrades_to_warning_and_rest_of_report_renders(self):
+        payload = _prosperity_payload(hits=[{**_prosperity_hit("BIG", 2e12), "close": None}])
+        text, html, visual = _three_faces(payload)
+        warning = "⚠️ 景气池（试运行）不可用（显示异常）"
+        assert text.splitlines()[1] == warning
+        assert html[0]["subtitle"] == warning and visual[0]["subtitle"] == warning
+        ms = sample_market_signals()
+        ms["prosperity_compass"] = payload
+        report = mr.format_morning_report(market_signals=ms, dv_result=_make_dv_result())
+        assert warning in report and "PMARP" in report
+
+    def test_section_sits_between_0c_and_pmarp(self):
+        ms = _make_market_signals()
+        ms["selection_compass"] = _selection_compass_payload(hits=[_selection_compass_hit("BIG", 2e12)])
+        ms["prosperity_compass"] = _prosperity_payload(hits=[_prosperity_hit("BIG", 2e12)])
+        headings = [b.get("heading") for b in mr.build_html_payload(ms, None, "2026-11-02")["blocks"]]
+        assert headings.index("0c. 选股罗盘") < headings.index("0d. 景气池（试运行）") < headings.index("1. PMARP 信号")
+        slugs = [s["slug"] for s in mr.build_morning_visual_sections(ms, None)]
+        assert slugs.index("00c_selection_compass") < slugs.index("00d_prosperity_pool") < slugs.index("01_pmarp")
+        report = mr.format_morning_report(market_signals={**sample_market_signals(), **ms},
+                                          dv_result=_make_dv_result())
+        assert report.index("*0c. 选股罗盘*") < report.index("*0d. 景气池（试运行）*")

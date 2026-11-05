@@ -76,7 +76,7 @@ flowchart TD
 | B1 | 读取与绑定 | 池缺失/过期/条件不符/损坏 → 对应 `prosperity_pool_*`；库缺失 → `prosperity_db_unavailable`；原榜不符（改一个成员排名）→ `prosperity_pool_board_mismatch`；合法 → `available` 且成员齐全；空池合法 → `available`、成员 0 | T1 |
 | B2 | 对比 | 交集、仅景气（新增）、仅 Premium（移出）各自排序正确；Premium 不可用时对比记 `premium_unavailable`，不当成 Premium 为空 | T1 |
 | B3 | 接线 | `market_signals['prosperity_compass']` 由 `scan_selection_compass` 计算；缺价格的景气成员从 `market.db` 补；景气块抛异常 → `prosperity_compass_error`，`selection_compass` 与 `premium_pool` 与不接入时完全相同 | T2 |
-| B4 | 显示 | 键缺失 → 三处都不出现 0d（现有测试不变）；不可用 → 三处都是"⚠️ 景气池（试运行）不可用（原因中文）"；可用 → 文本、HTML、图片三处列与行一一对应，含排名、评级、分数、成交额排名、收盘、EMA30、市值、Premium ✓；合格为零 → 显示"合格为零"与对比 | T3 |
+| B4 | 显示 | 键缺失 → 三处都不出现 0d（现有测试不变）；不可用 → 三处都是"⚠️ 景气池（试运行）不可用（原因中文）"；可用 → 文本、HTML、图片三处列与行一一对应，含排名、评级、分数、成交额排名、收盘、EMA30、市值、Premium 列"是"；合格为零 → 显示"合格为零"与对比 | T3 |
 | B5 | 真实数据 | 用 11-01 快照 `/tmp/m12/prosperity.db`、10-31 池文件（时钟 2026-11-01）、本地 `market.db` 副本、`/tmp/m12/premium_pool.json`：绑定通过 36 只；EMA30 段生成；对比数字与独立 `set` 运算一致；输出三处文本人工看过 | T4 |
 | B6 | 全量测试 | 与基线相同 12 failed，新增 0 | T4 |
 
@@ -148,7 +148,7 @@ def pool_comparison(prosperity: dict, premium: dict) -> dict
 - subtitle：`景气池 {n} 只（as_of {as_of}，第一档 ∩ STRICT/FULL ∩ 成交额前 100）| EMA30 {c}/{t} | 收盘价 > EMA30`；合格为零时写 `景气池 0 只（合格为零）`。
 - comparison_lines：`与 Premium：交集 {x}｜新增 {y}: …｜移出 {z}: …`（代码过多时每类最多列 15 个，后面写"等 N 只"）；Premium 不可用时写 `与 Premium：Premium 不可用，不比较`。
 - 原因中文：`prosperity_pool_missing` 景气池尚未生成 / `_stale` 已过期 / `_criteria_mismatch` 条件版本不匹配 / `_invalid` 数据异常 / `_board_mismatch` 与原榜不符 / `prosperity_board_missing` 库中没有对应周榜 / `prosperity_db_unavailable` 景气库不可读 / `premium_pool_invalid`（scan 对重复代码的返回）景气池数据异常 / `ema30_coverage_below_threshold` EMA30 价格覆盖不足 / `market_cap_unavailable` 当前市值数据不足 / `prosperity_compass_error` 计算异常 / 其他 暂时无法生成。
-- 行按市值降序（同 0c），Premium 列为 `✓` 或空。
+- 行按市值降序（同 0c），Premium 列为"是"或空（"✓"在部分报告字体里没有字形，本地渲染成方框）。
 
 - [ ] Step 1：写失败测试：B4 每一条；三处列与单元格一致（文本按 ` | ` 拆、HTML block rows、图片 block rows 逐格相等）；`len(widths) == len(columns)`；畸形 payload（`close=None`）→ 三处都显示"显示异常"，其余段落照常；`sample_market_signals()` 下图片 slug 列表不变。
 - [ ] Step 2：→ FAIL。

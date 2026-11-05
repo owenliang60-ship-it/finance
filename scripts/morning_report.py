@@ -1889,6 +1889,110 @@ def format_section_selection_compass(payload: dict | None) -> str:
     return "\n".join(lines)
 
 
+# --- M14: 0d. 景气池（试运行） ------------------------------------------------------------------
+
+PROSPERITY_COMPASS_TITLE = "0d. 景气池（试运行）"
+PROSPERITY_COMPARISON_TITLE = "0d. 与 Premium 对比"
+PROSPERITY_COMPASS_COLUMNS = ["标的", "排名", "评级", "分数", "成交额排名", "收盘", "EMA30", "当前市值", "Premium"]
+PROSPERITY_COMPASS_WIDTHS = [180, 110, 150, 120, 170, 210, 160, 170, 130]
+PROSPERITY_COMPARISON_COLUMNS = ["类别", "代码"]
+PROSPERITY_COMPARISON_WIDTHS = [160, 2088]
+PROSPERITY_COMPARISON_LIMIT = 15
+PROSPERITY_COMPASS_REASON_LABELS = {
+    "prosperity_pool_missing": "景气池尚未生成",
+    "prosperity_pool_stale": "景气池已过期",
+    "prosperity_pool_criteria_mismatch": "景气池条件版本不匹配",
+    "prosperity_pool_invalid": "景气池数据异常",
+    "prosperity_pool_board_mismatch": "与原榜不符",
+    "prosperity_board_missing": "库中没有对应周榜",
+    "prosperity_db_unavailable": "景气库不可读",
+    "premium_pool_invalid": "景气池数据异常",       # scan_selection_compass on a duplicated symbol
+    "ema30_coverage_below_threshold": "EMA30 价格覆盖不足",
+    "market_cap_unavailable": "当前市值数据不足",
+    "prosperity_compass_error": "计算异常",
+    "display_error": "显示异常",
+}
+
+
+def _prosperity_warning(reason: str | None) -> dict:
+    return {
+        "state": "warning",
+        "warning": "⚠️ 景气池（试运行）不可用（{}）".format(
+            PROSPERITY_COMPASS_REASON_LABELS.get(reason, "暂时无法生成")),
+    }
+
+
+def _prosperity_symbol_list(symbols: list) -> str:
+    shown = ", ".join(symbols[:PROSPERITY_COMPARISON_LIMIT])
+    return shown + (" 等 {} 只".format(len(symbols)) if len(symbols) > PROSPERITY_COMPARISON_LIMIT else "")
+
+
+def _prosperity_compass_display(payload: dict | None) -> dict:
+    """Shared display contract for text, HTML and visual faces of section 0d."""
+    if payload is None:
+        return {"state": "hidden"}
+    if not payload.get("available"):
+        return _prosperity_warning(payload.get("reason"))
+    from src.data.prosperity_web import _score
+
+    pool = payload.get("pool") or {}
+    count = pool.get("member_count", 0)
+    ema30 = (payload.get("coverage") or {}).get("ema30_ready") or {}
+    hits = sorted(payload.get("hits") or [],
+                  key=lambda hit: (-(hit.get("marketCap") or 0), hit.get("symbol", "")))
+    as_of = pool.get("as_of")
+    head = ("景气池 0 只（合格为零，as_of {}）".format(as_of) if count == 0
+            else "景气池 {} 只（as_of {}，第一档 ∩ STRICT/FULL ∩ 成交额前 100）".format(count, as_of))
+    subtitle = "{} | EMA30 {}/{} | 收盘价 > EMA30 | 命中 {} 只".format(
+        head, ema30.get("covered", 0), ema30.get("total", 0), len(hits))
+
+    comparison = payload.get("comparison") or {}
+    premium = set(comparison.get("both") or []) if comparison.get("status") == "ok" else set()
+    rows = [[
+        str(hit["symbol"]), str(hit["rank"]), str(hit["grade"]), _score(hit.get("score")),
+        str(hit.get("dollar_volume_rank") or "—"),
+        "{:.2f}".format(hit["close"]), "{:.2f}".format(hit["ema30"]),
+        _format_market_cap(hit.get("marketCap")), "是" if hit["symbol"] in premium else "",   # CJK glyph: "✓" is missing in some report fonts
+    ] for hit in hits]
+
+    if comparison.get("status") == "ok":
+        new, gone = comparison.get("prosperity_only") or [], comparison.get("premium_only") or []
+        summary = "与 Premium：交集 {}｜新增 {}｜移出 {}".format(len(comparison.get("both") or []),
+                                                          len(new), len(gone))
+        detail = [[label, _prosperity_symbol_list(symbols)]
+                  for label, symbols in (("新增", new), ("移出", gone)) if symbols]
+    else:
+        summary, detail = "与 Premium：Premium 不可用，不比较", []
+    return {"state": "table", "subtitle": subtitle, "columns": PROSPERITY_COMPASS_COLUMNS, "rows": rows,
+            "comparison_summary": summary, "comparison": detail}
+
+
+def _safe_prosperity_display(payload: dict | None) -> dict:
+    """A display failure must never take the morning report down (plan §11 #1)."""
+    try:
+        return _prosperity_compass_display(payload)
+    except Exception as exc:
+        logger.warning("prosperity compass display failed: %s", exc)
+        return _prosperity_warning("display_error")
+
+
+def format_section_prosperity_compass(payload: dict | None) -> str:
+    display = _safe_prosperity_display(payload)
+    if display["state"] == "hidden":
+        return ""
+    lines = ["*{}*".format(PROSPERITY_COMPASS_TITLE)]
+    if display["state"] == "warning":
+        lines.append(display["warning"])
+        return "\n".join(lines)
+    lines.append(display["subtitle"])
+    if display["rows"]:
+        lines.append(" | ".join(display["columns"]))
+        lines.extend(" | ".join(row) for row in display["rows"])
+    lines.append(display["comparison_summary"])
+    lines.extend("{}: {}".format(label, codes) for label, codes in display["comparison"])
+    return "\n".join(lines)
+
+
 def _pmarp_signal_cap_groups(hits: list) -> list:
     """纯分组：返回 [(signal_label, tier_label, sorted_hits), ...]，空组已抑制。
     供文本/视觉/HTML 三处复用——HTML renderer 消费其输出，不反向 import morning_report。"""
@@ -2335,6 +2439,23 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
             ),
         })
 
+    prosperity_display = _safe_prosperity_display((market_signals or {}).get("prosperity_compass"))
+    if prosperity_display["state"] == "table":
+        blocks.append({
+            "heading": PROSPERITY_COMPASS_TITLE,
+            "subtitle": prosperity_display["subtitle"],
+            "columns": prosperity_display["columns"],
+            "rows": [dict(zip(prosperity_display["columns"], row)) for row in prosperity_display["rows"]],
+        })
+        blocks.append({
+            "heading": PROSPERITY_COMPARISON_TITLE,
+            "subtitle": prosperity_display["comparison_summary"],
+            "columns": PROSPERITY_COMPARISON_COLUMNS,
+            "rows": [dict(zip(PROSPERITY_COMPARISON_COLUMNS, row)) for row in prosperity_display["comparison"]],
+        })
+    elif prosperity_display["state"] == "warning":
+        blocks.append({"heading": PROSPERITY_COMPASS_TITLE, "subtitle": prosperity_display["warning"]})
+
     blocks.append({"heading": "1. PMARP 信号"})
 
     # PMARP — signal -> cap-tier sub-blocks (columns one-to-one with text)
@@ -2544,6 +2665,24 @@ def build_morning_visual_sections(
                 ),
                 "blocks": [],
             })
+        prosperity_display = _safe_prosperity_display(market_signals.get("prosperity_compass"))
+        if prosperity_display["state"] == "table":
+            sections.append({
+                "slug": "00d_prosperity_pool",
+                "title": PROSPERITY_COMPASS_TITLE,
+                "subtitle": prosperity_display["subtitle"],
+                "blocks": [
+                    {"title": "当前命中（按市值降序）", "columns": prosperity_display["columns"],
+                     "widths": PROSPERITY_COMPASS_WIDTHS, "grouped": False,
+                     "rows": [{"cells": row} for row in prosperity_display["rows"]]},
+                    {"title": prosperity_display["comparison_summary"], "columns": PROSPERITY_COMPARISON_COLUMNS,
+                     "widths": PROSPERITY_COMPARISON_WIDTHS, "grouped": False,
+                     "rows": [{"cells": row} for row in prosperity_display["comparison"]]},
+                ],
+            })
+        elif prosperity_display["state"] == "warning":
+            sections.append({"slug": "00d_prosperity_pool", "title": PROSPERITY_COMPASS_TITLE,
+                             "subtitle": prosperity_display["warning"], "blocks": []})
         pmarp = market_signals.get("pmarp", {})
         _pmarp_cols = ["标的", "概念", "信号", "当前", "变化", "市值", "β6M"]
         _pmarp_widths = [300, 320, 140, 130, 170, 150, 120]
@@ -3196,6 +3335,13 @@ def format_morning_report(
         )
         if compass_text:
             lines.append(compass_text)
+            lines.append("")
+
+        prosperity_text = format_section_prosperity_compass(
+            market_signals.get("prosperity_compass")
+        )
+        if prosperity_text:
+            lines.append(prosperity_text)
             lines.append("")
 
         lines.append(format_section_pmarp_by_signal_and_cap(market_signals))
