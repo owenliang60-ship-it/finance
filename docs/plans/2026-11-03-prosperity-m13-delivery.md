@@ -1,6 +1,6 @@
 # 景气引擎 M13 Telegram 投递 Implementation Plan
 
-**状态：2026-11-03 `/autopilot` 执行（Boss 授权"剩下的搞定"），Plan Reviewer 第 1 轮 11 条已处理（§12）。T1、T2 已提交（784abdbf、64a8222d）。**
+**状态：已完成，2026-11-05 合并本地 main（6b1dd8cf），待 push。Plan Reviewer 两轮（§12–13）、code review 两轮（§14–15）均已处理。**
 
 **Goal:** 每周六 live 周更发布成功后，云端把网页（M11）发到 Boss 的 Telegram 私聊，附精选池进出；冻结周另附 F1 体检报告（M12）。
 **Architecture:** 新模块 `src/data/prosperity_delivery.py` 在周更之后单独执行一步。它先给 `prosperity.db`（冻结周加上 `market.db`）拍只读快照，再用子进程调用现有的 `scripts/prosperity_web.py` 和 `scripts/prosperity_health.py`，然后用 `src/telegram_bot.py` 发送。每周一个 JSON 台账，用来防止重复发送、支持补发。入口 `scripts/prosperity_weekly.py` 加 `--delivery-dir`；`scripts/run_prosperity.sh` 固定传这个参数。crontab 不改。不进 `code_version`，不改打分、精选池或 `publication` 表。

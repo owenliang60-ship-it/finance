@@ -1,6 +1,6 @@
 # 景气引擎 M14 晨报并行接入 Implementation Plan
 
-**状态：2026-11-05 Plan Reviewer 第一轮 23 条已处理（§11），进入实现。**
+**状态：已完成，2026-11-05 合并本地 main（89922b50），待 push。Plan Reviewer 23 条（§11）、`/code-review high` 9 条（§12）均已处理。**
 
 **Goal:** 晨报新增"0d. 景气池（试运行）"一段：景气精选池成员跑与 Premium 相同的 EMA30 门，并列出与 Premium 的交集、新增、移出。Premium 照旧驱动 🔴 和 0c。
 **Architecture:** 新模块 `src/data/prosperity_morning.py` 读池文件（8 天新鲜度），再对照 `prosperity.db` 原榜做北极星 §4.1 要求的两步绑定（复用 `prosperity_web.pool_binding`），返回与 Premium 池同形状的字典。`build_market_signal_report` 把它交给现成的 `scan_selection_compass`（同一个 EMA30 门 + 市值门），结果放进 `market_signals['prosperity_compass']`。文本、HTML、图片三处各加一段，共用一个 display 函数。整段包在 `try/except` 里，任何失败只让这一段显示"不可用"，不影响晨报其余部分。不改 Premium 路径，不进 `code_version`。

@@ -86,6 +86,7 @@ API Keys: 环境变量 `FMP_API_KEY` / `MARKETDATA_API_KEY` / `ADANOS_API_KEY`�
 | 06:30 | Tue-Sat | 量价 + DV + IV + social 一次性更新 |
 | 08:00 | Tue-Sat | 晨报推送 |
 | 08:30 / 09:00 / 10:45 / 14:00 | Sat | 池刷新 / 扩展池 / 前瞻预期（yfinance → FMP forward 串行）/ 基本面 + 质量修复（后两项共用 `market_db_writer` 资源锁） |
+| 16:30 / 20:30 | Sat | 景气引擎周更 + 精选池 + Telegram 私聊投递（同锁；20:30 补缺） |
 | 22:00 / 23:00 SGT | Mon-Fri | Portfolio Intelligence 推送 |
 
 完整 cron 见 `ARCHITECTURE.md`。本地 launchd `com.finance.sync-pull` 每天 09:00 auto-pull。
