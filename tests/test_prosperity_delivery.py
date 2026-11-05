@@ -194,8 +194,9 @@ def test_first_delivery_sends_web_and_text_and_records_baseline(env):
     run, send = FakeRun(), FakeSend()
     before = _sha(env['db'])
     out = deliver(env, run, send)
-    assert out.status == 'delivered' and out.sent == ('web', 'pool_text')
+    assert out.status == 'delivered' and out.sent == ('web', 'pool_text', 'health_baseline')
     assert run.scripts() == ['prosperity_web.py']
+    assert '体检报告基线：冻结 2026-10-03' in send.msgs[1]                  # review #5: never silent
     cmd, kw = run.calls[0]
     assert cmd[0] == sys.executable and kw['timeout'] == 600
     assert cmd[cmd.index('--code-version') + 1] == VERSION and cmd[cmd.index('--pool') + 1] == str(env['pool'])
@@ -223,8 +224,8 @@ def test_rerun_is_already_delivered_without_snapshot(env):
 def test_partial_failure_resends_only_missing_items(env):
     send = FakeSend(fail_on={2})                                          # web ok, pool text fails
     out = deliver(env, FakeRun(), send)
-    assert out.status == 'failed' and out.sent == ('web',) and 'pool_text' in out.error
-    assert set(d.read_ledger(env['dir'], WEEK)['items']) == {'web'}
+    assert out.status == 'failed' and out.sent == ('web', 'health_baseline') and 'pool_text' in out.error
+    assert set(d.read_ledger(env['dir'], WEEK)['items']) == {'web', 'health'}
     run, send = FakeRun(), FakeSend()
     out = deliver(env, run, send)
     assert out.status == 'delivered' and out.sent == ('pool_text',) and not run.calls and not send.docs
@@ -303,7 +304,7 @@ def test_pool_from_another_week_is_not_compared(env):
     seed_previous(env, members=['A'])
     send = FakeSend()
     assert deliver(env, FakeRun(), send).status == 'delivered'
-    assert 'pool\\_as\\_of\\_mismatch' in send.msgs[0] and '入池 0' in send.docs[0][1]
+    assert 'pool\\_as\\_of\\_mismatch' in send.msgs[0] and send.docs[0][1].endswith('入池 未知')
     assert 'pool_members' not in d.read_ledger(env['dir'], WEEK)
 
 
@@ -339,7 +340,7 @@ def test_out_keeps_two_weeks(env):
 
 
 def test_last_health_freeze_rules(tmp_path):
-    assert d.last_health_freeze(tmp_path, WEEK, VERSION) is None
+    assert d.last_health_freeze(tmp_path, WEEK, VERSION) is d.NEVER
     d.write_ledger(tmp_path, {'as_of': '2026-09-19', 'items': {
         'health': {'freeze_as_of': '2026-08-29', 'sent_at': 'x', 'code_version': VERSION}}})
     d.write_ledger(tmp_path, {'as_of': '2026-09-26', 'items': {
@@ -354,3 +355,73 @@ def test_real_web_cli_integration(env):
     assert out.status == 'delivered', out.error
     page = env['dir'] / 'out' / WEEK / 'prosperity-web-20261003.html'
     assert page.is_file() and '<section id=' in page.read_text(encoding='utf-8')
+
+
+# --- code review (high) fixes ----------------------------------------------------------------
+
+def test_pool_not_bound_to_board_is_not_trusted(env):
+    """review #1: a self-consistent pool for this Saturday whose members disagree with the board."""
+    payload = json.loads(env['pool'].read_text(encoding='utf-8'))
+    payload['source']['content_hash'] = 'f' * 64                             # self-consistent, wrong board
+    env['pool'].write_text(json.dumps(payload), encoding='utf-8')
+    from src.data.prosperity_pool import validate_prosperity_pool
+    validate_prosperity_pool(payload, now=NOW)                               # passes the file's own checks
+    seed_previous(env, members=['A'])
+    send = FakeSend()
+    assert deliver(env, FakeRun(), send).status == 'delivered'
+    assert 'pool\\_board\\_mismatch' in send.msgs[0] and send.docs[0][1].endswith('入池 未知')
+    assert 'pool_members' not in d.read_ledger(env['dir'], WEEK)
+
+
+def test_web_caption_unknown_pool():
+    assert d.web_caption(as_of='2026-11-14', strict=1, full=2, pool_count=None, size_bytes=1).endswith('入池 未知')
+
+
+def test_unreadable_ledger_names_the_file(env):
+    """review #3: a broken hand-written ledger fails loudly with its name; the web page still goes out."""
+    seed_previous(env)
+    (env['dir'] / 'ledger' / '2026-09-27.json').write_text('{not json', encoding='utf-8')
+    send = FakeSend()
+    out = deliver(env, FakeRun(), send)
+    assert out.status == 'failed' and '2026-09-27.json' in out.error and 'web' in out.sent
+    (env['dir'] / 'ledger' / '2026-09-27.json').write_text('{"as_of": "2026-09-27", "items": []}', encoding='utf-8')
+    assert '2026-09-27.json' in deliver(env, FakeRun(), FakeSend()).error
+
+
+def test_web_failure_does_not_block_text_and_health(env):
+    """review #4: stages are independent; failures are collected."""
+    seed_previous(env)
+    send = FakeSend()
+    out = deliver(env, FakeRun(web_rc=6), send)
+    assert out.status == 'failed' and out.sent == ('pool_text', 'health') and 'prosperity_web.py rc=6' in out.error
+    assert set(d.read_ledger(env['dir'], WEEK)['items']) == {'pool_text', 'health'}
+    out = deliver(env, FakeRun(), FakeSend())
+    assert out.status == 'delivered' and out.sent == ('web',)
+
+
+def test_baseline_without_freeze_sends_the_first_freeze(env, tmp_path):
+    """review #5: a baseline taken while no freeze existed must not swallow the first freeze."""
+    d.write_ledger(env['dir'], {'as_of': '2026-09-26', 'items': {
+        'health': {'freeze_as_of': None, 'baseline': True, 'code_version': VERSION}}})
+    assert d.last_health_freeze(env['dir'], WEEK, VERSION) is None
+    assert 'health' in deliver(env, FakeRun(), FakeSend()).sent
+
+
+def test_snapshot_is_self_contained(env, tmp_path):
+    """review #6: the copy is in DELETE journal mode and leaves no sidecars."""
+    snap = d.snapshot(env['db'], tmp_path / 'snap.db')
+    header = snap.read_bytes()[:100]
+    assert header[18] == 1 and header[19] == 1
+    assert not (tmp_path / 'snap.db-wal').exists() and not (tmp_path / 'snap.db-shm').exists()
+
+
+def test_foreign_delivery_dir_is_refused_untouched(env):
+    """review #8: never clean up a directory this module did not create."""
+    env['dir'].mkdir()
+    (env['dir'] / 'market.db').write_text('not ours')
+    (env['dir'] / 'tmp').mkdir()
+    (env['dir'] / 'tmp' / 'keep.txt').write_text('x')
+    run = FakeRun()
+    out = deliver(env, run, FakeSend())
+    assert out.status == 'failed' and 'delivery_dir_not_owned' in out.error and not run.calls
+    assert (env['dir'] / 'tmp' / 'keep.txt').exists()

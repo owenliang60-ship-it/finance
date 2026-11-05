@@ -47,3 +47,9 @@ def test_cron_entry_passes_pool_path(tmp_path):
     words = run(tmp_path, with_venv=False)
     i = words.index('--pool-path')
     assert words[i + 1] == str(tmp_path / 'data' / 'pool' / 'prosperity_pool.json')
+
+
+def test_cron_entry_passes_delivery_dir(tmp_path):
+    words = run(tmp_path, with_venv=False)
+    i = words.index('--delivery-dir')
+    assert words[i + 1] == str(tmp_path / 'data' / 'prosperity-delivery')

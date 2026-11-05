@@ -1,0 +1,98 @@
+{
+ "outcome": {
+  "status": "delivered",
+  "sent": [
+   "web",
+   "pool_text",
+   "health"
+  ],
+  "error": "",
+  "baseline": null
+ },
+ "rerun": {
+  "status": "already_delivered",
+  "sent": [],
+  "error": "",
+  "baseline": null
+ },
+ "elapsed_seconds": 320.4,
+ "inputs_unchanged": true,
+ "db_sha256": "ca0aa05a7cfccf753799137d3bbe1df3d44004fe8f51e794533faf586ca09ef6",
+ "market_sha256": "97db51f9b25a22c9d7fa29ed34b6cb9469b33aed7b1915730520e4f201fcff11",
+ "tmp_removed": true,
+ "ledger": {
+  "as_of": "2026-10-31",
+  "items": {
+   "health": {
+    "code_version": "13e5f9d5183f1b8e",
+    "freeze_as_of": "2026-08-29",
+    "sent_at": "2026-11-01T05:00:00Z"
+   },
+   "pool_text": {
+    "sent_at": "2026-11-01T05:00:00Z"
+   },
+   "web": {
+    "bytes": 10249963,
+    "sent_at": "2026-11-01T05:00:00Z"
+   }
+  },
+  "pool_members": [
+   "AAPL",
+   "ADI",
+   "ALAB",
+   "AMAT",
+   "AMD",
+   "AMGN",
+   "APP",
+   "ARM",
+   "AVGO",
+   "CAT",
+   "CIEN",
+   "COHR",
+   "COST",
+   "CVX",
+   "GLW",
+   "HPE",
+   "KLAC",
+   "LRCX",
+   "MDT",
+   "MRVL",
+   "MU",
+   "NFLX",
+   "NU",
+   "NVDA",
+   "PLTR",
+   "SMCI",
+   "SNDK",
+   "SNOW",
+   "STX",
+   "TSM",
+   "TXN",
+   "V",
+   "VLO",
+   "VRT",
+   "WFC",
+   "XOM"
+  ]
+ },
+ "sent": [
+  {
+   "kind": "document",
+   "name": "prosperity-web-20261031.html",
+   "bytes": 10249963,
+   "caption": "景气榜 2026-10-31 · F1 STRICT 55 / FULL 194 · 入池 36",
+   "timeout": 300
+  },
+  {
+   "kind": "message",
+   "text": "*景气精选池 2026-10-31*\n入池 36 只\n对比 2026-10-24\n新进（34）: AAPL, ADI, ALAB, AMAT, AMD, AMGN, APP, ARM, CAT, CIEN, COHR, COST, CVX, GLW, HPE, KLAC, LRCX, MDT, MRVL, NFLX, NU, NVDA, PLTR, SMCI, SNDK, SNOW, STX, TSM, TXN, V, VLO, VRT, WFC, XOM\n移出（1）: GONE\\_X"
+  },
+  {
+   "kind": "document",
+   "name": "prosperity-health-F1-20260829.html",
+   "bytes": 83001,
+   "caption": "F1 体检报告 · 冻结 2026-08-29",
+   "timeout": 300
+  }
+ ]
+}

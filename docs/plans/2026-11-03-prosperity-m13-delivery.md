@@ -327,3 +327,18 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path,
 | 5 | MINOR | 体检报告附件名用本周日期，没有 caption | 成立。文件名用冻结日，caption 写冻结日 |
 
 第 2 轮是审查上限，以上全部按审查建议修订，plan 放行。
+
+## 14. 实现审查（`/code-review high`，2026-11-03）
+
+8 条全部核实成立，全部修复（TDD，先写失败测试）。
+
+| # | 问题 | 修复 |
+|---|---|---|
+| 1 | 投递只看池 `as_of`，没对照原榜（北极星 §4.1 读取端规则） | `_trusted_pool` 复用 `prosperity_web.pool_binding`；不符 → `pool_board_mismatch`，不比较、不写 `pool_members` |
+| 2 | 池不可信时 caption 写"入池 0"（门控失败显示成安全值） | `pool_count=None` → "入池 未知" |
+| 3 | 坏台账让以后每周都失败，且不报文件名 | `_parse_ledger` 报 `ledger_unreadable: <文件名>`；三项独立后网页照发 |
+| 4 | 网页失败拦住进出文本和体检报告 | 三项各自 try，错误收集后统一返回 failed |
+| 5 | 首次投递在冻结后时，冻结被静默吞掉 | 记基线时发一次性提示消息；`NEVER` 哨兵区分"从没记过"与"基线时无冻结" |
+| 6 | 快照保留 WAL 头，只读打开会生成 -wal/-shm | 复用 `prosperity_backup._quick_check` 切 DELETE 模式 |
+| 7 | 两处重复判断与两次目录扫描 | `_health_done`、`_ledgers_before` |
+| 8 | `--delivery-dir` 指向共享目录时会删别人的 `tmp/`、`out/` | 所有权标记 `.prosperity-delivery`；无标记时只接受 `ledger/out/tmp` 布局 |

@@ -118,7 +118,7 @@ cron 和周更入口都不会移除任何数据。空间不足时周更退出 6�
   重建方法：在云端用 `build_pool` + `publish_prosperity_pool` 对本周 F1 周榜手动重建，需 Boss 确认。
 - 成交额排名在发布时读当时的 `market.db`，不随周榜冻结。同一天内重试结果相同；
   隔几天手动重建时，若期间 `as_of` 之前的价格被回补或修正，成员可能与当周略有不同。
-- 网页与 Telegram（M11、M13）尚未接入。体检报告（M12）只在本地生成，见下节。
+- M13 起，live 周发布成功后在同一次运行里投递网页到 Telegram 私聊，见文末「Telegram 投递（M13）」。
 
 ### 首次发布核对（2026-11-07，M10 A9 + 第一档规则）
 
@@ -194,3 +194,35 @@ scp aliyun:/root/workspace/Finance/data/pool/prosperity_pool.json /tmp/web/  # �
 - 整张榜都是近似 PIT（回放出来的季末榜）时，榜头写"本榜全部为近似 PIT"，行内不再逐行标。
 - 独立核对：`/usr/bin/python3 -I reports/prosperity/m11-web-20261102/verify_web.py --db … --html … --code-version <页首的 code_version> [--pool …]`
   （只用标准库，不 import 项目代码；`--code-version` 必填，取页首显示的值）。
+
+## Telegram 投递（M13）
+
+live 周更发布成功后（`publication` 为 `published` 或 `already_published`），`prosperity_weekly.py` 在同一把锁里调用
+`src/data/prosperity_delivery.py` 的 `deliver_week`。cron 入口固定传 `--delivery-dir data/prosperity-delivery`。
+replay 模式（`--as-of`、`--rebuild-chain`）也接受这个参数，但不投递。
+
+发到私聊（`TELEGRAM_CHAT_ID`）的内容：
+1. 网页附件 `prosperity-web-YYYYMMDD.html`，说明一行：日期、F1 STRICT/FULL 只数、入池只数；超过 12 MB 时加告警，超过 45 MB 不发。
+2. 精选池进出文本：与最近一份有成员记录的台账比较；池文件不可用或不是本周时只写原因，不比较。
+3. F1 体检报告 `prosperity-health-F1-<冻结日>.html`：库里 F1 最新季末冻结榜晚于上次发送（或基线）的冻结日时才发，
+   包括回放出来的较早冻结和连续失败后的补发。`code_version` 变了就把最新冻结当新的发一次。
+
+投递只读：先给 `prosperity.db`（发体检报告时加 `market.db`）拍 `.backup` 快照，再用子进程调用 M11/M12 两个 CLI。
+快照放 `data/prosperity-delivery/tmp/`，用完就删；拍之前跑 `check_space`。
+
+```
+data/prosperity-delivery/
+  ledger/YYYY-MM-DD.json   每周一份，一直保留：items.web / items.pool_text / items.health、pool_members
+  out/YYYY-MM-DD/          生成的网页与体检报告，只留最近 2 周
+```
+
+| rc | 含义 | 处理 |
+|---|---|---|
+| 0 | 周榜已发布；投递完成或本周已投递（`delivery.status` = `delivered` / `already_delivered`） | 无 |
+| 7 | 周榜已发布，投递失败（`delivery.error` 写阶段和原因，token 已脱敏） | cron 告警。20:30 那次自动补发缺的项。两次都失败：下周会照常发最新网页；进出文本以有成员记录的上一周为准；体检报告下周补发。急用时按上面两节在本地生成 |
+
+投递语义是“至少一次”：发送成功后台账写入失败，或客户端超时而服务器已收到，会重复发一份。
+
+首次投递：台账为空时 `health` 记基线（当前最新冻结日），不发体检报告；JSON 输出的 `delivery.baseline` 写这个日期。
+首次投递必须在下一次冻结之前成功。做不到时，在首次投递前手工写 `ledger/<上周六>.json`：
+`{"as_of": "<上周六>", "items": {"health": {"freeze_as_of": "<上一个冻结日>", "baseline": true, "code_version": "<当前>"}}}`。

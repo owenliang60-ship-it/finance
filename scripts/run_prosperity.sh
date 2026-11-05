@@ -24,4 +24,5 @@ fi
 exec "$PYTHON" "$PROJECT_DIR/scripts/prosperity_weekly.py" \
     --db "$PROJECT_DIR/data/prosperity.db" --market-db "$PROJECT_DIR/data/market.db" \
     --quality-dir "$PROJECT_DIR/data/quality" --backup-dir "$PROJECT_DIR/data/prosperity-backups" \
-    --pool-path "$PROJECT_DIR/data/pool/prosperity_pool.json" "$@"
+    --pool-path "$PROJECT_DIR/data/pool/prosperity_pool.json" \
+    --delivery-dir "$PROJECT_DIR/data/prosperity-delivery" "$@"

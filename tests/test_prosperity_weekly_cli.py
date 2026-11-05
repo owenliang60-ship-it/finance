@@ -78,3 +78,111 @@ def test_cli_pool_path_must_not_be_a_database(tmp_path, monkeypatch, target):
     assert cli.main(['--live', '--db', str(result), '--market-db', str(db),
                      '--pool-path', str(tmp_path / '.' / pool.name)], now=lambda: NOW) == 4
     assert db.read_bytes() == before and not result.exists()
+
+
+# --- M13 delivery wiring ----------------------------------------------------------------------
+
+def _wire(tmp_path, monkeypatch, outcome, delivered=None, raise_exc=None):
+    from scripts import prosperity_weekly as cli
+    from src.data import prosperity_delivery
+    from tests.prosperity_fixtures import seed_db
+    calls = []
+
+    def week(**kw):
+        return outcome
+
+    def deliver(**kw):
+        calls.append(kw)
+        if raise_exc:
+            raise raise_exc
+        return delivered or prosperity_delivery.DeliveryOutcome('delivered', ('web', 'pool_text'))
+    monkeypatch.setattr(cli, 'run_week', week)
+    monkeypatch.setattr(prosperity_delivery, 'deliver_week', deliver)
+    market = seed_db(tmp_path / 'market.db')
+    return cli, market, calls
+
+
+def _live(tmp_path, market, *extra):
+    return ['--live', '--db', str(tmp_path / 'r.db'), '--market-db', str(market),
+            '--pool-path', str(tmp_path / 'pool.json'), *extra]
+
+
+@pytest.mark.parametrize('publication', ['published', 'already_published'])
+def test_cli_delivers_after_a_published_live_week(tmp_path, monkeypatch, capsys, publication):
+    from src.data.prosperity_run import RunOutcome
+    cli, market, calls = _wire(tmp_path, monkeypatch, RunOutcome(0, (), detail={'publication': publication}))
+    rc = cli.main(_live(tmp_path, market, '--delivery-dir', str(tmp_path / 'delivery')), now=lambda: NOW)
+    assert rc == 0 and len(calls) == 1
+    kw = calls[0]
+    assert kw['as_of'] == '2026-10-24' and kw['pool_path'] == tmp_path / 'pool.json'
+    assert kw['delivery_dir'] == tmp_path / 'delivery' and kw['db'] == tmp_path / 'r.db'
+    from terminal.prosperity.version import code_version
+    assert kw['code_version'] == code_version()
+    import json
+    printed = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert printed['delivery']['status'] == 'delivered'
+
+
+@pytest.mark.parametrize('rc,detail', [(0, {'publication': 'publication_not_configured'}), (0, None),
+                                       (3, None), (5, {'publication': 'published'}), (6, None)])
+def test_cli_does_not_deliver_unless_published(tmp_path, monkeypatch, rc, detail):
+    from src.data.prosperity_run import RunOutcome
+    cli, market, calls = _wire(tmp_path, monkeypatch, RunOutcome(rc, (), detail=detail))
+    assert cli.main(_live(tmp_path, market, '--delivery-dir', str(tmp_path / 'd')), now=lambda: NOW) == rc
+    assert calls == []
+
+
+def test_cli_delivery_failure_and_exception_return_7(tmp_path, monkeypatch, capsys):
+    from src.data.prosperity_delivery import DeliveryOutcome
+    from src.data.prosperity_run import RunOutcome
+    ok = RunOutcome(0, (), detail={'publication': 'published'})
+    cli, market, _ = _wire(tmp_path, monkeypatch, ok, delivered=DeliveryOutcome('failed', ('web',), 'pool_text: x'))
+    assert cli.main(_live(tmp_path, market, '--delivery-dir', str(tmp_path / 'd')), now=lambda: NOW) == 7
+    assert '"status":"failed"' in capsys.readouterr().out.replace(' ', '')
+    second = tmp_path / 'second'
+    second.mkdir()
+    cli, market, _ = _wire(second, monkeypatch, ok, raise_exc=ImportError('scipy'))
+    assert cli.main(_live(second, market, '--delivery-dir', str(second / 'd')), now=lambda: NOW) == 7
+
+
+def test_cli_already_delivered_is_0(tmp_path, monkeypatch):
+    from src.data.prosperity_delivery import DeliveryOutcome
+    from src.data.prosperity_run import RunOutcome
+    cli, market, _ = _wire(tmp_path, monkeypatch, RunOutcome(0, (), detail={'publication': 'already_published'}),
+                           delivered=DeliveryOutcome('already_delivered'))
+    assert cli.main(_live(tmp_path, market, '--delivery-dir', str(tmp_path / 'd')), now=lambda: NOW) == 0
+
+
+def test_cli_without_delivery_dir_never_delivers(tmp_path, monkeypatch, capsys):
+    from src.data.prosperity_run import RunOutcome
+    cli, market, calls = _wire(tmp_path, monkeypatch, RunOutcome(0, (), detail={'publication': 'published'}))
+    assert cli.main(_live(tmp_path, market), now=lambda: NOW) == 0
+    assert calls == [] and '"delivery"' not in capsys.readouterr().out
+
+
+def test_cli_replay_modes_accept_delivery_dir_without_delivering(tmp_path, monkeypatch):
+    from src.data.prosperity_run import RunOutcome
+    from scripts import prosperity_weekly as cli
+    cli_, market, calls = _wire(tmp_path, monkeypatch, RunOutcome(0, ()))
+    monkeypatch.setattr(cli, 'rebuild_freeze_chain', lambda **kw: RunOutcome(0, ()))
+    base = ['--db', str(tmp_path / 'r.db'), '--market-db', str(market), '--delivery-dir', str(tmp_path / 'd')]
+    assert cli.main(['--as-of', '2026-10-17', *base], now=lambda: NOW) == 0
+    assert cli.main(['--rebuild-chain', *base], now=lambda: NOW) == 0
+    assert calls == []
+
+
+def test_cli_live_delivery_requires_pool_path(tmp_path, monkeypatch):
+    from src.data.prosperity_run import RunOutcome
+    cli, market, calls = _wire(tmp_path, monkeypatch, RunOutcome(0, (), detail={'publication': 'published'}))
+    assert cli.main(['--live', '--db', str(tmp_path / 'r.db'), '--market-db', str(market),
+                     '--delivery-dir', str(tmp_path / 'd')], now=lambda: NOW) == 4
+    assert calls == [] and not (tmp_path / 'r.db').exists()
+
+
+@pytest.mark.parametrize('target', ['market.db', 'r.db', 'r.db-wal', 'r.db.state'])
+def test_cli_delivery_dir_must_not_be_a_database(tmp_path, monkeypatch, target):
+    from src.data.prosperity_run import RunOutcome
+    cli, market, calls = _wire(tmp_path, monkeypatch, RunOutcome(0, (), detail={'publication': 'published'}))
+    assert cli.main(_live(tmp_path, market, '--delivery-dir', str(tmp_path / '.' / target)),
+                    now=lambda: NOW) == 4
+    assert calls == []
