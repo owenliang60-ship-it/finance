@@ -186,3 +186,14 @@ def test_cli_delivery_dir_must_not_be_a_database(tmp_path, monkeypatch, target):
     assert cli.main(_live(tmp_path, market, '--delivery-dir', str(tmp_path / '.' / target)),
                     now=lambda: NOW) == 4
     assert calls == []
+
+
+@pytest.mark.parametrize('flag', ['--db', '--market-db', '--pool-path'])
+def test_cli_inputs_must_be_outside_delivery_dir(tmp_path, monkeypatch, capsys, flag):
+    """second review P1: delivery cleanup must never reach an input; refused before the week runs."""
+    from src.data.prosperity_run import RunOutcome
+    cli, market, calls = _wire(tmp_path, monkeypatch, RunOutcome(0, (), detail={'publication': 'published'}))
+    argv = _live(tmp_path, market, '--delivery-dir', str(tmp_path / 'd'))
+    argv[argv.index(flag) + 1] = str(tmp_path / 'd' / 'tmp' / 'input')
+    assert cli.main(argv, now=lambda: NOW) == 4
+    assert calls == [] and 'inputs_must_be_outside_delivery_dir' in capsys.readouterr().err

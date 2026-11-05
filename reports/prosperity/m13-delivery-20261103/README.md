@@ -22,6 +22,7 @@ Plan：`docs/plans/2026-11-03-prosperity-m13-delivery.md`。分支 `prosperity/m
 | A6 | 进出文本（池可用） | 时钟设为池文件生成之后（11-01 05:00Z）：`入池 36 只 / 对比 2026-10-24 / 新进（34）… / 移出（1）: GONE\_X`；台账写入 36 个 `pool_members`。证据 `pool-text.json` |
 | A6 | 进出文本（池不可用） | 时钟设为 10-31 09:00Z（早于池文件生成）：池文件校验报 `prosperity_pool_invalid`，文本只写原因，不比较，台账不写 `pool_members`。审查前 caption 写成"入池 0"（code review #2），已改为"入池 未知" |
 | A6 | 审查修复后重跑 | 时钟 11-01 05:00Z：池文件通过新鲜度校验与原榜绑定（`pool_binding`），三项都发出；caption `入池 36`；台账 36 个 `pool_members`、health `sent_at` 冻结 2026-08-29；耗时 320.4 秒；两库 SHA256 不变；重跑 `already_delivered`。证据 `sent.json`（当前版本） |
+| A6 | 第二轮审查修复后重跑（11-05） | 时钟 11-01 05:00Z：三项都发出，caption `入池 36`；台账三项都记 `code_version` `13e5f9d5183f1b8e`；耗时 339.7 秒，峰值内存 2.52 GB；两库 SHA256 不变；`tmp/` 已删除；重跑 `already_delivered`。证据 `sent.json`（当前版本） |
 | A7 | 全量测试 | 审查修复后 12 failed / 4386 passed / 4 skipped，失败名单与基线 `817007dd` 完全相同，新增失败 0 |
 
 `out/` 里两个 HTML 是验收产物（约 10 MB，gitignore，可重新生成）。

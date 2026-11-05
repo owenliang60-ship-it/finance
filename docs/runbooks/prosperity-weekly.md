@@ -207,6 +207,9 @@ replay 模式（`--as-of`、`--rebuild-chain`）也接受这个参数，但不�
 3. F1 体检报告 `prosperity-health-F1-<冻结日>.html`：库里 F1 最新季末冻结榜晚于上次发送（或基线）的冻结日时才发，
    包括回放出来的较早冻结和连续失败后的补发。`code_version` 变了就把最新冻结当新的发一次。
 
+台账每一项记 `code_version`。同一周升级引擎、新版榜单发布后，三项按新版本重发一次。
+`--db`、`--market-db`、`--pool-path` 不能放在投递目录里（结束时会删 `tmp/` 和旧的 `out/`），否则 rc 4。
+
 投递只读：先给 `prosperity.db`（发体检报告时加 `market.db`）拍 `.backup` 快照，再用子进程调用 M11/M12 两个 CLI。
 快照放 `data/prosperity-delivery/tmp/`，用完就删；拍之前跑 `check_space`。
 

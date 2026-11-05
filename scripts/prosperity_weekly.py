@@ -67,6 +67,9 @@ def parse_args(argv, now):
         databases = {args.db.resolve(), args.market_db.resolve()}
         if target in databases or any(target == Path(str(d) + s) for d in databases for s in ('-wal', '-shm', '.state')):
             raise ValueError('delivery_dir_must_differ_from_databases')
+        inputs = [args.db, args.market_db] + ([args.pool_path] if args.pool_path is not None else [])
+        if any(target == p.resolve() or target in p.resolve().parents for p in inputs):  # tmp/, old out/ get deleted
+            raise ValueError('inputs_must_be_outside_delivery_dir')
         if args.live and args.pool_path is None:
             raise ValueError('--delivery-dir with --live requires --pool-path')
     if args.through and not args.rebuild_chain:

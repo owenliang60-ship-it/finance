@@ -15,7 +15,7 @@
   "error": "",
   "baseline": null
  },
- "elapsed_seconds": 320.4,
+ "elapsed_seconds": 339.7,
  "inputs_unchanged": true,
  "db_sha256": "ca0aa05a7cfccf753799137d3bbe1df3d44004fe8f51e794533faf586ca09ef6",
  "market_sha256": "97db51f9b25a22c9d7fa29ed34b6cb9469b33aed7b1915730520e4f201fcff11",
@@ -29,10 +29,12 @@
     "sent_at": "2026-11-01T05:00:00Z"
    },
    "pool_text": {
+    "code_version": "13e5f9d5183f1b8e",
     "sent_at": "2026-11-01T05:00:00Z"
    },
    "web": {
     "bytes": 10249963,
+    "code_version": "13e5f9d5183f1b8e",
     "sent_at": "2026-11-01T05:00:00Z"
    }
   },

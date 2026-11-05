@@ -176,8 +176,8 @@ class FakeSend:
         return ok
 
 
-def deliver(env, run, send, as_of=WEEK, now=NOW):
-    return d.deliver_week(as_of=as_of, code_version=VERSION, db=env['db'], market_db=env['market'],
+def deliver(env, run, send, as_of=WEEK, now=NOW, version=VERSION):
+    return d.deliver_week(as_of=as_of, code_version=version, db=env['db'], market_db=env['market'],
                           pool_path=env['pool'], delivery_dir=env['dir'], now=lambda: now,
                           send_document=send.document, send_message=send.message, run=run)
 
@@ -425,3 +425,51 @@ def test_foreign_delivery_dir_is_refused_untouched(env):
     out = deliver(env, run, FakeSend())
     assert out.status == 'failed' and 'delivery_dir_not_owned' in out.error and not run.calls
     assert (env['dir'] / 'tmp' / 'keep.txt').exists()
+
+
+# --- second review (2026-11-05) ---------------------------------------------------------------
+
+@pytest.mark.parametrize('which,where', [('db', 'tmp'), ('market', 'tmp'), ('pool', 'out/2026-09-19'),
+                                          ('db', 'alias')])
+def test_inputs_inside_delivery_dir_are_refused_untouched(env, which, where):
+    """review P1: cleanup of tmp/ and old out/ weeks must never be able to reach an input file."""
+    folder = env['dir'] / ('tmp' if where == 'alias' else where)
+    folder.mkdir(parents=True)
+    # not the snapshot names: a regression must fail, not deadlock backing a file up onto itself
+    names = {'db': 'input-prosperity.db', 'market': 'input-market.db', 'pool': 'input-pool.json'}
+    target = folder / names[which]
+    if which == 'pool':
+        target.write_bytes(env['pool'].read_bytes())
+    else:
+        d.snapshot(env['db'], target) if which == 'db' else target.write_bytes(b'')
+    if where == 'alias':                                                   # symlinked path into tmp/
+        alias = env['dir'].parent / 'alias'
+        alias.symlink_to(folder, target_is_directory=True)
+        env[which] = alias / names[which]
+    else:
+        env[which] = target
+    run, send = FakeRun(), FakeSend()
+    out = deliver(env, run, send)
+    assert out.status == 'failed' and 'input_inside_delivery_dir' in out.error
+    assert target.is_file() and not run.calls and not send.docs and not send.msgs
+
+
+def test_same_week_engine_upgrade_delivers_the_new_board(env):
+    """review P2: a week delivered under one code_version is not 'already delivered' for another."""
+    seed_previous(env)
+    assert deliver(env, FakeRun(), FakeSend()).status == 'delivered'
+    with ProsperityStore(env['db'], read_only=False) as s:
+        s.save_batch(storage_batch(as_of=WEEK, count=20, freeze=True, quarter_label='2026Q3',
+                                   code_version='test-v2'))
+        stored = s.get_board(next(k for k in s.list_boards(scheme_hash=F1, code_version='test-v2',
+                                                            board_type='weekly') if k.as_of == WEEK))
+    publish_prosperity_pool(build_pool(stored, _liquidity(stored), generated_at=WEEK + 'T09:20:00Z'),
+                            env['pool'], now=NOW)
+    run, send = FakeRun(), FakeSend()
+    out = deliver(env, run, send, version='test-v2')
+    assert out.status == 'delivered' and out.sent == ('web', 'pool_text', 'health')
+    assert run.calls[0][0][run.calls[0][0].index('--code-version') + 1] == 'test-v2'
+    assert send.docs[0][1].endswith(f'入池 {len(env["members"])}')
+    items = d.read_ledger(env['dir'], WEEK)['items']
+    assert {items[k]['code_version'] for k in ('web', 'pool_text', 'health')} == {'test-v2'}
+    assert deliver(env, FakeRun(), FakeSend(), version='test-v2').status == 'already_delivered'

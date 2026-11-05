@@ -342,3 +342,12 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path,
 | 6 | 快照保留 WAL 头，只读打开会生成 -wal/-shm | 复用 `prosperity_backup._quick_check` 切 DELETE 模式 |
 | 7 | 两处重复判断与两次目录扫描 | `_health_done`、`_ledgers_before` |
 | 8 | `--delivery-dir` 指向共享目录时会删别人的 `tmp/`、`out/` | 所有权标记 `.prosperity-delivery`；无标记时只接受 `ledger/out/tmp` 布局 |
+
+## 15. 第二轮审查（2026-11-05，提交 8ca3d740 之后）
+
+两条都复现成立，都已修复（先写失败测试）。
+
+| # | 问题 | 修复 |
+|---|---|---|
+| P1 | 输入库可以放在 `<delivery-dir>/tmp/`；投递结束删 `tmp/` 时连源库一起删 | 投递前用解析后的路径检查 `db`、`market_db`、`pool_path`，落在投递目录内（含符号链接别名）→ `input_inside_delivery_dir`，不拍快照、不发送、不清理。CLI 解析阶段同样检查，rc 4 |
+| P2 | 同周升级引擎后，防重只看本周台账，新版网页和体检报告不发 | 台账每一项记 `code_version`；某项只在版本等于本次时算已发。同周换版本后三项都重发，再跑一次 `already_delivered` |

@@ -168,9 +168,30 @@ class DeliveryOutcome:
     baseline: Optional[str] = None    # freeze as_of recorded as the health baseline this run, if any
 
 
-def _complete(ledger: dict) -> bool:
-    items = ledger['items']
-    return 'web' in items and 'pool_text' in items and _health_done(items.get('health'))
+def _sent(items: dict, key: str, code_version: str) -> bool:
+    """An item counts only for the board version it was sent for (second review P2): a same-week
+    engine upgrade publishes a new board, so every item is due again under the new code_version."""
+    item = items.get(key)
+    if not isinstance(item, dict) or item.get('code_version') != code_version:
+        return False
+    return _health_done(item) if key == 'health' else True
+
+
+def _complete(ledger: dict, code_version: str) -> bool:
+    return all(_sent(ledger['items'], key, code_version) for key in ('web', 'pool_text', 'health'))
+
+
+def _inputs_outside(delivery_dir: Path, **inputs: Path) -> None:
+    """Refuse an input that resolves inside delivery_dir (second review P1).
+
+    tmp/ is removed and old out/ weeks are pruned after every run, and a snapshot onto its own
+    source blocks; checked on resolved paths so a symlinked alias counts too.
+    """
+    root = delivery_dir.resolve()
+    for name, path in inputs.items():
+        resolved = Path(path).resolve()
+        if resolved == root or root in resolved.parents:
+            raise ValueError(f'input_inside_delivery_dir: {name}')
 
 
 def snapshot(src: Path, dst: Path) -> Path:
@@ -275,12 +296,13 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
         errors.append(telegram_bot._sanitize_error_text(f'{stage}: {type(exc).__name__}: {exc}'))
 
     try:
+        _inputs_outside(delivery_dir, db=db, market_db=market_db, pool_path=pool_path)
         _claim(delivery_dir)
         ledger = read_ledger(delivery_dir, as_of)
     except Exception as exc:
         fail('setup', exc)
         return DeliveryOutcome('failed', (), '; '.join(errors))
-    if _complete(ledger):
+    if _complete(ledger, code_version):
         return DeliveryOutcome('already_delivered')
     items = ledger['items']
     tmp = delivery_dir / 'tmp'
@@ -297,7 +319,7 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
             fail('snapshot', exc)
             return DeliveryOutcome('failed', (), '; '.join(errors))
 
-        if 'web' not in items:
+        if not _sent(items, 'web', code_version):
             try:
                 page = out / f'prosperity-web-{as_of.replace("-", "")}.html'
                 _run_cli(run, 'prosperity_web.py', ['--db', snap, '--pool', pool_path, '--code-version',
@@ -312,13 +334,13 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
                 if not send_document(str(page), caption=caption, channel='private',
                                      timeout=UPLOAD_TIMEOUT_SECONDS):
                     raise RuntimeError('send_document returned False')
-                items['web'] = {'sent_at': _stamp(now), 'bytes': size}
+                items['web'] = {'sent_at': _stamp(now), 'bytes': size, 'code_version': code_version}
                 write_ledger(delivery_dir, ledger)
                 sent.append('web')
             except Exception as exc:
                 fail('web', exc)
 
-        if 'pool_text' not in items:
+        if not _sent(items, 'pool_text', code_version):
             try:
                 if members is not None:
                     previous = previous_ledger(delivery_dir, as_of)
@@ -330,7 +352,7 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
                                      reason=pool_reason)
                 if not send_message(text, channel='private'):
                     raise RuntimeError('send_message returned False')
-                items['pool_text'] = {'sent_at': _stamp(now)}
+                items['pool_text'] = {'sent_at': _stamp(now), 'code_version': code_version}
                 if members is not None:
                     ledger['pool_members'] = members
                 write_ledger(delivery_dir, ledger)
@@ -338,7 +360,7 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
             except Exception as exc:
                 fail('pool_text', exc)
 
-        if not _health_done(items.get('health')):
+        if not _sent(items, 'health', code_version):
             try:
                 last = last_health_freeze(delivery_dir, as_of, code_version)
                 record = {'freeze_as_of': latest_freeze, 'code_version': code_version}
