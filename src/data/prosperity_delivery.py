@@ -231,7 +231,7 @@ def _trusted_pool(pool: dict, stored, as_of: str) -> Tuple[Optional[List[str]], 
     if pool.get('as_of') != as_of:
         return None, 'pool_as_of_mismatch'
     _, note = pool_binding(pool, stored)
-    if note.startswith('未标入池'):
+    if not note.startswith('入池'):                 # positive check: an unknown note is never trusted
         return None, 'pool_board_mismatch'
     return sorted(m['symbol'] for m in pool['members']), None
 

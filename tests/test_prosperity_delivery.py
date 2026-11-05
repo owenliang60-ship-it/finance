@@ -473,3 +473,13 @@ def test_same_week_engine_upgrade_delivers_the_new_board(env):
     items = d.read_ledger(env['dir'], WEEK)['items']
     assert {items[k]['code_version'] for k in ('web', 'pool_text', 'health')} == {'test-v2'}
     assert deliver(env, FakeRun(), FakeSend(), version='test-v2').status == 'already_delivered'
+
+
+def test_unknown_binding_note_is_not_trusted(env, monkeypatch):
+    """M14 review: only a note starting with 入池 counts as bound; a new failure wording fails closed."""
+    monkeypatch.setattr(d, 'pool_binding', lambda pool, stored: ({}, 'some new wording'))
+    seed_previous(env, members=['A'])
+    send = FakeSend()
+    assert deliver(env, FakeRun(), send).status == 'delivered'
+    assert 'pool\\_board\\_mismatch' in send.msgs[0] and send.docs[0][1].endswith('入池 未知')
+    assert 'pool_members' not in d.read_ledger(env['dir'], WEEK)

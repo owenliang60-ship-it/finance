@@ -1,0 +1,15 @@
+*0d. 景气池（试运行）*
+景气池 36 只（截至 2026-10-31，第一档 ∩ STRICT/FULL ∩ 成交额前 100） | EMA30 36/36 | 收盘价 > EMA30 | 命中 9 只
+标的 | 排名 | 评级 | 分数 | 成交额排名 | 收盘 | EMA30 | 当前市值 | Premium
+V | 145 | FULL | 56.2 | 34 | 425.51 | 393.84 | $768.9B | 
+XOM | 19 | STRICT | 78.6 | 44 | 179.67 | 174.27 | $750.8B | 
+CVX | 8 | STRICT | 85.1 | 56 | 227.77 | 220.30 | $449.6B | 
+COST | 159 | FULL | 54.9 | 38 | 1040.55 | 973.25 | $440.5B | 
+TXN | 47 | STRICT | 66.6 | 54 | 302.02 | 287.82 | $282.3B | 是
+WFC | 112 | FULL | 58.9 | 83 | 85.89 | 83.39 | $249.3B | 
+AMGN | 154 | FULL | 55.5 | 88 | 465.45 | 431.96 | $241.9B | 
+ADI | 101 | FULL | 59.6 | 72 | 412.85 | 403.29 | $207.4B | 
+MDT | 61 | FULL | 63.9 | 36 | 99.29 | 93.13 | $120.2B | 
+与 Premium：交集 14｜新增 22｜移出 33
+新增: AAPL, ADI, AMAT, AMGN, APP, ARM, COST, CVX, GLW, KLAC, MDT, MRVL, NFLX, NU, NVDA 等 22 只
+移出: AFRM, ASX, BE, CLS, CVNA, CX, DELL, ENTG, GNRC, ING, IVZ, JBL, JHX, MCHP, MDB 等 33 只

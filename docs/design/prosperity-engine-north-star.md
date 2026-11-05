@@ -232,7 +232,7 @@ Python 冻结 dataclass（因子与权重、变换方式、闸门、行业豁免
 
 | 阶段 | 做什么 | 退出条件 |
 |---|---|---|
-| **并行期** | Premium 照旧驱动 🔴 和 EMA30 段；新增一段"景气池（试运行）"：景气池成员跑同一个 EMA30 门，并列出与 Premium 的交集、新增、移出 | 首份体检报告出来、Boss 看过 |
+| **并行期** | Premium 照旧驱动 🔴 和 EMA30 段；新增一段"景气池（试运行）"：景气池成员跑同一个 EMA30 门，并列出与 Premium 的交集、新增、移出（M14 已实现，2026-11-05，分支 `prosperity/m14-morning`，未 merge） | 首份体检报告出来、Boss 看过 |
 | **切换** | 新增配置 `SELECTION_POOL_SOURCE = premium / prosperity`，加一个统一的 `load_selection_pool()`，两种池返回同样的结构；晨报文案里的池名改为取自池文件，不再写死"精选Premium池"。Boss 拍板后改配置 | 切换后连续 4 周正常 |
 | **Premium 退役** | 停 Premium 的周更构建；代码归档，不删；`premium_pool.json` 冻结留档 | Boss 确认 |
 
@@ -290,7 +290,7 @@ flowchart LR
 | 12 | M11 网页 | 9 | 核心 | ❌ 最小版（MVP 验收项）；✅ 本地生成器已完成 2026-11-03；完整版 ✅ 可延后 | 纯静态 HTML；本地 `scripts/prosperity_web.py`，云端生成与投递并入 M13；证据 `reports/prosperity/m11-web-20261102/` |
 | 13 | M12 体检报告 | 9, 10 | 核心 | ❌（MVP 验收项）；✅ 本地生成器已完成 2026-11-01 | 固定格式 HTML；本地 `scripts/prosperity_health.py`，云端生成与投递并入 M13；证据 `reports/prosperity/m12-health/` |
 | 14 | M13 Telegram 投递 | 12, 13 | 外围 | ❌ 网页投递（MVP，"网页可访问"靠它）；体检报告投递 ✅；🟡 代码完成 2026-11-03（分支 `prosperity/m13-delivery`），待 merge 与云端验收 | 周更后发送网页与精选池进出，冻结后附 F1 体检报告；台账防重、rc 7 告警、20:30 补发；证据 `reports/prosperity/m13-delivery-20261103/` |
-| 15 | M14 晨报并行接入 | 11 | 核心 | ✅ 可延后 | "景气池（试运行）"段 |
+| 15 | M14 晨报并行接入 | 11 | 核心 | ✅ 可延后；🟡 代码完成 2026-11-05（分支 `prosperity/m14-morning`），待 merge | "景气池（试运行）"段：池文件按原榜绑定（正向判断）→ 同一个 `scan_selection_compass` → 文本/HTML/图片三处 0d；计算与显示各自兜底，失败只让本段显示原因；证据 `reports/prosperity/m14-morning-20261105/` |
 | 16 | M15 晨报切换与 Premium 退役 | 13, 15 | 外围 | ✅ | S4，Boss 看完首份体检报告后 |
 
 ## 建设路径
@@ -314,7 +314,7 @@ flowchart LR
 | 因子与打分 | M5/M6/M7已完成 | 方案注册表、因子与打分内核、只读验收CLI已在main（e57f1c19，未接cron）；M7 S1 对拍达标：2021 年后 23 期原站口径 96.0%（6220/6478），原因不明 0，独立抽检 10/10（`reports/prosperity/m7-s1-20260930/`）；已验收快照 live 与 2024-08-17 回放通过，Codex独立验收通过（`reports/prosperity/m6-acceptance-20260930/`、`m6-codex-acceptance-20260930/`）；2026-09-30 按 Boss 拍板改内核：revision 按 4 季折算、预期亏损不进 PE 分位、EPS 按财报财季日期配对（分支 `prosperity/kernel-decisions`，`code_version` 随之变化） |
 | 调度 | M8/M9 已部署 | M9 本地验收通过（f2ff1ee9）；2026-10-25/26 云端冻结链重建（code_version 13e5f9d5，21/21 冻结日一致）；2026-10-26 装周六 16:30/20:30 cron；2026-10-31 首个自然周六 4 张 live 周榜落库（A10） |
 | 输出 | 部分完成 | M10精选池已实现（2026-11-01；2026-11-02 改为第一档 ∩ STRICT/FULL ∩ 成交额前 100，10-31 池 36 只；live 周更发布挂点；main 1d35d702 已 push，云端 11-03 起自动拉取，11-07 首发）；M12体检报告本地生成器已实现（2026-11-01，四方案八章 HTML，F1 独立重算 731 值差异 0）；M11最小网页本地生成器已实现（2026-11-03，88 张榜纯静态 HTML 10.25 MB，独立核对 72,580 行差异 0，CC 与 Codex 审查已修）；M13 投递代码完成（2026-11-03，分支 `prosperity/m13-delivery`，本地真实快照验收通过），待 merge 与云端上传实测 |
-| 晨报过渡 | 未开始 | Premium继续运行；M14并行与M15切换退役未执行 |
+| 晨报过渡 | 部分完成 | Premium继续运行；M14并行段代码完成（2026-11-05，分支，10-31 池真实快照验收：36 只、EMA30 命中 9 只、与 Premium 交集 14），待 merge；M15切换退役未执行 |
 
 ## 关键架构决策
 

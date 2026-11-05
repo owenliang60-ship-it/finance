@@ -503,6 +503,53 @@ def _compute_signal_betas(
     return betas
 
 
+def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str, scan) -> dict:
+    """M14 trial section: the prosperity pool through the same EMA30 gate as Premium.
+
+    Never raises: any failure becomes an unavailable payload, so the morning report and the
+    Premium path are unaffected. Builds its own price dict; Premium's is left untouched.
+    """
+    try:
+        from scripts.broad_market_scan import load_price_frames_from_market_db
+        from src.data import prosperity_morning
+        from src.data.market_store import get_store
+
+        pool = prosperity_morning.load_bound_prosperity_pool()
+        summary = {
+            "available": bool(pool.get("available")),
+            "reason": pool.get("reason"),
+            "as_of": pool.get("as_of"),
+            "generated_at": pool.get("generated_at"),
+            "member_count": len(pool.get("members") or []) if pool.get("available") else 0,
+        }
+        comparison = prosperity_morning.pool_comparison(pool, premium_pool)
+        if not pool.get("available"):
+            # Keep the loader's diagnostics in the saved JSON (runbook: binding_note / error).
+            extra = {key: pool[key] for key in ("binding_note", "error") if key in pool}
+            logger.warning("prosperity pool unavailable: %s %s", pool.get("reason"), extra)
+            return {"available": False, "reason": pool.get("reason") or "prosperity_pool_invalid",
+                    "coverage": {}, "hits": [], "comparison": comparison, "pool": summary, **extra}
+        symbols = sorted({m.get("symbol") for m in pool.get("members") or [] if m.get("symbol")})
+        frames = {s: price_frames[s] for s in symbols if s in price_frames}
+        missing = [s for s in symbols if s not in frames]
+        if missing:
+            try:
+                frames.update(load_price_frames_from_market_db(
+                    missing, rows_needed=SELECTION_COMPASS_PRICE_ROWS))
+            except Exception as exc:
+                logger.warning("prosperity compass DB price supplement failed: %s", exc)
+        compass = scan(
+            premium_pool=pool, as_of=as_of, price_frames=frames,
+            market_cap_observations=_load_selection_compass_market_cap_observations(
+                get_store(), symbols, as_of),
+        )
+        return {**compass, "comparison": comparison, "pool": summary}
+    except Exception as exc:
+        logger.warning("prosperity compass unavailable: %s", exc)
+        return {"available": False, "reason": "prosperity_compass_error",
+                "error": type(exc).__name__, "coverage": {}, "hits": []}
+
+
 def _load_selection_compass_market_cap_observations(
     store,
     symbols: list[str],
@@ -1470,6 +1517,10 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
                 "hits": [],
             }
 
+    prosperity_compass = _build_prosperity_compass(
+        premium_pool, price_frames, as_of, scan_selection_compass,
+    )
+
     try:
         volconc_frames = _load_volume_concentration_frames()
         if volconc_frames.get("available"):
@@ -1490,6 +1541,7 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         "market_timing_factor": build_market_timing_factor_report(),
         "volume_concentration": volconc,
         "selection_compass": selection_compass,
+        "prosperity_compass": prosperity_compass,
         "premium_pool": {
             "available": premium_pool.get("available", False),
             "reason": premium_pool.get("reason"),
@@ -1837,6 +1889,121 @@ def format_section_selection_compass(payload: dict | None) -> str:
         return "\n".join(lines)
     lines.extend([display["subtitle"], " | ".join(display["columns"])])
     lines.extend(" | ".join(row) for row in display["rows"])
+    return "\n".join(lines)
+
+
+# --- M14: 0d. 景气池（试运行） ------------------------------------------------------------------
+
+PROSPERITY_COMPASS_TITLE = "0d. 景气池（试运行）"
+PROSPERITY_COMPARISON_TITLE = "0d. 与 Premium 对比"
+PROSPERITY_COMPASS_COLUMNS = ["标的", "排名", "评级", "分数", "成交额排名", "收盘", "EMA30", "当前市值", "Premium"]
+PROSPERITY_COMPASS_WIDTHS = [180, 110, 150, 120, 170, 210, 160, 170, 130]
+PROSPERITY_COMPARISON_COLUMNS = ["类别", "代码"]
+PROSPERITY_COMPARISON_WIDTHS = [160, 2088]
+PROSPERITY_COMPARISON_LIMIT = 15
+PROSPERITY_COMPASS_REASON_LABELS = {
+    "prosperity_pool_missing": "景气池尚未生成",
+    "prosperity_pool_stale": "景气池已过期",
+    "prosperity_pool_criteria_mismatch": "景气池条件版本不匹配",
+    "prosperity_pool_invalid": "景气池数据异常",
+    "prosperity_pool_board_mismatch": "与原榜不符",
+    "prosperity_board_missing": "库中没有对应周榜",
+    "prosperity_db_unavailable": "景气库不可读",
+    "premium_pool_invalid": "景气池数据异常",       # scan_selection_compass on a duplicated symbol
+    "ema30_coverage_below_threshold": "EMA30 价格覆盖不足",
+    "market_cap_unavailable": "当前市值数据不足",
+    "prosperity_compass_error": "计算异常",
+    "display_error": "显示异常",
+}
+
+
+def _prosperity_warning(reason: str | None) -> dict:
+    return {
+        "state": "warning",
+        "warning": "⚠️ 景气池（试运行）不可用（{}）".format(
+            PROSPERITY_COMPASS_REASON_LABELS.get(reason, "暂时无法生成")),
+    }
+
+
+def _prosperity_symbol_list(symbols: list) -> str:
+    shown = ", ".join(symbols[:PROSPERITY_COMPARISON_LIMIT])
+    return shown + (" 等 {} 只".format(len(symbols)) if len(symbols) > PROSPERITY_COMPARISON_LIMIT else "")
+
+
+def _prosperity_comparison(comparison: dict) -> tuple:
+    """(summary line, [[类别, 代码串], …]) for the Premium comparison."""
+    if comparison.get("status") != "ok":
+        return "与 Premium：Premium 不可用，不比较", []
+    new, gone = comparison.get("prosperity_only") or [], comparison.get("premium_only") or []
+    summary = "与 Premium：交集 {}｜新增 {}｜移出 {}".format(len(comparison.get("both") or []), len(new), len(gone))
+    return summary, [[label, _prosperity_symbol_list(symbols)]
+                     for label, symbols in (("新增", new), ("移出", gone)) if symbols]
+
+
+def _prosperity_compass_display(payload: dict | None) -> dict:
+    """Shared display contract for text, HTML and visual faces of section 0d.
+
+    No "_" anywhere: the text report goes out with Telegram legacy Markdown (issue 016).
+    """
+    if payload is None:
+        return {"state": "hidden"}
+    pool = payload.get("pool") or {}
+    comparison = payload.get("comparison") or {}
+    if not payload.get("available"):
+        display = _prosperity_warning(payload.get("reason"))
+        if pool.get("available"):          # the pool is valid; only the EMA30/market-cap gate failed
+            display["comparison_summary"], display["comparison"] = _prosperity_comparison(comparison)
+        return display
+    from src.data.prosperity_pool import LIQUIDITY_TOP, POOL_GRADES
+    from src.data.prosperity_web import _score
+
+    count = pool.get("member_count", 0)
+    ema30 = (payload.get("coverage") or {}).get("ema30_ready") or {}
+    hits = sorted(payload.get("hits") or [],
+                  key=lambda hit: (-(hit.get("marketCap") or 0), hit.get("symbol", "")))
+    as_of = pool.get("as_of")
+    head = ("景气池 0 只（合格为零，截至 {}）".format(as_of) if count == 0
+            else "景气池 {} 只（截至 {}，第一档 ∩ {} ∩ 成交额前 {}）".format(
+                count, as_of, "/".join(POOL_GRADES), LIQUIDITY_TOP))
+    subtitle = "{} | EMA30 {}/{} | 收盘价 > EMA30 | 命中 {} 只".format(
+        head, ema30.get("covered", 0), ema30.get("total", 0), len(hits))
+
+    premium = set(comparison.get("both") or []) if comparison.get("status") == "ok" else set()
+    rows = [[
+        str(hit["symbol"]), str(hit["rank"]), str(hit["grade"]), _score(hit.get("score")),
+        str(hit.get("dollar_volume_rank") or "—"),
+        "{:.2f}".format(hit["close"]), "{:.2f}".format(hit["ema30"]),
+        _format_market_cap(hit.get("marketCap")), "是" if hit["symbol"] in premium else "",   # CJK glyph: "✓" is missing in some report fonts
+    ] for hit in hits]
+    summary, detail = _prosperity_comparison(comparison)
+    return {"state": "table", "subtitle": subtitle, "columns": PROSPERITY_COMPASS_COLUMNS, "rows": rows,
+            "comparison_summary": summary, "comparison": detail}
+
+
+def _safe_prosperity_display(payload: dict | None) -> dict:
+    """A display failure must never take the morning report down (plan §11 #1)."""
+    try:
+        return _prosperity_compass_display(payload)
+    except Exception as exc:
+        logger.warning("prosperity compass display failed: %s", exc)
+        return _prosperity_warning("display_error")
+
+
+def format_section_prosperity_compass(payload: dict | None) -> str:
+    display = _safe_prosperity_display(payload)
+    if display["state"] == "hidden":
+        return ""
+    lines = ["*{}*".format(PROSPERITY_COMPASS_TITLE)]
+    if display["state"] == "warning":
+        lines.append(display["warning"])
+    else:
+        lines.append(display["subtitle"])
+        if display["rows"]:
+            lines.append(" | ".join(display["columns"]))
+            lines.extend(" | ".join(row) for row in display["rows"])
+    if "comparison_summary" in display:
+        lines.append(display["comparison_summary"])
+        lines.extend("{}: {}".format(label, codes) for label, codes in display["comparison"])
     return "\n".join(lines)
 
 
@@ -2286,6 +2453,24 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
             ),
         })
 
+    prosperity_display = _safe_prosperity_display((market_signals or {}).get("prosperity_compass"))
+    if prosperity_display["state"] == "table":
+        blocks.append({
+            "heading": PROSPERITY_COMPASS_TITLE,
+            "subtitle": prosperity_display["subtitle"],
+            "columns": prosperity_display["columns"],
+            "rows": [dict(zip(prosperity_display["columns"], row)) for row in prosperity_display["rows"]],
+        })
+    elif prosperity_display["state"] == "warning":
+        blocks.append({"heading": PROSPERITY_COMPASS_TITLE, "subtitle": prosperity_display["warning"]})
+    if "comparison_summary" in prosperity_display:
+        blocks.append({
+            "heading": PROSPERITY_COMPARISON_TITLE,
+            "subtitle": prosperity_display["comparison_summary"],
+            "columns": PROSPERITY_COMPARISON_COLUMNS,
+            "rows": [dict(zip(PROSPERITY_COMPARISON_COLUMNS, row)) for row in prosperity_display["comparison"]],
+        })
+
     blocks.append({"heading": "1. PMARP 信号"})
 
     # PMARP — signal -> cap-tier sub-blocks (columns one-to-one with text)
@@ -2494,6 +2679,25 @@ def build_morning_visual_sections(
                     compass_display["warning"], compass_display["subtitle"]
                 ),
                 "blocks": [],
+            })
+        prosperity_display = _safe_prosperity_display(market_signals.get("prosperity_compass"))
+        if prosperity_display["state"] != "hidden":
+            table = prosperity_display["state"] == "table"
+            prosperity_blocks = [
+                {"title": "当前命中（按市值降序）", "columns": prosperity_display["columns"],
+                 "widths": PROSPERITY_COMPASS_WIDTHS, "grouped": False,
+                 "rows": [{"cells": row} for row in prosperity_display["rows"]]},
+            ] if table else []
+            if "comparison_summary" in prosperity_display:
+                prosperity_blocks.append(
+                    {"title": prosperity_display["comparison_summary"], "columns": PROSPERITY_COMPARISON_COLUMNS,
+                     "widths": PROSPERITY_COMPARISON_WIDTHS, "grouped": False,
+                     "rows": [{"cells": row} for row in prosperity_display["comparison"]]})
+            sections.append({
+                "slug": "00d_prosperity_pool",
+                "title": PROSPERITY_COMPASS_TITLE,
+                "subtitle": prosperity_display["subtitle" if table else "warning"],
+                "blocks": prosperity_blocks,
             })
         pmarp = market_signals.get("pmarp", {})
         _pmarp_cols = ["标的", "概念", "信号", "当前", "变化", "市值", "β6M"]
@@ -3147,6 +3351,13 @@ def format_morning_report(
         )
         if compass_text:
             lines.append(compass_text)
+            lines.append("")
+
+        prosperity_text = format_section_prosperity_compass(
+            market_signals.get("prosperity_compass")
+        )
+        if prosperity_text:
+            lines.append(prosperity_text)
             lines.append("")
 
         lines.append(format_section_pmarp_by_signal_and_cap(market_signals))

@@ -1,0 +1,38 @@
+{
+ "pool_members": 36,
+ "as_of_prices": "2026-11-02",
+ "compass_available": true,
+ "compass_reason": null,
+ "ema30_ready": {
+  "covered": 36,
+  "total": 36,
+  "ratio": 1.0
+ },
+ "hits": [
+  "V",
+  "XOM",
+  "CVX",
+  "COST",
+  "TXN",
+  "WFC",
+  "AMGN",
+  "ADI",
+  "MDT"
+ ],
+ "comparison_counts": {
+  "both": 14,
+  "prosperity_only": 22,
+  "premium_only": 33
+ },
+ "independent_counts": {
+  "both": 14,
+  "prosperity_only": 22,
+  "premium_only": 33
+ },
+ "counts_match": true,
+ "premium_members": 47,
+ "premium_as_of": "2026-10-30",
+ "inputs_unchanged": true,
+ "db_sha256_16": "ca0aa05a7cfccf75",
+ "market_sha256_16": "97db51f9b25a22c9"
+}
