@@ -41,6 +41,15 @@ def isolate_s2_membership_io(monkeypatch):
     monkeypatch.setattr(mr, "_load_market_breadth_universes", lambda as_of: {})
 
 
+@pytest.fixture(autouse=True)
+def isolate_prosperity_pool_io(monkeypatch):
+    # M14: never read the real data/pool/prosperity_pool.json; reader is tested in test_prosperity_morning.py.
+    monkeypatch.setattr(
+        "src.data.prosperity_morning.load_bound_prosperity_pool",
+        lambda *a, **kw: {"available": False, "reason": "prosperity_pool_missing", "members": []},
+    )
+
+
 def _make_pmarp_hit(symbol="NVDA", signal="bullish_breakout", value=98.5,
                     market_cap=3e12, secondary_concept_id=None):
     return {"symbol": symbol, "signal": signal, "value": value, "previous": value - 1.0,
@@ -3536,6 +3545,104 @@ class TestSelectionCompassWiring:
 # Selection compass Task 3 — text / HTML / visual rendering
 # Plan: docs/plans/2026-09-04-selection-compass-morning-report.md
 # ============================================================
+
+
+
+def _prosperity_trial_pool(symbols):
+    return {
+        "available": True, "reason": None, "name": "景气精选池", "as_of": "2026-08-29",
+        "generated_at": "2026-08-29T08:50:00Z",
+        "coverage": {"tier_cut": 10, "eligible": 8, "selected": len(symbols)},
+        "members": [
+            {"symbol": s, "rank": i + 1, "grade": "STRICT", "score": 80.0 - i,
+             "dollar_volume_rank": 5 + i}
+            for i, s in enumerate(symbols)
+        ],
+    }
+
+
+class TestProsperityCompassWiring:
+    """M14 T2: the trial section runs the same EMA30 gate without touching the Premium path."""
+
+    def _build(self, monkeypatch, *, loader, db_frames=None):
+        frames = {"PREM": _compass_price_frame("2026-09-03"), "BOTH": _compass_price_frame("2026-09-03")}
+        _stub_compass_builder_dependencies(monkeypatch, frames=frames)
+        monkeypatch.setattr(mr, "current_base_universe", lambda: ["PREM", "BOTH"])
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "CREATE TABLE historical_market_cap "
+            "(symbol TEXT, date TEXT, market_cap REAL, PRIMARY KEY(symbol, date))"
+        )
+        conn.executemany(
+            "INSERT INTO historical_market_cap VALUES (?, ?, ?)",
+            [(s, "2026-09-03", cap) for s, cap in (("PREM", 40e9), ("BOTH", 50e9), ("NEWP", 60e9))],
+        )
+
+        class FakeStore:
+            def _get_conn(self):
+                return conn
+
+        from src.data import market_store as ms_mod
+        monkeypatch.setattr(ms_mod, "get_store", lambda: FakeStore())
+        monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
+        db_calls = []
+
+        def fake_db_loader(symbols, *, rows_needed):
+            db_calls.append((list(symbols), rows_needed))
+            return {s: (db_frames or {})[s] for s in symbols if s in (db_frames or {})}
+
+        monkeypatch.setattr("scripts.broad_market_scan.load_price_frames_from_market_db", fake_db_loader)
+        monkeypatch.setattr("src.data.prosperity_morning.load_bound_prosperity_pool", loader)
+        return mr.build_market_signal_report(), db_calls
+
+    def test_trial_pool_runs_ema30_and_compares_with_premium(self, monkeypatch):
+        result, db_calls = self._build(
+            monkeypatch, loader=lambda *a, **kw: _prosperity_trial_pool(["BOTH", "NEWP"]),
+            db_frames={"NEWP": _compass_price_frame("2026-09-03").iloc[-127:]},
+        )
+        trial = result["prosperity_compass"]
+        assert trial["available"] is True
+        assert trial["coverage"]["ema30_ready"] == {"covered": 2, "total": 2, "ratio": 1.0}
+        assert [h["symbol"] for h in trial["hits"]] == ["NEWP", "BOTH"]          # market cap desc
+        assert trial["hits"][0]["rank"] == 2 and trial["hits"][0]["dollar_volume_rank"] == 6
+        assert trial["comparison"] == {"status": "ok", "both": ["BOTH"], "prosperity_only": ["NEWP"],
+                                       "premium_only": ["PREM"]}
+        assert trial["pool"] == {"available": True, "reason": None, "as_of": "2026-08-29",
+                                 "generated_at": "2026-08-29T08:50:00Z", "member_count": 2}
+        assert db_calls == [(["NEWP"], 127)]                                    # only the missing member
+        assert sorted(h["symbol"] for h in result["selection_compass"]["hits"]) == ["BOTH", "PREM"]
+
+    def test_unavailable_pool_skips_the_scan(self, monkeypatch):
+        calls = []
+        real = __import__("terminal.selection_compass", fromlist=["x"]).scan_selection_compass
+
+        def counting(**kw):
+            calls.append(kw["premium_pool"].get("name"))
+            return real(**kw)
+
+        monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", counting)
+        result, db_calls = self._build(
+            monkeypatch, loader=lambda *a, **kw: {"available": False, "reason": "prosperity_pool_stale",
+                                                  "members": []})
+        assert calls == ["精选Premium池"] and db_calls == []
+        trial = result["prosperity_compass"]
+        assert trial["available"] is False and trial["reason"] == "prosperity_pool_stale"
+        assert trial["comparison"] == {"status": "prosperity_unavailable"}
+        assert trial["pool"]["member_count"] == 0
+
+    def test_trial_failure_leaves_premium_path_identical(self, monkeypatch):
+        good, _ = self._build(monkeypatch, loader=lambda *a, **kw: _prosperity_trial_pool(["BOTH"]))
+
+        def boom(*a, **kw):
+            raise RuntimeError("disk on fire")
+
+        bad, _ = self._build(monkeypatch, loader=boom)
+        trial = bad["prosperity_compass"]
+        assert trial["available"] is False and trial["reason"] == "prosperity_compass_error"
+        assert trial["error"] == "RuntimeError" and trial["hits"] == []
+        assert bad["selection_compass"] == good["selection_compass"]
+        assert bad["premium_pool"] == good["premium_pool"]
 
 
 _SELECTION_COMPASS_COLUMNS = [

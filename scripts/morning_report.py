@@ -503,6 +503,50 @@ def _compute_signal_betas(
     return betas
 
 
+def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str, scan) -> dict:
+    """M14 trial section: the prosperity pool through the same EMA30 gate as Premium.
+
+    Never raises: any failure becomes an unavailable payload, so the morning report and the
+    Premium path are unaffected. Builds its own price dict; Premium's is left untouched.
+    """
+    try:
+        from scripts.broad_market_scan import load_price_frames_from_market_db
+        from src.data import prosperity_morning
+        from src.data.market_store import get_store
+
+        pool = prosperity_morning.load_bound_prosperity_pool()
+        summary = {
+            "available": bool(pool.get("available")),
+            "reason": pool.get("reason"),
+            "as_of": pool.get("as_of"),
+            "generated_at": pool.get("generated_at"),
+            "member_count": len(pool.get("members") or []) if pool.get("available") else 0,
+        }
+        comparison = prosperity_morning.pool_comparison(pool, premium_pool)
+        if not pool.get("available"):
+            return {"available": False, "reason": pool.get("reason") or "prosperity_pool_invalid",
+                    "coverage": {}, "hits": [], "comparison": comparison, "pool": summary}
+        symbols = sorted({m.get("symbol") for m in pool.get("members") or [] if m.get("symbol")})
+        frames = {s: price_frames[s] for s in symbols if s in price_frames}
+        missing = [s for s in symbols if s not in frames]
+        if missing:
+            try:
+                frames.update(load_price_frames_from_market_db(
+                    missing, rows_needed=SELECTION_COMPASS_PRICE_ROWS))
+            except Exception as exc:
+                logger.warning("prosperity compass DB price supplement failed: %s", exc)
+        compass = scan(
+            premium_pool=pool, as_of=as_of, price_frames=frames,
+            market_cap_observations=_load_selection_compass_market_cap_observations(
+                get_store(), symbols, as_of),
+        )
+        return {**compass, "comparison": comparison, "pool": summary}
+    except Exception as exc:
+        logger.warning("prosperity compass unavailable: %s", exc)
+        return {"available": False, "reason": "prosperity_compass_error",
+                "error": type(exc).__name__, "coverage": {}, "hits": []}
+
+
 def _load_selection_compass_market_cap_observations(
     store,
     symbols: list[str],
@@ -1470,6 +1514,10 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
                 "hits": [],
             }
 
+    prosperity_compass = _build_prosperity_compass(
+        premium_pool, price_frames, as_of, scan_selection_compass,
+    )
+
     try:
         volconc_frames = _load_volume_concentration_frames()
         if volconc_frames.get("available"):
@@ -1490,6 +1538,7 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         "market_timing_factor": build_market_timing_factor_report(),
         "volume_concentration": volconc,
         "selection_compass": selection_compass,
+        "prosperity_compass": prosperity_compass,
         "premium_pool": {
             "available": premium_pool.get("available", False),
             "reason": premium_pool.get("reason"),
