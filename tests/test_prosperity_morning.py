@@ -8,7 +8,10 @@ import pytest
 from src.data import prosperity_morning as pm
 from src.data.prosperity_pool import publish_prosperity_pool
 from src.data.prosperity_store import ProsperityStore
+from terminal.prosperity.schemes import SCHEMES, scheme_hash
 from tests.test_prosperity_web import boards, pool_for
+
+F1 = scheme_hash(SCHEMES['F1'])
 
 NOW = datetime(2026, 10, 3, 9, 30, tzinfo=timezone.utc)
 
@@ -97,15 +100,29 @@ def test_unknown_binding_note_fails_closed(env, monkeypatch):
     assert load(env)['reason'] == 'prosperity_pool_board_mismatch'
 
 
-def test_empty_pool_is_available_not_unavailable(env, monkeypatch):
-    """North star §4.1: zero qualifying stocks is a valid result."""
-    payload = copy.deepcopy(env['payload'])
-    payload['members'] = []
-    monkeypatch.setattr(pm, 'load_prosperity_pool', lambda path, now=None: {**payload, 'available': True,
-                                                                             'reason': None})
-    monkeypatch.setattr(pm, 'pool_binding', lambda pool, stored: ({}, '入池 0 只（…）'))
-    out = load(env)
-    assert out['available'] is True and out['members'] == []
+def test_empty_pool_is_available_not_unavailable(env, tmp_path):
+    """North star §4.1: zero qualifying stocks is a valid result. Real build/publish/bind path, no mocks
+    (review #7): a board whose ranked rows are all below FULL publishes an empty pool."""
+    from dataclasses import replace
+    from src.data.prosperity_pool import build_pool
+    from tests.prosperity_fixtures import storage_batch
+    from tests.test_prosperity_web import fake_liquidity
+    batch = storage_batch(as_of='2026-10-03', count=20)
+    batch = tuple(replace(b, board=replace(b.board, rows=tuple(
+        replace(r, grade='BELOW') if r.grade in ('STRICT', 'FULL') else r for r in b.board.rows)))
+        for b in batch)
+    db = tmp_path / 'empty.db'
+    with ProsperityStore(db, read_only=False) as s:
+        s.save_batch(batch)
+    with ProsperityStore(db) as s:
+        (stored,) = [s.get_board(k) for k in s.list_boards(scheme_hash=F1, code_version='test-v1',
+                                                           board_type='weekly')]
+    payload = build_pool(stored, fake_liquidity(stored), generated_at='2026-10-03T09:00:00Z')
+    assert payload['members'] == [] and payload['coverage']['eligible'] == 0
+    pool = tmp_path / 'empty-pool.json'
+    publish_prosperity_pool(payload, pool, now=NOW)
+    out = pm.load_bound_prosperity_pool(pool, db, now=NOW)
+    assert out['available'] is True and out['reason'] is None and out['members'] == []
 
 
 def test_db_is_not_modified(env):

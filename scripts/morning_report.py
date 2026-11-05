@@ -524,8 +524,11 @@ def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str
         }
         comparison = prosperity_morning.pool_comparison(pool, premium_pool)
         if not pool.get("available"):
+            # Keep the loader's diagnostics in the saved JSON (runbook: binding_note / error).
+            extra = {key: pool[key] for key in ("binding_note", "error") if key in pool}
+            logger.warning("prosperity pool unavailable: %s %s", pool.get("reason"), extra)
             return {"available": False, "reason": pool.get("reason") or "prosperity_pool_invalid",
-                    "coverage": {}, "hits": [], "comparison": comparison, "pool": summary}
+                    "coverage": {}, "hits": [], "comparison": comparison, "pool": summary, **extra}
         symbols = sorted({m.get("symbol") for m in pool.get("members") or [] if m.get("symbol")})
         frames = {s: price_frames[s] for s in symbols if s in price_frames}
         missing = [s for s in symbols if s not in frames]
@@ -1927,26 +1930,44 @@ def _prosperity_symbol_list(symbols: list) -> str:
     return shown + (" 等 {} 只".format(len(symbols)) if len(symbols) > PROSPERITY_COMPARISON_LIMIT else "")
 
 
+def _prosperity_comparison(comparison: dict) -> tuple:
+    """(summary line, [[类别, 代码串], …]) for the Premium comparison."""
+    if comparison.get("status") != "ok":
+        return "与 Premium：Premium 不可用，不比较", []
+    new, gone = comparison.get("prosperity_only") or [], comparison.get("premium_only") or []
+    summary = "与 Premium：交集 {}｜新增 {}｜移出 {}".format(len(comparison.get("both") or []), len(new), len(gone))
+    return summary, [[label, _prosperity_symbol_list(symbols)]
+                     for label, symbols in (("新增", new), ("移出", gone)) if symbols]
+
+
 def _prosperity_compass_display(payload: dict | None) -> dict:
-    """Shared display contract for text, HTML and visual faces of section 0d."""
+    """Shared display contract for text, HTML and visual faces of section 0d.
+
+    No "_" anywhere: the text report goes out with Telegram legacy Markdown (issue 016).
+    """
     if payload is None:
         return {"state": "hidden"}
+    pool = payload.get("pool") or {}
+    comparison = payload.get("comparison") or {}
     if not payload.get("available"):
-        return _prosperity_warning(payload.get("reason"))
+        display = _prosperity_warning(payload.get("reason"))
+        if pool.get("available"):          # the pool is valid; only the EMA30/market-cap gate failed
+            display["comparison_summary"], display["comparison"] = _prosperity_comparison(comparison)
+        return display
+    from src.data.prosperity_pool import LIQUIDITY_TOP, POOL_GRADES
     from src.data.prosperity_web import _score
 
-    pool = payload.get("pool") or {}
     count = pool.get("member_count", 0)
     ema30 = (payload.get("coverage") or {}).get("ema30_ready") or {}
     hits = sorted(payload.get("hits") or [],
                   key=lambda hit: (-(hit.get("marketCap") or 0), hit.get("symbol", "")))
     as_of = pool.get("as_of")
-    head = ("景气池 0 只（合格为零，as_of {}）".format(as_of) if count == 0
-            else "景气池 {} 只（as_of {}，第一档 ∩ STRICT/FULL ∩ 成交额前 100）".format(count, as_of))
+    head = ("景气池 0 只（合格为零，截至 {}）".format(as_of) if count == 0
+            else "景气池 {} 只（截至 {}，第一档 ∩ {} ∩ 成交额前 {}）".format(
+                count, as_of, "/".join(POOL_GRADES), LIQUIDITY_TOP))
     subtitle = "{} | EMA30 {}/{} | 收盘价 > EMA30 | 命中 {} 只".format(
         head, ema30.get("covered", 0), ema30.get("total", 0), len(hits))
 
-    comparison = payload.get("comparison") or {}
     premium = set(comparison.get("both") or []) if comparison.get("status") == "ok" else set()
     rows = [[
         str(hit["symbol"]), str(hit["rank"]), str(hit["grade"]), _score(hit.get("score")),
@@ -1954,15 +1975,7 @@ def _prosperity_compass_display(payload: dict | None) -> dict:
         "{:.2f}".format(hit["close"]), "{:.2f}".format(hit["ema30"]),
         _format_market_cap(hit.get("marketCap")), "是" if hit["symbol"] in premium else "",   # CJK glyph: "✓" is missing in some report fonts
     ] for hit in hits]
-
-    if comparison.get("status") == "ok":
-        new, gone = comparison.get("prosperity_only") or [], comparison.get("premium_only") or []
-        summary = "与 Premium：交集 {}｜新增 {}｜移出 {}".format(len(comparison.get("both") or []),
-                                                          len(new), len(gone))
-        detail = [[label, _prosperity_symbol_list(symbols)]
-                  for label, symbols in (("新增", new), ("移出", gone)) if symbols]
-    else:
-        summary, detail = "与 Premium：Premium 不可用，不比较", []
+    summary, detail = _prosperity_comparison(comparison)
     return {"state": "table", "subtitle": subtitle, "columns": PROSPERITY_COMPASS_COLUMNS, "rows": rows,
             "comparison_summary": summary, "comparison": detail}
 
@@ -1983,13 +1996,14 @@ def format_section_prosperity_compass(payload: dict | None) -> str:
     lines = ["*{}*".format(PROSPERITY_COMPASS_TITLE)]
     if display["state"] == "warning":
         lines.append(display["warning"])
-        return "\n".join(lines)
-    lines.append(display["subtitle"])
-    if display["rows"]:
-        lines.append(" | ".join(display["columns"]))
-        lines.extend(" | ".join(row) for row in display["rows"])
-    lines.append(display["comparison_summary"])
-    lines.extend("{}: {}".format(label, codes) for label, codes in display["comparison"])
+    else:
+        lines.append(display["subtitle"])
+        if display["rows"]:
+            lines.append(" | ".join(display["columns"]))
+            lines.extend(" | ".join(row) for row in display["rows"])
+    if "comparison_summary" in display:
+        lines.append(display["comparison_summary"])
+        lines.extend("{}: {}".format(label, codes) for label, codes in display["comparison"])
     return "\n".join(lines)
 
 
@@ -2447,14 +2461,15 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
             "columns": prosperity_display["columns"],
             "rows": [dict(zip(prosperity_display["columns"], row)) for row in prosperity_display["rows"]],
         })
+    elif prosperity_display["state"] == "warning":
+        blocks.append({"heading": PROSPERITY_COMPASS_TITLE, "subtitle": prosperity_display["warning"]})
+    if "comparison_summary" in prosperity_display:
         blocks.append({
             "heading": PROSPERITY_COMPARISON_TITLE,
             "subtitle": prosperity_display["comparison_summary"],
             "columns": PROSPERITY_COMPARISON_COLUMNS,
             "rows": [dict(zip(PROSPERITY_COMPARISON_COLUMNS, row)) for row in prosperity_display["comparison"]],
         })
-    elif prosperity_display["state"] == "warning":
-        blocks.append({"heading": PROSPERITY_COMPASS_TITLE, "subtitle": prosperity_display["warning"]})
 
     blocks.append({"heading": "1. PMARP 信号"})
 
@@ -2666,23 +2681,24 @@ def build_morning_visual_sections(
                 "blocks": [],
             })
         prosperity_display = _safe_prosperity_display(market_signals.get("prosperity_compass"))
-        if prosperity_display["state"] == "table":
+        if prosperity_display["state"] != "hidden":
+            table = prosperity_display["state"] == "table"
+            prosperity_blocks = [
+                {"title": "当前命中（按市值降序）", "columns": prosperity_display["columns"],
+                 "widths": PROSPERITY_COMPASS_WIDTHS, "grouped": False,
+                 "rows": [{"cells": row} for row in prosperity_display["rows"]]},
+            ] if table else []
+            if "comparison_summary" in prosperity_display:
+                prosperity_blocks.append(
+                    {"title": prosperity_display["comparison_summary"], "columns": PROSPERITY_COMPARISON_COLUMNS,
+                     "widths": PROSPERITY_COMPARISON_WIDTHS, "grouped": False,
+                     "rows": [{"cells": row} for row in prosperity_display["comparison"]]})
             sections.append({
                 "slug": "00d_prosperity_pool",
                 "title": PROSPERITY_COMPASS_TITLE,
-                "subtitle": prosperity_display["subtitle"],
-                "blocks": [
-                    {"title": "当前命中（按市值降序）", "columns": prosperity_display["columns"],
-                     "widths": PROSPERITY_COMPASS_WIDTHS, "grouped": False,
-                     "rows": [{"cells": row} for row in prosperity_display["rows"]]},
-                    {"title": prosperity_display["comparison_summary"], "columns": PROSPERITY_COMPARISON_COLUMNS,
-                     "widths": PROSPERITY_COMPARISON_WIDTHS, "grouped": False,
-                     "rows": [{"cells": row} for row in prosperity_display["comparison"]]},
-                ],
+                "subtitle": prosperity_display["subtitle" if table else "warning"],
+                "blocks": prosperity_blocks,
             })
-        elif prosperity_display["state"] == "warning":
-            sections.append({"slug": "00d_prosperity_pool", "title": PROSPERITY_COMPASS_TITLE,
-                             "subtitle": prosperity_display["warning"], "blocks": []})
         pmarp = market_signals.get("pmarp", {})
         _pmarp_cols = ["标的", "概念", "信号", "当前", "变化", "市值", "β6M"]
         _pmarp_widths = [300, 320, 140, 130, 170, 150, 120]
