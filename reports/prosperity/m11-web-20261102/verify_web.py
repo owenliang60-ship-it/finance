@@ -7,8 +7,14 @@ HTML with html.parser, and compares section by section, row by row, cell by cell
 content_hash is not recomputed here (it hashes M8's canonical JSON; rewriting it would copy the
 implementation); the unit tests cover that branch.
 
+Since 2026-11-09 the page also carries the pool list above the table of contents (<aside id="pool">):
+present exactly when there is an F1 live weekly board, one row per bound member in rank order,
+no rows when the pool is not bound. Pages generated before that date have no list, so this script
+reports `pool list: missing` on them; re-check an old page with the script at its own commit
+(`git show e7b13241:reports/prosperity/m11-web-20261102/verify_web.py`, the version behind verify.txt).
+
 Usage: verify_web.py --db SNAPSHOT --html PAGE --code-version V [--pool POOL.json]
-Prints `checked N rows, M pool ranks; differences: K`; exit 1 when K > 0.
+Prints `checked N rows, M pool ranks, L pool list rows; differences: K`; exit 1 when K > 0.
 """
 from __future__ import annotations
 
@@ -45,11 +51,14 @@ class Page(HTMLParser):
     def __init__(self):
         super().__init__()
         self.sections, self.cur, self.body, self.badge, self.head = {}, None, False, None, []
+        self.pool = None                                       # <aside id="pool">, kept out of sections
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
         if tag == 'section':
             self.cur = self.sections.setdefault(a['id'], {'rows': [], 'header': []})
+        elif tag == 'aside' and a.get('id') == 'pool':
+            self.pool = self.cur = {'rows': [], 'header': []}
         elif self.cur is None:
             return
         elif tag == 'tbody':
@@ -67,7 +76,7 @@ class Page(HTMLParser):
             self.body = False
         elif tag in ('i', 'b'):
             self.badge = None
-        elif tag == 'section':
+        elif tag in ('section', 'aside'):
             self.cur = None
 
     def handle_data(self, data):
@@ -90,12 +99,12 @@ def parse(path):
     with open(path, encoding='utf-8') as f:
         p.feed(f.read())
     p.close()
-    for s in p.sections.values():
+    for s in list(p.sections.values()) + ([p.pool] if p.pool else []):
         for r in s['rows']:
             r['cells'] = [c.strip() for c in r['cells']]
             r['badges'] = [(t, x.strip()) for t, x in r['badges']]
         s['header'] = ''.join(s['header'])
-    return {'__head__': {'header': ''.join(p.head)}, **p.sections}
+    return {'__head__': {'header': ''.join(p.head)}, '__pool__': p.pool, **p.sections}
 
 
 # ---- expectations -------------------------------------------------------------------
@@ -221,6 +230,8 @@ def main(argv=None):
     expected_boards = boards(conn, a.code_version)
     criteria = expected_criteria(conn)
     page_head = page.pop('__head__', {'header': ''})['header']
+    pool_list = page.pop('__pool__', None)
+    pool_listed = 0
     if not any(b['scheme'] == 'F1' and b['type'] == 'weekly' for b in expected_boards):
         if '未标入池：库中无 F1 live 周榜' not in page_head:
             diff('page header: no F1 live weekly board, but the page does not say the pool was not checked')
@@ -241,7 +252,8 @@ def main(argv=None):
         if bool(marks) != ('未验证当前新鲜度' in sec['header']):
             diff(f'{b["section"]}: freshness note')
         if pooled_board:
-            note_ok = (f'入池 {len(marks)} 只' in sec['header']) if marks else ('未标入池' in sec['header'])
+            # bound = why is None, even with zero members (a valid 合格为零 pool says 入池 0 只; review #5)
+            note_ok = (f'入池 {len(marks)} 只' in sec['header']) if why is None else ('未标入池' in sec['header'])
             if not note_ok:
                 diff(f'{b["section"]}: pool note (expected {"marked" if marks else "unmarked: " + str(why)})')
         got = sec['rows']
@@ -267,7 +279,28 @@ def main(argv=None):
                 diff(f'{b["section"]} {e["symbol"]}: badges page={g["badges"]} db={e["badges"]}')
         if marks and sum(r['cls'] == 'p' for r in got) != len(marks):
             diff(f'{b["section"]}: {sum(r["cls"] == "p" for r in got)} marked rows, pool has {len(marks)}')
-    print(f'checked {checked} rows, {pool_checked} pool ranks; differences: {len(diffs)}')
+        if pooled_board:                                   # pool list: bound members in board order
+            if pool_list is None:
+                diff('pool list: missing although there is an F1 live weekly board')
+                continue
+            want_list = []
+            for e in rows:
+                if e['symbol'] in marks:
+                    name = e['name'] or '—'
+                    want_list.append([e['cells'][0], e['symbol'], name if len(name) <= 28 else name[:28] + '…',
+                                      e['cells'][3], e['cells'][4], e['cells'][5], str(marks[e['symbol']])])
+            got_list = [r['cells'] for r in pool_list['rows']]
+            pool_listed = len(got_list)
+            if got_list != want_list:
+                diff(f'pool list: {len(got_list)} rows on page, {len(want_list)} expected (or cells differ)')
+            if f'精选池 · {b["as_of"]}' not in pool_list['header']:
+                diff('pool list: title date')
+            if not (f'入池 {len(marks)} 只' in pool_list['header'] if why is None else '未标入池' in pool_list['header']):
+                diff('pool list: note')
+    if pool_list is not None and not any(b['scheme'] == 'F1' and b['type'] == 'weekly' for b in expected_boards):
+        diff('pool list: present although there is no F1 live weekly board')
+    print(f'checked {checked} rows, {pool_checked} pool ranks, {pool_listed} pool list rows; '
+          f'differences: {len(diffs)}')
     return 1 if diffs else 0
 
 

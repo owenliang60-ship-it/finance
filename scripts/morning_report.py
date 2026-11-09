@@ -509,18 +509,22 @@ def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str
     Never raises: any failure becomes an unavailable payload, so the morning report and the
     Premium path are unaffected. Builds its own price dict; Premium's is left untouched.
     """
+    summary = comparison = None
     try:
         from scripts.broad_market_scan import load_price_frames_from_market_db
         from src.data import prosperity_morning
         from src.data.market_store import get_store
 
         pool = prosperity_morning.load_bound_prosperity_pool()
+        symbols = sorted({m.get("symbol") for m in pool.get("members") or [] if m.get("symbol")}) \
+            if pool.get("available") else []
         summary = {
             "available": bool(pool.get("available")),
             "reason": pool.get("reason"),
             "as_of": pool.get("as_of"),
             "generated_at": pool.get("generated_at"),
             "member_count": len(pool.get("members") or []) if pool.get("available") else 0,
+            "symbols": symbols,       # sections 1 and 2 split on these (Boss 2026-11-09)
         }
         comparison = prosperity_morning.pool_comparison(pool, premium_pool)
         if not pool.get("available"):
@@ -529,7 +533,6 @@ def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str
             logger.warning("prosperity pool unavailable: %s %s", pool.get("reason"), extra)
             return {"available": False, "reason": pool.get("reason") or "prosperity_pool_invalid",
                     "coverage": {}, "hits": [], "comparison": comparison, "pool": summary, **extra}
-        symbols = sorted({m.get("symbol") for m in pool.get("members") or [] if m.get("symbol")})
         frames = {s: price_frames[s] for s in symbols if s in price_frames}
         missing = [s for s in symbols if s not in frames]
         if missing:
@@ -546,8 +549,12 @@ def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str
         return {**compass, "comparison": comparison, "pool": summary}
     except Exception as exc:
         logger.warning("prosperity compass unavailable: %s", exc)
-        return {"available": False, "reason": "prosperity_compass_error",
-                "error": type(exc).__name__, "coverage": {}, "hits": []}
+        failed = {"available": False, "reason": "prosperity_compass_error",
+                  "error": type(exc).__name__, "coverage": {}, "hits": []}
+        if summary is not None and comparison is not None:
+            # A valid pool whose 0d calculation failed still splits sections 1 and 2 (review #1).
+            failed.update(pool=summary, comparison=comparison)
+        return failed
 
 
 def _load_selection_compass_market_cap_observations(
@@ -1896,8 +1903,11 @@ def format_section_selection_compass(payload: dict | None) -> str:
 
 PROSPERITY_COMPASS_TITLE = "0d. 景气池（试运行）"
 PROSPERITY_COMPARISON_TITLE = "0d. 与 Premium 对比"
-PROSPERITY_COMPASS_COLUMNS = ["标的", "排名", "评级", "分数", "成交额排名", "收盘", "EMA30", "当前市值", "Premium"]
-PROSPERITY_COMPASS_WIDTHS = [180, 110, 150, 120, 170, 210, 160, 170, 130]
+PROSPERITY_COMPASS_COLUMNS = ["标的", "排名", "评级", "分数", "成交额排名", "收盘", "EMA30", "相对EMA30", "当前市值",
+                              "Premium"]
+PROSPERITY_COMPASS_WIDTHS = [180, 110, 150, 120, 170, 210, 160, 150, 170, 130]
+PROSPERITY_MEMBERS_TITLE = "全部成员（站上 EMA30 在前，按市值降序）"
+_PROSPERITY_POSITION = {True: "上方", False: "下方"}
 PROSPERITY_COMPARISON_COLUMNS = ["类别", "代码"]
 PROSPERITY_COMPARISON_WIDTHS = [160, 2088]
 PROSPERITY_COMPARISON_LIMIT = 15
@@ -1959,8 +1969,9 @@ def _prosperity_compass_display(payload: dict | None) -> dict:
 
     count = pool.get("member_count", 0)
     ema30 = (payload.get("coverage") or {}).get("ema30_ready") or {}
-    hits = sorted(payload.get("hits") or [],
-                  key=lambda hit: (-(hit.get("marketCap") or 0), hit.get("symbol", "")))
+    hits = payload.get("hits") or []
+    members = sorted(payload["members"], key=lambda m: (
+        {True: 0, False: 1}.get(m.get("above"), 2), -(m.get("marketCap") or 0), m.get("symbol", "")))
     as_of = pool.get("as_of")
     head = ("景气池 0 只（合格为零，截至 {}）".format(as_of) if count == 0
             else "景气池 {} 只（截至 {}，第一档 ∩ {} ∩ 成交额前 {}）".format(
@@ -1969,12 +1980,19 @@ def _prosperity_compass_display(payload: dict | None) -> dict:
         head, ema30.get("covered", 0), ema30.get("total", 0), len(hits))
 
     premium = set(comparison.get("both") or []) if comparison.get("status") == "ok" else set()
+
+    def price(member, key):          # a hit must carry its price; a not-ready member shows "—"
+        value = member.get(key)
+        if value is None and member.get("above") is True:
+            raise ValueError("prosperity hit {} without {}".format(member.get("symbol"), key))
+        return "—" if value is None else "{:.2f}".format(value)
+
     rows = [[
-        str(hit["symbol"]), str(hit["rank"]), str(hit["grade"]), _score(hit.get("score")),
-        str(hit.get("dollar_volume_rank") or "—"),
-        "{:.2f}".format(hit["close"]), "{:.2f}".format(hit["ema30"]),
-        _format_market_cap(hit.get("marketCap")), "是" if hit["symbol"] in premium else "",   # CJK glyph: "✓" is missing in some report fonts
-    ] for hit in hits]
+        str(m["symbol"]), str(m["rank"]), str(m["grade"]), _score(m.get("score")),
+        str(m.get("dollar_volume_rank") or "—"), price(m, "close"), price(m, "ema30"),
+        _PROSPERITY_POSITION.get(m.get("above"), "—"),
+        _format_market_cap(m.get("marketCap")), "是" if m["symbol"] in premium else "",   # CJK glyph: "✓" is missing in some report fonts
+    ] for m in members]
     summary, detail = _prosperity_comparison(comparison)
     return {"state": "table", "subtitle": subtitle, "columns": PROSPERITY_COMPASS_COLUMNS, "rows": rows,
             "comparison_summary": summary, "comparison": detail}
@@ -2028,12 +2046,45 @@ def _pmarp_signal_cap_groups(hits: list) -> list:
     return groups
 
 
-def format_section_pmarp_by_signal_and_cap(market_signals: dict) -> str:
-    section = market_signals.get("pmarp", {})
-    lines = ["*1. PMARP 信号 ({})*".format(section.get("criteria", ""))]
-    hits = section.get("hits", [])
-    if not hits:
-        return "\n".join(lines + ["无 PMARP 信号"])
+PROSPERITY_SPLIT_LABELS = ("景气精选池", "其他 Extended")
+
+
+def _prosperity_split(market_signals: dict | None) -> tuple:
+    """(pool symbols or None, note) for sections 1 and 2 (Boss 2026-11-09).
+
+    None = do not split: either 0d is absent (old saved JSON; no note) or the pool is not trusted
+    (note says why). Uses the same bound pool as 0d, so both always agree.
+    """
+    payload = (market_signals or {}).get("prosperity_compass")
+    if payload is None:
+        return None, None
+    pool = payload.get("pool") or {}
+    if pool.get("available") and isinstance(pool.get("symbols"), list):
+        return set(pool["symbols"]), None
+    reason = pool.get("reason") or payload.get("reason")
+    return None, "景气池不可用（{}），本段不分组".format(
+        PROSPERITY_COMPASS_REASON_LABELS.get(reason, "暂时无法生成"))
+
+
+def _split_groups(hits: list, symbols) -> list:
+    """[(label or None, hits)]: one unlabeled group when not splitting; pool first, then the rest."""
+    if symbols is None:
+        return [(None, hits)]
+    pooled, rest = PROSPERITY_SPLIT_LABELS
+    return [(pooled, [h for h in hits if h.get("symbol") in symbols]),
+            (rest, [h for h in hits if h.get("symbol") not in symbols])]
+
+
+def _split_summary(groups: list, note) -> str | None:
+    if note:
+        return note
+    if groups[0][0] is None:
+        return None
+    return "｜".join("{} {}".format(label, len(group)) for label, group in groups)
+
+
+def _pmarp_text_lines(hits: list) -> list:
+    lines = []
     last_signal = None
     for signal_label, tier, tier_hits in _pmarp_signal_cap_groups(hits):
         if signal_label != last_signal:
@@ -2048,7 +2099,31 @@ def format_section_pmarp_by_signal_and_cap(market_signals: dict) -> str:
                 _format_market_cap(item.get("marketCap")),
                 _format_beta(item.get("beta_6m")),
             ))
+    return lines
+
+
+def _split_text(lines: list, hits: list, market_signals: dict, body) -> str:
+    """Append `body(group)` per group; a labeled group gets a ▶ line, an empty one says 无."""
+    symbols, note = _prosperity_split(market_signals)
+    if note:
+        lines.append(note)
+    for label, group in _split_groups(hits, symbols):
+        if label is not None:
+            lines.append("▶ {}（{}）".format(label, len(group)))
+            if not group:
+                lines.append("  无")
+                continue
+        lines.extend(body(group))
     return "\n".join(lines)
+
+
+def format_section_pmarp_by_signal_and_cap(market_signals: dict) -> str:
+    section = market_signals.get("pmarp", {})
+    lines = ["*1. PMARP 信号 ({})*".format(section.get("criteria", ""))]
+    hits = section.get("hits", [])
+    if not hits:
+        return "\n".join(lines + ["无 PMARP 信号"])
+    return _split_text(lines, hits, market_signals, _pmarp_text_lines)
 
 
 def format_section_layered_dv(market_signals: dict) -> str:
@@ -2156,8 +2231,11 @@ def _format_volume_anomaly_rvol_cell(item: dict) -> str:
 def format_section_layered_volume_anomaly(market_signals: dict) -> str:
     section = market_signals.get("volume_anomaly", {})
     lines = ["*2. 量能异常 ({})*".format(section.get("criteria", ""))]
-    lines.extend(_format_bucketed_table(
-        section.get("hits", []),
+    hits = section.get("hits", [])
+    if not hits:
+        return "\n".join(lines + ["无量能异常信号"])
+    return _split_text(lines, hits, market_signals, lambda group: _format_bucketed_table(
+        group,
         "无量能异常信号",
         "标的 | 概念 | 类型 | DV 5d/20d | RVOL | 市值 | β6M",
         lambda item: "{} | {} | {} | {} | {} | {} | {}".format(
@@ -2170,7 +2248,6 @@ def format_section_layered_volume_anomaly(market_signals: dict) -> str:
             _format_beta(item.get("beta_6m")),
         ),
     ))
-    return "\n".join(lines)
 
 
 def _merge_volume_anomaly_hits(dv_hits: list[dict], rvol_hits: list[dict]) -> list[dict]:
@@ -2471,33 +2548,54 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
             "rows": [dict(zip(PROSPERITY_COMPARISON_COLUMNS, row)) for row in prosperity_display["comparison"]],
         })
 
-    blocks.append({"heading": "1. PMARP 信号"})
+    # Sections 1 and 2 split on the prosperity pool (Boss 2026-11-09); same groups as the text.
+    split_symbols, split_note = _prosperity_split(market_signals)
 
     # PMARP — signal -> cap-tier sub-blocks (columns one-to-one with text)
     pm_cols = ["标的", "概念", "信号", "当前", "变化", "市值", "β6M"]
     pmarp_hits = (market_signals.get("pmarp") or {}).get("hits", [])
-    for signal_label, tier, tier_hits in _pmarp_signal_cap_groups(pmarp_hits):
-        rows = [{"标的": _compact_company(h), "概念": _display_concept_tags(h),
-                 "信号": PMARP_SIGNAL_LABELS.get(h.get("signal"), "—"),
-                 "当前": "{:.1f}%".format(h.get("value") or 0),
-                 "变化": "{:.1f}→{:.1f}".format(h.get("previous") or 0, h.get("value") or 0),
-                 "市值": _format_market_cap(h.get("marketCap")),
-                 "β6M": _format_beta(h.get("beta_6m")),
-                 "_premium": bool(h.get("is_premium"))} for h in tier_hits]
-        blocks.append({"heading": "{} — {}".format(signal_label, tier),
-                       "columns": pm_cols, "rows": rows})
+    pm_groups = _split_groups(pmarp_hits, split_symbols)
+    pm_section = {"heading": "1. PMARP 信号"}
+    if _split_summary(pm_groups, split_note):
+        pm_section["subtitle"] = _split_summary(pm_groups, split_note)
+    blocks.append(pm_section)
+    for group_label, group_hits in pm_groups:
+        if group_label is not None and not group_hits:      # an empty group still shows, like the text 无
+            blocks.append({"heading": group_label, "columns": pm_cols, "rows": []})
+        for signal_label, tier, tier_hits in _pmarp_signal_cap_groups(group_hits):
+            rows = [{"标的": _compact_company(h), "概念": _display_concept_tags(h),
+                     "信号": PMARP_SIGNAL_LABELS.get(h.get("signal"), "—"),
+                     "当前": "{:.1f}%".format(h.get("value") or 0),
+                     "变化": "{:.1f}→{:.1f}".format(h.get("previous") or 0, h.get("value") or 0),
+                     "市值": _format_market_cap(h.get("marketCap")),
+                     "β6M": _format_beta(h.get("beta_6m")),
+                     "_premium": bool(h.get("is_premium"))} for h in tier_hits]
+            heading = "{} — {}".format(signal_label, tier)
+            blocks.append({"heading": heading if group_label is None else "{} · {}".format(group_label, heading),
+                           "columns": pm_cols, "rows": rows})
 
     # 量能异常 — columns one-to-one with format_section_layered_volume_anomaly
     va_cols = ["标的", "概念", "类型", "DV 5d/20d", "RVOL", "市值", "β6M"]
     va_hits = (market_signals.get("volume_anomaly") or {}).get("hits", [])
-    va_rows = [{"标的": _compact_company(h), "概念": _display_concept_tags(h),
-                "类型": h.get("volume_signal_kind") or "—",
-                "DV 5d/20d": _format_volume_anomaly_dv_cell(h),
-                "RVOL": _format_volume_anomaly_rvol_cell(h),
-                "市值": _format_market_cap(h.get("marketCap")),
-                "β6M": _format_beta(h.get("beta_6m")),
-                "_premium": bool(h.get("is_premium"))} for h in va_hits]
-    blocks.append({"heading": "2. 量能异常", "columns": va_cols, "rows": va_rows})
+
+    def va_rows(hits):
+        return [{"标的": _compact_company(h), "概念": _display_concept_tags(h),
+                 "类型": h.get("volume_signal_kind") or "—",
+                 "DV 5d/20d": _format_volume_anomaly_dv_cell(h),
+                 "RVOL": _format_volume_anomaly_rvol_cell(h),
+                 "市值": _format_market_cap(h.get("marketCap")),
+                 "β6M": _format_beta(h.get("beta_6m")),
+                 "_premium": bool(h.get("is_premium"))} for h in hits]
+
+    va_groups = _split_groups(va_hits, split_symbols)
+    if va_groups[0][0] is None:
+        va_block = {"heading": "2. 量能异常", "columns": va_cols, "rows": va_rows(va_hits)}
+        if split_note:
+            va_block["subtitle"] = split_note
+        blocks.append(va_block)
+    else:
+        blocks.append({"heading": "2. 量能异常", "subtitle": _split_summary(va_groups, None)})
+        blocks.extend({"heading": label, "columns": va_cols, "rows": va_rows(group)} for label, group in va_groups)
 
     # Dollar Volume — flat ranking; columns one-to-one with format_section_d
     if dv_result and dv_result.get("status") == "unavailable":
@@ -2684,7 +2782,7 @@ def build_morning_visual_sections(
         if prosperity_display["state"] != "hidden":
             table = prosperity_display["state"] == "table"
             prosperity_blocks = [
-                {"title": "当前命中（按市值降序）", "columns": prosperity_display["columns"],
+                {"title": PROSPERITY_MEMBERS_TITLE, "columns": prosperity_display["columns"],
                  "widths": PROSPERITY_COMPASS_WIDTHS, "grouped": False,
                  "rows": [{"cells": row} for row in prosperity_display["rows"]]},
             ] if table else []
@@ -2699,45 +2797,60 @@ def build_morning_visual_sections(
                 "subtitle": prosperity_display["subtitle" if table else "warning"],
                 "blocks": prosperity_blocks,
             })
+        # Sections 1 and 2 split on the prosperity pool (Boss 2026-11-09); same groups as the text.
+        _split_symbols, _split_note = _prosperity_split(market_signals)
         pmarp = market_signals.get("pmarp", {})
         _pmarp_cols = ["标的", "概念", "信号", "当前", "变化", "市值", "β6M"]
         _pmarp_widths = [300, 320, 140, 130, 170, 150, 120]
         _pmarp_blocks = []
+        _pmarp_groups = _split_groups(pmarp.get("hits", []), _split_symbols)
         # signal -> cap-tier sub-blocks; shared with text/HTML via _pmarp_signal_cap_groups
         # so the 大盘/中小盘 tier is explicit on every surface (P2 review fix).
-        for _signal_label, _tier, _tier_hits in _pmarp_signal_cap_groups(pmarp.get("hits", [])):
-            _pmarp_blocks.append({
-                "title": "{} — {}".format(_signal_label, _tier),
-                "columns": _pmarp_cols,
-                "widths": _pmarp_widths,
-                "grouped": False,
-                "rows": [_visual_row(item, [
-                    _visual_company(item),
-                    _display_concept_tags(item),
-                    PMARP_SIGNAL_LABELS.get(item.get("signal"), "—"),
-                    "{:.1f}%".format(item.get("value") or 0),
-                    "{:.1f}→{:.1f}".format(item.get("previous") or 0, item.get("value") or 0),
-                    _format_market_cap(item.get("marketCap")),
-                    _format_beta(item.get("beta_6m")),
-                ]) for item in _tier_hits],
-            })
+        for _group_label, _group_hits in _pmarp_groups:
+            if _group_label is not None and not _group_hits:   # an empty group still shows, like the text 无
+                _pmarp_blocks.append({"title": _group_label, "columns": _pmarp_cols, "widths": _pmarp_widths,
+                                      "grouped": False, "rows": []})
+            for _signal_label, _tier, _tier_hits in _pmarp_signal_cap_groups(_group_hits):
+                _title = "{} — {}".format(_signal_label, _tier)
+                _pmarp_blocks.append({
+                    "title": _title if _group_label is None else "{} · {}".format(_group_label, _title),
+                    "columns": _pmarp_cols,
+                    "widths": _pmarp_widths,
+                    "grouped": False,
+                    "rows": [_visual_row(item, [
+                        _visual_company(item),
+                        _display_concept_tags(item),
+                        PMARP_SIGNAL_LABELS.get(item.get("signal"), "—"),
+                        "{:.1f}%".format(item.get("value") or 0),
+                        "{:.1f}→{:.1f}".format(item.get("previous") or 0, item.get("value") or 0),
+                        _format_market_cap(item.get("marketCap")),
+                        _format_beta(item.get("beta_6m")),
+                    ]) for item in _tier_hits],
+                })
+        _pmarp_subtitle = "{} | {}".format(pmarp.get("criteria", ""), common_subtitle)
+        if _split_summary(_pmarp_groups, _split_note):
+            _pmarp_subtitle += " | " + _split_summary(_pmarp_groups, _split_note)
         sections.append({
             "slug": "01_pmarp",
             "title": "1. PMARP 信号",
-            "subtitle": "{} | {}".format(pmarp.get("criteria", ""), common_subtitle),
+            "subtitle": _pmarp_subtitle,
             "blocks": _pmarp_blocks,
         })
 
         volume_anomaly = market_signals.get("volume_anomaly", {})
+        _va_groups = _split_groups(volume_anomaly.get("hits", []), _split_symbols)
+        _va_subtitle = "{} | {}".format(volume_anomaly.get("criteria", ""), common_subtitle)
+        if _split_summary(_va_groups, _split_note):
+            _va_subtitle += " | " + _split_summary(_va_groups, _split_note)
         sections.append({
             "slug": "02_volume_anomaly",
             "title": "2. 量能异常",
-            "subtitle": "{} | {}".format(volume_anomaly.get("criteria", ""), common_subtitle),
+            "subtitle": _va_subtitle,
             "blocks": [
                 _build_visual_block(
-                    "量能异常",
+                    "量能异常" if _group_label is None else _group_label,
                     ["标的", "概念", "类型", "DV 5d/20d", "RVOL", "市值", "β6M"],
-                    volume_anomaly.get("hits", []),
+                    _group_hits,
                     lambda item: [
                         _visual_company(item),
                         _display_concept_tags(item),
@@ -2748,7 +2861,8 @@ def build_morning_visual_sections(
                         _format_beta(item.get("beta_6m")),
                     ],
                     [280, 320, 140, 280, 180, 150, 120],
-                ),
+                )
+                for _group_label, _group_hits in _va_groups
             ],
         })
 

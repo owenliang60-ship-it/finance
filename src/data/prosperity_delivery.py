@@ -142,8 +142,9 @@ def web_caption(*, as_of: str, strict: int, full: int, pool_count: Optional[int]
 
 
 def pool_text(*, as_of: str, previous_as_of: Optional[str], added: Sequence[str], removed: Sequence[str],
-              members: int, reason: Optional[str]) -> str:
-    """Markdown message; every variable part is escaped."""
+              members: int, reason: Optional[str], current: Sequence[str] = ()) -> str:
+    """Markdown message; every variable part is escaped. `current` = members in pool-rank order,
+    listed on the last line (Boss 2026-11-09)."""
     lines = [f'*景气精选池 {md_escape(as_of)}*']
     if reason:
         lines.append(f'池文件不可用（{md_escape(reason)}），本周不列进出')
@@ -157,6 +158,8 @@ def pool_text(*, as_of: str, previous_as_of: Optional[str], added: Sequence[str]
         lines.append(f'对比 {md_escape(previous_as_of)}')
         lines.append(f'新进（{len(added)}）: ' + (', '.join(md_escape(s) for s in added) or '无'))
         lines.append(f'移出（{len(removed)}）: ' + (', '.join(md_escape(s) for s in removed) or '无'))
+    if current:
+        lines.append(f'当前（{len(current)}，按景气排名）: ' + ', '.join(md_escape(s) for s in current))
     return '\n'.join(lines)
 
 
@@ -314,7 +317,10 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
             check_space(db)
             snap = snapshot(db, tmp / 'prosperity.db')
             stored, latest_freeze = _load_board(snap, as_of, code_version)
-            members, pool_reason = _trusted_pool(load_prosperity_pool(pool_path, now=now()), stored, as_of)
+            pool = load_prosperity_pool(pool_path, now=now())
+            members, pool_reason = _trusted_pool(pool, stored, as_of)
+            # the validator already holds members in strictly increasing rank (review #8: no re-sort)
+            by_rank = [m['symbol'] for m in pool['members']] if members is not None else []
         except Exception as exc:
             fail('snapshot', exc)
             return DeliveryOutcome('failed', (), '; '.join(errors))
@@ -346,7 +352,8 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
                     previous = previous_ledger(delivery_dir, as_of)
                     added, removed = pool_diff(previous['pool_members'] if previous else None, members)
                     text = pool_text(as_of=as_of, previous_as_of=previous['as_of'] if previous else None,
-                                     added=added, removed=removed, members=len(members), reason=None)
+                                     added=added, removed=removed, members=len(members), reason=None,
+                                     current=by_rank)
                 else:
                     text = pool_text(as_of=as_of, previous_as_of=None, added=[], removed=[], members=0,
                                      reason=pool_reason)

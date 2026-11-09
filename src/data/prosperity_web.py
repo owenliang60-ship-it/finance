@@ -196,6 +196,7 @@ th,td{padding:4px 8px;border-bottom:1px solid var(--line);text-align:left;white-
 th{background:var(--head);font-weight:600;position:sticky;top:0}
 section td:nth-child(1),section td:nth-child(n+6):nth-child(-n+10),section td:nth-child(13){text-align:right}
 tr.p{background:var(--pool)}
+aside{margin:16px 0 0}aside td:nth-child(1),aside td:nth-child(n+6){text-align:right}
 section{content-visibility:auto;contain-intrinsic-size:auto 1500px;margin:28px 0 0;padding-top:12px;
 border-top:2px solid var(--line)}
 td i,td b{display:inline-block;padding:0 6px;margin:1px 2px 1px 0;border-radius:4px;background:var(--badge);
@@ -224,12 +225,16 @@ def _badge(code: str) -> str:
     return f'<{tag}>{escape(BADGE_TEXT.get(code, code))}</{tag}>'
 
 
+def _name_cell(r: WebRow) -> str:
+    name = r.name or '—'
+    short = name if len(name) <= NAME_CHARS else name[:NAME_CHARS] + '…'
+    return f'<td title="{escape(name)}">{escape(short)}' if short != name else f'<td>{escape(short)}'
+
+
 def _cells(r: WebRow, *, pooled: bool) -> str:
     """One row on one line. </td> and </tr> are optional in HTML5 and omitted (A2 size budget);
     alignment comes from column position in the CSS, not per-cell classes."""
-    name = r.name or '—'
-    short = name if len(name) <= NAME_CHARS else name[:NAME_CHARS] + '…'
-    name_cell = f'<td title="{escape(name)}">{escape(short)}' if short != name else f'<td>{escape(short)}'
+    name_cell = _name_cell(r)
     grade = r.grade if r.status == 'ranked' else REASON_TEXT.get(r.observe_reason or '', r.observe_reason or '—')
     parts = [f'<td>{"—" if r.rank is None else r.rank}', f'<td>{escape(r.symbol)}', name_cell,
              f'<td>{escape(r.sector or "—")}', f'<td>{escape(grade)}', f'<td>{_score(r.score)}']
@@ -281,6 +286,24 @@ def _section(page: BoardPage, peers: Sequence[BoardPage]) -> str:
     return '\n'.join(out)
 
 
+def _pool_list(page: Optional[BoardPage]) -> str:
+    """The bound pool above the table of contents, in rank order (Boss 2026-11-09). Rows come from the
+    F1 latest weekly page, so the list is marked exactly when that board is; otherwise only its note."""
+    if page is None:
+        return ''
+    members = [r for r in page.rows if r.pool_rank is not None]
+    out = ['<aside id="pool">', f'<h2>精选池 · {page.as_of}</h2>',
+           f'<p class="note">{escape(page.pool_note or "")}</p>']
+    if members:
+        out.append(f'<p class="m">按景气排名 · 完整周榜见 <a href="#{section_id(page)}">F1 最新周榜</a></p>')
+        head = ''.join(f'<th>{h}</th>' for h in ('排名', '代码', '名称', '行业', '评级', '分数', '成交额排名'))
+        body = '\n'.join(f'<tr><td>{r.rank}<td>{escape(r.symbol)}{_name_cell(r)}<td>{escape(r.sector or "—")}'
+                         f'<td>{escape(r.grade or "—")}<td>{_score(r.score)}<td>{r.pool_rank}' for r in members)
+        out.append(f'<div class="w"><table><thead><tr>{head}</tr></thead><tbody>\n{body}\n</tbody></table></div>')
+    out.append('</aside>')
+    return '\n'.join(out) + '\n'
+
+
 def render_page(pages: Sequence[BoardPage], *, generated_at: str, source: Mapping[str, str],
                 pool_error: Optional[str] = None) -> str:
     """One self-contained static page: no script, no external resource, anchors only.
@@ -303,7 +326,7 @@ def render_page(pages: Sequence[BoardPage], *, generated_at: str, source: Mappin
             cells.append(f'<td><a href="#{section_id(p)}">{p.as_of}</a></td>' if p else '<td class="m">无榜</td>')
         toc_rows.append(f'<tr><th>{escape(label)}</th>{"".join(cells)}</tr>')
     scheme_line = ' · '.join(f'{escape(s)} {escape(hashes.get(s, "无榜"))}' for s in WEB_SCHEMES)
-    pool_board = any(p.scheme_id == POOL_SCHEME_ID and p.board_type == 'weekly' for p in pages)
+    pool_board = next((p for p in pages if p.scheme_id == POOL_SCHEME_ID and p.board_type == 'weekly'), None)
     no_pool_board = '' if pool_board else (
         '<p class="note">未标入池：库中无 F1 live 周榜' + (f'（池文件：{escape(pool_error)}）' if pool_error else '')
         + '</p>\n')
@@ -318,7 +341,7 @@ def render_page(pages: Sequence[BoardPage], *, generated_at: str, source: Mappin
 <p class="m">生成于 {escape(generated_at)} · 库 SHA256 {escape(db[:16] or '—')} · code_version {escape(source.get('code_version') or '—')} · 池文件 {escape(pool[:16] or '无')}</p>
 <p class="m">方案 hash：{scheme_line}</p>
 <p class="m">评级：分数 ≥ {strict:g} 为 STRICT，≥ {full:g} 为 FULL，其余 BELOW；任一闸门不过降为 BELOW。分数 = 0–100 基础分 + 毛利斜率加减分，向下取一位小数。每张榜只展开 STRICT/FULL，BELOW、观察、排除行收在折叠块里。本页无脚本，用目录链接切换方案和期数。</p>
-{no_pool_board}<nav id="toc"><h2>目录</h2><div class="w"><table><thead><tr><th>期数</th>{head}</tr></thead><tbody>
+{no_pool_board}{_pool_list(pool_board)}<nav id="toc"><h2>目录</h2><div class="w"><table><thead><tr><th>期数</th>{head}</tr></thead><tbody>
 {chr(10).join(toc_rows)}
 </tbody></table></div></nav>
 {sections}

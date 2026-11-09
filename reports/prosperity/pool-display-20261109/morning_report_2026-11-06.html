@@ -1,0 +1,522 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>
+:root {
+  --bg: #fdfbf7;
+  --surface: #ffffff;
+  --surface2: #f5f0e8;
+  --border: #e8e0d0;
+  --text: #2d2a26;
+  --text-dim: #7a7265;
+  --text-muted: #b0a898;
+  --gold: #d4a012;
+  --gold-dim: #d4a01222;
+  --red: #dc3545;
+  --red-dim: #dc354515;
+  --green: #198754;
+  --green-dim: #19875415;
+  --amber: #e8960c;
+  --amber-dim: #e8960c15;
+  --blue: #2563eb;
+  --blue-dim: #2563eb12;
+  --purple: #7c3aed;
+  --purple-dim: #7c3aed12;
+  --cyan: #0891b2;
+  --cyan-dim: #0891b212;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-x: hidden;
+}
+
+.layout {
+  display: flex;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.toc {
+  width: 220px;
+  position: sticky;
+  top: 24px;
+  align-self: flex-start;
+  padding: 24px 16px;
+  margin-top: 40px;
+  border-right: 1px solid var(--border);
+  height: fit-content;
+  flex-shrink: 0;
+}
+
+.toc-label {
+  font-size: 9px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.toc a {
+  display: block;
+  padding: 6px 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  padding-left: 12px;
+  transition: all 0.2s;
+}
+
+.toc a:hover {
+  color: var(--gold);
+  border-left-color: var(--gold);
+}
+
+.container {
+  flex: 1;
+  max-width: 900px;
+  padding: 40px 32px;
+  min-width: 0;
+}
+
+/* Header */
+.header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 32px;
+  margin-bottom: 48px;
+  position: relative;
+}
+
+.header::before {
+  content: '';
+  position: absolute;
+  top: -40px;
+  left: -100px;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, var(--gold-dim) 0%, transparent 70%);
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.header-badge {
+  display: inline-block;
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  padding: 4px 12px;
+  margin-bottom: 16px;
+}
+
+.header h1 {
+  font-family: 'Crimson Pro', serif;
+  font-size: 42px;
+  font-weight: 300;
+  letter-spacing: -1px;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.header h1 span { color: var(--gold); font-weight: 600; }
+
+.header-meta {
+  display: flex;
+  gap: 24px;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.header-meta .val { color: var(--text); font-weight: 600; }
+
+/* Sections */
+.section {
+  margin-bottom: 56px;
+}
+
+.section-label {
+  font-size: 10px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.section-title {
+  font-family: 'Crimson Pro', serif;
+  font-size: 28px;
+  font-weight: 300;
+  color: var(--text);
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-title span { color: var(--gold); }
+
+/* Regime Box */
+.regime-box {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--amber);
+  padding: 24px 28px;
+  margin-bottom: 24px;
+}
+
+.regime-box.green { border-left-color: var(--green); }
+.regime-box.red { border-left-color: var(--red); }
+.regime-box.blue { border-left-color: var(--blue); }
+.regime-box.purple { border-left-color: var(--purple); }
+.regime-box.cyan { border-left-color: var(--cyan); }
+.regime-box.gold { border-left-color: var(--gold); }
+
+.regime-box h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--amber);
+  margin-bottom: 12px;
+  letter-spacing: 1px;
+}
+
+.regime-box.green h3 { color: var(--green); }
+.regime-box.red h3 { color: var(--red); }
+.regime-box.blue h3 { color: var(--blue); }
+.regime-box.purple h3 { color: var(--purple); }
+.regime-box.cyan h3 { color: var(--cyan); }
+.regime-box.gold h3 { color: var(--gold); }
+
+.regime-box .prose { margin-bottom: 0; }
+
+/* Snap Cards (OPRMS grid) */
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.snap-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.snap-card .label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.snap-card .value {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.snap-card .sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.snap-card .bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+}
+
+/* Strategy Cards (Lens cards) */
+.strat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 24px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  position: relative;
+}
+
+.strat-card .layer-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  font-weight: 700;
+}
+
+.strat-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.strat-card .strat-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+  letter-spacing: 0.5px;
+}
+
+/* Tags */
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+.tag-buy { background: var(--green-dim); color: var(--green); }
+.tag-hold { background: var(--amber-dim); color: var(--amber); }
+.tag-pass { background: var(--red-dim); color: var(--red); }
+.tag-pair { background: var(--cyan-dim); color: var(--cyan); }
+.tag-blue { background: var(--blue-dim); color: var(--blue); }
+.tag-purple { background: var(--purple-dim); color: var(--purple); }
+.tag-cyan { background: var(--cyan-dim); color: var(--cyan); }
+.tag-green { background: var(--green-dim); color: var(--green); }
+.tag-amber { background: var(--amber-dim); color: var(--amber); }
+.tag-red { background: var(--red-dim); color: var(--red); }
+.tag-gold { background: var(--gold-dim); color: var(--gold); }
+
+.star { color: var(--gold); }
+
+/* Debate: tension rows */
+.tension-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.tension-header {
+  padding: 16px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+
+.tension-side {
+  padding: 16px 24px;
+  border-left: 3px solid transparent;
+}
+
+.tension-side.bull { border-left-color: var(--green); }
+.tension-side.bear { border-left-color: var(--red); }
+.tension-side.resolution { border-left-color: var(--cyan); background: var(--surface2); }
+
+.tension-side .side-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.tension-side.bull .side-label { color: var(--green); }
+.tension-side.bear .side-label { color: var(--red); }
+.tension-side.resolution .side-label { color: var(--cyan); }
+
+/* Risk Callout */
+.risk-callout {
+  background: var(--surface);
+  border: 1px solid var(--red);
+  border-left: 4px solid var(--red);
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.risk-callout.amber {
+  border-color: var(--amber);
+  border-left-color: var(--amber);
+}
+
+.risk-callout h3 {
+  color: var(--red);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.risk-callout.amber h3 { color: var(--amber); }
+
+/* Portfolio Table */
+.portfolio-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 24px;
+  font-size: 13px;
+}
+
+.portfolio-table th {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 2px solid var(--border);
+}
+
+.portfolio-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.portfolio-table tr:nth-child(even) td { background: var(--surface2); }
+.portfolio-table tr:hover td { background: var(--surface2); }
+
+/* Prose */
+.prose {
+  font-family: 'Crimson Pro', serif;
+  font-size: 16px;
+  line-height: 1.9;
+  color: var(--text);
+  margin-bottom: 20px;
+}
+
+.prose strong { color: var(--text); font-weight: 700; }
+.prose em { color: var(--gold); font-style: italic; }
+.prose code {
+  background: var(--surface2);
+  padding: 1px 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  border-radius: 2px;
+}
+
+.prose ul, .prose ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.prose li { margin-bottom: 4px; }
+
+.prose blockquote {
+  border-left: 3px solid var(--gold);
+  padding: 8px 16px;
+  margin: 12px 0;
+  color: var(--text-dim);
+  background: var(--surface2);
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 24px 0;
+}
+
+.prose h2 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 24px 0 12px 0;
+}
+
+.prose h3 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 20px 0 8px 0;
+}
+
+/* Verdict box */
+.verdict-box {
+  background: var(--surface);
+  border: 2px solid var(--gold);
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.verdict-box .verdict-text {
+  font-family: 'Crimson Pro', serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+
+.verdict-box .verdict-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* Disclaimer */
+.disclaimer {
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.8;
+  letter-spacing: 0.5px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .toc { display: none; }
+  .container { padding: 24px 16px; }
+  .snapshot-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 600px) {
+  .snapshot-grid { grid-template-columns: 1fr; }
+  .header h1 { font-size: 28px; }
+}
+
+/* Financial history chart (PDF: own landscape page so figures stay legible) */
+.fh-figure { margin: 12px 0 16px; }
+.fh-figure img { width: 100%; height: auto; border: 1px solid var(--border); }
+.fh-figure figcaption { font-family: 'Crimson Pro', serif; font-size: 13px;
+  color: var(--text-dim); margin-top: 6px; }
+.fh-data table { font-size: 11px; line-height: 1.4; }
+.fh-data th, .fh-data td { padding: 4px 6px; white-space: nowrap; }
+.fh-status { display: inline-block; padding: 2px 10px; border-radius: 3px; font-size: 11px;
+  font-weight: 600; letter-spacing: 1px; }
+.fh-status.complete { background: var(--green-dim); color: var(--green); }
+.fh-status.partial { background: var(--amber-dim); color: var(--amber); }
+.fh-status.blocked { background: var(--red-dim); color: var(--red); }
+@page fh-landscape { size: A4 landscape; margin: 8mm; }
+@media print {
+  .layout { display: block; }  /* named pages need block flow, not flex */
+  .fh-data table { font-size: 8px; }
+  .fh-data th, .fh-data td { padding: 3px 4px; }
+  /* widen only the chart block to the landscape page (container stays 900px) */
+  .fh-figure { page: fh-landscape; break-before: page; break-after: page;
+    width: 1000px; margin: 0 0 0 -32px; }
+  .fh-figure img { border: none; }
+  #sec-financials { page-break-inside: auto; }
+}
+
+/* Print */
+@media print {
+  .toc { display: none; }
+  body { font-size: 11px; }
+  .section { page-break-inside: avoid; }
+  .header::before { display: none; }
+  .strat-card, .snap-card, .tension-block { box-shadow: none; }
+}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 0 16px;}.report-subtitle{color:#666;font-size:0.9em;margin:0 0 10px;}.alert{color:#c0392b;font-weight:600;margin:2px 0;}.valuation-chart{display:block;width:100%;height:auto;}.premium-row td:first-child{color:#b91c1c;font-weight:700;}</style></head><body><div class="container"><h1>未来资本晨报 — 2026-11-06</h1><h2>0. 大盘择时因子</h2><p class="report-subtitle">PMARP 上穿2% + S2(各池等权 MA20 参与度上穿30%, cooldown=60) | PMARP as_of 2026-11-06 | S2 as_of 2026-11-06 | 信号日 2026-11-06</p><p class="alert">🔴 大盘择时触发</p><p class="alert">🔴 PMARP 2% UPCROSS: SOXX 0.8→3.3</p><h3>SPY / QQQ / SOXX / Extended</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>股票池</th><th>PMARP</th><th>PMARP 2%上穿</th><th>S2参与度(各池)</th><th>覆盖</th><th>S2触发</th></tr></thead><tbody><tr><td>SPY</td><td>0.0%→0.8%</td><td>—</td><td>63.9%→59.7%</td><td>501/504</td><td>—</td></tr><tr><td>QQQ</td><td>0.0%→0.8%</td><td>—</td><td>45.5%→39.6%</td><td>101/101</td><td>—</td></tr><tr><td>SOXX</td><td>0.8%→3.3%</td><td>YES</td><td>3.3%→3.3%</td><td>30/30</td><td>—</td></tr><tr><td>Extended</td><td>N/A</td><td>—</td><td>57.6%→55.1%</td><td>898/899</td><td>—</td></tr></tbody></table></div><h3>0b. 成交集中度</h3><p class="report-subtitle">截至 2026-11-06 | 状态: 常态</p><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>指标</th><th>数值</th><th>1年分位</th></tr></thead><tbody><tr><td>Top50 成交额占比(20日平滑)</td><td>43.6%</td><td>41</td></tr><tr><td>Top50 名单20日换手率(平滑)</td><td>24.0%</td><td>7</td></tr></tbody></table></div><h3>0c. 选股罗盘</h3><p class="report-subtitle">精选Premium池周频覆盖：基本面 866/899 | Beta 891/899 | EMA30 47/47 | 条件：EPS YoY/QoQ ≥20% / 成长均值 ≥10%或扭亏成长 / β6M ≥1.35 / 收盘价 &gt; EMA30</p><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>EPS YoY</th><th>EPS QoQ</th><th>营收4Q CAGR</th><th>净利4Q CAGR</th><th>成长均值</th><th>收盘</th><th>EMA30</th><th>当前市值</th><th>β6M</th></tr></thead><tbody><tr><td>CVNA</td><td>64.1%</td><td>23.5%</td><td>9.3%</td><td>27.1%</td><td>18.2%</td><td>73.57</td><td>65.74</td><td>$80.3B</td><td>2.09</td></tr><tr><td>RKT</td><td>扭亏</td><td>209.0%</td><td>9.6%</td><td>118.5%</td><td>扭亏成长</td><td>15.06</td><td>12.61</td><td>$52.6B</td><td>1.94</td></tr><tr><td>SOFI</td><td>63.6%</td><td>50.0%</td><td>10.4%</td><td>11.6%</td><td>11.0%</td><td>16.21</td><td>16.12</td><td>$21.7B</td><td>2.64</td></tr><tr><td>OWL</td><td>219.1%</td><td>80.7%</td><td>2.2%</td><td>18.9%</td><td>10.6%</td><td>9.82</td><td>9.80</td><td>$16.6B</td><td>1.60</td></tr><tr><td>JHX</td><td>20.0%</td><td>269.6%</td><td>4.5%</td><td>—</td><td>扭亏成长</td><td>27.85</td><td>26.83</td><td>$15.8B</td><td>1.64</td></tr><tr><td>TEM</td><td>扭亏</td><td>扭亏</td><td>4.6%</td><td>—</td><td>扭亏成长</td><td>76.05</td><td>71.97</td><td>$14.1B</td><td>2.55</td></tr><tr><td>CX</td><td>945.5%</td><td>43.7%</td><td>2.7%</td><td>9.5%</td><td>扭亏成长</td><td>10.72</td><td>10.38</td><td>$1.5B</td><td>1.48</td></tr></tbody></table></div><h3>0d. 景气池（试运行）</h3><p class="report-subtitle">景气池 36 只（截至 2026-11-07，第一档 ∩ STRICT/FULL ∩ 成交额前 100） | EMA30 36/36 | 收盘价 &gt; EMA30 | 命中 7 只</p><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>排名</th><th>评级</th><th>分数</th><th>成交额排名</th><th>收盘</th><th>EMA30</th><th>相对EMA30</th><th>当前市值</th><th>Premium</th></tr></thead><tbody><tr><td>V</td><td>141</td><td>FULL</td><td>56.3</td><td>33</td><td>422.65</td><td>401.25</td><td>上方</td><td>$722.7B</td><td></td></tr><tr><td>ABBV</td><td>77</td><td>FULL</td><td>61.8</td><td>68</td><td>291.31</td><td>281.30</td><td>上方</td><td>$506.8B</td><td></td></tr><tr><td>COST</td><td>159</td><td>FULL</td><td>54.9</td><td>40</td><td>1053.56</td><td>990.57</td><td>上方</td><td>$452.5B</td><td></td></tr><tr><td>AMGN</td><td>143</td><td>FULL</td><td>56.2</td><td>87</td><td>460.42</td><td>439.68</td><td>上方</td><td>$249.5B</td><td></td></tr><tr><td>VZ</td><td>151</td><td>FULL</td><td>55.5</td><td>85</td><td>45.69</td><td>45.30</td><td>上方</td><td>$188.1B</td><td></td></tr><tr><td>MDT</td><td>56</td><td>FULL</td><td>64.0</td><td>37</td><td>101.80</td><td>95.36</td><td>上方</td><td>$126.5B</td><td></td></tr><tr><td>APP</td><td>25</td><td>STRICT</td><td>73.0</td><td>61</td><td>391.22</td><td>285.47</td><td>上方</td><td>$82.6B</td><td></td></tr><tr><td>NVDA</td><td>48</td><td>STRICT</td><td>65.2</td><td>2</td><td>186.64</td><td>212.51</td><td>下方</td><td>$5.0T</td><td></td></tr><tr><td>TSM</td><td>38</td><td>STRICT</td><td>68.0</td><td>15</td><td>375.44</td><td>419.71</td><td>下方</td><td>$2.1T</td><td></td></tr><tr><td>AVGO</td><td>13</td><td>STRICT</td><td>80.0</td><td>12</td><td>293.69</td><td>336.65</td><td>下方</td><td>$1.6T</td><td>是</td></tr><tr><td>MU</td><td>10</td><td>STRICT</td><td>82.8</td><td>1</td><td>690.00</td><td>899.45</td><td>下方</td><td>$966.3B</td><td>是</td></tr><tr><td>XOM</td><td>132</td><td>FULL</td><td>56.7</td><td>42</td><td>165.87</td><td>173.07</td><td>下方</td><td>$734.7B</td><td></td></tr><tr><td>PLTR</td><td>49</td><td>STRICT</td><td>65.1</td><td>18</td><td>160.38</td><td>184.91</td><td>下方</td><td>$422.0B</td><td></td></tr><tr><td>AMAT</td><td>79</td><td>FULL</td><td>61.2</td><td>27</td><td>332.71</td><td>416.34</td><td>下方</td><td>$303.2B</td><td></td></tr><tr><td>LRCX</td><td>21</td><td>STRICT</td><td>75.0</td><td>28</td><td>200.44</td><td>259.35</td><td>下方</td><td>$288.6B</td><td>是</td></tr><tr><td>TXN</td><td>40</td><td>STRICT</td><td>66.6</td><td>43</td><td>277.36</td><td>289.20</td><td>下方</td><td>$285.6B</td><td>是</td></tr><tr><td>NFLX</td><td>135</td><td>FULL</td><td>56.5</td><td>29</td><td>63.41</td><td>67.23</td><td>下方</td><td>$262.2B</td><td></td></tr><tr><td>ANET</td><td>133</td><td>FULL</td><td>56.6</td><td>83</td><td>170.80</td><td>183.89</td><td>下方</td><td>$214.5B</td><td>是</td></tr><tr><td>ADI</td><td>97</td><td>FULL</td><td>59.7</td><td>59</td><td>363.56</td><td>399.21</td><td>下方</td><td>$204.6B</td><td></td></tr><tr><td>KLAC</td><td>113</td><td>FULL</td><td>58.6</td><td>51</td><td>138.49</td><td>166.60</td><td>下方</td><td>$203.9B</td><td></td></tr><tr><td>MRVL</td><td>66</td><td>FULL</td><td>62.5</td><td>14</td><td>141.20</td><td>216.79</td><td>下方</td><td>$154.3B</td><td></td></tr><tr><td>STX</td><td>11</td><td>STRICT</td><td>82.6</td><td>19</td><td>460.99</td><td>681.84</td><td>下方</td><td>$138.3B</td><td>是</td></tr><tr><td>SNDK</td><td>1</td><td>STRICT</td><td>97.6</td><td>9</td><td>835.06</td><td>1311.88</td><td>下方</td><td>$121.9B</td><td></td></tr><tr><td>BKNG</td><td>152</td><td>FULL</td><td>55.3</td><td>88</td><td>160.66</td><td>161.48</td><td>下方</td><td>$116.8B</td><td></td></tr><tr><td>VLO</td><td>16</td><td>STRICT</td><td>77.9</td><td>92</td><td>346.45</td><td>396.51</td><td>下方</td><td>$110.5B</td><td></td></tr><tr><td>GLW</td><td>34</td><td>STRICT</td><td>68.9</td><td>81</td><td>106.13</td><td>133.30</td><td>下方</td><td>$108.9B</td><td></td></tr><tr><td>SNOW</td><td>154</td><td>FULL</td><td>55.2</td><td>69</td><td>275.88</td><td>316.83</td><td>下方</td><td>$103.0B</td><td></td></tr><tr><td>VRT</td><td>20</td><td>STRICT</td><td>75.3</td><td>66</td><td>182.86</td><td>223.09</td><td>下方</td><td>$90.8B</td><td>是</td></tr><tr><td>HPE</td><td>61</td><td>FULL</td><td>63.4</td><td>99</td><td>44.77</td><td>56.87</td><td>下方</td><td>$70.9B</td><td>是</td></tr><tr><td>LITE</td><td>12</td><td>STRICT</td><td>80.9</td><td>17</td><td>538.59</td><td>816.60</td><td>下方</td><td>$62.9B</td><td>是</td></tr><tr><td>NU</td><td>118</td><td>FULL</td><td>58.0</td><td>84</td><td>12.03</td><td>13.33</td><td>下方</td><td>$56.4B</td><td></td></tr><tr><td>VST</td><td>131</td><td>FULL</td><td>56.7</td><td>95</td><td>124.80</td><td>140.73</td><td>下方</td><td>$47.0B</td><td></td></tr><tr><td>CIEN</td><td>94</td><td>FULL</td><td>59.8</td><td>96</td><td>243.39</td><td>333.42</td><td>下方</td><td>$42.6B</td><td>是</td></tr><tr><td>COHR</td><td>26</td><td>STRICT</td><td>72.6</td><td>48</td><td>192.81</td><td>241.61</td><td>下方</td><td>$40.6B</td><td>是</td></tr><tr><td>COIN</td><td>127</td><td>FULL</td><td>56.8</td><td>74</td><td>134.76</td><td>163.20</td><td>下方</td><td>$38.4B</td><td></td></tr><tr><td>SMCI</td><td>5</td><td>STRICT</td><td>89.4</td><td>75</td><td>28.76</td><td>34.51</td><td>下方</td><td>$20.7B</td><td></td></tr></tbody></table></div><h3>0d. 与 Premium 对比</h3><p class="report-subtitle">与 Premium：交集 11｜新增 25｜移出 30</p><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>类别</th><th>代码</th></tr></thead><tbody><tr><td>新增</td><td>ABBV, ADI, AMAT, AMGN, APP, BKNG, COIN, COST, GLW, KLAC, MDT, MRVL, NFLX, NU, NVDA 等 25 只</td></tr><tr><td>移出</td><td>ASX, ATI, AXON, BE, DASH, DDOG, DELL, ENTG, FROG, FTAI, JBL, JHX, MCHP, MDB, MKSI 等 30 只</td></tr></tbody></table></div><h2>1. PMARP 信号</h2><p class="report-subtitle">景气精选池 8｜其他 Extended 129</p><h3>景气精选池 · 上穿2% — 大盘(≥$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr class="premium-row"><td>PLTR Palantir Technolo…</td><td>AI算力/云</td><td>上穿2%</td><td>3.3%</td><td>0.8→3.3</td><td>$422.0B</td><td>2.16</td></tr><tr><td>ANET Arista Networks</td><td>AI算力/云</td><td>上穿2%</td><td>9.2%</td><td>0.0→9.2</td><td>$214.5B</td><td>2.65</td></tr><tr><td>GLW Corning</td><td>通信/网络设备</td><td>上穿2%</td><td>2.5%</td><td>1.7→2.5</td><td>$108.9B</td><td>3.22</td></tr></tbody></table></div><h3>景气精选池 · 上穿2% — 中小盘(&lt;$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr class="premium-row"><td>SMCI Super Micro Compu…</td><td>半导体链</td><td>上穿2%</td><td>8.3%</td><td>0.0→8.3</td><td>$20.7B</td><td>3.69</td></tr><tr class="premium-row"><td>VRT Vertiv Holdings Co</td><td>数据中心电力</td><td>上穿2%</td><td>2.5%</td><td>1.7→2.5</td><td>$90.8B</td><td>2.75</td></tr><tr class="premium-row"><td>COHR Coherent</td><td>通信/网络设备</td><td>上穿2%</td><td>6.7%</td><td>0.0→6.7</td><td>$40.6B</td><td>3.75</td></tr></tbody></table></div><h3>景气精选池 · 下穿98% — 大盘(≥$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>MDT Medtronic Plc</td><td>医药/生命科学</td><td>下穿98%</td><td>95.8%</td><td>99.2→95.8</td><td>$126.5B</td><td>-0.04</td></tr><tr><td>COST Costco Wholesale</td><td>消费/电商</td><td>下穿98%</td><td>95.8%</td><td>100.0→95.8</td><td>$452.5B</td><td>-0.39</td></tr></tbody></table></div><h3>其他 Extended · 上穿98% — 中小盘(&lt;$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>NXT Nextpower</td><td>数据中心电力</td><td>上穿98%</td><td>98.3%</td><td>96.7→98.3</td><td>$14.5B</td><td>2.91</td></tr><tr><td>AMX América Móvil, S.…</td><td>通信/网络设备</td><td>上穿98%</td><td>99.2%</td><td>95.8→99.2</td><td>$73.9B</td><td>0.32</td></tr><tr><td>CHT Chunghwa Telecom…</td><td>通信/网络设备</td><td>上穿98%</td><td>99.2%</td><td>72.5→99.2</td><td>$37.9B</td><td>-0.10</td></tr><tr><td>NTES NetEase</td><td>互联网/广告</td><td>上穿98%</td><td>100.0%</td><td>91.7→100.0</td><td>$74.5B</td><td>0.07</td></tr><tr><td>XYZ Block</td><td>软件/SaaS</td><td>上穿98%</td><td>99.2%</td><td>95.8→99.2</td><td>$45.8B</td><td>1.61</td></tr><tr class="premium-row"><td>CVNA Carvana Co.</td><td>自动驾驶/机器人</td><td>上穿98%</td><td>98.3%</td><td>97.5→98.3</td><td>$80.3B</td><td>1.76</td></tr><tr><td>HIG-PG The Hartford Fina…</td><td>金融/加密</td><td>上穿98%</td><td>100.0%</td><td>97.5→100.0</td><td>$37.5B</td><td>0.18</td></tr><tr><td>ALGN Align Technology</td><td>医药/生命科学</td><td>上穿98%</td><td>99.2%</td><td>95.0→99.2</td><td>$10.8B</td><td>0.95</td></tr><tr><td>ELAN Elanco Animal Hea…</td><td>医药/生命科学</td><td>上穿98%</td><td>100.0%</td><td>57.5→100.0</td><td>$12.3B</td><td>1.03</td></tr><tr><td>VTRS Viatris</td><td>医药/生命科学</td><td>上穿98%</td><td>100.0%</td><td>73.3→100.0</td><td>$22.0B</td><td>0.31</td></tr><tr><td>SPG Simon Property Gr…</td><td>消费/电商</td><td>上穿98%</td><td>99.2%</td><td>96.7→99.2</td><td>$72.0B</td><td>-0.02</td></tr><tr><td>SUZ Suzano</td><td>能源/材料</td><td>上穿98%</td><td>98.3%</td><td>95.8→98.3</td><td>$11.4B</td><td>0.44</td></tr></tbody></table></div><h3>其他 Extended · 上穿2% — 大盘(≥$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr class="premium-row"><td>AMD Advanced Micro De…</td><td>半导体链</td><td>上穿2%</td><td>2.5%</td><td>0.0→2.5</td><td>$791.7B</td><td>3.83</td></tr><tr><td>INTC Intel</td><td>半导体链</td><td>上穿2%</td><td>3.3%</td><td>0.0→3.3</td><td>$317.5B</td><td>3.55</td></tr><tr><td>IBKR Interactive Broke…</td><td>金融/加密</td><td>上穿2%</td><td>2.5%</td><td>0.0→2.5</td><td>$135.9B</td><td>1.77</td></tr><tr><td>GS-PD The Goldman Sachs…</td><td>金融/加密</td><td>上穿2%</td><td>4.2%</td><td>1.7→4.2</td><td>$265.3B</td><td>0.14</td></tr><tr><td>C Citigroup</td><td>金融/加密</td><td>上穿2%</td><td>9.2%</td><td>1.7→9.2</td><td>$205.1B</td><td>1.12</td></tr><tr><td>CVS CVS Health</td><td>医药/生命科学</td><td>上穿2%</td><td>12.5%</td><td>0.8→12.5</td><td>$116.6B</td><td>-0.34</td></tr></tbody></table></div><h3>其他 Extended · 上穿2% — 中小盘(&lt;$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>ONTO Onto Innovation</td><td>半导体链</td><td>上穿2%</td><td>2.5%</td><td>0.0→2.5</td><td>$10.0B</td><td>3.72</td></tr><tr class="premium-row"><td>MTSI MACOM Technology…</td><td>半导体链</td><td>上穿2%</td><td>4.2%</td><td>0.0→4.2</td><td>$18.0B</td><td>3.32</td></tr><tr class="premium-row"><td>ENTG Entegris</td><td>半导体链</td><td>上穿2%</td><td>5.0%</td><td>1.7→5.0</td><td>$23.4B</td><td>3.56</td></tr><tr class="premium-row"><td>SITM SiTime</td><td>半导体链</td><td>上穿2%</td><td>9.2%</td><td>0.0→9.2</td><td>$11.8B</td><td>3.36</td></tr><tr class="premium-row"><td>BE Bloom Energy</td><td>数据中心电力</td><td>上穿2%</td><td>4.2%</td><td>1.7→4.2</td><td>$63.1B</td><td>4.49</td></tr><tr><td>NRG NRG Energy</td><td>数据中心电力</td><td>上穿2%</td><td>20.8%</td><td>0.0→20.8</td><td>$20.3B</td><td>0.88</td></tr><tr><td>VSAT Viasat</td><td>通信/网络设备</td><td>上穿2%</td><td>15.0%</td><td>0.8→15.0</td><td>$10.2B</td><td>3.00</td></tr><tr class="premium-row"><td>MDB MongoDB</td><td>软件/SaaS</td><td>上穿2%</td><td>2.5%</td><td>0.0→2.5</td><td>$27.0B</td><td>2.09</td></tr><tr><td>TWLO Twilio</td><td>软件/SaaS</td><td>上穿2%</td><td>2.5%</td><td>1.7→2.5</td><td>$33.0B</td><td>1.54</td></tr><tr><td>NET Cloudflare</td><td>软件/SaaS</td><td>上穿2%</td><td>4.2%</td><td>0.0→4.2</td><td>$97.0B</td><td>2.04</td></tr><tr><td>AKAM Akamai Technologi…</td><td>软件/SaaS</td><td>上穿2%</td><td>6.7%</td><td>0.0→6.7</td><td>$12.5B</td><td>2.20</td></tr><tr><td>FROG JFrog</td><td>软件/SaaS</td><td>上穿2%</td><td>68.3%</td><td>0.0→68.3</td><td>$10.8B</td><td>1.95</td></tr><tr><td>HOOD Robinhood Markets</td><td>金融/加密</td><td>上穿2%</td><td>2.5%</td><td>0.0→2.5</td><td>$76.9B</td><td>2.64</td></tr><tr class="premium-row"><td>IVZ Invesco</td><td>金融/加密</td><td>上穿2%</td><td>2.5%</td><td>0.8→2.5</td><td>$12.7B</td><td>1.81</td></tr><tr><td>SF-PB Stifel Financial</td><td>金融/加密</td><td>上穿2%</td><td>3.3%</td><td>1.7→3.3</td><td>$10.4B</td><td>0.24</td></tr><tr><td>RF-PC Regions Financial</td><td>金融/加密</td><td>上穿2%</td><td>9.2%</td><td>1.7→9.2</td><td>$24.4B</td><td>0.25</td></tr><tr><td>AVTR Avantor</td><td>医药/生命科学</td><td>上穿2%</td><td>2.5%</td><td>1.7→2.5</td><td>$10.6B</td><td>0.44</td></tr><tr><td>MDGL Madrigal Pharmace…</td><td>医药/生命科学</td><td>上穿2%</td><td>2.5%</td><td>1.7→2.5</td><td>$11.6B</td><td>0.14</td></tr><tr><td>RVTY Revvity</td><td>医药/生命科学</td><td>上穿2%</td><td>6.7%</td><td>0.0→6.7</td><td>$18.2B</td><td>0.74</td></tr><tr><td>RVMD Revolution Medici…</td><td>医药/生命科学</td><td>上穿2%</td><td>25.0%</td><td>0.8→25.0</td><td>$41.0B</td><td>1.43</td></tr><tr><td>MOG-B Moog</td><td>工业/航天/国防</td><td>上穿2%</td><td>3.3%</td><td>0.0→3.3</td><td>$11.4B</td><td>0.69</td></tr><tr><td>PWR Quanta Services</td><td>工业/航天/国防</td><td>上穿2%</td><td>3.3%</td><td>0.0→3.3</td><td>$98.9B</td><td>1.92</td></tr><tr><td>BWXT BWX Technologies</td><td>工业/航天/国防</td><td>上穿2%</td><td>5.0%</td><td>0.0→5.0</td><td>$12.1B</td><td>1.25</td></tr><tr><td>IEX IDEX</td><td>工业/航天/国防</td><td>上穿2%</td><td>6.7%</td><td>0.0→6.7</td><td>$17.5B</td><td>0.65</td></tr><tr><td>ARMK Aramark</td><td>工业/航天/国防</td><td>上穿2%</td><td>7.5%</td><td>0.0→7.5</td><td>$14.4B</td><td>0.48</td></tr><tr><td>ESLT Elbit Systems</td><td>工业/航天/国防</td><td>上穿2%</td><td>16.7%</td><td>0.8→16.7</td><td>$36.4B</td><td>0.98</td></tr><tr><td>CW Curtiss-Wright</td><td>工业/航天/国防</td><td>上穿2%</td><td>38.3%</td><td>0.8→38.3</td><td>$18.4B</td><td>0.91</td></tr><tr><td>SYY Sysco</td><td>消费/电商</td><td>上穿2%</td><td>5.0%</td><td>0.8→5.0</td><td>$35.7B</td><td>-0.08</td></tr><tr><td>VG Venture Global</td><td>能源/材料</td><td>上穿2%</td><td>2.5%</td><td>0.8→2.5</td><td>$32.4B</td><td>-1.08</td></tr><tr><td>VNOM Viper Energy</td><td>能源/材料</td><td>上穿2%</td><td>3.3%</td><td>0.0→3.3</td><td>$8.6B</td><td>-0.39</td></tr><tr><td>CCJ Cameco</td><td>能源/材料</td><td>上穿2%</td><td>6.7%</td><td>0.0→6.7</td><td>$31.6B</td><td>2.09</td></tr><tr><td>EOG EOG Resources</td><td>能源/材料</td><td>上穿2%</td><td>7.5%</td><td>0.0→7.5</td><td>$81.6B</td><td>-0.75</td></tr><tr><td>IRM Iron Mountain</td><td>地产/基础设施</td><td>上穿2%</td><td>5.8%</td><td>0.8→5.8</td><td>$34.7B</td><td>1.35</td></tr><tr><td>SOXX iShares Semicondu…</td><td>ETF/宏观工具</td><td>上穿2%</td><td>3.3%</td><td>0.8→3.3</td><td>$43.1B</td><td>4.20</td></tr><tr><td>FLEX</td><td>其他</td><td>上穿2%</td><td>2.5%</td><td>0.0→2.5</td><td>$32.9B</td><td>3.10</td></tr><tr><td>LFUS Littelfuse</td><td>其他</td><td>上穿2%</td><td>4.2%</td><td>1.7→4.2</td><td>$10.5B</td><td>1.81</td></tr><tr class="premium-row"><td>MKSI MKS</td><td>其他</td><td>上穿2%</td><td>15.0%</td><td>0.8→15.0</td><td>$13.9B</td><td>3.05</td></tr><tr><td>TDY Teledyne Technolo…</td><td>其他</td><td>上穿2%</td><td>26.7%</td><td>0.0→26.7</td><td>$31.1B</td><td>1.12</td></tr><tr><td>FN Fabrinet</td><td>其他</td><td>上穿2%</td><td>35.0%</td><td>1.7→35.0</td><td>$13.0B</td><td>3.06</td></tr></tbody></table></div><h3>其他 Extended · 下穿98% — 大盘(≥$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>MS-PK Morgan Stanley</td><td>金融/加密</td><td>下穿98%</td><td>96.7%</td><td>98.3→96.7</td><td>$288.1B</td><td>0.19</td></tr><tr><td>ISRG Intuitive Surgical</td><td>医药/生命科学</td><td>下穿98%</td><td>77.5%</td><td>98.3→77.5</td><td>$153.8B</td><td>0.77</td></tr><tr><td>MCK McKesson</td><td>医药/生命科学</td><td>下穿98%</td><td>92.5%</td><td>98.3→92.5</td><td>$118.7B</td><td>-0.34</td></tr><tr><td>HCA HCA Healthcare</td><td>医药/生命科学</td><td>下穿98%</td><td>95.8%</td><td>99.2→95.8</td><td>$102.8B</td><td>0.18</td></tr><tr><td>SYK Stryker</td><td>医药/生命科学</td><td>下穿98%</td><td>96.7%</td><td>99.2→96.7</td><td>$118.7B</td><td>0.12</td></tr><tr><td>SBUX Starbucks</td><td>消费/电商</td><td>下穿98%</td><td>89.2%</td><td>98.3→89.2</td><td>$119.9B</td><td>0.18</td></tr><tr><td>WMT Walmart</td><td>消费/电商</td><td>下穿98%</td><td>90.0%</td><td>98.3→90.0</td><td>$993.1B</td><td>-0.19</td></tr><tr><td>SONY Sony Group</td><td>消费/电商</td><td>下穿98%</td><td>92.5%</td><td>100.0→92.5</td><td>$149.6B</td><td>-0.16</td></tr><tr><td>HD The Home Depot</td><td>消费/电商</td><td>下穿98%</td><td>95.8%</td><td>99.2→95.8</td><td>$331.7B</td><td>0.48</td></tr><tr><td>PEP PepsiCo</td><td>消费/电商</td><td>下穿98%</td><td>96.7%</td><td>99.2→96.7</td><td>$187.2B</td><td>-0.32</td></tr><tr><td>LOW Lowe&#x27;s Companies</td><td>消费/电商</td><td>下穿98%</td><td>97.5%</td><td>99.2→97.5</td><td>$119.3B</td><td>0.28</td></tr></tbody></table></div><h3>其他 Extended · 下穿98% — 中小盘(&lt;$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>CMG Chipotle Mexican…</td><td>半导体链</td><td>下穿98%</td><td>88.3%</td><td>98.3→88.3</td><td>$42.1B</td><td>-0.22</td></tr><tr><td>EXR Extra Space Stora…</td><td>半导体链</td><td>下穿98%</td><td>96.7%</td><td>99.2→96.7</td><td>$32.9B</td><td>0.01</td></tr><tr><td>PSA Public Storage</td><td>半导体链</td><td>下穿98%</td><td>96.7%</td><td>99.2→96.7</td><td>$61.4B</td><td>-0.01</td></tr><tr><td>ES Eversource Energy</td><td>数据中心电力</td><td>下穿98%</td><td>84.2%</td><td>100.0→84.2</td><td>$26.0B</td><td>-0.23</td></tr><tr><td>NGG National Grid</td><td>数据中心电力</td><td>下穿98%</td><td>88.3%</td><td>100.0→88.3</td><td>$82.4B</td><td>0.15</td></tr><tr><td>DUK Duke Energy</td><td>数据中心电力</td><td>下穿98%</td><td>91.7%</td><td>99.2→91.7</td><td>$98.6B</td><td>-0.32</td></tr><tr><td>ED Consolidated Edis…</td><td>数据中心电力</td><td>下穿98%</td><td>91.7%</td><td>100.0→91.7</td><td>$43.1B</td><td>-0.42</td></tr><tr><td>LNT Alliant Energy</td><td>数据中心电力</td><td>下穿98%</td><td>92.5%</td><td>98.3→92.5</td><td>$18.7B</td><td>-0.15</td></tr><tr><td>FTS Fortis</td><td>数据中心电力</td><td>下穿98%</td><td>95.0%</td><td>99.2→95.0</td><td>$28.7B</td><td>-0.20</td></tr><tr><td>AEE Ameren</td><td>数据中心电力</td><td>下穿98%</td><td>96.7%</td><td>98.3→96.7</td><td>$30.5B</td><td>-0.17</td></tr><tr><td>AWK American Water Wo…</td><td>数据中心电力</td><td>下穿98%</td><td>97.5%</td><td>100.0→97.5</td><td>$29.1B</td><td>-0.47</td></tr><tr><td>EMA Emera</td><td>数据中心电力</td><td>下穿98%</td><td>97.5%</td><td>99.2→97.5</td><td>$15.3B</td><td>-0.24</td></tr><tr><td>OGE OGE Energy</td><td>数据中心电力</td><td>下穿98%</td><td>97.5%</td><td>99.2→97.5</td><td>$10.2B</td><td>-0.11</td></tr><tr><td>WTRG Essential Utiliti…</td><td>数据中心电力</td><td>下穿98%</td><td>97.5%</td><td>100.0→97.5</td><td>$12.5B</td><td>-0.45</td></tr><tr><td>CMCSA Comcast</td><td>通信/网络设备</td><td>下穿98%</td><td>92.5%</td><td>99.2→92.5</td><td>$84.3B</td><td>0.03</td></tr><tr><td>BCE</td><td>通信/网络设备</td><td>下穿98%</td><td>95.0%</td><td>100.0→95.0</td><td>$19.2B</td><td>-0.52</td></tr><tr><td>MSI Motorola Solutions</td><td>通信/网络设备</td><td>下穿98%</td><td>95.0%</td><td>98.3→95.0</td><td>$81.4B</td><td>-0.04</td></tr><tr><td>TU Telus</td><td>通信/网络设备</td><td>下穿98%</td><td>97.5%</td><td>100.0→97.5</td><td>$14.0B</td><td>-0.42</td></tr><tr><td>JKHY Jack Henry &amp; Asso…</td><td>软件/SaaS</td><td>下穿98%</td><td>90.0%</td><td>99.2→90.0</td><td>$11.6B</td><td>-0.15</td></tr><tr><td>ROP Roper Technologies</td><td>软件/SaaS</td><td>下穿98%</td><td>91.7%</td><td>98.3→91.7</td><td>$46.8B</td><td>-0.40</td></tr><tr><td>VRSK Verisk Analytics</td><td>软件/SaaS</td><td>下穿98%</td><td>91.7%</td><td>99.2→91.7</td><td>$25.8B</td><td>-1.01</td></tr><tr><td>TYL Tyler Technologies</td><td>软件/SaaS</td><td>下穿98%</td><td>95.8%</td><td>100.0→95.8</td><td>$16.4B</td><td>-0.56</td></tr><tr><td>KEY-PJ KeyCorp</td><td>金融/加密</td><td>下穿98%</td><td>83.3%</td><td>99.2→83.3</td><td>$22.4B</td><td>0.17</td></tr><tr><td>ACGL Arch Capital Group</td><td>金融/加密</td><td>下穿98%</td><td>85.0%</td><td>98.3→85.0</td><td>$36.2B</td><td>-0.49</td></tr><tr><td>MSCI</td><td>金融/加密</td><td>下穿98%</td><td>88.3%</td><td>99.2→88.3</td><td>$46.1B</td><td>0.31</td></tr><tr><td>AON</td><td>金融/加密</td><td>下穿98%</td><td>91.7%</td><td>99.2→91.7</td><td>$70.1B</td><td>-0.36</td></tr><tr><td>ERIE Erie Indemnity Co…</td><td>金融/加密</td><td>下穿98%</td><td>91.7%</td><td>100.0→91.7</td><td>$12.5B</td><td>-0.73</td></tr><tr><td>MKL Markel</td><td>金融/加密</td><td>下穿98%</td><td>93.3%</td><td>98.3→93.3</td><td>$23.5B</td><td>-0.15</td></tr><tr><td>BNT Brookfield Wealth…</td><td>金融/加密</td><td>下穿98%</td><td>96.7%</td><td>98.3→96.7</td><td>$14.5B</td><td>0.98</td></tr><tr><td>BN Brookfield</td><td>金融/加密</td><td>下穿98%</td><td>97.5%</td><td>98.3→97.5</td><td>$96.2B</td><td>0.97</td></tr><tr><td>UHS Universal Health…</td><td>医药/生命科学</td><td>下穿98%</td><td>92.5%</td><td>100.0→92.5</td><td>$10.4B</td><td>-0.15</td></tr><tr><td>SNN Smith &amp; Nephew</td><td>医药/生命科学</td><td>下穿98%</td><td>93.3%</td><td>98.3→93.3</td><td>$13.0B</td><td>0.09</td></tr><tr><td>GEHC GE HealthCare Tec…</td><td>医药/生命科学</td><td>下穿98%</td><td>95.8%</td><td>99.2→95.8</td><td>$36.5B</td><td>0.17</td></tr><tr><td>ALC Alcon</td><td>医药/生命科学</td><td>下穿98%</td><td>96.7%</td><td>99.2→96.7</td><td>$35.2B</td><td>0.14</td></tr><tr><td>MDLN Medline</td><td>医药/生命科学</td><td>下穿98%</td><td>97.5%</td><td>99.2→97.5</td><td>$29.2B</td><td>0.80</td></tr><tr><td>BAH Booz Allen Hamilt…</td><td>工业/航天/国防</td><td>下穿98%</td><td>80.8%</td><td>98.3→80.8</td><td>$10.4B</td><td>-0.03</td></tr><tr><td>TTEK Tetra Tech</td><td>工业/航天/国防</td><td>下穿98%</td><td>91.7%</td><td>98.3→91.7</td><td>$10.2B</td><td>0.13</td></tr><tr><td>RTO Rentokil Initial</td><td>工业/航天/国防</td><td>下穿98%</td><td>92.5%</td><td>98.3→92.5</td><td>$11.9B</td><td>-0.25</td></tr><tr><td>RBA RB Global</td><td>工业/航天/国防</td><td>下穿98%</td><td>94.2%</td><td>98.3→94.2</td><td>$17.3B</td><td>0.33</td></tr><tr><td>RSG Republic Services</td><td>工业/航天/国防</td><td>下穿98%</td><td>94.2%</td><td>98.3→94.2</td><td>$74.4B</td><td>-0.63</td></tr><tr><td>GWW W.W. Grainger</td><td>工业/航天/国防</td><td>下穿98%</td><td>95.0%</td><td>99.2→95.0</td><td>$66.1B</td><td>0.37</td></tr><tr><td>FER Ferrovial</td><td>工业/航天/国防</td><td>下穿98%</td><td>97.5%</td><td>99.2→97.5</td><td>$41.5B</td><td>0.61</td></tr><tr><td>ROL Rollins</td><td>工业/航天/国防</td><td>下穿98%</td><td>97.5%</td><td>100.0→97.5</td><td>$17.9B</td><td>-0.29</td></tr><tr><td>CL Colgate-Palmolive…</td><td>消费/电商</td><td>下穿98%</td><td>86.7%</td><td>98.3→86.7</td><td>$76.4B</td><td>-0.34</td></tr><tr><td>KR The Kroger Co.</td><td>消费/电商</td><td>下穿98%</td><td>86.7%</td><td>98.3→86.7</td><td>$40.5B</td><td>-0.57</td></tr><tr><td>LEN-B Lennar</td><td>消费/电商</td><td>下穿98%</td><td>92.5%</td><td>98.3→92.5</td><td>$20.5B</td><td>0.71</td></tr><tr><td>PFGC Performance Food…</td><td>消费/电商</td><td>下穿98%</td><td>92.5%</td><td>99.2→92.5</td><td>$15.0B</td><td>0.13</td></tr><tr><td>BF-A Brown-Forman</td><td>消费/电商</td><td>下穿98%</td><td>95.0%</td><td>98.3→95.0</td><td>$13.3B</td><td>-0.20</td></tr><tr><td>LEN Lennar</td><td>消费/电商</td><td>下穿98%</td><td>95.0%</td><td>98.3→95.0</td><td>$20.5B</td><td>0.69</td></tr><tr><td>YUM Yum! Brands</td><td>消费/电商</td><td>下穿98%</td><td>95.0%</td><td>99.2→95.0</td><td>$42.7B</td><td>-0.00</td></tr><tr><td>STZ Constellation Bra…</td><td>消费/电商</td><td>下穿98%</td><td>95.8%</td><td>98.3→95.8</td><td>$23.5B</td><td>-0.22</td></tr><tr><td>CPNG Coupang</td><td>消费/电商</td><td>下穿98%</td><td>96.7%</td><td>99.2→96.7</td><td>$27.3B</td><td>1.45</td></tr><tr><td>LULU Lululemon Athleti…</td><td>消费/电商</td><td>下穿98%</td><td>96.7%</td><td>98.3→96.7</td><td>$12.1B</td><td>0.78</td></tr><tr><td>O Realty Income</td><td>消费/电商</td><td>下穿98%</td><td>96.7%</td><td>99.2→96.7</td><td>$54.3B</td><td>-0.19</td></tr><tr><td>KIM Kimco Realty</td><td>消费/电商</td><td>下穿98%</td><td>97.5%</td><td>99.2→97.5</td><td>$16.7B</td><td>-0.10</td></tr><tr><td>CRH</td><td>能源/材料</td><td>下穿98%</td><td>96.7%</td><td>98.3→96.7</td><td>$62.2B</td><td>0.92</td></tr><tr><td>WY Weyerhaeuser Comp…</td><td>地产/基础设施</td><td>下穿98%</td><td>90.0%</td><td>99.2→90.0</td><td>$14.8B</td><td>0.13</td></tr><tr><td>SBAC SBA Communications</td><td>地产/基础设施</td><td>下穿98%</td><td>91.7%</td><td>99.2→91.7</td><td>$19.5B</td><td>-0.03</td></tr><tr><td>SUI Sun Communities</td><td>地产/基础设施</td><td>下穿98%</td><td>94.2%</td><td>99.2→94.2</td><td>$13.9B</td><td>-0.37</td></tr><tr><td>VICI VICI Properties</td><td>地产/基础设施</td><td>下穿98%</td><td>95.8%</td><td>98.3→95.8</td><td>$26.9B</td><td>-0.25</td></tr><tr><td>ELS Equity LifeStyle…</td><td>地产/基础设施</td><td>下穿98%</td><td>97.5%</td><td>98.3→97.5</td><td>$11.7B</td><td>-0.34</td></tr></tbody></table></div><h2>2. 量能异常</h2><p class="report-subtitle">景气精选池 4｜其他 Extended 141</p><h3>景气精选池</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>类型</th><th>DV 5d/20d</th><th>RVOL</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>APP AppLovin</td><td>互联网/广告</td><td>共振</td><td>2.3x ($3.8B/$1.6B)</td><td>3日 2.2σ</td><td>$82.6B</td><td>0.30</td></tr><tr class="premium-row"><td>COHR Coherent</td><td>通信/网络设备</td><td>持续放量</td><td>—</td><td>3日 4.1σ</td><td>$40.6B</td><td>3.75</td></tr><tr><td>VST Vistra</td><td>数据中心电力</td><td>持续放量</td><td>—</td><td>3日 2.5σ</td><td>$47.0B</td><td>1.39</td></tr><tr><td>ANET Arista Networks</td><td>AI算力/云</td><td>流动性加速</td><td>1.6x ($2.2B/$1.4B)</td><td>—</td><td>$214.5B</td><td>2.65</td></tr></tbody></table></div><h3>其他 Extended</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>类型</th><th>DV 5d/20d</th><th>RVOL</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>LYV Live Nation Enter…</td><td>通信/网络设备</td><td>共振</td><td>1.9x ($776M/$415M)</td><td>3日 3.7σ</td><td>$41.6B</td><td>0.33</td></tr><tr><td>NRG NRG Energy</td><td>数据中心电力</td><td>共振</td><td>1.7x ($605M/$364M)</td><td>3日 3.5σ</td><td>$20.3B</td><td>0.88</td></tr><tr><td>BEKE KE Holdings</td><td>地产/基础设施</td><td>共振</td><td>1.7x ($150M/$89M)</td><td>3日 3.1σ</td><td>$19.0B</td><td>0.31</td></tr><tr><td>EXPE Expedia Group</td><td>消费/电商</td><td>共振</td><td>1.9x ($1.0B/$558M)</td><td>3日 2.9σ</td><td>$34.6B</td><td>1.01</td></tr><tr><td>KOF Coca-Cola FEMSA,…</td><td>消费/电商</td><td>共振</td><td>1.6x ($72M/$44M)</td><td>3日 2.6σ</td><td>$195.7B</td><td>0.18</td></tr><tr class="premium-row"><td>SITM SiTime</td><td>半导体链</td><td>共振</td><td>1.7x ($621M/$365M)</td><td>3日 2.6σ</td><td>$11.8B</td><td>3.36</td></tr><tr><td>MTZ MasTec</td><td>工业/航天/国防</td><td>共振</td><td>1.5x ($524M/$349M)</td><td>3日 2.5σ</td><td>$15.7B</td><td>1.26</td></tr><tr><td>CNP CenterPoint Energy</td><td>数据中心电力</td><td>共振</td><td>1.6x ($573M/$359M)</td><td>3日 2.3σ</td><td>$28.1B</td><td>-0.11</td></tr><tr><td>EVRG Evergy</td><td>数据中心电力</td><td>共振</td><td>1.7x ($360M/$212M)</td><td>3日 2.2σ</td><td>$19.7B</td><td>-0.18</td></tr><tr><td>U Unity Software</td><td>软件/SaaS</td><td>共振</td><td>2.2x ($1.2B/$544M)</td><td>3日 2.2σ</td><td>$17.7B</td><td>0.85</td></tr><tr><td>BWXT BWX Technologies</td><td>工业/航天/国防</td><td>共振</td><td>1.5x ($259M/$167M)</td><td>3日 2.2σ</td><td>$12.1B</td><td>1.25</td></tr><tr class="premium-row"><td>AMD Advanced Micro De…</td><td>半导体链</td><td>共振</td><td>1.5x ($21.3B/$14.0B)</td><td>3日 2.1σ</td><td>$791.7B</td><td>3.83</td></tr><tr><td>GMED Globus Medical</td><td>医药/生命科学</td><td>共振</td><td>2.0x ($286M/$142M)</td><td>单日 12.5σ</td><td>$10.8B</td><td>0.65</td></tr><tr><td>DKNG DraftKings</td><td>消费/电商</td><td>共振</td><td>1.8x ($550M/$311M)</td><td>单日 10.2σ</td><td>$10.9B</td><td>0.11</td></tr><tr><td>AXON Axon Enterprise</td><td>工业/航天/国防</td><td>共振</td><td>1.7x ($810M/$488M)</td><td>单日 8.8σ</td><td>$33.5B</td><td>1.70</td></tr><tr class="premium-row"><td>MCHP Microchip Technol…</td><td>半导体链</td><td>共振</td><td>1.6x ($1.7B/$1.1B)</td><td>单日 7.8σ</td><td>$42.3B</td><td>2.79</td></tr><tr><td>NTRA Natera</td><td>医药/生命科学</td><td>共振</td><td>1.8x ($1.3B/$749M)</td><td>单日 6.3σ</td><td>$55.7B</td><td>1.33</td></tr><tr><td>HBANZ Huntington Bancsh…</td><td>金融/加密</td><td>共振</td><td>1.7x ($0M/$0M)</td><td>单日 4.7σ</td><td>$32.0B</td><td>0.20</td></tr><tr><td>BAM Brookfield Asset…</td><td>金融/加密</td><td>共振</td><td>1.6x ($229M/$146M)</td><td>单日 4.6σ</td><td>$81.9B</td><td>1.04</td></tr><tr><td>BIP Brookfield Infras…</td><td>数据中心电力</td><td>共振</td><td>1.8x ($62M/$35M)</td><td>单日 4.3σ</td><td>$17.1B</td><td>0.10</td></tr><tr><td>ABNB Airbnb</td><td>消费/电商</td><td>共振</td><td>1.8x ($1.3B/$747M)</td><td>单日 3.9σ</td><td>$98.8B</td><td>0.86</td></tr><tr><td>SCHW-PD The Charles Schwab</td><td>金融/加密</td><td>共振</td><td>1.5x ($4M/$3M)</td><td>单日 3.7σ</td><td>$154.3B</td><td>0.15</td></tr><tr><td>ONC BeOne Medicines AG</td><td>医药/生命科学</td><td>共振</td><td>1.5x ($256M/$171M)</td><td>单日 3.7σ</td><td>$39.6B</td><td>0.52</td></tr><tr><td>FWONA Formula One Group</td><td>通信/网络设备</td><td>共振</td><td>1.5x ($37M/$24M)</td><td>单日 3.2σ</td><td>$22.0B</td><td>-0.25</td></tr><tr><td>FOXA Fox</td><td>通信/网络设备</td><td>共振</td><td>1.7x ($711M/$428M)</td><td>单日 3.2σ</td><td>$25.1B</td><td>0.04</td></tr><tr><td>PPL</td><td>数据中心电力</td><td>共振</td><td>1.6x ($454M/$282M)</td><td>单日 3.1σ</td><td>$26.9B</td><td>-0.12</td></tr><tr><td>SGI Somnigroup Intern…</td><td>消费/电商</td><td>共振</td><td>1.5x ($290M/$190M)</td><td>单日 3.1σ</td><td>$13.7B</td><td>1.17</td></tr><tr><td>DOCN DigitalOcean Hold…</td><td>软件/SaaS</td><td>共振</td><td>1.6x ($610M/$380M)</td><td>单日 2.5σ</td><td>$10.4B</td><td>3.18</td></tr><tr><td>CMS-PB Consumers Energy…</td><td>金融/加密</td><td>共振</td><td>2.3x ($0M/$0M)</td><td>单日 2.4σ</td><td>$20.1B</td><td>0.06</td></tr><tr><td>ABBNY ABB</td><td>数据中心电力</td><td>共振</td><td>1.7x ($49M/$29M)</td><td>单日 2.3σ</td><td>$170.4B</td><td>1.69</td></tr><tr><td>ROKU</td><td>通信/网络设备</td><td>共振</td><td>1.7x ($895M/$528M)</td><td>单日 2.2σ</td><td>$23.8B</td><td>0.59</td></tr><tr><td>MDGL Madrigal Pharmace…</td><td>医药/生命科学</td><td>共振</td><td>2.3x ($540M/$236M)</td><td>单日 2.1σ</td><td>$11.6B</td><td>0.14</td></tr><tr><td>IBN ICICI Bank</td><td>金融/加密</td><td>共振</td><td>1.7x ($388M/$222M)</td><td>单日 2.1σ</td><td>$108.1B</td><td>0.11</td></tr><tr><td>FROG JFrog</td><td>软件/SaaS</td><td>共振</td><td>1.5x ($333M/$217M)</td><td>单日 2.0σ</td><td>$10.8B</td><td>1.95</td></tr><tr><td>NET Cloudflare</td><td>软件/SaaS</td><td>单日爆量</td><td>—</td><td>单日 4.4σ</td><td>$97.0B</td><td>2.04</td></tr><tr><td>BUD Anheuser-Busch In…</td><td>消费/电商</td><td>单日爆量</td><td>—</td><td>单日 3.8σ</td><td>$160.1B</td><td>-0.18</td></tr><tr><td>BAC-PK Bank of America</td><td>金融/加密</td><td>单日爆量</td><td>—</td><td>单日 3.6σ</td><td>$355.2B</td><td>0.20</td></tr><tr><td>BBDO Banco Bradesco</td><td>金融/加密</td><td>单日爆量</td><td>—</td><td>单日 3.5σ</td><td>$24.8B</td><td>0.97</td></tr><tr><td>APA</td><td>能源/材料</td><td>单日爆量</td><td>—</td><td>单日 3.5σ</td><td>$16.9B</td><td>-0.73</td></tr><tr><td>HALO Halozyme Therapeu…</td><td>医药/生命科学</td><td>单日爆量</td><td>—</td><td>单日 3.5σ</td><td>$15.1B</td><td>0.43</td></tr><tr><td>ROK Rockwell Automati…</td><td>自动驾驶/机器人</td><td>单日爆量</td><td>—</td><td>单日 3.1σ</td><td>$50.0B</td><td>1.54</td></tr><tr><td>RGA Reinsurance Group…</td><td>金融/加密</td><td>单日爆量</td><td>—</td><td>单日 3.0σ</td><td>$17.5B</td><td>-0.00</td></tr><tr><td>SOXX iShares Semicondu…</td><td>ETF/宏观工具</td><td>持续放量</td><td>—</td><td>5日 5.3σ</td><td>$43.1B</td><td>4.20</td></tr><tr><td>GEV GE Vernova</td><td>数据中心电力</td><td>持续放量</td><td>—</td><td>3日 3.9σ</td><td>$244.2B</td><td>1.83</td></tr><tr><td>FIX Comfort Systems U…</td><td>工业/航天/国防</td><td>持续放量</td><td>—</td><td>3日 2.5σ</td><td>$45.1B</td><td>2.31</td></tr><tr><td>EME EMCOR Group</td><td>工业/航天/国防</td><td>持续放量</td><td>—</td><td>3日 2.5σ</td><td>$31.2B</td><td>1.64</td></tr><tr><td>FTAI FTAI Aviation</td><td>工业/航天/国防</td><td>持续放量</td><td>—</td><td>3日 2.4σ</td><td>$20.6B</td><td>2.17</td></tr><tr><td>CLH Clean Harbors</td><td>工业/航天/国防</td><td>持续放量</td><td>—</td><td>5日 2.3σ</td><td>$15.6B</td><td>-0.03</td></tr><tr><td>ETN Eaton Corporation</td><td>数据中心电力</td><td>持续放量</td><td>—</td><td>3日 2.3σ</td><td>$152.2B</td><td>2.04</td></tr><tr><td>STE STERIS</td><td>医药/生命科学</td><td>持续放量</td><td>—</td><td>3日 2.2σ</td><td>$22.6B</td><td>-0.01</td></tr><tr class="premium-row"><td>MKSI MKS</td><td>其他</td><td>持续放量</td><td>—</td><td>3日 2.2σ</td><td>$13.9B</td><td>3.05</td></tr><tr><td>PWR Quanta Services</td><td>工业/航天/国防</td><td>持续放量</td><td>—</td><td>3日 2.2σ</td><td>$98.9B</td><td>1.92</td></tr><tr><td>NVT nVent Electric</td><td>数据中心电力</td><td>持续放量</td><td>—</td><td>3日 2.1σ</td><td>$20.9B</td><td>2.42</td></tr><tr><td>CMI Cummins</td><td>工业/航天/国防</td><td>持续放量</td><td>—</td><td>3日 2.1σ</td><td>$69.1B</td><td>1.23</td></tr><tr><td>ARMK Aramark</td><td>工业/航天/国防</td><td>持续放量</td><td>—</td><td>3日 2.0σ</td><td>$14.4B</td><td>0.48</td></tr><tr><td>PFGC Performance Food…</td><td>消费/电商</td><td>流动性加速</td><td>2.1x ($411M/$194M)</td><td>—</td><td>$15.0B</td><td>0.13</td></tr><tr><td>FISV Fiserv</td><td>软件/SaaS</td><td>流动性加速</td><td>2.0x ($799M/$394M)</td><td>—</td><td>$31.1B</td><td>-0.08</td></tr><tr><td>GKOS Glaukos</td><td>医药/生命科学</td><td>流动性加速</td><td>2.0x ($826M/$410M)</td><td>—</td><td>$13.8B</td><td>0.58</td></tr><tr><td>NXT Nextpower</td><td>数据中心电力</td><td>流动性加速</td><td>2.0x ($569M/$288M)</td><td>—</td><td>$14.5B</td><td>2.91</td></tr><tr><td>CQP Cheniere Energy P…</td><td>能源/材料</td><td>流动性加速</td><td>2.0x ($15M/$8M)</td><td>—</td><td>$30.5B</td><td>-0.40</td></tr><tr><td>UNM Unum Group</td><td>金融/加密</td><td>流动性加速</td><td>1.9x ($374M/$192M)</td><td>—</td><td>$14.4B</td><td>0.03</td></tr><tr class="premium-row"><td>OKTA</td><td>软件/SaaS</td><td>流动性加速</td><td>1.9x ($2.0B/$1.0B)</td><td>—</td><td>$33.1B</td><td>2.16</td></tr><tr><td>BSY Bentley Systems,</td><td>软件/SaaS</td><td>流动性加速</td><td>1.9x ($244M/$128M)</td><td>—</td><td>$13.1B</td><td>-0.09</td></tr><tr><td>SWK Stanley Black &amp; D…</td><td>工业/航天/国防</td><td>流动性加速</td><td>1.9x ($362M/$190M)</td><td>—</td><td>$15.9B</td><td>1.26</td></tr><tr><td>IDXX IDEXX Laboratories</td><td>医药/生命科学</td><td>流动性加速</td><td>1.9x ($817M/$432M)</td><td>—</td><td>$53.0B</td><td>0.40</td></tr><tr><td>FIS Fidelity National…</td><td>软件/SaaS</td><td>流动性加速</td><td>1.9x ($540M/$286M)</td><td>—</td><td>$20.1B</td><td>-0.52</td></tr><tr><td>FSLR First Solar</td><td>能源/材料</td><td>流动性加速</td><td>1.9x ($1.0B/$539M)</td><td>—</td><td>$20.0B</td><td>2.05</td></tr><tr><td>XYZ Block</td><td>软件/SaaS</td><td>流动性加速</td><td>1.9x ($907M/$484M)</td><td>—</td><td>$45.8B</td><td>1.61</td></tr><tr><td>DD DuPont de Nemours</td><td>能源/材料</td><td>流动性加速</td><td>1.9x ($295M/$159M)</td><td>—</td><td>$20.6B</td><td>2.49</td></tr><tr><td>EW Edwards Lifescien…</td><td>医药/生命科学</td><td>流动性加速</td><td>1.8x ($798M/$434M)</td><td>—</td><td>$54.9B</td><td>0.25</td></tr><tr><td>SRE Sempra</td><td>数据中心电力</td><td>流动性加速</td><td>1.8x ($635M/$350M)</td><td>—</td><td>$55.8B</td><td>0.01</td></tr><tr><td>GRAB Grab Holdings</td><td>软件/SaaS</td><td>流动性加速</td><td>1.8x ($372M/$206M)</td><td>—</td><td>$12.7B</td><td>0.89</td></tr><tr><td>KMB Kimberly-Clark</td><td>消费/电商</td><td>流动性加速</td><td>1.8x ($1.3B/$720M)</td><td>—</td><td>$34.7B</td><td>-0.09</td></tr><tr><td>NYT The New York Time…</td><td>通信/网络设备</td><td>流动性加速</td><td>1.8x ($300M/$169M)</td><td>—</td><td>$10.9B</td><td>-0.11</td></tr><tr><td>LSCC Lattice Semicondu…</td><td>半导体链</td><td>流动性加速</td><td>1.8x ($493M/$278M)</td><td>—</td><td>$14.9B</td><td>3.28</td></tr><tr><td>MPLX MPLX Lp</td><td>能源/材料</td><td>流动性加速</td><td>1.8x ($174M/$98M)</td><td>—</td><td>$58.3B</td><td>-0.09</td></tr><tr><td>RACE Ferrari</td><td>自动驾驶/机器人</td><td>流动性加速</td><td>1.8x ($341M/$194M)</td><td>—</td><td>$72.9B</td><td>0.96</td></tr><tr><td>SYY Sysco</td><td>消费/电商</td><td>流动性加速</td><td>1.8x ($494M/$281M)</td><td>—</td><td>$35.7B</td><td>-0.08</td></tr><tr><td>PHG Koninklijke Phili…</td><td>医药/生命科学</td><td>流动性加速</td><td>1.8x ($73M/$42M)</td><td>—</td><td>$27.2B</td><td>0.48</td></tr><tr><td>SSNC SS&amp;C Technologies…</td><td>软件/SaaS</td><td>流动性加速</td><td>1.7x ($310M/$177M)</td><td>—</td><td>$19.0B</td><td>0.15</td></tr><tr><td>CVS CVS Health</td><td>医药/生命科学</td><td>流动性加速</td><td>1.7x ($1.6B/$940M)</td><td>—</td><td>$116.6B</td><td>-0.34</td></tr><tr><td>CPNG Coupang</td><td>消费/电商</td><td>流动性加速</td><td>1.7x ($404M/$233M)</td><td>—</td><td>$27.3B</td><td>1.45</td></tr><tr><td>XEL Xcel Energy</td><td>数据中心电力</td><td>流动性加速</td><td>1.7x ($916M/$534M)</td><td>—</td><td>$49.5B</td><td>-0.04</td></tr><tr><td>HUBS HubSpot</td><td>软件/SaaS</td><td>流动性加速</td><td>1.7x ($512M/$302M)</td><td>—</td><td>$11.4B</td><td>0.31</td></tr><tr><td>TRMB Trimble</td><td>其他</td><td>流动性加速</td><td>1.7x ($229M/$136M)</td><td>—</td><td>$15.3B</td><td>0.31</td></tr><tr><td>NBIX Neurocrine Biosci…</td><td>医药/生命科学</td><td>流动性加速</td><td>1.7x ($365M/$217M)</td><td>—</td><td>$16.7B</td><td>0.39</td></tr><tr><td>TPL Texas Pacific Land</td><td>能源/材料</td><td>流动性加速</td><td>1.7x ($215M/$128M)</td><td>—</td><td>$22.9B</td><td>0.33</td></tr><tr><td>LDOS Leidos Holdings</td><td>软件/SaaS</td><td>流动性加速</td><td>1.7x ($246M/$146M)</td><td>—</td><td>$16.7B</td><td>0.14</td></tr><tr><td>MSI Motorola Solutions</td><td>通信/网络设备</td><td>流动性加速</td><td>1.7x ($933M/$558M)</td><td>—</td><td>$81.4B</td><td>-0.04</td></tr><tr><td>SF-PB Stifel Financial</td><td>金融/加密</td><td>流动性加速</td><td>1.7x ($1M/$0M)</td><td>—</td><td>$10.4B</td><td>0.24</td></tr><tr><td>WDS Woodside Energy G…</td><td>能源/材料</td><td>流动性加速</td><td>1.7x ($23M/$14M)</td><td>—</td><td>$42.4B</td><td>-0.44</td></tr><tr><td>FLUT Flutter Entertain…</td><td>互联网/广告</td><td>流动性加速</td><td>1.7x ($405M/$244M)</td><td>—</td><td>$14.7B</td><td>-0.32</td></tr><tr><td>BR Broadridge Financ…</td><td>软件/SaaS</td><td>流动性加速</td><td>1.7x ($290M/$175M)</td><td>—</td><td>$20.9B</td><td>-0.06</td></tr><tr><td>FWONK Liberty Media</td><td>通信/网络设备</td><td>流动性加速</td><td>1.7x ($450M/$271M)</td><td>—</td><td>$22.0B</td><td>-0.21</td></tr><tr><td>CPAY Corpay</td><td>软件/SaaS</td><td>流动性加速</td><td>1.7x ($374M/$226M)</td><td>—</td><td>$26.6B</td><td>-0.01</td></tr><tr><td>ITT</td><td>工业/航天/国防</td><td>流动性加速</td><td>1.6x ($282M/$171M)</td><td>—</td><td>$18.3B</td><td>1.10</td></tr><tr><td>USFD US Foods Holding</td><td>消费/电商</td><td>流动性加速</td><td>1.6x ($419M/$255M)</td><td>—</td><td>$22.2B</td><td>0.15</td></tr><tr><td>SNN Smith &amp; Nephew</td><td>医药/生命科学</td><td>流动性加速</td><td>1.6x ($73M/$45M)</td><td>—</td><td>$13.0B</td><td>0.09</td></tr><tr><td>TOST Toast</td><td>软件/SaaS</td><td>流动性加速</td><td>1.6x ($511M/$313M)</td><td>—</td><td>$19.4B</td><td>0.67</td></tr><tr><td>RRX Regal Rexnord</td><td>工业/航天/国防</td><td>流动性加速</td><td>1.6x ($335M/$207M)</td><td>—</td><td>$12.0B</td><td>2.19</td></tr><tr><td>PSA Public Storage</td><td>半导体链</td><td>流动性加速</td><td>1.6x ($523M/$324M)</td><td>—</td><td>$61.4B</td><td>-0.01</td></tr><tr class="premium-row"><td>ZBRA Zebra Technologies</td><td>通信/网络设备</td><td>流动性加速</td><td>1.6x ($395M/$245M)</td><td>—</td><td>$15.6B</td><td>1.73</td></tr><tr><td>DASH DoorDash</td><td>通信/网络设备</td><td>流动性加速</td><td>1.6x ($1.6B/$1.0B)</td><td>—</td><td>$79.6B</td><td>1.39</td></tr><tr><td>BDX Becton, Dickinson…</td><td>医药/生命科学</td><td>流动性加速</td><td>1.6x ($598M/$374M)</td><td>—</td><td>$54.5B</td><td>-0.06</td></tr><tr><td>MOG-B Moog</td><td>工业/航天/国防</td><td>流动性加速</td><td>1.6x ($0M/$0M)</td><td>—</td><td>$11.4B</td><td>0.69</td></tr><tr><td>SIRI Sirius XM Holdings</td><td>互联网/广告</td><td>流动性加速</td><td>1.6x ($224M/$140M)</td><td>—</td><td>$10.4B</td><td>0.31</td></tr><tr><td>ZTS Zoetis</td><td>医药/生命科学</td><td>流动性加速</td><td>1.6x ($573M/$360M)</td><td>—</td><td>$34.7B</td><td>0.30</td></tr><tr><td>YUMC Yum China Holdings</td><td>消费/电商</td><td>流动性加速</td><td>1.6x ($142M/$89M)</td><td>—</td><td>$16.4B</td><td>-0.09</td></tr><tr><td>ZBH Zimmer Biomet Hol…</td><td>医药/生命科学</td><td>流动性加速</td><td>1.6x ($379M/$238M)</td><td>—</td><td>$18.7B</td><td>0.22</td></tr><tr><td>KYMR Kymera Therapeuti…</td><td>医药/生命科学</td><td>流动性加速</td><td>1.6x ($183M/$115M)</td><td>—</td><td>$10.5B</td><td>0.91</td></tr><tr><td>ADSK Autodesk</td><td>软件/SaaS</td><td>流动性加速</td><td>1.6x ($756M/$476M)</td><td>—</td><td>$53.0B</td><td>0.00</td></tr><tr><td>TKO TKO Group Holdings</td><td>通信/网络设备</td><td>流动性加速</td><td>1.6x ($325M/$205M)</td><td>—</td><td>$14.0B</td><td>0.18</td></tr><tr><td>IRM Iron Mountain</td><td>地产/基础设施</td><td>流动性加速</td><td>1.6x ($272M/$171M)</td><td>—</td><td>$34.7B</td><td>1.35</td></tr><tr><td>AMCR Amcor</td><td>消费/电商</td><td>流动性加速</td><td>1.6x ($274M/$173M)</td><td>—</td><td>$21.8B</td><td>0.71</td></tr><tr><td>NWSA News</td><td>通信/网络设备</td><td>流动性加速</td><td>1.6x ($180M/$114M)</td><td>—</td><td>$17.8B</td><td>0.54</td></tr><tr><td>MKC-V McCormick &amp; Compa…</td><td>消费/电商</td><td>流动性加速</td><td>1.6x ($0M/$0M)</td><td>—</td><td>$12.9B</td><td>-0.32</td></tr><tr><td>DDOG Datadog</td><td>软件/SaaS</td><td>流动性加速</td><td>1.6x ($1.6B/$999M)</td><td>—</td><td>$78.2B</td><td>1.39</td></tr><tr><td>NWS News</td><td>通信/网络设备</td><td>流动性加速</td><td>1.6x ($53M/$34M)</td><td>—</td><td>$17.8B</td><td>0.55</td></tr><tr><td>TM Toyota Motor</td><td>自动驾驶/机器人</td><td>流动性加速</td><td>1.6x ($110M/$70M)</td><td>—</td><td>$236.2B</td><td>-0.02</td></tr><tr><td>REGN Regeneron Pharmac…</td><td>医药/生命科学</td><td>流动性加速</td><td>1.6x ($1.3B/$814M)</td><td>—</td><td>$99.0B</td><td>0.05</td></tr><tr><td>ORCL Oracle</td><td>AI算力/云</td><td>流动性加速</td><td>1.6x ($8.7B/$5.6B)</td><td>—</td><td>$374.3B</td><td>2.55</td></tr><tr><td>RVMD Revolution Medici…</td><td>医药/生命科学</td><td>流动性加速</td><td>1.6x ($659M/$425M)</td><td>—</td><td>$41.0B</td><td>1.43</td></tr><tr><td>SN SharkNinja</td><td>消费/电商</td><td>流动性加速</td><td>1.5x ($474M/$306M)</td><td>—</td><td>$29.8B</td><td>0.87</td></tr><tr><td>SO The Southern Comp…</td><td>数据中心电力</td><td>流动性加速</td><td>1.5x ($996M/$643M)</td><td>—</td><td>$106.6B</td><td>-0.31</td></tr><tr><td>ETR Entergy</td><td>数据中心电力</td><td>流动性加速</td><td>1.5x ($517M/$335M)</td><td>—</td><td>$51.2B</td><td>0.16</td></tr><tr><td>WPM Wheaton Precious…</td><td>能源/材料</td><td>流动性加速</td><td>1.5x ($388M/$252M)</td><td>—</td><td>$53.3B</td><td>1.91</td></tr><tr><td>ALC Alcon</td><td>医药/生命科学</td><td>流动性加速</td><td>1.5x ($205M/$134M)</td><td>—</td><td>$35.2B</td><td>0.14</td></tr><tr><td>PAYC Paycom Software</td><td>软件/SaaS</td><td>流动性加速</td><td>1.5x ($282M/$184M)</td><td>—</td><td>$12.0B</td><td>0.15</td></tr><tr><td>FOX</td><td>通信/网络设备</td><td>流动性加速</td><td>1.5x ($80M/$52M)</td><td>—</td><td>$25.1B</td><td>-0.01</td></tr><tr><td>BTSG BrightSpring Heal…</td><td>医药/生命科学</td><td>流动性加速</td><td>1.5x ($247M/$162M)</td><td>—</td><td>$14.5B</td><td>0.64</td></tr><tr><td>NGG National Grid</td><td>数据中心电力</td><td>流动性加速</td><td>1.5x ($127M/$83M)</td><td>—</td><td>$82.4B</td><td>0.15</td></tr><tr class="premium-row"><td>TEM Tempus AI</td><td>医药/生命科学</td><td>流动性加速</td><td>1.5x ($689M/$455M)</td><td>—</td><td>$14.1B</td><td>2.31</td></tr><tr><td>WTRG Essential Utiliti…</td><td>数据中心电力</td><td>流动性加速</td><td>1.5x ($162M/$107M)</td><td>—</td><td>$12.5B</td><td>-0.45</td></tr><tr><td>TME Tencent Music Ent…</td><td>通信/网络设备</td><td>流动性加速</td><td>1.5x ($72M/$48M)</td><td>—</td><td>$13.9B</td><td>0.39</td></tr><tr><td>DEO Diageo</td><td>消费/电商</td><td>流动性加速</td><td>1.5x ($182M/$121M)</td><td>—</td><td>$52.3B</td><td>-0.28</td></tr><tr><td>GH Guardant Health</td><td>医药/生命科学</td><td>流动性加速</td><td>1.5x ($514M/$341M)</td><td>—</td><td>$23.1B</td><td>1.18</td></tr><tr><td>GWW W.W. Grainger</td><td>工业/航天/国防</td><td>流动性加速</td><td>1.5x ($574M/$380M)</td><td>—</td><td>$66.1B</td><td>0.37</td></tr><tr><td>ELAN Elanco Animal Hea…</td><td>医药/生命科学</td><td>流动性加速</td><td>1.5x ($193M/$128M)</td><td>—</td><td>$12.3B</td><td>1.03</td></tr><tr><td>KDP Keurig Dr Pepper</td><td>消费/电商</td><td>流动性加速</td><td>1.5x ($965M/$641M)</td><td>—</td><td>$47.3B</td><td>-0.03</td></tr><tr><td>GEHC GE HealthCare Tec…</td><td>医药/生命科学</td><td>流动性加速</td><td>1.5x ($502M/$334M)</td><td>—</td><td>$36.5B</td><td>0.17</td></tr><tr><td>MDLN Medline</td><td>医药/生命科学</td><td>流动性加速</td><td>1.5x ($548M/$365M)</td><td>—</td><td>$29.2B</td><td>0.80</td></tr></tbody></table></div></div></body></html>

@@ -268,3 +268,28 @@ def test_daily_compass_propagates_unavailable_pool_without_partial_rows():
     assert result["available"] is False
     assert result["reason"] == "premium_pool_stale"
     assert result["hits"] == []
+
+
+def test_daily_compass_returns_every_member_with_the_same_market_cap_rule():
+    """Boss 2026-11-09 (prosperity 0d lists all members): one EMA30 and one market-cap rule for all rows."""
+    symbols = [f"S{i:02d}" for i in range(17)] + ["BELOW", "STALE", " pad "]
+    frames = {s: price_frame() for s in symbols if s != " pad "}
+    frames["BELOW"] = price_frame(90)
+    frames["PAD"] = price_frame()
+    caps = {s.strip().upper(): {"date": "2026-09-04", "market_cap": 10e9} for s in symbols}
+    caps["STALE"] = {"date": "2026-08-27", "market_cap": 30e9}          # 8 days old
+    caps["BELOW"] = {"date": "2026-08-28", "market_cap": 30e9}          # 7 days old: still valid
+    result = scan_selection_compass(premium_pool=premium_payload(symbols), as_of="2026-09-04",
+                                    price_frames=frames, market_cap_observations=caps)
+    assert result["available"] is False and result["reason"] == "market_cap_unavailable"   # STALE is a hit
+    frames["STALE"] = price_frame(90)
+    result = scan_selection_compass(premium_pool=premium_payload(symbols), as_of="2026-09-04",
+                                    price_frames=frames, market_cap_observations=caps)
+    assert result["available"] is True
+    rows = {row["symbol"]: row for row in result["members"]}
+    assert [row["symbol"] for row in result["members"]] == [s.strip().upper() for s in symbols]   # pool order
+    assert rows["BELOW"]["above"] is False and rows["BELOW"]["marketCap"] == 30e9
+    assert rows["STALE"]["above"] is False and rows["STALE"]["marketCap"] is None
+    assert rows["PAD"]["above"] is True and "PAD" in {h["symbol"] for h in result["hits"]}   # normalized like hits
+    hits = {h["symbol"]: h for h in result["hits"]}
+    assert all(rows[s]["close"] == h["close"] and rows[s]["marketCap"] == h["marketCap"] for s, h in hits.items())
