@@ -79,6 +79,20 @@ def test_pool_text_first_week_and_unavailable():
     assert '池文件不可用（prosperity\\_pool\\_stale）' in bad and '新进' not in bad
 
 
+def test_pool_text_lists_the_whole_pool_in_rank_order():
+    """Boss 2026-11-09: the weekly text also lists every member, so the phone shows the pool without the page."""
+    text = d.pool_text(as_of='2026-11-14', previous_as_of='2026-11-07', added=['MU'], removed=['XOM'],
+                       members=3, reason=None, current=['SNDK', 'BRK_B', 'MU'])
+    assert text.splitlines()[-1] == '当前（3，按景气排名）: SNDK, BRK\\_B, MU'
+    for previous in (None, '2026-11-07'):                                   # first week and "same as last week"
+        same = d.pool_text(as_of='2026-11-14', previous_as_of=previous, added=[], removed=[], members=1,
+                           reason=None, current=['SNDK'])
+        assert same.splitlines()[-1] == '当前（1，按景气排名）: SNDK'
+    bad = d.pool_text(as_of='2026-11-14', previous_as_of=None, added=[], removed=[], members=0,
+                      reason='prosperity_pool_stale', current=['SNDK'])
+    assert '当前' not in bad
+
+
 # --- T3: deliver_week -----------------------------------------------------------------------
 
 import hashlib
@@ -483,3 +497,15 @@ def test_unknown_binding_note_is_not_trusted(env, monkeypatch):
     assert deliver(env, FakeRun(), send).status == 'delivered'
     assert 'pool\\_board\\_mismatch' in send.msgs[0] and send.docs[0][1].endswith('入池 未知')
     assert 'pool_members' not in d.read_ledger(env['dir'], WEEK)
+
+
+def test_delivered_text_lists_members_by_pool_rank(env):
+    """Boss 2026-11-09: ranked order comes from the pool file, not the alphabetical ledger list."""
+    import json
+    members = json.loads(env['pool'].read_text(encoding='utf-8'))['members']
+    ranked = [m['symbol'] for m in sorted(members, key=lambda m: (m['rank'], m['symbol']))]
+    send = FakeSend()
+    assert deliver(env, FakeRun(), send).status == 'delivered'
+    assert send.msgs[0].splitlines()[-1] == '当前（{}，按景气排名）: {}'.format(
+        len(ranked), ', '.join(d.md_escape(s) for s in ranked))
+    assert d.read_ledger(env['dir'], WEEK)['pool_members'] == env['members']       # ledger stays sorted
