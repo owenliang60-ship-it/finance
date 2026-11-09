@@ -319,8 +319,8 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
             stored, latest_freeze = _load_board(snap, as_of, code_version)
             pool = load_prosperity_pool(pool_path, now=now())
             members, pool_reason = _trusted_pool(pool, stored, as_of)
-            by_rank = ([m['symbol'] for m in sorted(pool['members'], key=lambda m: (m['rank'], m['symbol']))]
-                       if members is not None else [])
+            # the validator already holds members in strictly increasing rank (review #8: no re-sort)
+            by_rank = [m['symbol'] for m in pool['members']] if members is not None else []
         except Exception as exc:
             fail('snapshot', exc)
             return DeliveryOutcome('failed', (), '; '.join(errors))

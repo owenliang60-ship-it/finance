@@ -483,6 +483,11 @@ def _scan_premium_compass(
             "premium_pool_as_of": premium_pool.get("as_of"),
         }
 
+    as_of_date = pd.Timestamp(as_of).normalize()
+    market_caps = {
+        symbol: _observed_market_cap(market_cap_observations.get(symbol), as_of_date)
+        for symbol in symbols
+    }
     hits = []
     for symbol in symbols:
         ema = ema_results[symbol]
@@ -493,31 +498,10 @@ def _scan_premium_compass(
             "symbol": symbol,
             "close": ema["close"],
             "ema30": ema["ema30"],
+            "marketCap": market_caps[symbol],
         })
 
-    unavailable_market_caps = []
-    as_of_date = pd.Timestamp(as_of).normalize()
-    for hit in hits:
-        symbol = hit["symbol"]
-        observation = market_cap_observations.get(symbol)
-        if not isinstance(observation, dict):
-            unavailable_market_caps.append(symbol)
-            continue
-        observation_date = pd.to_datetime(observation.get("date"), errors="coerce")
-        market_cap = observation.get("marketCap", observation.get("market_cap"))
-        try:
-            market_cap_value = float(market_cap)
-        except (TypeError, ValueError):
-            market_cap_value = math.nan
-        age_days = (
-            (as_of_date - pd.Timestamp(observation_date).normalize()).days
-            if not pd.isna(observation_date) else None
-        )
-        if (age_days is None or age_days < 0 or age_days > 7
-                or not math.isfinite(market_cap_value) or market_cap_value <= 0):
-            unavailable_market_caps.append(symbol)
-            continue
-        hit["marketCap"] = market_cap_value
+    unavailable_market_caps = [hit["symbol"] for hit in hits if hit["marketCap"] is None]
     if unavailable_market_caps:
         return {
             "available": False, "reason": "market_cap_unavailable",
@@ -526,10 +510,40 @@ def _scan_premium_compass(
             "market_cap_unavailable_symbols": sorted(unavailable_market_caps),
         }
     hits.sort(key=lambda hit: (-hit["marketCap"], hit["symbol"]))
+    # Every member in pool order with its own EMA30 position (None = not ready) and the same
+    # market-cap rule; only hits gate the section (prosperity 0d lists all, Boss 2026-11-09).
+    member_rows = [{
+        **member,
+        "symbol": symbol,
+        "close": ema_results[symbol]["close"],
+        "ema30": ema_results[symbol]["ema30"],
+        "above": ema_results[symbol]["passes"] if ema_results[symbol]["ready"] else None,
+        "marketCap": market_caps[symbol],
+    } for symbol, member in member_by_symbol.items()]
     return {
         "available": True, "reason": None, "coverage": coverage,
-        "hits": hits, "premium_pool_as_of": premium_pool.get("as_of"),
+        "hits": hits, "members": member_rows, "premium_pool_as_of": premium_pool.get("as_of"),
     }
+
+
+def _observed_market_cap(observation: Any, as_of_date: pd.Timestamp) -> float | None:
+    """A market cap observed 0–7 days before as_of, finite and positive; otherwise None."""
+    if not isinstance(observation, dict):
+        return None
+    observation_date = pd.to_datetime(observation.get("date"), errors="coerce")
+    market_cap = observation.get("marketCap", observation.get("market_cap"))
+    try:
+        market_cap_value = float(market_cap)
+    except (TypeError, ValueError):
+        market_cap_value = math.nan
+    age_days = (
+        (as_of_date - pd.Timestamp(observation_date).normalize()).days
+        if not pd.isna(observation_date) else None
+    )
+    if (age_days is None or age_days < 0 or age_days > 7
+            or not math.isfinite(market_cap_value) or market_cap_value <= 0):
+        return None
+    return market_cap_value
 
 
 def _legacy_scan_selection_compass(

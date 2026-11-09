@@ -4400,3 +4400,40 @@ class TestProsperitySignalSplit:
         anomaly = next(s for s in mr.build_morning_visual_sections(ms, None) if s["slug"] == "02_volume_anomaly")
         assert [b["title"] for b in anomaly["blocks"]] == ["量能异常"]
         assert anomaly["subtitle"].endswith("| 景气池不可用（景气池已过期），本段不分组")
+
+
+class TestProsperitySplitReviewFixes:
+    """/code-review high on prosperity/pool-display (2026-11-09)."""
+
+    def test_failed_0d_calculation_still_splits_on_a_valid_pool(self, monkeypatch):
+        """review #1: the split needs only the member list; a 0d scan error must not drop it."""
+        real = __import__("terminal.selection_compass", fromlist=["x"]).scan_selection_compass
+
+        def scan(**kw):
+            if kw["premium_pool"].get("name") == "景气精选池":
+                raise sqlite3.OperationalError("disk I/O error")
+            return real(**kw)
+
+        monkeypatch.setattr("terminal.selection_compass.scan_selection_compass", scan)
+        result, _ = TestProsperityCompassWiring()._build(
+            monkeypatch, loader=lambda *a, **kw: _prosperity_trial_pool(["BOTH", "NEWP"]))
+        trial = result["prosperity_compass"]
+        assert trial["reason"] == "prosperity_compass_error" and trial["pool"]["symbols"] == ["BOTH", "NEWP"]
+        assert trial["comparison"]["status"] == "ok"
+        ms = _split_signals()
+        ms["prosperity_compass"] = trial
+        assert "▶ 景气精选池（" in mr.format_section_pmarp_by_signal_and_cap(ms)
+        lines = mr.format_section_prosperity_compass(trial).splitlines()
+        assert lines[1] == "⚠️ 景气池（试运行）不可用（计算异常）" and lines[2].startswith("与 Premium：交集 1")
+
+    def test_empty_pool_group_shows_on_html_and_image_too(self):
+        """review #6: an empty 景气精选池 group is visible on all three faces, not only in the text."""
+        ms = _split_signals(pmarp=[_make_pmarp_hit("SMCI", "bullish_breakout", 98.7, 30e9)])
+        blocks = mr.build_html_payload(ms, None, "2026-11-10")["blocks"]
+        start = [b.get("heading") for b in blocks].index("1. PMARP 信号")
+        empty = blocks[start + 1]
+        assert empty["heading"] == "景气精选池" and empty["rows"] == [] and empty["columns"]
+        assert blocks[start + 2]["heading"].startswith("其他 Extended · ")
+        pmarp = next(s for s in mr.build_morning_visual_sections(ms, None) if s["slug"] == "01_pmarp")
+        assert pmarp["blocks"][0]["title"] == "景气精选池" and pmarp["blocks"][0]["rows"] == []
+        assert pmarp["blocks"][1]["title"].startswith("其他 Extended · ")

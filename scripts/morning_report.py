@@ -509,6 +509,7 @@ def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str
     Never raises: any failure becomes an unavailable payload, so the morning report and the
     Premium path are unaffected. Builds its own price dict; Premium's is left untouched.
     """
+    summary = comparison = None
     try:
         from scripts.broad_market_scan import load_price_frames_from_market_db
         from src.data import prosperity_morning
@@ -540,49 +541,20 @@ def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str
                     missing, rows_needed=SELECTION_COMPASS_PRICE_ROWS))
             except Exception as exc:
                 logger.warning("prosperity compass DB price supplement failed: %s", exc)
-        observations = _load_selection_compass_market_cap_observations(get_store(), symbols, as_of)
-        compass = scan(premium_pool=pool, as_of=as_of, price_frames=frames,
-                       market_cap_observations=observations)
-        members = (_prosperity_member_rows(pool, frames, observations, compass.get("hits") or [], as_of)
-                   if compass.get("available") else [])
-        return {**compass, "members": members, "comparison": comparison, "pool": summary}
+        compass = scan(
+            premium_pool=pool, as_of=as_of, price_frames=frames,
+            market_cap_observations=_load_selection_compass_market_cap_observations(
+                get_store(), symbols, as_of),
+        )
+        return {**compass, "comparison": comparison, "pool": summary}
     except Exception as exc:
         logger.warning("prosperity compass unavailable: %s", exc)
-        return {"available": False, "reason": "prosperity_compass_error",
-                "error": type(exc).__name__, "coverage": {}, "hits": []}
-
-
-def _prosperity_member_rows(pool: dict, frames: dict, observations: dict, hits: list, as_of: str) -> list:
-    """Every pool member for the 0d table, in pool-rank order (Boss 2026-11-09).
-
-    Hits keep the scan's values. The others get their own EMA30 position (None = not ready) and a
-    market cap only when the observation is at most 7 days old, the same window the scan applies to hits.
-    """
-    from terminal.selection_compass import _evaluate_ema30
-
-    by_hit = {hit["symbol"]: hit for hit in hits}
-    rows = []
-    for member in sorted(pool.get("members") or [], key=lambda m: (m.get("rank") or 0, m.get("symbol") or "")):
-        symbol = member.get("symbol")
-        if symbol in by_hit:
-            rows.append({**by_hit[symbol], "above": True})
-            continue
-        ema = _evaluate_ema30(frames.get(symbol), as_of=as_of)
-        rows.append({**member, "symbol": symbol, "close": ema["close"], "ema30": ema["ema30"],
-                     "above": False if ema["ready"] else None,
-                     "marketCap": _fresh_market_cap(observations.get(symbol), as_of)})
-    return rows
-
-
-def _fresh_market_cap(observation, as_of: str) -> float | None:
-    if not isinstance(observation, dict) or not observation.get("date"):
-        return None
-    try:
-        value = float(observation.get("marketCap", observation.get("market_cap")))
-        age = (pd.Timestamp(as_of).normalize() - pd.Timestamp(observation["date"]).normalize()).days
-    except (TypeError, ValueError):
-        return None
-    return value if 0 <= age <= 7 and math.isfinite(value) and value > 0 else None
+        failed = {"available": False, "reason": "prosperity_compass_error",
+                  "error": type(exc).__name__, "coverage": {}, "hits": []}
+        if summary is not None and comparison is not None:
+            # A valid pool whose 0d calculation failed still splits sections 1 and 2 (review #1).
+            failed.update(pool=summary, comparison=comparison)
+        return failed
 
 
 def _load_selection_compass_market_cap_observations(
@@ -2588,6 +2560,8 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
         pm_section["subtitle"] = _split_summary(pm_groups, split_note)
     blocks.append(pm_section)
     for group_label, group_hits in pm_groups:
+        if group_label is not None and not group_hits:      # an empty group still shows, like the text 无
+            blocks.append({"heading": group_label, "columns": pm_cols, "rows": []})
         for signal_label, tier, tier_hits in _pmarp_signal_cap_groups(group_hits):
             rows = [{"标的": _compact_company(h), "概念": _display_concept_tags(h),
                      "信号": PMARP_SIGNAL_LABELS.get(h.get("signal"), "—"),
@@ -2833,6 +2807,9 @@ def build_morning_visual_sections(
         # signal -> cap-tier sub-blocks; shared with text/HTML via _pmarp_signal_cap_groups
         # so the 大盘/中小盘 tier is explicit on every surface (P2 review fix).
         for _group_label, _group_hits in _pmarp_groups:
+            if _group_label is not None and not _group_hits:   # an empty group still shows, like the text 无
+                _pmarp_blocks.append({"title": _group_label, "columns": _pmarp_cols, "widths": _pmarp_widths,
+                                      "grouped": False, "rows": []})
             for _signal_label, _tier, _tier_hits in _pmarp_signal_cap_groups(_group_hits):
                 _title = "{} — {}".format(_signal_label, _tier)
                 _pmarp_blocks.append({
