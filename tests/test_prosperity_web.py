@@ -392,3 +392,35 @@ def test_pool_criteria_or_source_hash_edits_mark_nothing(pool_store):
     bad = copy.deepcopy(pool); bad['criteria']['liquidity']['top'] = 101
     ranks, note = pool_binding(bad, stored)
     assert ranks == {} and note.startswith('未标入池：池文件校验失败')
+
+
+# ---- pool list at the top (Boss 2026-11-09) -----------------------------------------
+def _pool_block(html):
+    head = html.split('<nav id="toc">')[0]                 # the list sits above the table of contents
+    return head.split('<aside id="pool">')[1].split('</aside>')[0]
+
+
+def test_pool_list_at_the_top_in_rank_order(pages_with_pool):
+    from src.data.prosperity_web import _score
+    weekly = pages_with_pool[0]
+    members = [r for r in weekly.rows if r.pool_rank is not None]
+    assert len(members) == 4
+    block = _pool_block(render_page(pages_with_pool, generated_at='x', source={}))
+    rows = body_rows(block)
+    assert [r['cells'] for r in rows] == [
+        [str(r.rank), r.symbol, r.name, r.sector or '—', r.grade, _score(r.score), str(r.pool_rank)]
+        for r in members]
+    assert f'精选池 · {weekly.as_of}' in block and '入池 4 只' in block
+    assert f'href="#{section_id(weekly)}"' in block
+
+
+def test_pool_list_says_why_when_the_pool_is_not_bound(pool_store):
+    old, _ = boards(pool_store)
+    pages = load_pages(pool_store, code_version='test-v1', pool=pool_for(old))
+    block = _pool_block(render_page(pages, generated_at='x', source={}))
+    assert '未标入池：池文件与本榜不符（as_of）' in block and '<tbody>' not in block
+
+
+def test_no_pool_list_without_an_f1_live_weekly_board(pages):
+    html = render_page([p for p in pages if p.board_type != 'weekly'], generated_at='x', source={})
+    assert '<aside' not in html
