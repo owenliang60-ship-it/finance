@@ -515,12 +515,15 @@ def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str
         from src.data.market_store import get_store
 
         pool = prosperity_morning.load_bound_prosperity_pool()
+        symbols = sorted({m.get("symbol") for m in pool.get("members") or [] if m.get("symbol")}) \
+            if pool.get("available") else []
         summary = {
             "available": bool(pool.get("available")),
             "reason": pool.get("reason"),
             "as_of": pool.get("as_of"),
             "generated_at": pool.get("generated_at"),
             "member_count": len(pool.get("members") or []) if pool.get("available") else 0,
+            "symbols": symbols,       # sections 1 and 2 split on these (Boss 2026-11-09)
         }
         comparison = prosperity_morning.pool_comparison(pool, premium_pool)
         if not pool.get("available"):
@@ -529,7 +532,6 @@ def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str
             logger.warning("prosperity pool unavailable: %s %s", pool.get("reason"), extra)
             return {"available": False, "reason": pool.get("reason") or "prosperity_pool_invalid",
                     "coverage": {}, "hits": [], "comparison": comparison, "pool": summary, **extra}
-        symbols = sorted({m.get("symbol") for m in pool.get("members") or [] if m.get("symbol")})
         frames = {s: price_frames[s] for s in symbols if s in price_frames}
         missing = [s for s in symbols if s not in frames]
         if missing:
@@ -538,16 +540,49 @@ def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str
                     missing, rows_needed=SELECTION_COMPASS_PRICE_ROWS))
             except Exception as exc:
                 logger.warning("prosperity compass DB price supplement failed: %s", exc)
-        compass = scan(
-            premium_pool=pool, as_of=as_of, price_frames=frames,
-            market_cap_observations=_load_selection_compass_market_cap_observations(
-                get_store(), symbols, as_of),
-        )
-        return {**compass, "comparison": comparison, "pool": summary}
+        observations = _load_selection_compass_market_cap_observations(get_store(), symbols, as_of)
+        compass = scan(premium_pool=pool, as_of=as_of, price_frames=frames,
+                       market_cap_observations=observations)
+        members = (_prosperity_member_rows(pool, frames, observations, compass.get("hits") or [], as_of)
+                   if compass.get("available") else [])
+        return {**compass, "members": members, "comparison": comparison, "pool": summary}
     except Exception as exc:
         logger.warning("prosperity compass unavailable: %s", exc)
         return {"available": False, "reason": "prosperity_compass_error",
                 "error": type(exc).__name__, "coverage": {}, "hits": []}
+
+
+def _prosperity_member_rows(pool: dict, frames: dict, observations: dict, hits: list, as_of: str) -> list:
+    """Every pool member for the 0d table, in pool-rank order (Boss 2026-11-09).
+
+    Hits keep the scan's values. The others get their own EMA30 position (None = not ready) and a
+    market cap only when the observation is at most 7 days old, the same window the scan applies to hits.
+    """
+    from terminal.selection_compass import _evaluate_ema30
+
+    by_hit = {hit["symbol"]: hit for hit in hits}
+    rows = []
+    for member in sorted(pool.get("members") or [], key=lambda m: (m.get("rank") or 0, m.get("symbol") or "")):
+        symbol = member.get("symbol")
+        if symbol in by_hit:
+            rows.append({**by_hit[symbol], "above": True})
+            continue
+        ema = _evaluate_ema30(frames.get(symbol), as_of=as_of)
+        rows.append({**member, "symbol": symbol, "close": ema["close"], "ema30": ema["ema30"],
+                     "above": False if ema["ready"] else None,
+                     "marketCap": _fresh_market_cap(observations.get(symbol), as_of)})
+    return rows
+
+
+def _fresh_market_cap(observation, as_of: str) -> float | None:
+    if not isinstance(observation, dict) or not observation.get("date"):
+        return None
+    try:
+        value = float(observation.get("marketCap", observation.get("market_cap")))
+        age = (pd.Timestamp(as_of).normalize() - pd.Timestamp(observation["date"]).normalize()).days
+    except (TypeError, ValueError):
+        return None
+    return value if 0 <= age <= 7 and math.isfinite(value) and value > 0 else None
 
 
 def _load_selection_compass_market_cap_observations(
@@ -1896,8 +1931,11 @@ def format_section_selection_compass(payload: dict | None) -> str:
 
 PROSPERITY_COMPASS_TITLE = "0d. 景气池（试运行）"
 PROSPERITY_COMPARISON_TITLE = "0d. 与 Premium 对比"
-PROSPERITY_COMPASS_COLUMNS = ["标的", "排名", "评级", "分数", "成交额排名", "收盘", "EMA30", "当前市值", "Premium"]
-PROSPERITY_COMPASS_WIDTHS = [180, 110, 150, 120, 170, 210, 160, 170, 130]
+PROSPERITY_COMPASS_COLUMNS = ["标的", "排名", "评级", "分数", "成交额排名", "收盘", "EMA30", "相对EMA30", "当前市值",
+                              "Premium"]
+PROSPERITY_COMPASS_WIDTHS = [180, 110, 150, 120, 170, 210, 160, 150, 170, 130]
+PROSPERITY_MEMBERS_TITLE = "全部成员（站上 EMA30 在前，按市值降序）"
+_PROSPERITY_POSITION = {True: "上方", False: "下方"}
 PROSPERITY_COMPARISON_COLUMNS = ["类别", "代码"]
 PROSPERITY_COMPARISON_WIDTHS = [160, 2088]
 PROSPERITY_COMPARISON_LIMIT = 15
@@ -1959,8 +1997,9 @@ def _prosperity_compass_display(payload: dict | None) -> dict:
 
     count = pool.get("member_count", 0)
     ema30 = (payload.get("coverage") or {}).get("ema30_ready") or {}
-    hits = sorted(payload.get("hits") or [],
-                  key=lambda hit: (-(hit.get("marketCap") or 0), hit.get("symbol", "")))
+    hits = payload.get("hits") or []
+    members = sorted(payload["members"], key=lambda m: (
+        {True: 0, False: 1}.get(m.get("above"), 2), -(m.get("marketCap") or 0), m.get("symbol", "")))
     as_of = pool.get("as_of")
     head = ("景气池 0 只（合格为零，截至 {}）".format(as_of) if count == 0
             else "景气池 {} 只（截至 {}，第一档 ∩ {} ∩ 成交额前 {}）".format(
@@ -1969,12 +2008,19 @@ def _prosperity_compass_display(payload: dict | None) -> dict:
         head, ema30.get("covered", 0), ema30.get("total", 0), len(hits))
 
     premium = set(comparison.get("both") or []) if comparison.get("status") == "ok" else set()
+
+    def price(member, key):          # a hit must carry its price; a not-ready member shows "—"
+        value = member.get(key)
+        if value is None and member.get("above") is True:
+            raise ValueError("prosperity hit {} without {}".format(member.get("symbol"), key))
+        return "—" if value is None else "{:.2f}".format(value)
+
     rows = [[
-        str(hit["symbol"]), str(hit["rank"]), str(hit["grade"]), _score(hit.get("score")),
-        str(hit.get("dollar_volume_rank") or "—"),
-        "{:.2f}".format(hit["close"]), "{:.2f}".format(hit["ema30"]),
-        _format_market_cap(hit.get("marketCap")), "是" if hit["symbol"] in premium else "",   # CJK glyph: "✓" is missing in some report fonts
-    ] for hit in hits]
+        str(m["symbol"]), str(m["rank"]), str(m["grade"]), _score(m.get("score")),
+        str(m.get("dollar_volume_rank") or "—"), price(m, "close"), price(m, "ema30"),
+        _PROSPERITY_POSITION.get(m.get("above"), "—"),
+        _format_market_cap(m.get("marketCap")), "是" if m["symbol"] in premium else "",   # CJK glyph: "✓" is missing in some report fonts
+    ] for m in members]
     summary, detail = _prosperity_comparison(comparison)
     return {"state": "table", "subtitle": subtitle, "columns": PROSPERITY_COMPASS_COLUMNS, "rows": rows,
             "comparison_summary": summary, "comparison": detail}
@@ -2684,7 +2730,7 @@ def build_morning_visual_sections(
         if prosperity_display["state"] != "hidden":
             table = prosperity_display["state"] == "table"
             prosperity_blocks = [
-                {"title": "当前命中（按市值降序）", "columns": prosperity_display["columns"],
+                {"title": PROSPERITY_MEMBERS_TITLE, "columns": prosperity_display["columns"],
                  "widths": PROSPERITY_COMPASS_WIDTHS, "grouped": False,
                  "rows": [{"cells": row} for row in prosperity_display["rows"]]},
             ] if table else []

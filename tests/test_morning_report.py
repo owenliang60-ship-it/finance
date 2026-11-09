@@ -3986,7 +3986,8 @@ class TestPremiumMorningHighlight:
 
 # --- M14 T3: 0d. 景气池（试运行） --------------------------------------------------------------
 
-_PROSPERITY_COLUMNS = ["标的", "排名", "评级", "分数", "成交额排名", "收盘", "EMA30", "当前市值", "Premium"]
+_PROSPERITY_COLUMNS = ["标的", "排名", "评级", "分数", "成交额排名", "收盘", "EMA30", "相对EMA30", "当前市值",
+                       "Premium"]
 
 
 def _prosperity_hit(symbol, cap, *, rank=1, grade="STRICT", score=72.39, dv=3):
@@ -3995,9 +3996,11 @@ def _prosperity_hit(symbol, cap, *, rank=1, grade="STRICT", score=72.39, dv=3):
 
 
 def _prosperity_payload(*, available=True, reason=None, hits=None, comparison=None, members=3,
-                        ema=(3, 3)):
+                        ema=(3, 3), rows=None):
+    """rows = every pool member for the 0d table (Boss 2026-11-09); default: the hits, all above EMA30."""
     return {
         "available": available, "reason": reason, "hits": hits or [],
+        "members": rows if rows is not None else [{**hit, "above": True} for hit in hits or []],
         "coverage": {"ema30_ready": {"covered": ema[0], "total": ema[1], "ratio": 1.0}},
         "comparison": comparison or {"status": "ok", "both": ["BIG"], "prosperity_only": ["NEW", "SMALL"],
                                      "premium_only": ["OLD"]},
@@ -4035,8 +4038,8 @@ class TestProsperityCompassDisplay:
         assert lines[1] == ("景气池 3 只（截至 2026-10-31，第一档 ∩ STRICT/FULL ∩ 成交额前 100）"
                             " | EMA30 3/3 | 收盘价 > EMA30 | 命中 2 只")
         assert lines[2] == " | ".join(_PROSPERITY_COLUMNS)
-        expected = [["BIG", "1", "STRICT", "97.3", "7", "110.00", "100.00", "$2.0T", "是"],
-                    ["SMALL", "3", "FULL", "64.9", "40", "110.00", "100.00", "$20.0B", ""]]
+        expected = [["BIG", "1", "STRICT", "97.3", "7", "110.00", "100.00", "上方", "$2.0T", "是"],
+                    ["SMALL", "3", "FULL", "64.9", "40", "110.00", "100.00", "上方", "$20.0B", ""]]
         assert [row.split(" | ") for row in lines[3:5]] == expected
         assert lines[5:] == ["与 Premium：交集 1｜新增 2｜移出 1",
                              "新增: NEW, SMALL", "移出: OLD"]
@@ -4049,7 +4052,7 @@ class TestProsperityCompassDisplay:
         assert section["title"] == "0d. 景气池（试运行）" and section["subtitle"] == lines[1]
         hits_block, comp_block = section["blocks"]
         assert [r["cells"] for r in hits_block["rows"]] == expected
-        assert len(hits_block["widths"]) == len(hits_block["columns"]) == 9
+        assert len(hits_block["widths"]) == len(hits_block["columns"]) == 10
         assert comp_block["title"] == lines[5]
         assert [r["cells"] for r in comp_block["rows"]] == [["新增", "NEW, SMALL"], ["移出", "OLD"]]
         assert len(comp_block["widths"]) == len(comp_block["columns"]) == 2
@@ -4126,6 +4129,35 @@ class TestProsperityCompassDisplay:
         assert report.index("*0c. 选股罗盘*") < report.index("*0d. 景气池（试运行）*")
 
 
+
+class TestProsperityCompassAllMembers:
+    """Boss 2026-11-09: 0d lists every pool member; above EMA30 first, each group by market cap."""
+
+    def test_every_member_listed_above_first_on_all_three_faces(self):
+        above = [_prosperity_hit("A", 2e12, rank=4), _prosperity_hit("D", 20e9, rank=2, grade="FULL", score=60.0)]
+        rows = [{**above[1], "above": True},
+                {**_prosperity_hit("B", 3e12, rank=1, score=90.0), "close": 90.0, "ema30": 100.0, "above": False},
+                {**_prosperity_hit("C", None, rank=3), "close": None, "ema30": None, "above": None},
+                {**above[0], "above": True}]
+        text, html, visual = _three_faces(_prosperity_payload(hits=above, rows=rows, members=4, ema=(3, 4)))
+        lines = text.splitlines()
+        assert lines[1].endswith("| EMA30 3/4 | 收盘价 > EMA30 | 命中 2 只")
+        expected = [["A", "4", "STRICT", "72.3", "3", "110.00", "100.00", "上方", "$2.0T", ""],
+                    ["D", "2", "FULL", "60.0", "3", "110.00", "100.00", "上方", "$20.0B", ""],
+                    ["B", "1", "STRICT", "90.0", "3", "90.00", "100.00", "下方", "$3.0T", ""],
+                    ["C", "3", "STRICT", "72.3", "3", "—", "—", "—", "N/A", ""]]
+        assert lines[2] == " | ".join(_PROSPERITY_COLUMNS)
+        assert [row.split(" | ") for row in lines[3:7]] == expected
+        assert [list(r.values()) for r in html[0]["rows"]] == expected
+        block = visual[0]["blocks"][0]
+        assert block["title"] == "全部成员（站上 EMA30 在前，按市值降序）"
+        assert [r["cells"] for r in block["rows"]] == expected
+
+    def test_a_hit_without_a_price_is_still_a_display_error(self):
+        payload = _prosperity_payload(rows=[{**_prosperity_hit("BIG", 2e12), "close": None, "above": True}])
+        assert mr.format_section_prosperity_compass(payload).splitlines()[1] == "⚠️ 景气池（试运行）不可用（显示异常）"
+
+
 # --- M14 T2: trial section wiring ---------------------------------------------------------
 
 def _prosperity_trial_pool(symbols):
@@ -4189,9 +4221,27 @@ class TestProsperityCompassWiring:
         assert trial["comparison"] == {"status": "ok", "both": ["BOTH"], "prosperity_only": ["NEWP"],
                                        "premium_only": ["PREM"]}
         assert trial["pool"] == {"available": True, "reason": None, "as_of": "2026-08-29",
-                                 "generated_at": "2026-08-29T08:50:00Z", "member_count": 2}
+                                 "generated_at": "2026-08-29T08:50:00Z", "member_count": 2,
+                                 "symbols": ["BOTH", "NEWP"]}
         assert db_calls == [(["NEWP"], 127)]                                    # only the missing member
         assert sorted(h["symbol"] for h in result["selection_compass"]["hits"]) == ["BOTH", "PREM"]
+
+    def test_trial_lists_members_below_ema30_with_a_fresh_market_cap_only(self, monkeypatch):
+        """Boss 2026-11-09: non-hits are listed too; a member with no cap row shows no cap, the section stays up."""
+        falling = _compass_price_frame("2026-09-03").assign(close=list(range(280, 100, -1)))
+        result, _ = self._build(
+            monkeypatch, loader=lambda *a, **kw: _prosperity_trial_pool(["BOTH", "DOWN", "NEWP"]),
+            db_frames={"NEWP": _compass_price_frame("2026-09-03"), "DOWN": falling},
+        )
+        trial = result["prosperity_compass"]
+        assert trial["available"] is True and [h["symbol"] for h in trial["hits"]] == ["NEWP", "BOTH"]
+        rows = {m["symbol"]: m for m in trial["members"]}
+        assert [m["symbol"] for m in trial["members"]] == ["BOTH", "DOWN", "NEWP"]          # pool rank order
+        assert rows["BOTH"]["above"] is True and rows["BOTH"]["marketCap"] == 50e9
+        assert rows["DOWN"]["above"] is False and rows["DOWN"]["marketCap"] is None
+        assert rows["DOWN"]["close"] == 101.0 and rows["DOWN"]["ema30"] > 101.0
+        assert rows["DOWN"]["rank"] == 2 and rows["DOWN"]["dollar_volume_rank"] == 6
+        assert trial["pool"]["symbols"] == ["BOTH", "DOWN", "NEWP"]
 
     def test_unavailable_pool_skips_the_scan(self, monkeypatch):
         calls = []
