@@ -1,0 +1,70 @@
+{
+ "inputs": {
+  "prosperity_sha256_16": "ab824e41c7b6e3fd",
+  "market_sha256_16": "ea2a6cd9b9d8ffe7"
+ },
+ "web": {
+  "bytes": 10248943,
+  "verify": "checked 72536 rows, 36 pool ranks, 36 pool list rows; differences: 0",
+  "verify_rc": 0,
+  "list_rows": 36,
+  "list_matches_pool_rank_order": true
+ },
+ "weekly_text": {
+  "status": "delivered",
+  "sent": [
+   "web",
+   "pool_text",
+   "health_baseline"
+  ],
+  "caption": "景气榜 2026-11-07 · F1 STRICT 51 / FULL 184 · 入池 36",
+  "last_line_ok": true
+ },
+ "section_0d": {
+  "available": true,
+  "rows": 36,
+  "members": 36,
+  "hits": 7,
+  "above_rows": 7,
+  "below_rows": 29,
+  "not_ready_rows": 0,
+  "above_first": true,
+  "independent_mismatches": []
+ },
+ "sections_1_2": {
+  "pmarp": {
+   "hits": 137,
+   "text_counts": [
+    8,
+    129
+   ],
+   "independent_counts": [
+    8,
+    129
+   ],
+   "misplaced_symbols": []
+  },
+  "volume_anomaly": {
+   "hits": 145,
+   "text_counts": [
+    4,
+    141
+   ],
+   "independent_counts": [
+    4,
+    141
+   ],
+   "misplaced_symbols": []
+  },
+  "html_has_group_headings": true,
+  "png": [
+   "01_00_market_timing_factor.png",
+   "02_00b_volume_concentration.png",
+   "03_00c_selection_compass.png",
+   "04_00d_prosperity_pool.png",
+   "05_01_pmarp.png",
+   "06_02_volume_anomaly.png"
+  ]
+ },
+ "inputs_unchanged": true
+}
