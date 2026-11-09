@@ -187,6 +187,8 @@ scp aliyun:/root/workspace/Finance/data/pool/prosperity_pool.json /tmp/web/  # �
 | 6 | 运行期间库被改写（读前读后 SHA256 不同），不写文件 |
 
 怎么读：
+- 页首目录之前是"精选池"一节（2026-11-09）：按景气排名列出全部成员，行取自 F1 最新周榜的入池标记。
+  池文件没绑定时这一节只写原因；库里没有 F1 live 周榜时没有这一节。
 - 只有 F1 最新周榜标入池（✓ 与成交额排名）。池文件必须和这张榜完全对得上：as_of、criteria、code_version、来源哈希、
   股票池、可排名数、第一档切点、合格数，以及每个成员的排名与评级。任一项不符就整张榜不标，榜头写"未标入池：原因"。
 - 本地快照常常超过 8 天，所以网页不查池文件新鲜度；入池标记只说明池文件属于这张榜，榜头会写明这一点。
@@ -194,6 +196,7 @@ scp aliyun:/root/workspace/Finance/data/pool/prosperity_pool.json /tmp/web/  # �
 - 整张榜都是近似 PIT（回放出来的季末榜）时，榜头写"本榜全部为近似 PIT"，行内不再逐行标。
 - 独立核对：`/usr/bin/python3 -I reports/prosperity/m11-web-20261102/verify_web.py --db … --html … --code-version <页首的 code_version> [--pool …]`
   （只用标准库，不 import 项目代码；`--code-version` 必填，取页首显示的值）。
+  输出 `checked N rows, M pool ranks, L pool list rows; differences: K`，L 是页首精选池的行数。
 
 ## Telegram 投递（M13）
 
@@ -203,7 +206,8 @@ replay 模式（`--as-of`、`--rebuild-chain`）也接受这个参数，但不�
 
 发到私聊（`TELEGRAM_CHAT_ID`）的内容：
 1. 网页附件 `prosperity-web-YYYYMMDD.html`，说明一行：日期、F1 STRICT/FULL 只数、入池只数；超过 12 MB 时加告警，超过 45 MB 不发。
-2. 精选池进出文本：与最近一份有成员记录的台账比较；池文件不可用或不是本周时只写原因，不比较。
+2. 精选池进出文本：与最近一份有成员记录的台账比较；末行 `当前（N，按景气排名）` 列出全部成员（2026-11-09）。
+   池文件不可用或不是本周时只写原因，不比较，也不列成员。
 3. F1 体检报告 `prosperity-health-F1-<冻结日>.html`：库里 F1 最新季末冻结榜晚于上次发送（或基线）的冻结日时才发，
    包括回放出来的较早冻结和连续失败后的补发。`code_version` 变了就把最新冻结当新的发一次。
 
@@ -234,6 +238,10 @@ data/prosperity-delivery/
 
 晨报 08:00 在 0c 选股罗盘之后加"0d. 景气池（试运行）"。Premium 照旧驱动 🔴 和 0c。
 
+- 0d 列全部成员（2026-11-09）：`相对EMA30` 列写上方 / 下方 / —（价格不够算 EMA30）。上方在前，组内按市值降序；
+  小标题的"命中 N 只"只数上方。没站上的票缺 7 天内市值时显示 N/A，不让本段不可用。
+- 第 1 段 PMARP、第 2 段量能异常先列"▶ 景气精选池（N）"，再列"▶ 其他 Extended（N）"（2026-11-09）。组内排序不变，
+  🔴 仍标 Premium 成员。用的是 0d 同一个绑定池。池不可用时不分组，段首写"景气池不可用（原因），本段不分组"。
 - 读两个文件，都只读：`data/pool/prosperity_pool.json`（8 天新鲜度）、`data/prosperity.db`（按池文件里的 `as_of` 与 `source.code_version` 取 F1 live 周榜，做 `pool_binding` 两步核对）。
 - 本段显示"不可用（原因）"时，原因与排查：
 
