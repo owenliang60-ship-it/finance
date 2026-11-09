@@ -4318,3 +4318,85 @@ class TestProsperityCompassReviewFixes:
                                    "error": "OperationalError"}
         result, _ = TestProsperityCompassWiring()._build(monkeypatch, loader=loader)
         assert result["prosperity_compass"]["error"] == "OperationalError"
+
+
+# --- Boss 2026-11-09: sections 1 and 2 split on the prosperity pool -------------------------
+
+def _va_hit(symbol, cap):
+    return {"symbol": symbol, "marketCap": cap, "layer": "extend", "from_dv": True, "from_rvol": False,
+            "volume_signal_kind": "流动性加速", "dv_ratio": 2.1, "dv_5d": 5e9, "dv_20d": 2.4e9}
+
+
+def _split_signals(pool_symbols=("MU", "NVDA", "XYZ"), pool_available=True, pmarp=None):
+    ms = _make_market_signals(
+        pmarp_hits=pmarp if pmarp is not None else [
+            {**_make_pmarp_hit("NVDA", "bullish_breakout", 99.0, 3e12), "is_premium": True},
+            _make_pmarp_hit("SMCI", "bullish_breakout", 98.7, 30e9),
+            _make_pmarp_hit("XYZ", "oversold_recovery", 2.0, 50e9)],
+        anomaly_hits=[_va_hit("SMCI", 30e9), _va_hit("MU", 400e9)])
+    reason = None if pool_available else "prosperity_pool_stale"
+    ms["prosperity_compass"] = {
+        "available": pool_available, "reason": reason, "hits": [], "members": [],
+        "pool": {"available": pool_available, "reason": reason,
+                 "symbols": list(pool_symbols) if pool_available else []}}
+    return ms
+
+
+class TestProsperitySignalSplit:
+    def test_text_lists_pool_hits_first_then_other_extended(self):
+        ms = _split_signals()
+        pm = mr.format_section_pmarp_by_signal_and_cap(ms)
+        order = ["▶ 景气精选池（2）", "NVDA", "XYZ", "▶ 其他 Extended（1）", "SMCI"]
+        assert [pm.index(x) for x in order] == sorted(pm.index(x) for x in order)
+        assert any("🔴 *" in line and "NVDA" in line for line in pm.splitlines())   # Premium mark kept to M15
+        va = mr.format_section_layered_volume_anomaly(ms)
+        order = ["▶ 景气精选池（1）", "MU", "▶ 其他 Extended（1）", "SMCI"]
+        assert [va.index(x) for x in order] == sorted(va.index(x) for x in order)
+
+    def test_empty_group_says_none(self):
+        ms = _split_signals(pmarp=[_make_pmarp_hit("SMCI", "bullish_breakout", 98.7, 30e9)])
+        lines = mr.format_section_pmarp_by_signal_and_cap(ms).splitlines()
+        assert lines[1:3] == ["▶ 景气精选池（0）", "  无"] and "▶ 其他 Extended（1）" in lines
+
+    def test_unavailable_pool_keeps_one_group_and_says_why(self):
+        ms = _split_signals(pool_available=False)
+        for text in (mr.format_section_pmarp_by_signal_and_cap(ms), mr.format_section_layered_volume_anomaly(ms)):
+            assert text.splitlines()[1] == "景气池不可用（景气池已过期），本段不分组" and "▶" not in text
+        no_section = _make_market_signals(pmarp_hits=[_make_pmarp_hit("NVDA")])
+        assert "▶" not in mr.format_section_pmarp_by_signal_and_cap(no_section)
+        assert "本段不分组" not in mr.format_section_pmarp_by_signal_and_cap(no_section)
+
+    def test_html_and_image_follow_the_same_split(self):
+        ms = _split_signals()
+        big, small = mr._mcap_tier(3e12), mr._mcap_tier(30e9)
+        sub_headings = ["景气精选池 · 上穿98% — " + big, "景气精选池 · 上穿2% — " + mr._mcap_tier(50e9),
+                        "其他 Extended · 上穿98% — " + small]
+        blocks = mr.build_html_payload(ms, None, "2026-11-10")["blocks"]
+        headings = [b.get("heading") for b in blocks]
+        start = headings.index("1. PMARP 信号")
+        assert blocks[start]["subtitle"] == "景气精选池 2｜其他 Extended 1"
+        assert headings[start + 1:start + 4] == sub_headings
+        va = headings.index("2. 量能异常")
+        assert blocks[va]["subtitle"] == "景气精选池 1｜其他 Extended 1" and "columns" not in blocks[va]
+        assert headings[va + 1:va + 3] == ["景气精选池", "其他 Extended"]
+        assert [[r["标的"] for r in blocks[va + i]["rows"]] for i in (1, 2)] == [
+            [mr._compact_company(_va_hit("MU", 400e9))], [mr._compact_company(_va_hit("SMCI", 30e9))]]
+        sections = {s["slug"]: s for s in mr.build_morning_visual_sections(ms, None)}
+        pmarp = sections["01_pmarp"]
+        assert [b["title"] for b in pmarp["blocks"]] == sub_headings
+        assert pmarp["subtitle"].endswith("| 景气精选池 2｜其他 Extended 1")
+        anomaly = sections["02_volume_anomaly"]
+        assert [b["title"] for b in anomaly["blocks"]] == ["景气精选池", "其他 Extended"]
+        assert [len(b["rows"]) for b in anomaly["blocks"]] == [1, 1]
+        assert anomaly["subtitle"].endswith("| 景气精选池 1｜其他 Extended 1")
+
+    def test_html_and_image_unchanged_without_a_pool(self):
+        ms = _split_signals(pool_available=False)
+        blocks = mr.build_html_payload(ms, None, "2026-11-10")["blocks"]
+        pm = next(b for b in blocks if b.get("heading") == "1. PMARP 信号")
+        va = next(b for b in blocks if b.get("heading") == "2. 量能异常")
+        assert pm["subtitle"] == va["subtitle"] == "景气池不可用（景气池已过期），本段不分组"
+        assert len(va["rows"]) == 2
+        anomaly = next(s for s in mr.build_morning_visual_sections(ms, None) if s["slug"] == "02_volume_anomaly")
+        assert [b["title"] for b in anomaly["blocks"]] == ["量能异常"]
+        assert anomaly["subtitle"].endswith("| 景气池不可用（景气池已过期），本段不分组")
