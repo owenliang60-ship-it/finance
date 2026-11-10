@@ -3468,6 +3468,8 @@ class TestProsperityCompassWiring:
                                  "generated_at": "2026-08-29T08:50:00Z", "member_count": 2,
                                  "symbols": ["BOTH", "NEWP"]}
         assert db_calls == [(["NEWP"], 127)]                                    # only the missing member
+        assert result["symbols_with_data"] == 2      # review #3: the DB supplement stays out of the shared frames
+        assert "NEWP" not in {h["symbol"] for h in result["pmarp"]["hits"] + result["volume_anomaly"]["hits"]}
 
     def test_trial_lists_members_below_ema30_with_a_fresh_market_cap_only(self, monkeypatch):
         """Boss 2026-11-09: non-hits are listed too; a member with no cap row shows no cap, the section stays up."""
@@ -3728,3 +3730,23 @@ class TestSelectionCompassRemoved:
         assert headings.index("0b. 成交集中度") < headings.index("0d. 景气池（试运行）") < headings.index("1. PMARP 信号")
         slugs = [s["slug"] for s in visual]
         assert slugs.index("00b_volume_concentration") < slugs.index("00d_prosperity_pool") < slugs.index("01_pmarp")
+
+    def test_market_cap_loader_takes_latest_row_at_as_of_across_chunks(self):
+        """review #2: 0d still uses this loader; no look-ahead, latest row wins, >500 symbols chunk."""
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute("CREATE TABLE historical_market_cap "
+                     "(symbol TEXT, date TEXT, market_cap REAL, PRIMARY KEY(symbol, date))")
+        conn.executemany("INSERT INTO historical_market_cap VALUES (?, ?, ?)", [
+            ("ACTIVE", "2026-09-01", 40e9), ("ACTIVE", "2026-09-03", 42e9), ("ACTIVE", "2026-09-04", 43e9),
+            ("FUTURE", "2026-09-04", 9e9), ("ZZZ", "2026-09-02", 11e9)])
+
+        class FakeStore:
+            def _get_conn(self):
+                return conn
+
+        fillers = ["F{:03d}".format(i) for i in range(600)]          # pushes ZZZ into the second chunk
+        result = mr._load_selection_compass_market_cap_observations(
+            FakeStore(), ["ACTIVE", "FUTURE", "ZZZ"] + fillers, "2026-09-03")
+        assert result == {"ACTIVE": {"date": "2026-09-03", "marketCap": 42e9},
+                          "ZZZ": {"date": "2026-09-02", "marketCap": 11e9}}

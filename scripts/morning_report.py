@@ -1332,8 +1332,7 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     """Build technical signal payload for the merged morning report.
 
     Technical signals scan the current Extended universe. Premium membership
-    annotates technical signal rows (🔴) and feeds the 0d comparison; the 0c
-    Premium EMA30 table was removed (Boss 2026-11-10).
+    annotates technical signal rows (🔴) and feeds the 0d comparison.
 
     --symbols override grants extend privilege: every override symbol is
     treated as layer="extend", bypassing the $10B mcap filter so manual
