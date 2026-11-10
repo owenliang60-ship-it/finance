@@ -229,7 +229,7 @@ Python 冻结 dataclass（因子与权重、变换方式、闸门、行业豁免
 
 **职责**：让晨报从 Premium 平滑切到景气精选池，全程不中断、不静默降级。**不负责**：池怎么选（第四层）；晨报里 EMA30、RVOL 等时机信号本身的逻辑（原样复用）。
 
-**现状**（`scripts/morning_report.py`）：`load_premium_pool()` 读池文件，拿成员集合给技术信号标 🔴，并作为 0d 的对比对象。原来对 Premium 成员跑 EMA30 门的 0c 选股罗盘段已于 2026-11-10 删除（Boss）。并行期的 0d 段在同一文件，读取端在 `src/data/prosperity_morning.py`（池按原榜绑定、与 Premium 对比），排查表见 runbook「晨报试运行段（M14）」。
+**现状**（`scripts/morning_report.py`）：`load_premium_pool()` 读池文件，拿成员集合给技术信号标 🔴，并作为 0d 的对比对象。原来对 Premium 成员跑 EMA30 门的 0c 选股罗盘段已于 2026-11-10 删除（Boss）。此后 Premium 池不可用时晨报不另行提示，🔴 直接不出现，0d 只在景气池可用时写"Premium 不可用，不比较"；是否补提示、下方降级规则如何落地，留到 M15 设计（Boss 2026-11-10）。并行期的 0d 段在同一文件，读取端在 `src/data/prosperity_morning.py`（池按原榜绑定、与 Premium 对比），排查表见 runbook「晨报试运行段（M14）」。
 
 | 阶段 | 做什么 | 退出条件 |
 |---|---|---|
