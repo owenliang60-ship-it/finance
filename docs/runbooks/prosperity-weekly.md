@@ -236,7 +236,7 @@ data/prosperity-delivery/
 
 ## 晨报试运行段（M14）
 
-晨报 08:00 在 0c 选股罗盘之后加"0d. 景气池（试运行）"。Premium 照旧驱动 🔴 和 0c。
+晨报 08:00 在 0b 成交集中度之后显示"0d. 景气池（试运行）"。Premium 照旧驱动 🔴；原 0c 选股罗盘已于 2026-11-10 删除（Boss），编号 0d 不变。
 
 - 0d 列全部成员（2026-11-09）：`相对EMA30` 列写上方 / 下方 / —（价格不够算 EMA30）。上方在前，组内按市值降序；
   小标题的"命中 N 只"只数上方。没站上的票缺 7 天内市值时显示 N/A，不让本段不可用。
@@ -251,7 +251,7 @@ data/prosperity-delivery/
 | 库中没有对应周榜 | `prosperity_board_missing` | 池文件 `source.code_version` 的版本是否已被归档（D5） |
 | 与原榜不符 | `prosperity_pool_board_mismatch` | 晨报 JSON `market_signals.prosperity_compass` 里的 `binding_note` |
 | 景气库不可读 | `prosperity_db_unavailable` | 库文件与 `-wal`/`-shm` 权限；`error` 字段 |
-| EMA30 价格覆盖不足 / 当前市值数据不足 | 同名 | 与 0c 同一个门，查 `daily_price` / `historical_market_cap` |
+| EMA30 价格覆盖不足 / 当前市值数据不足 | 同名 | `scan_selection_compass` 的 EMA30 / 市值门，查 `daily_price` / `historical_market_cap` |
 | 计算异常 / 显示异常 | `prosperity_compass_error` / 显示层 | 晨报日志 `prosperity compass unavailable` / `display failed` |
 
 合格为零（池 0 只）和命中为零都照常显示，不算不可用。本地没有池文件，本地跑晨报会显示"景气池尚未生成"。

@@ -229,11 +229,11 @@ Python 冻结 dataclass（因子与权重、变换方式、闸门、行业豁免
 
 **职责**：让晨报从 Premium 平滑切到景气精选池，全程不中断、不静默降级。**不负责**：池怎么选（第四层）；晨报里 EMA30、RVOL 等时机信号本身的逻辑（原样复用）。
 
-**现状**（`scripts/morning_report.py`）：`load_premium_pool()` 读池文件，拿成员集合做两件事：给技术信号标 🔴，以及对池成员跑 EMA30 时机门。不可用原因映射成中文提示。并行期的 0d 段在同一文件，读取端在 `src/data/prosperity_morning.py`（池按原榜绑定、与 Premium 对比），排查表见 runbook「晨报试运行段（M14）」。
+**现状**（`scripts/morning_report.py`）：`load_premium_pool()` 读池文件，拿成员集合给技术信号标 🔴，并作为 0d 的对比对象。原来对 Premium 成员跑 EMA30 门的 0c 选股罗盘段已于 2026-11-10 删除（Boss）。并行期的 0d 段在同一文件，读取端在 `src/data/prosperity_morning.py`（池按原榜绑定、与 Premium 对比），排查表见 runbook「晨报试运行段（M14）」。
 
 | 阶段 | 做什么 | 退出条件 |
 |---|---|---|
-| **并行期** | Premium 照旧驱动 🔴 和 EMA30 段；新增一段"景气池（试运行）"：景气池成员跑同一个 EMA30 门，并列出与 Premium 的交集、新增、移出（M14，`src/data/prosperity_morning.py`，晨报 0d 段）。2026-11-09 Boss：0d 列全部成员（站上 EMA30 在前）；第 1 段 PMARP、第 2 段量能异常先列景气精选池、再列其他 Extended，组内排序不变，🔴 保留到 M15；景气池不可用时不分组并写原因 | 首份体检报告出来、Boss 看过 |
+| **并行期** | Premium 照旧驱动 🔴（Premium 的 EMA30 段 0c 已于 2026-11-10 删除）；新增一段"景气池（试运行）"：景气池成员跑同一个 EMA30 门，并列出与 Premium 的交集、新增、移出（M14，`src/data/prosperity_morning.py`，晨报 0d 段）。2026-11-09 Boss：0d 列全部成员（站上 EMA30 在前）；第 1 段 PMARP、第 2 段量能异常先列景气精选池、再列其他 Extended，组内排序不变，🔴 保留到 M15；景气池不可用时不分组并写原因 | 首份体检报告出来、Boss 看过 |
 | **切换** | 新增配置 `SELECTION_POOL_SOURCE = premium / prosperity`，加一个统一的 `load_selection_pool()`，两种池返回同样的结构；晨报文案里的池名改为取自池文件，不再写死"精选Premium池"。Boss 拍板后改配置 | 切换后连续 4 周正常 |
 | **Premium 退役** | 停 Premium 的周更构建；代码归档，不删；`premium_pool.json` 冻结留档 | Boss 确认 |
 
@@ -315,7 +315,7 @@ flowchart LR
 | 因子与打分 | M5/M6/M7已完成 | 方案注册表、因子与打分内核、只读验收CLI已在main（e57f1c19，未接cron）；M7 S1 对拍达标：2021 年后 23 期原站口径 96.0%（6220/6478），原因不明 0，独立抽检 10/10（`reports/prosperity/m7-s1-20260930/`）；已验收快照 live 与 2024-08-17 回放通过，Codex独立验收通过（`reports/prosperity/m6-acceptance-20260930/`、`m6-codex-acceptance-20260930/`）；2026-09-30 按 Boss 拍板改内核：revision 按 4 季折算、预期亏损不进 PE 分位、EPS 按财报财季日期配对（分支 `prosperity/kernel-decisions`，`code_version` 随之变化） |
 | 调度 | M8/M9 已部署 | M9 本地验收通过（f2ff1ee9）；2026-10-25/26 云端冻结链重建（code_version 13e5f9d5，21/21 冻结日一致）；2026-10-26 装周六 16:30/20:30 cron；2026-10-31 首个自然周六 4 张 live 周榜落库（A10） |
 | 输出 | MVP 已上线，待首次自然投递 | M10精选池在云端运行（第一档 ∩ STRICT/FULL ∩ 成交额前 100，11-07 首次云端发布 36 只，首发核对 5 步通过）；M12体检报告与M11网页最小版本地生成器已完成；M13投递 2026-11-09 push，11-14 首次自然投递；网页页首与私聊文本列出精选池（2026-11-09 Boss，分支 `prosperity/pool-display`，未 merge）；M11完整版待定 12 MB 裁剪方案 |
-| 晨报过渡 | 并行期已上线 | Premium继续驱动 🔴 和 0c；M14 0d 试运行段 2026-11-09 push，11-10 起出现在晨报；0d 列全部成员、第 1/2 段按景气池分组（2026-11-09 Boss，分支 `prosperity/pool-display`，未 merge）；M15切换与退役等 Boss 看过首份体检报告后拍板 |
+| 晨报过渡 | 并行期已上线 | Premium继续驱动 🔴；0c 已删（2026-11-10 Boss）；M14 0d 试运行段 2026-11-09 push，11-10 起出现在晨报；0d 列全部成员、第 1/2 段按景气池分组（2026-11-09 Boss，已 merge main 39962019）；M15切换与退役等 Boss 看过首份体检报告后拍板 |
 
 ## 关键架构决策
 

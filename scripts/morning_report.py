@@ -504,10 +504,10 @@ def _compute_signal_betas(
 
 
 def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str, scan) -> dict:
-    """M14 trial section: the prosperity pool through the same EMA30 gate as Premium.
+    """M14 trial section 0d: the prosperity pool through the EMA30 + market-cap gate.
 
-    Never raises: any failure becomes an unavailable payload, so the morning report and the
-    Premium path are unaffected. Builds its own price dict; Premium's is left untouched.
+    Never raises: any failure becomes an unavailable payload, so the rest of the morning report
+    is unaffected. Builds its own price dict from the shared frames plus a DB supplement.
     """
     summary = comparison = None
     try:
@@ -1331,10 +1331,9 @@ RVOL_ONLY_SINGLE_THRESHOLD = 3.0
 def build_market_signal_report(symbols_override: list[str] | None = None) -> dict:
     """Build technical signal payload for the merged morning report.
 
-    Technical signals scan the current Extended universe. Selection Compass
-    separately consumes the validated weekly Premium Pool and applies only
-    the daily EMA30 timing gate; Premium membership also annotates technical
-    signal rows for shared report highlighting.
+    Technical signals scan the current Extended universe. Premium membership
+    annotates technical signal rows (🔴) and feeds the 0d comparison; the 0c
+    Premium EMA30 table was removed (Boss 2026-11-10).
 
     --symbols override grants extend privilege: every override symbol is
     treated as layer="extend", bypassing the $10B mcap filter so manual
@@ -1345,7 +1344,6 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     from scripts.broad_market_scan import (
         fetch_universe_metadata,
         load_price_frames,
-        load_price_frames_from_market_db,
     )
     from src.data.market_store import get_store
     from src.indicators.dv_acceleration import scan_dv_acceleration
@@ -1357,7 +1355,6 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         row["symbol"] for row in premium_pool.get("members", [])
         if isinstance(row, dict) and row.get("symbol")
     } if premium_pool.get("available") else set()
-    selection_compass_symbols = sorted(premium_symbols)
     try:
         pool_symbols = set(current_base_universe())
     except Exception as e:
@@ -1411,25 +1408,6 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     _merge_local_metadata(metadata, symbols)
 
     price_frames = load_price_frames(symbols, rows_needed=MORNING_SIGNAL_PRICE_ROWS)
-    selection_compass_price_frames = {
-        symbol: price_frames[symbol]
-        for symbol in selection_compass_symbols
-        if symbol in price_frames
-    }
-    if premium_pool.get("available"):
-        missing_compass_symbols = sorted(
-            set(selection_compass_symbols) - set(selection_compass_price_frames)
-        )
-        if missing_compass_symbols:
-            try:
-                selection_compass_price_frames.update(
-                    load_price_frames_from_market_db(
-                        missing_compass_symbols,
-                        rows_needed=SELECTION_COMPASS_PRICE_ROWS,
-                    )
-                )
-            except Exception as exc:
-                logger.warning("selection compass DB price supplement failed: %s", exc)
     price_dict = {
         symbol: _frame_with_date(symbol, frame)
         for symbol, frame in price_frames.items()
@@ -1489,41 +1467,6 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     as_of = max(scan_dates).date().isoformat() if scan_dates else date.today().isoformat()
 
     from terminal.selection_compass import scan_selection_compass
-    if not premium_pool.get("available"):
-        selection_compass = scan_selection_compass(
-            premium_pool=premium_pool, as_of=as_of, price_frames={},
-            market_cap_observations={},
-        )
-    else:
-        try:
-            selection_store = get_store()
-            selection_compass = scan_selection_compass(
-                premium_pool=premium_pool,
-                as_of=as_of,
-                price_frames=selection_compass_price_frames,
-                market_cap_observations=(
-                    _load_selection_compass_market_cap_observations(
-                        selection_store,
-                        selection_compass_symbols,
-                        as_of,
-                    )
-                ),
-            )
-        except Exception as exc:
-            logger.warning("selection compass unavailable: %s", exc)
-            failed_coverage = dict(premium_pool.get("coverage") or {})
-            failed_coverage["ema30_ready"] = {
-                "covered": 0,
-                "total": len(selection_compass_symbols),
-                "ratio": 0.0,
-            }
-            selection_compass = {
-                "available": False,
-                "reason": "selection_compass_error",
-                "coverage": failed_coverage,
-                "hits": [],
-            }
-
     prosperity_compass = _build_prosperity_compass(
         premium_pool, price_frames, as_of, scan_selection_compass,
     )
@@ -1547,7 +1490,6 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
         "symbols_with_data": len(price_frames),
         "market_timing_factor": build_market_timing_factor_report(),
         "volume_concentration": volconc,
-        "selection_compass": selection_compass,
         "prosperity_compass": prosperity_compass,
         "premium_pool": {
             "available": premium_pool.get("available", False),
@@ -1747,155 +1689,6 @@ def format_section_volume_concentration(payload: dict) -> str:
     for row in display["rows"]:
         lines.append("{}   {}   1年分位 {}".format(row["label"], row["value"], row["pctile"]))
     lines.append("状态: {}".format(display["status"]))
-    return "\n".join(lines)
-
-
-SELECTION_COMPASS_COLUMNS = [
-    "标的", "EPS YoY", "EPS QoQ", "营收4Q CAGR", "净利4Q CAGR",
-    "成长均值", "收盘", "EMA30", "当前市值", "β6M",
-]
-SELECTION_COMPASS_WIDTHS = [180, 150, 150, 190, 190, 160, 210, 160, 170, 120]
-SELECTION_COMPASS_REASON_LABELS = {
-    "fundamental_coverage_below_threshold": "基本面覆盖不足",
-    "rvol_coverage_below_threshold": "RVOL 覆盖不足",
-    "ema30_coverage_below_threshold": "EMA30 价格覆盖不足",
-    "beta_coverage_below_threshold": "Beta 数据覆盖不足",
-    "premium_pool_missing": "精选Premium池尚未生成",
-    "premium_pool_stale": "精选Premium池已过期",
-    "premium_pool_criteria_mismatch": "精选Premium池条件版本不匹配",
-    "premium_pool_invalid": "精选Premium池数据异常",
-    "market_cap_unavailable": "当前市值数据不足",
-    "empty_universe": "股票池读取异常",
-    "universe_resolver_error": "股票池读取异常",
-    "fundamental_store_error": "筛选计算异常",
-    "selection_compass_error": "筛选计算异常",
-    "scanner_error": "筛选计算异常",
-    "store_error": "筛选计算异常",
-}
-
-
-def _format_compass_growth(value: float | None, turnaround: bool = False) -> str:
-    if turnaround:
-        return "扭亏"
-    if value is None or pd.isna(value):
-        return "—"
-    return "{:.1%}".format(value)
-
-
-def _selection_compass_coverage_subtitle(coverage: dict | None) -> str:
-    coverage = coverage or {}
-    fundamental = coverage.get("fundamental_ready") or {}
-    if "rvol_ready" not in coverage:
-        beta = coverage.get("beta_ready") or {}
-        ema30 = coverage.get("ema30_ready") or {}
-        return (
-            "精选Premium池周频覆盖：基本面 {}/{} | Beta {}/{} | "
-            "EMA30 {}/{} | 条件：EPS YoY/QoQ ≥20% / "
-            "成长均值 ≥10%或扭亏成长 / β6M ≥1.35 / 收盘价 > EMA30"
-        ).format(
-            fundamental.get("covered", 0), fundamental.get("total", 0),
-            beta.get("covered", 0), beta.get("total", 0),
-            ema30.get("covered", 0), ema30.get("total", 0),
-        )
-    rvol = coverage.get("rvol_ready") or {}
-    subtitle = "Extended 扫描覆盖：基本面 {}/{} | RVOL {}/{}".format(
-        fundamental.get("covered", 0),
-        fundamental.get("total", 0),
-        rvol.get("covered", 0),
-        rvol.get("total", 0),
-    )
-    # Legacy saved reports did not apply EMA30; do not relabel their semantics.
-    if "ema30_ready" in coverage:
-        ema30 = coverage["ema30_ready"]
-        subtitle += " | EMA30 {}/{}".format(
-            ema30.get("covered", 0), ema30.get("total", 0),
-        )
-        if "beta_ready" not in coverage:
-            subtitle += " | 收盘价 > EMA30"
-    if "beta_ready" in coverage:
-        beta = coverage["beta_ready"]
-        subtitle += (
-            " | Beta {}/{} | 条件：EPS YoY/QoQ ≥20% / "
-            "成长均值 ≥10%或扭亏成长 / 收盘价 > EMA30 / β6M ≥1.35"
-        ).format(beta.get("covered", 0), beta.get("total", 0))
-    return subtitle
-
-
-def _selection_compass_reason_label(reason: str | None) -> str:
-    return SELECTION_COMPASS_REASON_LABELS.get(reason, "暂时无法生成")
-
-
-def _selection_compass_display(payload: dict | None) -> dict:
-    """Build the shared display contract for text, HTML and visual faces."""
-    if payload is None:
-        return {
-            "state": "hidden",
-            "subtitle": "",
-            "columns": SELECTION_COMPASS_COLUMNS,
-            "rows": [],
-        }
-    payload = payload or {}
-    coverage_subtitle = _selection_compass_coverage_subtitle(payload.get("coverage"))
-    if not payload.get("available"):
-        return {
-            "state": "warning",
-            "subtitle": coverage_subtitle,
-            "warning": "⚠️ 选股罗盘不可用（{}）".format(
-                _selection_compass_reason_label(payload.get("reason"))
-            ),
-            "columns": SELECTION_COMPASS_COLUMNS,
-            "rows": [],
-        }
-
-    hits = sorted(
-        payload.get("hits") or [],
-        key=lambda hit: (-(hit.get("marketCap") or 0), hit.get("symbol", "")),
-    )
-    if not hits:
-        return {
-            "state": "hidden",
-            "subtitle": coverage_subtitle,
-            "columns": SELECTION_COMPASS_COLUMNS,
-            "rows": [],
-        }
-
-    rows = []
-    for hit in hits:
-        rows.append([
-            hit.get("symbol", ""),
-            _format_compass_growth(
-                hit.get("eps_yoy_growth"), hit.get("eps_yoy_turnaround", False)
-            ),
-            _format_compass_growth(
-                hit.get("eps_qoq_growth"), hit.get("eps_qoq_turnaround", False)
-            ),
-            _format_compass_growth(hit.get("revenue_cagr_4q")),
-            _format_compass_growth(hit.get("net_income_cagr_4q")),
-            ("扭亏成长" if hit.get("growth_route") == "turnaround"
-             else _format_compass_growth(hit.get("growth_avg_4q"))),
-            "{:.2f}".format(hit.get("close")),
-            "{:.2f}".format(hit.get("ema30")),
-            _format_market_cap(hit.get("marketCap")),
-            _format_beta(hit.get("beta_6m")),
-        ])
-    return {
-        "state": "table",
-        "subtitle": coverage_subtitle,
-        "columns": SELECTION_COMPASS_COLUMNS,
-        "rows": rows,
-    }
-
-
-def format_section_selection_compass(payload: dict | None) -> str:
-    display = _selection_compass_display(payload)
-    if display["state"] == "hidden":
-        return ""
-    lines = ["*0c. 选股罗盘*"]
-    if display["state"] == "warning":
-        lines.extend([display["warning"], display["subtitle"]])
-        return "\n".join(lines)
-    lines.extend([display["subtitle"], " | ".join(display["columns"])])
-    lines.extend(" | ".join(row) for row in display["rows"])
     return "\n".join(lines)
 
 
@@ -2509,27 +2302,6 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
             "subtitle": "成交集中度: 数据不足（{}）".format(volconc_display["reason"]),
         })
 
-    compass_display = _selection_compass_display(
-        (market_signals or {}).get("selection_compass")
-    )
-    if compass_display["state"] == "table":
-        blocks.append({
-            "heading": "0c. 选股罗盘",
-            "subtitle": compass_display["subtitle"],
-            "columns": compass_display["columns"],
-            "rows": [
-                dict(zip(compass_display["columns"], row))
-                for row in compass_display["rows"]
-            ],
-        })
-    elif compass_display["state"] == "warning":
-        blocks.append({
-            "heading": "0c. 选股罗盘",
-            "subtitle": "{} | {}".format(
-                compass_display["warning"], compass_display["subtitle"]
-            ),
-        })
-
     prosperity_display = _safe_prosperity_display((market_signals or {}).get("prosperity_compass"))
     if prosperity_display["state"] == "table":
         blocks.append({
@@ -2748,36 +2520,6 @@ def build_morning_visual_sections(
                 "blocks": [],
             })
 
-        compass_display = _selection_compass_display(
-            market_signals.get("selection_compass")
-        )
-        if compass_display["state"] == "table":
-            sections.append({
-                "slug": "00c_selection_compass",
-                "title": "0c. 选股罗盘",
-                "subtitle": compass_display["subtitle"],
-                "blocks": [
-                    {
-                        "title": "当前命中（按市值降序）",
-                        "columns": compass_display["columns"],
-                        "widths": SELECTION_COMPASS_WIDTHS,
-                        "grouped": False,
-                        "rows": [
-                            {"cells": row}
-                            for row in compass_display["rows"]
-                        ],
-                    },
-                ],
-            })
-        elif compass_display["state"] == "warning":
-            sections.append({
-                "slug": "00c_selection_compass",
-                "title": "0c. 选股罗盘",
-                "subtitle": "{} | {}".format(
-                    compass_display["warning"], compass_display["subtitle"]
-                ),
-                "blocks": [],
-            })
         prosperity_display = _safe_prosperity_display(market_signals.get("prosperity_compass"))
         if prosperity_display["state"] != "hidden":
             table = prosperity_display["state"] == "table"
@@ -3459,13 +3201,6 @@ def format_morning_report(
         lines.append(format_section_volume_concentration(
             market_signals.get("volume_concentration", {})))
         lines.append("")
-
-        compass_text = format_section_selection_compass(
-            market_signals.get("selection_compass")
-        )
-        if compass_text:
-            lines.append(compass_text)
-            lines.append("")
 
         prosperity_text = format_section_prosperity_compass(
             market_signals.get("prosperity_compass")
