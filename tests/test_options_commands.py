@@ -90,7 +90,7 @@ class TestPrepareOptionsContext:
             "underlyingPrice": [202.50],
         }
         mock_fmp = MagicMock()
-        mock_fmp.get_earnings_calendar.return_value = []
+        mock_fmp.get_earnings.return_value = []
 
         ctx = prepare_options_context(
             "AAPL",
@@ -113,7 +113,7 @@ class TestPrepareOptionsContext:
         """Should use existing snapshot when skip_chain_fetch=True."""
         company_store, mkt_store = store_with_data
         mock_fmp = MagicMock()
-        mock_fmp.get_earnings_calendar.return_value = []
+        mock_fmp.get_earnings.return_value = []
         mock_fmp.get_realtime_price.return_value = 205.0
 
         ctx = prepare_options_context(
@@ -131,7 +131,7 @@ class TestPrepareOptionsContext:
     def test_no_data_symbol(self, store, mkt_store):
         """Should handle symbol with no data gracefully."""
         mock_fmp = MagicMock()
-        mock_fmp.get_earnings_calendar.return_value = []
+        mock_fmp.get_earnings.return_value = []
         mock_fmp.get_realtime_price.return_value = None
 
         ctx = prepare_options_context(

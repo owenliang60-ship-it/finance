@@ -3498,6 +3498,9 @@ def main():
         if not args.no_telegram:
             error_msg = "*未来资本 晨报异常*\n\n错误: {}".format(str(e)[:200])
             _send_group_message(error_msg)
+        # A failed report must not exit 0: run_market_report_pipeline.sh keys
+        # DONE_WITH_FAILURE off this exit code.
+        sys.exit(1)
 
     elapsed = time.time() - start_time
     logger.info("晨报完成，耗时 %.1f 秒", elapsed)

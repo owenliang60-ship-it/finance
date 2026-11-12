@@ -69,8 +69,12 @@ class TestMorningReportRouting:
     def test_main_routes_errors_to_group(self, _symbols, _signals, mock_send, monkeypatch):
         monkeypatch.setattr(sys, "argv", ["morning_report.py", "--no-social"])
 
-        morning_report.main()
+        # The alert goes to the group AND the process exits non-zero, so the cron
+        # wrapper logs DONE_WITH_FAILURE instead of OK.
+        with pytest.raises(SystemExit) as exc:
+            morning_report.main()
 
+        assert exc.value.code == 1
         mock_send.assert_called_once()
         assert mock_send.call_args.kwargs["channel"] == "group"
         assert "晨报异常" in mock_send.call_args.args[0]

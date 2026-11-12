@@ -356,15 +356,16 @@ def get_fundamental_summary(symbol: str) -> Dict:
         "companyName": profile.get("companyName"),
         "sector": profile.get("sector"),
         "industry": profile.get("industry"),
-        "marketCap": profile.get("mktCap"),
+        "marketCap": profile.get("marketCap") or profile.get("mktCap"),
         "beta": profile.get("beta"),
-        "pe": latest_ratio.get("priceEarningsRatio"),
-        "pb": latest_ratio.get("priceToBookRatio"),
-        "roe": latest_ratio.get("returnOnEquity"),
-        "grossMargin": latest_ratio.get("grossProfitMargin"),
-        "netMargin": latest_ratio.get("netProfitMargin"),
+        # store rows are snake_case columns of ratios_annual / income_quarterly
+        "pe": latest_ratio.get("price_to_earnings_ratio"),
+        "pb": latest_ratio.get("price_to_book_ratio"),
+        "roe": latest_ratio.get("return_on_equity"),  # no such column in ratios_annual: always None
+        "grossMargin": latest_ratio.get("gross_profit_margin"),
+        "netMargin": latest_ratio.get("net_profit_margin"),
         "latestRevenue": latest_income.get("revenue"),
-        "latestNetIncome": latest_income.get("netIncome"),
+        "latestNetIncome": latest_income.get("net_income"),
         "latestEPS": latest_income.get("eps"),
     }
 

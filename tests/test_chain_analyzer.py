@@ -258,78 +258,97 @@ class TestFindATMOptions:
 
 
 class TestEarningsProximity:
-    """Test earnings proximity assessment."""
+    """Earnings gate: per-symbol lookup, three states (issue 044)."""
 
-    def test_clear_zone(self):
-        """No earnings in 90 days = CLEAR."""
+    @staticmethod
+    def _fmp(rows=None, error=None):
         mock_fmp = MagicMock()
-        mock_fmp.get_earnings_calendar.return_value = []
+        if error is not None:
+            mock_fmp.get_earnings.side_effect = error
+        else:
+            mock_fmp.get_earnings.return_value = rows
+        return mock_fmp
 
-        result = get_earnings_proximity("AAPL", fmp_client=mock_fmp)
-        assert result["zone"] == "CLEAR"
-
-    def test_blackout_zone(self):
-        """Earnings in 3 days = BLACKOUT."""
-        mock_fmp = MagicMock()
+    @staticmethod
+    def _day(offset):
         from datetime import timedelta
-        future = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
-        mock_fmp.get_earnings_calendar.return_value = [
-            {"symbol": "AAPL", "date": future},
-        ]
+        return (datetime.now().date() + timedelta(days=offset)).strftime("%Y-%m-%d")
 
-        result = get_earnings_proximity("AAPL", fmp_client=mock_fmp)
+    def _zone(self, offset):
+        rows = [{"date": self._day(offset), "epsActual": None},
+                {"date": self._day(-90), "epsActual": 1.0}]
+        return get_earnings_proximity("AAPL", fmp_client=self._fmp(rows))
+
+    def test_zone_boundaries_use_calendar_days(self):
+        expected = {0: "BLACKOUT", 5: "BLACKOUT", 6: "T5_WARNING", 10: "T5_WARNING",
+                    11: "CAUTION", 30: "CAUTION", 31: "CLEAR"}
+        for offset, zone in expected.items():
+            result = self._zone(offset)
+            assert result["zone"] == zone, offset
+            assert result["days_to_earnings"] == offset
+            assert result["earnings_date"] == self._day(offset)
+
+    def test_earnings_today_is_blackout_not_past(self):
+        result = self._zone(0)
+        assert result == {"days_to_earnings": 0, "earnings_date": self._day(0), "zone": "BLACKOUT"}
+
+    def test_lookup_failure_is_unknown_never_clear(self):
+        """FMP 404 / outage must not read as safe."""
+        result = get_earnings_proximity("AAPL", fmp_client=self._fmp(error=RuntimeError("404")))
+        assert result == {"days_to_earnings": None, "earnings_date": None, "zone": "UNKNOWN"}
+
+    def test_non_list_payload_is_unknown(self):
+        result = get_earnings_proximity("AAPL", fmp_client=self._fmp(rows=None))
+        assert result["zone"] == "UNKNOWN"
+
+    def test_reporter_without_upcoming_date_is_unknown(self):
+        rows = [{"date": self._day(-30), "epsActual": 2.1}, {"date": self._day(-120), "epsActual": 1.9}]
+        result = get_earnings_proximity("AAPL", fmp_client=self._fmp(rows))
+        assert result["zone"] == "UNKNOWN"
+
+    def test_etf_without_any_reported_eps_is_clear(self):
+        """SOXX returns []; QQQ / SPY return old placeholder rows with no EPS."""
+        assert get_earnings_proximity("SOXX", fmp_client=self._fmp([]))["zone"] == "CLEAR"
+        placeholder = [{"date": "2008-02-16", "epsActual": None, "epsEstimated": None}]
+        assert get_earnings_proximity("QQQ", fmp_client=self._fmp(placeholder))["zone"] == "CLEAR"
+
+    def test_picks_closest_upcoming_date(self):
+        rows = [{"date": self._day(40), "epsActual": None}, {"date": self._day(3), "epsActual": None},
+                {"date": self._day(-1), "epsActual": 1.0}]
+        result = get_earnings_proximity("aapl", fmp_client=self._fmp(rows))
         assert result["zone"] == "BLACKOUT"
-        assert result["days_to_earnings"] in (2, 3)  # Off-by-one from time-of-day
+        assert result["days_to_earnings"] == 3
 
-    def test_caution_zone(self):
-        """Earnings in 20 days = CAUTION."""
-        mock_fmp = MagicMock()
-        from datetime import timedelta
-        future = (datetime.now() + timedelta(days=20)).strftime("%Y-%m-%d")
-        mock_fmp.get_earnings_calendar.return_value = [
-            {"symbol": "AAPL", "date": future},
-        ]
+    def test_queries_the_symbol_uppercased(self):
+        mock_fmp = self._fmp([])
+        get_earnings_proximity("aapl", fmp_client=mock_fmp)
+        mock_fmp.get_earnings.assert_called_once_with("AAPL")
+        mock_fmp.get_earnings_calendar.assert_not_called()
 
-        result = get_earnings_proximity("AAPL", fmp_client=mock_fmp)
-        assert result["zone"] == "CAUTION"
+    def test_unparseable_dates_are_skipped(self):
+        rows = [{"date": "n/a"}, {"date": ""}, {}, {"date": self._day(8), "epsActual": None}]
+        assert get_earnings_proximity("AAPL", fmp_client=self._fmp(rows))["zone"] == "T5_WARNING"
 
-    def test_t5_warning_zone(self):
-        """Earnings in 7 days = T5_WARNING."""
-        mock_fmp = MagicMock()
-        from datetime import timedelta
-        future = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
-        mock_fmp.get_earnings_calendar.return_value = [
-            {"symbol": "AAPL", "date": future},
-        ]
 
-        result = get_earnings_proximity("AAPL", fmp_client=mock_fmp)
-        assert result["zone"] == "T5_WARNING"
 
-    def test_symbol_case_insensitive(self):
-        """Should match regardless of case."""
-        mock_fmp = MagicMock()
-        from datetime import timedelta
-        future = (datetime.now() + timedelta(days=50)).strftime("%Y-%m-%d")
-        mock_fmp.get_earnings_calendar.return_value = [
-            {"symbol": "AAPL", "date": future},
-        ]
+class TestEarningsFormatterUnknown:
+    """The formatter must never render an unavailable earnings gate as cleared."""
 
-        result = get_earnings_proximity("aapl", fmp_client=mock_fmp)
-        assert result["zone"] == "CLEAR"
-        assert result["days_to_earnings"] in (49, 50)  # Off-by-one from time-of-day
+    def test_unknown_zone_is_rendered_as_unavailable(self):
+        from terminal.options.formatter import format_options_context
+        text = format_options_context({
+            "symbol": "AAPL",
+            "earnings": {"days_to_earnings": None, "earnings_date": None, "zone": "UNKNOWN"},
+        })
+        assert "DATA UNAVAILABLE" in text
+        assert "UNKNOWN" in text
+        assert "No upcoming earnings found" not in text
+        assert "CLEAR" not in text
 
-    def test_picks_closest_earnings(self):
-        """Should pick the closest future earnings, not the first match."""
-        mock_fmp = MagicMock()
-        from datetime import timedelta
-        far = (datetime.now() + timedelta(days=40)).strftime("%Y-%m-%d")
-        near = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
-        # Far date listed FIRST — old code would return CLEAR
-        mock_fmp.get_earnings_calendar.return_value = [
-            {"symbol": "AAPL", "date": far},
-            {"symbol": "AAPL", "date": near},
-        ]
-
-        result = get_earnings_proximity("AAPL", fmp_client=mock_fmp)
-        assert result["zone"] == "BLACKOUT"
-        assert result["days_to_earnings"] in (2, 3)
+    def test_clear_zone_without_date_keeps_old_wording(self):
+        from terminal.options.formatter import format_options_context
+        text = format_options_context({
+            "symbol": "SOXX",
+            "earnings": {"days_to_earnings": None, "earnings_date": None, "zone": "CLEAR"},
+        })
+        assert "No upcoming earnings found — Zone: **CLEAR**" in text

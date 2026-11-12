@@ -10,7 +10,7 @@ Core functions:
 - get_earnings_proximity(): Days to earnings + zone classification
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from config.settings import (
@@ -417,11 +417,16 @@ def get_earnings_proximity(
 ) -> Dict[str, Any]:
     """Get earnings proximity and zone classification.
 
-    Zones:
-    - CLEAR: > 30 days
-    - CAUTION: 10-30 days
-    - T5_WARNING: 5-10 days
-    - BLACKOUT: < 5 days
+    Zones (calendar days from today to the next earnings date):
+    - CLEAR: > 30 days, or a symbol that has never reported an EPS (ETF)
+    - CAUTION: 11-30 days
+    - T5_WARNING: 6-10 days
+    - BLACKOUT: 0-5 days (earnings today counts)
+    - UNKNOWN: the lookup failed, or the company reports earnings but FMP lists
+      no upcoming date. UNKNOWN is never safe: verify the date by hand.
+
+    Source is the per-symbol `earnings` endpoint. The whole-market calendar
+    endpoint truncates at 4000 rows and silently drops symbols (issue 044).
 
     Args:
         symbol: Stock ticker
@@ -441,42 +446,39 @@ def get_earnings_proximity(
                 "zone": "UNKNOWN",
             }
 
-    today = datetime.now()
-    to_date = (today + timedelta(days=90)).strftime("%Y-%m-%d")
-    from_date = today.strftime("%Y-%m-%d")
-
-    calendar = fmp_client.get_earnings_calendar(
-        from_date=from_date, to_date=to_date
-    )
-
-    if not calendar:
-        return {
-            "days_to_earnings": None,
-            "earnings_date": None,
-            "zone": "CLEAR",  # No earnings data = assume safe
-        }
-
-    # Find the CLOSEST future earnings for this symbol
+    unknown = {"days_to_earnings": None, "earnings_date": None, "zone": "UNKNOWN"}
     symbol = symbol.upper()
+    try:
+        rows = fmp_client.get_earnings(symbol)
+    except Exception as exc:
+        logger.warning("%s: earnings lookup failed, zone UNKNOWN: %s", symbol, exc)
+        return unknown
+    if not isinstance(rows, list):
+        logger.warning("%s: earnings lookup returned no list, zone UNKNOWN", symbol)
+        return unknown
+
+    # Find the CLOSEST earnings date that is today or later
+    today = datetime.now().date()
     closest_days = None
     closest_date_str = None
+    reported_rows = 0  # past rows with a real EPS: the symbol is an earnings reporter
 
-    for entry in calendar:
-        if entry.get("symbol", "").upper() != symbol:
-            continue
-        earnings_date_str = entry.get("date", "")
+    for entry in rows:
+        earnings_date_str = entry.get("date", "") if isinstance(entry, dict) else ""
         if not earnings_date_str:
             continue
         try:
-            earnings_date = datetime.strptime(earnings_date_str, "%Y-%m-%d")
-            days = (earnings_date - today).days
-            if days < 0:
-                continue  # Past earnings
-            if closest_days is None or days < closest_days:
-                closest_days = days
-                closest_date_str = earnings_date_str
+            earnings_date = datetime.strptime(earnings_date_str[:10], "%Y-%m-%d").date()
         except ValueError:
             continue
+        days = (earnings_date - today).days
+        if days < 0:
+            if entry.get("epsActual") is not None:
+                reported_rows += 1
+            continue  # Past earnings
+        if closest_days is None or days < closest_days:
+            closest_days = days
+            closest_date_str = earnings_date_str[:10]
 
     if closest_days is not None:
         if closest_days > 30:
@@ -494,8 +496,15 @@ def get_earnings_proximity(
             "zone": zone,
         }
 
+    if reported_rows:
+        # The company reports earnings, but no upcoming date is listed: not proof of safety.
+        logger.warning("%s: no upcoming earnings date listed, zone UNKNOWN", symbol)
+        return unknown
+
     return {
         "days_to_earnings": None,
         "earnings_date": None,
-        "zone": "CLEAR",  # No earnings found in 90 days = safe
+        # Never reported an EPS: ETF / index product (FMP keeps EPS-less placeholder
+        # rows for QQQ and SPY, and returns [] for SOXX).
+        "zone": "CLEAR",
     }

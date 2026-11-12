@@ -191,7 +191,7 @@
 | 时间 | 频率 | 任务 |
 |------|------|------|
 | 06:25 | 日频 | git auto-pull（代码部署） |
-| 06:30 | Tue-Sat | 量价 + DV + IV + social 一次性更新（`run_market_data_pipeline.sh`） |
+| 06:30 | Tue-Sat | 量价（主池 FMP + broad yfinance）+ IV 一次性更新（`run_market_data_pipeline.sh`）；DV 在 08:00 晨报内采集，social 已归档 |
 | 07:30 | Wed | 广扫池历史市值采集（`broad_universe_cron_wrapper.sh daily_hmcap`，broad $1B+ final universe / $500M+ seed） |
 | 08:00 | Tue-Sat | 晨报生成与推送，HTML 附件投递（渲染/发送失败回退 PDF）（`run_market_report_pipeline.sh`）；含 0d 景气池试运行段 |
 | 08:30 | Sat | 股票池刷新（`run_update_data.sh --pool`） |

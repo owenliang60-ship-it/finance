@@ -515,7 +515,11 @@ class FMPClient:
 
     def get_earnings_calendar(self, from_date: str = None, to_date: str = None) -> List[Dict]:
         """
-        获取财报日程
+        获取财报日程（全市场）
+
+        注意: 响应上限 4000 行，长窗口会被截断且只保留窗口末尾的日期
+        （2026-11-12 实测 90 天窗口只返回最后 10 天）。查单只股票的下次财报
+        用 get_earnings(symbol)，不要用本方法。
 
         Args:
             from_date: 开始日期 (YYYY-MM-DD)
@@ -526,7 +530,7 @@ class FMPClient:
             params["from"] = from_date
         if to_date:
             params["to"] = to_date
-        data = self._request("earning_calendar", params)
+        data = self._request("earnings-calendar", params)
         return data if isinstance(data, list) else []
 
     def get_insider_trades(self, symbol: str, limit: int = 50) -> List[Dict]:
@@ -537,7 +541,7 @@ class FMPClient:
             symbol: 股票代码
             limit: 返回数量
         """
-        data = self._request("insider-trading", {
+        data = self._request("insider-trading/search", {
             "symbol": symbol,
             "limit": limit
         })
@@ -553,8 +557,8 @@ class FMPClient:
         """
         params = {"limit": limit}
         if tickers:
-            params["tickers"] = tickers
-        data = self._request("stock_news", params)
+            params["symbols"] = tickers
+        data = self._request("news/stock", params)
         return data if isinstance(data, list) else []
 
     def get_analyst_recommendations(self, symbol: str, limit: int = 200) -> List[Dict]:

@@ -110,18 +110,20 @@ def _ensure_loaded():
     _cache_loaded = True
 
 
-def get_risk_free_rate(date: str) -> float:
+def get_risk_free_rate(date: Optional[str] = None) -> float:
     """Get risk-free rate for a specific date.
 
     Falls back to most recent trading day for weekends/holidays.
     Returns DEFAULT_RATE if no data available.
 
     Args:
-        date: Date string YYYY-MM-DD
+        date: Date string YYYY-MM-DD. Defaults to today.
 
     Returns:
         Annualized risk-free rate as decimal (e.g. 0.045)
     """
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
     _ensure_loaded()
 
     if not _mem_cache:
