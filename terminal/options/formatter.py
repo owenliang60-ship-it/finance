@@ -90,8 +90,14 @@ def format_options_context(ctx: Dict[str, Any]) -> str:
             lines.append("**Earnings**: {} ({} days) — Zone: **{}**".format(
                 edate, days, zone
             ))
-        else:
+        elif zone == "CLEAR":
             lines.append("**Earnings**: No upcoming earnings found — Zone: **{}**".format(zone))
+        else:
+            lines.append(
+                "**Earnings**: ⚠️ DATA UNAVAILABLE — Zone: **UNKNOWN**. "
+                "Earnings gate is NOT cleared: verify the next earnings date by hand "
+                "before any short-premium structure."
+            )
         lines.append("")
 
     # Term Structure
