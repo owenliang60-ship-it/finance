@@ -24,6 +24,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.data.delisted_universe_manager import (
+    get_delisted_candidate_symbols,
     load_delisted_candidate_registry,
     get_delisted_large_cap_symbols,
     write_delisted_large_caps,

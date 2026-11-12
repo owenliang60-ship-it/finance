@@ -16,6 +16,6 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') pull exit=$RC" >> "$LOG"
 if [ $RC -ne 0 ]; then
     MSG=$(printf "⚠️ 云端 git pull 失败\n\nexit=%d\n%.500s" "$RC" "$OUTPUT")
     curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-        -d "chat_id=${TELEGRAM_CHAT_ID}" \
-        -d "text=$MSG" > /dev/null 2>&1
+        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+        --data-urlencode "text=$MSG" > /dev/null 2>&1
 fi

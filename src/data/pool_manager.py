@@ -369,7 +369,7 @@ def ensure_in_pool(symbol: str) -> Dict:
     new_entry = {
         "symbol": symbol,
         "companyName": profile.get("companyName", ""),
-        "marketCap": profile.get("mktCap"),
+        "marketCap": profile.get("marketCap") or profile.get("mktCap"),
         "sector": profile.get("sector", ""),
         "industry": profile.get("industry", ""),
         "exchange": profile.get("exchangeShortName", profile.get("exchange", "")),
@@ -449,7 +449,7 @@ def batch_add_to_pool(symbols: List[str], source: str = "manual", reason: str = 
         entry = {
             "symbol": sym,
             "companyName": profile.get("companyName", ""),
-            "marketCap": profile.get("mktCap"),
+            "marketCap": profile.get("marketCap") or profile.get("mktCap"),
             "sector": profile.get("sector", ""),
             "industry": profile.get("industry", ""),
             "exchange": profile.get("exchangeShortName", profile.get("exchange", "")),

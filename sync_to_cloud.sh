@@ -50,10 +50,16 @@ acquire_lock() {
         rm -f "$LOCK_FILE"
     fi
     echo $$ > "$LOCK_FILE"
+    _LOCK_OWNED=1
 }
 
+# Only the process that took the lock may remove it: a rejected second run exits
+# through the EXIT trap and must not delete the first run's lock.
+_LOCK_OWNED=""
 release_lock() {
-    rm -f "$LOCK_FILE"
+    if [ -n "$_LOCK_OWNED" ]; then
+        rm -f "$LOCK_FILE"
+    fi
 }
 
 # A3: canonical-CSV prefetch temp dir (script-global so the EXIT trap can clean it

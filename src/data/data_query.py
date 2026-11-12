@@ -73,7 +73,7 @@ def get_stock_data(symbol: str, price_days: int = 30) -> Dict[str, Any]:
             "description": profile.get("description"),
             "sector": profile.get("sector"),
             "industry": profile.get("industry"),
-            "marketCap": profile.get("mktCap"),
+            "marketCap": profile.get("marketCap") or profile.get("mktCap"),
             "beta": profile.get("beta"),
             "price": profile.get("price"),
             "website": profile.get("website"),

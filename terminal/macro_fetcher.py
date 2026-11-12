@@ -241,7 +241,7 @@ def _assess_regime(snapshot: MacroSnapshot) -> Tuple[str, str, str]:
 
     if (snapshot.hy_spread is not None and snapshot.hy_spread > 5.0):
         risk_off_signals += 1
-        reasons.append(f"HY spread wide ({snapshot.hy_spread:.0f}bp)")
+        reasons.append(f"HY spread wide ({snapshot.hy_spread * 100:.0f}bp)")
 
     if risk_off_signals > 0:
         return "RISK_OFF", _confidence(snapshot), "; ".join(reasons)
