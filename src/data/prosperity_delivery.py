@@ -38,7 +38,8 @@ HEALTH_TIMEOUT_SECONDS = 1800
 UPLOAD_TIMEOUT_SECONDS = 300
 MOMENTUM_TIMEOUT_SECONDS = 600
 MESSAGE_LIMIT = 4096                   # Telegram sendMessage text limit
-MOMENTUM_TOP = 30                      # rows listed in the momentum board text
+MOMENTUM_TOP = 30                      # rows listed in the momentum board text AND the combo rule
+                                       # (pool ∩ top 30, Boss 2026-11-13): changing it changes a backtested rule
 MOMENTUM_WINDOW = '14w'                # the one board the CLI writes (momentum_board.WINDOWS); a test pins the pair
 MOMENTUM_LABEL = '14周'
 MOMENTUM_ITEMS = ('momentum_text', 'combo_text')
@@ -175,6 +176,11 @@ def _long_rows(board: dict) -> List[dict]:
     return sorted((r for r in board['scored'] if r['eligible']), key=lambda r: r['rank'])
 
 
+def _top_rows(board: dict) -> List[dict]:
+    """The listed top of the long board: momentum_text prints these, combo_text intersects them with the pool."""
+    return _long_rows(board)[:MOMENTUM_TOP]
+
+
 def _counted(text: str) -> str:
     if len(text) > MESSAGE_LIMIT:
         raise ValueError(f'message_too_long: {len(text)}')
@@ -192,7 +198,7 @@ def momentum_text(payload: dict, pool: Optional[Sequence[str]]) -> str:
     lines = [f'*动量榜 {md_escape(payload["as_of"])}*（V4 · 只看上涨 · 价格截至 {md_escape(payload["price_date"])}）',
              f'主池 {payload["universe"]["count"]} 只', '']
     if rows:
-        top = rows[:MOMENTUM_TOP]
+        top = _top_rows(board)
         lines.append(head + f'，前 {len(top)}：')
         lines.extend(f'{r["rank"]}. {md_escape(r["symbol"])} {r["score"]:.1f} {r["return"]:+.0%}'
                      + (' ★' if r['symbol'] in starred else '') for r in top)
@@ -212,7 +218,7 @@ def combo_text(payload: dict, pool: Optional[Sequence[str]], reason: Optional[st
         return _counted(f'{title}\n池文件不可用（{md_escape(reason or "unknown")}），本周不列名单')
     members = set(pool)
     board = payload['boards'][MOMENTUM_WINDOW]
-    hits = [r for r in _long_rows(board)[:MOMENTUM_TOP] if r['symbol'] in members]
+    hits = [r for r in _top_rows(board) if r['symbol'] in members]
     listed = ' · '.join(f'{md_escape(r["symbol"])} #{r["rank"]} {r["return"]:+.0%}' for r in hits) or '无'
     line = f'*{MOMENTUM_LABEL}*（{len(hits)}）: {listed}'
     # third state (review #1): a member that could not be scored is named, never read as "not rising"

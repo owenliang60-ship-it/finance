@@ -672,6 +672,7 @@ def test_combo_names_pool_members_that_could_not_be_scored():
 
 
 def test_momentum_top_is_thirty():
+    """Pins the combo rule (pool ∩ momentum top 30, Boss 2026-11-13), not only a display length."""
     assert d.MOMENTUM_TOP == 30
 
 

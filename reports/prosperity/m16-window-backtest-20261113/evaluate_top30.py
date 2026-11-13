@@ -20,6 +20,8 @@ LISTS = {'池∩前30': lambda w: [s for s, k in w['picks']['70'] if k <= 30],
          '池全体': lambda w: w['pool'], 'SPY': lambda w: ['SPY']}
 R, held, dates = {k: [] for k in LISTS}, {k: [] for k in LISTS}, []
 for k in range(len(weeks) - 1):
+    if weeks[k]['picks'].get('70') is None:
+        continue                                                    # not enough history: skipped, as in evaluate.py
     dates.append(weeks[k]['as_of'])
     for name, f in LISTS.items():
         syms = f(weeks[k])
@@ -36,7 +38,7 @@ def stats(name, mask):
     beta = np.cov(r, spy, ddof=1)[0, 1] / spy.var(ddof=1)
     resid = r - beta * spy
     h = [held[name][i] for i in np.flatnonzero(mask)]
-    turn = np.mean([len(h[i + 1] - h[i]) / len(h[i + 1]) for i in range(len(h) - 1) if h[i + 1]])
+    turn = np.mean([len(h[i + 1] - h[i]) / max(1, len(h[i + 1])) for i in range(len(h) - 1)])   # evaluate.py's definition
     return dict(ann=nav[-1] ** (52 / n) - 1, alpha=resid.mean() * 52, t=resid.mean() / (resid.std(ddof=1) / n ** .5),
                 ex_pool=(r - pool).mean() * 52, mdd=float((nav / np.maximum.accumulate(nav) - 1).min()),
                 names=np.mean([len(x) for x in h]), cash=sum(len(x) == 0 for x in h), turn=turn)
