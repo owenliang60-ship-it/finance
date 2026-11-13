@@ -104,12 +104,13 @@ from pathlib import Path
 from src.data.prosperity_pool import LiquidityResult, build_pool, publish_prosperity_pool
 from src.data.prosperity_store import ProsperityStore
 from terminal.prosperity.schemes import SCHEMES, scheme_hash
-from tests.prosperity_fixtures import storage_batch, weekdays
+from tests.prosperity_fixtures import seed_market, storage_batch, weekdays
 
 VERSION = 'test-v1'
 WEEK = '2026-10-03'
 F1 = scheme_hash(SCHEMES['F1'])
 NOW = datetime(2026, 10, 3, 9, 30, tzinfo=timezone.utc)
+M16 = ('momentum_text', 'combo_text')        # sent after the M13 items, in this order
 
 
 def _sha(p):
@@ -140,20 +141,25 @@ def env(tmp_path):
     pool = tmp_path / 'pool.json'
     payload = build_pool(stored, _liquidity(stored), generated_at=WEEK + 'T09:10:00Z')
     publish_prosperity_pool(payload, pool, now=NOW)
-    market = tmp_path / 'market.db'
-    market.write_bytes(b'')
+    # real prices: test_real_web_cli_integration runs the M16 momentum CLI as a subprocess
+    market = seed_market(tmp_path / 'market.db', stored.meta.members, '2026-10-02')
     return {'db': db, 'market': market, 'pool': pool, 'dir': tmp_path / 'delivery',
             'members': sorted(m['symbol'] for m in payload['members'])}
 
 
 class FakeRun:
     """Stands in for subprocess.run: writes the --out file(s) and returns a chosen rc."""
-    def __init__(self, web_bytes=1000, web_rc=0, health_rc=0):
+    def __init__(self, web_bytes=1000, web_rc=0, health_rc=0, momentum_rc=0):
         self.calls, self.web_bytes, self.web_rc, self.health_rc = [], web_bytes, web_rc, health_rc
+        self.momentum_rc = momentum_rc
 
     def __call__(self, cmd, **kw):
         self.calls.append((cmd, kw))
         out = Path(cmd[cmd.index('--out') + 1])
+        if cmd[1].endswith('momentum_board.py'):
+            if self.momentum_rc == 0:
+                out.write_text(json.dumps(_payload(as_of=cmd[cmd.index('--as-of') + 1])), encoding='utf-8')
+            return subprocess.CompletedProcess(cmd, self.momentum_rc, '', 'momentum stderr')
         if cmd[1].endswith('prosperity_web.py'):
             if self.web_rc == 0:
                 out.write_bytes(b'x' * self.web_bytes)
@@ -208,8 +214,8 @@ def test_first_delivery_sends_web_and_text_and_records_baseline(env):
     run, send = FakeRun(), FakeSend()
     before = _sha(env['db'])
     out = deliver(env, run, send)
-    assert out.status == 'delivered' and out.sent == ('web', 'pool_text', 'health_baseline')
-    assert run.scripts() == ['prosperity_web.py']
+    assert out.status == 'delivered' and out.sent == ('web', 'pool_text', 'health_baseline', *M16)
+    assert run.scripts() == ['prosperity_web.py', 'momentum_board.py']
     assert '体检报告基线：冻结 2026-10-03' in send.msgs[1]                  # review #5: never silent
     cmd, kw = run.calls[0]
     assert cmd[0] == sys.executable and kw['timeout'] == 600
@@ -220,7 +226,7 @@ def test_first_delivery_sends_web_and_text_and_records_baseline(env):
     assert caption == f'景气榜 2026-10-03 · F1 STRICT 2 / FULL 7 · 入池 {len(env["members"])}'
     assert '无上周对比' in send.msgs[0]
     ledger = d.read_ledger(env['dir'], WEEK)
-    assert set(ledger['items']) == {'web', 'pool_text', 'health'}
+    assert set(ledger['items']) == {'web', 'pool_text', 'health', *M16}
     assert ledger['items']['health'] == {'freeze_as_of': WEEK, 'baseline': True, 'code_version': VERSION}
     assert ledger['pool_members'] == env['members']
     assert out.baseline == WEEK
@@ -238,8 +244,8 @@ def test_rerun_is_already_delivered_without_snapshot(env):
 def test_partial_failure_resends_only_missing_items(env):
     send = FakeSend(fail_on={2})                                          # web ok, pool text fails
     out = deliver(env, FakeRun(), send)
-    assert out.status == 'failed' and out.sent == ('web', 'health_baseline') and 'pool_text' in out.error
-    assert set(d.read_ledger(env['dir'], WEEK)['items']) == {'web', 'health'}
+    assert out.status == 'failed' and out.sent == ('web', 'health_baseline', *M16) and 'pool_text' in out.error
+    assert set(d.read_ledger(env['dir'], WEEK)['items']) == {'web', 'health', *M16}
     run, send = FakeRun(), FakeSend()
     out = deliver(env, run, send)
     assert out.status == 'delivered' and out.sent == ('pool_text',) and not run.calls and not send.docs
@@ -260,8 +266,8 @@ def test_health_sent_when_freeze_is_newer_than_last(env):
     seed_previous(env, members=env['members'][1:] + ['GONE'])
     run, send = FakeRun(), FakeSend()
     out = deliver(env, run, send)
-    assert out.status == 'delivered' and out.sent == ('web', 'pool_text', 'health')
-    assert run.scripts() == ['prosperity_web.py', 'prosperity_health.py']
+    assert out.status == 'delivered' and out.sent == ('web', 'pool_text', 'health', *M16)
+    assert run.scripts() == ['prosperity_web.py', 'prosperity_health.py', 'momentum_board.py']
     cmd, kw = run.calls[1]
     assert kw['timeout'] == 1800 and cmd[cmd.index('--schemes') + 1] == 'F1'
     assert cmd[cmd.index('--code-version') + 1] == VERSION
@@ -275,19 +281,19 @@ def test_health_sent_when_freeze_is_newer_than_last(env):
 def test_health_not_due_when_already_sent_and_version_change_sends_once(env):
     seed_previous(env, freeze_as_of=WEEK)
     run = FakeRun()
-    assert deliver(env, run, FakeSend()).sent == ('web', 'pool_text')
+    assert deliver(env, run, FakeSend()).sent == ('web', 'pool_text', *M16)
     assert d.read_ledger(env['dir'], WEEK)['items']['health'] == {
         'freeze_as_of': WEEK, 'not_due': True, 'code_version': VERSION}
     env['dir'] = env['dir'].parent / 'delivery2'
     seed_previous(env, freeze_as_of=WEEK, version='old-engine')
     run = FakeRun()
-    assert deliver(env, run, FakeSend()).sent == ('web', 'pool_text', 'health')
+    assert deliver(env, run, FakeSend()).sent == ('web', 'pool_text', 'health', *M16)
 
 
 def test_health_failure_keeps_other_items_and_retries(env):
     seed_previous(env)
     out = deliver(env, FakeRun(health_rc=6), FakeSend())
-    assert out.status == 'failed' and out.sent == ('web', 'pool_text') and 'prosperity_health.py rc=6' in out.error
+    assert out.status == 'failed' and out.sent == ('web', 'pool_text', *M16) and 'prosperity_health.py rc=6' in out.error
     assert 'health' not in d.read_ledger(env['dir'], WEEK)['items']
     out = deliver(env, FakeRun(), FakeSend())
     assert out.sent == ('health',)
@@ -296,7 +302,7 @@ def test_health_failure_keeps_other_items_and_retries(env):
 def test_two_failed_weeks_still_send_the_freeze(env):
     seed_previous(env)
     d.write_ledger(env['dir'], {'as_of': '2026-09-27', 'items': {'web': {'sent_at': 'x'}}})   # failed week
-    assert deliver(env, FakeRun(), FakeSend()).sent == ('web', 'pool_text', 'health')
+    assert deliver(env, FakeRun(), FakeSend()).sent == ('web', 'pool_text', 'health', *M16)
 
 
 def test_unavailable_pool_sends_reason_without_members(env):
@@ -369,6 +375,14 @@ def test_real_web_cli_integration(env):
     assert out.status == 'delivered', out.error
     page = env['dir'] / 'out' / WEEK / 'prosperity-web-20261003.html'
     assert page.is_file() and '<section id=' in page.read_text(encoding='utf-8')
+    # M16: the real momentum CLI ran on the seeded market.db (read in place) for the board's members
+    board = json.loads((env['dir'] / 'out' / WEEK / 'momentum-20261003.json').read_text(encoding='utf-8'))
+    with ProsperityStore(env['db'], read_only=True) as s:
+        stored = s.get_board(next(k for k in s.list_boards(scheme_hash=F1, code_version=VERSION,
+                                                            board_type='weekly') if k.as_of == WEEK))
+    assert board['universe']['symbols'] == sorted(stored.meta.members) and board['price_date'] == '2026-10-02'
+    assert out.sent[-2:] == M16 and send.msgs[-2].startswith('*动量榜 2026-10-03*')
+    assert all(f'{s} #' in send.msgs[-1] for s in env['members'])        # every pool member is rising here
 
 
 # --- code review (high) fixes ----------------------------------------------------------------
@@ -407,8 +421,8 @@ def test_web_failure_does_not_block_text_and_health(env):
     seed_previous(env)
     send = FakeSend()
     out = deliver(env, FakeRun(web_rc=6), send)
-    assert out.status == 'failed' and out.sent == ('pool_text', 'health') and 'prosperity_web.py rc=6' in out.error
-    assert set(d.read_ledger(env['dir'], WEEK)['items']) == {'pool_text', 'health'}
+    assert out.status == 'failed' and out.sent == ('pool_text', 'health', *M16) and 'prosperity_web.py rc=6' in out.error
+    assert set(d.read_ledger(env['dir'], WEEK)['items']) == {'pool_text', 'health', *M16}
     out = deliver(env, FakeRun(), FakeSend())
     assert out.status == 'delivered' and out.sent == ('web',)
 
@@ -481,11 +495,11 @@ def test_same_week_engine_upgrade_delivers_the_new_board(env):
                             env['pool'], now=NOW)
     run, send = FakeRun(), FakeSend()
     out = deliver(env, run, send, version='test-v2')
-    assert out.status == 'delivered' and out.sent == ('web', 'pool_text', 'health')
+    assert out.status == 'delivered' and out.sent == ('web', 'pool_text', 'health', *M16)
     assert run.calls[0][0][run.calls[0][0].index('--code-version') + 1] == 'test-v2'
     assert send.docs[0][1].endswith(f'入池 {len(env["members"])}')
     items = d.read_ledger(env['dir'], WEEK)['items']
-    assert {items[k]['code_version'] for k in ('web', 'pool_text', 'health')} == {'test-v2'}
+    assert {items[k]['code_version'] for k in ('web', 'pool_text', 'health', *M16)} == {'test-v2'}
     assert deliver(env, FakeRun(), FakeSend(), version='test-v2').status == 'already_delivered'
 
 
@@ -576,3 +590,69 @@ def test_combo_messages_refuse_a_section_that_cannot_fit():
     names = [f'LONGNAME{i:04d}' for i in range(400)]
     with pytest.raises(ValueError, match='message_too_long'):
         d.combo_messages(_payload(symbols=names, down=0), names, None)
+
+
+def test_deliver_sends_momentum_and_combo_last(env):
+    run, send = FakeRun(), FakeSend()
+    out = deliver(env, run, send)
+    assert out.status == 'delivered' and out.sent[-2:] == ('momentum_text', 'combo_text')
+    assert run.scripts()[-1] == 'momentum_board.py'
+    assert send.msgs[-2].startswith('*动量榜 2026-10-03*') and send.msgs[-1].startswith('*景气动量精选 2026-10-03*')
+    assert f'景气精选池 {len(env["members"])} 只' in send.msgs[-1] and '★ = 景气精选池成员' in send.msgs[-2]
+    cmd, kw = next(c for c in run.calls if c[0][1].endswith('momentum_board.py'))
+    assert cmd[cmd.index('--market-db') + 1] == str(env['market'])          # the live path, read-only: no snapshot
+    assert Path(cmd[cmd.index('--db') + 1]) != env['db'] and cmd[cmd.index('--as-of') + 1] == WEEK
+    assert cmd[cmd.index('--code-version') + 1] == VERSION and kw['timeout'] == d.MOMENTUM_TIMEOUT_SECONDS
+    items = d.read_ledger(env['dir'], WEEK)['items']
+    assert items['momentum_text']['code_version'] == VERSION and items['combo_text']['parts'] == 1
+    assert deliver(env, FakeRun(), FakeSend()).status == 'already_delivered'
+
+
+def test_momentum_cli_failure_keeps_other_items_and_retries(env):
+    out = deliver(env, FakeRun(momentum_rc=6), FakeSend())
+    assert out.status == 'failed' and 'momentum_board.py rc=6' in out.error
+    assert 'web' in out.sent and 'momentum_text' not in out.sent and 'combo_text' not in out.sent
+    run, send = FakeRun(), FakeSend()
+    again = deliver(env, run, send)
+    assert again.status == 'delivered' and again.sent == ('momentum_text', 'combo_text')
+    assert run.scripts() == ['momentum_board.py'] and not send.docs           # nothing else is redone
+
+
+def test_momentum_payload_for_another_week_is_refused(env):
+    class WrongWeek(FakeRun):
+        def __call__(self, cmd, **kw):
+            done = super().__call__(cmd, **kw)
+            if cmd[1].endswith('momentum_board.py'):
+                Path(cmd[cmd.index('--out') + 1]).write_text(json.dumps(_payload(as_of='2026-09-26')))
+            return done
+    out = deliver(env, WrongWeek(), FakeSend())
+    assert out.status == 'failed' and 'momentum_payload_invalid' in out.error
+    assert not {'momentum_text', 'combo_text'} & set(d.read_ledger(env['dir'], WEEK)['items'])
+
+
+def test_untrusted_pool_still_sends_board_and_says_why(env):
+    env['pool'].unlink()
+    send = FakeSend()
+    out = deliver(env, FakeRun(), send)
+    assert out.sent[-2:] == ('momentum_text', 'combo_text')
+    assert '★' not in send.msgs[-2] and '池文件不可用（prosperity\\_pool\\_missing）' in send.msgs[-1]
+
+
+def test_combo_second_part_failure_resends_the_whole_item(env, monkeypatch):
+    monkeypatch.setattr(d, 'combo_messages', lambda *a, **k: ['*景气动量精选 part1*', '*景气动量精选 part2*'])
+    first = FakeSend(fail_on={6})          # 1 web, 2 pool, 3 baseline, 4 momentum, 5 part1; part2 fails
+    out = deliver(env, FakeRun(), first)
+    assert out.status == 'failed' and 'combo_text' in out.error
+    assert out.sent[-1] == 'momentum_text' and first.msgs[-1] == '*景气动量精选 part1*'
+    assert 'combo_text' not in d.read_ledger(env['dir'], WEEK)['items']
+    again = FakeSend()
+    assert deliver(env, FakeRun(), again).sent == ('combo_text',)
+    assert again.msgs == ['*景气动量精选 part1*', '*景气动量精选 part2*']       # at-least-once: the whole item
+    assert d.read_ledger(env['dir'], WEEK)['items']['combo_text']['parts'] == 2
+
+
+def test_momentum_send_failure_does_not_block_combo(env):
+    send = FakeSend(fail_on={4})                                              # the momentum board message
+    out = deliver(env, FakeRun(), send)
+    assert out.status == 'failed' and 'momentum_text' in out.error and out.sent[-1] == 'combo_text'
+    assert deliver(env, FakeRun(), FakeSend()).sent == ('momentum_text',)

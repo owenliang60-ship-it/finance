@@ -40,6 +40,8 @@ MOMENTUM_TIMEOUT_SECONDS = 600
 MESSAGE_LIMIT = 4096                   # Telegram sendMessage text limit
 MOMENTUM_TOP = 30                      # rows listed per window in the momentum board text
 MOMENTUM_WINDOWS = (('7w', '7周'), ('14w', '14周'))
+MOMENTUM_ITEMS = ('momentum_text', 'combo_text')
+MOMENTUM_SCHEMA_VERSION = 1
 KEEP_OUTPUT_WEEKS = 2
 NEVER = object()                       # last_health_freeze: no report was ever sent or baselined
 VERSION_CHANGED = object()             # last_health_freeze: the last sent report used another code_version
@@ -252,7 +254,7 @@ def _sent(items: dict, key: str, code_version: str) -> bool:
 
 
 def _complete(ledger: dict, code_version: str) -> bool:
-    return all(_sent(ledger['items'], key, code_version) for key in ('web', 'pool_text', 'health'))
+    return all(_sent(ledger['items'], key, code_version) for key in ('web', 'pool_text', 'health', *MOMENTUM_ITEMS))
 
 
 def _inputs_outside(delivery_dir: Path, **inputs: Path) -> None:
@@ -318,6 +320,16 @@ def _run_cli(run, script: str, args: Sequence[str], timeout: int) -> None:
         raise RuntimeError(f'{script} rc={result.returncode}: {tail[0][:200]}')
 
 
+def _read_momentum(path: Path, as_of: str) -> dict:
+    """The CLI's JSON for exactly this week and this layout, or momentum_payload_invalid."""
+    payload = json.loads(path.read_text(encoding='utf-8'))
+    if (not isinstance(payload, dict) or payload.get('schema_version') != MOMENTUM_SCHEMA_VERSION
+            or payload.get('as_of') != as_of or not isinstance(payload.get('boards'), dict)
+            or set(payload['boards']) != {key for key, _ in MOMENTUM_WINDOWS}):
+        raise ValueError('momentum_payload_invalid')
+    return payload
+
+
 def _stamp(now) -> str:
     return now().astimezone(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
 
@@ -351,9 +363,10 @@ def _claim(delivery_dir: Path) -> None:
 def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, pool_path: Path,
                  delivery_dir: Path, now: Callable[[], datetime],
                  send_document=None, send_message=None, run=subprocess.run) -> DeliveryOutcome:
-    """Send this week's web page, pool changes and (when a newer freeze exists) the F1 health report.
+    """Send this week's web page, pool changes, (when a newer freeze exists) the F1 health report,
+    the M16 momentum board and the prosperity-momentum picks.
 
-    The three items are independent: each failure is collected and the others still run
+    The items are independent: each failure is collected and the others still run
     (code review #4). Each item is recorded in the ledger right after it is sent, so a re-run
     sends only what is missing (at-least-once: a crash between a send and its ledger write
     repeats that item). Every failure, including a ledger write, returns status 'failed';
@@ -472,6 +485,41 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
                 write_ledger(delivery_dir, ledger)
             except Exception as exc:
                 fail('health', exc)
+
+        if not all(_sent(items, key, code_version) for key in MOMENTUM_ITEMS):
+            # M16: one CLI run feeds both texts. market.db is read in place (read-only): this job
+            # holds the market_db_writer lock, and a weekly 1.5 GB snapshot buys nothing.
+            payload = None
+            try:
+                board_file = out / f'momentum-{as_of.replace("-", "")}.json'
+                _run_cli(run, 'momentum_board.py', ['--db', snap, '--market-db', market_db, '--code-version',
+                                                    code_version, '--as-of', as_of, '--out', board_file],
+                         MOMENTUM_TIMEOUT_SECONDS)
+                payload = _read_momentum(board_file, as_of)
+            except Exception as exc:
+                fail('momentum', exc)
+            trusted = by_rank if members is not None else None
+            if payload is not None and not _sent(items, 'momentum_text', code_version):
+                try:
+                    if not send_message(momentum_text(payload, trusted), channel='private'):
+                        raise RuntimeError('send_message returned False')
+                    items['momentum_text'] = {'sent_at': _stamp(now), 'code_version': code_version}
+                    write_ledger(delivery_dir, ledger)
+                    sent.append('momentum_text')
+                except Exception as exc:
+                    fail('momentum_text', exc)
+            if payload is not None and not _sent(items, 'combo_text', code_version):
+                try:
+                    parts = combo_messages(payload, trusted, pool_reason)
+                    for part in parts:               # recorded only when every part went out
+                        if not send_message(part, channel='private'):
+                            raise RuntimeError('send_message returned False')
+                    items['combo_text'] = {'sent_at': _stamp(now), 'code_version': code_version,
+                                           'parts': len(parts)}
+                    write_ledger(delivery_dir, ledger)
+                    sent.append('combo_text')
+                except Exception as exc:
+                    fail('combo_text', exc)
     except Exception as exc:
         fail('setup', exc)
     finally:
