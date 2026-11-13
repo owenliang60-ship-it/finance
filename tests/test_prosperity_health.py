@@ -480,3 +480,26 @@ def test_production_and_verifier_agree_on_split_cases(closes, splits, window, ex
     for got in (prod, mine):
         assert got[1] == expected[1]
         assert (got[0] is None) if expected[0] is None else got[0] == pytest.approx(expected[0])
+
+
+# --- M16: exact-date window series for the momentum board ------------------------------------
+
+def test_window_closes_exact_dates_and_reasons():
+    closes = {'A': [(d, 10.0 + i) for i, d in enumerate(CAL[:8])],
+              'GAP': [(d, 5.0) for i, d in enumerate(CAL[:8]) if i != 3]}
+    b = book(closes)
+    got, why = b.window_closes('A', 2, 6)
+    assert why == 'ok' and got.tolist() == [12.0, 13.0, 14.0, 15.0, 16.0]
+    assert b.window_closes('GAP', 2, 6) == (None, 'price_gap')       # no forward fill
+    assert b.window_closes('NONE', 2, 6) == (None, 'no_price')
+
+
+def test_window_closes_split_states():
+    half = [(d, 100.0 if i < 4 else 50.0) for i, d in enumerate(CAL[:8])]
+    adjusted = book({'S': half}, {'S': [(CAL[4], 2.0)]})            # recorded 2:1, one matching jump
+    got, why = adjusted.window_closes('S', 0, 7)
+    assert why == 'ok' and got.tolist() == [50.0] * 8
+    assert book({'S': half}).window_closes('S', 0, 7) == (None, 'split_suspect')   # jump, no record
+    twice = [(d, 100.0 if i < 3 else 50.0 if i < 5 else 25.0) for i, d in enumerate(CAL[:8])]
+    unresolved = book({'S': twice}, {'S': [(CAL[4], 2.0)]})         # two candidate jumps for one record
+    assert unresolved.window_closes('S', 0, 7) == (None, 'split_unresolved')
