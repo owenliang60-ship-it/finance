@@ -300,3 +300,12 @@ def seed_prices(path, rows):
                                        for d, c, v in points])
     w.close()
     return Path(path)
+
+
+def seed_market(path, symbols, last_day, days=80):
+    """Minimal market.db for the M16 momentum CLI: SPY calendar plus `days` weekdays of rising prices."""
+    cal = weekdays(last_day, days)
+    rows = {s: [(d, 20.0 + i + k * 0.05 * (i + 1), 10**6 * (i + 1)) for k, d in enumerate(cal)]
+            for i, s in enumerate(sorted(symbols))}
+    rows['SPY'] = [(d, 400.0 + k * 0.1, 10**7) for k, d in enumerate(cal)]
+    return seed_prices(seed_db(path), rows)
