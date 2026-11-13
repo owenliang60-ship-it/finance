@@ -6,11 +6,15 @@ Run:  /usr/bin/python3 -I verify.py --json momentum.json --market-db market.db -
 Recomputes, from raw daily_price rows and the rule text (docs/runbooks/momentum-ls-01.md §2), every
 scored row of both windows: return, ER, OLS slope and R² of log price, drawdown, dollar volume,
 whole-pool percentiles, score, long gate and rank. Also checks that scored ∪ unavailable is exactly
-the F1 live weekly board's member list. Split decisions are not re-judged: the listed adjustments
-are applied as given and printed, with the split-excluded symbols, for a human to read.
+the F1 live weekly board's member list, and that each window scores at least 90% of the members
+(the production floor: a board that excludes everyone must not verify). Split decisions are not
+re-judged, but every split exclusion needs evidence in the raw data: a recorded split near the
+window or a one-day close ratio outside [0.55, 1.8] inside it. Listed adjustments are applied as
+given and printed, with the split-excluded symbols, for a human to read.
 Exit 0: no difference. Exit 1: at least one difference (each printed).
 """
 import argparse
+import datetime
 import json
 import math
 import sqlite3
@@ -22,6 +26,8 @@ HALF = 1_000_000_000.0
 LONG_DRAWDOWN_LIMIT = 0.30
 NUMERIC = ('score', 'return', 'er', 'r_squared', 'slope', 'drawdown', 'dollar_volume')
 SPLIT_REASONS = ('split_unresolved', 'split_suspect')
+COVERAGE_MIN = 0.90
+SPLIT_NEAR_DAYS = 10            # calendar days around the window: PriceBook searches ±5 trading days
 
 
 def ro(path):
@@ -106,6 +112,8 @@ def main():
             missing = sorted(set(members) - set(names) - set(unavailable))
             extra = sorted((set(names) | set(unavailable)) - set(members))
             diff(label, 'scored ∪ unavailable != board members; missing', missing, 'extra', extra)
+        if len(set(names)) < COVERAGE_MIN * len(members):       # an empty or thin board never verifies
+            diff(label, 'coverage below floor:', len(set(names)), 'scored of', len(members), 'members')
         factors = {}
         for adj in board['adjustments']:
             factors.setdefault(adj['symbol'], []).append((adj['date'], adj['factor']))
@@ -187,7 +195,16 @@ def main():
                 if gap or not any(points[day][1] is None or points[day][1] < 0 for day in window[1:]):
                     diff(label, symbol, 'volume_missing but closes and volumes are complete')
             elif reason in SPLIT_REASONS:
-                notes.append('%s excluded for a split, not re-judged: %s (%s)' % (label, symbol, reason))
+                lo = (datetime.date.fromisoformat(window[0]) - datetime.timedelta(days=SPLIT_NEAR_DAYS)).isoformat()
+                hi = (datetime.date.fromisoformat(window[-1]) + datetime.timedelta(days=SPLIT_NEAR_DAYS)).isoformat()
+                recorded = market.execute('SELECT date, numerator, denominator FROM fmp_stock_splits WHERE symbol=? '
+                                          'AND date >= ? AND date <= ?', (symbol, lo, hi)).fetchall()
+                closes = [points[day][0] for day in window if day in points and points[day][0]]
+                jump = any(not 0.55 <= b / a <= 1.8 for a, b in zip(closes, closes[1:]))
+                if not recorded and not jump:
+                    diff(label, symbol, reason, 'but no recorded split near the window and no large one-day move')
+                notes.append('%s excluded for a split, not re-judged: %s (%s; recorded %s%s)' % (
+                    label, symbol, reason, recorded or 'none', ', large one-day move' if jump else ''))
             else:
                 diff(label, symbol, 'unknown reason', reason)
 

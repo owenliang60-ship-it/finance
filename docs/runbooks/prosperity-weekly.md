@@ -266,6 +266,9 @@ python scripts/momentum_board.py --db data/prosperity.db --market-db data/market
 ```
 
 核对脚本只用标准库，按规则原文重算每一行；输出 `checked N scored rows, M unavailable; differences: 0`，有差异退出码 1。
+它同时检查每个窗口有效股票不低于成员数的 90%，以及每条拆股排除在原始数据里有佐证。
+
+CLI 退出码：0 已写出；4 `--out` 无效（是目录、父目录不存在，或与 `--db` / `--market-db` 及其 `-wal` / `-shm` / `.state` 是同一个文件）；6 其他失败，什么都不写。
 
 ## 晨报试运行段（M14）
 

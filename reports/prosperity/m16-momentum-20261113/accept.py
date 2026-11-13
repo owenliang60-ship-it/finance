@@ -55,6 +55,14 @@ def tampered(name, change):
 
 
 b14 = lambda doc: doc['boards']['14w']
+
+
+def exclude_as_split(doc, count):          # review P2: the verifier must not pass a board that excludes (almost) everyone
+    for board in doc['boards'].values():
+        moved, board['scored'] = board['scored'][:count], board['scored'][count:]
+        board['unavailable'].update({r['symbol']: 'split_suspect' for r in moved})
+
+
 result['verify_negatives'] = {
     'drop_scored_row': tampered('drop-scored', lambda doc: b14(doc)['scored'].pop(400)),
     'drop_unavailable': tampered('drop-unavailable', lambda doc: b14(doc)['unavailable'].pop('MNST')),
@@ -63,6 +71,9 @@ result['verify_negatives'] = {
     'drop_adjustment': tampered('adjustment', lambda doc: b14(doc)['adjustments'].clear()),
     'flip_eligible': tampered('eligible', lambda doc: next(r for r in b14(doc)['scored'] if not r['eligible']).__setitem__('eligible', True)),
     'move_to_unavailable': tampered('move', lambda doc: b14(doc)['unavailable'].__setitem__(b14(doc)['scored'].pop(5)['symbol'], 'price_gap')),
+    'empty_boards_all_split_suspect': tampered('empty', lambda doc: exclude_as_split(doc, 10**6)),
+    'coverage_below_90pct': tampered('thin', lambda doc: exclude_as_split(doc, 100)),
+    'one_split_exclusion_without_evidence': tampered('split', lambda doc: exclude_as_split(doc, 1)),
 }
 
 # ---- A3 deliver_week with fake senders: real momentum CLI, stubbed web page ----------------------

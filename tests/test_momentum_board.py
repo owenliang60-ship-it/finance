@@ -193,3 +193,24 @@ def test_prices_must_reach_the_week_before_the_board_date():
         payload('2026-11-03', '2026-11-07')                                       # prices stop on Tuesday
     from src.data import prosperity_pool
     assert mb.COVERAGE_MIN is prosperity_pool.COVERAGE_MIN and mb.MAX_LAG_DAYS == 3
+
+
+def _is_sqlite(path):
+    return path.read_bytes()[:15] == b'SQLite format 3'
+
+
+@pytest.mark.parametrize('target', ['db', 'market', 'db-wal', 'market-shm', 'db.state', 'db-upper'])
+def test_cli_refuses_an_out_path_that_is_an_input(dbs, tmp_path, target):
+    """Review P2: os.replace onto --db or --market-db (or a sidecar) would destroy an input."""
+    db, market, _ = dbs
+    out = {'db': db, 'market': market, 'db-wal': Path(str(db) + '-wal'), 'market-shm': Path(str(market) + '-shm'),
+           'db.state': Path(str(db) + '.state'), 'db-upper': db.with_name(db.name.upper())}[target]
+    done = _cli(db, market, out)
+    assert done.returncode == 4 and 'would overwrite an input' in done.stderr
+    assert _is_sqlite(db) and _is_sqlite(market)
+
+
+def test_cli_refuses_a_directory_or_missing_parent_as_out(dbs, tmp_path):
+    db, market, _ = dbs
+    assert _cli(db, market, tmp_path).returncode == 4
+    assert _cli(db, market, tmp_path / 'nope' / 'momentum.json').returncode == 4

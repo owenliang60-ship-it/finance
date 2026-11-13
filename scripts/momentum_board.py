@@ -2,9 +2,11 @@
 """M16 momentum board: this week's F1 board members → 7-week and 14-week V4 long boards, one JSON.
 
 Read-only on both databases; writes only --out (atomically). Plan:
-docs/plans/2026-11-13-prosperity-m16-momentum-boards.md. Exit codes: 0 written; 6 anything else
-(nothing written; the last stderr line names the reason, e.g. weekly_board_missing,
-momentum_prices_stale, momentum_window_short, momentum_coverage_below_floor).
+docs/plans/2026-11-13-prosperity-m16-momentum-boards.md. Exit codes: 0 written; 4 invalid --out
+(a directory, a missing parent, or a path that is an input database or one of its
+-wal/-shm/.state files: os.replace would destroy it); 6 anything else (nothing written; the last
+stderr line names the reason, e.g. weekly_board_missing, momentum_prices_stale,
+momentum_window_short, momentum_coverage_below_floor).
 
 The universe is `meta.members` of the live weekly F1 board for --as-of and --code-version, so the
 board and the momentum list always describe the same Extended pool.
@@ -26,6 +28,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backtest.research.momentum_board import build_payload, load_dollar_volumes  # noqa: E402
 from backtest.research.prosperity_health import PriceBook  # noqa: E402
+from scripts.prosperity_web import _overwrites_input  # noqa: E402  (identity-based, APFS-safe)
 from src.data.market_store import MarketStore  # noqa: E402
 from src.data.prosperity_pool import POOL_SCHEME_ID  # noqa: E402
 from src.data.prosperity_storage import BoardKey  # noqa: E402
@@ -63,6 +66,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument('--as-of', required=True, help='board Saturday, YYYY-MM-DD')
     parser.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
+    if args.out.is_dir() or not args.out.parent.is_dir():
+        print(f'--out must be a file in an existing directory: {args.out}', file=sys.stderr)
+        return 4
+    out = args.out.parent.resolve() / args.out.name
+    if any(_overwrites_input(out, path.resolve(), None) for path in (args.db, args.market_db)):
+        print(f'--out would overwrite an input: {args.out}', file=sys.stderr)   # review P2: never replace an input
+        return 4
     try:
         for path in (args.db, args.market_db):
             if not path.is_file():
@@ -77,7 +87,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 generated_at=datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z'))
         finally:
             market.close()
-        write_json(payload, args.out)
+        write_json(payload, out)
     except Exception as exc:
         print(f'{type(exc).__name__}: {exc}', file=sys.stderr)
         return 6
