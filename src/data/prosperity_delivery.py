@@ -36,6 +36,10 @@ CAPTION_LIMIT = 1024
 WEB_TIMEOUT_SECONDS = 600
 HEALTH_TIMEOUT_SECONDS = 1800
 UPLOAD_TIMEOUT_SECONDS = 300
+MOMENTUM_TIMEOUT_SECONDS = 600
+MESSAGE_LIMIT = 4096                   # Telegram sendMessage text limit
+MOMENTUM_TOP = 30                      # rows listed per window in the momentum board text
+MOMENTUM_WINDOWS = (('7w', '7周'), ('14w', '14周'))
 KEEP_OUTPUT_WEEKS = 2
 NEVER = object()                       # last_health_freeze: no report was ever sent or baselined
 VERSION_CHANGED = object()             # last_health_freeze: the last sent report used another code_version
@@ -161,6 +165,73 @@ def pool_text(*, as_of: str, previous_as_of: Optional[str], added: Sequence[str]
     if current:
         lines.append(f'当前（{len(current)}，按景气排名）: ' + ', '.join(md_escape(s) for s in current))
     return '\n'.join(lines)
+
+
+def _long_rows(board: dict) -> List[dict]:
+    """Long-eligible rows of one window in rank order (M16 payload: every scored row is listed)."""
+    return sorted((r for r in board['scored'] if r['eligible']), key=lambda r: r['rank'])
+
+
+def _counted(text: str) -> str:
+    if len(text) > MESSAGE_LIMIT:
+        raise ValueError(f'message_too_long: {len(text)}')
+    return text
+
+
+def momentum_text(payload: dict, pool: Optional[Sequence[str]]) -> str:
+    """M16 item 1: top rows of the 7-week and 14-week V4 long boards. pool None = pool not trusted
+    (no stars). Counts come from the row lists, never from a stored total."""
+    starred = set(pool or ())
+    lines = [f'*动量榜 {md_escape(payload["as_of"])}*（V4 · 只看上涨 · 价格截至 {md_escape(payload["price_date"])}）',
+             f'主池 {payload["universe"]["count"]} 只']
+    for key, label in MOMENTUM_WINDOWS:
+        board = payload['boards'][key]
+        rows = _long_rows(board)
+        head = (f'*{label}*（{board["days"]} 交易日）有效 {len(board["scored"])} · '
+                f'不可用 {len(board["unavailable"])} · 上涨合格 {len(rows)}')
+        lines.append('')
+        if not rows:
+            lines.append(head + '：无')
+            continue
+        top = rows[:MOMENTUM_TOP]
+        lines.append(head + f'，前 {len(top)}：')
+        lines.extend(f'{r["rank"]}. {md_escape(r["symbol"])} {r["score"]:.1f} {r["return"]:+.0%}'
+                     + (' ★' if r['symbol'] in starred else '') for r in top)
+    if pool is not None:
+        lines += ['', '★ = 景气精选池成员']
+    return _counted('\n'.join(lines))
+
+
+def combo_messages(payload: dict, pool: Optional[Sequence[str]], reason: Optional[str]) -> List[str]:
+    """M16 item 2: pool members that pass the long gate, per window, with their whole-universe rank.
+
+    Sections are packed in order into messages of at most MESSAGE_LIMIT; a section is never cut
+    (a pool at its 100-member cap needs two messages). pool None = pool not trusted.
+    """
+    title = f'*景气动量精选 {md_escape(payload["as_of"])}*'
+    if pool is None:
+        return [_counted(f'{title}\n池文件不可用（{md_escape(reason or "unknown")}），本周不列名单')]
+    members = set(pool)
+    sections, per_window = [], []
+    for key, label in MOMENTUM_WINDOWS:
+        hits = [r for r in _long_rows(payload['boards'][key]) if r['symbol'] in members]
+        per_window.append({r['symbol'] for r in hits})
+        listed = ' · '.join(f'{md_escape(r["symbol"])} #{r["rank"]} {r["return"]:+.0%}' for r in hits) or '无'
+        sections.append(f'*{label}*（{len(hits)}）: {listed}')
+    both = sorted(set.intersection(*per_window))
+    sections.append(f'*两榜都在*（{len(both)}）: ' + (', '.join(md_escape(s) for s in both) or '无')
+                    + '\n#n = 全主池上涨榜名次')
+    head = f'{title}\n景气精选池 {len(members)} 只 ∩ 上涨合格（V4 · 价格截至 {md_escape(payload["price_date"])}）'
+    more = f'*景气动量精选 {md_escape(payload["as_of"])}（续）*'
+    parts, current = [], head
+    for section in sections:
+        if len(current) + 1 + len(section) <= MESSAGE_LIMIT:
+            current += '\n' + section
+        else:
+            parts.append(current)
+            current = _counted(more + '\n' + section)
+    parts.append(current)
+    return [_counted(p) for p in parts]
 
 
 @dataclass(frozen=True)

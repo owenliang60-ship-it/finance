@@ -509,3 +509,70 @@ def test_delivered_text_lists_members_by_pool_rank(env):
     assert send.msgs[0].splitlines()[-1] == '当前（{}，按景气排名）: {}'.format(
         len(ranked), ', '.join(d.md_escape(s) for s in ranked))
     assert d.read_ledger(env['dir'], WEEK)['pool_members'] == env['members']       # ledger stays sorted
+
+
+# --- M16: momentum board and prosperity-momentum picks ---------------------------------------
+
+def _payload(n=40, down=840, symbols=None, as_of='2026-11-07'):
+    names = symbols or [f'S{i:02d}' for i in range(1, n + 1)]
+    scored = [{'symbol': s, 'rank': i, 'eligible': True, 'score': 90.0 - (i * 0.01 if symbols else i),
+               'return': 0.10 + i / 100} for i, s in enumerate(names, 1)]
+    scored += [{'symbol': f'D{i:03d}', 'rank': None, 'eligible': False, 'score': 20.0, 'return': -0.1}
+               for i in range(down)]
+    board = {'days': 35, 'window': ['2026-09-17', '2026-11-06'], 'scored': scored,
+             'unavailable': {f'U{i}': 'price_gap' for i in range(8)}, 'adjustments': []}
+    return {'schema_version': 1, 'as_of': as_of, 'price_date': '2026-11-06',
+            'universe': {'count': len(scored) + 8},
+            'boards': {'7w': board, '14w': {**board, 'days': 70}}}
+
+
+def test_momentum_text_top30_and_stars():
+    text = d.momentum_text(_payload(), ['S02', 'S35'])
+    assert text.startswith('*动量榜 2026-11-07*') and '价格截至 2026-11-06' in text and '主池 888 只' in text
+    assert '*7周*（35 交易日）有效 880 · 不可用 8 · 上涨合格 40，前 30：' in text
+    assert '*14周*（70 交易日）有效 880 · 不可用 8 · 上涨合格 40，前 30：' in text
+    assert '\n2. S02 88.0 +12% ★\n' in text and '\n30. S30 60.0 +40%\n' in text and 'S31' not in text
+    assert text.rstrip().endswith('★ = 景气精选池成员') and len(text) <= 4096
+    plain = d.momentum_text(_payload(), None)                             # pool not trusted: no stars
+    assert '★' not in plain and '\n2. S02 88.0 +12%\n' in plain
+
+
+def test_momentum_text_short_and_empty_boards():
+    assert '上涨合格 3，前 3：' in d.momentum_text(_payload(n=3), [])
+    assert '上涨合格 0：无' in d.momentum_text(_payload(n=0), [])
+
+
+def test_combo_messages_list_every_eligible_member_with_rank():
+    [text] = d.combo_messages(_payload(), ['S35', 'S02', 'ZZZ', 'D001'], None)   # D001 is scored but falling
+    assert text.startswith('*景气动量精选 2026-11-07*') and '景气精选池 4 只' in text
+    assert '*7周*（2）: S02 #2 +12% · S35 #35 +45%' in text
+    assert '*两榜都在*（2）: S02, S35' in text and 'D001' not in text and 'ZZZ' not in text
+
+
+def test_combo_messages_empty_and_untrusted_pool():
+    [text] = d.combo_messages(_payload(), ['ZZZ'], None)
+    assert '*7周*（0）: 无' in text and '*两榜都在*（0）: 无' in text
+    [text] = d.combo_messages(_payload(), None, 'prosperity_pool_stale')
+    assert '池文件不可用（prosperity\\_pool\\_stale）' in text and '#' not in text
+
+
+def test_combo_messages_split_at_the_pool_cap():
+    """Review P2-2: 100 members (LIQUIDITY_TOP), all eligible in both windows, widest tokens."""
+    names = [f'BRK-{i:02d}' for i in range(100)]                    # 6-char symbols
+    payload = _payload(symbols=names, down=700)
+    for row in payload['boards']['7w']['scored'][:100]:             # the 14w board shares these rows
+        row['rank'] += 700                                          # 3-digit ranks
+        row['return'] = 12.34                                       # '+1234%'
+    parts = d.combo_messages(payload, names, None)
+    assert len(parts) == 2 and all(len(p) <= d.MESSAGE_LIMIT == 4096 for p in parts)
+    assert parts[1].startswith('*景气动量精选 2026-11-07（续）*')
+    joined = '\n'.join(parts)
+    assert all(joined.count(n + ' #') == 2 for n in names)          # each name once per window, none lost
+    assert joined.count('*7周*') == 1 and joined.count('*14周*') == 1 and joined.count('*两榜都在*') == 1
+    assert len(d.momentum_text(payload, names)) <= 4096
+
+
+def test_combo_messages_refuse_a_section_that_cannot_fit():
+    names = [f'LONGNAME{i:04d}' for i in range(400)]
+    with pytest.raises(ValueError, match='message_too_long'):
+        d.combo_messages(_payload(symbols=names, down=0), names, None)
