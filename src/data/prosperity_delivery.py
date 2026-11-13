@@ -214,26 +214,35 @@ def combo_messages(payload: dict, pool: Optional[Sequence[str]], reason: Optiona
     if pool is None:
         return [_counted(f'{title}\n池文件不可用（{md_escape(reason or "unknown")}），本周不列名单')]
     members = set(pool)
-    sections, per_window = [], []
+    head = f'{title}\n景气精选池 {len(members)} 只 ∩ 上涨合格（V4 · 价格截至 {md_escape(payload["price_date"])}）'
+    sections, per_window, unscored = [], [], False
     for key, label in MOMENTUM_WINDOWS:
-        hits = [r for r in _long_rows(payload['boards'][key]) if r['symbol'] in members]
+        board = payload['boards'][key]
+        hits = [r for r in _long_rows(board) if r['symbol'] in members]
         per_window.append({r['symbol'] for r in hits})
         listed = ' · '.join(f'{md_escape(r["symbol"])} #{r["rank"]} {r["return"]:+.0%}' for r in hits) or '无'
-        sections.append(f'*{label}*（{len(hits)}）: {listed}')
+        line = f'*{label}*（{len(hits)}）: {listed}'
+        # third state (review #1): a member that could not be scored is named, never read as "not rising"
+        missing = sorted((s, why) for s, why in board['unavailable'].items() if s in members)
+        if missing:
+            unscored = True
+            line += f' · 未评分（{len(missing)}）: ' + ', '.join(
+                f'{md_escape(s)}（{md_escape(str(why))}）' for s, why in missing)
+        sections.append(line)
     both = sorted(set.intersection(*per_window))
     sections.append(f'*两榜都在*（{len(both)}）: ' + (', '.join(md_escape(s) for s in both) or '无')
-                    + '\n#n = 全主池上涨榜名次')
-    head = f'{title}\n景气精选池 {len(members)} 只 ∩ 上涨合格（V4 · 价格截至 {md_escape(payload["price_date"])}）'
+                    + '\n#n = 全主池上涨榜名次' + ('\n未评分 = 缺价或拆股未决，不代表没涨' if unscored else ''))
+    sections[0] = head + '\n' + sections[0]                # the title never travels without content
     more = f'*景气动量精选 {md_escape(payload["as_of"])}（续）*'
-    parts, current = [], head
-    for section in sections:
+    parts, current = [], _counted(sections[0])
+    for section in sections[1:]:
         if len(current) + 1 + len(section) <= MESSAGE_LIMIT:
             current += '\n' + section
         else:
             parts.append(current)
             current = _counted(more + '\n' + section)
     parts.append(current)
-    return [_counted(p) for p in parts]
+    return parts
 
 
 @dataclass(frozen=True)

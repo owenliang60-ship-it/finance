@@ -10,17 +10,21 @@ def _path(start, end, n=36):
     return np.linspace(start, end, n)
 
 
+def _longs(rows):
+    return sorted((r for r in rows if r['eligible']), key=lambda r: r['rank'])
+
+
 def test_v4_weights_are_the_frozen_ones():
     assert V4_WEIGHTS == {'absolute_return': .45, 'er': .125, 'r_squared': .125,
                           'drawdown': .05, 'quote_volume': .25}
-    assert mb.WINDOWS == {'7w': 35, '14w': 70} and mb.TOP_N == 30
+    assert mb.WINDOWS == {'7w': 35, '14w': 70}
 
 
 def test_score_window_scores_everyone_ranks_longs_only():
     closes = {'UP': _path(100, 140), 'UP2': _path(100, 110), 'DOWN': _path(100, 60), 'FLAT': np.full(36, 50.0)}
     rows = mb.score_window(closes, {s: 5e8 for s in closes})
     assert {r['symbol'] for r in rows} == set(closes)             # decliners stay: they are percentile inputs
-    top = mb.longs(rows)
+    top = _longs(rows)
     assert [r['symbol'] for r in top] == ['UP', 'UP2']             # DOWN and FLAT fail the long gate
     assert [r['rank'] for r in top] == [1, 2] and top[0]['score'] > top[1]['score']
     assert top[0]['return'] == pytest.approx(0.40)
@@ -31,9 +35,9 @@ def test_score_window_scores_everyone_ranks_longs_only():
 
 def test_score_window_percentiles_use_the_whole_pool():
     base = {'UP': _path(100, 140), 'UP2': _path(100, 110)}
-    alone = mb.longs(mb.score_window(base, {s: 5e8 for s in base}))
+    alone = _longs(mb.score_window(base, {s: 5e8 for s in base}))
     wide = {**base, 'DOWN': _path(100, 30)}
-    crowded = mb.longs(mb.score_window(wide, {s: 5e8 for s in wide}))
+    crowded = _longs(mb.score_window(wide, {s: 5e8 for s in wide}))
     assert crowded[0]['score'] != alone[0]['score']                # DOWN changes UP's percentile
 
 
@@ -41,7 +45,7 @@ def test_score_window_drawdown_gate_and_tie_order():
     peak = np.concatenate([_path(100, 300, 30), _path(290, 150, 6)])    # +50% but 50% off the high
     closes = {'B': _path(100, 120), 'A': _path(100, 120), 'PEAK': peak}
     rows = mb.score_window(closes, {s: 1e9 for s in closes})
-    assert [r['symbol'] for r in mb.longs(rows)] == ['A', 'B']     # tie broken by symbol; PEAK gated out
+    assert [r['symbol'] for r in _longs(rows)] == ['A', 'B']     # tie broken by symbol; PEAK gated out
     assert len(rows) == 3
 
 
@@ -77,7 +81,7 @@ def test_build_payload_windows_and_unavailable():
     assert out['price_date'] == CAL[-1] and out['universe'] == {'count': 11, 'symbols': sorted(symbols)}
     assert b7['window'] == [CAL[-36], CAL[-1]] and b14['window'] == [CAL[-71], CAL[-1]]
     assert b7['unavailable'] == {'SHORT': 'price_gap'} and len(b7['scored']) == 10
-    assert len(mb.longs(b7['scored'])) == 10 and b7['adjustments'] == []
+    assert len(_longs(b7['scored'])) == 10 and b7['adjustments'] == []
     for board in (b7, b14):                                         # every member is accounted for, once
         assert sorted([r['symbol'] for r in board['scored']] + list(board['unavailable'])) == sorted(symbols)
     assert not ({'valid', 'long_eligible', 'longs'} & set(b7))     # no self-reported counts
@@ -173,3 +177,19 @@ def test_cli_fails_closed(dbs, tmp_path):
     empty = tmp_path / 'empty.db'
     empty.write_bytes(b'')
     assert _cli(db, empty, out).returncode == 6 and not out.exists()
+
+
+def test_prices_must_reach_the_week_before_the_board_date():
+    """Code review #2: a Wed–Fri price outage must not produce this week's board."""
+    def payload(last_day, as_of):
+        cal = weekdays(last_day, 80)
+        closes = {'A': [(d, 10.0 + i) for i, d in enumerate(cal)]}
+        return mb.build_payload(book=PriceBook(closes=closes, splits={}, calendar=cal),
+                                dollar_volumes=lambda days: {'A': 1e9}, symbols=['A'], as_of=as_of, generated_at='x')
+    assert payload('2026-11-06', '2026-11-07')['price_date'] == '2026-11-06'      # Friday close, normal
+    assert payload('2026-11-05', '2026-11-07')['price_date'] == '2026-11-05'      # Friday holiday
+    assert payload('2026-11-04', '2026-11-07')['price_date'] == '2026-11-04'      # Thu + Fri closed
+    with pytest.raises(ValueError, match='momentum_prices_stale'):
+        payload('2026-11-03', '2026-11-07')                                       # prices stop on Tuesday
+    from src.data import prosperity_pool
+    assert mb.COVERAGE_MIN is prosperity_pool.COVERAGE_MIN and mb.MAX_LAG_DAYS == 3

@@ -656,3 +656,32 @@ def test_momentum_send_failure_does_not_block_combo(env):
     out = deliver(env, FakeRun(), send)
     assert out.status == 'failed' and 'momentum_text' in out.error and out.sent[-1] == 'combo_text'
     assert deliver(env, FakeRun(), FakeSend()).sent == ('momentum_text',)
+
+
+# --- code review (high) on M16 -----------------------------------------------------------------
+
+def test_combo_names_pool_members_that_could_not_be_scored():
+    """review #1: 'could not be scored' is a third state, never shown as 'not rising'."""
+    payload = _payload()
+    payload['boards']['7w'] = {**payload['boards']['7w'],
+                               'unavailable': {'SCCO': 'split_unresolved', 'U1': 'price_gap'}}
+    [text] = d.combo_messages(payload, ['S02', 'SCCO', 'ZZZ'], None)
+    seven, fourteen = (next(l for l in text.splitlines() if l.startswith(tag)) for tag in ('*7周*', '*14周*'))
+    assert seven == '*7周*（1）: S02 #2 +12% · 未评分（1）: SCCO（split\\_unresolved）'
+    assert '未评分' not in fourteen and 'U1' not in text            # only pool members; only where it applies
+    assert '未评分 = 缺价或拆股未决，不代表没涨' in text
+    assert '未评分' not in d.combo_messages(_payload(), ['S02'], None)[0]
+
+
+def test_combo_never_sends_a_header_alone(monkeypatch):
+    """review #8: a first section that does not fit fails loudly instead of flushing a bare title."""
+    names = [f'S{i:02d}' for i in range(1, 41)]
+    [whole] = d.combo_messages(_payload(), names, None)
+    first_two_lines = len('\n'.join(whole.splitlines()[:3]))
+    monkeypatch.setattr(d, 'MESSAGE_LIMIT', first_two_lines - 1)
+    with pytest.raises(ValueError, match='message_too_long'):
+        d.combo_messages(_payload(), names, None)
+
+
+def test_momentum_top_is_thirty():
+    assert d.MOMENTUM_TOP == 30

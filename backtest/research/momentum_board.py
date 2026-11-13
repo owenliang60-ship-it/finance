@@ -17,13 +17,15 @@ import numpy as np
 
 from scripts.crypto_trend_metrics import trend_metrics
 from scripts.crypto_trend_rankings import V4_WEIGHTS, direction_eligible, score_rows
+from src.data.prosperity_pool import COVERAGE_MIN      # the prosperity pool's floor, one definition
 
 SCHEMA_VERSION = 1
 SCORING = 'v4'
 WINDOWS = {'7w': 35, '14w': 70}          # label → trading days (closes = days + 1)
-TOP_N = 30
-COVERAGE_MIN = 0.90                      # same floor as the prosperity pool
-MAX_LAG_DAYS = 7                         # last trading day may be at most this far before as_of
+# as_of is a Saturday: the last close is Friday (lag 1), Thursday after a Friday holiday (2), or
+# Wednesday when Thursday and Friday are both closed (3). Deliberately tighter than the pool's
+# 7-day LIQUIDITY_MAX_LAG_DAYS: a price outage from Wednesday on must not yield a board (review #2).
+MAX_LAG_DAYS = 3
 _QUERY_BATCH = 500
 _ROW_KEYS = ('return', 'er', 'r_squared', 'slope', 'drawdown')
 
@@ -40,10 +42,6 @@ def score_window(closes: Mapping[str, np.ndarray], dollar_volume: Mapping[str, f
                     'dollar_volume': row['quote_volume'], 'eligible': eligible,
                     'rank': rank if eligible else None})
     return out
-
-
-def longs(rows: Sequence[dict]) -> List[dict]:
-    return sorted((r for r in rows if r['eligible']), key=lambda r: r['rank'])
 
 
 def load_dollar_volumes(market, symbols: Sequence[str], days: Sequence[str]) -> Dict[str, float]:

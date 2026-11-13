@@ -490,13 +490,30 @@ def test_combo_second_part_failure_resends_the_whole_item(env, monkeypatch):
 | 3 | `test_real_web_cli_integration` 走真实子进程，行情库夹具是零字节 | 成立：`tests/test_prosperity_delivery.py:143-144, 366` | 新增 `seed_market` 夹具（SPY 日历 + 80 个交易日），`env` 改用它；该测试加动量 JSON 断言（T3、T5） |
 | 4 | `/usr/bin/python3 -I` 没有 numpy | 成立：实测 `ModuleNotFoundError` | 核对脚本改为纯标准库，仍用 `/usr/bin/python3 -I`。没有采用"换 `.venv/bin/python -I`"：纯标准库既解决依赖，又让核对实现与生产实现（numpy）更不同构 |
 
+### 第二轮（2026-11-13，`/code-review high`，实现后）
+
+8 条，无崩溃类缺陷。逐条核实：采纳 6 条，不改 2 条。
+
+| # | 问题 | 处理 |
+|---|---|---|
+| 1 | 精选池成员无法评分（拆股未决、缺价）时，交集消息把它静默丢掉，看起来像"没涨" | **采纳**。该窗口行尾加 `未评分（n）: 代码（原因）` 和图例。与 fails-open 反模式同族 |
+| 2 | 价格过期门 7 天太松：周三到周五断更仍会出榜 | **采纳，门槛 7 → 3 天**。榜单日是周六，正常差 1 天，周四周五连休差 3 天。**这改了已批准的"照抄精选池 7 天"，需 Boss 确认** |
+| 3 | 美股榜 import 币圈研究脚本，导入链长，脚本一坏周六任务 rc 7 | **不改**。plan §5 方案 C 已权衡：不动冻结的动量多空 1 号代码。导入只发生在子进程，失败会告警，不会静默出错。以后要解耦需单独立项 |
+| 4 | `COVERAGE_MIN`、`MAX_LAG_DAYS` 重复声明 | **采纳**。`COVERAGE_MIN` 改为 import 精选池的定义；`MAX_LAG_DAYS` 有意不同，注释写明 |
+| 5 | `momentum_board.TOP_N` 没有生产代码用 | **采纳**。删除；测试改钉 `prosperity_delivery.MOMENTUM_TOP` |
+| 6 | `_long_rows` 与 `momentum_board.longs` 重复；CLI 的 `board_members` 与投递的 `_load_board` 重复 | **部分采纳**。`longs` 只有测试在用，删掉，生产代码只剩 `_long_rows` 一份。`board_members` 保留：共用就得让 CLI import 投递模块（连带 Telegram），四行重复更便宜 |
+| 7 | `window_closes` 不查下标范围，负的起点会返回空序列和 `ok` | **采纳**。越界抛 `window_out_of_range`。`window_return` 是 M12 既有代码，本次不动 |
+| 8 | 装箱循环在首段放不下时会单独发一条只有标题的消息 | **采纳**。标题并入首段；首段放不下直接报 `message_too_long` |
+
 ## 13. 实现与 plan 的出入（2026-11-13）
 
 | # | plan 原文 | 实际 | 原因 |
 |---|---|---|---|
-| 1 | `momentum_board.TOP_N = 30` | 改为 `prosperity_delivery.MOMENTUM_TOP = 30` | 前 30 是显示口径；投递进程不 import 动量模块（它会连带加载工具注册表），常量放在用它的地方 |
+| 1 | `momentum_board.TOP_N = 30`、`momentum_board.longs` | 只保留 `prosperity_delivery.MOMENTUM_TOP = 30` 和 `_long_rows` | 前 30 是显示口径；投递进程不 import 动量模块（它会连带加载工具注册表），常量放在用它的地方 |
 | 2 | 动量榜首部一行"主池 · 有效 · 不可用" | 有效 / 不可用写在每个窗口的标题行 | 两个窗口的有效数不同（11-07：7 周 886，14 周 885），一行写不对 |
 | 3 | 新夹具 `seed_market` 自建两张表 | `seed_market` 包一层现成的 `seed_db` + `seed_prices` | 现有夹具已能建真库同构的行情库 |
 | 4 | T3 先写测试再实现 `build_payload` | `build_payload` 与 T2 同一次写出，测试随后补 | 顺序倒了；补做 6 个变异检查（去掉覆盖率门、过期门、成交额窗口错一天、缺成交额放行、丢拆股调整、窗口少一天），每个都有测试报错 |
 | 5 | 验收 4：100 只上限名单"确认拆成两条" | 真实代码的 100 只名单为 1 条 3,685 字符，未拆；最长代码的上限情形由单元测试覆盖（拆 2 条） | 真实代码比最坏情形短 |
 | 6 | 核对负例 5 个 | 7 个（加"翻转资格""有效行挪到不可用"） | 多覆盖两种篡改 |
+| 7 | 价格过期门 `MAX_LAG_DAYS = 7`（照抄精选池） | `MAX_LAG_DAYS = 3` | 第二轮审查 #2；待 Boss 确认 |
+| 8 | 交集消息只列上涨合格成员 | 另列无法评分的精选池成员及原因 | 第二轮审查 #1 |

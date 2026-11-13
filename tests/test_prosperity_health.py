@@ -503,3 +503,11 @@ def test_window_closes_split_states():
     twice = [(d, 100.0 if i < 3 else 50.0 if i < 5 else 25.0) for i, d in enumerate(CAL[:8])]
     unresolved = book({'S': twice}, {'S': [(CAL[4], 2.0)]})         # two candidate jumps for one record
     assert unresolved.window_closes('S', 0, 7) == (None, 'split_unresolved')
+
+
+def test_window_closes_refuses_an_out_of_range_window():
+    """Code review #7: a negative start would slice from the end and return an empty 'ok' series."""
+    b = book({'A': rising()})
+    for start, end in ((-1, 5), (5, 4), (0, len(CAL))):
+        with pytest.raises(ValueError, match='window_out_of_range'):
+            b.window_closes('A', start, end)

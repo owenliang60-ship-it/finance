@@ -197,6 +197,8 @@ class PriceBook:
 
     def window_closes(self, symbol: str, start_i: int, end_i: int) -> Tuple[Optional[np.ndarray], str]:
         """Split-resolved closes on every calendar day of [start_i, end_i]; no forward fill (M16)."""
+        if not 0 <= start_i <= end_i < len(self.calendar):
+            raise ValueError(f'window_out_of_range: {start_i}..{end_i}')
         if symbol not in self._series:
             return None, 'no_price'
         values = [self._close_on(symbol, day) for day in self.calendar[start_i:end_i + 1]]
