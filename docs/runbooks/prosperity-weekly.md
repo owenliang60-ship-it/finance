@@ -210,17 +210,22 @@ replay 模式（`--as-of`、`--rebuild-chain`）也接受这个参数，但不�
    池文件不可用或不是本周时只写原因，不比较，也不列成员。
 3. F1 体检报告 `prosperity-health-F1-<冻结日>.html`：库里 F1 最新季末冻结榜晚于上次发送（或基线）的冻结日时才发，
    包括回放出来的较早冻结和连续失败后的补发。`code_version` 变了就把最新冻结当新的发一次。
+4. 动量榜文本（M16，2026-11-13）：7 周（35 交易日）和 14 周（70 交易日）V4 上涨榜各前 30 名，精选池成员标 ★。
+   每个窗口的标题行写有效、不可用、上涨合格的只数。池不可信时不标 ★。
+5. 景气动量精选文本（M16）：精选池成员里通过上涨资格的全部，带全主池上涨榜名次；另列两个窗口都在的成员。
+   一条装不下（精选池接近 100 只）时按段落拆成两条，第二条标题带"（续）"。池不可信时只写原因。
 
-台账每一项记 `code_version`。同一周升级引擎、新版榜单发布后，三项按新版本重发一次。
+台账每一项记 `code_version`。同一周升级引擎、新版榜单发布后，各项按新版本重发一次。
 `--db`、`--market-db`、`--pool-path` 不能放在投递目录里（结束时会删 `tmp/` 和旧的 `out/`），否则 rc 4。
 
-投递只读：先给 `prosperity.db`（发体检报告时加 `market.db`）拍 `.backup` 快照，再用子进程调用 M11/M12 两个 CLI。
+投递只读：先给 `prosperity.db`（发体检报告时加 `market.db`）拍 `.backup` 快照，再用子进程调用 M11/M12/M16 三个 CLI。
+M16 的动量 CLI 读 `prosperity.db` 快照，对 `market.db` 只读直连、不拍快照（任务持有 `market_db_writer` 锁，没有并发写）。
 快照放 `data/prosperity-delivery/tmp/`，用完就删；拍之前跑 `check_space`。
 
 ```
 data/prosperity-delivery/
-  ledger/YYYY-MM-DD.json   每周一份，一直保留：items.web / items.pool_text / items.health、pool_members
-  out/YYYY-MM-DD/          生成的网页与体检报告，只留最近 2 周
+  ledger/YYYY-MM-DD.json   每周一份，一直保留：items.web / items.pool_text / items.health / items.momentum_text / items.combo_text、pool_members
+  out/YYYY-MM-DD/          生成的网页、体检报告与 momentum-YYYYMMDD.json，只留最近 2 周
 ```
 
 | rc | 含义 | 处理 |
@@ -233,6 +238,33 @@ data/prosperity-delivery/
 首次投递：台账为空时 `health` 记基线（当前最新冻结日），不发体检报告；JSON 输出的 `delivery.baseline` 写这个日期。
 首次投递必须在下一次冻结之前成功。做不到时，在首次投递前手工写 `ledger/<上周六>.json`：
 `{"as_of": "<上周六>", "items": {"health": {"freeze_as_of": "<上一个冻结日>", "baseline": true, "code_version": "<当前>"}}}`。
+
+### 动量榜（M16）排查
+
+两条 M16 文本共用一次 CLI 运行。CLI 失败时两条都不发、不记台账，`delivery.error` 以 `momentum:` 开头，其余三项不受影响。
+
+| `delivery.error` 里的原因 | 含义 | 处理 |
+|---|---|---|
+| `momentum_prices_stale` | SPY 最后交易日早于榜单日 7 天以上 | 先查 06:30 价格任务；价格补齐后 20:30 或手动重跑会补发 |
+| `momentum_window_short` | SPY 日历不足 71 个交易日 | 行情库异常，查 `daily_price` |
+| `momentum_coverage_below_floor` | 某个窗口有效股票不足主池 90% | 多为价格缺口；补齐价格后重跑。不要改门槛 |
+| `weekly_board_missing` | 快照里没有本周 F1 live 周榜 | 不应出现（投递前已取到周榜）；查 `code_version` |
+| `momentum_payload_invalid` | JSON 不是本周的或结构不对 | 删 `out/<周六>/momentum-*.json` 后重跑 |
+| `message_too_long` | 单个段落超过 4096 字符 | 精选池上限 100 只时不会出现；出现说明池规则变了，回北极星讨论 |
+
+消息里"不可用"的股票不参与打分。原因在 JSON 的 `boards.<窗口>.unavailable` 里逐票列出：`price_gap`（窗口内缺收盘价）、
+`split_unresolved` / `split_suspect`（拆股三态未决）、`volume_missing`、`no_price`。
+
+单独运行与独立核对（本地，两库只读）：
+
+```bash
+python scripts/momentum_board.py --db data/prosperity.db --market-db data/market.db \
+  --code-version <当前> --as-of <周六> --out /tmp/momentum.json
+/usr/bin/python3 -I reports/prosperity/m16-momentum-20261113/verify.py --json /tmp/momentum.json \
+  --market-db data/market.db --db data/prosperity.db --code-version <当前> --as-of <周六>
+```
+
+核对脚本只用标准库，按规则原文重算每一行；输出 `checked N scored rows, M unavailable; differences: 0`，有差异退出码 1。
 
 ## 晨报试运行段（M14）
 

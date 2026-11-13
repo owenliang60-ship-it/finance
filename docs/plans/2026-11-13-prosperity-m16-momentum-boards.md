@@ -1,6 +1,6 @@
 # 景气引擎 M16 动量榜与景气动量精选 Implementation Plan
 
-**状态：待 Boss 审批。先别实现。** 第一轮审查 4 项 P2 已全部采纳（§12）。
+**状态：Boss 2026-11-13 批准（四个默认值照建议）；已在分支 `prosperity/m16-momentum` 实现并本地验收，未 merge。** 第一轮审查 4 项 P2 已全部采纳（§12）；实现与本 plan 的出入见 §13。
 
 **Goal:** 周六景气周报的 Telegram 私聊多发两条消息：①「动量榜」7 周和 14 周（V4 算法，只看上涨，各前 30）；②「景气动量精选」= 景气精选池里通过上涨资格的全部成员，带全主池动量名次。
 **Architecture:** 新模块 `backtest/research/momentum_board.py` 对本周 F1 周榜的成员（Extended 主池）打 V4 分，价格经 `PriceBook` 做拆股三态处理；CLI `scripts/momentum_board.py` 把结果写成一个 JSON。`deliver_week` 用子进程跑这个 CLI（与 M11/M12 同一模式），读 JSON 后发两条文本，各记一项台账。V4 内核直接 import 现有函数，不复制、不改动。
@@ -489,3 +489,14 @@ def test_combo_second_part_failure_resends_the_whole_item(env, monkeypatch):
 | 2 | 交集消息超 4096 后直接失败，重试无法恢复 | 成立：精选池上限 100 只，实测上限名单约 4,600 字符 | `combo_text` 改为 `combo_messages`，按段落装箱成多条；加 100 只上限用例和分条失败重发用例（T4、T5，风险 8） |
 | 3 | `test_real_web_cli_integration` 走真实子进程，行情库夹具是零字节 | 成立：`tests/test_prosperity_delivery.py:143-144, 366` | 新增 `seed_market` 夹具（SPY 日历 + 80 个交易日），`env` 改用它；该测试加动量 JSON 断言（T3、T5） |
 | 4 | `/usr/bin/python3 -I` 没有 numpy | 成立：实测 `ModuleNotFoundError` | 核对脚本改为纯标准库，仍用 `/usr/bin/python3 -I`。没有采用"换 `.venv/bin/python -I`"：纯标准库既解决依赖，又让核对实现与生产实现（numpy）更不同构 |
+
+## 13. 实现与 plan 的出入（2026-11-13）
+
+| # | plan 原文 | 实际 | 原因 |
+|---|---|---|---|
+| 1 | `momentum_board.TOP_N = 30` | 改为 `prosperity_delivery.MOMENTUM_TOP = 30` | 前 30 是显示口径；投递进程不 import 动量模块（它会连带加载工具注册表），常量放在用它的地方 |
+| 2 | 动量榜首部一行"主池 · 有效 · 不可用" | 有效 / 不可用写在每个窗口的标题行 | 两个窗口的有效数不同（11-07：7 周 886，14 周 885），一行写不对 |
+| 3 | 新夹具 `seed_market` 自建两张表 | `seed_market` 包一层现成的 `seed_db` + `seed_prices` | 现有夹具已能建真库同构的行情库 |
+| 4 | T3 先写测试再实现 `build_payload` | `build_payload` 与 T2 同一次写出，测试随后补 | 顺序倒了；补做 6 个变异检查（去掉覆盖率门、过期门、成交额窗口错一天、缺成交额放行、丢拆股调整、窗口少一天），每个都有测试报错 |
+| 5 | 验收 4：100 只上限名单"确认拆成两条" | 真实代码的 100 只名单为 1 条 3,685 字符，未拆；最长代码的上限情形由单元测试覆盖（拆 2 条） | 真实代码比最坏情形短 |
+| 6 | 核对负例 5 个 | 7 个（加"翻转资格""有效行挪到不可用"） | 多覆盖两种篡改 |
