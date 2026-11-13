@@ -251,7 +251,7 @@ data/prosperity-delivery/
 | `momentum_coverage_below_floor` | 有效股票不足主池 90% | 多为价格缺口；补齐价格后重跑。不要改门槛 |
 | `weekly_board_missing` | 快照里没有本周 F1 live 周榜 | 不应出现（投递前已取到周榜）；查 `code_version` |
 | `momentum_payload_invalid` | JSON 不是本周的或结构不对 | 删 `out/<周六>/momentum-*.json` 后重跑 |
-| `message_too_long` | 单个段落超过 4096 字符 | 精选池上限 100 只时不会出现；出现说明池规则变了，回北极星讨论 |
+| `message_too_long` | 消息超过 4096 字符 | 精选池上限 100 只时约 2,300 字符，不会出现；出现说明池规则变了，回北极星讨论 |
 
 消息里"不可用"的股票不参与打分。原因在 JSON 的 `boards.14w.unavailable` 里逐票列出：`price_gap`（窗口内缺收盘价）、
 `split_unresolved` / `split_suspect`（拆股三态未决）、`volume_missing`、`no_price`。

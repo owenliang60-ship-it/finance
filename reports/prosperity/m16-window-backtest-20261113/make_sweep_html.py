@@ -24,12 +24,12 @@ def bars(metric, title, sub):
             v = S[p][n][metric]; y = Y(max(v, 0)); h = abs(Y(v) - Y(0))
             tip = f"{lab(n)}（{n}）｜{p}｜{title}：{v:+.1%}"
             out += f"<rect x={x0 + j * (bw + 2):.1f} y={y:.1f} width={bw:.1f} height={max(h, 1):.1f} rx=3 class={cls} data-tip='{tip}' />"
-        out += f"<text x={x0 + bw + 1:.1f} y={H - 22} class='ax{' hl' if hl else ''}' text-anchor=middle>{lab(n)}</text><text x={x0 + bw + 1:.1f} y={H - 8} class=ax2 text-anchor=middle>{n if n != base else '现行'}</text>"
+        out += f"<text x={x0 + bw + 1:.1f} y={H - 22} class='ax{' hl' if hl else ''}' text-anchor=middle>{lab(n)}</text><text x={x0 + bw + 1:.1f} y={H - 8} class=ax2 text-anchor=middle>{n if n != base else '原方案'}</text>"
         if hl: out += f"<rect x={x0 - 5:.1f} y={T} width={2 * bw + 12:.1f} height={H - T - B + 2} class=hlbox />"
     return f"<h2>{title}</h2><div class=m>{sub}</div><div class=legend><span><i style='background:var(--c1)'></i>开发段（{S['开发段']['SPY']['weeks']} 周，2024-07 之前）</span><span><i style='background:var(--c2)'></i>验证段（{S['验证段']['SPY']['weeks']} 周，2024-07 起）</span><span>框出的是建议窗口</span></div><svg viewBox='0 0 {W} {H}'>{out}</svg>"
 
 def nav_chart():
-    series = [(pick, f'单窗口 {lab(pick)}', 'var(--c1)', 2.5, ''), (base, '现行 7∩14', 'var(--c2)', 2, ''), ('池全体', '景气精选池全体', 'var(--c3)', 1.8, ''),
+    series = [(pick, f'单窗口 {lab(pick)}', 'var(--c1)', 2.5, ''), (base, '原方案 7∩14', 'var(--c2)', 2, ''), ('池全体', '景气精选池全体', 'var(--c3)', 1.8, ''),
               ('SPY', 'SPY', 'var(--t1)', 1.5, '5 4'), ('QQQ', 'QQQ', 'var(--t2)', 1.5, '2 3')]
     dates = r['dates']; vals = {}
     for k, *_ in series:

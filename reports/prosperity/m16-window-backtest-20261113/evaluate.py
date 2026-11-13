@@ -53,7 +53,7 @@ R = {k: np.array(v) for k, v in series.items()}
 def stats(name, mask):
     r, spy, pool = R[name][mask], R['SPY'][mask], R['池全体'][mask]
     n = len(r)
-    if n < 8: return None
+    if n < 4: return None                              # the 2025-02→03 drawdown is 7 weeks
     nav = np.cumprod(1 + r); peak = np.maximum.accumulate(np.concatenate([[1.0], nav]))
     beta = float(np.cov(r, spy, ddof=1)[0, 1] / spy.var(ddof=1)); resid = r - beta * spy
     alpha_w = float(resid.mean()); rs = float(resid.std(ddof=1))

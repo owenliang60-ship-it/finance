@@ -38,8 +38,9 @@ HEALTH_TIMEOUT_SECONDS = 1800
 UPLOAD_TIMEOUT_SECONDS = 300
 MOMENTUM_TIMEOUT_SECONDS = 600
 MESSAGE_LIMIT = 4096                   # Telegram sendMessage text limit
-MOMENTUM_TOP = 30                      # rows listed per window in the momentum board text
-MOMENTUM_WINDOWS = (('14w', '14周'),)   # one window (Boss 2026-11-13); keys must match the CLI's boards
+MOMENTUM_TOP = 30                      # rows listed in the momentum board text
+MOMENTUM_WINDOW = '14w'                # the one board the CLI writes (momentum_board.WINDOWS); a test pins the pair
+MOMENTUM_LABEL = '14周'
 MOMENTUM_ITEMS = ('momentum_text', 'combo_text')
 MOMENTUM_SCHEMA_VERSION = 1
 KEEP_OUTPUT_WEEKS = 2
@@ -181,67 +182,51 @@ def _counted(text: str) -> str:
 
 
 def momentum_text(payload: dict, pool: Optional[Sequence[str]]) -> str:
-    """M16 item 1: top rows of the 14-week V4 long board. pool None = pool not trusted
-    (no stars). Counts come from the row lists, never from a stored total."""
+    """M16 item 1: top rows of the 14-week V4 long board. pool None = pool not trusted (no stars).
+    Counts come from the row lists, never from a stored total."""
     starred = set(pool or ())
+    board = payload['boards'][MOMENTUM_WINDOW]
+    rows = _long_rows(board)
+    head = (f'*{MOMENTUM_LABEL}*（{board["days"]} 交易日）有效 {len(board["scored"])} · '
+            f'不可用 {len(board["unavailable"])} · 上涨合格 {len(rows)}')
     lines = [f'*动量榜 {md_escape(payload["as_of"])}*（V4 · 只看上涨 · 价格截至 {md_escape(payload["price_date"])}）',
-             f'主池 {payload["universe"]["count"]} 只']
-    for key, label in MOMENTUM_WINDOWS:
-        board = payload['boards'][key]
-        rows = _long_rows(board)
-        head = (f'*{label}*（{board["days"]} 交易日）有效 {len(board["scored"])} · '
-                f'不可用 {len(board["unavailable"])} · 上涨合格 {len(rows)}')
-        lines.append('')
-        if not rows:
-            lines.append(head + '：无')
-            continue
+             f'主池 {payload["universe"]["count"]} 只', '']
+    if rows:
         top = rows[:MOMENTUM_TOP]
         lines.append(head + f'，前 {len(top)}：')
         lines.extend(f'{r["rank"]}. {md_escape(r["symbol"])} {r["score"]:.1f} {r["return"]:+.0%}'
                      + (' ★' if r['symbol'] in starred else '') for r in top)
+    else:
+        lines.append(head + '：无')
     if pool is not None:
         lines += ['', '★ = 景气精选池成员']
     return _counted('\n'.join(lines))
 
 
-def combo_messages(payload: dict, pool: Optional[Sequence[str]], reason: Optional[str]) -> List[str]:
+def combo_text(payload: dict, pool: Optional[Sequence[str]], reason: Optional[str]) -> str:
     """M16 item 2: pool members that pass the 14-week long gate, with their whole-universe rank.
 
-    Normally one message (a pool at its 100-member cap is about 2,300 characters). Sections are
-    still packed in order under MESSAGE_LIMIT and never cut. pool None = pool not trusted.
+    One message: a pool at its 100-member cap is about 2,300 characters. pool None = pool not trusted.
     """
     title = f'*景气动量精选 {md_escape(payload["as_of"])}*'
     if pool is None:
-        return [_counted(f'{title}\n池文件不可用（{md_escape(reason or "unknown")}），本周不列名单')]
+        return _counted(f'{title}\n池文件不可用（{md_escape(reason or "unknown")}），本周不列名单')
     members = set(pool)
-    names = ' / '.join(label for _, label in MOMENTUM_WINDOWS)
-    sections = [f'{title}\n景气精选池 {len(members)} 只 ∩ {names.replace("周", " 周")}上涨合格'
-                f'（V4 · 价格截至 {md_escape(payload["price_date"])}）']
-    unscored = False
-    for key, label in MOMENTUM_WINDOWS:
-        board = payload['boards'][key]
-        hits = [r for r in _long_rows(board) if r['symbol'] in members]
-        listed = ' · '.join(f'{md_escape(r["symbol"])} #{r["rank"]} {r["return"]:+.0%}' for r in hits) or '无'
-        line = f'*{label}*（{len(hits)}）: {listed}'
-        # third state (review #1): a member that could not be scored is named, never read as "not rising"
-        missing = sorted((s, why) for s, why in board['unavailable'].items() if s in members)
-        if missing:
-            unscored = True
-            line += f' · 未评分（{len(missing)}）: ' + ', '.join(
-                f'{md_escape(s)}（{md_escape(str(why))}）' for s, why in missing)
-        sections[0] += '\n' + line                         # the title never travels without content
-    sections.append(f'#n = 全主池 {names.replace("周", " 周")}上涨榜名次'
-                    + ('\n未评分 = 缺价或拆股未决，不代表没涨' if unscored else ''))
-    more = f'*景气动量精选 {md_escape(payload["as_of"])}（续）*'
-    parts, current = [], _counted(sections[0])
-    for section in sections[1:]:
-        if len(current) + 1 + len(section) <= MESSAGE_LIMIT:
-            current += '\n' + section
-        else:
-            parts.append(current)
-            current = _counted(more + '\n' + section)
-    parts.append(current)
-    return parts
+    board = payload['boards'][MOMENTUM_WINDOW]
+    hits = [r for r in _long_rows(board) if r['symbol'] in members]
+    listed = ' · '.join(f'{md_escape(r["symbol"])} #{r["rank"]} {r["return"]:+.0%}' for r in hits) or '无'
+    line = f'*{MOMENTUM_LABEL}*（{len(hits)}）: {listed}'
+    # third state (review #1): a member that could not be scored is named, never read as "not rising"
+    missing = sorted((s, why) for s, why in board['unavailable'].items() if s in members)
+    if missing:
+        line += f' · 未评分（{len(missing)}）: ' + ', '.join(
+            f'{md_escape(s)}（{md_escape(str(why))}）' for s, why in missing)
+    lines = [title,
+             f'景气精选池 {len(members)} 只 ∩ {MOMENTUM_LABEL}上涨合格（V4 · 价格截至 {md_escape(payload["price_date"])}）',
+             line, f'#n = 全主池 {MOMENTUM_LABEL}上涨榜名次']
+    if missing:
+        lines.append('未评分 = 缺价或拆股未决，不代表没涨')
+    return _counted('\n'.join(lines))
 
 
 @dataclass(frozen=True)
@@ -333,7 +318,7 @@ def _read_momentum(path: Path, as_of: str) -> dict:
     payload = json.loads(path.read_text(encoding='utf-8'))
     if (not isinstance(payload, dict) or payload.get('schema_version') != MOMENTUM_SCHEMA_VERSION
             or payload.get('as_of') != as_of or not isinstance(payload.get('boards'), dict)
-            or set(payload['boards']) != {key for key, _ in MOMENTUM_WINDOWS}):
+            or set(payload['boards']) != {MOMENTUM_WINDOW}):
         raise ValueError('momentum_payload_invalid')
     return payload
 
@@ -518,12 +503,9 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
                     fail('momentum_text', exc)
             if payload is not None and not _sent(items, 'combo_text', code_version):
                 try:
-                    parts = combo_messages(payload, trusted, pool_reason)
-                    for part in parts:               # recorded only when every part went out
-                        if not send_message(part, channel='private'):
-                            raise RuntimeError('send_message returned False')
-                    items['combo_text'] = {'sent_at': _stamp(now), 'code_version': code_version,
-                                           'parts': len(parts)}
+                    if not send_message(combo_text(payload, trusted, pool_reason), channel='private'):
+                        raise RuntimeError('send_message returned False')
+                    items['combo_text'] = {'sent_at': _stamp(now), 'code_version': code_version}
                     write_ledger(delivery_dir, ledger)
                     sent.append('combo_text')
                 except Exception as exc:

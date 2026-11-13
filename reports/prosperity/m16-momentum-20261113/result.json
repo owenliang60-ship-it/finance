@@ -4,7 +4,7 @@
  "cli": {
   "price_date": "2026-11-06",
   "universe": 888,
-  "json_sha256_16": "b40ad8f7e421e2ec",
+  "json_sha256_16": "be311dfbfe836e6d",
   "boards": {
    "14w": {
     "window": [
@@ -101,9 +101,9 @@
   ],
   "error": "",
   "momentum_chars": 654,
-  "combo_parts": 1,
+  "combo_messages": 1,
   "combo_chars": [
-   213
+   211
   ],
   "pool_members": 36,
   "combo_14w": [
@@ -152,12 +152,9 @@
  },
  "cap_100": {
   "pool": 100,
-  "parts": 1,
-  "chars": [
-   1619
-  ],
-  "all_within_limit": true,
-  "every_name_listed_once_per_window": true
+  "chars": 1617,
+  "within_limit": true,
+  "every_name_listed_once": true
  },
  "inputs_unchanged": true
 }

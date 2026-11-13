@@ -556,43 +556,38 @@ def test_momentum_text_short_and_empty_boards():
     assert '上涨合格 0：无' in d.momentum_text(_payload(n=0), [])
 
 
-def test_combo_messages_list_every_eligible_member_with_rank():
-    [text] = d.combo_messages(_payload(), ['S35', 'S02', 'ZZZ', 'D001'], None)   # D001 is scored but falling
+def test_combo_text_lists_every_eligible_member_with_rank():
+    text = d.combo_text(_payload(), ['S35', 'S02', 'ZZZ', 'D001'], None)         # D001 is scored but falling
     assert text.startswith('*景气动量精选 2026-11-07*') and '景气精选池 4 只' in text
-    assert '景气精选池 4 只 ∩ 14 周上涨合格' in text
+    assert '景气精选池 4 只 ∩ 14周上涨合格' in text
     assert '*14周*（2）: S02 #2 +12% · S35 #35 +45%' in text
-    assert '#n = 全主池 14 周上涨榜名次' in text and 'D001' not in text and 'ZZZ' not in text
+    assert '#n = 全主池 14周上涨榜名次' in text and 'D001' not in text and 'ZZZ' not in text
     assert '两榜' not in text and '7周' not in text.replace('14周', '')
 
 
-def test_combo_messages_empty_and_untrusted_pool():
-    [text] = d.combo_messages(_payload(), ['ZZZ'], None)
-    assert '*14周*（0）: 无' in text
-    [text] = d.combo_messages(_payload(), None, 'prosperity_pool_stale')
+def test_combo_text_empty_and_untrusted_pool():
+    assert '*14周*（0）: 无' in d.combo_text(_payload(), ['ZZZ'], None)
+    text = d.combo_text(_payload(), None, 'prosperity_pool_stale')
     assert '池文件不可用（prosperity\\_pool\\_stale）' in text and '#' not in text
 
 
-def test_combo_messages_fit_one_message_at_the_pool_cap(monkeypatch):
-    """Review P2-2, one window: 100 members (LIQUIDITY_TOP), all eligible, widest tokens → still one message."""
+def test_combo_text_fits_one_message_at_the_pool_cap():
+    """Review P2-2, one window: 100 members (LIQUIDITY_TOP), all eligible, widest tokens → one message."""
     names = [f'BRK-{i:02d}' for i in range(100)]                    # 6-char symbols
     payload = _payload(symbols=names, down=700)
     for row in payload['boards']['14w']['scored'][:100]:
         row['rank'] += 700                                          # 3-digit ranks
         row['return'] = 12.34                                       # '+1234%'
-    [whole] = d.combo_messages(payload, names, None)
-    assert len(whole) <= d.MESSAGE_LIMIT == 4096
-    assert all(whole.count(n + ' #') == 1 for n in names)           # every name once, none lost
+    text = d.combo_text(payload, names, None)
+    assert len(text) <= d.MESSAGE_LIMIT == 4096
+    assert all(text.count(n + ' #') == 1 for n in names)            # every name once, none lost
     assert len(d.momentum_text(payload, names)) <= 4096
-    monkeypatch.setattr(d, 'MESSAGE_LIMIT', len(whole) - 5)         # the packer still splits between sections
-    parts = d.combo_messages(payload, names, None)
-    assert len(parts) == 2 and parts[1].startswith('*景气动量精选 2026-11-07（续）*')
-    assert all('\n'.join(parts).count(n + ' #') == 1 for n in names)
 
 
-def test_combo_messages_refuse_a_section_that_cannot_fit():
+def test_combo_text_refuses_a_message_that_cannot_fit():
     names = [f'LONGNAME{i:04d}' for i in range(400)]
     with pytest.raises(ValueError, match='message_too_long'):
-        d.combo_messages(_payload(symbols=names, down=0), names, None)
+        d.combo_text(_payload(symbols=names, down=0), names, None)
 
 
 def test_deliver_sends_momentum_and_combo_last(env):
@@ -607,7 +602,7 @@ def test_deliver_sends_momentum_and_combo_last(env):
     assert Path(cmd[cmd.index('--db') + 1]) != env['db'] and cmd[cmd.index('--as-of') + 1] == WEEK
     assert cmd[cmd.index('--code-version') + 1] == VERSION and kw['timeout'] == d.MOMENTUM_TIMEOUT_SECONDS
     items = d.read_ledger(env['dir'], WEEK)['items']
-    assert items['momentum_text']['code_version'] == VERSION and items['combo_text']['parts'] == 1
+    assert items['momentum_text']['code_version'] == VERSION and set(items['combo_text']) == {'sent_at', 'code_version'}
     assert deliver(env, FakeRun(), FakeSend()).status == 'already_delivered'
 
 
@@ -641,19 +636,6 @@ def test_untrusted_pool_still_sends_board_and_says_why(env):
     assert '★' not in send.msgs[-2] and '池文件不可用（prosperity\\_pool\\_missing）' in send.msgs[-1]
 
 
-def test_combo_second_part_failure_resends_the_whole_item(env, monkeypatch):
-    monkeypatch.setattr(d, 'combo_messages', lambda *a, **k: ['*景气动量精选 part1*', '*景气动量精选 part2*'])
-    first = FakeSend(fail_on={6})          # 1 web, 2 pool, 3 baseline, 4 momentum, 5 part1; part2 fails
-    out = deliver(env, FakeRun(), first)
-    assert out.status == 'failed' and 'combo_text' in out.error
-    assert out.sent[-1] == 'momentum_text' and first.msgs[-1] == '*景气动量精选 part1*'
-    assert 'combo_text' not in d.read_ledger(env['dir'], WEEK)['items']
-    again = FakeSend()
-    assert deliver(env, FakeRun(), again).sent == ('combo_text',)
-    assert again.msgs == ['*景气动量精选 part1*', '*景气动量精选 part2*']       # at-least-once: the whole item
-    assert d.read_ledger(env['dir'], WEEK)['items']['combo_text']['parts'] == 2
-
-
 def test_momentum_send_failure_does_not_block_combo(env):
     send = FakeSend(fail_on={4})                                              # the momentum board message
     out = deliver(env, FakeRun(), send)
@@ -668,23 +650,41 @@ def test_combo_names_pool_members_that_could_not_be_scored():
     payload = _payload()
     payload['boards']['14w'] = {**payload['boards']['14w'],
                                 'unavailable': {'SCCO': 'split_unresolved', 'U1': 'price_gap'}}
-    [text] = d.combo_messages(payload, ['S02', 'SCCO', 'ZZZ'], None)
+    text = d.combo_text(payload, ['S02', 'SCCO', 'ZZZ'], None)
     line = next(l for l in text.splitlines() if l.startswith('*14周*'))
     assert line == '*14周*（1）: S02 #2 +12% · 未评分（1）: SCCO（split\\_unresolved）'
     assert 'U1' not in text                                         # only pool members
     assert '未评分 = 缺价或拆股未决，不代表没涨' in text
-    assert '未评分' not in d.combo_messages(_payload(), ['S02'], None)[0]
-
-
-def test_combo_never_sends_a_header_alone(monkeypatch):
-    """review #8: a first section that does not fit fails loudly instead of flushing a bare title."""
-    names = [f'S{i:02d}' for i in range(1, 41)]
-    [whole] = d.combo_messages(_payload(), names, None)
-    first_two_lines = len('\n'.join(whole.splitlines()[:3]))
-    monkeypatch.setattr(d, 'MESSAGE_LIMIT', first_two_lines - 1)
-    with pytest.raises(ValueError, match='message_too_long'):
-        d.combo_messages(_payload(), names, None)
+    assert '未评分' not in d.combo_text(_payload(), ['S02'], None)
 
 
 def test_momentum_top_is_thirty():
     assert d.MOMENTUM_TOP == 30
+
+
+def test_combo_send_failure_is_retried_alone(env):
+    send = FakeSend(fail_on={5})                                              # 1 web, 2 pool, 3 baseline, 4 momentum, 5 combo
+    out = deliver(env, FakeRun(), send)
+    assert out.status == 'failed' and 'combo_text' in out.error and out.sent[-1] == 'momentum_text'
+    assert 'combo_text' not in d.read_ledger(env['dir'], WEEK)['items']
+    assert deliver(env, FakeRun(), FakeSend()).sent == ('combo_text',)
+
+
+def test_payload_with_other_boards_is_refused(env):
+    """Code review (single window): a leftover two-board JSON, or one without 14w, never reaches the text."""
+    for boards in ({'7w': _payload()['boards']['14w'], '14w': _payload()['boards']['14w']}, {'7w': _payload()['boards']['14w']}):
+        class Stale(FakeRun):
+            def __call__(self, cmd, **kw):
+                done = super().__call__(cmd, **kw)
+                if cmd[1].endswith('momentum_board.py'):
+                    Path(cmd[cmd.index('--out') + 1]).write_text(json.dumps({**_payload(as_of=WEEK), 'boards': boards}))
+                return done
+        out = deliver(env, Stale(), FakeSend())
+        assert out.status == 'failed' and 'momentum_payload_invalid' in out.error
+        assert not {'momentum_text', 'combo_text'} & set(d.read_ledger(env['dir'], WEEK)['items'])
+
+
+def test_delivery_window_is_the_board_modules_window():
+    """The delivery text and the CLI name the window separately (no shared import); this pins them together."""
+    from backtest.research import momentum_board as mb
+    assert mb.WINDOWS == {d.MOMENTUM_WINDOW: 70} and d.MOMENTUM_LABEL == '14周'

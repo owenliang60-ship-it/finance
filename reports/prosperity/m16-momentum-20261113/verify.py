@@ -4,9 +4,9 @@ Run:  /usr/bin/python3 -I verify.py --json momentum.json --market-db market.db -
           --code-version <v> --as-of YYYY-MM-DD
 
 Recomputes, from raw daily_price rows and the rule text (docs/runbooks/momentum-ls-01.md §2), every
-scored row of both windows: return, ER, OLS slope and R² of log price, drawdown, dollar volume,
+scored row of the 14-week board: return, ER, OLS slope and R² of log price, drawdown, dollar volume,
 whole-pool percentiles, score, long gate and rank. Also checks that scored ∪ unavailable is exactly
-the F1 live weekly board's member list, and that each window scores at least 90% of the members
+the F1 live weekly board's member list, and that the board scores at least 90% of the members
 (the production floor: a board that excludes everyone must not verify). Split decisions are not
 re-judged, but every split exclusion needs evidence in the raw data: a recorded split near the
 window or a one-day close ratio outside [0.55, 1.8] inside it. Listed adjustments are applied as

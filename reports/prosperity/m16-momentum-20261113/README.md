@@ -22,7 +22,7 @@ python reports/prosperity/m16-momentum-20261113/accept.py <repo> <data 目录> <
 | 交集 | 精选池 36 只中 8 只入选（PLTR、V、MDT、ABBV、AMGN、COST、VLO、XOM）；消息名单与独立从 JSON 算出的名单一致 |
 | 负例：池过期 | 动量榜照发且不标 ★；精选消息写 `prosperity_pool_stale` |
 | 负例：CLI 失败 | 状态 `failed`，台账只有 web / pool_text / health；重跑只补两条 M16 文本 |
-| 100 只真实名单 | 14 周榜名次最靠后的 100 只：1 条 1,619 字符，名单无遗漏。最长代码的上限情形由单元测试 `test_combo_messages_fit_one_message_at_the_pool_cap` 覆盖 |
+| 100 只真实名单 | 14 周榜名次最靠后的 100 只：1,617 字符，一条发完，名单无遗漏。最长代码的上限情形由单元测试 `test_combo_text_fits_one_message_at_the_pool_cap` 覆盖 |
 
 文件：`result.json`（全部结果）、`momentum-text.txt`、`combo-text.txt`、`combo-cap-100.txt`（消息原文）、`verify.py`、`accept.py`。
 

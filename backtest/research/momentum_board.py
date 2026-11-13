@@ -22,8 +22,9 @@ from src.data.prosperity_pool import COVERAGE_MIN      # the prosperity pool's f
 SCHEMA_VERSION = 1
 SCORING = 'v4'
 # One window, 14 weeks (Boss 2026-11-13). The window backtest over 270 replayed weeks is in
-# reports/prosperity/m16-window-backtest-20261113/: 70 days led the development period and held up
-# in validation; the 7-week leg of the earlier 7∩14 rule added turnover, not alpha.
+# reports/prosperity/m16-window-backtest-20261113/: 70 days and 25 days tied for the best alpha within
+# noise; 70 was kept for its good neighbour (60), lower turnover and smaller drawdown. Alpha is about
+# equal to the earlier 7∩14 rule, whose 7-week leg alone was mediocre.
 WINDOWS = {'14w': 70}                    # label → trading days (closes = days + 1)
 # as_of is a Saturday: the last close is Friday (lag 1), Thursday after a Friday holiday (2), or
 # Wednesday when Thursday and Friday are both closed (3). Deliberately tighter than the pool's

@@ -98,6 +98,16 @@ def deliver(folder, now, run=run):
 
 
 sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
+
+
+def listed(text):
+    """Symbols on the one '*14周*' line, in order. Exactly one such line, or the check itself fails
+    (code review: an all() over zero matching lines would pass vacuously)."""
+    lines = [l for l in text.splitlines() if l.startswith('*14周*')]
+    assert len(lines) == 1, f'expected one *14周* line, found {len(lines)}'
+    return [tok.split(' #')[0] for tok in lines[0].split(': ', 1)[1].split(' · ') if ' #' in tok]
+
+
 before = {'prosperity': sha(db), 'market': sha(market_db)}
 out, msgs = deliver('delivery', datetime(2026, 11, 7, 12, 0, tzinfo=timezone.utc))
 momentum_msg = next(m for m in msgs if m.startswith('*动量榜'))
@@ -108,12 +118,9 @@ expected = {k: [r['symbol'] for r in sorted((r for r in b['scored'] if r['eligib
                 if r['symbol'] in set(pool_syms)] for k, b in payload['boards'].items()}
 result['delivery'] = {
     'status': out.status, 'sent': list(out.sent), 'error': out.error,
-    'momentum_chars': len(momentum_msg), 'combo_parts': len(combo), 'combo_chars': [len(m) for m in combo],
+    'momentum_chars': len(momentum_msg), 'combo_messages': len(combo), 'combo_chars': [len(m) for m in combo],
     'pool_members': len(pool_syms), 'combo_14w': expected['14w'],
-    'combo_lists_exactly_the_eligible_pool_members': all(
-        [tok.split(' #')[0] for tok in line.split(': ', 1)[1].split(' · ') if ' #' in tok] == expected[key]
-        for key, tag in (('14w', '*14周*'),)
-        for line in combo[0].splitlines() if line.startswith(tag)),
+    'combo_lists_exactly_the_eligible_pool_members': listed(combo[0]) == expected['14w'],
     'rerun_status': deliver('delivery', datetime(2026, 11, 7, 12, 30, tzinfo=timezone.utc))[0].status}
 (evidence / 'momentum-text.txt').write_text(momentum_msg + '\n', encoding='utf-8')
 (evidence / 'combo-text.txt').write_text('\n\n'.join(combo) + '\n', encoding='utf-8')
@@ -135,15 +142,10 @@ result['delivery_negatives'] = {
 cap = copy.deepcopy(payload)
 ranks = {k: {r['symbol']: r['rank'] for r in b['scored'] if r['eligible']} for k, b in cap['boards'].items()}
 cap_pool = sorted(ranks['14w'], key=lambda s: -ranks['14w'][s])[:100]   # 100 real names, widest '#n' tokens
-parts = d.combo_messages(cap, cap_pool, None)
-joined = '\n'.join(parts)
-result['cap_100'] = {'pool': len(cap_pool), 'parts': len(parts), 'chars': [len(p) for p in parts],
-                     'all_within_limit': all(len(p) <= 4096 for p in parts),
-                     'every_name_listed_once_per_window': all(
-                         sorted(tok.split(' #')[0] for tok in line.split(': ', 1)[1].split(' · ')) == sorted(
-                             d.md_escape(s) for s in cap_pool)
-                         for line in joined.splitlines() if line.startswith('*14周*'))}
-(evidence / 'combo-cap-100.txt').write_text('\n\n'.join(parts) + '\n', encoding='utf-8')
+cap_text = d.combo_text(cap, cap_pool, None)
+result['cap_100'] = {'pool': len(cap_pool), 'chars': len(cap_text), 'within_limit': len(cap_text) <= 4096,
+                     'every_name_listed_once': sorted(listed(cap_text)) == sorted(d.md_escape(s) for s in cap_pool)}
+(evidence / 'combo-cap-100.txt').write_text(cap_text + '\n', encoding='utf-8')
 
 result['inputs_unchanged'] = before == {'prosperity': sha(db), 'market': sha(market_db)}
 (evidence / 'result.json').write_text(json.dumps(result, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
