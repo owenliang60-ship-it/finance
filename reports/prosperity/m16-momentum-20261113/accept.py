@@ -109,10 +109,10 @@ expected = {k: [r['symbol'] for r in sorted((r for r in b['scored'] if r['eligib
 result['delivery'] = {
     'status': out.status, 'sent': list(out.sent), 'error': out.error,
     'momentum_chars': len(momentum_msg), 'combo_parts': len(combo), 'combo_chars': [len(m) for m in combo],
-    'pool_members': len(pool_syms), 'combo_7w': expected['7w'], 'combo_14w': expected['14w'],
+    'pool_members': len(pool_syms), 'combo_14w': expected['14w'],
     'combo_lists_exactly_the_eligible_pool_members': all(
         [tok.split(' #')[0] for tok in line.split(': ', 1)[1].split(' · ') if ' #' in tok] == expected[key]
-        for key, tag in (('7w', '*7周*'), ('14w', '*14周*'))
+        for key, tag in (('14w', '*14周*'),)
         for line in combo[0].splitlines() if line.startswith(tag)),
     'rerun_status': deliver('delivery', datetime(2026, 11, 7, 12, 30, tzinfo=timezone.utc))[0].status}
 (evidence / 'momentum-text.txt').write_text(momentum_msg + '\n', encoding='utf-8')
@@ -134,8 +134,7 @@ result['delivery_negatives'] = {
 # ---- A5 the 100-member cap -----------------------------------------------------------------------
 cap = copy.deepcopy(payload)
 ranks = {k: {r['symbol']: r['rank'] for r in b['scored'] if r['eligible']} for k, b in cap['boards'].items()}
-in_both = sorted(set(ranks['7w']) & set(ranks['14w']), key=lambda s: -(ranks['7w'][s] + ranks['14w'][s]))
-cap_pool = in_both[:100]                                         # 100 real names on both boards, widest '#n' tokens
+cap_pool = sorted(ranks['14w'], key=lambda s: -ranks['14w'][s])[:100]   # 100 real names, widest '#n' tokens
 parts = d.combo_messages(cap, cap_pool, None)
 joined = '\n'.join(parts)
 result['cap_100'] = {'pool': len(cap_pool), 'parts': len(parts), 'chars': [len(p) for p in parts],
@@ -143,7 +142,7 @@ result['cap_100'] = {'pool': len(cap_pool), 'parts': len(parts), 'chars': [len(p
                      'every_name_listed_once_per_window': all(
                          sorted(tok.split(' #')[0] for tok in line.split(': ', 1)[1].split(' · ')) == sorted(
                              d.md_escape(s) for s in cap_pool)
-                         for line in joined.splitlines() if line.startswith(('*7周*', '*14周*')))}
+                         for line in joined.splitlines() if line.startswith('*14周*'))}
 (evidence / 'combo-cap-100.txt').write_text('\n\n'.join(parts) + '\n', encoding='utf-8')
 
 result['inputs_unchanged'] = before == {'prosperity': sha(db), 'market': sha(market_db)}

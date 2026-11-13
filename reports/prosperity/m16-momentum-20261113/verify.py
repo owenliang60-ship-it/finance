@@ -20,7 +20,7 @@ import math
 import sqlite3
 import sys
 
-WINDOWS = {'7w': 35, '14w': 70}
+WINDOWS = {'14w': 70}
 WEIGHTS = {'absolute_return': 0.45, 'er': 0.125, 'r_squared': 0.125, 'drawdown': 0.05, 'quote_volume': 0.25}
 HALF = 1_000_000_000.0
 LONG_DRAWDOWN_LIMIT = 0.30

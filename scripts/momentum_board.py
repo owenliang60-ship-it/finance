@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""M16 momentum board: this week's F1 board members → 7-week and 14-week V4 long boards, one JSON.
+"""M16 momentum board: this week's F1 board members → the 14-week V4 long board, one JSON.
 
 Read-only on both databases; writes only --out (atomically). Plan:
 docs/plans/2026-11-13-prosperity-m16-momentum-boards.md. Exit codes: 0 written; 4 invalid --out

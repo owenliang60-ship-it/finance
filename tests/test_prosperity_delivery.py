@@ -533,17 +533,17 @@ def _payload(n=40, down=840, symbols=None, as_of='2026-11-07'):
                'return': 0.10 + i / 100} for i, s in enumerate(names, 1)]
     scored += [{'symbol': f'D{i:03d}', 'rank': None, 'eligible': False, 'score': 20.0, 'return': -0.1}
                for i in range(down)]
-    board = {'days': 35, 'window': ['2026-09-17', '2026-11-06'], 'scored': scored,
+    board = {'days': 70, 'window': ['2026-07-30', '2026-11-06'], 'scored': scored,
              'unavailable': {f'U{i}': 'price_gap' for i in range(8)}, 'adjustments': []}
     return {'schema_version': 1, 'as_of': as_of, 'price_date': '2026-11-06',
             'universe': {'count': len(scored) + 8},
-            'boards': {'7w': board, '14w': {**board, 'days': 70}}}
+            'boards': {'14w': board}}
 
 
 def test_momentum_text_top30_and_stars():
     text = d.momentum_text(_payload(), ['S02', 'S35'])
     assert text.startswith('*动量榜 2026-11-07*') and '价格截至 2026-11-06' in text and '主池 888 只' in text
-    assert '*7周*（35 交易日）有效 880 · 不可用 8 · 上涨合格 40，前 30：' in text
+    assert '7周' not in text.replace('14周', '')                           # one window only
     assert '*14周*（70 交易日）有效 880 · 不可用 8 · 上涨合格 40，前 30：' in text
     assert '\n2. S02 88.0 +12% ★\n' in text and '\n30. S30 60.0 +40%\n' in text and 'S31' not in text
     assert text.rstrip().endswith('★ = 景气精选池成员') and len(text) <= 4096
@@ -559,31 +559,34 @@ def test_momentum_text_short_and_empty_boards():
 def test_combo_messages_list_every_eligible_member_with_rank():
     [text] = d.combo_messages(_payload(), ['S35', 'S02', 'ZZZ', 'D001'], None)   # D001 is scored but falling
     assert text.startswith('*景气动量精选 2026-11-07*') and '景气精选池 4 只' in text
-    assert '*7周*（2）: S02 #2 +12% · S35 #35 +45%' in text
-    assert '*两榜都在*（2）: S02, S35' in text and 'D001' not in text and 'ZZZ' not in text
+    assert '景气精选池 4 只 ∩ 14 周上涨合格' in text
+    assert '*14周*（2）: S02 #2 +12% · S35 #35 +45%' in text
+    assert '#n = 全主池 14 周上涨榜名次' in text and 'D001' not in text and 'ZZZ' not in text
+    assert '两榜' not in text and '7周' not in text.replace('14周', '')
 
 
 def test_combo_messages_empty_and_untrusted_pool():
     [text] = d.combo_messages(_payload(), ['ZZZ'], None)
-    assert '*7周*（0）: 无' in text and '*两榜都在*（0）: 无' in text
+    assert '*14周*（0）: 无' in text
     [text] = d.combo_messages(_payload(), None, 'prosperity_pool_stale')
     assert '池文件不可用（prosperity\\_pool\\_stale）' in text and '#' not in text
 
 
-def test_combo_messages_split_at_the_pool_cap():
-    """Review P2-2: 100 members (LIQUIDITY_TOP), all eligible in both windows, widest tokens."""
+def test_combo_messages_fit_one_message_at_the_pool_cap(monkeypatch):
+    """Review P2-2, one window: 100 members (LIQUIDITY_TOP), all eligible, widest tokens → still one message."""
     names = [f'BRK-{i:02d}' for i in range(100)]                    # 6-char symbols
     payload = _payload(symbols=names, down=700)
-    for row in payload['boards']['7w']['scored'][:100]:             # the 14w board shares these rows
+    for row in payload['boards']['14w']['scored'][:100]:
         row['rank'] += 700                                          # 3-digit ranks
         row['return'] = 12.34                                       # '+1234%'
-    parts = d.combo_messages(payload, names, None)
-    assert len(parts) == 2 and all(len(p) <= d.MESSAGE_LIMIT == 4096 for p in parts)
-    assert parts[1].startswith('*景气动量精选 2026-11-07（续）*')
-    joined = '\n'.join(parts)
-    assert all(joined.count(n + ' #') == 2 for n in names)          # each name once per window, none lost
-    assert joined.count('*7周*') == 1 and joined.count('*14周*') == 1 and joined.count('*两榜都在*') == 1
+    [whole] = d.combo_messages(payload, names, None)
+    assert len(whole) <= d.MESSAGE_LIMIT == 4096
+    assert all(whole.count(n + ' #') == 1 for n in names)           # every name once, none lost
     assert len(d.momentum_text(payload, names)) <= 4096
+    monkeypatch.setattr(d, 'MESSAGE_LIMIT', len(whole) - 5)         # the packer still splits between sections
+    parts = d.combo_messages(payload, names, None)
+    assert len(parts) == 2 and parts[1].startswith('*景气动量精选 2026-11-07（续）*')
+    assert all('\n'.join(parts).count(n + ' #') == 1 for n in names)
 
 
 def test_combo_messages_refuse_a_section_that_cannot_fit():
@@ -663,12 +666,12 @@ def test_momentum_send_failure_does_not_block_combo(env):
 def test_combo_names_pool_members_that_could_not_be_scored():
     """review #1: 'could not be scored' is a third state, never shown as 'not rising'."""
     payload = _payload()
-    payload['boards']['7w'] = {**payload['boards']['7w'],
-                               'unavailable': {'SCCO': 'split_unresolved', 'U1': 'price_gap'}}
+    payload['boards']['14w'] = {**payload['boards']['14w'],
+                                'unavailable': {'SCCO': 'split_unresolved', 'U1': 'price_gap'}}
     [text] = d.combo_messages(payload, ['S02', 'SCCO', 'ZZZ'], None)
-    seven, fourteen = (next(l for l in text.splitlines() if l.startswith(tag)) for tag in ('*7周*', '*14周*'))
-    assert seven == '*7周*（1）: S02 #2 +12% · 未评分（1）: SCCO（split\\_unresolved）'
-    assert '未评分' not in fourteen and 'U1' not in text            # only pool members; only where it applies
+    line = next(l for l in text.splitlines() if l.startswith('*14周*'))
+    assert line == '*14周*（1）: S02 #2 +12% · 未评分（1）: SCCO（split\\_unresolved）'
+    assert 'U1' not in text                                         # only pool members
     assert '未评分 = 缺价或拆股未决，不代表没涨' in text
     assert '未评分' not in d.combo_messages(_payload(), ['S02'], None)[0]
 

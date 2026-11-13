@@ -39,7 +39,7 @@ UPLOAD_TIMEOUT_SECONDS = 300
 MOMENTUM_TIMEOUT_SECONDS = 600
 MESSAGE_LIMIT = 4096                   # Telegram sendMessage text limit
 MOMENTUM_TOP = 30                      # rows listed per window in the momentum board text
-MOMENTUM_WINDOWS = (('7w', '7周'), ('14w', '14周'))
+MOMENTUM_WINDOWS = (('14w', '14周'),)   # one window (Boss 2026-11-13); keys must match the CLI's boards
 MOMENTUM_ITEMS = ('momentum_text', 'combo_text')
 MOMENTUM_SCHEMA_VERSION = 1
 KEEP_OUTPUT_WEEKS = 2
@@ -181,7 +181,7 @@ def _counted(text: str) -> str:
 
 
 def momentum_text(payload: dict, pool: Optional[Sequence[str]]) -> str:
-    """M16 item 1: top rows of the 7-week and 14-week V4 long boards. pool None = pool not trusted
+    """M16 item 1: top rows of the 14-week V4 long board. pool None = pool not trusted
     (no stars). Counts come from the row lists, never from a stored total."""
     starred = set(pool or ())
     lines = [f'*动量榜 {md_escape(payload["as_of"])}*（V4 · 只看上涨 · 价格截至 {md_escape(payload["price_date"])}）',
@@ -205,21 +205,22 @@ def momentum_text(payload: dict, pool: Optional[Sequence[str]]) -> str:
 
 
 def combo_messages(payload: dict, pool: Optional[Sequence[str]], reason: Optional[str]) -> List[str]:
-    """M16 item 2: pool members that pass the long gate, per window, with their whole-universe rank.
+    """M16 item 2: pool members that pass the 14-week long gate, with their whole-universe rank.
 
-    Sections are packed in order into messages of at most MESSAGE_LIMIT; a section is never cut
-    (a pool at its 100-member cap needs two messages). pool None = pool not trusted.
+    Normally one message (a pool at its 100-member cap is about 2,300 characters). Sections are
+    still packed in order under MESSAGE_LIMIT and never cut. pool None = pool not trusted.
     """
     title = f'*景气动量精选 {md_escape(payload["as_of"])}*'
     if pool is None:
         return [_counted(f'{title}\n池文件不可用（{md_escape(reason or "unknown")}），本周不列名单')]
     members = set(pool)
-    head = f'{title}\n景气精选池 {len(members)} 只 ∩ 上涨合格（V4 · 价格截至 {md_escape(payload["price_date"])}）'
-    sections, per_window, unscored = [], [], False
+    names = ' / '.join(label for _, label in MOMENTUM_WINDOWS)
+    sections = [f'{title}\n景气精选池 {len(members)} 只 ∩ {names.replace("周", " 周")}上涨合格'
+                f'（V4 · 价格截至 {md_escape(payload["price_date"])}）']
+    unscored = False
     for key, label in MOMENTUM_WINDOWS:
         board = payload['boards'][key]
         hits = [r for r in _long_rows(board) if r['symbol'] in members]
-        per_window.append({r['symbol'] for r in hits})
         listed = ' · '.join(f'{md_escape(r["symbol"])} #{r["rank"]} {r["return"]:+.0%}' for r in hits) or '无'
         line = f'*{label}*（{len(hits)}）: {listed}'
         # third state (review #1): a member that could not be scored is named, never read as "not rising"
@@ -228,11 +229,9 @@ def combo_messages(payload: dict, pool: Optional[Sequence[str]], reason: Optiona
             unscored = True
             line += f' · 未评分（{len(missing)}）: ' + ', '.join(
                 f'{md_escape(s)}（{md_escape(str(why))}）' for s, why in missing)
-        sections.append(line)
-    both = sorted(set.intersection(*per_window))
-    sections.append(f'*两榜都在*（{len(both)}）: ' + (', '.join(md_escape(s) for s in both) or '无')
-                    + '\n#n = 全主池上涨榜名次' + ('\n未评分 = 缺价或拆股未决，不代表没涨' if unscored else ''))
-    sections[0] = head + '\n' + sections[0]                # the title never travels without content
+        sections[0] += '\n' + line                         # the title never travels without content
+    sections.append(f'#n = 全主池 {names.replace("周", " 周")}上涨榜名次'
+                    + ('\n未评分 = 缺价或拆股未决，不代表没涨' if unscored else ''))
     more = f'*景气动量精选 {md_escape(payload["as_of"])}（续）*'
     parts, current = [], _counted(sections[0])
     for section in sections[1:]:

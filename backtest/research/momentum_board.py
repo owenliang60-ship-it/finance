@@ -2,7 +2,7 @@
 
 Plan: docs/plans/2026-11-13-prosperity-m16-momentum-boards.md. Rules: docs/runbooks/momentum-ls-01.md §2.
 The V4 kernel is imported, never copied: percentiles over the whole valid pool first, then the
-long gate (return > 0, slope > 0, drawdown ≤ 30%). Windows are 35 and 70 trading days of
+long gate (return > 0, slope > 0, drawdown ≤ 30%). The window is 70 trading days (14 weeks) of
 split-resolved closes (PriceBook three-state rule); dollar volume is mean(raw close × volume) over
 the same days. Read-only on market.db; not part of the engine code_version.
 """
@@ -21,7 +21,10 @@ from src.data.prosperity_pool import COVERAGE_MIN      # the prosperity pool's f
 
 SCHEMA_VERSION = 1
 SCORING = 'v4'
-WINDOWS = {'7w': 35, '14w': 70}          # label → trading days (closes = days + 1)
+# One window, 14 weeks (Boss 2026-11-13). The window backtest over 270 replayed weeks is in
+# reports/prosperity/m16-window-backtest-20261113/: 70 days led the development period and held up
+# in validation; the 7-week leg of the earlier 7∩14 rule added turnover, not alpha.
+WINDOWS = {'14w': 70}                    # label → trading days (closes = days + 1)
 # as_of is a Saturday: the last close is Friday (lag 1), Thursday after a Friday holiday (2), or
 # Wednesday when Thursday and Friday are both closed (3). Deliberately tighter than the pool's
 # 7-day LIQUIDITY_MAX_LAG_DAYS: a price outage from Wednesday on must not yield a board (review #2).
@@ -62,7 +65,7 @@ def load_dollar_volumes(market, symbols: Sequence[str], days: Sequence[str]) -> 
 
 def build_payload(*, book, dollar_volumes: Callable[[Sequence[str]], Mapping[str, float]],
                   symbols: Sequence[str], as_of: str, generated_at: str) -> dict:
-    """Both boards for one universe. Fails closed: stale prices, short calendar, thin coverage."""
+    """The board for one universe. Fails closed: stale prices, short calendar, thin coverage."""
     members = sorted(set(symbols))
     if not members:
         raise ValueError('momentum_no_members')

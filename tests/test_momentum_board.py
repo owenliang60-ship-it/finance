@@ -17,7 +17,7 @@ def _longs(rows):
 def test_v4_weights_are_the_frozen_ones():
     assert V4_WEIGHTS == {'absolute_return': .45, 'er': .125, 'r_squared': .125,
                           'drawdown': .05, 'quote_volume': .25}
-    assert mb.WINDOWS == {'7w': 35, '14w': 70}
+    assert mb.WINDOWS == {'14w': 70}                               # one window (Boss 2026-11-13, window backtest)
 
 
 def test_score_window_scores_everyone_ranks_longs_only():
@@ -77,14 +77,14 @@ def test_build_payload_windows_and_unavailable():
     out = mb.build_payload(book=PriceBook(closes=closes, splits={}, calendar=CAL),
                            dollar_volumes=lambda days: {s: 1e9 for s in symbols},
                            symbols=symbols, as_of='2026-11-07', generated_at='2026-11-07T09:00:00Z')
-    b7, b14 = out['boards']['7w'], out['boards']['14w']
+    assert list(out['boards']) == ['14w']
+    b14 = out['boards']['14w']
     assert out['price_date'] == CAL[-1] and out['universe'] == {'count': 11, 'symbols': sorted(symbols)}
-    assert b7['window'] == [CAL[-36], CAL[-1]] and b14['window'] == [CAL[-71], CAL[-1]]
-    assert b7['unavailable'] == {'SHORT': 'price_gap'} and len(b7['scored']) == 10
-    assert len(_longs(b7['scored'])) == 10 and b7['adjustments'] == []
-    for board in (b7, b14):                                         # every member is accounted for, once
-        assert sorted([r['symbol'] for r in board['scored']] + list(board['unavailable'])) == sorted(symbols)
-    assert not ({'valid', 'long_eligible', 'longs'} & set(b7))     # no self-reported counts
+    assert b14['days'] == 70 and b14['window'] == [CAL[-71], CAL[-1]]
+    assert b14['unavailable'] == {'SHORT': 'price_gap'} and len(b14['scored']) == 10
+    assert len(_longs(b14['scored'])) == 10 and b14['adjustments'] == []
+    assert sorted([r['symbol'] for r in b14['scored']] + list(b14['unavailable'])) == sorted(symbols)   # everyone, once
+    assert not ({'valid', 'long_eligible', 'longs'} & set(b14))    # no self-reported counts
     json.dumps(out, allow_nan=False)                                # plain JSON types only
 
 
@@ -93,15 +93,15 @@ def test_build_payload_volume_window_is_the_signal_window():
     mb.build_payload(book=PriceBook(closes=_risers(), splits={}, calendar=CAL),
                      dollar_volumes=lambda days: seen.append(list(days)) or {s: 1e9 for s in SYMS},
                      symbols=SYMS, as_of='2026-11-07', generated_at='x')
-    assert seen == [CAL[-35:], CAL[-70:]]                           # the L days after the base close
+    assert seen == [CAL[-70:]]                                      # the L days after the base close
 
 
 def test_build_payload_missing_volume_is_unavailable():
     out = mb.build_payload(book=PriceBook(closes=_risers(), splits={}, calendar=CAL),
                            dollar_volumes=lambda days: {s: 1e9 for s in SYMS[1:]},
                            symbols=SYMS, as_of='2026-11-07', generated_at='x')
-    assert out['boards']['7w']['unavailable'] == {'S01': 'volume_missing'}
-    assert 'S01' not in {r['symbol'] for r in out['boards']['7w']['scored']}
+    assert out['boards']['14w']['unavailable'] == {'S01': 'volume_missing'}
+    assert 'S01' not in {r['symbol'] for r in out['boards']['14w']['scored']}
 
 
 def test_build_payload_reports_split_adjustments():
@@ -110,8 +110,8 @@ def test_build_payload_reports_split_adjustments():
                      splits={'S': [(CAL[60], 2.0)]}, calendar=CAL)
     out = mb.build_payload(book=book, dollar_volumes=lambda days: {'S': 1e9, 'T': 1e9}, symbols=['S', 'T'],
                            as_of='2026-11-07', generated_at='x')
-    assert out['boards']['7w']['adjustments'] == [{'symbol': 'S', 'date': CAL[60], 'factor': 2.0}]
-    assert next(r for r in out['boards']['7w']['scored'] if r['symbol'] == 'S')['return'] > 0
+    assert out['boards']['14w']['adjustments'] == [{'symbol': 'S', 'date': CAL[60], 'factor': 2.0}]
+    assert next(r for r in out['boards']['14w']['scored'] if r['symbol'] == 'S')['return'] > 0
 
 
 def test_build_payload_fails_closed():
