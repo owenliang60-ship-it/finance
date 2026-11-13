@@ -195,6 +195,21 @@ class PriceBook:
             return None, 'split_suspect'
         return end / start - 1, 'ok'
 
+    def window_closes(self, symbol: str, start_i: int, end_i: int) -> Tuple[Optional[np.ndarray], str]:
+        """Split-resolved closes on every calendar day of [start_i, end_i]; no forward fill (M16)."""
+        if not 0 <= start_i <= end_i < len(self.calendar):
+            raise ValueError(f'window_out_of_range: {start_i}..{end_i}')
+        if symbol not in self._series:
+            return None, 'no_price'
+        values = [self._close_on(symbol, day) for day in self.calendar[start_i:end_i + 1]]
+        if any(v is None for v in values):
+            return None, 'price_gap'
+        if self.unresolved_overlaps(symbol, start_i, end_i):
+            return None, 'split_unresolved'
+        if any(j['kind'] == 'split_suspect' for j in self.jumps(symbol, start_i, end_i)):
+            return None, 'split_suspect'
+        return np.array(values, dtype=float), 'ok'
+
 
 # ---------------------------------------------------------------------------
 # Board view

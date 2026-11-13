@@ -36,6 +36,14 @@ CAPTION_LIMIT = 1024
 WEB_TIMEOUT_SECONDS = 600
 HEALTH_TIMEOUT_SECONDS = 1800
 UPLOAD_TIMEOUT_SECONDS = 300
+MOMENTUM_TIMEOUT_SECONDS = 600
+MESSAGE_LIMIT = 4096                   # Telegram sendMessage text limit
+MOMENTUM_TOP = 30                      # rows listed in the momentum board text AND the combo rule
+                                       # (pool ∩ top 30, Boss 2026-11-13): changing it changes a backtested rule
+MOMENTUM_WINDOW = '14w'                # the one board the CLI writes (momentum_board.WINDOWS); a test pins the pair
+MOMENTUM_LABEL = '14周'
+MOMENTUM_ITEMS = ('momentum_text', 'combo_text')
+MOMENTUM_SCHEMA_VERSION = 1
 KEEP_OUTPUT_WEEKS = 2
 NEVER = object()                       # last_health_freeze: no report was ever sent or baselined
 VERSION_CHANGED = object()             # last_health_freeze: the last sent report used another code_version
@@ -163,6 +171,69 @@ def pool_text(*, as_of: str, previous_as_of: Optional[str], added: Sequence[str]
     return '\n'.join(lines)
 
 
+def _long_rows(board: dict) -> List[dict]:
+    """Long-eligible rows of one window in rank order (M16 payload: every scored row is listed)."""
+    return sorted((r for r in board['scored'] if r['eligible']), key=lambda r: r['rank'])
+
+
+def _top_rows(board: dict) -> List[dict]:
+    """The listed top of the long board: momentum_text prints these, combo_text intersects them with the pool."""
+    return _long_rows(board)[:MOMENTUM_TOP]
+
+
+def _counted(text: str) -> str:
+    if len(text) > MESSAGE_LIMIT:
+        raise ValueError(f'message_too_long: {len(text)}')
+    return text
+
+
+def momentum_text(payload: dict, pool: Optional[Sequence[str]]) -> str:
+    """M16 item 1: top rows of the 14-week V4 long board. pool None = pool not trusted (no stars).
+    Counts come from the row lists, never from a stored total."""
+    starred = set(pool or ())
+    board = payload['boards'][MOMENTUM_WINDOW]
+    rows = _long_rows(board)
+    head = (f'*{MOMENTUM_LABEL}*（{board["days"]} 交易日）有效 {len(board["scored"])} · '
+            f'不可用 {len(board["unavailable"])} · 上涨合格 {len(rows)}')
+    lines = [f'*动量榜 {md_escape(payload["as_of"])}*（V4 · 只看上涨 · 价格截至 {md_escape(payload["price_date"])}）',
+             f'主池 {payload["universe"]["count"]} 只', '']
+    if rows:
+        top = _top_rows(board)
+        lines.append(head + f'，前 {len(top)}：')
+        lines.extend(f'{r["rank"]}. {md_escape(r["symbol"])} {r["score"]:.1f} {r["return"]:+.0%}'
+                     + (' ★' if r['symbol'] in starred else '') for r in top)
+    else:
+        lines.append(head + '：无')
+    if pool is not None:
+        lines += ['', '★ = 景气精选池成员']
+    return _counted('\n'.join(lines))
+
+
+def combo_text(payload: dict, pool: Optional[Sequence[str]], reason: Optional[str]) -> str:
+    """M16 item 2: pool members in the momentum board top MOMENTUM_TOP (Boss 2026-11-13), with their
+    whole-universe rank: exactly the starred rows of momentum_text. pool None = pool not trusted.
+    """
+    title = f'*景气动量精选 {md_escape(payload["as_of"])}*'
+    if pool is None:
+        return _counted(f'{title}\n池文件不可用（{md_escape(reason or "unknown")}），本周不列名单')
+    members = set(pool)
+    board = payload['boards'][MOMENTUM_WINDOW]
+    hits = [r for r in _top_rows(board) if r['symbol'] in members]
+    listed = ' · '.join(f'{md_escape(r["symbol"])} #{r["rank"]} {r["return"]:+.0%}' for r in hits) or '无'
+    line = f'*{MOMENTUM_LABEL}*（{len(hits)}）: {listed}'
+    # third state (review #1): a member that could not be scored is named, never read as "not rising"
+    missing = sorted((s, why) for s, why in board['unavailable'].items() if s in members)
+    if missing:
+        line += f' · 未评分（{len(missing)}）: ' + ', '.join(
+            f'{md_escape(s)}（{md_escape(str(why))}）' for s, why in missing)
+    lines = [title,
+             f'景气精选池 {len(members)} 只 ∩ {MOMENTUM_LABEL}动量榜前 {MOMENTUM_TOP}（V4 · 价格截至 {md_escape(payload["price_date"])}）',
+             line, f'#n = 全主池 {MOMENTUM_LABEL}上涨榜名次']
+    if missing:
+        lines.append('未评分 = 缺价或拆股未决，不代表没涨')
+    return _counted('\n'.join(lines))
+
+
 @dataclass(frozen=True)
 class DeliveryOutcome:
     status: str                       # 'delivered' | 'already_delivered' | 'failed'
@@ -181,7 +252,7 @@ def _sent(items: dict, key: str, code_version: str) -> bool:
 
 
 def _complete(ledger: dict, code_version: str) -> bool:
-    return all(_sent(ledger['items'], key, code_version) for key in ('web', 'pool_text', 'health'))
+    return all(_sent(ledger['items'], key, code_version) for key in ('web', 'pool_text', 'health', *MOMENTUM_ITEMS))
 
 
 def _inputs_outside(delivery_dir: Path, **inputs: Path) -> None:
@@ -247,6 +318,16 @@ def _run_cli(run, script: str, args: Sequence[str], timeout: int) -> None:
         raise RuntimeError(f'{script} rc={result.returncode}: {tail[0][:200]}')
 
 
+def _read_momentum(path: Path, as_of: str) -> dict:
+    """The CLI's JSON for exactly this week and this layout, or momentum_payload_invalid."""
+    payload = json.loads(path.read_text(encoding='utf-8'))
+    if (not isinstance(payload, dict) or payload.get('schema_version') != MOMENTUM_SCHEMA_VERSION
+            or payload.get('as_of') != as_of or not isinstance(payload.get('boards'), dict)
+            or set(payload['boards']) != {MOMENTUM_WINDOW}):
+        raise ValueError('momentum_payload_invalid')
+    return payload
+
+
 def _stamp(now) -> str:
     return now().astimezone(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
 
@@ -280,9 +361,10 @@ def _claim(delivery_dir: Path) -> None:
 def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, pool_path: Path,
                  delivery_dir: Path, now: Callable[[], datetime],
                  send_document=None, send_message=None, run=subprocess.run) -> DeliveryOutcome:
-    """Send this week's web page, pool changes and (when a newer freeze exists) the F1 health report.
+    """Send this week's web page, pool changes, (when a newer freeze exists) the F1 health report,
+    the M16 momentum board and the prosperity-momentum picks.
 
-    The three items are independent: each failure is collected and the others still run
+    The items are independent: each failure is collected and the others still run
     (code review #4). Each item is recorded in the ledger right after it is sent, so a re-run
     sends only what is missing (at-least-once: a crash between a send and its ledger write
     repeats that item). Every failure, including a ledger write, returns status 'failed';
@@ -401,6 +483,38 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
                 write_ledger(delivery_dir, ledger)
             except Exception as exc:
                 fail('health', exc)
+
+        if not all(_sent(items, key, code_version) for key in MOMENTUM_ITEMS):
+            # M16: one CLI run feeds both texts. market.db is read in place (read-only): this job
+            # holds the market_db_writer lock, and a weekly 1.5 GB snapshot buys nothing.
+            payload = None
+            try:
+                board_file = out / f'momentum-{as_of.replace("-", "")}.json'
+                _run_cli(run, 'momentum_board.py', ['--db', snap, '--market-db', market_db, '--code-version',
+                                                    code_version, '--as-of', as_of, '--out', board_file],
+                         MOMENTUM_TIMEOUT_SECONDS)
+                payload = _read_momentum(board_file, as_of)
+            except Exception as exc:
+                fail('momentum', exc)
+            trusted = by_rank if members is not None else None
+            if payload is not None and not _sent(items, 'momentum_text', code_version):
+                try:
+                    if not send_message(momentum_text(payload, trusted), channel='private'):
+                        raise RuntimeError('send_message returned False')
+                    items['momentum_text'] = {'sent_at': _stamp(now), 'code_version': code_version}
+                    write_ledger(delivery_dir, ledger)
+                    sent.append('momentum_text')
+                except Exception as exc:
+                    fail('momentum_text', exc)
+            if payload is not None and not _sent(items, 'combo_text', code_version):
+                try:
+                    if not send_message(combo_text(payload, trusted, pool_reason), channel='private'):
+                        raise RuntimeError('send_message returned False')
+                    items['combo_text'] = {'sent_at': _stamp(now), 'code_version': code_version}
+                    write_ledger(delivery_dir, ledger)
+                    sent.append('combo_text')
+                except Exception as exc:
+                    fail('combo_text', exc)
     except Exception as exc:
         fail('setup', exc)
     finally:
