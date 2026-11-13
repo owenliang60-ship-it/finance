@@ -556,38 +556,51 @@ def test_momentum_text_short_and_empty_boards():
     assert '上涨合格 0：无' in d.momentum_text(_payload(n=0), [])
 
 
-def test_combo_text_lists_every_eligible_member_with_rank():
-    text = d.combo_text(_payload(), ['S35', 'S02', 'ZZZ', 'D001'], None)         # D001 is scored but falling
-    assert text.startswith('*景气动量精选 2026-11-07*') and '景气精选池 4 只' in text
-    assert '景气精选池 4 只 ∩ 14周上涨合格' in text
-    assert '*14周*（2）: S02 #2 +12% · S35 #35 +45%' in text
+def test_combo_text_lists_pool_members_in_the_momentum_top30():
+    """Boss 2026-11-13: pool ∩ momentum board top 30 (rank ≤ MOMENTUM_TOP), not every eligible member."""
+    text = d.combo_text(_payload(), ['S35', 'S30', 'S31', 'S02', 'ZZZ', 'D001'], None)  # D001 falling, ZZZ absent
+    assert text.startswith('*景气动量精选 2026-11-07*') and '景气精选池 6 只' in text
+    assert '景气精选池 6 只 ∩ 14周动量榜前 30' in text
+    assert '*14周*（2）: S02 #2 +12% · S30 #30 +40%' in text
+    assert 'S31' not in text and 'S35' not in text                     # eligible, ranked 31 / 35: not listed
     assert '#n = 全主池 14周上涨榜名次' in text and 'D001' not in text and 'ZZZ' not in text
     assert '两榜' not in text and '7周' not in text.replace('14周', '')
 
 
+def test_combo_top30_matches_the_starred_rows_of_the_momentum_board():
+    pool = ['S02', 'S17', 'S30', 'S31', 'S40', 'D005']
+    starred = [l.split('. ')[1].split(' ')[0] for l in d.momentum_text(_payload(), pool).splitlines() if l.endswith('★')]
+    line = next(l for l in d.combo_text(_payload(), pool, None).splitlines() if l.startswith('*14周*'))
+    assert [t.split(' #')[0] for t in line.split(': ', 1)[1].split(' · ')] == starred == ['S02', 'S17', 'S30']
+
+
 def test_combo_text_empty_and_untrusted_pool():
     assert '*14周*（0）: 无' in d.combo_text(_payload(), ['ZZZ'], None)
+    assert '*14周*（0）: 无' in d.combo_text(_payload(), ['S31', 'S40'], None)   # eligible but outside the top 30
     text = d.combo_text(_payload(), None, 'prosperity_pool_stale')
     assert '池文件不可用（prosperity\\_pool\\_stale）' in text and '#' not in text
 
 
 def test_combo_text_fits_one_message_at_the_pool_cap():
-    """Review P2-2, one window: 100 members (LIQUIDITY_TOP), all eligible, widest tokens → one message."""
+    """Widest case: 100-member pool (LIQUIDITY_TOP), 30 listed with widest tokens, the other 70 unscored."""
     names = [f'BRK-{i:02d}' for i in range(100)]                    # 6-char symbols
-    payload = _payload(symbols=names, down=700)
-    for row in payload['boards']['14w']['scored'][:100]:
-        row['rank'] += 700                                          # 3-digit ranks
+    payload = _payload(symbols=names[:30], down=700)
+    for row in payload['boards']['14w']['scored'][:30]:
         row['return'] = 12.34                                       # '+1234%'
+    payload['boards']['14w']['unavailable'] = {n: 'split_unresolved' for n in names[30:]}
     text = d.combo_text(payload, names, None)
     assert len(text) <= d.MESSAGE_LIMIT == 4096
-    assert all(text.count(n + ' #') == 1 for n in names)            # every name once, none lost
+    assert all(text.count(n + ' #') == 1 for n in names[:30])       # every listed name once
+    assert all(text.count(n + '（') == 1 for n in names[30:])       # every unscored name once
     assert len(d.momentum_text(payload, names)) <= 4096
 
 
 def test_combo_text_refuses_a_message_that_cannot_fit():
     names = [f'LONGNAME{i:04d}' for i in range(400)]
+    payload = _payload(n=0)
+    payload['boards']['14w']['unavailable'] = {n: 'split_unresolved' for n in names}
     with pytest.raises(ValueError, match='message_too_long'):
-        d.combo_text(_payload(symbols=names, down=0), names, None)
+        d.combo_text(payload, names, None)
 
 
 def test_deliver_sends_momentum_and_combo_last(env):

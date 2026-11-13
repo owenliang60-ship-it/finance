@@ -4,7 +4,7 @@
  "cli": {
   "price_date": "2026-11-06",
   "universe": 888,
-  "json_sha256_16": "be311dfbfe836e6d",
+  "json_sha256_16": "8dbf3b103303c79a",
   "boards": {
    "14w": {
     "window": [
@@ -103,12 +103,16 @@
   "momentum_chars": 654,
   "combo_messages": 1,
   "combo_chars": [
-   211
+   119
   ],
   "pool_members": 36,
   "combo_14w": [
    "PLTR",
-   "V",
+   "V"
+  ],
+  "combo_lists_exactly_the_pool_members_in_top30": true,
+  "combo_equals_starred_momentum_rows": true,
+  "pool_members_eligible_outside_top30": [
    "MDT",
    "ABBV",
    "AMGN",
@@ -116,7 +120,6 @@
    "VLO",
    "XOM"
   ],
-  "combo_lists_exactly_the_eligible_pool_members": true,
   "rerun_status": "already_delivered"
  },
  "delivery_negatives": {
@@ -152,9 +155,9 @@
  },
  "cap_100": {
   "pool": 100,
-  "chars": 1617,
+  "chars": 540,
   "within_limit": true,
-  "every_name_listed_once": true
+  "lists_exactly_the_top30": true
  },
  "inputs_unchanged": true
 }

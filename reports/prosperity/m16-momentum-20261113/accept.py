@@ -114,13 +114,18 @@ momentum_msg = next(m for m in msgs if m.startswith('*动量榜'))
 combo = [m for m in msgs if m.startswith('*景气动量精选')]
 pool = json.loads(pool_path.read_text(encoding='utf-8'))
 pool_syms = [m['symbol'] for m in pool['members']]
+# Boss 2026-11-13: pool ∩ momentum board top 30, i.e. pool members with long rank <= d.MOMENTUM_TOP
 expected = {k: [r['symbol'] for r in sorted((r for r in b['scored'] if r['eligible']), key=lambda r: r['rank'])
-                if r['symbol'] in set(pool_syms)] for k, b in payload['boards'].items()}
+                if r['symbol'] in set(pool_syms) and r['rank'] <= d.MOMENTUM_TOP] for k, b in payload['boards'].items()}
+starred = [l.split('. ', 1)[1].split(' ')[0] for l in momentum_msg.splitlines() if l.endswith('★')]
 result['delivery'] = {
     'status': out.status, 'sent': list(out.sent), 'error': out.error,
     'momentum_chars': len(momentum_msg), 'combo_messages': len(combo), 'combo_chars': [len(m) for m in combo],
     'pool_members': len(pool_syms), 'combo_14w': expected['14w'],
-    'combo_lists_exactly_the_eligible_pool_members': listed(combo[0]) == expected['14w'],
+    'combo_lists_exactly_the_pool_members_in_top30': listed(combo[0]) == expected['14w'],
+    'combo_equals_starred_momentum_rows': listed(combo[0]) == starred,
+    'pool_members_eligible_outside_top30': [r['symbol'] for r in sorted((r for r in payload['boards']['14w']['scored']
+        if r['eligible'] and r['rank'] > d.MOMENTUM_TOP and r['symbol'] in set(pool_syms)), key=lambda r: r['rank'])],
     'rerun_status': deliver('delivery', datetime(2026, 11, 7, 12, 30, tzinfo=timezone.utc))[0].status}
 (evidence / 'momentum-text.txt').write_text(momentum_msg + '\n', encoding='utf-8')
 (evidence / 'combo-text.txt').write_text('\n\n'.join(combo) + '\n', encoding='utf-8')
@@ -139,12 +144,14 @@ result['delivery_negatives'] = {
                     'ledger_items': sorted(ledger), 'retry_sent': list(retried.sent)}}
 
 # ---- A5 the 100-member cap -----------------------------------------------------------------------
+# Pool of 100 real names: the 30 top-ranked long names plus the 70 lowest-ranked ones. Only the first 30 may be listed.
 cap = copy.deepcopy(payload)
-ranks = {k: {r['symbol']: r['rank'] for r in b['scored'] if r['eligible']} for k, b in cap['boards'].items()}
-cap_pool = sorted(ranks['14w'], key=lambda s: -ranks['14w'][s])[:100]   # 100 real names, widest '#n' tokens
+ranks = {r['symbol']: r['rank'] for r in cap['boards']['14w']['scored'] if r['eligible']}
+by_rank = sorted(ranks, key=ranks.get)
+cap_pool = by_rank[:30] + by_rank[-70:]
 cap_text = d.combo_text(cap, cap_pool, None)
 result['cap_100'] = {'pool': len(cap_pool), 'chars': len(cap_text), 'within_limit': len(cap_text) <= 4096,
-                     'every_name_listed_once': sorted(listed(cap_text)) == sorted(d.md_escape(s) for s in cap_pool)}
+                     'lists_exactly_the_top30': listed(cap_text) == [d.md_escape(s) for s in by_rank[:30]]}
 (evidence / 'combo-cap-100.txt').write_text(cap_text + '\n', encoding='utf-8')
 
 result['inputs_unchanged'] = before == {'prosperity': sha(db), 'market': sha(market_db)}

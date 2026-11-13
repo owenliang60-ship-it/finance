@@ -204,16 +204,15 @@ def momentum_text(payload: dict, pool: Optional[Sequence[str]]) -> str:
 
 
 def combo_text(payload: dict, pool: Optional[Sequence[str]], reason: Optional[str]) -> str:
-    """M16 item 2: pool members that pass the 14-week long gate, with their whole-universe rank.
-
-    One message: a pool at its 100-member cap is about 2,300 characters. pool None = pool not trusted.
+    """M16 item 2: pool members in the momentum board top MOMENTUM_TOP (Boss 2026-11-13), with their
+    whole-universe rank: exactly the starred rows of momentum_text. pool None = pool not trusted.
     """
     title = f'*景气动量精选 {md_escape(payload["as_of"])}*'
     if pool is None:
         return _counted(f'{title}\n池文件不可用（{md_escape(reason or "unknown")}），本周不列名单')
     members = set(pool)
     board = payload['boards'][MOMENTUM_WINDOW]
-    hits = [r for r in _long_rows(board) if r['symbol'] in members]
+    hits = [r for r in _long_rows(board)[:MOMENTUM_TOP] if r['symbol'] in members]
     listed = ' · '.join(f'{md_escape(r["symbol"])} #{r["rank"]} {r["return"]:+.0%}' for r in hits) or '无'
     line = f'*{MOMENTUM_LABEL}*（{len(hits)}）: {listed}'
     # third state (review #1): a member that could not be scored is named, never read as "not rising"
@@ -222,7 +221,7 @@ def combo_text(payload: dict, pool: Optional[Sequence[str]], reason: Optional[st
         line += f' · 未评分（{len(missing)}）: ' + ', '.join(
             f'{md_escape(s)}（{md_escape(str(why))}）' for s, why in missing)
     lines = [title,
-             f'景气精选池 {len(members)} 只 ∩ {MOMENTUM_LABEL}上涨合格（V4 · 价格截至 {md_escape(payload["price_date"])}）',
+             f'景气精选池 {len(members)} 只 ∩ {MOMENTUM_LABEL}动量榜前 {MOMENTUM_TOP}（V4 · 价格截至 {md_escape(payload["price_date"])}）',
              line, f'#n = 全主池 {MOMENTUM_LABEL}上涨榜名次']
     if missing:
         lines.append('未评分 = 缺价或拆股未决，不代表没涨')
