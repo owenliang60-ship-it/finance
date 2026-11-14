@@ -7,6 +7,11 @@ Usage:
 Exit 0 if all checked scopes meet thresholds, 1 otherwise.
 --min-date filters out rows with date < min_date so stale rows don't mask
 the verification of the most recent cron run.
+
+Overlay symbols that structurally cannot appear in `forward_estimates` are
+excluded from the overlay denominator (see STRUCTURAL_FORWARD_GAPS). The list
+is explicit and evidence-backed on purpose: a "no rows => exempt" rule would
+hide a genuinely broken ticker.
 """
 import argparse
 import datetime
@@ -21,6 +26,21 @@ from config.settings import MARKET_DB_PATH as MARKET_DB  # noqa: E402
 from src.data.pool_manager import get_symbols as get_pool_symbols  # noqa: E402
 from src.data.extended_universe_manager import get_extended_symbols  # noqa: E402
 from src.data.overlays import load_overlay_tier  # noqa: E402
+
+
+# Overlay symbols that structurally cannot appear in `forward_estimates`.
+# Every entry is evidence-backed and stays in the overlay only as a name Boss
+# tracks; the yfinance forward line either skips it by design or has no data.
+# If one of them ever gains rows, `run()` reports it so the entry gets reviewed
+# instead of silently widening the exemption.
+STRUCTURAL_FORWARD_GAPS = {
+    "QQQ": "benchmark ETF — collector skips is_etf/is_fund symbols",
+    "SPY": "benchmark ETF — collector skips is_etf/is_fund symbols",
+    "03032": "HK-listed holding — yfinance returns 0 periods",
+    "07709": "HK-listed holding — yfinance returns 0 periods",
+    "DRAM": "holdings row with no resolvable ticker — yfinance 404",
+    "TEST": "watchlist placeholder used by tests",
+}
 
 
 def _valid_iso_date(s: str) -> str:
@@ -114,8 +134,15 @@ def run(scope: str, min_core_pct: float, min_extended_pct: float,
     expected = get_expected_buckets()
     report = {}
     if scope in ("core", "all"):
+        overlay_raw = sorted({str(s).upper() for s in expected["overlay"]})
+        excluded = [s for s in overlay_raw if s in STRUCTURAL_FORWARD_GAPS]
+        overlay_expected = [s for s in overlay_raw if s not in STRUCTURAL_FORWARD_GAPS]
         report["overlay"] = _bucket_report(
-            "overlay", expected["overlay"], covered, min_core_pct)
+            "overlay", overlay_expected, covered, min_core_pct)
+        report["overlay"]["raw_expected"] = len(overlay_raw)
+        report["overlay"]["excluded_structural_gaps"] = excluded
+        report["overlay"]["gap_symbols_with_data"] = [
+            s for s in excluded if s in covered]
     if scope in ("extended", "all"):
         report["base"] = _bucket_report(
             "base", expected["base"], covered, min_extended_pct)
@@ -128,12 +155,22 @@ def _print_report(report: dict, min_date) -> None:
         print(f"Coverage filter: date >= {min_date}")
     for name, b in report.items():
         marker = "OK" if b["ok"] else "FAIL"
+        excluded = b.get("excluded_structural_gaps") or []
+        raw = b.get("raw_expected")
+        suffix = ""
+        if excluded:
+            suffix = (f" — excluded {len(excluded)} structural gaps "
+                      f"(raw {raw})")
         print(f"[{marker}] {name}: {b['covered']}/{b['expected']} "
-              f"({b['pct']}%, threshold {b['min_pct']}%)")
+              f"({b['pct']}%, threshold {b['min_pct']}%){suffix}")
         if b["missing"]:
             print(f"   missing (top 20): {b['missing'][:20]}")
             if len(b["missing"]) > 20:
                 print(f"   ... and {len(b['missing']) - 20} more")
+        if b.get("gap_symbols_with_data"):
+            print(f"   WARN: structural-gap symbols now have data "
+                  f"{b['gap_symbols_with_data']} — remove them from "
+                  f"STRUCTURAL_FORWARD_GAPS")
 
 
 def main():

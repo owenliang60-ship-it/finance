@@ -190,3 +190,100 @@ def test_expected_buckets_propagates_overlay_failure(monkeypatch):
 
     with pytest.raises(RuntimeError, match="watchlist store unavailable"):
         verifier.get_expected_buckets()
+
+
+# --- Structural-gap exemption (2026-11-14, Boss approved 方案 A) -------------
+# Overlay includes symbols the yfinance forward collector can never cover:
+# benchmark ETFs (skipped by is_etf/is_fund), HK listings, and two junk
+# tickers. They are excluded from the overlay denominator by an explicit,
+# evidence-backed list — never by a "no rows => exempt" rule, which would be
+# fails-open for a genuinely broken ticker.
+
+GAP_SYMBOLS = ["03032", "07709", "DRAM", "QQQ", "SPY", "TEST"]
+
+
+def _insert_rows(con, symbols, date="2026-05-09"):
+    for sym in symbols:
+        con.execute(
+            "INSERT INTO forward_estimates VALUES (?, ?, '0y', 1.0)", (sym, date)
+        )
+    con.commit()
+
+
+def test_structural_gap_symbols_leave_overlay_denominator(temp_db, monkeypatch):
+    db, con = temp_db
+    _insert_rows(con, ["AAPL"])
+    _patch_loaders(monkeypatch, db, ["AAPL"] + GAP_SYMBOLS, [])
+
+    from scripts.verify_forward_coverage import run
+    rc, report = run(scope="core", min_core_pct=99, min_extended_pct=95,
+                     min_date="2026-05-01")
+
+    assert rc == 0
+    assert report["overlay"]["expected"] == 1
+    assert report["overlay"]["covered"] == 1
+    assert report["overlay"]["raw_expected"] == 1 + len(GAP_SYMBOLS)
+    assert report["overlay"]["excluded_structural_gaps"] == GAP_SYMBOLS
+    assert report["overlay"]["gap_symbols_with_data"] == []
+
+
+def test_unknown_overlay_missing_still_fails(temp_db, monkeypatch):
+    """Exemption must not become fails-open: a non-gap symbol with no rows
+    keeps the bucket red."""
+    db, con = temp_db
+    _insert_rows(con, ["AAPL"])
+    _patch_loaders(monkeypatch, db, ["AAPL", "MSFT", "QQQ"], [])
+
+    from scripts.verify_forward_coverage import run
+    rc, report = run(scope="core", min_core_pct=99, min_extended_pct=95,
+                     min_date="2026-05-01")
+
+    assert rc == 1
+    assert report["overlay"]["expected"] == 2
+    assert report["overlay"]["missing"] == ["MSFT"]
+
+
+def test_gap_symbol_with_data_is_reported_for_review(temp_db, monkeypatch):
+    """If a gap symbol starts producing data, surface it so the exemption gets
+    reviewed; coverage only improved, so do not fail the run."""
+    db, con = temp_db
+    _insert_rows(con, ["AAPL", "QQQ"])
+    _patch_loaders(monkeypatch, db, ["AAPL", "QQQ"], [])
+
+    from scripts.verify_forward_coverage import run
+    rc, report = run(scope="core", min_core_pct=99, min_extended_pct=95,
+                     min_date="2026-05-01")
+
+    assert rc == 0
+    assert report["overlay"]["gap_symbols_with_data"] == ["QQQ"]
+
+
+def test_overlay_of_only_gap_symbols_fails_fast(temp_db, monkeypatch):
+    """An overlay loader that returns only junk is broken, not green."""
+    db, con = temp_db
+    _patch_loaders(monkeypatch, db, ["QQQ", "SPY"], [])
+
+    from scripts.verify_forward_coverage import run
+    rc, report = run(scope="core", min_core_pct=99, min_extended_pct=95,
+                     min_date="2026-05-01")
+
+    assert rc == 1
+    assert report["overlay"]["ok"] is False
+    assert report["overlay"]["expected"] == 0
+    assert report["overlay"]["raw_expected"] == 2
+
+
+def test_base_bucket_is_not_exempted(temp_db, monkeypatch):
+    """The gap list is an overlay-only exemption; base coverage keeps the
+    unchanged denominator."""
+    db, con = temp_db
+    _insert_rows(con, ["AAPL"])
+    _patch_loaders(monkeypatch, db, ["AAPL"], ["QQQ"])
+
+    from scripts.verify_forward_coverage import run
+    rc, report = run(scope="all", min_core_pct=99, min_extended_pct=95,
+                     min_date="2026-05-01")
+
+    assert rc == 1
+    assert report["base"]["expected"] == 1
+    assert report["base"]["missing"] == ["QQQ"]
