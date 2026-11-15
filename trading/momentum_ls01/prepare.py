@@ -46,3 +46,7 @@ def prepare(market,btc_weekly,anchor):
                 anchor_utc=str(anchor),signal_day=str(signal_day.date()),fisher=fisher,
                 short_ranked=ranked[-1],long_ranked=ranked[1],
                 input_hash=digest(inputs),input_hashes=inputs,report=report)
+
+
+def prepare_job(rt, anchor, compute):
+    raise NotImplementedError("Task 2.5")
