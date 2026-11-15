@@ -1,6 +1,6 @@
 # 动量多空1号实盘 — 三段实施计划
 
-日期：2026-10-20。状态：§9 Q1–Q3 已由 Boss 按推荐确认（2026-10-20）。**Boss 已批准开工（2026-10-20）**。阶段 1 执行中；进入阶段 2 仍须门 1 审批。
+日期：2026-10-20。状态：§9 Q1–Q3 已由 Boss 按推荐确认（2026-10-20）。**Boss 已批准开工（2026-10-20）**。**2026-11-15 Boss 批准 5 项修订（§13），与下文冲突处以 §13 为准**：门 1 拆成 1a/1b，阶段 2 先行；协议探针改在生产小额子账户；首个实盘周一 1,000 U；下单改串行；分支 push 备份。执行方由 Kiro 改为 CC。
 依据：[北极星 v3](../design/momentum-ls-01-live/north-star.md)（D1–D6 已拍板，commit `5e2cb152`）、[需求](../design/momentum-ls-01-live/requirements.md)、[协议验收](../design/momentum-ls-01-live/protocol-validation.md)。
 所属层：主北极星「Trading / Risk 执行分支：动量多空1号」（`docs/design/north-star.md:161`）。不改数据层所有权，不写 market.db / company.db。
 规则版本：momentum-ls-01 / 2026-10-19.v2。交易规则不改。
@@ -9,12 +9,16 @@
 
 ~~~mermaid
 flowchart LR
-  S1["阶段1<br/>demo 协议实测 G1–G5<br/>金样本对齐冻结内核"] --> M1{"门1<br/>Boss 审"}
+  S1["阶段1 离线<br/>金样本对齐冻结内核"] --> M1{"门1a<br/>离线证据"}
   M1 --> S2["阶段2<br/>先写故障夹具<br/>再写两个任务＋CLI"]
-  S2 --> M2{"门2<br/>Boss 审"}
+  M1 --> PB["生产小额探针 G1–G5<br/>云端发布目录运行"]
+  PB --> M1B{"门1b<br/>Boss 审"}
+  M1B --> S2
+  S2 --> M2{"门2<br/>Boss 审<br/>须门1b 已过"}
   M2 --> S3["阶段3<br/>固定发布目录<br/>生产只读核对＋影子1个周一"]
   S3 --> M3{"门3<br/>Boss 入金并启用"}
-  M3 --> L["实盘<br/>满8周复盘"]
+  M3 --> L1["实盘首周<br/>1,000 U"]
+  L1 --> L["补到 10,000 U<br/>满8周复盘"]
 ~~~
 
 |阶段|做什么|过门条件|不过怎么办|
@@ -30,27 +34,28 @@ flowchart LR
 |#|条件|负责|何时需要|
 |---|---|---|---|
 |P1|批准本计划，并回复 §9 的 3 项默认取值（Q1–Q3 已按推荐确认，2026-10-20；开工已批准）|Boss|阶段1 开工前|
-|P2|币安 **demo** 合约 API key（读取＋交易），存本机 `~/.momentum_ls01/demo.json`，权限 0600。Kiro 不读明文|Boss|Task 1.4 前|
-|P3|demo 账户有测试 USDT 余额（demo 页面领取）|Boss|Task 1.4 前|
+|P2|~~demo API key~~ 2026-11-15 取消：不用 demo。探针用 P6/P7 的生产子账户和 key|—|—|
+|P3|探针用小额资金：子账户先入约 200 USDT（§13 修订 2）|Boss|Task 1.4 前|
 |P4|实现 worktree 和分支（§2）|Kiro|阶段1 开工|
 |P5|v2 冻结包在主 checkout 未纳入 git，本分支没有。金样本从主 checkout 抽取，并逐个核 SHA256|Kiro|Task 1.1|
-|P6|生产专用子账户；API key 只开读取＋U 本位合约交易，关提现和划转，IP 白名单只含云端出口 IP|Boss|Task 3.2 前|
-|P7|生产 key 文件放云端 `/root/.momentum_ls01/binance.json`（目录 0700，文件 0600）。Kiro 给命令模板，不经手明文|Boss|Task 3.2 前|
+|P6|生产专用子账户；API key 只开读取＋U 本位合约交易，关提现和划转，IP 白名单只含云端出口 IP。子账户须开通 U 本位合约|Boss|Task 1.4 前（2026-11-15 提前）|
+|P7|生产 key 文件放云端 `/root/.momentum_ls01/binance.json`（目录 0700，文件 0600）。CC 给命令模板，不经手明文|Boss|Task 1.4 前（2026-11-15 提前）|
 |P8|专用 env 文件，只含 `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`（复用现有 bot 和私人 chat）。由脚本从 Finance `.env` 抽取，不打印值|Kiro，Boss 批准|Task 3.1|
 |P9|每次发布和每次 crontab 变更|Boss 批准|阶段3|
-|P10|首次 10,000 USDT 入金，并确认这笔流水作为基线|Boss|Task 3.6（影子可不入金，见 §9 Q3）|
+|P10|首个实盘周一前，子账户余额补到 1,000 USDT 并确认为基线；干净跑完一周后补到 10,000 USDT（§13 修订 3）|Boss|Task 3.6（影子可不入金，见 §9 Q3）|
 |P11|（可选）codex 侧第二道存活检查|Boss|上线后任意时间|
 
 ## 2. 开发约定
 
-- worktree：`/Users/owen/.codex/worktrees/momentum-ls-01-impl/Finance`；分支 `codex/momentum-ls-01-impl`，从 `codex/momentum-ls-01-live`（`5e2cb152`）切出。每个 Task 一个 commit。不 push、不 merge，等 Boss 指示。
+- worktree：`<主 checkout>/.worktrees/momentum-ls-01-impl`（2026-11-15 重建；原 `~/.codex/worktrees/` 下的目录已丢失）；分支 `codex/momentum-ls-01-impl`，从 `codex/momentum-ls-01-live`（`5e2cb152`）切出。每个 Task 一个 commit。分支 push 到 origin 做备份（Boss 2026-11-15 批准）；不 merge，等 Boss 指示。
+- 证据：小证据（goldcheck 结果、探针结果 JSON）提交到 `docs/design/momentum-ls-01-live/evidence/`。大的回放数据放主 checkout `data/momentum_ls01_evidence/`（gitignore，不随 worktree 删除），并在提交的清单里记 SHA256。
 - 代码：`trading/momentum_ls01/`。测试平铺：`tests/test_momentum_ls01_*.py`。假交易所：`tests/momentum_ls01_fake_exchange.py`。小夹具：`tests/fixtures/momentum_ls01/`。
 - 不加新依赖。只用 requests、pandas、numpy、sqlite3、decimal、concurrent.futures、fcntl。
 - 语法兼容云端 Python 3.10：不用 3.11+ 语法和 f-string 内反斜杠。
 - 金额和数量用 Decimal。信号纯函数沿用研究的 float 口径，不重写指标。
 - 日志、证据、数据库不存 API key、secret 和签名。
 - 本机测试命令：`"/Users/owen/CC workspace/Finance/.venv/bin/python" -m pytest tests/test_momentum_ls01_*.py -q`。
-- 每阶段末做一次 high 档代码审查。Kiro 里没有 `/code-review` 插件，改用 1 个独立只读审阅 agent。
+- 每阶段末做一次 `/code-review high`（2026-11-15 起由 CC 执行）。
 
 ## 3. 模块与存储（本计划冻结）
 
@@ -120,8 +125,9 @@ flowchart LR
 |迟到补跑|Boss 当次批准；限当天 UTC 日内（新加坡次日 08:00 前）；先重跑准备；记偏差|
 |统一收敛期限|首波发出后 10 分钟。到期未收敛的请求转持久暂停（原因：未知订单超期），守护继续查询|
 |波A 未收敛|统一期限内波A 未收敛，波B 不发，本周记偏差|
-|在途上限|分两条通道，各自计数，互不占用。**新增通道**（波A、波B、设杠杆）：最多 5 个。**保护通道**（挂保护、换保护、撤保护、越线即退、止损残仓退出、故障减仓或退出）：最多 5 个，新增请求永远不能占用。保护通道优先发送|
-|在途的定义|只算"受理结果还没确认"的请求（`SENDING`、`UNKNOWN`）。已受理、正在等触价的条件单，以及已受理、在等成交终态的市价单，都不算在途|
+|下单方式（2026-11-15 修订 4，取代"两条通道各 5 个在途"）|**串行，逐币处理。** 同一时刻最多 1 个新增请求在途。每个币走完"发单 → 查到终态 → 读回数量和 entryPrice → 挂或换保护并确认"，再处理下一个币。顺序：波A 先空后多，波B 先空后多，各按候选排名。不用线程|
+|新增请求结果未知|某个新增请求成为 `UNKNOWN` 时，本波剩余新增请求暂不发，先查询。统一收敛期限内查清（成交或确认未受理）就继续；到期未清转持久暂停，剩余请求记偏差。已成交数量的保护、越线即退、止损残仓退出不受影响，照常发|
+|在途的定义|只算"受理结果还没确认"的请求（`SENDING`、`UNKNOWN`）。已受理、正在等触价的条件单不算在途|
 |调仓期查询频率|每 2 秒查一次未决订单和保护|
 |新成交保护期限|成交确认后立即挂；60 秒内未确认生效 → 走北极星 §5.5|
 |波B 保证金|所需初始保证金 ×1.10 > 可用保证金时，波B 全部开仓和加仓乘同一因子 f＝可用÷(所需×1.10)，按 step 向零取整，记偏差和 f（D6）|
@@ -191,9 +197,15 @@ GC2 复用了 `HoldingPolicy` 本身。它证明移植、注入和冷启动接�
 - `exchange_rules.py`：解析 PRICE_FILTER、LOT_SIZE、MARKET_LOT_SIZE、MIN_NOTIONAL、PERCENT_PRICE、status、deliveryDate。舍入全部 Decimal。
 - 测试：签名向量、舍入边界、错误分类、权重自限、429/418 退避。
 
-### Task 1.4 demo 协议探针 G1–G5
+### Task 1.4 生产小额协议探针 G1–G5（2026-11-15 修订 2；下方 demo 字样按此读）
 
-- `probe g1|g2|g3|g4|g5 --env demo`。每个探针写 `work/momentum-ls-01-protocol/<run-id>/gN.json`：环境、时间、请求用途、非敏感参数、响应、最终订单和仓位、结论。
+- 不用 demo。探针在生产专用子账户上跑，从云端固定发布目录运行（key 只白名单云端 IP）。所以 Task 3.1 的发布目录和 Task 3.2 的生产只读核对提前到本 Task 之前做。
+- 硬上限写进代码，不靠调用方自觉：单笔名义 ≤ 25 USDT；探针全程未平名义合计 ≤ 60 USDT；币种必须在命令行白名单内；账户有任何既有持仓或挂单就只读退出；生产写入需要显式开关，默认关闭。
+- 每次运行前由 Boss 批准币种、数量和触发价。子账户先入约 200 USDT。预计手续费合计不到 1 USDT。
+- G5 改测串行两波（修订 4）：不再测并发。
+- 顺手多测一项备选：两张 `closePosition=true` 止损能否共存、第二张的拒单错误码。它不改变首选方案，只在 G2 失败回设计时省一轮探针。
+- G4 的 key 权限读回直接在生产测，不再有"demo 不可测"分支。
+- `probe g1|g2|g3|g4|g5 --env prod`。每个探针写 `work/momentum-ls-01-protocol/<run-id>/gN.json`：环境、时间、请求用途、非敏感参数、响应、最终订单和仓位、结论。
 - 场景完全按[协议验收](../design/momentum-ls-01-live/protocol-validation.md) G1–G5 矩阵。重点三项：G2 先挂新后撤旧是否被接受；G3 挂着保护时 reduceOnly MARKET 减仓是否冲突、超量 reduceOnly 条件单是否只平到零；G4 entryPrice 加减仓语义。
 - 每轮先确认 demo 账户空仓。探针结束撤光挂单、平光仓位。
 - G4 的 key 权限读回若 demo 不支持，标"demo 不可测"，改到 Task 3.2 用生产只读测。
@@ -205,8 +217,13 @@ GC2 复用了 `HoldingPolicy` 本身。它证明移植、注入和冷启动接�
 - 输出：双向排序候选、Fisher 状态、输入哈希。阶段1 只写 JSON，不写库。
 - 跑 GC5。
 
-### 门 1
+### 门 1（2026-11-15 修订 1：拆成 1a 和 1b）
 
+**门 1a（离线）。** GC1–GC6 全部 PASS，阶段 1 单元测试全过。过了就开工阶段 2。2026-10-20 记录为全过；2026-11-15 重跑 GC2/GC3/GC4/GC6 通过，GC1/GC5 的原始数据随旧 worktree 丢失，须重取后重跑并把结果提交。Boss 2026-11-15 批准阶段 2 不等这次重跑；重跑结果是门 2 的必要条件。
+
+**门 1b（生产探针）。** G1–G5 全部 PASS，Boss 审阅 `protocol-results.md`。门 1b 卡三件事：`protection.py` 的"减仓换不换保护"定稿、假交易所与实录的契约测试、门 2。门 1b 之前，`protection.py` 按保守默认实现：数量变化一律换成精确数量。
+
+原条文（保留备查）：
 - G1–G5 全部 PASS，或标"demo 不可测"并经 Boss 同意改到阶段3。
 - GC1–GC6 全部 PASS。阶段1 单元测试全过。high 档审查无阻塞。
 - Boss 审阅 `protocol-results.md` 后批准进入阶段2。
@@ -225,7 +242,7 @@ GC2 复用了 `HoldingPolicy` 本身。它证明移植、注入和冷启动接�
 ### Task 2.0 假交易所与故障夹具（先写，先红）
 
 - `tests/momentum_ls01_fake_exchange.py`：内存交易所。持仓、普通单、条件单、成交、资金流水、杠杆和模式。可注入：受理后丢响应、429、418、-2022、-4118、越线拒单、部分成交、ADL、强平、退市结算、外部转账、手动下单。
-- 响应格式取自阶段1 demo 实录。契约测试保证假交易所与实录同形。
+- 响应格式先按官方文档字段（`exchange-api.md`）写。门 1b 的生产探针实录到手后，补契约测试保证假交易所与实录同形（2026-11-15 修订 1）。
 - 写下表全部夹具测试。此时应全部失败。
 
 |#|场景|期望|门|
@@ -267,7 +284,7 @@ GC2 复用了 `HoldingPolicy` 本身。它证明移植、注入和冷启动接�
 |F35|整波已登记 `PLANNED`，发出前崩溃|重启后全部 `ABANDONED`，记偏差，不补发；需要的保护由核对重新生成|G6|
 |F36|已改 `SENDING`，请求没到交易所就崩溃|重启按 UNKNOWN 查询；按"确认未受理"规则判 `NOT_ACCEPTED` 前不重发|G6|
 |F37|交易所已受理（含已成交），响应落库前崩溃|重启查到订单和成交，落为真实状态；成交数量立即被保护覆盖；不重发|G6|
-|F38|5 笔开仓占满新增通道，都已部分成交、未终结|保护通道照常挂出 5 张保护，不被新增请求堵住；越线即退照常|G5|
+|F38|（2026-11-15 改写）波B 第 3 个币的开仓结果未知|第 4 个币起不发；前 2 个币已各有保护；第 3 个币查清后，成交数量立即有保护；期限内查清则继续剩余币|G5|
 |F39|零余额账户上做影子调仓（`--dry-run --assume-equity 10000`）|按模拟账户算出完整目标，D6 不触发；不发任何请求；不写 `state.db`；不形成基线|G9|
 |F40|账户只剩 1 个币，它出现单币故障|自动减仓或退出，不停等（D1）；记偏差|G2|
 |F41|条件单已触发，子订单状态不明|先查子订单和成交；不明时不另发平仓；终态后仍有残仓才 reduceOnly MARKET|G3|
@@ -287,6 +304,7 @@ GC2 复用了 `HoldingPolicy` 本身。它证明移植、注入和冷启动接�
 
 ### 门 2
 
+- 门 1b 已过；GC1–GC6 重跑结果已提交（2026-11-15 修订 1）。
 - F01–F41 全过。阶段1 测试仍全过。
 - 本机全量测试：除本 worktree 已知的数据相关失败外，无新增失败。先记基线数。
 - 云端：把候选 commit 的 `git archive` 解到临时目录，用 `/usr/bin/python3` 跑 `py_compile` 和 `tests/test_momentum_ls01_*.py`，全过。不改云端任何任务。
@@ -365,8 +383,9 @@ GC2 复用了 `HoldingPolicy` 本身。它证明移植、注入和冷启动接�
 ### Task 3.6 Boss 启用
 
 1. Kiro 新建正式状态目录和空 `state.db`。影子目录原样保留作证据，正式任务不读它。
-2. Boss 入金 10,000 USDT。
+2. Boss 把子账户余额补到 1,000 USDT（2026-11-15 修订 3；探针剩余资金计入）。
 3. Boss 运行或批准 `resume --accept-flow <tranId>`，这笔入金成为基线。
+3a. 首个实盘周一按约 1,000 USDT 权益运行。一周内无工程失败（北极星 §8 定义）且全量核对干净，Boss 再转入约 9,000 USDT，同样经 `resume --accept-flow` 确认。有工程失败则不加资，修完再跑一个周一。8 周复盘从首个实盘周一起算。
 4. Boss 书面批准发布 commit 和 cron 变更。
 5. Kiro 备份 crontab，把 `rebalance --dry-run` 改成 `rebalance`，`guard --readonly` 改成 `guard`，状态目录指向正式目录，安装后逐字比对。
 6. 首个实盘周一由 Boss 在场观察。
@@ -437,3 +456,28 @@ GC2 复用了 `HoldingPolicy` 本身。它证明移植、注入和冷启动接�
 - [ ] 门 1：未通过。不得进入阶段 2。
 
 证据、测试与剩余项见 [protocol-results.md](../design/momentum-ls-01-live/protocol-results.md)。实现分支 `codex/momentum-ls-01-impl`。未 merge、push、部署或下单。
+
+## 13. 修订（2026-11-15，CC 审核，Boss 全部按推荐批准）
+
+背景：阶段 1 离线部分 10-20 完成后停了 26 天，卡在 demo key。Boss 11-15 指示不用 demo，直接按生产开发，并要求审核计划。CC 接手执行。
+
+|#|修订|原因|落点|
+|---|---|---|---|
+|1|门 1 拆成 1a（离线）和 1b（生产探针）。1a 过了就开工阶段 2；1b 只卡保护模块定稿、契约测试和门 2|状态库、请求状态机、对账、通知、CLI 不依赖交易所实测。整段串行已造成 26 天空转|§0、门 1、Task 2.0、门 2|
+|2|协议探针改在生产专用子账户小额运行，从云端发布目录跑|不用 demo。key 只白名单云端 IP，所以发布目录和生产只读核对要提前。生产证据比 demo 更硬，key 权限也只能在生产测|§1 P2/P3/P6/P7、Task 1.4|
+|3|首个实盘周一约 1,000 USDT，干净一周后补到 10,000 USDT|影子周只算单不发单。没有 demo 后，调仓任务第一次真发单不应是全额|§1 P10、Task 3.6|
+|4|下单由"每波并发、两条通道各 5 个在途"改为串行逐币|每周最多约 30 单，串行约 30 秒，远在 5 分钟准入期内。去掉线程和双通道；"每个新仓先有保护再开下一个"天然成立。这改了 Boss 10-19 定的"并发"，Boss 11-15 明确同意|§4、F38、Task 1.4 的 G5|
+|5|分支 push 到 origin；小证据随代码提交，大数据放 worktree 外固定目录|证据目录没进 git，已随旧 worktree 丢过一次|§2|
+
+修订 4 对北极星的影响：§4.2 第 5、7 步和执行规则里的"并发提交"改为串行；D4（固定两波）不变。北极星 §9.4 已同步。
+
+未改的东西：交易规则、D1–D3、D5–D6、Q1–Q3、四表结构、请求状态机、41 个故障夹具中除 F38 外的全部场景。
+
+## 14. 执行进度（2026-11-15 起）
+
+- [x] 重建 worktree；专项测试 105 通过；GC2/GC3/GC4/GC6 重跑通过；冻结包 162/162 哈希一致。
+- [x] 计划修订写入本文件并同步北极星、需求。
+- [ ] GC1/GC5 重取数据重跑，结果提交。
+- [ ] Task 2.0 假交易所与故障夹具。
+- [ ] Task 2.1–2.8。
+- [ ] 生产探针模式（Task 1.4）与门 1b。
