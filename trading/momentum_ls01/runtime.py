@@ -17,4 +17,4 @@ class Runtime:
         from .store import Store
         self.state_dir = Path(self.state_dir)
         if self.store is None:
-            self.store = Store(self.state_dir)
+            self.store = Store(self.state_dir, clock=self.clock)
