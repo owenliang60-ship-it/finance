@@ -49,4 +49,40 @@ def prepare(market,btc_weekly,anchor):
 
 
 def prepare_job(rt, anchor, compute):
-    raise NotImplementedError("Task 2.5")
+    """11:00 job: freeze this week's candidates and direction in ``weeks``. Read-only on the exchange.
+
+    ``compute`` returns the ``prepare()`` result or raises. A failure means no new
+    positions this week (D5); existing positions and stops are left alone.
+    """
+    from . import config as C, notify
+    anchor = utc(anchor)
+    started = rt.clock()
+    existing = rt.store.week(str(anchor))
+    if existing and existing['status'] not in (None, 'prepared'):
+        return dict(status='locked', reason='week already ' + existing['status'])
+    try:
+        result = compute()
+        if result['anchor_utc'] != str(anchor) or result['fisher']['regime'] not in (-1, 1):
+            raise ValueError('prepared result does not belong to this anchor')
+        signals = signal_frame(result['report']).to_dict('records')
+        if not all(isinstance(r['score_v4'], float) and r['score_v4'] == r['score_v4'] for r in signals):
+            raise ValueError('incomplete candidate scores')
+    except Exception as error:   # any failure is the same outcome: nothing new this week
+        rt.store.save_week(str(anchor), rule_version=C.RULE_VERSION, release_commit=rt.release_commit,
+                           prep_status='failed', prep_error=(type(error).__name__ + ': ' + str(error))[:300],
+                           prep_started_at=started, prep_finished_at=rt.clock(), status='prepared')
+        notify.enqueue(rt, '⚠️ 动量多空1号 准备失败（%s）：%s\n本周不新增；已有持仓和止损不动。修好后可在锚点前重跑准备。'
+                       % (anchor, str(error)[:200]), key='prep_failed:%s:%s' % (anchor, started))
+        notify.flush(rt)
+        return dict(status='failed', error=str(error))
+    with rt.store.tx():
+        rt.store.add_evidence('snapshot', 'signals:%s:%s' % (anchor, result['input_hash']), signals)
+        rt.store.save_week(str(anchor), rule_version=C.RULE_VERSION, release_commit=rt.release_commit,
+                           prep_status='ready', prep_error=None, prep_started_at=started,
+                           prep_finished_at=rt.clock(), signal_day=result['signal_day'],
+                           input_hash=result['input_hash'], fisher_week_start=result['fisher'].get('week_end'),
+                           fisher=result['fisher']['fisher'], trigger=result['fisher']['trigger'],
+                           regime=result['fisher']['regime'], short_ranked=result['short_ranked'],
+                           long_ranked=result['long_ranked'], status='prepared')
+    return dict(status='ready', anchor=str(anchor), regime=result['fisher']['regime'],
+                shorts=len(result['short_ranked']), longs=len(result['long_ranked']))

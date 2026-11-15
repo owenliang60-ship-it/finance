@@ -162,7 +162,8 @@ def test_f03_start_after_entry_window_sends_nothing_and_alerts(tmp_path):
 def test_f03_approved_late_run_needs_same_utc_day(tmp_path):
     w = World(tmp_path, start=301)
     w.prepare()
-    assert w.rebalance(late_approved=True)['status'] == 'done'
+    assert w.rebalance(late_approved=True)['status'] == 'deviated'   # an approved late run is a recorded deviation
+    assert w.codes() == {'late_start'} and w.qty(S0) == -10
     late = World(tmp_path / 'next-day', start=21 * 3600)
     late.prepare()
     assert late.rebalance(late_approved=True)['status'] == 'late'

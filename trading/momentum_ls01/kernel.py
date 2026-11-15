@@ -60,7 +60,7 @@ class LivePolicy(HoldingPolicy):
     AsymmetricFisher direction mapping and Policy short doubling are copied
     from the pinned research implementations. Selection stays in HoldingPolicy.
     """
-    def __init__(self, signals, regime, anchor, *, cooldown=None, lifetimes=None):
+    def __init__(self, signals, regime, anchor, *, cooldown=None, lifetimes=None, blocked=()):
         anchor = utc(anchor)
         if anchor.weekday() != 0 or anchor != anchor.normalize()+pd.Timedelta(hours=4):
             raise ValueError('anchor must be Monday 04:00 UTC')
@@ -70,7 +70,12 @@ class LivePolicy(HoldingPolicy):
                          pd.Series([regime],index=[anchor]), anchor,14,
                          scoring_version='v4',holding='weekly',lifetimes=lifetimes)
         self.cooldown = {s:utc(t) for s,t in (cooldown or {}).items()}
+        # Live-only: symbols the exchange will not open now. Skipped in rank order, like research terminal symbols.
+        self.blocked = frozenset(blocked)
         self._called = False
+
+    def can_enter(self,symbol,date,forced):
+        return symbol not in self.blocked and super().can_enter(symbol,date,forced)
 
     def direction(self,date):
         state = super().direction(date)
