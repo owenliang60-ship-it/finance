@@ -90,7 +90,8 @@ def compute_targets(desk, week, equity, held, prices, stops, now_ms):
     frame = pd.DataFrame(rows[0]['payload'])
     rules = desk.rules
     candidates = set(frame['symbol'])
-    blocked = {s for s in candidates if s not in rules or s not in prices or not rules[s].can_open(now_ms)}
+    unusable = sorted(s for s in candidates if s not in rules or s not in prices)
+    blocked = set(unusable) | {s for s in candidates if s in rules and not rules[s].can_open(now_ms)}
     residual = sorted(s for s in {stop['symbol'] for stop in stops} if s not in held)
     blocked |= set(residual)   # an old stop still open on a flat symbol: no new episode there
     lifetimes = {s: dict(delivery=rules[s].delivery_ms) for s in candidates | set(held) if s in rules}
@@ -106,7 +107,7 @@ def compute_targets(desk, week, equity, held, prices, stops, now_ms):
             targets[symbol] = size if units > 0 else -size
         elif units:
             skipped.append(symbol)
-    return dict(targets=targets, policy=policy, cooldown=cooldown, skipped=skipped,
+    return dict(targets=targets, policy=policy, cooldown=cooldown, skipped=skipped, unusable=unusable,
                 residual=[s for s in residual if s in candidates])
 
 
@@ -134,7 +135,8 @@ def _dry_run(rt, anchor, assume_equity):
                 wave_b=[dict(symbol=i.symbol, side=i.side, qty=str(i.qty), purpose=i.purpose) for i in increases],
                 prices={s: str(prices[s]) for s in sorted(computed['targets'])},
                 symbol_config={s: config.get(s) for s in sorted(computed['targets'])},
-                blocked_residual=computed['residual'], skipped_below_step=computed['skipped'])
+                blocked_residual=computed['residual'], skipped_below_step=computed['skipped'],
+                rules_unusable=computed['unusable'])
     relative = 'evidence/plan-%s.json' % anchor.strftime('%y%m%d%H')
     path = rt.state_dir / relative
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -178,6 +180,7 @@ class Run:
     # ---- the nine steps ------------------------------------------------
     def execute(self):
         desk, store = self.desk, self.store
+        self.beat()
         try:
             desk.run(full=True)   # stops that already fired are settled before anything else
         except (Unclear, ExchangeError) as error:
@@ -208,6 +211,8 @@ class Run:
             self.deviation('residual_protection', symbol=symbol)
         for symbol in computed['skipped']:
             self.deviation('below_min', symbol=symbol)
+        for symbol in computed['unusable']:   # our parser or the price feed, not the exchange's eligibility
+            self.deviation('rules_unusable', symbol=symbol)
         with store.tx():   # cooldowns the policy just created (regime exits) and the ones that ran out
             for symbol, at in computed['policy'].cooldown.items():
                 if at == self.anchor and symbol not in computed['cooldown']:
@@ -300,6 +305,7 @@ class Run:
             self.one(action_id, reduce_only)
 
     def one(self, action_id, reduce_only):
+        self.beat()
         sent = self.acts.send(action_id)
         if self.deadline is None:
             self.deadline = self.rt.clock() + C.CONVERGE_S   # one deadline for the whole run
@@ -362,7 +368,7 @@ class Run:
             return   # longs carry no stop
         stops = [s for s in desk.open_stops(symbol) if s['clientAlgoId'].startswith(C.ID_PREFIX)]
         outcome = protection.ensure(desk, symbol, qty, entry, stops)
-        if outcome in ('ok', 'exited', 'triggered'):
+        if outcome in ('ok', 'exited', 'triggered', 'covered'):
             return
         self.halted = True   # north star §5.5 step 1: stop adding
         if outcome != 'rejected':

@@ -475,9 +475,32 @@ GC2 复用了 `HoldingPolicy` 本身。它证明移植、注入和冷启动接�
 
 ## 14. 执行进度（2026-11-15 起）
 
-- [x] 重建 worktree；专项测试 105 通过；GC2/GC3/GC4/GC6 重跑通过；冻结包 162/162 哈希一致。
-- [x] 计划修订写入本文件并同步北极星、需求。
-- [ ] GC1/GC5 重取数据重跑，结果提交。
-- [ ] Task 2.0 假交易所与故障夹具。
-- [ ] Task 2.1–2.8。
-- [ ] 生产探针模式（Task 1.4）与门 1b。
+- [x] 重建 worktree；冻结包 162/162 哈希一致。
+- [x] 计划修订写入本文件并同步北极星、需求；分支已 push 到 origin。
+- [x] 金样本重跑：GC1、GC2、GC3、GC4、GC6 通过。结果在 `docs/design/momentum-ls-01-live/evidence/goldcheck-20261115.json`。GC1 用 2026-11-15 重新拉取的公开 BTC 周线（SHA256 `daf93dd4…aea9e`，存主 checkout `data/momentum_ls01_evidence/`）。
+- [ ] GC5 未重跑。回放目录（云端缓存副本 1,058 个文件＋补充日线）和生成它的步骤都没进 git，已随旧 worktree 丢失。要么重建回放目录，要么由 Boss 同意用影子周一的独立对拍（Task 3.4）代替。
+- [x] Task 2.0：假交易所（自测 12 项）＋故障夹具 F01–F41（47 个测试，先红后绿）。
+- [x] Task 2.1–2.8：`store` `actions` `protection` `reconcile` `prepare_job` `rebalance` `guard` `notify` `cli`。专项测试 195 项通过；Python 3.10 语法检查通过。
+- [ ] 阶段末 `/code-review high`。
+- [ ] 云端 Python 3.10 实跑测试（门 2 条件）。
+- [ ] 生产小额探针模式（Task 1.4）与门 1b。等 Boss 的子账户和 key。
+
+### 14.1 实现与本计划的差异
+
+|项|计划写法|实际实现|原因|
+|---|---|---|---|
+|实盘开关|cron 写 `rebalance` 即实盘|`rebalance` 必须带 `--live` 才发单；不带就是影子运行|误敲命令不会下单|
+|冻结信号存放|`weeks` 只有排名两列|评分后的完整信号行存 `evidence`（kind=`snapshot`，键含输入哈希）|调仓要用同一批信号重建 `LivePolicy`；四表结构不变|
+|`evidence.kind`|trade / income / snapshot / notification|另加 `exit`（每次退出的原因和时间）|F28 要区分退市退出|
+|`state` 键|见 §3.2|另加 `pending_flows`（待 Boss 确认的资金流）、`ip_ban`、`seq:<tag>`（客户端 ID 序号）|F19、F23、ID 唯一|
+|保护被拒后|§5.5 第 1 步"停新增"|本次调仓剩余新增全部不发，记 `not_sent`|串行后只会先看到一个币被拒；先停再查最稳妥|
+|数量文本|—|数量和触发价一律按定点小数发送|`str(Decimal)` 可能给出 `1.00E+4`，追踪请求时发现并加测试|
+
+### 14.2 已知未完成项（不影响阶段 2 夹具，上线前必须处理或由 Boss 明确放行）
+
+1. **现金差额核对没做。** 现在只按流水类型识别外部资金流（非交易类流水 → 暂停，等 `resume --accept-flow`）。G7 写的"未知差额进入持久暂停"（钱包变动 ≠ 流水合计）还没实现。
+2. **API key 权限读回没做。** 属 Task 3.2，需要另一个接口；`reconcile` 命令目前报 `NOT_CHECKED`。
+3. **限频状态不跨进程。** 418 会写 `ip_ban` 并在下次调仓前拦住新增；429 的冷却只在当次进程内有效。
+4. **周报只有摘要。** 状态、权益、目标只数、偏差代码。滑点、手续费、资金费、守护覆盖率等 §8 指标还没算。
+5. **保证金率只读不报警。** 轻核对每分钟读账户，但没有设报警线（计划也没给数值）。
+6. **强平、ADL、结算的订单前缀**（`autoclose-`、`adl_autoclose`、`settlement_autoclose-`）来自官方文档，未经生产实录确认。

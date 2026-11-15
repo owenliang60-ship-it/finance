@@ -1,0 +1,93 @@
+{
+  "strategy_id": "momentum-ls-01",
+  "rule_version": "2026-10-19.v2",
+  "status": "BLOCKED",
+  "integrity": {
+    "checked": 162,
+    "manifest_sha256": "6ab7f02d8505336e6a5380fdee6ca997b48b263550f451d2ef660b24d3fcf1ad"
+  },
+  "checks": {
+    "GC1": {
+      "status": "PASS",
+      "rows": 3750,
+      "max_error": 0.0,
+      "sources": {
+        "/Users/owen/CC workspace/Finance/data/momentum_ls01_evidence/btc_weekly_20261115.json": "daf93dd4c298d33772abcfff48ecb670a1b315a3597e1fe8a05b9c9a638aea9e"
+      }
+    },
+    "GC2": {
+      "status": "PASS",
+      "anchors": 89,
+      "positions": 1272
+    },
+    "GC3": {
+      "status": "PASS",
+      "rows": 2174,
+      "max_absolute_error": 6.639311322942376e-11
+    },
+    "GC4": {
+      "status": "PASS",
+      "stops": [
+        {
+          "symbol": "GRIFFAINUSDT",
+          "stop": "2025-02-04 14:31:00+00:00",
+          "eligible_at": "2025-02-10 04:00:00+00:00",
+          "actual_entry": "2025-02-24 04:00:00+00:00"
+        },
+        {
+          "symbol": "HUSDT",
+          "stop": "2025-12-17 15:18:00+00:00",
+          "eligible_at": "2025-12-22 04:00:00+00:00",
+          "actual_entry": "2026-03-02 04:00:00+00:00"
+        },
+        {
+          "symbol": "LIGHTUSDT",
+          "stop": "2025-12-31 09:53:00+00:00",
+          "eligible_at": "2026-01-05 04:00:00+00:00",
+          "actual_entry": "2026-01-05 04:00:00+00:00"
+        },
+        {
+          "symbol": "SPACEUSDT",
+          "stop": "2026-02-14 12:13:00+00:00",
+          "eligible_at": "2026-02-16 04:00:00+00:00",
+          "actual_entry": null
+        },
+        {
+          "symbol": "BSBUSDT",
+          "stop": "2026-05-19 17:49:00+00:00",
+          "eligible_at": "2026-05-25 04:00:00+00:00",
+          "actual_entry": "2026-06-01 04:00:00+00:00"
+        },
+        {
+          "symbol": "ESPORTSUSDT",
+          "stop": "2026-06-02 00:48:00+00:00",
+          "eligible_at": "2026-06-08 04:00:00+00:00",
+          "actual_entry": "2026-06-08 04:00:00+00:00"
+        },
+        {
+          "symbol": "ESPORTSUSDT",
+          "stop": "2026-06-11 17:23:00+00:00",
+          "eligible_at": "2026-06-15 04:00:00+00:00",
+          "actual_entry": "2026-06-22 04:00:00+00:00"
+        },
+        {
+          "symbol": "AKEUSDT",
+          "stop": "2026-09-02 18:20:00+00:00",
+          "eligible_at": "2026-09-07 04:00:00+00:00",
+          "actual_entry": "2026-09-14 04:00:00+00:00"
+        }
+      ]
+    },
+    "GC5": {
+      "status": "BLOCKED",
+      "reason": "full raw market replay required; archived ranking rows alone are insufficient"
+    },
+    "GC6": {
+      "status": "PASS",
+      "bull_short_slots": 10,
+      "bull_long_slots": 10,
+      "bear_short_slots": 10,
+      "empty_slots": "cash"
+    }
+  }
+}

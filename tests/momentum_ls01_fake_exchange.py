@@ -94,6 +94,11 @@ class FakeExchange:
             if crossed:
                 self._trigger(algo)
 
+    def forget(self, symbol):
+        """The exchange does not list this symbol at all: no price, no filters, no position row."""
+        for book in (self.prices, self.status, self.delivery, self.qty, self.entry, self.leverage, self.margin_type):
+            book.pop(symbol, None)
+
     def deposit(self, amount, tran_id=None):
         self.wallet += Decimal(str(amount))
         return self._income('TRANSFER', amount, '', tran_id=tran_id)

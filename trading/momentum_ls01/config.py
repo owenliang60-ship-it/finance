@@ -14,6 +14,7 @@ MARGIN_TYPE = 'CROSSED'
 STOP_MULTIPLE = Decimal(2)      # short stop = entryPrice x 2, rounded up to tick
 MARGIN_BUFFER = Decimal('1.10')
 BASIS_TOLERANCE = Decimal('0.0001')    # relative; calibrate with G4 production evidence
+PROTECT_RETRY_S = 3600          # after a refused replacement while an old stop still covers the short
 GUARD_FAIL_LIMIT = 5
 HEARTBEAT_STALE_S = 180
 WATCHDOG_REPEAT_S = 1800

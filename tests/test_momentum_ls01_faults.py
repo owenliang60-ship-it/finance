@@ -661,3 +661,38 @@ def test_f39_shadow_run_on_an_empty_account_plans_everything_and_touches_nothing
     assert not w.ex.writes() and not w.rt.store.actions()
     assert w.week()['status'] == 'prepared' and w.rt.store.get('pause') is None
     assert (w.state_dir / result['plan_file']).exists()
+
+
+# ---- found in self-review, 2026-11-15 ----------------------------------
+def test_rejected_replacement_keeps_the_position_while_an_old_stop_still_covers_it(w):
+    """North star §5.5 step 3: after reducing back, the old stop covers the short. Do not exit it."""
+    w.open()
+    w.next_week()
+    w.ex.set_price(S0, 80)
+    w.prepare()
+    w.ex.fail('POST', E.ALGO_ORDER, 'reject', when=only(S0), code=NOT_AUTH_REJECT, times=99)
+    w.rebalance()
+    assert w.qty(S0) == -10 and Decimal(w.stops(S0)[0]['quantity']) == 10
+    w.clock.now += 60
+    w.guard()
+    posts = len([1 for m, p, q in w.ex.calls if m == 'POST' and p == E.ALGO_ORDER and q['symbol'] == S0])
+    w.clock.now += 60
+    w.guard()
+    assert w.qty(S0) == -10 and len(w.stops(S0)) == 1 and w.pause() is None
+    assert len([1 for m, p, q in w.ex.calls if m == 'POST' and p == E.ALGO_ORDER and q['symbol'] == S0]) == posts
+    assert any('旧止损仍覆盖' in text for text in w.sent)
+
+
+def test_candidate_without_usable_exchange_rules_is_skipped_and_recorded(w):
+    w.ex.forget(S0)   # the exchange lists no price and no filters for a ranked candidate
+    w.prepare()
+    w.rebalance()
+    assert not w.orders_sent(S0) and w.qty(S1) == w.qty(S2) == -10
+    assert 'rules_unusable' in w.codes()
+
+
+def test_rebalance_keeps_the_guard_heartbeat_fresh_while_it_holds_the_lock(w):
+    w.prepare()
+    w.rebalance()
+    assert w.rt.store.get('guard_heartbeat')['status'] == 'rebalance'
+    assert w.clock.now - w.rt.store.get('guard_heartbeat')['at'] < 60

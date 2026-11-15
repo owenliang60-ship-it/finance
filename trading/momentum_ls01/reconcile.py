@@ -153,6 +153,7 @@ class Desk:
                 self.store.set('cooldown:' + symbol, dict(at=at, reason=reason))
             self.store.delete('episode:' + symbol)
             self.store.delete('protection:' + symbol)
+            self.store.delete('protect_hold:' + symbol)
         self.cancel_stops(symbol, stops)
 
     # ---- actions on one symbol -----------------------------------------
@@ -352,6 +353,8 @@ class Desk:
             pause(self.rt, 'protection_common_cause', rejected)
             return 'common'
         symbol = rejected[0]['symbol']
+        if rejected[0].get('covered'):
+            return 'covered'   # an old stop still covers the short: keep the position (north star §5.5)
         if self.store.get('pause') is not None:
             notify.enqueue(self.rt, '⚠️ %s 保护被拒（代码 %s）。系统处于暂停，未自动退出，请处理。'
                            % (symbol, rejected[0]['code']))
