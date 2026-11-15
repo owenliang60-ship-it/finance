@@ -10,10 +10,11 @@ from decimal import Decimal
 import pandas as pd
 
 from . import config as C, notify, protection
-from .actions import Actions
-from .binance import Endpoints as E
+from .actions import Actions, fresh_clock
+from .binance import Endpoints as E, ExchangeError
 from .exchange_rules import RuleViolation, SymbolRules
 from .kernel import cost_after_trade
+from .protection import Unclear
 from .store import TERMINAL_STATES, process_lock
 
 REASONS = {
@@ -21,10 +22,6 @@ REASONS = {
     'entry_price_mismatch': '交易所成本价与本地成本不一致', 'protection_common_cause': '保护被拒，疑似共同根因',
     'unknown_order_overdue': '未知订单超期', 'account_mode': '账户模式或杠杆不符',
     'account_unclear': '账实不清', 'guard_failures': '守护连续失败', 'manual_pause': '手动暂停'}
-
-
-class Unclear(RuntimeError):
-    """A read that cannot be trusted. Change nothing and try again next run."""
 
 
 class Halt(Exception):
@@ -62,12 +59,13 @@ class Desk:
         self.rt, self.store, self.acts = rt, rt.store, Actions(rt)
         self.anchor = anchor if anchor is not None else current_anchor(rt.clock())
         self.rejections = []   # protection refusals seen in this run
+        self.outcome = {}      # per-symbol result of the last run()
         self._rules = None
 
     # ---- exchange reads ------------------------------------------------
     def read(self, path, params=None, signed=True):
         if signed:
-            self.rt.client.sync_clock()
+            fresh_clock(self.rt.client)
         return self.rt.client.request('GET', path, params, signed=signed, protective=True)
 
     @property
@@ -200,7 +198,8 @@ class Desk:
         known = set()
         for action in self.store.actions(symbol=symbol):
             known.update(str(x) for x in (action['exchange_id'], action['child_order_id']) if x)
-        trades = self.read(E.USER_TRADES, dict(symbol=symbol, startTime=episode['trades_since_ms'], limit=1000))
+        since = max(episode['trades_since_ms'], int((self.rt.clock() - C.TRADE_LOOKBACK_S) * 1000))
+        trades = self.read(E.USER_TRADES, dict(symbol=symbol, startTime=since, limit=1000))
         foreign = [t for t in trades if str(t['orderId']) not in known]
         labels = {}
         for order_id in sorted({t['orderId'] for t in foreign}):
@@ -308,8 +307,9 @@ class Desk:
 
     def overdue_unknowns(self):
         now = self.rt.clock()
-        return [a for a in self.store.actions(kind='order', state=('UNKNOWN', 'SENDING', 'ACKED'))
-                if now - (a['sent_at'] or now) > C.CONVERGE_S]
+        rows = (self.store.actions(kind='order', state=('UNKNOWN', 'SENDING', 'ACKED'))
+                + self.store.actions(kind=('algo', 'cancel_algo'), state=('UNKNOWN', 'SENDING')))
+        return [a for a in rows if now - (a['sent_at'] or now) > C.CONVERGE_S]
 
     def run(self, full=False):
         """One guard pass. Protection, stop exits and crossing exits run even while paused."""
@@ -327,19 +327,25 @@ class Desk:
         account = self.read(E.ACCOUNT)
         symbols = set(episodes) | {s for s, (q, _) in positions.items() if q != 0} | {s['symbol'] for s in stops}
         symbols |= {a['symbol'] for a in self.store.actions(state=('UNKNOWN', 'SENDING')) if a['symbol']}
-        outcome = {}
+        outcome, failed = {}, []
         for symbol in sorted(symbols):
-            if symbol not in positions:
-                raise Unclear('position row missing: ' + symbol)
-            qty, entry = positions[symbol]
-            try:
+            try:   # one symbol that cannot be explained must not starve the others of protection
+                if symbol not in positions:
+                    raise Unclear('position row missing: ' + symbol)
+                qty, entry = positions[symbol]
                 outcome[symbol] = self.check_symbol(symbol, qty, entry, [s for s in stops if s['symbol'] == symbol])
             except Halt as halt:
                 pause(self.rt, halt.reason, halt.detail)
                 outcome[symbol] = 'halt:' + halt.reason
+            except (Unclear, ExchangeError) as error:
+                outcome[symbol] = 'failed'
+                failed.append('%s: %s' % (symbol, error))
+        self.outcome = outcome
         self.judge_rejections()
         if self.overdue_unknowns():
             pause(self.rt, 'unknown_order_overdue', [a['client_id'] for a in self.overdue_unknowns()])
+        if failed:
+            raise Unclear('; '.join(failed))   # every other symbol was still checked
         return dict(symbols=outcome, margin_balance=account.get('totalMarginBalance'),
                     maintenance=account.get('totalMaintMargin'))
 
@@ -401,8 +407,12 @@ def resume(rt, accept_flow=None):
         store.delete('pause')
         try:
             desk.run(full=True)
-        except Unclear as error:
-            pause(rt, 'account_unclear', str(error))
+        except BaseException as error:   # the pause is cleared only by a reconciliation that finished
+            if store.get('pause') is None:
+                store.set('pause', previous or dict(reason='account_unclear', detail=str(error), at=rt.clock(), also=[]))
+            if not isinstance(error, (Unclear, ExchangeError)):
+                raise
+            return dict(status='blocked', reason='reconciliation did not finish', error=str(error))
         notify.flush(rt)
         current = store.get('pause')
         if current is not None:

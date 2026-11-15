@@ -118,7 +118,7 @@ class RateLimitState:
             raise ExchangeError('NOT_SENT', 'request weight soft limit', retry_after=60 - now % 60)
         self.used_weight += cost
 
-    def observe(self, headers, now):
+    def observe(self, headers, now, reserved=0):
         current_minute = int(now // 60)
         if self.minute != current_minute:
             self.used_weight = 0
@@ -129,7 +129,9 @@ class RateLimitState:
             try:
                 measured = int(raw)
                 if measured >= 0:
-                    self.used_weight = max(self.used_weight, measured)
+                    # The header is the exchange's own count for this IP. It replaces this
+                    # request's reservation; reservations of requests still in flight stay.
+                    self.used_weight = max(measured, self.used_weight - reserved)
             except (ValueError, TypeError):
                 pass  # Keep our conservative reservation; never reset to zero.
 
@@ -229,7 +231,9 @@ class BinanceClient:
                                for key, value in values.items()})
             if signed:
                 query += '&signature=' + sign_query(query, self.credentials.api_secret)
-            self.limiter.reserve(now, _weight(path, values), protective,
+            cost = _weight(path, values)
+            minute = int(now // 60)
+            self.limiter.reserve(now, cost, protective,
                                  bootstrap=path in {Endpoints.TIME, Endpoints.EXCHANGE_INFO})
         kwargs = {'headers': headers, 'timeout': (5, 10), 'allow_redirects': False}
         if mutation:
@@ -242,7 +246,8 @@ class BinanceClient:
         except requests.RequestException:
             raise ExchangeError('UNKNOWN', 'transport failure; query before retry') from None
         with self.limiter.lock:
-            self.limiter.observe(response.headers, self.clock())
+            after = self.clock()
+            self.limiter.observe(response.headers, after, reserved=cost if int(after // 60) == minute else 0)
             status = response.status_code
             retry_after = None
             if status in (429, 418):

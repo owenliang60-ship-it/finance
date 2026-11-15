@@ -58,7 +58,8 @@ def prepare_job(rt, anchor, compute):
     anchor = utc(anchor)
     started = rt.clock()
     existing = rt.store.week(str(anchor))
-    if existing and existing['status'] not in (None, 'prepared'):
+    rerunnable = existing and existing['status'] == 'no_new' and not rt.store.actions(anchor_utc=str(anchor), lane='risk')
+    if existing and existing['status'] not in (None, 'prepared') and not rerunnable:
         return dict(status='locked', reason='week already ' + existing['status'])
     try:
         result = compute()

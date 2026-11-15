@@ -23,6 +23,9 @@ BACKUP_KEEP = 30
 # Exchange error codes. Source: official USD-M error page (read 2026-10-20); the
 # production probe (gate 1b) must confirm the ones the system branches on.
 ORDER_NOT_FOUND = -2013
+RATE_LIMIT_CODE = -1003
+LOCK_WAIT_S = 90                # the minute guard starts in the same second as the rebalance
+TRADE_LOOKBACK_S = 6 * 86400    # userTrades accepts at most a 7-day window
 WOULD_TRIGGER = -2021
 # Signature, key, IP, permission, clock and account-mode failures hit every symbol alike.
 COMMON_CAUSE_CODES = frozenset({-1002, -1021, -1022, -2014, -2015, -4061})

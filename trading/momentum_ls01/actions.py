@@ -17,7 +17,8 @@ from . import config as C
 from .binance import Endpoints as E, ExchangeError
 from .store import TERMINAL_STATES
 
-ORDER_TERMINAL = {'FILLED', 'CANCELED', 'EXPIRED', 'REJECTED'}
+ORDER_TERMINAL = {'FILLED', 'CANCELED', 'EXPIRED', 'EXPIRED_IN_MATCH', 'REJECTED'}
+CLOCK_FRESH_S = 30
 ALGO_TERMINAL = {'CANCELED', 'EXPIRED', 'REJECTED'}
 PURPOSE_LETTER = {'wave_a_reduce': 'A', 'wave_a_close': 'A', 'wave_b_open': 'B', 'wave_b_add': 'B',
                   'protect_new': 'P', 'protect_replace': 'P', 'protect_cancel': 'P',
@@ -30,6 +31,14 @@ DONE = 'FILLED'   # settings and cancels have no fill; FILLED means "took effect
 def plain(value):
     """Fixed-point text. str(Decimal) can give '1.00E+4', which is not a valid order quantity."""
     return format(Decimal(str(value)), 'f')
+
+
+def fresh_clock(client):
+    """Sync the request clock unless a sample from the last half minute exists."""
+    synced = getattr(client, 'clock_synced_at', None)
+    if synced is not None and 0 <= client.clock() - synced < CLOCK_FRESH_S:
+        return
+    client.sync_clock()
 
 
 def anchor_tag(anchor):
@@ -109,7 +118,11 @@ class Actions:
         action = self.store.action(action_id)
         request = action['request']
         try:
-            self.client.sync_clock()
+            fresh_clock(self.client)
+        except ExchangeError as error:   # nothing was built or sent
+            self.store.update_action(action_id, state='NOT_ACCEPTED', error_msg='blocked before sending')
+            return Sent(self.store.action(action_id), error)
+        try:
             reply = self.client.request(request['method'], request['path'], request['params'], signed=True,
                                         protective=action['lane'] == 'protect')
         except ExchangeError as error:
@@ -149,7 +162,7 @@ class Actions:
         return self.store.action(action_id)
 
     def _get(self, path, params):
-        self.client.sync_clock()
+        fresh_clock(self.client)
         return self.client.request('GET', path, params, signed=True, protective=True)
 
     def _resolve_order(self, action):
@@ -159,14 +172,17 @@ class Actions:
         self._record_order(action, reply)
 
     def _record_order(self, action, reply):
+        status = reply.get('status')
+        if status in ORDER_TERMINAL and ('executedQty' not in reply or 'avgPrice' not in reply):
+            raise ExchangeError('UNKNOWN', 'terminal order reply without fill fields')   # never assume zero
         executed = Decimal(str(reply.get('executedQty', '0')))
         fields = dict(exchange_id=reply.get('orderId'), executed_qty=executed, avg_price=reply.get('avgPrice'),
                       last_checked_at=self.rt.clock())
-        status = reply.get('status')
         if status == 'FILLED':
             fields['state'] = 'FILLED'
         elif status in ORDER_TERMINAL:
-            fields['state'] = 'PARTIAL_FINAL' if executed > 0 else status
+            fields['state'] = ('PARTIAL_FINAL' if executed > 0
+                               else 'EXPIRED' if status.startswith('EXPIRED') else status)
         else:
             fields['state'] = 'ACKED'
         self.store.update_action(action['id'], **fields)
@@ -182,8 +198,8 @@ class Actions:
             fields['child_order_id'] = child
             self.store.update_action(action['id'], **fields)
             order = self._get(E.ORDER, dict(symbol=action['symbol'], orderId=child))
-            if order.get('status') in ORDER_TERMINAL:
-                executed = Decimal(str(order.get('executedQty', '0')))
+            if order.get('status') in ORDER_TERMINAL and 'executedQty' in order and 'avgPrice' in order:
+                executed = Decimal(str(order['executedQty']))
                 if order.get('updateTime'):
                     self.fill_time[action['id']] = int(order['updateTime']) / 1000
                 self.store.update_action(

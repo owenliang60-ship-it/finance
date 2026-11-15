@@ -60,16 +60,25 @@ def _dump(value):
 
 
 @contextmanager
-def process_lock(state_dir):
-    """One writer at a time across rebalance and guard. Released when the process dies."""
+def process_lock(state_dir, wait_s=0, sleep=time.sleep):
+    """One writer at a time across rebalance and guard. Released when the process dies.
+
+    ``wait_s`` > 0 retries once a second for that long before giving up.
+    """
     state_dir = Path(state_dir)
     state_dir.mkdir(parents=True, exist_ok=True)
     handle = open(state_dir / 'mls01.lock', 'a')
     try:
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            raise LockBusy('another LS01 job holds the lock') from None
+        waited = 0
+        while True:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if waited >= wait_s:
+                    raise LockBusy('another LS01 job holds the lock') from None
+                sleep(1)
+                waited += 1
         yield
     finally:
         handle.close()

@@ -144,6 +144,9 @@ class FakeExchange:
         fault = self._match_fault(method, path, params)
         if fault and fault.effect == 'crash_before':
             raise Crash()
+        if fault and fault.effect == 'not_sent':
+            self.calls.pop()   # it never left the process
+            raise ExchangeError('NOT_SENT', 'injected: local gate', retry_after=fault.retry_after)
         if fault and fault.effect == 'unknown':
             raise ExchangeError('UNKNOWN', 'injected: request never reached the exchange')
         if fault and fault.effect == 'reject':

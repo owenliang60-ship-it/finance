@@ -209,7 +209,9 @@ def test_shared_limiter_reserves_atomically_without_holding_lock_during_http():
     class ConcurrentTransport:
         def request(self, *args, **kwargs):
             barrier.wait(timeout=2)
-            return Response({'serverTime': 1000000})
+            reply = Response({'serverTime': 1000000})
+            reply.headers = {}   # no measured weight: both reservations must survive
+            return reply
 
     clients = [BinanceClient(limiter=state, transport=ConcurrentTransport(), clock=lambda: 1000.0)
                for _ in range(2)]
@@ -220,7 +222,9 @@ def test_shared_limiter_reserves_atomically_without_holding_lock_during_http():
 
 
 def test_all_market_last_price_has_public_endpoint_and_weight_two():
-    cli, _ = client(Response([{'symbol': 'BTCUSDT', 'price': '10', 'time': 1000000}]))
+    reply = Response([{'symbol': 'BTCUSDT', 'price': '10', 'time': 1000000}])
+    reply.headers = {}   # no measured weight: the local reservation is what remains
+    cli, _ = client(reply)
     assert cli.request('GET', Endpoints.TICKER_PRICE)[0]['price'] == '10'
     assert cli.limiter.used_weight == 2
 

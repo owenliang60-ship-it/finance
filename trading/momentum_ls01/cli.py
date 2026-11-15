@@ -72,9 +72,16 @@ NOT_OK={'no_new','late','blocked','failed','locked','no_prep','no_state'}
 clock=time.time
 
 
+def telegram_plain(text):
+    """send_message uses legacy Markdown; an unescaped '_' in a reason code makes Telegram reject the message."""
+    for mark in ('_','*','`','['):
+        text=text.replace(mark,'\\'+mark)
+    return text
+
+
 def private_sender():
     from src.telegram_bot import send_message
-    return lambda text: send_message(text,channel='private')
+    return lambda text: send_message(telegram_plain(text),channel='private',max_retries=1)
 
 
 def build_runtime(args,writes):

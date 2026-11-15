@@ -14,10 +14,11 @@ import pandas as pd
 from . import config as C, notify, protection
 from .binance import Endpoints as E, ExchangeError
 from .kernel import LivePolicy, split_waves
-from .reconcile import Desk, Unclear, current_anchor, pause
+from .reconcile import Desk, Halt, Unclear, current_anchor, pause
 from .store import TERMINAL_STATES, LockBusy, process_lock
 
 DAY_END_AFTER_ANCHOR_S = 20 * 3600   # the anchor is 04:00 UTC; its UTC day ends 20 hours later
+SETTLED = frozenset({'ok', 'flat', 'closed', 'covered', 'exited'})   # reconciliation outcomes safe to trade on
 
 
 def rebalance_job(rt, dry_run=False, late_approved=False, assume_equity=None):
@@ -26,10 +27,12 @@ def rebalance_job(rt, dry_run=False, late_approved=False, assume_equity=None):
     if dry_run:
         return _dry_run(rt, anchor, assume_equity)
     try:
-        with process_lock(rt.state_dir):
+        with process_lock(rt.state_dir, wait_s=C.LOCK_WAIT_S, sleep=rt.sleep):
             return _locked(rt, anchor, now, late_approved)
     except LockBusy:
-        return dict(status='locked')
+        _alert(rt, '🚨 动量多空1号 调仓拿不到进程锁（等了 %d 秒），本次未运行，未发任何单。请检查是否有卡住的守护进程。'
+               % C.LOCK_WAIT_S, key='locked:%s' % anchor)
+        return dict(status='locked', anchor=str(anchor))
 
 
 def _alert(rt, text, key=None):
@@ -44,7 +47,10 @@ def _alert(rt, text, key=None):
 def _locked(rt, anchor, now, late_approved):
     store, key = rt.store, str(anchor)
     week = store.week(key)
-    if week is not None and week['status'] not in (None, 'prepared'):
+    # A week in which no order or setting was ever registered may be run again (failed preparation
+    # fixed, a transient read failure, a pause that was resumed). Anything else is a duplicate.
+    untouched = week is not None and week['status'] == 'no_new' and not store.actions(anchor_utc=key, lane='risk')
+    if week is not None and week['status'] not in (None, 'prepared') and not untouched:
         return dict(status='duplicate', anchor=key, week_status=week['status'])
     elapsed = now - anchor.timestamp()
     late = elapsed >= C.ENTRY_WINDOW_S
@@ -80,7 +86,7 @@ def _locked(rt, anchor, now, late_approved):
     return result
 
 
-def compute_targets(desk, week, equity, held, prices, stops, now_ms):
+def compute_targets(desk, week, equity, held, prices, stops, now_ms, unsettled=()):
     """Frozen policy -> exchange-rounded target units. Pure: reads only, writes nothing."""
     rt, anchor = desk.rt, desk.anchor
     rows = [r for r in rt.store.evidence('snapshot')
@@ -94,6 +100,7 @@ def compute_targets(desk, week, equity, held, prices, stops, now_ms):
     blocked = set(unusable) | {s for s in candidates if s in rules and not rules[s].can_open(now_ms)}
     residual = sorted(s for s in {stop['symbol'] for stop in stops} if s not in held)
     blocked |= set(residual)   # an old stop still open on a flat symbol: no new episode there
+    blocked |= set(unsettled)  # the opening reconciliation could not settle these symbols
     lifetimes = {s: dict(delivery=rules[s].delivery_ms) for s in candidates | set(held) if s in rules}
     cooldown = {k.split(':', 1)[1]: pd.Timestamp(rt.store.get(k)['at'], unit='s', tz='UTC')
                 for k in rt.store.keys('cooldown:')}
@@ -174,7 +181,7 @@ class Run:
         notify.enqueue(self.rt, '📊 动量多空1号 周调仓 %s\n状态：%s。权益 %s USDT。目标：空 %d 只，多 %d 只。\n偏差 %d 项%s'
                        % (self.key, status, week['equity_usdt'], shorts, longs, len(material),
                           '：' + '、'.join(sorted({d['code'] for d in material})) if material else '。'),
-                       key='weekly:' + self.key)
+                       key='weekly:%s:%s:%d' % (self.key, status, self.rt.clock()))
         return dict(status=status, anchor=self.key, deviations=week['deviations'])
 
     # ---- the nine steps ------------------------------------------------
@@ -205,7 +212,9 @@ class Run:
             self.deviation('no_equity')
             return self.finish('no_new')
 
-        computed = compute_targets(desk, self.week, equity, held, self.prices, desk.open_stops(), cutoff_ms)
+        unsettled = {s for s, result in desk.outcome.items() if result not in SETTLED}
+        computed = compute_targets(desk, self.week, equity, held, self.prices, desk.open_stops(), cutoff_ms,
+                                   unsettled=unsettled)
         targets = computed['targets']
         for symbol in computed['residual']:
             self.deviation('residual_protection', symbol=symbol)
@@ -223,6 +232,11 @@ class Run:
             store.save_week(self.key, targets={s: str(q) for s, q in sorted(targets.items())})
 
         reductions, increases = split_waves(held, targets)
+        for intent in reductions + increases:
+            if intent.symbol in unsettled:   # do not trade on a position we could not reconcile
+                self.deviation('symbol_unsettled', symbol=intent.symbol, outcome=desk.outcome[intent.symbol])
+        reductions = [i for i in reductions if i.symbol not in unsettled]
+        increases = [i for i in increases if i.symbol not in unsettled]
         reductions = [i for i in self.ordered(reductions, held) if self.big_enough(i, opening=False)]
         increases = [i for i in self.ordered(increases, targets) if self.big_enough(i, opening=True)]
         increases = [i for i in increases if i.purpose != 'wave_b_open' or self.configure(i.symbol)]
@@ -240,7 +254,12 @@ class Run:
 
     def big_enough(self, intent, opening):
         rules = self.desk.rules.get(intent.symbol)
-        too_small = rules is None or intent.qty < max(rules.lot.minimum, rules.market_lot.minimum)
+        if rules is None:
+            if intent.purpose == 'wave_a_close':
+                return True   # closing the whole position needs no rounding
+            self.deviation('rules_unusable', symbol=intent.symbol, qty=str(intent.qty))
+            return False
+        too_small = intent.qty < max(rules.lot.minimum, rules.market_lot.minimum)
         if not too_small and opening:   # reduce-only orders are exempt from minimum notional
             too_small = intent.qty * self.prices[intent.symbol] < rules.min_notional
         if too_small:
@@ -296,19 +315,45 @@ class Run:
             ids = [self.acts.plan_order(self.anchor, i.symbol, i.side, i.qty, i.purpose, reduce_only,
                                         position_before=held.get(i.symbol, Decimal(0))) for i in intents]
         for position, action_id in enumerate(ids):
+            if not self.halted and self.store.get('pause') is not None:
+                self.halted = True   # paused while this run was working: send nothing more
             if self.halted:
                 for rest in ids[position:]:
                     action = self.store.action(rest)
                     self.store.update_action(rest, state='ABANDONED', error_msg='run stopped adding')
                     self.deviation('not_sent', symbol=action['symbol'], client_id=action['client_id'])
                 return
+            if not reduce_only and not self.still_valid(self.store.action(action_id)):
+                self.store.update_action(action_id, state='ABANDONED', error_msg='voided before sending')
+                self.deviation('add_voided', symbol=self.store.action(action_id)['symbol'])
+                continue
             self.one(action_id, reduce_only)
+
+    def still_valid(self, action):
+        """Re-check right before sending: a stop may have fired since the targets were computed."""
+        symbol = action['symbol']
+        try:
+            if action['purpose'] == 'wave_b_open':
+                return self.desk.episode(symbol) is None and self.desk.position(symbol)[0] == 0
+            qty, entry = self.desk.position(symbol)
+            return self.desk.check_symbol(symbol, qty, entry, self.desk.open_stops(symbol)) in ('ok', 'covered')
+        except Halt as halt:
+            pause(self.rt, halt.reason, halt.detail)
+        except (Unclear, ExchangeError):
+            pass
+        return False
 
     def one(self, action_id, reduce_only):
         self.beat()
-        sent = self.acts.send(action_id)
         if self.deadline is None:
             self.deadline = self.rt.clock() + C.CONVERGE_S   # one deadline for the whole run
+        sent = self.acts.send(action_id)
+        wait = getattr(sent.error, 'retry_after', None)
+        if (sent.state == 'NOT_ACCEPTED' and sent.action['client_id'].endswith('-1') and wait is not None
+                and wait <= 60 and self.rt.clock() + wait + 1 < self.deadline):
+            # Our own request-weight gate, never sent: wait for the next minute and try once more.
+            self.rt.sleep(wait + 1)
+            return self.one(self.acts.reissue(sent.action, self.anchor), reduce_only)
         action = sent.action
         symbol = action['symbol']
         if sent.state in ('ACKED', 'UNKNOWN'):
@@ -324,6 +369,8 @@ class Run:
             return None
         if state in ('REJECTED', 'NOT_ACCEPTED'):
             self.refused(action, sent, reduce_only)
+        elif state in ('CANCELED', 'EXPIRED') or (state == 'FILLED' and not Decimal(action['executed_qty'] or '0')):
+            self.deviation('order_no_fill', symbol=symbol, order_state=state)
         elif state == 'PARTIAL_FINAL':
             self.deviation('wave_a_partial' if reduce_only else 'wave_b_partial', symbol=symbol,
                            executed=action['executed_qty'], wanted=action['qty'])
@@ -344,7 +391,8 @@ class Run:
         symbol = action['symbol']
         status = getattr(sent.error, 'http_status', None)
         if status == 429 or action['state'] == 'NOT_ACCEPTED':
-            self.deviation('rate_limited', symbol=symbol)   # back off: nothing more is added in this run
+            # Back off: nothing more is added in this run.
+            self.deviation('rate_limited' if status == 429 else 'blocked_before_sending', symbol=symbol)
             self.halted = True
         elif status == 418:
             wait = getattr(sent.error, 'retry_after', None)

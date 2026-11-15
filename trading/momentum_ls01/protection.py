@@ -10,6 +10,10 @@ from decimal import Decimal
 from . import config as C, notify
 
 
+class Unclear(RuntimeError):
+    """A read that cannot be trusted. Change nothing and try again next run."""
+
+
 def stop_price(entry, rules):
     """Twice the entry price, rounded UP to tick so the stop never fires early."""
     return rules.round_price(Decimal(entry) * C.STOP_MULTIPLE, up=True)
@@ -28,6 +32,8 @@ def ensure(desk, symbol, qty, entry, stops):
     """
     store, acts = desk.store, desk.acts
     want_qty = -Decimal(qty)
+    if symbol not in desk.rules:
+        raise Unclear('no usable exchange rules for held symbol ' + symbol)
     trigger = stop_price(entry, desk.rules[symbol])
     matching = [s for s in stops if Decimal(str(s['quantity'])) == want_qty
                 and Decimal(str(s['triggerPrice'])) == trigger]
@@ -49,6 +55,17 @@ def ensure(desk, symbol, qty, entry, stops):
     if sent.state == 'REJECTED':
         if sent.action['error_code'] == C.WOULD_TRIGGER:
             return desk.crossing_exit(symbol)
+        status = getattr(sent.error, 'http_status', None)
+        if status in (429, 418) or sent.action['error_code'] == C.RATE_LIMIT_CODE:
+            # IP-level, not a fault of this symbol: never exit for it. The guard retries next minute.
+            if status == 418:
+                wait = getattr(sent.error, 'retry_after', None)
+                store.set('ip_ban', dict(at=desk.rt.clock(),
+                                         until=desk.rt.clock() + (wait if wait and wait != float('inf') else 86400)))
+            notify.enqueue(desk.rt, '🚨 %s 挂止损被限频（HTTP %s）。仓位保留，守护下一分钟重试；%s'
+                           % (symbol, status, '旧止损仍在。' if stops else '该仓位暂时没有止损。'),
+                           key='stop_limited:%s:%d' % (symbol, desk.rt.clock() // 600))
+            return 'blocked'
         if covering:
             until = desk.rt.clock() + C.PROTECT_RETRY_S
             store.set('protect_hold:' + symbol, dict(until=until, code=sent.action['error_code']))
