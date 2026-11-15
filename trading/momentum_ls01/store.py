@@ -128,6 +128,10 @@ class Store:
             week[name] = json.loads(raw) if raw else ([] if name != 'targets' else {})
         return week
 
+    def latest_week(self):
+        row = self.db.execute('SELECT anchor_utc FROM weeks ORDER BY anchor_utc DESC LIMIT 1').fetchone()
+        return None if row is None else self.week(row['anchor_utc'])
+
     def save_week(self, anchor, **fields):
         values = {}
         for name, value in fields.items():

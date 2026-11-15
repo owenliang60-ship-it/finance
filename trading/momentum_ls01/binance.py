@@ -1,4 +1,6 @@
-"""USD-M REST boundary with atomic shared rate state. No retries; production writes are disabled.
+"""USD-M REST boundary with atomic shared rate state. No retries.
+
+Writes are off by default. Each environment has its own switch; neither unlocks the other.
 
 Successful JSON is an acknowledgement, never proof of a fill. See exchange-api.md.
 """
@@ -167,7 +169,7 @@ def _weight(path, params):
 
 class BinanceClient:
     def __init__(self, env='demo', credentials=None, transport=None, limiter=None,
-                 clock=time.time, allow_demo_writes=False):
+                 clock=time.time, allow_demo_writes=False, allow_prod_writes=False):
         if env not in BASE_URLS:
             raise ValueError('env must be demo or prod')
         self.env = env
@@ -176,6 +178,7 @@ class BinanceClient:
         self.limiter = limiter if limiter is not None else _SHARED_LIMITERS[env]
         self.clock = clock
         self.allow_demo_writes = allow_demo_writes
+        self.allow_prod_writes = allow_prod_writes
         self.clock_offset_ms = None
         self.clock_synced_at = None
 
@@ -197,7 +200,8 @@ class BinanceClient:
     def request(self, method, path, params=None, signed=False, protective=False):
         method = method.upper()
         mutation = method != 'GET'
-        if mutation and (self.env != 'demo' or not self.allow_demo_writes):
+        writable = self.allow_demo_writes if self.env == 'demo' else self.allow_prod_writes
+        if mutation and not writable:
             raise ExchangeError('NOT_SENT', 'writes disabled')
         if (method == 'GET' and path not in READABLE) or (mutation and path not in WRITABLE.get(method, set())):
             raise ValueError('unsupported endpoint or method')

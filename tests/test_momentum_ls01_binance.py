@@ -223,3 +223,19 @@ def test_all_market_last_price_has_public_endpoint_and_weight_two():
     cli, _ = client(Response([{'symbol': 'BTCUSDT', 'price': '10', 'time': 1000000}]))
     assert cli.request('GET', Endpoints.TICKER_PRICE)[0]['price'] == '10'
     assert cli.limiter.used_weight == 2
+
+
+def test_production_writes_need_their_own_explicit_switch():
+    cli, transport = client(Response({'serverTime': 1000200}), Response({'orderId': 9}), env='prod',
+                            credentials=Credentials('key', 'secret'), allow_prod_writes=True)
+    cli.sync_clock()
+    assert cli.request('POST', Endpoints.ORDER, {'quantity': '1'}, signed=True) == {'orderId': 9}
+    assert transport.calls[-1][0][1].startswith('https://fapi.binance.com/')
+
+
+@pytest.mark.parametrize('env,flags', [('prod', dict(allow_demo_writes=True)), ('demo', dict(allow_prod_writes=True))])
+def test_a_write_switch_never_unlocks_the_other_environment(env, flags):
+    cli, transport = client(env=env, **flags)
+    with pytest.raises(ExchangeError) as err:
+        cli.request('POST', Endpoints.ORDER)
+    assert err.value.outcome == 'NOT_SENT' and transport.calls == []

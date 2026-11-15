@@ -1,7 +1,14 @@
-"""Stage-1 entry points. No production mutation command is exposed."""
+"""LS01 command line: offline checks, the two scheduled jobs and operator commands.
+
+Nothing is sent to the exchange unless the command is given --live (rebalance) or is
+the live guard / resume. Every other command is read-only on the exchange.
+"""
 import argparse
 import json
+import os
 from pathlib import Path
+import sqlite3
+import time
 
 import pandas as pd
 
@@ -37,7 +44,129 @@ def parser():
     probe.add_argument('--second-symbol')
     probe.add_argument('--second-quantity')
     probe.add_argument('--output-dir',type=Path,default=Path('work/momentum-ls-01-protocol'))
+    prep.add_argument('--state-dir',type=Path,help='write the frozen week into state.db (11:00 job)')
+    default_key=Path.home()/'.momentum_ls01/binance.json'
+    for name,text in OPS.items():
+        op=commands.add_parser(name,help=text)
+        op.add_argument('--state-dir',required=True,type=Path)
+        op.add_argument('--credentials',type=Path,default=default_key)
+        op.add_argument('--release-commit',default=os.environ.get('MLS01_RELEASE_COMMIT','unknown'))
+        if name=='rebalance':
+            op.add_argument('--live',action='store_true',help='send real orders; without it the run is a dry run')
+            op.add_argument('--assume-equity',help='dry run only: simulate an empty account with this equity')
+            op.add_argument('--late-approved',action='store_true',help='Boss approved a late run today')
+        if name=='guard':
+            op.add_argument('--readonly',action='store_true',help='shadow mode: no write permission')
+            op.add_argument('--full',action='store_true',help='force the hourly full reconciliation')
+        if name=='pause':
+            op.add_argument('--reason',required=True)
+        if name=='resume':
+            op.add_argument('--accept-flow',help='tranId of one external transfer to accept as baseline')
     return p
+
+
+OPS={'rebalance':'Monday 04:00 UTC rebalance','guard':'minute guard','watchdog':'heartbeat check, no lock',
+     'alive':'daily alive message','backup':'WAL-safe state.db backup','status':'local state summary',
+     'pause':'persistent pause','reconcile':'read-only account report','resume':'reconcile, then clear the pause'}
+NOT_OK={'no_new','late','blocked','failed','locked','no_prep','no_state'}
+clock=time.time
+
+
+def private_sender():
+    from src.telegram_bot import send_message
+    return lambda text: send_message(text,channel='private')
+
+
+def build_runtime(args,writes):
+    """Production runtime. ``writes`` is the only switch that lets a mutation leave this process."""
+    from .runtime import Runtime
+    client=BinanceClient(env='prod',credentials=load_credentials(args.credentials),allow_prod_writes=writes)
+    client.request('GET',Endpoints.EXCHANGE_INFO)   # loads the request-weight limit
+    return Runtime(state_dir=args.state_dir,client=client,clock=clock,sleep=time.sleep,send=private_sender(),
+                   release_commit=args.release_commit)
+
+
+def status_report(state_dir):
+    from .store import Store
+    now=clock()
+    try:
+        store=Store(state_dir,clock=clock,readonly=True)
+        beat=store.get('guard_heartbeat')
+        week=store.latest_week()
+        return dict(status='ok',paused=store.get('pause'),ip_ban=store.get('ip_ban'),
+            heartbeat_age=None if beat is None else now-beat['at'],
+            week=None if week is None else {k:week[k] for k in ('anchor_utc','prep_status','status','equity_usdt','deviations')},
+            episodes={k.split(':',1)[1]:store.get(k)['qty'] for k in store.keys('episode:')},
+            cooldowns=[k.split(':',1)[1] for k in store.keys('cooldown:')],
+            unresolved_requests=len(store.actions(state=('UNKNOWN','SENDING')))+len(store.actions(kind='order',state='ACKED')),
+            pending_flows=store.get('pending_flows',[]),pending_notifications=len(store.pending_notifications()))
+    except sqlite3.Error as error:
+        return dict(status='no_state',error=str(error))
+
+
+def account_report(rt):
+    """Read-only facts for the production preflight (Task 3.2). Key permissions are checked there."""
+    from .reconcile import Desk
+    desk=Desk(rt)
+    offset=rt.client.sync_clock()
+    account=desk.read(Endpoints.ACCOUNT)
+    positions=desk.positions()
+    return dict(status='ok',clock_offset_ms=offset,one_way=desk.read(Endpoints.POSITION_MODE).get('dualSidePosition') is False,
+        single_asset=desk.read(Endpoints.MULTI_ASSETS_MODE).get('multiAssetsMargin') is False,
+        wallet=account.get('totalWalletBalance'),available=account.get('availableBalance'),
+        open_positions=sum(1 for q,_ in positions.values() if q!=0),open_orders=len(desk.read(Endpoints.OPEN_ORDERS)),
+        open_stops=len(desk.open_stops()),weight_limit=getattr(getattr(rt.client,'limiter',None),'limit',None),
+        key_permissions='NOT_CHECKED')
+
+
+def run_ops(args):
+    from . import guard,reconcile
+    from .rebalance import rebalance_job
+    from .runtime import Runtime
+    from .store import Store
+    name=args.command
+    if name=='status':
+        result=status_report(args.state_dir)
+    elif name=='watchdog':
+        result=guard.watchdog(args.state_dir,clock,private_sender())
+    elif name=='alive':
+        result=guard.alive(args.state_dir,clock,private_sender())
+    elif name=='backup':
+        result=dict(status='ok',path=str(Store(args.state_dir,clock=clock).backup(args.state_dir/'backups')))
+    elif name=='pause':
+        rt=Runtime(state_dir=args.state_dir,client=None,clock=clock,sleep=time.sleep,send=private_sender())
+        result=dict(status='ok',paused=reconcile.pause(rt,'manual_pause',args.reason))
+    elif name=='guard':
+        if args.readonly and (args.state_dir/'drill-stop-guard').exists():
+            result=dict(status='drill_skipped')   # shadow drill: prove the watchdog notices a silent guard
+        else:
+            result=guard.guard_job(build_runtime(args,writes=not args.readonly),full=True if args.full else None)
+    elif name=='rebalance':
+        live=bool(args.live)
+        result=rebalance_job(build_runtime(args,writes=live),dry_run=not live,late_approved=args.late_approved,
+                             assume_equity=None if live else args.assume_equity)
+    elif name=='reconcile':
+        result=account_report(build_runtime(args,writes=False))
+    else:
+        flow=args.accept_flow
+        result=reconcile.resume(build_runtime(args,writes=True),
+                                accept_flow=int(flow) if flow and flow.lstrip('-').isdigit() else flow)
+    print(json.dumps(result,ensure_ascii=False,default=str))
+    return 1 if result.get('status') in NOT_OK else 0
+
+
+def run_prepare_job(args,anchor):
+    """11:00 job. Any failure while fetching or scoring becomes a recorded failed preparation."""
+    from .prepare import prepare_job
+    from .runtime import Runtime
+    client=BinanceClient(env=args.env)
+    def compute():
+        client.request('GET',Endpoints.EXCHANGE_INFO)
+        weekly=fetch_weekly(client,anchor)
+        return prepare(PublicMarket(client,args.cache_dir,anchor.normalize()-pd.Timedelta(days=1)),weekly,anchor)
+    rt=Runtime(state_dir=args.state_dir,client=client,clock=clock,sleep=time.sleep,send=private_sender(),
+               release_commit=os.environ.get('MLS01_RELEASE_COMMIT','unknown'))
+    return prepare_job(rt,anchor,compute)
 
 
 def write_result(path,result):
@@ -47,6 +176,8 @@ def write_result(path,result):
 
 def main(argv=None):
     args=parser().parse_args(argv)
+    if args.command in OPS:
+        return run_ops(args)
     if args.command=='probe':
         args.out=args.output_dir/'last-probe.json'
     try:
@@ -68,6 +199,12 @@ def main(argv=None):
             anchor=pd.Timestamp(args.anchor)
             if anchor.tzinfo is None:raise ValueError('--anchor must include UTC timezone')
             anchor=anchor.tz_convert('UTC')
+            if args.state_dir:
+                result=run_prepare_job(args,anchor)
+                result['status']='PASS' if result['status']=='ready' else 'FAIL'
+                write_result(args.out,result)
+                print(json.dumps(dict(status=result['status'],output=str(args.out))))
+                return 0 if result['status']=='PASS' else 1
             client=BinanceClient(env=args.env)
             client.request('GET',Endpoints.EXCHANGE_INFO)
             weekly=fetch_weekly(client,anchor)
