@@ -19,6 +19,16 @@ def stop_price(entry, rules):
     return rules.round_price(Decimal(entry) * C.STOP_MULTIPLE, up=True)
 
 
+def covering(stops, want_qty, trigger):
+    """Stops that close the whole short no later than the stop line (Boss 2026-11-16).
+
+    Quantity alone is not cover: an add below cost lowers the entry price, and the old
+    stop then fires later than twice the new cost. A tighter old stop still counts.
+    """
+    return [s for s in stops if Decimal(str(s['quantity'])) >= want_qty
+            and Decimal(str(s['triggerPrice'])) <= trigger]
+
+
 def ensure(desk, symbol, qty, entry, stops):
     """Make exactly one working stop cover the short. Returns one of:
 
@@ -44,9 +54,9 @@ def ensure(desk, symbol, qty, entry, stops):
         desk.cancel_stops(symbol, [s for s in stops if s is not keep])
         store.set('protection:' + symbol, dict(client_id=keep['clientAlgoId'], qty=str(want_qty), trigger=str(trigger)))
         return 'ok'
-    covering = [s for s in stops if Decimal(str(s['quantity'])) >= want_qty]
+    cover = covering(stops, want_qty, trigger)
     hold = store.get('protect_hold:' + symbol)
-    if covering and hold and hold['until'] > desk.rt.clock():
+    if cover and hold and hold['until'] > desk.rt.clock():
         return 'covered'   # do not hammer the exchange; retry when the hold runs out
     if desk.price(symbol) >= trigger:
         return desk.crossing_exit(symbol)
@@ -68,13 +78,13 @@ def ensure(desk, symbol, qty, entry, stops):
                            % (symbol, status, '旧止损仍在。' if stops else '该仓位暂时没有止损。'),
                            key='stop_limited:%s:%d' % (symbol, desk.rt.clock() // 600))
             return 'blocked'
-        if covering:
+        if cover:
             until = desk.rt.clock() + C.PROTECT_RETRY_S
             store.set('protect_hold:' + symbol, dict(until=until, code=sent.action['error_code']))
             notify.enqueue(desk.rt, '⚠️ %s 换止损被拒（代码 %s）。旧止损仍覆盖全部空头，仓位保留；%d 分钟后重试。'
                            % (symbol, sent.action['error_code'], C.PROTECT_RETRY_S // 60),
                            key='covered:%s:%d' % (symbol, until))
-        desk.rejections.append(dict(symbol=symbol, code=sent.action['error_code'], covered=bool(covering),
+        desk.rejections.append(dict(symbol=symbol, code=sent.action['error_code'], covered=bool(cover),
                                     http_status=getattr(sent.error, 'http_status', None)))
         return 'rejected'
     if sent.state == 'NOT_ACCEPTED':

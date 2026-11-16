@@ -479,6 +479,12 @@ class Run:
         if added >= -qty:
             self.fault_exit(symbol)   # a new position has no old stop: close it
             return
+        # Reducing keeps the entry price, so this is the line the old stop must meet after reducing back.
+        line = protection.stop_price(entry, desk.rules[symbol])
+        if not protection.covering(stops, -qty - added, line):
+            self.deviation('old_stop_not_covering', symbol=symbol)   # an add below cost loosened it
+            self.fault_exit(symbol)
+            return
         self.fault_reduce(symbol, added, qty)
 
     def fault_exit(self, symbol):
@@ -495,9 +501,8 @@ class Run:
             pause(self.rt, 'unknown_order_overdue', [action['client_id']])
             self.deviation('unknown_overdue', symbol=symbol, client_id=action['client_id'])
             return
-        left, _ = desk.position(symbol)
-        covered = max((Decimal(str(s['quantity'])) for s in desk.open_stops(symbol)
-                       if s['clientAlgoId'].startswith(C.ID_PREFIX)), default=Decimal(0))
-        if left < 0 and -left > covered:
+        left, entry = desk.position(symbol)
+        mine = [s for s in desk.open_stops(symbol) if s['clientAlgoId'].startswith(C.ID_PREFIX)]
+        if left < 0 and not protection.covering(mine, -left, protection.stop_price(entry, desk.rules[symbol])):
             self.deviation('fault_reduce_incomplete', symbol=symbol, order_state=action['state'])
             self.fault_exit(symbol)

@@ -298,19 +298,42 @@ def test_f14_single_rejected_protection_closes_the_new_position_and_stops_adding
     assert w.pause() is None
 
 
-def test_f14_rejected_replacement_reduces_back_to_the_covered_quantity(w):
+def add_above_cost_next_week(w):
+    """Second week where S0 is added at 105, above its cost of 100: the averaged entry rises,
+    so the old stop at 200 sits below the new stop line and still covers after reducing back."""
     w.open()
     w.next_week()
-    w.ex.set_price(S0, 80)   # same budget buys more units, so S0 gets an addition
+    for symbol, price in ((S1, 40), (S2, 40), (L0, 150), (L1, 150), (S0, 105)):
+        w.ex.set_price(symbol, price)   # profits on the others raise equity, so S0's target grows
     w.prepare()
+
+
+def test_f14_rejected_replacement_reduces_back_to_the_covered_quantity(w):
+    add_above_cost_next_week(w)
     posts = len(w.ex.writes(E.ALGO_ORDER))
     w.ex.fail('POST', E.ALGO_ORDER, 'reject', when=only(S0), code=NOT_AUTH_REJECT)
     w.rebalance()
     assert w.qty(S0) == -10
     old = w.stops(S0)
-    assert len(old) == 1 and Decimal(old[0]['quantity']) == 10
+    assert len(old) == 1 and Decimal(old[0]['quantity']) == 10 and Decimal(old[0]['triggerPrice']) == 200
     assert 'protection_rejected' in w.codes()
     assert len(w.ex.writes(E.ALGO_ORDER)) == posts + 1
+
+
+def test_f14_rejected_replacement_after_adding_below_cost_exits_the_symbol(w):
+    """Boss 2026-11-16: the old stop covers only if it is big enough AND fires no later than the new
+    stop line. An add below cost lowers the entry, so the old stop is too loose: close the symbol."""
+    w.open()
+    w.next_week()
+    w.ex.set_price(S0, 80)   # same budget buys more units at a lower price
+    w.prepare()
+    w.ex.fail('POST', E.ALGO_ORDER, 'reject', when=only(S0), code=NOT_AUTH_REJECT)
+    w.rebalance()
+    assert w.qty(S0) == 0 and not w.stops(S0)
+    purposes = [a['purpose'] for a in w.rt.store.actions(symbol=S0, kind='order', anchor_utc=str(w.anchor))]
+    assert 'fault_exit' in purposes and 'fault_reduce' not in purposes   # no reduction that cannot help
+    assert w.rt.store.get('cooldown:' + S0)['reason'] == 'fault'
+    assert {'protection_rejected', 'old_stop_not_covering'} <= w.codes() and w.pause() is None
 
 
 def test_f15_permission_class_rejection_is_a_common_cause_not_a_per_symbol_exit(w):
@@ -669,10 +692,7 @@ def test_f39_shadow_run_on_an_empty_account_plans_everything_and_touches_nothing
 # ---- found in self-review, 2026-11-15 ----------------------------------
 def test_rejected_replacement_keeps_the_position_while_an_old_stop_still_covers_it(w):
     """North star §5.5 step 3: after reducing back, the old stop covers the short. Do not exit it."""
-    w.open()
-    w.next_week()
-    w.ex.set_price(S0, 80)
-    w.prepare()
+    add_above_cost_next_week(w)
     w.ex.fail('POST', E.ALGO_ORDER, 'reject', when=only(S0), code=NOT_AUTH_REJECT, times=99)
     w.rebalance()
     assert w.qty(S0) == -10 and Decimal(w.stops(S0)[0]['quantity']) == 10

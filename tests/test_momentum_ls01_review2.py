@@ -7,8 +7,8 @@ import time
 import pandas as pd
 import pytest
 
-from tests.test_momentum_ls01_faults import (ANCHOR, L0, L1, NOT_AUTH_REJECT, S0, S1, S2, World, only,
-                                             prep_result)
+from tests.test_momentum_ls01_faults import (ANCHOR, L0, L1, NOT_AUTH_REJECT, S0, S1, S2, World,
+                                             add_above_cost_next_week, only, prep_result)
 from tests.test_momentum_ls01_ops_cli import ops  # noqa: F401  (fixture)
 from trading.momentum_ls01 import cli, config as C, reconcile
 from trading.momentum_ls01.actions import Actions
@@ -192,10 +192,7 @@ def test_failed_fault_exit_is_not_reported_as_closed(w):
 
 
 def test_refused_fault_reduction_escalates_to_a_full_exit(w):
-    w.open()
-    w.next_week()
-    w.ex.set_price(S0, 80)
-    w.prepare()
+    add_above_cost_next_week(w)   # the old stop is tight enough, so a reduction back is attempted first
     w.ex.fail('POST', E.ALGO_ORDER, 'reject', when=only(S0), code=NOT_AUTH_REJECT, times=99)
     w.ex.fail('POST', E.ORDER, 'reject', when=lambda p: p['symbol'] == S0 and '-F-' in p['newClientOrderId'],
               code=NOT_AUTH_REJECT)
@@ -382,3 +379,15 @@ def test_cooldown_after_a_full_liquidation_runs_from_the_fill_time(w):
     w.clock.now += 7200   # the guard was down for two hours
     w.guard()
     assert w.rt.store.get('cooldown:' + S0)['at'] == pytest.approx(filled_at)
+
+
+# ---- Boss 2026-11-16: an old stop covers only if it is big enough and not looser
+def test_guard_does_not_count_a_looser_old_stop_as_cover(w):
+    w.open()
+    w.stops(S0)[0]['triggerPrice'] = '250.00'   # big enough, but fires later than twice the cost
+    w.ex.fail('POST', E.ALGO_ORDER, 'reject', when=only(S0), code=NOT_AUTH_REJECT, times=99)
+    w.clock.now += 60
+    w.guard()
+    assert w.qty(S0) == 0 and w.rt.store.get('cooldown:' + S0)['reason'] == 'fault'
+    assert not any('旧止损仍覆盖' in text for text in w.sent)
+    assert w.pause() is None and w.qty(S1) == -10
