@@ -222,7 +222,9 @@ class Actions:
     def _resolve_cancel(self, action):
         target_id = action['request']['params']['clientAlgoId']
         target = self._get(E.ALGO_ORDER, dict(clientAlgoId=target_id))
-        status = target.get('algoStatus')
+        status = target.get('algoStatus') if isinstance(target, dict) else None
+        if not status or target.get('clientAlgoId') != target_id:
+            raise ExchangeError('UNKNOWN', 'conditional order identity mismatch')   # proves nothing either way
         with self.store.tx():
             self.store.update_action(action['id'], state='NOT_ACCEPTED' if status == 'NEW' else DONE,
                                      last_checked_at=self.rt.clock())
@@ -233,8 +235,12 @@ class Actions:
     def _resolve_setting(self, action):
         rows = [r for r in self._get(E.SYMBOL_CONFIG, dict(symbol=action['symbol']))
                 if r.get('symbol') == action['symbol']]
-        if len(rows) != 1:
-            raise ExchangeError('UNKNOWN', 'symbol config row missing')   # absence proves nothing
+        if len(rows) != 1:   # the read-back does not show the setting: not confirmed
+            # A setting carries no exposure, so there is nothing to keep waiting for. The real
+            # configuration is read again before any order (configure, full_checks).
+            self.store.update_action(action['id'], state='NOT_ACCEPTED', error_msg='no symbol config row',
+                                     last_checked_at=self.rt.clock())
+            return
         row = rows[0]
         applied = (int(row['leverage']) == C.LEVERAGE if action['kind'] == 'leverage'
                    else row['marginType'] == C.MARGIN_TYPE)

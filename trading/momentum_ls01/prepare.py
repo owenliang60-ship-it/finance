@@ -110,7 +110,6 @@ def prepare_job(rt, anchor, compute):
 def _week_taken(store, key):
     """A week that ran, or is running, is never prepared again. A 'no_new' week with nothing sent may be."""
     existing = store.week(key)
-    rerunnable = existing and existing['status'] == 'no_new' and not store.actions(anchor_utc=key, lane='risk')
-    if existing and existing['status'] not in (None, 'prepared') and not rerunnable:
+    if existing and existing['status'] not in (None, 'prepared') and not store.week_rerunnable(key):
         return 'week already ' + existing['status']
     return None

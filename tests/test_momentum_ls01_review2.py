@@ -4,6 +4,7 @@ import json
 import sqlite3
 import time
 
+import pandas as pd
 import pytest
 
 from tests.test_momentum_ls01_faults import (ANCHOR, L0, L1, NOT_AUTH_REJECT, S0, S1, S2, World, only,
@@ -127,8 +128,10 @@ def test_resume_rewrites_the_local_book_only_when_told_to_adopt(w):
     w.ex.set_price(S0, 150)
     w.ex.manual_order(S1, 'BUY', 3)
     reconcile.pause(w.rt, 'manual_pause')
-    assert reconcile.resume(w.rt)['status'] == 'blocked'
-    assert episode_qty(w, S1) == -10 and w.pause()['reason'] == 'manual_takeover'
+    out = reconcile.resume(w.rt)
+    assert out['status'] == 'blocked' and out['reason'] == 'manual_takeover'
+    assert episode_qty(w, S1) == -10
+    assert w.pause()['reason'] == 'manual_pause' and w.pause()['also'] == ['manual_takeover']
     assert reconcile.resume(w.rt, adopt=True)['status'] == 'resumed'
     assert episode_qty(w, S1) == -7 and w.pause() is None
     assert w.qty(S0) == 0
@@ -292,13 +295,74 @@ def test_preparation_writes_the_week_under_the_process_lock(w):
 
 
 # ---- small items ---------------------------------------------------------
-def test_setting_readback_with_no_row_stays_unknown(w):
+def test_setting_readback_with_no_row_is_not_confirmed_and_never_hangs(w):
     acts = Actions(w.rt)
     w.ex.fail('POST', E.LEVERAGE, 'lost')
     action_id = acts.plan_setting(ANCHOR, S0, 'leverage')
     acts.send(action_id)
     w.ex.fail('GET', E.SYMBOL_CONFIG, 'empty')
+    assert acts.resolve(action_id)['state'] == 'NOT_ACCEPTED'   # a setting has no exposure to wait on
+
+
+def test_setting_whose_readback_keeps_failing_is_reported_as_overdue(w):
+    acts = Actions(w.rt)
+    w.ex.fail('POST', E.MARGIN_TYPE, 'lost')
+    action_id = acts.plan_setting(ANCHOR, S0, 'margin_type')
+    acts.send(action_id)
+    w.ex.fail('GET', E.SYMBOL_CONFIG, 'unknown')
     assert acts.resolve(action_id)['state'] == 'UNKNOWN'
+    w.clock.now += C.CONVERGE_S + 1
+    assert [a['kind'] for a in reconcile.Desk(w.rt).overdue_unknowns()] == ['margin_type']
+
+
+# ---- second review, 2026-11-16 ------------------------------------------
+def test_hourly_full_check_that_keeps_failing_pauses_and_alerts_once(ops):
+    w, run, built = ops
+    w.open()
+    w.ex.fail('GET', E.SYMBOL_CONFIG, 'unknown', times=99)
+    w.clock.now = (ANCHOR + pd.Timedelta(hours=1)).timestamp()   # on the hour: a full check
+    codes = []
+    for _ in range(C.GUARD_FAIL_LIMIT + 1):
+        codes.append(run('guard')[0])
+        w.clock.now += 60
+    assert codes == [0] * (C.GUARD_FAIL_LIMIT - 1) + [1, 0]
+    assert w.pause()['reason'] == 'guard_failures'
+
+
+def test_full_check_is_repeated_every_minute_until_it_passes(w):
+    w.open()
+    w.ex.fail('GET', E.SYMBOL_CONFIG, 'unknown')
+    w.clock.now = (ANCHOR + pd.Timedelta(hours=1)).timestamp()
+    assert w.guard()['status'] == 'failed'
+    w.clock.now += 60
+    retry = w.guard()
+    assert retry['full'] is True and retry['status'] == 'ok'
+    w.clock.now += 60
+    assert w.guard()['full'] is False
+
+
+def test_failed_resume_keeps_the_original_pause_and_points_to_adopt(w):
+    w.open()
+    w.ex.manual_order(S0, 'BUY', 3)
+    w.clock.now += 60
+    w.guard()
+    first = w.pause()
+    alerts = sum('持久暂停' in text for text in w.sent)
+    out = reconcile.resume(w.rt)
+    assert out['status'] == 'blocked' and out['reason'] == 'manual_takeover' and '--adopt' in out['hint']
+    assert w.pause() == first
+    assert sum('持久暂停' in text for text in w.sent) == alerts
+
+
+def test_cancel_query_that_does_not_identify_the_stop_is_not_a_confirmation(w):
+    w.open()
+    acts = Actions(w.rt)
+    action_id = acts.plan_cancel_stop(ANCHOR, S0, w.stops(S0)[0]['clientAlgoId'])
+    w.ex.fail('DELETE', E.ALGO_ORDER, 'unknown')
+    assert acts.send(action_id).state == 'UNKNOWN'
+    w.ex.fail('GET', E.ALGO_ORDER, 'empty')
+    assert acts.resolve(action_id)['state'] == 'UNKNOWN'
+    assert acts.resolve(action_id)['state'] == 'NOT_ACCEPTED'   # the stop is still working: nothing was cancelled
 
 
 def test_held_symbol_missing_from_symbol_config_fails_the_check_but_not_protection(w):

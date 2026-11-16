@@ -24,6 +24,8 @@ def ensure(desk, symbol, qty, entry, stops):
 
     ok        one matching stop is working
     exited    price was already past the stop; the position was closed as a normal stop
+    exiting   price was already past the stop; the exit did not reach zero yet (the guard continues it).
+              Not settled: the symbol is not traded on in this run
     rejected  the exchange refused the new stop; recorded in desk.rejections
     covered   a replacement was refused recently, but an old stop still covers the whole short
     blocked   a local gate stopped the request before it was sent

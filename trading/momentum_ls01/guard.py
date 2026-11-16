@@ -25,12 +25,20 @@ def guard_job(rt, full=None):
 def _guard(rt, full):
     store = rt.store
     if full is None:
-        full = int(rt.clock() // 60) % 60 == 0   # full reconciliation on the hour
+        # On the hour, and every minute after a failed full check until one passes, so a check that
+        # keeps failing builds a failure streak instead of being reset by the light passes in between.
+        full = int(rt.clock() // 60) % 60 == 0 or bool(store.get('full_due'))
     try:
-        summary = Desk(rt).run(full=full)
+        desk = Desk(rt)
+        desk.rules   # the guard's first request: exchangeInfo also loads the client's request-weight limit
+        summary = desk.run(full=full)
         store.set('fail_streak', 0)
+        if full:
+            store.delete('full_due')
         result = dict(status='ok', full=full, **summary)
     except (Unclear, ExchangeError) as error:
+        if full:
+            store.set('full_due', True)
         streak = store.get('fail_streak', 0) + 1
         store.set('fail_streak', streak)
         if streak >= C.GUARD_FAIL_LIMIT:

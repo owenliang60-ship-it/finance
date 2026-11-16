@@ -45,7 +45,8 @@ def pause(rt, reason, detail=None):
     if current is None:
         current = dict(reason=reason, detail=detail, at=rt.clock(), also=[])
         rt.store.set('pause', current)
-        notify.enqueue(rt, '⚠️ 动量多空1号 持久暂停：%s。原因代码 %s。%s\n不再新增；原生止损保留。处理后用 resume 恢复。'
+        notify.enqueue(rt, '⚠️ 动量多空1号 持久暂停：%s。原因代码 %s。%s\n不再新增；原生止损保留。'
+                       '处理后用 resume 恢复；手动改过仓位就用 resume --adopt。'
                        % (REASONS.get(reason, reason), reason, '' if detail is None else '详情：%s' % (detail,)),
                        key='pause:%s:%s' % (reason, current['at']))
     elif reason != current['reason'] and reason not in current['also']:
@@ -60,7 +61,14 @@ class Desk:
         self.anchor = anchor if anchor is not None else current_anchor(rt.clock())
         self.rejections = []   # protection refusals seen in this run
         self.outcome = {}      # per-symbol result of the last run()
+        self.halts = []        # pause reasons this desk found, in order
+        self.judged = None     # what the last run decided about protection refusals
         self._rules = None
+
+    def halt(self, reason, detail=None):
+        """Persistent pause, remembered so ``resume`` can tell a clean reconciliation from a new finding."""
+        self.halts.append(reason)
+        return pause(self.rt, reason, detail)
 
     # ---- exchange reads ------------------------------------------------
     def read(self, path, params=None, signed=True):
@@ -330,26 +338,26 @@ class Desk:
     def overdue_unknowns(self):
         now = self.rt.clock()
         rows = (self.store.actions(kind='order', state=('UNKNOWN', 'SENDING', 'ACKED'))
-                + self.store.actions(kind=('algo', 'cancel_algo'), state=('UNKNOWN', 'SENDING')))
+                + self.store.actions(kind=('algo', 'cancel_algo', 'leverage', 'margin_type'),
+                                     state=('UNKNOWN', 'SENDING')))
         return [a for a in rows if now - (a['sent_at'] or now) > C.CONVERGE_S]
 
     def run(self, full=False):
         """One guard pass. Protection, stop exits and crossing exits run even while paused."""
         self.acts.recover()
-        self.rules   # first request of a fresh process: it also loads the request-weight limit
         failed = []
         if full:
             try:
                 self.full_checks()
             except Halt as halt:
-                pause(self.rt, halt.reason, halt.detail)
+                self.halt(halt.reason, halt.detail)
             except (Unclear, ExchangeError) as error:   # a failed check must not starve protection
                 failed.append('full check: %s' % error)
         episodes = self.episode_symbols()
         positions = self.positions(expect=episodes)
         stops = self.open_stops()
         if any(not str(o.get('clientOrderId', '')).startswith(C.ID_PREFIX) for o in self.read(E.OPEN_ORDERS)):
-            pause(self.rt, 'manual_takeover', 'foreign open order')
+            self.halt('manual_takeover', 'foreign open order')
         account = self.read(E.ACCOUNT)
         symbols = set(episodes) | {s for s, (q, _) in positions.items() if q != 0} | {s['symbol'] for s in stops}
         symbols |= {a['symbol'] for a in self.store.actions(state=('UNKNOWN', 'SENDING')) if a['symbol']}
@@ -361,15 +369,15 @@ class Desk:
                 qty, entry = positions[symbol]
                 outcome[symbol] = self.check_symbol(symbol, qty, entry, [s for s in stops if s['symbol'] == symbol])
             except Halt as halt:
-                pause(self.rt, halt.reason, halt.detail)
+                self.halt(halt.reason, halt.detail)
                 outcome[symbol] = 'halt:' + halt.reason
             except (Unclear, ExchangeError) as error:
                 outcome[symbol] = 'failed'
                 failed.append('%s: %s' % (symbol, error))
         self.outcome = outcome
-        self.judge_rejections()
+        self.judged = self.judge_rejections()
         if self.overdue_unknowns():
-            pause(self.rt, 'unknown_order_overdue', [a['client_id'] for a in self.overdue_unknowns()])
+            self.halt('unknown_order_overdue', [a['client_id'] for a in self.overdue_unknowns()])
         if failed:
             raise Unclear('; '.join(failed))   # every other symbol was still checked
         return dict(symbols=outcome, margin_balance=account.get('totalMarginBalance'),
@@ -382,7 +390,7 @@ class Desk:
             return None
         common = len(rejected) >= 2 or any(r['code'] in C.COMMON_CAUSE_CODES for r in rejected)
         if common:
-            pause(self.rt, 'protection_common_cause', rejected)
+            self.halt('protection_common_cause', rejected)
             return 'common'
         symbol = rejected[0]['symbol']
         if rejected[0].get('covered'):
@@ -448,18 +456,22 @@ def resume(rt, accept_flow=None, adopt=False):
                 if after['state'] == 'ACKED' and after['child_order_id']:
                     return dict(status='blocked', reason='triggered stop still settling', client_id=after['client_id'])
             desk.adopt_exchange_state()   # committed now; a failed reconciliation below keeps the pause
-        previous = store.get('pause')
-        store.delete('pause')
+        # The pause stays in place while we reconcile: a new finding joins the existing record
+        # (no second alert, original time kept), and nothing can add exposure meanwhile.
         try:
             desk.run(full=True)
-        except BaseException as error:   # the pause is cleared only by a reconciliation that finished
+        except (Unclear, ExchangeError) as error:
             if store.get('pause') is None:
-                store.set('pause', previous or dict(reason='account_unclear', detail=str(error), at=rt.clock(), also=[]))
-            if not isinstance(error, (Unclear, ExchangeError)):
-                raise
+                pause(rt, 'account_unclear', str(error))
+            notify.flush(rt)
             return dict(status='blocked', reason='reconciliation did not finish', error=str(error))
         notify.flush(rt)
-        current = store.get('pause')
-        if current is not None:
-            return dict(status='blocked', reason=current['reason'], detail=current.get('detail'))
+        if desk.halts or desk.judged == 'paused':
+            reason = desk.halts[0] if desk.halts else 'protection_refused'
+            blocked = dict(status='blocked', reason=reason)
+            if reason in ('manual_takeover', 'entry_price_mismatch'):
+                blocked['hint'] = 'after handling it by hand, run resume --adopt to take the exchange state as the book'
+            return blocked
+        previous = store.get('pause')
+        store.delete('pause')
         return dict(status='resumed', cleared=None if previous is None else previous['reason'])

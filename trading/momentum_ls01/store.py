@@ -225,6 +225,15 @@ class Store:
         action['request'] = json.loads(action.pop('request_json') or 'null')
         return action
 
+    def week_touched(self, anchor):
+        """True once any order or setting was registered for this week."""
+        return bool(self.actions(anchor_utc=str(anchor), lane='risk'))
+
+    def week_rerunnable(self, anchor):
+        """A 'no_new' week with nothing registered may be prepared and run again."""
+        week = self.week(anchor)
+        return week is not None and week['status'] == 'no_new' and not self.week_touched(anchor)
+
     def next_sequence(self, tag):
         with self.tx():
             value = self.get('seq:' + tag, 0) + 1

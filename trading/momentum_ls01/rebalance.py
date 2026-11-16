@@ -49,8 +49,7 @@ def _locked(rt, anchor, now, late_approved):
     week = store.week(key)
     # A week in which no order or setting was ever registered may be run again (failed preparation
     # fixed, a transient read failure, a pause that was resumed). Anything else is a duplicate.
-    untouched = week is not None and week['status'] == 'no_new' and not store.actions(anchor_utc=key, lane='risk')
-    if week is not None and week['status'] not in (None, 'prepared') and not untouched:
+    if week is not None and week['status'] not in (None, 'prepared') and not store.week_rerunnable(key):
         return dict(status='duplicate', anchor=key, week_status=week['status'])
     elapsed = now - anchor.timestamp()
     late = elapsed >= C.ENTRY_WINDOW_S
@@ -92,8 +91,8 @@ def _run_failed(rt, key, error):
     """A failure after the week was marked running. With no order or setting registered the
     week may run again; otherwise it is deviated and the guard takes over protection."""
     store = rt.store
-    touched = bool(store.actions(anchor_utc=key, lane='risk'))
-    detail = ('%s: %s' % (type(error).__name__, error))[:300]
+    touched = store.week_touched(key)
+    detail =('%s: %s' % (type(error).__name__, error))[:300]
     try:
         store.add_deviation(key, 'run_failed', error=detail)
         store.save_week(key, status='deviated' if touched else 'no_new')
@@ -163,9 +162,7 @@ def _dry_run(rt, anchor, assume_equity):
         return dict(status='no_new', anchor=str(anchor), reason='no_equity')
     computed = compute_targets(desk, week, equity, held, prices, stops, int(rt.clock() * 1000))
     run.note_skips(computed)
-    reductions, increases = split_waves(held, computed['targets'])
-    reductions = [i for i in run.ordered(reductions, held) if run.big_enough(i, opening=False)]
-    increases = [i for i in run.ordered(increases, computed['targets']) if run.big_enough(i, opening=True)]
+    reductions, increases = run.plan_waves(held, computed['targets'])
     increases = run.fit_margin(increases, available=available)
     config = {row['symbol']: row for row in desk.read(E.SYMBOL_CONFIG)}
     plan = dict(anchor=str(anchor), simulated=simulated, equity=str(equity), regime=week['regime'],
@@ -271,14 +268,7 @@ class Run:
                     store.delete('cooldown:' + symbol)
             store.save_week(self.key, targets={s: str(q) for s, q in sorted(targets.items())})
 
-        reductions, increases = split_waves(held, targets)
-        for intent in reductions + increases:
-            if intent.symbol in unsettled:   # do not trade on a position we could not reconcile
-                self.deviation('symbol_unsettled', symbol=intent.symbol, outcome=desk.outcome[intent.symbol])
-        reductions = [i for i in reductions if i.symbol not in unsettled]
-        increases = [i for i in increases if i.symbol not in unsettled]
-        reductions = [i for i in self.ordered(reductions, held) if self.big_enough(i, opening=False)]
-        increases = [i for i in self.ordered(increases, targets) if self.big_enough(i, opening=True)]
+        reductions, increases = self.plan_waves(held, targets, unsettled)
         increases = [i for i in increases if i.purpose != 'wave_b_open' or self.configure(i.symbol)]
 
         self.wave(reductions, held, reduce_only=True)
@@ -286,6 +276,18 @@ class Run:
             increases = self.fit_margin(increases)
             self.wave(increases, held, reduce_only=False)
         return self.finish()
+
+    def plan_waves(self, held, targets, unsettled=frozenset()):
+        """Wave A and wave B as they will be sent. Shared by the live run and the shadow run."""
+        reductions, increases = split_waves(held, targets)
+        for intent in reductions + increases:
+            if intent.symbol in unsettled:   # do not trade on a position we could not reconcile
+                self.deviation('symbol_unsettled', symbol=intent.symbol, outcome=self.desk.outcome[intent.symbol])
+        reductions = [i for i in self.ordered(reductions, held)
+                      if i.symbol not in unsettled and self.big_enough(i, opening=False)]
+        increases = [i for i in self.ordered(increases, targets)
+                     if i.symbol not in unsettled and self.big_enough(i, opening=True)]
+        return reductions, increases
 
     def ordered(self, intents, book):
         """Shorts first, then longs; inside each side the frozen rank order."""
