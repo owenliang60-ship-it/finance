@@ -13,6 +13,7 @@ import time
 import pandas as pd
 
 from scripts.crypto_trend_rankings import atomic_text
+from . import config as C
 from .binance import BinanceClient, Endpoints, load_credentials
 from .goldcheck import run_goldcheck, check_market_replay
 from .market_public import PublicMarket, fetch_weekly
@@ -62,6 +63,8 @@ def parser():
             op.add_argument('--reason',required=True)
         if name=='resume':
             op.add_argument('--accept-flow',help='tranId of one external transfer to accept as baseline')
+            op.add_argument('--adopt',action='store_true',
+                help='after handling the account by hand: the exchange positions and entry prices become the local book')
     return p
 
 
@@ -84,11 +87,16 @@ def private_sender():
     return lambda text: send_message(telegram_plain(text),channel='private',max_retries=1)
 
 
-def build_runtime(args,writes):
-    """Production runtime. ``writes`` is the only switch that lets a mutation leave this process."""
+def build_runtime(args,writes,bootstrap=True):
+    """Production runtime. ``writes`` is the only switch that lets a mutation leave this process.
+
+    The guard passes ``bootstrap=False``: its own run loads exchangeInfo, so a failed read
+    counts toward the guard's failure streak instead of crashing before it.
+    """
     from .runtime import Runtime
     client=BinanceClient(env='prod',credentials=load_credentials(args.credentials),allow_prod_writes=writes)
-    client.request('GET',Endpoints.EXCHANGE_INFO)   # loads the request-weight limit
+    if bootstrap:
+        client.request('GET',Endpoints.EXCHANGE_INFO)   # loads the request-weight limit
     return Runtime(state_dir=args.state_dir,client=client,clock=clock,sleep=time.sleep,send=private_sender(),
                    release_commit=args.release_commit)
 
@@ -147,7 +155,8 @@ def run_ops(args):
         if args.readonly and (args.state_dir/'drill-stop-guard').exists():
             result=dict(status='drill_skipped')   # shadow drill: prove the watchdog notices a silent guard
         else:
-            result=guard.guard_job(build_runtime(args,writes=not args.readonly),full=True if args.full else None)
+            result=guard.guard_job(build_runtime(args,writes=not args.readonly,bootstrap=False),
+                                   full=True if args.full else None)
     elif name=='rebalance':
         live=bool(args.live)
         result=rebalance_job(build_runtime(args,writes=live),dry_run=not live,late_approved=args.late_approved,
@@ -157,8 +166,12 @@ def run_ops(args):
     else:
         flow=args.accept_flow
         result=reconcile.resume(build_runtime(args,writes=True),
-                                accept_flow=int(flow) if flow and flow.lstrip('-').isdigit() else flow)
+                                accept_flow=int(flow) if flow and flow.lstrip('-').isdigit() else flow,
+                                adopt=args.adopt)
     print(json.dumps(result,ensure_ascii=False,default=str))
+    if name=='guard' and result.get('status')=='failed':
+        # One failed pass is retried next minute. cron alerts once, when the failures become a pause.
+        return 1 if result.get('fail_streak')==C.GUARD_FAIL_LIMIT else 0
     return 1 if result.get('status') in NOT_OK else 0
 
 

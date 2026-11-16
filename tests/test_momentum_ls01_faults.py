@@ -486,7 +486,10 @@ def test_f27_manual_trade_is_external_and_pauses_until_resume_reconciles(w):
     w.guard()
     assert w.pause()['reason'] == 'manual_takeover'
     assert Decimal(w.stops(S0)[0]['quantity']) == 10
-    assert reconcile.resume(w.rt)['status'] == 'resumed'
+    # Boss 2026-11-16 (resume option A): a plain resume reconciles and never accepts the manual trade;
+    # --adopt makes the exchange position the local book.
+    assert reconcile.resume(w.rt)['status'] == 'blocked' and w.pause()['reason'] == 'manual_takeover'
+    assert reconcile.resume(w.rt, adopt=True)['status'] == 'resumed'
     assert w.pause() is None and w.qty(S0) == -7
     w.assert_protected(S0)
 

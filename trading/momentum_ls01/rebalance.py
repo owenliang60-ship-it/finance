@@ -79,11 +79,30 @@ def _locked(rt, anchor, now, late_approved):
             pass
         _alert(rt, '🚨 动量多空1号 写库失败（%s），已停止发单。未入库的请求没有发出。请检查云端磁盘和 state.db。' % error)
         return dict(status='blocked', anchor=key, error=str(error))
+    except Exception as error:   # never leave the week 'running': it would refuse every later run
+        return _run_failed(rt, key, error)
     try:
         notify.flush(rt)
     except sqlite3.Error:
         pass
     return result
+
+
+def _run_failed(rt, key, error):
+    """A failure after the week was marked running. With no order or setting registered the
+    week may run again; otherwise it is deviated and the guard takes over protection."""
+    store = rt.store
+    touched = bool(store.actions(anchor_utc=key, lane='risk'))
+    detail = ('%s: %s' % (type(error).__name__, error))[:300]
+    try:
+        store.add_deviation(key, 'run_failed', error=detail)
+        store.save_week(key, status='deviated' if touched else 'no_new')
+    except sqlite3.Error:
+        pass
+    _alert(rt, '🚨 动量多空1号 调仓中途出错（%s），已停止。%s守护下一分钟接管保护和未决请求。请查日志。'
+           % (detail[:200], '本周已登记过订单，不会自动重跑。' if touched else '本周还没登记订单，修好后可重跑。'),
+           key='run_failed:%s:%d' % (key, rt.clock()))
+    return dict(status='failed', anchor=key, error=detail)
 
 
 def compute_targets(desk, week, equity, held, prices, stops, now_ms, unsettled=()):
@@ -119,21 +138,35 @@ def compute_targets(desk, week, equity, held, prices, stops, now_ms, unsettled=(
 
 
 def _dry_run(rt, anchor, assume_equity):
-    """Shadow run: full targets and waves, no request, no write to state.db."""
+    """Shadow run: the live run's targets, order, size filters and margin scaling.
+
+    No request and no write to state.db. Not modelled: leverage settings and the
+    opening reconciliation. Free margin is read before wave A, so on an account that
+    already holds positions the shadow may scale wave B more than the live run.
+    """
     week = rt.store.week(str(anchor))
     if week is None or week['prep_status'] != 'ready':
         return dict(status='no_prep', anchor=str(anchor))
-    desk = Desk(rt, anchor)
-    prices = {r['symbol']: Decimal(str(r['price'])) for r in desk.read(E.TICKER_PRICE, signed=False)}
+    run = Run(rt, anchor, week, dry=True)
+    desk = run.desk
+    prices = run.prices = {r['symbol']: Decimal(str(r['price'])) for r in desk.read(E.TICKER_PRICE, signed=False)}
     if assume_equity is not None:
         equity, held, stops, simulated = Decimal(str(assume_equity)), {}, [], True
+        available = equity
     else:
         account = desk.read(E.ACCOUNT)
         equity = Decimal(str(account['totalWalletBalance'])) + Decimal(str(account['totalUnrealizedProfit']))
+        available = Decimal(str(account['availableBalance']))
         held = {s: q for s, (q, _) in desk.positions().items() if q != 0}
         stops, simulated = desk.open_stops(), False
+    if equity <= 0:
+        return dict(status='no_new', anchor=str(anchor), reason='no_equity')
     computed = compute_targets(desk, week, equity, held, prices, stops, int(rt.clock() * 1000))
+    run.note_skips(computed)
     reductions, increases = split_waves(held, computed['targets'])
+    reductions = [i for i in run.ordered(reductions, held) if run.big_enough(i, opening=False)]
+    increases = [i for i in run.ordered(increases, computed['targets']) if run.big_enough(i, opening=True)]
+    increases = run.fit_margin(increases, available=available)
     config = {row['symbol']: row for row in desk.read(E.SYMBOL_CONFIG)}
     plan = dict(anchor=str(anchor), simulated=simulated, equity=str(equity), regime=week['regime'],
                 release_commit=rt.release_commit, input_hash=week['input_hash'],
@@ -143,7 +176,7 @@ def _dry_run(rt, anchor, assume_equity):
                 prices={s: str(prices[s]) for s in sorted(computed['targets'])},
                 symbol_config={s: config.get(s) for s in sorted(computed['targets'])},
                 blocked_residual=computed['residual'], skipped_below_step=computed['skipped'],
-                rules_unusable=computed['unusable'])
+                rules_unusable=computed['unusable'], deviations=run.notes)
     relative = 'evidence/plan-%s.json' % anchor.strftime('%y%m%d%H')
     path = rt.state_dir / relative
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -152,17 +185,29 @@ def _dry_run(rt, anchor, assume_equity):
 
 
 class Run:
-    def __init__(self, rt, anchor, week):
+    def __init__(self, rt, anchor, week, dry=False):
         self.rt, self.store, self.anchor, self.key, self.week = rt, rt.store, anchor, str(anchor), week
         self.desk = Desk(rt, anchor)
         self.acts = self.desk.acts
         self.deadline = None
-        self.halted = False    # no further new exposure in this run
+        self.halted = False    # no further new exposure in this run; reductions continue
         self.last_beat = 0.0
+        self.dry, self.notes = dry, []   # a shadow run keeps its deviations in memory
 
     # ---- small helpers -------------------------------------------------
     def deviation(self, code, symbol=None, **detail):
+        if self.dry:
+            self.notes.append(dict(code=code, **({} if symbol is None else dict(symbol=symbol)), **detail))
+            return
         self.store.add_deviation(self.key, code, symbol=symbol, **detail)
+
+    def note_skips(self, computed):
+        for symbol in computed['residual']:
+            self.deviation('residual_protection', symbol=symbol)
+        for symbol in computed['skipped']:
+            self.deviation('below_min', symbol=symbol)
+        for symbol in computed['unusable']:   # our parser or the price feed, not the exchange's eligibility
+            self.deviation('rules_unusable', symbol=symbol)
 
     def beat(self):
         """The rebalance holds the lock, so it writes the guard's heartbeat itself."""
@@ -216,12 +261,7 @@ class Run:
         computed = compute_targets(desk, self.week, equity, held, self.prices, desk.open_stops(), cutoff_ms,
                                    unsettled=unsettled)
         targets = computed['targets']
-        for symbol in computed['residual']:
-            self.deviation('residual_protection', symbol=symbol)
-        for symbol in computed['skipped']:
-            self.deviation('below_min', symbol=symbol)
-        for symbol in computed['unusable']:   # our parser or the price feed, not the exchange's eligibility
-            self.deviation('rules_unusable', symbol=symbol)
+        self.note_skips(computed)
         with store.tx():   # cooldowns the policy just created (regime exits) and the ones that ran out
             for symbol, at in computed['policy'].cooldown.items():
                 if at == self.anchor and symbol not in computed['cooldown']:
@@ -289,17 +329,19 @@ class Run:
             return False
         return True
 
-    def fit_margin(self, increases):
+    def fit_margin(self, increases, available=None):
         """D6: if wave B needs more margin than is free, shrink every order by one factor."""
         if not increases:
             return increases
-        available = Decimal(str(self.desk.read(E.ACCOUNT)['availableBalance']))
+        if available is None:
+            available = Decimal(str(self.desk.read(E.ACCOUNT)['availableBalance']))
         required = sum(i.qty * self.prices[i.symbol] for i in increases) / C.LEVERAGE * C.MARGIN_BUFFER
         if required <= available:
             return increases
         factor = available / required
         self.deviation('wave_b_scaled', factor=str(factor), available=str(available), required=str(required))
-        self.store.save_week(self.key, wave_b_scale=str(factor))
+        if not self.dry:
+            self.store.save_week(self.key, wave_b_scale=str(factor))
         scaled = []
         for intent in increases:
             qty = intent.qty * factor
@@ -315,9 +357,11 @@ class Run:
             ids = [self.acts.plan_order(self.anchor, i.symbol, i.side, i.qty, i.purpose, reduce_only,
                                         position_before=held.get(i.symbol, Decimal(0))) for i in intents]
         for position, action_id in enumerate(ids):
-            if not self.halted and self.store.get('pause') is not None:
-                self.halted = True   # paused while this run was working: send nothing more
-            if self.halted:
+            paused = self.store.get('pause') is not None
+            if paused:
+                self.halted = True   # paused while this run was working: send nothing more (§6.4)
+            # "Stop adding" (a refused stop, a rate limit) never stops wave A: reductions only cut risk.
+            if paused or (self.halted and not reduce_only):
                 for rest in ids[position:]:
                     action = self.store.action(rest)
                     self.store.update_action(rest, state='ABANDONED', error_msg='run stopped adding')
@@ -431,8 +475,27 @@ class Run:
         if added <= 0:
             return   # a reduction: the old, larger stop still covers the position
         if added >= -qty:
-            desk.exit(symbol, 'fault_exit', reason='fault')   # a new position has no old stop: close it
+            self.fault_exit(symbol)   # a new position has no old stop: close it
             return
+        self.fault_reduce(symbol, added, qty)
+
+    def fault_exit(self, symbol):
+        if self.desk.exit(symbol, 'fault_exit', reason='fault') != 'closed':
+            self.deviation('fault_exit_incomplete', symbol=symbol)   # the guard keeps exiting every minute
+
+    def fault_reduce(self, symbol, added, qty):
+        """North star §5.5 steps 3-4: reduce back to what the old stop covers; failing that, exit the symbol."""
+        desk = self.desk
         action_id = self.acts.plan_order(self.anchor, symbol, 'BUY', added, 'fault_reduce', True, position_before=qty)
-        if self.acts.send(action_id).state in ('ACKED', 'UNKNOWN'):
-            self.await_final(action_id)   # back to the quantity the old stop fully covers
+        sent = self.acts.send(action_id)
+        action = self.await_final(action_id) if sent.state in ('ACKED', 'UNKNOWN') else sent.action
+        if action['state'] not in TERMINAL_STATES:   # outcome unknown: never send a second order on top
+            pause(self.rt, 'unknown_order_overdue', [action['client_id']])
+            self.deviation('unknown_overdue', symbol=symbol, client_id=action['client_id'])
+            return
+        left, _ = desk.position(symbol)
+        covered = max((Decimal(str(s['quantity'])) for s in desk.open_stops(symbol)
+                       if s['clientAlgoId'].startswith(C.ID_PREFIX)), default=Decimal(0))
+        if left < 0 and -left > covered:
+            self.deviation('fault_reduce_incomplete', symbol=symbol, order_state=action['state'])
+            self.fault_exit(symbol)

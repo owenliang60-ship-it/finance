@@ -134,3 +134,17 @@ def test_external_fills_carry_exchange_client_id_prefixes(ex):
     assert position(ex, 'AAAUSDT')[0] == 0
     info = ex.request('GET', E.EXCHANGE_INFO)
     assert next(s for s in info['symbols'] if s['symbol'] == 'AAAUSDT')['status'] == 'SETTLING'
+
+
+def test_cancelled_stop_is_not_found_once_it_is_more_than_three_days_old(ex):
+    market(ex, 'AAAUSDT', 'SELL', 1, 'c1')
+    stop(ex, 'AAAUSDT', 1, 200, 's1')
+    stop(ex, 'AAAUSDT', 1, 200, 's2')
+    ex.request('DELETE', E.ALGO_ORDER, dict(clientAlgoId='s1'), signed=True)
+    ex.clock.now += 3 * 86400 - 1
+    assert ex.request('GET', E.ALGO_ORDER, dict(clientAlgoId='s1'), signed=True)['algoStatus'] == 'CANCELED'
+    ex.clock.now += 2
+    with pytest.raises(ExchangeError) as error:
+        ex.request('GET', E.ALGO_ORDER, dict(clientAlgoId='s1'), signed=True)
+    assert error.value.code == ORDER_NOT_FOUND
+    assert ex.request('GET', E.ALGO_ORDER, dict(clientAlgoId='s2'), signed=True)['algoStatus'] == 'NEW'

@@ -61,13 +61,15 @@ def watchdog(state_dir, clock, send):
             return dict(alert=False, age=age, stale=True)   # already alerted recently
     except (OSError, ValueError):
         pass
-    send('🚨 动量多空1号 守护心跳%s。分钟守护可能已停。交易所原生止损仍在；请登录云端检查 cron 和日志。'
-         % ('不存在' if age is None else '已 %d 秒未更新' % age))
+    sent = send('🚨 动量多空1号 守护心跳%s。分钟守护可能已停。交易所原生止损仍在；请登录云端检查 cron 和日志。'
+                % ('不存在' if age is None else '已 %d 秒未更新' % age))
+    if not sent:   # not delivered: try again next minute instead of staying quiet for 30
+        return dict(status='failed', alert=True, age=age)
     try:
         marker.write_text(str(now))
     except OSError:
         pass
-    return dict(alert=True, age=age)
+    return dict(status='ok', alert=True, age=age)
 
 
 def alive(state_dir, clock, send):
@@ -78,6 +80,7 @@ def alive(state_dir, clock, send):
         paused = Store(state_dir, clock=lambda: now, readonly=True).get('pause')
     except sqlite3.Error:
         paused = None
-    send('✅ 动量多空1号 存活。守护心跳：%s。状态：%s。'
-         % ('无' if age is None else '%d 秒前' % age, '运行中' if paused is None else '暂停（%s）' % paused['reason']))
-    return dict(heartbeat_age=age, paused=None if paused is None else paused['reason'])
+    sent = send('✅ 动量多空1号 存活。守护心跳：%s。状态：%s。'
+                % ('无' if age is None else '%d 秒前' % age, '运行中' if paused is None else '暂停（%s）' % paused['reason']))
+    return dict(status='ok' if sent else 'failed', heartbeat_age=age,
+                paused=None if paused is None else paused['reason'])

@@ -18,6 +18,9 @@ WOULD_TRIGGER = -2021
 REDUCE_ONLY_REJECTED = -2022
 FEE_RATE = Decimal('0.0005')
 FAR_FUTURE_MS = 4133404800000
+# Query Algo Order (official page, read 2026-11-16): a CANCELED or EXPIRED order with no
+# fill is "not found" once its create time is more than 3 days old.
+ALGO_ARCHIVE_MS = 3 * 86400 * 1000
 
 
 class Crash(BaseException):
@@ -326,7 +329,9 @@ class FakeExchange:
             return dict(algo)
         algo = next((a for a in self.algos.values()
                      if a['clientAlgoId'] == p.get('clientAlgoId') or str(a['algoId']) == str(p.get('algoId'))), None)
-        if algo is None:
+        archived = (algo is not None and algo['algoStatus'] in ('CANCELED', 'EXPIRED')
+                    and algo['createTime'] + ALGO_ARCHIVE_MS < self._ms())
+        if algo is None or (method == 'GET' and archived):
             raise ExchangeError('REJECTED', 'order does not exist', code=ORDER_NOT_FOUND)
         if method == 'DELETE':
             if algo['algoStatus'] != 'NEW':

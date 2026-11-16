@@ -94,13 +94,15 @@ class Store:
         else:
             self.state_dir.mkdir(parents=True, exist_ok=True)
             os.chmod(self.state_dir, 0o700)
-            self.db = sqlite3.connect(self.path, isolation_level=None, timeout=10)
+            # A rebalance can hold the write lock across a slow exchange query; operator commands wait for it.
+            self.db = sqlite3.connect(self.path, isolation_level=None, timeout=60)
             self.db.execute('PRAGMA journal_mode=WAL')
             version = self.db.execute('PRAGMA user_version').fetchone()[0]
             if version not in (0, SCHEMA_VERSION):
                 raise RuntimeError('unsupported state.db schema version ' + str(version))
-            self.db.executescript(SCHEMA)
-            self.db.execute('PRAGMA user_version=' + str(SCHEMA_VERSION))
+            if version == 0:   # opening an existing store writes nothing, so it never waits for another writer
+                self.db.executescript(SCHEMA)
+                self.db.execute('PRAGMA user_version=' + str(SCHEMA_VERSION))
         self.db.row_factory = sqlite3.Row
         self._depth = 0
 

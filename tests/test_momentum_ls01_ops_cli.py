@@ -15,7 +15,7 @@ def ops(tmp_path, monkeypatch, capsys):
     w = World(tmp_path)
     built = []
 
-    def build(args, writes):
+    def build(args, writes, bootstrap=True):
         built.append(writes)
         return w.rt
 

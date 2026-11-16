@@ -139,8 +139,17 @@ class Actions:
         elif action['kind'] == 'algo':
             self.store.update_action(action_id, state='ACKED', exchange_id=reply.get('algoId'))
         else:
-            self.store.update_action(action_id, state=DONE)
+            with self.store.tx():
+                self.store.update_action(action_id, state=DONE)
+                if action['kind'] == 'cancel_algo':   # the exchange cancelled it, so it can no longer fire
+                    self._retire_cancelled(request['params']['clientAlgoId'])
         return Sent(self.store.action(action_id))
+
+    def _retire_cancelled(self, target_client_id):
+        """A stop we cancelled is final here too. The exchange forgets it three days after it was created."""
+        for row in self.store.actions(kind='algo', client_id=target_client_id):
+            if row['state'] not in TERMINAL_STATES and not row['child_order_id']:
+                self.store.update_action(row['id'], state='CANCELED', last_checked_at=self.rt.clock())
 
     # ---- resolving -----------------------------------------------------
     def resolve(self, action_id):
@@ -211,13 +220,22 @@ class Actions:
         self.store.update_action(action['id'], **fields)
 
     def _resolve_cancel(self, action):
-        target = self._get(E.ALGO_ORDER, dict(clientAlgoId=action['request']['params']['clientAlgoId']))
-        still_working = target.get('algoStatus') == 'NEW'
-        self.store.update_action(action['id'], state='NOT_ACCEPTED' if still_working else DONE,
-                                 last_checked_at=self.rt.clock())
+        target_id = action['request']['params']['clientAlgoId']
+        target = self._get(E.ALGO_ORDER, dict(clientAlgoId=target_id))
+        status = target.get('algoStatus')
+        with self.store.tx():
+            self.store.update_action(action['id'], state='NOT_ACCEPTED' if status == 'NEW' else DONE,
+                                     last_checked_at=self.rt.clock())
+            if status == 'CANCELED' and target.get('actualOrderId') in ('', None):
+                self._retire_cancelled(target_id)
+            # Any other final status (triggered, expired) is left for the stop's own query to settle.
 
     def _resolve_setting(self, action):
-        row = self._get(E.SYMBOL_CONFIG, dict(symbol=action['symbol']))[0]
+        rows = [r for r in self._get(E.SYMBOL_CONFIG, dict(symbol=action['symbol']))
+                if r.get('symbol') == action['symbol']]
+        if len(rows) != 1:
+            raise ExchangeError('UNKNOWN', 'symbol config row missing')   # absence proves nothing
+        row = rows[0]
         applied = (int(row['leverage']) == C.LEVERAGE if action['kind'] == 'leverage'
                    else row['marginType'] == C.MARGIN_TYPE)
         self.store.update_action(action['id'], state=DONE if applied else 'NOT_ACCEPTED',
@@ -227,7 +245,13 @@ class Actions:
         """Count a "does not exist" reply only when it is old enough to mean something."""
         now = self.rt.clock()
         if action['state'] == 'ACKED':   # the exchange acknowledged it; a missing row is not a refusal
-            self.store.update_action(action['id'], last_checked_at=now)
+            # Exception: an untriggered stop the exchange no longer lists (we only query those) and no
+            # longer finds after the archive window was cancelled or expired with no fill.
+            archived = (action['kind'] == 'algo' and not action['child_order_id']
+                        and now - (action['sent_at'] or now) > C.ALGO_ARCHIVE_S)
+            self.store.update_action(action['id'], last_checked_at=now,
+                                     **(dict(state='EXPIRED', error_msg='not found after the archive window')
+                                        if archived else {}))
             return
         count = action['check_count']
         age = now - (action['sent_at'] or now)

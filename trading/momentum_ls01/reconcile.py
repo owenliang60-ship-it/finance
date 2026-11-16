@@ -143,7 +143,7 @@ class Desk:
     def close_episode(self, symbol, episode, stops):
         exiting = episode.get('exiting') or {}
         reason = exiting.get('reason') or episode.get('forced_close') or 'rebalance'
-        at = exiting.get('at') or self.rt.clock()
+        at = exiting.get('at') or episode.get('forced_at') or self.rt.clock()   # cooldown runs from the fill
         with self.store.tx():
             self.store.add_evidence('exit', 'exit:%s:%s' % (symbol, episode['opened_at']),
                                     dict(symbol=symbol, reason=reason, at=at), symbol=symbol, time_ms=int(at * 1000))
@@ -167,7 +167,11 @@ class Desk:
         return confirmed
 
     def exit(self, symbol, purpose, reason=None):
-        """reduceOnly MARKET for the whole exchange position. Returns the order's state."""
+        """reduceOnly MARKET for the whole exchange position.
+
+        Returns 'closed' once the symbol is flat, otherwise the order's state. A final
+        order that leaves the position open is alerted here, for every caller.
+        """
         if reason:
             self.mark_exiting(symbol, reason)
         qty, _ = self.position(symbol)
@@ -177,7 +181,12 @@ class Desk:
                                          reduce_only=True, position_before=qty)
         sent = self.acts.send(action_id)
         state = self.settle_action(action_id)['state'] if sent.state in ('ACKED', 'UNKNOWN') else sent.state
-        self.finish_if_flat(symbol)
+        if self.finish_if_flat(symbol) == 'closed':
+            return 'closed'
+        if state in TERMINAL_STATES:
+            notify.enqueue(self.rt, '🚨 %s 市价退出未完成（用途 %s，状态 %s，代码 %s）。仓位仍在，守护每分钟继续退出。'
+                           % (symbol, purpose, state, self.store.action(action_id)['error_code']),
+                           key='exit_incomplete:%s:%d' % (symbol, self.rt.clock() // 600))
         return state
 
     def finish_if_flat(self, symbol):
@@ -189,9 +198,11 @@ class Desk:
         return 'open'
 
     def crossing_exit(self, symbol):
-        """Price is already past the stop: the stop condition is met, so exit as a normal stop."""
-        self.exit(symbol, 'crossing_exit', reason='stop')
-        return 'exited'
+        """Price is already past the stop: the stop condition is met, so exit as a normal stop.
+
+        'exiting' means the position is still open; the guard finishes the exit next minute.
+        """
+        return 'exited' if self.exit(symbol, 'crossing_exit', reason='stop') == 'closed' else 'exiting'
 
     def explain_difference(self, symbol, episode):
         """Fills we did not send: forced by the exchange, or manual. Manual means hands off."""
@@ -216,9 +227,11 @@ class Desk:
                 self.apply_fill(symbol, size if trade['side'] == 'BUY' else -size, Decimal(str(trade['price'])))
             episode = self.episode(symbol)
             if foreign:
-                episode['trades_since_ms'] = max(t['time'] for t in foreign) + 1
+                last = max(foreign, key=lambda t: t['time'])
+                episode['trades_since_ms'] = last['time'] + 1
                 if Decimal(episode['qty']) == 0:
-                    episode['forced_close'] = labels[foreign[-1]['orderId']]
+                    episode['forced_close'] = labels[last['orderId']]
+                    episode['forced_at'] = last['time'] / 1000
                 self.store.set('episode:' + symbol, episode)
 
     def check_symbol(self, symbol, qty, entry, stops):
@@ -262,7 +275,12 @@ class Desk:
         if abs(entry - basis) > basis * C.BASIS_TOLERANCE:
             raise Halt('entry_price_mismatch', dict(symbol=symbol, exchange=str(entry), local=str(basis)))
         if episode.get('exiting'):
-            return self.exit(symbol, 'stop_residual_exit')   # allowed even while paused
+            state = self.exit(symbol, 'stop_residual_exit')   # allowed even while paused
+            if state == 'closed':
+                return 'closed'
+            if state in TERMINAL_STATES:   # refused or not filled: a failed pass, retried next minute
+                raise Unclear('exit did not reach zero on %s (%s)' % (symbol, state))
+            return 'pending'
         if qty < 0:
             return protection.ensure(self, symbol, qty, entry, stops)
         self.cancel_stops(symbol, stops)   # longs carry no stop
@@ -276,11 +294,15 @@ class Desk:
         if self.read(E.MULTI_ASSETS_MODE).get('multiAssetsMargin') is not False:
             raise Halt('account_mode', 'multi-assets mode is on')
         held = set(self.episode_symbols())
-        for row in self.read(E.SYMBOL_CONFIG):
-            if row['symbol'] in held and (int(row['leverage']) != C.LEVERAGE or row['marginType'] != C.MARGIN_TYPE):
-                raise Halt('account_mode', dict(symbol=row['symbol'], leverage=row['leverage'],
-                                                margin=row['marginType']))
+        rows = {row['symbol']: row for row in self.read(E.SYMBOL_CONFIG)}
+        for symbol in sorted(held & set(rows)):
+            row = rows[symbol]
+            if int(row['leverage']) != C.LEVERAGE or row['marginType'] != C.MARGIN_TYPE:
+                raise Halt('account_mode', dict(symbol=symbol, leverage=row['leverage'], margin=row['marginType']))
         self.ingest_income()
+        missing = sorted(held - set(rows))
+        if missing:   # a missing row is not proof of 2x crossed
+            raise Unclear('symbol config rows missing: %s' % ', '.join(missing))
 
     def ingest_income(self):
         store = self.store
@@ -314,11 +336,15 @@ class Desk:
     def run(self, full=False):
         """One guard pass. Protection, stop exits and crossing exits run even while paused."""
         self.acts.recover()
+        self.rules   # first request of a fresh process: it also loads the request-weight limit
+        failed = []
         if full:
             try:
                 self.full_checks()
             except Halt as halt:
                 pause(self.rt, halt.reason, halt.detail)
+            except (Unclear, ExchangeError) as error:   # a failed check must not starve protection
+                failed.append('full check: %s' % error)
         episodes = self.episode_symbols()
         positions = self.positions(expect=episodes)
         stops = self.open_stops()
@@ -327,7 +353,7 @@ class Desk:
         account = self.read(E.ACCOUNT)
         symbols = set(episodes) | {s for s, (q, _) in positions.items() if q != 0} | {s['symbol'] for s in stops}
         symbols |= {a['symbol'] for a in self.store.actions(state=('UNKNOWN', 'SENDING')) if a['symbol']}
-        outcome, failed = {}, []
+        outcome = {}
         for symbol in sorted(symbols):
             try:   # one symbol that cannot be explained must not starve the others of protection
                 if symbol not in positions:
@@ -365,27 +391,41 @@ class Desk:
             notify.enqueue(self.rt, '⚠️ %s 保护被拒（代码 %s）。系统处于暂停，未自动退出，请处理。'
                            % (symbol, rejected[0]['code']))
             return 'paused'
-        self.exit(symbol, 'fault_exit', reason='fault')
-        notify.enqueue(self.rt, '⚠️ %s 无法挂上止损（代码 %s），已按单币故障自动市价退出。' % (symbol, rejected[0]['code']))
+        if self.exit(symbol, 'fault_exit', reason='fault') == 'closed':
+            notify.enqueue(self.rt, '⚠️ %s 无法挂上止损（代码 %s），已按单币故障自动市价退出。' % (symbol, rejected[0]['code']))
+        else:
+            notify.enqueue(self.rt, '🚨 %s 无法挂上止损（代码 %s）。已发单币故障退出，但还没平完，止损不足；守护每分钟继续退出。'
+                           % (symbol, rejected[0]['code']))
         return 'exited'
 
     def adopt_exchange_state(self):
-        """After the Boss resumes: the exchange position becomes the local episode, as is."""
+        """``resume --adopt`` only: the exchange position becomes the local episode, as is.
+
+        An exit already under way (a stop that fired) is kept, so its residual is still closed.
+        """
         positions = self.positions()
         now_ms = int(self.rt.clock() * 1000)
         for symbol in sorted(set(self.episode_symbols()) | {s for s, (q, _) in positions.items() if q != 0}):
             qty, entry = positions[symbol]
             episode = self.episode(symbol) or dict(opened_at=self.rt.clock(), anchor=str(self.anchor))
             if qty == 0:
-                episode.update(qty='0', basis=None, exiting=dict(reason='manual', at=self.rt.clock()))
+                episode.update(qty='0', basis=None)
+                if not episode.get('exiting'):
+                    episode['exiting'] = dict(reason='manual', at=self.rt.clock())
             else:
                 episode.update(qty=str(qty), basis=str(entry))
             episode['trades_since_ms'] = now_ms
             self.store.set('episode:' + symbol, episode)
 
 
-def resume(rt, accept_flow=None):
-    """Clear a persistent pause after a full reconciliation. Optionally accept one external flow."""
+def resume(rt, accept_flow=None, adopt=False):
+    """Clear a persistent pause after a full reconciliation passes (north star §6.4).
+
+    The local book is never rewritten unless ``adopt`` is given. Then, after every
+    stop that fired has reached the book, the exchange positions and entry prices
+    replace the local episodes; use it after handling the account by hand.
+    Optionally accept one external flow as baseline.
+    """
     with process_lock(rt.state_dir):
         store = rt.store
         desk = Desk(rt)
@@ -402,8 +442,13 @@ def resume(rt, accept_flow=None):
         for action in store.actions(state=('UNKNOWN', 'SENDING')) + store.actions(kind='order', state='ACKED'):
             if desk.settle_action(action['id'])['state'] not in TERMINAL_STATES:
                 return dict(status='blocked', reason='request outcome still unknown', client_id=action['client_id'])
+        if adopt:
+            for action in store.actions(kind='algo', state='ACKED'):
+                after = desk.settle_action(action['id'])   # a stop that fired reaches the book before it is replaced
+                if after['state'] == 'ACKED' and after['child_order_id']:
+                    return dict(status='blocked', reason='triggered stop still settling', client_id=after['client_id'])
+            desk.adopt_exchange_state()   # committed now; a failed reconciliation below keeps the pause
         previous = store.get('pause')
-        desk.adopt_exchange_state()
         store.delete('pause')
         try:
             desk.run(full=True)

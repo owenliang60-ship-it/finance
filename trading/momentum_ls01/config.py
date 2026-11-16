@@ -32,5 +32,10 @@ COMMON_CAUSE_CODES = frozenset({-1002, -1021, -1022, -2014, -2015, -4061})
 
 # Client order id prefixes the exchange uses for fills it creates itself.
 FORCED_PREFIXES = (('autoclose-', 'liquidation'), ('adl_autoclose', 'adl'), ('settlement_autoclose-', 'delist'))
-TRADING_INCOME = frozenset({'REALIZED_PNL', 'FUNDING_FEE', 'COMMISSION', 'INSURANCE_CLEAR'})
+# Money the trading itself produced. Delisting settlement and fee rebates added 2026-11-16 (Boss);
+# names from the official IncomeType enum (binance-connector-java, derivatives-trading-usds-futures).
+TRADING_INCOME = frozenset({'REALIZED_PNL', 'FUNDING_FEE', 'COMMISSION', 'INSURANCE_CLEAR', 'DELIVERED_SETTELMENT',
+                            'COMMISSION_REBATE', 'REFERRAL_KICKBACK', 'API_REBATE', 'FEE_RETURN'})
+# Query Algo Order: a CANCELED or EXPIRED stop with no fill is "not found" 3 days after it was created.
+ALGO_ARCHIVE_S = 3 * 86400
 MINOR_DEVIATIONS = frozenset({'below_min'})
