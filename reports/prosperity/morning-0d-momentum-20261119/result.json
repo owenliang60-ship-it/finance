@@ -1,0 +1,132 @@
+{
+ "inputs": {
+  "prosperity.db": "d91ab61867ff3d9b",
+  "market.db": "18a326f57d6b1007",
+  "prosperity_pool.json": "081d5805a1058a08",
+  "momentum-20261114.json": "f75293ec57ba09af",
+  "morning_20261118_080133.json": "f99b4972d0f59153"
+ },
+ "code_version": {
+  "value": "13e5f9d5183f1b8e",
+  "expected": "13e5f9d5183f1b8e",
+  "ok": true
+ },
+ "section_0d": {
+  "available": true,
+  "reason": null,
+  "momentum_available": true,
+  "momentum_price_date": "2026-11-13",
+  "picks": [
+   [
+    "ABBV",
+    5
+   ],
+   [
+    "V",
+    21
+   ],
+   [
+    "COST",
+    23
+   ],
+   [
+    "MDT",
+    27
+   ]
+  ],
+  "picks_ok": true,
+  "rows_in_text": [
+   "ABBV",
+   "V",
+   "COST",
+   "MDT"
+  ],
+  "subtitle": "景气动量精选池 4 只（截至 2026-11-14，景气池 35 只 ∩ 14周动量榜前 30，动量价至 2026-11-13） | EMA30 4/4 | 站上EMA30 4 只",
+  "subtitle_counts_ok": true,
+  "unscored": [],
+  "pool_members_scanned": 35,
+  "pool_ema30_ready": {
+   "covered": 34,
+   "total": 35,
+   "ratio": 0.9714285714285714
+  },
+  "independent_mismatches": [],
+  "cloud_run_cross_check": {
+   "members_compared": 35,
+   "close_above_rank_mismatches": [],
+   "ema30_max_relative_diff": 0.0006936680012935955,
+   "market_cap_differs": [
+    "GLW",
+    "KLAC",
+    "LITE",
+    "LRCX",
+    "MDT",
+    "MRVL",
+    "MU",
+    "NFLX",
+    "NVDA",
+    "NXPI",
+    "PLTR",
+    "SMCI",
+    "SNDK",
+    "SNOW",
+    "SPCX",
+    "STX",
+    "TSM",
+    "TXN"
+   ]
+  },
+  "no_underscore": true,
+  "no_premium": true
+ },
+ "html": {
+  "file": "morning_report_2026-11-17.html",
+  "bytes": 26466,
+  "picks_in_0d_block": [
+   "ABBV",
+   "V",
+   "COST",
+   "MDT"
+  ],
+  "other_pool_members_in_0d_block": [],
+  "no_premium_comparison": true,
+  "has_group_headings": true
+ },
+ "sections_1_2": {
+  "pool_symbols": 35,
+  "split_symbols_equal_pool_file": true,
+  "pmarp": {
+   "hits": 24,
+   "text_counts": [
+    1,
+    23
+   ],
+   "independent_counts": [
+    1,
+    23
+   ],
+   "misplaced_symbols": []
+  },
+  "volume_anomaly": {
+   "hits": 38,
+   "text_counts": [
+    1,
+    37
+   ],
+   "independent_counts": [
+    1,
+    37
+   ],
+   "misplaced_symbols": []
+  },
+  "png": [
+   "01_00_market_timing_factor.png",
+   "02_00b_volume_concentration.png",
+   "03_00d_prosperity_pool.png",
+   "04_01_pmarp.png",
+   "05_02_volume_anomaly.png"
+  ]
+ },
+ "inputs_unchanged": true,
+ "work_listing_unchanged": true
+}

@@ -226,7 +226,8 @@ M16 的动量 CLI 读 `prosperity.db` 快照，对 `market.db` 只读直连、�
 ```
 data/prosperity-delivery/
   ledger/YYYY-MM-DD.json   每周一份，一直保留：items.web / items.pool_text / items.health / items.momentum_text / items.combo_text、pool_members
-  out/YYYY-MM-DD/          生成的网页、体检报告与 momentum-YYYYMMDD.json，只留最近 2 周
+  out/YYYY-MM-DD/          生成的网页、体检报告与 momentum-YYYYMMDD.json，只留最近 2 周；
+                           晨报 0d 读本周的 momentum-YYYYMMDD.json（只读）
 ```
 
 | rc | 含义 | 处理 |
@@ -250,7 +251,7 @@ data/prosperity-delivery/
 | `momentum_window_short` | SPY 日历不足 71 个交易日 | 行情库异常，查 `daily_price` |
 | `momentum_coverage_below_floor` | 有效股票不足主池 90% | 多为价格缺口；补齐价格后重跑。不要改门槛 |
 | `weekly_board_missing` | 快照里没有本周 F1 live 周榜 | 不应出现（投递前已取到周榜）；查 `code_version` |
-| `momentum_payload_invalid` | JSON 不是本周的或结构不对 | 删 `out/<周六>/momentum-*.json` 后重跑 |
+| `momentum_payload_invalid` | JSON 不是本周的或结构不对 | 删 `out/<周六>/momentum-*.json` 后重跑。删后到重跑写出前，晨报 0d 显示"动量榜尚未生成" |
 | `message_too_long` | 消息超过 4096 字符 | 精选池上限 100 只时约 2,300 字符，不会出现；出现说明池规则变了，回北极星讨论 |
 
 消息里"不可用"的股票不参与打分。原因在 JSON 的 `boards.14w.unavailable` 里逐票列出：`price_gap`（窗口内缺收盘价）、
@@ -272,13 +273,20 @@ CLI 退出码：0 已写出；4 `--out` 无效（是目录、父目录不存在�
 
 ## 晨报试运行段（M14）
 
-晨报 08:00 在 0b 成交集中度之后显示"0d. 景气池（试运行）"。Premium 照旧驱动 🔴；原 0c 选股罗盘已于 2026-11-10 删除（Boss），编号 0d 不变。
+晨报 08:00 在 0b 成交集中度之后显示"0d. 景气动量精选池（试运行）"。Premium 照旧驱动 🔴；原 0c 选股罗盘已于 2026-11-10 删除（Boss），编号 0d 不变。
+2026-11-19 Boss：0d 只显示景气动量精选池，删去与 Premium 的对比（分支 `morning/0d-prosperity-momentum`，未 merge）。
 
-- 0d 列全部成员（2026-11-09）：`相对EMA30` 列写上方 / 下方 / —（价格不够算 EMA30）。上方在前，组内按市值降序；
-  小标题的"命中 N 只"只数上方。没站上的票缺 7 天内市值时显示 N/A，不让本段不可用。
-- 第 1 段 PMARP、第 2 段量能异常先列"▶ 景气精选池（N）"，再列"▶ 其他 Extended（N）"（2026-11-09）。组内排序不变，
-  🔴 仍标 Premium 成员。用的是 0d 同一个绑定池。池不可用时不分组，段首写"景气池不可用（原因），本段不分组"。
-- 读两个文件，都只读：`data/pool/prosperity_pool.json`（8 天新鲜度）、`data/prosperity.db`（按池文件里的 `as_of` 与 `source.code_version` 取 F1 live 周榜，做 `pool_binding` 两步核对）。
+- 0d 只列景气动量精选池 = 景气精选池 ∩ 14 周动量榜前 30，与周六私聊"景气动量精选"同一份名单。按全主池动量名次升序，
+  10 列：标的、动量名次、14周涨幅、景气排名、评级、景气分、收盘、EMA30、相对EMA30、当前市值。`相对EMA30` 写上方 / 下方 / —
+  （价格不够算 EMA30，例如上市不满 127 个交易日的新股）。小标题的 `EMA30 x/y` 与 `站上EMA30 n 只` 只数入选行。
+- EMA30 门与 7 天市值门仍对全量景气池计算（覆盖率 ≥95%），只显示入选行：一只新股不会让只有几只的名单整段不可用。
+- 精选池成员在动量榜里无法评分（缺价、拆股未决等）时，表后单列"未评分（N 只，不代表没涨）"，原因写中文。
+- 第 1 段 PMARP、第 2 段量能异常先列"▶ 景气精选池（N）"，再列"▶ 其他 Extended（N）"（2026-11-09）。分组用全量景气精选池（约 35 只），
+  不是动量精选池。组内排序不变，🔴 仍标 Premium 成员。池不可用时不分组，段首写"景气池不可用（原因），本段不分组"；
+  只有动量榜不可用时照常分组。
+- 读三个文件，都只读：`data/pool/prosperity_pool.json`（8 天新鲜度）、`data/prosperity.db`（按池文件里的 `as_of` 与
+  `source.code_version` 取 F1 live 周榜，做 `pool_binding` 两步核对）、`data/prosperity-delivery/out/<as_of>/momentum-<YYYYMMDD>.json`
+  （周六 M16 写出；`as_of` 取池文件的，不回退读上一周；须与池文件同一主池：`universe` 的只数与 `symbols_sha256` 相同）。
 - 本段显示"不可用（原因）"时，原因与排查：
 
 | 显示 | reason | 查什么 |
@@ -287,7 +295,21 @@ CLI 退出码：0 已写出；4 `--out` 无效（是目录、父目录不存在�
 | 库中没有对应周榜 | `prosperity_board_missing` | 池文件 `source.code_version` 的版本是否已被归档（D5） |
 | 与原榜不符 | `prosperity_pool_board_mismatch` | 晨报 JSON `market_signals.prosperity_compass` 里的 `binding_note` |
 | 景气库不可读 | `prosperity_db_unavailable` | 库文件与 `-wal`/`-shm` 权限；`error` 字段 |
-| EMA30 价格覆盖不足 / 当前市值数据不足 | 同名 | `scan_selection_compass` 的 EMA30 / 市值门，查 `daily_price` / `historical_market_cap` |
+| 动量榜尚未生成 | `prosperity_momentum_missing` | 本周 `out/<周六>/` 下没有动量 JSON：查周六投递 `delivery.error` 是否以 `momentum:` 开头（上节排查表），或 `out/` 已被清理 |
+| 动量榜数据异常 | `prosperity_momentum_invalid` | JSON 损坏或结构不符（窗口、交易日数、价格日期、名次、覆盖率等）；晨报 JSON `prosperity_compass.momentum.error` |
+| 动量榜与景气池不符 | `prosperity_momentum_pool_mismatch` | JSON 的 `as_of` 或主池与池文件不同：多为池文件与动量榜不是同一次周更写出的 |
+| EMA30 价格覆盖不足 / 当前市值数据不足 | 同名 | `scan_selection_compass` 的 EMA30 / 市值门（对全量景气池），查 `daily_price` / `historical_market_cap` |
 | 计算异常 / 显示异常 | `prosperity_compass_error` / 显示层 | 晨报日志 `prosperity compass unavailable` / `display failed` |
 
-合格为零（池 0 只）和命中为零都照常显示，不算不可用。本地没有池文件，本地跑晨报会显示"景气池尚未生成"。
+三个动量原因需要补跑时，按上节"单独运行与独立核对"把 JSON 写到本周位置（两库只读）：
+
+```bash
+mkdir -p data/prosperity-delivery/out/<周六>      # CLI 不建目录，父目录不存在时退出码 4
+python scripts/momentum_board.py --db data/prosperity.db --market-db data/market.db \
+  --code-version <池文件 source.code_version> --as-of <周六> \
+  --out data/prosperity-delivery/out/<周六>/momentum-<YYYYMMDD>.json
+```
+
+只写 JSON，不补发私聊；私聊要补发时按上节重跑投递。
+
+精选池 0 只（池合格为零，或池内没有一只进前 30）照常显示空表，不算不可用。本地没有池文件，本地跑晨报会显示"景气池尚未生成"。

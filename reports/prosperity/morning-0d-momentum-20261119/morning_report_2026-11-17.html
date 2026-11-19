@@ -1,0 +1,522 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>
+:root {
+  --bg: #fdfbf7;
+  --surface: #ffffff;
+  --surface2: #f5f0e8;
+  --border: #e8e0d0;
+  --text: #2d2a26;
+  --text-dim: #7a7265;
+  --text-muted: #b0a898;
+  --gold: #d4a012;
+  --gold-dim: #d4a01222;
+  --red: #dc3545;
+  --red-dim: #dc354515;
+  --green: #198754;
+  --green-dim: #19875415;
+  --amber: #e8960c;
+  --amber-dim: #e8960c15;
+  --blue: #2563eb;
+  --blue-dim: #2563eb12;
+  --purple: #7c3aed;
+  --purple-dim: #7c3aed12;
+  --cyan: #0891b2;
+  --cyan-dim: #0891b212;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-x: hidden;
+}
+
+.layout {
+  display: flex;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.toc {
+  width: 220px;
+  position: sticky;
+  top: 24px;
+  align-self: flex-start;
+  padding: 24px 16px;
+  margin-top: 40px;
+  border-right: 1px solid var(--border);
+  height: fit-content;
+  flex-shrink: 0;
+}
+
+.toc-label {
+  font-size: 9px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.toc a {
+  display: block;
+  padding: 6px 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  padding-left: 12px;
+  transition: all 0.2s;
+}
+
+.toc a:hover {
+  color: var(--gold);
+  border-left-color: var(--gold);
+}
+
+.container {
+  flex: 1;
+  max-width: 900px;
+  padding: 40px 32px;
+  min-width: 0;
+}
+
+/* Header */
+.header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 32px;
+  margin-bottom: 48px;
+  position: relative;
+}
+
+.header::before {
+  content: '';
+  position: absolute;
+  top: -40px;
+  left: -100px;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, var(--gold-dim) 0%, transparent 70%);
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.header-badge {
+  display: inline-block;
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  padding: 4px 12px;
+  margin-bottom: 16px;
+}
+
+.header h1 {
+  font-family: 'Crimson Pro', serif;
+  font-size: 42px;
+  font-weight: 300;
+  letter-spacing: -1px;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.header h1 span { color: var(--gold); font-weight: 600; }
+
+.header-meta {
+  display: flex;
+  gap: 24px;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.header-meta .val { color: var(--text); font-weight: 600; }
+
+/* Sections */
+.section {
+  margin-bottom: 56px;
+}
+
+.section-label {
+  font-size: 10px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.section-title {
+  font-family: 'Crimson Pro', serif;
+  font-size: 28px;
+  font-weight: 300;
+  color: var(--text);
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-title span { color: var(--gold); }
+
+/* Regime Box */
+.regime-box {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--amber);
+  padding: 24px 28px;
+  margin-bottom: 24px;
+}
+
+.regime-box.green { border-left-color: var(--green); }
+.regime-box.red { border-left-color: var(--red); }
+.regime-box.blue { border-left-color: var(--blue); }
+.regime-box.purple { border-left-color: var(--purple); }
+.regime-box.cyan { border-left-color: var(--cyan); }
+.regime-box.gold { border-left-color: var(--gold); }
+
+.regime-box h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--amber);
+  margin-bottom: 12px;
+  letter-spacing: 1px;
+}
+
+.regime-box.green h3 { color: var(--green); }
+.regime-box.red h3 { color: var(--red); }
+.regime-box.blue h3 { color: var(--blue); }
+.regime-box.purple h3 { color: var(--purple); }
+.regime-box.cyan h3 { color: var(--cyan); }
+.regime-box.gold h3 { color: var(--gold); }
+
+.regime-box .prose { margin-bottom: 0; }
+
+/* Snap Cards (OPRMS grid) */
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.snap-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.snap-card .label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.snap-card .value {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.snap-card .sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.snap-card .bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+}
+
+/* Strategy Cards (Lens cards) */
+.strat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 24px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  position: relative;
+}
+
+.strat-card .layer-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  font-weight: 700;
+}
+
+.strat-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.strat-card .strat-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+  letter-spacing: 0.5px;
+}
+
+/* Tags */
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+.tag-buy { background: var(--green-dim); color: var(--green); }
+.tag-hold { background: var(--amber-dim); color: var(--amber); }
+.tag-pass { background: var(--red-dim); color: var(--red); }
+.tag-pair { background: var(--cyan-dim); color: var(--cyan); }
+.tag-blue { background: var(--blue-dim); color: var(--blue); }
+.tag-purple { background: var(--purple-dim); color: var(--purple); }
+.tag-cyan { background: var(--cyan-dim); color: var(--cyan); }
+.tag-green { background: var(--green-dim); color: var(--green); }
+.tag-amber { background: var(--amber-dim); color: var(--amber); }
+.tag-red { background: var(--red-dim); color: var(--red); }
+.tag-gold { background: var(--gold-dim); color: var(--gold); }
+
+.star { color: var(--gold); }
+
+/* Debate: tension rows */
+.tension-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.tension-header {
+  padding: 16px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+
+.tension-side {
+  padding: 16px 24px;
+  border-left: 3px solid transparent;
+}
+
+.tension-side.bull { border-left-color: var(--green); }
+.tension-side.bear { border-left-color: var(--red); }
+.tension-side.resolution { border-left-color: var(--cyan); background: var(--surface2); }
+
+.tension-side .side-label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.tension-side.bull .side-label { color: var(--green); }
+.tension-side.bear .side-label { color: var(--red); }
+.tension-side.resolution .side-label { color: var(--cyan); }
+
+/* Risk Callout */
+.risk-callout {
+  background: var(--surface);
+  border: 1px solid var(--red);
+  border-left: 4px solid var(--red);
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.risk-callout.amber {
+  border-color: var(--amber);
+  border-left-color: var(--amber);
+}
+
+.risk-callout h3 {
+  color: var(--red);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.risk-callout.amber h3 { color: var(--amber); }
+
+/* Portfolio Table */
+.portfolio-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 24px;
+  font-size: 13px;
+}
+
+.portfolio-table th {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 2px solid var(--border);
+}
+
+.portfolio-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.portfolio-table tr:nth-child(even) td { background: var(--surface2); }
+.portfolio-table tr:hover td { background: var(--surface2); }
+
+/* Prose */
+.prose {
+  font-family: 'Crimson Pro', serif;
+  font-size: 16px;
+  line-height: 1.9;
+  color: var(--text);
+  margin-bottom: 20px;
+}
+
+.prose strong { color: var(--text); font-weight: 700; }
+.prose em { color: var(--gold); font-style: italic; }
+.prose code {
+  background: var(--surface2);
+  padding: 1px 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  border-radius: 2px;
+}
+
+.prose ul, .prose ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.prose li { margin-bottom: 4px; }
+
+.prose blockquote {
+  border-left: 3px solid var(--gold);
+  padding: 8px 16px;
+  margin: 12px 0;
+  color: var(--text-dim);
+  background: var(--surface2);
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 24px 0;
+}
+
+.prose h2 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 24px 0 12px 0;
+}
+
+.prose h3 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 20px 0 8px 0;
+}
+
+/* Verdict box */
+.verdict-box {
+  background: var(--surface);
+  border: 2px solid var(--gold);
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.verdict-box .verdict-text {
+  font-family: 'Crimson Pro', serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+
+.verdict-box .verdict-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* Disclaimer */
+.disclaimer {
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.8;
+  letter-spacing: 0.5px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .toc { display: none; }
+  .container { padding: 24px 16px; }
+  .snapshot-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 600px) {
+  .snapshot-grid { grid-template-columns: 1fr; }
+  .header h1 { font-size: 28px; }
+}
+
+/* Financial history chart (PDF: own landscape page so figures stay legible) */
+.fh-figure { margin: 12px 0 16px; }
+.fh-figure img { width: 100%; height: auto; border: 1px solid var(--border); }
+.fh-figure figcaption { font-family: 'Crimson Pro', serif; font-size: 13px;
+  color: var(--text-dim); margin-top: 6px; }
+.fh-data table { font-size: 11px; line-height: 1.4; }
+.fh-data th, .fh-data td { padding: 4px 6px; white-space: nowrap; }
+.fh-status { display: inline-block; padding: 2px 10px; border-radius: 3px; font-size: 11px;
+  font-weight: 600; letter-spacing: 1px; }
+.fh-status.complete { background: var(--green-dim); color: var(--green); }
+.fh-status.partial { background: var(--amber-dim); color: var(--amber); }
+.fh-status.blocked { background: var(--red-dim); color: var(--red); }
+@page fh-landscape { size: A4 landscape; margin: 8mm; }
+@media print {
+  .layout { display: block; }  /* named pages need block flow, not flex */
+  .fh-data table { font-size: 8px; }
+  .fh-data th, .fh-data td { padding: 3px 4px; }
+  /* widen only the chart block to the landscape page (container stays 900px) */
+  .fh-figure { page: fh-landscape; break-before: page; break-after: page;
+    width: 1000px; margin: 0 0 0 -32px; }
+  .fh-figure img { border: none; }
+  #sec-financials { page-break-inside: auto; }
+}
+
+/* Print */
+@media print {
+  .toc { display: none; }
+  body { font-size: 11px; }
+  .section { page-break-inside: avoid; }
+  .header::before { display: none; }
+  .strat-card, .snap-card, .tension-block { box-shadow: none; }
+}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 0 16px;}.report-subtitle{color:#666;font-size:0.9em;margin:0 0 10px;}.alert{color:#c0392b;font-weight:600;margin:2px 0;}.valuation-chart{display:block;width:100%;height:auto;}.premium-row td:first-child{color:#b91c1c;font-weight:700;}</style></head><body><div class="container"><h1>未来资本晨报 — 2026-11-17</h1><h2>0. 大盘择时因子</h2><p class="report-subtitle">PMARP 上穿2% + S2(各池等权 MA20 参与度上穿30%, cooldown=60) | PMARP as_of 2026-11-17 | S2 as_of 2026-11-17 | 信号日 2026-11-17</p><h3>SPY / QQQ / SOXX / Extended</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>股票池</th><th>PMARP</th><th>PMARP 2%上穿</th><th>S2参与度(各池)</th><th>覆盖</th><th>S2触发</th></tr></thead><tbody><tr><td>SPY</td><td>1.7%→1.7%</td><td>—</td><td>55.0%→40.8%</td><td>502/504</td><td>—</td></tr><tr><td>QQQ</td><td>3.3%→2.5%</td><td>—</td><td>43.6%→30.7%</td><td>101/101</td><td>—</td></tr><tr><td>SOXX</td><td>7.5%→10.0%</td><td>—</td><td>10.0%→10.0%</td><td>30/30</td><td>—</td></tr><tr><td>Extended</td><td>N/A</td><td>—</td><td>50.6%→38.1%</td><td>888/888</td><td>—</td></tr></tbody></table></div><h3>0b. 成交集中度</h3><p class="report-subtitle">截至 2026-11-17 | 状态: 常态</p><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>指标</th><th>数值</th><th>1年分位</th></tr></thead><tbody><tr><td>Top50 成交额占比(20日平滑)</td><td>45.1%</td><td>49</td></tr><tr><td>Top50 名单20日换手率(平滑)</td><td>25.3%</td><td>3</td></tr></tbody></table></div><h3>0d. 景气动量精选池（试运行）</h3><p class="report-subtitle">景气动量精选池 4 只（截至 2026-11-14，景气池 35 只 ∩ 14周动量榜前 30，动量价至 2026-11-13） | EMA30 4/4 | 站上EMA30 4 只</p><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>动量名次</th><th>14周涨幅</th><th>景气排名</th><th>评级</th><th>景气分</th><th>收盘</th><th>EMA30</th><th>相对EMA30</th><th>当前市值</th></tr></thead><tbody><tr><td>ABBV</td><td>5</td><td>+21%</td><td>77</td><td>FULL</td><td>61.1</td><td>292.82</td><td>286.09</td><td>上方</td><td>$518.9B</td></tr><tr><td>V</td><td>21</td><td>+15%</td><td>137</td><td>FULL</td><td>56.2</td><td>416.77</td><td>409.27</td><td>上方</td><td>$727.1B</td></tr><tr><td>COST</td><td>23</td><td>+17%</td><td>159</td><td>FULL</td><td>54.9</td><td>1110.08</td><td>1029.18</td><td>上方</td><td>$492.8B</td></tr><tr><td>MDT</td><td>27</td><td>+20%</td><td>54</td><td>FULL</td><td>63.9</td><td>102.32</td><td>97.91</td><td>上方</td><td>$130.9B</td></tr></tbody></table></div><h2>1. PMARP 信号</h2><p class="report-subtitle">景气精选池 1｜其他 Extended 23</p><h3>景气精选池 · 下穿98% — 大盘(≥$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>COST Costco Wholesale</td><td>消费与零售 / 大型零售</td><td>下穿98%</td><td>95.8%</td><td>100.0→95.8</td><td>$492.8B</td><td>-0.31</td></tr></tbody></table></div><h3>其他 Extended · 上穿2% — 大盘(≥$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>CSCO Cisco Systems</td><td>AI算力与云 / 数据中心网络设备 / AI算力</td><td>上穿2%</td><td>3.3%</td><td>1.7→3.3</td><td>$375.5B</td><td>1.42</td></tr><tr><td>PBR-A Petróleo Brasilei…</td><td>能源与材料 / 综合油气</td><td>上穿2%</td><td>3.3%</td><td>0.0→3.3</td><td>$104.4B</td><td>-0.22</td></tr><tr><td>PBR Petróleo Brasilei…</td><td>能源与材料 / 综合油气</td><td>上穿2%</td><td>5.0%</td><td>0.8→5.0</td><td>$117.7B</td><td>-0.29</td></tr><tr><td>BML-PH Bank of America</td><td>金融/加密</td><td>上穿2%</td><td>2.5%</td><td>0.8→2.5</td><td>$353.6B</td><td>0.05</td></tr><tr><td>GS-PA The Goldman Sachs…</td><td>金融/加密</td><td>上穿2%</td><td>2.5%</td><td>0.8→2.5</td><td>$269.5B</td><td>0.12</td></tr><tr><td>OAK-PB Brookfield Oaktre…</td><td>金融/加密</td><td>上穿2%</td><td>4.2%</td><td>0.0→4.2</td><td>$100.3B</td><td>0.16</td></tr><tr><td>BAC-PE Bank of America</td><td>金融/加密</td><td>上穿2%</td><td>5.0%</td><td>0.8→5.0</td><td>$353.6B</td><td>0.19</td></tr></tbody></table></div><h3>其他 Extended · 上穿2% — 中小盘(&lt;$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>ILMN Illumina</td><td>创新药与生命科学 / 生命科学工具与CRO</td><td>上穿2%</td><td>2.5%</td><td>0.8→2.5</td><td>$32.5B</td><td>1.44</td></tr><tr><td>BNH Brookfield Finance</td><td>金融 / 支付与金融科技</td><td>上穿2%</td><td>2.5%</td><td>0.8→2.5</td><td>$62.0B</td><td>0.29</td></tr><tr><td>YPF YPF Sociedad Anón…</td><td>能源与材料 / 综合油气</td><td>上穿2%</td><td>5.8%</td><td>1.7→5.8</td><td>$14.7B</td><td>0.22</td></tr><tr><td>PAAS Pan American Silv…</td><td>能源与材料 / 矿业与金属 / 通胀对冲</td><td>上穿2%</td><td>5.0%</td><td>1.7→5.0</td><td>$16.5B</td><td>1.84</td></tr><tr><td>SQM Sociedad Química…</td><td>能源与材料 / 化工与气体</td><td>上穿2%</td><td>7.5%</td><td>0.8→7.5</td><td>$15.5B</td><td>0.86</td></tr><tr><td>CMI Cummins</td><td>工业与航天 / 重型机械与农机 / 工业资本开支</td><td>上穿2%</td><td>2.5%</td><td>1.7→2.5</td><td>$59.7B</td><td>1.25</td></tr><tr><td>VALE</td><td>地产与公用 / 工业建材</td><td>上穿2%</td><td>2.5%</td><td>1.7→2.5</td><td>$49.4B</td><td>0.79</td></tr></tbody></table></div><h3>其他 Extended · 下穿98% — 大盘(≥$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>PEP PepsiCo</td><td>消费与零售 / 必需消费品 / 防御股</td><td>下穿98%</td><td>86.7%</td><td>99.2→86.7</td><td>$195.9B</td><td>-0.23</td></tr><tr><td>PG The Procter &amp; Gam…</td><td>消费与零售 / 必需消费品</td><td>下穿98%</td><td>94.2%</td><td>99.2→94.2</td><td>$406.0B</td><td>-0.18</td></tr></tbody></table></div><h3>其他 Extended · 下穿98% — 中小盘(&lt;$100B)</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>信号</th><th>当前</th><th>变化</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>CMCSA Comcast</td><td>互联网与软件 / 电信运营商</td><td>下穿98%</td><td>89.2%</td><td>98.3→89.2</td><td>$90.2B</td><td>-0.00</td></tr><tr><td>BCE</td><td>互联网与软件 / 电信运营商</td><td>下穿98%</td><td>95.0%</td><td>99.2→95.0</td><td>$20.5B</td><td>-0.56</td></tr><tr><td>TU TELUS</td><td>互联网与软件 / 电信运营商</td><td>下穿98%</td><td>97.5%</td><td>100.0→97.5</td><td>$13.8B</td><td>-0.63</td></tr><tr><td>HTHT H World Group</td><td>消费与零售 / 可选消费品牌 / 中国敞口</td><td>下穿98%</td><td>95.8%</td><td>100.0→95.8</td><td>$16.0B</td><td>-0.42</td></tr><tr><td>PEG Public Service En…</td><td>地产与公用 / 电力与公用</td><td>下穿98%</td><td>85.0%</td><td>98.3→85.0</td><td>$37.2B</td><td>0.03</td></tr><tr><td>ES Eversource Energy</td><td>地产与公用 / 电力与公用</td><td>下穿98%</td><td>86.7%</td><td>99.2→86.7</td><td>$26.3B</td><td>-0.24</td></tr><tr><td>EMA Emera</td><td>地产与公用 / 电力与公用</td><td>下穿98%</td><td>95.8%</td><td>98.3→95.8</td><td>$15.7B</td><td>-0.26</td></tr></tbody></table></div><h2>2. 量能异常</h2><p class="report-subtitle">景气精选池 1｜其他 Extended 37</p><h3>景气精选池</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>类型</th><th>DV 5d/20d</th><th>RVOL</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>NVDA NVIDIA</td><td>半导体 / 计算芯片/GPU加速器 / AI算力</td><td>共振</td><td>1.6x ($66.4B/$40.6B)</td><td>5日 2.4σ</td><td>$4.1T</td><td>1.76</td></tr></tbody></table></div><h3>其他 Extended</h3><div class="table-wrap"><table class="portfolio-table"><thead><tr><th>标的</th><th>概念</th><th>类型</th><th>DV 5d/20d</th><th>RVOL</th><th>市值</th><th>β6M</th></tr></thead><tbody><tr><td>GS-PA The Goldman Sachs…</td><td>金融/加密</td><td>共振</td><td>1.7x ($3M/$2M)</td><td>3日 2.8σ</td><td>$269.5B</td><td>0.12</td></tr><tr><td>MS-PA Morgan Stanley</td><td>金融/加密</td><td>共振</td><td>1.6x ($5M/$3M)</td><td>3日 2.7σ</td><td>$290.3B</td><td>0.12</td></tr><tr><td>DLR-PK Digital Realty Tr…</td><td>金融/加密</td><td>共振</td><td>1.5x ($1M/$1M)</td><td>3日 2.4σ</td><td>$65.7B</td><td>0.20</td></tr><tr><td>OAK-PB Brookfield Oaktre…</td><td>金融/加密</td><td>共振</td><td>2.1x ($1M/$0M)</td><td>单日 8.0σ</td><td>$100.3B</td><td>0.16</td></tr><tr><td>CHYM Chime Financial,…</td><td>金融 / 大型综合银行</td><td>共振</td><td>2.2x ($456M/$206M)</td><td>单日 7.6σ</td><td>$12.6B</td><td>1.19</td></tr><tr><td>WF Woori Financial G…</td><td>金融 / 大型综合银行</td><td>共振</td><td>1.6x ($16M/$10M)</td><td>单日 5.5σ</td><td>$17.4B</td><td>1.02</td></tr><tr><td>BML-PG Bank of America</td><td>金融/加密</td><td>共振</td><td>1.6x ($0M/$0M)</td><td>单日 4.9σ</td><td>$353.6B</td><td>0.20</td></tr><tr><td>BAC-PE Bank of America</td><td>金融/加密</td><td>共振</td><td>1.7x ($1M/$1M)</td><td>单日 3.5σ</td><td>$353.6B</td><td>0.19</td></tr><tr><td>TU TELUS</td><td>互联网与软件 / 电信运营商</td><td>共振</td><td>1.9x ($160M/$86M)</td><td>单日 3.2σ</td><td>$13.8B</td><td>-0.63</td></tr><tr><td>EMBJ Embraer</td><td>工业与航天 / 航空航天与国防</td><td>单日爆量</td><td>—</td><td>单日 8.2σ</td><td>$14.7B</td><td>2.58</td></tr><tr><td>ED Consolidated Edis…</td><td>地产与公用 / 电力与公用 / 利率敏感</td><td>单日爆量</td><td>—</td><td>单日 5.6σ</td><td>$44.1B</td><td>-0.40</td></tr><tr><td>WCN Waste Connections</td><td>工业与航天 / 工业自动化与机械</td><td>单日爆量</td><td>—</td><td>单日 5.2σ</td><td>$48.0B</td><td>-0.37</td></tr><tr><td>AS Amer Sports</td><td>消费与零售 / 可选消费品牌 / 中国敞口</td><td>单日爆量</td><td>—</td><td>单日 4.7σ</td><td>$17.7B</td><td>0.83</td></tr><tr><td>VIK Viking Holdings</td><td>消费与零售 / 可选消费品牌</td><td>单日爆量</td><td>—</td><td>单日 4.1σ</td><td>$40.1B</td><td>0.97</td></tr><tr><td>TRI Thomson Reuters</td><td>互联网与软件 / 企业SaaS / AI应用层</td><td>单日爆量</td><td>—</td><td>单日 4.0σ</td><td>$47.0B</td><td>-0.16</td></tr><tr><td>JD JD.com</td><td>消费与零售 / 海外电商平台 / 中国敞口</td><td>单日爆量</td><td>—</td><td>单日 4.0σ</td><td>$38.1B</td><td>0.00</td></tr><tr><td>KEY-PI KeyCorp</td><td>金融/加密</td><td>单日爆量</td><td>—</td><td>单日 3.6σ</td><td>$22.5B</td><td>0.06</td></tr><tr><td>ALC Alcon</td><td>创新药与生命科学 / 医疗器械 / 防御股</td><td>单日爆量</td><td>—</td><td>单日 3.5σ</td><td>$35.6B</td><td>0.11</td></tr><tr><td>DIS The Walt Disney C…</td><td>互联网与软件 / 流媒体与内容</td><td>单日爆量</td><td>—</td><td>单日 3.4σ</td><td>$205.1B</td><td>0.28</td></tr><tr><td>BAC-PL Bank of America</td><td>金融/加密</td><td>单日爆量</td><td>—</td><td>单日 3.4σ</td><td>$353.6B</td><td>0.30</td></tr><tr><td>WFC-PY Wells Fargo &amp; Com…</td><td>金融/加密</td><td>单日爆量</td><td>—</td><td>单日 3.1σ</td><td>$258.7B</td><td>0.36</td></tr><tr><td>BIP Brookfield Infras…</td><td>地产与公用 / 电力与公用</td><td>单日爆量</td><td>—</td><td>单日 3.1σ</td><td>$18.4B</td><td>0.07</td></tr><tr><td>NWG NatWest Group</td><td>金融 / 大型综合银行 / 利率敏感</td><td>单日爆量</td><td>—</td><td>单日 3.0σ</td><td>$31.4B</td><td>1.28</td></tr><tr><td>XEL Xcel Energy</td><td>地产与公用 / 电力与公用</td><td>持续放量</td><td>—</td><td>3日 4.8σ</td><td>$50.4B</td><td>-0.02</td></tr><tr><td>WEC WEC Energy Group</td><td>地产与公用 / 电力与公用</td><td>持续放量</td><td>—</td><td>3日 2.5σ</td><td>$38.2B</td><td>-0.15</td></tr><tr><td>SOMN The Southern Comp…</td><td>地产与公用 / 电力与公用</td><td>流动性加速</td><td>2.8x ($77M/$28M)</td><td>—</td><td>$108.4B</td><td>-0.08</td></tr><tr><td>TRTN-PA Triton Internatio…</td><td>金融/加密</td><td>流动性加速</td><td>2.2x ($1M/$0M)</td><td>—</td><td>$10.5B</td><td>0.16</td></tr><tr><td>TIGO Millicom Internat…</td><td>互联网与软件 / 电信运营商</td><td>流动性加速</td><td>1.9x ($203M/$106M)</td><td>—</td><td>$14.9B</td><td>0.16</td></tr><tr><td>STRD Strategy</td><td>金融 / 投资银行与交易</td><td>流动性加速</td><td>1.8x ($11M/$6M)</td><td>—</td><td>$48.4B</td><td>0.61</td></tr><tr><td>BML-PL Bank of America</td><td>金融/加密</td><td>流动性加速</td><td>1.8x ($1M/$1M)</td><td>—</td><td>$353.6B</td><td>0.11</td></tr><tr><td>TTEK Tetra Tech</td><td>工业与航天 / 工程与建筑</td><td>流动性加速</td><td>1.7x ($206M/$122M)</td><td>—</td><td>$10.5B</td><td>0.12</td></tr><tr><td>CMS-PB Consumers Energy…</td><td>地产与公用 / 电力与公用</td><td>流动性加速</td><td>1.7x ($0M/$0M)</td><td>—</td><td>$21.7B</td><td>-0.06</td></tr><tr><td>FMS Fresenius Medical…</td><td>创新药与生命科学 / 医保健康服务</td><td>流动性加速</td><td>1.6x ($55M/$35M)</td><td>—</td><td>$12.0B</td><td>-0.18</td></tr><tr><td>BML-PJ Bank of America</td><td>金融/加密</td><td>流动性加速</td><td>1.6x ($1M/$0M)</td><td>—</td><td>$353.6B</td><td>0.19</td></tr><tr><td>ACM Aecom</td><td>工业/航天/国防</td><td>流动性加速</td><td>1.6x ($157M/$101M)</td><td>—</td><td>$10.4B</td><td>0.52</td></tr><tr><td>SO The Southern Comp…</td><td>地产与公用 / 电力与公用</td><td>流动性加速</td><td>1.5x ($1.2B/$795M)</td><td>—</td><td>$108.4B</td><td>-0.28</td></tr><tr><td>MS-PF Morgan Stanley</td><td>金融/加密</td><td>流动性加速</td><td>1.5x ($5M/$3M)</td><td>—</td><td>$290.3B</td><td>0.10</td></tr></tbody></table></div></div></body></html>
