@@ -503,13 +503,28 @@ def _compute_signal_betas(
     return betas
 
 
-def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str, scan) -> dict:
-    """M14 trial section 0d: the prosperity pool through the EMA30 + market-cap gate.
+def _prosperity_momentum_summary(momentum: dict) -> dict:
+    """What 0d keeps of load_prosperity_momentum_picks: the picks and their week, or why there are none."""
+    if not momentum.get("available"):
+        extra = {"error": momentum["error"]} if "error" in momentum else {}
+        return {"available": False, "reason": momentum.get("reason") or "prosperity_momentum_invalid",
+                "picks": [], "unscored": [], **extra}
+    picks = list(momentum.get("picks") or [])
+    return {"available": True, "reason": None,
+            **{key: momentum.get(key) for key in ("as_of", "price_date", "window", "days", "top_n")},
+            "pick_count": len(picks), "picks": picks, "unscored": list(momentum.get("unscored") or [])}
 
-    Never raises: any failure becomes an unavailable payload, so the rest of the morning report
-    is unaffected. Builds its own price dict from the shared frames plus a DB supplement.
+
+def _build_prosperity_compass(price_frames: dict, as_of: str, scan) -> dict:
+    """Section 0d: 景气动量精选池 = the bound prosperity pool ∩ the weekly M16 14-week momentum top 30.
+
+    The EMA30 + market-cap gate runs on the whole pool, so one listing younger than the 127 price
+    rows cannot fail a section of a few picks (plan P1-1); the display keeps only the picks. Never
+    raises: any failure becomes an unavailable payload, so the rest of the morning report is
+    unaffected. A valid pool always keeps `pool.symbols`, which sections 1 and 2 split on. Builds its
+    own price dict from the shared frames plus a DB supplement.
     """
-    summary = comparison = None
+    summary = momentum_summary = None
     try:
         from scripts.broad_market_scan import load_price_frames_from_market_db
         from src.data import prosperity_morning
@@ -526,13 +541,23 @@ def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str
             "member_count": len(pool.get("members") or []) if pool.get("available") else 0,
             "symbols": symbols,       # sections 1 and 2 split on these (Boss 2026-11-09)
         }
-        comparison = prosperity_morning.pool_comparison(pool, premium_pool)
         if not pool.get("available"):
             # Keep the loader's diagnostics in the saved JSON (runbook: binding_note / error).
             extra = {key: pool[key] for key in ("binding_note", "error") if key in pool}
             logger.warning("prosperity pool unavailable: %s %s", pool.get("reason"), extra)
             return {"available": False, "reason": pool.get("reason") or "prosperity_pool_invalid",
-                    "coverage": {}, "hits": [], "comparison": comparison, "pool": summary, **extra}
+                    "coverage": {}, "hits": [], "pool": summary, "momentum": None, **extra}
+        momentum_summary = _prosperity_momentum_summary(prosperity_morning.load_prosperity_momentum_picks(pool))
+        if not momentum_summary["available"]:
+            logger.warning("prosperity momentum picks unavailable: %s %s",
+                           momentum_summary["reason"], momentum_summary.get("error", ""))
+            return {"available": False, "reason": momentum_summary["reason"], "coverage": {}, "hits": [],
+                    "pool": summary, "momentum": momentum_summary}
+        if not momentum_summary["picks"]:
+            # Zero picks is a valid week: no scan, no market.db read.
+            return {"available": True, "reason": None,
+                    "coverage": {"ema30_ready": {"covered": 0, "total": 0, "ratio": 0.0}},
+                    "hits": [], "members": [], "pool": summary, "momentum": momentum_summary}
         frames = {s: price_frames[s] for s in symbols if s in price_frames}
         missing = [s for s in symbols if s not in frames]
         if missing:
@@ -546,14 +571,15 @@ def _build_prosperity_compass(premium_pool: dict, price_frames: dict, as_of: str
             market_cap_observations=_load_selection_compass_market_cap_observations(
                 get_store(), symbols, as_of),
         )
-        return {**compass, "comparison": comparison, "pool": summary}
+        return {**compass, "pool": summary, "momentum": momentum_summary}
     except Exception as exc:
         logger.warning("prosperity compass unavailable: %s", exc)
         failed = {"available": False, "reason": "prosperity_compass_error",
                   "error": type(exc).__name__, "coverage": {}, "hits": []}
-        if summary is not None and comparison is not None:
-            # A valid pool whose 0d calculation failed still splits sections 1 and 2 (review #1).
-            failed.update(pool=summary, comparison=comparison)
+        if summary is not None:
+            failed["pool"] = summary            # a valid pool still splits sections 1 and 2 (review #1)
+        if momentum_summary is not None:
+            failed["momentum"] = momentum_summary
         return failed
 
 
@@ -1332,7 +1358,7 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     """Build technical signal payload for the merged morning report.
 
     Technical signals scan the current Extended universe. Premium membership
-    annotates technical signal rows (🔴) and feeds the 0d comparison.
+    annotates technical signal rows (🔴).
 
     --symbols override grants extend privilege: every override symbol is
     treated as layer="extend", bypassing the $10B mcap filter so manual
@@ -1466,9 +1492,7 @@ def build_market_signal_report(symbols_override: list[str] | None = None) -> dic
     as_of = max(scan_dates).date().isoformat() if scan_dates else date.today().isoformat()
 
     from terminal.selection_compass import scan_selection_compass
-    prosperity_compass = _build_prosperity_compass(
-        premium_pool, price_frames, as_of, scan_selection_compass,
-    )
+    prosperity_compass = _build_prosperity_compass(price_frames, as_of, scan_selection_compass)
 
     try:
         volconc_frames = _load_volume_concentration_frames()

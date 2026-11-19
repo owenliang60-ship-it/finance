@@ -1,8 +1,10 @@
-"""M14 morning trial section: the prosperity pool, bound to its source board, and its Premium comparison.
+"""Morning section 0d: the prosperity pool bound to its source board, and its weekly momentum picks.
 
-Plan: docs/plans/2026-11-03-prosperity-m14-morning.md. Read-only on prosperity.db. Not part of the
-engine code_version. The caller (scripts/morning_report.py) wraps every use in try/except, so a
-failure here only marks the 0d section unavailable.
+Plans: docs/plans/2026-11-03-prosperity-m14-morning.md (pool binding) and
+docs/plans/2026-11-19-morning-0d-prosperity-momentum.md (景气动量精选池 = pool ∩ the M16 14-week
+momentum top 30, read from the Saturday delivery output). Read-only on prosperity.db and on the
+delivery files. Not part of the engine code_version. The caller (scripts/morning_report.py) wraps
+every use in try/except, so a failure here only marks the 0d section unavailable.
 """
 from __future__ import annotations
 
@@ -58,21 +60,6 @@ def load_bound_prosperity_pool(pool_path=POOL_PATH, db_path=PROSPERITY_DB_PATH, 
     if not note.startswith('入池'):                 # positive check: an unknown note is never trusted
         return _unavailable('prosperity_pool_board_mismatch', binding_note=note)
     return pool
-
-
-def _symbols(pool: dict) -> set:
-    return {m['symbol'] for m in pool.get('members') or [] if isinstance(m, dict) and m.get('symbol')}
-
-
-def pool_comparison(prosperity: dict, premium: dict) -> dict:
-    """Both / prosperity only (new) / Premium only (dropped), each sorted by symbol."""
-    if not prosperity.get('available'):
-        return {'status': 'prosperity_unavailable'}
-    if not premium.get('available'):
-        return {'status': 'premium_unavailable'}
-    ours, theirs = _symbols(prosperity), _symbols(premium)
-    return {'status': 'ok', 'both': sorted(ours & theirs), 'prosperity_only': sorted(ours - theirs),
-            'premium_only': sorted(theirs - ours)}
 
 
 # --- weekly M16 momentum picks (景气精选池 ∩ 14周动量榜前 30) -------------------------------------

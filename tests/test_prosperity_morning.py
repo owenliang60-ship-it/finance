@@ -1,4 +1,4 @@
-"""M14 morning trial section: bound prosperity pool reader and Premium comparison."""
+"""Morning section 0d: bound prosperity pool reader and the weekly M16 momentum picks."""
 import copy
 import json
 from datetime import datetime, timezone
@@ -129,29 +129,6 @@ def test_db_is_not_modified(env):
     before = env['db'].read_bytes()
     load(env)
     assert env['db'].read_bytes() == before
-
-
-# --- B2: comparison ---------------------------------------------------------------------------
-
-def _pool(symbols, available=True):
-    return {'available': available, 'reason': None if available else 'x',
-            'members': [{'symbol': s} for s in symbols]}
-
-
-def test_comparison_sorted_by_symbol():
-    out = pm.pool_comparison(_pool(['ZZ', 'AA', 'MM']), _pool(['MM', 'BB', 'AA', 'CC']))
-    assert out == {'status': 'ok', 'both': ['AA', 'MM'], 'prosperity_only': ['ZZ'],
-                   'premium_only': ['BB', 'CC']}
-
-
-def test_comparison_unavailable_sides():
-    assert pm.pool_comparison(_pool(['A'], available=False), _pool(['A'])) == {'status': 'prosperity_unavailable'}
-    assert pm.pool_comparison(_pool(['A']), _pool([], available=False)) == {'status': 'premium_unavailable'}
-
-
-def test_comparison_empty_prosperity_pool_is_ok():
-    assert pm.pool_comparison(_pool([]), _pool(['A'])) == {
-        'status': 'ok', 'both': [], 'prosperity_only': [], 'premium_only': ['A']}
 
 
 # --- 2026-11-19: weekly M16 momentum picks (pool ∩ 14-week momentum top 30) -----------------------
