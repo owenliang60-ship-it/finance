@@ -1715,18 +1715,18 @@ def format_section_volume_concentration(payload: dict) -> str:
     return "\n".join(lines)
 
 
-# --- M14: 0d. 景气池（试运行） ------------------------------------------------------------------
+# --- 0d. 景气动量精选池（试运行）: M14 pool binding + M16 momentum picks (2026-11-19) -----------------
 
-PROSPERITY_COMPASS_TITLE = "0d. 景气池（试运行）"
-PROSPERITY_COMPARISON_TITLE = "0d. 与 Premium 对比"
-PROSPERITY_COMPASS_COLUMNS = ["标的", "排名", "评级", "分数", "成交额排名", "收盘", "EMA30", "相对EMA30", "当前市值",
-                              "Premium"]
-PROSPERITY_COMPASS_WIDTHS = [180, 110, 150, 120, 170, 210, 160, 150, 170, 130]
-PROSPERITY_MEMBERS_TITLE = "全部成员（站上 EMA30 在前，按市值降序）"
+PROSPERITY_COMPASS_TITLE = "0d. 景气动量精选池（试运行）"
+PROSPERITY_COMPASS_COLUMNS = ["标的", "动量名次", "14周涨幅", "景气排名", "评级", "景气分", "收盘", "EMA30", "相对EMA30",
+                              "当前市值"]
+PROSPERITY_COMPASS_WIDTHS = [170, 150, 160, 150, 140, 130, 190, 170, 160, 170]
+PROSPERITY_MEMBERS_TITLE = "按 14 周动量名次排序"
+PROSPERITY_UNSCORED_TITLE = "0d. 未评分标的（不代表没涨）"           # HTML block heading
+PROSPERITY_UNSCORED_BLOCK_TITLE = "未评分标的（不代表没涨）"         # image block title
+PROSPERITY_UNSCORED_COLUMNS = ["标的", "原因"]
+PROSPERITY_UNSCORED_WIDTHS = [300, 1948]
 _PROSPERITY_POSITION = {True: "上方", False: "下方"}
-PROSPERITY_COMPARISON_COLUMNS = ["类别", "代码"]
-PROSPERITY_COMPARISON_WIDTHS = [160, 2088]
-PROSPERITY_COMPARISON_LIMIT = 15
 PROSPERITY_COMPASS_REASON_LABELS = {
     "prosperity_pool_missing": "景气池尚未生成",
     "prosperity_pool_stale": "景气池已过期",
@@ -1735,83 +1735,91 @@ PROSPERITY_COMPASS_REASON_LABELS = {
     "prosperity_pool_board_mismatch": "与原榜不符",
     "prosperity_board_missing": "库中没有对应周榜",
     "prosperity_db_unavailable": "景气库不可读",
+    "prosperity_momentum_missing": "动量榜尚未生成",
+    "prosperity_momentum_invalid": "动量榜数据异常",
+    "prosperity_momentum_pool_mismatch": "动量榜与景气池不符",
     "premium_pool_invalid": "景气池数据异常",       # scan_selection_compass on a duplicated symbol
     "ema30_coverage_below_threshold": "EMA30 价格覆盖不足",
     "market_cap_unavailable": "当前市值数据不足",
     "prosperity_compass_error": "计算异常",
     "display_error": "显示异常",
 }
+# The momentum board's `unavailable` codes (backtest/research/momentum_board.py); never shown raw: no "_".
+MOMENTUM_UNSCORED_REASON_LABELS = {
+    "no_price": "缺价",
+    "price_gap": "价格缺口",
+    "split_unresolved": "拆股未决",
+    "split_suspect": "疑似拆股",
+    "volume_missing": "缺成交额",
+}
 
 
 def _prosperity_warning(reason: str | None) -> dict:
     return {
         "state": "warning",
-        "warning": "⚠️ 景气池（试运行）不可用（{}）".format(
+        "warning": "⚠️ 景气动量精选池（试运行）不可用（{}）".format(
             PROSPERITY_COMPASS_REASON_LABELS.get(reason, "暂时无法生成")),
     }
-
-
-def _prosperity_symbol_list(symbols: list) -> str:
-    shown = ", ".join(symbols[:PROSPERITY_COMPARISON_LIMIT])
-    return shown + (" 等 {} 只".format(len(symbols)) if len(symbols) > PROSPERITY_COMPARISON_LIMIT else "")
-
-
-def _prosperity_comparison(comparison: dict) -> tuple:
-    """(summary line, [[类别, 代码串], …]) for the Premium comparison."""
-    if comparison.get("status") != "ok":
-        return "与 Premium：Premium 不可用，不比较", []
-    new, gone = comparison.get("prosperity_only") or [], comparison.get("premium_only") or []
-    summary = "与 Premium：交集 {}｜新增 {}｜移出 {}".format(len(comparison.get("both") or []), len(new), len(gone))
-    return summary, [[label, _prosperity_symbol_list(symbols)]
-                     for label, symbols in (("新增", new), ("移出", gone)) if symbols]
 
 
 def _prosperity_compass_display(payload: dict | None) -> dict:
     """Shared display contract for text, HTML and visual faces of section 0d.
 
-    No "_" anywhere: the text report goes out with Telegram legacy Markdown (issue 016).
+    The payload holds every scanned pool member; only the momentum picks are shown, in momentum
+    rank order, and the EMA30 counts are recomputed from them. No "_" anywhere: the text report
+    goes out with Telegram legacy Markdown (issue 016).
     """
     if payload is None:
         return {"state": "hidden"}
-    pool = payload.get("pool") or {}
-    comparison = payload.get("comparison") or {}
     if not payload.get("available"):
-        display = _prosperity_warning(payload.get("reason"))
-        if pool.get("available"):          # the pool is valid; only the EMA30/market-cap gate failed
-            display["comparison_summary"], display["comparison"] = _prosperity_comparison(comparison)
-        return display
-    from src.data.prosperity_pool import LIQUIDITY_TOP, POOL_GRADES
+        return _prosperity_warning(payload.get("reason"))
+    momentum = payload.get("momentum") or {}
+    if not momentum.get("available"):          # e.g. a payload saved before 2026-11-19: never show the whole pool
+        return _prosperity_warning(momentum.get("reason") or "prosperity_momentum_invalid")
+    from src.data.prosperity_delivery import MOMENTUM_TOP
+    from src.data.prosperity_pool import _finite, _is_int
     from src.data.prosperity_web import _score
 
-    count = pool.get("member_count", 0)
-    ema30 = (payload.get("coverage") or {}).get("ema30_ready") or {}
-    hits = payload.get("hits") or []
-    members = sorted(payload["members"], key=lambda m: (
-        {True: 0, False: 1}.get(m.get("above"), 2), -(m.get("marketCap") or 0), m.get("symbol", "")))
-    as_of = pool.get("as_of")
-    head = ("景气池 0 只（合格为零，截至 {}）".format(as_of) if count == 0
-            else "景气池 {} 只（截至 {}，第一档 ∩ {} ∩ 成交额前 {}）".format(
-                count, as_of, "/".join(POOL_GRADES), LIQUIDITY_TOP))
-    subtitle = "{} | EMA30 {}/{} | 收盘价 > EMA30 | 命中 {} 只".format(
-        head, ema30.get("covered", 0), ema30.get("total", 0), len(hits))
+    members = {m["symbol"]: m for m in payload.get("members") or []}
+    picked = []
+    for pick in sorted(momentum.get("picks") or [], key=lambda p: (p["momentum_rank"], p["symbol"])):
+        member = members.get(pick["symbol"])
+        if member is None:
+            raise ValueError("prosperity pick {} missing from the scanned pool".format(pick["symbol"]))
+        row = {**member, "momentum_rank": pick["momentum_rank"], "momentum_return": pick["momentum_return"]}
+        if (not _is_int(row["momentum_rank"]) or row["momentum_rank"] < 1 or not _finite(row["momentum_return"])
+                or not _is_int(row.get("rank")) or row["rank"] < 1
+                or not isinstance(row.get("grade"), str) or not row["grade"]):
+            raise ValueError("prosperity pick {} has an invalid row".format(pick["symbol"]))
+        picked.append(row)
 
-    premium = set(comparison.get("both") or []) if comparison.get("status") == "ok" else set()
+    pool = payload.get("pool") or {}
+    pool_count, as_of, price_date = pool.get("member_count", 0), pool.get("as_of"), momentum.get("price_date")
+    if pool_count == 0:
+        head = "景气动量精选池 0 只（景气池合格为零，截至 {}，动量价至 {}）".format(as_of, price_date)
+    else:
+        head = "景气动量精选池 {} 只（截至 {}，景气池 {} 只 ∩ 14周动量榜前 {}，动量价至 {}）".format(
+            len(picked), as_of, pool_count, momentum.get("top_n", MOMENTUM_TOP), price_date)
+    # Counts come from the shown rows (plan P1-1), never from the whole-pool coverage.
+    subtitle = "{} | EMA30 {}/{} | 站上EMA30 {} 只".format(
+        head, sum(m.get("above") is not None for m in picked), len(picked),
+        sum(m.get("above") is True for m in picked)) if picked else head
 
-    def price(member, key):          # a hit must carry its price; a not-ready member shows "—"
+    def price(member, key):          # a pick above EMA30 must carry its price; a not-ready one shows "—"
         value = member.get(key)
         if value is None and member.get("above") is True:
-            raise ValueError("prosperity hit {} without {}".format(member.get("symbol"), key))
+            raise ValueError("prosperity pick {} without {}".format(member.get("symbol"), key))
         return "—" if value is None else "{:.2f}".format(value)
 
     rows = [[
-        str(m["symbol"]), str(m["rank"]), str(m["grade"]), _score(m.get("score")),
-        str(m.get("dollar_volume_rank") or "—"), price(m, "close"), price(m, "ema30"),
-        _PROSPERITY_POSITION.get(m.get("above"), "—"),
-        _format_market_cap(m.get("marketCap")), "是" if m["symbol"] in premium else "",   # CJK glyph: "✓" is missing in some report fonts
-    ] for m in members]
-    summary, detail = _prosperity_comparison(comparison)
+        str(m["symbol"]), str(m["momentum_rank"]), "{:+.0%}".format(m["momentum_return"]), str(m["rank"]),
+        m["grade"], _score(m.get("score")), price(m, "close"), price(m, "ema30"),
+        _PROSPERITY_POSITION.get(m.get("above"), "—"), _format_market_cap(m.get("marketCap")),
+    ] for m in picked]
+    unscored = [[str(item["symbol"]), MOMENTUM_UNSCORED_REASON_LABELS.get(item.get("reason"), "原因未知")]
+                for item in momentum.get("unscored") or []]
     return {"state": "table", "subtitle": subtitle, "columns": PROSPERITY_COMPASS_COLUMNS, "rows": rows,
-            "comparison_summary": summary, "comparison": detail}
+            "unscored_rows": unscored}
 
 
 def _safe_prosperity_display(payload: dict | None) -> dict:
@@ -1835,9 +1843,10 @@ def format_section_prosperity_compass(payload: dict | None) -> str:
         if display["rows"]:
             lines.append(" | ".join(display["columns"]))
             lines.extend(" | ".join(row) for row in display["rows"])
-    if "comparison_summary" in display:
-        lines.append(display["comparison_summary"])
-        lines.extend("{}: {}".format(label, codes) for label, codes in display["comparison"])
+        if display["unscored_rows"]:
+            lines.append("未评分（{} 只，不代表没涨）: {}".format(
+                len(display["unscored_rows"]),
+                "、".join("{}（{}）".format(symbol, why) for symbol, why in display["unscored_rows"])))
     return "\n".join(lines)
 
 
@@ -2333,15 +2342,14 @@ def build_html_payload(market_signals: dict, dv_result: dict, as_of: str) -> dic
             "columns": prosperity_display["columns"],
             "rows": [dict(zip(prosperity_display["columns"], row)) for row in prosperity_display["rows"]],
         })
+        if prosperity_display["unscored_rows"]:
+            blocks.append({
+                "heading": PROSPERITY_UNSCORED_TITLE,
+                "columns": PROSPERITY_UNSCORED_COLUMNS,
+                "rows": [dict(zip(PROSPERITY_UNSCORED_COLUMNS, row)) for row in prosperity_display["unscored_rows"]],
+            })
     elif prosperity_display["state"] == "warning":
         blocks.append({"heading": PROSPERITY_COMPASS_TITLE, "subtitle": prosperity_display["warning"]})
-    if "comparison_summary" in prosperity_display:
-        blocks.append({
-            "heading": PROSPERITY_COMPARISON_TITLE,
-            "subtitle": prosperity_display["comparison_summary"],
-            "columns": PROSPERITY_COMPARISON_COLUMNS,
-            "rows": [dict(zip(PROSPERITY_COMPARISON_COLUMNS, row)) for row in prosperity_display["comparison"]],
-        })
 
     # Sections 1 and 2 split on the prosperity pool (Boss 2026-11-09); same groups as the text.
     split_symbols, split_note = _prosperity_split(market_signals)
@@ -2551,11 +2559,12 @@ def build_morning_visual_sections(
                  "widths": PROSPERITY_COMPASS_WIDTHS, "grouped": False,
                  "rows": [{"cells": row} for row in prosperity_display["rows"]]},
             ] if table else []
-            if "comparison_summary" in prosperity_display:
+            if table and prosperity_display["unscored_rows"]:
+                # its own block, never in the subtitle: the image cuts the subtitle at 2248 px (plan P2-2)
                 prosperity_blocks.append(
-                    {"title": prosperity_display["comparison_summary"], "columns": PROSPERITY_COMPARISON_COLUMNS,
-                     "widths": PROSPERITY_COMPARISON_WIDTHS, "grouped": False,
-                     "rows": [{"cells": row} for row in prosperity_display["comparison"]]})
+                    {"title": PROSPERITY_UNSCORED_BLOCK_TITLE, "columns": PROSPERITY_UNSCORED_COLUMNS,
+                     "widths": PROSPERITY_UNSCORED_WIDTHS, "grouped": False,
+                     "rows": [{"cells": row} for row in prosperity_display["unscored_rows"]]})
             sections.append({
                 "slug": "00d_prosperity_pool",
                 "title": PROSPERITY_COMPASS_TITLE,
