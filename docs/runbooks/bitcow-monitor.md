@@ -66,7 +66,7 @@ Cron 时区为 Asia/Shanghai。08:03 = UTC 00:03，在 UTC 日线收盘后 3 分
    03 8 * * * FINANCE_CRON_LOCK_BUSY_RC=75 /root/workspace/Finance/scripts/cron_wrapper.sh finance_bitcow cron_bitcow.log /root/workspace/Finance/scripts/run_bitcow_monitor.sh
    ```
 
-5. 部署后同步更新 `scripts/cron_jobs.md`（本分支按工单未改）。
+5. 部署后在 `ARCHITECTURE.md` 的「云端 cron（北京时间）」表加一行 08:03 Daily BitCow（cron 时间表 SSOT；`scripts/cron_jobs.md` 已过时，不再更新）。
 
 ## 日常检查
 
