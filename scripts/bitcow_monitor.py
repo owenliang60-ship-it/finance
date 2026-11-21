@@ -177,12 +177,13 @@ def d_level(d: float) -> int:
 
 
 WARN_SEV = {None: 0, "warn_long_mid": 1, "warn_short_mid": 1, "warn_long_near": 2, "warn_short_near": 2}
-WARN_TEXT = {
-    "warn_long_near": "中层预警：极近多头ATR止损（距边界不足0.5 ATR）",
-    "warn_long_mid": "中层预警：跌破EMA84中线，进入止损警戒区",
-    "warn_short_near": "中层预警：极近空头ATR止损（距边界不足0.5 ATR）",
-    "warn_short_mid": "中层预警：站上EMA84中线，进入止损警戒区",
+WARN_DESC = {
+    "warn_long_near": "极近多头ATR止损（距边界不足0.5 ATR）",
+    "warn_long_mid": "跌破EMA84中线，进入止损警戒区",
+    "warn_short_near": "极近空头ATR止损（距边界不足0.5 ATR）",
+    "warn_short_mid": "站上EMA84中线，进入止损警戒区",
 }
+WARN_TEXT = {k: "中层预警：" + v for k, v in WARN_DESC.items()}
 FLIP_TEXT = {
     "flip_short": "触发多头ATR止损 / 中层翻空：收盘跌破下沿",
     "flip_long": "触发空头ATR止损 / 中层翻多：收盘站上上沿",
@@ -295,3 +296,48 @@ def fetch_dvol(fetch: Any, now_ms: int, as_of_ms: int) -> dict[str, Any]:
     except Exception as exc:
         logger.warning("dvol_unavailable error=%s", type(exc).__name__)
         return _dvol_na("接口异常")
+
+
+def _check_label(label: str) -> str:
+    if label and not LABEL_RE.fullmatch(label):
+        raise ValueError("label 只允许 1-20 位字母、数字或连字符")
+    return label
+
+
+def render(report: dict[str, Any], label: str = "") -> str:
+    _check_label(label)
+    tag = "【{}】".format(label) if label else ""
+    r, slow, dvol = report, report["slow"], report["dvol"]
+    alerts = r["alerts"]
+    if alerts:
+        lines = ["🚨 *{}【奶牛信号报警】BTC 日线 ({})*".format(tag, r["as_of"])]
+        lines += ["• " + a for a in alerts] + [""]
+    else:
+        lines = ["📊 *{}【奶牛日线状态】BTC ({}) · 无新信号*".format(tag, r["as_of"])]
+    lines.append("收盘：{:,.2f} USDT（{} UTC 日线）".format(r["close"], r["as_of"]))
+    lines.append(
+        "慢层：{} · 自 {} · 周收盘 {:,.2f} vs 50W SMA {:,.2f}（{}）· 日收盘偏离 {:+.2f}%".format(
+            "多头" if slow["bull"] else "空头", slow["since"], slow["wclose"], slow["sma50"],
+            slow["weekly_date"], slow["daily_vs_sma50_pct"],
+        )
+    )
+    long_side = r["mid_state"] == 1
+    mid = "中层：{} · 自 {} · EMA84 {:,.2f} · 通道 {:,.2f} 至 {:,.2f} · ATR止损沿（{}）{:,.2f} 距离 {:.2f} ATR / {:.2f}%".format(
+        "多头" if long_side else "空头", r["mid_since"], r["ema84"], r["lower"], r["upper"],
+        "下沿" if long_side else "上沿", r["stop_price"], r["stop_dist_atr"], r["stop_dist_pct"],
+    )
+    event = r["mid_event"]
+    if event in WARN_DESC:
+        mid += " · {}：{}".format("新进警戒" if WARN_TEXT[event] in alerts else "持续警戒", WARN_DESC[event])
+    lines.append(mid)
+    tier = D_TIER.get((r["d_level"], r["d"] > 0), "常态区间")
+    lines.append("偏离D：{:+.2f} · {} · D=+7 价 {:,.2f} · D=-7 价 {:,.2f}".format(r["d"], tier, r["d_plus7"], r["d_minus7"]))
+    if dvol.get("available"):
+        lines.append("DVOL：{:.2f} · 1年分位 {:.1f}%".format(dvol["value"], dvol["percentile"]))
+    else:
+        lines.append("DVOL：⚠️ 不可用（{}）".format(dvol.get("reason") or "未知"))
+    text = "\n".join(lines)
+    unsafe = any(ch in text for ch in "_[`") or any(line.count("*") % 2 for line in text.splitlines())
+    if unsafe or len(text) >= 4000:
+        raise DataError("消息不满足 Telegram Markdown v1 安全约束")
+    return text

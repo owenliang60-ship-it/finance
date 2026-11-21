@@ -519,3 +519,100 @@ def test_closed_daily_bars_rejects(case):
 def test_closed_daily_bars_rejects_non_list_payload():
     with pytest.raises(DataError):
         bm.closed_daily_bars({"code": -1}, NOW_MS)
+
+
+# ---------------------------------------------------------------- T7 render
+
+DVOL_OK = {"available": True, "value": 52.54, "percentile": 70.41, "reason": ""}
+FIVE = ("收盘", "慢层", "中层", "偏离D", "DVOL")
+
+
+def _report(day: str, dvol=DVOL_OK):
+    return bm.evaluate(_upto(day)[-1000:], dvol)
+
+
+def _assert_md_safe(text: str):
+    assert "_" not in text and "[" not in text and "`" not in text
+    for line in text.splitlines():
+        assert line.count("*") % 2 == 0, line
+    assert len(text) < 4000
+
+
+def test_render_no_signal_day():
+    rep = _report("2026-11-20")
+    assert rep["alerts"] == []
+    text = bm.render(rep)
+    first = text.splitlines()[0]
+    assert "🚨" not in text
+    assert first == "📊 *【奶牛日线状态】BTC (2026-11-20) · 无新信号*"
+    for key in FIVE:
+        assert key in text
+    assert "58,951.51" in text and "65,351.05" in text and "{:,.2f}".format(rep["slow"]["sma50"]) in text
+    assert "2026-11-08" in text and "2026-11-06" in text
+    assert "78,221.46" in text and "6.88 ATR" in text and "32.69%" in text
+    assert "-5.88" in text and "95,026.43" in text and "55,814.85" in text
+    assert "52.54" in text and "70.4%" in text
+    _assert_md_safe(text)
+
+
+def test_render_alert_day_lists_alerts():
+    rep = _report("2026-11-06")
+    text = bm.render(rep)
+    lines = text.splitlines()
+    assert lines[0] == "🚨 *【奶牛信号报警】BTC 日线 (2026-11-06)*"
+    for a in rep["alerts"]:
+        assert a in text
+    for key in FIVE:
+        assert key in text
+    _assert_md_safe(text)
+
+
+def test_render_label_uses_cjk_brackets():
+    text = bm.render(_report("2026-11-06"), label="TEST-1")
+    assert text.splitlines()[0] == "🚨 *【TEST-1】【奶牛信号报警】BTC 日线 (2026-11-06)*"
+    text = bm.render(_report("2026-11-20"), label="dry")
+    assert text.splitlines()[0].startswith("📊 *【dry】【奶牛日线状态】")
+    _assert_md_safe(text)
+
+
+@pytest.mark.parametrize("label", ["a_b", "a b", "x" * 21, "[x]", "a*b", "测试", "abc\n"])
+def test_render_rejects_bad_label(label):
+    with pytest.raises(ValueError):
+        bm.render(_report("2026-11-20"), label=label)
+
+
+def test_render_persistent_warning_noted_without_siren():
+    rep = _report("2026-11-03")  # warn_long_near persisting from 2026-11-02
+    assert rep["alerts"] == [] and rep["mid_event"] == "warn_long_near"
+    text = bm.render(rep)
+    assert "🚨" not in text and "持续警戒" in text and "极近多头ATR止损" in text
+
+
+@pytest.mark.parametrize("reason", ["接口异常", "数据过期", "样本不足"])
+def test_render_dvol_unavailable(reason):
+    text = bm.render(_report("2026-11-20", {"available": False, "value": None, "percentile": None, "reason": reason}))
+    assert "DVOL：⚠️ 不可用（{}）".format(reason) in text
+    _assert_md_safe(text)
+
+
+def test_render_markdown_invariants_over_history():
+    dvols = [DVOL_OK, DVOL_NA]
+    seen_alert = seen_quiet = 0
+    for i in range(1000, len(ALL_BARS)):
+        rep = bm.evaluate(ALL_BARS[i - 999 : i + 1], dvols[i % 2])
+        text = bm.render(rep, label="P-1" if i % 3 == 0 else "")
+        _assert_md_safe(text)
+        if rep["alerts"]:
+            seen_alert += 1
+            assert text.startswith("🚨")
+        else:
+            seen_quiet += 1
+            assert "🚨" not in text
+    assert seen_alert > 50 and seen_quiet > 50
+
+
+def test_render_guard_rejects_unsafe_text():
+    rep = dict(_report("2026-11-20"))
+    rep["alerts"] = ["bad_text"]
+    with pytest.raises(DataError):
+        bm.render(rep)
