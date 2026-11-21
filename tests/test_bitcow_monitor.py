@@ -373,6 +373,14 @@ def test_dvol_stats_skips_dict_and_none_rows():
     assert out["available"] is True and out["value"] == rows[-1][4]
 
 
+def test_dvol_stats_requires_exact_365_utc_days():
+    rows = _dvol_rows(400)
+    del rows[100:135]  # drop 35 days inside the last 365; 365 rows remain overall
+    assert len(rows) == 365 and rows[-1][0] == AS_OF_MS
+    out = bm.dvol_stats(rows, AS_OF_MS, NOW_MS)
+    assert out == {"available": False, "value": None, "percentile": None, "reason": "样本不足"}
+
+
 def test_dvol_stats_insufficient_samples():
     out = bm.dvol_stats(_dvol_rows(364), AS_OF_MS, NOW_MS)
     assert out == {"available": False, "value": None, "percentile": None, "reason": "样本不足"}

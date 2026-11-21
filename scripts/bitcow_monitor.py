@@ -299,9 +299,10 @@ def dvol_stats(raw_rows: list[Any], as_of_ms: int, now_ms: int, window_days: int
     keys = sorted(closes)
     if not keys or keys[-1] != as_of_ms:
         return _dvol_na("数据过期")
-    if len(keys) < window_days:
+    expected = [as_of_ms - (window_days - 1 - i) * DAY_MS for i in range(window_days)]
+    if not all(k in closes for k in expected):
         return _dvol_na("样本不足")
-    vals = [closes[k] for k in keys[-window_days:]]
+    vals = [closes[k] for k in expected]
     current = vals[-1]
     pct = 100.0 * sum(1 for v in vals if v <= current) / len(vals)
     return {"available": True, "value": current, "percentile": pct, "reason": ""}
