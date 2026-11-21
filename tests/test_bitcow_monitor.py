@@ -1,6 +1,6 @@
-"""BitCow daily BTC signal monitor tests (offline; fixture tests/fixtures/bitcow)."""
-
 from __future__ import annotations
+
+# BitCow daily BTC signal monitor tests (offline; fixture tests/fixtures/bitcow).
 
 import csv
 from datetime import datetime, timezone
@@ -351,6 +351,14 @@ def test_dvol_stats_drops_invalid_and_dedupes_keep_last():
     rows.append([AS_OF_MS, 1, 1, 1, 77.0])  # duplicate ts, later wins
     out = bm.dvol_stats(rows, AS_OF_MS, NOW_MS)
     assert out["available"] is True and out["value"] == 77.0
+
+
+def test_dvol_stats_skips_dict_and_none_rows():
+    rows = _dvol_rows(366)
+    rows.insert(5, {"ts": 1, "close": 2})
+    rows.insert(6, None)
+    out = bm.dvol_stats(rows, AS_OF_MS, NOW_MS)
+    assert out["available"] is True and out["value"] == rows[-1][4]
 
 
 def test_dvol_stats_insufficient_samples():

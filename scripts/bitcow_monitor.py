@@ -1,9 +1,7 @@
-#!/usr/bin/env python3
-"""BTC 奶牛（BitCow）日线信号监控：慢层 50W SMA + 中层 EMA84±ATR14 + 偏离 D + DVOL。
-
-核心计算只用标准库；网络用 requests；投递用 src.telegram_bot（延迟导入）。
-"""
 from __future__ import annotations
+
+# BTC 奶牛（BitCow）日线信号监控：慢层 50W SMA + 中层 EMA84±ATR14 + 偏离 D + DVOL。
+# 核心计算只用标准库；网络用 requests；投递用 src.telegram_bot（延迟导入）。
 
 import argparse
 import json
@@ -276,7 +274,7 @@ def dvol_stats(raw_rows: list[Any], as_of_ms: int, now_ms: int, window_days: int
     for row in raw_rows:
         try:
             ts, val = int(row[0]), float(row[4])
-        except (TypeError, ValueError, IndexError):
+        except (TypeError, ValueError, IndexError, KeyError):
             continue
         if ts + DAY_MS > now_ms or not (math.isfinite(val) and val > 0):
             continue
