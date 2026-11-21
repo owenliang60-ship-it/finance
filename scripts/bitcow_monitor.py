@@ -105,7 +105,7 @@ def ema_atr(bars: Sequence[Bar], ema_len: int = 84, atr_len: int = 14) -> tuple[
         ema.append(c * k + ema[-1] * (1.0 - k))
         tr = max(h - lo, abs(h - pc), abs(lo - pc))
         atr.append((atr[-1] * (atr_len - 1) + tr) / atr_len)
-    if not (math.isfinite(atr[-1]) and atr[-1] > 0):
+    if not all(math.isfinite(x) and x > 0 for x in atr[-2:]):
         raise DataError("ATR 非正或非有限")
     return ema, atr
 

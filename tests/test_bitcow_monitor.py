@@ -87,6 +87,16 @@ def test_ema_atr_rejects_short_series_and_zero_atr():
         ema_atr(flat)
 
 
+
+def test_ema_atr_rejects_zero_previous_atr():
+    # flat history, only the last day moves: atr[-1] > 0 but atr[-2] == 0
+    bars = [Bar(i * DAY_MS, 5.0, 5.0, 5.0) for i in range(399)] + [Bar(399 * DAY_MS, 6.0, 5.0, 5.5)]
+    with pytest.raises(DataError):
+        ema_atr(bars)
+    with pytest.raises(DataError):
+        bm.evaluate(bars, {"available": False, "value": None, "percentile": None, "reason": "接口异常"})
+
+
 # ---------------------------------------------------------------- T2 mid_step
 
 # ema=100, atr=10 → upper=110, lower=90; near band (<0.5 ATR) = (90, 95) / (105, 110)
