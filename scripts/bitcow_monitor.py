@@ -166,14 +166,14 @@ def slow_layer(bars: Sequence[Bar], sma_len: int = 50) -> dict[str, Any]:
     weeks = [b for b in bars if _utc(b.open_ms).weekday() == 6]
     if len(weeks) < sma_len + 1:
         raise DataError("周线数量不足以计算 50W SMA")
-    since = _day(weeks[sma_len - 1].open_ms)
+    since, since_exact = _day(weeks[sma_len - 1].open_ms), False
     bulls: list[bool] = []
     sma = 0.0
     for i in range(sma_len - 1, len(weeks)):
         sma = sum(w.close for w in weeks[i - sma_len + 1 : i + 1]) / sma_len
         bull = weeks[i].close > sma
         if bulls and bull != bulls[-1]:
-            since = _day(weeks[i].open_ms)
+            since, since_exact = _day(weeks[i].open_ms), True
         bulls.append(bull)
     flipped = None
     if _utc(bars[-1].open_ms).weekday() == 6 and bulls[-1] != bulls[-2]:
@@ -184,6 +184,7 @@ def slow_layer(bars: Sequence[Bar], sma_len: int = 50) -> dict[str, Any]:
         "sma50": sma,
         "weekly_date": _day(weeks[-1].open_ms),
         "since": since,
+        "since_exact": since_exact,
         "flipped": flipped,
         "daily_vs_sma50_pct": (bars[-1].close / sma - 1.0) * 100.0,
     }
@@ -225,7 +226,7 @@ D_TIER = {
 
 def evaluate(bars: Sequence[Bar], dvol: dict[str, Any]) -> dict[str, Any]:
     ema, atr = ema_atr(bars)
-    state, mid_since = 0, None
+    state, mid_since, mid_since_exact = 0, None, False
     states: list[int] = []
     events: list[str | None] = []
     for i, b in enumerate(bars):
@@ -233,6 +234,7 @@ def evaluate(bars: Sequence[Bar], dvol: dict[str, Any]) -> dict[str, Any]:
         state, event = mid_step(prev, b.close, ema[i], atr[i])
         if event in FLIP_TEXT or (prev == 0 and state != 0 and mid_since is None):
             mid_since = _day(b.open_ms)
+            mid_since_exact = mid_since_exact or event in FLIP_TEXT
         states.append(state)
         events.append(event)
     if states[-1] == 0:
@@ -265,6 +267,7 @@ def evaluate(bars: Sequence[Bar], dvol: dict[str, Any]) -> dict[str, Any]:
         "slow": slow,
         "mid_state": states[-1],
         "mid_since": mid_since,
+        "mid_since_exact": mid_since_exact,
         "mid_event": event,
         "ema84": e,
         "atr14": a,
@@ -341,14 +344,15 @@ def render(report: dict[str, Any], label: str = "") -> str:
         lines = ["📊 *{}【奶牛日线状态】BTC ({}) · 无新信号*".format(tag, r["as_of"])]
     lines.append("收盘：{:,.2f} USDT（{} UTC 日线）".format(r["close"], r["as_of"]))
     lines.append(
-        "慢层：{} · 自 {} · 周收盘 {:,.2f} vs 50W SMA {:,.2f}（{}）· 日收盘偏离 {:+.2f}%".format(
-            "多头" if slow["bull"] else "空头", slow["since"], slow["wclose"], slow["sma50"],
-            slow["weekly_date"], slow["daily_vs_sma50_pct"],
+        "慢层：{} · {} {} · 周收盘 {:,.2f} vs 50W SMA {:,.2f}（{}）· 日收盘偏离 {:+.2f}%".format(
+            "多头" if slow["bull"] else "空头", "自" if slow["since_exact"] else "至少自", slow["since"],
+            slow["wclose"], slow["sma50"], slow["weekly_date"], slow["daily_vs_sma50_pct"],
         )
     )
     long_side = r["mid_state"] == 1
-    mid = "中层：{} · 自 {} · EMA84 {:,.2f} · 通道 {:,.2f} 至 {:,.2f} · ATR止损沿（{}）{:,.2f} 距离 {:.2f} ATR / {:.2f}%".format(
-        "多头" if long_side else "空头", r["mid_since"], r["ema84"], r["lower"], r["upper"],
+    mid = "中层：{} · {} {} · EMA84 {:,.2f} · 通道 {:,.2f} 至 {:,.2f} · ATR止损沿（{}）{:,.2f} 距离 {:.2f} ATR / {:.2f}%".format(
+        "多头" if long_side else "空头", "自" if r["mid_since_exact"] else "至少自", r["mid_since"],
+        r["ema84"], r["lower"], r["upper"],
         "下沿" if long_side else "上沿", r["stop_price"], r["stop_dist_atr"], r["stop_dist_pct"],
     )
     event = r["mid_event"]

@@ -929,3 +929,33 @@ def test_wrapper_respects_finance_project_dir(tmp_path):
     out = _wrapper(tmp_path, {"FINANCE_PROJECT_DIR": str(fake)})
     assert out.returncode == 0, out.stderr
     assert out.stdout.startswith(str(fake / "scripts" / "bitcow_monitor.py") + " ")
+
+
+# ---------------------------------------------------------------- rework 2: exact vs at-least since
+
+
+def test_since_not_exact_when_window_has_no_slow_flip():
+    rep = bm.evaluate(_upto("2025-11-15")[-999:], DVOL_OK)
+    assert rep["slow"]["since_exact"] is False and rep["slow"]["since"] == "2024-02-04"
+    text = bm.render(rep)
+    assert "慢层：多头 · 至少自 2024-02-04" in text
+    _assert_md_safe(text)
+
+
+def test_mid_since_not_exact_on_monotonic_series():
+    start = _ms("2020-01-02")
+    bars = [Bar(start + i * DAY_MS, 100.0 + i + 0.5, 100.0 + i - 0.5, 100.0 + i) for i in range(400)]
+    rep = bm.evaluate(bars, DVOL_OK)
+    assert rep["mid_state"] == 1 and rep["mid_since_exact"] is False
+    assert rep["slow"]["since_exact"] is False
+    text = bm.render(rep)
+    assert "中层：多头 · 至少自 {}".format(rep["mid_since"]) in text
+    assert "慢层：多头 · 至少自 {}".format(rep["slow"]["since"]) in text
+
+
+def test_since_exact_on_2026_11_20():
+    rep = _report("2026-11-20")
+    assert rep["slow"]["since_exact"] is True and rep["mid_since_exact"] is True
+    text = bm.render(rep)
+    assert "慢层：空头 · 自 2026-11-08" in text and "中层：空头 · 自 2026-11-06" in text
+    assert "至少自" not in text
