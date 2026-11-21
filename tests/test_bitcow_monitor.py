@@ -136,3 +136,53 @@ def test_mid_step_real_anchors(window):
     assert ev["2026-11-06"] == (-1, "flip_short")
     assert ev["2026-11-05"][0] == 1 and ev["2026-11-05"][1].startswith("warn_long")
     assert ev["2026-11-20"][0] == -1 and ev["2026-11-20"][1] not in ("flip_long", "flip_short")
+
+
+# ---------------------------------------------------------------- T3 slow_layer
+
+
+def test_slow_layer_sunday_flip_bear():
+    s = bm.slow_layer(_upto("2026-11-08"))
+    assert s["flipped"] == "bear" and s["bull"] is False
+    assert s["weekly_date"] == "2026-11-08" and s["since"] == "2026-11-08"
+
+
+def test_slow_layer_monday_after_flip_is_not_flipped():
+    bars = _upto("2026-11-09")
+    s = bm.slow_layer(bars)
+    assert s["flipped"] is None and s["bull"] is False
+    assert s["weekly_date"] == "2026-11-08"
+    assert s["daily_vs_sma50_pct"] == pytest.approx((bars[-1].close / s["sma50"] - 1.0) * 100.0)
+
+
+@pytest.mark.parametrize("day, flipped", [("2026-09-20", "bull"), ("2025-11-16", "bear")])
+def test_slow_layer_historical_flips(day, flipped):
+    s = bm.slow_layer(_upto(day))
+    assert s["flipped"] == flipped and s["since"] == day
+
+
+@pytest.mark.parametrize("window", [None, 1000])
+def test_slow_layer_2026_11_15_values(window):
+    bars = _upto("2026-11-15")
+    if window:
+        bars = bars[-window:]
+    s = bm.slow_layer(bars)
+    assert s["weekly_date"] == "2026-11-15"
+    assert s["wclose"] == 65351.05
+    assert s["sma50"] == pytest.approx(75035.1, abs=0.1)
+    assert s["since"] == "2026-11-08"
+    assert s["bull"] is False and s["flipped"] is None
+
+
+def test_slow_layer_rejects_fewer_than_51_weeks():
+    with pytest.raises(DataError):
+        bm.slow_layer(ALL_BARS[:350])
+
+
+def test_slow_layer_since_falls_back_to_first_sma_week_without_flip():
+    # 60 synthetic rising weeks starting on a Sunday → always bull, never flips
+    sunday0 = _ms("2017-08-20")
+    bars = [Bar(sunday0 + i * DAY_MS, 1.0 + i + 0.5, 1.0 + i - 0.5, 1.0 + i) for i in range(60 * 7)]
+    s = bm.slow_layer(bars)
+    first_sma_week = datetime.fromtimestamp((sunday0 + 49 * 7 * DAY_MS) / 1000, tz=timezone.utc).date().isoformat()
+    assert s["bull"] is True and s["since"] == first_sma_week

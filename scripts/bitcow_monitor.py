@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import math
 import re
-from typing import NamedTuple, Sequence
+from datetime import datetime, timezone
+from typing import Any, NamedTuple, Sequence
 
 DAY_MS = 86_400_000
 MIN_DAILY_BARS = 900
@@ -68,3 +69,38 @@ def mid_step(prev_state: int, close: float, ema: float, atr: float) -> tuple[int
     if close > ema:
         return -1, "warn_short_mid"
     return -1, None
+
+
+def _utc(ms: int) -> datetime:
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
+
+
+def _day(ms: int) -> str:
+    return _utc(ms).date().isoformat()
+
+
+def slow_layer(bars: Sequence[Bar], sma_len: int = 50) -> dict[str, Any]:
+    weeks = [b for b in bars if _utc(b.open_ms).weekday() == 6]
+    if len(weeks) < sma_len + 1:
+        raise DataError("周线数量不足以计算 50W SMA")
+    since = _day(weeks[sma_len - 1].open_ms)
+    bulls: list[bool] = []
+    sma = 0.0
+    for i in range(sma_len - 1, len(weeks)):
+        sma = sum(w.close for w in weeks[i - sma_len + 1 : i + 1]) / sma_len
+        bull = weeks[i].close > sma
+        if bulls and bull != bulls[-1]:
+            since = _day(weeks[i].open_ms)
+        bulls.append(bull)
+    flipped = None
+    if _utc(bars[-1].open_ms).weekday() == 6 and bulls[-1] != bulls[-2]:
+        flipped = "bull" if bulls[-1] else "bear"
+    return {
+        "bull": bulls[-1],
+        "wclose": weeks[-1].close,
+        "sma50": sma,
+        "weekly_date": _day(weeks[-1].open_ms),
+        "since": since,
+        "flipped": flipped,
+        "daily_vs_sma50_pct": (bars[-1].close / sma - 1.0) * 100.0,
+    }
