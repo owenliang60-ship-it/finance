@@ -840,3 +840,35 @@ def test_main_default_state_path(monkeypatch):
     monkeypatch.setattr(bm, "run", lambda now_ms, state_path, **k: seen.update(p=state_path) or 0)
     assert bm.main([]) == 0
     assert seen["p"] == bm.PROJECT_ROOT / "data" / "bitcow_monitor" / "state.json"
+
+
+# ---------------------------------------------------------------- rework: shell wrapper project dir
+
+import os  # noqa: E402
+import subprocess  # noqa: E402
+
+WRAPPER = Path(__file__).resolve().parent.parent / "scripts" / "run_bitcow_monitor.sh"
+
+
+def _wrapper(tmp_path, extra_env):
+    env = {k: v for k, v in os.environ.items() if k != "FINANCE_PROJECT_DIR"}
+    env.update(FINANCE_PYTHON="/bin/echo", **extra_env)
+    return subprocess.run(
+        ["bash", str(WRAPPER), "--dry-run", "--label", "a b"],
+        cwd=tmp_path, env=env, capture_output=True, text=True, timeout=10,
+    )
+
+
+def test_wrapper_defaults_project_dir_to_script_parent(tmp_path):
+    out = _wrapper(tmp_path, {})
+    root = WRAPPER.parent.parent
+    assert out.returncode == 0, out.stderr
+    assert out.stdout == "{} --dry-run --label a b\n".format(root / "scripts" / "bitcow_monitor.py")
+
+
+def test_wrapper_respects_finance_project_dir(tmp_path):
+    fake = tmp_path / "with space"
+    fake.mkdir()
+    out = _wrapper(tmp_path, {"FINANCE_PROJECT_DIR": str(fake)})
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.startswith(str(fake / "scripts" / "bitcow_monitor.py") + " ")
