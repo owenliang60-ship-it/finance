@@ -394,3 +394,128 @@ def test_fetch_dvol_params_and_happy_path():
         "end_timestamp": NOW_MS,
         "resolution": "86400",
     }
+
+
+# ---------------------------------------------------------------- T6 fetch_json + closed_daily_bars
+
+import requests  # noqa: E402
+
+
+class _Resp:
+    def __init__(self, status: int, payload=None, bad_json: bool = False):
+        self.status_code = status
+        self._payload = payload
+        self._bad = bad_json
+
+    def json(self):
+        if self._bad:
+            raise ValueError("not json")
+        return self._payload
+
+
+@pytest.fixture
+def http(monkeypatch):
+    """Script requests.get responses; record calls and sleeps."""
+    state = {"script": [], "calls": [], "sleeps": []}
+
+    def fake_get(url, params=None, timeout=None):
+        state["calls"].append((url, params, timeout))
+        item = state["script"].pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr(bm.requests, "get", fake_get)
+    monkeypatch.setattr(bm.time, "sleep", lambda s: state["sleeps"].append(s))
+    return state
+
+
+def test_fetch_json_network_failure_exhausts_retries(http):
+    http["script"] = [requests.ConnectionError("x"), requests.Timeout("y"), requests.ConnectionError("z")]
+    with pytest.raises(DataError):
+        bm.fetch_json("https://example.invalid/a", {"k": "v"})
+    assert len(http["calls"]) == 3 and http["sleeps"] == [2, 4]
+    assert http["calls"][0] == ("https://example.invalid/a", {"k": "v"}, 20)
+
+
+def test_fetch_json_429_then_success(http):
+    http["script"] = [_Resp(429), _Resp(200, [1, 2])]
+    assert bm.fetch_json("u", {}) == [1, 2]
+    assert http["sleeps"] == [2]
+
+
+def test_fetch_json_5xx_exhausts(http):
+    http["script"] = [_Resp(500), _Resp(502), _Resp(503)]
+    with pytest.raises(DataError):
+        bm.fetch_json("u", {})
+    assert http["sleeps"] == [2, 4]
+
+
+@pytest.mark.parametrize("status", [418, 404, 400, 451])
+def test_fetch_json_other_4xx_raise_immediately(http, status):
+    http["script"] = [_Resp(status)]
+    with pytest.raises(DataError):
+        bm.fetch_json("u", {})
+    assert len(http["calls"]) == 1 and http["sleeps"] == []
+
+
+def test_fetch_json_bad_json_raises(http):
+    http["script"] = [_Resp(200, bad_json=True)]
+    with pytest.raises(DataError):
+        bm.fetch_json("u", {})
+    assert len(http["calls"]) == 1
+
+
+def _klines(bars: list[Bar]) -> list[list]:
+    return [
+        [b.open_ms, str(b.close), str(b.high), str(b.low), str(b.close), "1.0", b.open_ms + DAY_MS - 1, "0", 1]
+        for b in bars
+    ]
+
+
+def _raw_live() -> list[list]:
+    """Binance-like 1000 rows: 999 closed through 2026-11-20 + today's open bar."""
+    raw = _klines(_upto("2026-11-20")[-999:])
+    raw.append([_ms("2026-11-21"), "58951.5", "59500", "58000", "59100", "1", _ms("2026-11-22") - 1, "0", 1])
+    return raw
+
+
+def test_closed_daily_bars_happy_path_drops_open_bar():
+    bars = bm.closed_daily_bars(_raw_live(), NOW_MS)
+    assert len(bars) == 999 and bars[-1].open_ms == AS_OF_MS
+    assert bars[-1] == _upto("2026-11-20")[-1]
+
+
+def _mutate(fn):
+    raw = _raw_live()
+    fn(raw)
+    return raw
+
+
+BAD_RAW = {
+    "stale_last_bar": _mutate(lambda r: r.__delitem__(slice(-2, None))),
+    "future_bar": _mutate(lambda r: r[-1].__setitem__(6, _ms("2026-11-21"))),
+    "gap_one_day": _mutate(lambda r: r.__delitem__(500)),
+    "duplicate": _mutate(lambda r: r.insert(500, list(r[500]))),
+    "unsorted": _mutate(lambda r: r.__setitem__(slice(500, 502), [r[501], r[500]])),
+    "under_900": _mutate(lambda r: r.__delitem__(slice(0, 100))),
+    "nan_close": _mutate(lambda r: r[300].__setitem__(4, "nan")),
+    "inf_high": _mutate(lambda r: r[300].__setitem__(2, "inf")),
+    "zero_low": _mutate(lambda r: r[300].__setitem__(3, "0")),
+    "high_below_low": _mutate(lambda r: r[300].__setitem__(2, "1.0")),
+    "close_above_high": _mutate(lambda r: r[300].__setitem__(4, "999999999")),
+    "short_row": _mutate(lambda r: r.__setitem__(300, r[300][:5])),
+    "non_numeric": _mutate(lambda r: r[300].__setitem__(4, "abc")),
+    "not_a_row": _mutate(lambda r: r.__setitem__(300, None)),
+}
+
+
+@pytest.mark.parametrize("case", sorted(BAD_RAW))
+def test_closed_daily_bars_rejects(case):
+    with pytest.raises(DataError):
+        bm.closed_daily_bars(BAD_RAW[case], NOW_MS)
+
+
+def test_closed_daily_bars_rejects_non_list_payload():
+    with pytest.raises(DataError):
+        bm.closed_daily_bars({"code": -1}, NOW_MS)

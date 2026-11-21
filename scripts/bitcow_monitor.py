@@ -8,8 +8,11 @@ from __future__ import annotations
 import logging
 import math
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any, NamedTuple, Sequence
+
+import requests
 
 DAY_MS = 86_400_000
 MIN_DAILY_BARS = 900
@@ -29,6 +32,59 @@ class Bar(NamedTuple):
     high: float
     low: float
     close: float
+
+
+def fetch_json(url: str, params: dict[str, Any], timeout: int = 20, max_retries: int = 3) -> Any:
+    reason = ""
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.get(url, params=params, timeout=timeout)
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            reason = type(exc).__name__
+        except requests.RequestException as exc:
+            raise DataError("请求失败: {}".format(type(exc).__name__)) from None
+        else:
+            status = resp.status_code
+            if status == 429 or status >= 500:
+                reason = "HTTP {}".format(status)
+            elif status >= 400:
+                raise DataError("HTTP {}".format(status))
+            else:
+                try:
+                    return resp.json()
+                except ValueError:
+                    raise DataError("JSON 解析失败") from None
+        if attempt < max_retries:
+            logger.warning("fetch_retry attempt=%d reason=%s", attempt, reason)
+            time.sleep(2 ** attempt)
+    raise DataError("重试耗尽: {}".format(reason))
+
+
+def closed_daily_bars(raw: list[Any], now_ms: int) -> list[Bar]:
+    if not isinstance(raw, list):
+        raise DataError("K线响应不是列表")
+    bars: list[Bar] = []
+    for row in raw:
+        try:
+            close_ms = int(row[6])
+            bar = Bar(int(row[0]), float(row[2]), float(row[3]), float(row[4]))
+        except (TypeError, ValueError, IndexError, KeyError):
+            raise DataError("K线行格式非法") from None
+        if close_ms >= now_ms:
+            continue
+        if not all(math.isfinite(x) and x > 0 for x in bar[1:]):
+            raise DataError("K线价格非有限正数")
+        if not (bar.high >= bar.low and bar.low <= bar.close <= bar.high):
+            raise DataError("K线 OHLC 不一致")
+        bars.append(bar)
+    for a, b in zip(bars, bars[1:]):
+        if b.open_ms - a.open_ms != DAY_MS:
+            raise DataError("K线重复、缺口或乱序")
+    if len(bars) < MIN_DAILY_BARS:
+        raise DataError("已收盘日线不足 {} 根".format(MIN_DAILY_BARS))
+    if bars[-1].open_ms != (now_ms // DAY_MS - 1) * DAY_MS:
+        raise DataError("末根日线不是 UTC 昨日")
+    return bars
 
 
 def ema_atr(bars: Sequence[Bar], ema_len: int = 84, atr_len: int = 14) -> tuple[list[float], list[float]]:
