@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import logging
 import math
 import re
 from datetime import datetime, timezone
@@ -15,6 +16,8 @@ MIN_DAILY_BARS = 900
 BINANCE_KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
 DERIBIT_DVOL_URL = "https://www.deribit.com/api/v2/public/get_volatility_index_data"
 LABEL_RE = re.compile(r"^[A-Za-z0-9-]{1,20}$")
+
+logger = logging.getLogger("bitcow_monitor")
 
 
 class DataError(RuntimeError):
@@ -196,3 +199,43 @@ def evaluate(bars: Sequence[Bar], dvol: dict[str, Any]) -> dict[str, Any]:
         "dvol": dvol,
         "alerts": alerts,
     }
+
+
+def _dvol_na(reason: str) -> dict[str, Any]:
+    return {"available": False, "value": None, "percentile": None, "reason": reason}
+
+
+def dvol_stats(raw_rows: list[Any], as_of_ms: int, now_ms: int, window_days: int = 365) -> dict[str, Any]:
+    closes: dict[int, float] = {}
+    for row in raw_rows:
+        try:
+            ts, val = int(row[0]), float(row[4])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if ts + DAY_MS > now_ms or not (math.isfinite(val) and val > 0):
+            continue
+        closes[ts] = val
+    keys = sorted(closes)
+    if not keys or keys[-1] != as_of_ms:
+        return _dvol_na("数据过期")
+    if len(keys) < window_days:
+        return _dvol_na("样本不足")
+    vals = [closes[k] for k in keys[-window_days:]]
+    current = vals[-1]
+    pct = 100.0 * sum(1 for v in vals if v <= current) / len(vals)
+    return {"available": True, "value": current, "percentile": pct, "reason": ""}
+
+
+def fetch_dvol(fetch: Any, now_ms: int, as_of_ms: int) -> dict[str, Any]:
+    params = {
+        "currency": "BTC",
+        "start_timestamp": now_ms - 400 * DAY_MS,
+        "end_timestamp": now_ms,
+        "resolution": "86400",
+    }
+    try:
+        rows = fetch(DERIBIT_DVOL_URL, params)["result"]["data"]
+        return dvol_stats(rows, as_of_ms, now_ms)
+    except Exception as exc:
+        logger.warning("dvol_unavailable error=%s", type(exc).__name__)
+        return _dvol_na("接口异常")

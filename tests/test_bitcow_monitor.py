@@ -307,3 +307,90 @@ def test_evaluate_warn_right_after_flip_is_new_alert(flat_channel):
     assert len(alerts) == 1 and "站上EMA84中线" in alerts[0]
     alerts = _alerts([111.0, 93.0], base=85.0)  # yesterday flip_long, today near lower band
     assert len(alerts) == 1 and "极近多头ATR止损" in alerts[0]
+
+
+# ---------------------------------------------------------------- T5 dvol_stats
+
+NOW_MS = _ms("2026-11-21") + 14 * 3600 * 1000  # 2026-11-21 14:00 UTC
+AS_OF_MS = _ms("2026-11-20")
+
+
+def _dvol_rows(n_closed: int, last_ms: int = AS_OF_MS) -> list[list[float]]:
+    rows = []
+    for i in range(n_closed):
+        ts = last_ms - (n_closed - 1 - i) * DAY_MS
+        v = 40.0 + (i * 37 % 101) / 10.0  # deterministic, non-monotone
+        rows.append([ts, v, v + 1, v - 1, v])
+    return rows
+
+
+def test_dvol_stats_percentile_and_unclosed_row_dropped():
+    rows = _dvol_rows(400)
+    rows.append([AS_OF_MS + DAY_MS, 99.0, 99.0, 99.0, 99.0])  # today, not closed
+    out = bm.dvol_stats(rows, AS_OF_MS, NOW_MS)
+    vals = [r[4] for r in rows[:-1]][-365:]
+    cur = vals[-1]
+    assert out["available"] is True and out["reason"] == ""
+    assert out["value"] == cur
+    assert out["percentile"] == pytest.approx(100.0 * sum(v <= cur for v in vals) / 365)
+
+
+def test_dvol_stats_hand_computed_percentile():
+    rows = [[AS_OF_MS - (364 - i) * DAY_MS, 1, 1, 1, float(i + 1)] for i in range(365)]
+    rows[-1][4] = 100.5  # current: 100 values (1..100) below, plus itself
+    out = bm.dvol_stats(rows, AS_OF_MS, NOW_MS)
+    assert out["value"] == 100.5
+    assert out["percentile"] == pytest.approx(100.0 * 101 / 365)
+
+
+def test_dvol_stats_drops_invalid_and_dedupes_keep_last():
+    rows = _dvol_rows(366)
+    rows.insert(10, [rows[10][0], 1, 1, 1, float("nan")])
+    rows.insert(20, ["bad"])
+    rows.insert(30, [rows[30][0], 1, 1, 1, -3.0])
+    rows.append([AS_OF_MS, 1, 1, 1, 77.0])  # duplicate ts, later wins
+    out = bm.dvol_stats(rows, AS_OF_MS, NOW_MS)
+    assert out["available"] is True and out["value"] == 77.0
+
+
+def test_dvol_stats_insufficient_samples():
+    out = bm.dvol_stats(_dvol_rows(364), AS_OF_MS, NOW_MS)
+    assert out == {"available": False, "value": None, "percentile": None, "reason": "样本不足"}
+
+
+@pytest.mark.parametrize("rows", [[], _dvol_rows(400, last_ms=AS_OF_MS - DAY_MS)])
+def test_dvol_stats_stale(rows):
+    out = bm.dvol_stats(rows, AS_OF_MS, NOW_MS)
+    assert out == {"available": False, "value": None, "percentile": None, "reason": "数据过期"}
+
+
+def test_fetch_dvol_api_error_degrades(caplog):
+    def boom(url, params):
+        raise bm.DataError("HTTP 503 secret-detail")
+
+    out = bm.fetch_dvol(boom, NOW_MS, AS_OF_MS)
+    assert out == {"available": False, "value": None, "percentile": None, "reason": "接口异常"}
+    assert "secret-detail" not in caplog.text
+
+
+def test_fetch_dvol_malformed_payload_degrades():
+    out = bm.fetch_dvol(lambda url, params: {"error": {"code": 1}}, NOW_MS, AS_OF_MS)
+    assert out["reason"] == "接口异常"
+
+
+def test_fetch_dvol_params_and_happy_path():
+    seen = {}
+
+    def fake(url, params):
+        seen.update(url=url, params=params)
+        return {"result": {"data": _dvol_rows(400), "continuation": None}}
+
+    out = bm.fetch_dvol(fake, NOW_MS, AS_OF_MS)
+    assert out["available"] is True
+    assert seen["url"] == bm.DERIBIT_DVOL_URL
+    assert seen["params"] == {
+        "currency": "BTC",
+        "start_timestamp": NOW_MS - 400 * DAY_MS,
+        "end_timestamp": NOW_MS,
+        "resolution": "86400",
+    }
