@@ -85,3 +85,54 @@ def test_ema_atr_rejects_short_series_and_zero_atr():
     flat = [Bar(i * DAY_MS, 5.0, 5.0, 5.0) for i in range(100)]
     with pytest.raises(DataError):
         ema_atr(flat)
+
+
+# ---------------------------------------------------------------- T2 mid_step
+
+# ema=100, atr=10 → upper=110, lower=90; near band (<0.5 ATR) = (90, 95) / (105, 110)
+@pytest.mark.parametrize(
+    "prev, close, expected",
+    [
+        (1, 89.99, (-1, "flip_short")),
+        (1, 90.0, (1, "warn_long_near")),  # close == lower: no flip, near stop
+        (1, 94.99, (1, "warn_long_near")),
+        (1, 95.0, (1, "warn_long_mid")),
+        (1, 99.99, (1, "warn_long_mid")),
+        (1, 100.0, (1, None)),
+        (1, 120.0, (1, None)),
+        (-1, 110.01, (1, "flip_long")),
+        (-1, 110.0, (-1, "warn_short_near")),  # close == upper: no flip, near stop
+        (-1, 105.01, (-1, "warn_short_near")),
+        (-1, 105.0, (-1, "warn_short_mid")),
+        (-1, 100.01, (-1, "warn_short_mid")),
+        (-1, 100.0, (-1, None)),
+        (-1, 80.0, (-1, None)),
+        (0, 120.0, (1, None)),
+        (0, 80.0, (-1, None)),
+        (0, 100.0, (0, None)),
+    ],
+)
+def test_mid_step_scenarios(prev, close, expected):
+    assert bm.mid_step(prev, close, 100.0, 10.0) == expected
+
+
+def _mid_events(bars: list[Bar]) -> dict[str, tuple[int, str | None]]:
+    ema, atr = ema_atr(bars)
+    state, out = 0, {}
+    for i, b in enumerate(bars):
+        state, event = bm.mid_step(state, b.close, ema[i], atr[i])
+        out[datetime.fromtimestamp(b.open_ms / 1000, tz=timezone.utc).date().isoformat()] = (state, event)
+    return out
+
+
+@pytest.mark.parametrize("window", [None, 1000])
+def test_mid_step_real_anchors(window):
+    bars = _upto("2026-11-20")
+    if window:
+        bars = bars[-window:]
+    ev = _mid_events(bars)
+    assert ev["2026-04-17"] == (1, "flip_long")
+    assert ev["2026-08-19"] == (1, "flip_long")
+    assert ev["2026-11-06"] == (-1, "flip_short")
+    assert ev["2026-11-05"][0] == 1 and ev["2026-11-05"][1].startswith("warn_long")
+    assert ev["2026-11-20"][0] == -1 and ev["2026-11-20"][1] not in ("flip_long", "flip_short")

@@ -41,3 +41,30 @@ def ema_atr(bars: Sequence[Bar], ema_len: int = 84, atr_len: int = 14) -> tuple[
     if not (math.isfinite(atr[-1]) and atr[-1] > 0):
         raise DataError("ATR 非正或非有限")
     return ema, atr
+
+
+def mid_step(prev_state: int, close: float, ema: float, atr: float) -> tuple[int, str | None]:
+    upper, lower = ema + atr, ema - atr
+    if close > upper:
+        new = 1
+    elif close < lower:
+        new = -1
+    else:
+        new = prev_state
+    if prev_state == 0:
+        return new, None
+    if prev_state == 1:
+        if new == -1:
+            return -1, "flip_short"
+        if close - lower < 0.5 * atr:
+            return 1, "warn_long_near"
+        if close < ema:
+            return 1, "warn_long_mid"
+        return 1, None
+    if new == 1:
+        return 1, "flip_long"
+    if upper - close < 0.5 * atr:
+        return -1, "warn_short_near"
+    if close > ema:
+        return -1, "warn_short_mid"
+    return -1, None
