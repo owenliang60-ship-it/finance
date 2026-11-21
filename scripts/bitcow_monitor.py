@@ -239,7 +239,7 @@ def evaluate(bars: Sequence[Bar], dvol: dict[str, Any]) -> dict[str, Any]:
         alerts.append("偏离D={:+.2f} 进入 {}".format(d, D_TIER[(lvl, d > 0)]))
 
     if states[-1] == 1:
-        stop_price, stop_dist_atr, stop_dist_pct = lower, (close - lower) / a, (close / lower - 1.0) * 100.0
+        stop_price, stop_dist_atr, stop_dist_pct = lower, (close - lower) / a, (close - lower) / close * 100.0
     else:
         stop_price, stop_dist_atr, stop_dist_pct = upper, (upper - close) / a, (upper / close - 1.0) * 100.0
     return {

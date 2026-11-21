@@ -264,7 +264,9 @@ def test_evaluate_flip_alerts_and_stop_fields(flat_channel):
     assert rep["alerts"] == ["触发空头ATR止损 / 中层翻多：收盘站上上沿"]
     assert rep["stop_price"] == 90.0
     assert rep["stop_dist_atr"] == pytest.approx(2.1)
-    assert rep["stop_dist_pct"] == pytest.approx((111.0 / 90.0 - 1.0) * 100.0)
+    assert rep["stop_dist_pct"] == pytest.approx((111.0 - 90.0) / 111.0 * 100.0)
+    rep = bm.evaluate(_synthetic([115.0, 100.0]), DVOL_NA)  # long, close 100, lower 90
+    assert rep["mid_state"] == 1 and rep["stop_dist_pct"] == pytest.approx(10.0)
 
 
 def test_evaluate_mid_since_falls_back_to_first_nonzero(flat_channel):
