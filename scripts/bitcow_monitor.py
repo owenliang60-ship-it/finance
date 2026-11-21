@@ -26,6 +26,7 @@ MIN_DAILY_BARS = 900
 BINANCE_KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
 DERIBIT_DVOL_URL = "https://www.deribit.com/api/v2/public/get_volatility_index_data"
 LABEL_RE = re.compile(r"^[A-Za-z0-9-]{1,20}$")
+MAX_RETRY_AFTER_SEC = 15
 
 logger = logging.getLogger("bitcow_monitor")
 
@@ -41,9 +42,24 @@ class Bar(NamedTuple):
     close: float
 
 
+def _retry_after(resp: Any) -> float:
+    headers = getattr(resp, "headers", None) or {}
+    ra = headers.get("Retry-After") or headers.get("retry-after")
+    if ra is None:
+        return 0.0
+    try:
+        wait = float(ra)
+    except (TypeError, ValueError):
+        wait = math.nan
+    if not (math.isfinite(wait) and 0 <= wait <= MAX_RETRY_AFTER_SEC):
+        raise DataError("HTTP 429 Retry-After 超限")
+    return wait
+
+
 def fetch_json(url: str, params: dict[str, Any], timeout: int = 20, max_retries: int = 3) -> Any:
     reason = ""
     for attempt in range(1, max_retries + 1):
+        wait = float(2 ** attempt)
         try:
             resp = requests.get(url, params=params, timeout=timeout)
         except (requests.ConnectionError, requests.Timeout) as exc:
@@ -54,6 +70,8 @@ def fetch_json(url: str, params: dict[str, Any], timeout: int = 20, max_retries:
             status = resp.status_code
             if status == 429 or status >= 500:
                 reason = "HTTP {}".format(status)
+                if status == 429:
+                    wait = max(wait, _retry_after(resp))
             elif status >= 400:
                 raise DataError("HTTP {}".format(status))
             else:
@@ -63,7 +81,7 @@ def fetch_json(url: str, params: dict[str, Any], timeout: int = 20, max_retries:
                     raise DataError("JSON 解析失败") from None
         if attempt < max_retries:
             logger.warning("fetch_retry attempt=%d reason=%s", attempt, reason)
-            time.sleep(2 ** attempt)
+            time.sleep(wait)
     raise DataError("重试耗尽: {}".format(reason))
 
 

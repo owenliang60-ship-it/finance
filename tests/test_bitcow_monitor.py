@@ -422,10 +422,11 @@ import requests  # noqa: E402
 
 
 class _Resp:
-    def __init__(self, status: int, payload=None, bad_json: bool = False):
+    def __init__(self, status: int, payload=None, bad_json: bool = False, headers=None):
         self.status_code = status
         self._payload = payload
         self._bad = bad_json
+        self.headers = headers or {}
 
     def json(self):
         if self._bad:
@@ -462,6 +463,34 @@ def test_fetch_json_429_then_success(http):
     http["script"] = [_Resp(429), _Resp(200, [1, 2])]
     assert bm.fetch_json("u", {}) == [1, 2]
     assert http["sleeps"] == [2]
+
+
+@pytest.mark.parametrize("value", ["60", "invalid", "-1", "nan", "inf"])
+def test_fetch_json_429_bad_or_long_retry_after_raises_immediately(http, value):
+    http["script"] = [_Resp(429, headers={"Retry-After": value}), _Resp(200, [1])]
+    with pytest.raises(DataError):
+        bm.fetch_json("u", {})
+    assert len(http["calls"]) == 1 and http["sleeps"] == []
+
+
+@pytest.mark.parametrize("name", ["Retry-After", "retry-after"])
+def test_fetch_json_429_honours_retry_after(http, name):
+    http["script"] = [_Resp(429, headers={name: "10"}), _Resp(200, [1])]
+    assert bm.fetch_json("u", {}) == [1]
+    assert http["sleeps"] == [10.0]
+
+
+def test_fetch_json_429_short_retry_after_keeps_backoff_floor(http):
+    http["script"] = [_Resp(429, headers={"Retry-After": "0"}), _Resp(200, [1])]
+    assert bm.fetch_json("u", {}) == [1]
+    assert http["sleeps"] == [2.0]
+
+
+def test_fetch_json_429_last_attempt_does_not_sleep(http):
+    http["script"] = [_Resp(429, headers={"Retry-After": "3"})] * 3
+    with pytest.raises(DataError):
+        bm.fetch_json("u", {})
+    assert http["sleeps"] == [3.0, 4.0]
 
 
 def test_fetch_json_5xx_exhausts(http):
