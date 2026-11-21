@@ -168,12 +168,14 @@ def slow_layer(bars: Sequence[Bar], sma_len: int = 50) -> dict[str, Any]:
         raise DataError("周线数量不足以计算 50W SMA")
     since, since_exact = _day(weeks[sma_len - 1].open_ms), False
     bulls: list[bool] = []
+    flips: list[tuple[str, str]] = []
     sma = 0.0
     for i in range(sma_len - 1, len(weeks)):
         sma = sum(w.close for w in weeks[i - sma_len + 1 : i + 1]) / sma_len
         bull = weeks[i].close > sma
         if bulls and bull != bulls[-1]:
             since, since_exact = _day(weeks[i].open_ms), True
+            flips.append((since, "bull" if bull else "bear"))
         bulls.append(bull)
     flipped = None
     if _utc(bars[-1].open_ms).weekday() == 6 and bulls[-1] != bulls[-2]:
@@ -186,6 +188,7 @@ def slow_layer(bars: Sequence[Bar], sma_len: int = 50) -> dict[str, Any]:
         "since": since,
         "since_exact": since_exact,
         "flipped": flipped,
+        "flips": flips,
         "daily_vs_sma50_pct": (bars[-1].close / sma - 1.0) * 100.0,
     }
 
@@ -214,6 +217,21 @@ FLIP_TEXT = {
     "flip_long": "触发空头ATR止损 / 中层翻多：收盘站上上沿",
 }
 SLOW_TEXT = {"bull": "慢层翻多：周线收盘站上50W SMA", "bear": "慢层翻空：周线收盘跌破50W SMA"}
+MISSED_SLOW = {"bull": "补报慢层翻多（{}，漏发期间）", "bear": "补报慢层翻空（{}，漏发期间）"}
+MISSED_MID = {
+    "flip_long": "补报触发空头ATR止损 / 中层翻多（{}，漏发期间）",
+    "flip_short": "补报触发多头ATR止损 / 中层翻空（{}，漏发期间）",
+}
+
+
+def _valid_day(value: Any) -> str | None:
+    if not (isinstance(value, str) and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value)):
+        return None
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return None
+    return value
 D_TIER = {
     (1, True): "+4.5 档（过热对冲）",
     (1, False): "-4.5 档（深跌警戒）",
@@ -224,7 +242,7 @@ D_TIER = {
 }
 
 
-def evaluate(bars: Sequence[Bar], dvol: dict[str, Any]) -> dict[str, Any]:
+def evaluate(bars: Sequence[Bar], dvol: dict[str, Any], last_sent_date: str | None = None) -> dict[str, Any]:
     ema, atr = ema_atr(bars)
     state, mid_since, mid_since_exact = 0, None, False
     states: list[int] = []
@@ -248,6 +266,14 @@ def evaluate(bars: Sequence[Bar], dvol: dict[str, Any]) -> dict[str, Any]:
     event = events[-1]
 
     alerts: list[str] = []
+    last, as_of, slow_flips = _valid_day(last_sent_date), _day(bars[-1].open_ms), dict(slow["flips"])
+    for b, ev in zip(bars, events if last else []):
+        day = _day(b.open_ms)
+        if last < day < as_of:  # missed days: after the last sent report, before today
+            if day in slow_flips:
+                alerts.append(MISSED_SLOW[slow_flips[day]].format(day))
+            if ev in MISSED_MID:
+                alerts.append(MISSED_MID[ev].format(day))
     if slow["flipped"]:
         alerts.append(SLOW_TEXT[slow["flipped"]])
     if event in FLIP_TEXT:
@@ -262,7 +288,7 @@ def evaluate(bars: Sequence[Bar], dvol: dict[str, Any]) -> dict[str, Any]:
     else:
         stop_price, stop_dist_atr, stop_dist_pct = upper, (upper - close) / a, (upper / close - 1.0) * 100.0
     return {
-        "as_of": _day(bars[-1].open_ms),
+        "as_of": as_of,
         "close": close,
         "slow": slow,
         "mid_state": states[-1],
@@ -423,7 +449,8 @@ def run(
     _check_label(label)
     as_of_ms = (now_ms // DAY_MS - 1) * DAY_MS
     expected = _day(as_of_ms)
-    if not dry_run and not force and load_state(state_path).get("last_sent_date") == expected:
+    last_sent = None if dry_run else _valid_day(load_state(state_path).get("last_sent_date"))
+    if not dry_run and not force and last_sent == expected:
         logger.info("already_sent date=%s", expected)
         return 0
     try:
@@ -434,7 +461,7 @@ def run(
         return 1
     dvol = fetch_dvol(fetch, now_ms, as_of_ms)
     try:
-        report = evaluate(bars, dvol)
+        report = evaluate(bars, dvol, last_sent)
         text = render(report, label)
     except DataError as exc:
         logger.error("evaluate_failed detail=%s", exc)

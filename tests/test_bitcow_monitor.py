@@ -959,3 +959,63 @@ def test_since_exact_on_2026_11_20():
     text = bm.render(rep)
     assert "慢层：空头 · 自 2026-11-08" in text and "中层：空头 · 自 2026-11-06" in text
     assert "至少自" not in text
+
+
+# ---------------------------------------------------------------- rework 2: missed-day backfill
+
+BACKFILL_SLOW = "补报慢层翻空（2026-11-08，漏发期间）"
+BACKFILL_MID = "补报触发多头ATR止损 / 中层翻空（2026-11-06，漏发期间）"
+
+
+def test_backfill_missed_slow_flip_on_recovery_day():
+    rep = bm.evaluate(_upto("2026-11-09")[-1000:], DVOL_OK, last_sent_date="2026-11-07")
+    assert BACKFILL_SLOW in rep["alerts"]
+    text = bm.render(rep)
+    assert text.startswith("🚨") and BACKFILL_SLOW in text
+    _assert_md_safe(text)
+
+
+def test_backfill_missed_mid_flip_on_recovery_day():
+    rep = bm.evaluate(_upto("2026-11-07")[-1000:], DVOL_OK, last_sent_date="2026-11-05")
+    assert rep["alerts"] == [BACKFILL_MID]
+    assert bm.render(rep).startswith("🚨")
+
+
+@pytest.mark.parametrize(
+    "day, last_sent",
+    [
+        ("2026-11-09", "2026-11-08"),  # consecutive normal day
+        ("2026-11-09", None),  # cold start
+        ("2026-11-09", "2026-11-09"),  # same-day --force
+        ("2026-11-09", "bad"),
+        ("2026-11-09", "2026-13-01"),
+        ("2026-11-09", 20261105),
+        ("2026-11-09", "２０２６-11-05"),
+    ],
+)
+def test_backfill_absent_without_missed_days(day, last_sent):
+    rep = bm.evaluate(_upto(day)[-1000:], DVOL_OK, last_sent_date=last_sent)
+    assert not any(a.startswith("补报") for a in rep["alerts"])
+
+
+def test_backfill_excludes_today_and_last_sent_day():
+    rep = bm.evaluate(_upto("2026-11-08")[-1000:], DVOL_OK, last_sent_date="2026-11-06")
+    assert rep["alerts"] == ["慢层翻空：周线收盘跌破50W SMA"]  # today's flip only, 11-06 already sent
+
+
+def test_backfill_whole_window_stays_within_telegram_limit():
+    rep = bm.evaluate(_upto("2026-11-20")[-1000:], DVOL_OK, last_sent_date="2017-01-01")
+    assert sum(a.startswith("补报") for a in rep["alerts"]) > 5
+    _assert_md_safe(bm.render(rep))
+
+
+def test_run_backfills_from_state_but_not_in_dry_run(tmp_path, capsys):
+    state = tmp_path / "bitcow" / "state.json"
+    bm.save_state(state, "2026-11-05", 1)
+    rc, _, _, _ = _run(tmp_path, dry_run=True)
+    assert rc == 0 and "补报" not in capsys.readouterr().out
+    rc, _, send, _ = _run(tmp_path)
+    text = send.calls[0][0]
+    assert rc == 0 and text.startswith("🚨") and BACKFILL_MID in text and BACKFILL_SLOW in text
+    rc, _, send, _ = _run(tmp_path, force=True)  # state now == as_of
+    assert rc == 0 and "补报" not in send.calls[0][0]
