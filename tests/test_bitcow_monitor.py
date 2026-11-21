@@ -616,3 +616,219 @@ def test_render_guard_rejects_unsafe_text():
     rep["alerts"] = ["bad_text"]
     with pytest.raises(DataError):
         bm.render(rep)
+
+
+# ---------------------------------------------------------------- T8 run + state + CLI
+
+import json  # noqa: E402
+
+
+def _dvol_payload():
+    rows = _dvol_rows(400)
+    rows.append([AS_OF_MS + DAY_MS, 60.0, 61.0, 59.0, 60.0])
+    return {"result": {"data": rows, "continuation": None}}
+
+
+class _Net:
+    def __init__(self, klines=None, dvol=None):
+        self.klines = _raw_live() if klines is None else klines
+        self.dvol = _dvol_payload() if dvol is None else dvol
+        self.calls = []
+
+    def __call__(self, url, params):
+        self.calls.append((url, params))
+        payload = self.klines if url == bm.BINANCE_KLINES_URL else self.dvol
+        if isinstance(payload, Exception):
+            raise payload
+        return payload
+
+
+class _Send:
+    def __init__(self, ok=True):
+        self.ok, self.calls = ok, []
+
+    def __call__(self, text, channel="private"):
+        self.calls.append((text, channel))
+        return self.ok
+
+
+def _run(tmp_path, net=None, send=None, **kw):
+    net = net or _Net()
+    send = send or _Send()
+    state = tmp_path / "bitcow" / "state.json"
+    rc = bm.run(NOW_MS, state, fetch=net, send=send, **kw)
+    return rc, net, send, state
+
+
+def test_run_first_send_writes_state(tmp_path):
+    rc, net, send, state = _run(tmp_path)
+    assert rc == 0 and len(send.calls) == 1 and send.calls[0][1] == "private"
+    assert net.calls[0] == (bm.BINANCE_KLINES_URL, {"symbol": "BTCUSDT", "interval": "1d", "limit": 1000})
+    saved = json.loads(state.read_text())
+    assert saved["last_sent_date"] == "2026-11-20" and saved["alert_count"] == 0
+    assert "DVOL：" in send.calls[0][0] and "不可用" not in send.calls[0][0]
+    assert sorted(p.name for p in state.parent.iterdir()) == ["state.json"]
+
+
+def test_run_same_day_rerun_skips_without_network(tmp_path):
+    _run(tmp_path)
+    rc, net, send, _ = _run(tmp_path)
+    assert rc == 0 and net.calls == [] and send.calls == []
+
+
+def test_run_force_resends(tmp_path):
+    _run(tmp_path)
+    rc, net, send, _ = _run(tmp_path, force=True)
+    assert rc == 0 and len(send.calls) == 1 and len(net.calls) == 2
+
+
+def test_run_send_false_returns_1_without_state(tmp_path):
+    rc, _, send, state = _run(tmp_path, send=_Send(ok=False))
+    assert rc == 1 and len(send.calls) == 1 and not state.exists()
+
+
+def test_run_dry_run_prints_without_send_or_state(tmp_path, capsys):
+    _run(tmp_path)
+    before = (tmp_path / "bitcow" / "state.json").read_text()
+    rc, net, send, state = _run(tmp_path, dry_run=True, label="dry")
+    assert rc == 0 and send.calls == [] and len(net.calls) == 2  # dry-run ignores dedupe
+    assert state.read_text() == before
+    assert "【dry】【奶牛日线状态】" in capsys.readouterr().out
+
+
+def test_run_dry_run_cold_start_writes_nothing(tmp_path):
+    rc, _, send, state = _run(tmp_path, dry_run=True)
+    assert rc == 0 and send.calls == [] and not state.parent.exists()
+
+
+def test_run_corrupt_state_still_sends(tmp_path, caplog):
+    state = tmp_path / "bitcow" / "state.json"
+    state.parent.mkdir(parents=True)
+    for bad in ("{not json", "[1, 2]"):
+        state.write_text(bad)
+        rc, _, send, _ = _run(tmp_path)
+        assert rc == 0 and len(send.calls) == 1
+        assert json.loads(state.read_text())["last_sent_date"] == "2026-11-20"
+    assert "state" in caplog.text.lower()
+
+
+def test_run_yesterday_state_sends_today(tmp_path):
+    state = tmp_path / "bitcow" / "state.json"
+    bm.save_state(state, "2026-11-19", 2)
+    rc, _, send, _ = _run(tmp_path)
+    assert rc == 0 and len(send.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "klines",
+    [
+        requests.ConnectionError("down"),
+        DataError("HTTP 418"),
+        BAD_RAW["stale_last_bar"],
+        BAD_RAW["gap_one_day"],
+        BAD_RAW["under_900"],
+        BAD_RAW["nan_close"],
+        BAD_RAW["high_below_low"],
+        {"code": -1121, "msg": "Invalid symbol."},
+    ],
+)
+def test_run_binance_fail_closed(tmp_path, klines):
+    rc, net, send, state = _run(tmp_path, net=_Net(klines=klines))
+    assert rc == 1 and send.calls == [] and not state.exists()
+    assert len(net.calls) == 1  # DVOL not fetched once Binance fails
+
+
+def test_run_binance_fail_closed_through_fetch_json(tmp_path, http):
+    http["script"] = [_Resp(418)]
+    send = _Send()
+    rc = bm.run(NOW_MS, tmp_path / "s.json", send=send)
+    assert rc == 1 and send.calls == [] and not (tmp_path / "s.json").exists()
+
+
+@pytest.mark.parametrize(
+    "dvol, reason",
+    [
+        (bm.DataError("Traceback secret 503"), "接口异常"),
+        ({"error": "x"}, "接口异常"),
+        ({"result": {"data": _dvol_rows(100)}}, "样本不足"),
+    ],
+)
+def test_run_dvol_degrades_but_still_sends(tmp_path, dvol, reason):
+    rc, _, send, state = _run(tmp_path, net=_Net(dvol=dvol))
+    text = send.calls[0][0]
+    assert rc == 0 and state.exists()
+    assert "DVOL" in text and "不可用（{}）".format(reason) in text
+    assert "Traceback" not in text and "secret" not in text
+
+
+def test_save_state_atomic_and_cleans_temp_on_failure(tmp_path, monkeypatch):
+    path = tmp_path / "d" / "state.json"
+    bm.save_state(path, "2026-11-20", 3)
+    assert json.loads(path.read_text()) == {"last_sent_date": "2026-11-20", "alert_count": 3}
+
+    def fail(src, dst):
+        raise OSError("disk")
+
+    monkeypatch.setattr(bm.os, "replace", fail)
+    with pytest.raises(OSError):
+        bm.save_state(path, "2026-11-21", 0)
+    assert sorted(p.name for p in path.parent.iterdir()) == ["state.json"]
+    assert json.loads(path.read_text())["last_sent_date"] == "2026-11-20"
+
+
+@pytest.mark.parametrize("name", ["state.db", "state", "state.json.bak", "market.db"])
+def test_state_path_must_be_json(tmp_path, name):
+    with pytest.raises(ValueError):
+        bm.validate_state_path(tmp_path / name)
+    with pytest.raises(ValueError):
+        bm.run(NOW_MS, tmp_path / name, fetch=_Net(), send=_Send())
+    with pytest.raises(ValueError):
+        bm.save_state(tmp_path / name, "2026-11-20", 0)
+
+
+def test_state_path_json_case_insensitive(tmp_path):
+    assert bm.validate_state_path(tmp_path / "S.JSON") == tmp_path / "S.JSON"
+
+
+def test_run_rejects_bad_label(tmp_path):
+    with pytest.raises(ValueError):
+        bm.run(NOW_MS, tmp_path / "s.json", label="a_b", fetch=_Net(), send=_Send())
+
+
+def test_load_state_missing_returns_empty(tmp_path):
+    assert bm.load_state(tmp_path / "nope.json") == {}
+
+
+@pytest.mark.parametrize("argv", [["--label", "a_b"], ["--label", ""], ["--label", "abc\n"]])
+def test_main_rejects_bad_args_exit_2(argv, monkeypatch, tmp_path):
+    called = []
+    monkeypatch.setattr(bm, "run", lambda *a, **k: called.append(1) or 0)
+    with pytest.raises(SystemExit) as exc:
+        bm.main(argv)
+    assert exc.value.code == 2 and called == []
+
+
+def test_main_db_state_path_exit_2_before_network(monkeypatch, tmp_path):
+    monkeypatch.setattr(bm.requests, "get", lambda *a, **k: pytest.fail("network called"))
+    assert bm.main(["--state-path", str(tmp_path / "market.db")]) == 2
+
+
+def test_main_passes_args_to_run(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake_run(now_ms, state_path, dry_run=False, force=False, label=""):
+        seen.update(now_ms=now_ms, state_path=state_path, dry_run=dry_run, force=force, label=label)
+        return 0
+
+    monkeypatch.setattr(bm, "run", fake_run)
+    sp = tmp_path / "s.json"
+    assert bm.main(["--dry-run", "--force", "--label", "T-1", "--state-path", str(sp)]) == 0
+    assert seen["state_path"] == sp and seen["dry_run"] and seen["force"] and seen["label"] == "T-1"
+    assert isinstance(seen["now_ms"], int)
+
+
+def test_main_default_state_path(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(bm, "run", lambda now_ms, state_path, **k: seen.update(p=state_path) or 0)
+    assert bm.main([]) == 0
+    assert seen["p"] == bm.PROJECT_ROOT / "data" / "bitcow_monitor" / "state.json"

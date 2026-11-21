@@ -5,14 +5,23 @@
 """
 from __future__ import annotations
 
+import argparse
+import json
 import logging
 import math
+import os
 import re
+import sys
+import tempfile
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, NamedTuple, Sequence
 
 import requests
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 DAY_MS = 86_400_000
 MIN_DAILY_BARS = 900
@@ -341,3 +350,113 @@ def render(report: dict[str, Any], label: str = "") -> str:
     if unsafe or len(text) >= 4000:
         raise DataError("消息不满足 Telegram Markdown v1 安全约束")
     return text
+
+
+def validate_state_path(path: Path) -> Path:
+    if Path(path).suffix.lower() != ".json":
+        raise ValueError("state 路径必须是 .json 文件")
+    return Path(path)
+
+
+def load_state(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except ValueError:
+        logger.warning("state_corrupt path=%s", path)
+        return {}
+    if not isinstance(data, dict):
+        logger.warning("state_corrupt path=%s", path)
+        return {}
+    return data
+
+
+def save_state(path: Path, as_of: str, alert_count: int) -> None:
+    path = validate_state_path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, prefix=".state-", suffix=".tmp", delete=False)
+    try:
+        with tmp:
+            json.dump({"last_sent_date": as_of, "alert_count": alert_count}, tmp)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+        os.replace(tmp.name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+        raise
+
+
+def run(
+    now_ms: int,
+    state_path: Path,
+    dry_run: bool = False,
+    force: bool = False,
+    label: str = "",
+    fetch: Any = fetch_json,
+    send: Any = None,
+) -> int:
+    state_path = validate_state_path(state_path)
+    _check_label(label)
+    as_of_ms = (now_ms // DAY_MS - 1) * DAY_MS
+    expected = _day(as_of_ms)
+    if not dry_run and not force and load_state(state_path).get("last_sent_date") == expected:
+        logger.info("already_sent date=%s", expected)
+        return 0
+    try:
+        raw = fetch(BINANCE_KLINES_URL, {"symbol": "BTCUSDT", "interval": "1d", "limit": 1000})
+        bars = closed_daily_bars(raw, now_ms)
+    except Exception as exc:
+        logger.error("binance_unavailable error=%s detail=%s", type(exc).__name__, exc)
+        return 1
+    dvol = fetch_dvol(fetch, now_ms, as_of_ms)
+    try:
+        report = evaluate(bars, dvol)
+        text = render(report, label)
+    except DataError as exc:
+        logger.error("evaluate_failed detail=%s", exc)
+        return 1
+    if dry_run:
+        print(text)
+        return 0
+    if send is None:
+        from src.telegram_bot import send_message as send
+    if not send(text, channel="private"):
+        logger.error("send_failed date=%s", expected)
+        return 1
+    save_state(state_path, report["as_of"], len(report["alerts"]))
+    logger.info("sent date=%s alerts=%d", expected, len(report["alerts"]))
+    return 0
+
+
+def _label_arg(value: str) -> str:
+    if not LABEL_RE.fullmatch(value):
+        raise argparse.ArgumentTypeError("label 只允许 1-20 位字母、数字或连字符")
+    return value
+
+
+def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    parser = argparse.ArgumentParser(description="BTC 奶牛日线信号监控（Telegram 私聊）")
+    parser.add_argument("--dry-run", action="store_true", help="只打印消息，不发送、不写 state")
+    parser.add_argument("--force", action="store_true", help="忽略当日防重，强制重发")
+    parser.add_argument("--label", type=_label_arg, default=None, help="消息首行标签（字母/数字/连字符）")
+    parser.add_argument(
+        "--state-path", type=Path, default=PROJECT_ROOT / "data" / "bitcow_monitor" / "state.json"
+    )
+    args = parser.parse_args(argv)
+    try:
+        return run(
+            int(time.time() * 1000), args.state_path,
+            dry_run=args.dry_run, force=args.force, label=args.label or "",
+        )
+    except ValueError as exc:
+        logger.error("invalid_argument detail=%s", exc)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
