@@ -471,7 +471,7 @@ def run(
         return 0
     if send is None:
         from src.telegram_bot import send_message as send
-    if not send(text, channel="private"):
+    if not send(text, channel="group"):
         logger.error("send_failed date=%s", expected)
         return 1
     save_state(state_path, report["as_of"], len(report["alerts"]))
@@ -487,7 +487,7 @@ def _label_arg(value: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    parser = argparse.ArgumentParser(description="BTC 奶牛日线信号监控（Telegram 私聊）")
+    parser = argparse.ArgumentParser(description="BTC 奶牛日线信号监控（Telegram 群组）")
     parser.add_argument("--dry-run", action="store_true", help="只打印消息，不发送、不写 state")
     parser.add_argument("--force", action="store_true", help="忽略当日防重，强制重发")
     parser.add_argument("--label", type=_label_arg, default=None, help="消息首行标签（字母/数字/连字符）")
