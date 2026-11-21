@@ -104,3 +104,95 @@ def slow_layer(bars: Sequence[Bar], sma_len: int = 50) -> dict[str, Any]:
         "flipped": flipped,
         "daily_vs_sma50_pct": (bars[-1].close / sma - 1.0) * 100.0,
     }
+
+
+def d_level(d: float) -> int:
+    a = abs(d)
+    if a >= 7.0:
+        return 3
+    if a >= 6.5:
+        return 2
+    if a >= 4.5:
+        return 1
+    return 0
+
+
+WARN_SEV = {None: 0, "warn_long_mid": 1, "warn_short_mid": 1, "warn_long_near": 2, "warn_short_near": 2}
+WARN_TEXT = {
+    "warn_long_near": "中层预警：极近多头ATR止损（距边界不足0.5 ATR）",
+    "warn_long_mid": "中层预警：跌破EMA84中线，进入止损警戒区",
+    "warn_short_near": "中层预警：极近空头ATR止损（距边界不足0.5 ATR）",
+    "warn_short_mid": "中层预警：站上EMA84中线，进入止损警戒区",
+}
+FLIP_TEXT = {
+    "flip_short": "触发多头ATR止损 / 中层翻空：收盘跌破下沿",
+    "flip_long": "触发空头ATR止损 / 中层翻多：收盘站上上沿",
+}
+SLOW_TEXT = {"bull": "慢层翻多：周线收盘站上50W SMA", "bear": "慢层翻空：周线收盘跌破50W SMA"}
+D_TIER = {
+    (1, True): "+4.5 档（过热对冲）",
+    (1, False): "-4.5 档（深跌警戒）",
+    (2, True): "+6.5 档（强止盈）",
+    (2, False): "-6.5 档（极端恐慌）",
+    (3, True): "+7.0 档（历史极值）",
+    (3, False): "-7.0 档（历史极值）",
+}
+
+
+def evaluate(bars: Sequence[Bar], dvol: dict[str, Any]) -> dict[str, Any]:
+    ema, atr = ema_atr(bars)
+    state, mid_since = 0, None
+    states: list[int] = []
+    events: list[str | None] = []
+    for i, b in enumerate(bars):
+        prev = state
+        state, event = mid_step(prev, b.close, ema[i], atr[i])
+        if event in FLIP_TEXT or (prev == 0 and state != 0 and mid_since is None):
+            mid_since = _day(b.open_ms)
+        states.append(state)
+        events.append(event)
+    if states[-1] == 0:
+        raise DataError("中层状态未初始化")
+    slow = slow_layer(bars)
+    close, e, a = bars[-1].close, ema[-1], atr[-1]
+    upper, lower = e + a, e - a
+    d = (close - e) / a
+    prev_d = (bars[-2].close - ema[-2]) / atr[-2]
+    lvl, prev_lvl = d_level(d), d_level(prev_d)
+    event = events[-1]
+
+    alerts: list[str] = []
+    if slow["flipped"]:
+        alerts.append(SLOW_TEXT[slow["flipped"]])
+    if event in FLIP_TEXT:
+        alerts.append(FLIP_TEXT[event])
+    elif WARN_SEV.get(event, 0) > 0 and states[-2] == states[-1] and WARN_SEV[event] > WARN_SEV.get(events[-2], 0):
+        alerts.append(WARN_TEXT[event])
+    if lvl > 0 and (lvl > prev_lvl or prev_lvl == 0 or (d > 0) != (prev_d > 0)):
+        alerts.append("偏离D={:+.2f} 进入 {}".format(d, D_TIER[(lvl, d > 0)]))
+
+    if states[-1] == 1:
+        stop_price, stop_dist_atr, stop_dist_pct = lower, (close - lower) / a, (close / lower - 1.0) * 100.0
+    else:
+        stop_price, stop_dist_atr, stop_dist_pct = upper, (upper - close) / a, (upper / close - 1.0) * 100.0
+    return {
+        "as_of": _day(bars[-1].open_ms),
+        "close": close,
+        "slow": slow,
+        "mid_state": states[-1],
+        "mid_since": mid_since,
+        "mid_event": event,
+        "ema84": e,
+        "atr14": a,
+        "upper": upper,
+        "lower": lower,
+        "stop_price": stop_price,
+        "stop_dist_atr": stop_dist_atr,
+        "stop_dist_pct": stop_dist_pct,
+        "d": d,
+        "d_level": lvl,
+        "d_plus7": e + 7.0 * a,
+        "d_minus7": e - 7.0 * a,
+        "dvol": dvol,
+        "alerts": alerts,
+    }

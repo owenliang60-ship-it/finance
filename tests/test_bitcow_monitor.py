@@ -186,3 +186,124 @@ def test_slow_layer_since_falls_back_to_first_sma_week_without_flip():
     s = bm.slow_layer(bars)
     first_sma_week = datetime.fromtimestamp((sunday0 + 49 * 7 * DAY_MS) / 1000, tz=timezone.utc).date().isoformat()
     assert s["bull"] is True and s["since"] == first_sma_week
+
+
+# ---------------------------------------------------------------- T4 d_level + evaluate
+
+DVOL_NA = {"available": False, "value": None, "percentile": None, "reason": "接口异常"}
+
+
+@pytest.mark.parametrize(
+    "d, lvl",
+    [(4.49, 0), (-4.49, 0), (4.5, 1), (-4.5, 1), (-6.5, 2), (6.99, 2), (-7.0, 3), (9.0, 3), (0.0, 0)],
+)
+def test_d_level_boundaries(d, lvl):
+    assert bm.d_level(d) == lvl
+
+
+def _synthetic(closes_tail: list[float], base: float = 115.0, n: int = 400) -> list[Bar]:
+    # start on a Thursday so the last bar (n-1 days later) is not a Sunday; slow layer never flips
+    start = _ms("2020-01-02")
+    closes = [base] * (n - len(closes_tail)) + list(closes_tail)
+    return [Bar(start + i * DAY_MS, c + 1.0, c - 1.0, c) for i, c in enumerate(closes)]
+
+
+@pytest.fixture
+def flat_channel(monkeypatch):
+    """Pin EMA=100 / ATR=10 so upper=110, lower=90 and D=(close-100)/10."""
+
+    def fake(bars, ema_len=84, atr_len=14):
+        return [100.0] * len(bars), [10.0] * len(bars)
+
+    monkeypatch.setattr(bm, "ema_atr", fake)
+
+
+def _alerts(closes_tail, base=115.0):
+    return bm.evaluate(_synthetic(closes_tail, base), DVOL_NA)["alerts"]
+
+
+def test_evaluate_d_alert_first_entry_upgrade_and_persistence(flat_channel):
+    first = _alerts([140.0, 146.0])  # D 4.0 → 4.6
+    assert len(first) == 1 and "+4.5" in first[0]
+    up = _alerts([146.0, 166.0])  # D 4.6 → 6.6
+    assert len(up) == 1 and "+6.5" in up[0]
+    top = _alerts([166.0, 172.0])  # D 6.6 → 7.2
+    assert len(top) == 1 and "+7.0" in top[0]
+    assert _alerts([166.0, 168.0]) == []  # same tier persists → no 🚨
+    assert _alerts([172.0, 166.0]) == []  # downgrade → no 🚨
+
+
+def test_evaluate_d_alert_on_sign_flip_same_tier(flat_channel):
+    alerts = _alerts([146.0, 54.0])  # D +4.6 → -4.6, also breaks lower band
+    assert any("中层翻空" in a for a in alerts)
+    assert any("-4.5" in a for a in alerts)
+
+
+def test_evaluate_warn_alert_entry_upgrade_and_persistence(flat_channel):
+    entry = _alerts([105.0, 97.0])
+    assert len(entry) == 1 and "跌破EMA84中线" in entry[0]
+    up = _alerts([97.0, 93.0])
+    assert len(up) == 1 and "极近多头ATR止损" in up[0]
+    assert _alerts([93.0, 92.0]) == []  # near persists
+    assert _alerts([97.0, 98.0]) == []  # mid persists
+    assert _alerts([93.0, 97.0]) == []  # near → mid downgrade
+    short_up = _alerts([103.0, 107.0], base=85.0)
+    assert len(short_up) == 1 and "极近空头ATR止损" in short_up[0]
+    short_entry = _alerts([95.0, 103.0], base=85.0)
+    assert len(short_entry) == 1 and "站上EMA84中线" in short_entry[0]
+
+
+def test_evaluate_flip_alerts_and_stop_fields(flat_channel):
+    rep = bm.evaluate(_synthetic([115.0, 89.0]), DVOL_NA)
+    assert rep["mid_state"] == -1 and rep["mid_event"] == "flip_short"
+    assert rep["alerts"] == ["触发多头ATR止损 / 中层翻空：收盘跌破下沿"]
+    assert rep["stop_price"] == 110.0
+    assert rep["stop_dist_atr"] == pytest.approx(2.1)
+    assert rep["stop_dist_pct"] == pytest.approx((110.0 / 89.0 - 1.0) * 100.0)
+    rep = bm.evaluate(_synthetic([85.0, 111.0], base=85.0), DVOL_NA)
+    assert rep["alerts"] == ["触发空头ATR止损 / 中层翻多：收盘站上上沿"]
+    assert rep["stop_price"] == 90.0
+    assert rep["stop_dist_atr"] == pytest.approx(2.1)
+    assert rep["stop_dist_pct"] == pytest.approx((111.0 / 90.0 - 1.0) * 100.0)
+
+
+def test_evaluate_mid_since_falls_back_to_first_nonzero(flat_channel):
+    bars = _synthetic([])
+    rep = bm.evaluate(bars, DVOL_NA)
+    assert rep["mid_since"] == "2020-01-02" and rep["alerts"] == []
+
+
+def test_evaluate_mid_state_zero_raises(flat_channel):
+    with pytest.raises(DataError):
+        bm.evaluate(_synthetic([], base=100.0), DVOL_NA)
+
+
+def test_evaluate_real_2026_11_20():
+    rep = bm.evaluate(_upto("2026-11-20")[-1000:], DVOL_NA)
+    # independent pandas ewm(span=84) / ewm(alpha=1/14) recomputation, last 1000 bars
+    assert rep["as_of"] == "2026-11-20" and rep["close"] == 58951.51
+    assert rep["ema84"] == pytest.approx(75420.637556, abs=1e-4)
+    assert rep["atr14"] == pytest.approx(2800.827227, abs=1e-4)
+    assert rep["d"] == pytest.approx(-5.880094, abs=1e-5)
+    assert rep["d_level"] == 1
+    assert rep["d_minus7"] == pytest.approx(55814.846965, abs=1e-4)
+    assert rep["d_plus7"] == pytest.approx(95026.428146, abs=1e-4)
+    assert rep["mid_state"] == -1 and rep["mid_since"] == "2026-11-06"
+    assert rep["stop_price"] == pytest.approx(78221.464783, abs=1e-4)
+    assert rep["stop_dist_atr"] == pytest.approx(6.880094, abs=1e-5)
+    assert rep["stop_dist_pct"] == pytest.approx(32.687805, abs=1e-5)
+    assert rep["slow"]["bull"] is False and rep["dvol"] is DVOL_NA
+
+
+def test_evaluate_real_flip_days():
+    rep = bm.evaluate(_upto("2026-11-06")[-1000:], DVOL_NA)
+    assert "触发多头ATR止损 / 中层翻空：收盘跌破下沿" in rep["alerts"]
+    rep = bm.evaluate(_upto("2026-11-08")[-1000:], DVOL_NA)
+    assert "慢层翻空：周线收盘跌破50W SMA" in rep["alerts"]
+
+
+def test_evaluate_warn_right_after_flip_is_new_alert(flat_channel):
+    alerts = _alerts([89.0, 103.0])  # yesterday flip_short, today back above EMA84
+    assert len(alerts) == 1 and "站上EMA84中线" in alerts[0]
+    alerts = _alerts([111.0, 93.0], base=85.0)  # yesterday flip_long, today near lower band
+    assert len(alerts) == 1 and "极近多头ATR止损" in alerts[0]
