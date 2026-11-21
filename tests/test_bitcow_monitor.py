@@ -712,7 +712,7 @@ class _Send:
     def __init__(self, ok=True):
         self.ok, self.calls = ok, []
 
-    def __call__(self, text, channel="private"):
+    def __call__(self, text, channel="group"):
         self.calls.append((text, channel))
         return self.ok
 
@@ -727,7 +727,7 @@ def _run(tmp_path, net=None, send=None, **kw):
 
 def test_run_first_send_writes_state(tmp_path):
     rc, net, send, state = _run(tmp_path)
-    assert rc == 0 and len(send.calls) == 1 and send.calls[0][1] == "private"
+    assert rc == 0 and len(send.calls) == 1 and send.calls[0][1] == "group"
     assert net.calls[0] == (bm.BINANCE_KLINES_URL, {"symbol": "BTCUSDT", "interval": "1d", "limit": 1000})
     saved = json.loads(state.read_text())
     assert saved["last_sent_date"] == "2026-11-20" and saved["alert_count"] == 0
