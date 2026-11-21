@@ -73,12 +73,11 @@ def closed_daily_bars(raw: list[Any], now_ms: int) -> list[Bar]:
     bars: list[Bar] = []
     for row in raw:
         try:
-            close_ms = int(row[6])
+            if int(row[6]) >= now_ms:
+                continue
             bar = Bar(int(row[0]), float(row[2]), float(row[3]), float(row[4]))
         except (TypeError, ValueError, IndexError, KeyError):
             raise DataError("K线行格式非法") from None
-        if close_ms >= now_ms:
-            continue
         if not all(math.isfinite(x) and x > 0 for x in bar[1:]):
             raise DataError("K线价格非有限正数")
         if not (bar.high >= bar.low and bar.low <= bar.close <= bar.high):

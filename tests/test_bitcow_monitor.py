@@ -506,6 +506,14 @@ def test_closed_daily_bars_happy_path_drops_open_bar():
     assert bars[-1] == _upto("2026-11-20")[-1]
 
 
+@pytest.mark.parametrize("col, junk", [(4, ""), (2, None)])
+def test_closed_daily_bars_ignores_unparsable_open_bar(col, junk):
+    raw = _raw_live()
+    raw[-1][col] = junk  # today's still-open bar carries garbage prices
+    bars = bm.closed_daily_bars(raw, NOW_MS)
+    assert len(bars) == 999 and bars[-1].open_ms == AS_OF_MS
+
+
 def _mutate(fn):
     raw = _raw_live()
     fn(raw)
