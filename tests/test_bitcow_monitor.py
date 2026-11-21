@@ -1005,8 +1005,32 @@ def test_backfill_excludes_today_and_last_sent_day():
 
 def test_backfill_whole_window_stays_within_telegram_limit():
     rep = bm.evaluate(_upto("2026-11-20")[-1000:], DVOL_OK, last_sent_date="2017-01-01")
-    assert sum(a.startswith("补报") for a in rep["alerts"]) > 5
+    assert rep["alerts"][0] == "漏发超90天（上次 2017-01-01），仅补报近90天内翻向"
     _assert_md_safe(bm.render(rep))
+
+
+def test_backfill_capped_to_recent_90_days_avoids_warmup_artifacts():
+    rep = bm.evaluate(_upto("2026-11-20")[-999:], DVOL_OK, last_sent_date="2024-08-01")
+    text = bm.render(rep)
+    assert "2024-08-02" not in text and "2024-08-03" not in text
+    assert "漏发超90天（上次 2024-08-01），仅补报近90天内翻向" in rep["alerts"]
+    assert "补报慢层翻多（2026-09-20，漏发期间）" in rep["alerts"]
+    assert "补报触发多头ATR止损 / 中层翻空（2026-11-06，漏发期间）" in rep["alerts"]
+    assert "补报慢层翻空（2026-11-08，漏发期间）" in rep["alerts"]
+    assert not any("2026-08-19" in a for a in rep["alerts"])  # real flip, but before the 90-day cutoff
+    assert text.startswith("🚨")
+    _assert_md_safe(text)
+
+
+def test_backfill_last_sent_equal_cutoff_has_no_cap_notice():
+    bars = _upto("2026-11-20")[-999:]
+    cutoff = bm._day(bars[-1].open_ms - bm.MAX_BACKFILL_DAYS * DAY_MS)
+    assert cutoff == "2026-08-22"
+    rep = bm.evaluate(bars, DVOL_OK, last_sent_date=cutoff)
+    assert not any(a.startswith("漏发超") for a in rep["alerts"])
+    assert "补报慢层翻多（2026-09-20，漏发期间）" in rep["alerts"]
+    rep = bm.evaluate(bars, DVOL_OK, last_sent_date="2026-08-21")
+    assert rep["alerts"][0] == "漏发超90天（上次 2026-08-21），仅补报近90天内翻向"
 
 
 def test_run_backfills_from_state_but_not_in_dry_run(tmp_path, capsys):

@@ -27,6 +27,7 @@ BINANCE_KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
 DERIBIT_DVOL_URL = "https://www.deribit.com/api/v2/public/get_volatility_index_data"
 LABEL_RE = re.compile(r"^[A-Za-z0-9-]{1,20}$")
 MAX_RETRY_AFTER_SEC = 15
+MAX_BACKFILL_DAYS = 90  # recent window stays >= 909 EMA days / >= 116 SMA weeks warmed up
 
 logger = logging.getLogger("bitcow_monitor")
 
@@ -267,9 +268,12 @@ def evaluate(bars: Sequence[Bar], dvol: dict[str, Any], last_sent_date: str | No
 
     alerts: list[str] = []
     last, as_of, slow_flips = _valid_day(last_sent_date), _day(bars[-1].open_ms), dict(slow["flips"])
+    cutoff = _day(bars[-1].open_ms - MAX_BACKFILL_DAYS * DAY_MS)
+    if last and last < cutoff:
+        alerts.append("漏发超{}天（上次 {}），仅补报近{}天内翻向".format(MAX_BACKFILL_DAYS, last, MAX_BACKFILL_DAYS))
     for b, ev in zip(bars, events if last else []):
         day = _day(b.open_ms)
-        if last < day < as_of:  # missed days: after the last sent report, before today
+        if last < day < as_of and day >= cutoff:  # missed days, capped to the recent warmed-up window
             if day in slow_flips:
                 alerts.append(MISSED_SLOW[slow_flips[day]].format(day))
             if ev in MISSED_MID:
