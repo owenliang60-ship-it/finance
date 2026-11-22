@@ -16,3 +16,4 @@ T1_GLOBAL_DOMAINS = ("sec.gov",)                   # 计划 G2：全局一手披
 G3_LABELS = ("eps_split_rescaled", "eps_split_unconfirmed", "eps_split_retrospective",
              "gaap_split_basis_break", "eps_conflicting_quarter")   # terminal/prosperity/street_eps.py 标签
 EXIT_OK, EXIT_DEGRADED, EXIT_BLOCKED = 0, 10, 20   # 计划「三档故障模型」
+VERIFIED, UNVERIFIED, CONFLICT = "VERIFIED", "UNVERIFIED", "CONFLICT"   # 计划「门控与熔断表」三态

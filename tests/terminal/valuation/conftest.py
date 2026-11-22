@@ -4,6 +4,7 @@
 returns its path. Variants: fadr (TWD reporter listed as ADR, ×32), thin (FY-blend NTM),
 snapshot (weekly snapshot date), and edit (callable that mutates the row dict first).
 """
+import shutil
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
@@ -11,11 +12,13 @@ from pathlib import Path
 import pytest
 
 from src.data.market_store import MarketStore
+from terminal.valuation.facts import load_facts
 
 QUARTER_ENDS = ("2023-12-31", "2024-03-31", "2024-06-30", "2024-09-30", "2024-12-31", "2025-03-31",
                 "2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30", "2026-09-30")
 NTM_QUARTERS = ("2026-12-31", "2027-03-31", "2027-06-30", "2027-09-30")
 FX = 32.0
+LEDGER_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "valuation" / "ACME"
 
 
 def _plus(day: str, days: int) -> str:
@@ -114,3 +117,34 @@ def valuation_db(tmp_path):
         return write_db(made[-1], rows)
 
     return seed(), seed
+
+
+@pytest.fixture
+def ledger_file(tmp_path):
+    """make(*(old, new), text=None, append="") → path of an edited ACME ledger beside a copy of its sources."""
+    made = []
+
+    def make(*edits, text=None, append=""):
+        body = text if text is not None else (LEDGER_DIR / "ledger.toml").read_text(encoding="utf-8")
+        for old, new in edits:
+            assert old in body, old
+            body = body.replace(old, new, 1)
+        root = tmp_path / f"ledger-{len(made)}"
+        shutil.copytree(LEDGER_DIR / "sources", root / "sources")
+        made.append(root / "ledger.toml")
+        made[-1].write_text(body + append, encoding="utf-8")
+        return made[-1]
+
+    return make
+
+
+@pytest.fixture
+def read_facts():
+    def load(path, as_of="2026-11-22"):
+        store = MarketStore(db_path=path, read_only=True)
+        try:
+            return load_facts(store, "ACME", as_of)
+        finally:
+            store.close()
+
+    return load
