@@ -1,0 +1,82 @@
+# TSM decision ledger (plan docs/plans/2026-11-22-valuation-dashboard-v2.md Task 5).
+# Facts: TSMC 3Q26 Quarterly Management Report (investor.tsmc.com PDF, text extracted verbatim into
+# sources/). Platform amounts = library revenue × disclosed share (pct_derived). No [[eps_facts]]:
+# G1c is UNVERIFIED for non-USD reporters. Scenarios and weights are Boss-supplied reference presets.
+schema = 1
+symbol = "TSM"
+reporting_currency = "TWD"
+eps_basis = "ifrs"
+cyclical = true
+t1_domains = ["investor.tsmc.com"]
+
+[assumptions]
+consensus_weight = 5
+note = "参考情景与权重：Boss 2026-11-22 工单"
+
+[[sources]]
+id = "tsm-3q26-mgmt-report"
+url = "https://investor.tsmc.com/english/encrypt/files/encrypt_file/reports/2026-10/f83780000ddc0c3b48e57a87eab6814c4ab35058/3Q26%20ManagementReport.pdf"
+fetched_at = "2026-11-22"
+raw = "sources/tsm-3q26-mgmt-report.txt"
+sha256 = "622f6d055ed40266213fb4e1cb4cd931fbc22e721488e1011abe28e66c40c4c9"
+
+[segments]
+unit = 1e9
+names = ["HPC", "Smartphone", "Auto & IoT", "DCE & Others"]
+axis_rationale = "按台积电管理层报告的终端平台轴（Net Revenue by Platform，分母为总营收）拆分；制程轴的分母是晶圆营收，不能加总成总营收，只作次轴参考。"
+roles = ["AI 资本开支绝对主力，也是最核心波动源", "成熟稳态底座，季节性可控", "成熟 / 特色制程分散需求（汽车 4% + 物联网 4%）",
+         "长尾缓冲项（数字消费 1% + 其他 2%）"]
+secondary_note = "制程维度（分母为晶圆营收，非总营收）：2nm 8%、3nm 33%、5nm 28%、7nm 10%，7nm 及以下合计 79%。3Q26 毛利率 66.4%，环比降 1.3pp，主因 N2 初期爬坡稀释；营业利润率 58.7%。"
+
+[[segments.quarters]]
+fiscal_date = "2026-09-30"
+values = [1016.085, 313.791, 119.539, 44.827]
+pct_derived = true
+source = "tsm-3q26-mgmt-report"
+quote = '''By platform, HPC and Smartphone represented 68% and 21% of net revenue respectively, while IoT,
+Automotive, DCE, and Others each represented 4%, 4%, 1%, and 2%.'''
+
+[[scenarios]]
+id = "bull"
+label = "Bull"
+tone = "bull"
+thesis = "AI ASIC + 2nm 涨价顺畅"
+seg_adjs = [0.12, 0.05, 0.05, 0.0]
+net_margin = 0.52
+pe_mid = 18.0
+pe_half = 1.5
+weight = 20
+
+[[scenarios]]
+id = "base"
+label = "Base"
+tone = "base"
+thesis = "AI CapEx 增速放缓 + 2nm 爬坡稀释毛利"
+seg_adjs = [-0.10, -0.03, 0.0, -0.05]
+net_margin = 0.46
+pe_mid = 15.0
+pe_half = 1.5
+weight = 50
+
+[[scenarios]]
+id = "bear"
+label = "Bear"
+tone = "bear"
+thesis = "AI 算力去库存 + 地缘折价，净利率回到 10 年中枢"
+seg_adjs = [-0.28, -0.10, -0.08, -0.10]
+net_margin = 0.38
+pe_mid = 12.0
+pe_half = 1.5
+weight = 25
+
+[[cycles]]
+id = "2018-19"
+label = "2018–19"
+start = "2018-05-01"
+end = "2020-06-30"
+
+[[cycles]]
+id = "2022-23"
+label = "2022–23"
+start = "2021-09-01"
+end = "2024-06-30"

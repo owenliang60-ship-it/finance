@@ -423,14 +423,15 @@ def _model_segments(facts: FactPack, ledger: Ledger, gates, rev_cons):
 
 def _ntm_window(facts: FactPack) -> dict:
     quarters = [q[0] for q in facts.ntm.quarters]
+    snap = f"快照 {facts.ntm.snapshot_date}"
     if facts.ntm.basis == "quarter_sum" and quarters:
-        label = f"{quarters[0][:7]} – {quarters[-1][:7]}（逐季加总）"
+        label, basis = f"{quarters[0][:7]} – {quarters[-1][:7]}", f"逐季加总 · {snap}"
     elif facts.ntm.basis == "ntm_fy_blend" and len(quarters) == len(facts.ntm_weights) == 2:
         w1, w2 = facts.ntm_weights
-        label = f"FY{quarters[0][2:4]}×{w1:g} + FY{quarters[1][2:4]}×{w2:g}（财年混合）"
+        label, basis = f"FY{quarters[0][2:4]}×{w1:g} + FY{quarters[1][2:4]}×{w2:g}", f"财年混合 · {snap}"
     else:
-        label = "NTM 口径不可解"
-    return {"basis": facts.ntm.basis, "quarters": quarters, "label": label}
+        label, basis = "NTM 口径不可解", snap
+    return {"basis": facts.ntm.basis, "quarters": quarters, "label": label, "basis_text": basis}
 
 
 def _trajectory(facts: FactPack, rev_cons) -> dict:

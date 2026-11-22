@@ -62,13 +62,15 @@ function _t(s, x, y, size, anchor, extra) {
                         fill: INK, prio: 1}, extra || {});
 }
 
-// Clamp each text box into the viewBox, then drop lower-priority texts that still collide.
+// Clamp each text box into the viewBox (EDGE px inset: the 0.58 width estimate runs a little short for
+// capitals), then drop lower-priority texts that still collide.
+const EDGE = 4;
 function _finish(items) {
   for (const it of items) {
     if (it.t !== "text") continue;
     const b = text_box(it);
-    if (b.x0 < 0) it.x += -b.x0;
-    if (b.x1 > VIEW_W) it.x -= b.x1 - VIEW_W;
+    if (b.x0 < EDGE) it.x += EDGE - b.x0;
+    if (b.x1 > VIEW_W - EDGE) it.x -= b.x1 - (VIEW_W - EDGE);
     if (b.y0 < 0) it.y += -b.y0;
     if (b.y1 > VIEW_H) it.y -= b.y1 - VIEW_H;
   }
@@ -86,6 +88,20 @@ function _finish(items) {
 
 function _money(x, currency) {
   return fmt_money(x, currency);
+}
+
+// Axis ticks: strip trailing fraction zeros ("$400.0B" → "$400B", "NT$1.50T" → "NT$1.5T").
+function _trim(s) {
+  return s.replace(/(\.\d*?)0+(?=[TBM]$)/, "$1").replace(/\.(?=[TBM]$)/, "");
+}
+
+function _axis_money(x, currency) {
+  return _trim(fmt_money(x, currency));
+}
+
+// Same amount without the currency prefix (Panel 3 states the unit once in its corner).
+function _bare_money(x, currency) {
+  return fmt_money(x, currency).replace(/^(−?)(NT\$|\$|[A-Z]{3} )/, "$1");
 }
 
 function _pct0(x) {
@@ -248,7 +264,7 @@ function panel2(view, payload) {
   for (let v = 0; v <= top + step * 1e-9; v += step) {
     const y = sy(v);
     items.push({t: "line", x1: X0, y1: y, x2: X1, y2: y, stroke: v === 0 ? "#d0d7de" : GRID, sw: 1});
-    items.push(_t(v === 0 ? "0" : _money(v, cur), 44, y + 3.5, 10, "end", {fill: MUTED, prio: 0, role: "axis"}));
+    items.push(_t(v === 0 ? "0" : _axis_money(v, cur), 44, y + 3.5, 10, "end", {fill: MUTED, prio: 0, role: "axis"}));
   }
   const slot = (X1 - X0) / bars.length;
   bars.forEach((b, i) => {
@@ -337,8 +353,11 @@ function panel3(view, payload) {
   for (const v of ticks) {
     const y = sy(v);
     items.push({t: "line", x1: X0, y1: y, x2: X1, y2: y, stroke: GRID, sw: 1});
-    items.push(_t(_money(v, cur), 48, y + 3.5, 10, "end", {fill: MUTED, prio: 0, role: "axis"}));
+    items.push(_t(_trim(_bare_money(v, cur)), 48, y + 3.5, 10, "end",
+                  {fill: MUTED, prio: 0, role: "axis"}));
   }
+  items.push(_t("单位 " + (cur === "USD" ? "USD" : cur === "TWD" ? "NT$" : String(cur)), 8, 22, 10, "start",
+                {fill: MUTED, prio: 2, role: "unit"}));
   hist.forEach((h, i) => items.push(_t(_xlabel(h.fiscal_date, "A"), px(i), 310, 10, "middle",
                                         {fill: MUTED, prio: 1, role: "x-label"})));
   future.forEach((d, i) => items.push(_t(_xlabel(d, "E"), px(hist.length + i), 310, 10, "middle",
@@ -365,7 +384,7 @@ function panel3(view, payload) {
   }
   const ys = spread(ends.map((e) => e.y), 13, 46, 292);
   ends.forEach((e, i) => {
-    items.push(_t(e.l.label + " " + _money(e.v, cur), 472, ys[i], 10, "start",
+    items.push(_t(e.l.label + " " + _bare_money(e.v, cur), 472, ys[i], 10, "start",
                   {fill: e.color, weight: e.l.id === "custom" ? 600 : 400, prio: 3, role: "end-label", key: e.l.id}));
   });
   return _finish(items);

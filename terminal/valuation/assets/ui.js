@@ -104,6 +104,7 @@
   put($("kpi-price-date"), "收盘 " + (c.price_date || "日期缺失"));
   put($("kpi-mktcap"), fmt_money(c.mkt_cap, "USD"));
   put($("kpi-window"), c.ntm_window.label);
+  put($("kpi-window-sub"), c.ntm_window.basis_text);
   put($("kpi-implied-pe"), c.pe_init !== null ? fmt(c.pe_init, "x") : "不适用");
   put($("kpi-implied-sub"), "NTM 共识 EPS " + fmt(c.ntm_eps_usd, "usd"));
   const ttl = payload.trajectory;

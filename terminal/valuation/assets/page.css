@@ -15,7 +15,7 @@ code { font-size: 11px; word-break: break-all; }
 
 /* ---- grid: KPI, banner, sticky deck on the left, 2×2 panels with the logic card between rows ---- */
 main.dash {
-  display: grid; gap: 10px; max-width: 1680px; margin: 0 auto;
+  display: grid; gap: 8px; max-width: 1680px; margin: 0 auto;
   grid-template-columns: 300px minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas: "kpi kpi kpi" "banner banner banner" "deck p1 p2" "deck logic logic" "deck p3 p4"
     "audit audit audit";
@@ -25,7 +25,8 @@ main.dash {
 #banner { grid-area: banner; }
 /* size containment: the deck never sets row heights; it stretches to the panel column and scrolls inside */
 #deck { grid-area: deck; position: sticky; top: 10px; align-self: stretch; contain: size;
-  max-height: calc(100vh - 20px); overflow-y: auto; box-sizing: border-box; }
+  max-height: calc(100vh - 100px); overflow-y: auto; box-sizing: border-box; }
+.panel { align-self: stretch; }
 #panel-p1 { grid-area: p1; }
 #panel-p2 { grid-area: p2; }
 #logic-card { grid-area: logic; }
@@ -33,6 +34,8 @@ main.dash {
 #panel-p4 { grid-area: p4; }
 #audit { grid-area: audit; }
 @media (max-width: 1279px) {
+  .logic-body { grid-template-columns: 1fr; }
+  .logic .rationale { border-right: 0; padding-right: 0; }
   main.dash {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas: "kpi kpi" "banner banner" "p1 p2" "logic logic" "p3 p4" "deck deck" "audit audit";
@@ -129,21 +132,24 @@ button.tick:disabled { opacity: 0.5; }
 .panel { padding: 6px 10px 6px; min-width: 0; }
 .panel header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px; }
 .panel header span { font-size: 11px; color: #6e7781; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.panel svg { display: block; width: 100%; height: auto; max-height: calc((100vh - 350px) / 2); min-height: 200px;
+.panel svg { display: block; width: 100%; height: auto; max-height: calc((100vh - 352px) / 2); min-height: 220px;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif; }
-.panel .note { margin: 1px 4px 0; font-size: 10.5px; line-height: 1.35; }
+.panel .note { margin: 0 4px; font-size: 10.5px; line-height: 1.35; }
 
 /* ---- logic card ---- */
 .logic { padding: 6px 14px 8px; }
 .logic-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .logic-head .badge { cursor: default; }
-.logic .rationale { margin: 2px 0 5px; font-size: 12px; }
-.chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 6px; margin: 0; padding: 0;
+.logic-body { display: grid; grid-template-columns: minmax(200px, 1fr) 3fr; gap: 14px; margin-top: 4px; }
+.logic .rationale { margin: 0; font-size: 12px; line-height: 1.45; padding-right: 12px; border-right: 1px solid #eaeef2; }
+.logic .note { margin-top: 3px; }
+.chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 6px; margin: 0; padding: 0;
   list-style: none; }
-.chips li { display: grid; grid-template-columns: auto 1fr auto; column-gap: 6px; align-items: center; padding: 3px 8px;
-  background: #f6f8fa; border-radius: 8px; font-size: 12px; line-height: 1.4; }
-.chips li .amt { justify-self: end; font-weight: 600; }
-.chips li em { grid-column: 2 / -1; font-style: normal; color: #57606a; font-size: 11px; }
+.chips li { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: center; padding: 4px 8px;
+  background: #f6f8fa; border-radius: 8px; font-size: 12px; line-height: 1.4; align-content: start; }
+.chips li b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chips li .amt { grid-column: 2; font-weight: 650; }
+.chips li em { grid-column: 2 / -1; font-style: normal; color: #57606a; font-size: 10.5px; line-height: 1.3; }
 
 /* ---- audit ---- */
 details#audit { padding: 8px 14px; }

@@ -85,7 +85,7 @@ def _kpi(payload: dict) -> str:
     return (f'<header id="kpi" class="kpi-strip"><div class="kpi kpi-title"><h1>{_e(meta["symbol"])}</h1>'
             f'<span class="kpi-sub">估值情景 · as_of {_e(meta["as_of"])} · {_e(meta["eps_basis"])}</span></div>'
             + item("Ref Price", "kpi-price", "kpi-price-date") + item("Mkt Cap", "kpi-mktcap")
-            + item("NTM Window", "kpi-window") + item("现价隐含 NTM P/E", "kpi-implied-pe", "kpi-implied-sub")
+            + item("NTM Window", "kpi-window", "kpi-window-sub") + item("现价隐含 NTM P/E", "kpi-implied-pe", "kpi-implied-sub")
             + item("Custom 实时情景值", "kpi-custom", "kpi-custom-sub", " kpi-custom")
             + item("加权情景期望值 EV", "kpi-ev", "kpi-ev-sub", " kpi-ev")
             + f'<button type="button" id="badge-gates" class="badge {cls}" title="展开审计栏">{_e(badge)}</button>'
@@ -194,8 +194,9 @@ def _logic(payload: dict) -> str:
     second = f'<p class="note">{_e(logic["secondary_note"])}</p>' if logic["secondary_note"] else ""
     return (f'<section id="logic-card" class="logic"><div class="logic-head">'
             f'<h3>营收拆分逻辑 · 最新已核实季 {_e(model["split_quarter"])}</h3>'
-            f'<span class="badge ok">{_e(badge)}</span></div>{rationale}<ul class="chips">{chips}</ul>{second}'
-            f'<p class="note">{_e(logic["formula_note"])}</p></section>')
+            f'<span class="badge ok">{_e(badge)}</span></div><div class="logic-body">{rationale}'
+            f'<div class="logic-main"><ul class="chips">{chips}</ul>{second}'
+            f'<p class="note">{_e(logic["formula_note"])}</p></div></div></section>')
 
 
 def _gates(payload: dict) -> str:

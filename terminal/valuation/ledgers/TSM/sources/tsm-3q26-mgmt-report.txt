@@ -1,0 +1,1070 @@
+FOR IMMEDIATE RELEASE
+
+3Q26
+
+Quarterly Management Report
+October 15, 2026
+
+Operating Results Review:
+CONTACT
+Jeff Su
+Investor Relations Division
+invest@tsmc.com
+886-3-568-2089
+
+Topics in This Report:
+
+Summary:
+(Amounts are on consolidated basis and are in
+NT$ billions unless otherwise noted)
+
+3Q26
+
+2Q26
+
+3Q25
+
+QoQ
+
+YoY
+
+8.0%
+
+68.7%
+
+16.2%
+17.6%
+15.4%
+
+41.2%
+50.9%
+68.6%
+
+EPS (NT$ per common share)
+(US$ per ADR unit)
+Net Revenue (US$ billions)
+Net Revenue
+Gross Profit
+Gross Margin
+
+29.43
+27.25
+4.60
+4.31
+46.72
+40.20
+1,494.24 1,270.38
+992.38
+860.31
+66.4%
+67.7%
+
+17.44
+2.92
+33.10
+989.92
+588.54
+59.5%
+
+Operating Expenses
+Other Operating Income and Expenses
+Operating Income
+Operating Margin
+Non-Operating Items
+
+(116.43)
+0.50
+876.45
+58.7%
+34.59
+
+(98.98)
+5.27
+766.60
+60.3%
+95.83
+
+(87.76)
+(0.09)
+500.69
+50.6%
+24.68
+
+17.6%
+
+32.7%
+
+14.3%
+
+75.0%
+
+Net Income Attributable to Shareholders of the
+Parent Company
+
+763.06
+
+706.56
+
+452.30
+
+8.0%
+
+68.7%
+
+•
+
+Revenue Analysis
+
+•
+
+Profit & Expense
+Analysis
+
+•
+
+Financial Condition
+Review
+
+Net Profit Margin
+
+51.1%
+
+55.6%
+
+45.7%
+
+Wafer Shipment (kpcs 12 inch-equiv.)
+
+4,476
+
+4,336
+
+4,085
+
+3.2%
+
+9.6%
+
+•
+
+Cash Flow
+
+Average Exchange Rate--USD/NTD
+
+31.98
+
+31.60
+
+29.91
+
+1.2%
+
+6.9%
+
+•
+
+CapEx
+
+Note: Diluted weighted average outstanding shares were 25,932mn units in 3Q26
+
+•
+
+Recap of Recent
+Important Events &
+Announcements
+
+Financial Highlights:
+Third Quarter 2026
+l
+
+Net revenue was NT$1,494.24 billion, representing a 17.6% increase from
+NT$1,270.38 billion in 2Q26 and a 50.9% increase from NT$989.92 billion
+in 3Q25.
+
+l
+
+Gross margin was 66.4%, 1.3 percentage points lower than 2Q26 and 6.9
+percentage points higher than 3Q25.
+
+l
+
+Operating margin was 58.7%, down 1.6 percentage points from 2Q26 and
+up 8.1 percentage points from 3Q25.
+
+l
+
+Non-operating items were a gain of NT$34.59 billion, compared to a gain
+of NT$95.83 billion in 2Q26 and a gain of NT$24.68 billion in 3Q25.
+
+l
+
+Net income attributable to shareholders of the parent company was
+NT$763.06 billion, up 8.0% from 2Q26 and up 68.7% from 3Q25. Net
+profit margin was 51.1% and diluted EPS was NT$29.43.
+
+TSMC
+October 15, 2026
+
+Page 2
+
+I. Revenue Analysis
+Wafer Revenue by Technology
+
+3Q26
+
+2Q26
+
+3Q25
+
+2nm
+3nm
+
+8%
+33%
+
+3%
+30%
+
+0%
+23%
+
+5nm
+
+28%
+
+33%
+
+37%
+
+7nm
+
+10%
+
+11%
+
+16/20nm
+28nm
+40/45nm
+65nm
+90nm-0.13um
+≥0.15um
+
+6%
+6%
+2%
+4%
+1%
+2%
+
+6%
+6%
+2%
+4%
+2%
+3%
+
+14%
+7%
+7%
+3%
+4%
+2%
+3%
+
+Net Revenue by Platform
+
+3Q26
+
+2Q26
+
+3Q25
+
+High Performance Computing
+Smartphone
+Internet of Things
+
+68%
+21%
+4%
+
+66%
+22%
+5%
+
+57%
+30%
+5%
+
+Automotive
+
+4%
+
+4%
+
+5%
+
+Digital Consumer Electronics
+Others
+
+1%
+2%
+
+1%
+2%
+
+1%
+2%
+
+Net Revenue by Geography
+
+3Q26
+
+2Q26
+
+3Q25
+
+North America
+
+79%
+
+78%
+
+76%
+
+Asia Pacific
+China
+Japan
+EMEA
+
+10%
+5%
+3%
+3%
+
+8%
+6%
+4%
+4%
+
+9%
+8%
+4%
+3%
+
+Revenue Analysis:
+In the third quarter, revenue increased 17.6% quarterover-quarter, as our business was supported by strong
+demand for our leading-edge process technologies.
+By technology, 2nm process technology contributed 8%
+of total wafer revenue in 3Q26, while 3nm, 5nm, and
+7nm accounted for 33%, 28%, and 10% respectively.
+Advanced technologies (7nm and below) accounted for
+79% of total wafer revenue.
+By platform, HPC and Smartphone represented 68%
+and 21% of net revenue respectively, while IoT,
+Automotive, DCE, and Others each represented 4%,
+4%, 1%, and 2%.
+Sequentially, revenue from HPC, Smartphone, IoT, and
+Automotive increased 22%, 10%, 5%, and 23%
+respectively. DCE and Others decreased 12% and 10%
+respectively from 2Q26.
+From a geographic perspective, revenue from
+customers based in North America accounted for 79%
+of total net revenue in 3Q26, while revenue from Asia
+Pacific, China, Japan, and EMEA (Europe, Middle East,
+and Africa) accounted for 10%, 5%, 3%, and 3% of
+total net revenue respectively.
+
+II. Profit & Expense Analysis
+Gross Profit Analysis:
+
+II - 1. Gross Profit Analysis
+(In NT$ billions)
+
+3Q26
+
+2Q26
+
+3Q25
+
+Net Revenue
+
+1,494.24
+
+1,270.38
+
+989.92
+
+Cost of Revenue
+
+(501.86)
+
+(410.07)
+
+(401.38)
+
+Gross Profit
+
+992.38
+
+860.31
+
+588.54
+
+Gross Margin
+
+66.4%
+
+67.7%
+
+59.5%
+
+Gross margin was 66.4% in 3Q26, 1.3 percentage
+points lower than 2Q26, primarily due to the margin
+dilution from the initial ramp-up of N2 technology.
+
+TSMC
+October 15, 2026
+
+Page 3
+
+Operating Income Analysis:
+
+II - 2. Operating Income Analysis
+(In NT$ billions)
+
+3Q26
+
+2Q26
+
+3Q25
+
+Total Operating Expenses
+
+(116.43)
+
+(98.98)
+
+(87.76)
+
+Research & Development
+
+(88.98)
+
+(73.14)
+
+(63.74)
+
+SG&A
+
+(27.45)
+
+(25.84)
+
+(24.02)
+
+0.50
+
+5.27
+
+(0.09)
+
+Operating Income
+
+876.45
+
+766.60
+
+500.69
+
+Operating Margin
+
+58.7%
+
+60.3%
+
+50.6%
+
+Total Operating Expenses as %
+of Net Revenue
+
+7.8%
+
+7.8%
+
+8.9%
+
+Other Operating Income and
+Expenses
+
+Non-Operating Items:
+
+II - 3. Non-Operating Items
+(In NT$ billions)
+
+Total operating expenses increased by NT$17.45 billion
+to NT$116.43 billion in 3Q26, representing 7.8% of net
+revenue in 3Q26. Other operating income and
+expenses decreased mainly due to the absence of
+insurance claims from the April 3, 2024 earthquake
+recorded in 2Q26. Operating margin declined 1.6
+percentage points sequentially to 58.7% in 3Q26.
+
+3Q26
+
+2Q26
+
+3Q25
+
+L-T Investments
+
+1.51
+
+1.44
+
+1.42
+
+Net Interest Income (Expenses)
+
+31.66
+
+26.96
+
+23.22
+
+Other Gains and Losses
+
+1.42
+
+67.43
+
+0.04
+
+Total Non-Operating Items
+
+34.59
+
+95.83
+
+24.68
+
+Total non-operating items were a gain of NT$34.59 billion
+in 3Q26, compared to a gain of NT$95.83 billion in 2Q26.
+The decrease was mainly due to the absence of disposal
+and mark-to-market gains on Vanguard International
+Semiconductor Corp. (VIS) shares recorded in 2Q26.
+
+Net Profit and EPS:
+
+II - 4. Net Profit and EPS
+(In NT$ billions)
+
+3Q26
+
+2Q26
+
+3Q25
+
+Income before Tax
+
+911.04
+
+862.43
+
+525.37
+
+Income Tax Expenses
+
+(147.70)
+
+(155.65)
+
+(73.61)
+
+Effective Tax Rate
+
+16.2%
+
+18.1%
+
+14.0%
+
+Net Income Attributable to the
+Parent Company
+
+763.06
+
+706.56
+
+452.30
+
+Net Profit Margin
+
+51.1%
+
+55.6%
+
+45.7%
+
+EPS (NT$ per common share)
+
+29.43
+
+27.25
+
+17.44
+
+Net income attributable to shareholders of the parent
+company was NT$763.06 billion in 3Q26, up 8.0% from
+2Q26 and up 68.7% from 3Q25.
+
+TSMC
+October 15, 2026
+
+Page 4
+
+III. Financial Condition Review
+Liquidity Analysis:
+
+III - 1. Liquidity Analysis
+(Balance Sheet Items)
+(In NT$ billions)
+
+3Q26
+
+2Q26
+
+3Q25
+
+Cash & Marketable Securities
+
+4,016.98
+
+3,518.01
+
+2,751.06
+
+Accounts Receivable
+
+483.56
+
+440.92
+
+307.81
+
+Inventories
+
+427.75
+
+385.53
+
+288.69
+
+Other Current Assets
+
+156.64
+
+221.24
+
+88.46
+
+Total Current Assets
+
+5,084.93
+
+4,565.70
+
+3,436.02
+
+Accounts Payable
+
+421.46
+
+401.48
+
+261.82
+
+Current Portion of Bonds Payable and
+Bank Loans
+
+213.20
+
+167.41
+
+76.22
+
+Dividends Payable
+
+363.05
+
+337.43
+
+259.33
+
+Accrued Liabilities and Others
+
+970.04
+
+951.44
+
+678.54
+
+1,967.75
+
+1,857.76
+
+1,275.91
+
+2.6
+
+2.5
+
+2.7
+
+3,117.18
+
+2,707.94
+
+2,160.11
+
+Total Current Liabilities
+Current Ratio (x)
+Net Working Capital
+
+On a sequential basis, total current assets increased by
+NT$519.23 billion, mainly due to the increase of
+NT$498.97 billion in cash and marketable securities.
+Total current liabilities increased by NT$109.99 billion,
+mainly due to the increases of NT$45.79 billion in
+current portion of bonds payable and bank loans, and
+NT$25.62 billion in dividends payable.
+Net working capital was NT$3,117.18 billion and current
+ratio was 2.6x in 3Q26.
+
+Receivable and Inventory Days:
+
+III - 2. Receivable/Inventory Days
+(In Number of Days)
+
+3Q26
+
+2Q26
+
+3Q25
+
+Days of Receivable
+
+28
+
+29
+
+25
+
+Days of Inventory
+
+82
+
+87
+
+74
+
+Days of receivable decreased 1 day to 28 days in 3Q26.
+Days of inventory decreased 5 days to 82 days in 3Q26,
+primarily due to the increase in wafer shipments.
+
+Debt Service:
+
+III - 3. Debt Service
+(In NT$ billions)
+
+3Q26
+
+2Q26
+
+3Q25
+
+Cash & Marketable Securities
+
+4,016.98
+
+3,518.01
+
+2,751.06
+
+Interest-Bearing Debts
+
+(1,031.58) (1,031.68)
+
+(994.45)
+
+Net Cash Reserves
+
+2,985.40
+
+1,756.61
+
+2,486.33
+
+Net cash reserves increased by NT$499.07 billion to
+NT$2,985.40 billion in 3Q26, mainly due to the increase
+of NT$498.97 billion in cash and marketable securities
+in 3Q26.
+
+TSMC
+October 15, 2026
+
+Page 5
+
+IV. Cash Flow
+Summary of Cash Flow:
+
+IV - 1. Quarterly Cash Flow Analysis
+(In NT$ billions)
+
+3Q26
+
+2Q26
+
+3Q25
+
+Income before Tax
+
+911.04
+
+862.43
+
+525.37
+
+Depreciation & Amortization
+
+220.20
+
+198.54
+
+162.79
+
+Other Operating Sources/(Uses)
+
+(211.47)
+
+(277.61)
+
+(261.33)
+
+Net Operating Sources/(Uses)
+
+919.77
+
+783.36
+
+426.83
+
+Capital Expenditures
+
+(443.21)
+
+(496.00)
+
+(287.45)
+
+Marketable Financial Instruments
+
+(22.32)
+
+(36.96)
+
+(1.25)
+
+Other Investing Sources/(Uses)
+
+198.74
+
+40.15
+
+28.95
+
+Net Investing Sources/(Uses)
+
+(266.79)
+
+(492.81)
+
+(259.75)
+
+Cash Dividends
+
+(155.59)
+
+(155.59)
+
+(116.70)
+
+Bonds Payable
+
+(0.85)
+
+(31.66)
+
+(9.06)
+
+Other Financing Sources/(Uses)
+
+(3.87)
+
+2.60
+
+(2.53)
+
+Net Financing Sources/(Uses)
+
+(160.31)
+
+(184.65)
+
+(128.29)
+
+Exchange Rate Changes
+
+(5.00)
+
+(7.32)
+
+67.45
+
+Cash Position Net Changes
+
+487.67
+
+98.58
+
+106.24
+
+Ending Cash Balance
+
+3,621.89
+
+IV-2 Free Cash Flow
+
+Net cash used in investing activities was NT$266.79
+billion in 3Q26, primarily attributable to capital
+expenditures of NT$443.21 billion, partially offset by
+other investing sources of NT$198.74 billion. The other
+investing sources were mainly attributable to U.S.
+Treasury Department Investment Tax Credits.
+Net cash used in financing activities was NT$160.31
+billion, mainly reflecting the payment of 4Q25 cash
+dividends of NT$155.59 billion.
+As a result, cash position increased by NT$487.67 billion
+to NT$3,621.89 billion at the end of 3Q26.
+
+Operating and Free Cash Flow:
+
+Free Cash Flow
+(in NT$ billions)
+
+(in NT$ billions)
+
+CAPEX
+
+3,134.22 2,470.76
+
+During the third quarter, net cash generated from
+operating activities totaled NT$919.77 billion, including
+(1) NT$911.04 billion from income before tax, (2)
+NT$220.20 billion from depreciation & amortization
+expenses, and (3) NT$211.47 billion for other operating
+uses. The other operating uses were mainly attributable
+to the income tax payment of NT$197.55 billion.
+
+Operating Cash Flow
+
+Free cash flow increased by NT$189.20 billion to an
+inflow of NT$476.56 billion in 3Q26, mainly due to the
+increase in operating cash flow and the decrease in
+capital expenditures during the quarter.
+
+Free Cash Flow
+
+1,000
+800
+600
+400
+200
+0
+3Q26
+
+2Q26
+
+1Q26
+
+4Q25
+
+(in NT$ billions)
+
+3Q26
+
+2Q26
+
+1Q26
+
+4Q25
+
+Free Cash Flow
+
+476.56
+
+287.36
+
+348.21
+
+368.60
+
+V. CapEx
+Capital Expenditures:
+
+V. Capital Expenditures
+(in US$ billions)
+
+3Q26
+
+2Q26
+
+1Q26
+
+YTD
+
+Capital Expenditures
+
+13.84
+
+15.70
+
+11.10
+
+40.64
+
+Capital expenditures for TSMC on a consolidated basis
+totaled US$13.84 billion in 3Q26.
+
+TSMC
+October 15, 2026
+
+Page 6
+
+VI. Recap of Recent Important Events & Announcements
+l
+
+ASML and TSMC Announce Initiative to Pioneer Industry Transition to Large-Format Photomasks for
+High NA EUV (2026/09/08)
+
+l
+
+Sony Semiconductor Solutions and TSMC Agreed to Establish Joint Venture for Next-Generation
+Image Sensors (2026/08/11)
+
+l
+
+TSMC Board of Directors Approved NT$7.00 Cash Dividend for the Second Quarter of 2026 and Set
+December 10, 2026 as Ex-Dividend Date, December 16, 2026 as the Record Date and January 7,
+2027 as the Distribution Date (2026/08/11)
+
+
