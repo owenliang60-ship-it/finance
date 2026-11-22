@@ -150,3 +150,7 @@ def test_live_state_missing_inputs():
     assert wide["value_lo"] is None and wide["value_hi"] == pytest.approx(17.0 * 10.0)
     bad = k.live_state({**LIVE, "adjs": [0.0]})
     assert bad["rev"] is None and bad["eps_local"] is None and bad["eps_state"] == "missing"
+
+
+def test_v1_bridge_functions_removed():
+    assert not hasattr(k, "bridge_eps") and not hasattr(k, "scenario_state")

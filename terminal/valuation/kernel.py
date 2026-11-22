@@ -27,13 +27,6 @@ def _fins(values):
     return None if any(v is None for v in out) else out
 
 
-def bridge_eps(rev, rev_cons, eps_cons, margin, shares) -> Optional[float]:
-    rev, rev_cons, eps_cons, margin, shares = fin(rev), fin(rev_cons), fin(eps_cons), fin(margin), fin(shares)
-    if rev is None or rev_cons is None or eps_cons is None or margin is None or shares is None or shares <= 0:
-        return None
-    return fin(eps_cons + (rev - rev_cons) * margin / shares)
-
-
 def zone(rev, rev_cons, half_width) -> Optional[str]:
     rev, rev_cons, half_width = fin(rev), fin(rev_cons), fin(half_width)
     if rev is None or rev_cons is None or half_width is None or rev_cons <= 0 or half_width <= 0:
@@ -183,24 +176,3 @@ def live_state(s: dict) -> dict:
             "eps_state": eps_state, "implied_pe": implied_pe(price, eps_usd), "value": value,
             "value_lo": scenario_value(pe_lo, eps_usd), "value_hi": scenario_value(pe_hi, eps_usd),
             "value_vs_price": pct_diff(value, price), "zone": zone(rev, s.get("rev_cons"), s.get("half_width"))}
-
-
-def scenario_state(s: dict) -> dict:
-    rev, delta = fin(s.get("rev")), fin(s.get("driver_delta"))
-    rev_eff = fin(rev + delta) if rev is not None and delta is not None else None
-    where = zone(rev_eff, s.get("rev_cons"), s.get("half_width"))
-    if s.get("eps_mode") == "direct":
-        eps_local = fin(s.get("direct_eps"))
-        source = "direct" if eps_local is not None else "blocked_input"
-    elif where == "mild":
-        eps_local = bridge_eps(rev_eff, s.get("rev_cons"), s.get("eps_cons"), s.get("margin"), s.get("shares"))
-        source = "bridge" if eps_local is not None else "blocked_input"
-    elif where == "tail":
-        eps_local, source = None, "blocked_tail"
-    else:
-        eps_local, source = None, "blocked_zone_unknown"
-    eps_usd = to_usd(eps_local, s.get("fx"))
-    value = scenario_value(s.get("pe"), eps_usd)
-    return {"rev_eff": rev_eff, "zone": where, "eps_local": eps_local, "eps_source": source,
-            "eps_usd": eps_usd, "implied_pe": implied_pe(s.get("price"), eps_usd), "value": value,
-            "value_vs_price": pct_diff(value, s.get("price"))}
