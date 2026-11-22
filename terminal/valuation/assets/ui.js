@@ -1,238 +1,333 @@
-// Thin DOM layer: one state, one reduce(), one render(). Numbers come from payload and
-// kernel.js/state.js; text is written with textContent only. The DOM never stores numbers.
+// Thin DOM layer v2: one state, one reduce(), one render() per animation frame. Numbers come from
+// payload, kernel.js, state.js and charts.js; text is written with textContent and SVG nodes with
+// createElementNS only. The DOM never stores numbers.
 (function () {
   "use strict";
   const root = document.documentElement;
   const payload = JSON.parse(document.getElementById("payload").textContent);
   const $ = (id) => document.getElementById(id);
-  const q = (sel) => document.querySelector(sel);
   const put = (el, text) => { if (el) el.textContent = text; };
   const controls = () => Array.prototype.slice.call(document.querySelectorAll("input, button"));
-  const KINDS = {rev: "num", margin: "pct", pe: "x", fx: "num"};
-  const SOURCE = {bridge: "利润率桥", blocked_tail: "尾部：利润率桥不外推", blocked_zone_unknown: "温和区不可得",
-                  blocked_input: "输入缺失"};
-  const ZONE = {mild: "温和区", tail: "尾部"};
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const PANELS = [["p1", panel1], ["p2", panel2], ["p3", panel3], ["p4", panel4]];
+
+  function svgBoxes(svg) {
+    const out = [];
+    svg.querySelectorAll("text").forEach((el) => {
+      const b = el.getBBox();
+      out.push({x0: b.x, y0: b.y, x1: b.x + b.width, y1: b.y + b.height, text: el.textContent});
+    });
+    return out;
+  }
 
   window.__valuationAudit = function () {
     const text = document.body.innerText || "";
+    const lonely = [];
+    document.querySelectorAll("body *").forEach((el) => {
+      if (el.children.length === 0 && el.textContent.trim() === "—" && el.offsetParent !== null) {
+        lonely.push(el.id || el.className || el.tagName);
+      }
+    });
+    const overlaps = [];
+    for (const [id] of PANELS) {
+      const svg = $(id);
+      if (!svg) continue;
+      const boxes = svgBoxes(svg);
+      for (let i = 0; i < boxes.length; i += 1) {
+        const a = boxes[i];
+        if (a.x0 < -0.5 || a.y0 < -0.5 || a.x1 > VIEW_W + 0.5 || a.y1 > VIEW_H + 0.5) {
+          overlaps.push(id + ": outside " + a.text);
+        }
+        for (let j = i + 1; j < boxes.length; j += 1) {
+          const b = boxes[j];
+          if (a.x0 < b.x1 - 0.5 && b.x0 < a.x1 - 0.5 && a.y0 < b.y1 - 0.5 && b.y0 < a.y1 - 0.5) {
+            overlaps.push(id + ": " + a.text + " × " + b.text);
+          }
+        }
+      }
+    }
     return {
       selfcheck: root.dataset.selfcheck || null,
       badText: text.match(/NaN|undefined|Infinity/g) || [],
+      lonelyDash: lonely,
+      textOverlaps: overlaps,
       disabledControls: controls().filter((el) => el.disabled)
         .map((el) => el.id || (el.dataset.preset ? "preset:" + el.dataset.preset : el.className || el.tagName)),
     };
   };
 
   function bannerLine(text, cls) {
+    const box = $("banner");
     const ul = $("banner-lines");
     if (!ul) return;
     const li = document.createElement("li");
     li.textContent = text;
     if (cls) li.className = cls;
     ul.appendChild(li);
+    if (box) box.hidden = false;
   }
 
-  put($("hdr-price"), fmt(payload.meta.price, "usd") + "（" + (payload.meta.price_date || "—") + "）");
   if (payload.status.page_blocked) {
     root.dataset.selfcheck = "pass";
     return;
   }
 
+  const c = payload.consensus;
+  const m = payload.model;
+  const sliders = payload.sliders;
+  const cur = m.currency;
+
   // ---- load-time self-check: JS kernel and state layer must reproduce the Python vectors ----
   const same = (a, b) => (a === null && b === null) || (typeof a === "string" && a === b)
     || (typeof a === "number" && typeof b === "number" && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b)));
   const matches = (got, want) => {
+    if (!got || !want) return got === want;
     const keys = Object.keys(want);
     return keys.length === Object.keys(got).length && keys.every((k) => same(got[k], want[k]));
   };
   const failed = [];
   for (const item of payload.selfcheck) {
-    if (!matches(scenario_state(item.in), item.out)) failed.push(item.name);
+    if (!matches(live_state(item.in), item.out)) failed.push(item.name);
   }
-  let state = init_state(payload);
-  const first = derive(state, payload);
-  const want = payload.selfcheck[0].out;
-  if (!Object.keys(want).every((k) => same(first[k], want[k]))) failed.push("init_state");
-
-  const sliders = payload.sliders;
-  const presets = payload.presets;
-
-  // ---- static numbers: matrix, sample, crowding, segments, guidance notes ----
-  const meaningless = (eps) => fin(eps) !== null && eps <= 0;
-  payload.matrix.pe.forEach((v, i) => put(q('[data-pe="' + i + '"]'), fmt(v, "x")));
-  for (const c of payload.matrix.columns) {
-    c.cells.forEach((v, i) => {
-      const td = q('[data-cell="' + c.key + ":" + i + '"]');
-      put(td, v === null && meaningless(c.eps_usd) ? "无意义" : fmt(v, "usd"));
-      if (td && c.bracket && c.bracket.indexOf(i) >= 0) td.classList.add("bracket");
-    });
-    put(q('[data-eps="' + c.key + '"]'), fmt(c.eps_usd, "usd"));
-    put(q('[data-implied="' + c.key + '"]'), c.implied_pe !== null
-      ? fmt(c.implied_pe, "x") + " · 分位 " + fmt(c.pe_rank, "pct") : meaningless(c.eps_usd) ? "无意义" : "—");
+  const init = init_state(payload);
+  if (!matches(derive(init, payload).live, payload.selfcheck[0].out)) failed.push("init_state");
+  for (const sc of payload.scenarios) {
+    if (sc.enabled === true && !matches(derive(reduce(init, {type: "preset", id: sc.id}, payload), payload).live,
+                                        sc.out)) {
+      failed.push("preset:" + sc.id);
+    }
   }
-  const s = payload.matrix.pe_sample;
-  put($("pe-sample"), s.note + "；样本 " + (s.start || "—") + " 至 " + (s.end || "—") + "，有效 " + s.n_valid
-    + " 天，剔除 TTM≤0 " + s.n_nonpositive + " 天、无 TTM " + s.n_no_ttm + " 天");
+  let state = init;
+
+  // ---- static numbers ----
+  put($("kpi-price"), fmt(c.price, "usd"));
+  put($("kpi-price-date"), "收盘 " + (c.price_date || "日期缺失"));
+  put($("kpi-mktcap"), fmt_money(c.mkt_cap, "USD"));
+  put($("kpi-window"), c.ntm_window.label);
+  put($("kpi-implied-pe"), c.pe_init !== null ? fmt(c.pe_init, "x") : "不适用");
+  put($("kpi-implied-sub"), "NTM 共识 EPS " + fmt(c.ntm_eps_usd, "usd"));
+  const ttl = payload.trajectory;
+  put($("p3-note"), ttl.note || ttl.reason || "");
   const cy = payload.matrix.cyclical;
-  if (cy) {
-    put($("cyclical-row"), "周期股双口径：峰值 TTM EPS " + fmt(cy.peak_ttm, "usd") + "（" + (cy.peak_date || "—")
-      + "）× P10 = " + fmt(cy.peak_x_low, "usd") + "；中位 TTM EPS " + fmt(cy.mid_ttm, "usd") + " × P50 = "
-      + fmt(cy.mid_x_normal, "usd"));
-  }
-  const cs = payload.consensus;
-  const cr = cs.crowding;
-  put($("crowding"), "卖方区间（" + cs.crowding_note + "）：营收低值 " + fmt(cr.rev_low_vs_avg, "pct") + " / 高值 "
-    + fmt(cr.rev_high_vs_avg, "pct") + "；EPS 低值 " + fmt(cr.eps_low_vs_avg, "pct") + " / 高值 "
-    + fmt(cr.eps_high_vs_avg, "pct") + "。NTM 口径 " + (cs.ntm_basis === "quarter_sum" ? "逐季加总" : "财年混合")
-    + "，快照 " + (cs.snapshot_date || "—") + "，NTM EPS（本币）" + fmt(cs.eps_cons, "num")
-    + "，NTM 营收（本币）" + fmt(cs.rev_cons, "num") + "，fx0 " + fmt(cs.fx0, "num"));
-
-  const seg = payload.segments;
-  put($("segments-note"), seg.cleared || (seg.quarters.length ? "" : "无通过门控的分部季度"));
-  const segBody = $("segments-rows");
-  for (const row of seg.quarters) {
-    const tr = document.createElement("tr");
-    const th = document.createElement("th");
-    th.textContent = row.fiscal_date;
-    tr.appendChild(th);
-    row.values.forEach((v, i) => {
-      const td = document.createElement("td");
-      const amount = fin(v) !== null && fin(seg.unit) !== null ? v * seg.unit : null;
-      td.textContent = fmt(amount, "num") + "（同比 " + fmt(row.yoy[i], "pct") + "）";
-      tr.appendChild(td);
-    });
-    const basis = document.createElement("td");
-    basis.className = "text";
-    basis.textContent = row.yoy_basis === "restated" ? "重述口径" : row.yoy_basis === "ledger" ? "台账上年同季" : "无上年同季";
-    tr.appendChild(basis);
-    if (segBody) segBody.appendChild(tr);
-  }
-  const notes = $("guidance-notes");
-  for (const g of payload.guidance_notes) {
-    const li = document.createElement("li");
-    li.textContent = g.label + "（" + g.fiscal_date + "）：" + fmt(g.value, "num") + " · " + g.flags.join("、")
-      + " · 仅文字标注，不进算术 · " + g.source;
-    if (notes) notes.appendChild(li);
-  }
+  const sample = payload.matrix.pe_sample;
+  const cr = c.crowding;
+  put($("p4-note-cycle"), cy ? "周期股双口径：峰值 TTM EPS " + fmt(cy.peak_ttm, "usd") + "（" + (cy.peak_date || "日期缺失")
+    + "）× P10 = " + fmt(cy.peak_x_low, "usd") + "；中位 TTM EPS " + fmt(cy.mid_ttm, "usd") + " × P50 = "
+    + fmt(cy.mid_x_normal, "usd") : "非周期股台账：不列峰值口径");
+  put($("p4-note-sample"), sample.note + "：" + (sample.start || "起点缺失") + " 至 " + (sample.end || "终点缺失")
+    + "，有效 " + sample.n_valid + " 天，剔除 TTM≤0 " + sample.n_nonpositive + " 天、无 TTM " + sample.n_no_ttm + " 天");
+  put($("p4-note-crowd"), "卖方区间（" + c.crowding_note + "）：营收低/高值 " + fmt_signed(cr.rev_low_vs_avg, 1) + " / "
+    + fmt_signed(cr.rev_high_vs_avg, 1) + "；EPS 低/高值 " + fmt_signed(cr.eps_low_vs_avg, 1) + " / "
+    + fmt_signed(cr.eps_high_vs_avg, 1) + "。快照 " + (c.snapshot_date || "缺失"));
+  const heat = payload.heatmap;
+  if (heat && heat.reason) put($("p4-note-crowd"), heat.reason);
+  m.segments.forEach((s, i) => put($("base-seg-" + i), "共识基数 " + fmt_money(s.base, cur)));
+  document.querySelectorAll("[data-marker-value]").forEach((el) => {
+    const mk = payload.markers[Number(el.dataset.markerValue)];
+    const kind = mk.slider === "margin" ? "pct" : mk.slider === "pe" ? "x" : "num";
+    put(el, fmt(mk.value, kind));
+  });
+  const margins = payload.margins;
+  put($("audit-margins"), "增量利润率三读数（只作审计，不进算术）：历史 " + fmt(margins.hist.value, "pct") + "（"
+    + margins.hist.detail + "）；街口 " + fmt(margins.street.value, "pct") + "（" + margins.street.detail + "）；Boss "
+    + fmt(margins.boss.value, "pct") + "（" + margins.boss.detail + "）");
 
   // ---- controls ----
+  let pending = false;
   const dispatch = (action) => {
     state = reduce(state, action, payload);
-    render();
+    if (!pending) {
+      pending = true;
+      window.requestAnimationFrame(() => { pending = false; render(); });
+    }
   };
-  for (const key of Object.keys(KINDS)) {
+  const range = (el, lo, hi) => {
+    if (!el) return;
+    if (fin(lo) !== null && fin(hi) !== null) {
+      el.min = String(lo);
+      el.max = String(hi);
+    }
+  };
+  m.segments.forEach((s, i) => {
+    const el = $("sl-seg-" + i);
+    if (!el) return;
+    range(el, sliders.seg.min, sliders.seg.max);
+    el.disabled = sliders.seg.disabled === true;
+    el.addEventListener("input", () => dispatch({type: "seg", index: i, value: Number(el.value)}));
+  });
+  for (const key of ["margin", "pe", "fx"]) {
     const el = $("sl-" + key);
     const sl = sliders[key];
     if (!el || !sl) continue;
-    if (fin(sl.min) !== null && fin(sl.max) !== null) {
-      el.min = String(sl.min);
-      el.max = String(sl.max);
-    }
+    range(el, sl.min, sl.max);
     el.disabled = sl.disabled === true;
     el.addEventListener("input", () => dispatch({type: "set", key: key, value: Number(el.value)}));
+  }
+  const half = $("in-pe-half");
+  if (half) {
+    half.disabled = sliders.pe.disabled === true;
+    half.addEventListener("input", () => dispatch({type: "set", key: "pe_half", value: Number(half.value)}));
   }
   for (const d of sliders.drivers) {
     const el = $("sl-driver-" + d.id);
     if (!el) continue;
-    el.min = String(d.min);
-    el.max = String(d.max);
+    range(el, d.min, d.max);
+    el.disabled = m.eps_mode !== "margin";
     el.addEventListener("input", () => dispatch({type: "driver", id: d.id, value: Number(el.value)}));
   }
   document.querySelectorAll("button.tick").forEach((btn) => {
-    const m = payload.markers[Number(btn.dataset.marker)];
-    const sl = sliders[m.slider];
+    const mk = payload.markers[Number(btn.dataset.marker)];
+    const sl = sliders[mk.slider];
     const lo = sl ? fin(sl.min) : null;
     const hi = sl ? fin(sl.max) : null;
-    const v = fin(m.value);
+    const v = fin(mk.value);
     if (lo === null || hi === null || v === null || hi <= lo || v < lo || v > hi) {
-      btn.hidden = true;
+      btn.disabled = true;
+      btn.title = btn.title + "（超出滑轨范围）";
       return;
     }
-    btn.style.left = ((v - lo) / (hi - lo) * 100) + "%";
     btn.disabled = sl.disabled === true;
-    btn.addEventListener("click", () => dispatch({type: "set", key: m.slider, value: m.value}));
+    btn.addEventListener("click", () => dispatch({type: "set", key: mk.slider, value: mk.value}));
   });
-  document.querySelectorAll("[data-marker-value]").forEach((td) => {
-    const m = payload.markers[Number(td.dataset.markerValue)];
-    const btn = q('button.tick[data-marker="' + td.dataset.markerValue + '"]');
-    put(td, fmt(m.value, KINDS[m.slider]) + (btn && btn.hidden ? "（超出滑轨）" : ""));
+  document.querySelectorAll("[data-track-mark]").forEach((el) => {
+    const mk = payload.markers[Number(el.dataset.trackMark)];
+    const sl = sliders[mk.slider];
+    const lo = sl ? fin(sl.min) : null;
+    const hi = sl ? fin(sl.max) : null;
+    const v = fin(mk.value);
+    if (lo === null || hi === null || v === null || hi <= lo || v < lo || v > hi) {
+      el.hidden = true;
+      return;
+    }
+    el.style.left = ((v - lo) / (hi - lo) * 100).toFixed(3) + "%";
   });
   document.querySelectorAll("button[data-preset]").forEach((btn) => {
     btn.addEventListener("click", () => dispatch({type: "preset", id: btn.dataset.preset}));
   });
   $("btn-reset").addEventListener("click", () => dispatch({type: "reset"}));
-  $("btn-save").addEventListener("click", () => dispatch({type: "save"}));
-
-  // ---- render ----
-  function sourceText(d) {
-    if (d.eps_source === "direct") {
-      const p = presets.find((x) => x.id === state.preset_id);
-      return p ? p.label + " 回放" : "卖方共识（利润率桥禁用）";
-    }
-    return SOURCE[d.eps_source] || "—";
+  document.querySelectorAll("input[data-weight]").forEach((input) => {
+    input.addEventListener("input", () => dispatch({type: "weight", id: input.dataset.weight, text: input.value}));
+  });
+  const badge = $("badge-gates");
+  if (badge) {
+    badge.addEventListener("click", () => {
+      const audit = $("audit");
+      audit.open = true;
+      audit.scrollIntoView({behavior: "smooth", block: "start"});
+    });
   }
 
-  function renderScenarios(d) {
-    const body = $("scenario-rows");
-    const rebuild = body.children.length !== state.scenarios.length;
-    if (rebuild) {
-      while (body.firstChild) body.removeChild(body.firstChild);
-      state.scenarios.forEach((sc, i) => {
-        const tr = document.createElement("tr");
-        for (let c = 0; c < 4; c += 1) tr.appendChild(document.createElement("td"));
-        tr.children[0].className = "text";
-        const wtd = document.createElement("td");
-        const input = document.createElement("input");
-        input.type = "text";
-        input.inputMode = "decimal";
-        input.dataset.weight = String(i);
-        input.value = sc.weight === null ? "" : String(sc.weight);
-        input.addEventListener("input", () => dispatch({type: "weight", index: i, text: input.value}));
-        wtd.appendChild(input);
-        tr.appendChild(wtd);
-        const xtd = document.createElement("td");
-        const del = document.createElement("button");
-        del.type = "button";
-        del.textContent = "删除";
-        del.addEventListener("click", () => dispatch({type: "delete", index: i}));
-        xtd.appendChild(del);
-        tr.appendChild(xtd);
-        body.appendChild(tr);
-      });
+  // ---- render ----
+  function draw(svg, list) {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    for (const it of list) {
+      let el;
+      if (it.t === "text") {
+        el = document.createElementNS(SVG_NS, "text");
+        el.setAttribute("x", it.x.toFixed(2));
+        el.setAttribute("y", it.y.toFixed(2));
+        el.setAttribute("font-size", String(it.size));
+        el.setAttribute("text-anchor", it.anchor);
+        el.setAttribute("fill", it.fill);
+        if (it.weight) el.setAttribute("font-weight", String(it.weight));
+        if (it.halo) {
+          el.setAttribute("stroke", it.halo);
+          el.setAttribute("stroke-width", "3");
+          el.setAttribute("stroke-linejoin", "round");
+          el.setAttribute("paint-order", "stroke");
+        }
+        el.textContent = it.text;
+      } else if (it.t === "rect") {
+        el = document.createElementNS(SVG_NS, "rect");
+        el.setAttribute("x", it.x.toFixed(2));
+        el.setAttribute("y", it.y.toFixed(2));
+        el.setAttribute("width", Math.max(it.w, 0).toFixed(2));
+        el.setAttribute("height", Math.max(it.h, 0).toFixed(2));
+        el.setAttribute("fill", it.fill);
+        if (it.rx) el.setAttribute("rx", String(it.rx));
+        if (it.opacity !== undefined) el.setAttribute("fill-opacity", String(it.opacity));
+      } else if (it.t === "line") {
+        el = document.createElementNS(SVG_NS, "line");
+        el.setAttribute("x1", it.x1.toFixed(2));
+        el.setAttribute("y1", it.y1.toFixed(2));
+        el.setAttribute("x2", it.x2.toFixed(2));
+        el.setAttribute("y2", it.y2.toFixed(2));
+      } else if (it.t === "path") {
+        el = document.createElementNS(SVG_NS, "path");
+        el.setAttribute("d", it.pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(2) + " " + p[1].toFixed(2)).join(" "));
+        el.setAttribute("fill", "none");
+        el.setAttribute("stroke-linejoin", "round");
+      } else if (it.t === "circle") {
+        el = document.createElementNS(SVG_NS, "circle");
+        el.setAttribute("cx", it.cx.toFixed(2));
+        el.setAttribute("cy", it.cy.toFixed(2));
+        el.setAttribute("r", String(it.r));
+        el.setAttribute("fill", it.fill);
+        if (it.opacity !== undefined) el.setAttribute("fill-opacity", String(it.opacity));
+      } else {
+        continue;
+      }
+      if (it.t !== "text") {
+        if (it.stroke) el.setAttribute("stroke", it.stroke);
+        if (it.sw) el.setAttribute("stroke-width", String(it.sw));
+        if (it.dash) el.setAttribute("stroke-dasharray", it.dash);
+      }
+      svg.appendChild(el);
     }
-    state.scenarios.forEach((sc, i) => {
-      const cells = body.children[i].children;
-      put(cells[0], sc.name);
-      put(cells[1], fmt(sc.eps_usd, "usd"));
-      put(cells[2], fmt(sc.pe, "x"));
-      put(cells[3], sc.value === null && meaningless(sc.eps_usd) ? "无意义" : fmt(sc.value, "usd"));
-    });
-    put($("out-weighted"), fmt(d.weighted, "usd"));
-    put($("out-weighted-reason"), d.weighted_reason ? "（" + d.weighted_reason + "）" : "");
   }
 
   function render() {
     const d = derive(state, payload);
-    for (const key of Object.keys(KINDS)) {
+    const live = d.live;
+    m.segments.forEach((s, i) => {
+      const el = $("sl-seg-" + i);
+      if (el && fin(state.adjs[i]) !== null) el.value = String(state.adjs[i]);
+      put($("val-seg-" + i), fmt_signed(state.adjs[i], 1));
+      put($("amt-seg-" + i), fmt_money(d.seg_rev[i], cur));
+    });
+    const setv = (key, kind) => {
       const el = $("sl-" + key);
-      if (!el) continue;
-      if (fin(state[key]) !== null) el.value = String(state[key]);
-      put($("val-" + key), fmt(state[key], KINDS[key]));
-    }
+      if (el && fin(state[key]) !== null) el.value = String(state[key]);
+      put($("val-" + key), fmt(state[key], kind));
+    };
+    setv("margin", "pct");
+    setv("pe", "x");
+    setv("fx", "num");
+    if (half && document.activeElement !== half) half.value = String(state.pe_half);
     for (const dr of sliders.drivers) {
       const el = $("sl-driver-" + dr.id);
       const v = state.drivers[dr.id];
       if (el && fin(v) !== null) el.value = String(v);
-      put($("val-driver-" + dr.id), fmt(v, "num") + "（相对基准 " + fmt(fin(v) !== null ? v - dr.base : null, "num") + "）");
+      put($("val-driver-" + dr.id), fmt_money(v, cur) + "（相对基准 " + fmt_money(fin(v) !== null ? v - dr.base : null, cur) + "）");
     }
-    put($("out-eps"), fmt(d.eps_usd, "usd"));
-    put($("out-eps-source"), sourceText(d));
-    put($("out-zone"), ZONE[d.zone] || "—");
-    put($("out-implied-pe"), d.implied_pe !== null ? fmt(d.implied_pe, "x") : meaningless(d.eps_usd) ? "无意义" : "—");
-    put($("out-pe-rank"), fmt(d.pe_rank, "pct"));
-    put($("out-value"), d.value !== null ? fmt(d.value, "usd") : meaningless(d.eps_usd) ? "无意义" : "—");
-    put($("out-value-vs-price"), fmt(d.value_vs_price, "pct"));
-    renderScenarios(d);
+    document.querySelectorAll("input[data-weight]").forEach((input) => {
+      if (document.activeElement === input) return;
+      const w = state.weights[input.dataset.weight];
+      input.value = fin(w) === null ? "" : String(w);
+    });
+    put($("out-rev"), fmt_money(live.rev, cur));
+    put($("out-ni"), live.net_income !== null ? fmt_money(live.net_income, cur) : "直接取共识 EPS");
+    put($("out-eps-local"), live.eps_local !== null ? fmt(live.eps_local, "num") + " " + cur : "输入不足");
+    put($("out-eps-usd"), fmt(live.eps_usd, "usd"));
+    put($("out-implied-pe"), live.implied_pe !== null ? fmt(live.implied_pe, "x")
+      + (d.pe_rank !== null ? " · 历史分位 " + fmt(d.pe_rank, "pct") : "") : "负盈利，不适用");
+    put($("kpi-custom"), custom_text(d));
+    put($("kpi-custom-sub"), "P/E " + fmt(state.pe, "x") + (state.pe_half > 0 ? " ± " + fmt(state.pe_half, "num") : "")
+      + " · 净利率 " + (m.eps_mode === "margin" ? fmt(state.margin, "pct") : "直接取共识"));
+    put($("kpi-ev"), ev_text(d));
+    put($("kpi-ev-sub"), d.ev !== null ? "权重合计 100%" : "权重合计 " + fmt(d.weight_total, "num") + "%");
+    const note = $("w-note");
+    put(note, d.ev !== null ? "权重合计 100%，EV 线已显示" : d.ev_reason + "（当前合计 " + fmt(d.weight_total, "num") + "%），EV 线隐藏");
+    if (note) note.className = d.ev !== null ? "note" : "note warn";
+    const pill = $("pill-zone");
+    if (pill) pill.hidden = !d.tail;
+    document.querySelectorAll("button[data-preset]").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.preset === state.preset_id);
+    });
+    for (const [id, fn] of PANELS) {
+      const svg = $(id);
+      if (svg) draw(svg, fn(d, payload));
+    }
   }
 
   render();

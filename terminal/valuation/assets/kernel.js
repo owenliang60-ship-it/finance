@@ -12,14 +12,6 @@ function _fins(values) {
   return out.some((v) => v === null) ? null : out;
 }
 
-function bridge_eps(rev, rev_cons, eps_cons, margin, shares) {
-  rev = fin(rev); rev_cons = fin(rev_cons); eps_cons = fin(eps_cons); margin = fin(margin); shares = fin(shares);
-  if (rev === null || rev_cons === null || eps_cons === null || margin === null || shares === null || shares <= 0) {
-    return null;
-  }
-  return fin(eps_cons + (rev - rev_cons) * margin / shares);
-}
-
 function zone(rev, rev_cons, half_width) {
   rev = fin(rev); rev_cons = fin(rev_cons); half_width = fin(half_width);
   if (rev === null || rev_cons === null || half_width === null || rev_cons <= 0 || half_width <= 0) return null;
@@ -160,37 +152,9 @@ function live_state(s) {
   };
 }
 
-function scenario_state(s) {
-  const rev = fin(s.rev);
-  const delta = fin(s.driver_delta);
-  const rev_eff = rev !== null && delta !== null ? fin(rev + delta) : null;
-  const where = zone(rev_eff, s.rev_cons, s.half_width);
-  let eps_local;
-  let source;
-  if (s.eps_mode === "direct") {
-    eps_local = fin(s.direct_eps);
-    source = eps_local !== null ? "direct" : "blocked_input";
-  } else if (where === "mild") {
-    eps_local = bridge_eps(rev_eff, s.rev_cons, s.eps_cons, s.margin, s.shares);
-    source = eps_local !== null ? "bridge" : "blocked_input";
-  } else if (where === "tail") {
-    eps_local = null;
-    source = "blocked_tail";
-  } else {
-    eps_local = null;
-    source = "blocked_zone_unknown";
-  }
-  const eps_usd = to_usd(eps_local, s.fx);
-  const value = scenario_value(s.pe, eps_usd);
-  return {
-    rev_eff: rev_eff, zone: where, eps_local: eps_local, eps_source: source, eps_usd: eps_usd,
-    implied_pe: implied_pe(s.price, eps_usd), value: value, value_vs_price: pct_diff(value, s.price),
-  };
-}
-
 if (typeof module !== "undefined") {
   module.exports = {
-    fin, bridge_eps, zone, to_usd, implied_pe, scenario_value, pct_diff, pct_rank, weighted_value,
-    scenario_state, seg_revenue, implied_margin, margin_eps, quarter_path, grid_pos, live_state,
+    fin, zone, to_usd, implied_pe, scenario_value, pct_diff, pct_rank, weighted_value, seg_revenue, implied_margin,
+    margin_eps, quarter_path, grid_pos, live_state,
   };
 }

@@ -36,7 +36,7 @@ def test_full_ledger_exit_zero_and_no_writes(valuation_db, ledger_file, tmp_path
     out = tmp_path / "out" / "acme.html"
     code, stdout, _ = _main(capsys, db, ledger_file(), out)
     assert code == 0
-    assert out.is_file() and 'id="matrix"' in out.read_text(encoding="utf-8")
+    assert out.is_file() and 'id="p1"' in out.read_text(encoding="utf-8")
     line = json.loads(stdout.strip())
     assert set(line) == {"symbol", "as_of", "overall", "page_blocked", "exit_code", "html", "non_verified",
                          "g4_reextract"}
@@ -70,7 +70,7 @@ def test_vendor_conflict_blocks_page(valuation_db, ledger_file, tmp_path, capsys
     code, stdout, _ = _main(capsys, db, ledger_file(text=FADR_LEDGER), out)
     assert code == 20 and json.loads(stdout)["page_blocked"] is True
     html = out.read_text(encoding="utf-8")
-    assert 'id="matrix"' not in html and 'id="gates"' in html
+    assert 'id="p1"' not in html and 'id="gates"' in html
 
 
 def test_bad_toml_is_hard_failure(valuation_db, ledger_file, tmp_path, capsys):

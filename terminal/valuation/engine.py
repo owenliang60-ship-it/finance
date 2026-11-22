@@ -258,7 +258,15 @@ def _meta(facts: FactPack, ledger: Ledger) -> dict:
     return {"symbol": facts.symbol, "as_of": facts.as_of, "reporting_currency": facts.reporting_currency,
             "ledger_currency": ledger.reporting_currency, "eps_basis": ledger.eps_basis, "cyclical": ledger.cyclical,
             "is_adr": facts.is_adr, "price": facts.price, "price_date": facts.price_date, "ledger": str(ledger.path),
-            "sources": [dict(s) for s in ledger.sources.values()], "disclaimer": DISCLAIMER}
+            "sources": [dict(s) for s in ledger.sources.values()], "quotes": _quotes(ledger), "disclaimer": DISCLAIMER}
+
+
+def _quotes(ledger: Ledger) -> list:
+    out = [{"item": f"分部 {q['fiscal_date']}", "source": q["source"], "quote": q["quote"]}
+           for q in ledger.segment_quarters]
+    out += [{"item": f"EPS {f['fiscal_date']}", "source": f["source"], "quote": f["quote"]} for f in ledger.eps_facts]
+    out += [{"item": g["label"], "source": g["source"], "quote": g["quote"]} for g in ledger.guidance]
+    return out
 
 
 def _slider(init, lo, hi, disabled) -> dict:
