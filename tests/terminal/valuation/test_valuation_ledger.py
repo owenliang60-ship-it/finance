@@ -38,6 +38,27 @@ def test_acme_fixture_loads():
     assert ledger.guidance[0]["is_lower_bound"] is False
     assert ledger.cycles[0]["id"] == "2025-26"
     assert "G3a:2026-06-30" in ledger.acks
+    assert ledger.segment_axis_rationale == "夹具：按两个业务分部拆分营收"
+    assert ledger.segment_roles == ("稳态底座", "高弹性分部")
+    assert ledger.segment_colors == ()
+    assert ledger.segment_secondary_note.startswith("夹具次轴注释")
+    assert ledger.consensus_weight == 5.0
+    assert [s["id"] for s in ledger.scenarios] == ["bull", "base", "bear"]
+    bull = ledger.scenarios[0]
+    assert bull["tone"] == "bull" and bull["seg_adjs"] == (0.10, 0.05) and bull["net_margin"] == 0.18
+    assert bull["pe_mid"] == 9.0 and bull["pe_half"] == 1.0 and bull["weight"] == 20.0
+    assert ledger.segment_quarters[0].get("pct_derived") is None
+
+
+def test_colors_and_pct_derived_load(tmp_path):
+    text = ACME.read_text(encoding="utf-8").replace(
+        'secondary_note = "', 'colors = ["#4c78a8", "#F58518"]\nsecondary_note = "', 1).replace(
+        "prior_year_restated = [600.0, 400.0]", "prior_year_restated = [600.0, 400.0]\npct_derived = true", 1)
+    path = tmp_path / "ledger.toml"
+    path.write_text(text, encoding="utf-8")
+    ledger = load_ledger(path)
+    assert ledger.segment_colors == ("#4c78a8", "#F58518")
+    assert ledger.segment_quarters[0]["pct_derived"] is True
 
 
 @pytest.mark.parametrize("old,new,match", [
@@ -56,6 +77,18 @@ def test_acme_fixture_loads():
     ('denominator = "total_revenue"', 'denominator = "gross"', "denominator"),
     ('fetched_at = "2026-11-22"', 'fetched_at = "2026/11/22"', "fetched_at"),
     ("is_lower_bound = false", "is_lower_bnd = false", "is_lower_bnd"),
+    ('roles = ["稳态底座", "高弹性分部"]', 'roles = ["稳态底座"]', r"segments\.roles"),
+    ('secondary_note = "', 'colors = ["red", "#00ff00"]\nsecondary_note = "', r"segments\.colors"),
+    ("seg_adjs = [0.10, 0.05]", "seg_adjs = [0.10]", r"scenarios\[0\]\.seg_adjs"),
+    ("seg_adjs = [0.10, 0.05]", "seg_adjs = [0.5, 0.05]", r"scenarios\[0\]\.seg_adjs"),
+    ("pe_mid = 9.0\npe_half = 1.0", "pe_mid = 9.0\npe_half = 9.0", r"scenarios\[0\]\.pe_half"),
+    ('tone = "base"', 'tone = "bull"', r"scenarios\[1\]\.tone"),
+    ('id = "bull"', 'id = "custom"', r"scenarios\[0\]\.id"),
+    ("weight = 20", "weight = 15", "weights"),
+    ('tone = "bull"', 'tone = "bull"\nupside = 1.0', r"scenarios\[0\]\.upside"),
+    ("net_margin = 0.18", "net_margin = -1.0", r"scenarios\[0\]\.net_margin"),
+    ("consensus_weight = 5", "consensus_weight = 105", "consensus_weight"),
+    ('tone = "bear"', 'tone = "worst"', r"scenarios\[2\]\.tone"),
 ])
 def test_invalid_variants_raise(tmp_path, old, new, match):
     with pytest.raises(LedgerError, match=match):
@@ -86,3 +119,26 @@ def test_minimal_ledger_loads(tmp_path):
     assert ledger.sources == {} and ledger.acks == frozenset()
     assert ledger.segment_names == () and ledger.segment_quarters == () and ledger.eps_facts == ()
     assert ledger.drivers == () and ledger.guidance == () and ledger.cycles == () and ledger.t1_domains == ()
+    assert ledger.scenarios == () and ledger.consensus_weight is None and ledger.segment_roles == ()
+    assert ledger.segment_axis_rationale is None and ledger.segment_secondary_note is None
+
+
+def test_more_than_three_scenarios_raise(tmp_path):
+    text = ACME.read_text(encoding="utf-8")
+    extra = text[text.index("[[scenarios]]"):text.index("[[scenarios]]", text.index("[[scenarios]]") + 1)]
+    path = tmp_path / "ledger.toml"
+    path.write_text(text + "\n" + extra.replace('id = "bull"', 'id = "bull2"'), encoding="utf-8")
+    with pytest.raises(LedgerError, match="scenarios"):
+        load_ledger(path)
+
+
+def test_scenarios_without_segments_take_one_adjustment(tmp_path):
+    body = MINIMAL + (
+        '[assumptions]\nconsensus_weight = 40\n\n[[scenarios]]\nid = "base"\nlabel = "Base"\ntone = "base"\n'
+        'thesis = "单一总营收"\nseg_adjs = [-0.1]\nnet_margin = 0.2\npe_mid = 10.0\npe_half = 0.0\nweight = 60\n')
+    path = tmp_path / "ledger.toml"
+    path.write_text(body, encoding="utf-8")
+    assert load_ledger(path).scenarios[0]["seg_adjs"] == (-0.1,)
+    path.write_text(body.replace("seg_adjs = [-0.1]", "seg_adjs = [-0.1, 0.0]"), encoding="utf-8")
+    with pytest.raises(LedgerError, match=r"scenarios\[0\]\.seg_adjs"):
+        load_ledger(path)

@@ -48,6 +48,8 @@ def test_acme_fact_pack(valuation_db):
     assert facts.ntm_sums == {"eps_low": 8.0, "eps_high": 12.0, "rev_avg": 6400e6,
                               "rev_low": 6000e6, "rev_high": 7200e6}
     assert facts.next_q["fiscal_date"][:10] == "2026-12-31"
+    assert [r["fiscal_date"][:10] for r in facts.next_q4] == ["2026-12-31", "2027-03-31", "2027-06-30", "2027-09-30"]
+    assert facts.next_q4[0] is facts.next_q or facts.next_q4[0] == facts.next_q
     assert facts.upcoming["eps_estimated"] == 2.5
     assert facts.yf_0q["eps_avg"] == 2.5
     assert facts.fy_pair[0]["fiscal_date"][:10] == "2026-12-31"
@@ -75,6 +77,7 @@ def test_stale_snapshot_has_no_ntm(valuation_db):
     assert facts.ntm.missing_reason == "snapshot_stale"
     assert facts.ntm_weights == ()
     assert facts.ntm_sums == {k: None for k in ("eps_low", "eps_high", "rev_avg", "rev_low", "rev_high")}
+    assert facts.next_q4 == ()
 
 
 def test_stale_price_is_none_but_date_kept(valuation_db):

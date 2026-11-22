@@ -16,4 +16,7 @@ T1_GLOBAL_DOMAINS = ("sec.gov",)                   # 计划 G2：全局一手披
 G3_LABELS = ("eps_split_rescaled", "eps_split_unconfirmed", "eps_split_retrospective",
              "gaap_split_basis_break", "eps_conflicting_quarter")   # terminal/prosperity/street_eps.py 标签
 EXIT_OK, EXIT_DEGRADED, EXIT_BLOCKED = 0, 10, 20   # 计划「三档故障模型」
+SEG_ADJ_RANGE = (-0.60, 0.40)  # 计划 v2 §5：分部调整与情景 seg_adjs 的范围
+MAX_SCENARIOS = 3              # 计划 v2 §5：bull / base / bear 各至多一条
+WEIGHT_TOL = 0.01              # 计划 v2 §4 不变量 4：权重合计偏离 100 的容差
 VERIFIED, UNVERIFIED, CONFLICT = "VERIFIED", "UNVERIFIED", "CONFLICT"   # 计划「门控与熔断表」三态

@@ -12,33 +12,41 @@ from datetime import date
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
 
+from terminal.valuation.config import MAX_SCENARIOS, SEG_ADJ_RANGE, WEIGHT_TOL
 from terminal.valuation.kernel import fin
 
 EPS_BASES = ("non_gaap", "ifrs", "gaap")
 PERIOD_TYPES = ("quarter", "fiscal_year", "run_rate")
 DENOMINATORS = ("total_revenue", "segment", "other")
+TONES = ("bull", "base", "bear")
+RESERVED_SCENARIO_IDS = ("consensus", "custom")
 REQUIRED = ("schema", "symbol", "reporting_currency", "eps_basis")
 TOP_KEYS = REQUIRED + ("cyclical", "t1_domains", "assumptions", "fx", "sources", "segments", "eps_facts",
-                       "drivers", "guidance", "cycles", "acks")
+                       "drivers", "guidance", "cycles", "acks", "scenarios")
 # section → (required keys, optional keys)
 ENTRIES = {
-    "assumptions": ((), ("incremental_margin", "note")),
+    "assumptions": ((), ("incremental_margin", "consensus_weight", "note")),
     "fx": (("local_per_usd",), ("as_of",)),
     "sources": (("id", "url", "fetched_at", "raw", "sha256"), ()),
-    "segments": (("unit", "names"), ("quarters",)),
-    "segments.quarters": (("fiscal_date", "values", "source", "quote"), ("prior_year_restated",)),
+    "segments": (("unit", "names"), ("quarters", "axis_rationale", "roles", "colors", "secondary_note")),
+    "segments.quarters": (("fiscal_date", "values", "source", "quote"), ("prior_year_restated", "pct_derived")),
     "eps_facts": (("fiscal_date", "value", "source", "quote"), ()),
     "drivers": (("id", "label", "base", "min", "max"), ("basis_note",)),
     "guidance": (("id", "label", "fiscal_date", "value", "period_type", "denominator", "is_lower_bound",
                   "source", "quote"), ()),
     "cycles": (("id", "label", "start", "end"), ()),
     "acks": (("key",), ("note", "date")),
+    "scenarios": (("id", "label", "tone", "thesis", "seg_adjs", "net_margin", "pe_mid", "pe_half", "weight"), ()),
 }
 DATE_KEYS = ("as_of", "fetched_at", "fiscal_date", "start", "end", "date")
-NUM_KEYS = ("incremental_margin", "local_per_usd", "unit", "value", "base", "min", "max")
-NUM_LIST_KEYS = ("values", "prior_year_restated")
+NUM_KEYS = ("incremental_margin", "local_per_usd", "unit", "value", "base", "min", "max", "consensus_weight",
+            "net_margin", "pe_mid", "pe_half", "weight")
+NUM_LIST_KEYS = ("values", "prior_year_restated", "seg_adjs")
+BOOL_KEYS = ("is_lower_bound", "pct_derived")
+NAME_LIST_KEYS = ("names", "roles")
 POSITIVE_KEYS = ("local_per_usd", "unit")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")   # 写进 SVG 属性，必须严格
 
 
 class LedgerError(ValueError):
@@ -64,6 +72,12 @@ class Ledger:
     guidance: Tuple[Mapping, ...]
     cycles: Tuple[Mapping, ...]
     acks: frozenset          # ack key 集合
+    segment_axis_rationale: Optional[str] = None
+    segment_roles: Tuple[str, ...] = ()
+    segment_colors: Tuple[str, ...] = ()
+    segment_secondary_note: Optional[str] = None
+    scenarios: Tuple[Mapping, ...] = ()
+    consensus_weight: Optional[float] = None
 
 
 def _field(where: str, key: str, value):
@@ -89,15 +103,21 @@ def _field(where: str, key: str, value):
         if any(v is None for v in nums):
             raise LedgerError(f"{where}: every element must be a finite number")
         return nums
-    if key == "is_lower_bound":
+    if key in BOOL_KEYS:
         if not isinstance(value, bool):
             raise LedgerError(f"{where}: must be true or false")
         return value
+    if key == "tone" and value not in TONES:
+        raise LedgerError(f"{where}: must be one of {TONES}")
+    if key == "colors":
+        if not isinstance(value, list) or not all(isinstance(v, str) and COLOR_RE.match(v) for v in value):
+            raise LedgerError(f"{where}: must be a list of #rrggbb colors")
+        return tuple(value)
     if key == "period_type" and value not in PERIOD_TYPES:
         raise LedgerError(f"{where}: must be one of {PERIOD_TYPES}")
     if key == "denominator" and value not in DENOMINATORS:
         raise LedgerError(f"{where}: must be one of {DENOMINATORS}")
-    if key == "names":
+    if key in NAME_LIST_KEYS:
         if not isinstance(value, list) or not value or not all(isinstance(v, str) and v for v in value):
             raise LedgerError(f"{where}: must be a non-empty list of names")
         return tuple(value)
@@ -134,6 +154,38 @@ def _unique(items, where: str, key: str):
         seen.add(item[key])
 
 
+def _scenarios(raw: dict, n_adjs: int, consensus_weight: Optional[float]):
+    items = _entries(raw, "scenarios", "scenarios")
+    if len(items) > MAX_SCENARIOS:
+        raise LedgerError(f"scenarios: at most {MAX_SCENARIOS} entries (got {len(items)})")
+    lo, hi = SEG_ADJ_RANGE
+    for i, s in enumerate(items):
+        where = f"scenarios[{i}]"
+        if s["id"] in RESERVED_SCENARIO_IDS:
+            raise LedgerError(f"{where}.id: '{s['id']}' is reserved")
+        if len(s["seg_adjs"]) != n_adjs:
+            raise LedgerError(f"{where}.seg_adjs: {len(s['seg_adjs'])} values, expected {n_adjs}")
+        if not all(lo <= a <= hi for a in s["seg_adjs"]):
+            raise LedgerError(f"{where}.seg_adjs: every value must be within [{lo}, {hi}]")
+        if not -1 < s["net_margin"] <= 1:
+            raise LedgerError(f"{where}.net_margin: must satisfy -1 < net_margin <= 1")
+        if not s["pe_mid"] > 0:
+            raise LedgerError(f"{where}.pe_mid: must be > 0")
+        if not 0 <= s["pe_half"] < s["pe_mid"]:
+            raise LedgerError(f"{where}.pe_half: must satisfy 0 <= pe_half < pe_mid")
+        if not 0 <= s["weight"] <= 100:
+            raise LedgerError(f"{where}.weight: must be within [0, 100]")
+    _unique(items, "scenarios", "id")
+    _unique(items, "scenarios", "tone")
+    if items:
+        total = consensus_weight or 0.0
+        for s in items:
+            total += s["weight"]
+        if abs(total - 100) > WEIGHT_TOL:
+            raise LedgerError(f"scenarios: weights (consensus_weight + Σ weight) sum to {total:g}, not 100")
+    return items
+
+
 def _validate(raw: dict, path: Path) -> Ledger:
     for key in raw:
         if key not in TOP_KEYS:
@@ -167,6 +219,13 @@ def _validate(raw: dict, path: Path) -> Ledger:
         raise LedgerError("segments.quarters: must be an array of tables")
     seg_quarters = tuple(_entry(f"segments.quarters[{i}]", "segments.quarters", q) for i, q in enumerate(quarters))
     names = segments.get("names", ())
+    for key in ("roles", "colors"):
+        if key in segments and len(segments[key]) != len(names):
+            raise LedgerError(f"segments.{key}: {len(segments[key])} values for {len(names)} names")
+    consensus_weight = assumptions.get("consensus_weight")
+    if consensus_weight is not None and not 0 <= consensus_weight <= 100:
+        raise LedgerError("assumptions.consensus_weight: must be within [0, 100]")
+    scenarios = _scenarios(raw, len(names) if "segments" in raw else 1, consensus_weight)
     for i, q in enumerate(seg_quarters):
         for key in NUM_LIST_KEYS:
             if key in q and len(q[key]) != len(names):
@@ -196,6 +255,9 @@ def _validate(raw: dict, path: Path) -> Ledger:
         segment_unit=segments.get("unit"), segment_names=names, segment_quarters=seg_quarters,
         eps_facts=eps_facts, drivers=drivers, guidance=guidance, cycles=cycles,
         acks=frozenset(a["key"] for a in acks),
+        segment_axis_rationale=segments.get("axis_rationale"), segment_roles=segments.get("roles", ()),
+        segment_colors=segments.get("colors", ()), segment_secondary_note=segments.get("secondary_note"),
+        scenarios=scenarios, consensus_weight=consensus_weight,
     )
 
 

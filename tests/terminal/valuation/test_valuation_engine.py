@@ -163,22 +163,6 @@ def test_negative_consensus_disables_pe(valuation_db, read_facts, ledger_file):
     json.dumps(p, allow_nan=False)
 
 
-def test_missing_fy_rows_disable_bridge(valuation_db, read_facts, ledger_file):
-    _, seed = valuation_db
-
-    def edit(rows):
-        rows["estimates"] = [r for r in rows["estimates"] if r["period_type"] != "FY"]
-
-    facts, ledger = read_facts(seed(edit=edit)), load_ledger(ledger_file())
-    gates = _gates(facts, ledger)
-    assert {r.id: r.status for r in gates.results}["B1"] == UNVERIFIED
-    p = build_payload(facts, ledger, gates)
-    assert p["sliders"]["rev"]["disabled"] is True and p["sliders"]["margin"]["disabled"] is True
-    init = p["selfcheck"][0]
-    assert init["in"]["eps_mode"] == "direct" and init["in"]["direct_eps"] == 10.0
-    assert init["out"]["value"] == pytest.approx(80.0)
-
-
 def test_few_surprise_quarters_disable_bridge(valuation_db, read_facts, ledger_file):
     _, seed = valuation_db
 

@@ -28,7 +28,7 @@ RANK = {VERIFIED: 0, UNVERIFIED: 1, CONFLICT: 2}
 @dataclass(frozen=True)
 class GateResult:
     id: str                    # 如 "C2"、"G1a:2026-09-30"、"G2:g-2026q4-rev"
-    scope: str                 # "page" | "item" | "bridge"
+    scope: str                 # "page" | "item" | "bridge" | "segment"
     status: str
     blocks_page: bool
     detail: str
@@ -150,23 +150,25 @@ def _page(facts: FactPack, ledger: Ledger, fx0: Optional[float]):
 
 
 def _engine_inputs(facts: FactPack, ledger: Ledger):
-    """P3 / B1 / B2 read the engine's own P/E sample, street margin and mild zone (one source of numbers)."""
+    """P3 / B2 read the engine's own P/E sample and mild zone (one source of numbers).
+
+    B1 (net-margin method): consensus revenue > 0, diluted shares > 0 and a finite NTM EPS consensus.
+    B2 only mutes the yellow mild-zone pill; it never disables a slider."""
     pe = engine.pe_history(facts.closes, facts.eps)
     sample = f"有效 {pe['n_valid']} 天（{pe['start']}–{pe['end']}，TTM≤0 {pe['n_nonpositive']} 天，无 TTM {pe['n_no_ttm']} 天）"
     out = [_r("P3", "page", VERIFIED if pe["n_valid"] >= PE_MIN_DAYS else UNVERIFIED,
               f"P/E 样本{sample}，下限 {PE_MIN_DAYS} 天", (UNVERIFIED,))]
-    street = engine.incremental_margins(facts, ledger)["street"]
-    shares = fin(facts.shares)
-    if street["value"] is None:
-        out.append(_r("B1", "bridge", UNVERIFIED, f"街口隐含增量利润率不可得：{street['detail']}，桥禁用，EPS 固定为共识"))
-    elif fin(facts.ntm_sums.get("rev_avg")) is None or shares is None or shares <= 0:
-        out.append(_r("B1", "bridge", UNVERIFIED, "NTM 营收共识或摊薄股本缺失，桥禁用，EPS 固定为共识"))
+    rev, shares, eps = fin(facts.ntm_sums.get("rev_avg")), fin(facts.shares), fin(facts.ntm.value)
+    if rev is None or rev <= 0 or shares is None or shares <= 0 or eps is None:
+        out.append(_r("B1", "bridge", UNVERIFIED,
+                      "NTM 营收共识、摊薄股本或 NTM EPS 共识缺失，净利率法禁用，EPS 固定为卖方共识"))
     else:
-        out.append(_r("B1", "bridge", VERIFIED, f"街口隐含增量利润率 {street['value']:.4f}（{street['detail']}）"))
+        out.append(_r("B1", "bridge", VERIFIED,
+                      f"NTM 营收共识 {rev:,.0f}、摊薄股本 {shares:,.0f}、NTM EPS 共识 {eps:g}，净利率法可用"))
     zone = engine.mild_zone(facts)
     if zone["half_width"] is None:
         out.append(_r("B2", "bridge", UNVERIFIED,
-                      f"营收意外样本 {zone['n']} 季（需 ≥8 且离散度 >0），桥禁用，EPS 固定为共识"))
+                      f"营收意外样本 {zone['n']} 季（需 ≥8 且离散度 >0），温和区提醒关闭，滑块不受影响"))
     else:
         out.append(_r("B2", "bridge", VERIFIED, f"营收意外样本 {zone['n']} 季，温和区 ±{zone['half_width']:.1%}"))
     return out
@@ -251,7 +253,9 @@ def _items(facts: FactPack, ledger: Ledger):
             out.append(_r(f"G1a:{fiscal}", "item", UNVERIFIED, "库内无该季营收"))
         else:
             status = VERIFIED if _within(total, rev, G1_TOL) else CONFLICT
-            out.append(_r(f"G1a:{fiscal}", "item", status, f"分部合计 {total:,.0f} vs 营收 {rev:,.0f}"))
+            note = "；百分比折算，对账为构造性" if q.get("pct_derived") else ""
+            out.append(_r(f"G1a:{fiscal}", "item", status,
+                          f"分部合计 {total:,.0f} vs 营收 {rev:,.0f}（偏差 {total / rev - 1:+.3%}）{note}"))
         out.append(_g2(f"G2:seg:{fiscal}", q, ledger))
     for f in ledger.eps_facts:
         fiscal = f["fiscal_date"]
@@ -270,25 +274,55 @@ def _items(facts: FactPack, ledger: Ledger):
     return out
 
 
+def usable_segment_quarters(results, ledger: Ledger) -> list:
+    """Segment quarters passing G1a and G2, ascending; none while any G3d restatement conflict is open."""
+    status = {r.id: r.status for r in results}
+    if any(r.id.startswith("G3d:") and r.status == CONFLICT for r in results):
+        return []
+    return sorted((q for q in ledger.segment_quarters if status.get(f"G1a:{q['fiscal_date']}") == VERIFIED
+                   and status.get(f"G2:seg:{q['fiscal_date']}") == VERIFIED), key=lambda q: q["fiscal_date"])
+
+
+def _s1(facts: FactPack, ledger: Ledger, results):
+    """S1: the newest usable segment quarter is the newest announced quarter, with values ≥ 0 and sum > 0."""
+    if not ledger.segment_quarters:
+        return []
+    usable = usable_segment_quarters(results, ledger)
+    last = _latest_actual(facts)
+    off = "，分部切分停用，退回单一总营收"
+    if not usable:
+        return [_r("S1", "segment", UNVERIFIED, "无通过 G1a/G2 且无重述冲突的分部季度" + off)]
+    q = usable[-1]
+    if last is None:
+        return [_r("S1", "segment", UNVERIFIED, "库内无已公告财报季" + off)]
+    gap = abs(_days(q["fiscal_date"], last["fiscal_date"]))
+    if gap > ESTIMATE_MATCH_DAYS:
+        return [_r("S1", "segment", UNVERIFIED, f"最新可用分部季 {q['fiscal_date']} 与库内最新已公告季 "
+                   f"{last['fiscal_date'][:10]} 相差 {gap} 天（上限 {ESTIMATE_MATCH_DAYS} 天）" + off)]
+    total = 0.0
+    for v in q["values"]:
+        total += v
+    if any(v < 0 for v in q["values"]) or total <= 0:
+        return [_r("S1", "segment", UNVERIFIED, f"分部季 {q['fiscal_date']} 含负值或合计 ≤0" + off)]
+    return [_r("S1", "segment", VERIFIED, f"分部切分季 {q['fiscal_date']}（库内最新已公告季 "
+               f"{last['fiscal_date'][:10]}），{len(q['values'])} 个分部")]
+
+
 def _fx0(facts: FactPack) -> Optional[float]:
     return 1.0 if facts.reporting_currency == "USD" else implied_fx(facts)["fwd_rev"]
 
 
 def run_gates(facts: FactPack, ledger: Ledger) -> Tuple[GateResult, ...]:
-    return tuple(_page(facts, ledger, _fx0(facts)) + _engine_inputs(facts, ledger) + _g3(facts, ledger)
-                 + _items(facts, ledger))
+    results = (_page(facts, ledger, _fx0(facts)) + _engine_inputs(facts, ledger) + _g3(facts, ledger)
+               + _items(facts, ledger))
+    return tuple(results + _s1(facts, ledger, results))
 
 
 def summarize(results, facts: FactPack, ledger: Ledger) -> GateSummary:
     results = tuple(results)
     status = {r.id: r.status for r in results}
     ok = lambda gid: status.get(gid) == VERIFIED
-    restated = any(r.id.startswith("G3d:") and r.status == CONFLICT for r in results)
-    usable = set()
-    for q in ledger.segment_quarters:
-        fiscal = q["fiscal_date"]
-        if not restated and ok(f"G1a:{fiscal}") and ok(f"G2:seg:{fiscal}"):
-            usable.add(f"seg:{fiscal}")
+    usable = {f"seg:{q['fiscal_date']}" for q in usable_segment_quarters(results, ledger)}
     for f in ledger.eps_facts:
         if ok(f"G1c:{f['fiscal_date']}") and ok(f"G2:eps:{f['fiscal_date']}"):
             usable.add(f"eps:{f['fiscal_date']}")

@@ -1,4 +1,4 @@
-# ACME synthetic decision ledger (valuation tests, plan 2026-11-22 Task 3)
+# ACME synthetic decision ledger (valuation tests, plan 2026-11-22 Task 3; v2 scenarios: dashboard-v2 Task 2)
 schema = 1
 symbol = "ACME"
 reporting_currency = "USD"     # 必须等于 income_quarterly.reported_currency
@@ -8,6 +8,7 @@ t1_domains = ["investors.acme.com"]
 
 [assumptions]
 incremental_margin = 0.35
+consensus_weight = 5
 note = "Boss 2026-11-22"
 
 [[sources]]
@@ -20,6 +21,9 @@ sha256 = "ee19795e59aa2e7ec9e078529a9ea4cb073d3e7e4fe3845c175c26402034099d"
 [segments]
 unit = 1e6
 names = ["A", "B"]
+axis_rationale = "夹具：按两个业务分部拆分营收"
+roles = ["稳态底座", "高弹性分部"]
+secondary_note = "夹具次轴注释：两个分部共用一条产线"
 [[segments.quarters]]
 fiscal_date = "2026-09-30"
 values = [900.0, 600.0]
@@ -40,6 +44,39 @@ base = 800e6
 min = 0.0
 max = 2400e6
 basis_note = "假设，非披露事实"
+
+[[scenarios]]
+id = "bull"
+label = "Bull"
+tone = "bull"
+thesis = "夹具乐观情景"
+seg_adjs = [0.10, 0.05]
+net_margin = 0.18
+pe_mid = 9.0
+pe_half = 1.0
+weight = 20
+
+[[scenarios]]
+id = "base"
+label = "Base"
+tone = "base"
+thesis = "夹具中性情景"
+seg_adjs = [-0.10, -0.05]
+net_margin = 0.14
+pe_mid = 8.0
+pe_half = 1.0
+weight = 50
+
+[[scenarios]]
+id = "bear"
+label = "Bear"
+tone = "bear"
+thesis = "夹具悲观情景"
+seg_adjs = [-0.40, -0.30]
+net_margin = 0.08
+pe_mid = 7.0
+pe_half = 1.0
+weight = 25
 
 [[guidance]]
 id = "g-2026q4-rev"

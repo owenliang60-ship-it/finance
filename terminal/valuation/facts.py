@@ -42,6 +42,7 @@ class FactPack:
     ntm_sums: Mapping[str, Optional[float]]    # 键：eps_low, eps_high, rev_avg, rev_low, rev_high
     ntm_rows: Tuple[Optional[Mapping], ...]    # 与 ntm.quarters 等长的快照行（Q 或 FY），定位不到为 None
     next_q: Optional[Mapping]                  # 同快照下第一未公告季的 Q 行
+    next_q4: Tuple[Mapping, ...]               # 同快照下前 4 个未公告季的 Q 行（不足 4 行时有几行给几行）
     upcoming: Optional[Mapping]                # fmp_earnings 中 eps_actual 为空且与 next_q 同季的行
     yf_0q: Optional[Mapping]                   # forward_estimates 最新日期的 '0q' 行，距 as_of <= 14 天
     fy_pair: Optional[Tuple[Mapping, Mapping]] # FY1, FY2
@@ -105,15 +106,15 @@ def _sums(rows, weights) -> dict:
     return out
 
 
-def _next_q(snap_rows, eps: Tuple[EpsQuarter, ...]):
+def _unannounced_q(snap_rows, eps: Tuple[EpsQuarter, ...]) -> list:
+    """Q rows of the snapshot after the last announced quarter, ascending by fiscal date."""
     if not eps:
-        return None
+        return []
     anchor = eps[-1].fiscal_date
-    cands = sorted((r for r in snap_rows if r.get("period_type") == "Q"
-                    and _days(r["fiscal_date"], anchor) > ESTIMATE_MATCH_DAYS
-                    and all(abs(_days(r["fiscal_date"], q.fiscal_date)) > ESTIMATE_MATCH_DAYS for q in eps)),
-                   key=lambda r: r["fiscal_date"])
-    return cands[0] if cands else None
+    return sorted((r for r in snap_rows if r.get("period_type") == "Q"
+                   and _days(r["fiscal_date"], anchor) > ESTIMATE_MATCH_DAYS
+                   and all(abs(_days(r["fiscal_date"], q.fiscal_date)) > ESTIMATE_MATCH_DAYS for q in eps)),
+                  key=lambda r: r["fiscal_date"])
 
 
 def _upcoming(earnings, next_q):
@@ -158,7 +159,8 @@ def load_facts(store: MarketStore, symbol: str, as_of: str) -> FactPack:
     weights = _weights(ntm)
     live = ntm.snapshot_date if ntm.missing_reason not in ("snapshot_stale", "no_current_snapshot") else None
     snap_rows = [r for r in estimates if live and r["snapshot_date"][:10] == live]
-    next_q = _next_q(snap_rows, eps)
+    upcoming_q = _unannounced_q(snap_rows, eps)
+    next_q = upcoming_q[0] if upcoming_q else None
     ntm_rows = _ntm_rows(snap_rows, ntm)
     closes, notes = _closes(history, as_of)
     price_date = closes[-1][0] if closes else None
@@ -169,7 +171,7 @@ def load_facts(store: MarketStore, symbol: str, as_of: str) -> FactPack:
         reporting_currency=income[-1].get("reported_currency") if income else None,
         is_adr=history.is_adr, price=price, price_date=price_date, closes=closes, price_jump_notes=notes,
         eps=eps, ttm_eps_usd=ttm, ttm_quarters=ttm_q, ntm=ntm, ntm_weights=weights,
-        ntm_sums=_sums(ntm_rows, weights), ntm_rows=ntm_rows, next_q=next_q,
+        ntm_sums=_sums(ntm_rows, weights), ntm_rows=ntm_rows, next_q=next_q, next_q4=tuple(upcoming_q[:4]),
         upcoming=_upcoming(history.earnings, next_q), yf_0q=_yf_0q(store, symbol, as_of),
         fy_pair=_fy_pair(snap_rows, eps), income=income, earnings=tuple(history.earnings),
         shares=fin(income[-1].get("weighted_average_shs_out_dil")) if income else None,

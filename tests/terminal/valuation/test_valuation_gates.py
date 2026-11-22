@@ -29,9 +29,10 @@ def test_acme_full_ledger_all_verified(acme):
     assert summary.usable == frozenset({"seg:2026-09-30", "eps:2026-09-30", "guidance:g-2026q4-rev"})
     assert summary.g4_reextract == ()
     for gate in ("P1", "P2", "C1", "C2a", "C2", "C3", "G1a:2026-09-30", "G1c:2026-09-30",
-                 "G2:seg:2026-09-30", "G2:eps:2026-09-30", "G2:g-2026q4-rev", "G3a", "G3b", "G3c"):
+                 "G2:seg:2026-09-30", "G2:eps:2026-09-30", "G2:g-2026q4-rev", "G3a", "G3b", "G3c", "S1", "B1", "B2"):
         assert gate in by_id
     assert by_id["P1"].scope == "page" and by_id["G1a:2026-09-30"].scope == "item"
+    assert by_id["S1"].scope == "segment" and by_id["S1"].blocks_page is False
 
 
 def _fadr(valuation_db, read_facts, ledger_file, edit=None):
@@ -239,3 +240,86 @@ def test_missing_ntm_blocks_page(valuation_db, read_facts, ledger_file):
     _, seed = valuation_db
     by_id, summary = _run(read_facts(seed(snapshot="2026-10-01")), load_ledger(ledger_file()))
     assert by_id["P2"].status == UNVERIFIED and summary.page_blocked is True
+
+
+LATEST_SEGMENTS = ("""fiscal_date = "2026-09-30"
+values = [900.0, 600.0]
+prior_year_restated = [600.0, 400.0]
+source = "acme-pr-2026q3"
+quote = '''Segment A revenue was $900 million and Segment B revenue was $600 million'''""",
+                   """fiscal_date = "2025-09-30"
+values = [600.0, 400.0]
+source = "acme-pr-2026q3"
+quote = '''for total revenue of $1.5 billion'''""")
+
+
+def test_stale_segment_quarter_fails_s1(acme, ledger_file):
+    facts, _ = acme
+    by_id, summary = _run(facts, load_ledger(ledger_file(LATEST_SEGMENTS)))
+    assert by_id["G1a:2025-09-30"].status == VERIFIED and by_id["G2:seg:2025-09-30"].status == VERIFIED
+    assert by_id["S1"].status == UNVERIFIED and "2025-09-30" in by_id["S1"].detail
+    assert summary.page_blocked is False and summary.exit_code == 10
+
+
+def test_segment_conflict_fails_s1(acme, ledger_file):
+    facts, _ = acme
+    by_id, _ = _run(facts, load_ledger(ledger_file(("values = [900.0, 600.0]", "values = [900.0, 500.0]"))))
+    assert by_id["S1"].status == UNVERIFIED
+
+
+def test_negative_segment_value_fails_s1(valuation_db, read_facts, ledger_file):
+    _, seed = valuation_db
+
+    def edit(rows):
+        rows["income"][-1]["revenue"] = 300e6
+
+    facts = read_facts(seed(edit=edit))
+    path = ledger_file(("values = [900.0, 600.0]", "values = [900.0, -600.0]"))
+    by_id, _ = _run(facts, load_ledger(path))
+    assert by_id["G1a:2026-09-30"].status == VERIFIED and by_id["G2:seg:2026-09-30"].status == VERIFIED
+    assert by_id["S1"].status == UNVERIFIED and "负" in by_id["S1"].detail
+
+
+def test_no_segments_means_no_s1(acme, ledger_file):
+    facts, _ = acme
+    ledger = load_ledger(ledger_file(text='schema = 1\nsymbol = "ACME"\nreporting_currency = "USD"\n'
+                                          'eps_basis = "non_gaap"\ncyclical = true\n'))
+    by_id, _ = _run(facts, ledger)
+    assert "S1" not in by_id
+
+
+def test_missing_fy_rows_keep_b1(valuation_db, read_facts, ledger_file):
+    _, seed = valuation_db
+
+    def edit(rows):
+        rows["estimates"] = [r for r in rows["estimates"] if r["period_type"] != "FY"]
+
+    by_id, _ = _run(read_facts(seed(edit=edit)), load_ledger(ledger_file()))
+    assert by_id["B1"].status == VERIFIED
+
+
+def test_zero_shares_fail_b1(acme):
+    from dataclasses import replace
+    facts, ledger = acme
+    by_id, _ = _run(replace(facts, shares=0.0), ledger)
+    assert by_id["B1"].status == UNVERIFIED
+
+
+def test_few_surprise_quarters_only_mute_zone(valuation_db, read_facts, ledger_file):
+    _, seed = valuation_db
+
+    def edit(rows):
+        for r in rows["earnings"][:6]:
+            r["revenue_estimated"] = None
+
+    by_id, summary = _run(read_facts(seed(edit=edit)), load_ledger(ledger_file()))
+    assert by_id["B2"].status == UNVERIFIED and "提醒" in by_id["B2"].detail
+    assert by_id["B1"].status == VERIFIED and summary.exit_code == 10
+
+
+def test_pct_derived_marks_g1a_detail(acme, ledger_file):
+    facts, _ = acme
+    path = ledger_file(("prior_year_restated = [600.0, 400.0]", "prior_year_restated = [600.0, 400.0]\npct_derived = true"))
+    by_id, _ = _run(facts, load_ledger(path))
+    assert by_id["G1a:2026-09-30"].status == VERIFIED
+    assert "百分比折算" in by_id["G1a:2026-09-30"].detail
