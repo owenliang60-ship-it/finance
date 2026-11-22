@@ -1,0 +1,64 @@
+# ACME synthetic decision ledger (valuation tests, plan 2026-11-22 Task 3)
+schema = 1
+symbol = "ACME"
+reporting_currency = "USD"     # 必须等于 income_quarterly.reported_currency
+eps_basis = "non_gaap"         # non_gaap | ifrs | gaap；non_gaap 要求 USD
+cyclical = true
+t1_domains = ["investors.acme.com"]
+
+[assumptions]
+incremental_margin = 0.35
+note = "Boss 2026-11-22"
+
+[[sources]]
+id = "acme-pr-2026q3"
+url = "https://investors.acme.com/q3-2026"
+fetched_at = "2026-11-22"
+raw = "sources/acme-pr-2026q3.txt"
+sha256 = "ee19795e59aa2e7ec9e078529a9ea4cb073d3e7e4fe3845c175c26402034099d"
+
+[segments]
+unit = 1e6
+names = ["A", "B"]
+[[segments.quarters]]
+fiscal_date = "2026-09-30"
+values = [900.0, 600.0]
+prior_year_restated = [600.0, 400.0]
+source = "acme-pr-2026q3"
+quote = '''Segment A revenue was $900 million and Segment B revenue was $600 million'''
+
+[[eps_facts]]
+fiscal_date = "2026-09-30"
+value = 2.0
+source = "acme-pr-2026q3"
+quote = '''non-GAAP diluted earnings per share of $2.00'''
+
+[[drivers]]
+id = "hbm"
+label = "HBM 收入"
+base = 800e6
+min = 0.0
+max = 2400e6
+basis_note = "假设，非披露事实"
+
+[[guidance]]
+id = "g-2026q4-rev"
+label = "FY26Q4 营收指引中值"
+fiscal_date = "2026-12-31"
+value = 1650e6
+period_type = "quarter"
+denominator = "total_revenue"
+is_lower_bound = false
+source = "acme-pr-2026q3"
+quote = '''expects fourth quarter revenue of approximately $1.65 billion'''
+
+[[cycles]]
+id = "2025-26"
+label = "夹具周期"
+start = "2025-01-01"
+end = "2026-12-31"
+
+[[acks]]
+key = "G3a:2026-06-30"
+note = "Boss 确认回购所致"
+date = "2026-11-22"
