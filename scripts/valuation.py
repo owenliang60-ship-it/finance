@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Valuation scenario page: market.db (read-only) + one hand-written ledger → one self-contained HTML.
 
-Plan: docs/plans/2026-11-22-valuation-scenario-workflow.md. stdout carries one JSON line.
+Plans: docs/plans/2026-11-22-valuation-scenario-workflow.md (v1) and
+docs/plans/2026-11-22-valuation-dashboard-v2.md (four-panel dashboard). stdout carries one JSON line.
 Exit codes: 0 every gate VERIFIED; 10 degraded (non-VERIFIED items are excluded and listed);
 20 page blocked (the HTML holds only the banner and the gate report); 1 hard failure (ledger,
 database, symbol mismatch or a non-finite payload: no HTML is written, the reason goes to

@@ -1,6 +1,6 @@
 ---
 name: valuation
-description: "估值情景工作流：用只读 market.db 与手写台账，为单只股票生成事实反推矩阵加情景滑块的交互 HTML，带三态门控与熔断。Use when the user runs /valuation SYMBOL or asks 估值、反推、情景估值、现价隐含了什么. Not for 多 agent 深度研究 (deep-analysis) or 期权策略 (options)."
+description: "估值情景工作流：用只读 market.db 与手写台账，为单只股票生成四面板实时估值大屏（分部营收 × 净利率 × P/E，含台账参考情景）的交互 HTML，带三态门控与熔断。Use when the user runs /valuation SYMBOL or asks 估值、反推、情景估值、现价隐含了什么. Not for 多 agent 深度研究 (deep-analysis) or 期权策略 (options)."
 invocation: user
 arguments:
   - name: symbol
@@ -9,7 +9,7 @@ arguments:
 
 # /valuation — 估值情景工作流
 
-本 skill 为一只股票生成一个单文件 HTML。首屏是事实反推矩阵。滑块初始位停在卖方共识。初始情景值等于现价。页面不输出模型结论。
+本 skill 为一只股票生成一个单文件 HTML。首屏是 KPI 条、参数控制台和四个实时 SVG 面板（情景区间、分部营收堆叠、季度营收走势、EPS × P/E 热力矩阵）。滑块初始位停在卖方共识。初始情景值等于现价。参考情景与权重只来自台账 `[[scenarios]]`，新建或改动须经 Boss 确认。页面不输出模型结论。
 
 入口：`scripts/valuation.py`。仓库内正本：`docs/skills/valuation/SKILL.md`。改动先改仓库，再复制到 `~/.claude/skills/valuation/`。
 
@@ -43,15 +43,16 @@ arguments:
 | 顶层 | `eps_basis` | 是 | `non_gaap` / `ifrs` / `gaap`；`non_gaap` 要求 USD |
 | 顶层 | `cyclical` | 否 | 布尔，默认 false；true 时矩阵加周期股双口径行 |
 | 顶层 | `t1_domains` | 否 | 一手披露域名白名单，另含全局 `sec.gov` |
-| `[assumptions]` | `incremental_margin`、`note` | 否 | Boss 假设，只作利润率滑块刻度 |
+| `[assumptions]` | `incremental_margin`、`consensus_weight`、`note` | 否 | `incremental_margin` 只进审计栏；`consensus_weight` 为卖方共识情景权重（0–100） |
 | `[fx]` | `local_per_usd`（必填）、`as_of` | 否 | 仅非 USD；只作汇率滑块刻度，不参与初始位 |
 | `[[sources]]` | `id`、`url`、`fetched_at`、`raw`、`sha256` | 是 | `raw` 相对台账目录；`sha256` 为原文文件哈希 |
-| `[segments]` | `unit`、`names` | 是 | `unit` 为正数 |
-| `[[segments.quarters]]` | `fiscal_date`、`values`、`source`、`quote`；可选 `prior_year_restated` | 是 | `values` 与 `names` 等长；G1a 校验合计 vs 营收 ≤1% |
+| `[segments]` | `unit`、`names`；可选 `axis_rationale`、`roles`、`colors`、`secondary_note` | 是 | `unit` 为正数；`roles`、`colors` 与 `names` 等长；`colors` 每项为 `#rrggbb`；`secondary_note` 不写历史净利率（页面由库内计算） |
+| `[[segments.quarters]]` | `fiscal_date`、`values`、`source`、`quote`；可选 `prior_year_restated`、`pct_derived` | 是 | `values` 与 `names` 等长；G1a 校验合计 vs 营收 ≤1%；`pct_derived = true` 表示由披露百分比折算（对账为构造性）；S1 要求最新可用分部季即库内最新已公告季 |
 | `[[eps_facts]]` | `fiscal_date`、`value`、`source`、`quote` | 是 | G1c 校验 vs 街口 EPS ≤1%；非 USD 报告者恒为 UNVERIFIED |
 | `[[drivers]]` | `id`、`label`、`base`、`min`、`max`；可选 `basis_note` | 是 | `min <= base <= max`；纯收入增量假设，初始增量为 0 |
 | `[[guidance]]` | `id`、`label`、`fiscal_date`、`value`、`period_type`、`denominator`、`is_lower_bound`、`source`、`quote` | 是 | `run_rate` 或下限只作文字标注，不进算术 |
-| `[[cycles]]` | `id`、`label`、`start`、`end` | 是 | 窗口内季度须连续且街口 EPS 齐全，否则预设禁用 |
+| `[[cycles]]` | `id`、`label`、`start`、`end` | 是 | 窗口内季度须连续且街口 EPS 齐全，否则预设禁用；回放只改分部调整（峰→谷营收比）与净利率（窗口最低季） |
+| `[[scenarios]]` | `id`、`label`、`tone`、`thesis`、`seg_adjs`、`net_margin`、`pe_mid`、`pe_half`、`weight` | 否 | 至多 3 条；`tone` 为 `bull` / `base` / `bear` 且不重复；`id` 不得为 `consensus`、`custom`；`seg_adjs` 长度等于分部数（无分部为 1），每项在 [−0.60, 0.40]；`−1 < net_margin ≤ 1`；`0 ≤ pe_half < pe_mid`；`consensus_weight + Σ weight = 100` |
 | `[[acks]]` | `key`；可选 `note`、`date` | 是 | 键格式 `G3a:<季末>`、`G3b:<fiscal>`、`G3c`、`G3d:<fiscal>:<分部名>` |
 
 ## 币种合约表
@@ -76,4 +77,5 @@ R = `income_quarterly.reported_currency`。
 - 不读 `fx_daily`（已停更）。
 - 不输出估值结论或头寸建议。
 - 未通过门控的数字不得引用。门控报告里的非 VERIFIED 条目只能作为「被剔除项」提及。
-- 不替 Boss 填情景权重。
+- 参考情景与权重只来自台账 `[[scenarios]]` 与 `consensus_weight`，新建或改动须经 Boss 确认；不替 Boss 填权重。
+- 过门控的指引只作文字备注，不进算术。
