@@ -1,4 +1,6 @@
-"""Numeric kernel: finite-number guards and the scenario state (Task 1)."""
+"""Numeric kernel v2: finite-number guards, segment revenue and the net-margin live state (Task 1)."""
+import pytest
+
 from terminal.valuation import kernel as k
 
 
@@ -12,13 +14,6 @@ def test_fin_rejects_non_numbers_and_non_finite():
     assert k.fin(float("-inf")) is None
     assert k.fin(0) == 0.0
     assert k.fin(-2) == -2.0
-
-
-def test_bridge_eps():
-    assert k.bridge_eps(6500e6, 6400e6, 10.0, 0.5, 100e6) == 10.5
-    assert k.bridge_eps(6500e6, 6400e6, 10.0, 0.5, 0) is None
-    assert k.bridge_eps(6500e6, 6400e6, 10.0, 0.5, -1.0) is None
-    assert k.bridge_eps(None, 6400e6, 10.0, 0.5, 100e6) is None
 
 
 def test_zone():
@@ -64,38 +59,94 @@ def test_weighted_value():
     assert k.weighted_value([100, 50], [-10, 110]) is None
 
 
-BASE = {"rev": 6400e6, "rev_cons": 6400e6, "eps_cons": 10.0, "margin": 0.5, "shares": 100e6,
-        "half_width": 0.1, "fx": 1.0, "price": 80.0, "pe": 8.0, "driver_delta": 0.0,
-        "eps_mode": "bridge", "direct_eps": None}
+def test_seg_revenue():
+    assert k.seg_revenue([3840e6, 2560e6], [0.10, 0.05], 0.0) == 6912e6
+    assert k.seg_revenue([3840e6, 2560e6], [0.0, 0.0], 150e6) == 6400e6 + 150e6
+    assert k.seg_revenue([3840e6, 2560e6], [0.10], 0.0) is None
+    assert k.seg_revenue([], [], 0.0) is None
+    assert k.seg_revenue([3840e6, float("nan")], [0.1, 0.0], 0.0) is None
+    assert k.seg_revenue([3840e6], [0.1], None) is None
+    assert k.seg_revenue(None, [0.1], 0.0) is None
 
 
-def test_scenario_state_initial_equals_price():
-    out = k.scenario_state(BASE)
-    assert out["value"] == 80.0
-    assert out["value_vs_price"] == 0.0
-    assert out["eps_source"] == "bridge"
-    assert out["zone"] == "mild"
-    assert set(out) == {"rev_eff", "zone", "eps_local", "eps_source", "eps_usd",
-                        "implied_pe", "value", "value_vs_price"}
+def test_implied_margin():
+    assert k.implied_margin(10.0, 100e6, 6400e6) == 0.15625
+    assert k.implied_margin(10.0, 100e6, 0) is None
+    assert k.implied_margin(10.0, 0, 6400e6) is None
+    assert k.implied_margin(None, 100e6, 6400e6) is None
 
 
-def test_scenario_state_direct_negative_eps():
-    out = k.scenario_state({**BASE, "eps_mode": "direct", "direct_eps": -129.0})
-    assert out["eps_usd"] == -129.0
-    assert out["eps_source"] == "direct"
-    assert out["implied_pe"] is None
-    assert out["value"] is None
-    assert out["value_vs_price"] is None
+def test_margin_eps():
+    assert k.margin_eps(6912e6, 0.18, 100e6) == pytest.approx(12.4416, rel=1e-15)
+    neg = k.margin_eps(4e9, -0.5642, 1e9)
+    assert neg is not None and neg < 0
+    assert k.margin_eps(4e9, 0.2, 0) is None
+    assert k.margin_eps(4e9, float("inf"), 1e9) is None
 
 
-def test_scenario_state_blocked_paths():
-    tail = k.scenario_state({**BASE, "rev": 6400e6 * 1.2})
-    assert tail["eps_source"] == "blocked_tail" and tail["eps_local"] is None and tail["value"] is None
-    unknown = k.scenario_state({**BASE, "half_width": None})
-    assert unknown["eps_source"] == "blocked_zone_unknown" and unknown["value"] is None
-    no_shares = k.scenario_state({**BASE, "shares": 0})
-    assert no_shares["eps_source"] == "blocked_input" and no_shares["value"] is None
-    no_direct = k.scenario_state({**BASE, "eps_mode": "direct", "direct_eps": float("nan")})
-    assert no_direct["eps_source"] == "blocked_input" and no_direct["eps_local"] is None
-    no_delta = k.scenario_state({**BASE, "driver_delta": None})
-    assert no_delta["rev_eff"] is None and no_delta["eps_source"] == "blocked_zone_unknown"
+def test_quarter_path():
+    assert k.quarter_path([1, 1, 2], 8.0) == [2.0, 2.0, 4.0]
+    assert k.quarter_path([0, 0, 0], 8.0) is None
+    assert k.quarter_path([1, -1, 2], 8.0) is None
+    assert k.quarter_path([1, 1], None) is None
+    assert k.quarter_path([], 8.0) is None
+
+
+def test_grid_pos():
+    levels = [6, 7, 8, 9, 10]
+    assert k.grid_pos(levels, 8.5) == 2.5
+    assert k.grid_pos(levels, 3) == 0.0
+    assert k.grid_pos(levels, 99) == 4.0
+    assert k.grid_pos(levels, 10) == 4.0
+    assert k.grid_pos([6], 6) is None
+    assert k.grid_pos([6, 6, 7], 6) is None
+    assert k.grid_pos([7, 6], 6.5) is None
+    assert k.grid_pos(levels, None) is None
+
+
+LIVE = {"bases": [3840e6, 2560e6], "adjs": [0.0, 0.0], "driver_delta": 0.0, "margin": 0.15625,
+        "shares": 100e6, "fx": 1.0, "pe": 8.0, "pe_half": 0.0, "price": 80.0, "rev_cons": 6400e6,
+        "half_width": 0.1, "eps_mode": "margin", "direct_eps": None}
+LIVE_KEYS = {"rev", "net_income", "eps_local", "eps_usd", "eps_state", "implied_pe", "value", "value_lo",
+             "value_hi", "value_vs_price", "zone"}
+
+
+def test_live_state_initial_equals_price():
+    out = k.live_state(LIVE)
+    assert set(out) == LIVE_KEYS
+    assert out["rev"] == 6400e6 and out["net_income"] == 1000e6 and out["eps_local"] == 10.0
+    assert abs(out["value"] / 80.0 - 1) <= 1e-12
+    assert abs(out["value_vs_price"]) <= 1e-12
+    assert out["eps_state"] == "pos" and out["zone"] == "mild"
+    assert out["value_lo"] == out["value_hi"] == out["value"]
+
+
+def test_live_state_band_and_tail_keep_numbers():
+    out = k.live_state({**LIVE, "adjs": [-0.6, -0.6], "pe_half": 1.0})
+    assert out["zone"] == "tail"
+    assert out["value"] == pytest.approx(8.0 * 4.0) and out["value_lo"] == pytest.approx(7.0 * 4.0)
+    assert out["value_hi"] == pytest.approx(9.0 * 4.0)
+
+
+def test_live_state_negative_margin():
+    out = k.live_state({**LIVE, "margin": -0.5642})
+    assert out["eps_state"] == "nonpos"
+    assert out["value"] is None and out["value_lo"] is None and out["implied_pe"] is None
+    for key in ("rev", "net_income", "eps_local", "eps_usd"):
+        assert k.fin(out[key]) is not None, key
+
+
+def test_live_state_direct_mode():
+    out = k.live_state({**LIVE, "eps_mode": "direct", "direct_eps": 12.25, "margin": None})
+    assert out["net_income"] is None
+    assert out["eps_local"] == 12.25 and out["eps_usd"] == 12.25
+    assert out["value"] == 8.0 * 12.25
+
+
+def test_live_state_missing_inputs():
+    no_fx = k.live_state({**LIVE, "fx": None})
+    assert no_fx["eps_usd"] is None and no_fx["eps_state"] == "missing" and no_fx["value"] is None
+    wide = k.live_state({**LIVE, "pe_half": 9.0})
+    assert wide["value_lo"] is None and wide["value_hi"] == pytest.approx(17.0 * 10.0)
+    bad = k.live_state({**LIVE, "adjs": [0.0]})
+    assert bad["rev"] is None and bad["eps_local"] is None and bad["eps_state"] == "missing"

@@ -82,6 +82,84 @@ function weighted_value(values, weights) {
   return fin(total);
 }
 
+function seg_revenue(bases, adjs, driver_delta) {
+  bases = _fins(bases);
+  adjs = _fins(adjs);
+  const delta = fin(driver_delta);
+  if (bases === null || bases.length === 0 || adjs === null || delta === null || bases.length !== adjs.length) {
+    return null;
+  }
+  let total = 0.0;
+  for (let i = 0; i < bases.length; i += 1) total += bases[i] * (1 + adjs[i]);
+  return fin(total + delta);
+}
+
+function implied_margin(eps, shares, rev) {
+  eps = fin(eps); shares = fin(shares); rev = fin(rev);
+  if (eps === null || shares === null || rev === null || shares <= 0 || rev <= 0) return null;
+  return fin(eps * shares / rev);
+}
+
+function margin_eps(rev, margin, shares) {
+  rev = fin(rev); margin = fin(margin); shares = fin(shares);
+  if (rev === null || margin === null || shares === null || shares <= 0) return null;
+  return fin(rev * margin / shares);
+}
+
+function quarter_path(shape, total) {
+  const values = _fins(shape);
+  total = fin(total);
+  if (values === null || values.length === 0 || total === null) return null;
+  let s = 0.0;
+  for (const v of values) {
+    if (v < 0) return null;
+    s += v;
+  }
+  if (s <= 0) return null;
+  const out = values.map((v) => fin(v * total / s));
+  return out.some((v) => v === null) ? null : out;
+}
+
+function grid_pos(levels, x) {
+  const values = _fins(levels);
+  x = fin(x);
+  if (values === null || values.length < 2 || x === null) return null;
+  for (let i = 0; i + 1 < values.length; i += 1) {
+    if (!(values[i + 1] > values[i])) return null;
+  }
+  if (x <= values[0]) return 0.0;
+  if (x >= values[values.length - 1]) return values.length - 1;
+  let i = 0;
+  while (x > values[i + 1]) i += 1;
+  return fin(i + (x - values[i]) / (values[i + 1] - values[i]));
+}
+
+function live_state(s) {
+  const rev = seg_revenue(s.bases, s.adjs, s.driver_delta);
+  let net_income = null;
+  let eps_local = null;
+  if (s.eps_mode === "margin") {
+    const margin = fin(s.margin);
+    net_income = rev !== null && margin !== null ? fin(rev * margin) : null;
+    eps_local = margin_eps(rev, margin, s.shares);
+  } else if (s.eps_mode === "direct") {
+    eps_local = fin(s.direct_eps);
+  }
+  const eps_usd = to_usd(eps_local, s.fx);
+  const eps_state = eps_usd === null ? "missing" : eps_usd > 0 ? "pos" : "nonpos";
+  const pe = fin(s.pe);
+  const half = fin(s.pe_half);
+  const pe_lo = pe !== null && half !== null ? fin(pe - half) : null;
+  const pe_hi = pe !== null && half !== null ? fin(pe + half) : null;
+  const value = scenario_value(pe, eps_usd);
+  return {
+    rev: rev, net_income: net_income, eps_local: eps_local, eps_usd: eps_usd, eps_state: eps_state,
+    implied_pe: implied_pe(s.price, eps_usd), value: value, value_lo: scenario_value(pe_lo, eps_usd),
+    value_hi: scenario_value(pe_hi, eps_usd), value_vs_price: pct_diff(value, s.price),
+    zone: zone(rev, s.rev_cons, s.half_width),
+  };
+}
+
 function scenario_state(s) {
   const rev = fin(s.rev);
   const delta = fin(s.driver_delta);
@@ -113,6 +191,6 @@ function scenario_state(s) {
 if (typeof module !== "undefined") {
   module.exports = {
     fin, bridge_eps, zone, to_usd, implied_pe, scenario_value, pct_diff, pct_rank, weighted_value,
-    scenario_state,
+    scenario_state, seg_revenue, implied_margin, margin_eps, quarter_path, grid_pos, live_state,
   };
 }
