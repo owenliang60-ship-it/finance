@@ -1,0 +1,6 @@
+# Real-DB read-only smoke ledger for TSM (plan 2026-11-22 Task 7). No hand-written facts.
+schema = 1
+symbol = "TSM"
+reporting_currency = "TWD"
+eps_basis = "ifrs"
+cyclical = true
