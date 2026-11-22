@@ -13,9 +13,10 @@ from typing import Mapping, Optional, Tuple
 from urllib.parse import urlparse
 
 from terminal.prosperity.config import ESTIMATE_MATCH_DAYS
+from terminal.valuation import engine
 from terminal.valuation.config import (CONFLICT, EXIT_BLOCKED, EXIT_DEGRADED, EXIT_OK, FX_DRIFT_TOL,
-                                       FX_XVENDOR_TOL, G1_TOL, G3_LABELS, MIN_ABS_EPS_FOR_FX, QUOTE_MIN_CHARS,
-                                       SHARE_JUMP_TOL, T1_GLOBAL_DOMAINS, UNVERIFIED, VERIFIED)
+                                       FX_XVENDOR_TOL, G1_TOL, G3_LABELS, MIN_ABS_EPS_FOR_FX, PE_MIN_DAYS,
+                                       QUOTE_MIN_CHARS, SHARE_JUMP_TOL, T1_GLOBAL_DOMAINS, UNVERIFIED, VERIFIED)
 from terminal.valuation.facts import FactPack
 from terminal.valuation.kernel import fin
 from terminal.valuation.ledger import Ledger
@@ -99,7 +100,7 @@ def _r(gid, scope, status, detail, blocks=None, acks=frozenset()):
 def _page(facts: FactPack, ledger: Ledger, fx0: Optional[float]):
     out = []
     usd = facts.reporting_currency == "USD"
-    if facts.price is not None:
+    if fin(facts.price) is not None:
         out.append(_r("P1", "page", VERIFIED, f"最后收盘 {facts.price_date}"))
     else:
         age = f"，距 as_of {_days(facts.as_of, facts.price_date)} 天" if facts.price_date else ""
@@ -145,6 +146,29 @@ def _page(facts: FactPack, ledger: Ledger, fx0: Optional[float]):
         status = VERIFIED if abs(dev) <= tol else CONFLICT
         out.append(_r("C3", "page", status, f"{name}：比值 {fx['act_rev']:.4f}，对 fx0 偏差 {dev:+.1%}",
                       (CONFLICT,)))
+    return out
+
+
+def _engine_inputs(facts: FactPack, ledger: Ledger):
+    """P3 / B1 / B2 read the engine's own P/E sample, street margin and mild zone (one source of numbers)."""
+    pe = engine.pe_history(facts.closes, facts.eps)
+    sample = f"有效 {pe['n_valid']} 天（{pe['start']}–{pe['end']}，TTM≤0 {pe['n_nonpositive']} 天，无 TTM {pe['n_no_ttm']} 天）"
+    out = [_r("P3", "page", VERIFIED if pe["n_valid"] >= PE_MIN_DAYS else UNVERIFIED,
+              f"P/E 样本{sample}，下限 {PE_MIN_DAYS} 天", (UNVERIFIED,))]
+    street = engine.incremental_margins(facts, ledger)["street"]
+    shares = fin(facts.shares)
+    if street["value"] is None:
+        out.append(_r("B1", "bridge", UNVERIFIED, f"街口隐含增量利润率不可得：{street['detail']}，桥禁用，EPS 固定为共识"))
+    elif fin(facts.ntm_sums.get("rev_avg")) is None or shares is None or shares <= 0:
+        out.append(_r("B1", "bridge", UNVERIFIED, "NTM 营收共识或摊薄股本缺失，桥禁用，EPS 固定为共识"))
+    else:
+        out.append(_r("B1", "bridge", VERIFIED, f"街口隐含增量利润率 {street['value']:.4f}（{street['detail']}）"))
+    zone = engine.mild_zone(facts)
+    if zone["half_width"] is None:
+        out.append(_r("B2", "bridge", UNVERIFIED,
+                      f"营收意外样本 {zone['n']} 季（需 ≥8 且离散度 >0），桥禁用，EPS 固定为共识"))
+    else:
+        out.append(_r("B2", "bridge", VERIFIED, f"营收意外样本 {zone['n']} 季，温和区 ±{zone['half_width']:.1%}"))
     return out
 
 
@@ -251,7 +275,8 @@ def _fx0(facts: FactPack) -> Optional[float]:
 
 
 def run_gates(facts: FactPack, ledger: Ledger) -> Tuple[GateResult, ...]:
-    return tuple(_page(facts, ledger, _fx0(facts)) + _g3(facts, ledger) + _items(facts, ledger))
+    return tuple(_page(facts, ledger, _fx0(facts)) + _engine_inputs(facts, ledger) + _g3(facts, ledger)
+                 + _items(facts, ledger))
 
 
 def summarize(results, facts: FactPack, ledger: Ledger) -> GateSummary:

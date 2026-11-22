@@ -40,6 +40,7 @@ class FactPack:
     ntm: NtmResult                             # 报告币种
     ntm_weights: Tuple[float, ...]             # 与 ntm.quarters 等长；不可解时为 ()
     ntm_sums: Mapping[str, Optional[float]]    # 键：eps_low, eps_high, rev_avg, rev_low, rev_high
+    ntm_rows: Tuple[Optional[Mapping], ...]    # 与 ntm.quarters 等长的快照行（Q 或 FY），定位不到为 None
     next_q: Optional[Mapping]                  # 同快照下第一未公告季的 Q 行
     upcoming: Optional[Mapping]                # fmp_earnings 中 eps_actual 为空且与 next_q 同季的行
     yf_0q: Optional[Mapping]                   # forward_estimates 最新日期的 '0q' 行，距 as_of <= 14 天
@@ -81,12 +82,16 @@ def _weights(ntm: NtmResult) -> Tuple[float, ...]:
     return (w, 1 - w)
 
 
-def _sums(snap_rows, ntm: NtmResult, weights) -> dict:
+def _ntm_rows(snap_rows, ntm: NtmResult) -> tuple:
     period = "Q" if ntm.basis == "quarter_sum" else "FY"
     rows = []
     for fiscal, _, _ in ntm.quarters:
         match = [r for r in snap_rows if r.get("period_type") == period and r["fiscal_date"][:10] == fiscal]
         rows.append(match[0] if len(match) == 1 else None)
+    return tuple(rows)
+
+
+def _sums(rows, weights) -> dict:
     out = {}
     for key in SUM_KEYS:
         total = 0.0
@@ -154,6 +159,7 @@ def load_facts(store: MarketStore, symbol: str, as_of: str) -> FactPack:
     live = ntm.snapshot_date if ntm.missing_reason not in ("snapshot_stale", "no_current_snapshot") else None
     snap_rows = [r for r in estimates if live and r["snapshot_date"][:10] == live]
     next_q = _next_q(snap_rows, eps)
+    ntm_rows = _ntm_rows(snap_rows, ntm)
     closes, notes = _closes(history, as_of)
     price_date = closes[-1][0] if closes else None
     price = closes[-1][1] if closes and _days(as_of, price_date) <= PRICE_MAX_STALENESS_DAYS else None
@@ -163,7 +169,7 @@ def load_facts(store: MarketStore, symbol: str, as_of: str) -> FactPack:
         reporting_currency=income[-1].get("reported_currency") if income else None,
         is_adr=history.is_adr, price=price, price_date=price_date, closes=closes, price_jump_notes=notes,
         eps=eps, ttm_eps_usd=ttm, ttm_quarters=ttm_q, ntm=ntm, ntm_weights=weights,
-        ntm_sums=_sums(snap_rows, ntm, weights), next_q=next_q,
+        ntm_sums=_sums(ntm_rows, weights), ntm_rows=ntm_rows, next_q=next_q,
         upcoming=_upcoming(history.earnings, next_q), yf_0q=_yf_0q(store, symbol, as_of),
         fy_pair=_fy_pair(snap_rows, eps), income=income, earnings=tuple(history.earnings),
         shares=fin(income[-1].get("weighted_average_shs_out_dil")) if income else None,
