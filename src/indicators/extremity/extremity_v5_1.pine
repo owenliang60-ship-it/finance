@@ -1,0 +1,226 @@
+//@version=6
+// D1: EMA 锚点用首根收盘显式种子的 EWMA（不用 ta.ema 的 SMA 种子），与 Python compute_extremity 逐根一致
+// D2: stdUp/stdDn/stdS 任一 <= 1e-9（停牌/平盘）时 isLive=false，uDn/uUp 置 na，分类与报警全关；轨道、面板、滚动队列仍按 isWarm
+indicator("双轴极端度 Z + S (2年精确滚动版 v5.1)", shorttitle="Extremity Z+S v5.1", overlay=false, precision=2)
+
+emaLen        = input.int(84, "中期锚点 EMA 周期", minval=10)
+speedLen      = input.int(5, "速度窗口 k (日)", minval=1, maxval=20)
+halfLife      = input.float(25.0, "稳尺子半衰期 (K线数)", minval=5.0, maxval=100.0)
+volMode       = input.string("Auto", "波动率算法", options=["Auto", "Yang-Zhang (美股含跳空)", "Garman-Klass (加密24h)"])
+railYears     = input.float(2.0, "动态轨道回看年数", minval=0.5, maxval=10.0, step=0.5)
+priorWeight   = input.float(200.0, "新股不足窗口时的先验缓冲 (K线数)", minval=0.0, maxval=500.0)
+
+kWarn         = input.float(1.5, "警戒倍数 (σ)", minval=0.8, step=0.1)
+kExt          = input.float(2.0, "极值倍数 (σ)", minval=1.2, step=0.1)
+kDip          = input.float(1.5, "急杀回踩速度倍数 (σ)", minval=0.8, step=0.1)
+hystBuf       = input.float(0.25, "穿线确认防抖缓冲 (σ)", minval=0.0, maxval=0.8, step=0.05)
+
+showSpeedHist = input.bool(true, "仅显示极端 5 日速度柱")
+showRibbon    = input.bool(true, "显示底部状态色带")
+showPanel     = input.bool(true, "显示右上角状态面板")
+
+ewma(float src, float alpha) =>
+    var float acc = na
+    if not na(src)
+        acc := na(acc) ? src : acc + alpha * (src - acc)
+    acc
+
+alpha = 1.0 - math.pow(0.5, 1.0 / halfLife)
+nEff  = 2.0 / alpha - 1.0
+kYZ   = 0.34 / (1.34 + (nEff + 1.0) / math.max(nEff - 1.0, 1.0))
+
+x = math.log(close)
+o = math.log(open)
+h = math.log(high)
+l = math.log(low)
+
+dHL   = h - l
+dXO   = x - o
+gkRaw = math.max(0.0, 0.5 * (dHL * dHL) - (2.0 * math.log(2.0) - 1.0) * (dXO * dXO))
+varGK = ewma(gkRaw, alpha)
+
+rO    = o - x[1]
+rC    = x - o
+muO   = ewma(rO, alpha)
+muC   = ewma(rC, alpha)
+dO    = rO - muO
+dC    = rC - muC
+varO  = ewma(dO * dO, alpha)
+varC  = ewma(dC * dC, alpha)
+rsRaw = math.max(0.0, (h - x) * (h - o) + (l - x) * (l - o))
+varRS = ewma(rsRaw, alpha)
+varYZ = varO + kYZ * varC + (1.0 - kYZ) * varRS
+
+isCrypto = syminfo.type == "crypto"
+useGK    = volMode == "Garman-Klass (加密24h)" or (volMode == "Auto" and isCrypto)
+sigmaM   = math.sqrt(math.max(useGK ? varGK : varYZ, 1e-12))
+sigmaLag = sigmaM[speedLen]
+
+emaX = ewma(x, 2.0 / (emaLen + 1.0))
+cN   = (emaLen - 1.0) / (2.0 * math.sqrt(emaLen))
+
+zVal = (not na(emaX) and not na(sigmaLag) and sigmaLag > 0) ? (x - emaX) / (cN * sigmaLag) : na
+sVal = (not na(emaX) and not na(sigmaLag) and sigmaLag > 0) ? (x - x[speedLen]) / (sigmaLag * math.sqrt(speedLen)) : na
+
+// 自适应周期换算：日线精确对应 加密 730 根 / 美股 504 根；周线或小时线自动折算，上限 2000 根防卡顿
+tfSec       = math.max(60.0, float(nz(timeframe.in_seconds(timeframe.period), 86400)))
+yearSec     = isCrypto ? (365.0 * 86400.0) : (timeframe.isintraday ? 252.0 * 23400.0 : 252.0 * 86400.0)
+barsPerYear = timeframe.isdaily ? (isCrypto ? 365.0 : 252.0) : yearSec / tfSec
+railBars    = math.max(30, math.min(2000, int(math.round(railYears * barsPerYear))))
+
+// 因果精确滚动窗口：第 t 根严格只读 [t - railBars, t - 1] 的原始 Z/S，按当期窗口均值重算半方差（零漂移、零前视）
+var array<float> zBuf = array.new_float(0)
+var array<float> sBuf = array.new_float(0)
+
+int   wLen   = array.size(zBuf)
+float mLen   = float(wLen)
+float effPri = math.max(0.0, priorWeight - mLen)
+
+float sumZ = 0.0
+float ssS  = 0.0
+if wLen > 0
+    for i = 0 to wLen - 1
+        sumZ += array.get(zBuf, i)
+        sv    = array.get(sBuf, i)
+        ssS  += sv * sv
+
+float meanZ = sumZ / math.max(1.0, mLen + effPri)
+
+float nUp  = 0.0
+float ssUp = 0.0
+float nDn  = 0.0
+float ssDn = 0.0
+if wLen > 0
+    for i = 0 to wLen - 1
+        dz = array.get(zBuf, i) - meanZ
+        if dz >= 0.0
+            nUp  += 1.0
+            ssUp += dz * dz
+        else
+            nDn  += 1.0
+            ssDn += dz * dz
+
+float stdUp = math.sqrt(math.max(0.0, ssUp + effPri * 0.5) / math.max(1.0, nUp + effPri * 0.5))
+float stdDn = math.sqrt(math.max(0.0, ssDn + effPri * 0.5) / math.max(1.0, nDn + effPri * 0.5))
+float stdS  = math.sqrt(math.max(0.0, ssS  + effPri)       / math.max(1.0, mLen + effPri))
+
+zUpWarn = meanZ + kWarn * stdUp
+zUpExt  = meanZ + kExt  * stdUp
+zDnWarn = meanZ - kWarn * stdDn
+zDnExt  = meanZ - kExt  * stdDn
+sExtDyn = kExt  * stdS
+sDipDyn = kDip  * stdS
+
+isWarm = bar_index >= emaLen + speedLen and not na(zVal) and not na(sVal)
+railOk = stdUp > 1e-9 and stdDn > 1e-9 and stdS > 1e-9
+isLive = isWarm and railOk
+
+// 标准化偏离倍数（下行正数 uDn 代表低于中枢多少个 stdDn，上行正数 uUp 代表高于中枢多少个 stdUp）
+uDn    = isLive ? (meanZ - zVal) / stdDn : na
+uUp    = isLive ? (zVal - meanZ) / stdUp : na
+
+isPanicBottom  = isLive and zVal <= zDnExt and sVal <= -sExtDyn
+isDeepOversold = isLive and zVal <= zDnExt and sVal > -sExtDyn
+isWarnOversold = isLive and zVal > zDnExt and zVal <= zDnWarn
+isClimaxTop    = isLive and (zVal >= zUpExt or (zVal >= zUpWarn and sVal >= sExtDyn))
+isSlowGrind    = isLive and zVal >= zUpWarn and not isClimaxTop
+isFakeDip      = isLive and zVal > (meanZ - 1.2 * stdDn) and sVal <= -sDipDyn
+
+// 防锯齿双门禁状态机（进线看 kWarn/kExt，退线看减 hystBuf）
+var bool armedDnWarn = false
+var bool armedDnExt  = false
+var bool armedUpWarn = false
+var bool armedUpExt  = false
+
+bool sigEnterDnWarn = false
+bool sigExitDnWarn  = false
+bool sigEnterDnExt  = false
+bool sigExitDnExt   = false
+bool sigExitUpExt   = false
+bool sigExitUpWarn  = false
+
+if isLive
+    if not armedDnWarn and uDn >= kWarn
+        armedDnWarn    := true
+        sigEnterDnWarn := true
+    else if armedDnWarn and uDn <= (kWarn - hystBuf)
+        armedDnWarn   := false
+        sigExitDnWarn := true
+
+    if not armedDnExt and uDn >= kExt
+        armedDnExt    := true
+        sigEnterDnExt := true
+    else if armedDnExt and uDn <= (kExt - hystBuf)
+        armedDnExt   := false
+        sigExitDnExt := true
+
+    if not armedUpExt and uUp >= kExt
+        armedUpExt := true
+    else if armedUpExt and uUp <= (kExt - hystBuf)
+        armedUpExt   := false
+        sigExitUpExt := true
+
+    if not armedUpWarn and uUp >= kWarn
+        armedUpWarn := true
+    else if armedUpWarn and uUp <= (kWarn - hystBuf)
+        armedUpWarn   := false
+        sigExitUpWarn := true
+
+// 当根判定完毕后再把当根 Z/S 推入滚动队列，严格杜绝前视
+if isWarm
+    zClean = math.max(-6.0, math.min(6.0, zVal))
+    sClean = math.max(-6.0, math.min(6.0, sVal))
+    array.push(zBuf, zClean)
+    array.push(sBuf, sClean)
+    while array.size(zBuf) > railBars
+        array.shift(zBuf)
+        array.shift(sBuf)
+
+hline(0, "EMA84 零轴", color=color.new(color.gray, 55), linestyle=hline.style_dotted, linewidth=1)
+plot(isWarm ? meanZ   : na, "滚动中枢 (均值)",     color=color.new(color.gray, 40),   linewidth=1, linestyle=plot.linestyle_solid)
+plot(isWarm ? zUpExt  : na, "动态过热极值 (+2σ)",  color=color.new(#F57C00, 20),      linewidth=4, linestyle=plot.linestyle_solid)
+plot(isWarm ? zUpWarn : na, "动态慢牛警戒 (+1.5σ)", color=color.new(#F57C00, 45),     linewidth=4, linestyle=plot.linestyle_dashed)
+plot(isWarm ? zDnWarn : na, "动态超跌警戒 (-1.5σ)", color=color.new(#00ACC1, 45),     linewidth=4, linestyle=plot.linestyle_dashed)
+plot(isWarm ? zDnExt  : na, "动态恐慌极值 (-2σ)",  color=color.new(#00ACC1, 20),      linewidth=4, linestyle=plot.linestyle_solid)
+
+isExtremeS = isLive and math.abs(sVal) >= sExtDyn
+sCol       = sVal <= -sExtDyn ? color.new(#00ACC1, 15) : color.new(#FB8C00, 15)
+plot(showSpeedHist and isExtremeS ? sVal : na, "极端 5日速度 S", color=sCol, style=plot.style_columns)
+
+zColor = isClimaxTop ? #F57C00 : (isPanicBottom or isDeepOversold) ? #00ACC1 : isWarnOversold ? color.new(#00ACC1, 35) : #2962FF
+plot(isWarm ? zVal : na, "位置 Z", color=zColor, linewidth=2)
+plot(isSlowGrind ? zVal : na, title="慢牛钝化(禁逆势)", color=color.fuchsia, style=plot.style_circles, linewidth=3)
+
+ribbonCol = isPanicBottom ? #00ACC1 : isDeepOversold ? #3949AB : isClimaxTop ? #FB8C00 : isFakeDip ? #FBC02D : na
+plotshape(showRibbon and not na(ribbonCol), title="底部状态色带", style=shape.square, location=location.bottom, color=ribbonCol, size=size.tiny)
+
+alertcondition(sigEnterDnWarn, "下穿 -1.5σ (进超跌警戒)", "Extremity 下穿 -1.5σ 进入超跌警戒区")
+alertcondition(sigEnterDnExt,  "下穿 -2.0σ (进恐慌极值)", "Extremity 下穿 -2.0σ 进入恐慌极值区")
+alertcondition(sigExitDnExt,   "防抖上穿 -2.0σ (极值止跌)", "Extremity 防抖回升脱离 -2.0σ 恐慌极值区")
+alertcondition(sigExitDnWarn,  "防抖上穿 -1.5σ (超跌反转)", "Extremity 防抖回升脱离 -1.5σ 超跌警戒区")
+alertcondition(sigExitUpExt,   "防抖下穿 +2.0σ (过热退潮)", "Extremity 冲高回落脱离 +2.0σ 极值区")
+alertcondition(sigExitUpWarn,  "防抖下穿 +1.5σ (强势衰减)", "Extremity 冲高回落脱离 +1.5σ 警戒区")
+
+var table infoTbl = table.new(position.top_right, 2, 6, bgcolor=color.new(color.white, 6), border_width=1, border_color=color.new(#B2B5BE, 20))
+
+if showPanel and barstate.islast and isWarm
+    annFactor = math.sqrt(barsPerYear)
+    annVolPct = sigmaM * annFactor * 100.0
+    stateText = isPanicBottom ? "恐慌超跌 · 禁追空" : isDeepOversold ? "深度超跌 · 减速观察" : isWarnOversold ? "超跌警戒 · 弱势下探" : isClimaxTop ? "喷发过热 · 止盈警戒" : isSlowGrind ? "慢牛钝化 · 禁逆势" : isFakeDip ? "急杀回踩 · 假极端" : "常态区间"
+    stateCol  = isPanicBottom ? #00838F : isDeepOversold ? #283593 : isWarnOversold ? #E65100 : isClimaxTop ? #D84315 : isSlowGrind ? #AD1457 : isFakeDip ? #B28900 : #5D606B
+    txtDark   = #1E222D
+    txtMuted  = #5D606B
+    upStr     = (zUpExt >= 0 ? "+" : "") + str.tostring(zUpExt, "#.##")
+
+    table.cell(infoTbl, 0, 0, "位置 Z (极值)",   text_color=txtMuted, text_size=size.small)
+    table.cell(infoTbl, 1, 0, str.tostring(zVal, "#.##") + "  [" + str.tostring(zDnExt, "#.##") + " / " + upStr + "]", text_color=zColor, text_size=size.small)
+    table.cell(infoTbl, 0, 1, "5日速度 S (极值)", text_color=txtMuted, text_size=size.small)
+    table.cell(infoTbl, 1, 1, str.tostring(sVal, "#.##") + "  [±" + str.tostring(sExtDyn, "#.##") + "]", text_color=sVal >= 0 ? #00796B : #C62828, text_size=size.small)
+    table.cell(infoTbl, 0, 2, str.tostring(railYears, "#.#") + "年中枢 (" + str.tostring(wLen) + "根)", text_color=txtMuted, text_size=size.small)
+    table.cell(infoTbl, 1, 2, str.tostring(meanZ, "#.##"), text_color=txtDark, text_size=size.small)
+    table.cell(infoTbl, 0, 3, "稳态年化波动",    text_color=txtMuted, text_size=size.small)
+    table.cell(infoTbl, 1, 3, str.tostring(annVolPct, "#.#") + "%", text_color=txtDark, text_size=size.small)
+    table.cell(infoTbl, 0, 4, "尺子算法",        text_color=txtMuted, text_size=size.small)
+    table.cell(infoTbl, 1, 4, useGK ? "Garman-Klass (24h)" : "Yang-Zhang (含跳空)", text_color=txtDark, text_size=size.small)
+    table.cell(infoTbl, 0, 5, "盘面定性",        text_color=txtMuted, text_size=size.small)
+    table.cell(infoTbl, 1, 5, stateText, text_color=stateCol, text_size=size.small)

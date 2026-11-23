@@ -8,3 +8,4 @@ from .dv_acceleration import compute_dv_acceleration, scan_dv_acceleration, form
 from .rvol_sustained import check_rvol_sustained, scan_rvol_sustained
 from .market_momentum import compute_market_momentum, scan_market_momentum
 from .beta import compute_beta
+from .extremity import compute_extremity
