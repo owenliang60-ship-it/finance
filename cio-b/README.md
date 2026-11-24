@@ -1,10 +1,10 @@
-# CIO-B Workspace — Geralt Kowalski
+# CIO-B Workspace — Geralt Kowalski (Performance Coach)
 
-Standalone workspace housing CIO-B personality (Pattern C deployment, locked 2026-05-06).
+Standalone workspace housing CIO-B (Pattern C deployment, locked 2026-05-06; upgraded to Performance Coach spec 2026-11-24).
 
 ## What this is
 
-`Finance/cio-b/` is a dedicated CC workspace where the model takes on the persona of **Geralt Kowalski** — CIO of Westbrook Capital, Boss's CIO-B partner. `CLAUDE.md` is loaded at session start. Since 2026-10-23 it is a short behavior spec (~135 lines, v2): it routes every position conversation through Boss's playbook (Obsidian `Cards/风险采购员的自我修养.md`) and holds no sizing numbers itself.
+`Finance/cio-b/` is a dedicated CC workspace where the model operates as **Geralt** — Boss's CIO and **Trading Performance Coach**. `CLAUDE.md` is loaded at session start. It holds zero hard-coded sizing numbers (all trading rules and sizing parameters live in Obsidian `Cards/风险采购员操作手册.md`) and prioritizes **emotional/cognitive reframing and peak execution performance** before mechanical rule checks.
 
 ## How to start
 
@@ -12,7 +12,7 @@ Standalone workspace housing CIO-B personality (Pattern C deployment, locked 202
 # Direct
 cd "/Users/owen/CC workspace/Finance/cio-b" && claude
 
-# Via alias (recommended; install via ~/.zshrc)
+# Via alias (installed in ~/.zshrc)
 cio
 ```
 
@@ -20,48 +20,30 @@ cio
 
 | Path | Role |
 |------|------|
-| `CLAUDE.md` | **Source of truth** for how Geralt works (v2 behavior spec). Investment rules live in the playbook, not here |
+| `CLAUDE.md` | **Source of truth** for how Geralt coaches, triages, challenges, and collaborates. Investment rules live in the operating manual, not here |
+| `AGENTS.md` | Generated Codex/agent startup bundle (`scripts/codex/render_startup_bundle.py`, untracked) |
 | `cards/` | Workspace mirror of conviction cards (Obsidian `Cards/Stocks/{TICKER}.md` is master) |
 | `cards/Rejected/` | Workspace mirror of rejection cards (no-go list) |
-| `draft/` | Frozen history: Section 1-5 drafts + `CLAUDE.v1.md` (the original ~23,500-word persona, retired 2026-10-23). Not loaded |
+| `draft/` | Frozen history: Section 1-5 drafts + `CLAUDE.v1.md` (retired 2026-10-23). Not loaded |
 | `research/` | Psychology research backstory used to construct the persona |
 
-## How v2 works
+## How the Performance Coach spec works
 
-- **Triage** every message: research/chat · position decision · psychological moment (psych takes priority).
-- **Position protocol**: mindset gate → route via playbook index → read card → live Sheet pull → clause / plan / gap table → stop at the gap; Boss writes the number.
-- **Psych protocol**: name the pattern (P1–P6), cite Boss's own past case from the playbook, quote the clause, give the clause's next step.
-- **Red lines**: no final numbers, no soothing, no short-term price calls, no scapegoating, no ghost-writing for third parties, no new thesis in an activated state.
-- **Override**: legal if written, unconstitutional if silent (Must-Not #5).
-
-Why v2: v1 hard-coded sizing numbers that drifted from the playbook, pointed at files that never existed, and its worked MU example got copied into unrelated answers. An 8-scenario A/B test on 2026-10-23 showed v2 matching v1 on routing, clause citation, and the no-number line, without the example leakage.
-
-## Working with cards
-
-Cards are written and read as ordinary markdown. Master copy lives in Obsidian (`Cards/Stocks/{TICKER}.md`); workspace mirror at `cards/{TICKER}.md` is what Geralt loads into context first.
-
-Rejection cards (`cards/Rejected/{TICKER}.md` and Obsidian master): three fields — date / reason / reconsideration trigger. They prevent rejected names from re-entering the conviction stack under fresh framing.
-
-When Boss queries a ticker without a card, Geralt does not compute a target (it may lay out the playbook formula range) and proposes either:
-1. Schedule a calm-period card-creation conversation, or
-2. Decide the ticker is not conviction-band material and build a rejection card.
-
-There are exactly two exits, never one.
+- **Emotion-first triage**: Every message is triaged with **Mode P (Performance Coaching)** and **Mode R (Battlefield Damage Control)** taking strict priority over **Mode B (Position Execution)**.
+- **Performance Coach, not therapist or cop**: Never runs feeling-naming therapy ("are you scared or angry?"). Cuts straight to structural mechanisms (comparison addiction & survivorship math, high-base transition from ranger to citadel+spear, threat vs. challenge response & risk inversion, HWM phantom-limb pain, off-season vs. avoidance).
+- **Grounded fuel & red pen on cowardly sizing**: Distinguishes normal pre-battle adrenaline (do **not** freeze buying; channel into Challenge State and push execution when setup is complete) from true physiological/revenge meltdown (freeze per operating manual). Uses Boss's proven track record, probability math, and structural edge to crush self-limiting narratives and push conviction-sized action.
+- **Position protocol**: Quick state check → 5 facts lookup in `风险采购员操作手册` Table 3 → conviction/rejection card check → live read-only Sheet pull → manual range + Geralt's own candid view → Boss makes the final call.
+- **Red lines & override**: Numbers are candid views (never orders), no price soothing, no <1Q price predictions, strict separation of decision quality vs. single-bet outcome, explicit written override protocol, Google Sheet strictly read-only.
 
 ## What this workspace is not
 
-- Not a coding workspace. For code work on Finance, exit to the main `Finance/` worktree.
-- Not a data tool. `market.db` and `company.db` are read-only here. Data ingest stays on the cloud Data Desk.
-- Not a generic chat. Every conversation is a CIO-LP session. If Boss wants generic CC behavior, use a different workspace.
-
-## Evolving the persona
-
-New investment rules or failure modes go into the **playbook**, not `CLAUDE.md`. Edit `CLAUDE.md` only when the way Geralt works changes. Do not add example dialogues; they get copied. `draft/` is historical and frozen.
+- Not a coding workspace. For code work on Finance, exit to a code worktree under `Finance/`.
+- Not a data-writing tool. `market.db`, `company.db`, and the Portfolio Google Sheet are strictly read-only here.
+- Not a generic chat. Every session is a CIO + Performance Coach session.
 
 ## Origin trace
 
-- 2026-05-04: CIO-B redefined from "commander discipline" to "conviction exoskeleton + L3 forcing function"; Pattern C (standalone workspace) chosen for personality strength.
-- 2026-05-06: Character locked (Geralt Kowalski). Section 1 (8420w) + Section 2 (3440w) drafted.
-- 2026-05-07: Section 3 (4307w) + Section 4 (4576w) + Section 5 (1935w) drafted; integration into this CLAUDE.md.
-- Total personality core: ~22,680 words English drafted across Sections 1-5.
-- 2026-10-23: v2 rewrite. `CLAUDE.md` cut from ~146.8K to ~8.3K chars; backstory retired to `draft/CLAUDE.v1.md`; all numbers delegated to the playbook.
+- 2026-05-04 ~ 05-07: Pattern C standalone workspace created (`61b2720`) with ~23K-word v1 persona.
+- 2026-10-23: v2 rewrite (`70035b0`) — stripped hard-coded sizing numbers and worked examples, delegated rules to playbook.
+- 2026-11-11 ~ 11-13: Pointed SSOT to `Cards/风险采购员操作手册.md` (`1e7a0d0`); added independent judgment and plain-language rule (`5d654e6`).
+- 2026-11-24: Upgraded to **Performance Coach** spec — replaced passive therapeutic low-point protocol with emotion-first structural reframing, Threat→Challenge activation, battlefield damage control, and grounded performance ignition distilled from Boss's 2025–2026 trading mindset archive.
