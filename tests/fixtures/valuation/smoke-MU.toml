@@ -1,0 +1,19 @@
+# Real-DB read-only smoke ledger for MU (plan 2026-11-22 Task 7). No hand-written facts.
+schema = 1
+symbol = "MU"
+reporting_currency = "USD"
+eps_basis = "non_gaap"
+cyclical = true
+
+# 2018-19 starts 2018-05-01: the fmp_earnings 2018-03-22 row collides with the prior quarter.
+[[cycles]]
+id = "2018-19"
+label = "2018–19"
+start = "2018-05-01"
+end = "2020-06-30"
+
+[[cycles]]
+id = "2022-23"
+label = "2022–23"
+start = "2021-09-01"
+end = "2024-06-30"

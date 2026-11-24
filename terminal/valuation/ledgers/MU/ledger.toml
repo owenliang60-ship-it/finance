@@ -1,0 +1,89 @@
+# MU decision ledger (plan docs/plans/2026-11-22-valuation-dashboard-v2.md Task 5).
+# Facts: SEC EX-99.1 FQ4-26 earnings release, stored verbatim in sources/. Scenarios and weights are
+# Boss-supplied reference presets (work order 2026-11-22), not model output.
+schema = 1
+symbol = "MU"
+reporting_currency = "USD"
+eps_basis = "non_gaap"
+cyclical = true
+
+[assumptions]
+consensus_weight = 5
+note = "参考情景与权重：Boss 2026-11-22 工单"
+
+[[sources]]
+id = "mu-fq4-26-ex991"
+url = "https://www.sec.gov/Archives/edgar/data/723125/000072312526000018/a2026q4ex991-pressrelease.htm"
+fetched_at = "2026-11-22"
+raw = "sources/mu-fq4-26-ex991.txt"
+sha256 = "576b24d7ba3b2a8004469a2680f3e8f40f5da733bef54ad78357f19d818dc268"
+
+[segments]
+unit = 1e6
+names = ["CDBU 核心数据中心", "CMBU 云内存", "MCBU 移动与客户端", "AEBU 汽车与嵌入式"]
+axis_rationale = "按美光季报唯一逐季披露营收与利润率的四大业务单元（BU）拆分；HBM 归入 CMBU，DRAM / NAND 是跨 BU 的产品轴，只作次轴参考。"
+roles = ["高弹性周期支柱（受通用服务器存储价格周期影响极大）", "AI 核心底座（HBM 锁量锁价占比高）",
+         "消费周期先导（最先反映端侧去库存）", "长约稳态底座"]
+secondary_note = "FQ4-26 各 BU 毛利率 / 营业利润率：CDBU 90% / 85%，CMBU 83% / 76%，MCBU 90% / 88%，AEBU 84% / 79%；公司 Non-GAAP 毛利率 87.0%。DRAM / NAND 产品拆分不在本份 EX-99.1 内，页面不引用。"
+
+[[segments.quarters]]
+fiscal_date = "2026-09-03"
+values = [18002.0, 16283.0, 13114.0, 6824.0]
+source = "mu-fq4-26-ex991"
+quote = '''Cloud Memory Business Unit Revenue $ 16,283 $ 13,769 $ 4,543 Gross margin 83 % 83 % 59 %
+Operating margin 76 % 78 % 48 % Core Data Center Business Unit Revenue $ 18,002 $ 11,524 $ 1,577
+Gross margin 90 % 87 % 41 % Operating margin 85 % 83 % 25 % Mobile and Client Business Unit Revenue
+$ 13,114 $ 11,521 $ 3,760 Gross margin 90 % 87 % 36 % Operating margin 88 % 86 % 29 % Automotive and
+Embedded Business Unit Revenue $ 6,824'''
+
+[[eps_facts]]
+fiscal_date = "2026-09-03"
+value = 33.42
+source = "mu-fq4-26-ex991"
+quote = '''Non-GAAP net income of $38.40 billion, or $33.42 per diluted share'''
+
+[[scenarios]]
+id = "bull"
+label = "Bull"
+tone = "bull"
+thesis = "AI 超级周期延续，HBM 紧缺外溢"
+seg_adjs = [0.10, 0.15, 0.0, 0.05]
+net_margin = 0.68
+pe_mid = 6.0
+pe_half = 1.0
+weight = 20
+
+[[scenarios]]
+id = "base"
+label = "Base"
+tone = "base"
+thesis = "通用存储价格回落，CMBU 相对抗跌"
+seg_adjs = [-0.20, -0.05, -0.25, -0.10]
+net_margin = 0.50
+pe_mid = 8.0
+pe_half = 1.0
+weight = 50
+
+[[scenarios]]
+id = "bear"
+label = "Bear"
+tone = "bear"
+thesis = "传统存储硬着陆 + 行业去库存，参考 2018–19 周期回撤，净利率回到 10 年中枢"
+seg_adjs = [-0.45, -0.25, -0.45, -0.25]
+net_margin = 0.23
+pe_mid = 11.0
+pe_half = 1.5
+weight = 25
+
+# 2018-19 starts 2018-05-01: the fmp_earnings 2018-03-22 row collides with the prior quarter.
+[[cycles]]
+id = "2018-19"
+label = "2018–19"
+start = "2018-05-01"
+end = "2020-06-30"
+
+[[cycles]]
+id = "2022-23"
+label = "2022–23"
+start = "2021-09-01"
+end = "2024-06-30"
