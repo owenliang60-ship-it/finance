@@ -126,6 +126,11 @@ def _read_receipt(store, identity):
     return p
 
 
+def _retire_live_receipt(store, identity) -> None:
+    path = _receipt_path(store, identity)
+    os.replace(path, path.with_name(path.name + '.live-abandoned'))
+
+
 def _write_receipt(store, payload):
     path = _receipt_path(store, payload['identity'])
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -211,6 +216,11 @@ def _evaluate(market, store, as_of, quarter, version, mode, cutoff, builder, cac
               previous, data=None, snapshot_sha256=None):
     identity = _identity(as_of, quarter, version)
     receipt = _read_receipt(store, identity)
+    if receipt and receipt['decision'] and receipt['meta']['mode'] == 'live' and mode == 'replay':
+        # Both callers only reach here when the day has no stored boards. A live
+        # cutoff belongs to its own Saturday; once that day is gone, re-judge as replay.
+        _retire_live_receipt(store, identity)
+        receipt = None
     if receipt and receipt['decision'] is None:
         return (), receipt, data
     if receipt:
