@@ -98,6 +98,8 @@ class SymbolHistory:
     # statement → [(date removed from the current table, archived_at)]; strict replay only
     removed: Dict[str, List[Tuple[str, str]]] = field(default_factory=dict)
     forward_runs_available: bool = False
+    # statement → [(date a repair kept, archived_at)]; reverses an earlier tombstone of that date (P1-1)
+    restored: Dict[str, List[Tuple[str, str]]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

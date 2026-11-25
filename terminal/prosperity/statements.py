@@ -58,12 +58,14 @@ def _utc(stamp: str) -> datetime:
     return moment.astimezone(timezone.utc)
 
 
-def _latest_vintage(rows: List[dict], as_of: str, removed: Sequence[Tuple[str, str]] = ()) -> List[dict]:
+def _latest_vintage(rows: List[dict], as_of: str, removed: Sequence[Tuple[str, str]] = (),
+                    restored: Sequence[Tuple[str, str]] = ()) -> List[dict]:
     """Newest version per fiscal date observed before the end of `as_of` (exclusive next-midnight bound).
 
     The vintage is append-only, so a date a repair removed from the current table (e.g. a
     fiscal alias) would live on; it is dropped from the repair's archived_at onward unless it
-    was observed again later (Codex M4 review F2).
+    was observed again later (Codex M4 review F2), or a later repair kept that date again
+    (P1-1: the AEM/BIP alias flips of 2026-10-10).
     """
     bound = datetime.combine(_d(as_of) + timedelta(days=1), datetime.min.time(), timezone.utc)
     best: Dict[str, Tuple[datetime, dict]] = {}
@@ -76,7 +78,16 @@ def _latest_vintage(rows: List[dict], as_of: str, removed: Sequence[Tuple[str, s
         at = _utc(archived_at)
         if at < bound:
             gone[day[:10]] = max(at, gone.get(day[:10], at))
-    kept = [r for seen, r in best.values() if not (r["date"][:10] in gone and gone[r["date"][:10]] > seen)]
+    kept_at: Dict[str, datetime] = {}
+    for day, archived_at in restored:
+        at = _utc(archived_at)
+        if at < bound:
+            kept_at[day[:10]] = max(at, kept_at.get(day[:10], at))
+
+    def dropped(day: str, seen: datetime) -> bool:
+        return day in gone and gone[day] > seen and not (day in kept_at and kept_at[day] >= gone[day])
+
+    kept = [r for seen, r in best.values() if not dropped(r["date"][:10], seen)]
     return sorted(kept, key=lambda r: r["date"])
 
 
@@ -90,7 +101,8 @@ def visible_statements(history: SymbolHistory, as_of: str, mode: str,
     if mode != "replay":
         raise ValueError(f"unknown mode: {mode!r}")
     if as_of[:10] >= STRICT_STATEMENTS_FROM:   # no vintage means no proof, never today's tables (review F5)
-        return VisibleStatements({t: _latest_vintage(history.vintage.get(t, []), as_of, history.removed.get(t, ()))
+        return VisibleStatements({t: _latest_vintage(history.vintage.get(t, []), as_of, history.removed.get(t, ()),
+                                                     history.restored.get(t, ()))
                                   for t in TABLES},
                                  "strict", None)
     return VisibleStatements(current, "approximate", None, tuple(history.earnings))

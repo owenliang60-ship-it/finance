@@ -209,3 +209,20 @@ def test_quarter_dated_by_its_results_release_carries_a_label():
     assert [q.fiscal_date for q in qb.quarters] == fiscals
     assert all("statement_date_from_earnings" in q.labels for q in qb.quarters)
     assert qb.quarters[-1].availability_basis == "earnings_announcement"
+
+
+def test_a_later_repair_that_keeps_a_date_reverses_its_earlier_tombstone():
+    # P1-1 BIP: 09-29 alias repair removed Q3_ALIAS (kept 2025-09-30); 10-10 flipped it back
+    vint = _vintage(hist(), "2026-09-04T15:03:34Z")
+    for rows in vint.values():
+        rows[2] = dict(rows[2], date=Q3_ALIAS)
+    first, flip = "2026-09-29T03:11:58.911173Z", "2026-10-10T06:45:48.450605Z"
+    h = replace(hist(), vintage=vint,
+                removed={t: [(Q3_ALIAS, first), ("2025-09-30", flip)] for t in vint},
+                restored={t: [("2025-09-30", first), (Q3_ALIAS, flip)] for t in vint})
+    assert Q3_ALIAS not in [q.fiscal_date for q in _build(h, "2026-10-05").quarters]
+    assert _build(h, "2026-10-10").quarters[2].fiscal_date == Q3_ALIAS
+    assert _build(h, "2026-11-21").quarters[2].fiscal_date == Q3_ALIAS
+    # a tombstone newer than the keep record still wins
+    late = replace(h, removed={t: [(Q3_ALIAS, first), (Q3_ALIAS, "2026-11-01T00:00:00Z")] for t in vint})
+    assert Q3_ALIAS not in [q.fiscal_date for q in _build(late, "2026-11-21").quarters]
