@@ -99,7 +99,7 @@ def test_freeze_eight_boards_and_next_week_uses_params(env):
 
 
 def test_candidate_receipt_prevents_rejudging_and_detects_pending_drift(env, monkeypatch):
-    from src.data.prosperity_run import rebuild_freeze_chain
+    from src.data.prosperity_run import rebuild_freeze_chain, state_path
     calls = []
     build = builder_with(calls, {'2026-08-29': '2026Q1', '2026-09-05': '2026Q2'})
     opts = dict(market=env[0], store=env[1], through='2026-09-05', start_quarter='2026Q2',
@@ -110,6 +110,7 @@ def test_candidate_receipt_prevents_rejudging_and_detects_pending_drift(env, mon
     monkeypatch.setattr(env[1], 'save_batch', broken)
     assert rebuild_freeze_chain(**opts).exit_code == 6
     assert calls == ['2026-08-29', '2026-09-05']
+    pending = next((state_path(env[1]) / 'candidates').glob('2026-09-05-*.json')).read_bytes()
     monkeypatch.setattr(env[1], 'save_batch', save)
     def changed(market, as_of, **kw):
         packets, meta = build(market, as_of, **kw)
@@ -120,6 +121,9 @@ def test_candidate_receipt_prevents_rejudging_and_detects_pending_drift(env, mon
     recovered = rebuild_freeze_chain(**opts)
     assert recovered.exit_code == 0 and len(recovered.keys) == 8
     assert all(k.as_of == '2026-09-05' for k in recovered.keys)
+    candidates = state_path(env[1]) / 'candidates'
+    assert not list(candidates.glob('*.live-abandoned'))
+    assert next(candidates.glob('2026-09-05-*.json')).read_bytes() == pending
 
 
 def test_rebuild_timeout_and_invalid_future(env):
@@ -196,6 +200,44 @@ def test_live_pending_retry_rebuilds_at_original_cutoff(env, monkeypatch):
     out = run_week(**opts)
     assert out.exit_code == 0 and cutoffs[-1] == 8
     assert all(env[1].get_board(k).meta.frozen_at == '2026-12-05T08:30:00Z' for k in out.keys[4:])
+
+
+def test_stale_live_pending_receipt_is_retired_by_next_week_chain(env, monkeypatch):
+    from src.data.prosperity_run import run_week, state_path
+    clock = [datetime(2026, 12, 5, 8, 30, tzinfo=timezone.utc)]
+    base = builder_with([], {'2026-12-05': '2026Q3'})
+    def timed(market, as_of, **kw):
+        packets, meta = base(market, as_of, **kw)
+        return [replace(p, price_asof=100 + kw['cutoff'].hour) for p in packets], meta
+    quality = env[2] / 'fundamentals-now.json'
+    quality.write_text(json.dumps({'after': {'as_of': '2026-12-05T07:00:00Z',
+        'coverage': {'fundamental_ready': {'ratio': .96}}}}))
+    opts = {**options(env, []), 'saturday': '2026-12-05', 'now': lambda: clock[0], 'packet_builder': timed}
+    save = env[1].save_batch
+    monkeypatch.setattr(env[1], 'save_batch', lambda boards: (_ for _ in ()).throw(RuntimeError('injected')))
+    assert run_week(**opts).exit_code == 6
+    monkeypatch.setattr(env[1], 'save_batch', save)
+    candidates = state_path(env[1]) / 'candidates'
+    [live] = candidates.glob('2026-12-05-*.json')
+    original = live.read_bytes()
+    assert json.loads(original)['payload']['meta']['mode'] == 'live'
+    clock[0] = datetime(2026, 12, 12, 8, 30, tzinfo=timezone.utc)
+    quality.write_text(json.dumps({'after': {'as_of': '2026-12-12T07:00:00Z',
+        'coverage': {'fundamental_ready': {'ratio': .96}}}}))
+    out = run_week(**{**opts, 'saturday': '2026-12-12'})
+    assert out.exit_code == 0, out.error
+    chain = [k for k in out.detail['chain_keys'] if k['as_of'] == '2026-12-05']
+    assert len(chain) == 8
+    from src.data.prosperity_storage import BoardKey
+    for k in chain:
+        meta = env[1].get_board(BoardKey(**k)).meta
+        assert meta.mode == 'replay'
+        if k['board_type'] == 'quarter_final':
+            assert meta.frozen_at == '2026-12-06T00:00:00Z'
+    abandoned = list(candidates.glob('2026-12-05-*.live-abandoned'))
+    assert len(abandoned) == 1 and abandoned[0].read_bytes() == original
+    [replay] = candidates.glob('2026-12-05-*.json')
+    assert json.loads(replay.read_text())['payload']['meta']['mode'] == 'replay'
 
 
 def test_replay_week_with_negative_receipt_does_not_block_chain(env):

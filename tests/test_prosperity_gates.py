@@ -60,3 +60,53 @@ def test_member_floor_and_input_errors():
     assert input_health({**meta, 'errors': {'x': 'bad', 'y': 'bad'}}, rows, 100, 100).status == 'fail'
     assert input_health(meta, rows, 0, 100).status == 'fail'
     assert input_health({'members_resolved': 0, 'errors': {}}, [], 0, None).status == 'fail'
+
+
+def _named(tmp_path, hhmm, ratio=None, text=None):
+    p = tmp_path / f'fundamentals-20261024T{hhmm}00Z.json'
+    if text is not None:
+        p.write_text(text)
+    else:
+        report(p, at=f'2026-10-24T{hhmm[:2]}:{hhmm[2:]}:00Z', ratio=ratio)
+    return p
+
+
+def test_fundamental_latest_pre_snapshot_failure_overrides_earlier_pass(tmp_path):
+    from src.data.prosperity_gates import fundamental_refreshed
+    _named(tmp_path, '0600', .93)
+    latest = _named(tmp_path, '0700', .84)
+    g = fundamental_refreshed(tmp_path, '2026-10-24', CUTOFF)
+    assert g.status == 'fail' and g.detail['reason'] == 'coverage_below_floor'
+    assert g.detail['path'] == str(latest)
+
+
+def test_fundamental_latest_pre_snapshot_pass_overrides_earlier_failure(tmp_path):
+    from src.data.prosperity_gates import fundamental_refreshed
+    _named(tmp_path, '0600', .84)
+    latest = _named(tmp_path, '0700', .93)
+    g = fundamental_refreshed(tmp_path, '2026-10-24', CUTOFF)
+    assert g.status == 'pass' and g.detail['path'] == str(latest)
+
+
+def test_fundamental_corrupt_latest_report_is_unknown(tmp_path):
+    from src.data.prosperity_gates import fundamental_refreshed
+    _named(tmp_path, '0600', .93)
+    _named(tmp_path, '0700', text='{')
+    g = fundamental_refreshed(tmp_path, '2026-10-24', CUTOFF)
+    assert g.status == 'unknown' and g.detail['reason'] == 'report_invalid'
+
+
+def test_fundamental_corrupt_older_report_is_ignored(tmp_path):
+    from src.data.prosperity_gates import fundamental_refreshed
+    _named(tmp_path, '0600', text='{')
+    latest = _named(tmp_path, '0700', .93)
+    g = fundamental_refreshed(tmp_path, '2026-10-24', CUTOFF)
+    assert g.status == 'pass' and g.detail['path'] == str(latest)
+
+
+def test_fundamental_report_after_cutoff_is_skipped(tmp_path):
+    from src.data.prosperity_gates import fundamental_refreshed
+    before = _named(tmp_path, '0700', .93)
+    _named(tmp_path, '0900', .50)
+    g = fundamental_refreshed(tmp_path, '2026-10-24', CUTOFF)
+    assert g.status == 'pass' and g.detail['path'] == str(before)

@@ -48,16 +48,22 @@ cron 使用计划中的周六 16:30 / 20:30 CST 两个条目。所有 replay 入
 | 退出码 | 含义 | 处理 |
 |---|---|---|
 | 0 | 计算成功并已发布（`published` / `already_published`）；不传 `--pool-path` 时为 `publication_not_configured` | 只有 `published` 或 `already_published` 才表示池文件是本周的 |
-| 3 | 输入/基本面硬门控失败 | 修复输入证据后重试，不降低门槛 |
+| 3 | 输入/基本面硬门控失败 | 修复输入证据后重试，不降低门槛。基本面质量报告按文件名时间戳倒序，取快照前（`after.as_of` 不晚于 cutoff）最新一份判定；更早的通过报告不能掩盖它的失败。倒序扫描中，在定论那份之前遇到损坏报告即为 unknown；比它更旧的损坏报告不影响结果。手工生成的报告必须沿用 `fundamentals-YYYYMMDDTHHMMSSZ.json`（UTC）命名 |
 | 4 | 日期、模式或参数错误 | 更正参数；当前周只能 live |
 | 5 | 已计算、发布未确认 | 同周重试只发布，不重算。池发布常见原因：`liquidity_window_short` / `liquidity_prices_stale`（价格没到或过期，先查 06:30 价格任务）、`pool_ranked_coverage_below_floor`（周榜可排名覆盖率 <90%；周榜已冻结，**同周重试不会好**，只能等下周或回北极星讨论门槛，不要反复重跑）、`pool_liquidity_coverage_below_floor`（有成交额排名的成员 <90%；价格缺失导致，**补齐价格后同周重试可以成功**）、磁盘错误。池文件此时是上一版，或本周已校验的新版（`os.replace` 后目录 fsync 或 `mark_published` 失败）；读取端不会看到半写文件 |
-| 6 | 重建、空间、证据、恢复或运行故障 | 查 `.state/runs/` 的 error，保留候选记录 |
+| 6 | 重建、空间、证据、恢复或运行故障 | 查 `.state/runs/` 的 error，保留候选记录。stdout 结果含 `backup_error` 时，榜已落库，投递已照常执行（结果里有 `delivery` 段），只是运行后备份失败：看 stderr 的 `post_run_backup_failed`（空间不足时附可归档版本提示），修复后下次运行会补备份。运行后备份失败不覆盖 5 / 7；运行前备份失败仍为 6 且不进入计算 |
 | 75 | job/resource 锁忙 | 等待下一次入口，不并发绕过锁 |
 
 候选记录完整且未达标时直接复用。达标但八榜未提交时，按记录中的原
 mode/cutoff/source_evidence 准备八榜，逐榜比 M8 内容哈希。
 `recovery_input_changed` 表示输入已改变，停止该季及后续写入。
 恢复原始来源后再重试；不能删除候选记录来绕过此检查。
+
+live 冻结周例外：达标但八榜未提交的 live 候选记录，当天重试仍按原 cutoff 恢复。
+过了当天（例如下周 live 运行重建冻结链），且该日库内无榜时，
+下一次运行自动把它改名为 `<原名>.live-abandoned`，再按 replay 重判该日。
+改名文件是无害留痕；按版本归档只搬 `.json`，旧版本移走后它仍留在源状态目录。
+`replay` 候选记录永不自动退役，仍禁止删除。
 
 损坏、错版本、错方案或校验失败的候选记录会阻断恢复。
 用匹配的备份集合恢复数据库和状态目录。普通发布异常会回滚原副本；
@@ -66,7 +72,9 @@ mode/cutoff/source_evidence 准备八榜，逐榜比 M8 内容哈希。
 
 ## 备份与拉取
 
-正式入口在运行前、成功计算后制作匹配备份，每个源库只保留最近两套。
+正式入口在运行前、成功计算后制作匹配备份。每个源库按库与候选状态去重，
+保留最近两个不同状态的最新一套。状态 = 解压后数据库 SHA256 + `state/candidates/` 文件哈希；
+gzip 字节和 `state/runs/` 不计入。所以同周无变化的重跑不会把写入前的恢复点挤掉。
 快照使用 SQLite backup API，包含 WAL 已提交内容；每套包含 gzip 压缩的数据库
 （`database.sqlite.gz`，约原体积 28%）、状态目录和哈希清单。清单同时记录压缩前的
 SHA256，校验和发布时先解压再核对，再跑 quick_check。
