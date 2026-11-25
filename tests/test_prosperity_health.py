@@ -593,3 +593,40 @@ def test_load_reads_market_cap_from_the_database(tmp_path):
         market.close()
     assert b.window_return('X', 240, 260) == (None, 'split_suspect')
     assert b.window_return('Y', 240, 260) == (pytest.approx(324 / 685 - 1), 'ok')   # no caps: unchanged
+
+
+# --- P2-14: tiny split / stock-dividend records (< 1.05) are ignored, not unresolved ----------
+
+def wobble(base=100.0):
+    """±3% alternating daily moves: every day is a 'big' move for a ~1% split record."""
+    return [(d, base * (1.03 if k % 2 else 1.0)) for k, d in enumerate(CAL)]
+
+
+def test_tiny_split_record_is_ignored_and_the_return_is_raw():
+    w = wobble()
+    b = book({'W': w}, {'W': [(CAL[250], 5053 / 5000)]})
+    assert [e[3] for e in b.split_events] == ['ignored']
+    assert b.adjustments == ()
+    assert b.window_return('W', 240, 261) == (pytest.approx(w[261][1] / w[240][1] - 1), 'ok')
+    assert b.window_closes('W', 240, 261)[1] == 'ok'
+
+
+@pytest.mark.parametrize('factor,state', [(0.953, 'ignored'), (0.95, 'unresolved'), (1.05, 'unresolved')])
+def test_ignore_bound_is_strictly_below_1_05_either_way(factor, state):
+    b = book({'W': wobble()}, {'W': [(CAL[250], factor)]})
+    assert [e[3] for e in b.split_events] == [state]
+    assert b.window_return('W', 240, 261)[1] == ('ok' if state == 'ignored' else 'split_unresolved')
+
+
+def test_ignored_record_does_not_hide_a_nearby_unrecorded_split():
+    p = [(d, 100.0) for d in CAL[:252]] + [(d, 50.0) for d in CAL[252:]]
+    b = book({'P': p}, {'P': [(CAL[250], 5053 / 5000)]})
+    assert [e[3] for e in b.split_events] == ['ignored']
+    assert b.window_return('P', 240, 260) == (None, 'split_suspect')
+
+
+def test_appendix_legend_explains_ignored():
+    from backtest.research.prosperity_health_html import _appendix
+    out = _appendix({'unknown': [], 'no_price': [], 'large_moves': [], 'adjustments': [],
+                     'splits': [{'symbol': 'W', 'fmp_date': CAL[250], 'factor': 1.0106, 'state': 'ignored'}]})
+    assert 'ignored = 比例 &lt; 1.05，收益照算，最多偏差 5%' in out

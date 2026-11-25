@@ -2,7 +2,7 @@
 
 Plan: docs/plans/2026-11-01-prosperity-m12-health-report.md. North star §4.3. Price returns use
 `daily_price` closes with recorded splits resolved in three states (adjusted / already adjusted /
-unresolved); dividends are not included. Nothing here feeds `code_version`.
+unresolved; records below ×1.05 are ignored); dividends are not included. Nothing here feeds `code_version`.
 """
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ MOMENTUM_SKIP = 21
 PRICE_SLACK_DAYS = 5                 # an end / look-back close may be up to 5 trading days early
 SPLIT_SEARCH_DAYS = 5                # event window = FMP split date ± 5 trading days
 SPLIT_ADJUST_MIN = 1.2               # records with max(f, 1/f) < 1.2 are never adjusted
+SPLIT_IGNORE_MAX = 1.05              # records with max(f, 1/f) < 1.05 are ignored: return kept, ≤ 5% off
 SPLIT_MATCH_TOL = 0.15               # |ln(r·f)| < min(0.15, |ln f| / 2) is the same split
 LARGE_MOVE = 2.0                     # single-day moves beyond ×2 / ÷2 go to the appendix
 SHARE_JUMP_MIN = 1.5                 # implied share-count change ≥ ×1.5 / ÷1.5 on a big jump → split_suspect
@@ -119,6 +120,9 @@ class PriceBook:
             for fmp_date, f in sorted(splits.get(symbol, ())):
                 f = float(f)
                 if f == 1 or not n or fmp_date < self.calendar[0] or fmp_date > self.calendar[-1]:
+                    continue
+                if max(f, 1.0 / f) < SPLIT_IGNORE_MAX:
+                    events.append((symbol, fmp_date, f, 'ignored'))
                     continue
                 k = bisect.bisect_left(self.calendar, fmp_date)
                 lo = self.calendar[max(0, k - SPLIT_SEARCH_DAYS)]

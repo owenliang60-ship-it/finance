@@ -314,7 +314,7 @@ def _appendix(app: Mapping[str, Any]) -> str:
         f'<details><summary>D. 拆股记录处理结果（{len(splits)} 条）</summary>'
         + table(['代码', 'FMP 日期', '比例', '状态'], splits)
         + '<p class="dim">adjusted = 已按实际跳变日复权；already_adjusted = 价格已复权；'
-          'unresolved = 无法判定，跨过它的收益记未知。</p>'
+          'unresolved = 无法判定，跨过它的收益记未知；ignored = 比例 &lt; 1.05，收益照算，最多偏差 5%。</p>'
         + table(['代码', '复权跳变日', '比例'], adj) + '</details>',
     ])
 
