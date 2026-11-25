@@ -27,7 +27,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backtest.research.prosperity_health import (PriceBook, apply_bh, board_view,  # noqa: E402
-                                                 load_fundamentals, scheme_report)
+                                                 load_fundamentals, load_pool_liquidity, scheme_report)
 from backtest.research.prosperity_health_html import render  # noqa: E402
 from src.data.prosperity_backup import _sha, wal_bytes as _wal_bytes  # noqa: E402
 from src.data.market_store import MarketStore  # noqa: E402
@@ -100,6 +100,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f'market.db: {exc}', file=sys.stderr)
             return 3
         fundamentals = load_fundamentals(market, symbols)
+        liquidity = load_pool_liquidity(market, [v for sid in computed for v in boards[sid]])
     finally:
         market.close()
 
@@ -108,7 +109,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         print('an input database changed while it was read; nothing written', file=sys.stderr)
         return 6
     memo: dict = {}
-    every = {sid: scheme_report(boards[sid], weekly[sid], prices, fundamentals, memo=memo) for sid in computed}
+    every = {sid: scheme_report(boards[sid], weekly[sid], prices, fundamentals, memo=memo, liquidity=liquidity)
+             for sid in computed}
     family = apply_bh({sid: every[sid] for sid in BH_SCHEMES})
     reports = {sid: every[sid] for sid in schemes}
     inputs = {'prosperity_db': str(args.db), 'prosperity_db_sha256': hashes['db'],

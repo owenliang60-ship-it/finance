@@ -217,14 +217,17 @@ def _ch_ic(ch: Mapping[str, Any]) -> str:
             + table(['持有期', '期数', 'IC 均值', '标准差', 'ICIR', '95% 区间', 'p', 'lag', 'p_bh'], rows))
 
 
-CONTROL_ROWS = (('top', '本方案 Top 40'), ('momentum', '价格动量 Top 40（12-1）'),
+CONTROL_ROWS = (('top', '本方案 Top 40'), ('pool', '景气精选池规则回放（approximate）'),
+                ('momentum', '价格动量 Top 40（12-1）'),
                 ('premium', 'Premium 池（approximate）'), ('universe', '扩展池等权'),
                 ('top_minus_momentum', 'Top 40 − 动量'), ('top_minus_premium', 'Top 40 − Premium'))
 
 
 def _ch_controls(ch: Mapping[str, Any]) -> str:
     out = ['<p class="dim">每个持有期只用共同有效期（三组都有值的期）。Premium 用 selection_compass 纯函数在'
-           '点时财报上重算，4 季 CAGR 是当前值，标 approximate。p 值为描述性，不进 BH 检验族。</p>']
+           '点时财报上重算，4 季 CAGR 是当前值，标 approximate。p 值为描述性，不进 BH 检验族。'
+           '精选池回放基于季末冻结榜与当前价格表（errors 为空时与线上精选池规则一致），'
+           '只取共同有效期里精选池有值的期，期数可能更少。</p>']
     for hz in HORIZONS:
         k = str(hz)
         rng = ch['common_range'][k]
@@ -246,6 +249,9 @@ def _ch_controls(ch: Mapping[str, Any]) -> str:
     out.append('<details><summary>Premium 逐期只数与覆盖率</summary><p class="dim">基本面可评估率低的期'
                '（早期历史季度不足 5 个）Premium 只数很少，该期对照不稳。</p>'
                + table(['as_of', 'Premium 只数', '基本面可评估', 'beta 可用'], prem) + '</details>')
+    pool = [[_e(p['as_of']), DASH if p['members'] is None else str(p['members'])] for p in ch.get('pool_periods', ())]
+    out.append('<details><summary>精选池逐期只数</summary><p class="dim">— = 该期流动性窗口不足或价格过旧，'
+               '无法回放。</p>' + table(['as_of', '精选池只数'], pool) + '</details>')
     return ''.join(out)
 
 

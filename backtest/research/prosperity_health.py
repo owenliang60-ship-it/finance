@@ -18,6 +18,7 @@ from scipy.stats import spearmanr
 from scipy.stats import t as t_dist
 
 from backtest.pipeline.primitives.evaluation import newey_west_tstat
+from src.data.prosperity_pool import LIQUIDITY_TOP, liquidity_ranks, tier_cut
 from terminal.financial_history import detect_split_like_jumps
 
 TOP_N = 40
@@ -551,6 +552,34 @@ def premium_members(view: BoardView, fundamentals: Mapping[str, dict], *, as_of:
     return {'members': chosen, 'coverage': result.get('coverage'), 'basis': 'approximate'}
 
 
+def load_pool_liquidity(market, views: Sequence[BoardView]) -> Dict[str, Optional[Dict[str, int]]]:
+    """Dollar-volume ranks per board date, the live pool's rule; None when the window fails.
+
+    M8 forces the same row set on all four schemes of one batch, so each as_of is computed once.
+    """
+    out: Dict[str, Optional[Dict[str, int]]] = {}
+    for v in views:
+        if v.as_of in out:
+            continue
+        symbols = sorted({r.symbol for r in v.rows})
+        try:
+            out[v.as_of] = dict(liquidity_ranks(market, symbols, v.as_of).ranks)
+        except ValueError:
+            out[v.as_of] = None
+    return out
+
+
+def pool_members(view: BoardView, ranks: Optional[Mapping[str, int]]) -> Optional[Tuple[str, ...]]:
+    """景气精选池 rule on one board: first tier ∩ STRICT/FULL ∩ top-100 dollar volume, in rank order."""
+    if ranks is None:
+        return None
+    ranked = ranked_rows(view)
+    cut = tier_cut(len(ranked))
+    return tuple(r.symbol for r in ranked
+                 if r.rank <= cut and r.grade in POOL_GRADES
+                 and ranks.get(r.symbol, LIQUIDITY_TOP + 1) <= LIQUIDITY_TOP)
+
+
 # ---------------------------------------------------------------------------
 # Report assembly and BH-FDR
 # ---------------------------------------------------------------------------
@@ -582,7 +611,8 @@ def _period_row(res: PeriodResult) -> dict:
 
 
 def scheme_report(views: Sequence[BoardView], weekly: Sequence[BoardView], prices: PriceBook,
-                  fundamentals: Mapping[str, dict], *, memo: Optional[dict] = None) -> dict:
+                  fundamentals: Mapping[str, dict], *, memo: Optional[dict] = None,
+                  liquidity: Optional[Mapping[str, Optional[Mapping[str, int]]]] = None) -> dict:
     from terminal.prosperity.schemes import SCHEMES
     views = sorted(views, key=lambda v: v.as_of)
     memo = {} if memo is None else memo
@@ -604,6 +634,9 @@ def scheme_report(views: Sequence[BoardView], weekly: Sequence[BoardView], price
          'fundamental_ready': ((p.get('coverage') or {}).get('fundamental_ready') or {}).get('ratio'),
          'beta_ready': ((p.get('coverage') or {}).get('beta_ready') or {}).get('ratio')}
         for v, p in zip(views, premiums)]
+    pools = [pool_members(v, liquidity.get(v.as_of)) if liquidity is not None else None for v in views]
+    control_ch['pool_periods'] = [{'as_of': v.as_of, 'members': None if p is None else len(p)}
+                                  for v, p in zip(views, pools)]
     coverage, unknown, large = {}, [], {}
     for h in HORIZONS:
         done = [(i, r) for i, r in enumerate(results[h]) if r.status == 'complete']
@@ -621,12 +654,18 @@ def scheme_report(views: Sequence[BoardView], weekly: Sequence[BoardView], price
             excess = {k: (None if g is None else group_excess(r.returns, g, r.baseline)) for k, g in groups.items()}
             if all(x is not None for x in excess.values()):
                 raw = {k: _group_mean(r.returns, g) for k, g in groups.items()}
-                rows.append((r, excess, raw))
+                rows.append((r, excess, raw, i))
+        pool_rows = []                       # common periods where the pool replay has a value
+        for r, _, _, i in rows:
+            pool_ex = None if pools[i] is None else group_excess(r.returns, pools[i], r.baseline)
+            if pool_ex is not None:
+                pool_rows.append((r, pool_ex, _group_mean(r.returns, pools[i])))
         control_ch['common_periods'][str(h)] = len(rows)
         control_ch['common_range'][str(h)] = [rows[0][0].as_of, rows[-1][0].as_of] if rows else None
         control_ch['horizons'][str(h)] = {
             **{k: {'mean_return': _mean(x[2][k] for x in rows), 'excess': _series([(x[0], x[1][k]) for x in rows])}
                for k in ('top', 'momentum', 'premium')},
+            'pool': {'mean_return': _mean(x[2] for x in pool_rows), 'excess': _series([(x[0], x[1]) for x in pool_rows])},
             'universe': {'mean_return': _mean(x[0].baseline for x in rows), 'excess': 0.0 if rows else None},
             'top_minus_momentum': {'excess': _series([(x[0], x[1]['top'] - x[1]['momentum']) for x in rows])},
             'top_minus_premium': {'excess': _series([(x[0], x[1]['top'] - x[1]['premium']) for x in rows])},
