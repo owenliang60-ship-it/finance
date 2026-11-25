@@ -13,10 +13,6 @@ REVISION_LONG_WEEKS = 13
 # M9 D3: 0–6 days current, 7–14 days usable with a stale badge, >14 missing.
 SNAPSHOT_MAX_STALENESS_DAYS = 7
 FORWARD_STALE_DAYS = 14
-# M9 quarter freeze: first eligible Saturday from day 60; force at/after day 80.
-FREEZE_START_DAYS = 60
-FREEZE_FORCE_DAYS = 80
-FREEZE_COVERAGE = 0.95
 PRE_ANNOUNCE_MAX_STALENESS_DAYS = 14
 PRICE_MAX_STALENESS_DAYS = 7
 MCAP_MAX_STALENESS_DAYS = 10

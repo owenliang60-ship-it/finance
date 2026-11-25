@@ -6,7 +6,6 @@ import math
 import re
 from datetime import date, timedelta
 
-from terminal.prosperity.config import FREEZE_START_DAYS, FREEZE_FORCE_DAYS, FREEZE_COVERAGE
 from terminal.prosperity.kernel import rankable
 
 
@@ -26,12 +25,16 @@ def quarter_labels(start, end):
         y, q = (y + 1, 1) if q == 4 else (y, q + 1)
 
 
+def freeze_date(label):
+    """Last Saturday of the calendar quarter after `label` (Boss 2026-11-13)."""
+    quarter_of(label)
+    y, q = int(label[:4]), int(label[-1])
+    end = quarter_of(f'{y + (q == 4):04d}Q{1 if q == 4 else q + 1}')[1]
+    return (end - timedelta(days=(end.weekday() - 5) % 7)).isoformat()
+
+
 def candidate_saturdays(label):
-    end = quarter_of(label)[1]
-    first, last = end + timedelta(days=FREEZE_START_DAYS), end + timedelta(days=FREEZE_FORCE_DAYS)
-    first += timedelta(days=(5 - first.weekday()) % 7)
-    last += timedelta(days=(5 - last.weekday()) % 7)
-    return tuple((first + timedelta(days=n)).isoformat() for n in range(0, (last-first).days + 1, 7))
+    return (freeze_date(label),)
 
 
 def saturday(value):
@@ -45,7 +48,7 @@ def due_quarter(as_of, frozen_labels, start_quarter='2021Q2'):
     d = saturday(as_of)
     end = f'{d.year:04d}Q{(d.month-1)//3+1}'
     return next((q for q in quarter_labels(start_quarter, end)
-                 if q not in frozen_labels and candidate_saturdays(q)[0] <= as_of), None)
+                 if q not in frozen_labels and freeze_date(q) <= as_of), None)
 
 
 def freeze_coverage(rows, packets, scheme, label):
@@ -59,12 +62,8 @@ def freeze_coverage(rows, packets, scheme, label):
 
 
 def freeze_decision(as_of, label, coverage):
-    d = saturday(as_of)
+    """'calendar' on the quarter's freeze date, else None; coverage is validated and recorded, never a gate."""
+    saturday(as_of)
     if isinstance(coverage, bool) or not math.isfinite(coverage) or not 0 <= coverage <= 1:
         raise ValueError('invalid_freeze_coverage')
-    age = (d - quarter_of(label)[1]).days
-    if age >= FREEZE_FORCE_DAYS:
-        return 'forced'
-    if age >= FREEZE_START_DAYS and coverage >= FREEZE_COVERAGE:
-        return 'coverage'
-    return None
+    return 'calendar' if as_of == freeze_date(label) else None
