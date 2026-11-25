@@ -197,3 +197,83 @@ def test_cli_inputs_must_be_outside_delivery_dir(tmp_path, monkeypatch, capsys, 
     argv[argv.index(flag) + 1] = str(tmp_path / 'd' / 'tmp' / 'input')
     assert cli.main(argv, now=lambda: NOW) == 4
     assert calls == [] and 'inputs_must_be_outside_delivery_dir' in capsys.readouterr().err
+
+
+# --- post-run backup failure (P2-8) -----------------------------------------------------------
+
+def _failing_backup(monkeypatch, cli, exc):
+    calls = []
+    def backup(db, directory):
+        calls.append(db)
+        raise exc
+    monkeypatch.setattr(cli, 'backup_bundle', backup)
+    return calls
+
+
+def test_cli_post_run_backup_failure_still_delivers(tmp_path, monkeypatch, capsys):
+    import json
+    from src.data.prosperity_run import RunOutcome
+    cli, market, calls = _wire(tmp_path, monkeypatch, RunOutcome(0, (), detail={'publication': 'published'}))
+    backups = _failing_backup(monkeypatch, cli, OSError('disk'))
+    rc = cli.main(_live(tmp_path, market, '--delivery-dir', str(tmp_path / 'd'),
+                        '--backup-dir', str(tmp_path / 'b')), now=lambda: NOW)
+    captured = capsys.readouterr()
+    printed = json.loads(captured.out.strip().splitlines()[-1])
+    assert rc == 6 and len(calls) == 1 and len(backups) == 1
+    assert printed['delivery']['status'] == 'delivered'
+    assert printed['backup_error'] == 'OSError: disk'
+    assert 'post_run_backup_failed' in captured.err
+
+
+def test_cli_post_run_backup_insufficient_space_prints_archivable_hint(tmp_path, monkeypatch, capsys):
+    import json
+    import scripts.prosperity_archive as archive
+    from src.data.prosperity_run import RunOutcome
+    from terminal.prosperity.version import code_version
+    cli, market, calls = _wire(tmp_path, monkeypatch, RunOutcome(0, (), detail={'publication': 'published'}))
+    _failing_backup(monkeypatch, cli, ValueError('insufficient_space'))
+    hints = []
+    def hint(db, *, current):
+        hints.append((db, current))
+        return 'ARCHIVE-HINT-TEXT'
+    monkeypatch.setattr(archive, 'archivable_hint', hint)
+    rc = cli.main(_live(tmp_path, market, '--delivery-dir', str(tmp_path / 'd'),
+                        '--backup-dir', str(tmp_path / 'b')), now=lambda: NOW)
+    captured = capsys.readouterr()
+    assert rc == 6 and len(calls) == 1
+    assert json.loads(captured.out.strip().splitlines()[-1])['delivery']['status'] == 'delivered'
+    assert hints == [(tmp_path / 'r.db', code_version())]
+    assert 'ARCHIVE-HINT-TEXT' in captured.err
+
+
+@pytest.mark.parametrize('rc,detail,delivered,expected,has_delivery', [
+    (0, {'publication': 'published'}, 'failed', 7, True),
+    (5, {'publication': 'published'}, None, 5, False),
+])
+def test_cli_post_run_backup_failure_keeps_higher_exit_code(tmp_path, monkeypatch, capsys,
+                                                            rc, detail, delivered, expected, has_delivery):
+    import json
+    from src.data.prosperity_delivery import DeliveryOutcome
+    from src.data.prosperity_run import RunOutcome
+    outcome = DeliveryOutcome(delivered, ('web',), 'pool_text: x') if delivered else None
+    cli, market, calls = _wire(tmp_path, monkeypatch, RunOutcome(rc, (), detail=detail), delivered=outcome)
+    _failing_backup(monkeypatch, cli, OSError('disk'))
+    assert cli.main(_live(tmp_path, market, '--delivery-dir', str(tmp_path / 'd'),
+                          '--backup-dir', str(tmp_path / 'b')), now=lambda: NOW) == expected
+    printed = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert ('delivery' in printed) is has_delivery and len(calls) == int(has_delivery)
+    assert printed['backup_error'] == 'OSError: disk'
+
+
+def test_cli_pre_run_backup_failure_still_aborts(tmp_path, monkeypatch, capsys):
+    from src.data.prosperity_run import RunOutcome
+    from src.data.prosperity_store import ProsperityStore
+    cli, market, calls = _wire(tmp_path, monkeypatch, RunOutcome(0, (), detail={'publication': 'published'}))
+    ProsperityStore(tmp_path / 'r.db', read_only=False).close()
+    weeks = []
+    monkeypatch.setattr(cli, 'run_week', lambda **kw: weeks.append(kw) or RunOutcome(0))
+    backups = _failing_backup(monkeypatch, cli, OSError('disk'))
+    rc = cli.main(_live(tmp_path, market, '--delivery-dir', str(tmp_path / 'd'),
+                        '--backup-dir', str(tmp_path / 'b')), now=lambda: NOW)
+    assert rc == 6 and len(backups) == 1 and weeks == [] and calls == []
+    assert capsys.readouterr().out == ''

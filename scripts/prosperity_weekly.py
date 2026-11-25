@@ -3,6 +3,9 @@
 
 Exit codes: 0 done; 3 a gate failed; 4 invalid arguments; 5 boards computed, publication
 unconfirmed; 6 error; 7 boards published, Telegram delivery (M13, --delivery-dir) failed.
+A failed post-run backup does not stop delivery or the stdout result: the result carries
+`backup_error` and the code is 6 only when everything else succeeded (5 and 7 win).
+A failed pre-run backup is still 6 before any computation.
 Delivery runs only for a live week whose publication is `published` or `already_published`;
 replay modes accept --delivery-dir (the cron wrapper always passes it) and never deliver.
 """
@@ -125,26 +128,40 @@ def main(argv=None, *, now=utcnow):
                                    publishers=publishers, **common)
         finally:
             market.close()
+        backup_error = ''
         if args.backup_dir and out.exit_code in (0, 5):
-            backup_bundle(args.db, args.backup_dir)
+            # Boards are already committed: a failed post-run backup must not block delivery.
+            try:
+                backup_bundle(args.db, args.backup_dir)
+            except Exception as exc:
+                backup_error = f'{type(exc).__name__}: {exc}'
+        result, rc = asdict(out), out.exit_code
         publication = (out.detail or {}).get('publication')
         if (args.live and args.delivery_dir is not None and out.exit_code == 0
                 and publication in ('published', 'already_published')):
             delivery = _deliver(args, now)
-            print(canonical({**asdict(out), 'delivery': delivery}))
-            return 7 if delivery['status'] == 'failed' else 0
-        print(canonical(asdict(out)))
-        return out.exit_code
+            result['delivery'] = delivery
+            rc = 7 if delivery['status'] == 'failed' else 0
+        if backup_error:
+            result['backup_error'] = backup_error
+            print('post_run_backup_failed: ' + backup_error, file=sys.stderr)
+            _print_archivable_hint(args.db, backup_error)
+        print(canonical(result))
+        return rc or (6 if backup_error else 0)
     except Exception as exc:
         print(canonical({'exit_code': 6, 'error': f'{type(exc).__name__}: {exc}'}), file=sys.stderr)
-        if 'insufficient_space' in str(exc) and args.db.is_file():
-            # D5: alert only. Archiving/removal stays a manual, Boss-confirmed step.
-            from scripts.prosperity_archive import archivable_hint
-            try:
-                print(archivable_hint(args.db, current=code_version()), file=sys.stderr)
-            except Exception as hint_exc:
-                print('archive hint unavailable: ' + str(hint_exc), file=sys.stderr)
+        _print_archivable_hint(args.db, str(exc))
         return 6
+
+
+def _print_archivable_hint(db_path: Path, message: str) -> None:
+    if 'insufficient_space' in message and db_path.is_file():
+        # D5: alert only. Archiving/removal stays a manual, Boss-confirmed step.
+        from scripts.prosperity_archive import archivable_hint
+        try:
+            print(archivable_hint(db_path, current=code_version()), file=sys.stderr)
+        except Exception as hint_exc:
+            print('archive hint unavailable: ' + str(hint_exc), file=sys.stderr)
 
 
 def _deliver(args, now) -> dict:
