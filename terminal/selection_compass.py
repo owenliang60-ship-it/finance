@@ -443,9 +443,13 @@ def build_premium_pool(
 
 def _scan_premium_compass(
     *, premium_pool: dict, as_of: str, price_frames: dict,
-    market_cap_observations: dict[str, dict],
+    market_cap_observations: dict[str, dict], enforce_gates: bool = True,
 ) -> Dict[str, Any]:
-    """Daily face: valid weekly Premium membership intersected with EMA30."""
+    """Daily face: valid weekly Premium membership intersected with EMA30.
+
+    enforce_gates=False skips the 95% EMA30 coverage and missing-market-cap section gates: each
+    row keeps its own None (prosperity 0d scans only its picks, P2-16). Pool validity still gates.
+    """
     members = premium_pool.get("members") or []
     coverage = dict(premium_pool.get("coverage") or {})
     if not premium_pool.get("available"):
@@ -476,7 +480,7 @@ def _scan_premium_compass(
     coverage["ema30_ready"] = _coverage_stat(
         sum(result["ready"] for result in ema_results.values()), len(symbols),
     )
-    if symbols and coverage["ema30_ready"]["ratio"] < EMA30_COVERAGE_THRESHOLD:
+    if enforce_gates and symbols and coverage["ema30_ready"]["ratio"] < EMA30_COVERAGE_THRESHOLD:
         return {
             "available": False, "reason": "ema30_coverage_below_threshold",
             "coverage": coverage, "hits": [],
@@ -502,14 +506,14 @@ def _scan_premium_compass(
         })
 
     unavailable_market_caps = [hit["symbol"] for hit in hits if hit["marketCap"] is None]
-    if unavailable_market_caps:
+    if enforce_gates and unavailable_market_caps:
         return {
             "available": False, "reason": "market_cap_unavailable",
             "coverage": coverage, "hits": [],
             "premium_pool_as_of": premium_pool.get("as_of"),
             "market_cap_unavailable_symbols": sorted(unavailable_market_caps),
         }
-    hits.sort(key=lambda hit: (-hit["marketCap"], hit["symbol"]))
+    hits.sort(key=lambda hit: (hit["marketCap"] is None, -(hit["marketCap"] or 0.0), hit["symbol"]))
     # Every member in pool order with its own EMA30 position (None = not ready) and the same
     # market-cap rule; only hits gate the section (prosperity 0d lists all, Boss 2026-11-09).
     member_rows = [{
@@ -765,10 +769,10 @@ def _legacy_scan_selection_compass(
 
 def scan_selection_compass(
     *, premium_pool: dict, as_of: str, price_frames: dict,
-    market_cap_observations: dict[str, dict],
+    market_cap_observations: dict[str, dict], enforce_gates: bool = True,
 ) -> Dict[str, Any]:
     """Public daily compass contract: weekly Premium members above EMA30."""
     return _scan_premium_compass(
         premium_pool=premium_pool, as_of=as_of, price_frames=price_frames,
-        market_cap_observations=market_cap_observations,
+        market_cap_observations=market_cap_observations, enforce_gates=enforce_gates,
     )

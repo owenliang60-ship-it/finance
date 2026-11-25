@@ -293,3 +293,56 @@ def test_daily_compass_returns_every_member_with_the_same_market_cap_rule():
     assert rows["PAD"]["above"] is True and "PAD" in {h["symbol"] for h in result["hits"]}   # normalized like hits
     hits = {h["symbol"]: h for h in result["hits"]}
     assert all(rows[s]["close"] == h["close"] and rows[s]["marketCap"] == h["marketCap"] for s, h in hits.items())
+
+
+def _ungated_case():
+    """SHORT has no prices (EMA30 2/3); BIG and NOCAP are above EMA30, NOCAP has no market cap."""
+    symbols = ["SHORT", "NOCAP", "BIG"]
+    frames = {"NOCAP": price_frame(), "BIG": price_frame()}
+    caps = {"BIG": {"date": "2026-09-04", "market_cap": 50e9}, "SHORT": {"date": "2026-09-04", "market_cap": 5e9}}
+    return symbols, frames, caps
+
+
+def test_ungated_scan_keeps_low_ema30_coverage_and_missing_market_caps():
+    """P2-16: the prosperity 0d scans only its picks and shows gaps per row, never as a whole-section gate."""
+    symbols, frames, caps = _ungated_case()
+    result = scan_selection_compass(premium_pool=premium_payload(symbols), as_of="2026-09-04",
+                                    price_frames=frames, market_cap_observations=caps, enforce_gates=False)
+    assert result["available"] is True and result["reason"] is None
+    assert result["coverage"]["ema30_ready"] == {"covered": 2, "total": 3, "ratio": 2 / 3}
+    assert [h["symbol"] for h in result["hits"]] == ["BIG", "NOCAP"]           # missing cap sorts last
+    assert result["hits"][1]["marketCap"] is None
+    rows = {m["symbol"]: m for m in result["members"]}
+    assert rows["SHORT"]["above"] is None and rows["SHORT"]["close"] is None
+    assert rows["NOCAP"]["above"] is True and rows["NOCAP"]["marketCap"] is None
+
+
+def test_ungated_scan_sorts_several_missing_caps_by_symbol():
+    frames = {s: price_frame() for s in ("ZED", "ABC", "MID")}
+    caps = {"MID": {"date": "2026-09-04", "market_cap": 1e9}}
+    result = scan_selection_compass(premium_pool=premium_payload(["ZED", "ABC", "MID"]), as_of="2026-09-04",
+                                    price_frames=frames, market_cap_observations=caps, enforce_gates=False)
+    assert [h["symbol"] for h in result["hits"]] == ["MID", "ABC", "ZED"]
+
+
+def test_gates_stay_on_by_default():
+    symbols, frames, caps = _ungated_case()
+    result = scan_selection_compass(premium_pool=premium_payload(symbols), as_of="2026-09-04",
+                                    price_frames=frames, market_cap_observations=caps)
+    assert result["available"] is False and result["reason"] == "ema30_coverage_below_threshold"
+    frames["SHORT"] = price_frame(90)
+    result = scan_selection_compass(premium_pool=premium_payload(symbols), as_of="2026-09-04",
+                                    price_frames=frames, market_cap_observations=caps, enforce_gates=True)
+    assert result["available"] is False and result["reason"] == "market_cap_unavailable"
+    assert result["market_cap_unavailable_symbols"] == ["NOCAP"]
+
+
+def test_ungated_scan_still_rejects_an_invalid_pool():
+    pool = premium_payload(["DUP", "DUP"])
+    result = scan_selection_compass(premium_pool=pool, as_of="2026-09-04", price_frames={},
+                                    market_cap_observations={}, enforce_gates=False)
+    assert result["available"] is False and result["reason"] == "premium_pool_invalid"
+    result = scan_selection_compass(premium_pool={"available": False, "reason": "x", "members": []},
+                                    as_of="2026-09-04", price_frames={}, market_cap_observations={},
+                                    enforce_gates=False)
+    assert result["available"] is False and result["reason"] == "x"
