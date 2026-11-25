@@ -169,7 +169,7 @@ sqlite3 "/Users/owen/CC workspace/Finance/data/market.db" ".backup /tmp/health/m
   `--schemes` 只决定输出哪几份 HTML，检验族始终包含全部 4 个方案，所以单出 F1 的 `p_bh` 与全量运行相同。
 - 第 3 章对照组只用共同有效期（动量从 2022-03 起才有），p 值是描述性的。
 - 附录 D 列出每条拆股记录的处理状态；`unresolved` 跨过的收益在附录 A 里记 `split_unresolved`。
-- 独立核对与复权敏感性：`reports/prosperity/m12-health/verify_health.py`（不 import 项目代码）。
+- 独立核对与复权敏感性：`reports/prosperity/m12-health/verify_health.py`（不 import 项目代码）。它只对应 2026-11 验收口径，不含后续新增的 `ignored` 状态（比例 < 1.05 的拆股记录）与市值旁证（`historical_market_cap` 识别未记录拆股）。
 
 ## 网页榜单（M11，本地）
 
@@ -282,12 +282,12 @@ CLI 退出码：0 已写出；4 `--out` 无效（是目录、父目录不存在�
 ## 晨报试运行段（M14）
 
 晨报 08:00 在 0b 成交集中度之后显示"0d. 景气动量精选池（试运行）"。Premium 照旧驱动 🔴；原 0c 选股罗盘已于 2026-11-10 删除（Boss），编号 0d 不变。
-2026-11-19 Boss：0d 只显示景气动量精选池，删去与 Premium 的对比（分支 `morning/0d-prosperity-momentum`，未 merge）。
+2026-11-19 Boss：0d 只显示景气动量精选池，删去与 Premium 的对比（分支 `morning/0d-prosperity-momentum` 已于 2026-11-19 merge main（`17588c94`））。
 
 - 0d 只列景气动量精选池 = 景气精选池 ∩ 14 周动量榜前 30，与周六私聊"景气动量精选"同一份名单。按全主池动量名次升序，
   10 列：标的、动量名次、14周涨幅、景气排名、评级、景气分、收盘、EMA30、相对EMA30、当前市值。`相对EMA30` 写上方 / 下方 / —
   （价格不够算 EMA30，例如上市不满 127 个交易日的新股）。小标题的 `EMA30 x/y` 与 `站上EMA30 n 只` 只数入选行。
-- EMA30 门与 7 天市值门仍对全量景气池计算（覆盖率 ≥95%），只显示入选行：一只新股不会让只有几只的名单整段不可用。
+- P2-16（2026-11-25）起，EMA30 与 7 天市值只对入选行计算，不再用全量景气池的覆盖率门控：入选行缺价显示 —，缺当前市值显示 N/A，整段照常出表；非入选成员缺数不影响本段。
 - 精选池成员在动量榜里无法评分（缺价、拆股未决等）时，表后单列"未评分（N 只，不代表没涨）"，原因写中文。
 - 第 1 段 PMARP、第 2 段量能异常先列"▶ 景气精选池（N）"，再列"▶ 其他 Extended（N）"（2026-11-09）。分组用全量景气精选池（约 35 只），
   不是动量精选池。组内排序不变，🔴 仍标 Premium 成员。池不可用时不分组，段首写"景气池不可用（原因），本段不分组"；
@@ -306,7 +306,7 @@ CLI 退出码：0 已写出；4 `--out` 无效（是目录、父目录不存在�
 | 动量榜尚未生成 | `prosperity_momentum_missing` | 本周 `out/<周六>/` 下没有动量 JSON：查周六投递 `delivery.error` 是否以 `momentum:` 开头（上节排查表），或 `out/` 已被清理 |
 | 动量榜数据异常 | `prosperity_momentum_invalid` | JSON 损坏或结构不符（窗口、交易日数、价格日期、名次、覆盖率等）；晨报 JSON `prosperity_compass.momentum.error` |
 | 动量榜与景气池不符 | `prosperity_momentum_pool_mismatch` | JSON 的 `as_of` 或主池与池文件不同：多为池文件与动量榜不是同一次周更写出的 |
-| EMA30 价格覆盖不足 / 当前市值数据不足 | 同名 | `scan_selection_compass` 的 EMA30 / 市值门（对全量景气池），查 `daily_price` / `historical_market_cap` |
+| EMA30 价格覆盖不足 / 当前市值数据不足 | 同名 | P2-16 起 0d 不再触发这两个门（只对入选行计算、按行显示）；仍出现说明晨报跑的是旧代码或读了旧 JSON，先查部署版本 |
 | 计算异常 / 显示异常 | `prosperity_compass_error` / 显示层 | 晨报日志 `prosperity compass unavailable` / `display failed` |
 
 三个动量原因需要补跑时，按上节"单独运行与独立核对"把 JSON 写到本周位置（两库只读）：

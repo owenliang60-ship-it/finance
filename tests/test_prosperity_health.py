@@ -511,3 +511,235 @@ def test_window_closes_refuses_an_out_of_range_window():
     for start, end in ((-1, 5), (5, 4), (0, len(CAL))):
         with pytest.raises(ValueError, match='window_out_of_range'):
             b.window_closes('A', start, end)
+
+
+# --- P1-6: market-cap continuity flags unrecorded splits the 3% price rule misses -------------
+
+def caps_of(points):
+    """market_cap(symbol, day) over {(symbol, day): cap}; missing days are None."""
+    return lambda symbol, day: points.get((symbol, day))
+
+
+def test_market_cap_continuity_flags_an_unrecorded_split_off_the_exact_ratio():
+    """IESC-like: 685 → 324 is 5.4% off 2:1, but the market cap barely moved (13.65e9 → 12.92e9)."""
+    from backtest.research.prosperity_health import PriceBook
+    x = [(d, 685.0) for d in CAL[:250]] + [(d, 324.0) for d in CAL[250:]]
+    caps = caps_of({('X', CAL[249]): 13.65e9, ('X', CAL[250]): 12.92e9})
+    b = PriceBook(closes={'X': x}, splits={}, calendar=CAL, market_cap=caps)
+    assert b.window_return('X', 240, 260) == (None, 'split_suspect')
+    assert b.window_closes('X', 240, 260) == (None, 'split_suspect')        # the M16 path as well
+    assert b.window_return('X', 251, 270) == (pytest.approx(0.0), 'ok')
+
+
+def test_without_market_cap_the_same_jump_is_a_large_move():
+    x = [(d, 685.0) for d in CAL[:250]] + [(d, 324.0) for d in CAL[250:]]
+    b = book({'X': x})
+    assert b.window_return('X', 240, 260) == (pytest.approx(324 / 685 - 1), 'ok')
+    assert [j['kind'] for j in b.jumps('X', 240, 260)] == ['large_move']
+
+
+def test_a_real_crash_with_a_matching_market_cap_drop_keeps_its_return():
+    from backtest.research.prosperity_health import PriceBook
+    c = [(d, 19.36) for d in CAL[:250]] + [(d, 10.30) for d in CAL[250:]]
+    caps = caps_of({('C', CAL[249]): 19.36e9, ('C', CAL[250]): 10.30e9})
+    b = PriceBook(closes={'C': c}, splits={}, calendar=CAL, market_cap=caps)
+    assert b.window_return('C', 240, 260) == (pytest.approx(10.30 / 19.36 - 1), 'ok')
+    assert 'split_suspect' not in [j['kind'] for j in b.jumps('C', 240, 260)]
+
+
+def test_one_sided_market_cap_falls_back_to_the_price_rule():
+    from backtest.research.prosperity_health import PriceBook
+    x = [(d, 685.0) for d in CAL[:250]] + [(d, 324.0) for d in CAL[250:]]
+    caps = caps_of({('X', CAL[249]): 13.65e9})
+    b = PriceBook(closes={'X': x}, splits={}, calendar=CAL, market_cap=caps)
+    assert b.window_return('X', 240, 260) == (pytest.approx(324 / 685 - 1), 'ok')
+    assert [j['kind'] for j in b.jumps('X', 240, 260)] == ['large_move']
+
+
+@pytest.mark.parametrize('m0,m1,ratio,expected', [
+    (13.65e9, 12.92e9, 0.473, pytest.approx(12.92 / 13.65 / 0.473)),
+    (None, 1e9, 0.5, None), (1e9, None, 0.5, None), (0.0, 1e9, 0.5, None), (1e9, -1.0, 0.5, None),
+    (float('nan'), 1e9, 0.5, None), (1e9, float('inf'), 0.5, None),
+    (1e9, 1e9, 0.0, None), (1e9, 1e9, float('nan'), None), (1e9, 1e9, True, None),
+])
+def test_share_factor_needs_two_positive_finite_caps_and_a_valid_ratio(m0, m1, ratio, expected):
+    from backtest.research.prosperity_health import _share_factor
+    caps = caps_of({('X', 'd0'): m0, ('X', 'd1'): m1})
+    assert _share_factor(caps, 'X', 'd0', 'd1', ratio) == expected
+    assert _share_factor(None, 'X', 'd0', 'd1', 0.5) is None
+
+
+def test_load_reads_market_cap_from_the_database(tmp_path):
+    """PriceBook.load wires historical_market_cap: an unrecorded 2:1 split 5.4% off is flagged."""
+    from backtest.research.prosperity_health import PriceBook
+    from src.data.market_store import MarketStore
+    from tests.prosperity_fixtures import seed_prices
+    path = seed_prices(tmp_path / 'market.db', {
+        'SPY': [(d, 400.0, 10**6) for d in CAL],
+        'X': [(d, 685.0 if k < 250 else 324.0, 1000) for k, d in enumerate(CAL)],
+        'Y': [(d, 685.0 if k < 250 else 324.0, 1000) for k, d in enumerate(CAL)]})
+    w = MarketStore(db_path=path)
+    w.upsert_historical_market_cap('X', [{'date': CAL[249], 'market_cap': 13.65e9},
+                                         {'date': CAL[250], 'market_cap': 12.92e9}])
+    conn = w._get_conn()
+    conn.execute("INSERT INTO fmp_stock_splits (symbol, date, numerator, denominator, split_type, source, "
+                 "fetched_at) VALUES ('Z', ?, 2, 1, 'split', 'test', 't')", (CAL[100],))
+    conn.commit()
+    w.close()
+    market = MarketStore(db_path=path, read_only=True)
+    try:
+        b = PriceBook.load(market, ['X', 'Y'])
+    finally:
+        market.close()
+    assert b.window_return('X', 240, 260) == (None, 'split_suspect')
+    assert b.window_return('Y', 240, 260) == (pytest.approx(324 / 685 - 1), 'ok')   # no caps: unchanged
+
+
+# --- P2-14: tiny split / stock-dividend records (< 1.05) are ignored, not unresolved ----------
+
+def wobble(base=100.0):
+    """±3% alternating daily moves: every day is a 'big' move for a ~1% split record."""
+    return [(d, base * (1.03 if k % 2 else 1.0)) for k, d in enumerate(CAL)]
+
+
+def test_tiny_split_record_is_ignored_and_the_return_is_raw():
+    w = wobble()
+    b = book({'W': w}, {'W': [(CAL[250], 5053 / 5000)]})
+    assert [e[3] for e in b.split_events] == ['ignored']
+    assert b.adjustments == ()
+    assert b.window_return('W', 240, 261) == (pytest.approx(w[261][1] / w[240][1] - 1), 'ok')
+    assert b.window_closes('W', 240, 261)[1] == 'ok'
+
+
+@pytest.mark.parametrize('factor,state', [(0.953, 'ignored'), (0.95, 'unresolved'), (1.05, 'unresolved')])
+def test_ignore_bound_is_strictly_below_1_05_either_way(factor, state):
+    b = book({'W': wobble()}, {'W': [(CAL[250], factor)]})
+    assert [e[3] for e in b.split_events] == [state]
+    assert b.window_return('W', 240, 261)[1] == ('ok' if state == 'ignored' else 'split_unresolved')
+
+
+def test_ignored_record_does_not_hide_a_nearby_unrecorded_split():
+    p = [(d, 100.0) for d in CAL[:252]] + [(d, 50.0) for d in CAL[252:]]
+    b = book({'P': p}, {'P': [(CAL[250], 5053 / 5000)]})
+    assert [e[3] for e in b.split_events] == ['ignored']
+    assert b.window_return('P', 240, 260) == (None, 'split_suspect')
+
+
+def test_appendix_legend_explains_ignored():
+    from backtest.research.prosperity_health_html import _appendix
+    out = _appendix({'unknown': [], 'no_price': [], 'large_moves': [], 'adjustments': [],
+                     'splits': [{'symbol': 'W', 'fmp_date': CAL[250], 'factor': 1.0106, 'state': 'ignored'}]})
+    assert 'ignored = 比例 &lt; 1.05，收益照算，最多偏差 5%' in out
+
+
+# --- P2-15: chapter 3 control — prosperity pool rule replayed on each frozen board ------------
+
+def _f1_weekly(as_of='2026-10-31'):
+    from tests.prosperity_fixtures import storage_batch
+    return next(b for b in storage_batch(count=20, as_of=as_of) if b.board.scheme_id == 'F1')
+
+
+def _first_tier(stored):
+    from src.data.prosperity_pool import tier_cut
+    ranked = [r for r in stored.board.rows if r.status == 'ranked']
+    cut = tier_cut(len(ranked))
+    return [r.symbol for r in sorted(ranked, key=lambda r: r.rank) if r.rank <= cut and r.grade in POOL]
+
+
+POOL = ('STRICT', 'FULL')
+
+
+@pytest.mark.parametrize('illiquid', ['none', 'best', 'tier'])
+def test_pool_replay_matches_build_pool_members(illiquid):
+    from backtest.research.prosperity_health import board_view, pool_members
+    from src.data.prosperity_pool import LiquidityResult, build_pool
+    from tests.prosperity_fixtures import weekdays as wd
+    stored = _f1_weekly()
+    tier = _first_tier(stored)
+    out = {'none': set(), 'best': {tier[0]}, 'tier': set(tier)}[illiquid]
+    symbols = sorted(stored.meta.members)
+    ranks = {s: (150 + i if s in out else i + 1) for i, s in enumerate(symbols)}
+    liquidity = LiquidityResult(stored.board.as_of, tuple(wd('2026-10-30', 30)),
+                                {s: 1e9 / r for s, r in ranks.items()}, ranks)
+    live = build_pool(stored, liquidity, generated_at='2026-10-31T09:10:00Z')
+    got = pool_members(board_view(stored), liquidity.ranks)
+    assert got == tuple(m['symbol'] for m in live['members'])
+    assert len(got) == len(tier) - len(out)
+    assert pool_members(board_view(stored), None) is None
+
+
+def _control_views():
+    s0 = 261
+    early, late = CAL[s0 - 1], CAL[s0 + 63 - 1]
+    closes = {f'R{i:02d}': [(d, 10.0 * (1 + 0.001 * i) ** k) for k, d in enumerate(CAL)] for i in range(45)}
+    funds = {s: quarter_rows([1.0, 1.0, 1.0, 1.0, 1.0, 1.5], ACCEPTED) for s in closes}
+    rows = [row(s, k + 1, beta=1.5) for k, s in enumerate(sorted(closes))]
+    views = [view(rows, as_of=a, frozen_at=a + 'T08:30:00Z') for a in (CAL[100], early, late)]
+    return views, closes, funds, early, late
+
+
+def test_pool_control_uses_common_periods_where_the_pool_has_a_value():
+    from backtest.research.prosperity_health import evaluate_board, group_excess, scheme_report
+    views, closes, funds, early, late = _control_views()
+    ranks = {f'R{i:02d}': 45 - i for i in range(45)}             # R44 most liquid … R00 least (rank 45)
+    liquidity = {CAL[100]: ranks, early: ranks}                  # late: liquidity failed → None
+    b = book(closes)
+    base = scheme_report(views, [], b, funds)
+    rep = scheme_report(views, [], b, funds, liquidity=liquidity)
+    ctrl = rep['chapters']['对照组']
+    assert ctrl['common_periods'] == base['chapters']['对照组']['common_periods']
+    assert ctrl['common_periods']['1'] == 2
+    pool = tuple(f'R{i:02d}' for i in range(9))                   # tier_cut(45) = 9, all ranks ≤ 100
+    assert ctrl['pool_periods'] == [{'as_of': CAL[100], 'members': 9}, {'as_of': early, 'members': 9},
+                                    {'as_of': late, 'members': None}]
+    res = evaluate_board(views[1], b, horizon=1)
+    p1 = ctrl['horizons']['1']['pool']
+    assert p1['excess']['n'] == 1 and p1['excess']['as_of'] == [early]
+    assert p1['excess']['mean'] == pytest.approx(group_excess(res.returns, pool, res.baseline))
+    assert p1['mean_return'] == pytest.approx(sum(res.returns[s][0] for s in pool) / 9)
+
+
+def test_pool_control_without_liquidity_is_empty_and_renders_a_dash():
+    from backtest.research.prosperity_health import scheme_report
+    from backtest.research.prosperity_health_html import render
+    views, closes, funds, *_ = _control_views()
+    rep = scheme_report(views, [], book(closes), funds)
+    ctrl = rep['chapters']['对照组']
+    for h in ('1', '2', '3'):
+        assert ctrl['horizons'][h]['pool']['excess']['n'] == 0
+        assert ctrl['horizons'][h]['pool']['mean_return'] is None
+    assert [p['members'] for p in ctrl['pool_periods']] == [None, None, None]
+    page = render(rep, scheme_id='F1', inputs={})
+    assert '景气精选池规则回放（approximate）' in page and '精选池逐期只数' in page
+    assert '<tr><td>' + views[0].as_of + '</td><td>—</td></tr>' in page
+
+
+def test_pool_control_stays_out_of_the_bh_family():
+    from backtest.research.prosperity_health import apply_bh, scheme_report
+    views, closes, funds, early, _ = _control_views()
+    ranks = {f'R{i:02d}': i + 1 for i in range(45)}
+    b = book(closes)
+    reps = {sid: scheme_report(views, [], b, funds, liquidity={v.as_of: ranks for v in views})
+            for sid in ('F1', 'F1-rank', 'F1-exfin', 'F0')}
+    assert apply_bh(reps)['family'] == 24
+    for rep in reps.values():
+        for h in ('1', '2', '3'):
+            assert 'p_bh' not in rep['chapters']['对照组']['horizons'][h]['pool']['excess']
+
+
+def test_load_pool_liquidity_once_per_board_date_and_none_on_failure(tmp_path, monkeypatch):
+    import backtest.research.prosperity_health as health
+    from src.data.prosperity_pool import LiquidityResult
+    calls = []
+
+    def fake(market, symbols, as_of):
+        calls.append((tuple(symbols), as_of))
+        if as_of == 'bad':
+            raise ValueError('liquidity_window_short')
+        return LiquidityResult(as_of, (), {}, {s: i for i, s in enumerate(symbols, 1)})
+    monkeypatch.setattr(health, 'liquidity_ranks', fake)
+    rows = [row('B', 1), row('A', 2), row('X', status='excluded')]
+    views = [view(rows, as_of='d1'), view(rows, as_of='d1'), view(rows, as_of='bad')]
+    out = health.load_pool_liquidity(object(), views)
+    assert out == {'d1': {'A': 1, 'B': 2, 'X': 3}, 'bad': None}
+    assert calls == [(('A', 'B', 'X'), 'd1'), (('A', 'B', 'X'), 'bad')]

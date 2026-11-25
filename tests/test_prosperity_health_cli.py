@@ -128,3 +128,15 @@ def test_missing_calendar_is_an_input_error(dbs, tmp_path):
     out = tmp_path / 'out'
     assert run(dbs, out) == 3
     assert not out.exists()
+
+
+def test_report_includes_the_prosperity_pool_replay(dbs, tmp_path):
+    """P2-15: chapter 3 gains the pool rule replay, liquidity read from the same market.db."""
+    out = tmp_path / 'out'
+    assert run(dbs, out) == 0
+    html = (out / 'F1.html').read_text()
+    assert '景气精选池规则回放' in html
+    summary = json.loads((out / 'summary.json').read_text())
+    periods = summary['schemes']['F1']['chapters']['对照组']['pool_periods']
+    assert [p['as_of'] for p in periods] == ['2026-09-26', '2026-10-03']
+    assert all(isinstance(p['members'], int) for p in periods)

@@ -233,7 +233,7 @@ Python 冻结 dataclass（因子与权重、变换方式、闸门、行业豁免
 - **已知弱点**：名单集中，平均不到 6 只，单周波动大。2025-02 至 2025-03 下跌段 −36.7%（SPY −17.5%）；2022-01 至 2022-10 下跌段 −3.6%（SPY −24.6%），这一段靠少数能源股，不能当作熊市保护。
 - **价格**：拆股沿用体检报告的三态规则（`PriceBook`）。窗口内有未决或疑似拆股的股票标为不可用，不打分。
 - **缺数不放行**：有效股票不足主池 90%、最后交易日早于榜单日 3 天以上、交易日不足 71 个，整榜失败，两条都不发，任务 rc 7。精选池成员若无法评分（缺价、拆股未决），在景气动量精选里单列"未评分"并写原因，不当作没涨。
-- **边界**：只读，不进 `code_version`，不改打分和精选池规则；不进网页。晨报 0d 切换为只显示景气动量精选池（2026-11-19 Boss；晨报读周六已写出的动量 JSON，不另算；分支 `morning/0d-prosperity-momentum`，未 merge）。这是参考名单，不是验证过的策略：做过 270 周回放回测，但 t 约 1.7，不显著，只有一段历史样本；成交额分按币圈标定，榜单偏大票。
+- **边界**：只读，不进 `code_version`，不改打分和精选池规则；不进网页。晨报 0d 切换为只显示景气动量精选池（2026-11-19 Boss；晨报读周六已写出的动量 JSON，不另算；分支 `morning/0d-prosperity-momentum` 已于 2026-11-19 merge main（`17588c94`））。这是参考名单，不是验证过的策略：做过 270 周回放回测，但 t 约 1.7，不显著，只有一段历史样本；成交额分按币圈标定，榜单偏大票。
 
 ---
 
@@ -241,11 +241,11 @@ Python 冻结 dataclass（因子与权重、变换方式、闸门、行业豁免
 
 **职责**：让晨报从 Premium 平滑切到景气精选池，全程不中断、不静默降级。**不负责**：池怎么选（第四层）；晨报里 EMA30、RVOL 等时机信号本身的逻辑（原样复用）。
 
-**现状**（`scripts/morning_report.py`）：`load_premium_pool()` 读池文件，拿成员集合给技术信号标 🔴。原来对 Premium 成员跑 EMA30 门的 0c 选股罗盘段已于 2026-11-10 删除（Boss）。此后 Premium 池不可用时晨报不另行提示，🔴 直接不出现；是否补提示、下方降级规则如何落地，留到 M15 设计（Boss 2026-11-10）。并行期的 0d 段在同一文件，读取端在 `src/data/prosperity_morning.py`（池按原榜绑定；2026-11-19 起再读同周 M16 动量 JSON，取景气动量精选池，与 Premium 的对比已删，分支 `morning/0d-prosperity-momentum`，未 merge），排查表见 runbook「晨报试运行段（M14）」。
+**现状**（`scripts/morning_report.py`）：`load_premium_pool()` 读池文件，拿成员集合给技术信号标 🔴。原来对 Premium 成员跑 EMA30 门的 0c 选股罗盘段已于 2026-11-10 删除（Boss）。此后 Premium 池不可用时晨报不另行提示，🔴 直接不出现；是否补提示、下方降级规则如何落地，留到 M15 设计（Boss 2026-11-10）。并行期的 0d 段在同一文件，读取端在 `src/data/prosperity_morning.py`（池按原榜绑定；2026-11-19 起再读同周 M16 动量 JSON，取景气动量精选池，与 Premium 的对比已删，分支 `morning/0d-prosperity-momentum` 已于 2026-11-19 merge main（`17588c94`）），排查表见 runbook「晨报试运行段（M14）」。
 
 | 阶段 | 做什么 | 退出条件 |
 |---|---|---|
-| **并行期** | Premium 照旧驱动 🔴（Premium 的 EMA30 段 0c 已于 2026-11-10 删除）；新增一段"景气池（试运行）"：景气池成员跑同一个 EMA30 门，并列出与 Premium 的交集、新增、移出（M14，`src/data/prosperity_morning.py`，晨报 0d 段）。2026-11-09 Boss：0d 列全部成员（站上 EMA30 在前）；第 1 段 PMARP、第 2 段量能异常先列景气精选池、再列其他 Extended，组内排序不变，🔴 保留到 M15；景气池不可用时不分组并写原因。2026-11-19 Boss：0d 改为只显示景气动量精选池（景气池 ∩ 14 周动量榜前 30，按动量名次），EMA30 门仍对全池计算、只显示入选行；删去与 Premium 的对比；第 1/2 段仍按全量景气精选池分组（分支 `morning/0d-prosperity-momentum`，未 merge） | 首份体检报告出来、Boss 看过 |
+| **并行期** | Premium 照旧驱动 🔴（Premium 的 EMA30 段 0c 已于 2026-11-10 删除）；新增一段"景气池（试运行）"：景气池成员跑同一个 EMA30 门，并列出与 Premium 的交集、新增、移出（M14，`src/data/prosperity_morning.py`，晨报 0d 段）。2026-11-09 Boss：0d 列全部成员（站上 EMA30 在前）；第 1 段 PMARP、第 2 段量能异常先列景气精选池、再列其他 Extended，组内排序不变，🔴 保留到 M15；景气池不可用时不分组并写原因。2026-11-19 Boss：0d 改为只显示景气动量精选池（景气池 ∩ 14 周动量榜前 30，按动量名次）；删去与 Premium 的对比；第 1/2 段仍按全量景气精选池分组（分支 `morning/0d-prosperity-momentum` 已于 2026-11-19 merge main（`17588c94`））。P2-16（2026-11-25）：EMA30 与市值只对入选行计算、按行显示，不因非入选成员缺数打掉整段 | 首份体检报告出来、Boss 看过 |
 | **切换** | 新增配置 `SELECTION_POOL_SOURCE = premium / prosperity`，加一个统一的 `load_selection_pool()`，两种池返回同样的结构；晨报文案里的池名改为取自池文件，不再写死"精选Premium池"。Boss 拍板后改配置 | 切换后连续 4 周正常 |
 | **Premium 退役** | 停 Premium 的周更构建；代码归档，不删；`premium_pool.json` 冻结留档 | Boss 确认 |
 
@@ -303,9 +303,9 @@ flowchart LR
 | 12 | M11 网页 | 9 | 核心 | ❌ 最小版（MVP 验收项）；✅ 本地生成器已完成 2026-11-03；完整版 ✅ 可延后 | 纯静态 HTML；本地 `scripts/prosperity_web.py`，云端生成与投递并入 M13；证据 `reports/prosperity/m11-web-20261102/` |
 | 13 | M12 体检报告 | 9, 10 | 核心 | ❌（MVP 验收项）；✅ 本地生成器已完成 2026-11-01 | 固定格式 HTML；本地 `scripts/prosperity_health.py`，云端生成与投递并入 M13；证据 `reports/prosperity/m12-health/` |
 | 14 | M13 Telegram 投递 | 12, 13 | 外围 | ❌ 网页投递（MVP，"网页可访问"靠它）；体检报告投递 ✅；🟡 2026-11-09 push main 33bcbcda，待 11-14 首次自然投递核对 | 周更后发送网页与精选池进出，冻结后附 F1 体检报告；台账按项与 `code_version` 防重、rc 7 告警、20:30 补发；输入不得落在投递目录内；证据 `reports/prosperity/m13-delivery-20261103/` |
-| 15 | M14 晨报并行接入 | 11 | 核心 | ✅ 可延后；🟡 2026-11-09 push main 33bcbcda，11-10 起晨报上线 | "景气池（试运行）"段：池文件按原榜绑定（正向判断）→ 同一个 `scan_selection_compass` → 文本/HTML/图片三处 0d；计算与显示各自兜底，失败只让本段显示原因；证据 `reports/prosperity/m14-morning-20261105/`。2026-11-09 Boss 加：0d 全部成员、第 1/2 段按景气池分组（分支 `prosperity/pool-display`，未 merge；证据 `reports/prosperity/pool-display-20261109/`）。2026-11-19 Boss：0d 只显示景气动量精选池、删 Premium 对比（分支 `morning/0d-prosperity-momentum`，未 merge；证据 `reports/prosperity/morning-0d-momentum-20261119/`） |
+| 15 | M14 晨报并行接入 | 11 | 核心 | ✅ 可延后；🟡 2026-11-09 push main 33bcbcda，11-10 起晨报上线 | "景气池（试运行）"段：池文件按原榜绑定（正向判断）→ 同一个 `scan_selection_compass` → 文本/HTML/图片三处 0d；计算与显示各自兜底，失败只让本段显示原因；证据 `reports/prosperity/m14-morning-20261105/`。2026-11-09 Boss 加：0d 全部成员、第 1/2 段按景气池分组（分支 `prosperity/pool-display` 已于 2026-11-09 merge main（`39962019`）；证据 `reports/prosperity/pool-display-20261109/`）。2026-11-19 Boss：0d 只显示景气动量精选池、删 Premium 对比（分支 `morning/0d-prosperity-momentum` 已于 2026-11-19 merge main（`17588c94`）；证据 `reports/prosperity/morning-0d-momentum-20261119/`） |
 | 16 | M15 晨报切换与 Premium 退役 | 13, 15 | 外围 | ✅ | S4，Boss 看完首份体检报告后 |
-| 17 | M16 动量榜与景气动量精选 | 11, 14 | 外围 | ✅；🟡 2026-11-13 本地验收，分支 `prosperity/m16-momentum`，未 merge | 周报多发两条私聊文本：14 周 V4 上涨榜前 30；景气精选池 ∩ 14 周动量榜前 30（单一窗口，窗口回测见 `reports/prosperity/m16-window-backtest-20261113/`）。`backtest/research/momentum_board.py` + CLI `scripts/momentum_board.py`，由 M13 的 `deliver_week` 以子进程调用；证据 `reports/prosperity/m16-momentum-20261113/`。2026-11-19 起晨报 0d 读同一份 JSON（分支 `morning/0d-prosperity-momentum`，未 merge） |
+| 17 | M16 动量榜与景气动量精选 | 11, 14 | 外围 | ✅；🟡 2026-11-13 本地验收，分支 `prosperity/m16-momentum` 已于 2026-11-13 merge main（`07ea7f82`） | 周报多发两条私聊文本：14 周 V4 上涨榜前 30；景气精选池 ∩ 14 周动量榜前 30（单一窗口，窗口回测见 `reports/prosperity/m16-window-backtest-20261113/`）。`backtest/research/momentum_board.py` + CLI `scripts/momentum_board.py`，由 M13 的 `deliver_week` 以子进程调用；证据 `reports/prosperity/m16-momentum-20261113/`。2026-11-19 起晨报 0d 读同一份 JSON（分支 `morning/0d-prosperity-momentum` 已于 2026-11-19 merge main（`17588c94`）） |
 
 ## 建设路径
 
@@ -327,8 +327,8 @@ flowchart LR
 | 引擎数据读取层 | M4已完成 | 点时输入包、来源级点时标注、NTM契约、EPS拆股校准已在main（31fcdf38，含Codex审查修复）；2026-09-30 可用日期兜底（历史回放中占位申报日期改用同季财报发布日、两个有效日期取较早，Boss 批准，264b3453）；已知限制见M4验收（APH短孤岛 S1 覆盖不到，仍需一手来源核实；ASML strict仅8季） |
 | 因子与打分 | M5/M6/M7已完成 | 方案注册表、因子与打分内核、只读验收CLI已在main（e57f1c19，未接cron）；M7 S1 对拍达标：2021 年后 23 期原站口径 96.0%（6220/6478），原因不明 0，独立抽检 10/10（`reports/prosperity/m7-s1-20260930/`）；已验收快照 live 与 2024-08-17 回放通过，Codex独立验收通过（`reports/prosperity/m6-acceptance-20260930/`、`m6-codex-acceptance-20260930/`）；2026-09-30 按 Boss 拍板改内核：revision 按 4 季折算、预期亏损不进 PE 分位、EPS 按财报财季日期配对（分支 `prosperity/kernel-decisions`，`code_version` 随之变化） |
 | 调度 | M8/M9 已部署 | M9 本地验收通过（f2ff1ee9）；2026-10-25/26 云端冻结链重建（code_version 13e5f9d5，21/21 冻结日一致）；2026-10-26 装周六 16:30/20:30 cron；2026-10-31 首个自然周六 4 张 live 周榜落库（A10） |
-| 输出 | MVP 已上线，待首次自然投递 | M10精选池在云端运行（第一档 ∩ STRICT/FULL ∩ 成交额前 100，11-07 首次云端发布 36 只，首发核对 5 步通过）；M12体检报告与M11网页最小版本地生成器已完成；M13投递 2026-11-09 push，11-14 首次自然投递；网页页首与私聊文本列出精选池（2026-11-09 Boss，分支 `prosperity/pool-display`，未 merge）；M11完整版待定 12 MB 裁剪方案 |
-| 晨报过渡 | 并行期已上线 | Premium继续驱动 🔴；0c 已删（2026-11-10 Boss）；M14 0d 试运行段 2026-11-09 push，11-10 起出现在晨报；0d 列全部成员、第 1/2 段按景气池分组（2026-11-09 Boss，已 merge main 39962019）；0d 改为只显示景气动量精选池（2026-11-19 Boss，分支 `morning/0d-prosperity-momentum`，未 merge）；M15切换与退役等 Boss 看过首份体检报告后拍板 |
+| 输出 | MVP 已上线，待首次自然投递 | M10精选池在云端运行（第一档 ∩ STRICT/FULL ∩ 成交额前 100，11-07 首次云端发布 36 只，首发核对 5 步通过）；M12体检报告与M11网页最小版本地生成器已完成；M13投递 2026-11-09 push，11-14 首次自然投递；网页页首与私聊文本列出精选池（2026-11-09 Boss，分支 `prosperity/pool-display` 已于 2026-11-09 merge main（`39962019`））；M11完整版待定 12 MB 裁剪方案 |
+| 晨报过渡 | 并行期已上线 | Premium继续驱动 🔴；0c 已删（2026-11-10 Boss）；M14 0d 试运行段 2026-11-09 push，11-10 起出现在晨报；0d 列全部成员、第 1/2 段按景气池分组（2026-11-09 Boss，已 merge main 39962019）；0d 改为只显示景气动量精选池（2026-11-19 Boss，分支 `morning/0d-prosperity-momentum` 已于 2026-11-19 merge main（`17588c94`））；M15切换与退役等 Boss 看过首份体检报告后拍板 |
 
 ## 关键架构决策
 
