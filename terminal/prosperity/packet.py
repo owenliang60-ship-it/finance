@@ -19,6 +19,8 @@ from terminal.prosperity.types import InputPacket, SymbolHistory
 
 SEASON_SHIFT_DAYS = 7          # same season bucketing as prosperity_history.SEASON_SHIFT_DAYS
 PRICE_SPLIT_TOLERANCE = math.log(1.25)   # same match band as prosperity_quality.split_basis_audit
+# P1-3: SNDK switched 4 sessions before its 2026-11-20 split; two trading weeks covers it with margin
+PRICE_SPLIT_LOOKBACK = 10
 BETA_CLOSES = 400              # compute_beta uses the last 126 returns; keep a margin for gaps
 
 
@@ -42,23 +44,39 @@ def _quarter_bucket(fiscal: Optional[str]) -> Optional[str]:
 
 
 def _split_adjusted(closes: Sequence[Tuple[str, float]], splits: Sequence[dict]) -> Tuple[List[Tuple[str, float]], bool]:
-    """Divide closes before a split date by its ratio when the stored series still jumps there.
+    """Divide closes still on the pre-split basis by the split ratio.
 
     Same principle as the street EPS rescale (Boss 2026-09-29): only a price jump
-    at the split date matching the ratio counts as confirmation; market.db is untouched.
+    matching the ratio counts as confirmation; market.db is untouched. The vendor can
+    switch up to PRICE_SPLIT_LOOKBACK sessions before the registered date (SNDK 11-16
+    for 11-20) and can leave single post-split rows sandwiched in the old basis (MLI
+    06-25), so walk left from the split date and track which rows are still old-basis.
     """
     out, changed = list(closes), False
     for s in splits:
         num, den, day = s.get("numerator"), s.get("denominator"), (s.get("date") or "")[:10]
         if not (day and split_ratio_eligible(num, den)):
             continue
-        i = bisect_left(closes, day, key=lambda c: c[0][:10])        # closes are date-sorted
-        if i == 0 or i == len(closes) or not (closes[i - 1][1] and closes[i][1]) \
-                or closes[i - 1][1] <= 0 or closes[i][1] <= 0:
-            continue
-        jump, log_r = math.log(closes[i - 1][1] / closes[i][1]), math.log(num / den)
-        if abs(jump - log_r) <= min(PRICE_SPLIT_TOLERANCE, 0.25 * abs(log_r)):
-            out = [(d, p / (num / den) if d[:10] < day else p) for d, p in out]
+        r = num / den
+        log_r = math.log(r)
+        tol = min(PRICE_SPLIT_TOLERANCE, 0.25 * abs(log_r))
+        idx = bisect_left(out, day, key=lambda c: c[0][:10])        # closes are date-sorted
+        if idx == 0 or idx == len(out):
+            continue                                                 # before the first close or a future split
+        in_old, old_indices = False, set()
+        lo = max(1, idx - PRICE_SPLIT_LOOKBACK)
+        for j in range(idx, lo - 1, -1):
+            p_prev, p_curr = out[j - 1][1], out[j][1]
+            if p_prev and p_curr and p_prev > 0 and p_curr > 0:
+                jump = math.log(p_prev / p_curr)
+                if not in_old and abs(jump - log_r) <= tol:
+                    in_old = True
+                elif in_old and abs(jump + log_r) <= tol:
+                    in_old = False
+            if in_old:
+                old_indices.add(j - 1)
+        if in_old:
+            out = [(d, p / r if (k < lo - 1 or k in old_indices) else p) for k, (d, p) in enumerate(out)]
             changed = True
     return out, changed
 

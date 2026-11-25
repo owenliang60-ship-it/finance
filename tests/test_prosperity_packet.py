@@ -170,3 +170,54 @@ def test_listing_date_comes_from_profile_unless_market_cap_history_predates_it()
     relisted = replace(h, market_caps=[("2019-01-02", 5e9)] + h.market_caps)   # vendor ipoDate later than trading history
     assert build(relisted).listing_date is None
     assert build(replace(h, profile={"sector": "Technology"})).listing_date is None
+
+
+# P1-3: market.db 2026-11-24 SNDK closes; the vendor switched to the 8:1 basis on 11-16, four sessions before
+# the registered 2026-11-20 split date
+SNDK_CLOSES = [("2026-10-27", 1304.84), ("2026-10-28", 1404.77), ("2026-10-29", 1330.05), ("2026-10-30", 1150.89),
+               ("2026-11-02", 1075.08), ("2026-11-03", 1126.52), ("2026-11-04", 1037.40), ("2026-11-05", 806.43),
+               ("2026-11-06", 835.06), ("2026-11-09", 886.51), ("2026-11-10", 859.99), ("2026-11-11", 977.69),
+               ("2026-11-12", 937.46), ("2026-11-13", 885.01), ("2026-11-16", 101.14), ("2026-11-17", 99.65),
+               ("2026-11-18", 97.03), ("2026-11-19", 94.39), ("2026-11-20", 79.24), ("2026-11-23", 87.71),
+               ("2026-11-24", 77.95)]
+SNDK_SPLIT = [{"date": "2026-11-20", "numerator": 8.0, "denominator": 1.0}]
+# market.db MLI: 06-25 alone was already on the 2:1 basis, 06-30 switched for good before the 07-01 split
+MLI_CLOSES = [("2026-06-24", 133.17), ("2026-06-25", 67.19), ("2026-06-26", 128.20), ("2026-06-29", 122.83),
+              ("2026-06-30", 61.47), ("2026-07-01", 61.50)]
+
+
+def test_split_switched_days_before_the_registered_date_is_rescaled():
+    from terminal.prosperity.packet import _split_adjusted
+    out, changed = _split_adjusted(SNDK_CLOSES, SNDK_SPLIT)
+    got = dict(out)
+    assert changed is True
+    assert abs(got["2026-10-28"] - 1404.77 / 8) < 1e-9 and abs(got["2026-11-13"] - 885.01 / 8) < 1e-9
+    assert got["2026-11-16"] == 101.14 and got["2026-11-24"] == 77.95
+    assert all(0.75 < b / a < 1.33 for (_, a), (_, b) in zip(out, out[1:]))
+
+
+def test_sandwiched_post_split_row_before_the_switch_is_left_alone():
+    from terminal.prosperity.packet import _split_adjusted
+    out, changed = _split_adjusted(MLI_CLOSES, [{"date": "2026-07-01", "numerator": 2.0, "denominator": 1.0}])
+    assert changed is True
+    expect = [66.585, 67.19, 64.10, 61.415, 61.47, 61.50]
+    assert all(abs(p - e) < 1e-9 for (_, p), e in zip(out, expect))
+    assert all(0.8 <= b / a <= 1.25 for (_, a), (_, b) in zip(out, out[1:]))
+
+
+def test_split_lookback_leaves_adjusted_spiky_and_future_series_alone():
+    from terminal.prosperity.packet import _split_adjusted
+    klac, changed = _split_adjusted(KLAC_CLOSES, [{"date": "2026-06-12", "numerator": 10.0, "denominator": 1.0}])
+    assert changed is True and [p for _, p in klac] == [240.0, 241.164, 254.54, 256.0]
+    nvda = [("2024-06-03", 115.0), ("2024-06-04", 116.4), ("2024-06-05", 122.4), ("2024-06-06", 120.9),
+            ("2024-06-07", 120.8), ("2024-06-10", 121.8), ("2024-06-11", 120.9)]
+    out, changed = _split_adjusted(nvda, [{"date": "2024-06-10", "numerator": 10.0, "denominator": 1.0}])
+    assert changed is False and out == nvda
+    spike = [("2026-03-02", 100.0), ("2026-03-03", 100.0), ("2026-03-04", 200.0), ("2026-03-05", 100.0),
+             ("2026-03-06", 100.0), ("2026-03-09", 100.0)]
+    out, changed = _split_adjusted(spike, [{"date": "2026-03-09", "numerator": 2.0, "denominator": 1.0}])
+    assert changed is False and out == spike
+    # SITM 2026-12-07 split registered while closes end 11-24
+    future = SNDK_CLOSES[-6:]
+    out, changed = _split_adjusted(future, [{"date": "2026-12-07", "numerator": 3.0, "denominator": 1.0}])
+    assert changed is False and out == future
