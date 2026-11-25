@@ -142,6 +142,8 @@ def rankable(row: FactorRow, scheme: Scheme) -> Tuple[bool, Optional[str]]:
         return False, "universe_excluded"
     if "identity_unverified" in row.packet_flags:          # D-7 A: observe, never rank
         return False, "identity_unverified"
+    if "stale_current_fiscal" in row.packet_flags:         # P1-2: statements older than the stale limit
+        return False, "stale_current_fiscal"
     if row.disclosed_quarters < scheme.min_quarters:
         return False, "insufficient_quarters"
     if _coverage(usable_values(row, scheme)[0], scheme) + COVERAGE_TOLERANCE < scheme.min_coverage:

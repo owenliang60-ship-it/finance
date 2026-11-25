@@ -36,8 +36,11 @@ EPS_QUARTERS = 16
 NTM_MIN_ANALYSTS = 3
 # Q14: median period ≥150 days marks a semiannual reporter (e.g. BHP)
 SEMIANNUAL_MEDIAN_GAP_DAYS = 150
-# Same as prosperity_history FUNDAMENTAL gap cap (config/settings.py FUNDAMENTAL_QUARTER_GAP_MAX_DAYS)
-STALE_FISCAL_DAYS = 120
+# P1-2 (2026-11-25): a quarter (91 days) plus the ~84 days from quarter end to the calendar freeze
+# Saturday; 120 started flagging every quarterly reporter on day 31 of the next quarter
+STALE_FISCAL_DAYS = 175
+# Half-year reporters (BHP/RIO/UL/BTI): 182 days plus 88, so the 12-26 / 06-27 freezes keep them
+STALE_SEMIANNUAL_DAYS = 270
 # scripts/morning_report.py BETA_BENCHMARK
 BETA_BENCHMARK = "SPY"
 PIT_RANK = {"approximate": 0, "strict": 1, "live": 2}

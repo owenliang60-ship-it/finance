@@ -258,3 +258,20 @@ def test_stored_params_must_match_their_content_hash():
     d["winsor"]["revenue_yoy"]["hi"] += 1.0                              # edited after it was stored
     with pytest.raises(ValueError, match="params_version_mismatch"):
         params_from_dict(d)
+
+
+def test_stale_current_fiscal_is_observed_not_ranked():
+    # P1-2: a quarter older than STALE_FISCAL_DAYS would otherwise keep ranking on stale statements
+    ok = frow("A", full_values(1), disclosed=6)
+    assert rankable(replace(ok, packet_flags=("stale_current_fiscal",)), F1) == (False, "stale_current_fiscal")
+    both = replace(ok, packet_flags=("stale_current_fiscal", "identity_unverified"))
+    assert rankable(both, F1) == (False, "identity_unverified")
+    short = replace(ok, disclosed_quarters=5, packet_flags=("stale_current_fiscal",))
+    assert rankable(short, F1) == (False, "stale_current_fiscal")
+    rows = [frow(f"S{i}", full_values(i)) for i in range(8)]
+    rows += [replace(frow("Z", full_values(3)), packet_flags=("stale_current_fiscal",))]
+    board = score_board(rows, F1, frozen=None, as_of="2026-09-26", code_version="test")
+    z = next(r for r in board.rows if r.symbol == "Z")
+    assert (z.status, z.observe_reason, z.rank) == ("observe", "stale_current_fiscal", None)
+    assert board.counts == {"ranked": 8, "observe": 1, "excluded": 0}
+    assert sum(board.counts.values()) == len(rows)

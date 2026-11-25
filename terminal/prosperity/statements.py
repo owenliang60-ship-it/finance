@@ -16,8 +16,8 @@ from src.data.fiscal_repair import _fiscal_key
 from src.data.fundamental_value_checks import apply_hard_issues, check_quarter_values
 from src.data.metrics_calculator import _statement_by_income_date
 from src.data.prosperity_quality import statement_availability, statement_known_on
-from terminal.prosperity.config import (SEMIANNUAL_MEDIAN_GAP_DAYS, STALE_FISCAL_DAYS, STATEMENT_QUARTERS,
-                                        STRICT_STATEMENTS_FROM)
+from terminal.prosperity.config import (SEMIANNUAL_MEDIAN_GAP_DAYS, STALE_FISCAL_DAYS, STALE_SEMIANNUAL_DAYS,
+                                        STATEMENT_QUARTERS, STRICT_STATEMENTS_FROM)
 from terminal.prosperity.types import QuarterInputs, SymbolHistory
 
 TABLES = ("income", "balance", "cashflow")
@@ -189,7 +189,9 @@ def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
         row = aligned[t].get(inc_date)
         return seen[t][row["date"]] if row is not None else None
 
-    complete = [r["date"] for r in income if entry("balance", r["date"]) and entry("cashflow", r["date"])]
+    # P1-2: income + balance sheet advance the current quarter; a missing cash flow only blanks its
+    # own fields (cashflow_unavailable) instead of holding every factor back (SAN 2026-09-30)
+    complete = [r["date"] for r in income if entry("balance", r["date"])]
     if not complete:
         return QuarterBuild((), None, ("no_current_fiscal",) + (("statement_alignment_conflict",) if dropped else ()),
                             dropped)
@@ -236,6 +238,7 @@ def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
     gaps = [q.period_days for q in quarters if q.period_days is not None]
     if gaps and statistics.median(gaps) >= SEMIANNUAL_MEDIAN_GAP_DAYS:
         flags.append("semiannual_reporter")
-    if (_d(bound) - _d(current)).days > STALE_FISCAL_DAYS:
+    stale_limit = STALE_SEMIANNUAL_DAYS if "semiannual_reporter" in flags else STALE_FISCAL_DAYS
+    if (_d(bound) - _d(current)).days > stale_limit:
         flags.append("stale_current_fiscal")
     return QuarterBuild(quarters, current[:10], tuple(flags), dropped)
