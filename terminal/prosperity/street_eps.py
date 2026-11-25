@@ -23,7 +23,8 @@ from dataclasses import replace
 from datetime import date
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
-from src.data.prosperity_quality import SAME_QUARTER_DAYS, resolve_eps_quarters, split_basis_audit
+from src.data.prosperity_quality import (SAME_QUARTER_DAYS, resolve_eps_quarters, split_basis_audit,
+                                        split_unrestated_audit)
 from terminal.prosperity.config import EPS_QUARTERS, EPS_STATEMENT_MATCH_DAYS, EPS_STATEMENT_PAIR_DAYS
 from terminal.prosperity.types import EpsQuarter
 
@@ -124,17 +125,41 @@ def announced_eps(earnings: Sequence[Mapping], income_rows: Sequence[Mapping], s
     full = breaks_in(stored)
     near = lambda b: any(abs((_d(b[1]) - _d(f[1])).days) <= SAME_QUARTER_DAYS for f in full)
     divisor, blank, labels = _rescale(quarters, full + [b for b in breaks_in(quarters) if not near(b)])
-
-    def basis(value, k):
-        return None if blank[k] or value is None else value / divisor[k]
+    # P0-2: quarters the vendor never restated after a later split, judged on the rescaled full series
+    s_div, s_blank, _ = _rescale(stored, full)
+    stored_scaled = [{"fiscal_date": q["fiscal_date"], "announce_date": q["announce_date"],
+                      "eps_actual": _scaled(q["eps_actual"], s_div[k], s_blank[k]),
+                      "eps_estimated": _scaled(_attach_estimated(q, rows), s_div[k], s_blank[k])}
+                     for k, q in enumerate(stored)]
+    unrestated = split_unrestated_audit(stored_scaled, list(income_rows), list(splits))["flagged"]
+    last_visible = quarters[-1]["fiscal_date"] if quarters else None
+    for k, q in enumerate(quarters):
+        ends = [end for f, end in unrestated.items()
+                if abs((_d(q["fiscal_date"]) - _d(f)).days) <= SAME_QUARTER_DAYS]
+        if not ends:
+            continue
+        blank[k] = True
+        labels[k].append("eps_split_unconfirmed")
+        if last_visible is None or (_d(max(ends)) - _d(last_visible)).days > SAME_QUARTER_DAYS:
+            labels[k].append("eps_split_retrospective")
 
     out = []
     for k, (q, tags) in enumerate(zip(quarters, labels)):
-        first = next((r for r in rows if r.get("announce_date") == q["announce_date"] and r.get("fiscal_date")
-                      and abs((_d(r["fiscal_date"]) - _d(q["fiscal_date"])).days) <= EPS_STATEMENT_MATCH_DAYS), {})
-        out.append(EpsQuarter(q["fiscal_date"], q["announce_date"][:10], basis(q["eps_actual"], k),
-                              basis(first.get("eps_estimated"), k), tuple(dict.fromkeys(tags))))
+        out.append(EpsQuarter(q["fiscal_date"], q["announce_date"][:10],
+                              _scaled(q["eps_actual"], divisor[k], blank[k]),
+                              _scaled(_attach_estimated(q, rows), divisor[k], blank[k]), tuple(dict.fromkeys(tags))))
     return tuple(out)
+
+
+def _scaled(value, divisor: float, blank: bool):
+    return None if blank or value is None else value / divisor
+
+
+def _attach_estimated(q: Mapping, rows: Sequence[Mapping]):
+    """Vendor estimate of the earnings row that announced this quarter."""
+    first = next((r for r in rows if r.get("announce_date") == q["announce_date"] and r.get("fiscal_date")
+                  and abs((_d(r["fiscal_date"]) - _d(q["fiscal_date"])).days) <= EPS_STATEMENT_MATCH_DAYS), {})
+    return first.get("eps_estimated")
 
 
 def pair_statement_dates(series: Sequence[EpsQuarter], statement_fiscals: Sequence[str]) -> Tuple[EpsQuarter, ...]:

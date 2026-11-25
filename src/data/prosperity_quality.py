@@ -155,7 +155,7 @@ def split_basis_audit(quarters: list[dict], income_rows: list[dict], splits: lis
                    for v in (eps, gaap)) or eps * gaap <= 0:
             continue
         pairs.append({'fiscal_date': q['fiscal_date'], 'ratio': eps / gaap,
-                      'street_eps': eps, 'gaap_eps_diluted': gaap})
+                      'street_eps': eps, 'gaap_eps_diluted': gaap, 'announce_date': q.get('announce_date')})
     events, ignored_events = [], []
     for s in splits:
         num, den = s.get('numerator'), s.get('denominator')
@@ -195,6 +195,11 @@ def split_basis_audit(quarters: list[dict], income_rows: list[dict], splits: lis
             # Old splits before the stored series cannot explain a new boundary.
             if event['date'][:10] < pairs[0]['fiscal_date']:
                 continue
+            # P2-6: a split before the last left-side quarter was released cannot have left that
+            # quarter on the old unit (rows without an announce date skip this check)
+            left_ann = left[-1].get('announce_date')
+            if left_ann and event['date'][:10] <= left_ann[:10]:
+                continue
             ratio = event['ratio']
             event_change = math.log(ratio)
             tolerance = min(math.log(1.25), abs(event_change) * .25)
@@ -206,3 +211,70 @@ def split_basis_audit(quarters: list[dict], income_rows: list[dict], splits: lis
                     'evidence': block})
     return dict(base, status='suspect' if base['issues'] else
                 'no_suspect_detected' if windows else 'no_comparable_windows')
+
+
+def _finite_nonzero(*values) -> bool:
+    return all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and abs(v) > 1e-9
+               for v in values)
+
+
+def split_unrestated_audit(quarters: list[dict], income_rows: list[dict], splits: list[dict]) -> dict:
+    """Pre-split quarters the vendor never restated, proven by GAAP *and* the vendor estimate (P0-2).
+
+    `quarters` are fiscal-sorted and already rescaled by the boundary detector. The baseline is
+    the median street/GAAP ratio of quarters released after the split (or the last paired quarter
+    when none is). A seed is a quarter released on or before the split whose street/GAAP ratio and
+    actual/estimate both sit at the split ratio, in the same direction; one-sided evidence (a GAAP
+    one-off, a stale estimate) never seeds. From a seed the run spreads over neighbouring pre-split
+    releases until a quarter's GAAP ratio agrees with the baseline. Retrospective, like split_basis_audit.
+    Returns {'flagged': {fiscal_date: evidence_end_fiscal}, 'issues': [...]}.
+    """
+    ratio: list = []
+    for q in quarters:
+        fiscal, eps = _date(q.get('fiscal_date')), q.get('eps_actual')
+        matches = [r for r in income_rows if fiscal and _date(r.get('date'))
+                   and abs((_date(r['date']) - fiscal).days) <= SAME_QUARTER_DAYS]
+        gaap = matches[0].get('eps_diluted') if len(matches) == 1 else None
+        ratio.append(eps / gaap if _finite_nonzero(eps, gaap) and eps * gaap > 0 else None)
+    announced = [(q.get('announce_date') or '')[:10] for q in quarters]
+    flagged: dict = {}
+    issues: list = []
+    for s in splits:
+        num, den, s_day = s.get('numerator'), s.get('denominator'), (s.get('date') or '')[:10]
+        if not (_date(s_day) and split_ratio_eligible(num, den)):
+            continue
+        r = num / den
+        log_r = math.log(r)
+        tol = min(math.log(1.25), 0.25 * abs(log_r))
+        post = [i for i, x in enumerate(ratio) if x is not None and announced[i] > s_day]
+        if post:
+            baseline = statistics.median(ratio[i] for i in post)
+            evidence_end = max(quarters[i]['fiscal_date'] for i in post)
+        else:
+            paired = [i for i, x in enumerate(ratio) if x is not None]
+            if not paired:
+                continue
+            baseline, evidence_end = ratio[paired[-1]], quarters[paired[-1]]['fiscal_date']
+        pre = lambda k: 0 <= k < len(quarters) and announced[k] and announced[k] <= s_day
+        for i, q in enumerate(quarters):
+            act, est = q.get('eps_actual'), q.get('eps_estimated')
+            if not (pre(i) and ratio[i] is not None and _finite_nonzero(act, est) and act * est > 0):
+                continue
+            d_gaap, d_est = math.log(ratio[i] / baseline), math.log(act / est)
+            if not any(abs(d_gaap - sign * log_r) <= tol and abs(d_est - sign * log_r) <= tol for sign in (1, -1)):
+                continue
+            run = [i]
+            for step in (1, -1):
+                k = i + step
+                while pre(k) and not (ratio[k] is not None and abs(math.log(ratio[k] / baseline)) <= tol):
+                    run.append(k)
+                    k += step
+            for k in sorted(run):
+                fiscal = quarters[k]['fiscal_date']
+                if any(x['fiscal_date'] == fiscal and x['split_date'] == s_day for x in issues):
+                    continue
+                flagged[fiscal] = max(flagged.get(fiscal, evidence_end), evidence_end)
+                issues.append({'reason': 'eps_split_unrestated', 'fiscal_date': fiscal,
+                               'seed_fiscal': q['fiscal_date'], 'split_date': s_day, 'split_ratio': r,
+                               'baseline_ratio': baseline, 'evidence_end': evidence_end})
+    return {'flagged': flagged, 'issues': issues}

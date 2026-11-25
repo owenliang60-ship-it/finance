@@ -209,3 +209,29 @@ def test_window_aligns_on_the_paired_statement_date():
     assert aligned_eps_window(cost_eps()[:9], "2024-09-01") == ((), "eps_behind_current")   # 22 days off
     window, reason = aligned_eps_window(pair_statement_dates(cost_eps()[:9], COST_STATEMENTS), "2024-09-01")
     assert reason is None and window[-1].fiscal_date == "2024-08-10" and len(window) == 9
+
+
+def test_unrestated_quarters_after_a_rescaled_break_are_blanked():
+    # P0-2 APH: 2025-12-31 (0.97 vs estimate 0.4665, GAAP 0.465) and 2026-03-31 stayed on the pre-2026-09-03 unit
+    from tests.test_prosperity_quality import APH_EARN, APH_GAAP, APH_SPLITS, earn_rows, gaap
+    got = {x.fiscal_date: x for x in announced_eps(earn_rows(APH_EARN), gaap(APH_GAAP), APH_SPLITS, "2026-11-21")}
+    for f in ("2025-12-31", "2026-03-31"):
+        assert got[f].eps_actual is None and got[f].eps_estimated is None
+        assert "eps_split_unconfirmed" in got[f].labels and "eps_split_retrospective" not in got[f].labels
+    assert [got[f].eps_actual for f in ("2025-09-30", "2026-06-30", "2026-09-30")] == [0.51, 0.68, 0.8]
+    assert abs(got["2024-12-31"].eps_actual - 0.275) < 1e-9 and "eps_split_rescaled" in got["2024-12-31"].labels
+    replay = {x.fiscal_date: x for x in announced_eps(earn_rows(APH_EARN), gaap(APH_GAAP), APH_SPLITS, "2026-07-25")}
+    assert "2026-06-30" not in replay
+    for f in ("2025-12-31", "2026-03-31"):
+        assert replay[f].eps_actual is None
+        assert {"eps_split_unconfirmed", "eps_split_retrospective"} <= set(replay[f].labels)
+    assert replay["2025-09-30"].eps_actual == 0.51
+
+
+def test_unrestated_sndk_history_is_blanked_but_the_restated_quarter_kept():
+    from tests.test_prosperity_quality import SNDK_EARN, SNDK_GAAP, SNDK_SPLITS, earn_rows, gaap
+    got = {x.fiscal_date: x for x in announced_eps(earn_rows(SNDK_EARN), gaap(SNDK_GAAP), SNDK_SPLITS, "2026-11-21")}
+    assert got["2026-10-02"].eps_actual == 6.19 and got["2026-10-02"].eps_estimated == 5.83
+    assert "eps_split_unconfirmed" not in got["2026-10-02"].labels
+    assert all(x.eps_actual is None and "eps_split_unconfirmed" in x.labels
+               for f, x in got.items() if f < "2026-10-02")

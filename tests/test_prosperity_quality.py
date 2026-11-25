@@ -327,3 +327,115 @@ def test_report_anchor_uses_same_earnings_floor(tmp_path):
     observed = _SymbolData(s, 'ASML', observed_at='2022-07-10')
     assert observed.current_fiscal('2022-07-10') == '2022-06-30'
     s.close()
+
+
+# P0-2 / P2-6: market.db 2026-11-24 rows (fiscal, announce, street actual, vendor estimate) and income eps_diluted
+APH_EARN = [("2022-06-29", "2022-07-27", 0.38, 0.34), ("2022-09-29", "2022-10-26", 0.4, 0.38),
+            ("2022-12-29", "2023-01-25", 0.39, 0.38), ("2023-03-29", "2023-04-26", 0.35, 0.34),
+            ("2023-06-29", "2023-07-26", 0.36, 0.34), ("2023-09-29", "2023-10-25", 0.39, 0.37),
+            ("2023-12-30", "2024-01-24", 0.41, 0.39), ("2024-03-31", "2024-04-24", 0.4, 0.3674),
+            ("2024-06-30", "2024-07-24", 0.44, 0.41), ("2024-09-30", "2024-10-23", 0.5, 0.45),
+            ("2024-12-31", "2025-01-22", 0.55, 0.2509), ("2025-03-31", "2025-04-23", 0.315, 0.2612),
+            ("2025-06-30", "2025-07-23", 0.405, 0.3333), ("2025-09-30", "2025-10-22", 0.51, 0.3966),
+            ("2025-12-31", "2026-01-28", 0.97, 0.4665), ("2026-03-31", "2026-04-29", 1.06, 0.95),
+            ("2026-06-30", "2026-07-29", 0.68, 0.59), ("2026-09-30", "2026-10-28", 0.8, 0.729)]
+APH_GAAP = [("2022-06-30", 0.19), ("2022-09-30", 0.2), ("2022-12-31", 0.205), ("2023-03-31", 0.18),
+            ("2023-06-30", 0.185), ("2023-09-30", 0.21), ("2023-12-31", 0.21), ("2024-03-31", 0.22),
+            ("2024-06-30", 0.205), ("2024-09-30", 0.24), ("2024-12-31", 0.295), ("2025-03-31", 0.29),
+            ("2025-06-30", 0.43), ("2025-09-30", 0.485), ("2025-12-31", 0.465), ("2026-03-31", 0.36),
+            ("2026-06-30", 0.69), ("2026-09-30", 0.79)]
+APH_SPLITS = [{'date': '2024-06-12', 'numerator': 2.0, 'denominator': 1.0},
+              {'date': '2026-09-03', 'numerator': 2.0, 'denominator': 1.0}]
+SNDK_EARN = [("2023-09-29", "2023-12-28", -2.09028, None), ("2023-12-28", "2023-12-31", -1.43386, None),
+             ("2024-03-31", "2024-06-30", 0.83, None), ("2024-12-27", "2025-03-07", 1.23, 1.22),
+             ("2025-03-28", "2025-05-07", -0.3, -0.39), ("2025-06-27", "2025-08-14", 0.29, 0.00583),
+             ("2025-10-03", "2025-11-06", 1.22, 0.1104), ("2026-01-02", "2026-01-29", 6.2, 0.4525),
+             ("2026-04-03", "2026-04-30", 23.41, 2.92), ("2026-07-03", "2026-08-05", 39.25, 34.96),
+             ("2026-07-03", "2026-08-13", 4.91, 4.37), ("2026-10-02", "2026-10-29", 6.19, 5.83)]
+SNDK_GAAP = [("2023-09-29", -3.6), ("2023-12-28", -2.08), ("2024-03-31", 0.19), ("2024-06-30", 0.83),
+             ("2024-09-30", 1.46), ("2024-12-27", 0.09), ("2025-03-28", -1.66625), ("2025-06-27", -0.02),
+             ("2025-10-03", 0.09375), ("2026-01-02", 0.64375), ("2026-04-03", 2.87875), ("2026-07-03", 5.60375),
+             ("2026-10-02", 6.58)]
+SNDK_SPLITS = [{'date': '2026-11-20', 'numerator': 8.0, 'denominator': 1.0}]
+
+
+def earn_rows(rows):
+    return [{'fiscal_date': f, 'announce_date': a, 'eps_actual': e, 'eps_estimated': est,
+             'match_method': 'estimates_window'} for f, a, e, est in rows]
+
+
+def gaap(rows):
+    return [{'date': d, 'eps_diluted': v} for d, v in rows]
+
+
+def _audit_input(rows, divide_through=None, ratio=1.0):
+    """Quarters as street_eps hands them over: already rescaled by the boundary detector."""
+    out = []
+    for f, a, e, est in rows:
+        k = ratio if divide_through and f <= divide_through else 1.0
+        out.append({'fiscal_date': f, 'announce_date': a, 'eps_actual': None if e is None else e / k,
+                    'eps_estimated': None if est is None else est / k})
+    return out
+
+
+def test_unrestated_quarters_need_both_gaap_and_estimate_evidence():
+    from src.data.prosperity_quality import split_unrestated_audit
+    # APH: the boundary detector already halved ≤ 2024-12-31; 2025-12-31 still on the pre-2026-09-03 unit
+    got = split_unrestated_audit(_audit_input(APH_EARN, '2024-12-31', 2.0), gaap(APH_GAAP), APH_SPLITS)
+    assert got['flagged'] == {'2025-12-31': '2026-09-30', '2026-03-31': '2026-09-30'}
+    assert {i['seed_fiscal'] for i in got['issues']} == {'2025-12-31'}
+    assert all(i['reason'] == 'eps_split_unrestated' and i['split_date'] == '2026-09-03' for i in got['issues'])
+
+
+def test_unrestated_run_spreads_until_gaap_agrees_with_the_post_split_basis():
+    from src.data.prosperity_quality import resolve_eps_quarters, split_unrestated_audit
+    quarters = resolve_eps_quarters(earn_rows(SNDK_EARN), '9999-12-31')['quarters']
+    est = {(f, a): e for f, a, _, e in SNDK_EARN}
+    rows = sorted((dict(q, eps_estimated=est.get((q['fiscal_date'], q['announce_date']))) for q in quarters),
+                  key=lambda q: q['fiscal_date'])
+    got = split_unrestated_audit(rows, gaap(SNDK_GAAP), SNDK_SPLITS)
+    assert '2026-10-02' not in got['flagged'] and {i['seed_fiscal'] for i in got['issues']} == {'2026-04-03'}
+    assert set(got['flagged']) == {q['fiscal_date'] for q in rows if q['fiscal_date'] < '2026-10-02'}
+    assert set(got['flagged'].values()) == {'2026-10-02'}
+
+
+def _after(day, n):
+    from datetime import date, timedelta
+    return (date.fromisoformat(day) + timedelta(days=n)).isoformat()
+
+
+def test_one_sided_evidence_is_not_an_unrestated_quarter():
+    from src.data.prosperity_quality import split_unrestated_audit
+    fiscals = ['2025-03-31', '2025-06-30', '2025-09-30', '2025-12-31', '2026-03-31', '2026-06-30', '2026-09-30']
+    split = [{'date': '2026-05-22', 'numerator': 2.0, 'denominator': 1.0}]
+
+    def case(est_mid, gaap_mid):
+        quarters = [{'fiscal_date': f, 'announce_date': _after(f, 28), 'eps_actual': 1.0,
+                     'eps_estimated': est_mid if f == '2025-12-31' else 0.97} for f in fiscals]
+        income = [{'date': f, 'eps_diluted': gaap_mid if f == '2025-12-31' else 0.9} for f in fiscals]
+        return split_unrestated_audit(quarters, income, split)
+
+    assert case(0.97, 0.45)['flagged'] == {}      # PANW-type: GAAP one-off, actual meets the estimate
+    assert case(0.5, 0.9)['flagged'] == {}        # FAST-type: stale estimate, GAAP on the street basis
+    assert case(0.5, 0.45)['flagged'] == {'2025-12-31': '2026-09-30'}
+    assert split_unrestated_audit([], [], split) == {'flagged': {}, 'issues': []}
+
+
+def _ratio_block(announce):
+    fiscals = ['2024-03-31', '2024-06-30', '2024-09-30', '2024-12-31', '2025-03-31', '2025-06-30']
+    quarters = [{'fiscal_date': f, 'eps_actual': 2.0 if f <= '2024-09-30' else 1.0} for f in fiscals]
+    if announce:
+        for q in quarters:
+            q['announce_date'] = _after(q['fiscal_date'], 25)
+    income = [{'date': f, 'eps_diluted': 1.0} for f in fiscals]
+    return quarters, income
+
+
+def test_split_before_the_last_pre_boundary_release_cannot_explain_the_boundary():
+    quarters, income = _ratio_block(announce=True)
+    early = [{'date': '2024-10-10', 'numerator': 2.0, 'denominator': 1.0}]      # before 2024-09-30 was released
+    assert split_basis_audit(quarters, income, early)['issues'] == []
+    late = [{'date': '2024-11-15', 'numerator': 2.0, 'denominator': 1.0}]
+    assert [i['boundary_fiscal'] for i in split_basis_audit(quarters, income, late)['issues']] == ['2024-12-31']
+    old, income = _ratio_block(announce=False)                                    # legacy rows: no announce date
+    assert [i['boundary_fiscal'] for i in split_basis_audit(old, income, early)['issues']] == ['2024-12-31']
