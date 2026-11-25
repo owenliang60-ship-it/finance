@@ -47,7 +47,9 @@ def parse_args(argv, now):
     p.add_argument('--quality-dir', type=Path, default=ROOT / 'data/quality')
     p.add_argument('--observed-at')
     p.add_argument('--snapshot-sha256', help='optional SHA256 of the fixed input snapshot')
-    p.add_argument('--backup-dir', type=Path, help='matched SQLite/state backups, retaining two sets')
+    p.add_argument('--backup-dir', type=Path,
+                   help='matched SQLite/state backups; per source database, deduplicated by database '
+                        'and candidate state, keeping the newest set of the last two distinct states')
     p.add_argument('--pool-path', type=Path,
                    help='publish the M10 pool file here after a live week; omitted = no publication')
     p.add_argument('--delivery-dir', type=Path,

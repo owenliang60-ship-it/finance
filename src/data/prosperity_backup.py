@@ -145,8 +145,19 @@ def _sync_directory(path):
         os.close(fd)
 
 
+def _signature(manifest):
+    """Restorable state: database content plus candidate records (not gzip bytes or run logs)."""
+    files = manifest['files']
+    return manifest['database_sha256'], tuple(sorted(
+        (k, v) for k, v in files.items() if k.startswith('state/candidates/')))
+
+
 def backup_bundle(db_path, backup_dir, keep=2) -> Path:
     """Return a validated immutable directory; prune only this tool's same-source bundles.
+
+    Retention keeps the newest bundle of each of the last ``keep`` distinct
+    states (database SHA256 + candidate records), so no-op reruns cannot push
+    the pre-write restore point out.
 
     Caller holds finance_prosperity's job lock, so candidate records and SQLite
     are a matched point. Missing databases are explicit FileNotFoundError.
@@ -203,7 +214,7 @@ def backup_bundle(db_path, backup_dir, keep=2) -> Path:
     except BaseException:
         shutil.rmtree(temp, ignore_errors=True)
         raise
-    ours = []
+    ours, newest = [], {}
     for path in sorted(backup_dir.glob(prefix + '*')):
         if not path.is_dir() or path.is_symlink():
             continue
@@ -211,10 +222,13 @@ def backup_bundle(db_path, backup_dir, keep=2) -> Path:
             old = validate_bundle(path)
             if old['source_id'] == source_id:
                 ours.append(path)
+                # Fixed-width UTC names sort by time: the last bundle per state wins.
+                newest[_signature(old)] = path
         except (OSError, ValueError, KeyError, sqlite3.Error):
             continue  # damaged or unrecognized evidence is never a pruning target
-    for path in ours[:-keep]:
-        if path != final:
+    retained = set(sorted(newest.values())[-keep:])
+    for path in ours:
+        if path not in retained and path != final:
             shutil.rmtree(path)
     return final
 

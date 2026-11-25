@@ -112,9 +112,59 @@ def test_retention_only_deletes_own_same_database_bundles(tmp_path):
     other_bundle = backup_bundle(other, backups)
     unrelated = backups / 'manual-keep'
     unrelated.mkdir()
-    ours = [backup_bundle(db, backups) for _ in range(3)]
+    ours = []
+    for i in range(3):
+        database(db, f'state-{i}').close()
+        ours.append(backup_bundle(db, backups))
     assert not ours[0].exists()
     assert all(p.exists() for p in [*ours[1:], other_bundle, unrelated])
+
+
+def test_retention_keeps_pre_write_point_across_noop_reruns(tmp_path):
+    import gzip
+    import shutil
+    from src.data.prosperity_store import ProsperityStore
+    from tests.prosperity_fixtures import storage_batch
+    db, backups = tmp_path / 'result.db', tmp_path / 'backups'
+    runs = Path(str(db) + '.state') / 'runs'
+    manifest = lambda p: json.loads((p / 'manifest.json').read_text())
+    with ProsperityStore(db, read_only=False) as store:
+        assert store._conn.execute('PRAGMA journal_mode').fetchone()[0] == 'wal'
+        a = backup_bundle(db, backups)
+        store.save_batch(storage_batch(as_of='2026-10-24', code_version='test-m9'))
+        b = backup_bundle(db, backups)
+        shas = [manifest(b)['database_sha256']]
+    with ProsperityStore(db, read_only=False):
+        pass
+    runs.mkdir(parents=True)
+    (runs / 'run-1.json').write_text('{"run": 1}')
+    c = backup_bundle(db, backups)
+    shas.append(manifest(c)['database_sha256'])
+    (runs / 'run-2.json').write_text('{"run": 2}')
+    d = backup_bundle(db, backups)
+    shas.append(manifest(d)['database_sha256'])
+    assert a.exists() and d.exists() and not b.exists() and not c.exists()
+    assert len(set(shas)) == 1 and manifest(a)['database_sha256'] != shas[0]
+    def boards(bundle):
+        raw = tmp_path / (bundle.name + '.sqlite')
+        with gzip.open(bundle / 'database.sqlite.gz', 'rb') as src, raw.open('wb') as dst:
+            shutil.copyfileobj(src, dst)
+        with sqlite3.connect(raw) as conn:
+            return conn.execute('SELECT COUNT(*) FROM board').fetchone()[0]
+    assert boards(a) == 0 and boards(d) == 4
+    assert (d / 'state/runs/run-2.json').read_text() == '{"run": 2}'
+
+
+def test_candidate_change_is_a_distinct_state(tmp_path):
+    db, backups = tmp_path / 'p.db', tmp_path / 'backups'
+    database(db).close()
+    candidate(db, 'first')
+    first = backup_bundle(db, backups)
+    candidate(db, 'second')
+    second = backup_bundle(db, backups)
+    assert first.exists() and second.exists()
+    manifests = [json.loads((p / 'manifest.json').read_text()) for p in (first, second)]
+    assert manifests[0]['database_sha256'] == manifests[1]['database_sha256']
 
 
 def test_publish_checks_hash_before_touching_existing_pair(tmp_path, monkeypatch):
