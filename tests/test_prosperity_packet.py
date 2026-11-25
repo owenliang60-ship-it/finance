@@ -221,3 +221,35 @@ def test_split_lookback_leaves_adjusted_spiky_and_future_series_alone():
     future = SNDK_CLOSES[-6:]
     out, changed = _split_adjusted(future, [{"date": "2026-12-07", "numerator": 3.0, "denominator": 1.0}])
     assert changed is False and out == future
+
+
+def _sndk_history():
+    from tests.test_prosperity_consensus import sndk_estimates
+    rows = [("2026-01-02", "2026", "Q2", "2026-02-10 16:00:00"), ("2026-04-03", "2026", "Q3", "2026-05-08 16:00:00"),
+            ("2026-07-03", "2026", "Q4", "2026-08-20 16:00:00"), ("2026-10-02", "2027", "Q1", "2026-11-05 16:00:00")]
+    earn = [er("2026-07-03", "2026-08-13", 4.91, 4.37), er("2026-10-02", "2026-10-29", 6.19, 5.83)]
+    h = hist(rows=rows, earnings=earn)
+    vintage = {t: [dict(r, _observed_at="2026-11-06T04:00:00Z") for r in getattr(h, t)]
+               for t in ("income", "balance", "cashflow")}
+    return replace(h, vintage=vintage, estimates=sndk_estimates(), closes=SNDK_CLOSES, splits=SNDK_SPLIT,
+                   forward_runs_available=True,
+                   market_caps=[("2026-11-24", 1.2e10)])
+
+
+def test_sndk_expectations_share_the_post_split_unit_with_prices():
+    from terminal.prosperity.factors import expectation_factors
+    p = build_packet(_sndk_history(), "2026-11-21", mode="replay", membership_basis="approximate_mcap",
+                     benchmark_closes=[], cutoff=replay_cutoff("2026-11-21"))
+    v = expectation_factors(p).values
+    assert abs(p.consensus.pre_announce.price_pre_announce - 1404.77 / 8) < 1e-9 and "price_split_rescaled" in p.flags
+    assert abs(v["surprise"] - 0.236) < 0.005 and abs(v["revision"] - 3.41) < 0.01 and abs(v["pe_ntm"] - 2.56) < 0.01
+
+
+def test_replay_before_the_split_still_uses_the_stored_post_split_unit():
+    # as_of 11-07 reads snapshots up to 11-07, but closes run to 11-24 and are already divided by 8
+    from terminal.prosperity.factors import expectation_factors
+    p = build_packet(_sndk_history(), "2026-11-07", mode="replay", membership_basis="approximate_mcap",
+                     benchmark_closes=[], cutoff=replay_cutoff("2026-11-07"))
+    assert abs(p.consensus.ntm.value - (56.97 + 57.438 + 63.614 + 68.945) / 8) < 1e-9
+    assert abs(p.price_asof - 835.06 / 8) < 1e-9
+    assert abs(expectation_factors(p).values["pe_ntm"] - 3.38) < 0.01

@@ -142,3 +142,146 @@ def test_ntm_jump_check_uses_the_last_snapshot_that_had_each_quarter():
     last_week = [est("2026-08-08", "2027-07-26", 3.1, 11)]                      # lacks the NTM quarters
     got = ntm_eps(two_weeks_ago + last_week + NVDA_EST, NVDA_EPS, "2026-08-15", cutoff=replay_cutoff("2026-08-15"))
     assert got.value is None and got.missing_reason == "e2_consensus_jump"
+
+
+# P0-1: market.db SNDK weekly snapshots (Q rows, 2026-10 … 2027-10 quarters). FMP moved the quarter ends
+# from the -03 to the -02 dates on 10-31; the 11-21 snapshot is still on the pre-split basis.
+SNDK_WEEKS = [
+    ("2026-07-13", 43.428, 51.337, 49.934, 50.56, 54.538), ("2026-07-18", 43.839, 51.911, 50.424, 51.529, 54.538),
+    ("2026-07-25", 43.839, 51.911, 50.424, 51.529, 54.538), ("2026-08-01", 43.936, 51.966, 49.69, 51.194, 55.203),
+    ("2026-08-08", 45.71, 52.368, 53.025, 56.805, 59.517), ("2026-08-15", 45.71, 52.368, 53.025, 56.805, 59.517),
+    ("2026-08-22", 46.031, 52.195, 53.721, 58.18, 61.574), ("2026-08-29", 46.031, 52.195, 53.721, 58.18, 61.574),
+    ("2026-09-05", 46.031, 52.195, 53.721, 58.18, 61.574), ("2026-09-12", 46.031, 52.195, 53.721, 58.18, 61.361),
+    ("2026-09-19", 46.121, 52.405, 54.01, 58.531, 61.852), ("2026-09-26", 46.108, 52.43, 53.974, 58.509, 61.706),
+    ("2026-10-03", 46.108, 52.43, 53.974, 58.51, 61.706), ("2026-10-10", 46.174, 52.544, 54.05, 58.673, 61.706),
+    ("2026-10-17", 46.174, 52.544, 54.05, 58.673, 61.706), ("2026-10-24", 46.205, 52.772, 54.55, 59.147, 61.706),
+    ("2026-10-31", 46.67, 53.763, 54.674, 59.33, 62.427), ("2026-11-07", 46.67, 56.97, 57.438, 63.614, 68.945),
+    ("2026-11-14", 46.67, 56.97, 57.438, 63.614, 69.279), ("2026-11-21", 46.67, 56.97, 57.438, 63.614, 69.279)]
+SNDK_SPLIT = [{"date": "2026-11-20", "numerator": 8.0, "denominator": 1.0}]
+
+
+def sndk_estimates(weeks=SNDK_WEEKS):
+    out = []
+    for snap, *values in weeks:
+        day = "02" if snap >= "2026-10-31" else "03"
+        fiscals = [f"{y}-{m}-{day}" for y, m in (("2026", "10"), ("2027", "01"), ("2027", "04"), ("2027", "07"),
+                                                  ("2027", "10"))]
+        out += [est(snap, f, v) for f, v in zip(fiscals, values)]
+    return out
+
+
+SNDK_Q = EpsQuarter("2026-10-02", "2026-10-29", 6.19, 5.83, ())      # fmp_earnings, already on the 8:1 basis
+SNDK_ANNOUNCED = [eq("2026-07-03", "2026-08-13", 4.91), SNDK_Q]
+
+
+def _sndk_consensus(estimates, as_of="2026-11-21", **kw):
+    return build_consensus(estimates=estimates, announced=SNDK_ANNOUNCED, current_eps=SNDK_Q,
+                           closes=[("2026-10-28", 1404.77 / 8), ("2026-11-20", 79.24)], as_of=as_of, unit_ok=True,
+                           cutoff=replay_cutoff(as_of), forward_runs_available=True, **kw)
+
+
+def test_every_pre_split_snapshot_is_put_on_the_latest_basis():
+    c = _sndk_consensus(sndk_estimates(), splits=SNDK_SPLIT, last_close_date="2026-11-24")
+    assert abs(c.pre_announce.value - 46.205 / 8) < 1e-9 and c.pre_announce.source == "local_snapshot"
+    assert abs(c.ntm.value - (56.97 + 57.438 + 63.614 + 69.279) / 8) < 1e-9 and c.ntm.snapshot_date == "2026-11-21"
+    assert abs(c.revision.delta_eps - (247.301 - 225.67) / 8) < 1e-9 and c.revision.base_snapshot == "2026-08-22"
+    surprise = (6.19 - c.pre_announce.value) / c.pre_announce.price_pre_announce * 100
+    assert abs(surprise - 0.236) < 0.005
+    assert abs(c.revision.delta_eps / 79.24 * 100 - 3.41) < 0.01 and abs(79.24 / c.ntm.value - 2.56) < 0.01
+    # without split metadata the old behaviour stays: the 8:1 unit is still mixed in
+    raw = _sndk_consensus(sndk_estimates())
+    assert abs(raw.ntm.value - 247.301) < 1e-9
+
+
+def test_post_split_snapshot_pairs_quarters_across_fiscal_date_drift():
+    # ref 10-24 names 2027-01-03 …, the 11-21 snapshot names 2027-01-02 …: ±ESTIMATE_MATCH_DAYS pairs them
+    weeks = [w for w in SNDK_WEEKS if not "2026-10-31" <= w[0] <= "2026-11-14"]
+    c = _sndk_consensus(sndk_estimates(weeks), splits=SNDK_SPLIT, last_close_date="2026-11-24")
+    assert c.ntm.snapshot_date == "2026-11-21" and abs(c.ntm.value - 247.301 / 8) < 1e-9
+
+
+def _mnst(snap, a, b, c):
+    return [est(snap, "2026-09-30", a), est(snap, "2026-12-31", b), est(snap, "2027-03-31", c)]
+
+
+def test_on_latest_basis_divides_only_snapshots_still_on_the_old_unit():
+    from terminal.prosperity.consensus import on_latest_basis
+    rows = (_mnst("2026-08-08", 0.80, 0.85, 0.90) + _mnst("2026-08-15", 0.80, 0.86, 0.90)
+            + _mnst("2026-08-22", 0.40, 0.43, 0.45) + _mnst("2026-08-29", 0.41, 0.43, 0.46))
+    out, divisor, dropped = on_latest_basis(rows, (("2026-08-11", 2.0),))
+    assert divisor == {"2026-08-08": 2.0, "2026-08-15": 2.0, "2026-08-22": 1.0, "2026-08-29": 1.0}
+    assert dropped == () and [r["eps_avg"] for r in out[:3]] == [0.40, 0.425, 0.45]
+    assert [r["eps_avg"] for r in out[6:9]] == [0.40, 0.43, 0.45] and rows[0]["eps_avg"] == 0.80
+    # a snapshot past the verify window that the reference still proves unswitched keeps being divided
+    late = _mnst("2026-08-08", 0.80, 0.85, 0.90) + _mnst("2026-09-19", 0.81, 0.86, 0.91)
+    _, divisor, _ = on_latest_basis(late, (("2026-08-11", 2.0),))
+    assert divisor["2026-09-19"] == 2.0
+    # neither 1 nor the split ratio: unknown unit, dropped
+    odd = _mnst("2026-08-08", 0.80, 0.85, 0.90) + _mnst("2026-08-15", 0.53, 0.57, 0.60)
+    out, divisor, dropped = on_latest_basis(odd, (("2026-08-11", 2.0),))
+    assert dropped == ("2026-08-15",) and {r["snapshot_date"] for r in out} == {"2026-08-08"}
+
+
+def test_on_latest_basis_without_a_reference_drops_the_verify_window():
+    from terminal.prosperity.consensus import on_latest_basis
+    rows = _mnst("2026-07-18", 0.4, 0.43, 0.45) + _mnst("2026-08-08", 0.4, 0.43, 0.45) + _mnst("2026-08-22", 0.4, 0.43, 0.45)
+    out, divisor, dropped = on_latest_basis(rows, (("2026-07-15", 2.0),))
+    assert dropped == ("2026-07-18", "2026-08-08") and divisor == {"2026-08-22": 1.0}
+    assert {r["snapshot_date"] for r in out} == {"2026-08-22"}
+    # no overlapping quarter to compare: dropped inside the window, accepted after it
+    ref = [est("2026-08-08", "2026-06-30", 0.8)]
+    out, divisor, dropped = on_latest_basis(ref + _mnst("2026-08-15", 0.4, 0.43, 0.45) + _mnst("2026-09-12", 0.4, 0.43, 0.45),
+                                            (("2026-08-11", 2.0),))
+    assert dropped == ("2026-08-15",) and divisor == {"2026-08-08": 2.0, "2026-09-12": 1.0}
+    assert on_latest_basis(rows, ()) == ([dict(r) for r in rows], {}, ())
+
+
+def test_split_events_ignore_future_and_spin_off_records():
+    from terminal.prosperity.consensus import split_events
+    splits = [{"date": "2026-12-07", "numerator": 3.0, "denominator": 1.0},        # SITM, after the last close
+              {"date": "2025-11-03", "numerator": 239.0, "denominator": 100.0},    # DD spin-off factor
+              {"date": "2026-11-20", "numerator": 8.0, "denominator": 1.0},
+              {"date": "2026-06-24", "numerator": 1.0, "denominator": 3.0}]
+    assert split_events(splits, "2026-11-24") == (("2026-06-24", 1 / 3), ("2026-11-20", 8.0))
+    assert split_events(splits, None) == ()
+    c = _sndk_consensus(sndk_estimates(), splits=[{"date": "2026-12-07", "numerator": 8.0, "denominator": 1.0}],
+                        last_close_date="2026-11-24")
+    assert abs(c.ntm.value - 247.301) < 1e-9
+
+
+def test_pre_announcement_blanks_a_value_on_the_other_side_of_a_split():
+    events = (("2026-06-01", 2.0),)
+    vendor = EpsQuarter("2026-03-31", "2026-04-29", 2.0, 1.0, ())       # actual restated, vendor estimate not
+    closes = [("2026-04-28", 50.0)]
+    got = pre_announcement_consensus(vendor, [], closes, cutoff=replay_cutoff("2026-04-29"), events=events)
+    assert (got.value, got.source, got.missing_reason) == (None, "vendor_estimate", "split_basis_unconfirmed")
+    flipped = EpsQuarter("2026-03-31", "2026-04-29", 0.5, 1.0, ())
+    got = pre_announcement_consensus(flipped, [], closes, cutoff=replay_cutoff("2026-04-29"), events=events)
+    assert got.missing_reason == "split_basis_unconfirmed"
+    # local snapshots are already on the latest basis: only an unrestated (too large) actual is a mismatch
+    q = EpsQuarter("2026-06-30", "2026-08-01", 2.4, None, ())
+    rows = [est("2026-07-25", "2026-06-28", 1.20)]
+    late = (("2026-08-10", 2.0),)
+    got = pre_announcement_consensus(q, rows, [("2026-07-31", 80.0)], cutoff=replay_cutoff("2026-08-01"), events=late)
+    assert got.missing_reason == "split_basis_unconfirmed"
+    small = EpsQuarter("2026-06-30", "2026-08-01", 0.6, None, ())
+    got = pre_announcement_consensus(small, rows, [("2026-07-31", 80.0)], cutoff=replay_cutoff("2026-08-01"), events=late)
+    assert (got.value, got.missing_reason) == (1.20, None)
+    # snapshot taken after the split: nothing to guard
+    got = pre_announcement_consensus(q, rows, [("2026-07-31", 80.0)], cutoff=replay_cutoff("2026-08-01"),
+                                     events=(("2026-07-20", 2.0),))
+    assert (got.value, got.missing_reason) == (1.20, None)
+
+
+def test_normal_inputs_are_unchanged_by_split_metadata():
+    # NVDA-type: split long before every snapshot and quarter
+    q = EpsQuarter("2026-07-31", "2026-08-27", 1.05, 1.0, ())
+    rows = [est("2026-08-22", "2026-07-27", 1.01), est("2026-08-22", "2026-10-26", 1.2),
+            est("2026-08-22", "2027-01-25", 1.3), est("2026-08-22", "2027-04-26", 1.4),
+            est("2026-08-22", "2027-07-26", 1.5)]
+    kw = dict(estimates=rows, announced=[q], current_eps=q, closes=[("2026-08-26", 180.0), ("2026-08-28", 181.0)],
+              as_of="2026-08-29", unit_ok=True, cutoff=replay_cutoff("2026-08-29"), forward_runs_available=True)
+    base = build_consensus(**kw)
+    with_splits = build_consensus(**kw, splits=[{"date": "2024-06-10", "numerator": 10.0, "denominator": 1.0}],
+                                  last_close_date="2026-08-28")
+    assert with_splits == base and base.pre_announce.value == 1.01

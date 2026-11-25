@@ -98,9 +98,13 @@ def build_packet(history: SymbolHistory, as_of: str, *, mode: str, cutoff, membe
     estimates = [r for r in history.estimates if r["snapshot_date"][:10] <= as_of[:10]]
     currency = qb.quarters[-1].reported_currency if qb.quarters else None
     unit_ok = unit_verified(currency, history.is_adr)
+    # Whole stored series, never sliced at as_of: the same retrospective unit as the price and
+    # street EPS rescale above, so a replay before a split sees estimates on the stored price unit (P0-1)
+    last_close_date = history.closes[-1][0] if history.closes else None
     consensus = build_consensus(estimates=estimates, announced=announced, current_eps=window[-1] if window else None,
                                 closes=closes, as_of=as_of, unit_ok=unit_ok, cutoff=cutoff,
-                                forward_runs_available=history.forward_runs_available)
+                                forward_runs_available=history.forward_runs_available,
+                                splits=history.splits, last_close_date=last_close_date)
     price, price_date = _last_on_or_before(closes, as_of, PRICE_MAX_STALENESS_DAYS)
     mcap, mcap_date = _last_on_or_before(history.market_caps, as_of, MCAP_MAX_STALENESS_DAYS)
     beta = None

@@ -22,6 +22,9 @@ PRICE_MAX_STALENESS_DAYS = 7
 MCAP_MAX_STALENESS_DAYS = 10
 # North-star: estimates match fiscal quarters within ±10 days; EPS ↔ statements within ±20 (Codex SAME_QUARTER_DAYS)
 ESTIMATE_MATCH_DAYS = 10
+# P0-1: a weekly snapshot this close after a split must prove its unit against a pre-split snapshot
+# (four weekly runs; SNDK 11-21 was still on the pre-split basis one day after its 11-20 split)
+ESTIMATE_SPLIT_VERIFY_DAYS = 28
 EPS_STATEMENT_MATCH_DAYS = 20
 # Boss 2026-09-30 ④: an EPS quarter pairs with the nearest statement quarter within half a quarter
 # (2026-09-29 snapshot: COST drifts up to 22 days, BIP 37; quarters are ≥84 days apart)
