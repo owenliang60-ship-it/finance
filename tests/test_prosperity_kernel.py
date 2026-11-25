@@ -275,3 +275,32 @@ def test_stale_current_fiscal_is_observed_not_ranked():
     assert (z.status, z.observe_reason, z.rank) == ("observe", "stale_current_fiscal", None)
     assert board.counts == {"ranked": 8, "observe": 1, "excluded": 0}
     assert sum(board.counts.values()) == len(rows)
+
+
+def test_non_finite_values_are_rejected_by_the_transforms():
+    # P2-5: NaN passes every min/max clip and turns the whole composite into NaN
+    p = winsor_params([1.0, 2.0, 3.0, 4.0], 3.0)
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="non_finite_value"):
+            winsor_z(bad, p)
+        with pytest.raises(ValueError, match="non_finite_value"):
+            rank_z(bad, (1.0, 2.0, 3.0))
+
+
+def test_one_non_finite_factor_value_does_not_move_its_peers():
+    clean = [frow(f"S{i}", full_values(i)) for i in range(8)]
+    bad = frow("X", {**full_values(4), "revenue_yoy": float("nan"), "eps_sue": float("inf")},
+               aux={"net_margin_yoy": 1.0, "ntm_eps": 5.0, "ttm_eps": 4.0, "gm_slope": float("nan"), "ep_ntm": None})
+    values, missing = usable_values(bad, F1)
+    assert values["revenue_yoy"] is None and missing["revenue_yoy"] == "non_finite"
+    assert values["eps_sue"] is None and missing["eps_sue"] == "non_finite"
+    base = score_board(clean, F1, frozen=None, as_of="2026-09-26", code_version="test")
+    mixed = score_board(clean + [bad], F1, frozen=None, as_of="2026-09-26", code_version="test")
+    no_x = score_board(clean + [frow("X", {**full_values(4), "revenue_yoy": None, "eps_sue": None})], F1,
+                       frozen=None, as_of="2026-09-26", code_version="test")
+    z = lambda board: {r.symbol: r.z for r in board.rows if r.symbol != "X"}
+    assert z(mixed) == z(no_x)
+    x = next(r for r in mixed.rows if r.symbol == "X")
+    assert x.score is not None and math.isfinite(x.score)
+    assert all(math.isfinite(v) for r in mixed.rows for v in (r.z or {}).values() if v is not None)
+    assert base.counts["ranked"] == 8

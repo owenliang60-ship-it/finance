@@ -92,13 +92,21 @@ def winsor_params(values: Sequence[float], k: float) -> WinsorParams:
     return WinsorParams(lo, hi, statistics.fmean(clipped), statistics.pstdev(clipped))
 
 
+def _finite(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
 def winsor_z(value: float, p: WinsorParams, clip: float = 3.0) -> float:
+    if not math.isfinite(value):
+        raise ValueError("non_finite_value")
     z = (min(max(value, p.lo), p.hi) - p.mu) / p.sigma
     return max(-clip, min(clip, z))
 
 
 def rank_z(value: float, reference: Sequence[float]) -> float:
     """Standardized mid-rank (QMJ, D-6): p = (below + ½·equal) / n, z = (p − ½)·√12."""
+    if not math.isfinite(value):
+        raise ValueError("non_finite_value")
     below = bisect.bisect_left(reference, value)
     equal = bisect.bisect_right(reference, value) - below
     return ((below + 0.5 * equal) / len(reference) - 0.5) * math.sqrt(12)
@@ -130,6 +138,8 @@ def usable_values(row: FactorRow, scheme: Scheme) -> Tuple[Dict[str, Optional[fl
             values[f] = row.values.get(f)
             if values[f] is None:
                 missing[f] = row.missing.get(f, "missing")
+            elif not _finite(values[f]):                # P2-5: stored or hand-built rows too
+                values[f], missing[f] = None, "non_finite"
     return values, missing
 
 
@@ -152,7 +162,10 @@ def rankable(row: FactorRow, scheme: Scheme) -> Tuple[bool, Optional[str]]:
 
 
 def _slope(row: FactorRow) -> Optional[float]:
-    return None if industry_matches(row.industry, EXEMPT_INDUSTRIES) else row.aux.get("gm_slope")
+    if industry_matches(row.industry, EXEMPT_INDUSTRIES):
+        return None
+    slope = row.aux.get("gm_slope")
+    return slope if slope is None or _finite(slope) else None
 
 
 def estimate_params(rows: Sequence[FactorRow], scheme: Scheme, *, as_of: str, code_version: str) -> ParamsPackage:

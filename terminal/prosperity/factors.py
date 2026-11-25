@@ -7,6 +7,7 @@ Pure functions: no reads, no writes.
 """
 from __future__ import annotations
 
+import math
 import statistics
 from dataclasses import dataclass
 from datetime import date
@@ -369,6 +370,11 @@ def compute_factor_row(packet: InputPacket) -> FactorRow:
     else:
         values["growth_4q"] = (values["revenue_ttm_leg"] + values["eps_ttm_leg"]) / 2 * 100
     values.update(beta=packet.beta, price=packet.price_asof)
+    # P2-5: a NaN/Inf input (statement value, price) must leave the row blank, never non-finite
+    for f in set(SCORING_FACTORS) | set(AUX_KEYS):
+        v = values.get(f)
+        if v is not None and (isinstance(v, bool) or not math.isfinite(v)):
+            values[f], missing[f] = None, "non_finite"
     labels = [lab for part in parts for lab in part.labels]
     listing_days = None
     if packet.listing_date:

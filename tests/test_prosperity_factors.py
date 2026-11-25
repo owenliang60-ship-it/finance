@@ -229,3 +229,18 @@ def test_packet_without_current_fiscal_is_not_blamed_on_eps():
     row = compute_factor_row(pkt([]))
     assert row.missing["eps_sue"] == "no_current_fiscal" and row.missing["growth_4q"] == "no_statements"
     assert eps_factors(()).missing["eps_sue"] == "eps_behind_current"
+
+
+def test_non_finite_inputs_never_reach_the_factor_row():
+    # P2-5: a NaN revenue or an infinite price used to flow into scoring values and aux
+    import math
+    qs = _qs([100, 100, 100, 100, 100, 110, 130, 140])
+    qs[-1] = qin(D8[-1], rev=float("nan"))
+    eps = [eps_q(f, 1.0 + 0.1 * i) for i, f in enumerate(D8)]
+    p = pkt(qs, eps, cons(pre=1.0, price_pre=float("nan"), ntm=5.0, ttm=4.0, delta=0.4), price=float("inf"))
+    row = compute_factor_row(p)
+    for name, v in list(row.values.items()) + list(row.aux.items()):
+        assert v is None or (not isinstance(v, bool) and math.isfinite(v)), (name, v)
+    assert row.values["revenue_yoy"] is None and row.missing["revenue_yoy"] == "non_finite"
+    assert row.values["surprise"] is None and row.missing["surprise"] == "non_finite"
+    assert row.aux["pe_ntm"] is None and row.values["revision"] == 0.0     # Δ / inf is a finite 0

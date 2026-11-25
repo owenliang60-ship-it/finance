@@ -14,6 +14,7 @@ only half of the run.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
@@ -42,7 +43,9 @@ class ValueIssue:
 
 
 def _num(value):
-    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+    """A finite real number, else None (P2-5: NaN slips through every comparison-based check)."""
+    return (value if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+            else None)
 
 
 def _unit_step(prev_rev, rev) -> int:
