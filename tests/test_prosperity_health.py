@@ -511,3 +511,85 @@ def test_window_closes_refuses_an_out_of_range_window():
     for start, end in ((-1, 5), (5, 4), (0, len(CAL))):
         with pytest.raises(ValueError, match='window_out_of_range'):
             b.window_closes('A', start, end)
+
+
+# --- P1-6: market-cap continuity flags unrecorded splits the 3% price rule misses -------------
+
+def caps_of(points):
+    """market_cap(symbol, day) over {(symbol, day): cap}; missing days are None."""
+    return lambda symbol, day: points.get((symbol, day))
+
+
+def test_market_cap_continuity_flags_an_unrecorded_split_off_the_exact_ratio():
+    """IESC-like: 685 → 324 is 5.4% off 2:1, but the market cap barely moved (13.65e9 → 12.92e9)."""
+    from backtest.research.prosperity_health import PriceBook
+    x = [(d, 685.0) for d in CAL[:250]] + [(d, 324.0) for d in CAL[250:]]
+    caps = caps_of({('X', CAL[249]): 13.65e9, ('X', CAL[250]): 12.92e9})
+    b = PriceBook(closes={'X': x}, splits={}, calendar=CAL, market_cap=caps)
+    assert b.window_return('X', 240, 260) == (None, 'split_suspect')
+    assert b.window_closes('X', 240, 260) == (None, 'split_suspect')        # the M16 path as well
+    assert b.window_return('X', 251, 270) == (pytest.approx(0.0), 'ok')
+
+
+def test_without_market_cap_the_same_jump_is_a_large_move():
+    x = [(d, 685.0) for d in CAL[:250]] + [(d, 324.0) for d in CAL[250:]]
+    b = book({'X': x})
+    assert b.window_return('X', 240, 260) == (pytest.approx(324 / 685 - 1), 'ok')
+    assert [j['kind'] for j in b.jumps('X', 240, 260)] == ['large_move']
+
+
+def test_a_real_crash_with_a_matching_market_cap_drop_keeps_its_return():
+    from backtest.research.prosperity_health import PriceBook
+    c = [(d, 19.36) for d in CAL[:250]] + [(d, 10.30) for d in CAL[250:]]
+    caps = caps_of({('C', CAL[249]): 19.36e9, ('C', CAL[250]): 10.30e9})
+    b = PriceBook(closes={'C': c}, splits={}, calendar=CAL, market_cap=caps)
+    assert b.window_return('C', 240, 260) == (pytest.approx(10.30 / 19.36 - 1), 'ok')
+    assert 'split_suspect' not in [j['kind'] for j in b.jumps('C', 240, 260)]
+
+
+def test_one_sided_market_cap_falls_back_to_the_price_rule():
+    from backtest.research.prosperity_health import PriceBook
+    x = [(d, 685.0) for d in CAL[:250]] + [(d, 324.0) for d in CAL[250:]]
+    caps = caps_of({('X', CAL[249]): 13.65e9})
+    b = PriceBook(closes={'X': x}, splits={}, calendar=CAL, market_cap=caps)
+    assert b.window_return('X', 240, 260) == (pytest.approx(324 / 685 - 1), 'ok')
+    assert [j['kind'] for j in b.jumps('X', 240, 260)] == ['large_move']
+
+
+@pytest.mark.parametrize('m0,m1,ratio,expected', [
+    (13.65e9, 12.92e9, 0.473, pytest.approx(12.92 / 13.65 / 0.473)),
+    (None, 1e9, 0.5, None), (1e9, None, 0.5, None), (0.0, 1e9, 0.5, None), (1e9, -1.0, 0.5, None),
+    (float('nan'), 1e9, 0.5, None), (1e9, float('inf'), 0.5, None),
+    (1e9, 1e9, 0.0, None), (1e9, 1e9, float('nan'), None), (1e9, 1e9, True, None),
+])
+def test_share_factor_needs_two_positive_finite_caps_and_a_valid_ratio(m0, m1, ratio, expected):
+    from backtest.research.prosperity_health import _share_factor
+    caps = caps_of({('X', 'd0'): m0, ('X', 'd1'): m1})
+    assert _share_factor(caps, 'X', 'd0', 'd1', ratio) == expected
+    assert _share_factor(None, 'X', 'd0', 'd1', 0.5) is None
+
+
+def test_load_reads_market_cap_from_the_database(tmp_path):
+    """PriceBook.load wires historical_market_cap: an unrecorded 2:1 split 5.4% off is flagged."""
+    from backtest.research.prosperity_health import PriceBook
+    from src.data.market_store import MarketStore
+    from tests.prosperity_fixtures import seed_prices
+    path = seed_prices(tmp_path / 'market.db', {
+        'SPY': [(d, 400.0, 10**6) for d in CAL],
+        'X': [(d, 685.0 if k < 250 else 324.0, 1000) for k, d in enumerate(CAL)],
+        'Y': [(d, 685.0 if k < 250 else 324.0, 1000) for k, d in enumerate(CAL)]})
+    w = MarketStore(db_path=path)
+    w.upsert_historical_market_cap('X', [{'date': CAL[249], 'market_cap': 13.65e9},
+                                         {'date': CAL[250], 'market_cap': 12.92e9}])
+    conn = w._get_conn()
+    conn.execute("INSERT INTO fmp_stock_splits (symbol, date, numerator, denominator, split_type, source, "
+                 "fetched_at) VALUES ('Z', ?, 2, 1, 'split', 'test', 't')", (CAL[100],))
+    conn.commit()
+    w.close()
+    market = MarketStore(db_path=path, read_only=True)
+    try:
+        b = PriceBook.load(market, ['X', 'Y'])
+    finally:
+        market.close()
+    assert b.window_return('X', 240, 260) == (None, 'split_suspect')
+    assert b.window_return('Y', 240, 260) == (pytest.approx(324 / 685 - 1), 'ok')   # no caps: unchanged

@@ -11,7 +11,7 @@ import math
 import statistics
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 from scipy.stats import spearmanr
@@ -33,6 +33,7 @@ SPLIT_SEARCH_DAYS = 5                # event window = FMP split date ± 5 tradin
 SPLIT_ADJUST_MIN = 1.2               # records with max(f, 1/f) < 1.2 are never adjusted
 SPLIT_MATCH_TOL = 0.15               # |ln(r·f)| < min(0.15, |ln f| / 2) is the same split
 LARGE_MOVE = 2.0                     # single-day moves beyond ×2 / ÷2 go to the appendix
+SHARE_JUMP_MIN = 1.5                 # implied share-count change ≥ ×1.5 / ÷1.5 on a big jump → split_suspect
 CALENDAR_SYMBOL = 'SPY'
 POOL_GRADES = ('STRICT', 'FULL')
 CHAPTERS = ('分层前瞻收益', 'IC', '对照组', '与价格动量的重叠度', '行业集中度', '换手率', '失败案例', '短史因子')
@@ -56,6 +57,27 @@ class _Series:
         self.notable: List[Tuple[str, float, str]] = []     # (date, ratio, kind) on adjusted closes
 
 
+def _finite_positive(value) -> bool:
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value) and value > 0)
+
+
+def _share_factor(market_cap: Optional[Callable[[str, str], Optional[float]]], symbol: str, d0: str, d1: str,
+                  ratio: float) -> Optional[float]:
+    """Implied share-count change across one day: (market cap ratio) / (price ratio).
+
+    A split moves the price but not the market cap, so the factor is near the split ratio; a real
+    crash moves both, so it stays near 1. None when either market cap is missing or invalid.
+    """
+    if market_cap is None or not _finite_positive(ratio):
+        return None
+    m0, m1 = market_cap(symbol, d0), market_cap(symbol, d1)
+    if not (_finite_positive(m0) and _finite_positive(m1)):
+        return None
+    k = float((m1 / m0) / ratio)
+    return k if math.isfinite(k) and k > 0 else None
+
+
 def _classify_split(dates: Sequence[str], closes: np.ndarray, lo: str, hi: str, f: float):
     """Three states for one recorded split; returns (state, index of the matched jump or None)."""
     first = max(bisect.bisect_left(dates, lo), 1)
@@ -77,7 +99,8 @@ class PriceBook:
     """Trading calendar, split-resolved closes and window returns."""
 
     def __init__(self, *, closes: Mapping[str, Sequence[Tuple[str, float]]],
-                 splits: Mapping[str, Sequence[Tuple[str, float]]], calendar: Sequence[str]):
+                 splits: Mapping[str, Sequence[Tuple[str, float]]], calendar: Sequence[str],
+                 market_cap: Optional[Callable[[str, str], Optional[float]]] = None):
         if not calendar:
             raise ValueError('empty_calendar: no CALENDAR_SYMBOL prices')   # second review #2
         self.calendar = tuple(calendar)
@@ -116,7 +139,9 @@ class PriceBook:
             for j in np.flatnonzero((ratios < 0.55) | (ratios > 1.8)):
                 d0, d1 = date.fromisoformat(dates[j]), date.fromisoformat(dates[j + 1])
                 r = float(ratios[j])
-                if detect_split_like_jumps([(d0, adjusted[j]), (d1, adjusted[j + 1])]):
+                k = _share_factor(market_cap, symbol, dates[j], dates[j + 1], r)
+                if (detect_split_like_jumps([(d0, adjusted[j]), (d1, adjusted[j + 1])])
+                        or (k is not None and max(k, 1.0 / k) >= SHARE_JUMP_MIN)):
                     series.notable.append((dates[j + 1], r, 'split_suspect'))
                 elif r > LARGE_MOVE or r < 1 / LARGE_MOVE:
                     series.notable.append((dates[j + 1], r, 'large_move'))
@@ -143,7 +168,15 @@ class PriceBook:
                     f'SELECT symbol, date, numerator, denominator FROM fmp_stock_splits '
                     f'WHERE symbol IN ({marks})', batch):
                 splits.setdefault(s, []).append((d, num / den))
-        return cls(closes=closes, splits=splits, calendar=calendar)
+
+        def _mcap(sym: str, day: str) -> Optional[float]:
+            """Primary-key read; called only while cls(...) runs, never kept past this method."""
+            row = conn.execute(
+                'SELECT market_cap FROM historical_market_cap WHERE symbol=? AND date=?', (sym, day)
+            ).fetchone()
+            return None if row is None or row[0] is None else float(row[0])
+
+        return cls(closes=closes, splits=splits, calendar=calendar, market_cap=_mcap)
 
     def start_index(self, frozen_at: str) -> Optional[int]:
         i = bisect.bisect_right(self.calendar, _utc_day(frozen_at))
