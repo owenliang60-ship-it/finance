@@ -258,6 +258,46 @@ def test_remote_snapshot_holds_the_scheduler_job_lock(tmp_path):
                                 input=remote_program().encode(), capture_output=True)
     assert result.returncode == 75
     assert result.stdout == b''
+    assert not list(tmp_path.glob('.prosperity-pull-*'))
+
+
+def test_remote_snapshot_releases_job_lock_before_streaming(tmp_path):
+    import fcntl
+    import os
+    import subprocess
+    import sys
+    from scripts.sync_prosperity import remote_program
+    db, lock = tmp_path/'remote.db', tmp_path/'job.lock'
+    conn = database(db)
+    conn.execute('INSERT INTO sample VALUES (?)', (os.urandom(300 * 1024),))  # tar > pipe buffer
+    conn.commit()
+    conn.close()
+    proc = subprocess.Popen([sys.executable, '-', str(db), str(lock)], stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        proc.stdin.write(remote_program().encode())
+        proc.stdin.close()
+        announced = None
+        for line in iter(proc.stderr.readline, b''):
+            if line.startswith(b'PROSPERITY_SHA256 '):
+                announced = line.split()[1].decode()
+                break
+        assert announced, 'no checksum line'
+        # The child is now blocked writing stdout that nobody reads yet.
+        with lock.open('a') as probe:
+            fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(probe, fcntl.LOCK_UN)
+        payload = proc.stdout.read()
+        assert proc.wait(timeout=60) == 0
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        proc.stdout.close()
+        proc.stderr.close()
+    assert len(payload) > 300 * 1024
+    assert hashlib.sha256(payload).hexdigest() == announced
+    assert not list(tmp_path.glob('.prosperity-pull-*'))
 
 
 def test_extract_refuses_links_and_traversal(tmp_path):

@@ -39,22 +39,24 @@ if not db.is_file():
     print('prosperity database is not deployed; skipping', file=sys.stderr)
     sys.exit(44)
 lock_path.parent.mkdir(parents=True, exist_ok=True)
-with lock_path.open('a') as job_lock:
-    try:
-        fcntl.flock(job_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        print('finance_prosperity job lock is busy', file=sys.stderr)
-        sys.exit(75)
-    with tempfile.TemporaryDirectory(prefix='.prosperity-pull-', dir=db.parent) as temporary:
-        directory = Path(temporary)
+with tempfile.TemporaryDirectory(prefix='.prosperity-pull-', dir=db.parent) as temporary:
+    directory = Path(temporary)
+    archive = directory / 'transfer.tar'
+    with lock_path.open('a') as job_lock:
+        try:
+            fcntl.flock(job_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print('finance_prosperity job lock is busy', file=sys.stderr)
+            sys.exit(75)
         bundle = backup_bundle(db, directory / 'bundles')
-        archive = directory / 'transfer.tar'
         with tarfile.open(archive, 'w') as output:
             output.add(bundle, arcname='bundle')
-        print('PROSPERITY_SHA256 ' + _sha(archive), file=sys.stderr)
-        with archive.open('rb') as stream:
-            shutil.copyfileobj(stream, sys.stdout.buffer)
-        sys.stdout.buffer.flush()
+    # Closing the handle released the lock: the private archive is a matched
+    # point, so a slow network transfer must not block the scheduler.
+    print('PROSPERITY_SHA256 ' + _sha(archive), file=sys.stderr)
+    with archive.open('rb') as stream:
+        shutil.copyfileobj(stream, sys.stdout.buffer)
+    sys.stdout.buffer.flush()
 '''
 
 
