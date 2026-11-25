@@ -48,7 +48,7 @@ cron 使用计划中的周六 16:30 / 20:30 CST 两个条目。所有 replay 入
 | 退出码 | 含义 | 处理 |
 |---|---|---|
 | 0 | 计算成功并已发布（`published` / `already_published`）；不传 `--pool-path` 时为 `publication_not_configured` | 只有 `published` 或 `already_published` 才表示池文件是本周的 |
-| 3 | 输入/基本面硬门控失败 | 修复输入证据后重试，不降低门槛 |
+| 3 | 输入/基本面硬门控失败 | 修复输入证据后重试，不降低门槛。基本面质量报告按文件名时间戳倒序，取快照前（`after.as_of` 不晚于 cutoff）最新一份判定；更早的通过报告不能掩盖它的失败。倒序扫描中，在定论那份之前遇到损坏报告即为 unknown；比它更旧的损坏报告不影响结果。手工生成的报告必须沿用 `fundamentals-YYYYMMDDTHHMMSSZ.json`（UTC）命名 |
 | 4 | 日期、模式或参数错误 | 更正参数；当前周只能 live |
 | 5 | 已计算、发布未确认 | 同周重试只发布，不重算。池发布常见原因：`liquidity_window_short` / `liquidity_prices_stale`（价格没到或过期，先查 06:30 价格任务）、`pool_ranked_coverage_below_floor`（周榜可排名覆盖率 <90%；周榜已冻结，**同周重试不会好**，只能等下周或回北极星讨论门槛，不要反复重跑）、`pool_liquidity_coverage_below_floor`（有成交额排名的成员 <90%；价格缺失导致，**补齐价格后同周重试可以成功**）、磁盘错误。池文件此时是上一版，或本周已校验的新版（`os.replace` 后目录 fsync 或 `mark_published` 失败）；读取端不会看到半写文件 |
 | 6 | 重建、空间、证据、恢复或运行故障 | 查 `.state/runs/` 的 error，保留候选记录。stdout 结果含 `backup_error` 时，榜已落库，投递已照常执行（结果里有 `delivery` 段），只是运行后备份失败：看 stderr 的 `post_run_backup_failed`（空间不足时附可归档版本提示），修复后下次运行会补备份。运行后备份失败不覆盖 5 / 7；运行前备份失败仍为 6 且不进入计算 |

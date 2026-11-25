@@ -45,7 +45,9 @@ def fundamental_refreshed(quality_dir, saturday, cutoff):
         paths = sorted(Path(quality_dir).glob('fundamentals-*.json'), reverse=True)
         if not paths:
             return GateResult('fundamental_refreshed', 'unknown', {'reason': 'report_missing'})
-        failures, broken = [], []
+        # Newest first by file-name timestamp: the latest report before the
+        # snapshot decides alone; an earlier pass cannot mask a later failure.
+        after_detail = None
         for path in paths:
             try:
                 after = json.loads(path.read_text())['after']
@@ -53,18 +55,20 @@ def fundamental_refreshed(quality_dir, saturday, cutoff):
                 ratio = after['coverage']['fundamental_ready']['ratio']
                 if isinstance(ratio, bool) or not isinstance(ratio, (int, float)) or not math.isfinite(ratio) or not 0 <= ratio <= 1:
                     raise ValueError('invalid_ratio')
-                detail = {'path': str(path), 'as_of': at.isoformat(), 'ratio': ratio}
-                reason = ('report_wrong_week' if at.astimezone(CST).date().isoformat() != saturday
-                          else 'report_after_snapshot' if at > bound
-                          else 'coverage_below_floor' if ratio < .90 else None)
-                if reason is None:
-                    return GateResult('fundamental_refreshed', 'pass', detail)
-                failures.append({**detail, 'reason': reason})
             except Exception as exc:
-                broken.append({'path': str(path), 'error': str(exc)})
-        if broken:
-            return GateResult('fundamental_refreshed', 'unknown', {'reason': 'report_invalid', 'errors': broken})
-        return GateResult('fundamental_refreshed', 'fail', failures[0])
+                return GateResult('fundamental_refreshed', 'unknown', {
+                    'reason': 'report_invalid', 'errors': [{'path': str(path), 'error': str(exc)}]})
+            detail = {'path': str(path), 'as_of': at.isoformat(), 'ratio': ratio}
+            if at > bound:
+                if after_detail is None:
+                    after_detail = {**detail, 'reason': 'report_after_snapshot'}
+                continue
+            if at.astimezone(CST).date().isoformat() != saturday:
+                return GateResult('fundamental_refreshed', 'fail', {**detail, 'reason': 'report_wrong_week'})
+            if ratio < .90:
+                return GateResult('fundamental_refreshed', 'fail', {**detail, 'reason': 'coverage_below_floor'})
+            return GateResult('fundamental_refreshed', 'pass', detail)
+        return GateResult('fundamental_refreshed', 'fail', after_detail)
     except Exception as exc:
         return GateResult('fundamental_refreshed', 'unknown', {'reason': str(exc)})
 
