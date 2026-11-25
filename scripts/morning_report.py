@@ -518,11 +518,12 @@ def _prosperity_momentum_summary(momentum: dict) -> dict:
 def _build_prosperity_compass(price_frames: dict, as_of: str, scan) -> dict:
     """Section 0d: 景气动量精选池 = the bound prosperity pool ∩ the weekly M16 14-week momentum top 30.
 
-    The EMA30 + market-cap gate runs on the whole pool, so one listing younger than the 127 price
-    rows cannot fail a section of a few picks (plan P1-1); the display keeps only the picks. Never
-    raises: any failure becomes an unavailable payload, so the rest of the morning report is
-    unaffected. A valid pool always keeps `pool.symbols`, which sections 1 and 2 split on. Builds its
-    own price dict from the shared frames plus a DB supplement.
+    Only the picks are scanned (P2-16): prices, the DB price supplement and market caps are read for
+    the picks alone, and the scan runs with enforce_gates=False, so a missing price or market cap
+    shows on its own row ("—" / N/A) and never takes the section down; non-picks are never read.
+    `pool.symbols` keeps the whole valid pool, which sections 1 and 2 split on. Never raises: any
+    failure becomes an unavailable payload, so the rest of the morning report is unaffected. Builds
+    its own price dict from the shared frames plus a DB supplement.
     """
     summary = momentum_summary = None
     try:
@@ -558,8 +559,11 @@ def _build_prosperity_compass(price_frames: dict, as_of: str, scan) -> dict:
             return {"available": True, "reason": None,
                     "coverage": {"ema30_ready": {"covered": 0, "total": 0, "ratio": 0.0}},
                     "hits": [], "members": [], "pool": summary, "momentum": momentum_summary}
-        frames = {s: price_frames[s] for s in symbols if s in price_frames}
-        missing = [s for s in symbols if s not in frames]
+        pick_set = {p["symbol"] for p in momentum_summary["picks"]}
+        pick_symbols = sorted(pick_set)
+        pick_pool = {**pool, "members": [m for m in pool["members"] if m.get("symbol") in pick_set]}
+        frames = {s: price_frames[s] for s in pick_symbols if s in price_frames}
+        missing = [s for s in pick_symbols if s not in frames]
         if missing:
             try:
                 frames.update(load_price_frames_from_market_db(
@@ -567,9 +571,10 @@ def _build_prosperity_compass(price_frames: dict, as_of: str, scan) -> dict:
             except Exception as exc:
                 logger.warning("prosperity compass DB price supplement failed: %s", exc)
         compass = scan(
-            premium_pool=pool, as_of=as_of, price_frames=frames,
+            premium_pool=pick_pool, as_of=as_of, price_frames=frames,
             market_cap_observations=_load_selection_compass_market_cap_observations(
-                get_store(), symbols, as_of),
+                get_store(), pick_symbols, as_of),
+            enforce_gates=False,
         )
         return {**compass, "pool": summary, "momentum": momentum_summary}
     except Exception as exc:
@@ -1765,8 +1770,9 @@ def _prosperity_warning(reason: str | None) -> dict:
 def _prosperity_compass_display(payload: dict | None) -> dict:
     """Shared display contract for text, HTML and visual faces of section 0d.
 
-    The payload holds every scanned pool member; only the momentum picks are shown, in momentum
-    rank order, and the EMA30 counts are recomputed from them. No "_" anywhere: the text report
+    The payload holds every scanned member (since P2-16 only the picks; older saved payloads hold
+    the whole pool); only the momentum picks are shown, in momentum rank order, and the EMA30
+    counts are recomputed from them. No "_" anywhere: the text report
     goes out with Telegram legacy Markdown (issue 016).
     """
     if payload is None:

@@ -3455,7 +3455,7 @@ class TestProsperityCompassDisplay:
 
 
 class TestProsperityCompassMomentumFilter:
-    """2026-11-19: the whole pool is scanned, only the momentum picks are shown, counts come from them."""
+    """2026-11-19: only the momentum picks are shown, counts come from them (since P2-16 only they are scanned)."""
 
     def test_unready_pick_shows_dashes_and_counts_come_from_the_picks(self):
         """Plan P1-1 (SPCX): a pick with under 127 price rows has above=None; the section stays up."""
@@ -3518,7 +3518,8 @@ def _every_member_picked(pool):
 
 
 class TestProsperityCompassWiring:
-    """The 0d builder: whole-pool EMA30 gate, momentum picks attached, Premium path untouched."""
+    """The 0d builder: only the picks are scanned, without the whole-section EMA30 / market-cap gates
+    (P2-16); the full pool still splits sections 1 and 2; Premium path untouched."""
 
     def _build(self, monkeypatch, *, loader, momentum=_every_member_picked, db_frames=None, scan=None):
         frames = {"PREM": _compass_price_frame("2026-09-03"), "BOTH": _compass_price_frame("2026-09-03")}
@@ -3540,7 +3541,13 @@ class TestProsperityCompassWiring:
             def _get_conn(self):
                 return conn
 
-        self.store_opens, self.scans, self.momentum_calls = [], [], []
+        self.store_opens, self.scans, self.momentum_calls, self.scan_gates, self.cap_calls = [], [], [], [], []
+        real_caps = mr._load_selection_compass_market_cap_observations
+
+        def recording_caps(store, symbols, as_of):
+            self.cap_calls.append(sorted(symbols))
+            return real_caps(store, symbols, as_of)
+        monkeypatch.setattr(mr, "_load_selection_compass_market_cap_observations", recording_caps)
         from src.data import market_store as ms_mod
         monkeypatch.setattr(ms_mod, "get_store", lambda: self.store_opens.append(1) or FakeStore())
         monkeypatch.setattr(mr, "_compute_signal_betas", lambda *a, **kw: {})
@@ -3552,6 +3559,7 @@ class TestProsperityCompassWiring:
 
         def counting_scan(**kw):
             self.scans.append(sorted(m["symbol"] for m in kw["premium_pool"]["members"]))
+            self.scan_gates.append(kw.get("enforce_gates", "not passed"))
             return (scan or _REAL_COMPASS_SCAN)(**kw)
 
         def momentum_loader(pool, *a, **kw):
@@ -3564,8 +3572,8 @@ class TestProsperityCompassWiring:
         monkeypatch.setattr("src.data.prosperity_morning.load_prosperity_momentum_picks", momentum_loader)
         return mr.build_market_signal_report(), db_calls
 
-    def test_picks_run_the_ema30_gate_on_the_whole_pool(self, monkeypatch):
-        """Plan P1-1: the scan covers all pool members, so a young listing cannot fail a few-pick section."""
+    def test_picks_scan_only_selected_members_without_whole_pool_gates(self, monkeypatch):
+        """P2-16: only the picks are scanned and supplemented; non-picks never touch EMA30 or market caps."""
         frame = _compass_price_frame("2026-09-03").iloc[-127:]
         result, db_calls = self._build(
             monkeypatch, loader=lambda *a, **kw: _prosperity_trial_pool(["BOTH", "NEWP", "EXTRA"]),
@@ -3573,12 +3581,13 @@ class TestProsperityCompassWiring:
             db_frames={"NEWP": frame, "EXTRA": frame},
         )
         trial = result["prosperity_compass"]
-        assert self.momentum_calls == ["2026-08-29"] and self.scans == [["BOTH", "EXTRA", "NEWP"]]
+        assert self.momentum_calls == ["2026-08-29"] and self.scans == [["BOTH", "NEWP"]]
+        assert self.scan_gates == [False] and self.cap_calls == [["BOTH", "NEWP"]]
         assert self.store_opens == [1]
         assert trial["available"] is True and "comparison" not in trial
-        assert trial["coverage"]["ema30_ready"] == {"covered": 3, "total": 3, "ratio": 1.0}
-        assert [m["symbol"] for m in trial["members"]] == ["BOTH", "NEWP", "EXTRA"]        # pool rank order
-        assert [h["symbol"] for h in trial["hits"]] == ["NEWP", "BOTH", "EXTRA"]           # market cap desc
+        assert trial["coverage"]["ema30_ready"] == {"covered": 2, "total": 2, "ratio": 1.0}
+        assert [m["symbol"] for m in trial["members"]] == ["BOTH", "NEWP"]                 # pool rank order
+        assert [h["symbol"] for h in trial["hits"]] == ["NEWP", "BOTH"]                    # market cap desc
         assert trial["pool"] == {"available": True, "reason": None, "as_of": "2026-08-29",
                                  "generated_at": "2026-08-29T08:50:00Z", "member_count": 3,
                                  "symbols": ["BOTH", "EXTRA", "NEWP"]}
@@ -3589,9 +3598,57 @@ class TestProsperityCompassWiring:
             "window": "14w", "days": 70, "top_n": 30, "pick_count": 2}
         assert [(p["symbol"], p["momentum_rank"]) for p in momentum["picks"]] == [("NEWP", 5), ("BOTH", 21)]
         assert momentum["unscored"] == [{"symbol": "EXTRA", "reason": "split_unresolved"}]
-        assert db_calls == [(["EXTRA", "NEWP"], 127)]                           # only the missing members
+        assert db_calls == [(["NEWP"], 127)]                                    # only the missing picks
         assert result["symbols_with_data"] == 2      # review #3: the DB supplement stays out of the shared frames
         assert "NEWP" not in {h["symbol"] for h in result["pmarp"]["hits"] + result["volume_anomaly"]["hits"]}
+
+    def test_non_pick_gaps_never_take_the_section_down(self, monkeypatch):
+        """P2-16 (a): 20-member pool, 2 picks; non-picks lack prices or a market cap, the section stays up."""
+        pool_symbols = ["BOTH", "NEWP"] + ["N{:02d}".format(i) for i in range(18)]
+        result, db_calls = self._build(
+            monkeypatch, loader=lambda *a, **kw: _prosperity_trial_pool(pool_symbols),
+            momentum=_trial_momentum([("NEWP", 3), ("BOTH", 8)]),
+            db_frames={"NEWP": _compass_price_frame("2026-09-03"),
+                       "N00": _compass_price_frame("2026-09-03")})       # N00: above EMA30, no cap row
+        trial = result["prosperity_compass"]
+        assert trial["available"] is True and trial["reason"] is None
+        assert self.scans == [["BOTH", "NEWP"]] and db_calls == [(["NEWP"], 127)]
+        assert [m["symbol"] for m in trial["members"]] == ["BOTH", "NEWP"]
+        assert trial["coverage"]["ema30_ready"] == {"covered": 2, "total": 2, "ratio": 1.0}
+        assert trial["pool"]["member_count"] == 20 and trial["pool"]["symbols"] == sorted(pool_symbols)
+        split, note = mr._prosperity_split(result)                          # P2-16 (c): sections 1/2
+        assert split == set(pool_symbols) and note is None
+        text = mr.format_section_prosperity_compass(trial)
+        assert "景气池 20 只" in text and "| EMA30 2/2 |" in text and "N00" not in text
+
+    def test_pick_gaps_show_per_row_on_every_face(self, monkeypatch, tmp_path):
+        """P2-16 (b): a pick under 30 prices shows "—", a pick above EMA30 without a cap shows N/A."""
+        pytest.importorskip("PIL")
+        frame = _compass_price_frame("2026-09-03")
+        pool_symbols = ["SHORT", "NOCAP", "BOTH"]
+        result, _ = self._build(
+            monkeypatch, loader=lambda *a, **kw: _prosperity_trial_pool(pool_symbols),
+            momentum=_trial_momentum([("SHORT", 2), ("NOCAP", 6)]),
+            db_frames={"SHORT": frame.iloc[-20:], "NOCAP": frame})
+        trial = result["prosperity_compass"]
+        assert trial["available"] is True and self.scans == [["NOCAP", "SHORT"]]
+        assert trial["coverage"]["ema30_ready"] == {"covered": 1, "total": 2, "ratio": 0.5}
+        assert [h["symbol"] for h in trial["hits"]] == ["NOCAP"] and trial["hits"][0]["marketCap"] is None
+        assert mr._prosperity_split(result)[0] == set(pool_symbols)
+        text, html, visual = _three_faces(trial)
+        lines = text.splitlines()
+        assert lines[1].endswith("| EMA30 1/2 | 站上EMA30 1 只")
+        expected = [["SHORT", "2", "+48%", "1", "STRICT", "80.0", "—", "—", "—", "N/A"],
+                    ["NOCAP", "6", "+44%", "2", "STRICT", "79.0", "279.00",
+                     "{:.2f}".format(trial["hits"][0]["ema30"]), "上方", "N/A"]]
+        assert [row.split(" | ") for row in lines[3:]] == expected
+        assert html[0]["subtitle"] == lines[1] and [list(r.values()) for r in html[0]["rows"]] == expected
+        assert visual[0]["subtitle"] == lines[1]
+        assert [r["cells"] for r in visual[0]["blocks"][0]["rows"]] == expected
+        ms = _make_market_signals()
+        ms["prosperity_compass"] = trial
+        paths = mr.render_morning_report_images(market_signals=ms, dv_result=None, output_dir=tmp_path)
+        assert any("00d_prosperity_pool" in p.name and p.stat().st_size > 0 for p in paths)
 
     def test_trial_lists_members_below_ema30_with_a_fresh_market_cap_only(self, monkeypatch):
         """Boss 2026-11-09: non-hits are listed too; a member with no cap row shows no cap, the section stays up."""
