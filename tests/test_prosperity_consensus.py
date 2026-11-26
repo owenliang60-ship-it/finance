@@ -350,3 +350,20 @@ def test_a_partially_switched_snapshot_is_dropped():
     assert dropped == ("2026-08-15",) and divisor == {"2026-08-08": 2.0, "2026-08-22": 1.0}
     out, divisor, dropped = on_latest_basis(ref + stale, (("2026-08-11", 2.0),))
     assert dropped == () and divisor == {"2026-08-08": 2.0, "2026-08-29": 2.0}
+
+
+def test_post_split_snapshots_past_verify_window_are_not_permanently_dropped():
+    # P2-1: after ESTIMATE_SPLIT_VERIFY_DAYS (28d), a genuine 40% revision on one quarter
+    # must not keep every later snapshot dropped forever against the stale pre-split ref
+    from terminal.prosperity.consensus import on_latest_basis
+    ref = _mnst("2026-08-08", 0.80, 0.86, 0.90)
+    in_win_noisy = _mnst("2026-08-15", 0.56, 0.43, 0.45)        # +40% rev on Q1 inside 28d -> dropped
+    past_win_ok = _mnst("2026-09-12", 0.56, 0.43, 0.45)         # 32d after split, none near 1.0 -> switched
+    later = _mnst("2026-09-19", 0.60, 0.44, 0.46)               # kept automatically once switched
+    out, divisor, dropped = on_latest_basis(ref + in_win_noisy + past_win_ok + later, (("2026-08-11", 2.0),))
+    assert dropped == ("2026-08-15",)
+    assert divisor == {"2026-08-08": 2.0, "2026-09-12": 1.0, "2026-09-19": 1.0}
+    # A genuinely mixed snapshot (one quarter still on old unit ~1.0) stays dropped even past 28d
+    past_win_mixed = _mnst("2026-09-12", 0.40, 0.43, 0.90)
+    _, _, dropped_mixed = on_latest_basis(ref + past_win_mixed, (("2026-08-11", 2.0),))
+    assert dropped_mixed == ("2026-09-12",)

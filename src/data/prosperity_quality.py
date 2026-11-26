@@ -261,7 +261,16 @@ def split_unrestated_audit(quarters: list[dict], income_rows: list[dict], splits
             if not (pre(i) and ratio[i] is not None and _finite_nonzero(act, est) and act * est > 0):
                 continue
             d_gaap, d_est = math.log(ratio[i] / baseline), math.log(act / est)
-            if not any(abs(d_gaap - sign * log_r) <= tol and abs(d_est - sign * log_r) <= tol for sign in (1, -1)):
+            pos = abs(d_gaap - log_r) <= tol and abs(d_est - log_r) <= tol
+            neg = abs(d_gaap + log_r) <= tol and abs(d_est + log_r) <= tol
+            if neg and not pos:
+                # P2-4: actual smaller than GAAP+est by r can mean GAAP+est stayed unadjusted while
+                # actual is already right (RDY 2021-12-29, GSAT 2017-03-29); require a matching jump
+                # against an adjacent quarter's actual to confirm double-adjustment
+                neighbors = [quarters[k].get('eps_actual') for k in (i - 1, i + 1) if 0 <= k < len(quarters)]
+                neg = any(_finite_nonzero(n) and act * n > 0 and abs(math.log(act / n) + log_r) <= tol
+                          for n in neighbors)
+            if not (pos or neg):
                 continue
             run = [i]
             for step in (1, -1):

@@ -255,7 +255,7 @@ def _evaluate(market, store, as_of, quarter, version, mode, cutoff, builder, cac
         receipt = {'schema_version': 1, 'identity': identity, 'cutoff': stamp(cutoff), 'meta': asdict(meta),
                    'health': asdict(health), 'coverage': coverage, 'decision': decision,
                    'evidence': [[r.symbol, by_symbol[r.symbol].quarter_bucket] for r in rows
-                                if rankable(r, SCHEMES['F1'])[0]], 'hashes': _hashes(boards)}
+                                if rankable(r, SCHEMES['F1'], ignore_stale=True)[0]], 'hashes': _hashes(boards)}
         _space(store)
         _write_receipt(store, receipt)
     if not receipt['decision']:

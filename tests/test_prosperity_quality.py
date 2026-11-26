@@ -421,6 +421,26 @@ def test_one_sided_evidence_is_not_an_unrestated_quarter():
     assert split_unrestated_audit([], [], split) == {'flagged': {}, 'issues': []}
 
 
+def test_negative_direction_requires_actual_jump_relative_to_neighbors():
+    # P2-4: RDY 2021-12-29 & GSAT 2017-03-29 had unadjusted GAAP+est while actual matched its neighbors;
+    # RDY 2024-09-30 genuinely double-divided actual (0.04 between 0.20 and 0.20) must still be caught
+    from src.data.prosperity_quality import split_unrestated_audit
+    fiscals = ['2024-03-31', '2024-06-30', '2024-09-30', '2024-12-31', '2025-03-31']
+    split = [{'date': '2024-11-05', 'numerator': 5.0, 'denominator': 1.0}]
+
+    # False positive pattern: actual is steady (0.20), GAAP and estimate are both 5x larger on one pre-split quarter
+    steady_q = [{'fiscal_date': f, 'announce_date': _after(f, 28), 'eps_actual': 0.20,
+                 'eps_estimated': 1.00 if f == '2024-09-30' else 0.20} for f in fiscals]
+    steady_i = [{'date': f, 'eps_diluted': 80.0 if f == '2024-09-30' else 16.0} for f in fiscals]
+    assert split_unrestated_audit(steady_q, steady_i, split)['flagged'] == {}
+
+    # True positive pattern: actual was double-divided (0.04 between 0.20 neighbors), GAAP+est stay normal
+    dd_q = [{'fiscal_date': f, 'announce_date': _after(f, 28),
+             'eps_actual': 0.04 if f == '2024-09-30' else 0.20, 'eps_estimated': 0.20} for f in fiscals]
+    dd_i = [{'date': f, 'eps_diluted': 16.0} for f in fiscals]
+    assert split_unrestated_audit(dd_q, dd_i, split)['flagged'] == {'2024-09-30': '2025-03-31'}
+
+
 def _ratio_block(announce):
     fiscals = ['2024-03-31', '2024-06-30', '2024-09-30', '2024-12-31', '2025-03-31', '2025-06-30']
     quarters = [{'fiscal_date': f, 'eps_actual': 2.0 if f <= '2024-09-30' else 1.0} for f in fiscals]

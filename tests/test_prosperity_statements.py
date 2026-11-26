@@ -28,15 +28,16 @@ def test_current_fiscal_advances_on_income_and_balance_without_cashflow():
 
 
 def test_stale_current_fiscal_limit_is_175_days_or_270_for_semiannual_reporters():
-    assert "stale_current_fiscal" not in _build(hist(), "2026-06-24").flags      # 2025-12-31 + 175
-    assert "stale_current_fiscal" in _build(hist(), "2026-06-25").flags          # + 176
+    # P2-2: >= 175 / >= 270 makes all 21 freeze dates consistent (including 2023-06-24 at 175d)
+    assert "stale_current_fiscal" not in _build(hist(), "2026-06-23").flags      # 2025-12-31 + 174
+    assert "stale_current_fiscal" in _build(hist(), "2026-06-24").flags          # + 175
     rows = [("2024-06-30", "2024", "Q4", "2024-08-30 10:00:00"), ("2024-12-31", "2025", "Q2", "2025-02-18 10:00:00"),
             ("2025-06-30", "2025", "Q4", "2025-08-22 10:00:00"), ("2025-12-31", "2026", "Q2", "2026-02-17 10:00:00")]
     semi = hist(rows)
     flags = _build(semi, "2026-07-19").flags                                      # 200 days, BHP-like
     assert "semiannual_reporter" in flags and "stale_current_fiscal" not in flags
-    assert "stale_current_fiscal" not in _build(semi, "2026-09-27").flags         # 270
-    assert "stale_current_fiscal" in _build(semi, "2026-09-28").flags             # 271
+    assert "stale_current_fiscal" not in _build(semi, "2026-09-26").flags        # 269
+    assert "stale_current_fiscal" in _build(semi, "2026-09-27").flags            # 270
 
 
 ASML_PLACEHOLDER = [("2024-03-31", "2024", "Q1", "2024-03-30 20:00:00"),

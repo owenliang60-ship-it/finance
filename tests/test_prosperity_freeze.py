@@ -38,10 +38,15 @@ def test_coverage_counts_missing_bucket_only_in_denominator():
     from terminal.prosperity.schemes import SCHEMES
     from types import SimpleNamespace
     rows = [frow('A', full_values(1)), frow('B', full_values(2)),
-            frow('C', full_values(3), flags=('identity_unverified',))]
+            frow('C', full_values(3), flags=('identity_unverified',)),
+            frow('D', full_values(4), flags=('stale_current_fiscal',))]
     packets = {'A': SimpleNamespace(quarter_bucket='2026Q3'),
-               'B': SimpleNamespace(quarter_bucket=None), 'C': SimpleNamespace(quarter_bucket='2026Q3')}
-    assert freeze_coverage(rows, packets, SCHEMES['F1'], '2026Q3') == (.5, 1, 2)
+               'B': SimpleNamespace(quarter_bucket=None),
+               'C': SimpleNamespace(quarter_bucket='2026Q3'),
+               'D': SimpleNamespace(quarter_bucket='2026Q1')}
+    # P2-3: stale_current_fiscal stays in the freeze coverage denominator (true arrival rate),
+    # while identity_unverified / industry exclusions stay excluded
+    assert freeze_coverage(rows, packets, SCHEMES['F1'], '2026Q3') == (1 / 3, 1, 3)
     with pytest.raises(ValueError, match='denominator'):
         freeze_coverage([], {}, SCHEMES['F1'], '2026Q3')
 

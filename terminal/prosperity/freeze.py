@@ -53,7 +53,8 @@ def due_quarter(as_of, frozen_labels, start_quarter='2021Q2'):
 
 def freeze_coverage(rows, packets, scheme, label):
     quarter_of(label)
-    eligible = [r for r in rows if rankable(r, scheme)[0]]
+    # P2-3: late filers excluded only for stale_current_fiscal stay in the arrival denominator
+    eligible = [r for r in rows if rankable(r, scheme, ignore_stale=True)[0]]
     if not eligible:
         raise ValueError('zero_freeze_denominator')
     numerator = sum(bool(packets[r.symbol].quarter_bucket and packets[r.symbol].quarter_bucket >= label)

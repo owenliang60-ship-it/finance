@@ -257,6 +257,6 @@ def build_quarters(visible: VisibleStatements, as_of: str) -> QuarterBuild:
     if gaps and statistics.median(gaps) >= SEMIANNUAL_MEDIAN_GAP_DAYS:
         flags.append("semiannual_reporter")
     stale_limit = STALE_SEMIANNUAL_DAYS if "semiannual_reporter" in flags else STALE_FISCAL_DAYS
-    if (_d(bound) - _d(current)).days > stale_limit:
+    if (_d(bound) - _d(current)).days >= stale_limit:
         flags.append("stale_current_fiscal")
     return QuarterBuild(quarters, current[:10], tuple(flags), dropped)

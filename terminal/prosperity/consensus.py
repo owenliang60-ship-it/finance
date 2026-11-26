@@ -155,13 +155,16 @@ def on_latest_basis(estimates: Sequence[Mapping], events: Sequence[Tuple[str, fl
                 else:
                     switched = True
                 continue
-            # review fix 5: every paired quarter must agree; a median let a partly switched
-            # snapshot through (all 9 real post-split snapshots in market.db are unanimous)
+            # review fix 5: every paired quarter must agree inside the verify window; past
+            # ESTIMATE_SPLIT_VERIFY_DAYS, genuine estimate drift against the stale pre-split ref
+            # must not permanently drop snapshots as long as no quarter still sits on the old unit (P2-1)
             logs = [math.log(x) for x in ratios]
             if all(abs(x - log_r) <= tol for x in logs):
                 switched = True
             elif all(abs(x) <= tol for x in logs):
                 divisor[s] *= r
+            elif not in_window and not any(abs(x) <= tol for x in logs):
+                switched = True
             else:
                 dropped.add(s)
     out = []

@@ -147,12 +147,12 @@ def _coverage(values: Mapping[str, Optional[float]], scheme: Scheme) -> float:
     return sum(w for f, w in scheme.weights if values.get(f) is not None)
 
 
-def rankable(row: FactorRow, scheme: Scheme) -> Tuple[bool, Optional[str]]:
+def rankable(row: FactorRow, scheme: Scheme, *, ignore_stale: bool = False) -> Tuple[bool, Optional[str]]:
     if industry_matches(row.industry, scheme.universe_exclude_industries):
         return False, "universe_excluded"
     if "identity_unverified" in row.packet_flags:          # D-7 A: observe, never rank
         return False, "identity_unverified"
-    if "stale_current_fiscal" in row.packet_flags:         # P1-2: statements older than the stale limit
+    if not ignore_stale and "stale_current_fiscal" in row.packet_flags:  # P1-2: statements older than the stale limit
         return False, "stale_current_fiscal"
     if row.disclosed_quarters < scheme.min_quarters:
         return False, "insufficient_quarters"
