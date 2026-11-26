@@ -360,3 +360,175 @@ class TestSkewToAlpha:
         """Call IV > put IV → positive α."""
         alpha = skew_to_alpha(0.25, 0.35, 0.30)
         assert alpha > 0
+
+
+# ── Q/P dual distribution + Mid/Natural slippage ──
+
+from terminal.options.scenario_analyzer import (
+    compute_dual_probability_summary,
+    compute_mid_vs_natural,
+)
+
+
+def _fair_long_call(S=100.0, K=100.0, dte=30, r=0.045, sigma=0.30):
+    entry = bs_price(S, K, dte / 365.0, r, sigma, "call")
+    return build_strategy([_long_call(K, dte, sigma, entry)])
+
+
+class TestProbabilitySummaryOverrides:
+    def test_none_overrides_match_original_call(self):
+        legs = _bull_call_spread()
+        base = compute_probability_summary(legs, 200.0, 0.045, 0.35, 15, -0.2)
+        same = compute_probability_summary(
+            legs, 200.0, 0.045, 0.35, 15, -0.2, drift_override=None, vol_override=None
+        )
+        assert base == same
+
+    def test_drift_override_equal_to_r_matches_default(self):
+        legs = _bull_call_spread()
+        base = compute_probability_summary(legs, 200.0, 0.045, 0.35, 15)
+        same = compute_probability_summary(legs, 200.0, 0.045, 0.35, 15, drift_override=0.045)
+        assert base == same
+
+    def test_vol_override_replaces_sigma(self):
+        legs = _bull_call_spread()
+        via_override = compute_probability_summary(legs, 200.0, 0.045, 0.10, 15, vol_override=0.35)
+        via_sigma = compute_probability_summary(legs, 200.0, 0.045, 0.35, 15)
+        assert via_override == via_sigma
+
+    def test_higher_drift_raises_long_call_ev(self):
+        legs = _fair_long_call()
+        low = compute_probability_summary(legs, 100.0, 0.045, 0.30, 30)
+        high = compute_probability_summary(legs, 100.0, 0.045, 0.30, 30, drift_override=0.60)
+        assert high["expected_pnl"] > low["expected_pnl"]
+
+
+class TestDualProbabilitySummary:
+    def test_ev_q_near_minus_slippage_for_fair_price(self):
+        legs = _fair_long_call()
+        dual = compute_dual_probability_summary(
+            legs, 100.0, 0.045, 0.30, 30, view_drift=0.045, slippage_dollars=15.0
+        )
+        assert abs(dual["ev_q"] - (-15.0)) < 5.0
+        assert dual["ev_q"] == round(dual["q_summary"]["expected_pnl"] - 15.0, 2)
+
+    def test_neutral_view_has_zero_edge(self):
+        legs = _fair_long_call()
+        dual = compute_dual_probability_summary(legs, 100.0, 0.045, 0.30, 30, view_drift=0.045)
+        assert dual["edge_ev"] == 0.0
+        assert dual["ev_half_view"] == dual["ev_q"]
+
+    def test_bullish_view_creates_positive_edge_for_long_call(self):
+        legs = _fair_long_call()
+        dual = compute_dual_probability_summary(
+            legs, 100.0, 0.045, 0.30, 30, view_drift=0.60, slippage_dollars=10.0
+        )
+        assert dual["edge_ev"] == round(dual["ev_p"] - dual["ev_q"], 2)
+        assert dual["edge_ev"] > 0
+        # Half-view stress sits between Q and P
+        assert dual["ev_q"] < dual["ev_half_view"] < dual["ev_p"]
+
+    def test_half_view_uses_blended_drift_and_vol(self):
+        legs = _fair_long_call()
+        dual = compute_dual_probability_summary(
+            legs, 100.0, 0.045, 0.30, 30, view_drift=0.40, view_vol=0.50
+        )
+        expected = compute_probability_summary(
+            legs, 100.0, 0.045, 0.30, 30,
+            drift_override=0.5 * 0.40 + 0.5 * 0.045,
+            vol_override=0.5 * (0.50 + 0.30),
+        )
+        assert dual["half_view_summary"] == expected
+
+    def test_view_vol_defaults_to_market_iv(self):
+        legs = _fair_long_call()
+        dual = compute_dual_probability_summary(legs, 100.0, 0.045, 0.30, 30, view_drift=0.20)
+        expected = compute_probability_summary(
+            legs, 100.0, 0.045, 0.30, 30, drift_override=0.20, vol_override=0.30
+        )
+        assert dual["p_summary"] == expected
+
+    def test_expected_move_uses_365_day_basis(self):
+        legs = _fair_long_call()
+        dual = compute_dual_probability_summary(legs, 100.0, 0.045, 0.30, 30)
+        move = 100.0 * 0.30 * math.sqrt(30 / 365.0)
+        assert dual["expected_move_1sigma"] == round(move, 2)
+        assert dual["expected_move_pct"] == round(0.30 * math.sqrt(30 / 365.0) * 100, 2)
+
+    def test_upside_target_probability(self):
+        legs = _fair_long_call()
+        dual = compute_dual_probability_summary(
+            legs, 100.0, 0.045, 0.30, 30, view_drift=0.60, target_price=110.0
+        )
+        assert 0.0 < dual["prob_target_q"] < 0.5
+        assert dual["prob_target_p"] > dual["prob_target_q"]
+
+    def test_downside_target_probability(self):
+        legs = _fair_long_call()
+        dual = compute_dual_probability_summary(
+            legs, 100.0, 0.045, 0.30, 30, view_drift=0.60, target_price=90.0
+        )
+        assert 0.0 < dual["prob_target_q"] < 0.5
+        # Bullish view lowers the chance of finishing at or below 90
+        assert dual["prob_target_p"] < dual["prob_target_q"]
+
+    def test_target_probability_matches_lognormal_closed_form(self):
+        legs = _fair_long_call()
+        S, r, sigma, days, K = 100.0, 0.045, 0.30, 30, 110.0
+        T = days / 365.0
+        d2 = (math.log(S / K) + (r - 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
+        closed = 0.5 * (1.0 + math.erf(d2 / math.sqrt(2.0)))
+        dual = compute_dual_probability_summary(legs, S, r, sigma, days, target_price=K)
+        assert abs(dual["prob_target_q"] - closed) < 0.01
+
+    def test_no_target_gives_none(self):
+        legs = _fair_long_call()
+        dual = compute_dual_probability_summary(legs, 100.0, 0.045, 0.30, 30)
+        assert dual["prob_target_q"] is None
+        assert dual["prob_target_p"] is None
+
+    def test_negative_slippage_rejected(self):
+        legs = _fair_long_call()
+        with pytest.raises(ValueError):
+            compute_dual_probability_summary(legs, 100.0, 0.045, 0.30, 30, slippage_dollars=-1.0)
+
+
+class TestMidVsNatural:
+    def test_vertical_debit_spread(self):
+        result = compute_mid_vs_natural([
+            {"direction": "long", "bid": 1.00, "ask": 1.20},
+            {"direction": "short", "bid": 0.50, "ask": 0.60},
+        ])
+        assert result["mid_cost"] == pytest.approx(0.55)
+        assert result["natural_cost"] == pytest.approx(0.70)
+        assert result["slippage_per_share"] == pytest.approx(0.15)
+        assert result["mid_cost_dollars"] == pytest.approx(55.0)
+        assert result["natural_cost_dollars"] == pytest.approx(70.0)
+        assert result["slippage_dollars"] == pytest.approx(15.0)
+
+    def test_credit_structure_has_negative_cost_and_positive_slippage(self):
+        result = compute_mid_vs_natural([
+            {"direction": "short", "bid": 2.00, "ask": 2.20},
+            {"direction": "long", "bid": 0.80, "ask": 1.00},
+        ])
+        assert result["mid_cost"] == pytest.approx(-1.20)
+        assert result["natural_cost"] == pytest.approx(-1.00)
+        assert result["slippage_dollars"] == pytest.approx(20.0)
+        assert result["slippage_dollars"] >= 0
+
+    def test_quantity_scales_cost(self):
+        result = compute_mid_vs_natural([
+            {"direction": "long", "bid": 1.00, "ask": 1.20, "quantity": 3},
+        ])
+        assert result["mid_cost"] == pytest.approx(3.30)
+        assert result["slippage_dollars"] == pytest.approx(30.0)
+
+    def test_invalid_leg_rejected(self):
+        with pytest.raises(ValueError):
+            compute_mid_vs_natural([{"direction": "buy", "bid": 1.0, "ask": 1.2}])
+        with pytest.raises(ValueError):
+            compute_mid_vs_natural([{"direction": "long", "bid": None, "ask": 1.2}])
+        with pytest.raises(ValueError):
+            compute_mid_vs_natural([{"direction": "long", "bid": 1.3, "ask": 1.2}])
+        with pytest.raises(ValueError):
+            compute_mid_vs_natural([])

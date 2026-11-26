@@ -195,6 +195,30 @@ def _adjusted_pdf(
     return base_pdf * adjustment
 
 
+def _clamp_skew(skew_alpha: float) -> float:
+    return max(-0.5, min(0.5, skew_alpha))
+
+
+def _price_grid(
+    S: float, mu: float, sigma: float, T: float, skew_alpha: float
+) -> tuple:
+    """Midpoint integration grid over ±3σ in log space.
+
+    Returns ([(S_i, weight_i), ...], dS). Weights are unnormalized pdf × dS.
+    """
+    std_log = sigma * math.sqrt(T)
+    mean_log = math.log(S) + mu * T
+    S_lo = math.exp(mean_log - _SIGMA_RANGE * std_log)
+    S_hi = math.exp(mean_log + _SIGMA_RANGE * std_log)
+    dS = (S_hi - S_lo) / _GRID_POINTS
+
+    points = []
+    for i in range(_GRID_POINTS):
+        S_i = S_lo + (i + 0.5) * dS  # midpoint rule
+        points.append((S_i, _adjusted_pdf(S_i, S, mu, sigma, T, skew_alpha) * dS))
+    return points, dS
+
+
 def compute_probability_summary(
     strategy: List[Dict[str, Any]],
     S: float,
@@ -202,6 +226,9 @@ def compute_probability_summary(
     sigma: float,
     days_forward: int,
     skew_alpha: float = 0.0,
+    *,
+    drift_override: Optional[float] = None,
+    vol_override: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Probability-weighted P&L summary using numerical integration.
 
@@ -210,18 +237,22 @@ def compute_probability_summary(
     Args:
         strategy: Normalized legs
         S: current underlying price
-        r: risk-free rate
+        r: risk-free rate (always used for BS repricing of the legs)
         sigma: annualized volatility for the probability distribution
         days_forward: time horizon for P&L evaluation
         skew_alpha: Cornish-Fisher skewness parameter
+        drift_override: annualized drift of the distribution. None = r (risk-neutral Q).
+        vol_override: distribution volatility. None = sigma.
 
     Returns:
         Dict with: expected_pnl, win_probability, median_pnl,
                    pctl_25, pctl_75, price_range
     """
+    if vol_override is not None:
+        sigma = vol_override
     T = days_forward / 365.0
     # Clamp skew_alpha to prevent extreme Cornish-Fisher distortion
-    skew_alpha = max(-0.5, min(0.5, skew_alpha))
+    skew_alpha = _clamp_skew(skew_alpha)
 
     if T <= 0:
         # At expiry: just compute at current price
@@ -234,25 +265,14 @@ def compute_probability_summary(
             "pctl_75": round(pnl, 2),
         }
 
-    mu = r - 0.5 * sigma * sigma
-    std_log = sigma * math.sqrt(T)
-    mean_log = math.log(S) + mu * T
-
-    # Integration grid: ±3σ in log space
-    log_lo = mean_log - _SIGMA_RANGE * std_log
-    log_hi = mean_log + _SIGMA_RANGE * std_log
-    S_lo = math.exp(log_lo)
-    S_hi = math.exp(log_hi)
-    dS = (S_hi - S_lo) / _GRID_POINTS
+    drift = r if drift_override is None else drift_override
+    mu = drift - 0.5 * sigma * sigma
 
     # Collect (pnl, probability_weight) pairs
     pnl_weights = []
     total_weight = 0.0
 
-    for i in range(_GRID_POINTS):
-        S_i = S_lo + (i + 0.5) * dS  # midpoint rule
-        pdf_i = _adjusted_pdf(S_i, S, mu, sigma, T, skew_alpha)
-        weight = pdf_i * dS
+    for S_i, weight in _price_grid(S, mu, sigma, T, skew_alpha)[0]:
         pnl_i = price_strategy(strategy, S_i, days_forward, r)
         pnl_weights.append((pnl_i, weight))
         total_weight += weight
@@ -410,3 +430,150 @@ def skew_to_alpha(put_iv_25d: float, call_iv_25d: float, atm_iv: float) -> float
     if atm_iv <= 0:
         return 0.0
     return -(put_iv_25d - call_iv_25d) / atm_iv
+
+
+def _target_probability(
+    S: float, target: float, mu: float, sigma: float, T: float, skew_alpha: float
+) -> float:
+    """P(S_T >= target) when target >= S, else P(S_T <= target).
+
+    Uses the same grid as compute_probability_summary. The bucket that
+    straddles the target counts by its linear fraction.
+    """
+    upside = target >= S
+    if T <= 0:
+        hit = S >= target if upside else S <= target
+        return 1.0 if hit else 0.0
+
+    points, dS = _price_grid(S, mu, sigma, T, _clamp_skew(skew_alpha))
+    total = sum(w for _, w in points)
+    if total <= 0:
+        return 0.0
+
+    hit_weight = 0.0
+    for S_i, w in points:
+        lo, hi = S_i - 0.5 * dS, S_i + 0.5 * dS
+        if upside:
+            frac = (hi - target) / dS
+        else:
+            frac = (target - lo) / dS
+        hit_weight += w * max(0.0, min(1.0, frac))
+    return hit_weight / total
+
+
+def compute_dual_probability_summary(
+    strategy: List[Dict[str, Any]],
+    S: float,
+    r: float,
+    market_iv: float,
+    days_forward: int,
+    *,
+    view_drift: float = 0.0,
+    view_vol: Optional[float] = None,
+    skew_alpha: float = 0.0,
+    target_price: Optional[float] = None,
+    slippage_dollars: float = 0.0,
+) -> Dict[str, Any]:
+    """Compare risk-neutral Q against Boss view P, plus a half-view stress test.
+
+    Q: drift r, vol market_iv. EV_Q of a fairly priced trade ≈ -slippage.
+    P: drift view_drift, vol view_vol (default market_iv).
+    Half view: drift 0.5·view_drift + 0.5·r, vol 0.5·(view_vol + market_iv).
+    All EVs are per strategy set in dollars, net of slippage_dollars.
+    edge_ev = EV_P - EV_Q is the value of the view, not a guaranteed profit.
+    """
+    if slippage_dollars < 0:
+        raise ValueError("slippage_dollars must be >= 0, got {}".format(slippage_dollars))
+
+    p_vol = view_vol or market_iv
+    half_drift = 0.5 * view_drift + 0.5 * r
+    half_vol = 0.5 * (p_vol + market_iv)
+
+    def _summary(drift: Optional[float], vol: float) -> Dict[str, Any]:
+        return compute_probability_summary(
+            strategy, S, r, vol, days_forward, skew_alpha,
+            drift_override=drift, vol_override=vol,
+        )
+
+    q_summary = _summary(None, market_iv)
+    p_summary = _summary(view_drift, p_vol)
+    half_summary = _summary(half_drift, half_vol)
+
+    ev_q = round(q_summary["expected_pnl"] - slippage_dollars, 2)
+    ev_p = round(p_summary["expected_pnl"] - slippage_dollars, 2)
+    ev_half = round(half_summary["expected_pnl"] - slippage_dollars, 2)
+
+    move_frac = market_iv * math.sqrt(max(days_forward, 0) / 365.0)
+
+    prob_target_q = prob_target_p = None
+    if target_price is not None and target_price > 0:
+        T = days_forward / 365.0
+        prob_target_q = round(_target_probability(
+            S, target_price, r - 0.5 * market_iv ** 2, market_iv, T, skew_alpha), 4)
+        prob_target_p = round(_target_probability(
+            S, target_price, view_drift - 0.5 * p_vol ** 2, p_vol, T, skew_alpha), 4)
+
+    return {
+        "underlying_price": S,
+        "days_forward": days_forward,
+        "market_iv": market_iv,
+        "view_drift": view_drift,
+        "view_vol": p_vol,
+        "skew_alpha": skew_alpha,
+        "slippage_dollars": slippage_dollars,
+        "q_summary": q_summary,
+        "p_summary": p_summary,
+        "half_view_summary": half_summary,
+        "ev_q": ev_q,
+        "ev_p": ev_p,
+        "ev_half_view": ev_half,
+        "edge_ev": round(ev_p - ev_q, 2),
+        "expected_move_1sigma": round(S * move_frac, 2),
+        "expected_move_pct": round(move_frac * 100, 2),
+        "target_price": target_price,
+        "prob_target_q": prob_target_q,
+        "prob_target_p": prob_target_p,
+    }
+
+
+def compute_mid_vs_natural(legs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Net cost of a multi-leg order at mid vs at the natural (crossing) price.
+
+    Each leg: direction 'long'|'short', bid, ask, optional quantity (default 1).
+    Long pays mid / ask. Short receives mid / bid. Positive cost = debit,
+    negative cost = credit. Slippage = natural - mid, always >= 0.
+    """
+    if not legs:
+        raise ValueError("At least one leg is required")
+
+    mid_cost = 0.0
+    natural_cost = 0.0
+    for i, leg in enumerate(legs):
+        direction = str(leg.get("direction", "")).lower()
+        if direction not in ("long", "short"):
+            raise ValueError("Leg {}: direction must be 'long' or 'short', got '{}'".format(i, direction))
+        bid, ask = leg.get("bid"), leg.get("ask")
+        if bid is None or ask is None:
+            raise ValueError("Leg {}: bid and ask are required".format(i))
+        bid, ask = float(bid), float(ask)
+        quantity = int(leg.get("quantity", 1))
+        if bid < 0 or ask < bid or quantity <= 0:
+            raise ValueError("Leg {}: need 0 <= bid <= ask and quantity > 0".format(i))
+
+        mid = (bid + ask) / 2.0
+        if direction == "long":
+            mid_cost += mid * quantity
+            natural_cost += ask * quantity
+        else:
+            mid_cost -= mid * quantity
+            natural_cost -= bid * quantity
+
+    slippage = max(0.0, natural_cost - mid_cost)
+    return {
+        "mid_cost": round(mid_cost, 4),
+        "natural_cost": round(natural_cost, 4),
+        "slippage_per_share": round(slippage, 4),
+        "mid_cost_dollars": round(mid_cost * 100.0, 2),
+        "natural_cost_dollars": round(natural_cost * 100.0, 2),
+        "slippage_dollars": round(slippage * 100.0, 2),
+    }
