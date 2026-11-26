@@ -352,3 +352,145 @@ class TestEarningsFormatterUnknown:
             "earnings": {"days_to_earnings": None, "earnings_date": None, "zone": "CLEAR"},
         })
         assert "No upcoming earnings found — Zone: **CLEAR**" in text
+
+
+# ── today type bug + snapshot freshness + 25Δ skew ──
+
+import re
+from datetime import date
+
+from terminal.options.chain_analyzer import check_snapshot_freshness, compute_25d_skew
+from terminal.options.scenario_analyzer import skew_to_alpha
+
+
+class TestFetchSnapshotDateIsString:
+    def test_snapshot_date_passed_and_returned_as_string(self):
+        fake_store = MagicMock()
+        fake_store.save_options_snapshot.return_value = 4
+        mock_client = MagicMock()
+        mock_client.get_options_chain.return_value = _sample_chain_response()
+
+        result = fetch_and_store_chain("AAPL", fake_store, client=mock_client)
+
+        saved_date = fake_store.save_options_snapshot.call_args[0][1]
+        assert isinstance(saved_date, str)
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", saved_date)
+        assert isinstance(result["snapshot_date"], str)
+        assert result["snapshot_date"] == saved_date
+
+
+class TestSnapshotFreshness:
+    AS_OF = date(2026, 11, 26)
+
+    def test_missing_when_empty(self):
+        for value in (None, ""):
+            res = check_snapshot_freshness(value, as_of=self.AS_OF)
+            assert res == {"status": "MISSING", "snapshot_date": None, "age_days": None}
+
+    def test_fresh_within_window(self):
+        res = check_snapshot_freshness("2026-11-25", as_of=self.AS_OF)
+        assert res["status"] == "FRESH"
+        assert res["age_days"] == 1
+        assert res["snapshot_date"] == "2026-11-25"
+
+    def test_boundary_is_fresh(self):
+        assert check_snapshot_freshness("2026-11-23", as_of=self.AS_OF)["status"] == "FRESH"
+
+    def test_stale_beyond_window(self):
+        res = check_snapshot_freshness("2026-11-22", as_of=self.AS_OF)
+        assert res["status"] == "STALE"
+        assert res["age_days"] == 4
+
+    def test_custom_max_stale_days(self):
+        res = check_snapshot_freshness("2026-11-25", as_of=self.AS_OF, max_stale_days=0)
+        assert res["status"] == "STALE"
+
+    def test_unparseable_fails_closed(self):
+        res = check_snapshot_freshness("not-a-date", as_of=self.AS_OF)
+        assert res["status"] == "MISSING"
+        assert res["age_days"] is None
+
+    def test_defaults_to_today(self):
+        today = datetime.now().strftime("%Y-%m-%d")
+        assert check_snapshot_freshness(today)["status"] == "FRESH"
+
+
+def _skew_contract(exp, dte, side, strike, delta, iv):
+    return {
+        "expiration": exp, "dte": dte, "side": side, "strike": strike,
+        "bid": 1.0, "ask": 1.1, "mid": 1.05, "volume": 100, "open_interest": 1000,
+        "iv": iv, "delta": delta, "underlying_price": 100.0,
+    }
+
+
+def _expiry_block(exp, dte, put25_iv, call25_iv, atm_iv):
+    return [
+        _skew_contract(exp, dte, "put", 90, -0.24, put25_iv),
+        _skew_contract(exp, dte, "put", 85, -0.12, put25_iv + 0.05),
+        _skew_contract(exp, dte, "put", 100, -0.47, atm_iv + 0.01),
+        _skew_contract(exp, dte, "call", 100, 0.51, atm_iv),
+        _skew_contract(exp, dte, "call", 110, 0.26, call25_iv),
+        _skew_contract(exp, dte, "call", 115, 0.15, call25_iv - 0.02),
+    ]
+
+
+class TestCompute25dSkew:
+    def test_no_snapshot(self, store):
+        assert compute_25d_skew("AAPL", store) == {"available": False, "reason": "no_snapshot"}
+
+    def test_picks_expiration_closest_to_35_in_window(self, store):
+        contracts = (
+            _expiry_block("2026-12-05", 9, 0.50, 0.40, 0.45)
+            + _expiry_block("2026-12-28", 32, 0.38, 0.30, 0.32)
+            + _expiry_block("2027-01-16", 51, 0.36, 0.31, 0.33)
+        )
+        store.save_options_snapshot("AAPL", "2026-11-26", contracts)
+
+        res = compute_25d_skew("AAPL", store)
+
+        assert res["available"] is True
+        assert res["snapshot_date"] == "2026-11-26"
+        assert res["expiration"] == "2026-12-28"
+        assert res["dte"] == 32
+        assert res["put_iv_25d"] == 0.38
+        assert res["call_iv_25d"] == 0.30
+        assert res["atm_iv"] == 0.32
+        assert res["skew_25d_pt"] == 8.0
+        assert res["skew_alpha"] == round(skew_to_alpha(0.38, 0.30, 0.32), 4)
+
+    def test_skips_expiration_without_valid_put(self, store):
+        block_35 = [c for c in _expiry_block("2026-12-31", 35, 0.38, 0.30, 0.32)
+                    if c["side"] == "call"]
+        contracts = block_35 + _expiry_block("2027-01-16", 51, 0.36, 0.31, 0.33)
+        store.save_options_snapshot("AAPL", "2026-11-26", contracts)
+
+        res = compute_25d_skew("AAPL", store)
+        assert res["expiration"] == "2027-01-16"
+
+    def test_invalid_iv_or_delta_not_counted(self, store):
+        block = _expiry_block("2026-12-31", 35, 0.38, 0.30, 0.32)
+        for c in block:
+            if c["side"] == "put":
+                c["iv"] = 0.0
+        contracts = block + _expiry_block("2027-01-16", 51, 0.36, 0.31, 0.33)
+        store.save_options_snapshot("AAPL", "2026-11-26", contracts)
+        assert compute_25d_skew("AAPL", store)["expiration"] == "2027-01-16"
+
+    def test_falls_back_outside_window(self, store):
+        contracts = (
+            _expiry_block("2026-12-05", 9, 0.50, 0.40, 0.45)
+            + _expiry_block("2027-03-20", 114, 0.36, 0.31, 0.33)
+        )
+        store.save_options_snapshot("AAPL", "2026-11-26", contracts)
+
+        res = compute_25d_skew("AAPL", store)
+        assert res["available"] is True
+        assert res["expiration"] == "2026-12-05"
+
+    def test_no_valid_pair_anywhere(self, store):
+        contracts = [c for c in _expiry_block("2026-12-31", 35, 0.38, 0.30, 0.32)
+                     if c["side"] == "call"]
+        store.save_options_snapshot("AAPL", "2026-11-26", contracts)
+        res = compute_25d_skew("AAPL", store)
+        assert res["available"] is False
+        assert res["reason"] == "no_valid_put_call"

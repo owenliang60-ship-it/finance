@@ -8,9 +8,11 @@ Core functions:
 - filter_liquid_strikes(): Filter strikes meeting liquidity thresholds
 - find_atm_options(): Find ATM call/put for a given expiration
 - get_earnings_proximity(): Days to earnings + zone classification
+- check_snapshot_freshness(): FRESH / STALE / MISSING gate for a chain snapshot
+- compute_25d_skew(): 25-delta put/call IV skew + Cornish-Fisher alpha
 """
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from config.settings import (
@@ -21,6 +23,8 @@ from config.settings import (
     OPTIONS_LIQUIDITY_MIN_VOLUME,
     OPTIONS_LIQUIDITY_MAX_SPREAD_PCT,
 )
+
+from terminal.options.scenario_analyzer import skew_to_alpha
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +53,13 @@ def fetch_and_store_chain(
         client = marketdata_client
 
     symbol = symbol.upper()
-    today = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
 
     # Convert DTE to date range for API
     from datetime import timedelta
-    today = datetime.now()
-    date_from = (today + timedelta(days=dte_min)).strftime("%Y-%m-%d")
-    date_to = (today + timedelta(days=dte_max)).strftime("%Y-%m-%d")
+    date_from = (now + timedelta(days=dte_min)).strftime("%Y-%m-%d")
+    date_to = (now + timedelta(days=dte_max)).strftime("%Y-%m-%d")
     data = client.get_options_chain(symbol, date_from=date_from, date_to=date_to)
     if not data or data.get("s") != "ok":
         logger.warning("No chain data for %s", symbol)
@@ -78,7 +82,7 @@ def fetch_and_store_chain(
         c["underlying_price"] = underlying_price
 
     # Store in DB
-    count = store.save_options_snapshot(symbol, today, contracts)
+    count = store.save_options_snapshot(symbol, today_str, contracts)
 
     # Collect unique expirations
     expirations = sorted(set(c["expiration"] for c in contracts))
@@ -87,7 +91,7 @@ def fetch_and_store_chain(
         "symbol": symbol,
         "contract_count": count,
         "expirations": expirations,
-        "snapshot_date": today,
+        "snapshot_date": today_str,
         "underlying_price": underlying_price,
     }
 
@@ -507,4 +511,87 @@ def get_earnings_proximity(
         # Never reported an EPS: ETF / index product (FMP keeps EPS-less placeholder
         # rows for QQQ and SPY, and returns [] for SOXX).
         "zone": "CLEAR",
+    }
+
+
+def check_snapshot_freshness(
+    snapshot_date: Optional[str],
+    as_of: Optional[date] = None,
+    max_stale_days: int = 3,
+) -> Dict[str, Any]:
+    """Classify a chain snapshot date as FRESH, STALE or MISSING.
+
+    Calendar days. A missing or unparseable date is MISSING (fail-closed).
+    """
+    missing = {"status": "MISSING", "snapshot_date": None, "age_days": None}
+    if not snapshot_date:
+        return missing
+    try:
+        snap = datetime.strptime(str(snapshot_date), "%Y-%m-%d").date()
+    except ValueError:
+        logger.warning("Unparseable snapshot_date %r, freshness MISSING", snapshot_date)
+        return missing
+
+    ref = as_of or datetime.now().date()
+    age_days = (ref - snap).days
+    return {
+        "status": "FRESH" if age_days <= max_stale_days else "STALE",
+        "snapshot_date": snap.strftime("%Y-%m-%d"),
+        "age_days": age_days,
+    }
+
+
+def _valid_skew_leg(c: Dict[str, Any], side: str) -> bool:
+    return c.get("side") == side and c.get("delta") is not None and (c.get("iv") or 0) > 0
+
+
+def compute_25d_skew(
+    symbol: str,
+    store,
+    target_dte_min: int = 20,
+    target_dte_max: int = 60,
+) -> Dict[str, Any]:
+    """25-delta skew from the latest snapshot.
+
+    Expiration: closest to 35 DTE inside [target_dte_min, target_dte_max]
+    with at least one valid put and call (delta present, iv > 0). If none
+    qualifies, falls back to the valid expiration closest to 35 DTE.
+    """
+    contracts = store.get_options_snapshot(symbol)
+    if not contracts:
+        return {"available": False, "reason": "no_snapshot"}
+
+    by_exp: Dict[str, List[Dict[str, Any]]] = {}
+    for c in contracts:
+        by_exp.setdefault(c.get("expiration", ""), []).append(c)
+
+    candidates = []  # (expiration, dte, puts, calls)
+    for exp, exp_contracts in by_exp.items():
+        puts = [c for c in exp_contracts if _valid_skew_leg(c, "put")]
+        calls = [c for c in exp_contracts if _valid_skew_leg(c, "call")]
+        dte = next((c["dte"] for c in exp_contracts if c.get("dte") is not None), None)
+        if puts and calls and dte is not None:
+            candidates.append((exp, dte, puts, calls))
+    if not candidates:
+        return {"available": False, "reason": "no_valid_put_call"}
+
+    in_window = [x for x in candidates if target_dte_min <= x[1] <= target_dte_max]
+    exp, dte, puts, calls = min(in_window or candidates, key=lambda x: (abs(x[1] - 35), x[1]))
+
+    put_25 = min(puts, key=lambda c: abs(c["delta"] + 0.25))
+    call_25 = min(calls, key=lambda c: abs(c["delta"] - 0.25))
+    atm = min(puts + calls, key=lambda c: abs(abs(c["delta"]) - 0.50))
+
+    put_iv, call_iv, atm_iv = put_25["iv"], call_25["iv"], atm["iv"]
+    alpha = skew_to_alpha(put_iv, call_iv, atm_iv)
+    return {
+        "available": True,
+        "snapshot_date": contracts[0].get("snapshot_date"),
+        "expiration": exp,
+        "dte": dte,
+        "put_iv_25d": put_iv,
+        "call_iv_25d": call_iv,
+        "atm_iv": atm_iv,
+        "skew_25d_pt": round((put_iv - call_iv) * 100, 2),
+        "skew_alpha": round(alpha, 4),
     }
