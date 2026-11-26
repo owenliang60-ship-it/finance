@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""M16 momentum board: this week's F1 board members → the 14-week V4 long board, one JSON.
+"""M16 momentum board: this week's F1 board members → the 14-week U70 + UDV long board, one JSON.
 
 Read-only on both databases; writes only --out (atomically). Plan:
 docs/plans/2026-11-13-prosperity-m16-momentum-boards.md. Exit codes: 0 written; 4 invalid --out
@@ -26,7 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from backtest.research.momentum_board import build_payload, load_dollar_volumes  # noqa: E402
+from backtest.research.momentum_board import build_payload, load_daily_dollar_volumes  # noqa: E402
 from backtest.research.prosperity_health import PriceBook  # noqa: E402
 from scripts.prosperity_web import _overwrites_input  # noqa: E402  (identity-based, APFS-safe)
 from src.data.market_store import MarketStore  # noqa: E402
@@ -82,7 +82,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         try:
             payload = build_payload(
                 book=PriceBook.load(market, members),
-                dollar_volumes=lambda days: load_dollar_volumes(market, members, days),
+                daily_volumes=lambda days: load_daily_dollar_volumes(market, members, days),
                 symbols=members, as_of=args.as_of,
                 generated_at=datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z'))
         finally:
