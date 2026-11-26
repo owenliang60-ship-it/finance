@@ -21,6 +21,7 @@ from terminal.prosperity.types import (ConsensusInputs, EpsQuarter, NtmResult, P
 
 QUARTER_GAP = (60, 120)       # adjacent fiscal quarters (days)
 SPLIT_TOLERANCE = math.log(1.25)   # same match band as the price and street EPS split checks
+MIXED_BASIS_MIN_RATIO = 1.5        # below this a split ratio is indistinguishable from a normal surprise
 QUARTER_DAYS = 91
 FY_STEP_DAYS, FY_STEP_TOLERANCE = 365, 20
 
@@ -181,15 +182,23 @@ def _mixed_basis(quarter: EpsQuarter, pre: PreAnnouncement, events: Sequence[Tup
         return False
     ref_day = pre.snapshot_date if pre.source == "local_snapshot" else quarter.announce_date[:10]
     gap = math.log(actual / val)
+    rescaled = "eps_split_rescaled" in quarter.labels
     for s_day, r in events:
-        if ref_day > s_day:
+        # review fix 3: stock dividends and small adjustments (BBD 1.1, QGEN 0.95) sit inside normal beats
+        if ref_day > s_day or max(r, 1 / r) < MIXED_BASIS_MIN_RATIO:
             continue
         log_r = math.log(r)
         if pre.source == "local_snapshot":
             # the snapshot is already on the latest unit; only an unrestated actual can disagree
             miss = abs(gap - log_r)
-        else:
+        elif rescaled:
+            # street_eps divided actual and estimate by the ratio; an estimate that was already
+            # adjusted is now divided twice (APH 2024-12-31), so both sides are suspect
             miss = min(abs(gap - log_r), abs(gap + log_r))
+        else:
+            # FMP keeps the unadjusted vendor estimate next to a restated actual: actual / est ≈ 1 / r.
+            # The other side is a real miss or beat (MSTR 2024Q2, VMRK 2025Q3)
+            miss = abs(gap + log_r)
         if miss <= _split_tolerance(log_r):
             return True
     return False

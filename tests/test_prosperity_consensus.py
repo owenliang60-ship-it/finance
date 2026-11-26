@@ -251,13 +251,14 @@ def test_split_events_ignore_future_and_spin_off_records():
 
 def test_pre_announcement_blanks_a_value_on_the_other_side_of_a_split():
     events = (("2026-06-01", 2.0),)
-    vendor = EpsQuarter("2026-03-31", "2026-04-29", 2.0, 1.0, ())       # actual restated, vendor estimate not
     closes = [("2026-04-28", 50.0)]
-    got = pre_announcement_consensus(vendor, [], closes, cutoff=replay_cutoff("2026-04-29"), events=events)
+    restated = EpsQuarter("2026-03-31", "2026-04-29", 0.5, 1.0, ())     # actual restated, vendor estimate not
+    got = pre_announcement_consensus(restated, [], closes, cutoff=replay_cutoff("2026-04-29"), events=events)
     assert (got.value, got.source, got.missing_reason) == (None, "vendor_estimate", "split_basis_unconfirmed")
-    flipped = EpsQuarter("2026-03-31", "2026-04-29", 0.5, 1.0, ())
-    got = pre_announcement_consensus(flipped, [], closes, cutoff=replay_cutoff("2026-04-29"), events=events)
-    assert got.missing_reason == "split_basis_unconfirmed"
+    # review fix 3: actual / estimate at +ratio is a real beat unless street_eps divided both by the ratio
+    beat = EpsQuarter("2026-03-31", "2026-04-29", 2.0, 1.0, ())
+    got = pre_announcement_consensus(beat, [], closes, cutoff=replay_cutoff("2026-04-29"), events=events)
+    assert (got.value, got.missing_reason) == (1.0, None)
     # local snapshots are already on the latest basis: only an unrestated (too large) actual is a mismatch
     q = EpsQuarter("2026-06-30", "2026-08-01", 2.4, None, ())
     rows = [est("2026-07-25", "2026-06-28", 1.20)]
@@ -306,3 +307,33 @@ def test_non_finite_consensus_inputs_become_missing_values():
                                                    ("2027-06-30", 1.3))]
     ntm = ntm_eps(rows, [anchor], "2026-08-01", cutoff=replay_cutoff("2026-08-01"))
     assert ntm.value is None or math.isfinite(ntm.value)
+
+
+
+def _vendor(q, events):
+    return pre_announcement_consensus(q, [], [("2024-07-29", 1.0)], cutoff=replay_cutoff(q.announce_date), events=events)
+
+
+def test_vendor_estimate_guard_is_one_sided_and_skips_small_adjustments():
+    # review fix 3, market.db: unadjusted vendor estimates against post-split actuals sit at 1 / ratio
+    fast = EpsQuarter("2024-03-31", "2024-04-11", 0.26, 0.53, ())               # FAST, 2025-05-22 2:1
+    assert _vendor(fast, (("2025-05-22", 2.0),)).missing_reason == "split_basis_unconfirmed"
+    amcr = EpsQuarter("2024-12-31", "2025-02-04", 0.8, 0.16, ())                 # AMCR, 2026-01-15 1:5
+    assert _vendor(amcr, (("2026-01-15", 0.2),)).missing_reason == "split_basis_unconfirmed"
+    mstr = EpsQuarter("2024-06-30", "2024-07-30", -0.76, -0.09267, ())           # MSTR miss, GAAP -0.57
+    got = _vendor(mstr, (("2024-08-08", 10.0),))
+    assert (got.value, got.missing_reason) == (-0.09267, None)
+    vmrk = EpsQuarter("2025-09-30", "2025-10-29", 0.76, 0.4276, ())              # VMRK beat before 2026-08-17 2:1
+    assert _vendor(vmrk, (("2026-08-17", 2.0),)).missing_reason is None
+    bbd = EpsQuarter("2021-09-29", "2021-10-28", 0.11, 0.12, ())                 # BBD 1.1x stock dividend
+    assert _vendor(bbd, (("2022-04-19", 1.1),)).missing_reason is None
+    qgen = EpsQuarter("2025-09-30", "2025-11-04", 0.64, 0.61, ())                # QGEN 0.95 adjustment
+    assert _vendor(qgen, (("2026-01-08", 0.95),)).missing_reason is None
+
+
+def test_a_double_divided_vendor_estimate_is_still_caught_after_a_rescale():
+    # APH 2024-12-31: street_eps divided actual and the already-adjusted estimate by 2
+    aph = EpsQuarter("2024-12-31", "2025-01-22", 0.275, 0.12545, ("eps_split_rescaled",))
+    assert _vendor(aph, (("2026-09-03", 2.0),)).missing_reason == "split_basis_unconfirmed"
+    plain = EpsQuarter("2024-12-31", "2025-01-22", 0.275, 0.12545, ())
+    assert _vendor(plain, (("2026-09-03", 2.0),)).missing_reason is None
