@@ -245,9 +245,13 @@ class DeliveryOutcome:
 
 def _sent(items: dict, key: str, code_version: str) -> bool:
     """An item counts only for the board version it was sent for (second review P2): a same-week
-    engine upgrade publishes a new board, so every item is due again under the new code_version."""
+    engine upgrade publishes a new board, so every item is due again under the new code_version.
+    The M16 texts also need this momentum scoring: a scoring upgrade keeps code_version, and a V4
+    board text must never pair with a udv1 combo text."""
     item = items.get(key)
     if not isinstance(item, dict) or item.get('code_version') != code_version:
+        return False
+    if key in MOMENTUM_ITEMS and item.get('scoring') != MOMENTUM_SCORING:
         return False
     return _health_done(item) if key == 'health' else True
 
@@ -506,7 +510,8 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
                 try:
                     if not send_message(momentum_text(payload, trusted), channel='private'):
                         raise RuntimeError('send_message returned False')
-                    items['momentum_text'] = {'sent_at': _stamp(now), 'code_version': code_version}
+                    items['momentum_text'] = {'sent_at': _stamp(now), 'code_version': code_version,
+                                              'scoring': MOMENTUM_SCORING}
                     write_ledger(delivery_dir, ledger)
                     sent.append('momentum_text')
                 except Exception as exc:
@@ -515,7 +520,8 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
                 try:
                     if not send_message(combo_text(payload, trusted, pool_reason), channel='private'):
                         raise RuntimeError('send_message returned False')
-                    items['combo_text'] = {'sent_at': _stamp(now), 'code_version': code_version}
+                    items['combo_text'] = {'sent_at': _stamp(now), 'code_version': code_version,
+                                           'scoring': MOMENTUM_SCORING}
                     write_ledger(delivery_dir, ledger)
                     sent.append('combo_text')
                 except Exception as exc:

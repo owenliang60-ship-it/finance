@@ -668,7 +668,9 @@ def test_deliver_sends_momentum_and_combo_last(env):
     assert Path(cmd[cmd.index('--db') + 1]) != env['db'] and cmd[cmd.index('--as-of') + 1] == WEEK
     assert cmd[cmd.index('--code-version') + 1] == VERSION and kw['timeout'] == d.MOMENTUM_TIMEOUT_SECONDS
     items = d.read_ledger(env['dir'], WEEK)['items']
-    assert items['momentum_text']['code_version'] == VERSION and set(items['combo_text']) == {'sent_at', 'code_version'}
+    assert items['momentum_text']['code_version'] == VERSION and set(items['combo_text']) == {'sent_at', 'code_version',
+                                                                                              'scoring'}
+    assert items['momentum_text']['scoring'] == items['combo_text']['scoring'] == 'udv1'
     assert deliver(env, FakeRun(), FakeSend()).status == 'already_delivered'
 
 
@@ -700,6 +702,25 @@ def test_untrusted_pool_still_sends_board_and_says_why(env):
     out = deliver(env, FakeRun(), send)
     assert out.sent[-2:] == ('momentum_text', 'combo_text')
     assert '★' not in send.msgs[-2] and '池文件不可用（prosperity\\_pool\\_missing）' in send.msgs[-1]
+
+
+@pytest.mark.parametrize('old', [None, 'v4'], ids=['no-scoring', 'v4'])
+def test_momentum_items_of_another_scoring_are_resent_as_a_pair(env, old):
+    """Review P2: the M16 upgrade keeps the F1 code_version. A V4 momentum text sent before the upgrade
+    must not pair with a udv1 combo text: both are due again under udv1, the M13 items are not."""
+    deliver(env, FakeRun(), FakeSend())
+    ledger = d.read_ledger(env['dir'], WEEK)
+    ledger['items']['momentum_text'] = {'sent_at': 'x', 'code_version': VERSION,
+                                        **({'scoring': old} if old else {})}
+    del ledger['items']['combo_text']                                         # the V4 combo send had failed
+    d.write_ledger(env['dir'], ledger)
+    run, send = FakeRun(), FakeSend()
+    out = deliver(env, run, send)
+    assert out.status == 'delivered' and out.sent == ('momentum_text', 'combo_text')
+    assert run.scripts() == ['momentum_board.py'] and not send.docs and len(send.msgs) == 2
+    items = d.read_ledger(env['dir'], WEEK)['items']
+    assert items['momentum_text']['scoring'] == items['combo_text']['scoring'] == 'udv1'
+    assert deliver(env, FakeRun(), FakeSend()).status == 'already_delivered'
 
 
 def test_momentum_send_failure_does_not_block_combo(env):
