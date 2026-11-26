@@ -1,4 +1,4 @@
 PASS: 21 quarters; 60 source SQL fiscal-date/bucket checks
-tamper_coverage: rc=1 | FAIL: Failure: coverage 2021Q2: 0.01 != 1.0
+tamper_coverage: rc=1 | FAIL: Failure: coverage 2021Q2: 0.01 != 0.9914163090128756
 tamper_as_of: rc=1 | FAIL: Failure: as_of 2021Q2: 2020-01-04 != 2021-09-25
 tamper_missing: rc=1 | FAIL: Failure: missing_record 2021Q2

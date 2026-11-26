@@ -1,21 +1,21 @@
-2026-11-26 10:07:57,702 - WARNING - FMP tools registered but unavailable (missing FMP_API_KEY or import failed)
-2026-11-26 10:07:57,703 - INFO - FRED tools registered but unavailable (missing FRED_API_KEY - get free key at https://fred.stlouisfed.org/)
-2026-11-26 10:07:57,703 - INFO - MarketData tools registered but unavailable (missing MARKETDATA_API_KEY)
-     1017.55 real      1001.10 user        15.28 sys
-          1899085824  maximum resident set size
+2026-11-26 16:15:25,575 - WARNING - FMP tools registered but unavailable (missing FMP_API_KEY or import failed)
+2026-11-26 16:15:25,575 - INFO - FRED tools registered but unavailable (missing FRED_API_KEY - get free key at https://fred.stlouisfed.org/)
+2026-11-26 16:15:25,575 - INFO - MarketData tools registered but unavailable (missing MARKETDATA_API_KEY)
+     1021.69 real      1001.84 user        17.11 sys
+          1883504640  maximum resident set size
                    0  average shared memory size
                    0  average unshared data size
                    0  average unshared stack size
-             1202675  page reclaims
-                  89  page faults
+             1201092  page reclaims
+                 103  page faults
                    0  swaps
                    0  block input operations
                    0  block output operations
                    0  messages sent
                    0  messages received
                    0  signals received
-                2726  voluntary context switches
-              134874  involuntary context switches
-      17884946606007  instructions retired
-       4387402647327  cycles elapsed
-          1659570168  peak memory footprint
+                2665  voluntary context switches
+              334811  involuntary context switches
+      17879372525390  instructions retired
+       4418150134195  cycles elapsed
+          1636255664  peak memory footprint
