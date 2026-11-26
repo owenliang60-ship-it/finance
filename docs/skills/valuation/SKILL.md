@@ -16,12 +16,15 @@ arguments:
 ## 固定流程（7 步，每步一个动作）
 
 1. 进入 `/Users/owen/CC workspace/Finance`，执行 `./sync_to_cloud.sh --pull`。
-2. 检查 `terminal/valuation/ledgers/<SYMBOL>/ledger.toml` 是否存在。不存在则新建（字段见下表，样例见 `tests/fixtures/valuation/ACME/ledger.toml`）。只有当一级收入轴有多种合理划分时才问 Boss（D1）；否则不问。
+2. 检查 `terminal/valuation/ledgers/<SYMBOL>/ledger.toml` 是否存在。不存在则新建（字段见下表，样例见 `tests/fixtures/valuation/ACME/ledger.toml`）。只有当一级收入轴有多种合理划分时才问 Boss（D1）；否则不问。台账 `ledger.toml` 与 `sources/` 原文属研究数据资产，可直接落盘 Finance 主目录（豁免代码 worktree 规则）。
 3. 抓取一手披露原文，存为同目录 `sources/<id>.txt`，计算 sha256，写入 `[[sources]]`。每条事实写逐字引文 `quote`；每条指引另写三个语义字段 `period_type`、`denominator`、`is_lower_bound`。
 4. 运行 `.venv/bin/python scripts/valuation.py <SYMBOL> --ledger terminal/valuation/ledgers/<SYMBOL>/ledger.toml`。
 5. 按退出码处理（stdout 一行 JSON，见下方退出码表）。
-6. `g4_reextract` 非空时，换一个异构模型重新抽取这些条目，再比对。G3 阻断时向 Boss 说明股本跳变、拆股标签或分部重述；Boss 确认后写 `[[acks]]`，再回到第 4 步。
-7. 回复只给一屏运行结论和 `file://` 链接。运行结论只含退出码、被剔除项、现价隐含 P/E 与历史分位等事实反推读数。
+6. `g4_reextract` 非空时，换一个异构模型重新抽取这些条目，再比对。宿主映射：Antigravity 下由 Neon 抽取、Fable 复抽；CLI 下没有异构模型时照常复抽，并在回复中把这些条目显式标为「同源降级」。G3 阻断时向 Boss 说明股本跳变、拆股标签或分部重述；Boss 确认后写 `[[acks]]`，再回到第 4 步。
+7. 回复只给一屏运行结论和 `file://` 链接。运行结论只含退出码、被剔除项和下列纯算术读数（只用 VERIFIED 数字；只列数字，不加「低估 / 高估」判词，不给头寸建议）：
+   - 现价隐含 EPS 增速 vs 共识：隐含 EPS = 现价 ÷ 历史中位 P/E；隐含增速 = 隐含 EPS ÷ TTM EPS − 1；并列共识 NTM EPS ÷ TTM EPS − 1。
+   - 现价隐含 NTM P/E 及其在历史 P/E 序列中的分位。
+   - 现价距台账各情景的百分比距离：（情景价 − 现价）÷ 现价，情景价取情景区间面板的 `pe_mid` 中值价，逐条列出；无 `[[scenarios]]` 时写「台账无参考情景」。
 
 ## 退出码
 

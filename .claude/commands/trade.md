@@ -6,6 +6,8 @@ user-invocable: true
 
 ## /trade — 交易录入
 
+> 🚫 **红线**：本命令仅写入本地 company.db 并同步云端；PORTFOLIO_SHEET_ID 标识的主账 Google Sheet 绝对只读，严禁通过脚本或工具写入。
+
 解析用户交易意图并执行原子写入。
 
 ### 流程
@@ -28,8 +30,11 @@ user-invocable: true
 3. **展示确认摘要**（必须等 Boss 确认才能执行）：
    - 当前持仓 / 无持仓
    - 交易后均价、股数、仓位占比 (基于 total_NAV)
-   - OPRMS DNA 上限 vs 交易后仓位
    - 现金变化
+   - **交易前预警**（在确认前算好，不等交易后）：
+     - [ ] 交易后仓位是否超过 OPRMS DNA 上限？ → ⚠️ 警告
+     - [ ] 交易后行业集中度是否超标（>40%）？ → ⚠️ 警告。算法：把本笔交易叠加到 `mgr.refresh_prices(prices)` 的持仓上，再用 `portfolio.exposure.analyzer.ExposureAnalyzer(positions).sector_concentration_check(0.40)`
+     - [ ] 该股票有没有 OPRMS 评级？ → 没有则提醒先做分析
    - 格式示例：
    ```
    📝 交易确认
@@ -37,7 +42,8 @@ user-invocable: true
    
    当前: 600 shares @ $176.09 (DNA=S, Timing=A)
    交易后: 700 shares, 均价 $170.22
-   仓位: 7.1% → 8.3% (DNA上限 25%)
+   仓位: 7.1% → 8.3% (DNA上限 25%) ✓
+   行业: Technology 34% → 36% (上限 40%) ✓
    现金: $750,000 → $736,500
    
    确认执行？
@@ -48,10 +54,8 @@ user-invocable: true
    result = mgr.execute_trade(symbol, action, shares, price, date)
    ```
 
-5. **交易后自动检查**（不需要 Boss 确认，直接展示）：
-   - [ ] 交易后仓位是否超过 DNA 上限？ → 警告
-   - [ ] 交易后行业集中度是否超标（>40%）？ → 警告
-   - [ ] 该股票有没有 OPRMS 评���？ → 没有则提醒先做分析
+5. **交易后复核**（不需要 Boss 确认，直接展示）：
+   - 用实际成交结果复算第 3 步的 DNA 上限、行业集中度（>40%）和 OPRMS 评级检查；与确认摘要不一致时 ⚠️ 警告
 
 6. **Auto-push**：
    交易 `execute_trade()` 返回成功后，执行：
