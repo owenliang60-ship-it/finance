@@ -20,6 +20,7 @@ import sys
 import tempfile
 from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 
+from backtest.research.momentum_board import SCORING as MOMENTUM_SCORING, board_top_cut
 from src import telegram_bot
 from src.data.prosperity_backup import _quick_check, check_space
 from src.data.prosperity_pool import POOL_SCHEME_ID, load_prosperity_pool
@@ -38,8 +39,6 @@ HEALTH_TIMEOUT_SECONDS = 1800
 UPLOAD_TIMEOUT_SECONDS = 300
 MOMENTUM_TIMEOUT_SECONDS = 600
 MESSAGE_LIMIT = 4096                   # Telegram sendMessage text limit
-MOMENTUM_TOP = 30                      # rows listed in the momentum board text AND the combo rule
-                                       # (pool ∩ top 30, Boss 2026-11-13): changing it changes a backtested rule
 MOMENTUM_WINDOW = '14w'                # the one board the CLI writes (momentum_board.WINDOWS); a test pins the pair
 MOMENTUM_LABEL = '14周'
 MOMENTUM_ITEMS = ('momentum_text', 'combo_text')
@@ -177,8 +176,9 @@ def _long_rows(board: dict) -> List[dict]:
 
 
 def _top_rows(board: dict) -> List[dict]:
-    """The listed top of the long board: momentum_text prints these, combo_text intersects them with the pool."""
-    return _long_rows(board)[:MOMENTUM_TOP]
+    """The listed top of the long board: momentum_text prints these, combo_text intersects them with the pool.
+    The cut is board_top_cut (Boss 2026-11-26): changing it changes a backtested rule."""
+    return _long_rows(board)[:board_top_cut(board)]
 
 
 def _counted(text: str) -> str:
@@ -188,17 +188,17 @@ def _counted(text: str) -> str:
 
 
 def momentum_text(payload: dict, pool: Optional[Sequence[str]]) -> str:
-    """M16 item 1: top rows of the 14-week V4 long board. pool None = pool not trusted (no stars).
+    """M16 item 1: top rows of the 14-week U70 + UDV long board. pool None = pool not trusted (no stars).
     Counts come from the row lists, never from a stored total."""
     starred = set(pool or ())
     board = payload['boards'][MOMENTUM_WINDOW]
-    rows = _long_rows(board)
+    rows, top = _long_rows(board), _top_rows(board)
+    u_count = sum(1 for r in board['scored'] if r['in_u70'])
     head = (f'*{MOMENTUM_LABEL}*（{board["days"]} 交易日）有效 {len(board["scored"])} · '
             f'不可用 {len(board["unavailable"])} · 上涨合格 {len(rows)}')
-    lines = [f'*动量榜 {md_escape(payload["as_of"])}*（V4 · 只看上涨 · 价格截至 {md_escape(payload["price_date"])}）',
-             f'主池 {payload["universe"]["count"]} 只', '']
-    if rows:
-        top = _top_rows(board)
+    lines = [f'*动量榜 {md_escape(payload["as_of"])}*（UDV · 只看上涨 · 价格截至 {md_escape(payload["price_date"])}）',
+             f'主池 {payload["universe"]["count"]} 只 · 70日过半Top100 {u_count} 只', '']
+    if top:
         lines.append(head + f'，前 {len(top)}：')
         lines.extend(f'{r["rank"]}. {md_escape(r["symbol"])} {r["score"]:.1f} {r["return"]:+.0%}'
                      + (' ★' if r['symbol'] in starred else '') for r in top)
@@ -210,14 +210,15 @@ def momentum_text(payload: dict, pool: Optional[Sequence[str]]) -> str:
 
 
 def combo_text(payload: dict, pool: Optional[Sequence[str]], reason: Optional[str]) -> str:
-    """M16 item 2: pool members in the momentum board top MOMENTUM_TOP (Boss 2026-11-13), with their
-    whole-universe rank: exactly the starred rows of momentum_text. pool None = pool not trusted.
+    """M16 item 2: pool members in the momentum board top board_top_cut (Boss 2026-11-26), with their
+    long-board rank: exactly the starred rows of momentum_text. pool None = pool not trusted.
     """
     title = f'*景气动量精选 {md_escape(payload["as_of"])}*'
     if pool is None:
         return _counted(f'{title}\n池文件不可用（{md_escape(reason or "unknown")}），本周不列名单')
     members = set(pool)
     board = payload['boards'][MOMENTUM_WINDOW]
+    cut = board_top_cut(board)
     hits = [r for r in _top_rows(board) if r['symbol'] in members]
     listed = ' · '.join(f'{md_escape(r["symbol"])} #{r["rank"]} {r["return"]:+.0%}' for r in hits) or '无'
     line = f'*{MOMENTUM_LABEL}*（{len(hits)}）: {listed}'
@@ -227,8 +228,8 @@ def combo_text(payload: dict, pool: Optional[Sequence[str]], reason: Optional[st
         line += f' · 未评分（{len(missing)}）: ' + ', '.join(
             f'{md_escape(s)}（{md_escape(str(why))}）' for s, why in missing)
     lines = [title,
-             f'景气精选池 {len(members)} 只 ∩ {MOMENTUM_LABEL}动量榜前 {MOMENTUM_TOP}（V4 · 价格截至 {md_escape(payload["price_date"])}）',
-             line, f'#n = 全主池 {MOMENTUM_LABEL}上涨榜名次']
+             f'景气精选池 {len(members)} 只 ∩ {MOMENTUM_LABEL}动量榜前 {cut}（UDV · 价格截至 {md_escape(payload["price_date"])}）',
+             line, f'#n = {MOMENTUM_LABEL}主战场上涨榜名次']
     if missing:
         lines.append('未评分 = 缺价或拆股未决，不代表没涨')
     return _counted('\n'.join(lines))
@@ -322,6 +323,7 @@ def _read_momentum(path: Path, as_of: str) -> dict:
     """The CLI's JSON for exactly this week and this layout, or momentum_payload_invalid."""
     payload = json.loads(path.read_text(encoding='utf-8'))
     if (not isinstance(payload, dict) or payload.get('schema_version') != MOMENTUM_SCHEMA_VERSION
+            or payload.get('scoring') != MOMENTUM_SCORING
             or payload.get('as_of') != as_of or not isinstance(payload.get('boards'), dict)
             or set(payload['boards']) != {MOMENTUM_WINDOW}):
         raise ValueError('momentum_payload_invalid')

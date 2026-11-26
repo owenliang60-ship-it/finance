@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from backtest.research import momentum_board as mb
 from src.data import prosperity_delivery as d
 
 
@@ -382,7 +383,10 @@ def test_real_web_cli_integration(env):
                                                             board_type='weekly') if k.as_of == WEEK))
     assert board['universe']['symbols'] == sorted(stored.meta.members) and board['price_date'] == '2026-10-02'
     assert out.sent[-2:] == M16 and send.msgs[-2].startswith('*动量榜 2026-10-03*')
-    assert all(f'{s} #' in send.msgs[-1] for s in env['members'])        # every pool member is rising here
+    b14 = board['boards']['14w']
+    assert board['scoring'] == 'udv1' and mb.board_top_cut(b14) == 4         # 20 rising names: min(ceil(20/5), ceil(20/2))
+    top = [r['symbol'] for r in sorted((r for r in b14['scored'] if r['eligible']), key=lambda r: r['rank'])][:4]
+    assert all((f'{s} #' in send.msgs[-1]) == (s in top) for s in env['members'])   # pool ∩ the cut, nothing else
 
 
 # --- code review (high) fixes ----------------------------------------------------------------
@@ -527,71 +531,93 @@ def test_delivered_text_lists_members_by_pool_rank(env):
 
 # --- M16: momentum board and prosperity-momentum picks ---------------------------------------
 
-def _payload(n=40, down=840, symbols=None, as_of='2026-11-07'):
+def _payload(n=40, down=840, symbols=None, as_of='2026-11-07', u=75):
+    """n long-eligible rows, then `down` ineligible ones; the first u rows are in U70 (u >= n: E ⊆ U70).
+    Defaults: cut = min(ceil(75 / 5), ceil(40 / 2)) = 15."""
     names = symbols or [f'S{i:02d}' for i in range(1, n + 1)]
     scored = [{'symbol': s, 'rank': i, 'eligible': True, 'score': 90.0 - (i * 0.01 if symbols else i),
                'return': 0.10 + i / 100} for i, s in enumerate(names, 1)]
-    scored += [{'symbol': f'D{i:03d}', 'rank': None, 'eligible': False, 'score': 20.0, 'return': -0.1}
+    scored += [{'symbol': f'D{i:03d}', 'rank': None, 'eligible': False, 'score': 0.0, 'return': -0.1}
                for i in range(down)]
+    for i, row in enumerate(scored):
+        row.update(in_u70=i < u, top100_days=70 if i < u else 0, udv=1.5)
     board = {'days': 70, 'window': ['2026-07-30', '2026-11-06'], 'scored': scored,
              'unavailable': {f'U{i}': 'price_gap' for i in range(8)}, 'adjustments': []}
-    return {'schema_version': 1, 'as_of': as_of, 'price_date': '2026-11-06',
+    return {'schema_version': 1, 'as_of': as_of, 'price_date': '2026-11-06', 'scoring': 'udv1',
             'universe': {'count': len(scored) + 8},
             'boards': {'14w': board}}
 
 
-def test_momentum_text_top30_and_stars():
+def test_momentum_text_lists_the_dynamic_cut_and_stars():
     text = d.momentum_text(_payload(), ['S02', 'S35'])
-    assert text.startswith('*动量榜 2026-11-07*') and '价格截至 2026-11-06' in text and '主池 888 只' in text
-    assert '7周' not in text.replace('14周', '')                           # one window only
-    assert '*14周*（70 交易日）有效 880 · 不可用 8 · 上涨合格 40，前 30：' in text
-    assert '\n2. S02 88.0 +12% ★\n' in text and '\n30. S30 60.0 +40%\n' in text and 'S31' not in text
+    lines = text.splitlines()
+    assert lines[0] == '*动量榜 2026-11-07*（UDV · 只看上涨 · 价格截至 2026-11-06）'
+    assert lines[1] == '主池 888 只 · 70日过半Top100 75 只'               # U70 counted from the rows
+    assert '7周' not in text.replace('14周', '') and 'V4' not in text      # one window, the new scoring
+    assert '*14周*（70 交易日）有效 880 · 不可用 8 · 上涨合格 40，前 15：' in text
+    assert '\n2. S02 88.0 +12% ★\n' in text and '\n15. S15 75.0 +25%\n' in text and 'S16' not in text
+    assert 'S35' not in text                                             # a starred member outside the cut
     assert text.rstrip().endswith('★ = 景气精选池成员') and len(text) <= 4096
     plain = d.momentum_text(_payload(), None)                             # pool not trusted: no stars
     assert '★' not in plain and '\n2. S02 88.0 +12%\n' in plain
 
 
 def test_momentum_text_short_and_empty_boards():
-    assert '上涨合格 3，前 3：' in d.momentum_text(_payload(n=3), [])
-    assert '上涨合格 0：无' in d.momentum_text(_payload(n=0), [])
+    assert '上涨合格 3，前 2：' in d.momentum_text(_payload(n=3), [])     # min(ceil(75 / 5), ceil(3 / 2)) = 2
+    assert '上涨合格 1，前 1：' in d.momentum_text(_payload(n=1), [])
+    empty = d.momentum_text(_payload(n=0), [])
+    assert '上涨合格 0：无' in empty and '70日过半Top100 75 只' in empty
 
 
-def test_combo_text_lists_pool_members_in_the_momentum_top30():
-    """Boss 2026-11-13: pool ∩ momentum board top 30 (rank ≤ MOMENTUM_TOP), not every eligible member."""
-    text = d.combo_text(_payload(), ['S35', 'S30', 'S31', 'S02', 'ZZZ', 'D001'], None)  # D001 falling, ZZZ absent
-    assert text.startswith('*景气动量精选 2026-11-07*') and '景气精选池 6 只' in text
-    assert '景气精选池 6 只 ∩ 14周动量榜前 30' in text
-    assert '*14周*（2）: S02 #2 +12% · S30 #30 +40%' in text
-    assert 'S31' not in text and 'S35' not in text                     # eligible, ranked 31 / 35: not listed
-    assert '#n = 全主池 14周上涨榜名次' in text and 'D001' not in text and 'ZZZ' not in text
-    assert '两榜' not in text and '7周' not in text.replace('14周', '')
+def test_momentum_text_cut_follows_u70_when_it_is_the_smaller_side():
+    text = d.momentum_text(_payload(u=40), [])                           # min(ceil(40 / 5), ceil(40 / 2)) = 8
+    assert '70日过半Top100 40 只' in text and '上涨合格 40，前 8：' in text
+    assert '\n8. S08 ' in text and 'S09' not in text
 
 
-def test_combo_top30_matches_the_starred_rows_of_the_momentum_board():
-    pool = ['S02', 'S17', 'S30', 'S31', 'S40', 'D005']
+def test_combo_text_lists_pool_members_in_the_momentum_cut():
+    """Boss 2026-11-26: pool ∩ the long board top board_top_cut, not every eligible member."""
+    text = d.combo_text(_payload(), ['S16', 'S15', 'S31', 'S02', 'ZZZ', 'D001'], None)  # D001 falling, ZZZ absent
+    lines = text.splitlines()
+    assert lines[0] == '*景气动量精选 2026-11-07*'
+    assert lines[1] == '景气精选池 6 只 ∩ 14周动量榜前 15（UDV · 价格截至 2026-11-06）'
+    assert lines[2] == '*14周*（2）: S02 #2 +12% · S15 #15 +25%'
+    assert 'S16' not in text and 'S31' not in text                     # eligible, ranked 16 / 31: not listed
+    assert lines[3] == '#n = 14周主战场上涨榜名次' and 'D001' not in text and 'ZZZ' not in text
+    assert '两榜' not in text and '7周' not in text.replace('14周', '') and 'V4' not in text
+
+
+def test_combo_matches_the_starred_rows_of_the_momentum_board():
+    pool = ['S02', 'S12', 'S15', 'S16', 'S40', 'D005']
     starred = [l.split('. ')[1].split(' ')[0] for l in d.momentum_text(_payload(), pool).splitlines() if l.endswith('★')]
     line = next(l for l in d.combo_text(_payload(), pool, None).splitlines() if l.startswith('*14周*'))
-    assert [t.split(' #')[0] for t in line.split(': ', 1)[1].split(' · ')] == starred == ['S02', 'S17', 'S30']
+    assert [t.split(' #')[0] for t in line.split(': ', 1)[1].split(' · ')] == starred == ['S02', 'S12', 'S15']
 
 
 def test_combo_text_empty_and_untrusted_pool():
     assert '*14周*（0）: 无' in d.combo_text(_payload(), ['ZZZ'], None)
-    assert '*14周*（0）: 无' in d.combo_text(_payload(), ['S31', 'S40'], None)   # eligible but outside the top 30
+    assert '*14周*（0）: 无' in d.combo_text(_payload(), ['S16', 'S40'], None)   # eligible but outside the cut
+    empty = d.combo_text(_payload(n=0), ['S01'], None)
+    assert '14周动量榜前 0' in empty and '*14周*（0）: 无' in empty
     text = d.combo_text(_payload(), None, 'prosperity_pool_stale')
     assert '池文件不可用（prosperity\\_pool\\_stale）' in text and '#' not in text
 
 
 def test_combo_text_fits_one_message_at_the_pool_cap():
-    """Widest case: 100-member pool (LIQUIDITY_TOP), 30 listed with widest tokens, the other 70 unscored."""
+    """Widest case: 100-member pool (LIQUIDITY_TOP), the widest cut listed, the other members unscored.
+
+    At most floor(100 × 70 / 36) = 194 names can spend 36 of 70 days in a daily top 100, so the
+    cut is at most ceil(194 / 5) = 39."""
     names = [f'BRK-{i:02d}' for i in range(100)]                    # 6-char symbols
-    payload = _payload(symbols=names[:30], down=700)
-    for row in payload['boards']['14w']['scored'][:30]:
+    payload = _payload(symbols=names[:39] + [f'X{i:02d}' for i in range(39)], down=700, u=194)
+    assert mb.board_top_cut(payload['boards']['14w']) == 39
+    for row in payload['boards']['14w']['scored'][:39]:
         row['return'] = 12.34                                       # '+1234%'
-    payload['boards']['14w']['unavailable'] = {n: 'split_unresolved' for n in names[30:]}
+    payload['boards']['14w']['unavailable'] = {n: 'split_unresolved' for n in names[39:]}
     text = d.combo_text(payload, names, None)
     assert len(text) <= d.MESSAGE_LIMIT == 4096
-    assert all(text.count(n + ' #') == 1 for n in names[:30])       # every listed name once
-    assert all(text.count(n + '（') == 1 for n in names[30:])       # every unscored name once
+    assert all(text.count(n + ' #') == 1 for n in names[:39])       # every listed name once
+    assert all(text.count(n + '（') == 1 for n in names[39:])       # every unscored name once
     assert len(d.momentum_text(payload, names)) <= 4096
 
 
@@ -671,9 +697,10 @@ def test_combo_names_pool_members_that_could_not_be_scored():
     assert '未评分' not in d.combo_text(_payload(), ['S02'], None)
 
 
-def test_momentum_top_is_thirty():
-    """Pins the combo rule (pool ∩ momentum top 30, Boss 2026-11-13), not only a display length."""
-    assert d.MOMENTUM_TOP == 30
+def test_momentum_cut_is_the_board_modules_rule():
+    """Pins the combo rule (pool ∩ board_top_cut, Boss 2026-11-26): no fixed top 30 is left behind."""
+    assert d.board_top_cut is mb.board_top_cut and not hasattr(d, 'MOMENTUM_TOP')
+    assert d.MOMENTUM_SCORING == mb.SCORING == 'udv1'
 
 
 def test_combo_send_failure_is_retried_alone(env):
@@ -682,6 +709,21 @@ def test_combo_send_failure_is_retried_alone(env):
     assert out.status == 'failed' and 'combo_text' in out.error and out.sent[-1] == 'momentum_text'
     assert 'combo_text' not in d.read_ledger(env['dir'], WEEK)['items']
     assert deliver(env, FakeRun(), FakeSend()).sent == ('combo_text',)
+
+
+@pytest.mark.parametrize('scoring', ['v4', None])
+def test_payload_of_another_scoring_is_refused(env, scoring):
+    """A leftover V4 JSON (or one without scoring) never reaches the text: its rows carry no U70 fields."""
+    class Old(FakeRun):
+        def __call__(self, cmd, **kw):
+            done = super().__call__(cmd, **kw)
+            if cmd[1].endswith('momentum_board.py'):
+                payload = {**_payload(as_of=WEEK), 'scoring': scoring}
+                Path(cmd[cmd.index('--out') + 1]).write_text(json.dumps(payload))
+            return done
+    out = deliver(env, Old(), FakeSend())
+    assert out.status == 'failed' and 'momentum_payload_invalid' in out.error
+    assert not {'momentum_text', 'combo_text'} & set(d.read_ledger(env['dir'], WEEK)['items'])
 
 
 def test_payload_with_other_boards_is_refused(env):
@@ -700,5 +742,4 @@ def test_payload_with_other_boards_is_refused(env):
 
 def test_delivery_window_is_the_board_modules_window():
     """The delivery text and the CLI name the window separately (no shared import); this pins them together."""
-    from backtest.research import momentum_board as mb
     assert mb.WINDOWS == {d.MOMENTUM_WINDOW: 70} and d.MOMENTUM_LABEL == '14周'
