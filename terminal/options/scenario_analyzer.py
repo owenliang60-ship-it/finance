@@ -516,9 +516,12 @@ def compute_dual_probability_summary(
     return {
         "underlying_price": S,
         "days_forward": days_forward,
+        "r": r,
         "market_iv": market_iv,
         "view_drift": view_drift,
         "view_vol": p_vol,
+        "half_view_drift": half_drift,
+        "half_view_vol": half_vol,
         "skew_alpha": skew_alpha,
         "slippage_dollars": slippage_dollars,
         "q_summary": q_summary,

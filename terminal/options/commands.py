@@ -5,6 +5,8 @@ prepare_options_context(symbol) collects all data needed for the options
 strategy discussion in one call.
 """
 import logging
+import math
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -16,12 +18,17 @@ from terminal.options.chain_analyzer import (
     analyze_liquidity,
     get_term_structure,
     get_earnings_proximity,
+    check_snapshot_freshness,
+    compute_25d_skew,
 )
 from terminal.options.formatter import format_options_context
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
+
+OPRMS_STALE_DAYS = 60
+EXPECTED_MOVE_DAYS = 30
 
 
 def prepare_options_context(
@@ -44,6 +51,9 @@ def prepare_options_context(
     - Earnings proximity
     - Kill conditions
     - Report summary path
+    - Snapshot freshness, 25-delta skew, 30D 1-sigma expected move
+    - Actual holdings from company.db (not the book of record) + estimated NAV
+    - Gates summary: snapshot / liquidity / earnings
 
     Args:
         symbol: Stock ticker
@@ -104,6 +114,18 @@ def prepare_options_context(
     # 9. Report summary path
     report_summary_path = _find_report_summary(symbol)
 
+    # 10. Snapshot freshness + 25-delta skew + expected move (from market_store)
+    snapshot_date = (chain_summary or {}).get("snapshot_date")
+    if not snapshot_date:
+        latest = market_store.get_options_snapshot(symbol)
+        snapshot_date = latest[0].get("snapshot_date") if latest else None
+    snapshot_freshness = check_snapshot_freshness(snapshot_date)
+    skew_25d = compute_25d_skew(symbol, market_store)
+    expected_move = _compute_expected_move(underlying_price, iv_summary, skew_25d)
+
+    # 11. Actual holdings (company.db; the Google Sheet stays the book of record)
+    portfolio = _get_portfolio_context(symbol, store, underlying_price)
+
     # Build context
     ctx = {
         "symbol": symbol,
@@ -117,9 +139,18 @@ def prepare_options_context(
         "chain_summary": chain_summary,
         "report_summary_path": report_summary_path,
         "kill_conditions": kill_conditions,
+        "snapshot_freshness": snapshot_freshness,
+        "skew_25d": skew_25d,
+        "expected_move": expected_move,
+        "portfolio": portfolio,
+        "gates": {
+            "snapshot": snapshot_freshness["status"],
+            "liquidity": (liquidity or {}).get("verdict"),
+            "earnings": (earnings or {}).get("zone", "UNKNOWN"),
+        },
     }
 
-    # 10. Format as markdown
+    # 12. Format as markdown
     ctx["formatted_context"] = format_options_context(ctx)
 
     return ctx
@@ -144,10 +175,21 @@ def _get_deep_analysis(symbol: str, store) -> Dict[str, Any]:
 
 
 def _get_oprms(symbol: str, store) -> Dict[str, Any]:
-    """Extract current OPRMS for options context."""
+    """Extract current OPRMS for options context.
+
+    position_pct is the suggested cap at rating time, not an actual holding
+    (issue 045). is_stale = rating older than OPRMS_STALE_DAYS, or undated.
+    """
     oprms = store.get_current_oprms(symbol)
     if not oprms:
         return {}
+
+    created_at = oprms.get("created_at")
+    try:
+        age_days = (date.today() - date.fromisoformat(str(created_at)[:10])).days
+        is_stale = age_days > OPRMS_STALE_DAYS
+    except ValueError:
+        is_stale = True
 
     return {
         "dna": oprms.get("dna"),
@@ -156,6 +198,74 @@ def _get_oprms(symbol: str, store) -> Dict[str, Any]:
         "position_pct": oprms.get("position_pct"),
         "investment_bucket": oprms.get("investment_bucket"),
         "verdict": oprms.get("verdict"),
+        "created_at": created_at,
+        "is_stale": is_stale,
+    }
+
+
+def _compute_expected_move(
+    underlying_price: Optional[float],
+    iv_summary: Optional[Dict[str, Any]],
+    skew_25d: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """30D 1-sigma move = S × IV × sqrt(30/365). None if price or IV is missing."""
+    iv = (iv_summary or {}).get("current_iv")
+    iv_source = "iv_summary.current_iv"
+    if not iv and skew_25d.get("available"):
+        iv = skew_25d.get("atm_iv")
+        iv_source = "skew_25d.atm_iv"
+    if not underlying_price or not iv:
+        return None
+
+    move = underlying_price * iv * math.sqrt(EXPECTED_MOVE_DAYS / 365.0)
+    return {
+        "days": EXPECTED_MOVE_DAYS,
+        "iv": iv,
+        "iv_source": iv_source,
+        "move_1sigma": round(move, 2),
+        "move_pct": round(move / underlying_price * 100, 2),
+        "lower": round(underlying_price - move, 2),
+        "upper": round(underlying_price + move, 2),
+    }
+
+
+def _get_portfolio_context(symbol: str, store, underlying_price: Optional[float]) -> Dict[str, Any]:
+    """Actual holdings from company.db. Not the book of record (Google Sheet is).
+
+    estimated_nav = cash + Σ shares × (spot for this symbol, avg_cost otherwise).
+    Option legs are not valued. An empty book or a non-positive estimate gives
+    estimated_nav = None instead of an invented number.
+    """
+    holding = store.get_open_holding(symbol)
+    option_legs = store.get_open_option_positions(symbol)
+    cash = store.get_cash_balance() or 0.0
+    all_holdings = store.get_all_open_holdings()
+
+    nav = None
+    if cash or all_holdings:
+        nav = cash
+        for h in all_holdings:
+            px = underlying_price if (h["symbol"] == symbol and underlying_price) else h["avg_cost"]
+            nav += h["shares"] * px
+        if nav <= 0:
+            nav = None
+
+    return {
+        "holding": {
+            "shares": holding["shares"],
+            "avg_cost": holding["avg_cost"],
+            "open_date": holding.get("open_date"),
+        } if holding else None,
+        "option_legs": [
+            {k: leg.get(k) for k in
+             ("expiration", "strike", "side", "quantity", "avg_premium", "strategy_tag")}
+            for leg in option_legs
+        ],
+        "cash": cash,
+        "estimated_nav": round(nav, 2) if nav is not None else None,
+        "nav_is_estimated": nav is not None,
+        "max_loss_2pct": round(nav * 0.02, 2) if nav is not None else None,
+        "max_loss_3pct": round(nav * 0.03, 2) if nav is not None else None,
     }
 
 

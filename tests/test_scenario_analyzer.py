@@ -532,3 +532,15 @@ class TestMidVsNatural:
             compute_mid_vs_natural([{"direction": "long", "bid": 1.3, "ask": 1.2}])
         with pytest.raises(ValueError):
             compute_mid_vs_natural([])
+
+
+class TestDualSummaryEchoesInputs:
+    def test_echoes_rate_and_half_view_parameters(self):
+        legs = _fair_long_call()
+        dual = compute_dual_probability_summary(
+            legs, 100.0, 0.045, 0.30, 30, view_drift=0.40, view_vol=0.50
+        )
+        assert dual["r"] == 0.045
+        assert dual["view_vol"] == 0.50
+        assert dual["half_view_drift"] == pytest.approx(0.2225)
+        assert dual["half_view_vol"] == pytest.approx(0.40)
