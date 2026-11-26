@@ -100,6 +100,9 @@ class SymbolHistory:
     forward_runs_available: bool = False
     # statement → [(date a repair kept, archived_at)]; reverses an earlier tombstone of that date (P1-1)
     restored: Dict[str, List[Tuple[str, str]]] = field(default_factory=dict)
+    # [(provider date, reviewed date, archived_at)] from reviewed_identity_update; strict replay renames
+    # a vintage row of any statement only from archived_at on (review fix 1)
+    renamed: List[Tuple[str, str, str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

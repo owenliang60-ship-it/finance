@@ -244,3 +244,54 @@ def test_a_later_repair_that_keeps_a_date_reverses_its_earlier_tombstone():
     # a tombstone newer than the keep record still wins
     late = replace(h, removed={t: [(Q3_ALIAS, first), (Q3_ALIAS, "2026-11-01T00:00:00Z")] for t in vint})
     assert Q3_ALIAS not in [q.fiscal_date for q in _build(late, "2026-11-21").quarters]
+
+
+
+def _aem(renamed=None):
+    """AEM-like Q3: provider date Q3_ALIAS (09-04), repaired 09-30 row (09-29), alias flip back to
+    Q3_ALIAS for income/balance (10-10 06:34), reviewed rename Q3_ALIAS -> 09-30 (10-10 08:23:31),
+    then cash flow re-observed under the provider date (10-10 08:23:36). market.db 2026-11-26."""
+    vint = _vintage(hist(), "2026-09-04T15:03:34Z")
+    for t, rows in vint.items():
+        repaired = dict(rows[2], _observed_at="2026-09-29T03:11:58.849639Z")
+        rows[2] = dict(rows[2], date=Q3_ALIAS)
+        rows.append(repaired)
+    vint["cashflow"].append(dict(vint["cashflow"][2], _observed_at="2026-10-10T08:23:36.791203+00:00"))
+    first, flip = "2026-09-29T03:11:58.851349Z", "2026-10-10T06:34:17.571734Z"
+    removed = {t: [(Q3_ALIAS, first)] + ([("2025-09-30", flip)] if t != "cashflow" else []) for t in vint}
+    restored = {t: [("2025-09-30", first)] + ([(Q3_ALIAS, flip)] if t != "cashflow" else []) for t in vint}
+    if renamed is None:
+        renamed = [(Q3_ALIAS, "2025-09-30", "2026-10-10T08:23:31.711055Z")]
+    return replace(hist(), vintage=vint, removed=removed, restored=restored, renamed=renamed)
+
+
+def test_reviewed_rename_applies_only_from_its_archived_at():
+    # review fix 1: strict replay used to apply every reviewed date before the repair existed
+    tech = _vintage(hist(), "2026-09-04T15:09:29Z")                       # TECK-like: income only
+    tech["income"][2] = dict(tech["income"][2], date=Q3_ALIAS)
+    h = replace(hist(), vintage=tech, renamed=[(Q3_ALIAS, "2025-09-30", "2026-10-25T06:31:05.257740Z")])
+    assert _build(h, "2026-10-17").quarters[2].fiscal_date == Q3_ALIAS      # the record before the repair
+    assert _build(h, "2026-10-25").quarters[2].fiscal_date == "2025-09-30"
+    assert _build(h, "2026-11-21").quarters[2].fiscal_date == "2025-09-30"
+    assert tech["income"][2]["date"] == Q3_ALIAS                            # vintage rows are not rewritten
+
+
+def test_alias_flip_and_rename_resolve_to_one_quarter_in_every_statement():
+    h = _aem()
+    for as_of in ("2026-10-03", "2026-10-10", "2026-10-17", "2026-11-21"):
+        qb = _build(h, as_of)
+        assert [q.fiscal_date for q in qb.quarters] == ["2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31"], as_of
+        assert "statement_alignment_conflict" not in qb.flags and qb.quarters[2].free_cash_flow == 15.0
+    assert _build(h, "2026-10-03").quarters[2].observed_on == "2026-09-29"   # the repaired rows, no rename yet
+    assert _build(h, "2026-10-17").quarters[2].observed_on == "2026-10-10"   # renamed rows, newest observation
+    # without the rename the 10-10 flip leaves the provider date, and cash flow holds two rows for Q3
+    qb = _build(_aem(renamed=[]), "2026-10-17")
+    assert "2025-09-30" not in [q.fiscal_date for q in qb.quarters]
+
+
+def test_rename_tie_prefers_the_row_already_under_the_new_date():
+    from terminal.prosperity.statements import _latest_vintage
+    rows = [{"date": Q3_ALIAS, "_observed_at": "2026-10-01T00:00:00Z", "revenue": 1.0},
+            {"date": "2025-09-30", "_observed_at": "2026-10-01T00:00:00Z", "revenue": 2.0}]
+    (row,) = _latest_vintage(rows, "2026-10-17", renamed=[(Q3_ALIAS, "2025-09-30", "2026-10-02T00:00:00Z")])
+    assert row["revenue"] == 2.0 and rows[0]["date"] == Q3_ALIAS

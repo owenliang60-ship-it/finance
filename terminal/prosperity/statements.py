@@ -59,13 +59,18 @@ def _utc(stamp: str) -> datetime:
 
 
 def _latest_vintage(rows: List[dict], as_of: str, removed: Sequence[Tuple[str, str]] = (),
-                    restored: Sequence[Tuple[str, str]] = ()) -> List[dict]:
+                    restored: Sequence[Tuple[str, str]] = (),
+                    renamed: Sequence[Tuple[str, str, str]] = ()) -> List[dict]:
     """Newest version per fiscal date observed before the end of `as_of` (exclusive next-midnight bound).
 
     The vintage is append-only, so a date a repair removed from the current table (e.g. a
     fiscal alias) would live on; it is dropped from the repair's archived_at onward unless it
     was observed again later (Codex M4 review F2), or a later repair kept that date again
-    (P1-1: the AEM/BIP alias flips of 2026-10-10).
+    (P1-1: the AEM/BIP alias flips of 2026-10-10). Tombstones read the provider (raw) dates;
+    surviving rows then take a reviewed date from the rename's archived_at onward, for every
+    statement of the symbol (AEM's cash flow was re-observed under the provider date after its
+    income/balance rename), and one row per final date is kept: the newest observation, on a tie
+    the row already stored under that date (review fix 1).
     """
     bound = datetime.combine(_d(as_of) + timedelta(days=1), datetime.min.time(), timezone.utc)
     best: Dict[str, Tuple[datetime, dict]] = {}
@@ -87,8 +92,21 @@ def _latest_vintage(rows: List[dict], as_of: str, removed: Sequence[Tuple[str, s
     def dropped(day: str, seen: datetime) -> bool:
         return day in gone and gone[day] > seen and not (day in kept_at and kept_at[day] >= gone[day])
 
-    kept = [r for seen, r in best.values() if not dropped(r["date"][:10], seen)]
-    return sorted(kept, key=lambda r: r["date"])
+    renames: Dict[str, Tuple[datetime, str]] = {}
+    for orig, new, archived_at in renamed:
+        at = _utc(archived_at)
+        if at < bound and (orig[:10] not in renames or at > renames[orig[:10]][0]):
+            renames[orig[:10]] = (at, new[:10])
+    final: Dict[str, Tuple[Tuple[datetime, bool], dict]] = {}
+    for seen, r in best.values():
+        raw = r["date"][:10]
+        if dropped(raw, seen):
+            continue
+        row = dict(r, date=renames[raw][1]) if raw in renames else r
+        rank = (seen, raw not in renames)
+        if row["date"] not in final or rank > final[row["date"]][0]:
+            final[row["date"]] = (rank, row)
+    return sorted((r for _, r in final.values()), key=lambda r: r["date"])
 
 
 def visible_statements(history: SymbolHistory, as_of: str, mode: str,
@@ -102,7 +120,7 @@ def visible_statements(history: SymbolHistory, as_of: str, mode: str,
         raise ValueError(f"unknown mode: {mode!r}")
     if as_of[:10] >= STRICT_STATEMENTS_FROM:   # no vintage means no proof, never today's tables (review F5)
         return VisibleStatements({t: _latest_vintage(history.vintage.get(t, []), as_of, history.removed.get(t, ()),
-                                                     history.restored.get(t, ()))
+                                                     history.restored.get(t, ()), history.renamed)
                                   for t in TABLES},
                                  "strict", None)
     return VisibleStatements(current, "approximate", None, tuple(history.earnings))

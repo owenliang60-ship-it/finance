@@ -5,7 +5,6 @@ import json
 import sqlite3
 from typing import FrozenSet, List, Tuple
 
-from src.data.fiscal_repair import REVIEWED_STATEMENT_DATES, reviewed_statement_date
 from src.data.market_store import MarketStore
 from terminal.prosperity.config import BETA_BENCHMARK, DATE_REMOVING_REPAIRS, LIVE_MEMBERSHIP_FROM
 from terminal.prosperity.types import SymbolHistory
@@ -28,7 +27,7 @@ def _closes(rows, key: str) -> List[Tuple[str, float]]:
 def load_history(store: MarketStore, symbol: str, *, with_vintage: bool) -> SymbolHistory:
     conn = store._get_conn()
     by_date = lambda rows: sorted(rows, key=lambda r: r["date"])
-    vintage, removed, restored = {}, {}, {}
+    vintage, removed, restored, renamed = {}, {}, {}, []
     if with_vintage:
         for r in conn.execute("SELECT statement, observed_at, filing_date, accepted_date, payload "
                               "FROM fundamental_vintage WHERE symbol = ? ORDER BY fiscal_date, observed_at",
@@ -40,8 +39,6 @@ def load_history(store: MarketStore, symbol: str, *, with_vintage: bool) -> Symb
             for key in ("filing_date", "accepted_date"):
                 if row.get(key) is None:
                     row[key] = r[key]
-            # Same reviewed provider-date correction the current tables got (P1-1: AEM, TECK, PGR)
-            row = reviewed_statement_date(row)
             row["_observed_at"] = r["observed_at"]
             vintage.setdefault(r["statement"], []).append(row)
         statement_of = {table: name for name, table in MarketStore._VINTAGE_STATEMENT_TABLES.items()}
@@ -57,7 +54,16 @@ def load_history(store: MarketStore, symbol: str, *, with_vintage: bool) -> Symb
             # equivalent_fiscal_alias stores keep_date on top, reviewed_fiscal_repair inside its plan
             keep = ctx.get("keep_date") or (ctx.get("plan") or {}).get("keep_date")
             if isinstance(keep, str) and keep:
-                restored.setdefault(stmt, []).append((_reviewed_date(symbol, keep[:10]), r["archived_at"]))
+                restored.setdefault(stmt, []).append((keep[:10], r["archived_at"]))
+        # Reviewed provider-date corrections, dated by when the current table changed (review fix 1:
+        # applying REVIEWED_STATEMENT_DATES to every vintage row leaked the 10-10 / 10-25 repairs)
+        for r in conn.execute("SELECT source_table, original_date, archived_at, context FROM fundamental_current_archive "
+                              "WHERE symbol = ? AND reason = 'reviewed_identity_update' ORDER BY archived_at",
+                              (symbol,)).fetchall():
+            ctx = json.loads(r["context"]) if r["context"] else {}
+            new = ((ctx.get("plan") or {}).get("changes") or {}).get("date")
+            if r["source_table"] in statement_of and isinstance(new, str) and new and r["original_date"]:
+                renamed.append((r["original_date"][:10], new[:10], r["archived_at"]))
     # Forward is optional: a missing/unreadable manifest must not discard this
     # member's statements. Keep run metadata for per-cutoff filtering in the kernel.
     forward_runs_available = False
@@ -95,13 +101,8 @@ def load_history(store: MarketStore, symbol: str, *, with_vintage: bool) -> Symb
         removed=removed,
         forward_runs_available=forward_runs_available,
         restored=restored,
+        renamed=renamed,
     )
-
-
-def _reviewed_date(symbol: str, day: str) -> str:
-    """A kept provider date as the reviewed table maps it (AEM keep 2024-10-30 → 2024-09-30); else unchanged."""
-    matches = {v for (sym, _cik, d, _fy, _p, _c), v in REVIEWED_STATEMENT_DATES.items() if sym == symbol and d == day}
-    return next(iter(matches)) if len(matches) == 1 else day
 
 
 def load_benchmark_closes(store: MarketStore) -> List[Tuple[str, float]]:

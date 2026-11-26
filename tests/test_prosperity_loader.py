@@ -67,9 +67,9 @@ def _archive(conn, symbol, reason, table, day, at, context):
                  ("op", at, table, symbol, day, reason, json.dumps(context), "{}"))
 
 
-def test_strict_history_applies_reviewed_dates_and_reads_tombstone_reversals(tmp_path):
-    # P1-1, market.db AEM: the 2024-09-30 → 2024-10-30 alias flip (10-10 06:34) keeps a date the
-    # reviewed table maps back to 2024-09-30, so that flip must not hide the quarter
+def test_strict_history_keeps_raw_vintage_dates_and_reads_timed_renames(tmp_path):
+    # P1-1 + review fix 1, market.db AEM: vintage rows keep the provider date; the reviewed rename
+    # and the alias flip are read with their archived_at so strict replay applies them only from then on
     path = seed_db(tmp_path / "m.db")
     w = MarketStore(db_path=path)
     flip, first = "2026-10-10T06:34:17.571734Z", "2026-09-29T03:11:58.851349Z"
@@ -87,16 +87,23 @@ def test_strict_history_applies_reviewed_dates_and_reads_tombstone_reversals(tmp
                  {"keep_date": "2024-10-30"})
         _archive(conn, "AEM", "reviewed_identity_update", "income_quarterly", "2024-10-30", "2026-10-10T08:23:31Z",
                  {"plan": {"changes": {"date": "2024-09-30"}, "date": "2024-10-30"}})
+        _archive(conn, "AEM", "reviewed_identity_update", "balance_sheet_quarterly", "2024-10-30",
+                 "2026-10-10T08:23:32Z", {"plan": {"changes": {"date": "2024-09-30"}, "date": "2024-10-30"}})
+        _archive(conn, "AEM", "reviewed_identity_update", "income_quarterly", "2024-03-31", "2026-10-10T08:23:33Z",
+                 {"plan": {"changes": {"period": "Q1"}, "date": "2024-03-31"}})     # CRH-type: period only
         _archive(conn, "AEM", "reviewed_fiscal_repair", "balance_sheet_quarterly", "2025-10-28", "2026-09-05T01:04:27Z",
                  {"after_hash": "x", "plan": {"keep_date": "2025-09-30", "period": "Q3"}})
         _archive(conn, "AEM", "reviewed_monthly_row_removed", "balance_sheet_quarterly", "2026-08-31",
                  "2026-10-25T14:32:16Z", {"plan": {"date": "2026-08-31"}})
     h = load_history(MarketStore(db_path=path, read_only=True), "AEM", with_vintage=True)
     (row,) = h.vintage["income"]
-    assert row["date"] == "2024-09-30" and row["_observed_at"] == "2026-09-04T15:03:34Z"
+    assert row["date"] == "2024-10-30" and row["_observed_at"] == "2026-09-04T15:03:34Z"
     assert row["accepted_date"] == "2024-10-31 18:33:32"
     assert h.removed == {"income": [("2024-10-30", first), ("2024-09-30", flip)],
                          "balance": [("2025-10-28", "2026-09-05T01:04:27Z"), ("2026-08-31", "2026-10-25T14:32:16Z")]}
-    assert h.restored == {"income": [("2024-09-30", first), ("2024-09-30", flip)],
+    assert h.restored == {"income": [("2024-09-30", first), ("2024-10-30", flip)],
                           "balance": [("2025-09-30", "2026-09-05T01:04:27Z")]}
-    assert load_history(MarketStore(db_path=path, read_only=True), "AEM", with_vintage=False).restored == {}
+    assert h.renamed == [("2024-10-30", "2024-09-30", "2026-10-10T08:23:31Z"),
+                         ("2024-10-30", "2024-09-30", "2026-10-10T08:23:32Z")]
+    plain = load_history(MarketStore(db_path=path, read_only=True), "AEM", with_vintage=False)
+    assert plain.restored == {} and plain.renamed == []
