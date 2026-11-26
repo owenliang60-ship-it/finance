@@ -181,6 +181,7 @@ def test_build_payload_windows_and_unavailable():
     assert sorted([r['symbol'] for r in b14['scored']] + list(b14['unavailable'])) == sorted(symbols)   # everyone, once
     assert not ({'valid', 'long_eligible', 'longs', 'u_count', 'e_count', 'top_n', 'cut'} & set(b14))   # no self-reported counts
     json.dumps(out, allow_nan=False)                                # plain JSON types only
+    assert mb.check_header(out) == sorted(symbols) and mb.check_board(out) is b14   # the readers' checks
 
 
 def test_build_payload_volume_window_is_the_signal_window():
@@ -297,8 +298,9 @@ def test_cli_writes_the_payload_for_the_board_members(dbs, tmp_path):
     out = tmp_path / 'momentum.json'
     done = _cli(db, market, out)
     assert done.returncode == 0, done.stderr
-    payload = json.loads(out.read_text(encoding='utf-8'))
+    payload = json.loads(out.read_text(encoding='utf-8'), parse_constant=mb.reject_non_finite)
     assert payload['as_of'] == WEEK and payload['price_date'] == '2026-10-02'
+    assert mb.check_header(payload) == members and mb.check_board(payload) is payload['boards']['14w']
     assert payload['universe']['symbols'] == members
     assert len(payload['boards']['14w']['scored']) == len(members) and not payload['boards']['14w']['unavailable']
     assert payload['scoring'] == 'udv1' and all(r['in_u70'] and r['top100_days'] == 70 and r['eligible']

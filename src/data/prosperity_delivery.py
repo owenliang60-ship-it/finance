@@ -20,7 +20,8 @@ import sys
 import tempfile
 from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 
-from backtest.research.momentum_board import SCORING as MOMENTUM_SCORING, board_top_cut, board_u70_count
+from backtest.research.momentum_board import (SCORING as MOMENTUM_SCORING, board_top_cut, board_u70_count, check_board,
+                                             check_header, reject_non_finite)
 from src import telegram_bot
 from src.data.prosperity_backup import _quick_check, check_space
 from src.data.prosperity_pool import POOL_SCHEME_ID, load_prosperity_pool
@@ -42,7 +43,6 @@ MESSAGE_LIMIT = 4096                   # Telegram sendMessage text limit
 MOMENTUM_WINDOW = '14w'                # the one board the CLI writes (momentum_board.WINDOWS); a test pins the pair
 MOMENTUM_LABEL = '14周'
 MOMENTUM_ITEMS = ('momentum_text', 'combo_text')
-MOMENTUM_SCHEMA_VERSION = 1
 KEEP_OUTPUT_WEEKS = 2
 NEVER = object()                       # last_health_freeze: no report was ever sent or baselined
 VERSION_CHANGED = object()             # last_health_freeze: the last sent report used another code_version
@@ -320,13 +320,16 @@ def _run_cli(run, script: str, args: Sequence[str], timeout: int) -> None:
 
 
 def _read_momentum(path: Path, as_of: str) -> dict:
-    """The CLI's JSON for exactly this week and this layout, or momentum_payload_invalid."""
-    payload = json.loads(path.read_text(encoding='utf-8'))
-    if (not isinstance(payload, dict) or payload.get('schema_version') != MOMENTUM_SCHEMA_VERSION
-            or payload.get('scoring') != MOMENTUM_SCORING
-            or payload.get('as_of') != as_of or not isinstance(payload.get('boards'), dict)
-            or set(payload['boards']) != {MOMENTUM_WINDOW}):
-        raise ValueError('momentum_payload_invalid')
+    """The CLI's JSON for exactly this week, passing the morning reader's checks (review P2), or
+    momentum_payload_invalid."""
+    try:
+        payload = json.loads(path.read_text(encoding='utf-8'), parse_constant=reject_non_finite)
+        check_header(payload)
+        if payload['as_of'] != as_of:
+            raise ValueError('momentum board is for another week')
+        check_board(payload)
+    except (ValueError, TypeError, KeyError, OverflowError, RecursionError) as exc:
+        raise ValueError(f'momentum_payload_invalid: {exc}'[:200]) from exc
     return payload
 
 

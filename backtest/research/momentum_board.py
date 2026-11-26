@@ -13,13 +13,14 @@ from __future__ import annotations
 import bisect
 from datetime import date
 import math
+import re
 import statistics
 from typing import Callable, Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 
 from scripts.crypto_trend_metrics import trend_metrics
-from src.data.prosperity_pool import COVERAGE_MIN      # the prosperity pool's floor, one definition
+from src.data.prosperity_pool import COVERAGE_MIN, _day, _finite, _is_int   # the pool's floor, one definition
 
 SCHEMA_VERSION = 1
 SCORING = 'udv1'                         # no "_": the delivery text goes out with Telegram legacy Markdown
@@ -41,6 +42,7 @@ LONG_DRAWDOWN_LIMIT = 0.30
 UDV_WEIGHTS = {'return': 0.45, 'er': 0.125, 'r_squared': 0.125, 'drawdown': 0.05, 'udv': 0.25}
 _QUERY_BATCH = 500
 _ROW_KEYS = ('return', 'er', 'r_squared', 'slope', 'drawdown')
+_SYMBOL = re.compile(r'[A-Z0-9.-]+')     # no "_": the texts go out with Telegram legacy Markdown (issue 016)
 
 
 def min_top_volume_days(days: int) -> int:
@@ -144,6 +146,74 @@ def load_daily_dollar_volumes(market, symbols: Sequence[str], days: Sequence[str
             if value is not None and math.isfinite(value) and value >= 0:
                 out.setdefault(symbol, {})[day] = float(value)
     return out
+
+
+def reject_non_finite(token: str):
+    """json.loads parse_constant: NaN / Infinity never enter a board."""
+    raise ValueError(f'non-finite number in momentum board: {token}')
+
+
+def _unit(value) -> bool:
+    return _finite(value) and 0 <= value <= 1
+
+
+def check_header(payload) -> List[str]:
+    """The universe symbols of a payload whose header this CLI could have written, or ValueError.
+    The sender and the morning reader both call this, then check_board (review P2)."""
+    if (not isinstance(payload, dict) or not _is_int(payload.get('schema_version'))
+            or payload['schema_version'] != SCHEMA_VERSION or payload.get('scoring') != SCORING):
+        raise ValueError('momentum header invalid')
+    boards, universe = payload.get('boards'), payload.get('universe')
+    if not isinstance(boards, dict) or set(boards) != set(WINDOWS) or not isinstance(universe, dict):
+        raise ValueError('momentum boards or universe invalid')
+    _day(payload.get('as_of'))
+    symbols = universe.get('symbols')
+    if (not isinstance(symbols, list) or not symbols or symbols != sorted(set(symbols))
+            or not all(isinstance(s, str) and _SYMBOL.fullmatch(s) for s in symbols)
+            or not _is_int(universe.get('count')) or universe['count'] != len(symbols)):
+        raise ValueError('momentum universe invalid')
+    return symbols
+
+
+def check_board(payload) -> dict:
+    """The one board of a payload passing check_header, if every row is what score_window writes."""
+    (label, days), = WINDOWS.items()
+    board, price_day = payload['boards'][label], _day(payload.get('price_date'))
+    if not 0 <= (_day(payload['as_of']) - price_day).days <= MAX_LAG_DAYS or not isinstance(board, dict):
+        raise ValueError('momentum price_date not bound to as_of')
+    window = board.get('window')
+    if (not isinstance(window, list) or len(window) != 2 or not _day(window[0]) < _day(window[1]) == price_day
+            or not _is_int(board.get('days')) or board['days'] != days):
+        raise ValueError('momentum window invalid')
+    scored, unavailable, idle = board.get('scored'), board.get('unavailable'), board.get('unavailable_top100_days')
+    if (not isinstance(scored, list) or not isinstance(unavailable, dict) or not isinstance(idle, dict)
+            or set(idle) != set(unavailable) or not all(_is_int(n) and 0 <= n <= days for n in idle.values())
+            or not all(_SYMBOL.fullmatch(s) and isinstance(why, str) and why for s, why in unavailable.items())):
+        raise ValueError('momentum unavailable rows invalid')
+    for r in scored:
+        if (not isinstance(r, dict) or type(r.get('eligible')) is not bool or type(r.get('in_u70')) is not bool
+                or not all(_finite(r.get(k)) for k in ('score', 'return', 'slope', 'dollar_volume'))
+                or not all(_unit(r.get(k)) for k in ('er', 'r_squared', 'drawdown')) or r['dollar_volume'] < 0
+                or 'udv' not in r or (r['udv'] is not None and not (_finite(r['udv']) and r['udv'] >= 0))
+                or not _is_int(r.get('top100_days')) or not 0 <= r['top100_days'] <= days
+                or r['in_u70'] != (r['top100_days'] >= min_top_volume_days(days))
+                or r['eligible'] != (r['in_u70'] and r['return'] > 0 and r['slope'] > 0
+                                     and r['drawdown'] <= LONG_DRAWDOWN_LIMIT)):
+            raise ValueError('momentum scored row invalid')
+        if (r['score'] <= 0 or not _is_int(r.get('rank')) or r['rank'] < 1) if r['eligible'] else (
+                r.get('rank') is not None or r['score'] != 0.0):
+            raise ValueError('momentum rank or score invalid')
+    names = [r.get('symbol') for r in scored]
+    if (len(set(names)) != len(names) or not set(names).isdisjoint(unavailable)
+            or set(names) | set(unavailable) != set(payload['universe']['symbols'])):
+        raise ValueError('momentum rows do not partition the universe')
+    if len(names) < COVERAGE_MIN * len(payload['universe']['symbols']):
+        raise ValueError('momentum coverage below floor')
+    keys = [(-r['score'], r['symbol']) for r in scored]
+    ranks = [r['rank'] for r in scored if r['eligible']]       # eligible rows in score order: 1..|E|
+    if keys != sorted(keys) or ranks != list(range(1, len(ranks) + 1)):
+        raise ValueError('momentum rows not in score order')
+    return board
 
 
 def build_payload(*, book, daily_volumes: Callable[[Sequence[str]], Mapping[str, Mapping[str, float]]],

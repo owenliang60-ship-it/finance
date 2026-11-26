@@ -532,21 +532,23 @@ def test_delivered_text_lists_members_by_pool_rank(env):
 # --- M16: momentum board and prosperity-momentum picks ---------------------------------------
 
 def _payload(n=40, down=840, symbols=None, as_of='2026-11-07', u=75):
-    """n long-eligible rows, then `down` ineligible ones; the first u rows are in U70 (u >= n: E ⊆ U70).
-    Defaults: cut = min(ceil(75 / 5), ceil(40 / 2)) = 15."""
+    """A board that passes the shared checks: n long-eligible rows, then `down` falling ones; the first
+    u rows are in U70 (u >= n: E ⊆ U70). Defaults: cut = min(ceil(75 / 5), ceil(40 / 2)) = 15."""
     names = symbols or [f'S{i:02d}' for i in range(1, n + 1)]
+    metrics = {'er': 0.2, 'r_squared': 0.5, 'drawdown': 0.1, 'dollar_volume': 1e9, 'udv': 1.5}
     scored = [{'symbol': s, 'rank': i, 'eligible': True, 'score': 90.0 - (i * 0.01 if symbols else i),
-               'return': 0.10 + i / 100} for i, s in enumerate(names, 1)]
-    scored += [{'symbol': f'D{i:03d}', 'rank': None, 'eligible': False, 'score': 0.0, 'return': -0.1}
-               for i in range(down)]
+               'return': 0.10 + i / 100, 'slope': 0.01, **metrics} for i, s in enumerate(names, 1)]
+    scored += [{'symbol': f'D{i:03d}', 'rank': None, 'eligible': False, 'score': 0.0, 'return': -0.1,
+                'slope': -0.01, **metrics} for i in range(down)]
     for i, row in enumerate(scored):
-        row.update(in_u70=i < u, top100_days=70 if i < u else 0, udv=1.5)
-    board = {'days': 70, 'window': ['2026-07-30', '2026-11-06'], 'scored': scored,
-             'unavailable': {f'U{i}': 'price_gap' for i in range(8)},
-             'unavailable_top100_days': {f'U{i}': 0 for i in range(8)}, 'adjustments': []}
-    return {'schema_version': 1, 'as_of': as_of, 'price_date': '2026-11-06', 'scoring': 'udv1',
-            'universe': {'count': len(scored) + 8},
-            'boards': {'14w': board}}
+        row.update(in_u70=i < u, top100_days=70 if i < u else 0)
+    unavailable = {f'U{i}': 'price_gap' for i in range(8)}
+    price_date = (date.fromisoformat(as_of) - timedelta(days=1)).isoformat()
+    board = {'days': 70, 'window': ['2026-07-30', price_date], 'scored': scored, 'unavailable': unavailable,
+             'unavailable_top100_days': {s: 0 for s in unavailable}, 'adjustments': []}
+    universe = sorted([*(r['symbol'] for r in scored), *unavailable])
+    return {'schema_version': 1, 'as_of': as_of, 'price_date': price_date, 'scoring': 'udv1',
+            'universe': {'count': len(universe), 'symbols': universe}, 'boards': {'14w': board}}
 
 
 def test_momentum_text_lists_the_dynamic_cut_and_stars():
@@ -748,6 +750,30 @@ def test_payload_of_another_scoring_is_refused(env, scoring):
                 Path(cmd[cmd.index('--out') + 1]).write_text(json.dumps(payload))
             return done
     out = deliver(env, Old(), FakeSend())
+    assert out.status == 'failed' and 'momentum_payload_invalid' in out.error
+    assert not {'momentum_text', 'combo_text'} & set(d.read_ledger(env['dir'], WEEK)['items'])
+
+
+@pytest.mark.parametrize('tamper', [
+    lambda b: b['scored'][0].update(top100_days=0, in_u70=False),
+    lambda b: b['scored'][0].update(slope=-0.1),
+    lambda b: b['scored'][0].update(drawdown=0.50),
+    lambda b: b['unavailable_top100_days'].pop('U0'),
+    lambda b: b['unavailable_top100_days'].update(ZZZ=0),
+    lambda b: b['unavailable_top100_days'].update(U0=71),
+], ids=['eligible-out-of-u70', 'eligible-slope-negative', 'eligible-drawdown-50', 'top100-key-missing',
+        'top100-key-extra', 'top100-above-window'])
+def test_a_board_failing_the_shared_checks_is_never_sent(env, tamper):
+    """Review P2: the sender runs the morning reader's checks; a tampered row keeping eligible=True is refused."""
+    class Tampered(FakeRun):
+        def __call__(self, cmd, **kw):
+            done = super().__call__(cmd, **kw)
+            if cmd[1].endswith('momentum_board.py'):
+                payload = _payload(as_of=WEEK)
+                tamper(payload['boards']['14w'])
+                Path(cmd[cmd.index('--out') + 1]).write_text(json.dumps(payload))
+            return done
+    out = deliver(env, Tampered(), FakeSend())
     assert out.status == 'failed' and 'momentum_payload_invalid' in out.error
     assert not {'momentum_text', 'combo_text'} & set(d.read_ledger(env['dir'], WEEK)['items'])
 
