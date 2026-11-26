@@ -1,0 +1,515 @@
+{
+  "status": "PASS",
+  "quarters": [
+    {
+      "quarter": "2021Q2",
+      "as_of": "2021-09-25",
+      "coverage": 1.0,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2021Q3",
+      "as_of": "2021-12-25",
+      "coverage": 0.9943019943019943,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2021Q4",
+      "as_of": "2022-03-26",
+      "coverage": 1.0,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2022Q1",
+      "as_of": "2022-06-25",
+      "coverage": 0.9938366718027735,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2022Q2",
+      "as_of": "2022-09-24",
+      "coverage": 1.0,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2022Q3",
+      "as_of": "2022-12-31",
+      "coverage": 0.9908952959028832,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2022Q4",
+      "as_of": "2023-03-25",
+      "coverage": 1.0,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2023Q1",
+      "as_of": "2023-06-24",
+      "coverage": 0.976401179941003,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2023Q2",
+      "as_of": "2023-09-30",
+      "coverage": 1.0,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2023Q3",
+      "as_of": "2023-12-30",
+      "coverage": 0.9903448275862069,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2023Q4",
+      "as_of": "2024-03-30",
+      "coverage": 1.0,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2024Q1",
+      "as_of": "2024-06-29",
+      "coverage": 0.9865771812080537,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2024Q2",
+      "as_of": "2024-09-28",
+      "coverage": 1.0,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2024Q3",
+      "as_of": "2024-12-28",
+      "coverage": 0.9933862433862434,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2024Q4",
+      "as_of": "2025-03-29",
+      "coverage": 1.0,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2025Q1",
+      "as_of": "2025-06-28",
+      "coverage": 0.9935316946959897,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2025Q2",
+      "as_of": "2025-09-27",
+      "coverage": 1.0,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2025Q3",
+      "as_of": "2025-12-27",
+      "coverage": 0.992619926199262,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2025Q4",
+      "as_of": "2026-03-28",
+      "coverage": 1.0,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2026Q1",
+      "as_of": "2026-06-27",
+      "coverage": 0.9930875576036866,
+      "decision": "calendar",
+      "mode": "replay"
+    },
+    {
+      "quarter": "2026Q2",
+      "as_of": "2026-09-26",
+      "coverage": 1.0,
+      "decision": "calendar",
+      "mode": "replay"
+    }
+  ],
+  "source_bucket_sample": [
+    {
+      "quarter": "2021Q2",
+      "symbol": "A",
+      "source_fiscal": "2021-07-31",
+      "quarter_bucket": "2021Q3"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "AAL",
+      "source_fiscal": "2021-06-30",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "AAP",
+      "source_fiscal": "2021-07-17",
+      "quarter_bucket": "2021Q3"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "AAPL",
+      "source_fiscal": "2021-06-26",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "ABBNY",
+      "source_fiscal": "2021-06-30",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "ABBV",
+      "source_fiscal": "2021-06-30",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "ABT",
+      "source_fiscal": "2021-06-30",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "ACGL",
+      "source_fiscal": "2021-06-30",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "ACI",
+      "source_fiscal": "2021-06-19",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "ACN",
+      "source_fiscal": "2021-05-31",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "ADBE",
+      "source_fiscal": "2021-06-04",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "ADI",
+      "source_fiscal": "2021-07-31",
+      "quarter_bucket": "2021Q3"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "ADM",
+      "source_fiscal": "2021-06-30",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "ADP",
+      "source_fiscal": "2021-06-30",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "ADSK",
+      "source_fiscal": "2021-07-31",
+      "quarter_bucket": "2021Q3"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "AEE",
+      "source_fiscal": "2021-06-30",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "AEM",
+      "source_fiscal": "2021-06-30",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "AEP",
+      "source_fiscal": "2021-06-30",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "AES",
+      "source_fiscal": "2021-06-30",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2021Q2",
+      "symbol": "AFG",
+      "source_fiscal": "2021-06-30",
+      "quarter_bucket": "2021Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "A",
+      "source_fiscal": "2024-07-31",
+      "quarter_bucket": "2024Q3"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "AAPL",
+      "source_fiscal": "2024-06-29",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ABBNY",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ABBV",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ABNB",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ABT",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ACGL",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ACI",
+      "source_fiscal": "2024-06-15",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ACM",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ACN",
+      "source_fiscal": "2024-05-31",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ADBE",
+      "source_fiscal": "2024-08-30",
+      "quarter_bucket": "2024Q3"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ADI",
+      "source_fiscal": "2024-08-03",
+      "quarter_bucket": "2024Q3"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ADM",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ADP",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "ADSK",
+      "source_fiscal": "2024-07-31",
+      "quarter_bucket": "2024Q3"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "AEE",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "AEM",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "AEP",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "AER",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2024Q2",
+      "symbol": "AES",
+      "source_fiscal": "2024-06-30",
+      "quarter_bucket": "2024Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "A",
+      "source_fiscal": "2026-07-31",
+      "quarter_bucket": "2026Q3"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "AA",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "AAPL",
+      "source_fiscal": "2026-06-27",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "ABBV",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "ABEV",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "ABNB",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "ABT",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "ACGL",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "ACN",
+      "source_fiscal": "2026-05-31",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "ADBE",
+      "source_fiscal": "2026-08-28",
+      "quarter_bucket": "2026Q3"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "ADI",
+      "source_fiscal": "2026-08-01",
+      "quarter_bucket": "2026Q3"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "ADM",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "ADP",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "ADSK",
+      "source_fiscal": "2026-07-31",
+      "quarter_bucket": "2026Q3"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "AEE",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "AEIS",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "AEM",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "AEP",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "AER",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    },
+    {
+      "quarter": "2026Q2",
+      "symbol": "AES",
+      "source_fiscal": "2026-06-30",
+      "quarter_bucket": "2026Q2"
+    }
+  ],
+  "scope": "Freeze dates recomputed from the calendar; candidate coverage recomputed from its evidence; sampled fiscal dates checked against source SQL. Candidate denominators are taken as given; does not reimplement M4 eligibility."
+}

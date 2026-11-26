@@ -71,14 +71,29 @@ def read_records(db, version):
     return records
 
 
+def open_ro(path: Path) -> sqlite3.Connection:
+    """Open SQLite read-only; cleanly-closed WAL files with no -wal/-shm need immutable=1."""
+    uri = path.resolve().as_uri() + '?mode=ro'
+    wal = Path(str(path) + '-wal')
+    if wal.exists() and wal.stat().st_size > 0:
+        return sqlite3.connect(uri, uri=True)
+    conn = sqlite3.connect(uri, uri=True)
+    try:
+        conn.execute('SELECT 1 FROM sqlite_master LIMIT 1').fetchone()
+        return conn
+    except sqlite3.OperationalError:
+        conn.close()
+        return sqlite3.connect(uri + '&immutable=1', uri=True)
+
+
 def verify(a):
     records = read_records(a.db, a.version)
     expected = list(labels(a.first, a.last))
     for label, body in records.items():           # every record of this version, inside the range or not
         check(body['identity']['as_of'] == planned(label).isoformat(),
               f'as_of {label}: {body["identity"]["as_of"]} != {planned(label)}')
-    conn = sqlite3.connect(a.db.resolve().as_uri() + '?mode=ro', uri=True)
-    market = sqlite3.connect(a.market_db.resolve().as_uri() + '?mode=ro', uri=True)
+    conn = open_ro(a.db)
+    market = open_ro(a.market_db)
     try:
         chain = conn.execute("SELECT quarter_label, as_of, input_set_id FROM board WHERE board_type='quarter_final' "
                              "AND scheme_id='F1' AND code_version=? ORDER BY as_of", (a.version,)).fetchall()
