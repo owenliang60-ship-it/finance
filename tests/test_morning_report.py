@@ -3257,10 +3257,11 @@ def _prosperity_member(symbol, cap, *, rank=1, grade="STRICT", score=72.39, clos
             "close": close, "ema30": ema30, "above": above, "marketCap": cap}
 
 
-def _prosperity_momentum(picks=(), unscored=()):
-    """picks = [(symbol, momentum rank, 14-week return)]; unscored = [(symbol, reason code)]."""
+def _prosperity_momentum(picks=(), unscored=(), top_n=22):
+    """picks = [(symbol, momentum rank, 14-week return)]; unscored = [(symbol, reason code)].
+    top_n = that week's board_top_cut (Boss 2026-11-26), read as given, never a constant."""
     return {"available": True, "reason": None, "as_of": "2026-11-14", "price_date": "2026-11-13",
-            "window": "14w", "days": 70, "top_n": 30, "pick_count": len(picks),
+            "window": "14w", "days": 70, "top_n": top_n, "pick_count": len(picks),
             "picks": [{"symbol": s, "momentum_rank": r, "momentum_score": 80.0, "momentum_return": ret}
                       for s, r, ret in picks],
             "unscored": [{"symbol": s, "reason": why} for s, why in unscored]}
@@ -3315,7 +3316,7 @@ class TestProsperityCompassDisplay:
         text, html, visual = _three_faces(payload)
         lines = text.splitlines()
         assert lines[0] == "*0d. 景气动量精选池（试运行）*"
-        assert lines[1] == ("景气动量精选池 2 只（截至 2026-11-14，景气池 35 只 ∩ 14周动量榜前 30，动量价至 2026-11-13）"
+        assert lines[1] == ("景气动量精选池 2 只（截至 2026-11-14，景气池 35 只 ∩ 14周动量榜前 22，动量价至 2026-11-13）"
                             " | EMA30 2/2 | 站上EMA30 2 只")
         assert lines[2] == " | ".join(_PROSPERITY_COLUMNS)
         expected = [["SMALL", "5", "+21%", "3", "FULL", "64.9", "110.00", "100.00", "上方", "$20.0B"],
@@ -3368,7 +3369,7 @@ class TestProsperityCompassDisplay:
 
     def test_zero_picks_is_an_empty_table_not_a_warning(self):
         text, html, visual = _three_faces(_prosperity_payload(members=[], picks=[]))
-        head = "景气动量精选池 0 只（截至 2026-11-14，景气池 35 只 ∩ 14周动量榜前 30，动量价至 2026-11-13）"
+        head = "景气动量精选池 0 只（截至 2026-11-14，景气池 35 只 ∩ 14周动量榜前 22，动量价至 2026-11-13）"
         assert text.splitlines() == ["*0d. 景气动量精选池（试运行）*", head]
         assert html[0]["subtitle"] == head and html[0]["rows"] == [] and len(html) == 1
         assert visual[0]["subtitle"] == head and [b["rows"] for b in visual[0]["blocks"]] == [[]]
@@ -3412,16 +3413,22 @@ class TestProsperityCompassDisplay:
         _, html, visual = _three_faces(_prosperity_payload(members=_POOL_ROWS, picks=[("BIG", 3, 0.3)]))
         assert len(html) == 1 and len(visual[0]["blocks"]) == 1
 
-    def test_subtitle_fits_the_image_at_thirty_long_dated_picks(self):
-        """Plan P2-2: the image subtitle is cut at 2248 px; the worst case must fit whole."""
+    def test_subtitle_fits_the_image_at_the_widest_cut(self):
+        """Plan P2-2: the image subtitle is cut at 2248 px; the worst case must fit whole.
+
+        Worst case: a 100-member pool and the widest cut, ceil(194 / 5) = 39 (at most 194 names can
+        spend 36 of 70 days in a daily top 100)."""
         from PIL import Image, ImageDraw
-        members = [_prosperity_member("SYM{:02d}".format(i), 1e12, rank=i + 1) for i in range(35)]
-        payload = _prosperity_payload(members=members, picks=[(m["symbol"], i + 1, 0.5)
-                                                              for i, m in enumerate(members[:30])],
-                                      unscored=[("A{}".format(i), "split_unresolved") for i in range(5)])
+        members = [_prosperity_member("SYM{:02d}".format(i), 1e12, rank=i + 1) for i in range(100)]
+        picks = [(m["symbol"], i + 1, 0.5) for i, m in enumerate(members[:39])]
+        payload = _prosperity_payload(members=members, pool_count=100,
+                                      momentum=_prosperity_momentum(picks, top_n=39,
+                                                                    unscored=[("A{}".format(i), "split_unresolved")
+                                                                              for i in range(5)]))
         (section,) = _three_faces(payload)[2]
         subtitle = section["subtitle"]
-        assert subtitle.startswith("景气动量精选池 30 只") and subtitle.endswith("| EMA30 30/30 | 站上EMA30 30 只")
+        assert "景气池 100 只 ∩ 14周动量榜前 39" in subtitle
+        assert subtitle.startswith("景气动量精选池 39 只") and subtitle.endswith("| EMA30 39/39 | 站上EMA30 39 只")
         draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))
         width = mr._VISUAL_WIDTH - mr._VISUAL_MARGIN * 2
         assert mr._fit_text(draw, subtitle, mr._load_visual_font(32), width) == subtitle
@@ -3452,6 +3459,24 @@ class TestProsperityCompassDisplay:
         payload = _prosperity_payload(members=members, picks=picks)
         assert mr.format_section_prosperity_compass(payload).splitlines()[1] == (
             "⚠️ 景气动量精选池（试运行）不可用（显示异常）")
+
+    @pytest.mark.parametrize("top_n", ["missing", None, True, -1, 22.0, "22"],
+                             ids=["missing", "none", "bool", "negative", "float", "string"])
+    def test_bad_top_n_is_a_display_error(self, top_n):
+        """The cut changes every week: it is read from the momentum summary, never a fallback constant."""
+        momentum = _prosperity_momentum([("BIG", 1, 0.2)])
+        if top_n == "missing":
+            del momentum["top_n"]
+        else:
+            momentum["top_n"] = top_n
+        text, html, visual = _three_faces(_prosperity_payload(members=_POOL_ROWS, momentum=momentum))
+        warning = "⚠️ 景气动量精选池（试运行）不可用（显示异常）"
+        assert text.splitlines()[1] == warning and html[0]["subtitle"] == warning and visual[0]["subtitle"] == warning
+
+    def test_top_n_zero_is_a_valid_empty_week(self):
+        payload = _prosperity_payload(members=[], momentum=_prosperity_momentum([], top_n=0))
+        assert mr.format_section_prosperity_compass(payload).splitlines()[1] == (
+            "景气动量精选池 0 只（截至 2026-11-14，景气池 35 只 ∩ 14周动量榜前 0，动量价至 2026-11-13）")
 
 
 class TestProsperityCompassMomentumFilter:
