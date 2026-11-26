@@ -60,3 +60,103 @@ def test_invalid_decision_inputs():
             freeze_decision('2026-12-26', '2026Q3', coverage)
     with pytest.raises(ValueError):
         freeze_decision('2026-12-25', '2026Q3', .95)
+
+
+VERIFIER = 'reports/prosperity/freeze-calendar-20261113/verify_freezes.py'
+
+
+def _envelope(body):
+    import hashlib, json
+    text = json.dumps(body, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
+    return {'payload': body, 'sha256': hashlib.sha256(text.encode()).hexdigest()}
+
+
+def _synthetic_chain(tmp_path, version='v-new'):
+    """Minimal prosperity.db + state + market.db for two quarters on the new calendar."""
+    import json, sqlite3
+    db, market = tmp_path / 'prosperity.db', tmp_path / 'market.db'
+    conn = sqlite3.connect(db)
+    conn.execute('CREATE TABLE board (board_type TEXT, as_of TEXT, scheme_id TEXT, code_version TEXT, '
+                 'quarter_label TEXT, frozen_at TEXT, input_set_id INTEGER)')
+    conn.execute('CREATE TABLE stock_input (input_set_id INTEGER, symbol TEXT, input_json TEXT)')
+    m = sqlite3.connect(market)
+    m.execute('CREATE TABLE income_quarterly (symbol TEXT, date TEXT)')
+    state = tmp_path / 'prosperity.db.state' / 'candidates'
+    state.mkdir(parents=True)
+    for n, (label, day, fiscal) in enumerate((('2026Q1', '2026-06-27', '2026-03-31'),
+                                              ('2026Q2', '2026-09-26', '2026-06-30'))):
+        bucket = label
+        evidence = [['AAA', bucket], ['BBB', bucket], ['CCC', None]]
+        cutoff = f'{day[:8]}{int(day[8:]) + 1:02d}T00:00:00Z'
+        body = {'schema_version': 1, 'identity': {'as_of': day, 'quarter_label': label, 'code_version': version,
+                                                  'schemes': {}},
+                'cutoff': cutoff, 'meta': {'mode': 'replay'}, 'health': {'status': 'pass'},
+                'coverage': 2 / 3, 'decision': 'calendar', 'evidence': evidence, 'hashes': {'k': 'h'}}
+        (state / f'{day}-{n}.json').write_text(json.dumps(_envelope(body)))
+        for scheme in ('F1', 'F1-rank', 'F1-exfin', 'F0'):
+            conn.execute('INSERT INTO board VALUES (?,?,?,?,?,?,?)', ('quarter_final', day, scheme, version, label,
+                                                                    cutoff, n))
+            conn.execute('INSERT INTO board VALUES (?,?,?,?,?,?,?)', ('weekly', day, scheme, version, None, None, n))
+        for sym, b in evidence:
+            conn.execute('INSERT INTO stock_input VALUES (?,?,?)',
+                         (n, sym, json.dumps({'current_fiscal': fiscal if b else None, 'quarter_bucket': b})))
+            if b:
+                m.execute('INSERT INTO income_quarterly VALUES (?,?)', (sym, fiscal))
+    conn.commit(); m.commit(); conn.close(); m.close()
+    return db, market, state
+
+
+def _verify(db, market, out, *extra):
+    import subprocess, sys
+    return subprocess.run([sys.executable, '-I', VERIFIER, '--db', str(db), '--market-db', str(market),
+                           '--version', 'v-new', '--first', '2026Q1', '--last', '2026Q2', '--out', str(out),
+                           '--sample-quarters', '2026Q2', *extra], capture_output=True, text=True)
+
+
+def test_new_calendar_verifier_is_stdlib_only_and_passes_a_valid_chain(tmp_path):
+    import json, re
+    source = open(VERIFIER).read()
+    assert not re.search(r'^\s*(from|import)\s+(terminal|src|backtest|scripts)\b', source, re.M)
+    db, market, _ = _synthetic_chain(tmp_path)
+    out = tmp_path / 'verify.json'
+    run = _verify(db, market, out)
+    assert run.returncode == 0, run.stdout + run.stderr
+    report = json.loads(out.read_text())
+    assert report['status'] == 'PASS' and [q['as_of'] for q in report['quarters']] == ['2026-06-27', '2026-09-26']
+    assert len(report['source_bucket_sample']) == 2
+
+
+def _rewrite(state, day, change):
+    import json
+    (path,) = state.glob(f'{day}-*.json')
+    body = json.loads(path.read_text())['payload']
+    change(body)
+    path.write_text(json.dumps(_envelope(body)))                 # self-consistent checksum: only content checks catch it
+
+
+def _bad_checksum(state):
+    import json
+    (path,) = state.glob('2026-06-27-*.json')
+    envelope = json.loads(path.read_text())
+    envelope['sha256'] = '0' * 64
+    path.write_text(json.dumps(envelope))
+
+
+def test_new_calendar_verifier_fails_on_tampered_records(tmp_path):
+    import json, shutil
+    cases = {
+        'as_of': lambda s: _rewrite(s, '2026-09-26', lambda b: b['identity'].update(as_of='2026-10-03')),
+        'coverage': lambda s: _rewrite(s, '2026-09-26', lambda b: b.update(coverage=1.0)),
+        'decision': lambda s: _rewrite(s, '2026-06-27', lambda b: b.update(decision='coverage')),
+        'missing': lambda s: next(s.glob('2026-06-27-*.json')).unlink(),
+        'duplicate': lambda s: shutil.copy(next(s.glob('2026-06-27-*.json')), s / '2026-06-27-copy.json'),
+        'checksum': _bad_checksum,
+    }
+    for name, tamper in cases.items():
+        root = tmp_path / name
+        root.mkdir()
+        db, market, state = _synthetic_chain(root)
+        tamper(state)
+        run = _verify(db, market, root / 'verify.json')
+        assert run.returncode == 1, (name, run.stdout, run.stderr)
+        assert 'FAIL' in run.stdout and not (root / 'verify.json').exists(), name

@@ -312,7 +312,7 @@ flowchart LR
 | 15 | M14 晨报并行接入 | 11 | 核心 | ✅ 可延后；🟡 2026-11-09 push main 33bcbcda，11-10 起晨报上线 | "景气池（试运行）"段：池文件按原榜绑定（正向判断）→ 同一个 `scan_selection_compass` → 文本/HTML/图片三处 0d；计算与显示各自兜底，失败只让本段显示原因；证据 `reports/prosperity/m14-morning-20261105/`。2026-11-09 Boss 加：0d 全部成员、第 1/2 段按景气池分组（分支 `prosperity/pool-display` 已于 2026-11-09 merge main（`39962019`）；证据 `reports/prosperity/pool-display-20261109/`）。2026-11-19 Boss：0d 只显示景气动量精选池、删 Premium 对比（分支 `morning/0d-prosperity-momentum` 已于 2026-11-19 merge main（`17588c94`）；证据 `reports/prosperity/morning-0d-momentum-20261119/`） |
 | 16 | M15 晨报切换与 Premium 退役 | 13, 15 | 外围 | ✅ | S4，Boss 看完首份体检报告后 |
 | 17 | M16 动量榜与景气动量精选 | 11, 14 | 外围 | ✅；🟡 2026-11-13 本地验收，分支 `prosperity/m16-momentum` 已于 2026-11-13 merge main（`07ea7f82`） | 周报多发两条私聊文本：14 周 V4 上涨榜前 30；景气精选池 ∩ 14 周动量榜前 30（单一窗口，窗口回测见 `reports/prosperity/m16-window-backtest-20261113/`）。`backtest/research/momentum_board.py` + CLI `scripts/momentum_board.py`，由 M13 的 `deliver_week` 以子进程调用；证据 `reports/prosperity/m16-momentum-20261113/`。2026-11-19 起晨报 0d 读同一份 JSON（分支 `morning/0d-prosperity-momentum` 已于 2026-11-19 merge main（`17588c94`）） |
-| 18 | M17 季末冻结改日历 | 10 | 基础 | ❌ | 每个自然季度最后一个周六冻结上一财季，覆盖率只记录；冻结周门控不过则下周按计划日回放补冻。🟡 2026-11-25 代码与测试在分支 `fix/prosperity-kernel-freeze`（与 Batch 2 内核修复同一个新 `code_version`），未 merge；上线前按 plan `docs/plans/2026-11-13-prosperity-freeze-calendar.md`（分支 `prosperity/freeze-calendar`）§10 重建冻结链 |
+| 18 | M17 季末冻结改日历 | 10 | 基础 | ❌ | 每个自然季度最后一个周六冻结上一财季，覆盖率只记录；冻结周门控不过则下周按计划日回放补冻。🟡 2026-11-25 代码与测试在分支 `fix/prosperity-kernel-freeze`（与 Batch 2 内核修复同一个新 `code_version`），未 merge；上线前按 plan `docs/plans/2026-11-13-prosperity-freeze-calendar.md` §10 重建冻结链，独立核对 `reports/prosperity/freeze-calendar-20261113/verify_freezes.py` |
 
 ## 建设路径
 

@@ -42,8 +42,11 @@ cron 使用计划中的周六 16:30 / 20:30 CST 两个条目。所有 replay 入
 `acceptance.py` 校验每次八榜/四榜落库后读回等于内存结果，记录峰值 RSS、耗时、体积；
 `verify_freezes.py` 不导入景气内核，逐季复核候选证据、首次达标日和 60 个源库财季日期。
 它不声称独立重做所有 M4 成员资格判定。它按旧规则（第 60 天起覆盖率 ≥95%、第 80 天强制）核对，
-只适用于 `code_version` 13e5f9d5 及更早的冻结链；新日历的独立核对见
-`docs/plans/2026-11-13-prosperity-freeze-calendar.md` Task 3。
+只适用于 `code_version` 13e5f9d5 及更早的冻结链。新日历的独立核对用
+`reports/prosperity/freeze-calendar-20261113/verify_freezes.py`（只用标准库，不导入引擎；
+做法见 `docs/plans/2026-11-13-prosperity-freeze-calendar.md` Task 3）：
+`python3 -I reports/prosperity/freeze-calendar-20261113/verify_freezes.py --db <prosperity.db> --market-db <market.db> --version <code_version> --out verify.json`，
+通过打印 `PASS: 21 quarters`，任何一季日期、决定、覆盖率或季末榜不符即打印 `FAIL` 并退出 1。
 
 ## 季末冻结日历（2026-11-13 Boss 拍板，新 `code_version` 起生效）
 
