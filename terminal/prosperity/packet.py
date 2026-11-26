@@ -94,17 +94,18 @@ def build_packet(history: SymbolHistory, as_of: str, *, mode: str, cutoff, membe
                  benchmark_closes: Sequence[Tuple[str, float]], observed_at: Optional[str] = None,
                  identity_unverified: bool = False, with_beta: bool = True) -> InputPacket:
     closes, price_rescaled = _split_adjusted(history.closes, history.splits)
+    # Whole stored series, never sliced at as_of: the same retrospective unit as the price and
+    # street EPS rescale, so a replay before a split sees estimates on the stored price unit (P0-1)
+    last_close_date = history.closes[-1][0] if history.closes else None
     visible = visible_statements(history, as_of, mode, observed_at)
     qb = build_quarters(visible, as_of)
-    announced = pair_statement_dates(announced_eps(history.earnings, history.income, history.splits, as_of),
+    announced = pair_statement_dates(announced_eps(history.earnings, history.income, history.splits, as_of,
+                                                   last_close_date),
                                      [q.fiscal_date for q in qb.quarters])
     window, eps_reason = aligned_eps_window(announced, qb.current_fiscal)
     estimates = [r for r in history.estimates if r["snapshot_date"][:10] <= as_of[:10]]
     currency = qb.quarters[-1].reported_currency if qb.quarters else None
     unit_ok = unit_verified(currency, history.is_adr)
-    # Whole stored series, never sliced at as_of: the same retrospective unit as the price and
-    # street EPS rescale above, so a replay before a split sees estimates on the stored price unit (P0-1)
-    last_close_date = history.closes[-1][0] if history.closes else None
     consensus = build_consensus(estimates=estimates, announced=announced, current_eps=window[-1] if window else None,
                                 closes=closes, as_of=as_of, unit_ok=unit_ok, cutoff=cutoff,
                                 forward_runs_available=history.forward_runs_available,

@@ -235,3 +235,46 @@ def test_unrestated_sndk_history_is_blanked_but_the_restated_quarter_kept():
     assert "eps_split_unconfirmed" not in got["2026-10-02"].labels
     assert all(x.eps_actual is None and "eps_split_unconfirmed" in x.labels
                for f, x in got.items() if f < "2026-10-02")
+
+
+def _one_off(rows, seed, gaap_from):
+    """Quarter `seed` beats its estimate 2x while GAAP halves (a one-off); GAAP pairs start at `gaap_from`."""
+    rows = [dict(r, eps_estimated=r["eps_actual"] * (0.5 if i == seed else 0.95)) for i, r in enumerate(rows)]
+    income = [{"date": r["fiscal_date"], "eps_diluted": r["eps_actual"] * (0.45 if i == seed else 0.9)}
+              for i, r in enumerate(rows) if i >= gaap_from]
+    return rows, income
+
+
+def test_a_split_after_the_last_close_never_blanks_history():
+    # review fix 4: an announced 2026-12-07 split (SITM/PARA-type) with no post-split quarter made the
+    # unrestated audit fall back to the last quarter as baseline and blank NVDA's whole history
+    nvda, income = _one_off(seq([(f"{y}-{m}", 0.5 + 0.05 * i) for i, (y, m) in enumerate(
+        (y, m) for y in range(2023, 2027) for m in ("01-28", "04-28", "07-28", "10-27"))]), seed=9, gaap_from=9)
+    future = [SPLIT("2026-12-07", 2.0)]
+    base = announced_eps(nvda, income, [], "2026-11-21")
+    assert all(x.eps_actual is not None for x in base)
+    for kw in ({"last_close_date": "2026-11-24"}, {}):
+        got = announced_eps(nvda, income, future, "2026-11-21", **kw)
+        assert [x.eps_actual for x in got] == [x.eps_actual for x in base], kw
+        assert not any(x.labels for x in got)
+    # the same split on or before the last close is evidence again
+    seen = announced_eps(nvda, income, future, "2026-11-21", last_close_date="2026-12-08")
+    assert sum(x.eps_actual is None for x in seen) == 10
+    past = announced_eps(KLAC, gaap_rows(KLAC, 10.0, "2024-06-30"), [SPLIT("2026-06-12", 10.0)], "2026-09-26",
+                         last_close_date="2026-09-25")
+    assert all("eps_split_rescaled" in x.labels for x in past if x.fiscal_date <= "2024-06-30")
+
+
+def test_packet_passes_its_last_close_to_the_street_eps_split_filter():
+    from dataclasses import replace
+    from terminal.prosperity.packet import build_packet
+    from tests.prosperity_fixtures import replay_cutoff
+    from tests.test_prosperity_packet import _usd_history
+    h = _usd_history()
+    rows, gaap = _one_off(h.earnings, seed=1, gaap_from=1)
+    eps_of = {g["date"]: g["eps_diluted"] for g in gaap}
+    income = [dict(r, eps_diluted=eps_of.get(r["date"])) for r in h.income]
+    split = [SPLIT("2026-03-28", 2.0)]                               # after the last stored close (03-06)
+    p = build_packet(replace(h, earnings=rows, income=income, splits=split), "2026-03-07", mode="replay",
+                     membership_basis="approximate_mcap", benchmark_closes=[], cutoff=replay_cutoff("2026-03-07"))
+    assert len(p.eps) == 4 and all(q.eps_actual is not None and not q.labels for q in p.eps)

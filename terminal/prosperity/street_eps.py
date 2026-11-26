@@ -111,7 +111,7 @@ def _rescale(quarters: List[dict], breaks) -> Tuple[List[float], List[bool], Lis
 
 
 def announced_eps(earnings: Sequence[Mapping], income_rows: Sequence[Mapping], splits: Sequence[Mapping],
-                  as_of: str) -> Tuple[EpsQuarter, ...]:
+                  as_of: str, last_close_date: Optional[str] = None) -> Tuple[EpsQuarter, ...]:
     rows = [r for r in earnings if r.get("match_method") != "none"]
 
     def breaks_in(series):
@@ -119,6 +119,11 @@ def announced_eps(earnings: Sequence[Mapping], income_rows: Sequence[Mapping], s
                        split_basis_audit(series, list(income_rows), list(splits))["issues"])
 
     stored = sorted(resolve_eps_quarters(rows, FULL_HISTORY)["quarters"], key=lambda q: q["fiscal_date"])
+    # review fix 4: a split after the last stored close (or, without prices, after every stored
+    # release) has moved nothing yet and must not become evidence (SITM 2026-12-07, PARA 2026-11-23)
+    bound = (last_close_date[:10] if last_close_date else
+             max([as_of[:10]] + [q["announce_date"][:10] for q in stored if q.get("announce_date")]))
+    splits = [s for s in splits if (s.get("date") or "")[:10] <= bound]
     quarters = sorted(resolve_eps_quarters(rows, as_of)["quarters"], key=lambda q: q["fiscal_date"])
     # Later rows can also hide a break (a conflicting duplicate blanks a pre-break quarter), so a
     # break the as_of series shows on its own still counts (code review 2026-09-29)
