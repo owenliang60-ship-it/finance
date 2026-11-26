@@ -37,6 +37,16 @@ def _instant(value) -> datetime:
     return moment.astimezone(timezone.utc)
 
 
+def _finite(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _clean(row: Mapping) -> Mapping:
+    """A non-finite consensus value is a missing one (review fix 2)."""
+    v = row.get("eps_avg")
+    return row if v is None or _finite(v) else dict(row, eps_avg=None)
+
+
 def _eligible_estimates(estimates: Sequence[Mapping], cutoff) -> List[Mapping]:
     bound = _instant(cutoff)
     eligible = []
@@ -49,7 +59,7 @@ def _eligible_estimates(estimates: Sequence[Mapping], cutoff) -> List[Mapping]:
         except (AttributeError, TypeError, ValueError):
             continue
         if complete <= bound:
-            eligible.append(row)
+            eligible.append(_clean(row))
     return eligible
 
 
@@ -60,7 +70,7 @@ def unit_verified(reported_currency: Optional[str], is_adr: Optional[bool]) -> b
 
 def _close_before(closes: Sequence[Tuple[str, float]], bound: str, max_age: int) -> Optional[float]:
     """Last close strictly before `bound`, None if older than `max_age` days."""
-    prior = [(d, p) for d, p in closes if d[:10] < bound[:10]]
+    prior = [(d, p) for d, p in closes if d[:10] < bound[:10] and _finite(p)]
     if not prior:
         return None
     day, price = max(prior)
@@ -167,7 +177,7 @@ def on_latest_basis(estimates: Sequence[Mapping], events: Sequence[Tuple[str, fl
 def _mixed_basis(quarter: EpsQuarter, pre: PreAnnouncement, events: Sequence[Tuple[str, float]]) -> bool:
     """True when actual / pre-announcement value sits at a split ratio the value may not share."""
     val, actual = pre.value, quarter.eps_actual
-    if pre.missing_reason is not None or val is None or actual is None or val == 0 or actual * val <= 0:
+    if pre.missing_reason is not None or not (_finite(val) and _finite(actual)) or val == 0 or actual * val <= 0:
         return False
     ref_day = pre.snapshot_date if pre.source == "local_snapshot" else quarter.announce_date[:10]
     gap = math.log(actual / val)
@@ -200,7 +210,7 @@ def _pre_announcement(quarter: EpsQuarter, estimates: Sequence[Mapping],
     announce = quarter.announce_date[:10]
     price = _close_before(closes, announce, PRICE_MAX_STALENESS_DAYS)
     if announce <= FIRST_WEEKLY_SNAPSHOT:
-        value = quarter.eps_estimated
+        value = quarter.eps_estimated if _finite(quarter.eps_estimated) else None
         return PreAnnouncement(value, "vendor_estimate" if value is not None else None, None, price,
                                None if value is not None else "no_vendor_estimate")
     rows = [r for r in estimates
@@ -230,7 +240,7 @@ def ttm_eps(announced: Sequence[EpsQuarter]) -> Tuple[Optional[float], Tuple[str
     """Sum of the latest 4 announced street EPS quarters; contiguous and all present."""
     last4 = sorted(announced, key=lambda q: q.fiscal_date)[-4:]
     fiscals = tuple(q.fiscal_date[:10] for q in last4)
-    if len(last4) < 4 or not _contiguous(fiscals) or any(q.eps_actual is None for q in last4):
+    if len(last4) < 4 or not _contiguous(fiscals) or any(not _finite(q.eps_actual) for q in last4):
         return None, ()
     return sum(q.eps_actual for q in last4), fiscals
 

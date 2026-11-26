@@ -242,5 +242,10 @@ def test_non_finite_inputs_never_reach_the_factor_row():
     for name, v in list(row.values.items()) + list(row.aux.items()):
         assert v is None or (not isinstance(v, bool) and math.isfinite(v)), (name, v)
     assert row.values["revenue_yoy"] is None and row.missing["revenue_yoy"] == "non_finite"
-    assert row.values["surprise"] is None and row.missing["surprise"] == "non_finite"
-    assert row.aux["pe_ntm"] is None and row.values["revision"] == 0.0     # Δ / inf is a finite 0
+    # review fix 2: an infinite price is a missing price, never a fake 0.0 (Δ / inf, ntm / inf)
+    for f in ("surprise", "revision"):
+        assert row.values[f] is None and row.missing[f] == "price_missing", f
+    for k in ("ep_ntm", "pe_ntm", "pe_ttm", "price"):
+        assert row.aux[k] is None, k
+    inf_pre = compute_factor_row(pkt(qs, eps, cons(pre=1.0, price_pre=float("inf"), ntm=5.0, ttm=4.0, delta=0.4)))
+    assert inf_pre.values["surprise"] is None and inf_pre.missing["surprise"] == "price_missing"

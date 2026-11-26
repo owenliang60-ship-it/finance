@@ -58,6 +58,10 @@ class FactorRow:
     pit_basis: str
 
 
+def _finite(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
 def _d(value: str) -> date:
     return date.fromisoformat(value[:10])
 
@@ -320,13 +324,14 @@ def expectation_factors(packet: InputPacket) -> FactorOut:
     """Surprise and revision as % of price, plus the NTM/TTM inputs for the gate and PE guard."""
     c = packet.consensus
     reasons = c.missing_reasons
-    price = packet.price_asof if packet.price_asof is not None and packet.price_asof > 0 else None
+    # review fix 2: an infinite price is a missing one, never a fake 0.0 through Δ / inf
+    price = packet.price_asof if _finite(packet.price_asof) and packet.price_asof > 0 else None
     current = packet.eps[-1].eps_actual if packet.eps else None
     pre = c.pre_announce
 
     reason = (reasons.get("pre_announce") or pre.missing_reason or ("pre_announce_missing" if pre.value is None else None)
               or ("eps_missing_value" if current is None else None)
-              or ("price_missing" if not pre.price_pre_announce or pre.price_pre_announce <= 0 else None))
+              or ("price_missing" if not _finite(pre.price_pre_announce) or pre.price_pre_announce <= 0 else None))
     surprise = (None, reason) if reason else ((current - pre.value) / pre.price_pre_announce * 100, None)
 
     reason = (reasons.get("revision") or c.revision.missing_reason

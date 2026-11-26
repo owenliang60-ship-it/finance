@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from typing import FrozenSet, List, Tuple
 
@@ -21,7 +22,9 @@ def resolve_members(store: MarketStore, as_of: str) -> Tuple[List[str], str, Fro
 
 
 def _closes(rows, key: str) -> List[Tuple[str, float]]:
-    return sorted((r["date"][:10], r[key]) for r in rows if r.get(key) is not None)
+    """Finite numbers only (review fix 2: one inf close used to abort the whole week's board)."""
+    return sorted((r["date"][:10], r[key]) for r in rows
+                  if isinstance(r.get(key), (int, float)) and not isinstance(r.get(key), bool) and math.isfinite(r[key]))
 
 
 def load_history(store: MarketStore, symbol: str, *, with_vintage: bool) -> SymbolHistory:

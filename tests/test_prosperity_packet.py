@@ -253,3 +253,37 @@ def test_replay_before_the_split_still_uses_the_stored_post_split_unit():
     assert abs(p.consensus.ntm.value - (56.97 + 57.438 + 63.614 + 68.945) / 8) < 1e-9
     assert abs(p.price_asof - 835.06 / 8) < 1e-9
     assert abs(expectation_factors(p).values["pe_ntm"] - 3.38) < 0.01
+
+
+
+def test_non_finite_prices_and_caps_never_reach_the_packet_or_the_board(tmp_path):
+    # review fix 2: one close = inf became price_asof = inf, faked 0.0 factors and made
+    # canonical(allow_nan=False) abort the whole week's board
+    import math
+    from src.data.prosperity_storage import BoardMeta, prepare_board
+    from src.data.prosperity_store import ProsperityStore
+    from terminal.prosperity.factors import compute_factor_row
+    from terminal.prosperity.kernel import score_board
+    from terminal.prosperity.loader import _closes
+    from terminal.prosperity.schemes import SCHEMES
+    assert _closes([{"date": "2026-03-04", "close": 10.0}, {"date": "2026-03-05", "close": float("nan")},
+                    {"date": "2026-03-06", "close": float("inf")}, {"date": "2026-03-09", "close": True}], "close") \
+        == [("2026-03-04", 10.0)]
+    base = _usd_history()
+    closes = base.closes[:-2] + [(base.closes[-2][0], float("nan")), (base.closes[-1][0], float("inf"))]
+    h = replace(base, closes=closes, market_caps=[("2026-03-05", 3e10), ("2026-03-06", float("inf"))])
+    bench = BENCH[:-1] + [(BENCH[-1][0], float("inf"))]
+    p = build_packet(h, "2026-03-07", mode="replay", membership_basis="approximate_mcap", benchmark_closes=bench,
+                     cutoff=replay_cutoff("2026-03-07"))
+    assert (p.price_asof, p.price_date) == (closes[-3][1], closes[-3][0]) and p.market_cap_asof == 3e10
+    assert p.beta is not None and math.isfinite(p.beta)
+    f = compute_factor_row(p)
+    assert all(v is None or math.isfinite(v) for v in list(f.values.values()) + list(f.aux.values()))
+    scheme = SCHEMES["F1"]
+    result = score_board([f], scheme, frozen=None, as_of=p.as_of, code_version="test-v1")
+    meta = BoardMeta("weekly", None, None, "2026-03-07T09:00:00Z", "0" * 40, "replay", (p.symbol,), {},
+                     {"source_id": "synthetic-non-finite", "observed_at": None, "snapshot_sha256": None,
+                      "profile_observed_at": None})
+    board = prepare_board(meta, result, scheme, [p], [f], names={p.symbol: None})
+    with ProsperityStore(tmp_path / "non-finite.db", read_only=False) as store:
+        assert store.get_board(store.save_batch([board])[0]) == board

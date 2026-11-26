@@ -28,8 +28,12 @@ def _d(value: str) -> date:
     return date.fromisoformat(value[:10])
 
 
+def _finite(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
 def _last_on_or_before(series: Sequence[Tuple[str, float]], as_of: str, max_age: int):
-    prior = [(d, v) for d, v in series if d[:10] <= as_of[:10]]
+    prior = [(d, v) for d, v in series if d[:10] <= as_of[:10] and _finite(v)]
     if not prior:
         return None, None
     day, value = max(prior)
@@ -67,7 +71,7 @@ def _split_adjusted(closes: Sequence[Tuple[str, float]], splits: Sequence[dict])
         lo = max(1, idx - PRICE_SPLIT_LOOKBACK)
         for j in range(idx, lo - 1, -1):
             p_prev, p_curr = out[j - 1][1], out[j][1]
-            if p_prev and p_curr and p_prev > 0 and p_curr > 0:
+            if _finite(p_prev) and _finite(p_curr) and p_prev > 0 and p_curr > 0:
                 jump = math.log(p_prev / p_curr)
                 if not in_old and abs(jump - log_r) <= tol:
                     in_old = True
@@ -82,7 +86,7 @@ def _split_adjusted(closes: Sequence[Tuple[str, float]], splits: Sequence[dict])
 
 
 def _series(closes: Sequence[Tuple[str, float]], as_of: str) -> pd.Series:
-    prior = [(d, v) for d, v in closes if d[:10] <= as_of[:10]][-BETA_CLOSES:]
+    prior = [(d, v) for d, v in closes if d[:10] <= as_of[:10] and _finite(v)][-BETA_CLOSES:]
     return pd.Series([v for _, v in prior], index=[d for d, _ in prior], dtype=float)
 
 
@@ -110,6 +114,7 @@ def build_packet(history: SymbolHistory, as_of: str, *, mode: str, cutoff, membe
     beta = None
     if with_beta and closes and benchmark_closes:
         beta = compute_beta(_series(closes, as_of), _series(benchmark_closes, as_of))
+        beta = beta if _finite(beta) else None
     live = mode == "live"
     pit = {"statements": visible.pit,
            "street_eps": "live" if live else "approximate",

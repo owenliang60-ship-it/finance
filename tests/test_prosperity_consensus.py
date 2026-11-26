@@ -285,3 +285,24 @@ def test_normal_inputs_are_unchanged_by_split_metadata():
     with_splits = build_consensus(**kw, splits=[{"date": "2024-06-10", "numerator": 10.0, "denominator": 1.0}],
                                   last_close_date="2026-08-28")
     assert with_splits == base and base.pre_announce.value == 1.01
+
+
+
+def test_non_finite_consensus_inputs_become_missing_values():
+    # review fix 2: NaN/Inf estimates, vendor estimates, actuals and prices never reach the archive
+    import math
+    nan, inf = float("nan"), float("inf")
+    q = EpsQuarter("2026-03-31", "2026-04-29", 1.10, inf, ())
+    got = pre_announcement_consensus(q, [], [("2026-04-27", 50.0), ("2026-04-28", inf)], cutoff=replay_cutoff(q.announce_date))
+    assert (got.value, got.missing_reason, got.price_pre_announce) == (None, "no_vendor_estimate", 50.0)
+    late = EpsQuarter("2026-06-30", "2026-08-01", 1.30, None, ())
+    got = pre_announcement_consensus(late, [est("2026-07-25", "2026-06-28", nan)], [("2026-07-31", 80.0)],
+                                     cutoff=replay_cutoff(late.announce_date))
+    assert got.value is None and got.missing_reason == "no_pre_announce_value"
+    assert ttm_eps([eq("2025-09-30", "2025-10-30", 1.0), eq("2025-12-31", "2026-01-30", 1.0),
+                    eq("2026-03-31", "2026-04-30", inf), eq("2026-06-30", "2026-07-30", 1.0)]) == (None, ())
+    anchor = eq("2026-06-30", "2026-07-30", 1.0)
+    rows = [est("2026-08-01", f, v) for f, v in (("2026-09-30", 1.0), ("2026-12-31", nan), ("2027-03-31", 1.2),
+                                                   ("2027-06-30", 1.3))]
+    ntm = ntm_eps(rows, [anchor], "2026-08-01", cutoff=replay_cutoff("2026-08-01"))
+    assert ntm.value is None or math.isfinite(ntm.value)
