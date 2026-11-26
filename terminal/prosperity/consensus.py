@@ -6,7 +6,6 @@ function applies its own as_of / announce-date bound.
 from __future__ import annotations
 
 import math
-import statistics
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -118,9 +117,9 @@ def on_latest_basis(estimates: Sequence[Mapping], events: Sequence[Tuple[str, fl
     """Put every weekly snapshot on the post-split unit of the latest stored split (P0-1).
 
     Snapshots before a split are divided by its ratio. A later snapshot is compared with the
-    newest pre-split snapshot over the same quarters: a median ratio near the split ratio means
-    FMP already switched (kept, and every later snapshot is kept too); near 1 means still on the
-    old unit (divided); anything else is an unknown unit (dropped). Without a usable comparison a
+    newest pre-split snapshot over the same quarters: every paired ratio near the split ratio means
+    FMP already switched (kept, and every later snapshot is kept too); every one near 1 means still
+    on the old unit (divided); anything else, including a partly switched snapshot, is dropped. Without a usable comparison a
     snapshot within ESTIMATE_SPLIT_VERIFY_DAYS of the split is dropped, a later one is accepted.
     Returns (adjusted copies, divisor per kept snapshot, dropped snapshot dates).
     """
@@ -156,10 +155,12 @@ def on_latest_basis(estimates: Sequence[Mapping], events: Sequence[Tuple[str, fl
                 else:
                     switched = True
                 continue
-            med = math.log(statistics.median(ratios))
-            if abs(med - log_r) <= tol:
+            # review fix 5: every paired quarter must agree; a median let a partly switched
+            # snapshot through (all 9 real post-split snapshots in market.db are unanimous)
+            logs = [math.log(x) for x in ratios]
+            if all(abs(x - log_r) <= tol for x in logs):
                 switched = True
-            elif abs(med) <= tol:
+            elif all(abs(x) <= tol for x in logs):
                 divisor[s] *= r
             else:
                 dropped.add(s)

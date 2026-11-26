@@ -337,3 +337,16 @@ def test_a_double_divided_vendor_estimate_is_still_caught_after_a_rescale():
     assert _vendor(aph, (("2026-09-03", 2.0),)).missing_reason == "split_basis_unconfirmed"
     plain = EpsQuarter("2024-12-31", "2025-01-22", 0.275, 0.12545, ())
     assert _vendor(plain, (("2026-09-03", 2.0),)).missing_reason is None
+
+
+def test_a_partially_switched_snapshot_is_dropped():
+    # review fix 5: the median passed 2 switched quarters + 1 old-unit quarter as "switched"
+    from terminal.prosperity.consensus import on_latest_basis
+    ref = _mnst("2026-08-08", 0.80, 0.86, 0.90)
+    mixed = _mnst("2026-08-15", 0.40, 0.43, 0.90)
+    switched = _mnst("2026-08-22", 0.40, 0.43, 0.45)
+    stale = _mnst("2026-08-29", 0.81, 0.86, 0.91)
+    out, divisor, dropped = on_latest_basis(ref + mixed + switched, (("2026-08-11", 2.0),))
+    assert dropped == ("2026-08-15",) and divisor == {"2026-08-08": 2.0, "2026-08-22": 1.0}
+    out, divisor, dropped = on_latest_basis(ref + stale, (("2026-08-11", 2.0),))
+    assert dropped == () and divisor == {"2026-08-08": 2.0, "2026-08-29": 2.0}
