@@ -130,11 +130,21 @@ def test_score_window_refuses_bad_volume_input(vols):
         mb.score_window({'A': _path(100, 120)}, {'A': vols})
 
 
+def _cut_board(u, e, unavailable_days=35):
+    return {'days': L, 'scored': [{'in_u70': i < u, 'eligible': i < e} for i in range(60)],
+            'unavailable': {'Z': 'price_gap'}, 'unavailable_top100_days': {'Z': unavailable_days}}
+
+
 @pytest.mark.parametrize('u, e, cut', [(38, 36, 8), (40, 40, 8), (50, 5, 3), (10, 3, 2), (12, 11, 3),
                                        (1, 1, 1), (20, 0, 0), (0, 0, 0)])
 def test_board_top_cut_is_min_of_a_fifth_of_u_and_half_of_e(u, e, cut):
-    board = {'scored': [{'in_u70': i < u, 'eligible': i < e} for i in range(60)], 'unavailable': {'Z': 'price_gap'}}
-    assert mb.board_top_cut(board) == cut
+    assert mb.board_top_cut(_cut_board(u, e)) == cut               # Z: 35 of 70 days, not in U70
+
+
+def test_u70_counts_unavailable_members_from_their_days():
+    """Review P1: U70 is over the whole universe; an unscorable member on 36+ days counts (north star §4.4)."""
+    assert mb.board_u70_count(_cut_board(10, 10)) == 10 and mb.board_top_cut(_cut_board(10, 10)) == 2
+    assert mb.board_u70_count(_cut_board(10, 10, 36)) == 11 and mb.board_top_cut(_cut_board(10, 10, 36)) == 3
 
 
 # --- payload ---------------------------------------------------------------------------------
@@ -165,6 +175,7 @@ def test_build_payload_windows_and_unavailable():
     assert out['price_date'] == CAL[-1] and out['universe'] == {'count': 11, 'symbols': sorted(symbols)}
     assert b14['days'] == 70 and b14['window'] == [CAL[-71], CAL[-1]]
     assert b14['unavailable'] == {'SHORT': 'price_gap'} and len(b14['scored']) == 10
+    assert b14['unavailable_top100_days'] == {'SHORT': 70}          # per member, same keys as unavailable
     assert len(_longs(b14['scored'])) == 10 and b14['adjustments'] == []
     assert all(r['top100_days'] == 70 and r['in_u70'] is True for r in b14['scored'])
     assert sorted([r['symbol'] for r in b14['scored']] + list(b14['unavailable'])) == sorted(symbols)   # everyone, once
@@ -188,6 +199,7 @@ def test_build_payload_needs_volume_on_every_day():
     out = mb.build_payload(book=PriceBook(closes=_risers(), splits={}, calendar=CAL), daily_volumes=volumes,
                            symbols=SYMS, as_of='2026-11-07', generated_at='x')
     assert out['boards']['14w']['unavailable'] == {'S01': 'volume_missing'}
+    assert out['boards']['14w']['unavailable_top100_days'] == {'S01': 69}  # 69 days with volume, all in the top
     assert 'S01' not in {r['symbol'] for r in out['boards']['14w']['scored']}
 
 
@@ -205,7 +217,9 @@ def test_unscorable_members_still_compete_for_the_daily_top(monkeypatch):
                            symbols=symbols, as_of='2026-11-07', generated_at='x')
     rows = {r['symbol']: r for r in out['boards']['14w']['scored']}
     assert out['boards']['14w']['unavailable'] == {'SHORT': 'price_gap'}
+    assert out['boards']['14w']['unavailable_top100_days'] == {'SHORT': 70}
     assert (rows['S01']['top100_days'], rows['S02']['top100_days']) == (70, 0)
+    assert mb.board_u70_count(out['boards']['14w']) == 2                   # S01 and SHORT
     assert [r['symbol'] for r in _longs(rows.values())] == ['S01']
 
 

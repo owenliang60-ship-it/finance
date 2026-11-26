@@ -161,6 +161,7 @@ def momentum_payload(universe=UNIVERSE, ineligible=INELIGIBLE):
             'universe': {'count': len(universe), 'symbols': list(universe)},
             'boards': {'14w': {'days': 70, 'window': ['2026-08-04', '2026-11-13'], 'scored': scored,
                                'unavailable': {s: w for s, w in sorted(UNAVAILABLE.items()) if s in universe},
+                               'unavailable_top100_days': {s: 0 for s in sorted(UNAVAILABLE) if s in universe},
                                'adjustments': []}}}
 
 
@@ -292,6 +293,7 @@ def _move_to_unavailable(p, symbols):
     board = _board(p)
     board['scored'] = [r for r in board['scored'] if r['symbol'] not in symbols]
     board['unavailable'].update({s: 'no_price' for s in symbols})
+    board['unavailable_top100_days'].update({s: 0 for s in symbols})
 
 
 def _swap_scores(p):

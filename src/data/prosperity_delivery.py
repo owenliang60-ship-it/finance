@@ -20,7 +20,7 @@ import sys
 import tempfile
 from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 
-from backtest.research.momentum_board import SCORING as MOMENTUM_SCORING, board_top_cut
+from backtest.research.momentum_board import SCORING as MOMENTUM_SCORING, board_top_cut, board_u70_count
 from src import telegram_bot
 from src.data.prosperity_backup import _quick_check, check_space
 from src.data.prosperity_pool import POOL_SCHEME_ID, load_prosperity_pool
@@ -193,7 +193,7 @@ def momentum_text(payload: dict, pool: Optional[Sequence[str]]) -> str:
     starred = set(pool or ())
     board = payload['boards'][MOMENTUM_WINDOW]
     rows, top = _long_rows(board), _top_rows(board)
-    u_count = sum(1 for r in board['scored'] if r['in_u70'])
+    u_count = board_u70_count(board)
     head = (f'*{MOMENTUM_LABEL}*（{board["days"]} 交易日）有效 {len(board["scored"])} · '
             f'不可用 {len(board["unavailable"])} · 上涨合格 {len(rows)}')
     lines = [f'*动量榜 {md_escape(payload["as_of"])}*（UDV · 只看上涨 · 价格截至 {md_escape(payload["price_date"])}）',

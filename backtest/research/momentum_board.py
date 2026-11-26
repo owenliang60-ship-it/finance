@@ -48,13 +48,19 @@ def min_top_volume_days(days: int) -> int:
     return days // 2 + 1
 
 
+def board_u70_count(board: Mapping) -> int:
+    """|U70| over the whole universe, from the per-member days: unscorable members count too."""
+    floor = min_top_volume_days(board['days'])
+    return (sum(1 for r in board['scored'] if r['in_u70'])
+            + sum(1 for n in board['unavailable_top100_days'].values() if n >= floor))
+
+
 def board_top_cut(board: Mapping) -> int:
     """Rows listed from the long board: min(ceil(|U70| / 5), ceil(|E| / 2)), counted from the rows."""
-    u_count = sum(1 for r in board['scored'] if r['in_u70'])
     e_count = sum(1 for r in board['scored'] if r['eligible'])
     if e_count == 0:
         return 0
-    return min(-(-u_count // 5), -(-e_count // 2))
+    return min(-(-board_u70_count(board) // 5), -(-e_count // 2))
 
 
 def top_volume_days(day_volumes: Mapping[str, Mapping], days: Sequence) -> Dict[str, int]:
@@ -175,8 +181,9 @@ def build_payload(*, book, daily_volumes: Callable[[Sequence[str]], Mapping[str,
                 unavailable[symbol] = 'volume_missing'
         if len(closes) < COVERAGE_MIN * len(members):
             raise ValueError(f'momentum_coverage_below_floor: {label} {len(closes)}/{len(members)}')
+        counts = top_volume_days(day_volumes, window_days)
         scored = score_window(closes, {s: [day_volumes[s][d] for d in window_days] for s in closes},
-                              top100_days=top_volume_days(day_volumes, window_days))
+                              top100_days=counts)
         names = [r['symbol'] for r in scored]
         if sorted([*names, *unavailable]) != members:          # every member exactly once
             raise ValueError(f'momentum_universe_mismatch: {label}')
@@ -184,6 +191,7 @@ def build_payload(*, book, daily_volumes: Callable[[Sequence[str]], Mapping[str,
         boards[label] = {
             'days': days, 'window': [first, last], 'scored': scored,
             'unavailable': dict(sorted(unavailable.items())),
+            'unavailable_top100_days': {s: int(counts.get(s, 0)) for s in sorted(unavailable)},
             'adjustments': [{'symbol': s, 'date': d, 'factor': f} for s, d, f in book.adjustments
                             if s in closes and first < d <= last]}
     return {'schema_version': SCHEMA_VERSION, 'as_of': as_of, 'generated_at': generated_at,

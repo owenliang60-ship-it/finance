@@ -542,7 +542,8 @@ def _payload(n=40, down=840, symbols=None, as_of='2026-11-07', u=75):
     for i, row in enumerate(scored):
         row.update(in_u70=i < u, top100_days=70 if i < u else 0, udv=1.5)
     board = {'days': 70, 'window': ['2026-07-30', '2026-11-06'], 'scored': scored,
-             'unavailable': {f'U{i}': 'price_gap' for i in range(8)}, 'adjustments': []}
+             'unavailable': {f'U{i}': 'price_gap' for i in range(8)},
+             'unavailable_top100_days': {f'U{i}': 0 for i in range(8)}, 'adjustments': []}
     return {'schema_version': 1, 'as_of': as_of, 'price_date': '2026-11-06', 'scoring': 'udv1',
             'universe': {'count': len(scored) + 8},
             'boards': {'14w': board}}
@@ -573,6 +574,28 @@ def test_momentum_text_cut_follows_u70_when_it_is_the_smaller_side():
     text = d.momentum_text(_payload(u=40), [])                           # min(ceil(40 / 5), ceil(40 / 2)) = 8
     assert '70日过半Top100 40 只' in text and '上涨合格 40，前 8：' in text
     assert '\n8. S08 ' in text and 'S09' not in text
+
+
+def test_u70_and_the_cut_count_an_unscorable_newcomer_in_the_daily_top():
+    """Review P1: a newcomer with 69 days of price and volume, in the daily top 100 on all 69, cannot be
+    scored (price_gap) but is in U70 (north star §4.4, the 270-week replay): |U70| 11, |E| 10, cut 3 (not 2)."""
+    from backtest.research.prosperity_health import PriceBook
+    cal = weekdays('2026-11-06', 80)
+    longs = [f'S{i:02d}' for i in range(1, 11)]
+    closes = {s: [(day, 100.0 + k * (i + 1)) for i, day in enumerate(cal)] for k, s in enumerate(longs, 1)}
+    closes['NEW'] = [(day, 50.0 + i) for i, day in enumerate(cal[-69:])]
+
+    def volumes(days):
+        return {s: {day: 1e9 for day in days if s != 'NEW' or day >= cal[-69]} for s in closes}
+    payload = mb.build_payload(book=PriceBook(closes=closes, splits={}, calendar=cal), daily_volumes=volumes,
+                               symbols=list(closes), as_of='2026-11-07', generated_at='x')
+    board = payload['boards']['14w']
+    assert board['unavailable'] == {'NEW': 'price_gap'} and board['unavailable_top100_days'] == {'NEW': 69}
+    assert mb.board_u70_count(board) == 11 and sum(r['eligible'] for r in board['scored']) == 10
+    assert mb.board_top_cut(board) == 3
+    text = d.momentum_text(payload, None)
+    assert '主池 11 只 · 70日过半Top100 11 只' in text and '上涨合格 10，前 3：' in text
+    assert '\n3. ' in text and '\n4. ' not in text
 
 
 def test_combo_text_lists_pool_members_in_the_momentum_cut():
@@ -614,6 +637,7 @@ def test_combo_text_fits_one_message_at_the_pool_cap():
     for row in payload['boards']['14w']['scored'][:39]:
         row['return'] = 12.34                                       # '+1234%'
     payload['boards']['14w']['unavailable'] = {n: 'split_unresolved' for n in names[39:]}
+    payload['boards']['14w']['unavailable_top100_days'] = {n: 0 for n in names[39:]}
     text = d.combo_text(payload, names, None)
     assert len(text) <= d.MESSAGE_LIMIT == 4096
     assert all(text.count(n + ' #') == 1 for n in names[:39])       # every listed name once
@@ -625,6 +649,7 @@ def test_combo_text_refuses_a_message_that_cannot_fit():
     names = [f'LONGNAME{i:04d}' for i in range(400)]
     payload = _payload(n=0)
     payload['boards']['14w']['unavailable'] = {n: 'split_unresolved' for n in names}
+    payload['boards']['14w']['unavailable_top100_days'] = {n: 0 for n in names}
     with pytest.raises(ValueError, match='message_too_long'):
         d.combo_text(payload, names, None)
 
@@ -688,7 +713,8 @@ def test_combo_names_pool_members_that_could_not_be_scored():
     """review #1: 'could not be scored' is a third state, never shown as 'not rising'."""
     payload = _payload()
     payload['boards']['14w'] = {**payload['boards']['14w'],
-                                'unavailable': {'SCCO': 'split_unresolved', 'U1': 'price_gap'}}
+                                'unavailable': {'SCCO': 'split_unresolved', 'U1': 'price_gap'},
+                                'unavailable_top100_days': {'SCCO': 0, 'U1': 0}}
     text = d.combo_text(payload, ['S02', 'SCCO', 'ZZZ'], None)
     line = next(l for l in text.splitlines() if l.startswith('*14周*'))
     assert line == '*14周*（1）: S02 #2 +12% · 未评分（1）: SCCO（split\\_unresolved）'
