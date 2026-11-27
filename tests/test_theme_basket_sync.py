@@ -521,3 +521,380 @@ def test_detect_delta_leaves_no_wal_and_no_writes(world):
 
 def _first_l2():
     return sorted(b["basket_id"] for b in _read(BASKETS)["baskets"] if b["tier"] == "l2")[0]
+
+
+# ================================================================ Task 2: cloud apply + private locks
+
+import fcntl  # noqa: E402
+import gzip  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+from contextlib import redirect_stdout  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
+
+import config.settings as settings  # noqa: E402
+from src.data import theme_basket_store as store  # noqa: E402
+
+T1 = datetime(2026, 11, 29, 2, 0, 0, tzinfo=timezone.utc)
+T2 = datetime(2026, 11, 29, 2, 0, 1, tzinfo=timezone.utc)
+T3 = datetime(2026, 11, 29, 2, 0, 2, tzinfo=timezone.utc)
+BACKUP_LABEL = "auto-theme-sync"
+
+
+def make_wal_db(path, n=50):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(str(path))) as c:
+        c.execute("PRAGMA journal_mode=WAL")
+        c.execute("CREATE TABLE IF NOT EXISTS filler (id INTEGER PRIMARY KEY, v TEXT)")
+        c.executemany("INSERT INTO filler (v) VALUES (?)", [("x" * 100,)] * n)
+        c.commit()
+    return path
+
+
+def _backups(db_path):
+    return sorted(p.name for p in db_path.parent.iterdir()
+                  if p.name.startswith(db_path.name + ".backup-"))
+
+
+def _row(symbol, **kw):
+    row = {"symbol": symbol, "asset_kind": "us_equity", "in_us_basket_calc": 1, "l2_id": _first_l2(),
+           "pi_bucket": "pi_other", "agreement_status": "single_pass_weekly", "cross_themes": []}
+    row.update(kw)
+    return row
+
+
+def envelope(rows=(), *, overrides=None, send_telegram=True):
+    rows = [dict(r) for r in rows]
+    return sync.build_envelope(rows=rows, payload_id=store.compute_payload_id(rows),
+                               baskets_doc=_read(BASKETS),
+                               overrides_doc=overrides if overrides is not None else _read(OVERRIDES),
+                               send_telegram=send_telegram)
+
+
+class FakeTelegram:
+    def __init__(self, lock_path=None, fail=False):
+        self.calls, self.lock_path, self.fail = [], lock_path, fail
+        self.lock_was_free = None
+
+    def __call__(self, text, channel="private"):
+        if self.lock_path is not None:
+            with open(self.lock_path, "a") as fh:
+                try:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    self.lock_was_free = True
+                except BlockingIOError:
+                    self.lock_was_free = False
+        self.calls.append((text, channel))
+        if self.fail:
+            raise ConnectionError("telegram down")
+
+
+@pytest.fixture
+def cloud(tmp_path, monkeypatch):
+    monkeypatch.setenv("FINANCE_ENV", "cloud")
+    db = make_wal_db(tmp_path / "cloud" / "market.db")
+    return {"db_path": db, "lock_path": tmp_path / "locks" / "resource-market_db_writer.lock"}
+
+
+def _apply(cloud, env, **kw):
+    kw.setdefault("send_telegram_fn", FakeTelegram())
+    return sync.apply_cloud_envelope(env, db_path=cloud["db_path"], lock_path=cloud["lock_path"], **kw)
+
+
+def _stock(db_path, symbol):
+    with closing(sqlite3.connect(str(db_path))) as c:
+        c.row_factory = sqlite3.Row
+        row = c.execute("SELECT * FROM stock_themes WHERE symbol = ?", (symbol,)).fetchone()
+        return dict(row) if row else None
+
+
+def _count_rows(db_path, table):
+    with closing(sqlite3.connect(str(db_path))) as c:
+        return c.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
+
+# ---------------------------------------------------------------- backup_sqlite_wal_safe
+
+def test_backup_keep2_gzips_previous_and_prunes_third(tmp_path):
+    db = make_wal_db(tmp_path / "market.db")
+    first = sync.backup_sqlite_wal_safe(db, keep=2, now=T1)
+    second = sync.backup_sqlite_wal_safe(db, keep=2, now=T2)
+    third = sync.backup_sqlite_wal_safe(db, keep=2, now=T3)
+    assert first.name == "market.db.backup-20261129020000-auto-theme-sync"
+    assert _backups(db) == [second.name + ".gz", third.name]
+    assert not first.exists()
+    with closing(sqlite3.connect(str(third))) as c:
+        assert c.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        assert c.execute("SELECT COUNT(*) FROM filler").fetchone()[0] == 50
+    with gzip.open(str(second) + ".gz", "rb") as fh:
+        assert fh.read(16) == b"SQLite format 3\x00"
+    assert not [p for p in tmp_path.iterdir() if "partial" in p.name]
+
+
+def test_backup_refuses_when_disk_is_short(tmp_path, monkeypatch):
+    db = make_wal_db(tmp_path / "market.db")
+
+    class Usage:
+        free = 10
+
+    monkeypatch.setattr(sync.shutil, "disk_usage", lambda p: Usage)
+    with pytest.raises(RuntimeError, match="insufficient disk"):
+        sync.backup_sqlite_wal_safe(db, keep=2, now=T1)
+    assert _backups(db) == []
+
+
+def test_backup_missing_db_returns_none(tmp_path):
+    assert sync.backup_sqlite_wal_safe(tmp_path / "absent.db", now=T1) is None
+
+
+# ---------------------------------------------------------------- apply_cloud_envelope
+
+def test_apply_first_commit_backs_up_commits_and_notifies_after_unlock(cloud):
+    tg = FakeTelegram(lock_path=cloud["lock_path"])
+    rc, res = _apply(cloud, envelope([_row("PRIV1"), _row("PRIV2")]), send_telegram_fn=tg, now=T1)
+    assert rc == 0 and res["ok"] is True
+    assert res["replayed"] is False
+    assert res["inserted"] >= 2
+    assert res["backup"] and Path(res["backup"]).exists()
+    assert _stock(cloud["db_path"], "PRIV1")["source"] == "agy_llm"
+    assert _stock(cloud["db_path"], "NVDA")["source"] == "override"
+    assert len(tg.calls) == 1 and tg.calls[0][1] == "private"
+    assert tg.lock_was_free is True
+    assert res["telegram"] == "sent"
+
+
+def test_apply_replay_is_idempotent_and_heartbeat_skips_backup(cloud):
+    env = envelope([_row("PRIV1")])
+    rc1, res1 = _apply(cloud, env, now=T1)
+    history = _count_rows(cloud["db_path"], "stock_theme_history")
+    rc2, res2 = _apply(cloud, env, now=T2)
+    assert (rc1, rc2) == (0, 0)
+    assert res2["replayed"] is True and res2["inserted"] == 0
+    assert res2["backup"] is None
+    assert _count_rows(cloud["db_path"], "stock_theme_history") == history
+    assert _count_rows(cloud["db_path"], "theme_sync_commits") == 1
+
+    rc3, res3 = _apply(cloud, envelope([]), now=T2)
+    assert rc3 == 0 and res3["backup"] is None          # 0 rows, dictionary unchanged
+
+    overrides = _read(OVERRIDES)
+    overrides["locked_stocks"] = overrides["locked_stocks"][:-1]
+    rc4, res4 = _apply(cloud, envelope([], overrides=overrides), now=T3)
+    assert rc4 == 0 and res4["backup"] is not None      # dictionary changed
+
+
+def test_apply_lock_busy_returns_75_without_db_writes(cloud):
+    cloud["lock_path"].parent.mkdir(parents=True)
+    holder = subprocess.Popen(
+        [sys.executable, "-c",
+         "import fcntl, sys, time\n"
+         "fh = open(sys.argv[1], 'a')\n"
+         "fcntl.flock(fh.fileno(), fcntl.LOCK_EX)\n"
+         "print('locked', flush=True)\n"
+         "time.sleep(30)\n", str(cloud["lock_path"])],
+        stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "locked"
+        before = cloud["db_path"].read_bytes()
+        tg = FakeTelegram()
+        start = time.monotonic()
+        rc, res = _apply(cloud, envelope([_row("PRIV1")]), lock_timeout_sec=0.5, send_telegram_fn=tg)
+        assert rc == 75
+        assert res == {"ok": False, "error": "lock_busy"} or (res["ok"] is False and res["error"] == "lock_busy")
+        assert time.monotonic() - start < 10
+        assert cloud["db_path"].read_bytes() == before
+        with closing(sqlite3.connect(str(cloud["db_path"]))) as c:
+            assert c.execute("SELECT 1 FROM sqlite_master WHERE name = 'stock_themes'").fetchone() is None
+        assert tg.calls == []
+    finally:
+        holder.kill()
+        holder.wait()
+
+
+def test_apply_telegram_failure_keeps_exit_zero(cloud):
+    tg = FakeTelegram(fail=True)
+    rc, res = _apply(cloud, envelope([_row("PRIV1")]), send_telegram_fn=tg, now=T1)
+    assert rc == 0 and res["ok"] is True
+    assert res["telegram"] == "failed"
+    assert "ConnectionError" in res["telegram_error"]
+    assert _stock(cloud["db_path"], "PRIV1") is not None
+
+
+@pytest.mark.parametrize("flags", [{"force_no_telegram": True}, {"send_telegram": False}])
+def test_apply_telegram_can_be_disabled(cloud, flags):
+    tg = FakeTelegram()
+    env = envelope([], send_telegram=flags.get("send_telegram", True))
+    rc, res = _apply(cloud, env, send_telegram_fn=tg,
+                     force_no_telegram=flags.get("force_no_telegram", False))
+    assert rc == 0 and tg.calls == [] and res["telegram"] == "skipped"
+
+
+def test_apply_refuses_outside_cloud(tmp_path, monkeypatch):
+    monkeypatch.delenv("FINANCE_ENV", raising=False)
+    db = tmp_path / "market.db"
+    rc, res = sync.apply_cloud_envelope(envelope([]), db_path=db, lock_path=tmp_path / "l.lock",
+                                        send_telegram_fn=FakeTelegram())
+    assert rc == 1 and res["ok"] is False and "FINANCE_ENV" in res["error"]
+    assert not db.exists()
+
+
+def test_apply_allow_noncloud_never_reaches_production(tmp_path, monkeypatch):
+    prod = make_wal_db(tmp_path / "prod" / "market.db")
+    monkeypatch.setattr(settings, "MARKET_DB_PATH", prod)
+    monkeypatch.delenv("FINANCE_ENV", raising=False)
+    before = prod.read_bytes()
+    rc, res = sync.apply_cloud_envelope(envelope([_row("PRIV1")]), db_path=prod,
+                                        lock_path=tmp_path / "l.lock", allow_noncloud=True,
+                                        send_telegram_fn=FakeTelegram())
+    assert rc == 1 and res["ok"] is False
+    assert prod.read_bytes() == before
+    assert _backups(prod) == []
+
+
+def test_apply_allow_noncloud_on_test_db(tmp_path, monkeypatch):
+    monkeypatch.delenv("FINANCE_ENV", raising=False)
+    db = tmp_path / "t" / "market.db"
+    db.parent.mkdir()
+    rc, res = sync.apply_cloud_envelope(envelope([_row("PRIV1")]), db_path=db,
+                                        lock_path=tmp_path / "l.lock", allow_noncloud=True,
+                                        send_telegram_fn=FakeTelegram())
+    assert rc == 0 and res["ok"] is True
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda e: e.update(payload_id="0" * 64),
+    lambda e: e.update(schema_version=2),
+    lambda e: e.update(rows="nope"),
+    lambda e: e.pop("baskets_doc"),
+])
+def test_apply_rejects_bad_envelope_without_writes(cloud, mutate):
+    env = envelope([_row("PRIV1")])
+    mutate(env)
+    before = cloud["db_path"].read_bytes()
+    rc, res = _apply(cloud, env)
+    assert rc == 1 and res["ok"] is False
+    assert cloud["db_path"].read_bytes() == before
+    assert _backups(cloud["db_path"]) == []
+
+
+def test_apply_broken_dictionary_rolls_back(cloud):
+    env = envelope([_row("PRIV1")])
+    env["overrides_doc"]["locked_stocks"][0]["l2_id"] = "no_such_l2"
+    rc, res = _apply(cloud, env, now=T1)
+    assert rc == 1 and res["ok"] is False
+    with closing(sqlite3.connect(str(cloud["db_path"]))) as c:
+        assert c.execute("SELECT COUNT(*) FROM theme_sync_commits").fetchone()[0] == 0
+
+
+def _run_cli(args, stdin_bytes, env_extra):
+    env = dict(os.environ)
+    env.update(env_extra)
+    return subprocess.run([sys.executable, str(REPO / "scripts" / "theme_basket_sync.py"), *args],
+                          input=stdin_bytes, capture_output=True, cwd=str(REPO), env=env, timeout=120)
+
+
+def test_apply_cli_stdout_is_pure_json(cloud):
+    args = ["--apply-cloud-stdin", "--db", str(cloud["db_path"]), "--lock-path", str(cloud["lock_path"]),
+            "--no-telegram"]
+    body = json.dumps(envelope([_row("PRIV1", business_note="中文备注")]), ensure_ascii=False).encode("utf-8")
+    proc = _run_cli(args, body, {"FINANCE_ENV": "cloud"})
+    assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")
+    lines = proc.stdout.decode("ascii").splitlines()
+    assert len(lines) == 1
+    res = json.loads(lines[0])
+    assert res["ok"] is True and res["inserted"] >= 1
+    assert _stock(cloud["db_path"], "PRIV1")["business_note"] == "中文备注"
+
+    bad = _run_cli(args, b"\xff\xfe not utf8", {"FINANCE_ENV": "cloud"})
+    assert bad.returncode == 1
+    assert json.loads(bad.stdout.decode("ascii"))["ok"] is False
+
+    nonjson = _run_cli(args, b"{truncated", {"FINANCE_ENV": "cloud"})
+    assert nonjson.returncode == 1
+    assert json.loads(nonjson.stdout.decode("ascii"))["ok"] is False
+
+
+# ---------------------------------------------------------------- private locks
+
+def _cloud_cli_runner(cloud, calls):
+    """Fake SSH: run the remote CLI in-process against the tmp cloud db."""
+    def runner(remote_args, stdin_bytes=None):
+        calls.append(list(remote_args))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = sync.main(list(remote_args) + ["--db", str(cloud["db_path"]),
+                                                "--lock-path", str(cloud["lock_path"])])
+        return rc, buf.getvalue().encode("ascii"), b""
+    return runner
+
+
+def _cross_of(db_path, symbol):
+    with closing(sqlite3.connect(str(db_path))) as c:
+        return sorted(c.execute("SELECT theme_id, role, source FROM stock_cross_themes WHERE symbol = ?",
+                                (symbol,)).fetchall())
+
+
+def _first_cross():
+    return sorted(b["basket_id"] for b in _read(BASKETS)["baskets"] if b["tier"] == "cross")[0]
+
+
+def test_private_lock_refuses_public_override(cloud):
+    _apply(cloud, envelope([_row("PRIV1")]), now=T1)
+    rc, res = sync.cloud_private_lock(db_path=cloud["db_path"], lock_path=cloud["lock_path"],
+                                      action="lock", symbol="NVDA", l2_id=_first_l2())
+    assert rc == 1 and res["ok"] is False and "override" in res["error"]
+    assert _stock(cloud["db_path"], "NVDA")["source"] == "override"
+
+
+def test_private_lock_then_unlock_via_local_cli(cloud, tmp_path):
+    _apply(cloud, envelope([_row("PRIV1")]), now=T1)
+    xchg = tmp_path / "xchg"
+    calls, pulls = [], []
+    runner = _cloud_cli_runner(cloud, calls)
+    cross = _first_cross()
+    rc = sync.run_private_lock(action="lock", symbol="priv1", l2_id=_first_l2(),
+                               cross=[f"{cross}:platform_giant"], note="私密小票", exchange_dir=xchg,
+                               market_db_path=tmp_path / "local-market.db",
+                               ssh_runner=runner, pull_runner=lambda: pulls.append(1) or 0)
+    assert rc == 0
+    assert calls[0][:3] == ["--cloud-local", "--lock-private", "PRIV1"]
+    row = _stock(cloud["db_path"], "PRIV1")
+    assert (row["source"], row["agreement_status"], row["business_note"]) == ("db_locked", "locked", "私密小票")
+    assert _cross_of(cloud["db_path"], "PRIV1") == [(cross, "platform_giant", "db_locked")]
+    backup = xchg / "db_locked_backup" / "db_locked_latest.json"
+    assert stat.S_IMODE(backup.stat().st_mode) == 0o600
+    saved = _read(backup)
+    assert [r["symbol"] for r in saved["db_locked_rows"]] == ["PRIV1"]
+    assert saved["db_locked_rows"][0]["cross_themes"] == [{"role": "platform_giant", "theme_id": cross}]
+    assert pulls == [1]
+
+    rc = sync.run_private_lock(action="unlock", symbol="PRIV1", exchange_dir=xchg,
+                               market_db_path=tmp_path / "local-market.db",
+                               ssh_runner=runner, pull_runner=lambda: pulls.append(1) or 0,
+                               skip_pull=True)
+    assert rc == 0
+    assert calls[1] == ["--cloud-local", "--unlock-private", "PRIV1"]
+    row = _stock(cloud["db_path"], "PRIV1")
+    assert (row["source"], row["agreement_status"]) == ("agy_llm", "needs_spot_check")
+    assert _read(backup)["db_locked_rows"] == []
+    assert pulls == [1]
+
+
+def test_private_lock_cloud_failure_keeps_local_backup(cloud, tmp_path):
+    xchg = tmp_path / "xchg"
+    runner = _cloud_cli_runner(cloud, [])
+    rc = sync.run_private_lock(action="unlock", symbol="NOPE", exchange_dir=xchg,
+                               market_db_path=tmp_path / "local-market.db", ssh_runner=runner,
+                               pull_runner=lambda: pytest.fail("no pull on failure"))
+    assert rc == 1
+    assert not (xchg / "db_locked_backup" / "db_locked_latest.json").exists()
+
+
+def test_private_lock_transport_failure(tmp_path):
+    def runner(remote_args, stdin_bytes=None):
+        raise ConnectionError("ssh: connect to host aliyun port 22: Connection refused")
+
+    rc = sync.run_private_lock(action="unlock", symbol="PRIV1", exchange_dir=tmp_path / "x",
+                               market_db_path=tmp_path / "m.db", ssh_runner=runner,
+                               pull_runner=lambda: pytest.fail("no pull"))
+    assert rc == 1

@@ -10,11 +10,16 @@ Step A（本机）  --detect-delta   只读扫 Extended ∪ Sheet ∪ watchlist�
 """
 import argparse
 import contextlib
+import fcntl
+import gzip
 import hashlib
 import io
 import json
+import logging
 import os
 import re
+import shlex
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -41,6 +46,18 @@ SHANGHAI = timezone(timedelta(hours=8))  # Asia/Shanghai has no DST
 SCHEMA_VERSION = 1
 EXIT_OK = 0
 EXIT_FAIL = 1
+EXIT_LOCK_BUSY = 75                # scripts/backfill_extended_fundamentals.py:EXIT_LOCK_BUSY
+
+LOCK_TIMEOUT_SEC = 15.0
+BACKUP_LABEL = "auto-theme-sync"
+BACKUP_SPACE_FACTOR = 1.5          # scripts/build_company_concept_registry.py:BACKUP_SPACE_FACTOR
+REMOTE_HOST = "aliyun"             # sync_to_cloud.sh:REMOTE_HOST
+REMOTE_DIR = "/root/workspace/Finance"
+REMOTE_PYTHON = "/usr/bin/python3"
+SSH_TIMEOUT_SEC = 1800             # covers a 1.5 GB backup + gzip of the previous one
+LSOF = "/usr/sbin/lsof"            # sync_to_cloud.sh:LSOF
+
+logger = logging.getLogger("theme_basket_sync")
 
 SHEET_TAB = "Summary_OSV"          # portfolio/holdings/sheet_book.py:SUMMARY_TAB
 SHEET_HEADER_SCAN_ROWS = 15        # sheet_book.py:MAX_HEADER_SCAN_ROWS
@@ -522,6 +539,387 @@ def detect_delta(*, market_db_path, company_db_path, exchange_dir, baskets_path,
     return delta
 
 
+# ---------------------------------------------------------------- cloud: backup + writer lock
+
+def default_lock_path() -> Path:
+    """Same file cron_wrapper.sh and backfill_extended_fundamentals.py lock for market.db writers."""
+    return (Path(os.environ.get("FINANCE_CRON_LOCK_DIR", "/tmp/finance-cron-locks"))
+            / "resource-market_db_writer.lock")
+
+
+class LockBusy(Exception):
+    pass
+
+
+@contextlib.contextmanager
+def market_db_writer_lock(lock_path, timeout_sec: float = LOCK_TIMEOUT_SEC):
+    """flock(LOCK_EX) polled until `timeout_sec`; raises LockBusy. Closing the file releases it."""
+    lock_path = Path(lock_path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "a") as fh:
+        deadline = time.monotonic() + timeout_sec
+        while True:
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise LockBusy(str(lock_path)) from None
+                time.sleep(0.1)
+        yield
+
+
+def _gzip_backup(path: Path) -> None:
+    tmp = path.with_name(path.name + ".gz.partial")
+    try:
+        with open(path, "rb") as src, open(tmp, "wb") as raw:
+            with gzip.GzipFile(fileobj=raw, mode="wb", compresslevel=6) as dst:
+                shutil.copyfileobj(src, dst, 1 << 20)
+            raw.flush()
+            os.fsync(raw.fileno())
+        os.replace(tmp, path.with_name(path.name + ".gz"))
+        path.unlink()
+    except OSError as exc:  # the raw backup stays in place
+        tmp.unlink(missing_ok=True)
+        logger.warning("backup gzip failed for %s: %s", path.name, exc)
+
+
+def _prune_backups(db_path: Path, label: str, final: Path, keep: int) -> None:
+    """Keep `final` raw + the newest keep-1 older same-label backups gzipped; delete the rest."""
+    pattern = re.compile(rf"^{re.escape(db_path.name)}\.backup-(\d{{14}})-{re.escape(label)}(\.gz)?$")
+    older = sorted((p for p in db_path.parent.iterdir() if p != final and pattern.match(p.name)),
+                   key=lambda p: pattern.match(p.name).group(1), reverse=True)
+    for index, old in enumerate(older):
+        try:
+            if index >= keep - 1:
+                old.unlink()
+            elif not old.name.endswith(".gz"):
+                _gzip_backup(old)
+        except OSError as exc:  # the new backup is already published
+            logger.warning("backup prune failed for %s: %s", old.name, exc)
+
+
+def backup_sqlite_wal_safe(db_path, *, label: str = BACKUP_LABEL, keep: int = 2,
+                           now: Optional[datetime] = None) -> Optional[Path]:
+    """WAL-safe snapshot `<db>.backup-<UTC14>-<label>`; None when db_path is missing.
+
+    Refuses (RuntimeError) when free disk < logical size x1.5. Copies with the SQLite
+    backup API from a read-only source into a `.partial` temp file, requires
+    quick_check == 'ok', then publishes with os.link (never overwrites).
+    """
+    db_path = Path(db_path)
+    if not db_path.exists():
+        return None
+    stamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).strftime("%Y%m%d%H%M%S")
+    final = db_path.with_name(f"{db_path.name}.backup-{stamp}-{label}")
+    tmp = None
+    try:
+        with contextlib.closing(ro_connect(db_path)) as src:
+            logical = (src.execute("PRAGMA page_count").fetchone()[0]
+                       * src.execute("PRAGMA page_size").fetchone()[0])
+            need = int(logical * BACKUP_SPACE_FACTOR)
+            free = shutil.disk_usage(str(db_path.parent)).free
+            if free < need:
+                raise RuntimeError(f"insufficient disk for backup: free={free} need={need}")
+            fd, name = tempfile.mkstemp(dir=str(db_path.parent), prefix=f"{final.name}.",
+                                        suffix=".partial")
+            os.close(fd)
+            tmp = Path(name)
+            with contextlib.closing(sqlite3.connect(str(tmp))) as dst:
+                src.backup(dst)
+        with contextlib.closing(sqlite3.connect(str(tmp))) as check:
+            result = check.execute("PRAGMA quick_check").fetchone()[0]
+        if result != "ok":
+            raise RuntimeError(f"backup quick_check={result!r}")
+        os.link(str(tmp), str(final))
+    finally:
+        if tmp is not None:
+            for suffix in ("", "-journal", "-wal", "-shm"):
+                Path(str(tmp) + suffix).unlink(missing_ok=True)
+    _prune_backups(db_path, label, final, keep)
+    return final
+
+
+# ---------------------------------------------------------------- cloud: --apply-cloud-stdin
+
+def build_envelope(*, rows: Sequence[Mapping[str, Any]], payload_id: str,
+                   baskets_doc: Mapping[str, Any], overrides_doc: Mapping[str, Any],
+                   send_telegram: bool = True,
+                   local_summary: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+    return {"schema_version": SCHEMA_VERSION, "payload_id": payload_id, "rows": [dict(r) for r in rows],
+            "baskets_doc": baskets_doc, "overrides_doc": overrides_doc,
+            "send_telegram": bool(send_telegram), "local_summary": dict(local_summary or {})}
+
+
+def _env_refusal(db_path, allow_noncloud: bool) -> Optional[str]:
+    """None when this process may write `db_path`; otherwise the refusal message."""
+    if os.environ.get("FINANCE_ENV") == "cloud":
+        return None
+    if not allow_noncloud:
+        return "refusing: FINANCE_ENV is not 'cloud'"
+    from src.data.theme_basket_store import _protected_paths
+
+    if os.path.realpath(str(db_path)) in _protected_paths():
+        return "refusing: production market.db needs FINANCE_ENV=cloud"
+    return None
+
+
+def _parse_envelope(envelope: Any):
+    from src.data.theme_basket_store import compute_payload_id
+
+    if not isinstance(envelope, Mapping):
+        raise TypeError("envelope must be a JSON object")
+    if type(envelope.get("schema_version")) is not int or envelope["schema_version"] != SCHEMA_VERSION:
+        raise ValueError(f"schema_version must be {SCHEMA_VERSION}")
+    rows, payload_id = envelope["rows"], envelope["payload_id"]
+    baskets_doc, overrides_doc = envelope["baskets_doc"], envelope["overrides_doc"]
+    if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+        raise TypeError("rows must be a list of objects")
+    if not isinstance(baskets_doc, Mapping) or not isinstance(overrides_doc, Mapping):
+        raise TypeError("baskets_doc and overrides_doc must be objects")
+    if type(payload_id) is not str or compute_payload_id(rows) != payload_id:
+        raise ValueError("payload_id does not match the rows")
+    return rows, payload_id, baskets_doc, overrides_doc
+
+
+def _needs_backup(db_path: Path, rows: Sequence[Any], payload_id: str, taxonomy: str) -> bool:
+    """Read-only probe: back up only before a substantive change (not for a pure heartbeat)."""
+    if not Path(db_path).exists():
+        return False
+    try:
+        with contextlib.closing(ro_connect(db_path)) as conn:
+            if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' "
+                                "AND name = 'theme_sync_commits'").fetchone():
+                return True
+            if rows and not conn.execute("SELECT 1 FROM theme_sync_commits WHERE payload_id = ?",
+                                         (payload_id,)).fetchone():
+                return True
+            last = conn.execute("SELECT taxonomy_sha256 FROM theme_sync_commits "
+                                "ORDER BY applied_at DESC, rowid DESC LIMIT 1").fetchone()
+            return last is None or last[0] != taxonomy
+    except sqlite3.Error:
+        return True
+
+
+def _md_escape(text: str) -> str:
+    """Escape Telegram legacy-Markdown control characters (send_message uses parse_mode=Markdown)."""
+    return re.sub(r"([_*`\[])", r"\\\1", text)
+
+
+def format_weekly_summary(result: Mapping[str, Any], local: Mapping[str, Any]) -> str:
+    local_q = [str(s) for s in local.get("local_quarantined") or []]
+    cloud_q = [str(s) for s, _ in result["quarantined"]]
+    lines = [
+        "主题篮子周同步：" + ("重放已提交载荷" if result["replayed"] else "载荷已提交"),
+        f"新增 {result['inserted']} · 更新 {result['updated']} · "
+        f"云端隔离 {len(cloud_q)} · 本地隔离 {len(local_q)}",
+        f"老票异动候选 {int(local.get('pivot_candidates') or 0)}",
+        "备份：" + ("已完成" if result["backup"] else "跳过（无实质变更）"),
+        f"载荷 {result['payload_id'][:12]}",
+    ]
+    if cloud_q or local_q:
+        lines.append("隔离代码：" + ", ".join((cloud_q + local_q)[:20]))
+    lines += ["告警：" + str(w) for w in (local.get("warnings") or [])[:5]]
+    return _md_escape("\n".join(lines))
+
+
+def default_send_telegram(text: str, channel: str = "private") -> None:
+    from src.telegram_bot import send_message
+
+    if not send_message(text, channel=channel):
+        raise RuntimeError("telegram send_message returned False")
+
+
+def apply_cloud_envelope(envelope: Mapping[str, Any], *, db_path, lock_path,
+                         lock_timeout_sec: float = LOCK_TIMEOUT_SEC,
+                         send_telegram_fn: Optional[Callable[..., Any]] = None,
+                         force_no_telegram: bool = False, allow_noncloud: bool = False,
+                         now: Optional[datetime] = None) -> Tuple[int, Dict[str, Any]]:
+    """Cloud side: validate → (backup) → 15 s writer lock → apply_envelope → unlock → Telegram."""
+    refusal = _env_refusal(db_path, allow_noncloud)
+    if refusal:
+        return EXIT_FAIL, {"ok": False, "error": refusal}
+    from src.data import theme_basket_store as store
+
+    try:
+        rows, payload_id, baskets_doc, overrides_doc = _parse_envelope(envelope)
+    except (KeyError, TypeError, ValueError) as exc:
+        return EXIT_FAIL, {"ok": False, "error": f"bad_envelope: {type(exc).__name__}: {exc}"}
+    db_path = Path(db_path)
+    backup = None
+    if _needs_backup(db_path, rows, payload_id, store.compute_taxonomy_sha256(baskets_doc, overrides_doc)):
+        try:
+            backup = backup_sqlite_wal_safe(db_path, keep=2, now=now)
+        except Exception as exc:
+            return EXIT_FAIL, {"ok": False, "error": f"backup_failed: {type(exc).__name__}: {exc}"}
+    try:
+        with market_db_writer_lock(lock_path, lock_timeout_sec):
+            with contextlib.closing(store.open_writer(db_path, cloud_authoritative=True)) as conn:
+                res = store.apply_envelope(conn, baskets_doc=baskets_doc, overrides_doc=overrides_doc,
+                                           rows=rows, payload_id=payload_id, now=now)
+    except LockBusy:
+        return EXIT_LOCK_BUSY, {"ok": False, "error": "lock_busy"}
+    except Exception as exc:
+        return EXIT_FAIL, {"ok": False, "error": f"apply_failed: {type(exc).__name__}: {exc}"}
+
+    result = {"ok": True, "payload_id": res.payload_id, "taxonomy_sha256": res.taxonomy_sha256,
+              "replayed": res.replayed, "inserted": res.inserted, "updated": res.updated,
+              "quarantined": [list(q) for q in res.quarantined],
+              "history_appended": res.history_appended,
+              "backup": str(backup) if backup else None, "telegram": "skipped"}
+    if envelope.get("send_telegram", True) and not force_no_telegram:
+        local = envelope.get("local_summary")
+        try:
+            (send_telegram_fn or default_send_telegram)(
+                format_weekly_summary(result, local if isinstance(local, Mapping) else {}),
+                channel="private")
+            result["telegram"] = "sent"
+        except Exception as exc:  # the commit stands; report only
+            result.update(telegram="failed", telegram_error=f"{type(exc).__name__}: {exc}")
+    return EXIT_OK, result
+
+
+# ---------------------------------------------------------------- private locks (db_locked)
+
+_LOCKED_COLUMNS = ("symbol", "cik", "asset_kind", "in_us_basket_calc", "l1_id", "l2_id", "pi_bucket",
+                   "business_note", "profile_sector", "profile_industry", "company_name_snapshot",
+                   "source", "agreement_status", "assigned_at", "updated_at")
+
+
+def _db_locked_rows(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+    rows = [dict(zip(_LOCKED_COLUMNS, r)) for r in conn.execute(
+        f"SELECT {', '.join(_LOCKED_COLUMNS)} FROM stock_themes "
+        "WHERE source = 'db_locked' ORDER BY symbol")]
+    cross: Dict[str, List[Dict[str, str]]] = {}
+    for symbol, theme_id, role in conn.execute(
+            "SELECT x.symbol, x.theme_id, x.role FROM stock_cross_themes x "
+            "JOIN stock_themes s ON s.symbol = x.symbol WHERE s.source = 'db_locked' "
+            "ORDER BY x.symbol, x.theme_id"):
+        cross.setdefault(symbol, []).append({"role": role, "theme_id": theme_id})
+    for row in rows:
+        row["cross_themes"] = cross.get(row["symbol"], [])
+    return rows
+
+
+def _parse_cross(item: str) -> Dict[str, str]:
+    theme_id, _, role = item.partition(":")
+    return {"theme_id": theme_id.strip(), "role": role.strip() or "core"}
+
+
+def cloud_private_lock(*, db_path, lock_path, action: str, symbol: str, l2_id: Optional[str] = None,
+                       cross: Sequence[str] = (), note: Optional[str] = None,
+                       lock_timeout_sec: float = LOCK_TIMEOUT_SEC, allow_noncloud: bool = False,
+                       now: Optional[datetime] = None) -> Tuple[int, Dict[str, Any]]:
+    """Cloud side of --lock-private / --unlock-private; returns the full db_locked snapshot."""
+    refusal = _env_refusal(db_path, allow_noncloud)
+    if refusal:
+        return EXIT_FAIL, {"ok": False, "error": refusal}
+    from src.data import theme_basket_store as store
+
+    symbol = symbol.strip().upper()
+    try:
+        with market_db_writer_lock(lock_path, lock_timeout_sec):
+            with contextlib.closing(store.open_writer(db_path, cloud_authoritative=True)) as conn:
+                if action == "lock":
+                    store.lock_private_symbol(conn, symbol, l2_id=l2_id,
+                                              cross_themes=[_parse_cross(c) for c in cross],
+                                              business_note=note, now=now)
+                else:
+                    store.unlock_private_symbol(conn, symbol, now=now)
+                rows = _db_locked_rows(conn)
+    except LockBusy:
+        return EXIT_LOCK_BUSY, {"ok": False, "error": "lock_busy"}
+    except Exception as exc:
+        return EXIT_FAIL, {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    return EXIT_OK, {"ok": True, "action": action, "symbol": symbol, "db_locked_rows": rows}
+
+
+# ---------------------------------------------------------------- local → cloud transport
+
+def default_ssh_runner(remote_args: Sequence[str], stdin_bytes: Optional[bytes] = None):
+    command = (f"cd {shlex.quote(REMOTE_DIR)} && {REMOTE_PYTHON} scripts/theme_basket_sync.py "
+               + shlex.join(list(remote_args)))
+    proc = subprocess.run(["ssh", "-o", "BatchMode=yes", REMOTE_HOST, command],
+                          input=stdin_bytes or b"", capture_output=True, timeout=SSH_TIMEOUT_SEC)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def call_cloud(ssh_runner, remote_args: Sequence[str],
+               stdin_bytes: Optional[bytes] = None) -> Tuple[int, Dict[str, Any]]:
+    """(rc, reply). Transport failures and non-JSON stdout come back as rc=1, ok=False."""
+    try:
+        rc, out, err = ssh_runner(list(remote_args), stdin_bytes)
+    except Exception as exc:
+        return EXIT_FAIL, {"ok": False, "error": f"transport_failed: {type(exc).__name__}: {exc}"}
+    try:
+        reply = json.loads(out.decode("utf-8"))
+        if not isinstance(reply, dict):
+            raise ValueError("reply is not an object")
+    except ValueError:
+        tail = (err or b"").decode("utf-8", "replace").strip()[-300:]
+        return EXIT_FAIL, {"ok": False, "error": f"bad_cloud_reply: rc={rc} stderr={tail!r}"}
+    if rc == EXIT_OK and reply.get("ok") is True:
+        return EXIT_OK, reply
+    return (rc if rc in (EXIT_FAIL, EXIT_LOCK_BUSY) else EXIT_FAIL), dict(reply, ok=False)
+
+
+def _local_db_busy(market_db_path) -> Optional[str]:
+    """Why sync_to_cloud.sh --pull would refuse right now (issue 059), or None."""
+    path = Path(market_db_path)
+    wal = Path(str(path) + "-wal")
+    if wal.exists() and wal.stat().st_size > 0:
+        return "local market.db-wal is not empty"
+    if not Path(LSOF).exists():
+        return f"{LSOF} not found"
+    for item in (path, wal, Path(str(path) + "-shm")):
+        if item.exists() and subprocess.run([LSOF, "--", str(item)], stdout=subprocess.DEVNULL,
+                                            stderr=subprocess.DEVNULL).returncode == 0:
+            return f"{item.name} is open by a process"
+    return None
+
+
+def pull_after_commit(market_db_path, pull_runner: Callable[[], int], warnings: List[str]) -> None:
+    busy = _local_db_busy(market_db_path)
+    if busy:
+        warnings.append(f"pull_skipped: {busy}")
+        return
+    try:
+        rc = pull_runner()
+    except Exception as exc:
+        rc = type(exc).__name__
+    if rc != 0:
+        warnings.append(f"pull_failed: rc={rc}")
+
+
+def run_private_lock(*, action: str, symbol: str, l2_id: Optional[str] = None, cross: Sequence[str] = (),
+                     note: Optional[str] = None, exchange_dir=DEFAULT_EXCHANGE_DIR,
+                     market_db_path=DEFAULT_MARKET_DB, ssh_runner=None, pull_runner=None,
+                     skip_pull: bool = False) -> int:
+    """Local side: run the cloud lock over SSH, then save the db_locked snapshot (0600) and pull."""
+    symbol = symbol.strip().upper()
+    remote = ["--cloud-local", "--lock-private" if action == "lock" else "--unlock-private", symbol]
+    if action == "lock":
+        remote += ["--l2", str(l2_id)]
+        for item in cross:
+            remote += ["--cross", item]
+        if note is not None:
+            remote += ["--note", note]
+    rc, reply = call_cloud(ssh_runner or default_ssh_runner, remote)
+    if rc != EXIT_OK:
+        _emit({"ok": False, "mode": f"{action}-private", "symbol": symbol, "error": reply.get("error")})
+        return rc
+    dirs = ensure_exchange_dirs(exchange_dir)
+    atomic_write_json(dirs["db_locked_backup"] / "db_locked_latest.json", {
+        "saved_at": utc_stamp(), "action": action, "symbol": symbol,
+        "db_locked_rows": reply.get("db_locked_rows", [])})
+    warnings: List[str] = []
+    if not skip_pull:
+        pull_after_commit(market_db_path, pull_runner or default_pull_runner, warnings)
+    _emit({"ok": True, "mode": f"{action}-private", "symbol": symbol,
+           "db_locked_count": len(reply.get("db_locked_rows", [])), "warnings": warnings})
+    return EXIT_OK
+
+
 # ---------------------------------------------------------------- CLI
 
 def _emit(obj: Mapping[str, Any], stream=None) -> None:
@@ -534,19 +932,71 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--detect-delta", action="store_true", help="Step A (local)")
+    mode.add_argument("--apply-cloud-stdin", action="store_true",
+                      help="cloud: read one envelope from stdin, print one JSON line")
+    mode.add_argument("--lock-private", metavar="SYMBOL", help="lock a private holding as db_locked")
+    mode.add_argument("--unlock-private", metavar="SYMBOL", help="release a db_locked holding")
     parser.add_argument("--exchange-dir", type=Path, default=DEFAULT_EXCHANGE_DIR)
-    parser.add_argument("--market-db", type=Path, default=DEFAULT_MARKET_DB)
+    parser.add_argument("--market-db", type=Path, default=DEFAULT_MARKET_DB,
+                        help="local read-only market.db")
     parser.add_argument("--company-db", type=Path, default=DEFAULT_COMPANY_DB)
     parser.add_argument("--baskets", type=Path, default=DEFAULT_BASKETS)
     parser.add_argument("--overrides", type=Path, default=DEFAULT_OVERRIDES)
     parser.add_argument("--aliases", type=Path, default=DEFAULT_ALIASES)
     parser.add_argument("--skip-sheet", action="store_true", help="Step A: do not read the Google Sheet")
     parser.add_argument("--no-pull", action="store_true", help="never run sync_to_cloud.sh --pull")
+    parser.add_argument("--cloud-local", action="store_true",
+                        help="run --lock-private/--unlock-private directly on this (cloud) host")
+    parser.add_argument("--l2", help="--lock-private: active L2 basket id")
+    parser.add_argument("--cross", action="append", default=[], metavar="THEME_ID[:ROLE]")
+    parser.add_argument("--note", help="--lock-private: business note")
+    parser.add_argument("--db", type=Path, default=DEFAULT_MARKET_DB, help="cloud writer target")
+    parser.add_argument("--lock-path", type=Path, default=None)
+    parser.add_argument("--no-telegram", action="store_true")
+    parser.add_argument("--allow-noncloud-test-db", action="store_true",
+                        help="tests only: allow a non-production --db without FINANCE_ENV=cloud")
     return parser
 
 
+def _run_cloud(args) -> Tuple[int, Dict[str, Any]]:
+    import config.settings  # noqa: F401  (loads <repo>/.env, which sets FINANCE_ENV=cloud)
+
+    lock_path = args.lock_path or default_lock_path()
+    if args.apply_cloud_stdin:
+        try:
+            envelope = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as exc:
+            return EXIT_FAIL, {"ok": False, "error": f"bad_envelope: {type(exc).__name__}"}
+        return apply_cloud_envelope(envelope, db_path=args.db, lock_path=lock_path,
+                                    force_no_telegram=args.no_telegram,
+                                    allow_noncloud=args.allow_noncloud_test_db)
+    return cloud_private_lock(db_path=args.db, lock_path=lock_path,
+                              action="lock" if args.lock_private else "unlock",
+                              symbol=args.lock_private or args.unlock_private, l2_id=args.l2,
+                              cross=args.cross, note=args.note,
+                              allow_noncloud=args.allow_noncloud_test_db)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.lock_private and not args.l2:
+        parser.error("--lock-private needs --l2")
+    if args.apply_cloud_stdin or args.cloud_local:
+        out = sys.stdout  # the JSON reply is the only thing allowed on stdout
+        with contextlib.redirect_stdout(sys.stderr):
+            try:
+                rc, reply = _run_cloud(args)
+            except Exception as exc:
+                rc, reply = EXIT_FAIL, {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        _emit(reply, out)
+        return rc
+    if args.lock_private or args.unlock_private:
+        return run_private_lock(
+            action="lock" if args.lock_private else "unlock",
+            symbol=args.lock_private or args.unlock_private, l2_id=args.l2, cross=args.cross,
+            note=args.note, exchange_dir=args.exchange_dir, market_db_path=args.market_db,
+            skip_pull=args.no_pull)
     if args.detect_delta:
         try:
             delta = detect_delta(
