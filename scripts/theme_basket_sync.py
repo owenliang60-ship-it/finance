@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 """股票主题分类 M3：仓外三明治同步 CLI。
 
-Step A（本机）  --detect-delta   只读扫 Extended ∪ Sheet ∪ watchlist，写 inbox/delta.json
-                                 （0 待标且 0 异动时同时写 0 行 outbox/payload.json）。
+Step A（本机）  --detect-delta      只读扫 Extended ∪ Sheet ∪ watchlist，写 inbox/delta.json
+                                    （0 待标且 0 异动时同时写 0 行 outbox/payload.json）。
+Step C（本机）  --commit-outbox     硬门控 → 覆盖确定性字段 → :memory: 预演 → 先重放 pending/
+                                    → SSH 发双段信封；锁忙/断网则封存到 pending/<payload_id>.json。
+               --sync-config       只发最新字典 + 公开锁定（0 行）。
+               --replay-pending    原样重发 pending/ 封存包（拼最新字典）。
+云端           --apply-cloud-stdin 锁外条件备份 → 15 s market_db_writer 锁 → apply_envelope
+                                    → 释放锁后发 Telegram；stdout 只有一行 JSON。
+私密锁定       --lock-private / --unlock-private（本机经 SSH；云端加 --cloud-local）。
 
 兼容约束：云端 /usr/bin/python3 3.10 + SQLite 3.37.2。src.data.* 只在函数内导入：
 `src/data/__init__.py` 会初始化整个数据包并打日志，不能在导入本模块时触发。
@@ -280,7 +287,7 @@ def scan_sheet_tickers_tolerant(xlsx_bytes: bytes) -> List[Tuple[str, str]]:
                 if set(SHEET_COLUMNS) <= set(cells):
                     header = [cells.index(name) for name in SHEET_COLUMNS]
                 continue
-            ticker, market, shares = (row[i] if i < len(row) else None for i in header)
+            ticker, market, shares = (row[col] if col < len(row) else None for col in header)
             if ticker is None or not str(ticker).strip():
                 continue
             try:
@@ -496,7 +503,7 @@ def detect_delta(*, market_db_path, company_db_path, exchange_dir, baskets_path,
         old = existing.get(sym)
         if old is not None:
             if _is_active_us(old) and any(
-                    meta[f] and _text(old[f]) and meta[f] != old[f]
+                    meta[f] and _text(old[f]) and meta[f] != _text(old[f])
                     for f in ("profile_sector", "profile_industry")):
                 pivots.append({"symbol": sym,
                                "old_profile_sector": old["profile_sector"],
@@ -865,7 +872,7 @@ def call_cloud(ssh_runner, remote_args: Sequence[str],
 
 def _local_db_busy(market_db_path) -> Optional[str]:
     """Why sync_to_cloud.sh --pull would refuse right now (issue 059), or None."""
-    path = Path(market_db_path)
+    path = Path(market_db_path).resolve()  # a worktree's data/market.db is a symlink
     wal = Path(str(path) + "-wal")
     if wal.exists() and wal.stat().st_size > 0:
         return "local market.db-wal is not empty"
@@ -920,6 +927,228 @@ def run_private_lock(*, action: str, symbol: str, l2_id: Optional[str] = None, c
     return EXIT_OK
 
 
+# ---------------------------------------------------------------- Step C: --commit-outbox / --sync-config / --replay-pending
+
+ALLOWED_AGREEMENT = frozenset({"single_pass_weekly", "dual_agreed", "needs_spot_check", "disagreed"})
+
+
+class GateError(Exception):
+    """A Step C hard gate failed: nothing is sent and outbox/ is left for inspection."""
+
+
+def _gate_outbox(exchange_dir, today: str):
+    dirs = ensure_exchange_dirs(exchange_dir)
+    delta_path, payload_path = dirs["inbox"] / "delta.json", dirs["outbox"] / "payload.json"
+    if not delta_path.is_file() or not payload_path.is_file():
+        raise GateError("inbox/delta.json and outbox/payload.json must both exist")
+    try:
+        delta, payload = load_json(delta_path), load_json(payload_path)
+    except ValueError as exc:
+        raise GateError(f"unreadable json: {type(exc).__name__}") from None
+    if not isinstance(delta, dict) or not isinstance(payload, dict):
+        raise GateError("delta.json and payload.json must be JSON objects")
+    if delta.get("generated_date") != today:
+        raise GateError(f"delta.json generated_date {delta.get('generated_date')!r} is not today {today}")
+    digest = compute_delta_sha256(delta)
+    if digest != delta.get("delta_sha256") or digest != payload.get("delta_sha256"):
+        raise GateError("delta_sha256 mismatch between inbox/delta.json and outbox/payload.json")
+    items = payload.get("classifications")
+    if not isinstance(items, list) or not all(
+            isinstance(c, dict) and isinstance(c.get("symbol"), str) for c in items):
+        raise GateError("classifications must be a list of objects with a string symbol")
+    symbols = [c["symbol"] for c in items]
+    if len(set(symbols)) != len(symbols):
+        raise GateError("duplicate symbol in classifications")
+    extra = sorted(set(symbols) - {m["symbol"] for m in delta["missing_symbols"]})
+    if extra:
+        raise GateError(f"classifications outside missing_symbols: {extra[:10]}")
+    return dirs, delta, payload
+
+
+def merge_classifications(delta: Mapping[str, Any], items: Sequence[Mapping[str, Any]],
+                          baskets_doc: Mapping[str, Any]) -> Tuple[List[Dict[str, Any]], List[List[str]]]:
+    """Model rows → store rows: identity fields always come from delta.json.
+
+    Only l2_id / cross_themes / pi_bucket / business_note / agreement_status are taken
+    from the model. Returns (rows, locally rejected [symbol, reason]).
+    """
+    missing = {m["symbol"]: m for m in delta["missing_symbols"]}
+    l2_pi = {b["basket_id"]: b["default_pi_bucket"] for b in baskets_doc["baskets"] if b["tier"] == "l2"}
+    kind_pi = baskets_doc["asset_kind_default_pi_bucket"]
+    rows, rejected = [], []
+    for item in items:
+        meta = missing[item["symbol"]]
+        status = item.get("agreement_status") or DEFAULT_AGREEMENT
+        if not isinstance(status, str) or status not in ALLOWED_AGREEMENT:
+            rejected.append([meta["symbol"], f"agreement_status {status!r} is not allowed"])
+            continue
+        l2_id = item.get("l2_id")
+        row = {k: meta[k] for k in ROW_META_FIELDS}
+        row.update(
+            l2_id=l2_id,
+            cross_themes=(item.get("cross_themes") or []) if meta["in_us_basket_calc"] == 1 else [],
+            pi_bucket=(item.get("pi_bucket") or (l2_pi.get(l2_id) if isinstance(l2_id, str) else None)
+                       or kind_pi[meta["asset_kind"]]),
+            business_note=item.get("business_note"),
+            agreement_status=status)
+        rows.append(row)
+    return rows, rejected
+
+
+def rehearse(baskets_doc: Mapping[str, Any], overrides_doc: Mapping[str, Any],
+             rows: Sequence[Mapping[str, Any]]) -> Tuple[List[Dict[str, Any]], List[List[str]]]:
+    """Dry-run the envelope in :memory:. A broken dictionary raises; bad rows come back quarantined."""
+    from src.data import theme_basket_store as store
+
+    rows = [dict(r) for r in rows]
+    with contextlib.closing(store.open_writer(":memory:")) as conn:
+        res = store.apply_envelope(conn, baskets_doc=baskets_doc, overrides_doc=overrides_doc,
+                                   rows=rows, payload_id=store.compute_payload_id(rows))
+    bad = {symbol for symbol, _ in res.quarantined}
+    return [r for r in rows if r["symbol"] not in bad], [list(q) for q in res.quarantined]
+
+
+def _send_sealed(sealed: Mapping[str, Any], baskets_doc, overrides_doc, ssh_runner,
+                 send_telegram: bool) -> Tuple[int, Dict[str, Any]]:
+    envelope = build_envelope(rows=sealed["rows"], payload_id=sealed["payload_id"],
+                              baskets_doc=baskets_doc, overrides_doc=overrides_doc,
+                              send_telegram=send_telegram, local_summary=sealed.get("local_summary"))
+    return call_cloud(ssh_runner, ["--apply-cloud-stdin"],
+                      json.dumps(envelope, ensure_ascii=False).encode("utf-8"))
+
+
+def _load_sealed(path: Path) -> Dict[str, Any]:
+    from src.data.theme_basket_store import compute_payload_id
+
+    sealed = load_json(path)
+    if not isinstance(sealed, dict) or not isinstance(sealed.get("rows"), list) \
+            or not all(isinstance(r, dict) for r in sealed["rows"]) \
+            or not isinstance(sealed.get("local_summary", {}), dict) \
+            or sealed.get("payload_id") != compute_payload_id(sealed["rows"]):
+        raise ValueError("not a sealed payload (rows/payload_id mismatch)")
+    return sealed
+
+
+def _replay_files(pending_dir: Path, baskets_doc, overrides_doc, ssh_runner, send_telegram: bool,
+                  warnings: List[str]) -> Tuple[int, int]:
+    """Send pending/*.json in (created_at, filename) order; stop at the first cloud failure.
+
+    Corrupt files are reported in `warnings` and left on disk. Returns (rc, files sent).
+    """
+    queue = []
+    for path in pending_dir.glob("*.json"):
+        try:
+            sealed = _load_sealed(path)
+        except ValueError as exc:
+            warnings.append(f"pending_corrupt: {path.name}: {type(exc).__name__}")
+            continue
+        queue.append((str(sealed.get("created_at", "")), path.name, path, sealed))
+    sent = 0
+    for _, _, path, sealed in sorted(queue, key=lambda q: (q[0], q[1])):
+        rc, reply = _send_sealed(sealed, baskets_doc, overrides_doc, ssh_runner, send_telegram)
+        if rc != EXIT_OK:
+            warnings.append(f"pending_replay_failed: {path.name}: {reply.get('error')}")
+            return rc, sent
+        path.unlink()
+        sent += 1
+    return EXIT_OK, sent
+
+
+def commit_outbox(*, exchange_dir, baskets_path, overrides_path, market_db_path,
+                  today: Optional[str] = None, ssh_runner=None, pull_runner=None,
+                  send_telegram: bool = True, skip_pull: bool = False) -> int:
+    """Step C: gate → merge → :memory: rehearsal → seal → replay pending/ → send → pull."""
+    from src.data.theme_basket_store import compute_payload_id
+
+    ssh_runner = ssh_runner or default_ssh_runner
+    try:
+        dirs, delta, payload = _gate_outbox(exchange_dir, today or today_shanghai())
+        baskets_doc, overrides_doc = load_json(baskets_path), load_json(overrides_path)
+        merged, local_q = merge_classifications(delta, payload["classifications"], baskets_doc)
+        clean, quarantined = rehearse(baskets_doc, overrides_doc, list(delta["auto_rows"]) + merged)
+    except GateError as exc:
+        _emit({"ok": False, "mode": "commit-outbox", "error": f"gate: {exc}"})
+        return EXIT_FAIL
+    except Exception as exc:
+        _emit({"ok": False, "mode": "commit-outbox", "error": f"rehearsal_failed: {type(exc).__name__}: {exc}"})
+        return EXIT_FAIL
+    local_q += quarantined
+    sealed = {"schema_version": SCHEMA_VERSION, "payload_id": compute_payload_id(clean), "rows": clean,
+              "created_at": utc_stamp(), "delta_sha256": delta["delta_sha256"],
+              "local_summary": {"local_quarantined": [s for s, _ in local_q],
+                                "pivot_candidates": len(delta["pivot_candidates"]),
+                                "warnings": list(delta["warnings"])}}
+    summary = {"mode": "commit-outbox", "payload_id": sealed["payload_id"], "rows": len(clean),
+               "local_quarantined": local_q}
+    warnings: List[str] = []
+    rc, _ = _replay_files(dirs["pending"], baskets_doc, overrides_doc, ssh_runner, send_telegram, warnings)
+    reply: Dict[str, Any] = {"ok": False, "error": "pending replay failed first"}
+    if rc == EXIT_OK:
+        rc, reply = _send_sealed(sealed, baskets_doc, overrides_doc, ssh_runner, send_telegram)
+    if rc != EXIT_OK:
+        # Park the sealed rows and clear outbox/ so a WatchPaths trigger cannot loop on it.
+        atomic_write_json(dirs["pending"] / f"{sealed['payload_id']}.json", sealed)
+        (dirs["outbox"] / "payload.json").unlink(missing_ok=True)
+        _emit(dict(summary, ok=False, parked=True, error=reply.get("error"), warnings=warnings))
+        return rc
+    (dirs["outbox"] / "payload.json").unlink(missing_ok=True)
+    (dirs["pending"] / f"{sealed['payload_id']}.json").unlink(missing_ok=True)
+    if not skip_pull:
+        pull_after_commit(market_db_path, pull_runner or default_pull_runner, warnings)
+    _emit(dict(summary, ok=True, cloud={k: reply.get(k) for k in (
+        "replayed", "inserted", "updated", "quarantined", "backup", "telegram")}, warnings=warnings))
+    return EXIT_OK
+
+
+def _validated_docs(baskets_path, overrides_path):
+    baskets_doc, overrides_doc = load_json(baskets_path), load_json(overrides_path)
+    rehearse(baskets_doc, overrides_doc, [])
+    return baskets_doc, overrides_doc
+
+
+def sync_config(*, baskets_path, overrides_path, market_db_path, ssh_runner=None, pull_runner=None,
+                send_telegram: bool = True, skip_pull: bool = False) -> int:
+    """Send the latest dictionary + public locks with zero rows (e.g. right after editing overrides.json)."""
+    from src.data.theme_basket_store import compute_payload_id
+
+    try:
+        baskets_doc, overrides_doc = _validated_docs(baskets_path, overrides_path)
+    except Exception as exc:
+        _emit({"ok": False, "mode": "sync-config", "error": f"rehearsal_failed: {type(exc).__name__}: {exc}"})
+        return EXIT_FAIL
+    rc, reply = _send_sealed({"rows": [], "payload_id": compute_payload_id([])}, baskets_doc,
+                             overrides_doc, ssh_runner or default_ssh_runner, send_telegram)
+    if rc != EXIT_OK:
+        _emit({"ok": False, "mode": "sync-config", "error": reply.get("error")})
+        return rc
+    warnings: List[str] = []
+    if not skip_pull:
+        pull_after_commit(market_db_path, pull_runner or default_pull_runner, warnings)
+    _emit({"ok": True, "mode": "sync-config", "updated": reply.get("updated"), "warnings": warnings})
+    return EXIT_OK
+
+
+def replay_pending(*, exchange_dir, baskets_path, overrides_path, market_db_path, ssh_runner=None,
+                   pull_runner=None, send_telegram: bool = True, skip_pull: bool = False) -> int:
+    """Resend sealed pending/ payloads unchanged, each with the latest dictionary; one pull at the end."""
+    dirs = ensure_exchange_dirs(exchange_dir)
+    if not any(dirs["pending"].glob("*.json")):
+        _emit({"ok": True, "mode": "replay-pending", "sent": 0, "warnings": []})
+        return EXIT_OK
+    try:
+        baskets_doc, overrides_doc = _validated_docs(baskets_path, overrides_path)
+    except Exception as exc:
+        _emit({"ok": False, "mode": "replay-pending", "error": f"rehearsal_failed: {type(exc).__name__}: {exc}"})
+        return EXIT_FAIL
+    warnings: List[str] = []
+    rc, sent = _replay_files(dirs["pending"], baskets_doc, overrides_doc,
+                             ssh_runner or default_ssh_runner, send_telegram, warnings)
+    if rc == EXIT_OK and sent and not skip_pull:
+        pull_after_commit(market_db_path, pull_runner or default_pull_runner, warnings)
+    _emit({"ok": rc == EXIT_OK, "mode": "replay-pending", "sent": sent, "warnings": warnings})
+    return rc
+
+
 # ---------------------------------------------------------------- CLI
 
 def _emit(obj: Mapping[str, Any], stream=None) -> None:
@@ -932,6 +1161,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--detect-delta", action="store_true", help="Step A (local)")
+    mode.add_argument("--commit-outbox", action="store_true", help="Step C (local)")
+    mode.add_argument("--sync-config", action="store_true",
+                      help="local: push baskets.json + overrides.json with zero rows")
+    mode.add_argument("--replay-pending", action="store_true", help="local: resend pending/*.json")
     mode.add_argument("--apply-cloud-stdin", action="store_true",
                       help="cloud: read one envelope from stdin, print one JSON line")
     mode.add_argument("--lock-private", metavar="SYMBOL", help="lock a private holding as db_locked")
@@ -997,6 +1230,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             symbol=args.lock_private or args.unlock_private, l2_id=args.l2, cross=args.cross,
             note=args.note, exchange_dir=args.exchange_dir, market_db_path=args.market_db,
             skip_pull=args.no_pull)
+    common = {"market_db_path": args.market_db, "send_telegram": not args.no_telegram,
+              "skip_pull": args.no_pull, "baskets_path": args.baskets, "overrides_path": args.overrides}
+    if args.commit_outbox:
+        return commit_outbox(exchange_dir=args.exchange_dir, **common)
+    if args.sync_config:
+        return sync_config(**common)
+    if args.replay_pending:
+        return replay_pending(exchange_dir=args.exchange_dir, **common)
     if args.detect_delta:
         try:
             delta = detect_delta(

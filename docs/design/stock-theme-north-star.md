@@ -31,7 +31,7 @@ flowchart TB
     end
 
     subgraph L3_SYNC["第三层：周日仓外三明治同步层 (本机 ~/.local/share/finance-theme-sync/)"]
-        STEP_A["Step A (launchd 周日 09:50): --detect-delta\n查 MAX(security_master.updated_at) · 清空 outbox/\n扫 Extended ∪ Sheet ∪ watchlist · 写 inbox/delta.json\n(若 0 新票则直写 0 行 payload 触发 Step C 发字典心跳)"]
+        STEP_A["Step A (launchd 周日 09:50): --detect-delta\n查 market.db 文件 mtime · 清空 outbox/\n扫 Extended ∪ Sheet ∪ watchlist · 写 inbox/delta.json\n(若 0 新票则直写 0 行 payload 触发 Step C 发字典心跳)"]
         STEP_B["Step B (AGY Sidecar 周日 10:00, 经 M2.5 权限实测)\n仅读 baskets + inbox/delta.json → 写 outbox/payload.json"]
         STEP_C["Step C (launchd WatchPaths 监听 outbox): --commit-outbox\n验当日时间戳+delta_sha256+子集 · 坏行隔离 · 实时拼字典段\nrestrict,command 受限 SSH 提交 · 失败存仓外 pending/"]
     end
@@ -93,18 +93,21 @@ flowchart TB
 ### 第三层：周日仓外三明治同步层（`scripts/theme_basket_sync.py` + `launchd`）
 
 - **职责**：通过仓外三目录（`inbox/`、`outbox/`、Sidecar 不可访问的 `pending/`）与事件触发串接确定性前后置脚本与最小权限模型。
+- **M2.5 拍板结论（Boss 2026-11-27，M3 已按此实现）**：保持周日无人值守；Step A 用 `market.db` **文件 `mtime`** 锚定新鲜度（`security_master.updated_at` 在无行变化的周不推进，实测不可用）并**剥离 `company_profile.description` 长文本**；Step C **强制用 `delta.json` 覆盖确定性元数据**；Telegram 周摘要改由云端 `--apply-cloud-stdin` 在**写锁释放后**发送（本机 `.env` 无 `TELEGRAM_*`）；纯 0 行且字典未变的心跳包跳过整库备份。
 - **周日三段式流水线（`Asia/Shanghai`）**：
   1. **Step A（`launchd` 周日 `09:50`：`--detect-delta`）**：
-     - 短连接检查本地 `MAX(security_master.updated_at)` 是否处于近 36 小时内（若周六云端池刷新失败或本地未拉取，先尝试一次 `--pull`，仍旧则记入摘要 `WARN` 后按现有库继续，不卡死字典同步）；
-     - **先清空 `outbox/`**，汇总 `extended_membership` ∪ **宽松只读扫描 Google Sheet（代码+市场列，不可达标 `UNKNOWN`）** ∪ `company.db:watchlist`；
-     - Python 确定性标准化市场前缀与 `asset_kind`。若当周 `missing_symbols` 与 `pivot_candidates` 均为空，直接向 `outbox/payload.json` 原子写入 0 行载荷立即唤醒 Step C 发字典心跳；否则原子写入带 `generated_date` 与 `delta_sha256` 的 `inbox/delta.json`。
+     - **先清空 `outbox/`**，再检查本地 `market.db` 文件 `mtime` 是否处于近 36 小时内（过期先尝试一次 `--pull`，仍旧则记 `WARN` 后按现有库继续，不卡死字典同步）；
+     - 只读短连接汇总 `extended_membership`（全历史去重）∪ **宽松只读扫描 Google Sheet（仅代码/市场/股数>0 三列，不可达标 `UNKNOWN`，不落盘股数/金额/Sheet ID）** ∪ `company.db:watchlist`；
+     - Python 确定性标准化市场前缀与 `asset_kind`；ETF/基金/加密/自定义篮子/其他、同 CIK 次级码（`is_superseded=1`）与 `overrides.json` 公开巨头直接生成确定性 `auto_rows`，只把其余未入库美股与非美股写入 `missing_symbols`；原子写入带 `generated_date` 与 `delta_sha256` 的 `inbox/delta.json`。若 `missing_symbols` 与 `pivot_candidates` 均为空，再向 `outbox/payload.json` 原子写入 0 行载荷，唤醒 Step C 发字典心跳。
   2. **Step B（AGY Sidecar 周日 `10:00`，或 M2.5 降级受控入口）**：
      - 读取 `baskets.json` 与当日 `inbox/delta.json`，原子写出 `outbox/payload.json`（回显 `delta_sha256`；新票标 `single_pass_weekly`；老票异动只给文本建议，`D4` 只报不改）。
   3. **Step C（`launchd` `WatchPaths` 监听 `outbox/payload.json` + 定时重试器：`--commit-outbox`）**：
-     - 硬验 `delta.generated_date == 今日`、`payload.delta_sha256 == inbox.delta_sha256` 且提交代码 `⊆ inbox.missing_symbols`；
-     - 内存临时库逐行预演全部约束与触发器（重放 `pending/` 时同样用最新字典重验），坏行移入隔离告警，合格行计算内容哈希 `payload_id`；
+     - 硬验 `delta.generated_date == 今日`、`payload.delta_sha256 == inbox.delta_sha256`（且等于重算值）、提交代码无重复且 `⊆ inbox.missing_symbols`；
+     - 强制用 `delta.json` 覆盖 `symbol/cik/asset_kind/in_us_basket_calc/profile_*/company_name_snapshot`，模型只提供 `l2_id/cross_themes/pi_bucket/business_note/agreement_status`（禁 `locked`；不入篮行清空 `cross_themes`）；
+     - 内存临时库逐行预演全部约束与触发器（重放 `pending/` 时只用最新字典重验，封存行与 `payload_id` 不变），坏行移入隔离告警，合格行计算内容哈希 `payload_id`；
      - 实时读取最新 `baskets.json` + `overrides.json` 组装**双段信封**，经 `restrict,command="python3 /root/workspace/Finance/scripts/theme_basket_sync.py --apply-cloud-stdin"` 受限 SSH 发送云端：云端锁外备份，`flock -w 15` 拿锁 `<20ms` 执行「字典锁定段常执 + 新票行段按 `payload_id` 幂等插入」；若断网或锁忙，将合格分类行与 `payload_id` 存入仓外 `pending/` 待重试；
-     - 云端成功后确认零打开句柄，调 `./sync_to_cloud.sh --pull` 并发送 Telegram 周摘要。
+     - 云端在写锁释放后发送 Telegram 周摘要；本机收到成功回包后删除 `outbox/payload.json`，确认本地 `market.db` 零打开句柄且 `-wal` 为 0 字节，再调 `./sync_to_cloud.sh --pull`。
+     - 公开字典或锁定表改动后可随时 `--sync-config`（0 行信封）；`--replay-pending` 单独重放 `pending/`；私密票用 `--lock-private SYMBOL --l2 L2_ID` / `--unlock-private SYMBOL`，成功后快照写入 `db_locked_backup/db_locked_latest.json`（`0600`）。
 - **关键决策**：对应 `R5, R6, R8, R9` 与 `D2, D4, D5`。
 
 ### 第四层：短连接只读查询与兼容层（`terminal/theme_baskets.py`）
@@ -141,9 +144,10 @@ flowchart TB
 
 | 层 / 模块 | 当前完成度 | 关键缺口 |
 |---|---|---|
-| 第一层：字典与锁定表（M1） | 95%（待 Boss S1 签字） | 已产出 `baskets.json`（99 项：15 `pi_bucket` + 10 L1 + 62 L2 + 12 Cross）与 `overrides.json`（49 只公开龙头 + 10 条补充别名）及单测，待 Boss S1 审定 |
-| 第二层：5 表存储与体检（M2） | 0% | 待在独立 worktree 中 TDD 实现 `theme_basket_store.py` |
-| 第三层：M2.5 权限门控与三明治 CLI（M3） | 0% | 待跑半小时 Sidecar 越权实测并实现 `theme_basket_sync.py` |
+| 第一层：字典与锁定表（M1） | 100%（已完成，Boss S1 已签字） | `baskets.json`（99 项：15 `pi_bucket` + 10 L1 + 62 L2 + 12 Cross）与 `overrides.json`（49 只公开龙头 + 10 条补充别名）已合并 `main` |
+| 第二层：5 表存储与体检（M2） | 100%（已完成） | `theme_basket_store.py` 5 表引擎与 `data_health.py` 只读体检已合并 `main` |
+| 第三层：M2.5 权限门控（M2.5） | 100%（已完成，Boss 2026-11-27 拍板） | 结论见第 4 节第三层「M2.5 拍板结论」 |
+| 第三层：三明治同步 CLI（M3） | 代码与单测完成（worktree `feat/stock-theme-m3-sync`） | 待云端 `/tmp` 隔离库冒烟（Python 3.10.12 + SQLite 3.37.2）、Boss 审查合并；受限 SSH `restrict,command` 在 M5 部署时配置 |
 | 第四层：首轮双盲精标、自动化与清债（M4–M7） | 0% | 待按 M4 → M5 → M6 → M7 顺序推进 |
 
 ---

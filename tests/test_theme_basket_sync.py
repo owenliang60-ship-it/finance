@@ -530,7 +530,7 @@ import gzip  # noqa: E402
 import subprocess  # noqa: E402
 import sys  # noqa: E402
 from contextlib import redirect_stdout  # noqa: E402
-from datetime import datetime, timezone  # noqa: E402
+from datetime import datetime, timedelta, timezone  # noqa: E402
 
 import config.settings as settings  # noqa: E402
 from src.data import theme_basket_store as store  # noqa: E402
@@ -604,6 +604,8 @@ def _apply(cloud, env, **kw):
 def _stock(db_path, symbol):
     with closing(sqlite3.connect(str(db_path))) as c:
         c.row_factory = sqlite3.Row
+        if not c.execute("SELECT 1 FROM sqlite_master WHERE name = 'stock_themes'").fetchone():
+            return None
         row = c.execute("SELECT * FROM stock_themes WHERE symbol = ?", (symbol,)).fetchone()
         return dict(row) if row else None
 
@@ -898,3 +900,327 @@ def test_private_lock_transport_failure(tmp_path):
                                market_db_path=tmp_path / "m.db", ssh_runner=runner,
                                pull_runner=lambda: pytest.fail("no pull"))
     assert rc == 1
+
+
+# ================================================================ Task 3: Step C / sync-config / replay
+
+class FakeCloud:
+    """Fake SSH runner: `--apply-cloud-stdin` against a tmp cloud db, optional scripted failures.
+
+    Each call runs one second later: backup names have 1 s resolution, and a real 1.5 GB
+    backup alone takes longer than that, so two calls never share a second in production.
+    """
+
+    def __init__(self, cloud, script=()):
+        self.cloud, self.script, self.calls = cloud, list(script), []
+
+    def __call__(self, remote_args, stdin_bytes=None):
+        env = json.loads(stdin_bytes.decode("utf-8"))
+        self.calls.append((list(remote_args), env))
+        mode = self.script.pop(0) if self.script else "ok"
+        now = T1 + timedelta(seconds=len(self.calls))
+        if mode == "busy":
+            return 75, b'{"ok": false, "error": "lock_busy"}\n', b""
+        if mode == "down":
+            raise subprocess.TimeoutExpired(["ssh"], 1)
+        if mode == "commit_then_drop":
+            sync.apply_cloud_envelope(env, db_path=self.cloud["db_path"], lock_path=self.cloud["lock_path"],
+                                      send_telegram_fn=FakeTelegram(), now=now)
+            return 255, b"", b"Connection reset by peer"
+        rc, res = sync.apply_cloud_envelope(env, db_path=self.cloud["db_path"],
+                                            lock_path=self.cloud["lock_path"],
+                                            send_telegram_fn=FakeTelegram(), now=now)
+        return rc, (json.dumps(res) + "\n").encode("ascii"), b""
+
+
+def _step_a(tmp_path, *, missing=("ABBNY", "NEWCO")):
+    """Minimal delta via the real Step A: two missing US names + deterministic auto rows."""
+    sm = [_sm("NVDA", "0001045810"), _sm("SOXX", "0001100663", is_etf=1, eligible=0, reason="etf")]
+    sm += [_sm(s, f"00099900{i:02d}") for i, s in enumerate(missing)]
+    market = make_market_db(
+        tmp_path / "local-market.db", sm=sm,
+        extended=[(r[0], "2026-08-21", None) for r in sm],
+        profiles=[_profile(r[0]) for r in sm])
+    company = make_company_db(tmp_path / "company.db", ["TEST"])
+    xchg = tmp_path / "xchg"
+    delta = sync.detect_delta(market_db_path=market, company_db_path=company, exchange_dir=xchg,
+                              baskets_path=BASKETS, overrides_path=OVERRIDES, aliases_path=ALIASES,
+                              today=TODAY, auto_pull_stale=False, skip_sheet=True)
+    return xchg, market, delta
+
+
+def _write_payload(xchg, delta, classifications, **extra):
+    payload = {"delta_sha256": delta["delta_sha256"], "classifications": classifications}
+    payload.update(extra)
+    (xchg / "outbox" / "payload.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _cls(symbol, l2_id=None, **kw):
+    item = {"symbol": symbol, "l2_id": l2_id or _first_l2(), "cross_themes": [],
+            "business_note": f"{symbol} note", "agreement_status": "single_pass_weekly"}
+    item.update(kw)
+    return item
+
+
+def _commit(xchg, market, runner, pulls=None, **kw):
+    kw.setdefault("today", TODAY)
+    return sync.commit_outbox(exchange_dir=xchg, baskets_path=BASKETS, overrides_path=OVERRIDES,
+                              market_db_path=market, ssh_runner=runner,
+                              pull_runner=(lambda: pulls.append(1) or 0) if pulls is not None
+                              else (lambda: pytest.fail("unexpected pull")), **kw)
+
+
+def _pending(xchg):
+    return sorted((xchg / "pending").glob("*.json"))
+
+
+def test_commit_outbox_happy_path_pushes_and_pulls(cloud, tmp_path):
+    xchg, market, delta = _step_a(tmp_path)
+    _write_payload(xchg, delta, [_cls("ABBNY"), _cls("NEWCO")])
+    fake, pulls = FakeCloud(cloud), []
+    assert _commit(xchg, market, fake, pulls) == 0
+    assert pulls == [1]
+    assert not (xchg / "outbox" / "payload.json").exists()
+    assert _pending(xchg) == []
+    assert fake.calls[0][0] == ["--apply-cloud-stdin"]
+    env = fake.calls[0][1]
+    assert env["baskets_doc"] == _read(BASKETS) and env["overrides_doc"] == _read(OVERRIDES)
+    symbols = {r["symbol"] for r in env["rows"]}
+    assert {"ABBNY", "NEWCO", "SOXX", "TEST", "NVDA"} <= symbols
+    assert _stock(cloud["db_path"], "ABBNY")["business_note"] == "ABBNY note"
+    assert _stock(cloud["db_path"], "SOXX")["asset_kind"] == "etf"
+
+
+@pytest.mark.parametrize("tamper", ["sha", "stale", "extra_symbol", "duplicate", "auto_symbol", "no_delta"])
+def test_commit_outbox_hard_gates_reject(cloud, tmp_path, tamper):
+    xchg, market, delta = _step_a(tmp_path)
+    classifications = [_cls("ABBNY")]
+    today = TODAY
+    if tamper == "sha":
+        _write_payload(xchg, delta, classifications)
+        payload = _read(xchg / "outbox" / "payload.json")
+        payload["delta_sha256"] = "f" * 64
+        (xchg / "outbox" / "payload.json").write_text(json.dumps(payload), encoding="utf-8")
+    else:
+        if tamper == "stale":
+            today = "2026-11-30"
+        elif tamper == "extra_symbol":
+            classifications.append(_cls("HALLUCINATED"))
+        elif tamper == "duplicate":
+            classifications.append(_cls("ABBNY"))
+        elif tamper == "auto_symbol":
+            classifications.append(_cls("SOXX"))
+        _write_payload(xchg, delta, classifications)
+        if tamper == "no_delta":
+            (xchg / "inbox" / "delta.json").unlink()
+    fake = FakeCloud(cloud)
+    assert _commit(xchg, market, fake, today=today) == 1
+    assert fake.calls == []
+    assert (xchg / "outbox" / "payload.json").exists()
+    assert _pending(xchg) == []
+
+
+def test_commit_outbox_rejects_edited_delta(cloud, tmp_path):
+    xchg, market, delta = _step_a(tmp_path)
+    tampered = _read(xchg / "inbox" / "delta.json")
+    tampered["missing_symbols"].append(dict(tampered["missing_symbols"][0], symbol="EVIL"))
+    (xchg / "inbox" / "delta.json").write_text(json.dumps(tampered), encoding="utf-8")
+    _write_payload(xchg, delta, [_cls("EVIL")])
+    fake = FakeCloud(cloud)
+    assert _commit(xchg, market, fake) == 1
+    assert fake.calls == []
+
+
+def test_commit_outbox_restores_deterministic_fields(cloud, tmp_path):
+    xchg, market, delta = _step_a(tmp_path)
+    evil = _cls("ABBNY", asset_kind="etf", in_us_basket_calc=0, cik="0000000666",
+                profile_sector="Evil", company_name_snapshot="Evil Corp", source="override",
+                is_superseded=1, superseded_by="NVDA")
+    _write_payload(xchg, delta, [evil, _cls("NEWCO", agreement_status=None, pi_bucket=None)])
+    fake = FakeCloud(cloud)
+    assert _commit(xchg, market, fake, skip_pull=True) == 0
+    truth = _by_symbol(delta["missing_symbols"])["ABBNY"]
+    row = _stock(cloud["db_path"], "ABBNY")
+    for key in ("cik", "asset_kind", "in_us_basket_calc", "profile_sector", "company_name_snapshot"):
+        assert row[key] == truth[key]
+    assert (row["source"], row["is_superseded"], row["superseded_by"]) == ("agy_llm", 0, None)
+    newco = _stock(cloud["db_path"], "NEWCO")
+    baskets = {b["basket_id"]: b for b in _read(BASKETS)["baskets"]}
+    assert newco["agreement_status"] == "single_pass_weekly"
+    assert newco["pi_bucket"] == baskets[_first_l2()]["default_pi_bucket"]
+
+
+def test_commit_outbox_non_us_rows_drop_cross_themes(cloud, tmp_path):
+    xchg, market, delta = _step_a(tmp_path)
+    world_delta = _read(xchg / "inbox" / "delta.json")
+    world_delta["missing_symbols"].append({
+        "symbol": "HK:0700", "cik": None, "asset_kind": "non_us_equity", "in_us_basket_calc": 0,
+        "profile_sector": None, "profile_industry": None, "company_name_snapshot": None,
+        "sources": ["overlay"]})
+    world_delta["delta_sha256"] = sync.compute_delta_sha256(world_delta)
+    (xchg / "inbox" / "delta.json").write_text(json.dumps(world_delta), encoding="utf-8")
+    cross = _first_cross()
+    _write_payload(xchg, world_delta, [_cls("HK:0700", cross_themes=[{"theme_id": cross, "role": "core"}])])
+    assert _commit(xchg, market, FakeCloud(cloud), skip_pull=True) == 0
+    assert _stock(cloud["db_path"], "HK:0700")["asset_kind"] == "non_us_equity"
+    assert _cross_of(cloud["db_path"], "HK:0700") == []
+
+
+def test_commit_outbox_quarantines_bad_rows_locally(cloud, tmp_path):
+    xchg, market, delta = _step_a(tmp_path)
+    _write_payload(xchg, delta, [_cls("ABBNY", l2_id="no_such_l2"), _cls("NEWCO")])
+    fake = FakeCloud(cloud)
+    assert _commit(xchg, market, fake, skip_pull=True) == 0
+    env = fake.calls[0][1]
+    assert "ABBNY" not in {r["symbol"] for r in env["rows"]}
+    assert "ABBNY" in env["local_summary"]["local_quarantined"]
+    assert _stock(cloud["db_path"], "ABBNY") is None
+    assert _stock(cloud["db_path"], "NEWCO") is not None
+
+
+def test_commit_outbox_rejects_locked_agreement_status(cloud, tmp_path):
+    xchg, market, delta = _step_a(tmp_path)
+    _write_payload(xchg, delta, [_cls("ABBNY", agreement_status="locked"), _cls("NEWCO")])
+    fake = FakeCloud(cloud)
+    assert _commit(xchg, market, fake, skip_pull=True) == 0
+    assert "ABBNY" in fake.calls[0][1]["local_summary"]["local_quarantined"]
+    assert _stock(cloud["db_path"], "ABBNY") is None
+
+
+def test_commit_outbox_broken_dictionary_refuses_before_cloud(cloud, tmp_path):
+    xchg, market, delta = _step_a(tmp_path)
+    _write_payload(xchg, delta, [_cls("ABBNY")])
+    broken = _read(OVERRIDES)
+    broken["locked_stocks"][0]["l2_id"] = "no_such_l2"
+    bad_overrides = tmp_path / "overrides.json"
+    bad_overrides.write_text(json.dumps(broken), encoding="utf-8")
+    fake = FakeCloud(cloud)
+    rc = sync.commit_outbox(exchange_dir=xchg, baskets_path=BASKETS, overrides_path=bad_overrides,
+                            market_db_path=market, today=TODAY, ssh_runner=fake,
+                            pull_runner=lambda: pytest.fail("no pull"))
+    assert rc == 1 and fake.calls == []
+    assert (xchg / "outbox" / "payload.json").exists()
+
+
+def test_lock_busy_goes_to_pending_then_replay_is_idempotent(cloud, tmp_path):
+    xchg, market, delta = _step_a(tmp_path)
+    _write_payload(xchg, delta, [_cls("ABBNY"), _cls("NEWCO")])
+    fake = FakeCloud(cloud, script=["busy"])
+    assert _commit(xchg, market, fake) == 75
+    assert not (xchg / "outbox" / "payload.json").exists()
+    files = _pending(xchg)
+    assert len(files) == 1
+    sealed = _read(files[0])
+    assert files[0].name == sealed["payload_id"] + ".json"
+    assert stat.S_IMODE(files[0].stat().st_mode) == 0o600
+    assert _stock(cloud["db_path"], "ABBNY") is None
+
+    pulls = []
+    rc = sync.replay_pending(exchange_dir=xchg, baskets_path=BASKETS, overrides_path=OVERRIDES,
+                             market_db_path=market, ssh_runner=fake,
+                             pull_runner=lambda: pulls.append(1) or 0)
+    assert rc == 0 and pulls == [1]
+    assert _pending(xchg) == []
+    assert fake.calls[-1][1]["payload_id"] == sealed["payload_id"]
+    assert fake.calls[-1][1]["rows"] == sealed["rows"]
+    assert _stock(cloud["db_path"], "ABBNY") is not None
+
+    history = _count_rows(cloud["db_path"], "stock_theme_history")
+    rc, res = sync.apply_cloud_envelope(fake.calls[-1][1], db_path=cloud["db_path"],
+                                        lock_path=cloud["lock_path"], send_telegram_fn=FakeTelegram())
+    assert rc == 0 and res["replayed"] is True
+    assert _count_rows(cloud["db_path"], "stock_theme_history") == history
+
+
+def test_commit_then_dropped_reply_replays_as_recorded(cloud, tmp_path):
+    xchg, market, delta = _step_a(tmp_path)
+    _write_payload(xchg, delta, [_cls("ABBNY"), _cls("NEWCO")])
+    fake = FakeCloud(cloud, script=["commit_then_drop"])
+    assert _commit(xchg, market, fake) == 1
+    assert len(_pending(xchg)) == 1
+    commits = _count_rows(cloud["db_path"], "theme_sync_commits")
+    stocks = _count_rows(cloud["db_path"], "stock_themes")
+
+    rc = sync.replay_pending(exchange_dir=xchg, baskets_path=BASKETS, overrides_path=OVERRIDES,
+                             market_db_path=market, ssh_runner=fake, pull_runner=lambda: 0)
+    assert rc == 0 and _pending(xchg) == []
+    assert _count_rows(cloud["db_path"], "theme_sync_commits") == commits
+    assert _count_rows(cloud["db_path"], "stock_themes") == stocks
+
+
+def test_transport_failure_goes_to_pending_and_next_commit_replays_first(cloud, tmp_path):
+    xchg, market, delta = _step_a(tmp_path)
+    _write_payload(xchg, delta, [_cls("ABBNY")])
+    fake = FakeCloud(cloud, script=["down"])
+    assert _commit(xchg, market, fake) == 1
+    assert not (xchg / "outbox" / "payload.json").exists()
+    first = _read(_pending(xchg)[0])
+
+    _write_payload(xchg, delta, [_cls("NEWCO")])
+    pulls = []
+    assert _commit(xchg, market, fake, pulls) == 0
+    assert _pending(xchg) == []
+    assert [c[1]["payload_id"] for c in fake.calls[1:]][0] == first["payload_id"]
+    assert len(fake.calls) == 3
+    assert pulls == [1]
+    assert _stock(cloud["db_path"], "ABBNY") is not None
+    assert _stock(cloud["db_path"], "NEWCO") is not None
+
+
+def test_replay_pending_keeps_files_on_failure_and_ignores_corrupt(cloud, tmp_path):
+    xchg, market, delta = _step_a(tmp_path)
+    _write_payload(xchg, delta, [_cls("ABBNY")])
+    assert _commit(xchg, market, FakeCloud(cloud, script=["busy"])) == 75
+    (xchg / "pending" / "garbage.json").write_text("{not json", encoding="utf-8")
+    rc = sync.replay_pending(exchange_dir=xchg, baskets_path=BASKETS, overrides_path=OVERRIDES,
+                             market_db_path=market, ssh_runner=FakeCloud(cloud, script=["busy"]),
+                             pull_runner=lambda: pytest.fail("no pull"))
+    assert rc == 75
+    assert len(_pending(xchg)) == 2
+    rc = sync.replay_pending(exchange_dir=xchg, baskets_path=BASKETS, overrides_path=OVERRIDES,
+                             market_db_path=market, ssh_runner=FakeCloud(cloud), pull_runner=lambda: 0)
+    assert rc == 0
+    assert [p.name for p in _pending(xchg)] == ["garbage.json"]
+
+
+def test_replay_pending_empty_is_noop(tmp_path):
+    rc = sync.replay_pending(exchange_dir=tmp_path / "x", baskets_path=BASKETS, overrides_path=OVERRIDES,
+                             market_db_path=tmp_path / "m.db",
+                             ssh_runner=lambda *a: pytest.fail("no cloud call"),
+                             pull_runner=lambda: pytest.fail("no pull"))
+    assert rc == 0
+
+
+def test_sync_config_pushes_99_baskets_and_49_locks(cloud, tmp_path):
+    fake, pulls = FakeCloud(cloud), []
+    rc = sync.sync_config(baskets_path=BASKETS, overrides_path=OVERRIDES,
+                          market_db_path=tmp_path / "m.db", ssh_runner=fake,
+                          pull_runner=lambda: pulls.append(1) or 0)
+    assert rc == 0 and pulls == [1]
+    env = fake.calls[0][1]
+    assert env["rows"] == [] and env["payload_id"] == store.compute_payload_id([])
+    with closing(sqlite3.connect(str(cloud["db_path"]))) as c:
+        assert c.execute("SELECT COUNT(*) FROM theme_baskets").fetchone()[0] == 99
+        assert c.execute("SELECT COUNT(*) FROM stock_themes WHERE source = 'override'").fetchone()[0] == 49
+
+
+def test_sync_config_lock_busy_returns_75(cloud, tmp_path):
+    rc = sync.sync_config(baskets_path=BASKETS, overrides_path=OVERRIDES,
+                          market_db_path=tmp_path / "m.db", ssh_runner=FakeCloud(cloud, script=["busy"]),
+                          pull_runner=lambda: pytest.fail("no pull"))
+    assert rc == 75
+
+
+def test_zero_row_heartbeat_end_to_end(cloud, tmp_path):
+    xchg, market, delta = _step_a(tmp_path, missing=())
+    assert (xchg / "outbox" / "payload.json").exists()
+    fake = FakeCloud(cloud)
+    assert _commit(xchg, market, fake, skip_pull=True) == 0
+    env = fake.calls[0][1]
+    assert {r["symbol"] for r in env["rows"]} == {r["symbol"] for r in delta["auto_rows"]}
+
+
+def test_code_version_unchanged():
+    from terminal.prosperity.version import code_version
+
+    assert code_version() == "4c9da30bd5001102"
