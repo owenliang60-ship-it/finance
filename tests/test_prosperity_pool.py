@@ -1,10 +1,42 @@
-"""M10 prosperity pool: liquidity ranks, pool file contract, live publish hook."""
+"""M10 prosperity pool: shared calendar/top-days operators, pool file contract, live publish hook."""
 import copy
 
 import pytest
 
 from src.data.market_store import MarketStore
 from tests.prosperity_fixtures import seed_db, seed_prices, weekdays
+
+
+# ---- Task 1: shared calendar, daily dollar volumes, and top-N day counts ------------
+def test_count_top_days_ties_by_symbol_and_skips_missing_day():
+    from src.data.prosperity_pool import count_top_days
+    vols = {'A': {'d1': 3.0, 'd2': 1.0}, 'B': {'d1': 3.0, 'd2': 2.0}, 'C': {'d2': 5.0}}
+    assert count_top_days(vols, ['d1', 'd2'], 1) == {'A': 1, 'B': 0, 'C': 1}
+    assert count_top_days(vols, ['d1', 'd2'], 2) == {'A': 1, 'B': 2, 'C': 1}
+
+
+def test_load_calendar_uses_spy_positive_closes_and_matches_price_book(tmp_path):
+    from backtest.research import momentum_board as mb
+    from backtest.research import prosperity_health as health
+    from src.data import prosperity_pool as pool
+    db = seed_prices(seed_db(tmp_path / 'market.db'), {
+        'SPY': [('2026-10-20', 400.0, 1000), ('2026-10-21', 0.0, 1000), ('2026-10-22', 402.0, 1000)],
+        'AAA': [('2026-10-19', 50.0, 1000), ('2026-10-20', 50.0, 1000), ('2026-10-22', 51.0, 1000)],
+    })
+    m = MarketStore(db_path=db, read_only=True)
+    try:
+        cal = pool.load_calendar(m)
+        book = health.PriceBook.load(m, ['AAA'])
+        dvs = pool.load_daily_dollar_volumes(m, ['AAA'], cal)
+    finally:
+        m.close()
+    assert cal == ['2026-10-20', '2026-10-22']
+    assert book.calendar == tuple(cal)
+    assert dvs == {'AAA': {'2026-10-20': 50000.0, '2026-10-22': 51000.0}}
+    assert mb.load_daily_dollar_volumes is pool.load_daily_dollar_volumes
+    assert mb.TOP_VOLUME_RANK == pool.LIQUIDITY_TOP == 100
+    assert health.CALENDAR_SYMBOL == pool.CALENDAR_SYMBOL == 'SPY'
+
 
 DAYS = weekdays('2026-10-30', 35)
 SYMBOLS = [f'S{i:04d}' for i in range(20)]

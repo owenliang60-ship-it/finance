@@ -20,7 +20,8 @@ from typing import Callable, Dict, List, Mapping, Optional, Sequence
 import numpy as np
 
 from scripts.crypto_trend_metrics import trend_metrics
-from src.data.prosperity_pool import COVERAGE_MIN, _day, _finite, _is_int   # the pool's floor, one definition
+from src.data.prosperity_pool import (COVERAGE_MIN, LIQUIDITY_TOP, _day, _finite, _is_int,
+                                      count_top_days, load_daily_dollar_volumes)   # shared definitions
 
 SCHEMA_VERSION = 1
 SCORING = 'udv1'                         # no "_": the delivery text goes out with Telegram legacy Markdown
@@ -35,12 +36,11 @@ WINDOWS = {'14w': 70}                    # label → trading days (closes = days
 # Wednesday when Thursday and Friday are both closed (3). Deliberately tighter than the pool's
 # 7-day LIQUIDITY_MAX_LAG_DAYS: a price outage from Wednesday on must not yield a board (review #2).
 MAX_LAG_DAYS = 3
-TOP_VOLUME_RANK = 100                    # U70: in each day's dollar-volume top 100 ...
+TOP_VOLUME_RANK = LIQUIDITY_TOP          # U70: in each day's dollar-volume top 100 ...
 LONG_DRAWDOWN_LIMIT = 0.30
 # The V4 ratio 45/12.5/12.5/5/25 with the turnover slot taken by UDV (Boss 2026-11-26; 270-week replay
 # in north-star §4.4).
 UDV_WEIGHTS = {'return': 0.45, 'er': 0.125, 'r_squared': 0.125, 'drawdown': 0.05, 'udv': 0.25}
-_QUERY_BATCH = 500
 _ROW_KEYS = ('return', 'er', 'r_squared', 'slope', 'drawdown')
 _SYMBOL = re.compile(r'[A-Z0-9.-]+')     # no "_": the texts go out with Telegram legacy Markdown (issue 016)
 
@@ -67,12 +67,7 @@ def board_top_cut(board: Mapping) -> int:
 
 def top_volume_days(day_volumes: Mapping[str, Mapping], days: Sequence) -> Dict[str, int]:
     """Days each symbol spent in that day's dollar-volume top TOP_VOLUME_RANK; ties go to the symbol."""
-    counts = {s: 0 for s in day_volumes}
-    for d in days:
-        ranked = sorted((-v[d], s) for s, v in day_volumes.items() if d in v)
-        for _, s in ranked[:TOP_VOLUME_RANK]:
-            counts[s] += 1
-    return counts
+    return count_top_days(day_volumes, days, TOP_VOLUME_RANK)
 
 
 def _udv(closes: np.ndarray, dvs: Sequence[float]) -> Optional[float]:
@@ -130,22 +125,6 @@ def score_window(closes: Mapping[str, np.ndarray], daily_volumes: Mapping[str, S
     for rank, r in enumerate((r for r in rows if r['eligible']), 1):
         r['rank'] = rank
     return rows
-
-
-def load_daily_dollar_volumes(market, symbols: Sequence[str], days: Sequence[str]) -> Dict[str, Dict[str, float]]:
-    """{symbol: {day: close × volume}} for every usable row on `days`; a missing day stays missing."""
-    conn = market._get_conn()
-    names, out = sorted(set(symbols)), {}
-    day_marks = ','.join('?' for _ in days)
-    for i in range(0, len(names), _QUERY_BATCH):
-        batch = names[i:i + _QUERY_BATCH]
-        marks = ','.join('?' for _ in batch)
-        for symbol, day, value in conn.execute(
-                f'SELECT symbol, date, close * volume FROM daily_price WHERE date IN ({day_marks}) '
-                f'AND symbol IN ({marks}) AND close > 0 AND volume >= 0', [*days, *batch]):
-            if value is not None and math.isfinite(value) and value >= 0:
-                out.setdefault(symbol, {})[day] = float(value)
-    return out
 
 
 def reject_non_finite(token: str):

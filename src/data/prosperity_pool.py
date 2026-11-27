@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from config.settings import DATA_DIR
 from src.data.prosperity_gates import CST, instant
@@ -35,7 +35,43 @@ LIQUIDITY_MIN_DAYS = 5
 LIQUIDITY_LOOKBACK_CALENDAR_DAYS = 70   # 30 trading days ≈ 42 calendar days, plus holiday slack
 LIQUIDITY_MAX_LAG_DAYS = 7
 COVERAGE_MIN = 0.90
+CALENDAR_SYMBOL = 'SPY'
+_QUERY_BATCH = 500
 _TIMESTAMP = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})')
+
+
+def load_calendar(market) -> List[str]:
+    """Ascending trading days on which CALENDAR_SYMBOL has a positive close."""
+    return [r[0] for r in market._get_conn().execute(
+        'SELECT date FROM daily_price WHERE symbol=? AND close > 0 ORDER BY date', (CALENDAR_SYMBOL,))]
+
+
+def load_daily_dollar_volumes(market, symbols: Sequence[str], days: Sequence[str]) -> Dict[str, Dict[str, float]]:
+    """{symbol: {day: close × volume}} for every usable row on `days`; a missing day stays missing."""
+    if not symbols or not days:
+        return {}
+    conn = market._get_conn()
+    names, out = sorted(set(symbols)), {}
+    day_marks = ','.join('?' for _ in days)
+    for i in range(0, len(names), _QUERY_BATCH):
+        batch = names[i:i + _QUERY_BATCH]
+        marks = ','.join('?' for _ in batch)
+        for symbol, day, value in conn.execute(
+                f'SELECT symbol, date, close * volume FROM daily_price WHERE date IN ({day_marks}) '
+                f'AND symbol IN ({marks}) AND close > 0 AND volume >= 0', [*days, *batch]):
+            if value is not None and math.isfinite(value) and value >= 0:
+                out.setdefault(symbol, {})[day] = float(value)
+    return out
+
+
+def count_top_days(day_volumes: Mapping[str, Mapping], days: Sequence, top: int) -> Dict[str, int]:
+    """Days each symbol spent in that day's dollar-volume top `top`; ties go to the earlier symbol."""
+    counts = {s: 0 for s in day_volumes}
+    for d in days:
+        ranked = sorted((-v[d], s) for s, v in day_volumes.items() if d in v)
+        for _, s in ranked[:top]:
+            counts[s] += 1
+    return counts
 
 
 class PoolCriteriaMismatch(RuntimeError):
