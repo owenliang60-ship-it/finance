@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import math
 import re
+import subprocess
 import unittest
 from pathlib import Path
 import pandas as pd
@@ -16,6 +17,7 @@ from portfolio.holdings.sheet_book import (
     SheetBook,
     SheetBookError,
     SheetHolding,
+    parse_sheet_book,
 )
 from scripts.daily_technical_analysis import chunk_telegram as ct
 from scripts.daily_technical_analysis import fetch_vol_env as m
@@ -205,6 +207,9 @@ def test_tv_symbol_hint_mapping_us_hk_kr():
     assert m.build_tv_symbol_hint("0001", "HK") == ("0001", "HKEX:1", False)
     assert m.build_tv_symbol_hint("KRX:005930", "KR") == ("005930", "KRX:005930", False)
     assert m.build_tv_symbol_hint("000660", "KR") == ("000660", "KRX:000660", False)
+    assert m.build_tv_symbol_hint("5930", "KR") == ("005930", "KRX:005930", False)
+    assert m.build_tv_symbol_hint("660", "KR") == ("000660", "KRX:000660", False)
+    assert m.build_tv_symbol_hint("ABC123", "KR") == ("ABC123", None, True)
     assert m.build_tv_symbol_hint("NASDAQ:SMH", "US") == ("SMH", "NASDAQ:SMH", False)
     assert m.build_tv_symbol_hint("QQQ", "US") == ("QQQ", "NASDAQ:QQQ", False)
     assert m.build_tv_symbol_hint("SOXX", "US") == ("SOXX", "NASDAQ:SOXX", False)
@@ -428,12 +433,18 @@ def test_evaluate_position_stop_both_bull_full_hold():
     assert res["cow_dist_pct"] == -4.0
     assert res["banner_alert"] is None
 
-    # Newly listed / unconfirmed cow channel (cow_direction == 0, close >= cow_lower)
+    # Newly listed / unconfirmed cow channel (cow_direction == 0): only ST leg confirmed -> 50%
     res_new_ipo = rhtml.evaluate_position_stop(_base_pos(cow_direction=0, cow_lower=96.0, close=100.0))
     assert res_new_ipo["available"] is True
-    assert res_new_ipo["cow_bull"] is True
-    assert res_new_ipo["target_hold_pct"] == 100
+    assert res_new_ipo["cow_bull"] is False
+    assert res_new_ipo["target_hold_pct"] == 50
+    assert res_new_ipo["badge_text"] == "留半仓 (50%)"
+    assert res_new_ipo["banner_alert"] is None
     assert "待确认" in res_new_ipo["cow_status_text"]
+
+    # cow_direction == 0 with cow_flipped_bear=True is contradictory -> fail closed
+    res_ipo_bad = rhtml.evaluate_position_stop(_base_pos(cow_direction=0, cow_flipped_bear=True))
+    assert res_ipo_bad["available"] is False
 
 
 def test_evaluate_position_stop_single_leg_break_new_vs_stale_and_null_st_stop():
@@ -502,6 +513,7 @@ def test_evaluate_position_stop_dual_break_new_vs_stale():
             st_flipped_bear=True,
             cow_direction=-1,
             cow_lower=102.0,
+            cow_mid=105.0,
             cow_upper=108.0,
             cow_flipped_bear=False,
             close=100.0,
@@ -519,6 +531,7 @@ def test_evaluate_position_stop_dual_break_new_vs_stale():
             st_flipped_bear=False,
             cow_direction=-1,
             cow_lower=102.0,
+            cow_mid=105.0,
             cow_upper=108.0,
             cow_flipped_bear=False,
             close=100.0,
@@ -558,10 +571,65 @@ def test_evaluate_position_stop_nan_inf_bool_and_inconsistency_fail_closed():
     assert res_short_bad["available"] is False
     assert res_short_bad["badge_text"] == "⚠️ 指标数据不可用"
 
-    # cow_direction == 1 with close significantly below cow_lower
-    res_cow_bad = rhtml.evaluate_position_stop(_base_pos(cow_direction=1, cow_lower=96.0, close=94.0))
+    # cow_direction == 1 with close significantly below cow_lower (ST stop valid so cow check is actually hit!)
+    res_cow_bad = rhtml.evaluate_position_stop(
+        _base_pos(st_direction="long", st_stop=90.0, cow_direction=1, cow_lower=96.0, cow_mid=99.0, cow_upper=102.0, close=94.0)
+    )
     assert res_cow_bad["available"] is False
     assert res_cow_bad["badge_text"] == "⚠️ 指标数据不可用"
+    assert "奶牛" in res_cow_bad["reason"]
+
+    # Null flipped_bear flags must fail closed
+    for flag_field in ("st_flipped_bear", "cow_flipped_bear"):
+        res_null = rhtml.evaluate_position_stop(_base_pos(**{flag_field: None}))
+        assert res_null["available"] is False
+        assert res_null["badge_text"] == "⚠️ 指标数据不可用"
+
+    # Direction vs flipped_bear contradictions must fail closed
+    res_st_contra = rhtml.evaluate_position_stop(_base_pos(st_direction="long", st_flipped_bear=True))
+    assert res_st_contra["available"] is False
+    res_cow_contra = rhtml.evaluate_position_stop(_base_pos(cow_direction=1, cow_flipped_bear=True))
+    assert res_cow_contra["available"] is False
+    # cow_direction == -1 with cow_flipped_bear=True requires close < cow_lower (no false 🚨 on rebound)
+    res_cow_rebound_flip = rhtml.evaluate_position_stop(
+        _base_pos(cow_direction=-1, cow_lower=96.0, cow_mid=99.0, cow_upper=104.0, close=100.0, cow_flipped_bear=True)
+    )
+    assert res_cow_rebound_flip["available"] is False
+
+    # cow_mid outside [cow_lower, cow_upper] must fail closed
+    res_mid_high = rhtml.evaluate_position_stop(_base_pos(cow_lower=95.0, cow_mid=150.0, cow_upper=105.0))
+    assert res_mid_high["available"] is False
+    res_mid_low = rhtml.evaluate_position_stop(_base_pos(cow_lower=95.0, cow_mid=90.0, cow_upper=105.0))
+    assert res_mid_low["available"] is False
+
+    # Strict exact boundary checks (no loose 0.05% tolerance hiding a stop breach)
+    res_long_eq = rhtml.evaluate_position_stop(
+        _base_pos(close=100.0, st_direction="long", st_stop=100.0, cow_lower=96.0, cow_mid=99.0, cow_upper=104.0)
+    )
+    assert res_long_eq["available"] is True
+    res_long_over = rhtml.evaluate_position_stop(
+        _base_pos(close=100.0, st_direction="long", st_stop=100.04, cow_lower=96.0, cow_mid=99.0, cow_upper=104.0)
+    )
+    assert res_long_over["available"] is False
+
+    res_short_eq = rhtml.evaluate_position_stop(
+        _base_pos(close=100.0, st_direction="short", st_stop=100.0, cow_lower=96.0, cow_mid=99.0, cow_upper=104.0)
+    )
+    assert res_short_eq["available"] is True
+    res_short_under = rhtml.evaluate_position_stop(
+        _base_pos(close=100.0, st_direction="short", st_stop=99.96, cow_lower=96.0, cow_mid=99.0, cow_upper=104.0)
+    )
+    assert res_short_under["available"] is False
+
+    # Huge integer OverflowError must fail closed cleanly (not crash)
+    res_overflow = rhtml.evaluate_position_stop(_base_pos(close=10 ** 400))
+    assert res_overflow["available"] is False
+    assert rhtml.fmt_num(10 ** 400) == "—"
+    assert rhtml.fmt_vol(10 ** 400) == "—"
+
+    # Missing or invalid bar_date must fail closed
+    assert rhtml.evaluate_position_stop(_base_pos(bar_date=""))["available"] is False
+    assert rhtml.evaluate_position_stop(_base_pos(bar_date="2026-13-99"))["available"] is False
 
 
 def test_reconcile_active_positions_prevents_fail_open_and_dropped_ticker():
@@ -602,8 +670,12 @@ def test_render_html_daily_three_states_banner_and_xss_escaping():
         "symbols": [_minimal_symbol("BTC")],
     }
 
-    # 1. empty
-    html_empty = rhtml.render_html({**base_daily, "active_positions": {"status": "empty", "positions": []}})
+    # 1. empty (with authoritative vol_env.active_holdings)
+    html_empty = rhtml.render_html({
+        **base_daily,
+        "vol_env": {"active_holdings": {"status": "empty", "items": []}},
+        "active_positions": {"status": "empty", "positions": []},
+    })
     assert "30% 主动进攻仓 · 移动止损" in html_empty
     assert "无主动进攻仓" in html_empty
     assert "--bg: #f7f8fa" in html_empty
@@ -612,6 +684,7 @@ def test_render_html_daily_three_states_banner_and_xss_escaping():
     # 2. unavailable
     html_unavail = rhtml.render_html({
         **base_daily,
+        "vol_env": {"active_holdings": {"status": "unavailable", "reason": "拉取失败 <script>alert(1)</script>", "items": []}},
         "active_positions": {"status": "unavailable", "reason": "拉取失败 <script>alert(1)</script>", "positions": []},
     })
     assert "30% 主动进攻仓 · 移动止损" in html_unavail
@@ -622,9 +695,22 @@ def test_render_html_daily_three_states_banner_and_xss_escaping():
     # 3. ok with full hold, new cut-half, new dual-break, stale dual-break, single unavailable + XSS
     sym_with_alert = _minimal_symbol("BTC")
     sym_with_alert["new_alerts"] = ["BTC 原有预警"]
+    sym_with_alert["volume"]["unit"] = "<b>BTC</b>"
     html_ok = rhtml.render_html({
         **base_daily,
         "symbols": [sym_with_alert],
+        "vol_env": {
+            "active_holdings": {
+                "status": "ok",
+                "items": [
+                    {"ticker": "AAA", "market": "US", "category": "Momentum", "tv_symbol_hint": None, "needs_tv_search": True},
+                    {"ticker": "BBB", "market": "US", "category": "Sentiment", "tv_symbol_hint": None, "needs_tv_search": True},
+                    {"ticker": "CCC", "market": "US", "category": "Value<script>alert(1)</script>", "tv_symbol_hint": None, "needs_tv_search": True},
+                    {"ticker": "DDD", "market": "US", "category": "Fundamental", "tv_symbol_hint": None, "needs_tv_search": True},
+                    {"ticker": "EEE", "market": "HK", "category": "Value", "tv_symbol_hint": "HKEX:700", "needs_tv_search": False},
+                ],
+            }
+        },
         "active_positions": {
             "status": "ok",
             "positions": [
@@ -646,6 +732,7 @@ def test_render_html_daily_three_states_banner_and_xss_escaping():
                     st_flipped_bear=True,
                     cow_direction=-1,
                     cow_lower=102.0,
+                    cow_mid=105.0,
                     cow_upper=108.0,
                 ),
                 _base_pos(
@@ -656,6 +743,7 @@ def test_render_html_daily_three_states_banner_and_xss_escaping():
                     st_flipped_bear=False,
                     cow_direction=-1,
                     cow_lower=102.0,
+                    cow_mid=105.0,
                     cow_upper=108.0,
                 ),
                 {"ticker": "EEE", "market": "HK", "category": "Value", "available": False, "reason": "MCP 超时"},
@@ -670,6 +758,8 @@ def test_render_html_daily_three_states_banner_and_xss_escaping():
     assert "⚠️ 指标数据不可用" in html_ok
     assert "<script>alert(1)</script>" not in html_ok
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html_ok
+    assert "<b>BTC</b>" not in html_ok
+    assert "&lt;b&gt;BTC&lt;/b&gt;" in html_ok
     assert not re.search(r'(?:src|href)=["\']https?://', html_ok)
 
     # Verify both newly triggered position breaks appear in .alert-banner BEFORE symbol alert
@@ -715,6 +805,369 @@ def test_sidecar_json_valid_and_least_privilege():
     assert "active_positions" in prompt
     assert "08:05" in prompt or "[-2]" in prompt
     assert "韩股" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Codex Round-1 Audit Regression Tests (#1, #2, #3, #4, #5, #6A, #8, #9)
+# ---------------------------------------------------------------------------
+
+def test_codex_p0_path_confinement_telegram_and_renderer(tmp_path):
+    outside_txt = tmp_path / "readme.txt"
+    outside_txt.write_text("harmless test content", encoding="utf-8")
+    outside_html = tmp_path / "outside.html"
+    outside_html.write_text("<html></html>", encoding="utf-8")
+
+    send_script = Path(__file__).resolve().parents[1] / "scripts" / "daily_technical_analysis" / "send_telegram_html.sh"
+    for bad_file in (outside_txt, outside_html):
+        proc = subprocess.run(
+            ["bash", str(send_script), str(bad_file), "test caption"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode != 0
+        assert "notes/ta" in (proc.stderr + proc.stdout)
+
+    # render_ta_html CLI must reject output outside ALLOWED_REPORT_DIR and non-stdin --input
+    with pytest.raises(ValueError, match="notes/ta"):
+        rhtml.validate_report_output_path(str(outside_html))
+    with pytest.raises(ValueError, match=".html"):
+        rhtml.validate_report_output_path(str(rhtml.ALLOWED_REPORT_DIR / "bad.txt"))
+
+    render_script = Path(__file__).resolve().parents[1] / "scripts" / "daily_technical_analysis" / "render_ta_html.py"
+    proc_out = subprocess.run(
+        ["/Users/owen/CC workspace/Finance/.venv/bin/python", str(render_script), "--output", str(outside_html)],
+        input=json.dumps({"mode": "single", "symbols": []}),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc_out.returncode != 0
+
+    proc_in = subprocess.run(
+        [
+            "/Users/owen/CC workspace/Finance/.venv/bin/python",
+            str(render_script),
+            "--input",
+            str(outside_txt),
+            "--output",
+            str(rhtml.ALLOWED_REPORT_DIR / "should_not_write.html"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc_in.returncode != 0
+
+
+def test_codex_p1_blank_category_row_order_end_to_end():
+    from tests.test_portfolio.test_sheet_book import FETCHED_AT, _row, build_fixture
+
+    rows_blank_first = [
+        _row("US", "AAA", 10.0, 20, 8.0, 200.0, ""),
+        _row("US", "AAA", 10.0, 50, 9.0, 500.0, "LTH"),
+    ]
+    rows_lth_first = list(reversed(rows_blank_first))
+
+    book1 = parse_sheet_book(build_fixture(rows=rows_blank_first), FETCHED_AT)
+    book2 = parse_sheet_book(build_fixture(rows=rows_lth_first), FETCHED_AT)
+    items1 = m.extract_offensive_holdings(book1, SHEET_PRICED_US_SYMBOLS)
+    items2 = m.extract_offensive_holdings(book2, SHEET_PRICED_US_SYMBOLS)
+    assert [it["ticker"] for it in items1] == ["AAA"]
+    assert [it["ticker"] for it in items2] == ["AAA"]
+
+
+def test_codex_p1_reconcile_strict_market_no_offbook_no_spoofed_evaluated():
+    # 1. Cross-market mismatch (US/EXAMPLE vs KR/EXAMPLE) must NOT match
+    rec_cross = rhtml.reconcile_active_positions(
+        active_positions={
+            "status": "ok",
+            "positions": [
+                _base_pos(
+                    ticker="EXAMPLE",
+                    market="KR",
+                    st_direction="short",
+                    st_stop=None,
+                    st_flipped_bear=True,
+                    cow_direction=-1,
+                    cow_lower=102.0,
+                    cow_mid=105.0,
+                    cow_upper=108.0,
+                )
+            ],
+        },
+        vol_env_holdings={
+            "status": "ok",
+            "items": [{"ticker": "EXAMPLE", "market": "US", "category": "Momentum", "tv_symbol_hint": None, "needs_tv_search": True}],
+        },
+    )
+    assert rec_cross is not None
+    assert len(rec_cross["positions"]) == 1
+    assert rec_cross["positions"][0]["market"] == "US"
+    assert rec_cross["positions"][0]["available"] is False
+    assert rec_cross["positions"][0]["banner_alert"] is None
+
+    # 2. Authoritative empty must ignore stray positions
+    rec_empty = rhtml.reconcile_active_positions(
+        active_positions={"status": "ok", "positions": [_base_pos(ticker="STRAY")]},
+        vol_env_holdings={"status": "empty", "items": []},
+    )
+    assert rec_empty is not None
+    assert rec_empty["status"] == "empty"
+    assert rec_empty["positions"] == []
+
+    # 3. Off-book extras and duplicate returned rows must NOT corrupt output
+    rec_dup = rhtml.reconcile_active_positions(
+        active_positions={
+            "status": "ok",
+            "positions": [
+                _base_pos(ticker="AAA", market="US"),
+                _base_pos(ticker="AAA", market="US"),
+                _base_pos(ticker="EXTRA", market="US"),
+            ],
+        },
+        vol_env_holdings={
+            "status": "ok",
+            "items": [{"ticker": "AAA", "market": "US", "category": "Momentum", "tv_symbol_hint": None, "needs_tv_search": True}],
+        },
+    )
+    assert rec_dup is not None
+    assert len(rec_dup["positions"]) == 1
+    assert rec_dup["positions"][0]["ticker"] == "AAA"
+    assert rec_dup["positions"][0]["available"] is False
+
+    # 4. Malformed vol_env.active_holdings={} with active_positions=empty must fail closed as unavailable
+    rec_bad_vh = rhtml.reconcile_active_positions(
+        active_positions={"status": "empty", "positions": []},
+        vol_env_holdings={},
+    )
+    assert rec_bad_vh is not None
+    assert rec_bad_vh["status"] == "unavailable"
+
+    # 5. External spoofed _evaluated=True must be ignored and re-evaluated (failing closed on missing prices)
+    rec_spoof = rhtml.reconcile_active_positions(
+        active_positions={
+            "status": "ok",
+            "positions": [
+                {
+                    "ticker": "AAA",
+                    "market": "US",
+                    "_evaluated": True,
+                    "available": True,
+                    "badge_text": "🚨 双破全清",
+                    "banner_alert": "SPOOFED ALERT",
+                }
+            ],
+        },
+        vol_env_holdings={
+            "status": "ok",
+            "items": [{"ticker": "AAA", "market": "US", "category": "Momentum", "tv_symbol_hint": None, "needs_tv_search": True}],
+        },
+    )
+    assert rec_spoof is not None
+    assert rec_spoof["positions"][0]["available"] is False
+    assert rec_spoof["positions"][0]["banner_alert"] is None
+
+    # 6. vol_env ok + active_positions unavailable must mark all items unavailable (ignore leftover rows)
+    rec_ap_unavail = rhtml.reconcile_active_positions(
+        active_positions={"status": "unavailable", "reason": "MCP offline", "positions": [_base_pos(ticker="AAA", market="US")]},
+        vol_env_holdings={
+            "status": "ok",
+            "items": [{"ticker": "AAA", "market": "US", "category": "Momentum", "tv_symbol_hint": None, "needs_tv_search": True}],
+        },
+    )
+    assert rec_ap_unavail is not None
+    assert rec_ap_unavail["status"] == "ok"
+    assert len(rec_ap_unavail["positions"]) == 1
+    assert rec_ap_unavail["positions"][0]["available"] is False
+    assert "MCP offline" in rec_ap_unavail["positions"][0]["reason"]
+
+
+def test_codex_p1_intraday_bar_blocked_in_render_html_and_weekend_no_repeat_alert():
+    # 1. KR intraday bar_date=2026-11-27 at 2026-11-27 08:05 SGT must NOT trigger alert in render_html
+    kr_intraday_payload = {
+        "mode": "daily",
+        "report_date": "2026-11-27",
+        "generated_at": "2026-11-27 08:05 SGT",
+        "vol_env": {
+            "active_holdings": {
+                "status": "ok",
+                "items": [{"ticker": "005930", "market": "KR", "category": "Momentum", "tv_symbol_hint": "KRX:005930", "needs_tv_search": False}],
+            }
+        },
+        "active_positions": {
+            "status": "ok",
+            "positions": [
+                _base_pos(
+                    ticker="005930",
+                    market="KR",
+                    exchange_symbol="KRX:005930",
+                    bar_date="2026-11-27",
+                    st_direction="short",
+                    st_stop=None,
+                    st_flipped_bear=True,
+                    cow_direction=-1,
+                    cow_lower=102.0,
+                    cow_mid=105.0,
+                    cow_upper=108.0,
+                )
+            ],
+        },
+        "symbols": [],
+    }
+    html_kr = rhtml.render_html(kr_intraday_payload)
+    assert "⚠️ 指标数据不可用" in html_kr
+    assert "🚨 双破全清" not in html_kr
+    assert 'class="alert-banner"' not in html_kr
+
+    # 2. select_closed_daily_bar must reject unparseable date and Saturday bar on Monday
+    bar_bad, note_bad = rhtml.select_closed_daily_bar(
+        [{"date": "not-a-date", "close": 100.0}],
+        "KR",
+        dt.datetime(2026, 11, 27, 0, 5, tzinfo=dt.timezone.utc),
+    )
+    assert bar_bad is None
+    assert note_bad != ""
+
+    bar_sat, note_sat = rhtml.select_closed_daily_bar(
+        [{"date": "2026-11-27", "close": 100.0}, {"date": "2026-11-28", "close": 101.0}],  # Sat bar
+        "KR",
+        dt.datetime(2026, 11, 30, 0, 5, tzinfo=dt.timezone.utc),  # Mon 08:05 SGT
+    )
+    assert bar_sat is not None
+    assert bar_sat["date"] == "2026-11-27"
+    assert note_sat != ""
+
+    # 3. Weekend repeat alert suppression (Scheme A): Friday 2026-11-27 KR break fires on Sat 11-28, NOT Sun 11-29
+    base_fri_kr = {
+        "mode": "daily",
+        "vol_env": {
+            "active_holdings": {
+                "status": "ok",
+                "items": [{"ticker": "005930", "market": "KR", "category": "Momentum", "tv_symbol_hint": "KRX:005930", "needs_tv_search": False}],
+            }
+        },
+        "active_positions": {
+            "status": "ok",
+            "positions": [
+                _base_pos(
+                    ticker="005930",
+                    market="KR",
+                    exchange_symbol="KRX:005930",
+                    bar_date="2026-11-27",
+                    st_direction="short",
+                    st_stop=None,
+                    st_flipped_bear=True,
+                    cow_direction=-1,
+                    cow_lower=102.0,
+                    cow_mid=105.0,
+                    cow_upper=108.0,
+                )
+            ],
+        },
+        "symbols": [],
+    }
+    html_sat = rhtml.render_html({**base_fri_kr, "report_date": "2026-11-28", "generated_at": "2026-11-28 08:05 SGT"})
+    assert "🚨 双破全清" in html_sat
+    assert 'class="alert-banner"' in html_sat
+
+    html_sun = rhtml.render_html({**base_fri_kr, "report_date": "2026-11-29", "generated_at": "2026-11-29 08:05 SGT"})
+    assert "⚠️ 双破全清 · 存量未清 (0%)" in html_sun
+    assert "🚨 双破全清" not in html_sun
+    assert 'class="alert-banner"' not in html_sun
+
+
+def test_codex_p1_single_mode_fmt_vol_escapes_unit():
+    sym = _minimal_symbol("NVDA_TEST")
+    sym["volume"]["unit"] = "<img src=x onerror=alert(1)>"
+    out = rhtml.render_html({"mode": "single", "report_date": "2026-11-27", "symbols": [sym]})
+    assert "<img src=x onerror=alert(1)>" not in out
+    assert "&lt;img src=x onerror=alert(1)&gt;" in out
+
+
+def test_rework_timestamp_bars_privacy_env_isolation_and_exchange_mismatch(tmp_path, monkeypatch):
+    # 1. select_closed_daily_bar supports native Unix timestamp 't' (s & ms)
+    now_utc = dt.datetime(2026, 11, 27, 0, 5, tzinfo=dt.timezone.utc)  # 09:05 KST Fri
+    ts_thu = int(dt.datetime(2026, 11, 26, 0, 0, tzinfo=dt.timezone.utc).timestamp())
+    ts_fri_ms = int(dt.datetime(2026, 11, 27, 0, 0, tzinfo=dt.timezone.utc).timestamp() * 1000)
+    bar_t, note_t = rhtml.select_closed_daily_bar(
+        [{"t": ts_thu, "close": 50000.0}, {"t": ts_fri_ms, "close": 51000.0}],
+        "KR",
+        now_utc,
+    )
+    assert bar_t is not None
+    assert bar_t["bar_date"] == "2026-11-26"
+    assert note_t != ""
+
+    # 2. Explicit env_file must NOT fall back to os.environ["PORTFOLIO_SHEET_ID"]
+    monkeypatch.setenv("PORTFOLIO_SHEET_ID", "ENV_LEAK_ID")
+    res_iso = m.fetch_active_offensive_holdings(
+        now_sg=dt.datetime(2026, 11, 27, 8, 5, tzinfo=m.SG_TZ),
+        env_file=tmp_path / "missing.env",
+    )
+    assert res_iso["status"] == "unavailable"
+    assert "PORTFOLIO_SHEET_ID" not in res_iso["reason"]
+    assert "ENV_LEAK_ID" not in res_iso["reason"]
+
+    # 3. Exception reason must NOT leak arbitrary private text from exception message
+    res_priv = m.fetch_active_offensive_holdings(
+        now_sg=dt.datetime(2026, 11, 27, 8, 5, tzinfo=m.SG_TZ),
+        sheet_id="FAKE_ID",
+        book_loader=lambda sid, t: (_ for _ in ()).throw(RuntimeError("PRIVATE_BALANCE_987654")),
+    )
+    assert res_priv["status"] == "unavailable"
+    assert "PRIVATE_BALANCE_987654" not in res_priv["reason"]
+
+    # 4. Invalid shares (NaN/bool) in extract_offensive_holdings fails closed to unavailable (not empty)
+    bad_book = _make_book([_make_holding("AAA", "US", "Momentum", shares=float("nan"))])
+    res_nan = m.fetch_active_offensive_holdings(
+        now_sg=dt.datetime(2026, 11, 27, 8, 5, tzinfo=m.SG_TZ),
+        sheet_id="FAKE_ID",
+        book_loader=lambda sid, t: bad_book,
+    )
+    assert res_nan["status"] == "unavailable"
+
+    # 5. URL injected into ticker/category fails closed to unavailable
+    url_book = _make_book([_make_holding("AAA", "US", "https://evil.example/x")])
+    res_url = m.fetch_active_offensive_holdings(
+        now_sg=dt.datetime(2026, 11, 27, 8, 5, tzinfo=m.SG_TZ),
+        sheet_id="FAKE_ID",
+        book_loader=lambda sid, t: url_book,
+    )
+    assert res_url["status"] == "unavailable"
+
+    # 6. All-closed sheet (0 open rows) returns empty (not unavailable) via allow_empty_holdings=True
+    from tests.test_portfolio.test_sheet_book import FETCHED_AT, _row, build_fixture
+    closed_xlsx = build_fixture(rows=[_row("US", "AAA", 10.0, 0, 0.0, 0.0, "Momentum")])
+    res_closed = m.fetch_active_offensive_holdings(
+        now_sg=dt.datetime(2026, 11, 27, 8, 5, tzinfo=m.SG_TZ),
+        sheet_id="FAKE_ID",
+        book_loader=lambda sid, t, allow_empty_holdings=False: parse_sheet_book(
+            closed_xlsx, FETCHED_AT, allow_empty_holdings=allow_empty_holdings
+        ),
+    )
+    assert res_closed["status"] == "empty"
+    assert res_closed["items"] == []
+
+    # 7. Exchange symbol mismatch against authoritative tv_symbol_hint fails closed
+    rec_exch = rhtml.reconcile_active_positions(
+        active_positions={"status": "ok", "positions": [_base_pos(ticker="0700", market="HK", exchange_symbol="NYSE:700")]},
+        vol_env_holdings={
+            "status": "ok",
+            "items": [{"ticker": "0700", "market": "HK", "category": "Value", "tv_symbol_hint": "HKEX:700", "needs_tv_search": False}],
+        },
+    )
+    assert rec_exch is not None
+    assert rec_exch["positions"][0]["available"] is False
+    assert "交易所代码" in rec_exch["positions"][0]["reason"]
+
+    # 8. vol_env_holdings=ok with empty items fails closed as unavailable
+    rec_empty_ok = rhtml.reconcile_active_positions(
+        active_positions={"status": "ok", "positions": []},
+        vol_env_holdings={"status": "ok", "items": []},
+    )
+    assert rec_empty_ok is not None
+    assert rec_empty_ok["status"] == "unavailable"
 
 
 if __name__ == "__main__":

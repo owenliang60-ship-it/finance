@@ -14,9 +14,28 @@ if [[ ! -f "$HTML_PATH" ]]; then
   exit 1
 fi
 
-BASENAME="$(basename "$HTML_PATH")"
+REAL_HTML_PATH="$(python3 - "$HTML_PATH" <<'PY'
+import sys
+from pathlib import Path
 
-python3 - "$HTML_PATH" "$BASENAME" "$CAPTION" <<'PY' | ssh -o ConnectTimeout=15 aliyun "cd /root/workspace/Finance && set -a && source .env && set +a && python3 -c '
+allowed_dir = Path("/Users/owen/CC workspace/Finance/notes/ta").resolve()
+try:
+    real_path = Path(sys.argv[1]).resolve(strict=True)
+except OSError:
+    sys.stderr.write("ERROR: HTML file not found or unreadable\n")
+    sys.exit(1)
+
+if not real_path.is_file() or real_path.suffix.lower() != ".html" or not real_path.is_relative_to(allowed_dir):
+    sys.stderr.write("ERROR: Refused path outside /Users/owen/CC workspace/Finance/notes/ta/*.html\n")
+    sys.exit(1)
+
+print(str(real_path))
+PY
+)"
+
+BASENAME="$(basename "$REAL_HTML_PATH")"
+
+python3 - "$REAL_HTML_PATH" "$BASENAME" "$CAPTION" <<'PY' | ssh -o ConnectTimeout=15 aliyun "cd /root/workspace/Finance && set -a && source .env && set +a && python3 -c '
 import base64, json, sys
 from pathlib import Path
 from src.telegram_bot import send_document

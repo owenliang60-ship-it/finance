@@ -13,10 +13,15 @@ import datetime as dt
 import html
 import json
 import math
+import re
 import sys
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
+
+ALLOWED_REPORT_DIR = Path("/Users/owen/CC workspace/Finance/notes/ta")
+_SG_TZ = ZoneInfo("Asia/Singapore")
+_EVAL_TOKEN = object()
 
 
 def esc(val: Any, default: str = "—") -> str:
@@ -36,8 +41,8 @@ def fmt_num(val: Any, digits: int = 2, prefix: str = "", suffix: str = "", signe
         if abs(v) >= 1000 and digits <= 2:
             return f"{prefix}{sign}{v:,.{digits}f}{suffix}"
         return f"{prefix}{sign}{v:.{digits}f}{suffix}"
-    except (TypeError, ValueError):
-        return esc(val)
+    except (TypeError, ValueError, OverflowError):
+        return "—"
 
 
 def fmt_vol(val: Any, unit: str = "") -> str:
@@ -47,14 +52,14 @@ def fmt_vol(val: Any, unit: str = "") -> str:
         v = float(val)
         if math.isnan(v) or math.isinf(v):
             return "—"
-        u = f" {unit}" if unit else ""
+        u = f" {esc(unit, default='')}" if unit else ""
         if abs(v) >= 1e8:
             return f"{v / 1e8:.2f}亿{u}"
         if abs(v) >= 1e4:
             return f"{v / 1e4:,.1f}万{u}"
         return f"{v:,.2f}{u}"
-    except (TypeError, ValueError):
-        return esc(val)
+    except (TypeError, ValueError, OverflowError):
+        return "—"
 
 
 def pct_color(pct: float | None, invert: bool = False) -> str:
@@ -573,6 +578,31 @@ _MARKET_CLOSE_SCHEDULE: dict[str, tuple[ZoneInfo, tuple[int, int]]] = {
     "US": (ZoneInfo("America/New_York"), (16, 15)),
 }
 
+_TZ_ALIASES: dict[str, ZoneInfo] = {
+    "SGT": _SG_TZ,
+    "+08": _SG_TZ,
+    "+0800": _SG_TZ,
+    "+08:00": _SG_TZ,
+    "UTC": ZoneInfo("UTC"),
+    "Z": ZoneInfo("UTC"),
+    "KST": ZoneInfo("Asia/Seoul"),
+    "HKT": ZoneInfo("Asia/Hong_Kong"),
+    "ET": ZoneInfo("America/New_York"),
+    "EST": ZoneInfo("America/New_York"),
+    "EDT": ZoneInfo("America/New_York"),
+}
+
+
+def validate_report_output_path(path_str: str, allowed_dir: Path = ALLOWED_REPORT_DIR) -> Path:
+    """Validate output path resolves strictly inside allowed_dir with .html suffix."""
+    allowed_resolved = allowed_dir.resolve()
+    target_resolved = Path(path_str).expanduser().resolve()
+    if target_resolved.suffix.lower() != ".html":
+        raise ValueError(f"Output path must have .html suffix: {path_str}")
+    if target_resolved == allowed_resolved or not target_resolved.is_relative_to(allowed_resolved):
+        raise ValueError(f"Output path must be inside {allowed_resolved} (notes/ta)")
+    return target_resolved
+
 
 def _parse_finite_float(
     val: Any, *, positive: bool = False, allow_none: bool = False
@@ -583,7 +613,7 @@ def _parse_finite_float(
         return (False, None)
     try:
         f = float(val)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return (False, None)
     if not math.isfinite(f):
         return (False, None)
@@ -593,8 +623,6 @@ def _parse_finite_float(
 
 
 def _parse_bool_flag(val: Any) -> tuple[bool, bool]:
-    if val is None:
-        return (True, False)
     if isinstance(val, bool):
         return (True, val)
     if isinstance(val, int) and val in (0, 1):
@@ -602,12 +630,91 @@ def _parse_bool_flag(val: Any) -> tuple[bool, bool]:
     return (False, False)
 
 
+def _parse_report_time_utc(
+    generated_at: str | None = None,
+    vol_env_generated_at: str | None = None,
+    report_date: str | None = None,
+) -> dt.datetime | None:
+    """Parse report timestamp into UTC datetime for closed-bar and first-window gating."""
+    for raw in (generated_at, vol_env_generated_at):
+        s = str(raw or "").strip()
+        if not s:
+            continue
+        try:
+            iso_dt = dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if iso_dt.tzinfo is None:
+                iso_dt = iso_dt.replace(tzinfo=_SG_TZ)
+            return iso_dt.astimezone(dt.timezone.utc)
+        except ValueError:
+            pass
+        m_ts = re.fullmatch(r"(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)\s*([A-Za-z0-9+:]+)?", s)
+        if m_ts:
+            d_part, t_part, tz_part = m_ts.groups()
+            tz = _TZ_ALIASES.get((tz_part or "SGT").upper(), _SG_TZ)
+            try:
+                parsed = dt.datetime.fromisoformat(f"{d_part}T{t_part}").replace(tzinfo=tz)
+                return parsed.astimezone(dt.timezone.utc)
+            except ValueError:
+                continue
+
+    rd = str(report_date or "").strip()[:10]
+    if rd:
+        try:
+            d = dt.date.fromisoformat(rd)
+            return dt.datetime(d.year, d.month, d.day, 8, 5, tzinfo=_SG_TZ).astimezone(dt.timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+def _extract_bar_date(bar: Any, tz: ZoneInfo) -> dt.date | None:
+    if not isinstance(bar, dict):
+        return None
+    raw_date = bar.get("date")
+    if raw_date is not None and str(raw_date).strip():
+        try:
+            return dt.date.fromisoformat(str(raw_date).strip()[:10])
+        except ValueError:
+            return None
+    raw_t = bar.get("t")
+    if raw_t is not None and not isinstance(raw_t, bool):
+        try:
+            ts = float(raw_t)
+            if not math.isfinite(ts):
+                return None
+            if abs(ts) > 1e11:
+                ts /= 1000.0
+            return dt.datetime.fromtimestamp(ts, tz=dt.timezone.utc).astimezone(tz).date()
+        except (TypeError, ValueError, OverflowError, OSError):
+            return None
+    return None
+
+
+def _is_bar_closed_for_market(
+    bar_d: dt.date, market: str, now_utc: dt.datetime
+) -> tuple[bool, str]:
+    mkt = str(market or "").strip().upper()
+    schedule = _MARKET_CLOSE_SCHEDULE.get(mkt)
+    if schedule is None:
+        return (True, "")
+    tz, close_hm = schedule
+    if bar_d.weekday() >= 5:
+        return (False, f"{mkt} 周末非交易日 K 线（{bar_d.isoformat()}）")
+    now_local = now_utc.astimezone(tz)
+    if bar_d > now_local.date() or (
+        bar_d == now_local.date()
+        and (now_local.weekday() >= 5 or (now_local.hour, now_local.minute) < close_hm)
+    ):
+        return (False, f"{mkt} 当日盘中未收盘 K 线（{bar_d.isoformat()}），禁止用于收盘止损裁决")
+    return (True, "")
+
+
 def select_closed_daily_bar(
     bars: list[dict[str, Any]],
     market: str,
     now_utc: dt.datetime | None = None,
 ) -> tuple[dict[str, Any] | None, str]:
-    """Return latest completed daily bar for market, dropping forming intraday bars (e.g., KR at 08:05 SGT / 09:05 KST)."""
+    """Return latest completed daily bar for market, supporting 'date' or Unix 't' and rejecting forming/weekend/invalid bars."""
     if not bars:
         return (None, "无可用日线数据")
     if now_utc is None:
@@ -619,41 +726,41 @@ def select_closed_daily_bar(
 
     mkt = str(market or "").strip().upper()
     schedule = _MARKET_CLOSE_SCHEDULE.get(mkt)
-    if schedule is None:
-        return (bars[-1], "")
+    tz = schedule[0] if schedule is not None else dt.timezone.utc
 
-    tz, close_hm = schedule
-    now_local = now_utc.astimezone(tz)
     remaining = list(bars)
     dropped_dates: list[str] = []
 
     while remaining:
-        raw_date = str(remaining[-1].get("date") or "")[:10]
-        try:
-            bar_d = dt.date.fromisoformat(raw_date)
-        except ValueError:
-            break
-        is_forming = bar_d > now_local.date() or (
-            bar_d == now_local.date()
-            and (now_local.weekday() >= 5 or (now_local.hour, now_local.minute) < close_hm)
-        )
-        if is_forming:
-            dropped_dates.append(raw_date)
+        bar_d = _extract_bar_date(remaining[-1], tz)
+        if bar_d is None:
+            return (None, "K线日期缺失或无法解析")
+        if schedule is None:
+            out_bar = dict(remaining[-1])
+            out_bar["bar_date"] = bar_d.isoformat()
+            return (out_bar, "")
+        closed, _ = _is_bar_closed_for_market(bar_d, mkt, now_utc)
+        if not closed:
+            dropped_dates.append(bar_d.isoformat())
             remaining.pop()
         else:
-            break
+            out_bar = dict(remaining[-1])
+            out_bar["bar_date"] = bar_d.isoformat()
+            if dropped_dates:
+                return (
+                    out_bar,
+                    f"已剔除 {mkt} 未收盘/无效 K 线（{dropped_dates[0]}），沿用已收盘日线 {bar_d.isoformat()}",
+                )
+            return (out_bar, "")
 
-    if not remaining:
-        return (None, f"剔除 {mkt} 未收盘盘中 K 线（{', '.join(dropped_dates)}）后无已收盘日线")
-    if dropped_dates:
-        return (
-            remaining[-1],
-            f"已剔除 {mkt} 未收盘盘中 K 线（{dropped_dates[0]}），沿用已收盘日线 {remaining[-1].get('date')}",
-        )
-    return (remaining[-1], "")
+    return (None, f"剔除 {mkt} 未收盘/无效 K 线（{', '.join(dropped_dates)}）后无已收盘日线")
 
 
-def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
+def evaluate_position_stop(
+    pos: dict[str, Any],
+    *,
+    now_utc: dt.datetime | None = None,
+) -> dict[str, Any]:
     """Evaluate dual-track trailing stop (50% Supertrend + 50% Cow Channel lower band) with strict fail-closed checks."""
     if not isinstance(pos, dict):
         pos = {}
@@ -667,7 +774,7 @@ def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
 
     def _fail(reason: str) -> dict[str, Any]:
         return {
-            "_evaluated": True,
+            "_eval_token": _EVAL_TOKEN,
             "available": False,
             "reason": reason,
             "ticker": ticker,
@@ -702,6 +809,21 @@ def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
     if pos.get("available") is False:
         return _fail(str(pos.get("reason") or "数据源不可用"))
 
+    try:
+        bar_d = dt.date.fromisoformat(bar_date) if len(bar_date) == 10 else None
+    except ValueError:
+        bar_d = None
+    if bar_d is None:
+        return _fail("K线日期缺失或无效")
+
+    if now_utc is not None:
+        norm_now = now_utc.replace(tzinfo=dt.timezone.utc) if now_utc.tzinfo is None else now_utc.astimezone(dt.timezone.utc)
+        closed, closed_reason = _is_bar_closed_for_market(bar_d, market, norm_now)
+        if not closed:
+            return _fail(closed_reason)
+    else:
+        norm_now = None
+
     ok_close, close = _parse_finite_float(pos.get("close"), positive=True, allow_none=False)
     if not ok_close or close is None:
         return _fail("收盘价无效或缺失")
@@ -716,14 +838,16 @@ def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
 
     ok_st_flip, st_flipped_bear = _parse_bool_flag(pos.get("st_flipped_bear"))
     if not ok_st_flip:
-        return _fail("ST翻空标记无效")
+        return _fail("ST翻空标记缺失或无效")
 
     if st_dir == "long":
         ok_st, st_stop = _parse_finite_float(pos.get("st_stop"), positive=True, allow_none=False)
         if not ok_st or st_stop is None:
             return _fail("Supertrend 多头止损缺失或无效")
-        if st_stop > close * 1.0005:
+        if st_stop > close:
             return _fail("Supertrend 多头止损高于收盘价（数据矛盾）")
+        if st_flipped_bear:
+            return _fail("Supertrend 方向为多头但 ST翻空 为 True（数据矛盾）")
         st_bull = True
         st_status_text = "多头守护"
     else:
@@ -731,7 +855,7 @@ def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
         ok_st, st_stop = _parse_finite_float(pos.get("st_stop"), positive=True, allow_none=True)
         if not ok_st:
             return _fail("Supertrend 空头止损数值无效")
-        if st_stop is not None and st_stop < close * 0.9995:
+        if st_stop is not None and st_stop < close:
             return _fail("Supertrend 空头止损低于收盘价（数据矛盾）")
         st_bull = False
         st_status_text = "当日翻空" if st_flipped_bear else "已翻空"
@@ -746,7 +870,7 @@ def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
 
     ok_cow_flip, cow_flipped_bear = _parse_bool_flag(pos.get("cow_flipped_bear"))
     if not ok_cow_flip:
-        return _fail("奶牛翻空标记无效")
+        return _fail("奶牛翻空标记缺失或无效")
 
     ok_clow, cow_lower = _parse_finite_float(pos.get("cow_lower"), positive=True, allow_none=False)
     if not ok_clow or cow_lower is None:
@@ -759,32 +883,49 @@ def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
     ok_cup, cow_upper = _parse_finite_float(pos.get("cow_upper"), positive=True, allow_none=True)
     if not ok_cup:
         return _fail("奶牛通道上沿无效")
-    if cow_upper is not None and cow_upper < cow_lower * 0.9995:
+
+    if cow_mid is not None and cow_mid < cow_lower:
+        return _fail("奶牛通道中枢低于下沿（数据矛盾）")
+    if cow_upper is not None and cow_upper < cow_lower:
         return _fail("奶牛通道上沿低于下沿（数据矛盾）")
+    if cow_mid is not None and cow_upper is not None and cow_mid > cow_upper:
+        return _fail("奶牛通道中枢高于上沿（数据矛盾）")
 
     if cow_dir == 1:
-        if close < cow_lower * 0.9995:
+        if close < cow_lower:
             return _fail("奶牛通道多头但收盘价低于下沿（数据矛盾）")
+        if cow_flipped_bear:
+            return _fail("奶牛通道多头但奶牛翻空为 True（数据矛盾）")
         cow_bull = True
         cow_status_text = "多头守护"
     elif cow_dir == -1:
-        if cow_upper is not None and close > cow_upper * 1.0005:
+        if cow_upper is not None and close > cow_upper:
             return _fail("奶牛通道空头但收盘价高于上沿（数据矛盾）")
+        if cow_flipped_bear and close >= cow_lower:
+            return _fail("奶牛翻空为 True 但收盘价未跌破下沿（数据矛盾）")
         cow_bull = False
         cow_status_text = "当日破下沿" if cow_flipped_bear else "空头（未收复上沿）"
     else:
-        cow_bull = close >= cow_lower * 0.9995
-        cow_status_text = "通道待确认（未破下沿）" if cow_bull else "通道待确认（已破下沿）"
+        if cow_flipped_bear:
+            return _fail("奶牛通道待确认但奶牛翻空为 True（数据矛盾）")
+        cow_bull = False
+        cow_status_text = "通道待确认（未站上上沿）"
 
     st_dist_pct = round((st_stop / close - 1.0) * 100.0, 2) if st_stop is not None else None
     cow_dist_pct = round((cow_lower / close - 1.0) * 100.0, 2)
 
-    st_new_break = (not st_bull) and st_flipped_bear
-    cow_new_break = (not cow_bull) and cow_flipped_bear
+    # Scheme A: Stateless first-report-window gate to suppress repeat 🚨 on subsequent weekend/closed days
+    in_first_window = True
+    if norm_now is not None:
+        now_sg_date = norm_now.astimezone(_SG_TZ).date()
+        in_first_window = now_sg_date <= (bar_d + dt.timedelta(days=1))
+
+    st_new_break = (not st_bull) and st_flipped_bear and in_first_window
+    cow_new_break = (not cow_bull) and cow_flipped_bear and in_first_window
     label_ctx = category or market or "进攻仓"
+    target_hold_pct = 50 * (int(st_bull) + int(cow_bull))
 
     if st_bull and cow_bull:
-        target_hold_pct = 100
         state = "hold_100"
         badge_text = "满额持有 (100%)"
         badge_cls = "pill-bull"
@@ -792,7 +933,6 @@ def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
         is_new_trigger = False
         banner_alert = None
     elif st_bull != cow_bull:
-        target_hold_pct = 50
         if not st_bull:
             is_new_trigger = st_new_break
             guard_desc = f"奶牛下沿 {fmt_num(cow_lower)}"
@@ -800,7 +940,7 @@ def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
         else:
             is_new_trigger = cow_new_break
             guard_desc = f"ST 多头止损 {fmt_num(st_stop)}"
-            broken_desc = "奶牛下沿破位"
+            broken_desc = "奶牛通道待确认" if cow_dir == 0 else "奶牛下沿破位"
 
         if is_new_trigger:
             state = "cut_half_new"
@@ -812,10 +952,13 @@ def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
             state = "hold_50_stale"
             badge_text = "留半仓 (50%)"
             badge_cls = "pill-warn"
-            action_note = f"单轨已破（存量），剩余 50% 由{guard_desc}守护"
+            action_note = (
+                f"奶牛通道待确认，当前 50% 由{guard_desc}守护"
+                if cow_dir == 0 and st_bull
+                else f"单轨已破（存量），剩余 50% 由{guard_desc}守护"
+            )
             banner_alert = None
     else:
-        target_hold_pct = 0
         is_new_trigger = st_new_break or cow_new_break
         if is_new_trigger:
             state = "exit_all_new"
@@ -827,11 +970,11 @@ def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
             state = "exit_all_stale"
             badge_text = "⚠️ 双破全清 · 存量未清 (0%)"
             badge_cls = "pill-warn"
-            action_note = "双轨均为空头（存量未清），请人工核对退出"
+            action_note = "双轨均非多头（存量未清），请人工核对退出"
             banner_alert = None
 
     return {
-        "_evaluated": True,
+        "_eval_token": _EVAL_TOKEN,
         "available": True,
         "reason": "",
         "ticker": ticker,
@@ -867,118 +1010,156 @@ def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
 def reconcile_active_positions(
     active_positions: dict[str, Any] | None,
     vol_env_holdings: dict[str, Any] | None,
+    *,
+    now_utc: dt.datetime | None = None,
 ) -> dict[str, Any] | None:
     """Reconcile agent-supplied active_positions against authoritative vol_env.active_holdings.
 
-    Prevents fail-open (unavailable downgraded to empty) and dropped tickers (auto-backfilled as unavailable).
+    Strict SSOT: never falls back across markets, never appends off-book rows,
+    never trusts external _evaluated flags, and fails closed on schema/status contradictions.
     """
     if active_positions is None and vol_env_holdings is None:
         return None
 
     ap = active_positions if isinstance(active_positions, dict) else {}
-    vh = vol_env_holdings if isinstance(vol_env_holdings, dict) else {}
-    vh_status = str(vh.get("status") or "").strip().lower()
     ap_status = str(ap.get("status") or "").strip().lower()
-    fetched_at_sg = str(ap.get("fetched_at_sg") or vh.get("fetched_at_sg") or "")
-
-    if vh_status == "unavailable":
-        return {
-            "status": "unavailable",
-            "reason": str(vh.get("reason") or ap.get("reason") or "主账持仓拉取失败"),
-            "fetched_at_sg": fetched_at_sg,
-            "positions": [],
-        }
-
-    if ap_status == "unavailable" and vh_status != "ok":
-        return {
-            "status": "unavailable",
-            "reason": str(ap.get("reason") or "主动进攻仓数据不可用"),
-            "fetched_at_sg": fetched_at_sg,
-            "positions": [],
-        }
-
     raw_positions = [p for p in (ap.get("positions") or []) if isinstance(p, dict)]
 
-    if vh_status == "ok":
-        by_mkt_tkr: dict[tuple[str, str], dict[str, Any]] = {}
-        by_tkr: dict[str, dict[str, Any]] = {}
+    if vol_env_holdings is not None:
+        if not isinstance(vol_env_holdings, dict):
+            return {"status": "unavailable", "reason": "权威主账 active_holdings 格式无效", "fetched_at_sg": "", "positions": []}
+        vh_status = str(vol_env_holdings.get("status") or "").strip().lower()
+        fetched_at_sg = str(ap.get("fetched_at_sg") or vol_env_holdings.get("fetched_at_sg") or "")
+
+        if vh_status == "empty":
+            if vol_env_holdings.get("items"):
+                return {
+                    "status": "unavailable",
+                    "reason": "主账 active_holdings 状态为 empty 但 items 非空（结构矛盾）",
+                    "fetched_at_sg": fetched_at_sg,
+                    "positions": [],
+                }
+            return {"status": "empty", "reason": "", "fetched_at_sg": fetched_at_sg, "positions": []}
+
+        if vh_status != "ok":
+            return {
+                "status": "unavailable",
+                "reason": str(vol_env_holdings.get("reason") or "权威主账 active_holdings 不可用或状态无效"),
+                "fetched_at_sg": fetched_at_sg,
+                "positions": [],
+            }
+
+        vh_items = [x for x in (vol_env_holdings.get("items") or []) if isinstance(x, dict)]
+        if not vh_items:
+            return {
+                "status": "unavailable",
+                "reason": "主账 active_holdings 状态为 ok 但 items 为空（结构矛盾）",
+                "fetched_at_sg": fetched_at_sg,
+                "positions": [],
+            }
+
+        if ap_status == "unavailable":
+            unavail_reason = str(ap.get("reason") or "主动进攻仓指标不可用")
+            placeholders = [
+                evaluate_position_stop(
+                    {
+                        "ticker": str(item.get("ticker") or "").strip().upper(),
+                        "market": str(item.get("market") or "").strip().upper(),
+                        "category": str(item.get("category") or "").strip(),
+                        "exchange_symbol": str(item.get("tv_symbol_hint") or "").strip(),
+                        "available": False,
+                        "reason": unavail_reason,
+                    },
+                    now_utc=now_utc,
+                )
+                for item in vh_items
+            ]
+            return {"status": "ok", "reason": "", "fetched_at_sg": fetched_at_sg, "positions": placeholders}
+
+        grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
         for p in raw_positions:
             tkr = str(p.get("ticker") or "").strip().upper()
             mkt = str(p.get("market") or "").strip().upper()
-            if not tkr:
-                continue
-            by_mkt_tkr[(mkt, tkr)] = p
-            by_tkr.setdefault(tkr, p)
+            if tkr and mkt:
+                grouped.setdefault((mkt, tkr), []).append(p)
 
-        used_ids: set[int] = set()
         reconciled_list: list[dict[str, Any]] = []
-        for item in vh.get("items") or []:
-            if not isinstance(item, dict):
-                continue
+        for item in vh_items:
             tkr = str(item.get("ticker") or "").strip().upper()
             mkt = str(item.get("market") or "").strip().upper()
             cat = str(item.get("category") or "").strip()
-            matched = by_mkt_tkr.get((mkt, tkr)) or by_tkr.get(tkr)
-            if matched is not None:
-                used_ids.add(id(matched))
-                merged = dict(matched)
-                merged.setdefault("ticker", tkr)
-                if not merged.get("market"):
-                    merged["market"] = mkt
-                if not merged.get("category"):
-                    merged["category"] = cat
-                reconciled_list.append(evaluate_position_stop(merged))
-            else:
+            hint = str(item.get("tv_symbol_hint") or "").strip()
+            matches = grouped.get((mkt, tkr), [])
+
+            if len(matches) == 0:
                 reconciled_list.append(
                     evaluate_position_stop(
                         {
                             "ticker": tkr,
                             "market": mkt,
                             "category": cat,
-                            "exchange_symbol": item.get("tv_symbol_hint") or "",
+                            "exchange_symbol": hint,
                             "available": False,
                             "reason": "未回传该标的止损指标（防漏占位）",
-                        }
+                        },
+                        now_utc=now_utc,
                     )
                 )
+            elif len(matches) > 1:
+                reconciled_list.append(
+                    evaluate_position_stop(
+                        {
+                            "ticker": tkr,
+                            "market": mkt,
+                            "category": cat,
+                            "exchange_symbol": hint,
+                            "available": False,
+                            "reason": "重复回传同名同市场持仓数据",
+                        },
+                        now_utc=now_utc,
+                    )
+                )
+            else:
+                matched = matches[0]
+                exch = str(matched.get("exchange_symbol") or "").strip()
+                if hint and exch and exch.upper() != hint.upper():
+                    reconciled_list.append(
+                        evaluate_position_stop(
+                            {
+                                "ticker": tkr,
+                                "market": mkt,
+                                "category": cat,
+                                "exchange_symbol": exch,
+                                "available": False,
+                                "reason": "交易所代码与主账提示不一致",
+                            },
+                            now_utc=now_utc,
+                        )
+                    )
+                else:
+                    merged = dict(matched)
+                    merged["ticker"] = tkr
+                    merged["market"] = mkt
+                    merged["category"] = cat
+                    reconciled_list.append(evaluate_position_stop(merged, now_utc=now_utc))
 
-        for p in raw_positions:
-            if id(p) not in used_ids:
-                reconciled_list.append(evaluate_position_stop(p))
+        return {"status": "ok", "reason": "", "fetched_at_sg": fetched_at_sg, "positions": reconciled_list}
 
-        return {
-            "status": "ok" if reconciled_list else "empty",
-            "reason": "",
-            "fetched_at_sg": fetched_at_sg,
-            "positions": reconciled_list,
-        }
+    # vol_env_holdings is None, active_positions is not None
+    fetched_at_sg = str(ap.get("fetched_at_sg") or "")
+    if not isinstance(active_positions, dict) or ap_status not in ("empty", "ok", "unavailable"):
+        return {"status": "unavailable", "reason": "主动进攻仓状态无效", "fetched_at_sg": fetched_at_sg, "positions": []}
+    if ap_status == "unavailable":
+        return {"status": "unavailable", "reason": str(ap.get("reason") or "主动进攻仓数据不可用"), "fetched_at_sg": fetched_at_sg, "positions": []}
+    if ap_status == "empty":
+        if raw_positions:
+            return {"status": "unavailable", "reason": "active_positions 状态为 empty 但含残留持仓", "fetched_at_sg": fetched_at_sg, "positions": []}
+        return {"status": "empty", "reason": "", "fetched_at_sg": fetched_at_sg, "positions": []}
+    if not raw_positions:
+        return {"status": "unavailable", "reason": "active_positions 状态为 ok 但 positions 为空", "fetched_at_sg": fetched_at_sg, "positions": []}
 
-    if vh_status == "empty" and not raw_positions:
-        return {
-            "status": "empty",
-            "reason": "",
-            "fetched_at_sg": fetched_at_sg,
-            "positions": [],
-        }
-
-    if ap_status == "empty" and not raw_positions:
-        return {
-            "status": "empty",
-            "reason": "",
-            "fetched_at_sg": fetched_at_sg,
-            "positions": [],
-        }
-
-    evaluated = [
-        p if p.get("_evaluated") else evaluate_position_stop(p)
-        for p in raw_positions
-    ]
-    return {
-        "status": "ok" if evaluated else (ap_status or "empty"),
-        "reason": str(ap.get("reason") or ""),
-        "fetched_at_sg": fetched_at_sg,
-        "positions": evaluated,
-    }
+    evaluated = [evaluate_position_stop(p, now_utc=now_utc) for p in raw_positions]
+    return {"status": "ok", "reason": "", "fetched_at_sg": fetched_at_sg, "positions": evaluated}
 
 
 def render_active_positions_section(reconciled: dict[str, Any] | None) -> tuple[str, list[str]]:
@@ -1014,7 +1195,7 @@ def render_active_positions_section(reconciled: dict[str, Any] | None) -> tuple[
         return (html_block, [])
 
     positions = [
-        p if (isinstance(p, dict) and p.get("_evaluated")) else evaluate_position_stop(p)
+        p if (isinstance(p, dict) and p.get("_eval_token") is _EVAL_TOKEN) else evaluate_position_stop(p)
         for p in (reconciled.get("positions") or [])
     ]
     banner_alerts: list[str] = []
@@ -1133,9 +1314,16 @@ def render_html(data: dict[str, Any]) -> str:
     active_pos_sec = ""
     pos_banner_alerts: list[str] = []
     if mode == "daily":
+        report_now_utc = _parse_report_time_utc(
+            generated_at=generated_at,
+            vol_env_generated_at=vol_env.get("generated_at_sg") if isinstance(vol_env, dict) else None,
+            report_date=report_date,
+        )
+        vol_holdings = vol_env.get("active_holdings") if isinstance(vol_env, dict) else None
         reconciled_positions = reconcile_active_positions(
             data.get("active_positions"),
-            vol_env.get("active_holdings") if isinstance(vol_env, dict) else None,
+            vol_holdings,
+            now_utc=report_now_utc,
         )
         active_pos_sec, pos_banner_alerts = render_active_positions_section(reconciled_positions)
 
@@ -1382,21 +1570,29 @@ def render_html(data: dict[str, Any]) -> str:
 </html>"""
 
 
-def main() -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    allowed_output_dir: Path = ALLOWED_REPORT_DIR,
+) -> int:
     parser = argparse.ArgumentParser(description="Render deterministic zero-CDN light-theme Technical Analysis HTML report")
-    parser.add_argument("--input", "-i", default="-", help="Input JSON path (default: stdin)")
-    parser.add_argument("--output", "-o", required=True, help="Output HTML file path")
-    args = parser.parse_args()
+    parser.add_argument("--input", "-i", default="-", help="Input JSON source (stdin '-' only)")
+    parser.add_argument("--output", "-o", required=True, help="Output HTML file path inside notes/ta/")
+    args = parser.parse_args(argv)
 
-    if args.input == "-":
-        raw = sys.stdin.read()
-    else:
-        raw = Path(args.input).read_text(encoding="utf-8")
+    if args.input != "-":
+        sys.stderr.write("ERROR: --input only supports stdin ('-')\n")
+        return 2
+    try:
+        out_path = validate_report_output_path(args.output, allowed_dir=allowed_output_dir)
+    except ValueError as exc:
+        sys.stderr.write(f"ERROR: {exc}\n")
+        return 2
 
+    raw = sys.stdin.read()
     data = json.loads(raw)
     out_html = render_html(data)
 
-    out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(out_html, encoding="utf-8")
     print(f"OK: {out_path} ({len(out_html)} bytes)")

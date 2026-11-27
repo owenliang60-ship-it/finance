@@ -93,12 +93,17 @@ def _to_float_strict(value, context: str) -> float:
     Book-of-record fields must never degrade to 0 on formula errors
     (e.g. '#N/A') or export anomalies.
     """
+    if isinstance(value, bool):
+        raise SheetBookError("non-numeric %s" % context)
     if value is None or (isinstance(value, str) and value.strip() == ""):
         raise SheetBookError("missing %s" % context)
     try:
-        return float(value)
-    except (TypeError, ValueError):
+        val = float(value)
+    except (TypeError, ValueError, OverflowError):
         raise SheetBookError("non-numeric %s" % context) from None
+    if not math.isfinite(val):
+        raise SheetBookError("non-numeric %s" % context)
+    return val
 
 
 def _normalize_symbol(raw: str) -> str:
@@ -133,7 +138,7 @@ def _parse_holdings(ws) -> List[SheetHolding]:
         idx = header_map[name]
         return row[idx] if idx < len(row) else None
 
-    merged: Dict[str, SheetHolding] = {}
+    merged: Dict[tuple[str, str], SheetHolding] = {}
     for row in data_rows:
         raw_ticker = cell(row, "Stock Ticker")
         if raw_ticker is None or str(raw_ticker).strip() == "":
@@ -164,10 +169,11 @@ def _parse_holdings(ws) -> List[SheetHolding]:
             market_value=_to_float(cell(row, "Mkt Value")),
             category=cat,
             is_leaps=sym.endswith(" LEAPS"),
-            categories=(cat,) if cat else (),
+            categories=(cat,),
         )
-        if sym in merged:
-            prev = merged[sym]
+        key = (market, sym)
+        if key in merged:
+            prev = merged[key]
             total_shares = prev.shares + h.shares
             if total_shares > 0:
                 prev.cost_per_share = (
@@ -176,15 +182,13 @@ def _parse_holdings(ws) -> List[SheetHolding]:
                 ) / total_shares
             prev.shares = total_shares
             prev.market_value += h.market_value
-            if h.category and h.category not in prev.categories:
+            if h.category not in prev.categories:
                 prev.categories = (*prev.categories, h.category)
-            elif not h.category and "" not in prev.categories:
-                prev.categories = (*prev.categories, "")
-            logger.warning("duplicate ticker merged: %s", sym)
+            logger.warning("duplicate holding merged in market %s", market)
             # sheet_price/category: keep first row's value (first-wins,
             # warning logged above)
         else:
-            merged[sym] = h
+            merged[key] = h
     return list(merged.values())
 
 
@@ -238,7 +242,12 @@ def _parse_whole_port_net_total(ws) -> Optional[float]:
     return None
 
 
-def parse_sheet_book(xlsx_bytes: bytes, fetched_at: dt.datetime) -> SheetBook:
+def parse_sheet_book(
+    xlsx_bytes: bytes,
+    fetched_at: dt.datetime,
+    *,
+    allow_empty_holdings: bool = False,
+) -> SheetBook:
     import openpyxl
 
     try:
@@ -255,7 +264,7 @@ def parse_sheet_book(xlsx_bytes: bytes, fetched_at: dt.datetime) -> SheetBook:
             raise SheetBookError("sheet tab missing: %s" % CASH_TAB)
 
         holdings = _parse_holdings(wb[SUMMARY_TAB])
-        if not holdings:
+        if not holdings and not allow_empty_holdings:
             raise SheetBookError("no holdings parsed from sheet")
         cash = _parse_cash(wb[CASH_TAB])
         total = (
@@ -303,8 +312,16 @@ def download_sheet_xlsx(sheet_id: Optional[str] = None,
     return resp.content
 
 
-def load_sheet_book(sheet_id: Optional[str] = None,
-                    timeout: float = 30.0) -> SheetBook:
+def load_sheet_book(
+    sheet_id: Optional[str] = None,
+    timeout: float = 30.0,
+    *,
+    allow_empty_holdings: bool = False,
+) -> SheetBook:
     """Download and parse the book; preserve the existing PI interface."""
     payload = download_sheet_xlsx(sheet_id, timeout)
-    return parse_sheet_book(payload, dt.datetime.now(dt.timezone.utc))
+    return parse_sheet_book(
+        payload,
+        dt.datetime.now(dt.timezone.utc),
+        allow_empty_holdings=allow_empty_holdings,
+    )

@@ -13,6 +13,7 @@ Outputs strict JSON with per-block fail-closed status (`available: bool`, `reaso
 from __future__ import annotations
 
 import datetime as dt
+import inspect
 import json
 import math
 import os
@@ -767,10 +768,7 @@ def _resolve_sheet_id(
     if sheet_id is not None and str(sheet_id).strip():
         return str(sheet_id).strip()
     if env_file is not None:
-        val = _read_dotenv_key(Path(env_file), "PORTFOLIO_SHEET_ID")
-        if val:
-            return val
-        return str(os.environ.get("PORTFOLIO_SHEET_ID") or "").strip()
+        return _read_dotenv_key(Path(env_file), "PORTFOLIO_SHEET_ID")
     env_val = str(os.environ.get("PORTFOLIO_SHEET_ID") or "").strip()
     if env_val:
         return env_val
@@ -788,10 +786,17 @@ def build_tv_symbol_hint(symbol: str, market: str) -> tuple[str, str | None, boo
         return (code, f"HKEX:{hk_num}", False)
 
     if mkt == "KR":
-        if ":" in sym:
+        has_prefix = ":" in sym
+        if has_prefix:
             exch, code = (p.strip() for p in sym.split(":", 1))
+        else:
+            exch, code = "KRX", sym
+        if code.isdigit() and 1 <= len(code) <= 6:
+            code = code.zfill(6)
             return (code, f"{exch}:{code}", False)
-        return (sym, f"KRX:{sym}", False)
+        if has_prefix:
+            return (code, f"{exch}:{code}", False)
+        return (code, None, True)
 
     if ":" in sym:
         exch, code = (p.strip() for p in sym.split(":", 1))
@@ -814,12 +819,14 @@ def extract_offensive_holdings(
     for h in getattr(book, "holdings", None) or []:
         raw_shares = getattr(h, "shares", 0)
         if isinstance(raw_shares, bool):
-            continue
+            raise ValueError("invalid shares")
         try:
             shares = float(raw_shares)
-        except (TypeError, ValueError):
-            continue
-        if not math.isfinite(shares) or shares <= 0:
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("invalid shares") from exc
+        if not math.isfinite(shares):
+            raise ValueError("invalid shares")
+        if shares <= 0:
             continue
 
         mkt = str(getattr(h, "market", "") or "").strip().upper()
@@ -849,6 +856,9 @@ def extract_offensive_holdings(
         non_empty = [c for c in offensive_cats if c]
         cat_label = " / ".join(non_empty) if non_empty else ""
 
+        if _URL_RE.search(ticker) or _URL_RE.search(cat_label):
+            raise ValueError("invalid field content")
+
         out.append({
             "ticker": ticker,
             "market": mkt,
@@ -861,12 +871,21 @@ def extract_offensive_holdings(
     return out
 
 
+def _safe_book_error_reason(exc: Exception, sheet_book_error_cls: type[Exception]) -> str:
+    if isinstance(exc, sheet_book_error_cls):
+        m_http = re.fullmatch(r"sheet download failed: HTTP (\d{3})", str(exc).strip())
+        if m_http:
+            return f"主账下载失败 (HTTP {m_http.group(1)})"
+        return "主账读取失败 (SheetBookError)"
+    return f"主账读取异常 ({type(exc).__name__})"
+
+
 def fetch_active_offensive_holdings(
     *,
     now_sg: dt.datetime | None = None,
     sheet_id: str | None = None,
     env_file: str | Path | None = None,
-    book_loader: Callable[[str, float], Any] | None = None,
+    book_loader: Callable[..., Any] | None = None,
     timeout: float = 20.0,
 ) -> dict[str, Any]:
     """Read active non-LTH offensive holdings from book-of-record sheet with fail-closed & privacy scrubbing."""
@@ -880,7 +899,7 @@ def fetch_active_offensive_holdings(
     if not resolved_id:
         return {
             "status": "unavailable",
-            "reason": "未配置 PORTFOLIO_SHEET_ID",
+            "reason": "主账配置未就绪",
             "fetched_at_sg": fetched_at_sg,
             "items": [],
         }
@@ -888,16 +907,28 @@ def fetch_active_offensive_holdings(
     try:
         from portfolio.holdings.sheet_book import (
             SHEET_PRICED_US_SYMBOLS,
+            SheetBookError,
             load_sheet_book,
         )
         loader = book_loader or load_sheet_book
-        book = loader(resolved_id, timeout)
+        try:
+            sig = inspect.signature(loader)
+            accepts_empty = "allow_empty_holdings" in sig.parameters or any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+            )
+        except (TypeError, ValueError):
+            accepts_empty = False
+        book = (
+            loader(resolved_id, timeout, allow_empty_holdings=True)
+            if accepts_empty
+            else loader(resolved_id, timeout)
+        )
         items = extract_offensive_holdings(book, SHEET_PRICED_US_SYMBOLS)
     except Exception as exc:
-        raw_msg = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+        err_cls = locals().get("SheetBookError", Exception)
         return {
             "status": "unavailable",
-            "reason": _scrub_secret(raw_msg, resolved_id),
+            "reason": _safe_book_error_reason(exc, err_cls),
             "fetched_at_sg": fetched_at_sg,
             "items": [],
         }
