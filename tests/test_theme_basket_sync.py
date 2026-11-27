@@ -1170,20 +1170,31 @@ def test_transport_failure_goes_to_pending_and_next_commit_replays_first(cloud, 
     assert _stock(cloud["db_path"], "NEWCO") is not None
 
 
-def test_replay_pending_keeps_files_on_failure_and_ignores_corrupt(cloud, tmp_path):
+def test_replay_pending_keeps_files_on_failure_and_stops_on_corrupt(cloud, tmp_path):
     xchg, market, delta = _step_a(tmp_path)
     _write_payload(xchg, delta, [_cls("ABBNY")])
     assert _commit(xchg, market, FakeCloud(cloud, script=["busy"])) == 75
-    (xchg / "pending" / "garbage.json").write_text("{not json", encoding="utf-8")
     rc = sync.replay_pending(exchange_dir=xchg, baskets_path=BASKETS, overrides_path=OVERRIDES,
                              market_db_path=market, ssh_runner=FakeCloud(cloud, script=["busy"]),
                              pull_runner=lambda: pytest.fail("no pull"))
     assert rc == 75
-    assert len(_pending(xchg)) == 2
+    assert len(_pending(xchg)) == 1
+
+    # A corrupt file stops the run before anything is sent: packages never go out of order.
+    (xchg / "pending" / "garbage.json").write_text("{not json", encoding="utf-8")
+    fake = FakeCloud(cloud)
     rc = sync.replay_pending(exchange_dir=xchg, baskets_path=BASKETS, overrides_path=OVERRIDES,
-                             market_db_path=market, ssh_runner=FakeCloud(cloud), pull_runner=lambda: 0)
+                             market_db_path=market, ssh_runner=fake, pull_runner=lambda: pytest.fail("no pull"))
+    assert rc == 1
+    assert fake.calls == []
+    assert len(_pending(xchg)) == 2
+    assert _stock(cloud["db_path"], "ABBNY") is None
+
+    (xchg / "pending" / "garbage.json").unlink()  # the operator removes the corrupt file
+    rc = sync.replay_pending(exchange_dir=xchg, baskets_path=BASKETS, overrides_path=OVERRIDES,
+                             market_db_path=market, ssh_runner=fake, pull_runner=lambda: 0)
     assert rc == 0
-    assert [p.name for p in _pending(xchg)] == ["garbage.json"]
+    assert _pending(xchg) == []
 
 
 def test_replay_pending_empty_is_noop(tmp_path):

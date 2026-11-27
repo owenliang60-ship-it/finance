@@ -70,15 +70,17 @@ logger = logging.getLogger("theme_basket_sync")
 SHEET_TAB = "Summary_OSV"          # portfolio/holdings/sheet_book.py:SUMMARY_TAB
 SHEET_HEADER_SCAN_ROWS = 15        # sheet_book.py:MAX_HEADER_SCAN_ROWS
 SHEET_COLUMNS = ("Stock Ticker", "Market", "Shares")
+ALLOWED_SHEET_MARKETS = frozenset({"US", "HK", "KR", "CN", "CRYPTO"})
 
 AUTO_KINDS = frozenset({"etf", "fund_cef", "crypto", "custom_basket", "other"})
+ASSET_KINDS = AUTO_KINDS | {"us_equity", "non_us_equity"}   # stock_themes.asset_kind CHECK
 CUSTOM_BASKETS = frozenset({"DRAM", "SOX"})
 PLACEHOLDER_SYMBOLS = frozenset({"TEST"})
 # US ETFs held or watched without a security_master / report_concepts.json row (e.g. "TQQQ PUT").
 COMMON_US_ETFS = frozenset({
     "SPY", "QQQ", "IWM", "DIA", "SOXX", "SMH", "XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP",
     "XLU", "XLB", "XLRE", "XLC", "TQQQ", "SQQQ", "SOXL", "SOXS", "TLT", "GLD", "SLV", "IBIT",
-    "FBTC", "ETHA", "ARKK"})
+    "FBTC", "ETHA", "ARKK", "BTC", "ETH"})  # BTC/ETH: Grayscale mini trusts; Market=CRYPTO → CRYPTO:
 ROW_META_FIELDS = ("symbol", "cik", "asset_kind", "in_us_basket_calc", "profile_sector",
                    "profile_industry", "company_name_snapshot")
 DEFAULT_AGREEMENT = "single_pass_weekly"
@@ -145,6 +147,17 @@ def ro_connect(path) -> sqlite3.Connection:
 
 def _text(value: Any) -> Optional[str]:
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _norm_cik(val: Any) -> Optional[str]:
+    """SEC CIK as 10 zero-padded digits, so '123456' and '0000123456' compare equal."""
+    s = "" if val is None else str(val).strip()
+    if not s:
+        return None
+    if s.isascii() and s.isdigit():
+        s = s.lstrip("0")
+        return s.zfill(10) if s else None
+    return s
 
 
 def main_repo_root() -> Path:
@@ -304,9 +317,14 @@ def scan_sheet_tickers_tolerant(xlsx_bytes: bytes) -> List[Tuple[str, str]]:
                 value = float(shares)
             except (TypeError, ValueError):
                 continue
-            held = math.isfinite(value) and value > 0
-            if held:
-                found.append((str(ticker).strip(), str(market or "US").strip().upper() or "US"))
+            if not (math.isfinite(value) and value > 0):
+                continue
+            raw, mkt = str(ticker).strip(), str(market or "").strip().upper()
+            if not mkt and not _US_EXCHANGE_RE.match(raw.upper()) and _split_market(raw.upper(), "") is None:
+                raise ValueError(f"missing Market in {SHEET_TAB}")  # never guess: "BTC" is both
+            if mkt and mkt not in ALLOWED_SHEET_MARKETS:
+                raise ValueError(f"unknown Market in {SHEET_TAB}")
+            found.append((raw, mkt or "US"))
         if header is None:
             raise ValueError(f"header row with {', '.join(SHEET_COLUMNS)} not found in {SHEET_TAB}")
         return found
@@ -382,14 +400,19 @@ def _read_market(market_db_path: Path, today: str):
                         "AND name = 'stock_themes'").fetchone():
             for r in conn.execute("SELECT symbol, cik, asset_kind, in_us_basket_calc, is_superseded, "
                                   "profile_sector, profile_industry FROM stock_themes"):
-                existing[r[0]] = {"cik": r[1], "asset_kind": r[2], "in_us_basket_calc": r[3],
+                existing[r[0]] = {"cik": _norm_cik(r[1]), "asset_kind": r[2], "in_us_basket_calc": r[3],
                                   "is_superseded": r[4], "profile_sector": r[5],
                                   "profile_industry": r[6]}
     return sm, extended, active, profiles, existing
 
 
 def _read_watchlist(company_db_path: Path) -> List[str]:
+    if not Path(company_db_path).exists():
+        return []
     with contextlib.closing(ro_connect(company_db_path)) as conn:
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' "
+                            "AND name = 'watchlist'").fetchone():
+            return []
         return [r[0] for r in conn.execute("SELECT symbol FROM watchlist ORDER BY symbol")]
 
 
@@ -442,8 +465,8 @@ def detect_delta(*, market_db_path, company_db_path, exchange_dir, baskets_path,
     from src.data.symbol_aliases import load_symbol_aliases
 
     dirs = ensure_exchange_dirs(exchange_dir)
-    for item in dirs["outbox"].iterdir():
-        if item.is_file() or item.is_symlink():
+    for item in dirs["outbox"].iterdir():  # a running Step C owns its .inflight.* claim
+        if (item.is_file() or item.is_symlink()) and not item.name.startswith(".inflight."):
             item.unlink()
     today = today or today_shanghai()
     warnings: List[str] = []
@@ -499,7 +522,7 @@ def detect_delta(*, market_db_path, company_db_path, exchange_dir, baskets_path,
                                                 extra_etfs=extra_etfs)
         sm_row, prof = sm_row or {}, prof or {}
         metas.append({
-            "symbol": sym, "cik": _text(sm_row.get("cik")) or _text(prof.get("cik")),
+            "symbol": sym, "cik": _norm_cik(sm_row.get("cik")) or _norm_cik(prof.get("cik")),
             "asset_kind": kind, "in_us_basket_calc": in_calc,
             "profile_sector": _text(prof.get("sector")),
             "profile_industry": _text(prof.get("industry")),
@@ -677,8 +700,11 @@ def _env_refusal(db_path, allow_noncloud: bool) -> Optional[str]:
         return "refusing: FINANCE_ENV is not 'cloud'"
     from src.data.theme_basket_store import _protected_paths
 
-    if os.path.realpath(str(db_path)) in _protected_paths():
-        return "refusing: production market.db needs FINANCE_ENV=cloud"
+    protected = _protected_paths() | {os.path.realpath(str(root / "data" / name))
+                                      for root in {REPO_ROOT, main_repo_root()}
+                                      for name in ("company.db", "prosperity.db")}
+    if os.path.realpath(str(db_path)) in protected:
+        return "refusing: production databases need FINANCE_ENV=cloud"
     return None
 
 
@@ -949,6 +975,14 @@ def run_private_lock(*, action: str, symbol: str, l2_id: Optional[str] = None, c
 # ---------------------------------------------------------------- Step C: --commit-outbox / --sync-config / --replay-pending
 
 ALLOWED_AGREEMENT = frozenset({"single_pass_weekly", "dual_agreed", "needs_spot_check", "disagreed"})
+# Model fields: absent or null → default; any other value must pass its check (no `or` fallback).
+_MODEL_FIELD_OK = {
+    "l2_id": lambda v: isinstance(v, str) and v != "",
+    "pi_bucket": lambda v: isinstance(v, str) and v != "",
+    "business_note": lambda v: isinstance(v, str),
+    "cross_themes": lambda v: isinstance(v, list),
+    "agreement_status": lambda v: isinstance(v, str) and v in ALLOWED_AGREEMENT,
+}
 
 
 class GateError(Exception):
@@ -1003,19 +1037,21 @@ def merge_classifications(delta: Mapping[str, Any], items: Sequence[Mapping[str,
     rows, rejected = [], []
     for item in items:
         meta = missing[item["symbol"]]
-        status = item.get("agreement_status") or DEFAULT_AGREEMENT
-        if not isinstance(status, str) or status not in ALLOWED_AGREEMENT:
-            rejected.append([meta["symbol"], f"agreement_status {status!r} is not allowed"])
+        bad = sorted(k for k, ok in _MODEL_FIELD_OK.items() if item.get(k) is not None and not ok(item[k]))
+        if bad:
+            rejected.append([meta["symbol"], "invalid fields: " + ", ".join(bad)])
             continue
-        l2_id = item.get("l2_id")
+        l2_id, pi, cross, status = (item.get(k) for k in ("l2_id", "pi_bucket", "cross_themes",
+                                                          "agreement_status"))
+        if pi is None and l2_id is not None:
+            pi = l2_pi.get(l2_id)
         row = {k: meta[k] for k in ROW_META_FIELDS}
         row.update(
             l2_id=l2_id,
-            cross_themes=(item.get("cross_themes") or []) if meta["in_us_basket_calc"] == 1 else [],
-            pi_bucket=(item.get("pi_bucket") or (l2_pi.get(l2_id) if isinstance(l2_id, str) else None)
-                       or kind_pi[meta["asset_kind"]]),
+            cross_themes=cross if cross is not None and meta["in_us_basket_calc"] == 1 else [],
+            pi_bucket=pi if pi is not None else kind_pi[meta["asset_kind"]],
             business_note=item.get("business_note"),
-            agreement_status=status)
+            agreement_status=status if status is not None else DEFAULT_AGREEMENT)
         rows.append(row)
     return rows, rejected
 
@@ -1029,6 +1065,12 @@ def rehearse(baskets_doc: Mapping[str, Any], overrides_doc: Mapping[str, Any],
     with contextlib.closing(store.open_writer(":memory:")) as conn:
         res = store.apply_envelope(conn, baskets_doc=baskets_doc, overrides_doc=overrides_doc,
                                    rows=rows, payload_id=store.compute_payload_id(rows))
+        active_pi = {b for (b,) in conn.execute(
+            "SELECT basket_id FROM theme_baskets WHERE tier = 'pi_bucket' AND is_active = 1")}
+    defaults = baskets_doc.get("asset_kind_default_pi_bucket")
+    if not isinstance(defaults, Mapping) or any(
+            not isinstance(defaults.get(kind), str) or defaults[kind] not in active_pi for kind in ASSET_KINDS):
+        raise ValueError("asset_kind_default_pi_bucket must map all 7 asset kinds to active pi_bucket baskets")
     bad = {symbol for symbol, _ in res.quarantined}
     return [r for r in rows if r["symbol"] not in bad], [list(q) for q in res.quarantined]
 
@@ -1055,34 +1097,50 @@ def _load_sealed(path: Path) -> Dict[str, Any]:
 
 
 def _replay_files(pending_dir: Path, baskets_doc, overrides_doc, ssh_runner, send_telegram: bool,
-                  warnings: List[str]) -> Tuple[int, int]:
+                  warnings: List[str]):
     """Send pending/*.json in (created_at, filename) order; stop at the first cloud failure.
 
-    Corrupt files are reported in `warnings` and left on disk. Returns (rc, files sent).
+    Any corrupt file stops the run before the first send (never out of order); every file
+    stays on disk. Returns (rc, files sent, symbols sent, cloud quarantine of the sent
+    files, symbols still queued in valid pending files).
     """
-    queue = []
+    queue, corrupt = [], False
     for path in pending_dir.glob("*.json"):
         try:
             sealed = _load_sealed(path)
         except ValueError as exc:
             warnings.append(f"pending_corrupt: {path.name}: {type(exc).__name__}")
+            corrupt = True
             continue
         queue.append((str(sealed.get("created_at", "")), path.name, path, sealed))
-    sent = 0
-    for _, _, path, sealed in sorted(queue, key=lambda q: (q[0], q[1])):
+    queue.sort(key=lambda q: (q[0], q[1]))
+    rc, sent, sent_symbols, quarantined = (EXIT_FAIL if corrupt else EXIT_OK), 0, set(), []
+    for _, _, path, sealed in ([] if corrupt else queue):
         rc, reply = _send_sealed(sealed, baskets_doc, overrides_doc, ssh_runner, send_telegram)
         if rc != EXIT_OK:
             warnings.append(f"pending_replay_failed: {path.name}: {reply.get('error')}")
-            return rc, sent
+            break
         path.unlink()
         sent += 1
-    return EXIT_OK, sent
+        sent_symbols |= {r.get("symbol") for r in sealed["rows"]}
+        quarantined += [list(q) for q in reply.get("quarantined") or []]
+    queued = {r.get("symbol") for _, _, _, sealed in queue[sent:] for r in sealed["rows"]}
+    return rc, sent, sent_symbols, quarantined, queued
+
+
+_RETRYABLE_ERRORS = ("transport_failed:", "bad_cloud_reply:", "backup_failed:", "pending_replay_failed:")
+
+
+def _is_retryable_cloud_failure(rc: int, reply: Mapping[str, Any]) -> bool:
+    """Lock busy, transport and backup trouble retry from pending/; contract rejections do not."""
+    error = str(reply.get("error") or "")
+    return rc == EXIT_LOCK_BUSY or error == "pending replay failed first" or error.startswith(_RETRYABLE_ERRORS)
 
 
 def commit_outbox(*, exchange_dir, baskets_path, overrides_path, market_db_path,
                   today: Optional[str] = None, ssh_runner=None, pull_runner=None,
                   send_telegram: bool = True, skip_pull: bool = False) -> int:
-    """Step C: gate → merge → :memory: rehearsal → seal → replay pending/ → send → pull."""
+    """Step C: gate → merge → :memory: rehearsal → claim → replay pending/ → seal the rest → send → pull."""
     from src.data.theme_basket_store import compute_payload_id
 
     ssh_runner = ssh_runner or default_ssh_runner
@@ -1097,8 +1155,16 @@ def commit_outbox(*, exchange_dir, baskets_path, overrides_path, market_db_path,
     except Exception as exc:
         _emit({"ok": False, "mode": "commit-outbox", "error": f"rehearsal_failed: {type(exc).__name__}: {exc}"})
         return EXIT_FAIL
+    # Claim the file: a payload.json written while SSH runs belongs to the next run.
+    claimed = dirs["outbox"] / f".inflight.{os.getpid()}.{time.monotonic_ns()}.json"
+    os.replace(str(dirs["outbox"] / "payload.json"), str(claimed))
     local_q += quarantined
-    sealed = {"schema_version": SCHEMA_VERSION, "payload_id": compute_payload_id(clean), "rows": clean,
+    warnings: List[str] = []
+    rc, _, sent_symbols, replayed_q, queued = _replay_files(
+        dirs["pending"], baskets_doc, overrides_doc, ssh_runner, send_telegram, warnings)
+    # Rows already sent or still queued in pending/ would only come back as "already exists".
+    rows = [r for r in clean if r["symbol"] not in sent_symbols | queued]
+    sealed = {"schema_version": SCHEMA_VERSION, "payload_id": compute_payload_id(rows), "rows": rows,
               "created_at": utc_stamp(), "delta_sha256": delta["delta_sha256"],
               "local_summary": {
                   "local_quarantined": [s for s, _ in local_q],
@@ -1109,21 +1175,23 @@ def commit_outbox(*, exchange_dir, baskets_path, overrides_path, market_db_path,
                   "pivot_symbols": [p["symbol"] for p in delta["pivot_candidates"]],
                   "pivot_notes": [{"symbol": n["symbol"], "note": n["note"].strip()[:200]}
                                   for n in payload.get("pivot_notes") or []]}}
-    summary = {"mode": "commit-outbox", "payload_id": sealed["payload_id"], "rows": len(clean),
-               "local_quarantined": local_q,
+    summary = {"mode": "commit-outbox", "payload_id": sealed["payload_id"], "rows": len(rows),
+               "local_quarantined": local_q, "replayed_quarantined": replayed_q,
                "unclassified": len(sealed["local_summary"]["unclassified_symbols"])}
-    warnings: List[str] = []
-    rc, _ = _replay_files(dirs["pending"], baskets_doc, overrides_doc, ssh_runner, send_telegram, warnings)
     reply: Dict[str, Any] = {"ok": False, "error": "pending replay failed first"}
     if rc == EXIT_OK:
         rc, reply = _send_sealed(sealed, baskets_doc, overrides_doc, ssh_runner, send_telegram)
     if rc != EXIT_OK:
-        # Park the sealed rows and clear outbox/ so a WatchPaths trigger cannot loop on it.
-        atomic_write_json(dirs["pending"] / f"{sealed['payload_id']}.json", sealed)
-        (dirs["outbox"] / "payload.json").unlink(missing_ok=True)
-        _emit(dict(summary, ok=False, parked=True, error=reply.get("error"), warnings=warnings))
+        parked = _is_retryable_cloud_failure(rc, reply)
+        if not parked:  # a permanent rejection: keep it for inspection, outside payload.json
+            os.replace(str(claimed), str(dirs["outbox"] / f"rejected.{sealed['payload_id'][:12]}.json"))
+        else:
+            if rows or not any(dirs["pending"].glob("*.json")):
+                atomic_write_json(dirs["pending"] / f"{sealed['payload_id']}.json", sealed)
+            claimed.unlink(missing_ok=True)
+        _emit(dict(summary, ok=False, parked=parked, error=reply.get("error"), warnings=warnings))
         return rc
-    (dirs["outbox"] / "payload.json").unlink(missing_ok=True)
+    claimed.unlink(missing_ok=True)
     (dirs["pending"] / f"{sealed['payload_id']}.json").unlink(missing_ok=True)
     if not skip_pull:
         pull_after_commit(market_db_path, pull_runner or default_pull_runner, warnings)
@@ -1165,7 +1233,7 @@ def replay_pending(*, exchange_dir, baskets_path, overrides_path, market_db_path
     """Resend sealed pending/ payloads unchanged, each with the latest dictionary; one pull at the end."""
     dirs = ensure_exchange_dirs(exchange_dir)
     if not any(dirs["pending"].glob("*.json")):
-        _emit({"ok": True, "mode": "replay-pending", "sent": 0, "warnings": []})
+        _emit({"ok": True, "mode": "replay-pending", "sent": 0, "replayed_quarantined": [], "warnings": []})
         return EXIT_OK
     try:
         baskets_doc, overrides_doc = _validated_docs(baskets_path, overrides_path)
@@ -1173,11 +1241,12 @@ def replay_pending(*, exchange_dir, baskets_path, overrides_path, market_db_path
         _emit({"ok": False, "mode": "replay-pending", "error": f"rehearsal_failed: {type(exc).__name__}: {exc}"})
         return EXIT_FAIL
     warnings: List[str] = []
-    rc, sent = _replay_files(dirs["pending"], baskets_doc, overrides_doc,
-                             ssh_runner or default_ssh_runner, send_telegram, warnings)
+    rc, sent, _, replayed_q, _ = _replay_files(dirs["pending"], baskets_doc, overrides_doc,
+                                               ssh_runner or default_ssh_runner, send_telegram, warnings)
     if rc == EXIT_OK and sent and not skip_pull:
         pull_after_commit(market_db_path, pull_runner or default_pull_runner, warnings)
-    _emit({"ok": rc == EXIT_OK, "mode": "replay-pending", "sent": sent, "warnings": warnings})
+    _emit({"ok": rc == EXIT_OK, "mode": "replay-pending", "sent": sent,
+           "replayed_quarantined": replayed_q, "warnings": warnings})
     return rc
 
 
