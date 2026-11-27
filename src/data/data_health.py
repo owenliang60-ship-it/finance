@@ -546,23 +546,26 @@ def _theme_baskets_result(conn: sqlite3.Connection) -> CheckResult:
         if gap:
             problems.append(f"主池 {len(gap)} 只未分类: {gap[:10]}")
 
-    under = [f"{basket_id} {n}/{minimum}" for basket_id, minimum, n in conn.execute(
-        """SELECT b.basket_id, b.min_active_members,
-                  CASE b.tier
-                    WHEN 'l1' THEN (SELECT COUNT(*) FROM stock_themes s WHERE s.l1_id = b.basket_id
-                                      AND s.in_us_basket_calc = 1 AND s.is_superseded = 0)
-                    WHEN 'l2' THEN (SELECT COUNT(*) FROM stock_themes s WHERE s.l2_id = b.basket_id
-                                      AND s.in_us_basket_calc = 1 AND s.is_superseded = 0)
-                    ELSE (SELECT COUNT(*) FROM stock_cross_themes x
-                          JOIN stock_themes s ON s.symbol = x.symbol
-                          WHERE x.theme_id = b.basket_id
-                            AND s.in_us_basket_calc = 1 AND s.is_superseded = 0)
-                  END
-           FROM theme_baskets b
-           WHERE b.is_active = 1 AND b.tier IN ('l1', 'l2', 'cross')
-           ORDER BY b.sort_order, b.basket_id""") if n < minimum]
-    if under:
-        problems.append(f"{len(under)} 个篮子成员不足: {under[:10]}")
+        # 成员数只算仍在活跃主池里的票：跌出主池的老票保留 stock_themes 行，不能撑人数
+        active = """s.in_us_basket_calc = 1 AND s.is_superseded = 0 AND EXISTS (
+                        SELECT 1 FROM extended_membership m JOIN security_master sm ON sm.symbol = m.symbol
+                        WHERE m.symbol = s.symbol AND m.effective_to IS NULL AND sm.eligible = 1)"""
+        under = [f"{basket_id} {n}/{minimum}" for basket_id, minimum, n in conn.execute(
+            f"""SELECT b.basket_id, b.min_active_members,
+                      CASE b.tier
+                        WHEN 'l1' THEN (SELECT COUNT(*) FROM stock_themes s
+                                        WHERE s.l1_id = b.basket_id AND {active})
+                        WHEN 'l2' THEN (SELECT COUNT(*) FROM stock_themes s
+                                        WHERE s.l2_id = b.basket_id AND {active})
+                        ELSE (SELECT COUNT(*) FROM stock_cross_themes x
+                              JOIN stock_themes s ON s.symbol = x.symbol
+                              WHERE x.theme_id = b.basket_id AND {active})
+                      END
+               FROM theme_baskets b
+               WHERE b.is_active = 1 AND b.tier IN ('l1', 'l2', 'cross')
+               ORDER BY b.sort_order, b.basket_id""") if n < minimum]
+        if under:
+            problems.append(f"{len(under)} 个篮子成员不足: {under[:10]}")
 
     if problems:
         return CheckResult(name, "WARN", "; ".join(problems))

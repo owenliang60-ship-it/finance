@@ -484,6 +484,10 @@ def _upsert_lock(conn: sqlite3.Connection, symbol: Any, l2_id: Any, pairs: Seque
     """
     if type(symbol) is not str:
         raise TypeError(f"symbol must be str: {symbol!r}")
+    existing = conn.execute(
+        "SELECT asset_kind, is_superseded FROM stock_themes WHERE symbol = ?", (symbol,)).fetchone()
+    if existing is not None and (existing[0] != "us_equity" or existing[1] != 0):
+        raise ValueError(f"{symbol}: only a non-superseded us_equity can be locked, got {existing}")
     info = _l2_info(conn, l2_id)
     if info is None or info[2] != 1:
         raise ValueError(f"{symbol}: l2_id {l2_id!r} is not an active L2 basket")
@@ -502,6 +506,7 @@ def _upsert_lock(conn: sqlite3.Connection, symbol: Any, l2_id: Any, pairs: Seque
                agreement_status, assigned_at, updated_at)
            VALUES (?, ?, 'us_equity', 1, 0, ?, ?, ?, ?, ?, ?, 'locked', ?, ?)
            ON CONFLICT(symbol) DO UPDATE SET
+               in_us_basket_calc = 1,
                l1_id = excluded.l1_id,
                l2_id = excluded.l2_id,
                source = excluded.source,
@@ -510,7 +515,8 @@ def _upsert_lock(conn: sqlite3.Connection, symbol: Any, l2_id: Any, pairs: Seque
                                     THEN excluded.business_note
                                     ELSE stock_themes.business_note END,
                updated_at = excluded.updated_at
-           WHERE stock_themes.l1_id IS NOT excluded.l1_id
+           WHERE stock_themes.in_us_basket_calc IS NOT 1
+              OR stock_themes.l1_id IS NOT excluded.l1_id
               OR stock_themes.l2_id IS NOT excluded.l2_id
               OR stock_themes.source IS NOT excluded.source
               OR stock_themes.agreement_status IS NOT 'locked'

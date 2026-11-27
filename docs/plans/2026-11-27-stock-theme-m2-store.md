@@ -102,6 +102,6 @@
 
 - `ApplyResult.inserted` = 本次新增的 `stock_themes` 行数；`updated` = 存量行中归属快照发生变化的行数（= `history_appended - inserted`）。
 - `lock_private_symbol(business_note=...)`：显式传入的备注覆盖旧备注；传 `None` 保留旧备注。备注不属于历史快照字段，单改备注不追加历史。
-- 已存在的票被公开锁定时，只改 `l1_id/l2_id/source/agreement_status`（按计划）；若该行是 ETF 等不允许 `l2_id` 的类型，`CHECK` 会拒绝，整个信封回滚。
-- `_check_theme_baskets()` 在表齐全且非空后，把心跳、主池缺口、成员不足三类问题合并进一条 `WARN` 详情；主池表缺失时只跳过缺口检查，成员数检查照跑。
+- 锁定（公开或私有）已存在的票时，改 `in_us_basket_calc=1` 与 `l1_id/l2_id/source/agreement_status`；存量行若 `asset_kind != 'us_equity'` 或 `is_superseded = 1`，写入前抛 `ValueError`（公开锁定则整个信封回滚）。（Neon 审查返工）
+- `_check_theme_baskets()` 在表齐全且非空后，把心跳、主池缺口、成员不足三类问题合并进一条 `WARN` 详情；成员数只计入仍在活跃主池（`extended_membership.effective_to IS NULL` ∩ `security_master.eligible = 1`）的票；主池表缺失时缺口与成员数检查一起跳过。（Neon 审查返工）
 - 云端冒烟：把模块源码、真实 JSON 和断言脚本拼成一个文件，经 SSH 标准输入喂给 `/usr/bin/python3 -I -`（Python 3.10.12 / SQLite 3.37.2），只用 `:memory:`，云端零落盘。
