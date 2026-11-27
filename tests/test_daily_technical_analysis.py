@@ -5,7 +5,9 @@
 import datetime as dt
 import json
 import math
+import re
 import unittest
+from pathlib import Path
 import pandas as pd
 import pytest
 
@@ -17,6 +19,7 @@ from portfolio.holdings.sheet_book import (
 )
 from scripts.daily_technical_analysis import chunk_telegram as ct
 from scripts.daily_technical_analysis import fetch_vol_env as m
+from scripts.daily_technical_analysis import render_ta_html as rhtml
 
 
 class TestVolEnv(unittest.TestCase):
@@ -315,6 +318,403 @@ def test_offensive_holdings_fail_closed_on_missing_env_and_download_error(tmp_pa
     assert res_rt_err["items"] == []
     assert "FAKE_SECRET" not in res_rt_err["reason"]
     assert "https://" not in res_rt_err["reason"]
+
+
+# ---------------------------------------------------------------------------
+# Task 3: Dual-stop state machine, reconciliation, responsive HTML, sidecar.json
+# ---------------------------------------------------------------------------
+
+def _base_pos(**overrides):
+    pos = {
+        "ticker": "AAA",
+        "market": "US",
+        "category": "Momentum",
+        "exchange_symbol": "NASDAQ:AAA",
+        "bar_date": "2026-11-26",
+        "close": 100.0,
+        "change_pct": 1.25,
+        "st_direction": "long",
+        "st_stop": 95.0,
+        "st_flipped_bear": False,
+        "cow_direction": 1,
+        "cow_lower": 96.0,
+        "cow_mid": 98.0,
+        "cow_upper": 102.0,
+        "cow_flipped_bear": False,
+    }
+    pos.update(overrides)
+    return pos
+
+
+def _minimal_symbol(ticker: str = "BTC"):
+    return {
+        "ticker": ticker,
+        "exchange_symbol": f"EXCH:{ticker}",
+        "timeframe": "1D",
+        "bar_date": "2026-11-26",
+        "close": 100.0,
+        "change_pct": 1.5,
+        "trend": {
+            "resonance": 1,
+            "st_direction": "long",
+            "st_stop": 95.0,
+            "st_status": "多头",
+            "st_flip_text": "95.00",
+            "cow_direction_text": "多头",
+            "cow_upper": 103.0,
+            "cow_mid": 99.0,
+            "cow_lower": 96.0,
+        },
+        "extremity": {
+            "regime_code": 0,
+            "z_val": 0.2,
+            "z_sigma": 0.3,
+            "z_2y_pct": 55.0,
+            "s_val": 0.1,
+            "s_pct_extreme": 12.0,
+            "s_2y_pct": 50.0,
+        },
+        "original_d": {"d_val": 0.5, "d_2y_pct": 52.0, "d_overheat": 4.5, "d_oversold": -4.5},
+        "volume": {"vol": 1000, "vol_ma20": 900, "threshold_2sigma": 1800, "rvol": 1.1, "z_score": 0.4},
+        "conclusions": {
+            "trend": "多头",
+            "extremity": "常态",
+            "volume": "平量",
+            "levels": "95-103",
+            "trend_1w": "1W 多头",
+        },
+        "new_alerts": [],
+    }
+
+
+def test_select_closed_daily_bar_kr_0805_sgt_drops_intraday_bar():
+    now_utc = dt.datetime(2026, 11, 27, 0, 5, 0, tzinfo=dt.timezone.utc)  # 08:05 SGT / 09:05 KST
+
+    kr_bars = [
+        {"date": "2026-11-25", "close": 50000.0},
+        {"date": "2026-11-26", "close": 51000.0},
+        {"date": "2026-11-27", "close": 51500.0},  # intraday forming at 09:05 KST
+    ]
+    kr_bar, kr_note = rhtml.select_closed_daily_bar(kr_bars, "KR", now_utc)
+    assert kr_bar is not None
+    assert kr_bar["date"] == "2026-11-26"
+    assert kr_note != ""
+
+    hk_bars = [
+        {"date": "2026-11-25", "close": 380.0},
+        {"date": "2026-11-26", "close": 385.0},
+    ]
+    hk_bar, hk_note = rhtml.select_closed_daily_bar(hk_bars, "HK", now_utc)
+    assert hk_bar is not None
+    assert hk_bar["date"] == "2026-11-26"
+    assert hk_note == ""
+
+    us_bars = [
+        {"date": "2026-11-25", "close": 100.0},
+        {"date": "2026-11-26", "close": 102.0},
+    ]
+    us_bar, us_note = rhtml.select_closed_daily_bar(us_bars, "US", now_utc)
+    assert us_bar is not None
+    assert us_bar["date"] == "2026-11-26"
+    assert us_note == ""
+
+
+def test_evaluate_position_stop_both_bull_full_hold():
+    res = rhtml.evaluate_position_stop(_base_pos())
+    assert res["available"] is True
+    assert res["target_hold_pct"] == 100
+    assert res["badge_text"] == "满额持有 (100%)"
+    assert res["st_dist_pct"] == -5.0
+    assert res["cow_dist_pct"] == -4.0
+    assert res["banner_alert"] is None
+
+    # Newly listed / unconfirmed cow channel (cow_direction == 0, close >= cow_lower)
+    res_new_ipo = rhtml.evaluate_position_stop(_base_pos(cow_direction=0, cow_lower=96.0, close=100.0))
+    assert res_new_ipo["available"] is True
+    assert res_new_ipo["cow_bull"] is True
+    assert res_new_ipo["target_hold_pct"] == 100
+    assert "待确认" in res_new_ipo["cow_status_text"]
+
+
+def test_evaluate_position_stop_single_leg_break_new_vs_stale_and_null_st_stop():
+    # New ST break with st_stop=None (Pine v12.0 outputs null for bull stop when flipped short)
+    st_null = rhtml.evaluate_position_stop(
+        _base_pos(st_direction="short", st_stop=None, st_flipped_bear=True, cow_direction=1, cow_lower=96.0, close=100.0)
+    )
+    assert st_null["available"] is True
+    assert st_null["target_hold_pct"] == 50
+    assert st_null["badge_text"] == "🚨 清一半 (50%)"
+    assert st_null["banner_alert"] is not None
+    assert "96.00" in st_null["banner_alert"]
+
+    # New ST break with explicit short stop > close
+    st_num = rhtml.evaluate_position_stop(
+        _base_pos(st_direction="short", st_stop=105.0, st_flipped_bear=True, cow_direction=1, cow_lower=96.0, close=100.0)
+    )
+    assert st_num["available"] is True
+    assert st_num["target_hold_pct"] == 50
+    assert st_num["badge_text"] == "🚨 清一半 (50%)"
+    assert st_num["banner_alert"] is not None
+    assert "96.00" in st_num["banner_alert"]
+
+    # New Cow break while ST remains long
+    cow_brk = rhtml.evaluate_position_stop(
+        _base_pos(st_direction="long", st_stop=94.0, cow_direction=-1, cow_lower=98.0, cow_flipped_bear=True, close=97.0)
+    )
+    assert cow_brk["available"] is True
+    assert cow_brk["target_hold_pct"] == 50
+    assert cow_brk["badge_text"] == "🚨 清一半 (50%)"
+    assert cow_brk["banner_alert"] is not None
+    assert "94.00" in cow_brk["banner_alert"]
+
+    # Stale single-leg break (flipped_bear=False)
+    stale_st = rhtml.evaluate_position_stop(
+        _base_pos(st_direction="short", st_stop=None, st_flipped_bear=False, cow_direction=1, cow_lower=96.0, close=100.0)
+    )
+    assert stale_st["available"] is True
+    assert stale_st["target_hold_pct"] == 50
+    assert stale_st["badge_text"] == "留半仓 (50%)"
+    assert stale_st["banner_alert"] is None
+
+    # Cow hysteresis: cow_direction == -1 even when close rebounds between cow_lower and cow_upper
+    hyst = rhtml.evaluate_position_stop(
+        _base_pos(
+            st_direction="long",
+            st_stop=94.0,
+            cow_direction=-1,
+            cow_lower=96.0,
+            cow_upper=104.0,
+            cow_flipped_bear=False,
+            close=100.0,
+        )
+    )
+    assert hyst["available"] is True
+    assert hyst["cow_bull"] is False
+    assert hyst["badge_text"] == "留半仓 (50%)"
+    assert hyst["banner_alert"] is None
+
+
+def test_evaluate_position_stop_dual_break_new_vs_stale():
+    new_dual = rhtml.evaluate_position_stop(
+        _base_pos(
+            st_direction="short",
+            st_stop=None,
+            st_flipped_bear=True,
+            cow_direction=-1,
+            cow_lower=102.0,
+            cow_upper=108.0,
+            cow_flipped_bear=False,
+            close=100.0,
+        )
+    )
+    assert new_dual["available"] is True
+    assert new_dual["target_hold_pct"] == 0
+    assert new_dual["badge_text"] == "🚨 双破全清"
+    assert new_dual["banner_alert"] is not None
+
+    stale_dual = rhtml.evaluate_position_stop(
+        _base_pos(
+            st_direction="short",
+            st_stop=106.0,
+            st_flipped_bear=False,
+            cow_direction=-1,
+            cow_lower=102.0,
+            cow_upper=108.0,
+            cow_flipped_bear=False,
+            close=100.0,
+        )
+    )
+    assert stale_dual["available"] is True
+    assert stale_dual["target_hold_pct"] == 0
+    assert stale_dual["badge_text"] == "⚠️ 双破全清 · 存量未清 (0%)"
+    assert stale_dual["banner_alert"] is None
+
+
+def test_evaluate_position_stop_nan_inf_bool_and_inconsistency_fail_closed():
+    bad_universal = [float("nan"), float("inf"), -float("inf"), True]
+    for field in ("close", "cow_lower", "cow_upper", "change_pct", "st_stop"):
+        for bad_val in bad_universal:
+            res = rhtml.evaluate_position_stop(_base_pos(**{field: bad_val}))
+            assert res["available"] is False, f"{field}={bad_val!r} must fail closed"
+            assert res["badge_text"] == "⚠️ 指标数据不可用"
+
+    for price_field in ("close", "cow_lower", "cow_upper", "st_stop"):
+        res = rhtml.evaluate_position_stop(_base_pos(**{price_field: -1.0}))
+        assert res["available"] is False, f"{price_field}=-1.0 must fail closed"
+        assert res["badge_text"] == "⚠️ 指标数据不可用"
+
+    # Negative change_pct is valid; ensure normal negative daily move does NOT fail closed
+    res_neg_chg = rhtml.evaluate_position_stop(_base_pos(change_pct=-1.0))
+    assert res_neg_chg["available"] is True
+
+    # st_direction == "long" with st_stop=None or st_stop > close * 1.0005
+    for bad_long_stop in (None, 105.0):
+        res = rhtml.evaluate_position_stop(_base_pos(st_direction="long", st_stop=bad_long_stop, close=100.0))
+        assert res["available"] is False
+        assert res["badge_text"] == "⚠️ 指标数据不可用"
+
+    # st_direction == "short" with numeric st_stop < close * 0.9995
+    res_short_bad = rhtml.evaluate_position_stop(_base_pos(st_direction="short", st_stop=90.0, close=100.0))
+    assert res_short_bad["available"] is False
+    assert res_short_bad["badge_text"] == "⚠️ 指标数据不可用"
+
+    # cow_direction == 1 with close significantly below cow_lower
+    res_cow_bad = rhtml.evaluate_position_stop(_base_pos(cow_direction=1, cow_lower=96.0, close=94.0))
+    assert res_cow_bad["available"] is False
+    assert res_cow_bad["badge_text"] == "⚠️ 指标数据不可用"
+
+
+def test_reconcile_active_positions_prevents_fail_open_and_dropped_ticker():
+    # vol_env unavailable must override active_positions empty
+    rec_unavail = rhtml.reconcile_active_positions(
+        active_positions={"status": "empty", "positions": []},
+        vol_env_holdings={"status": "unavailable", "reason": "SheetBookError: timeout", "items": []},
+    )
+    assert rec_unavail is not None
+    assert rec_unavail["status"] == "unavailable"
+    assert "timeout" in rec_unavail["reason"]
+
+    # vol_env ok has [AAA, 0700] while active_positions only returned [AAA]
+    rec_partial = rhtml.reconcile_active_positions(
+        active_positions={"status": "ok", "positions": [_base_pos(ticker="AAA", market="US")]},
+        vol_env_holdings={
+            "status": "ok",
+            "items": [
+                {"ticker": "AAA", "market": "US", "category": "Momentum", "tv_symbol_hint": None, "needs_tv_search": True},
+                {"ticker": "0700", "market": "HK", "category": "Value", "tv_symbol_hint": "HKEX:700", "needs_tv_search": False},
+            ],
+        },
+    )
+    assert rec_partial is not None
+    assert rec_partial["status"] == "ok"
+    assert [p["ticker"] for p in rec_partial["positions"]] == ["AAA", "0700"]
+    assert rec_partial["positions"][0]["available"] is True
+    assert rec_partial["positions"][1]["available"] is False
+    assert rec_partial["positions"][1]["badge_text"] == "⚠️ 指标数据不可用"
+
+
+def test_render_html_daily_three_states_banner_and_xss_escaping():
+    base_daily = {
+        "mode": "daily",
+        "report_date": "2026-11-27",
+        "generated_at": "2026-11-27 08:05 SGT",
+        "overview_bullets": ["总览要点"],
+        "symbols": [_minimal_symbol("BTC")],
+    }
+
+    # 1. empty
+    html_empty = rhtml.render_html({**base_daily, "active_positions": {"status": "empty", "positions": []}})
+    assert "30% 主动进攻仓 · 移动止损" in html_empty
+    assert "无主动进攻仓" in html_empty
+    assert "--bg: #f7f8fa" in html_empty
+    assert not re.search(r'(?:src|href)=["\']https?://', html_empty)
+
+    # 2. unavailable
+    html_unavail = rhtml.render_html({
+        **base_daily,
+        "active_positions": {"status": "unavailable", "reason": "拉取失败 <script>alert(1)</script>", "positions": []},
+    })
+    assert "30% 主动进攻仓 · 移动止损" in html_unavail
+    assert "不可用" in html_unavail
+    assert "<script>alert(1)</script>" not in html_unavail
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html_unavail
+
+    # 3. ok with full hold, new cut-half, new dual-break, stale dual-break, single unavailable + XSS
+    sym_with_alert = _minimal_symbol("BTC")
+    sym_with_alert["new_alerts"] = ["BTC 原有预警"]
+    html_ok = rhtml.render_html({
+        **base_daily,
+        "symbols": [sym_with_alert],
+        "active_positions": {
+            "status": "ok",
+            "positions": [
+                _base_pos(ticker="AAA", category="Momentum"),
+                _base_pos(
+                    ticker="BBB",
+                    category="Sentiment",
+                    st_direction="short",
+                    st_stop=None,
+                    st_flipped_bear=True,
+                    cow_direction=1,
+                    cow_lower=96.0,
+                ),
+                _base_pos(
+                    ticker="CCC",
+                    category="Value<script>alert(1)</script>",
+                    st_direction="short",
+                    st_stop=None,
+                    st_flipped_bear=True,
+                    cow_direction=-1,
+                    cow_lower=102.0,
+                    cow_upper=108.0,
+                ),
+                _base_pos(
+                    ticker="DDD",
+                    category="Fundamental",
+                    st_direction="short",
+                    st_stop=105.0,
+                    st_flipped_bear=False,
+                    cow_direction=-1,
+                    cow_lower=102.0,
+                    cow_upper=108.0,
+                ),
+                {"ticker": "EEE", "market": "HK", "category": "Value", "available": False, "reason": "MCP 超时"},
+            ],
+        },
+    })
+    assert "30% 主动进攻仓 · 移动止损" in html_ok
+    assert "满额持有 (100%)" in html_ok
+    assert "🚨 清一半 (50%)" in html_ok
+    assert "🚨 双破全清" in html_ok
+    assert "⚠️ 双破全清 · 存量未清 (0%)" in html_ok
+    assert "⚠️ 指标数据不可用" in html_ok
+    assert "<script>alert(1)</script>" not in html_ok
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html_ok
+    assert not re.search(r'(?:src|href)=["\']https?://', html_ok)
+
+    # Verify both newly triggered position breaks appear in .alert-banner BEFORE symbol alert
+    banner_idx = html_ok.index('class="alert-banner"')
+    pos_sec_idx = html_ok.index("30% 主动进攻仓 · 移动止损")
+    overview_idx = html_ok.index("一、三标的横向总览")
+    assert banner_idx < pos_sec_idx < overview_idx
+    banner_slice = html_ok[banner_idx:pos_sec_idx]
+    bbb_idx = banner_slice.index("BBB")
+    ccc_idx = banner_slice.index("CCC")
+    btc_idx = banner_slice.index("BTC 原有预警")
+    assert bbb_idx < btc_idx
+    assert ccc_idx < btc_idx
+
+
+def test_render_html_single_mode_100_percent_backward_compatible():
+    single_payload = {
+        "mode": "single",
+        "report_date": "2026-11-27",
+        "symbols": [_minimal_symbol("NVDA_TEST")],
+        "active_positions": {
+            "status": "ok",
+            "positions": [_base_pos(ticker="AAA", st_direction="short", st_stop=None, st_flipped_bear=True)],
+        },
+    }
+    out = rhtml.render_html(single_payload)
+    assert "30% 主动进攻仓" not in out
+    assert "三板块技术分析面板" in out
+    assert "NVDA_TEST" in out
+    assert "清一半" not in out
+
+
+def test_sidecar_json_valid_and_least_privilege():
+    sidecar_path = Path(__file__).resolve().parents[1] / "scripts" / "daily_technical_analysis" / "sidecar.json"
+    cfg = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    grants = cfg["agent_permissions"]["access_grants"]
+    assert "mcp(tradingview/mcp-tv-search-symbols)" in grants
+    for g in grants:
+        assert ".env" not in g
+        assert "*" not in g
+    prompt = cfg["args"][-1]
+    assert "active_holdings" in prompt
+    assert "active_positions" in prompt
+    assert "08:05" in prompt or "[-2]" in prompt
+    assert "韩股" in prompt
 
 
 if __name__ == "__main__":

@@ -9,12 +9,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import html
 import json
 import math
 import sys
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 def esc(val: Any, default: str = "—") -> str:
@@ -24,7 +26,7 @@ def esc(val: Any, default: str = "—") -> str:
 
 
 def fmt_num(val: Any, digits: int = 2, prefix: str = "", suffix: str = "", signed: bool = False) -> str:
-    if val is None or val == "":
+    if val is None or val == "" or isinstance(val, bool):
         return "—"
     try:
         v = float(val)
@@ -39,10 +41,12 @@ def fmt_num(val: Any, digits: int = 2, prefix: str = "", suffix: str = "", signe
 
 
 def fmt_vol(val: Any, unit: str = "") -> str:
-    if val is None:
+    if val is None or isinstance(val, bool):
         return "—"
     try:
         v = float(val)
+        if math.isnan(v) or math.isinf(v):
+            return "—"
         u = f" {unit}" if unit else ""
         if abs(v) >= 1e8:
             return f"{v / 1e8:.2f}亿{u}"
@@ -563,6 +567,559 @@ def render_symbol_card(sym: dict[str, Any], idx: int) -> str:
     </article>"""
 
 
+_MARKET_CLOSE_SCHEDULE: dict[str, tuple[ZoneInfo, tuple[int, int]]] = {
+    "KR": (ZoneInfo("Asia/Seoul"), (15, 35)),
+    "HK": (ZoneInfo("Asia/Hong_Kong"), (16, 15)),
+    "US": (ZoneInfo("America/New_York"), (16, 15)),
+}
+
+
+def _parse_finite_float(
+    val: Any, *, positive: bool = False, allow_none: bool = False
+) -> tuple[bool, float | None]:
+    if val is None:
+        return (allow_none, None)
+    if isinstance(val, bool):
+        return (False, None)
+    try:
+        f = float(val)
+    except (TypeError, ValueError):
+        return (False, None)
+    if not math.isfinite(f):
+        return (False, None)
+    if positive and f <= 0.0:
+        return (False, None)
+    return (True, f)
+
+
+def _parse_bool_flag(val: Any) -> tuple[bool, bool]:
+    if val is None:
+        return (True, False)
+    if isinstance(val, bool):
+        return (True, val)
+    if isinstance(val, int) and val in (0, 1):
+        return (True, bool(val))
+    return (False, False)
+
+
+def select_closed_daily_bar(
+    bars: list[dict[str, Any]],
+    market: str,
+    now_utc: dt.datetime | None = None,
+) -> tuple[dict[str, Any] | None, str]:
+    """Return latest completed daily bar for market, dropping forming intraday bars (e.g., KR at 08:05 SGT / 09:05 KST)."""
+    if not bars:
+        return (None, "无可用日线数据")
+    if now_utc is None:
+        now_utc = dt.datetime.now(dt.timezone.utc)
+    elif now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=dt.timezone.utc)
+    else:
+        now_utc = now_utc.astimezone(dt.timezone.utc)
+
+    mkt = str(market or "").strip().upper()
+    schedule = _MARKET_CLOSE_SCHEDULE.get(mkt)
+    if schedule is None:
+        return (bars[-1], "")
+
+    tz, close_hm = schedule
+    now_local = now_utc.astimezone(tz)
+    remaining = list(bars)
+    dropped_dates: list[str] = []
+
+    while remaining:
+        raw_date = str(remaining[-1].get("date") or "")[:10]
+        try:
+            bar_d = dt.date.fromisoformat(raw_date)
+        except ValueError:
+            break
+        is_forming = bar_d > now_local.date() or (
+            bar_d == now_local.date()
+            and (now_local.weekday() >= 5 or (now_local.hour, now_local.minute) < close_hm)
+        )
+        if is_forming:
+            dropped_dates.append(raw_date)
+            remaining.pop()
+        else:
+            break
+
+    if not remaining:
+        return (None, f"剔除 {mkt} 未收盘盘中 K 线（{', '.join(dropped_dates)}）后无已收盘日线")
+    if dropped_dates:
+        return (
+            remaining[-1],
+            f"已剔除 {mkt} 未收盘盘中 K 线（{dropped_dates[0]}），沿用已收盘日线 {remaining[-1].get('date')}",
+        )
+    return (remaining[-1], "")
+
+
+def evaluate_position_stop(pos: dict[str, Any]) -> dict[str, Any]:
+    """Evaluate dual-track trailing stop (50% Supertrend + 50% Cow Channel lower band) with strict fail-closed checks."""
+    if not isinstance(pos, dict):
+        pos = {}
+
+    ticker = str(pos.get("ticker") or "").strip()
+    market = str(pos.get("market") or "").strip().upper()
+    category = str(pos.get("category") or "").strip()
+    exchange_symbol = str(pos.get("exchange_symbol") or "").strip()
+    bar_date = str(pos.get("bar_date") or "").strip()
+    bar_note = str(pos.get("bar_note") or "").strip()
+
+    def _fail(reason: str) -> dict[str, Any]:
+        return {
+            "_evaluated": True,
+            "available": False,
+            "reason": reason,
+            "ticker": ticker,
+            "market": market,
+            "category": category,
+            "exchange_symbol": exchange_symbol,
+            "bar_date": bar_date,
+            "bar_note": bar_note,
+            "close": None,
+            "change_pct": None,
+            "st_direction": None,
+            "st_stop": None,
+            "st_dist_pct": None,
+            "st_bull": None,
+            "st_status_text": "不可用",
+            "cow_direction": None,
+            "cow_lower": None,
+            "cow_mid": None,
+            "cow_upper": None,
+            "cow_dist_pct": None,
+            "cow_bull": None,
+            "cow_status_text": "不可用",
+            "target_hold_pct": None,
+            "state": "unavailable",
+            "badge_text": "⚠️ 指标数据不可用",
+            "badge_cls": "pill-warn",
+            "action_note": reason,
+            "is_new_trigger": False,
+            "banner_alert": None,
+        }
+
+    if pos.get("available") is False:
+        return _fail(str(pos.get("reason") or "数据源不可用"))
+
+    ok_close, close = _parse_finite_float(pos.get("close"), positive=True, allow_none=False)
+    if not ok_close or close is None:
+        return _fail("收盘价无效或缺失")
+
+    ok_chg, change_pct = _parse_finite_float(pos.get("change_pct"), positive=False, allow_none=True)
+    if not ok_chg:
+        return _fail("涨跌幅数值无效")
+
+    st_dir = str(pos.get("st_direction") or "").strip().lower()
+    if st_dir not in ("long", "short"):
+        return _fail("Supertrend 方向无效")
+
+    ok_st_flip, st_flipped_bear = _parse_bool_flag(pos.get("st_flipped_bear"))
+    if not ok_st_flip:
+        return _fail("ST翻空标记无效")
+
+    if st_dir == "long":
+        ok_st, st_stop = _parse_finite_float(pos.get("st_stop"), positive=True, allow_none=False)
+        if not ok_st or st_stop is None:
+            return _fail("Supertrend 多头止损缺失或无效")
+        if st_stop > close * 1.0005:
+            return _fail("Supertrend 多头止损高于收盘价（数据矛盾）")
+        st_bull = True
+        st_status_text = "多头守护"
+    else:
+        # Pine v12.0 outputs null for bull stop when ST flips short; short stop is optional.
+        ok_st, st_stop = _parse_finite_float(pos.get("st_stop"), positive=True, allow_none=True)
+        if not ok_st:
+            return _fail("Supertrend 空头止损数值无效")
+        if st_stop is not None and st_stop < close * 0.9995:
+            return _fail("Supertrend 空头止损低于收盘价（数据矛盾）")
+        st_bull = False
+        st_status_text = "当日翻空" if st_flipped_bear else "已翻空"
+
+    raw_cow_dir = pos.get("cow_direction")
+    if isinstance(raw_cow_dir, bool):
+        return _fail("奶牛通道方向无效")
+    ok_cdir, cdir_f = _parse_finite_float(raw_cow_dir, positive=False, allow_none=False)
+    if not ok_cdir or cdir_f not in (-1.0, 0.0, 1.0):
+        return _fail("奶牛通道方向无效")
+    cow_dir = int(cdir_f)
+
+    ok_cow_flip, cow_flipped_bear = _parse_bool_flag(pos.get("cow_flipped_bear"))
+    if not ok_cow_flip:
+        return _fail("奶牛翻空标记无效")
+
+    ok_clow, cow_lower = _parse_finite_float(pos.get("cow_lower"), positive=True, allow_none=False)
+    if not ok_clow or cow_lower is None:
+        return _fail("奶牛通道下沿缺失或无效")
+
+    ok_cmid, cow_mid = _parse_finite_float(pos.get("cow_mid"), positive=True, allow_none=True)
+    if not ok_cmid:
+        return _fail("奶牛通道中枢无效")
+
+    ok_cup, cow_upper = _parse_finite_float(pos.get("cow_upper"), positive=True, allow_none=True)
+    if not ok_cup:
+        return _fail("奶牛通道上沿无效")
+    if cow_upper is not None and cow_upper < cow_lower * 0.9995:
+        return _fail("奶牛通道上沿低于下沿（数据矛盾）")
+
+    if cow_dir == 1:
+        if close < cow_lower * 0.9995:
+            return _fail("奶牛通道多头但收盘价低于下沿（数据矛盾）")
+        cow_bull = True
+        cow_status_text = "多头守护"
+    elif cow_dir == -1:
+        if cow_upper is not None and close > cow_upper * 1.0005:
+            return _fail("奶牛通道空头但收盘价高于上沿（数据矛盾）")
+        cow_bull = False
+        cow_status_text = "当日破下沿" if cow_flipped_bear else "空头（未收复上沿）"
+    else:
+        cow_bull = close >= cow_lower * 0.9995
+        cow_status_text = "通道待确认（未破下沿）" if cow_bull else "通道待确认（已破下沿）"
+
+    st_dist_pct = round((st_stop / close - 1.0) * 100.0, 2) if st_stop is not None else None
+    cow_dist_pct = round((cow_lower / close - 1.0) * 100.0, 2)
+
+    st_new_break = (not st_bull) and st_flipped_bear
+    cow_new_break = (not cow_bull) and cow_flipped_bear
+    label_ctx = category or market or "进攻仓"
+
+    if st_bull and cow_bull:
+        target_hold_pct = 100
+        state = "hold_100"
+        badge_text = "满额持有 (100%)"
+        badge_cls = "pill-bull"
+        action_note = "双轨均守多，继续持有"
+        is_new_trigger = False
+        banner_alert = None
+    elif st_bull != cow_bull:
+        target_hold_pct = 50
+        if not st_bull:
+            is_new_trigger = st_new_break
+            guard_desc = f"奶牛下沿 {fmt_num(cow_lower)}"
+            broken_desc = "ST(14,2) 翻空"
+        else:
+            is_new_trigger = cow_new_break
+            guard_desc = f"ST 多头止损 {fmt_num(st_stop)}"
+            broken_desc = "奶牛下沿破位"
+
+        if is_new_trigger:
+            state = "cut_half_new"
+            badge_text = "🚨 清一半 (50%)"
+            badge_cls = "pill-bear"
+            action_note = f"当日{broken_desc}，剩余 50% 由{guard_desc}守护"
+            banner_alert = f"{ticker}（{label_ctx}）当日触发{broken_desc} → 🚨 清一半 (50%)，剩余半仓由{guard_desc}守护"
+        else:
+            state = "hold_50_stale"
+            badge_text = "留半仓 (50%)"
+            badge_cls = "pill-warn"
+            action_note = f"单轨已破（存量），剩余 50% 由{guard_desc}守护"
+            banner_alert = None
+    else:
+        target_hold_pct = 0
+        is_new_trigger = st_new_break or cow_new_break
+        if is_new_trigger:
+            state = "exit_all_new"
+            badge_text = "🚨 双破全清"
+            badge_cls = "pill-bear"
+            action_note = "当日触发 ST + 奶牛双破，清空剩余仓位"
+            banner_alert = f"{ticker}（{label_ctx}）当日触发双轨全破（ST + 奶牛下沿）→ 🚨 双破全清 (0%)"
+        else:
+            state = "exit_all_stale"
+            badge_text = "⚠️ 双破全清 · 存量未清 (0%)"
+            badge_cls = "pill-warn"
+            action_note = "双轨均为空头（存量未清），请人工核对退出"
+            banner_alert = None
+
+    return {
+        "_evaluated": True,
+        "available": True,
+        "reason": "",
+        "ticker": ticker,
+        "market": market,
+        "category": category,
+        "exchange_symbol": exchange_symbol,
+        "bar_date": bar_date,
+        "bar_note": bar_note,
+        "close": close,
+        "change_pct": change_pct,
+        "st_direction": st_dir,
+        "st_stop": st_stop,
+        "st_dist_pct": st_dist_pct,
+        "st_bull": st_bull,
+        "st_status_text": st_status_text,
+        "cow_direction": cow_dir,
+        "cow_lower": cow_lower,
+        "cow_mid": cow_mid,
+        "cow_upper": cow_upper,
+        "cow_dist_pct": cow_dist_pct,
+        "cow_bull": cow_bull,
+        "cow_status_text": cow_status_text,
+        "target_hold_pct": target_hold_pct,
+        "state": state,
+        "badge_text": badge_text,
+        "badge_cls": badge_cls,
+        "action_note": action_note,
+        "is_new_trigger": is_new_trigger,
+        "banner_alert": banner_alert,
+    }
+
+
+def reconcile_active_positions(
+    active_positions: dict[str, Any] | None,
+    vol_env_holdings: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Reconcile agent-supplied active_positions against authoritative vol_env.active_holdings.
+
+    Prevents fail-open (unavailable downgraded to empty) and dropped tickers (auto-backfilled as unavailable).
+    """
+    if active_positions is None and vol_env_holdings is None:
+        return None
+
+    ap = active_positions if isinstance(active_positions, dict) else {}
+    vh = vol_env_holdings if isinstance(vol_env_holdings, dict) else {}
+    vh_status = str(vh.get("status") or "").strip().lower()
+    ap_status = str(ap.get("status") or "").strip().lower()
+    fetched_at_sg = str(ap.get("fetched_at_sg") or vh.get("fetched_at_sg") or "")
+
+    if vh_status == "unavailable":
+        return {
+            "status": "unavailable",
+            "reason": str(vh.get("reason") or ap.get("reason") or "主账持仓拉取失败"),
+            "fetched_at_sg": fetched_at_sg,
+            "positions": [],
+        }
+
+    if ap_status == "unavailable" and vh_status != "ok":
+        return {
+            "status": "unavailable",
+            "reason": str(ap.get("reason") or "主动进攻仓数据不可用"),
+            "fetched_at_sg": fetched_at_sg,
+            "positions": [],
+        }
+
+    raw_positions = [p for p in (ap.get("positions") or []) if isinstance(p, dict)]
+
+    if vh_status == "ok":
+        by_mkt_tkr: dict[tuple[str, str], dict[str, Any]] = {}
+        by_tkr: dict[str, dict[str, Any]] = {}
+        for p in raw_positions:
+            tkr = str(p.get("ticker") or "").strip().upper()
+            mkt = str(p.get("market") or "").strip().upper()
+            if not tkr:
+                continue
+            by_mkt_tkr[(mkt, tkr)] = p
+            by_tkr.setdefault(tkr, p)
+
+        used_ids: set[int] = set()
+        reconciled_list: list[dict[str, Any]] = []
+        for item in vh.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            tkr = str(item.get("ticker") or "").strip().upper()
+            mkt = str(item.get("market") or "").strip().upper()
+            cat = str(item.get("category") or "").strip()
+            matched = by_mkt_tkr.get((mkt, tkr)) or by_tkr.get(tkr)
+            if matched is not None:
+                used_ids.add(id(matched))
+                merged = dict(matched)
+                merged.setdefault("ticker", tkr)
+                if not merged.get("market"):
+                    merged["market"] = mkt
+                if not merged.get("category"):
+                    merged["category"] = cat
+                reconciled_list.append(evaluate_position_stop(merged))
+            else:
+                reconciled_list.append(
+                    evaluate_position_stop(
+                        {
+                            "ticker": tkr,
+                            "market": mkt,
+                            "category": cat,
+                            "exchange_symbol": item.get("tv_symbol_hint") or "",
+                            "available": False,
+                            "reason": "未回传该标的止损指标（防漏占位）",
+                        }
+                    )
+                )
+
+        for p in raw_positions:
+            if id(p) not in used_ids:
+                reconciled_list.append(evaluate_position_stop(p))
+
+        return {
+            "status": "ok" if reconciled_list else "empty",
+            "reason": "",
+            "fetched_at_sg": fetched_at_sg,
+            "positions": reconciled_list,
+        }
+
+    if vh_status == "empty" and not raw_positions:
+        return {
+            "status": "empty",
+            "reason": "",
+            "fetched_at_sg": fetched_at_sg,
+            "positions": [],
+        }
+
+    if ap_status == "empty" and not raw_positions:
+        return {
+            "status": "empty",
+            "reason": "",
+            "fetched_at_sg": fetched_at_sg,
+            "positions": [],
+        }
+
+    evaluated = [
+        p if p.get("_evaluated") else evaluate_position_stop(p)
+        for p in raw_positions
+    ]
+    return {
+        "status": "ok" if evaluated else (ap_status or "empty"),
+        "reason": str(ap.get("reason") or ""),
+        "fetched_at_sg": fetched_at_sg,
+        "positions": evaluated,
+    }
+
+
+def render_active_positions_section(reconciled: dict[str, Any] | None) -> tuple[str, list[str]]:
+    """Render the 30% Active Offensive Holdings dual-stop ledger section and return (html, banner_alerts)."""
+    if reconciled is None:
+        return ("", [])
+
+    status = str(reconciled.get("status") or "").strip().lower()
+    fetched_at = str(reconciled.get("fetched_at_sg") or "").strip()
+    meta_sub = f'<span class="pos-meta">主账同步：{esc(fetched_at)} · 双轨口径：ST(14,2) 50% + 奶牛下沿(EMA30−1ATR) 50%</span>' if fetched_at else '<span class="pos-meta">双轨口径：ST(14,2) 50% + 奶牛下沿(EMA30−1ATR) 50%</span>'
+
+    if status == "empty":
+        html_block = f"""
+    <section class="section">
+      <div class="pos-head-row">
+        <h2>30% 主动进攻仓 · 移动止损</h2>
+        {meta_sub}
+      </div>
+      <div class="pos-empty">当前无主动进攻仓（主账仅含 LTH 长期底仓或空仓），今日无需执行移动止损。</div>
+    </section>"""
+        return (html_block, [])
+
+    if status == "unavailable":
+        reason = str(reconciled.get("reason") or "主账或指标不可用")
+        html_block = f"""
+    <section class="section">
+      <div class="pos-head-row">
+        <h2>30% 主动进攻仓 · 移动止损</h2>
+        {meta_sub}
+      </div>
+      <div class="pos-unavail">⚠️ 主动进攻仓不可用（{esc(reason)}）· 无法自动核对移动止损，请人工检查主账与盘面。</div>
+    </section>"""
+        return (html_block, [])
+
+    positions = [
+        p if (isinstance(p, dict) and p.get("_evaluated")) else evaluate_position_stop(p)
+        for p in (reconciled.get("positions") or [])
+    ]
+    banner_alerts: list[str] = []
+    rows_html: list[str] = []
+
+    for p in positions:
+        if p.get("banner_alert"):
+            banner_alerts.append(str(p["banner_alert"]))
+
+        row_cls = (
+            "pos-row-alert"
+            if p.get("is_new_trigger")
+            else ("pos-row-unavail" if not p.get("available") else "")
+        )
+        cat_pill = f'<span class="pill pill-muted">{esc(p.get("category"))}</span>' if p.get("category") else ""
+        mkt_pill = f'<span class="pos-mkt">{esc(p.get("market"))}</span>' if p.get("market") else ""
+        sub_meta_parts = [x for x in (p.get("exchange_symbol"), p.get("bar_date")) if x]
+        sub_meta = " · ".join(esc(x) for x in sub_meta_parts)
+        note_html = f'<div class="sub-td">{esc(p.get("bar_note"))}</div>' if p.get("bar_note") else ""
+
+        if not p.get("available"):
+            close_cell = '<span class="muted">—</span>'
+            st_cell = '<span class="muted">—</span>'
+            cow_cell = '<span class="muted">—</span>'
+            verdict_cell = (
+                f'<span class="pill {esc(p.get("badge_cls") or "pill-warn")}">{esc(p.get("badge_text"))}</span>'
+                f'<div class="sub-td">{esc(p.get("reason") or "数据缺失")}</div>'
+            )
+        else:
+            chg = p.get("change_pct")
+            chg_cls = "pos" if (chg is not None and chg >= 0) else "neg"
+            chg_html = (
+                f' <span class="pos-chg {chg_cls}">{fmt_num(chg, 2, signed=True, suffix="%")}</span>'
+                if chg is not None
+                else ""
+            )
+            close_cell = f'<b>{fmt_num(p.get("close"))}</b>{chg_html}'
+
+            st_col_cls = "pos" if p.get("st_bull") else "neg"
+            st_price_str = fmt_num(p.get("st_stop")) if p.get("st_stop") is not None else "—"
+            st_dist_str = (
+                f"（{fmt_num(p.get('st_dist_pct'), 2, signed=True, suffix='%')}）"
+                if p.get("st_dist_pct") is not None
+                else ""
+            )
+            st_cell = (
+                f'<div><span class="{st_col_cls}" style="font-weight:700;">{esc(p.get("st_status_text"))}</span></div>'
+                f'<div class="sub-td">止损价 <b>{st_price_str}</b>{st_dist_str}</div>'
+            )
+
+            cow_col_cls = "pos" if p.get("cow_bull") else "neg"
+            cow_dist_str = (
+                f"（{fmt_num(p.get('cow_dist_pct'), 2, signed=True, suffix='%')}）"
+                if p.get("cow_dist_pct") is not None
+                else ""
+            )
+            cow_cell = (
+                f'<div><span class="{cow_col_cls}" style="font-weight:700;">{esc(p.get("cow_status_text"))}</span></div>'
+                f'<div class="sub-td">下沿 <b>{fmt_num(p.get("cow_lower"))}</b>{cow_dist_str}</div>'
+            )
+
+            verdict_cell = (
+                f'<span class="pill {esc(p.get("badge_cls") or "pill-muted")}">{esc(p.get("badge_text"))}</span>'
+                f'<div class="sub-td">{esc(p.get("action_note"))}</div>'
+            )
+
+        rows_html.append(f"""
+        <tr class="{row_cls}">
+          <td data-label="标的 / 分类">
+            <div class="pos-sym-line"><b>{esc(p.get("ticker"))}</b> {mkt_pill} {cat_pill}</div>
+            {f'<div class="sub-td">{sub_meta}</div>' if sub_meta else ''}
+            {note_html}
+          </td>
+          <td data-label="最新收盘 (1D)">{close_cell}</td>
+          <td data-label="Supertrend(14,2) · 管50%">{st_cell}</td>
+          <td data-label="奶牛下沿(EMA30−1ATR) · 管50%">{cow_cell}</td>
+          <td data-label="执行裁决">{verdict_cell}</td>
+        </tr>""")
+
+    html_block = f"""
+    <section class="section">
+      <div class="pos-head-row">
+        <h2>30% 主动进攻仓 · 移动止损</h2>
+        {meta_sub}
+      </div>
+      <div class="pos-card">
+        <table class="pos-table">
+          <thead>
+            <tr>
+              <th>标的 / 分类</th>
+              <th>最新收盘 (1D)</th>
+              <th>Supertrend(14,2) · 管50%</th>
+              <th>奶牛下沿(EMA30−1ATR) · 管50%</th>
+              <th>执行裁决</th>
+            </tr>
+          </thead>
+          <tbody>
+            {"".join(rows_html)}
+          </tbody>
+        </table>
+      </div>
+    </section>"""
+    return (html_block, banner_alerts)
+
+
 def render_html(data: dict[str, Any]) -> str:
     mode = data.get("mode", "daily")
     title = data.get("title") or ("未来资本 · 每日三标的四维技术与期权晨报" if mode == "daily" else "未来资本 · 技术分析报告")
@@ -571,8 +1128,18 @@ def render_html(data: dict[str, Any]) -> str:
     holiday_note = data.get("holiday_note") or ""
     overview_bullets = data.get("overview_bullets") or []
     symbols = data.get("symbols") or []
+    vol_env = data.get("vol_env") or {}
 
-    all_alerts = []
+    active_pos_sec = ""
+    pos_banner_alerts: list[str] = []
+    if mode == "daily":
+        reconciled_positions = reconcile_active_positions(
+            data.get("active_positions"),
+            vol_env.get("active_holdings") if isinstance(vol_env, dict) else None,
+        )
+        active_pos_sec, pos_banner_alerts = render_active_positions_section(reconciled_positions)
+
+    all_alerts = list(pos_banner_alerts)
     for s in symbols:
         for a in (s.get("new_alerts") or []):
             all_alerts.append(f"{s.get('ticker')}: {a}")
@@ -750,6 +1317,33 @@ def render_html(data: dict[str, Any]) -> str:
   td:last-child {{ color: var(--text); font-variant-numeric: tabular-nums; }}
   .sub-td {{ font-size: 11px; color: var(--muted); margin-top: 2px; }}
   footer {{ margin-top: 28px; text-align: center; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); padding-top: 14px; }}
+  .pos-head-row {{ display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }}
+  .pos-head-row h2 {{ margin-bottom: 0; }}
+  .pos-meta {{ font-size: 12px; color: var(--muted); }}
+  .pos-empty {{ background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; color: var(--muted); font-size: 13px; }}
+  .pos-unavail {{ background: var(--warn-bg); border: 1px solid #f0d599; border-radius: 12px; padding: 14px 16px; color: var(--warn); font-size: 13px; font-weight: 600; }}
+  .pos-card {{ background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }}
+  .pos-table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+  .pos-table th {{ text-align: left; padding: 10px 12px; background: var(--card-alt); color: var(--muted); font-size: 12px; font-weight: 700; border-bottom: 1px solid var(--border); }}
+  .pos-table td {{ padding: 10px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; width: auto; color: var(--text); font-variant-numeric: tabular-nums; }}
+  .pos-table td:first-child {{ width: auto; color: var(--text); padding-right: 12px; }}
+  .pos-table tbody tr:last-child td {{ border-bottom: none; }}
+  .pos-table tr.pos-row-alert {{ background: var(--bear-bg); }}
+  .pos-table tr.pos-row-unavail {{ background: var(--warn-bg); }}
+  .pos-sym-line {{ display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 14px; }}
+  .pos-mkt {{ display: inline-block; padding: 1px 6px; border-radius: 4px; background: var(--blue-bg); color: var(--accent); font-size: 10.5px; font-weight: 700; }}
+  .pos-chg {{ font-size: 12px; font-weight: 600; }}
+  @media (max-width: 680px) {{
+    .pos-card {{ background: transparent; border: none; }}
+    .pos-table thead {{ display: none; }}
+    .pos-table, .pos-table tbody, .pos-table tr, .pos-table td {{ display: block; width: 100%; }}
+    .pos-table tr {{ background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }}
+    .pos-table tr.pos-row-alert {{ background: var(--bear-bg); border-color: #f1b7b4; }}
+    .pos-table tr.pos-row-unavail {{ background: var(--warn-bg); border-color: #f0d599; }}
+    .pos-table td {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 6px 0; text-align: right; border-bottom: 1px dashed #e2e8f0; }}
+    .pos-table td:last-child {{ border-bottom: none; }}
+    .pos-table td::before {{ content: attr(data-label); color: var(--muted); font-size: 11.5px; font-weight: 600; text-align: left; flex-shrink: 0; }}
+  }}
   @media (max-width: 640px) {{
     body {{ padding: 12px 10px 36px; }}
     .sym-price-box {{ text-align: left; }}
@@ -770,6 +1364,7 @@ def render_html(data: dict[str, Any]) -> str:
   </header>
 
   {alert_banner}
+  {active_pos_sec}
   {overview_sec}
   {vol_sec}
   {traders_sec}
