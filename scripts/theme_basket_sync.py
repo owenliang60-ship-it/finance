@@ -150,14 +150,14 @@ def _text(value: Any) -> Optional[str]:
 
 
 def _norm_cik(val: Any) -> Optional[str]:
-    """SEC CIK as 10 zero-padded digits, so '123456' and '0000123456' compare equal."""
+    """SEC CIK as 10 zero-padded digits, so '123456' and '0000123456' compare equal.
+
+    Anything else ('N/A', '-', 11+ digits) is None: two unknown CIKs must never dedupe.
+    """
     s = "" if val is None else str(val).strip()
-    if not s:
-        return None
-    if s.isascii() and s.isdigit():
-        s = s.lstrip("0")
-        return s.zfill(10) if s else None
-    return s
+    if s.isascii() and s.isdigit() and len(s) <= 10 and s.lstrip("0"):
+        return s.lstrip("0").zfill(10)
+    return None
 
 
 def main_repo_root() -> Path:
@@ -694,17 +694,18 @@ def build_envelope(*, rows: Sequence[Mapping[str, Any]], payload_id: str,
 
 def _env_refusal(db_path, allow_noncloud: bool) -> Optional[str]:
     """None when this process may write `db_path`; otherwise the refusal message."""
+    target = os.path.realpath(str(db_path))
+    if target in {os.path.realpath(str(root / "data" / name)) for root in {REPO_ROOT, main_repo_root()}
+                  for name in ("company.db", "prosperity.db")}:
+        return "refusing: theme tables never go into company.db or prosperity.db"
     if os.environ.get("FINANCE_ENV") == "cloud":
         return None
     if not allow_noncloud:
         return "refusing: FINANCE_ENV is not 'cloud'"
     from src.data.theme_basket_store import _protected_paths
 
-    protected = _protected_paths() | {os.path.realpath(str(root / "data" / name))
-                                      for root in {REPO_ROOT, main_repo_root()}
-                                      for name in ("company.db", "prosperity.db")}
-    if os.path.realpath(str(db_path)) in protected:
-        return "refusing: production databases need FINANCE_ENV=cloud"
+    if target in _protected_paths():
+        return "refusing: production market.db needs FINANCE_ENV=cloud"
     return None
 
 
@@ -989,9 +990,8 @@ class GateError(Exception):
     """A Step C hard gate failed: nothing is sent and outbox/ is left for inspection."""
 
 
-def _gate_outbox(exchange_dir, today: str):
-    dirs = ensure_exchange_dirs(exchange_dir)
-    delta_path, payload_path = dirs["inbox"] / "delta.json", dirs["outbox"] / "payload.json"
+def _gate_outbox(dirs: Mapping[str, Path], payload_path: Path, today: str):
+    delta_path = dirs["inbox"] / "delta.json"
     if not delta_path.is_file() or not payload_path.is_file():
         raise GateError("inbox/delta.json and outbox/payload.json must both exist")
     try:
@@ -1021,7 +1021,7 @@ def _gate_outbox(exchange_dir, today: str):
             isinstance(n, dict) and isinstance(n.get("symbol"), str) and isinstance(n.get("note"), str)
             and n["symbol"] in pivots for n in notes):
         raise GateError("pivot_notes must be [{symbol, note}] for symbols in pivot_candidates")
-    return dirs, delta, payload
+    return delta, payload
 
 
 def merge_classifications(delta: Mapping[str, Any], items: Sequence[Mapping[str, Any]],
@@ -1122,42 +1122,43 @@ def _replay_files(pending_dir: Path, baskets_doc, overrides_doc, ssh_runner, sen
             break
         path.unlink()
         sent += 1
-        sent_symbols |= {r.get("symbol") for r in sealed["rows"]}
+        sent_symbols |= ({r.get("symbol") for r in sealed["rows"]}
+                         - {sym for sym, _ in reply.get("quarantined") or []})
         quarantined += [list(q) for q in reply.get("quarantined") or []]
     queued = {r.get("symbol") for _, _, _, sealed in queue[sent:] for r in sealed["rows"]}
     return rc, sent, sent_symbols, quarantined, queued
 
 
-_RETRYABLE_ERRORS = ("transport_failed:", "bad_cloud_reply:", "backup_failed:", "pending_replay_failed:")
-
-
-def _is_retryable_cloud_failure(rc: int, reply: Mapping[str, Any]) -> bool:
-    """Lock busy, transport and backup trouble retry from pending/; contract rejections do not."""
-    error = str(reply.get("error") or "")
-    return rc == EXIT_LOCK_BUSY or error == "pending replay failed first" or error.startswith(_RETRYABLE_ERRORS)
-
-
 def commit_outbox(*, exchange_dir, baskets_path, overrides_path, market_db_path,
                   today: Optional[str] = None, ssh_runner=None, pull_runner=None,
                   send_telegram: bool = True, skip_pull: bool = False) -> int:
-    """Step C: gate → merge → :memory: rehearsal → claim → replay pending/ → seal the rest → send → pull."""
+    """Step C: claim → gate → merge → :memory: rehearsal → replay pending/ → seal the rest → send → pull."""
     from src.data.theme_basket_store import compute_payload_id
 
     ssh_runner = ssh_runner or default_ssh_runner
+    dirs = ensure_exchange_dirs(exchange_dir)
+    payload_path = dirs["outbox"] / "payload.json"
+    # Claim the file before reading it: a payload.json written after this belongs to the next run.
+    claimed = dirs["outbox"] / f".inflight.{os.getpid()}.{time.monotonic_ns()}.json"
     try:
-        dirs, delta, payload = _gate_outbox(exchange_dir, today or today_shanghai())
+        try:
+            os.replace(str(payload_path), str(claimed))
+        except FileNotFoundError:
+            raise GateError("inbox/delta.json and outbox/payload.json must both exist") from None
+        delta, payload = _gate_outbox(dirs, claimed, today or today_shanghai())
         baskets_doc, overrides_doc = load_json(baskets_path), load_json(overrides_path)
         merged, local_q = merge_classifications(delta, payload["classifications"], baskets_doc)
         clean, quarantined = rehearse(baskets_doc, overrides_doc, list(delta["auto_rows"]) + merged)
-    except GateError as exc:
-        _emit({"ok": False, "mode": "commit-outbox", "error": f"gate: {exc}"})
-        return EXIT_FAIL
     except Exception as exc:
-        _emit({"ok": False, "mode": "commit-outbox", "error": f"rehearsal_failed: {type(exc).__name__}: {exc}"})
+        if claimed.exists():  # put it back for inspection, but never over a newer payload.json
+            try:
+                os.link(str(claimed), str(payload_path))
+            except FileExistsError:
+                os.replace(str(claimed), str(dirs["outbox"] / f"rejected.{os.getpid()}.{time.monotonic_ns()}.json"))
+            claimed.unlink(missing_ok=True)
+        error = f"gate: {exc}" if isinstance(exc, GateError) else f"rehearsal_failed: {type(exc).__name__}: {exc}"
+        _emit({"ok": False, "mode": "commit-outbox", "error": error})
         return EXIT_FAIL
-    # Claim the file: a payload.json written while SSH runs belongs to the next run.
-    claimed = dirs["outbox"] / f".inflight.{os.getpid()}.{time.monotonic_ns()}.json"
-    os.replace(str(dirs["outbox"] / "payload.json"), str(claimed))
     local_q += quarantined
     warnings: List[str] = []
     rc, _, sent_symbols, replayed_q, queued = _replay_files(
@@ -1182,14 +1183,17 @@ def commit_outbox(*, exchange_dir, baskets_path, overrides_path, market_db_path,
     if rc == EXIT_OK:
         rc, reply = _send_sealed(sealed, baskets_doc, overrides_doc, ssh_runner, send_telegram)
     if rc != EXIT_OK:
-        parked = _is_retryable_cloud_failure(rc, reply)
-        if not parked:  # a permanent rejection: keep it for inspection, outside payload.json
-            os.replace(str(claimed), str(dirs["outbox"] / f"rejected.{sealed['payload_id'][:12]}.json"))
-        else:
-            if rows or not any(dirs["pending"].glob("*.json")):
-                atomic_write_json(dirs["pending"] / f"{sealed['payload_id']}.json", sealed)
-            claimed.unlink(missing_ok=True)
-        _emit(dict(summary, ok=False, parked=parked, error=reply.get("error"), warnings=warnings))
+        # The local gate and rehearsal passed: park every cloud failure for --replay-pending.
+        if rows or sealed["local_summary"]["pivot_notes"] or not any(dirs["pending"].glob("*.json")):
+            target = dirs["pending"] / f"{sealed['payload_id']}.json"
+            if target.exists():
+                try:
+                    _load_sealed(target)
+                except ValueError:  # never overwrite a corrupt file: it is the evidence
+                    target = dirs["pending"] / f"{int(time.time())}-{sealed['payload_id']}.json"
+            atomic_write_json(target, sealed)
+        claimed.unlink(missing_ok=True)
+        _emit(dict(summary, ok=False, parked=True, error=reply.get("error"), warnings=warnings))
         return rc
     claimed.unlink(missing_ok=True)
     (dirs["pending"] / f"{sealed['payload_id']}.json").unlink(missing_ok=True)

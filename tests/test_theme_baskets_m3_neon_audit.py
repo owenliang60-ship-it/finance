@@ -353,15 +353,20 @@ def _envelope(rows):
 
 # ---------------------------------------------------------------- #1 local company.db / prosperity.db
 
+@pytest.mark.parametrize("env, allow_noncloud", [("local", True), ("cloud", False)])
 @pytest.mark.parametrize("target", [
     sync.DEFAULT_COMPANY_DB,
     sync.main_repo_root() / "data" / "company.db",
     sync.REPO_ROOT / "data" / "prosperity.db",
     sync.main_repo_root() / "data" / "prosperity.db",
 ])
-def test_noncloud_writer_refuses_local_company_and_prosperity_db(target, tmp_path, monkeypatch):
-    """Sentinels make a missing guard fail loudly without ever opening the real file."""
-    monkeypatch.setenv("FINANCE_ENV", "local")
+def test_writer_refuses_company_and_prosperity_db_in_any_env(target, env, allow_noncloud, tmp_path,
+                                                            monkeypatch):
+    """Theme tables never go into company.db / prosperity.db, not even with FINANCE_ENV=cloud.
+
+    Sentinels make a missing guard fail loudly without ever opening the real file.
+    """
+    monkeypatch.setenv("FINANCE_ENV", env)
 
     def sentinel(*args, **kwargs):
         raise AssertionError("must refuse before touching the target db")
@@ -376,10 +381,10 @@ def test_noncloud_writer_refuses_local_company_and_prosperity_db(target, tmp_pat
 
     before = fingerprint()
     rc, res = sync.apply_cloud_envelope(_envelope([]), db_path=target, lock_path=tmp_path / "w.lock",
-                                        allow_noncloud=True, send_telegram_fn=sentinel)
+                                        allow_noncloud=allow_noncloud, send_telegram_fn=sentinel)
     assert rc == sync.EXIT_FAIL and res["error"].startswith("refusing")
     rc, res = sync.cloud_private_lock(db_path=target, lock_path=tmp_path / "w.lock", action="unlock",
-                                      symbol="PRIV1", allow_noncloud=True)
+                                      symbol="PRIV1", allow_noncloud=allow_noncloud)
     assert rc == sync.EXIT_FAIL and res["error"].startswith("refusing")
     assert fingerprint() == before
 
@@ -392,7 +397,19 @@ def test_norm_cik():
     assert sync._norm_cik("0000") is None
     assert sync._norm_cik("  ") is None
     assert sync._norm_cik(None) is None
-    assert sync._norm_cik("ABC12") == "ABC12"
+    assert sync._norm_cik("1") == "0000000001"
+    assert sync._norm_cik("0001045810") == "0001045810"
+    for bad in ("ABC12", "N/A", "-", "12345678901", "\uff11\uff12\uff13", "12 34"):
+        assert sync._norm_cik(bad) is None, bad
+
+
+def test_non_numeric_cik_never_dedupes_two_companies(tmp_path):
+    market = _local_market(tmp_path, sm=[("NAAA", "N/A", 0), ("NBBB", "N/A", 0)])
+    delta = _detect(tmp_path, market)
+    missing = {m["symbol"]: m for m in delta["missing_symbols"]}
+    assert {"NAAA", "NBBB"} <= set(missing)
+    assert missing["NAAA"]["cik"] is None and missing["NBBB"]["cik"] is None
+    assert not any(r["is_superseded"] for r in delta["auto_rows"])
 
 
 def test_same_cik_with_and_without_leading_zeros_keeps_one_active_row(tmp_path):
@@ -436,6 +453,44 @@ def test_commit_outbox_keeps_a_payload_written_during_ssh(tmp_path, script):
     _commit(tmp_path, cloud)
     assert json.loads(newer.read_text(encoding="utf-8")) == second
     assert not list(newer.parent.glob(".inflight.*"))
+
+
+@pytest.mark.parametrize("rehearsal_fails", [False, True], ids=["rehearsal_ok", "rehearsal_fails"])
+def test_payload_written_during_rehearsal_survives(tmp_path, monkeypatch, rehearsal_fails):
+    market = _local_market(tmp_path)
+    delta = _detect(tmp_path, market)
+    _outbox(tmp_path, delta, [_cls("AAAX")])
+    outbox = tmp_path / "xchg" / "outbox"
+    newer = outbox / "payload.json"
+    second = {"delta_sha256": "e" * 64, "classifications": [], "marker": "written during rehearsal"}
+    real = sync.rehearse
+
+    def rehearse_and_race(*args, **kwargs):
+        sync.atomic_write_json(newer, second)
+        if rehearsal_fails:
+            raise ValueError("dictionary broke")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(sync, "rehearse", rehearse_and_race)
+    cloud = _Cloud(tmp_path)
+    rc = _commit(tmp_path, cloud)
+    assert json.loads(newer.read_text(encoding="utf-8")) == second
+    assert not list(outbox.glob(".inflight.*"))
+    if rehearsal_fails:
+        assert rc == sync.EXIT_FAIL and cloud.calls == []
+        rejected = list(outbox.glob("rejected.*.json"))
+        assert len(rejected) == 1
+        assert json.loads(rejected[0].read_text(encoding="utf-8"))["classifications"][0]["symbol"] == "AAAX"
+    else:
+        assert rc == sync.EXIT_OK
+        assert "AAAX" in cloud.rows()
+
+
+def test_commit_outbox_without_payload_is_a_gate_error(tmp_path, capsys):
+    sync.ensure_exchange_dirs(tmp_path / "xchg")
+    assert _commit(tmp_path, _Cloud(tmp_path)) == sync.EXIT_FAIL
+    assert _last_json(capsys)["error"].startswith("gate:")
+    assert list((tmp_path / "xchg" / "outbox").iterdir()) == []
 
 
 def test_detect_delta_keeps_inflight_claims(tmp_path):
@@ -537,43 +592,28 @@ def test_commit_outbox_quarantines_bad_type_rows_locally(tmp_path, capsys):
     assert not {"AAAX", "BBBX", "CCCX"} & set(cloud.rows())
 
 
-# ---------------------------------------------------------------- #9 only retryable failures are parked
+# ---------------------------------------------------------------- #9 every cloud failure is parked
 
-@pytest.mark.parametrize("rc, error, retryable", [
-    (75, "lock_busy", True),
-    (1, "transport_failed: TimeoutExpired: ssh", True),
-    (1, "bad_cloud_reply: rc=255 stderr=''", True),
-    (1, "backup_failed: RuntimeError: insufficient disk", True),
-    (1, "pending replay failed first", True),
-    (1, "apply_failed: ValueError: poison", False),
-    (1, "bad_envelope: KeyError: 'rows'", False),
-    (1, "refusing: FINANCE_ENV is not 'cloud'", False),
+@pytest.mark.parametrize("rc, error", [
+    (75, "lock_busy"),
+    (1, "transport_failed: TimeoutExpired: ssh"),
+    (1, "backup_failed: RuntimeError: insufficient disk"),
+    (1, "apply_failed: OperationalError: database is locked"),
+    (1, "apply_failed: ValueError: poison"),
+    (1, "bad_envelope: KeyError: 'rows'"),
 ])
-def test_is_retryable_cloud_failure(rc, error, retryable):
-    assert sync._is_retryable_cloud_failure(rc, {"ok": False, "error": error}) is retryable
-
-
-@pytest.mark.parametrize("error, parked", [
-    ("apply_failed: ValueError: poison", False),
-    ("backup_failed: RuntimeError: insufficient disk", True),
-])
-def test_only_retryable_cloud_failures_are_parked(tmp_path, capsys, error, parked):
+def test_every_cloud_failure_after_rehearsal_is_parked(tmp_path, capsys, rc, error):
+    """The local gate and :memory: rehearsal already passed, so any cloud failure is parked for replay."""
+    assert not hasattr(sync, "_is_retryable_cloud_failure")
     market = _local_market(tmp_path)
     delta = _detect(tmp_path, market)
     _outbox(tmp_path, delta, [_cls("AAAX")])
-    cloud = _Cloud(tmp_path, script=[(1, {"ok": False, "error": error})])
-    assert _commit(tmp_path, cloud) == sync.EXIT_FAIL
+    cloud = _Cloud(tmp_path, script=[(rc, {"ok": False, "error": error})])
+    assert _commit(tmp_path, cloud) == rc
     out = _last_json(capsys)
-    assert out["parked"] is parked
-    outbox = tmp_path / "xchg" / "outbox"
-    assert not (outbox / "payload.json").exists()
-    assert not list(outbox.glob(".inflight.*"))
-    if parked:
-        assert [p.name for p in _pending(tmp_path)] == [out["payload_id"] + ".json"]
-        assert not list(outbox.glob("rejected.*"))
-    else:
-        assert _pending(tmp_path) == []
-        assert [p.name for p in outbox.glob("rejected.*")] == [f"rejected.{out['payload_id'][:12]}.json"]
+    assert out["parked"] is True and out["error"] == error
+    assert [p.name for p in _pending(tmp_path)] == [out["payload_id"] + ".json"]
+    assert list((tmp_path / "xchg" / "outbox").iterdir()) == []
 
 
 # ---------------------------------------------------------------- #11 rows already queued in pending/
@@ -642,3 +682,71 @@ def test_replay_pending_reports_cloud_quarantine(tmp_path, capsys):
     out = _last_json(capsys)
     assert [q[0] for q in out["replayed_quarantined"]] == ["PRIV1"]
     assert "already exists" in out["replayed_quarantined"][0][1]
+
+
+# ---------------------------------------------------------------- round 2: #10 / #11 replay and parking
+
+def test_row_quarantined_on_replay_is_resent_from_this_round(tmp_path, capsys):
+    market = _local_market(tmp_path)
+    delta = _detect(tmp_path, market)
+    dirs = sync.ensure_exchange_dirs(tmp_path / "xchg")
+    stale = [dict(_store_row("AAAX", "stale copy"), l2_id="no_such_l2")]
+    sync.atomic_write_json(dirs["pending"] / "old.json", {
+        "schema_version": 1, "payload_id": store.compute_payload_id(stale), "rows": stale,
+        "created_at": "2026-11-28T00:00:00Z", "local_summary": {}})
+    _outbox(tmp_path, delta, [_cls("AAAX")])
+    cloud = _Cloud(tmp_path)
+    assert _commit(tmp_path, cloud) == sync.EXIT_OK
+    out = _last_json(capsys)
+    assert [q[0] for q in out["replayed_quarantined"]] == ["AAAX"]
+    assert "AAAX" in {r["symbol"] for r in cloud.calls[1]["rows"]}
+    assert out["cloud"]["quarantined"] == []
+    assert cloud.rows()["AAAX"][4] == "AAAX note"
+
+
+def test_zero_row_package_with_pivot_notes_is_parked(tmp_path, capsys):
+    market = _local_market(tmp_path)
+    delta = _detect(tmp_path, market)
+    _outbox(tmp_path, delta, [_cls("AAAX")])
+    cloud = _Cloud(tmp_path, script=[LOCK_BUSY, LOCK_BUSY])
+    assert _commit(tmp_path, cloud) == sync.EXIT_LOCK_BUSY
+    first = _pending(tmp_path)
+
+    delta2 = _detect(tmp_path, market)
+    delta2["pivot_candidates"] = [{"symbol": "PIVX", "old_profile_sector": "Energy",
+                                   "old_profile_industry": "Oil & Gas", "new_profile_sector": "Technology",
+                                   "new_profile_industry": "Software"}]
+    delta2["delta_sha256"] = sync.compute_delta_sha256(delta2)
+    sync.atomic_write_json(tmp_path / "xchg" / "inbox" / "delta.json", delta2)
+    sync.atomic_write_json(tmp_path / "xchg" / "outbox" / "payload.json", {
+        "delta_sha256": delta2["delta_sha256"], "classifications": [_cls("AAAX")],
+        "pivot_notes": [{"symbol": "PIVX", "note": "建议复核是否转入软件赛道"}]})
+    capsys.readouterr()
+    assert _commit(tmp_path, cloud) == sync.EXIT_LOCK_BUSY
+    out = _last_json(capsys)
+    assert out["rows"] == 0 and out["parked"] is True
+    new = [p for p in _pending(tmp_path) if p not in first]
+    assert len(new) == 1
+    notes = json.loads(new[0].read_text(encoding="utf-8"))["local_summary"]["pivot_notes"]
+    assert notes == [{"symbol": "PIVX", "note": "建议复核是否转入软件赛道"}]
+
+
+def test_parking_never_overwrites_a_corrupt_pending_file(tmp_path, capsys):
+    market = _local_market(tmp_path)
+    delta = _detect(tmp_path, market)
+    _outbox(tmp_path, delta, [_cls("AAAX")])
+    cloud = _Cloud(tmp_path, script=[LOCK_BUSY])
+    assert _commit(tmp_path, cloud) == sync.EXIT_LOCK_BUSY
+    [target] = _pending(tmp_path)
+    target.write_text("{corrupt", encoding="utf-8")
+
+    _outbox(tmp_path, delta, [_cls("AAAX")])  # the same payload again → the same payload_id
+    capsys.readouterr()
+    assert _commit(tmp_path, cloud) == sync.EXIT_FAIL
+    out = _last_json(capsys)
+    assert out["parked"] is True and out["payload_id"] + ".json" == target.name
+    assert target.read_text(encoding="utf-8") == "{corrupt"
+    others = [p for p in _pending(tmp_path) if p != target]
+    assert len(others) == 1 and others[0].name.endswith("-" + target.name)
+    assert sync._load_sealed(others[0])["payload_id"] == out["payload_id"]
+    assert len(cloud.calls) == 1  # the corrupt file stopped the replay before any send
