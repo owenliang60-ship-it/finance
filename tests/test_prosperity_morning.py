@@ -131,36 +131,42 @@ def test_db_is_not_modified(env):
     assert env['db'].read_bytes() == before
 
 
-# --- 2026-11-19: weekly M16 momentum picks (pool ∩ 14-week momentum top 30) -----------------------
+# --- 2026-11-19: weekly M16 momentum picks (pool ∩ 14-week momentum top board_top_cut) ---------------
 
 from pathlib import Path  # noqa: E402
 
+from src.data import prosperity_delivery as d  # noqa: E402
 from src.data.prosperity_pool import _universe  # noqa: E402
 
 AS_OF = '2026-11-14'
 UNIVERSE = ['U{:02d}'.format(i) for i in range(1, 41)]          # U01 has the best score … U38
-INELIGIBLE = {'U03', 'U10'}                                       # scored, not long-eligible
+INELIGIBLE = {'U03', 'U10'}                                       # scored, not long-eligible: score 0, last
 UNAVAILABLE = {'U39': 'split_unresolved', 'U40': 'price_gap'}
 # long ranks: U01 1, U02 2, U04 3, U05 4, … U09 8, U11 9, … Uk k-2 → U22 #20, U32 #30, U33 #31
+# every scored row is in U70: cut = min(ceil(38 / 5), ceil(36 / 2)) = 8 → U09 #8 is in, U11 #9 is out
 
 
-def momentum_payload(universe=UNIVERSE):
-    scored, rank = [], 0
-    for i, s in enumerate(u for u in universe if u not in UNAVAILABLE):
-        eligible = s not in INELIGIBLE
-        rank += eligible
-        scored.append({'symbol': s, 'score': 90.0 - i, 'return': 0.5 - i * 0.01 if eligible else -0.1,
-                       'eligible': eligible, 'rank': rank if eligible else None, 'er': 0.2,
-                       'r_squared': 0.5, 'slope': 0.01, 'drawdown': 0.1, 'dollar_volume': 1e9})
+def momentum_payload(universe=UNIVERSE, ineligible=INELIGIBLE):
+    names = [u for u in universe if u not in UNAVAILABLE]
+    longs = [s for s in names if s not in ineligible]
+    common = {'er': 0.2, 'r_squared': 0.5, 'slope': 0.01, 'drawdown': 0.1, 'dollar_volume': 1e9,
+              'udv': 1.5, 'top100_days': 70, 'in_u70': True}
+    scored = [{'symbol': s, 'score': 90.0 - i, 'return': 0.5 - i * 0.01, 'eligible': True, 'rank': i + 1, **common}
+              for i, s in enumerate(longs)]
+    scored += [{'symbol': s, 'score': 0.0, 'return': -0.1, 'eligible': False, 'rank': None, **common}
+               for s in names if s in ineligible]
+    if scored:
+        scored[0]['udv'] = None                                   # no priced down day: a valid row
     return {'schema_version': 1, 'as_of': AS_OF, 'generated_at': '2026-11-14T08:58:30Z',
-            'price_date': '2026-11-13', 'scoring': 'v4', 'weights': {},
+            'price_date': '2026-11-13', 'scoring': 'udv1', 'weights': {},
             'universe': {'count': len(universe), 'symbols': list(universe)},
             'boards': {'14w': {'days': 70, 'window': ['2026-08-04', '2026-11-13'], 'scored': scored,
                                'unavailable': {s: w for s, w in sorted(UNAVAILABLE.items()) if s in universe},
+                               'unavailable_top100_days': {s: 0 for s in sorted(UNAVAILABLE) if s in universe},
                                'adjustments': []}}}
 
 
-def momentum_pool(symbols=('U22', 'U05', 'U33', 'U03', 'U40'), universe=UNIVERSE, as_of=AS_OF):
+def momentum_pool(symbols=('U22', 'U05', 'U11', 'U09', 'U03', 'U40'), universe=UNIVERSE, as_of=AS_OF):
     """A bound pool as load_bound_prosperity_pool returns it (only the fields the momentum reader uses)."""
     return {'available': True, 'reason': None, 'as_of': as_of, 'universe': _universe(universe),
             'members': [{'symbol': s, 'rank': i + 1} for i, s in enumerate(symbols)]}
@@ -183,28 +189,39 @@ def test_board_path_follows_the_saturday_delivery_layout(tmp_path):
         pm.momentum_board_path('20261114', tmp_path)
 
 
-def test_picks_are_pool_members_in_the_top_30_by_momentum_rank(tmp_path):
+def test_picks_are_pool_members_in_the_board_cut_by_momentum_rank(tmp_path):
     write_board(tmp_path, momentum_payload())
     out = picks(tmp_path)
     assert out['available'] is True and out['reason'] is None
     assert (out['as_of'], out['price_date'], out['window'], out['days'], out['top_n']) == (
-        AS_OF, '2026-11-13', '14w', 70, 30)
-    # U22 comes first in pool order; U33 is #31; U03 is not long-eligible; non-pool top-30 rows never show
-    assert [(p['symbol'], p['momentum_rank']) for p in out['picks']] == [('U05', 4), ('U22', 20)]
+        AS_OF, '2026-11-13', '14w', 70, 8)
+    # U22 comes first in pool order; U11 is #9 and U22 #20 (outside the cut); U03 is not long-eligible
+    assert [(p['symbol'], p['momentum_rank']) for p in out['picks']] == [('U05', 4), ('U09', 8)]
     first = out['picks'][0]
     assert set(first) == {'symbol', 'momentum_rank', 'momentum_score', 'momentum_return'}
-    assert first['momentum_score'] == 86.0 and first['momentum_return'] == pytest.approx(0.46)
+    assert first['momentum_score'] == 87.0 and first['momentum_return'] == pytest.approx(0.47)
     # U40 is a pool member that could not be scored; U39 (not in the pool) is not listed
     assert out['unscored'] == [{'symbol': 'U40', 'reason': 'price_gap'}]
 
 
-def test_rank_30_is_in_and_rank_31_is_out(tmp_path):
+def test_rank_8_is_in_and_rank_9_is_out(tmp_path):
     write_board(tmp_path, momentum_payload())
-    out = picks(tmp_path, momentum_pool(('U33', 'U32')))
-    assert [(p['symbol'], p['momentum_rank']) for p in out['picks']] == [('U32', 30)]
+    out = picks(tmp_path, momentum_pool(('U11', 'U09')))
+    assert [(p['symbol'], p['momentum_rank']) for p in out['picks']] == [('U09', 8)]
 
 
-@pytest.mark.parametrize('members', [('U33', 'U03'), ()])
+@pytest.mark.parametrize('ineligible, top_n, hits', [
+    (set(UNIVERSE[3:]), 2, [('U02', 2)]),                          # min(ceil(38 / 5), ceil(3 / 2)) = 2
+    (set(UNIVERSE), 0, []),                                         # no rising row: nothing listed, still valid
+], ids=['three-rising', 'none-rising'])
+def test_top_n_is_the_board_cut_counted_from_the_rows(tmp_path, ineligible, top_n, hits):
+    write_board(tmp_path, momentum_payload(ineligible=ineligible))
+    out = picks(tmp_path, momentum_pool(('U03', 'U02')))
+    assert out['available'] is True and out['top_n'] == top_n
+    assert [(p['symbol'], p['momentum_rank']) for p in out['picks']] == hits
+
+
+@pytest.mark.parametrize('members', [('U11', 'U03'), ()])
 def test_no_hit_and_an_empty_pool_are_a_valid_empty_result(tmp_path, members):
     write_board(tmp_path, momentum_payload())
     out = picks(tmp_path, momentum_pool(members))
@@ -253,10 +270,12 @@ def test_malformed_pool_is_pool_invalid(tmp_path, mutate):
 def test_board_of_another_week_or_universe_is_a_pool_mismatch(tmp_path, mutate):
     payload = momentum_payload()
     mutate(payload)
-    write_board(tmp_path, payload)
+    path = write_board(tmp_path, payload)
     out = picks(tmp_path)
     assert out['available'] is False and out['reason'] == 'prosperity_momentum_pool_mismatch'
     assert out['picks'] == [] and out['unscored'] == []
+    with pytest.raises(ValueError, match='momentum_payload_invalid'):    # the Saturday sender refuses it too
+        d._read_momentum(path, AS_OF)
 
 
 def test_pool_member_outside_the_board_universe_is_a_pool_mismatch(tmp_path):
@@ -277,6 +296,7 @@ def _move_to_unavailable(p, symbols):
     board = _board(p)
     board['scored'] = [r for r in board['scored'] if r['symbol'] not in symbols]
     board['unavailable'].update({s: 'no_price' for s in symbols})
+    board['unavailable_top100_days'].update({s: 0 for s in symbols})
 
 
 def _swap_scores(p):
@@ -287,6 +307,11 @@ def _swap_scores(p):
 def _swap_ranks(p):
     a, b = _board(p)['scored'][:2]
     a['rank'], b['rank'] = b['rank'], a['rank']
+
+
+def _swap_universe(p):
+    symbols = p['universe']['symbols']
+    symbols[0], symbols[1] = symbols[1], symbols[0]
 
 
 def _rename_u01(p):
@@ -309,7 +334,7 @@ INVALID = {                            # in-place mutation of the payload
     'compact-as-of': lambda p: p.update(as_of='20261114'),
     'schema-version': lambda p: p.update(schema_version=2),
     'schema-version-bool': lambda p: p.update(schema_version=True),
-    'scoring': lambda p: p.update(scoring='v3'),
+    'scoring-v4': lambda p: p.update(scoring='v4'),
     'boards-not-dict': lambda p: p.update(boards=[]),
     'extra-7w-window': lambda p: p['boards'].update({'7w': copy.deepcopy(_board(p))}),
     'days-35': lambda p: _board(p).update(days=35),
@@ -322,6 +347,7 @@ INVALID = {                            # in-place mutation of the payload
     'universe-count-inconsistent': lambda p: p['universe'].update(count=41),
     'universe-empty': lambda p: p['universe'].update(count=0, symbols=[]),
     'universe-duplicate': lambda p: p['universe'].update(count=41, symbols=UNIVERSE + ['U01']),
+    'universe-unsorted': _swap_universe,
     'underscore-symbol': _rename_u01,
     'scored-not-list': lambda p: _board(p).update(scored={}),
     'unavailable-not-dict': lambda p: _board(p).update(unavailable=[]),
@@ -330,8 +356,7 @@ INVALID = {                            # in-place mutation of the payload
     'score-string': lambda p: _row(p, 'U01').update(score='90'),
     'eligible-not-bool': lambda p: _row(p, 'U01').update(eligible=1),
     'partition-missing-member': lambda p: _board(p).update(scored=_board(p)['scored'][:-1]),
-    'partition-overlap': lambda p: _board(p)['scored'].append(
-        {'symbol': 'U39', 'score': 0.0, 'return': -0.1, 'eligible': False, 'rank': None}),
+    'partition-overlap': lambda p: _board(p)['scored'].append({**_row(p, 'U03'), 'symbol': 'U39'}),   # last row
     'duplicate-scored-row': lambda p: _board(p)['scored'].append(copy.deepcopy(_board(p)['scored'][-1])),
     'coverage-below-90': lambda p: _move_to_unavailable(p, {'U36', 'U37', 'U38'}),
     'rank-gap': lambda p: _row(p, 'U38').update(rank=37),
@@ -339,6 +364,41 @@ INVALID = {                            # in-place mutation of the payload
     'rank-bool': lambda p: _row(p, 'U01').update(rank=True),
     'eligible-return-zero': lambda p: _row(p, 'U01').update(**{'return': 0.0}),
     'ineligible-with-rank': lambda p: _row(p, 'U03').update(rank=3),
+    'ineligible-positive-score': lambda p: _row(p, 'U03').update(score=0.5),          # still in score order
+    'eligible-score-zero': lambda p: (_move_to_unavailable(p, {'U03', 'U10'}),          # U38 is then last
+                                      _row(p, 'U38').update(score=0.0)),
+    'eligible-outside-u70': lambda p: _row(p, 'U01').update(in_u70=False, top100_days=35),
+    'in-u70-missing': lambda p: _row(p, 'U03').pop('in_u70'),
+    'in-u70-not-bool': lambda p: _row(p, 'U03').update(in_u70=1),
+    'in-u70-true-below-majority': lambda p: _row(p, 'U03').update(top100_days=35),
+    'in-u70-false-at-majority': lambda p: _row(p, 'U03').update(in_u70=False, top100_days=36),
+    'top100-days-missing': lambda p: _row(p, 'U03').pop('top100_days'),
+    'top100-days-float': lambda p: _row(p, 'U03').update(top100_days=70.0),
+    'top100-days-bool': lambda p: _row(p, 'U03').update(top100_days=True),
+    'top100-days-negative': lambda p: _row(p, 'U03').update(in_u70=False, top100_days=-1),
+    'top100-days-above-window': lambda p: _row(p, 'U03').update(top100_days=71),
+    'udv-missing': lambda p: _row(p, 'U02').pop('udv'),
+    'udv-negative': lambda p: _row(p, 'U02').update(udv=-0.5),
+    'udv-string': lambda p: _row(p, 'U02').update(udv='1.5'),
+    'udv-bool': lambda p: _row(p, 'U02').update(udv=True),
+    # review P2: eligible must be re-derived from the row, and every metric must be in range
+    'eligible-out-of-u70-keeps-flag': lambda p: _row(p, 'U01').update(in_u70=False, top100_days=0),
+    'eligible-slope-negative': lambda p: _row(p, 'U01').update(slope=-0.1),
+    'eligible-drawdown-50': lambda p: _row(p, 'U01').update(drawdown=0.50),
+    'rising-row-marked-ineligible': lambda p: _row(p, 'U03').update(**{'return': 0.2}),
+    'slope-missing': lambda p: _row(p, 'U02').pop('slope'),
+    'er-above-one': lambda p: _row(p, 'U02').update(er=1.5),
+    'r-squared-negative': lambda p: _row(p, 'U02').update(r_squared=-0.1),
+    'drawdown-negative': lambda p: _row(p, 'U02').update(drawdown=-0.1),
+    'dollar-volume-negative': lambda p: _row(p, 'U02').update(dollar_volume=-1.0),
+    'dollar-volume-bool': lambda p: _row(p, 'U02').update(dollar_volume=True),
+    'unavailable-top100-missing': lambda p: _board(p).pop('unavailable_top100_days'),
+    'unavailable-top100-extra-key': lambda p: _board(p)['unavailable_top100_days'].update(U01=0),
+    'unavailable-top100-missing-key': lambda p: _board(p)['unavailable_top100_days'].pop('U40'),
+    'unavailable-top100-above-window': lambda p: _board(p)['unavailable_top100_days'].update(U40=71),
+    'unavailable-top100-negative': lambda p: _board(p)['unavailable_top100_days'].update(U40=-1),
+    'unavailable-top100-bool': lambda p: _board(p)['unavailable_top100_days'].update(U40=True),
+    'unavailable-top100-float': lambda p: _board(p)['unavailable_top100_days'].update(U40=36.0),
     'scored-out-of-score-order': _swap_scores,
     'ranks-out-of-score-order': _swap_ranks,
 }
@@ -365,6 +425,8 @@ def test_malformed_board_is_invalid(tmp_path, case):
     out = picks(tmp_path)
     assert out['available'] is False and out['reason'] == 'prosperity_momentum_invalid'
     assert out['picks'] == [] and out['unscored'] == []
+    with pytest.raises(ValueError, match='momentum_payload_invalid'):    # review P2: both readers, same checks
+        d._read_momentum(path, AS_OF)
 
 
 def test_fixture_coverage_and_lag_edges_are_valid(tmp_path):
@@ -372,8 +434,27 @@ def test_fixture_coverage_and_lag_edges_are_valid(tmp_path):
     payload = momentum_payload()
     _move_to_unavailable(payload, {'U37', 'U38'})
     payload['price_date'] = _board(payload)['window'][1] = '2026-11-11'
-    write_board(tmp_path, payload)
+    path = write_board(tmp_path, payload)
     assert picks(tmp_path)['available'] is True
+    assert d._read_momentum(path, AS_OF) == payload
+
+
+@pytest.mark.parametrize('edit', [
+    lambda p: _row(p, 'U03').update(in_u70=False, top100_days=35),  # below the majority, consistent
+    lambda p: _row(p, 'U03').update(top100_days=36),                # exactly the majority
+    lambda p: _row(p, 'U03').update(in_u70=False, top100_days=0),
+    lambda p: _row(p, 'U03').update(udv=0.0),
+    lambda p: _row(p, 'U03').update(udv=None),
+    lambda p: _row(p, 'U01').update(drawdown=0.30),                 # the long gate is inclusive
+    lambda p: _board(p)['unavailable_top100_days'].update(U39=36, U40=70),
+], ids=['below-majority', 'at-majority', 'zero-days', 'udv-zero', 'udv-none', 'drawdown-at-limit',
+        'unavailable-in-u70'])
+def test_field_edges_are_valid_for_both_readers(tmp_path, edit):
+    payload = momentum_payload()
+    edit(payload)
+    path = write_board(tmp_path, payload)
+    assert picks(tmp_path)['available'] is True
+    assert d._read_momentum(path, AS_OF) == payload
 
 
 def test_constants_match_the_saturday_producer():
@@ -384,8 +465,9 @@ def test_constants_match_the_saturday_producer():
     assert '--delivery-dir "$PROJECT_DIR/data/{}"'.format(
         pm.PROSPERITY_DELIVERY_DIR.relative_to(DATA_DIR).as_posix()) in script
     assert pm.MOMENTUM_WINDOW_DAYS == momentum_board.WINDOWS[MOMENTUM_WINDOW]
-    assert pm.MOMENTUM_MAX_LAG_DAYS == momentum_board.MAX_LAG_DAYS
-    assert pm._SCORING == momentum_board.SCORING
+    # review P2: one implementation of the board checks for the producer's module, the sender and this reader
+    assert pm.check_header is d.check_header is momentum_board.check_header
+    assert pm.check_board is d.check_board is momentum_board.check_board
 
 
 def test_board_file_is_not_modified(tmp_path):

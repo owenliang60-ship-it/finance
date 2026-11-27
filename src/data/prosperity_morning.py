@@ -2,7 +2,7 @@
 
 Plans: docs/plans/2026-11-03-prosperity-m14-morning.md (pool binding) and
 docs/plans/2026-11-19-morning-0d-prosperity-momentum.md (景气动量精选池 = pool ∩ the M16 14-week
-momentum top 30, read from the Saturday delivery output). Read-only on prosperity.db and on the
+momentum top board_top_cut, Boss 2026-11-26; read from the Saturday delivery output). Read-only on prosperity.db and on the
 delivery files. Not part of the engine code_version. The caller (scripts/morning_report.py) wraps
 every use in try/except, so a failure here only marks the 0d section unavailable.
 """
@@ -15,9 +15,9 @@ import re
 import sqlite3
 from typing import Optional
 
+from backtest.research.momentum_board import check_board, check_header, reject_non_finite
 from config.settings import DATA_DIR
-from src.data.prosperity_pool import (COVERAGE_MIN, POOL_PATH, POOL_SCHEME_ID, _day, _finite, _is_int, _universe,
-                                      load_prosperity_pool)
+from src.data.prosperity_pool import POOL_PATH, POOL_SCHEME_ID, _day, _universe, load_prosperity_pool
 from src.data.prosperity_storage import BoardKey
 from src.data.prosperity_store import ProsperityStore
 from src.data.prosperity_web import pool_binding
@@ -26,8 +26,6 @@ from terminal.prosperity.schemes import SCHEMES, scheme_hash
 PROSPERITY_DB_PATH = DATA_DIR / 'prosperity.db'
 PROSPERITY_DELIVERY_DIR = DATA_DIR / 'prosperity-delivery'   # run_prosperity.sh --delivery-dir; a test pins the pair
 MOMENTUM_WINDOW_DAYS = 70          # backtest/research/momentum_board.py WINDOWS['14w']; a test pins it
-MOMENTUM_MAX_LAG_DAYS = 3          # momentum_board.MAX_LAG_DAYS; a test pins it
-_SCORING = 'v4'                    # momentum_board.SCORING
 _SYMBOL = re.compile(r'[A-Z0-9.-]+')   # no "_": the 0d text goes out with Telegram legacy Markdown (issue 016)
 
 
@@ -62,7 +60,7 @@ def load_bound_prosperity_pool(pool_path=POOL_PATH, db_path=PROSPERITY_DB_PATH, 
     return pool
 
 
-# --- weekly M16 momentum picks (景气精选池 ∩ 14周动量榜前 30) -------------------------------------
+# --- weekly M16 momentum picks (景气精选池 ∩ 14周动量榜前 board_top_cut) ---------------------------
 
 class _MomentumPoolMismatch(ValueError):
     """A well-formed momentum board for another week or another universe than the bound pool."""
@@ -70,10 +68,6 @@ class _MomentumPoolMismatch(ValueError):
 
 def _momentum_unavailable(reason: str, **extra) -> dict:
     return {'available': False, 'reason': reason, 'picks': [], 'unscored': [], **extra}
-
-
-def _reject_non_finite(token: str):
-    raise ValueError(f'non-finite number in momentum board: {token}')
 
 
 def momentum_board_path(as_of: str, delivery_dir=PROSPERITY_DELIVERY_DIR) -> Path:
@@ -103,75 +97,27 @@ def _pool_symbols(pool: dict) -> Optional[set]:
         return None
 
 
-def _check_board(payload, as_of: str, pool_universe: dict, members: set, *, schema_version: int,
-                 window_key: str) -> dict:
-    """The 14-week board of a payload bound to this pool, or ValueError / _MomentumPoolMismatch."""
-    if (not isinstance(payload, dict) or not _is_int(payload.get('schema_version'))
-            or payload['schema_version'] != schema_version or payload.get('scoring') != _SCORING):
-        raise ValueError('momentum header invalid')
-    boards = payload.get('boards')
-    if not isinstance(boards, dict) or set(boards) != {window_key}:
-        raise ValueError('momentum boards invalid')
-    _day(payload.get('as_of'))
+def _check_board(payload, as_of: str, pool_universe: dict, members: set) -> dict:
+    """The 14-week board of a payload bound to this pool, or ValueError / _MomentumPoolMismatch.
+    Board and row checks are the sender's own (momentum_board.check_board, review P2)."""
+    symbols = check_header(payload)
     if payload['as_of'] != as_of:
         raise _MomentumPoolMismatch('momentum board is for another week')
-    universe = payload.get('universe')
-    if not isinstance(universe, dict):
-        raise ValueError('momentum universe invalid')
-    symbols = _symbol_list(universe.get('symbols'))
-    if not symbols or not _is_int(universe.get('count')) or universe['count'] != len(symbols):
-        raise ValueError('momentum universe count invalid')
     expected = _universe(symbols)
     if (expected['count'] != pool_universe['count'] or expected['symbols_sha256'] != pool_universe['symbols_sha256']
             or not members <= set(symbols)):
         raise _MomentumPoolMismatch('momentum universe differs from the pool')
-    price_day = _day(payload.get('price_date'))
-    if not 0 <= (_day(as_of) - price_day).days <= MOMENTUM_MAX_LAG_DAYS:
-        raise ValueError('momentum price_date not bound to as_of')
-    board = boards[window_key]
-    if not isinstance(board, dict):
-        raise ValueError('momentum board invalid')
-    window = board.get('window')
-    if not isinstance(window, list) or len(window) != 2 or not _day(window[0]) < _day(window[1]) == price_day:
-        raise ValueError('momentum window invalid')
-    if not _is_int(board.get('days')) or board['days'] != MOMENTUM_WINDOW_DAYS:
-        raise ValueError('momentum window length invalid')
-    scored, unavailable = board.get('scored'), board.get('unavailable')
-    if not isinstance(scored, list) or not isinstance(unavailable, dict):
-        raise ValueError('momentum rows invalid')
-    if not all(_SYMBOL.fullmatch(s) and isinstance(why, str) and why for s, why in unavailable.items()):
-        raise ValueError('momentum unavailable rows invalid')
-    for r in scored:
-        if (not isinstance(r, dict) or type(r.get('eligible')) is not bool
-                or not _finite(r.get('score')) or not _finite(r.get('return'))):
-            raise ValueError('momentum scored row invalid')
-        if r['eligible']:
-            if not _is_int(r.get('rank')) or r['rank'] < 1 or r['return'] <= 0:
-                raise ValueError('momentum eligible row invalid')
-        elif r.get('rank') is not None:
-            raise ValueError('momentum ineligible row has a rank')
-    names = set(_symbol_list([r.get('symbol') for r in scored]))
-    keys = [(-r['score'], r['symbol']) for r in scored]
-    if keys != sorted(keys):
-        raise ValueError('momentum rows not in score order')
-    if not names.isdisjoint(unavailable) or names | set(unavailable) != set(symbols):
-        raise ValueError('momentum rows do not partition the universe')
-    if len(names) < COVERAGE_MIN * len(symbols):
-        raise ValueError('momentum coverage below floor')
-    ranks = [r['rank'] for r in scored if r['eligible']]       # the producer counts eligible rows in score order
-    if ranks != list(range(1, len(ranks) + 1)):
-        raise ValueError('momentum ranks not contiguous')
-    return board
+    return check_board(payload)
 
 
 def load_prosperity_momentum_picks(pool: dict, delivery_dir=PROSPERITY_DELIVERY_DIR) -> dict:
-    """This week's 景气动量精选池: bound-pool members in the M16 14-week momentum top 30, by momentum rank.
+    """This week's 景气动量精选池: bound-pool members in the M16 14-week momentum top board_top_cut, by rank.
 
     Reads the JSON the Saturday delivery already wrote for the pool's own as_of (never an older
     week). Fail-closed: anything that does not prove the board belongs to this pool and is
     complete makes the picks unavailable. Zero picks is a valid result. Read-only.
     """
-    from src.data.prosperity_delivery import MOMENTUM_SCHEMA_VERSION, MOMENTUM_TOP, MOMENTUM_WINDOW, _top_rows
+    from src.data.prosperity_delivery import MOMENTUM_WINDOW, _top_rows, board_top_cut
 
     if not isinstance(pool, dict) or not pool.get('available'):
         return _momentum_unavailable((pool.get('reason') if isinstance(pool, dict) else None)
@@ -184,9 +130,8 @@ def load_prosperity_momentum_picks(pool: dict, delivery_dir=PROSPERITY_DELIVERY_
     if not path.is_file():
         return _momentum_unavailable('prosperity_momentum_missing')
     try:
-        payload = json.loads(path.read_text(encoding='utf-8'), parse_constant=_reject_non_finite)
-        board = _check_board(payload, as_of, pool['universe'], members,
-                             schema_version=MOMENTUM_SCHEMA_VERSION, window_key=MOMENTUM_WINDOW)
+        payload = json.loads(path.read_text(encoding='utf-8'), parse_constant=reject_non_finite)
+        board = _check_board(payload, as_of, pool['universe'], members)
     except _MomentumPoolMismatch:
         return _momentum_unavailable('prosperity_momentum_pool_mismatch')
     except (OSError, UnicodeDecodeError, ValueError, TypeError, KeyError, OverflowError, RecursionError,
@@ -196,5 +141,5 @@ def load_prosperity_momentum_picks(pool: dict, delivery_dir=PROSPERITY_DELIVERY_
               'momentum_return': r['return']} for r in _top_rows(board) if r['symbol'] in members]
     unscored = [{'symbol': s, 'reason': board['unavailable'][s]} for s in sorted(board['unavailable']) if s in members]
     return {'available': True, 'reason': None, 'as_of': as_of, 'price_date': payload['price_date'],
-            'window': MOMENTUM_WINDOW, 'days': MOMENTUM_WINDOW_DAYS, 'top_n': MOMENTUM_TOP,
+            'window': MOMENTUM_WINDOW, 'days': MOMENTUM_WINDOW_DAYS, 'top_n': board_top_cut(board),
             'picks': picks, 'unscored': unscored}

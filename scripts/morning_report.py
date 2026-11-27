@@ -516,7 +516,7 @@ def _prosperity_momentum_summary(momentum: dict) -> dict:
 
 
 def _build_prosperity_compass(price_frames: dict, as_of: str, scan) -> dict:
-    """Section 0d: 景气动量精选池 = the bound prosperity pool ∩ the weekly M16 14-week momentum top 30.
+    """Section 0d: 景气动量精选池 = the bound prosperity pool ∩ the weekly M16 14-week momentum top board_top_cut.
 
     Only the picks are scanned (P2-16): prices, the DB price supplement and market caps are read for
     the picks alone, and the scan runs with enforce_gates=False, so a missing price or market cap
@@ -1782,9 +1782,12 @@ def _prosperity_compass_display(payload: dict | None) -> dict:
     momentum = payload.get("momentum") or {}
     if not momentum.get("available"):          # e.g. a payload saved before 2026-11-19: never show the whole pool
         return _prosperity_warning(momentum.get("reason") or "prosperity_momentum_invalid")
-    from src.data.prosperity_delivery import MOMENTUM_TOP
     from src.data.prosperity_pool import _finite, _is_int
     from src.data.prosperity_web import _score
+
+    top_n = momentum.get("top_n")          # that week's board_top_cut (Boss 2026-11-26): no fallback constant
+    if not _is_int(top_n) or top_n < 0:
+        raise ValueError("prosperity momentum top_n invalid")
 
     members = {m["symbol"]: m for m in payload.get("members") or []}
     picked = []
@@ -1793,7 +1796,8 @@ def _prosperity_compass_display(payload: dict | None) -> dict:
         if member is None:
             raise ValueError("prosperity pick {} missing from the scanned pool".format(pick["symbol"]))
         row = {**member, "momentum_rank": pick["momentum_rank"], "momentum_return": pick["momentum_return"]}
-        if (not _is_int(row["momentum_rank"]) or row["momentum_rank"] < 1 or not _finite(row["momentum_return"])
+        if (not _is_int(row["momentum_rank"]) or not 1 <= row["momentum_rank"] <= top_n
+                or not _finite(row["momentum_return"])
                 or not _is_int(row.get("rank")) or row["rank"] < 1
                 or not isinstance(row.get("grade"), str) or not row["grade"]):
             raise ValueError("prosperity pick {} has an invalid row".format(pick["symbol"]))
@@ -1805,7 +1809,7 @@ def _prosperity_compass_display(payload: dict | None) -> dict:
         head = "景气动量精选池 0 只（景气池合格为零，截至 {}，动量价至 {}）".format(as_of, price_date)
     else:
         head = "景气动量精选池 {} 只（截至 {}，景气池 {} 只 ∩ 14周动量榜前 {}，动量价至 {}）".format(
-            len(picked), as_of, pool_count, momentum.get("top_n", MOMENTUM_TOP), price_date)
+            len(picked), as_of, pool_count, top_n, price_date)
     # Counts come from the shown rows (plan P1-1), never from the whole-pool coverage.
     subtitle = "{} | EMA30 {}/{} | 站上EMA30 {} 只".format(
         head, sum(m.get("above") is not None for m in picked), len(picked),

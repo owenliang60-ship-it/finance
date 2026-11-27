@@ -20,6 +20,8 @@ import sys
 import tempfile
 from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 
+from backtest.research.momentum_board import (SCORING as MOMENTUM_SCORING, board_top_cut, board_u70_count, check_board,
+                                             check_header, reject_non_finite)
 from src import telegram_bot
 from src.data.prosperity_backup import _quick_check, check_space
 from src.data.prosperity_pool import POOL_SCHEME_ID, load_prosperity_pool
@@ -38,12 +40,9 @@ HEALTH_TIMEOUT_SECONDS = 1800
 UPLOAD_TIMEOUT_SECONDS = 300
 MOMENTUM_TIMEOUT_SECONDS = 600
 MESSAGE_LIMIT = 4096                   # Telegram sendMessage text limit
-MOMENTUM_TOP = 30                      # rows listed in the momentum board text AND the combo rule
-                                       # (pool ∩ top 30, Boss 2026-11-13): changing it changes a backtested rule
 MOMENTUM_WINDOW = '14w'                # the one board the CLI writes (momentum_board.WINDOWS); a test pins the pair
 MOMENTUM_LABEL = '14周'
 MOMENTUM_ITEMS = ('momentum_text', 'combo_text')
-MOMENTUM_SCHEMA_VERSION = 1
 KEEP_OUTPUT_WEEKS = 2
 NEVER = object()                       # last_health_freeze: no report was ever sent or baselined
 VERSION_CHANGED = object()             # last_health_freeze: the last sent report used another code_version
@@ -177,8 +176,9 @@ def _long_rows(board: dict) -> List[dict]:
 
 
 def _top_rows(board: dict) -> List[dict]:
-    """The listed top of the long board: momentum_text prints these, combo_text intersects them with the pool."""
-    return _long_rows(board)[:MOMENTUM_TOP]
+    """The listed top of the long board: momentum_text prints these, combo_text intersects them with the pool.
+    The cut is board_top_cut (Boss 2026-11-26): changing it changes a backtested rule."""
+    return _long_rows(board)[:board_top_cut(board)]
 
 
 def _counted(text: str) -> str:
@@ -188,17 +188,17 @@ def _counted(text: str) -> str:
 
 
 def momentum_text(payload: dict, pool: Optional[Sequence[str]]) -> str:
-    """M16 item 1: top rows of the 14-week V4 long board. pool None = pool not trusted (no stars).
+    """M16 item 1: top rows of the 14-week U70 + UDV long board. pool None = pool not trusted (no stars).
     Counts come from the row lists, never from a stored total."""
     starred = set(pool or ())
     board = payload['boards'][MOMENTUM_WINDOW]
-    rows = _long_rows(board)
+    rows, top = _long_rows(board), _top_rows(board)
+    u_count = board_u70_count(board)
     head = (f'*{MOMENTUM_LABEL}*（{board["days"]} 交易日）有效 {len(board["scored"])} · '
             f'不可用 {len(board["unavailable"])} · 上涨合格 {len(rows)}')
-    lines = [f'*动量榜 {md_escape(payload["as_of"])}*（V4 · 只看上涨 · 价格截至 {md_escape(payload["price_date"])}）',
-             f'主池 {payload["universe"]["count"]} 只', '']
-    if rows:
-        top = _top_rows(board)
+    lines = [f'*动量榜 {md_escape(payload["as_of"])}*（UDV · 只看上涨 · 价格截至 {md_escape(payload["price_date"])}）',
+             f'主池 {payload["universe"]["count"]} 只 · 70日过半Top100 {u_count} 只', '']
+    if top:
         lines.append(head + f'，前 {len(top)}：')
         lines.extend(f'{r["rank"]}. {md_escape(r["symbol"])} {r["score"]:.1f} {r["return"]:+.0%}'
                      + (' ★' if r['symbol'] in starred else '') for r in top)
@@ -210,14 +210,15 @@ def momentum_text(payload: dict, pool: Optional[Sequence[str]]) -> str:
 
 
 def combo_text(payload: dict, pool: Optional[Sequence[str]], reason: Optional[str]) -> str:
-    """M16 item 2: pool members in the momentum board top MOMENTUM_TOP (Boss 2026-11-13), with their
-    whole-universe rank: exactly the starred rows of momentum_text. pool None = pool not trusted.
+    """M16 item 2: pool members in the momentum board top board_top_cut (Boss 2026-11-26), with their
+    long-board rank: exactly the starred rows of momentum_text. pool None = pool not trusted.
     """
     title = f'*景气动量精选 {md_escape(payload["as_of"])}*'
     if pool is None:
         return _counted(f'{title}\n池文件不可用（{md_escape(reason or "unknown")}），本周不列名单')
     members = set(pool)
     board = payload['boards'][MOMENTUM_WINDOW]
+    cut = board_top_cut(board)
     hits = [r for r in _top_rows(board) if r['symbol'] in members]
     listed = ' · '.join(f'{md_escape(r["symbol"])} #{r["rank"]} {r["return"]:+.0%}' for r in hits) or '无'
     line = f'*{MOMENTUM_LABEL}*（{len(hits)}）: {listed}'
@@ -227,8 +228,8 @@ def combo_text(payload: dict, pool: Optional[Sequence[str]], reason: Optional[st
         line += f' · 未评分（{len(missing)}）: ' + ', '.join(
             f'{md_escape(s)}（{md_escape(str(why))}）' for s, why in missing)
     lines = [title,
-             f'景气精选池 {len(members)} 只 ∩ {MOMENTUM_LABEL}动量榜前 {MOMENTUM_TOP}（V4 · 价格截至 {md_escape(payload["price_date"])}）',
-             line, f'#n = 全主池 {MOMENTUM_LABEL}上涨榜名次']
+             f'景气精选池 {len(members)} 只 ∩ {MOMENTUM_LABEL}动量榜前 {cut}（UDV · 价格截至 {md_escape(payload["price_date"])}）',
+             line, f'#n = {MOMENTUM_LABEL}主战场上涨榜名次']
     if missing:
         lines.append('未评分 = 缺价或拆股未决，不代表没涨')
     return _counted('\n'.join(lines))
@@ -244,9 +245,13 @@ class DeliveryOutcome:
 
 def _sent(items: dict, key: str, code_version: str) -> bool:
     """An item counts only for the board version it was sent for (second review P2): a same-week
-    engine upgrade publishes a new board, so every item is due again under the new code_version."""
+    engine upgrade publishes a new board, so every item is due again under the new code_version.
+    The M16 texts also need this momentum scoring: a scoring upgrade keeps code_version, and a V4
+    board text must never pair with a udv1 combo text."""
     item = items.get(key)
     if not isinstance(item, dict) or item.get('code_version') != code_version:
+        return False
+    if key in MOMENTUM_ITEMS and item.get('scoring') != MOMENTUM_SCORING:
         return False
     return _health_done(item) if key == 'health' else True
 
@@ -318,13 +323,19 @@ def _run_cli(run, script: str, args: Sequence[str], timeout: int) -> None:
         raise RuntimeError(f'{script} rc={result.returncode}: {tail[0][:200]}')
 
 
-def _read_momentum(path: Path, as_of: str) -> dict:
-    """The CLI's JSON for exactly this week and this layout, or momentum_payload_invalid."""
-    payload = json.loads(path.read_text(encoding='utf-8'))
-    if (not isinstance(payload, dict) or payload.get('schema_version') != MOMENTUM_SCHEMA_VERSION
-            or payload.get('as_of') != as_of or not isinstance(payload.get('boards'), dict)
-            or set(payload['boards']) != {MOMENTUM_WINDOW}):
-        raise ValueError('momentum_payload_invalid')
+def _read_momentum(path: Path, as_of: str, expected_symbols: Optional[Sequence[str]] = None) -> dict:
+    """The CLI's JSON for exactly this week and board universe, passing the morning reader's checks
+    (review P2), or momentum_payload_invalid."""
+    try:
+        payload = json.loads(path.read_text(encoding='utf-8'), parse_constant=reject_non_finite)
+        symbols = check_header(payload)
+        if payload['as_of'] != as_of:
+            raise ValueError('momentum board is for another week')
+        if expected_symbols is not None and symbols != sorted(set(expected_symbols)):
+            raise ValueError('momentum universe differs from the board')
+        check_board(payload)
+    except (ValueError, TypeError, KeyError, OverflowError, RecursionError) as exc:
+        raise ValueError(f'momentum_payload_invalid: {exc}'[:200]) from exc
     return payload
 
 
@@ -493,7 +504,7 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
                 _run_cli(run, 'momentum_board.py', ['--db', snap, '--market-db', market_db, '--code-version',
                                                     code_version, '--as-of', as_of, '--out', board_file],
                          MOMENTUM_TIMEOUT_SECONDS)
-                payload = _read_momentum(board_file, as_of)
+                payload = _read_momentum(board_file, as_of, stored.meta.members)
             except Exception as exc:
                 fail('momentum', exc)
             trusted = by_rank if members is not None else None
@@ -501,7 +512,8 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
                 try:
                     if not send_message(momentum_text(payload, trusted), channel='private'):
                         raise RuntimeError('send_message returned False')
-                    items['momentum_text'] = {'sent_at': _stamp(now), 'code_version': code_version}
+                    items['momentum_text'] = {'sent_at': _stamp(now), 'code_version': code_version,
+                                              'scoring': MOMENTUM_SCORING}
                     write_ledger(delivery_dir, ledger)
                     sent.append('momentum_text')
                 except Exception as exc:
@@ -510,7 +522,8 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
                 try:
                     if not send_message(combo_text(payload, trusted, pool_reason), channel='private'):
                         raise RuntimeError('send_message returned False')
-                    items['combo_text'] = {'sent_at': _stamp(now), 'code_version': code_version}
+                    items['combo_text'] = {'sent_at': _stamp(now), 'code_version': code_version,
+                                           'scoring': MOMENTUM_SCORING}
                     write_ledger(delivery_dir, ledger)
                     sent.append('combo_text')
                 except Exception as exc:
