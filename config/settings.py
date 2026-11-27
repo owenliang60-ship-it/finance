@@ -1,8 +1,6 @@
 """
 Finance 工作区配置 (Data Desk)
 """
-
-from __future__ import annotations
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -439,14 +437,6 @@ OPTIONS_SNAPSHOT_RETAIN_DAYS = 7  # Chain 快照保留天数
 OPTIONS_LIQUIDITY_MIN_OI = 200   # 最低 OI 标准
 OPTIONS_LIQUIDITY_MIN_VOLUME = 100  # 最低日成交量
 OPTIONS_LIQUIDITY_MAX_SPREAD_PCT = 0.10  # 最大 bid-ask spread (占 mid %)
-
-# /vol-scan 默认标的（期权确定性扫描）
-VOL_SCAN_SYMBOLS = ["QQQ", "SOXX", "NVDA", "MU", "AMD", "TSM"]
-# 无财报的 ETF：FMP 无未来日期时财报门控为 CLEAR / NOT_APPLICABLE；
-# 其余标的无未来日期一律 UNKNOWN（fail-closed）
-ETF_NO_EARNINGS_SYMBOLS = frozenset({"SPY", "QQQ", "SOXX", "SMH", "IWM", "DIA", "XLK"})
-# 官方确认财报日覆盖文件（优先于 FMP 估计日期）
-EARNINGS_CONFIRMED_PATH = PROJECT_ROOT / "config" / "earnings_confirmed.json"
 
 # ============ Adanos (Social Sentiment) ============
 

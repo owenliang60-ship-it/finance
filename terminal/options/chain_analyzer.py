@@ -21,8 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from config.settings import (
-    EARNINGS_CONFIRMED_PATH,
-    ETF_NO_EARNINGS_SYMBOLS,
+    PROJECT_ROOT,
     OPTIONS_CHAIN_DTE_MIN,
     OPTIONS_CHAIN_DTE_MAX,
     OPTIONS_SNAPSHOT_RETAIN_DAYS,
@@ -32,6 +31,11 @@ from config.settings import (
 )
 
 from terminal.options.scenario_analyzer import skew_to_alpha
+
+# 无财报的 ETF：FMP 无未来日期时财报门控为 CLEAR / NOT_APPLICABLE；
+# 其余标的无未来日期一律 UNKNOWN（fail-closed）。放此处避免修改 config/settings.py 触发景气 code_version 漂移。
+ETF_NO_EARNINGS_SYMBOLS = frozenset({"SPY", "QQQ", "SOXX", "SMH", "IWM", "DIA", "XLK"})
+EARNINGS_CONFIRMED_PATH = PROJECT_ROOT / "config" / "earnings_confirmed.json"
 
 logger = logging.getLogger(__name__)
 
