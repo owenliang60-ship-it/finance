@@ -50,6 +50,7 @@ class SheetHolding:
     market_value: float    # sheet "Mkt Value" (USD, informational)
     category: str          # sheet "Category" sleeve
     is_leaps: bool
+    categories: tuple[str, ...] = ()
 
 
 @dataclass
@@ -92,12 +93,17 @@ def _to_float_strict(value, context: str) -> float:
     Book-of-record fields must never degrade to 0 on formula errors
     (e.g. '#N/A') or export anomalies.
     """
+    if isinstance(value, bool):
+        raise SheetBookError("non-numeric %s" % context)
     if value is None or (isinstance(value, str) and value.strip() == ""):
         raise SheetBookError("missing %s" % context)
     try:
-        return float(value)
-    except (TypeError, ValueError):
+        val = float(value)
+    except (TypeError, ValueError, OverflowError):
         raise SheetBookError("non-numeric %s" % context) from None
+    if not math.isfinite(val):
+        raise SheetBookError("non-numeric %s" % context)
+    return val
 
 
 def _normalize_symbol(raw: str) -> str:
@@ -107,7 +113,7 @@ def _normalize_symbol(raw: str) -> str:
     return sym
 
 
-def _parse_holdings(ws) -> List[SheetHolding]:
+def _parse_holdings_with_meta(ws) -> tuple[List[SheetHolding], bool]:
     header_map = None
     data_rows = []
     for i, row in enumerate(ws.iter_rows(values_only=True)):
@@ -132,11 +138,13 @@ def _parse_holdings(ws) -> List[SheetHolding]:
         idx = header_map[name]
         return row[idx] if idx < len(row) else None
 
-    merged: Dict[str, SheetHolding] = {}
+    merged: Dict[tuple[str, str], SheetHolding] = {}
+    seen_ticker_rows = False
     for row in data_rows:
         raw_ticker = cell(row, "Stock Ticker")
         if raw_ticker is None or str(raw_ticker).strip() == "":
             continue
+        seen_ticker_rows = True
         raw = str(raw_ticker).strip()
         sym = _normalize_symbol(raw)
         shares = _to_float_strict(
@@ -149,6 +157,7 @@ def _parse_holdings(ws) -> List[SheetHolding]:
         if market not in ALLOWED_MARKETS:
             raise SheetBookError(
                 "unknown Market '%s' for %s in %s" % (market, raw, SUMMARY_TAB))
+        cat = str(cell(row, "Category") or "").strip()
         h = SheetHolding(
             symbol=sym,
             raw_ticker=raw,
@@ -160,11 +169,13 @@ def _parse_holdings(ws) -> List[SheetHolding]:
             sheet_price=_to_float_strict(
                 cell(row, "Last Price"), "Last Price for %s" % raw),
             market_value=_to_float(cell(row, "Mkt Value")),
-            category=str(cell(row, "Category") or "").strip(),
+            category=cat,
             is_leaps=sym.endswith(" LEAPS"),
+            categories=(cat,),
         )
-        if sym in merged:
-            prev = merged[sym]
+        key = (market, sym)
+        if key in merged:
+            prev = merged[key]
             total_shares = prev.shares + h.shares
             if total_shares > 0:
                 prev.cost_per_share = (
@@ -173,12 +184,19 @@ def _parse_holdings(ws) -> List[SheetHolding]:
                 ) / total_shares
             prev.shares = total_shares
             prev.market_value += h.market_value
-            logger.warning("duplicate ticker merged: %s", sym)
+            if h.category not in prev.categories:
+                prev.categories = (*prev.categories, h.category)
+            logger.warning("duplicate holding merged in market %s", market)
             # sheet_price/category: keep first row's value (first-wins,
             # warning logged above)
         else:
-            merged[sym] = h
-    return list(merged.values())
+            merged[key] = h
+    return list(merged.values()), seen_ticker_rows
+
+
+def _parse_holdings(ws) -> List[SheetHolding]:
+    holdings, _ = _parse_holdings_with_meta(ws)
+    return holdings
 
 
 def _parse_cash(ws) -> float:
@@ -231,7 +249,12 @@ def _parse_whole_port_net_total(ws) -> Optional[float]:
     return None
 
 
-def parse_sheet_book(xlsx_bytes: bytes, fetched_at: dt.datetime) -> SheetBook:
+def parse_sheet_book(
+    xlsx_bytes: bytes,
+    fetched_at: dt.datetime,
+    *,
+    allow_empty_holdings: bool = False,
+) -> SheetBook:
     import openpyxl
 
     try:
@@ -247,8 +270,8 @@ def parse_sheet_book(xlsx_bytes: bytes, fetched_at: dt.datetime) -> SheetBook:
         if CASH_TAB not in wb.sheetnames:
             raise SheetBookError("sheet tab missing: %s" % CASH_TAB)
 
-        holdings = _parse_holdings(wb[SUMMARY_TAB])
-        if not holdings:
+        holdings, seen_ticker_rows = _parse_holdings_with_meta(wb[SUMMARY_TAB])
+        if not holdings and (not allow_empty_holdings or not seen_ticker_rows):
             raise SheetBookError("no holdings parsed from sheet")
         cash = _parse_cash(wb[CASH_TAB])
         total = (
@@ -296,8 +319,16 @@ def download_sheet_xlsx(sheet_id: Optional[str] = None,
     return resp.content
 
 
-def load_sheet_book(sheet_id: Optional[str] = None,
-                    timeout: float = 30.0) -> SheetBook:
+def load_sheet_book(
+    sheet_id: Optional[str] = None,
+    timeout: float = 30.0,
+    *,
+    allow_empty_holdings: bool = False,
+) -> SheetBook:
     """Download and parse the book; preserve the existing PI interface."""
     payload = download_sheet_xlsx(sheet_id, timeout)
-    return parse_sheet_book(payload, dt.datetime.now(dt.timezone.utc))
+    return parse_sheet_book(
+        payload,
+        dt.datetime.now(dt.timezone.utc),
+        allow_empty_holdings=allow_empty_holdings,
+    )

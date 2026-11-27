@@ -110,6 +110,67 @@ class TestParseHoldings:
         assert h.market_value == 2000.0
         assert h.sheet_price == 10.0
 
+    def test_duplicate_ticker_lth_and_offensive_preserves_both_categories(self):
+        rows = [
+            _row("US", "QQQ", 500.0, 50, 400.0, 25000.0, "LTH"),
+            _row("US", "QQQ", 500.0, 20, 480.0, 10000.0, "Momentum"),
+        ]
+        book = parse_sheet_book(build_fixture(rows=rows), FETCHED_AT)
+        assert len(book.holdings) == 1
+        h = book.holdings[0]
+        assert h.symbol == "QQQ"
+        assert h.category == "LTH"
+        assert h.categories == ("LTH", "Momentum")
+
+    def test_duplicate_ticker_blank_category_first_and_second_order_consistent(self):
+        rows_blank_first = [
+            _row("US", "QQQ", 500.0, 20, 480.0, 10000.0, ""),
+            _row("US", "QQQ", 500.0, 50, 400.0, 25000.0, "LTH"),
+        ]
+        book1 = parse_sheet_book(build_fixture(rows=rows_blank_first), FETCHED_AT)
+        h1 = book1.holdings[0]
+        assert h1.category == ""
+        assert h1.categories == ("", "LTH")
+
+        rows_lth_first = [
+            _row("US", "QQQ", 500.0, 50, 400.0, 25000.0, "LTH"),
+            _row("US", "QQQ", 500.0, 20, 480.0, 10000.0, ""),
+        ]
+        book2 = parse_sheet_book(build_fixture(rows=rows_lth_first), FETCHED_AT)
+        h2 = book2.holdings[0]
+        assert h2.category == "LTH"
+        assert h2.categories == ("LTH", "")
+
+    def test_nan_and_bool_shares_rejected_strictly(self):
+        from portfolio.holdings.sheet_book import _to_float_strict
+        for bad_shares in ("NaN", "inf", "-inf", True, False):
+            rows = [_row("US", "AAA", 10.0, bad_shares, 8.0, 1000.0, "Momentum")]
+            with pytest.raises(SheetBookError, match="non-numeric Shares"):
+                parse_sheet_book(build_fixture(rows=rows), FETCHED_AT)
+        for bad_float in (float("nan"), float("inf"), -float("inf"), True, False):
+            with pytest.raises(SheetBookError, match="non-numeric Shares"):
+                _to_float_strict(bad_float, "Shares")
+
+    def test_cross_market_same_symbol_kept_separate(self):
+        rows = [
+            _row("US", "ABC", 10.0, 100, 8.0, 1000.0, "Momentum"),
+            _row("HK", "ABC", 20.0, 50, 18.0, 1000.0, "Value"),
+        ]
+        book = parse_sheet_book(build_fixture(rows=rows), FETCHED_AT)
+        assert len(book.holdings) == 2
+        by_mkt = {(h.market, h.symbol): h for h in book.holdings}
+        assert by_mkt[("US", "ABC")].shares == 100
+        assert by_mkt[("HK", "ABC")].shares == 50
+
+    def test_allow_empty_holdings_returns_empty_list(self):
+        rows = [_row("KR", "000002", 12.0, 0, 0.0, 0.0, "Momentum")]
+        book = parse_sheet_book(build_fixture(rows=rows), FETCHED_AT, allow_empty_holdings=True)
+        assert book.holdings == []
+
+    def test_allow_empty_holdings_still_rejects_header_only_sheet(self):
+        with pytest.raises(SheetBookError, match="no holdings"):
+            parse_sheet_book(build_fixture(rows=[]), FETCHED_AT, allow_empty_holdings=True)
+
     def test_header_found_after_multiple_noise_rows(self):
         book = parse_sheet_book(build_fixture(noise_rows=5), FETCHED_AT)
         assert len(book.holdings) == 5
