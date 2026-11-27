@@ -15,8 +15,12 @@ from __future__ import annotations
 import datetime as dt
 import json
 import math
+import os
+import re
+import sys
 import time
-from typing import Any, Callable
+from pathlib import Path
+from typing import Any, Callable, Iterable
 from zoneinfo import ZoneInfo
 
 import requests
@@ -720,6 +724,199 @@ def fetch_semi_vol(today_sg: dt.date | None = None, today_utc: dt.date | None = 
     return out
 
 
+KNOWN_US_TV_HINTS: dict[str, str] = {
+    "QQQ": "NASDAQ:QQQ",
+    "SOXX": "NASDAQ:SOXX",
+}
+
+_OFFENSIVE_MARKET_ORDER: dict[str, int] = {"US": 0, "HK": 1, "KR": 2}
+_URL_RE = re.compile(r"(?:https?://\S+|docs\.google\.com\S*)", re.IGNORECASE)
+
+
+def _resolve_finance_root() -> Path:
+    parents = Path(__file__).resolve().parents
+    if len(parents) > 2 and (parents[2] / "portfolio" / "holdings" / "sheet_book.py").is_file():
+        return parents[2]
+    return Path("/Users/owen/CC workspace/Finance")
+
+
+def _scrub_secret(text: str, secret: str | None = None) -> str:
+    cleaned = _URL_RE.sub("[REDACTED_URL]", str(text or ""))
+    if secret:
+        cleaned = cleaned.replace(secret, "[REDACTED]")
+    cleaned = cleaned.strip()
+    return cleaned[:240] if cleaned else "未知异常"
+
+
+def _read_dotenv_key(path: Path, key: str) -> str:
+    if not path.is_file():
+        return ""
+    try:
+        from dotenv import dotenv_values
+        vals = dotenv_values(path)
+        return str(vals.get(key) or "").strip()
+    except Exception:
+        return ""
+
+
+def _resolve_sheet_id(
+    sheet_id: str | None,
+    env_file: str | Path | None,
+    fin_root: Path,
+) -> str:
+    if sheet_id is not None and str(sheet_id).strip():
+        return str(sheet_id).strip()
+    if env_file is not None:
+        val = _read_dotenv_key(Path(env_file), "PORTFOLIO_SHEET_ID")
+        if val:
+            return val
+        return str(os.environ.get("PORTFOLIO_SHEET_ID") or "").strip()
+    env_val = str(os.environ.get("PORTFOLIO_SHEET_ID") or "").strip()
+    if env_val:
+        return env_val
+    return _read_dotenv_key(fin_root / ".env", "PORTFOLIO_SHEET_ID")
+
+
+def build_tv_symbol_hint(symbol: str, market: str) -> tuple[str, str | None, bool]:
+    """Map normalized sheet symbol + market to (display_ticker, tv_symbol_hint, needs_tv_search)."""
+    sym = str(symbol or "").strip().upper()
+    mkt = str(market or "").strip().upper()
+
+    if mkt == "HK":
+        code = sym.split(":", 1)[1].strip() if ":" in sym else sym
+        hk_num = code.lstrip("0") or "0"
+        return (code, f"HKEX:{hk_num}", False)
+
+    if mkt == "KR":
+        if ":" in sym:
+            exch, code = (p.strip() for p in sym.split(":", 1))
+            return (code, f"{exch}:{code}", False)
+        return (sym, f"KRX:{sym}", False)
+
+    if ":" in sym:
+        exch, code = (p.strip() for p in sym.split(":", 1))
+        return (code, f"{exch}:{code}", False)
+
+    if sym in KNOWN_US_TV_HINTS:
+        return (sym, KNOWN_US_TV_HINTS[sym], False)
+
+    return (sym, None, True)
+
+
+def extract_offensive_holdings(
+    book: Any,
+    sheet_priced_us_symbols: Iterable[str] = frozenset({"DRAM"}),
+) -> list[dict[str, Any]]:
+    """Extract sanitized non-LTH open equity/ETF holdings (strict 5-field whitelist)."""
+    priced_us = {str(s).strip().upper() for s in sheet_priced_us_symbols}
+    out: list[dict[str, Any]] = []
+
+    for h in getattr(book, "holdings", None) or []:
+        raw_shares = getattr(h, "shares", 0)
+        if isinstance(raw_shares, bool):
+            continue
+        try:
+            shares = float(raw_shares)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(shares) or shares <= 0:
+            continue
+
+        mkt = str(getattr(h, "market", "") or "").strip().upper()
+        if mkt not in _OFFENSIVE_MARKET_ORDER:
+            continue
+
+        if bool(getattr(h, "is_leaps", False)):
+            continue
+
+        sym = str(getattr(h, "symbol", "") or "").strip().upper()
+        if not sym or " " in sym:
+            continue
+
+        ticker, tv_hint, needs_search = build_tv_symbol_hint(sym, mkt)
+        if mkt == "US" and (sym in priced_us or ticker in priced_us):
+            continue
+
+        raw_cats = getattr(h, "categories", None)
+        if raw_cats:
+            cats = [str(c or "").strip() for c in raw_cats]
+        else:
+            cats = [str(getattr(h, "category", "") or "").strip()]
+
+        offensive_cats = [c for c in cats if c.upper() != "LTH"]
+        if not offensive_cats:
+            continue
+        non_empty = [c for c in offensive_cats if c]
+        cat_label = " / ".join(non_empty) if non_empty else ""
+
+        out.append({
+            "ticker": ticker,
+            "market": mkt,
+            "category": cat_label,
+            "tv_symbol_hint": tv_hint,
+            "needs_tv_search": needs_search,
+        })
+
+    out.sort(key=lambda item: (_OFFENSIVE_MARKET_ORDER[item["market"]], item["ticker"]))
+    return out
+
+
+def fetch_active_offensive_holdings(
+    *,
+    now_sg: dt.datetime | None = None,
+    sheet_id: str | None = None,
+    env_file: str | Path | None = None,
+    book_loader: Callable[[str, float], Any] | None = None,
+    timeout: float = 20.0,
+) -> dict[str, Any]:
+    """Read active non-LTH offensive holdings from book-of-record sheet with fail-closed & privacy scrubbing."""
+    now_sg = now_sg or dt.datetime.now(SG_TZ)
+    fetched_at_sg = now_sg.strftime("%Y-%m-%d %H:%M:%S %Z")
+    fin_root = _resolve_finance_root()
+    if str(fin_root) not in sys.path:
+        sys.path.insert(0, str(fin_root))
+
+    resolved_id = _resolve_sheet_id(sheet_id, env_file, fin_root)
+    if not resolved_id:
+        return {
+            "status": "unavailable",
+            "reason": "未配置 PORTFOLIO_SHEET_ID",
+            "fetched_at_sg": fetched_at_sg,
+            "items": [],
+        }
+
+    try:
+        from portfolio.holdings.sheet_book import (
+            SHEET_PRICED_US_SYMBOLS,
+            load_sheet_book,
+        )
+        loader = book_loader or load_sheet_book
+        book = loader(resolved_id, timeout)
+        items = extract_offensive_holdings(book, SHEET_PRICED_US_SYMBOLS)
+    except Exception as exc:
+        raw_msg = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+        return {
+            "status": "unavailable",
+            "reason": _scrub_secret(raw_msg, resolved_id),
+            "fetched_at_sg": fetched_at_sg,
+            "items": [],
+        }
+
+    if not items:
+        return {
+            "status": "empty",
+            "reason": "",
+            "fetched_at_sg": fetched_at_sg,
+            "items": [],
+        }
+    return {
+        "status": "ok",
+        "reason": "",
+        "fetched_at_sg": fetched_at_sg,
+        "items": items,
+    }
+
+
 def build_payload() -> dict[str, Any]:
     now_sg = dt.datetime.now(SG_TZ)
     now_utc = now_sg.astimezone(UTC)
@@ -730,6 +927,7 @@ def build_payload() -> dict[str, Any]:
     fng = fetch_us_fear_greed(today_et=now_et.date())
     us_vol = fetch_us_equity_vol(today_sg=now_sg.date(), now_et=now_et)
     semi = fetch_semi_vol(today_sg=now_sg.date(), today_utc=now_utc.date(), now_et=now_et)
+    active_holdings = fetch_active_offensive_holdings(now_sg=now_sg)
 
     pos_mgmt = {
         "BTC": btc.pop("_position_mgmt", {"available": False, "reason": "未计算"}),
@@ -752,6 +950,7 @@ def build_payload() -> dict[str, Any]:
         "us_equity_vol": us_vol,
         "semi_vol": semi,
         "position_mgmt": pos_mgmt,
+        "active_holdings": active_holdings,
     }
 
 

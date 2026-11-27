@@ -3,10 +3,18 @@
 """Unit tests for fetch_vol_env.py math, sentinel guards, and fail-closed logic."""
 
 import datetime as dt
+import json
 import math
 import unittest
 import pandas as pd
+import pytest
 
+from portfolio.holdings.sheet_book import (
+    SHEET_PRICED_US_SYMBOLS,
+    SheetBook,
+    SheetBookError,
+    SheetHolding,
+)
 from scripts.daily_technical_analysis import chunk_telegram as ct
 from scripts.daily_technical_analysis import fetch_vol_env as m
 
@@ -146,6 +154,167 @@ class TestVolEnv(unittest.TestCase):
         self.assertEqual(res["days_above_ema20"], 0)
         self.assertIn("D_minus_5_5", res["extreme_price_levels"])
         self.assertLess(res["extreme_price_levels"]["D_minus_5_5"], res["extreme_price_levels"]["D_minus_4_8"])
+
+
+# ---------------------------------------------------------------------------
+# Task 2: Active offensive holdings extraction & privacy sanitization
+# ---------------------------------------------------------------------------
+
+def _make_holding(
+    symbol: str,
+    market: str,
+    category: str,
+    *,
+    shares: float = 100.0,
+    cost_per_share: float = 50.0,
+    sheet_price: float = 60.0,
+    market_value: float = 6000.0,
+    is_leaps: bool = False,
+    categories: tuple[str, ...] = (),
+) -> SheetHolding:
+    return SheetHolding(
+        symbol=symbol,
+        raw_ticker=symbol,
+        market=market,
+        shares=shares,
+        cost_per_share=cost_per_share,
+        sheet_price=sheet_price,
+        market_value=market_value,
+        category=category,
+        is_leaps=is_leaps,
+        categories=categories or ((category,) if category else ()),
+    )
+
+
+def _make_book(holdings: list[SheetHolding], *, cash_usd: float = 111000.0, total_capital_usd: float = 9999999.0) -> SheetBook:
+    return SheetBook(
+        holdings=holdings,
+        cash_usd=cash_usd,
+        total_capital_usd=total_capital_usd,
+        fetched_at=dt.datetime(2026, 11, 27, 0, 5, tzinfo=dt.timezone.utc),
+        whole_port_net_total_usd=total_capital_usd,
+    )
+
+
+def test_tv_symbol_hint_mapping_us_hk_kr():
+    assert m.build_tv_symbol_hint("0700", "HK") == ("0700", "HKEX:700", False)
+    assert m.build_tv_symbol_hint("09988", "HK") == ("09988", "HKEX:9988", False)
+    assert m.build_tv_symbol_hint("0001", "HK") == ("0001", "HKEX:1", False)
+    assert m.build_tv_symbol_hint("KRX:005930", "KR") == ("005930", "KRX:005930", False)
+    assert m.build_tv_symbol_hint("000660", "KR") == ("000660", "KRX:000660", False)
+    assert m.build_tv_symbol_hint("NASDAQ:SMH", "US") == ("SMH", "NASDAQ:SMH", False)
+    assert m.build_tv_symbol_hint("QQQ", "US") == ("QQQ", "NASDAQ:QQQ", False)
+    assert m.build_tv_symbol_hint("SOXX", "US") == ("SOXX", "NASDAQ:SOXX", False)
+    assert m.build_tv_symbol_hint("NVDA", "US") == ("NVDA", None, True)
+
+
+def test_offensive_holdings_all_lth_returns_empty():
+    book = _make_book([
+        _make_holding("AAA", "US", "LTH"),
+        _make_holding("0700", "HK", " lth "),
+    ])
+    res = m.fetch_active_offensive_holdings(
+        now_sg=dt.datetime(2026, 11, 27, 8, 5, tzinfo=m.SG_TZ),
+        sheet_id="FAKE_SHEET_ID_999",
+        book_loader=lambda sheet_id, timeout: book,
+    )
+    assert res["status"] == "empty"
+    assert res["items"] == []
+
+
+def test_offensive_holdings_filters_leaps_options_dram_crypto_and_keeps_mixed_duplicate():
+    book = _make_book([
+        _make_holding("KRX:005930", "KR", "Fundamental"),
+        _make_holding("0700", "HK", "Value"),
+        _make_holding("QQQ", "US", "LTH", categories=("LTH", "Sentiment")),
+        _make_holding("AAA", "US", "Momentum"),
+        _make_holding("BBB LEAPS", "US", "Momentum", is_leaps=True),
+        _make_holding("SPY PUT", "US", "Hedge"),
+        _make_holding("DRAM", "US", "Momentum"),
+        _make_holding("BTC", "CRYPTO", "Momentum"),
+        _make_holding("CLOSED_SYM", "US", "Momentum", shares=0.0),
+    ])
+    items = m.extract_offensive_holdings(book, SHEET_PRICED_US_SYMBOLS)
+    assert [it["ticker"] for it in items] == ["AAA", "QQQ", "0700", "005930"]
+    assert [it["market"] for it in items] == ["US", "US", "HK", "KR"]
+    by_ticker = {it["ticker"]: it for it in items}
+    assert by_ticker["QQQ"]["category"] == "Sentiment"
+    assert by_ticker["QQQ"]["tv_symbol_hint"] == "NASDAQ:QQQ"
+    assert by_ticker["QQQ"]["needs_tv_search"] is False
+    assert by_ticker["AAA"]["tv_symbol_hint"] is None
+    assert by_ticker["AAA"]["needs_tv_search"] is True
+    assert by_ticker["0700"]["tv_symbol_hint"] == "HKEX:700"
+    assert by_ticker["005930"]["tv_symbol_hint"] == "KRX:005930"
+
+
+def test_offensive_holdings_strict_privacy_whitelist():
+    book = _make_book(
+        [
+            _make_holding(
+                "NVDA_TEST",
+                "US",
+                "Momentum",
+                shares=12345,
+                cost_per_share=67.89,
+                sheet_price=123.45,
+                market_value=888888.0,
+            ),
+        ],
+        cash_usd=111000.0,
+        total_capital_usd=9999999.0,
+    )
+    res = m.fetch_active_offensive_holdings(
+        now_sg=dt.datetime(2026, 11, 27, 8, 5, tzinfo=m.SG_TZ),
+        sheet_id="FAKE_SHEET_ID_SECRET",
+        book_loader=lambda sheet_id, timeout: book,
+    )
+    assert res["status"] == "ok"
+    assert len(res["items"]) == 1
+    expected_keys = {"ticker", "market", "category", "tv_symbol_hint", "needs_tv_search"}
+    for item in res["items"]:
+        assert set(item.keys()) == expected_keys
+    dumped = json.dumps(res, ensure_ascii=False)
+    for forbidden in ("12345", "67.89", "888888", "111000", "9999999", "FAKE_SHEET_ID_SECRET"):
+        assert forbidden not in dumped
+
+
+def test_offensive_holdings_fail_closed_on_missing_env_and_download_error(tmp_path, monkeypatch):
+    monkeypatch.delenv("PORTFOLIO_SHEET_ID", raising=False)
+    res_missing = m.fetch_active_offensive_holdings(
+        now_sg=dt.datetime(2026, 11, 27, 8, 5, tzinfo=m.SG_TZ),
+        env_file=tmp_path / "none.env",
+    )
+    assert res_missing["status"] == "unavailable"
+    assert res_missing["items"] == []
+
+    def boom_sheet(sheet_id, timeout):
+        raise SheetBookError(
+            "sheet download failed: HTTP 500 https://docs.google.com/d/FAKE_SECRET/export"
+        )
+
+    res_sheet_err = m.fetch_active_offensive_holdings(
+        now_sg=dt.datetime(2026, 11, 27, 8, 5, tzinfo=m.SG_TZ),
+        sheet_id="FAKE_SECRET",
+        book_loader=boom_sheet,
+    )
+    assert res_sheet_err["status"] == "unavailable"
+    assert res_sheet_err["items"] == []
+    assert "FAKE_SECRET" not in res_sheet_err["reason"]
+    assert "https://" not in res_sheet_err["reason"]
+    assert "docs.google.com" not in res_sheet_err["reason"]
+
+    def boom_runtime(sheet_id, timeout):
+        raise RuntimeError("unexpected FAKE_SECRET https://example.com/secret")
+
+    res_rt_err = m.fetch_active_offensive_holdings(
+        now_sg=dt.datetime(2026, 11, 27, 8, 5, tzinfo=m.SG_TZ),
+        sheet_id="FAKE_SECRET",
+        book_loader=boom_runtime,
+    )
+    assert res_rt_err["status"] == "unavailable"
+    assert res_rt_err["items"] == []
+    assert "FAKE_SECRET" not in res_rt_err["reason"]
+    assert "https://" not in res_rt_err["reason"]
 
 
 if __name__ == "__main__":
