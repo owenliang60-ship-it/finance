@@ -88,6 +88,7 @@
 | **Event Study** | 标准化事件研究框架 | universe gate + RVOL/PMARP 共用 |
 | **Timing** | 择时信号回测（含 BTC dual-engine） | **结论：单因子机械择时全面无效** |
 | **Breadth Study** | 广度信号验证（QQQ/SOXX percentile upcross） | 进行中（buy quality / event validity） |
+| **Theme Crowding** (`theme_crowding/`) | 美股主题篮子拥挤度 V2.2（三维度 5 指标 EMA3 + 迟滞灯，CLI `scripts/theme_crowding_dashboard.py`） | 只读温度计看板 |
 | **Research** | 专题脚本（PMARP/RVOL/BBWP signal stats）| 一次性研究 |
 | `new/` | Per-study workspaces（数据 + 报告） | 隔离每次研究 |
 
