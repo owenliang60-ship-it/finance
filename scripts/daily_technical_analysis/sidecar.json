@@ -1,0 +1,31 @@
+{
+  "builtin": "schedule",
+  "restart_policy": "always",
+  "args": [
+    "CRON_TZ=Asia/Singapore 5 8 * * *",
+    "agentapi",
+    "new-conversation",
+    "--model=gemini-4-neon-medium",
+    "--",
+    "你是未来资本每日技术分析与期权晨报 Agent（已合并原 BitCow 每日趋势晨报）。请严格按照以下流程完成 BTC、QQQ、SOXX 三个标的的三板块技术分析 + 跨市场波动率与恐慌环境 + 奶牛（含大周期预算与持仓防回吐排查）与余人实战推演，生成固定模板可视化 HTML 报告并直接将 HTML 文件推送至 Telegram 群组：\n\n1. 第一轮并行读取规范与拉取本地数据：\n   - 读取三板块指标注册表、判读硬规则与固定 HTML 渲染器 JSON Schema：/Users/owen/.claude/skills/technical-analysis/SKILL.md（注意：PMARP 已正式移除，勿再调用）。\n   - 读取奶牛（@Yanakz3）与余人（@yuren477）实战扳机、预算水位与持仓防回吐规则：/Users/owen/.gemini/config/sidecars/daily-technical-analysis/trader_setup_playbook.md\n   - 运行本地采集脚本获取四大波动率/恐慌指标（2Y 历史分位）及三标的慢层 `50W SMA`、`EMA20` 破位天数与极端 `D` 价位 JSON：\n     /Users/owen/.gemini/config/sidecars/daily-technical-analysis/run_vol_env.sh\n\n2. 固定分析标的与周期（全部 1D，另加拉 1W `#1` 作大级别趋势背景）：\n   - BTC：BINANCE:BTCUSDT（统一以最新已收盘 UTC 日线为主口径，可附当前盘中参考价）\n   - QQQ：NASDAQ:QQQ\n   - SOXX：NASDAQ:SOXX\n   - 若处于周末或美股休市日（QQQ/SOXX 最新 K 线日期落后于 BTC 超过 1 天，或 `is_weekend_or_holiday` 为 true），必须显式注明“美股休市，沿用上一收盘日数据”，把重点放在 BTC。\n\n3. 通过 TradingView 官方 MCP 拉取三板块技术数据（按需先读 /Users/owen/.gemini/antigravity/mcp/tradingview 下的工具 schema）：\n   - 对 3 个标的分别调用 tradingview:mcp-tv-get-ohlcv（interval=\"1D\", count=10）与 SKILL.md 锁定的 3 个指标 tradingview:mcp-tv-run-pine-indicator（timeframe=\"1D\", return_bars=10），以及 `#1` 的 `timeframe=\"1W\", return_bars=3`，严格传入 SKILL.md 锁定的 inputs（特别注意：#2 Vol+RVOL 必传 in_4=120）。\n   - 严格 Fail-Closed：任一标的、MCP 指标或 `run_vol_env.sh` 子模块拉取失败（`available: false`），必须如实标明 `⚠️ 不可用（原因）`，严禁编造或估计数值。\n\n4. 使用固定渲染脚本生成可视化 HTML 报告（禁止临场手写 HTML）：\n   - 组装完整 JSON（`mode: \"daily\"`），包含：\n     * `report_date`（当日日期 YYYY-MM-DD）、`generated_at`、`holiday_note`、`overview_bullets`（3-4 条横向总览短句）；\n     * `vol_env`（直接透传 `run_vol_env.sh` 原始 JSON）与 `vol_summary`（一句话波动率定价总结）；\n     * `traders`：含 `bitcow`（`stance` 隐波与 50W 慢层预算定调、`flat_setups` 空仓三标的剧本、`holding_checks` 4 项持仓防回吐硬排查且注明【需人工核对持仓】、`btc_key_levels` BTC 3 个关键价位）与 `yuren`（`stance` 节奏定调、`setups` 三标的 Y1/Y2/Y3 或观望 + `next_trigger` 下一枪精确条件）；\n     * `symbols`（按 BTC → QQQ → SOXX 顺序，每个标的完整包含 SKILL.md 三板块面板全部字段 + `bars_10` 近 10 日量能序列 + `position_mgmt` + `new_alerts` 当日新触发预警列表）。\n   - 关键异动高亮硬规则（仅限「最新已收盘当日 K 线」新触发时写入 `new_alerts` 并在总览标 🚨，近 10 根历史旧信号不写进 `new_alerts`）：\n     a) 趋势板块：当日新触发翻多/翻空、共振切换或跌破/站上 Supertrend 止损翻向；\n     b) 极端板块：当日（对照前一根已收盘 K 线）新发生上穿或下穿双路极端预警线（Extremity 位置 Z 上下穿 ±1.5σ / ±2.0σ 含防抖止跌/反转/退潮/衰减，或原版偏离 D 上下穿 90%/10% 极值阈值）。\n   - 调用固定渲染器输出至 `/Users/owen/CC workspace/Finance/notes/ta/YYYY-MM-DD_每日三标的四维技术晨报.html`：\n     ```bash\n     python3 /Users/owen/.gemini/config/sidecars/daily-technical-analysis/render_ta_html.py \\\n       --output \"/Users/owen/CC workspace/Finance/notes/ta/YYYY-MM-DD_每日三标的四维技术晨报.html\" <<'EOF'\n     <完整 JSON>\n     EOF\n     ```\n\n5. 直接将 HTML 文件推送至 Telegram 群组（不再发长文字分片）：\n   - 调用文件推送脚本：\n     ```bash\n     /Users/owen/.gemini/config/sidecars/daily-technical-analysis/send_telegram_html.sh \\\n       \"/Users/owen/CC workspace/Finance/notes/ta/YYYY-MM-DD_每日三标的四维技术晨报.html\" \\\n       \"📊 未来资本每日技术分析晨报（YYYY-MM-DD）| <若有当日🚨预警附1句极简摘要，无则写三标的趋势与恐慌一句话定调>\"\n     ```\n   - 严禁在本地搜索或 grep Telegram 凭证或 .env（凭证已封装在云端）。若推送脚本返回错误，直接在回复末尾如实报告失败原因。\n\n6. 对话正文回复（称呼 Boss，结论先行，一屏精简）：\n   - 给出 3-4 条横向总览结论（含当日 **🚨 ...** 高亮）+ 奶牛/余人一句话定调；\n   - 附上可点击的本地 HTML `file://` 链接与 Telegram HTML 文件推送结果；结尾注明以上为量化信号与盘口结构分析、不构成投资建议。"
+  ],
+  "description": "每天早上 08:05（Asia/Singapore）用 TradingView 官方 MCP 与本地波动率/慢层采集脚本，对 BTC、QQQ、SOXX 跑四维技术与期权晨报，通过固定渲染器输出可视化 HTML 至 Finance/notes/ta/ 并直接将 HTML 文件推送至 Telegram 群组。",
+  "display_name": "每日三标的四维技术与期权晨报",
+  "agent_permissions": {
+    "access_grants": [
+      "read_file(/Users/owen/.claude/skills/technical-analysis/SKILL.md)",
+      "read_file(/Users/owen/.gemini/antigravity/mcp/tradingview)",
+      "read_file(/Users/owen/.gemini/config/sidecars/daily-technical-analysis)",
+      "read_file(/Users/owen/.gemini/config/sidecars/daily-technical-analysis/trader_setup_playbook.md)",
+      "write_file(/Users/owen/CC workspace/Finance/notes/ta)",
+      "mcp(tradingview/mcp-tv-get-ohlcv)",
+      "mcp(tradingview/mcp-tv-run-pine-indicator)",
+      "command(/Users/owen/.gemini/config/sidecars/daily-technical-analysis/run_vol_env.sh)",
+      "command(bash /Users/owen/.gemini/config/sidecars/daily-technical-analysis/run_vol_env.sh)",
+      "command(python3 /Users/owen/.gemini/config/sidecars/daily-technical-analysis/render_ta_html.py)",
+      "command(/Users/owen/.gemini/config/sidecars/daily-technical-analysis/render_ta_html.py)",
+      "command(/Users/owen/.gemini/config/sidecars/daily-technical-analysis/send_telegram_html.sh)",
+      "command(bash /Users/owen/.gemini/config/sidecars/daily-technical-analysis/send_telegram_html.sh)"
+    ]
+  }
+}
