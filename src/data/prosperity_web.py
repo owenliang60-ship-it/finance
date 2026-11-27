@@ -11,8 +11,8 @@ from html import escape
 import math
 from typing import List, Mapping, Optional, Sequence, Tuple
 
-from src.data.prosperity_pool import (LIQUIDITY_TOP, POOL_GRADES, POOL_SCHEME_ID, board_mismatch,
-                                      criteria_payload, validate_prosperity_pool)
+from src.data.prosperity_pool import (LIQUIDITY_DAYS, LIQUIDITY_MIN_TOP_DAYS, LIQUIDITY_TOP, POOL_GRADES,
+                                      POOL_SCHEME_ID, board_mismatch, criteria_payload, validate_prosperity_pool)
 from src.data.prosperity_storage import BoardKey, content_hash
 from terminal.prosperity.schemes import SCHEMES, scheme_hash
 
@@ -49,7 +49,7 @@ class WebRow:
     family_scores: Mapping[str, Optional[float]]
     badges: Tuple[str, ...]            # kernel badges (minus BOARD_BADGES) → demotions → SHOWN_LABELS → 'approximate'
                                        # ('approximate' only on a mixed board; see BoardPage.all_approximate)
-    pool_rank: Optional[int]           # dollar-volume rank when the row is in the bound pool
+    pool_days: Optional[int]           # top-100 dollar-volume days when the row is in the bound pool
 
 
 @dataclass(frozen=True)
@@ -82,10 +82,10 @@ def _badges(row, labels, pit_basis) -> Tuple[str, ...]:
     return tuple(dict.fromkeys(codes))
 
 
-def board_page(stored, *, pool_ranks: Optional[Mapping[str, int]] = None,
+def board_page(stored, *, pool_days: Optional[Mapping[str, int]] = None,
                pool_note: Optional[str] = None) -> BoardPage:
     board, meta = stored.board, stored.meta
-    pool_ranks = pool_ranks or {}
+    pool_days = pool_days or {}
     stocks = {p['symbol']: p for p in stored.stocks}
     labels = {f.symbol: set(f.labels) for f in stored.factors}
     ordered = sorted(board.rows, key=lambda r: (_STATUS_ORDER[r.status], r.rank or 0, r.symbol))
@@ -97,7 +97,7 @@ def board_page(stored, *, pool_ranks: Optional[Mapping[str, int]] = None,
                         observe_reason=r.observe_reason, family_scores=dict(r.family_scores),
                         badges=_badges(r, labels.get(r.symbol, set()),
                                        None if everyone else stocks[r.symbol].get('pit_basis')),
-                        pool_rank=pool_ranks.get(r.symbol))
+                        pool_days=pool_days.get(r.symbol))
                  for r in ordered)
     counts = {k: sum(r.status == k for r in rows) for k in _STATUS_ORDER}
     counts.update({g: sum(r.status == 'ranked' and r.grade == g for r in rows) for g in ('STRICT', 'FULL', 'BELOW')})
@@ -109,7 +109,7 @@ def board_page(stored, *, pool_ranks: Optional[Mapping[str, int]] = None,
 
 
 def pool_binding(pool: Optional[dict], stored) -> Tuple[Mapping[str, int], str]:
-    """(symbol → dollar-volume rank, header note). Marks only a pool bound to this exact board.
+    """(symbol → top-100 dollar-volume days, header note). Marks only a pool bound to this exact board.
 
     Board level: F1 live weekly, as_of, criteria, code_version, content_hash. Counts: board_mismatch
     recomputes ranked / tier cut / eligible from the board (plan §15). Members: content_hash does not
@@ -140,8 +140,9 @@ def pool_binding(pool: Optional[dict], stored) -> Tuple[Mapping[str, int], str]:
                 or m['rank'] != r.rank or m['grade'] != r.grade):
             return {}, f'未标入池：池成员与本榜不符（{m["symbol"]}）'
     members = pool['members']
-    return ({m['symbol']: m['dollar_volume_rank'] for m in members},
-            f'入池 {len(members)} 只（第一档 ∩ STRICT/FULL ∩ 成交额前 {LIQUIDITY_TOP}，as_of {board.as_of}）')
+    return ({m['symbol']: m['top100_days'] for m in members},
+            f'入池 {len(members)} 只（第一档 ∩ STRICT/FULL ∩ 近 {LIQUIDITY_DAYS} 个交易日至少 '
+            f'{LIQUIDITY_MIN_TOP_DAYS} 天进当日成交额前 {LIQUIDITY_TOP}，as_of {board.as_of}）')
 
 
 def load_pages(store, *, code_version: str, pool: Optional[dict] = None,
@@ -163,8 +164,8 @@ def load_pages(store, *, code_version: str, pool: Optional[dict] = None,
         for key in weekly + list(finals[::-1]):
             stored = store.get_board(key)
             if sid == POOL_SCHEME_ID and key.board_type == 'weekly':
-                ranks, note = ({}, '未标入池：' + pool_error) if pool_error else pool_binding(pool, stored)
-                pages.append(board_page(stored, pool_ranks=ranks, pool_note=note))
+                days, note = ({}, '未标入池：' + pool_error) if pool_error else pool_binding(pool, stored)
+                pages.append(board_page(stored, pool_days=days, pool_note=note))
             else:
                 pages.append(board_page(stored))
     return pages
@@ -241,16 +242,16 @@ def _cells(r: WebRow, *, pooled: bool) -> str:
     parts += [f'<td>{_num(r.family_scores.get(k), 0)}' for k, _ in FAMILIES]
     parts.append('<td>' + ''.join(_badge(b) for b in r.badges))
     if pooled:
-        marked = r.pool_rank is not None
-        parts += [f'<td>{"✓" if marked else ""}', f'<td>{r.pool_rank if marked else ""}']
-    cls = ' class="p"' if pooled and r.pool_rank is not None else ''
+        marked = r.pool_days is not None
+        parts += [f'<td>{"✓" if marked else ""}', f'<td>{f"{r.pool_days}/{LIQUIDITY_DAYS}" if marked else ""}']
+    cls = ' class="p"' if pooled and r.pool_days is not None else ''
     return f'<tr{cls}>' + ''.join(parts)
 
 
 def _table(rows: Sequence[WebRow], *, pooled: bool) -> str:
     heads = ['排名', '代码', '名称', '行业', '评级', '分数', *(label for _, label in FAMILIES), '徽章']
     if pooled:
-        heads += ['入池', '成交额排名']
+        heads += ['入池', '前100天数']
     head = ''.join(f'<th>{h}</th>' for h in heads)
     body = '\n'.join(_cells(r, pooled=pooled) for r in rows)
     return f'<div class="w"><table><thead><tr>{head}</tr></thead><tbody>\n{body}\n</tbody></table></div>'
@@ -258,7 +259,7 @@ def _table(rows: Sequence[WebRow], *, pooled: bool) -> str:
 
 def _section(page: BoardPage, peers: Sequence[BoardPage]) -> str:
     c = page.counts
-    pooled = any(r.pool_rank is not None for r in page.rows)    # pool_binding marks rows only when bound
+    pooled = any(r.pool_days is not None for r in page.rows)    # pool_binding marks rows only when bound
     title = f'{escape(page.scheme_id)} · {_TYPE_TEXT.get(page.board_type, page.board_type)} · {page.as_of}'
     meta = [f'季度 {escape(page.quarter_label)}' if page.quarter_label else None,
             f'冻结于 {escape(page.frozen_at)}' if page.frozen_at else None,
@@ -291,14 +292,15 @@ def _pool_list(page: Optional[BoardPage]) -> str:
     F1 latest weekly page, so the list is marked exactly when that board is; otherwise only its note."""
     if page is None:
         return ''
-    members = [r for r in page.rows if r.pool_rank is not None]
+    members = [r for r in page.rows if r.pool_days is not None]
     out = ['<aside id="pool">', f'<h2>精选池 · {page.as_of}</h2>',
            f'<p class="note">{escape(page.pool_note or "")}</p>']
     if members:
         out.append(f'<p class="m">按景气排名 · 完整周榜见 <a href="#{section_id(page)}">F1 最新周榜</a></p>')
-        head = ''.join(f'<th>{h}</th>' for h in ('排名', '代码', '名称', '行业', '评级', '分数', '成交额排名'))
+        head = ''.join(f'<th>{h}</th>' for h in ('排名', '代码', '名称', '行业', '评级', '分数', '前100天数'))
         body = '\n'.join(f'<tr><td>{r.rank}<td>{escape(r.symbol)}{_name_cell(r)}<td>{escape(r.sector or "—")}'
-                         f'<td>{escape(r.grade or "—")}<td>{_score(r.score)}<td>{r.pool_rank}' for r in members)
+                         f'<td>{escape(r.grade or "—")}<td>{_score(r.score)}<td>{r.pool_days}/{LIQUIDITY_DAYS}'
+                         for r in members)
         out.append(f'<div class="w"><table><thead><tr>{head}</tr></thead><tbody>\n{body}\n</tbody></table></div>')
     out.append('</aside>')
     return '\n'.join(out) + '\n'

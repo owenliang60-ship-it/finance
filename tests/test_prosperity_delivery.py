@@ -120,10 +120,9 @@ def _sha(p):
 
 def _liquidity(stored):
     as_of = stored.board.as_of
-    window = weekdays((date.fromisoformat(as_of) - timedelta(days=1)).isoformat(), 30)
+    window = weekdays((date.fromisoformat(as_of) - timedelta(days=1)).isoformat(), 90)
     symbols = sorted(stored.meta.members)
-    return LiquidityResult(as_of, tuple(window), {s: 1e9 - i * 1e6 for i, s in enumerate(symbols)},
-                           {s: i + 1 for i, s in enumerate(symbols)})
+    return LiquidityResult(as_of, tuple(window), {s: 90 - i for i, s in enumerate(symbols)}, len(symbols))
 
 
 @pytest.fixture()
@@ -142,8 +141,8 @@ def env(tmp_path):
     pool = tmp_path / 'pool.json'
     payload = build_pool(stored, _liquidity(stored), generated_at=WEEK + 'T09:10:00Z')
     publish_prosperity_pool(payload, pool, now=NOW)
-    # real prices: test_real_web_cli_integration runs the M16 momentum CLI as a subprocess
-    market = seed_market(tmp_path / 'market.db', stored.meta.members, '2026-10-02')
+    # real prices: test_real_web_cli_integration runs M12 health (90d liquidity) and M16 momentum CLIs
+    market = seed_market(tmp_path / 'market.db', stored.meta.members, '2026-10-02', days=100)
     return {'db': db, 'market': market, 'pool': pool, 'dir': tmp_path / 'delivery',
             'members': sorted(m['symbol'] for m in payload['members'])}
 
@@ -636,11 +635,12 @@ def test_combo_text_empty_and_untrusted_pool():
 
 
 def test_combo_text_fits_one_message_at_the_pool_cap():
-    """Widest case: 100-member pool (LIQUIDITY_TOP), the widest cut listed, the other members unscored.
+    """Widest case under an ~856-stock universe: widest U70 cut listed (39), plus max unscored
+    allowed by momentum_board's 90% coverage gate (floor(0.10 × 856) = 85 → 124 pool names).
 
     At most floor(100 × 70 / 36) = 194 names can spend 36 of 70 days in a daily top 100, so the
     cut is at most ceil(194 / 5) = 39."""
-    names = [f'BRK-{i:02d}' for i in range(100)]                    # 6-char symbols
+    names = [f'BRK-{i:03d}' for i in range(124)]                   # 7-char symbols: 39 listed + 85 unscored
     payload = _payload(symbols=names[:39] + [f'X{i:02d}' for i in range(39)], down=700, u=194)
     assert mb.board_top_cut(payload['boards']['14w']) == 39
     for row in payload['boards']['14w']['scored'][:39]:
