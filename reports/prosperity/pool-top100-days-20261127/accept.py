@@ -87,7 +87,7 @@ def main() -> int:
                         '--code-version', cv, '--as-of', as_of, '--out', str(mom_path)], check=True)
 
         rc_pos, out_pos = run_verifier(db, mdb_src, html_path, pool_path, cv, mom_path)
-        if rc_pos != 0:
+        if rc_pos != 0 or '33 pool days, 33 pool list rows, 90 u70 symbols; differences: 0' not in out_pos:
             print('POSITIVE FAILED:', out_pos, file=sys.stderr)
             return 1
 
@@ -139,6 +139,12 @@ def main() -> int:
         f6.write_text(pool_path.read_text(encoding='utf-8').replace(str(payload['members'][0]['score']), 'NaN', 1),
                       encoding='utf-8')
         negatives['pool_nan_score'] = run_verifier(db, mdb_src, html_path, f6, cv, mom_path)
+
+        # Bonus 7) Spoofed liquidity_daily.ratio (review P2)
+        p7 = copy.deepcopy(payload)
+        p7['coverage']['liquidity_daily']['ratio'] = 1.0
+        f7 = tdir / 'tamper7_ratio.json'; f7.write_text(json.dumps(p7, ensure_ascii=False))
+        negatives['coverage_ratio_spoofed'] = run_verifier(db, mdb_src, html_path, f7, cv, mom_path)
 
         for name, (rc, out) in negatives.items():
             if rc != 1:

@@ -235,6 +235,7 @@ def verify_pool_and_bind(conn, mconn, pool, board, rows, criteria, diff):
             diff('pool: schema_version or name invalid')
             return {}, 'schema'
         if pool.get('as_of') != board['as_of'] or board['mode'] != 'live':
+            diff(f'pool: as_of {pool.get("as_of")!r} != board {board["as_of"]!r} or mode={board["mode"]!r}')
             return {}, 'as_of/board'
         if pool.get('criteria') != criteria:
             diff('pool: criteria mismatch')
@@ -248,25 +249,38 @@ def verify_pool_and_bind(conn, mconn, pool, board, rows, criteria, diff):
         cut = -(-len(ranked) // 5)
         eligible_rows = [r for r in ranked if r['rank'] <= cut and r['grade'] in ('STRICT', 'FULL')]
         symbols = sorted(set(board['members']))
+        total_n = len(symbols)
         digest = hashlib.sha256('\n'.join(symbols).encode('utf-8')).hexdigest()
         cov = pool['coverage']
         win90, counts90, _, daily_min = recompute_market_liquidity(mconn, symbols, board['as_of'])
-        if (pool['universe']['count'] != len(symbols) or pool['universe']['symbols_sha256'] != digest
-                or not _strict_int(cov['ranked']['covered']) or cov['ranked']['covered'] != len(ranked)
-                or not _strict_int(cov['liquidity_daily']['covered']) or cov['liquidity_daily']['covered'] != daily_min
-                or cov['ranked']['ratio'] < COVERAGE_FLOOR or cov['liquidity_daily']['ratio'] < COVERAGE_FLOOR
-                or cov['tier_cut'] != cut or cov['eligible'] != len(eligible_rows)
+        rk_stat, lq_stat = cov['ranked'], cov['liquidity_daily']
+        if (not _strict_int(pool['universe']['count']) or pool['universe']['count'] != total_n
+                or pool['universe']['symbols_sha256'] != digest
+                or not _strict_int(rk_stat['covered']) or rk_stat['covered'] != len(ranked)
+                or not _strict_int(rk_stat['total']) or rk_stat['total'] != total_n
+                or not _finite_num(rk_stat['ratio']) or not math.isclose(rk_stat['ratio'], len(ranked) / total_n, abs_tol=1e-12)
+                or len(ranked) / total_n < COVERAGE_FLOOR
+                or not _strict_int(lq_stat['covered']) or lq_stat['covered'] != daily_min
+                or not _strict_int(lq_stat['total']) or lq_stat['total'] != total_n
+                or not _finite_num(lq_stat['ratio']) or not math.isclose(lq_stat['ratio'], daily_min / total_n, abs_tol=1e-12)
+                or daily_min / total_n < COVERAGE_FLOOR
+                or not _strict_int(cov['tier_cut']) or cov['tier_cut'] != cut
+                or not _strict_int(cov['eligible']) or cov['eligible'] != len(eligible_rows)
+                or not _strict_int(cov['selected'])
                 or cov['trading_window'] != [win90[0], win90[-1]]):
             diff('pool: universe/coverage/window mismatch vs recomputed DB values')
             return {}, 'counts'
         expected_members = [(r['symbol'], r['rank'], r['grade'], counts90[r['symbol']])
                             for r in sorted(eligible_rows, key=lambda x: x['rank'])
                             if counts90[r['symbol']] >= POOL_MIN_TOP_DAYS]
+        member_keys = {'symbol', 'name', 'sector', 'industry', 'rank', 'grade', 'score',
+                       'family_scores', 'badges', 'top100_days'}
         got_members = []
         for m in pool['members']:
-            if (not isinstance(m, dict) or not _strict_int(m.get('rank')) or not _strict_int(m.get('top100_days'))
+            if (not isinstance(m, dict) or set(m) != member_keys
+                    or not _strict_int(m.get('rank')) or not _strict_int(m.get('top100_days'))
                     or not (POOL_MIN_TOP_DAYS <= m['top100_days'] <= POOL_DAYS)
-                    or not _finite_num(m.get('score')) or 'dollar_volume_rank' in m or 'avg_dollar_volume' in m):
+                    or not _finite_num(m.get('score'))):
                 diff(f'pool: malformed member {m!r}')
                 return {}, 'member_schema'
             got_members.append((m['symbol'], m['rank'], m['grade'], m['top100_days']))

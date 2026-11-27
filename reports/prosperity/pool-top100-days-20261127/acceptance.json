@@ -237,6 +237,10 @@
     "pool_nan_score": {
       "rc": 1,
       "output": "checked 72408 rows, 0 pool days, 33 pool list rows, 90 u70 symbols; differences: 861"
+    },
+    "coverage_ratio_spoofed": {
+      "rc": 1,
+      "output": "checked 72408 rows, 0 pool days, 33 pool list rows, 90 u70 symbols; differences: 861"
     }
   }
 }
