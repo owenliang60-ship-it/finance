@@ -11,8 +11,9 @@
 import json
 import logging
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -48,6 +49,16 @@ EXTENDED_COVERAGE_TABLES = (
     "balance_sheet_quarterly",
     "cash_flow_quarterly",
 )
+
+# 主题篮子五表（theme_basket_store._SCHEMA；本模块只读，不导入写入模块）
+THEME_TABLES = (
+    "theme_baskets",
+    "stock_themes",
+    "stock_cross_themes",
+    "stock_theme_history",
+    "theme_sync_commits",
+)
+THEME_SYNC_STALE_DAYS = 14
 
 
 @dataclass
@@ -480,6 +491,84 @@ def _check_extended_coverage() -> CheckResult:
         return CheckResult("扩展覆盖率", under_threshold_status, detail)
 
 
+def _check_theme_baskets() -> CheckResult:
+    """检查主题篮子五表：表齐全、同步心跳 ≤14 天、主池全部已分类、篮子成员数达标。
+
+    只读短连接（mode=ro），不调用 current_base_universe() / get_store()。
+    结果只有 PASS / WARN：本地未拉取主题表、数据库损坏等都转 WARN，绝不抛异常。
+    """
+    name = "主题篮子"
+    if not MARKET_DB.exists():
+        return CheckResult(name, "WARN", "market.db 不存在")
+    uri = Path(MARKET_DB).resolve().as_uri() + "?mode=ro"
+    try:
+        with closing(sqlite3.connect(uri, uri=True)) as conn:
+            return _theme_baskets_result(conn)
+    except (sqlite3.DatabaseError, OSError) as e:
+        return CheckResult(name, "WARN", f"查询失败: {e}")
+
+
+def _theme_baskets_result(conn: sqlite3.Connection) -> CheckResult:
+    name = "主题篮子"
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    missing = [t for t in THEME_TABLES if t not in tables]
+    if missing:
+        return CheckResult(name, "WARN", f"主题表未建: {missing}")
+    n_baskets = conn.execute("SELECT COUNT(*) FROM theme_baskets").fetchone()[0]
+    n_stocks = conn.execute("SELECT COUNT(*) FROM stock_themes").fetchone()[0]
+    if n_baskets == 0 or n_stocks == 0:
+        return CheckResult(name, "WARN", f"主题表为空 (篮子 {n_baskets}, 股票 {n_stocks})")
+
+    problems = []
+    last = conn.execute("SELECT MAX(applied_at) FROM theme_sync_commits").fetchone()[0]
+    sync_note = "无同步心跳"
+    if not last:
+        problems.append(sync_note)
+    else:
+        try:
+            applied = datetime.strptime(last, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            age_days = (datetime.now(timezone.utc) - applied).days
+            sync_note = f"最近同步 {last} ({age_days} 天前)"
+            if age_days > THEME_SYNC_STALE_DAYS:
+                problems.append(f"同步心跳超 {THEME_SYNC_STALE_DAYS} 天: {sync_note}")
+        except (TypeError, ValueError):
+            problems.append(f"无法解析同步心跳时间: {last!r}")
+
+    if "extended_membership" not in tables or "security_master" not in tables:
+        problems.append("主池表未就绪 (extended_membership/security_master)")
+    else:
+        gap = [row[0] for row in conn.execute(
+            """SELECT DISTINCT m.symbol FROM extended_membership m
+               JOIN security_master s ON s.symbol = m.symbol
+               WHERE m.effective_to IS NULL AND s.eligible = 1
+                 AND NOT EXISTS (SELECT 1 FROM stock_themes t WHERE t.symbol = m.symbol)
+               ORDER BY m.symbol""")]
+        if gap:
+            problems.append(f"主池 {len(gap)} 只未分类: {gap[:10]}")
+
+    under = [f"{basket_id} {n}/{minimum}" for basket_id, minimum, n in conn.execute(
+        """SELECT b.basket_id, b.min_active_members,
+                  CASE b.tier
+                    WHEN 'l1' THEN (SELECT COUNT(*) FROM stock_themes s WHERE s.l1_id = b.basket_id
+                                      AND s.in_us_basket_calc = 1 AND s.is_superseded = 0)
+                    WHEN 'l2' THEN (SELECT COUNT(*) FROM stock_themes s WHERE s.l2_id = b.basket_id
+                                      AND s.in_us_basket_calc = 1 AND s.is_superseded = 0)
+                    ELSE (SELECT COUNT(*) FROM stock_cross_themes x
+                          JOIN stock_themes s ON s.symbol = x.symbol
+                          WHERE x.theme_id = b.basket_id
+                            AND s.in_us_basket_calc = 1 AND s.is_superseded = 0)
+                  END
+           FROM theme_baskets b
+           WHERE b.is_active = 1 AND b.tier IN ('l1', 'l2', 'cross')
+           ORDER BY b.sort_order, b.basket_id""") if n < minimum]
+    if under:
+        problems.append(f"{len(under)} 个篮子成员不足: {under[:10]}")
+
+    if problems:
+        return CheckResult(name, "WARN", "; ".join(problems))
+    return CheckResult(name, "PASS", f"{n_baskets} 个篮子, {n_stocks} 只已分类, {sync_note}")
+
+
 def health_check(verbose: bool = False) -> HealthReport:
     """
     一站式数据健康检查。
@@ -504,6 +593,7 @@ def health_check(verbose: bool = False) -> HealthReport:
     report.add(_check_mdb_iv_coverage(symbols))
     report.add(_check_mdb_iv_freshness())
     report.add(_check_extended_coverage())
+    report.add(_check_theme_baskets())
 
     if verbose:
         print(report.summary())

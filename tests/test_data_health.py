@@ -79,7 +79,61 @@ def mock_healthy_data(tmp_path, monkeypatch):
     # tables, so this check also PASSes in the "all-healthy" scenario.
     monkeypatch.setattr(health, "current_base_universe", lambda: list(symbols))
 
+    # 主题篮子：最小主池表 + 3 篮子迷你字典 + 100 只健康分类行（_check_theme_baskets PASS）
+    _seed_pool_tables(market_db_path, symbols)
+    _seed_theme_store(market_db_path, symbols)
+
     return tmp_path
+
+
+def _seed_pool_tables(db_path, symbols, *, extra=()):
+    """extended_membership + security_master (subset of market_store._SCHEMA columns).
+
+    `extra` = (symbol, effective_to, eligible) rows on top of the active eligible pool.
+    """
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute("CREATE TABLE extended_membership (symbol TEXT NOT NULL, effective_from TEXT NOT NULL, "
+                     "effective_to TEXT, reason TEXT NOT NULL DEFAULT 'screener', "
+                     "PRIMARY KEY (symbol, effective_from))")
+        conn.execute("CREATE TABLE security_master (symbol TEXT PRIMARY KEY, cik TEXT, company_name TEXT, "
+                     "eligible INTEGER NOT NULL, reason TEXT NOT NULL, updated_at TEXT NOT NULL)")
+        rows = [(s, None, 1) for s in symbols] + list(extra)
+        for s, effective_to, eligible in rows:
+            conn.execute("INSERT INTO extended_membership (symbol, effective_from, effective_to) "
+                         "VALUES (?, '2026-01-01', ?)", (s, effective_to))
+            conn.execute("INSERT INTO security_master VALUES (?, NULL, ?, ?, 'test', '2026-01-01')",
+                         (s, f"Company {s}", eligible))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _mini_baskets(min_members=5):
+    def basket(basket_id, tier, parent=None, pi=None, minimum=0):
+        return {"basket_id": basket_id, "label_zh": basket_id, "tier": tier,
+                "parent_l1_id": parent, "default_pi_bucket": pi, "sort_order": 0,
+                "min_active_members": minimum, "narrative_start_date": None,
+                "inclusion_rule": "in", "exclusion_rule": "out", "is_active": 1}
+    return {"schema_version": 1, "baskets": [
+        basket("pi_test", "pi_bucket"),
+        basket("l1_test", "l1", minimum=min_members),
+        basket("l2_test", "l2", parent="l1_test", pi="pi_test", minimum=min_members),
+    ]}
+
+
+def _seed_theme_store(db_path, symbols, *, now=None, min_members=5):
+    from src.data import theme_basket_store as tbs
+    rows = [{"symbol": s, "asset_kind": "us_equity", "in_us_basket_calc": 1, "pi_bucket": "pi_test",
+             "agreement_status": "dual_agreed", "l2_id": "l2_test"} for s in symbols]
+    conn = tbs.open_writer(db_path)
+    try:
+        result = tbs.apply_envelope(conn, baskets_doc=_mini_baskets(min_members),
+                                    overrides_doc={"schema_version": 1, "locked_stocks": []},
+                                    rows=rows, payload_id=tbs.compute_payload_id(rows), now=now)
+    finally:
+        conn.close()
+    assert result.inserted == len(symbols) and not result.quarantined
 
 
 @pytest.fixture
@@ -615,3 +669,204 @@ class TestCheckExtendedCoverage:
         report = health_check()
         names = [c.name for c in report.checks]
         assert "扩展覆盖率" in names
+
+
+# ============ 主题篮子只读健康检查 ============
+
+
+def _open_paths():
+    """Absolute paths this process currently holds open."""
+    import os
+    import subprocess
+    fd_dir = Path("/proc/self/fd")
+    if fd_dir.is_dir():
+        return {os.path.realpath(fd_dir / name) for name in os.listdir(fd_dir)}
+    out = subprocess.run(["lsof", "-Fn", "-p", str(os.getpid())],
+                         capture_output=True, text=True, check=True).stdout
+    return {line[1:] for line in out.splitlines() if line.startswith("n")}
+
+
+class TestCheckThemeBaskets:
+    SYMBOLS = [f"SYM{i:03d}" for i in range(100)]
+
+    @pytest.fixture
+    def theme_db(self, tmp_path, monkeypatch):
+        """Healthy theme store + pool tables; returns the db path (MARKET_DB patched)."""
+        import src.data.data_health as health
+        db = tmp_path / "market.db"
+        _seed_pool_tables(db, self.SYMBOLS)
+        _seed_theme_store(db, self.SYMBOLS)
+        monkeypatch.setattr(health, "MARKET_DB", db)
+        return db
+
+    @staticmethod
+    def _run():
+        from src.data.data_health import _check_theme_baskets
+        result = _check_theme_baskets()
+        assert result.name == "主题篮子"
+        assert result.status in ("PASS", "WARN")
+        return result
+
+    def test_healthy_passes(self, theme_db):
+        result = self._run()
+        assert result.status == "PASS", result.detail
+        assert "100" in result.detail
+
+    def test_missing_db_warns(self, tmp_path, monkeypatch):
+        import src.data.data_health as health
+        monkeypatch.setattr(health, "MARKET_DB", tmp_path / "market.db")
+        result = self._run()
+        assert result.status == "WARN"
+        assert not (tmp_path / "market.db").exists()
+
+    def test_missing_theme_tables_warns(self, tmp_path, monkeypatch):
+        import src.data.data_health as health
+        db = tmp_path / "market.db"
+        _seed_pool_tables(db, self.SYMBOLS)
+        monkeypatch.setattr(health, "MARKET_DB", db)
+        result = self._run()
+        assert result.status == "WARN"
+        assert "theme_baskets" in result.detail
+
+    def test_empty_theme_tables_warn(self, tmp_path, monkeypatch):
+        import src.data.data_health as health
+        from src.data import theme_basket_store as tbs
+        db = tmp_path / "market.db"
+        _seed_pool_tables(db, self.SYMBOLS)
+        tbs.open_writer(db).close()
+        monkeypatch.setattr(health, "MARKET_DB", db)
+        result = self._run()
+        assert result.status == "WARN"
+        assert "空" in result.detail
+
+    def test_no_heartbeat_warns(self, theme_db):
+        conn = sqlite3.connect(str(theme_db))
+        conn.execute("DELETE FROM theme_sync_commits")
+        conn.commit()
+        conn.close()
+        result = self._run()
+        assert result.status == "WARN"
+        assert "心跳" in result.detail
+
+    @pytest.mark.parametrize("age_days,status", [(13, "PASS"), (15, "WARN")])
+    def test_heartbeat_staleness(self, tmp_path, monkeypatch, age_days, status):
+        from datetime import timezone
+        import src.data.data_health as health
+        assert health.THEME_SYNC_STALE_DAYS == 14
+        db = tmp_path / "market.db"
+        _seed_pool_tables(db, self.SYMBOLS)
+        _seed_theme_store(db, self.SYMBOLS, now=datetime.now(timezone.utc) - timedelta(days=age_days))
+        monkeypatch.setattr(health, "MARKET_DB", db)
+        result = self._run()
+        assert result.status == status, result.detail
+        assert f"{age_days} 天前" in result.detail
+
+    @pytest.mark.parametrize("bad_value", ["yesterday", b"2026-11-27T00:00:00Z"])
+    def test_unparseable_heartbeat_warns(self, theme_db, bad_value):
+        conn = sqlite3.connect(str(theme_db))
+        conn.execute("UPDATE theme_sync_commits SET applied_at = ?", (bad_value,))
+        conn.commit()
+        conn.close()
+        assert self._run().status == "WARN"
+
+    def test_missing_pool_tables_warns(self, tmp_path, monkeypatch):
+        import src.data.data_health as health
+        db = tmp_path / "market.db"
+        _seed_theme_store(db, self.SYMBOLS)
+        monkeypatch.setattr(health, "MARKET_DB", db)
+        result = self._run()
+        assert result.status == "WARN"
+        assert "主池表未就绪" in result.detail
+
+    def test_pool_gap_warns_with_count_and_first_ten(self, tmp_path, monkeypatch):
+        import src.data.data_health as health
+        db = tmp_path / "market.db"
+        gap = [f"GAP{i:02d}" for i in range(12)]
+        extra = [(s, None, 1) for s in gap] + [("LEFT", "2026-06-01", 1), ("INELIGIBLE", None, 0)]
+        _seed_pool_tables(db, self.SYMBOLS, extra=extra)
+        _seed_theme_store(db, self.SYMBOLS)
+        monkeypatch.setattr(health, "MARKET_DB", db)
+        result = self._run()
+        assert result.status == "WARN"
+        assert "12" in result.detail
+        assert all(s in result.detail for s in gap[:10])
+        assert "GAP10" not in result.detail and "GAP11" not in result.detail
+        assert "LEFT" not in result.detail and "INELIGIBLE" not in result.detail
+
+    def test_under_min_active_members_warns(self, tmp_path, monkeypatch):
+        import src.data.data_health as health
+        db = tmp_path / "market.db"
+        few = self.SYMBOLS[:3]
+        _seed_pool_tables(db, few)
+        _seed_theme_store(db, few, min_members=5)
+        monkeypatch.setattr(health, "MARKET_DB", db)
+        result = self._run()
+        assert result.status == "WARN"
+        assert "l1_test" in result.detail and "l2_test" in result.detail
+        assert "pi_test" not in result.detail
+
+    def test_corrupted_db_warns(self, tmp_path, monkeypatch):
+        import src.data.data_health as health
+        db = tmp_path / "market.db"
+        db.write_bytes(b"this is not a sqlite database" * 100)
+        monkeypatch.setattr(health, "MARKET_DB", db)
+        result = self._run()
+        assert result.status == "WARN"
+
+    def test_os_error_warns(self, theme_db, monkeypatch):
+        import src.data.data_health as health
+
+        def boom(*args, **kwargs):
+            raise OSError("disk gone")
+        monkeypatch.setattr(health.sqlite3, "connect", boom)
+        result = self._run()
+        assert result.status == "WARN"
+        assert "disk gone" in result.detail
+
+    def test_does_not_touch_market_store_or_base_universe(self, theme_db, monkeypatch):
+        import ast
+        import src.data.data_health as health
+        import src.data.market_store as market_store
+
+        def forbidden(*args, **kwargs):
+            raise AssertionError("theme check must not use get_store/current_base_universe")
+        monkeypatch.setattr(market_store, "get_store", forbidden)
+        monkeypatch.setattr(health, "current_base_universe", forbidden)
+        assert self._run().status == "PASS"
+
+        tree = ast.parse(Path(health.__file__).read_text(encoding="utf-8"))
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported |= {a.name for a in node.names}
+            elif isinstance(node, ast.ImportFrom):
+                imported |= {node.module or ""} | {f"{node.module}.{a.name}" for a in node.names}
+        assert not any("theme_basket_store" in name for name in imported)
+
+    def test_read_only_and_leaves_no_handles(self, theme_db):
+        import hashlib
+        import os
+        conn = sqlite3.connect(str(theme_db))
+        assert conn.execute("PRAGMA journal_mode = WAL").fetchone()[0] == "wal"
+        conn.close()
+        wal = Path(str(theme_db) + "-wal")
+        digest = hashlib.sha256(theme_db.read_bytes()).hexdigest()
+        mtime = theme_db.stat().st_mtime_ns
+        assert self._run().status == "PASS"
+        assert hashlib.sha256(theme_db.read_bytes()).hexdigest() == digest
+        assert theme_db.stat().st_mtime_ns == mtime
+        assert not wal.exists() or wal.stat().st_size == 0
+        held = {p for p in _open_paths() if os.path.realpath(p).startswith(os.path.realpath(theme_db))}
+        assert held == set()
+
+    def test_included_in_health_check_report(self, mock_healthy_data):
+        from src.data.data_health import health_check
+        report = health_check()
+        names = [c.name for c in report.checks]
+        assert names.index("主题篮子") == names.index("扩展覆盖率") + 1
+
+    def test_unhealthy_report_only_warns_for_theme_check(self, mock_unhealthy_data):
+        from src.data.data_health import health_check
+        report = health_check()
+        theme = [c for c in report.checks if c.name == "主题篮子"]
+        assert len(theme) == 1 and theme[0].status == "WARN"
