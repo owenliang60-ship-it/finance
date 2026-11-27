@@ -302,12 +302,9 @@ class TestPortfolioRouting:
     @patch("scripts.portfolio_intelligence.get_store")
     def test_run_intelligence_empty_holdings_uses_private_delivery(self, mock_get_store, mock_manager_cls, mock_deliver):
         mock_store = MagicMock()
-        mock_store.get_open_option_positions.return_value = []
-        mock_store.get_cash_balance.return_value = 0
         mock_get_store.return_value = mock_store
 
         mock_manager = MagicMock()
-        mock_manager.load_holdings.return_value = []
         mock_manager_cls.return_value = mock_manager
 
         book = SimpleNamespace(
@@ -327,14 +324,8 @@ class TestPortfolioRouting:
     @patch("scripts.portfolio_intelligence.get_store")
     def test_run_intelligence_normal_uses_private_delivery(self, mock_get_store, mock_manager_cls, _sqlite, mock_fetch_stock, mock_deliver):
         mock_store = MagicMock()
-        mock_store.get_open_option_positions.return_value = []
-        mock_store.get_cash_balance.return_value = 100
         mock_store.get_kill_conditions.return_value = []
         mock_store.get_oprms_history.return_value = []
-        # get_positions_as_of() walks _get_conn().execute().fetchone(); make it
-        # return (None,) so the helper short-circuits to None without comparing
-        # MagicMocks under max().
-        mock_store._get_conn.return_value.execute.return_value.fetchone.return_value = (None,)
         mock_get_store.return_value = mock_store
 
         position = Position(
@@ -343,11 +334,7 @@ class TestPortfolioRouting:
         )
 
         mock_manager = MagicMock()
-        mock_manager.load_holdings.return_value = [position]
         mock_manager.enrich_holding_row.return_value = position
-        mock_manager.get_total_nav.return_value = 1000.0
-        mock_manager.get_option_market_value.return_value = 0.0
-        mock_manager.refresh_prices.return_value = [position]
         mock_manager_cls.return_value = mock_manager
         mock_fetch_stock.return_value = SimpleNamespace(
             prices={"AAPL": 125.0},
@@ -378,5 +365,8 @@ class TestPortfolioRouting:
         assert "组合概览" in result
         assert "NAV 快照 ET" in result
         assert "credit header unavailable" in result
+        assert "期权腿未纳入" in result
+        mock_store.get_open_option_positions.assert_not_called()
+        mock_store._get_conn.assert_not_called()  # no deprecated ledger tables read
         mock_deliver.assert_called_once()
         assert mock_deliver.call_args.kwargs["dry_run"] is False

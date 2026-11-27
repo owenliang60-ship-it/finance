@@ -489,33 +489,26 @@ def test_validate_only_does_not_create_market_db(tmp_path):
     )
 
 
-def test_company_db_override_routes_portfolio(tmp_path):
-    """--company-db must drive _read_portfolio_holdings, not the
-    terminal.company_store singleton (whose db_path is fixed on first call).
-    """
+def test_company_db_override_no_longer_routes_portfolio(tmp_path, monkeypatch):
+    """company.db `holdings` is retired: portfolio comes from the read-only
+    Google Sheet overlay regardless of --company-db."""
     from scripts.build_company_concept_registry import _read_portfolio_holdings
+    import src.data.overlays as ov
 
-    # Empty/missing company.db → empty portfolio, no exception.
-    assert _read_portfolio_holdings(tmp_path / "missing.db") == []
-
-    # Build a minimal company.db with one OPEN holding and ensure we pick it
-    # up — proves we read FROM the supplied path, not the singleton default.
     import sqlite3
     db_path = tmp_path / "company.db"
     conn = sqlite3.connect(str(db_path))
     conn.executescript("""
-        CREATE TABLE holdings (
-            position_id INTEGER PRIMARY KEY,
-            symbol TEXT NOT NULL,
-            status TEXT NOT NULL
-        );
-        INSERT INTO holdings (symbol, status) VALUES ('PORTFOLIO_SYM', 'OPEN');
-        INSERT INTO holdings (symbol, status) VALUES ('CLOSED_SYM', 'CLOSED');
+        CREATE TABLE holdings (position_id INTEGER PRIMARY KEY,
+                               symbol TEXT NOT NULL, status TEXT NOT NULL);
+        INSERT INTO holdings (symbol, status) VALUES ('STALE_SYM', 'OPEN');
     """)
     conn.commit()
     conn.close()
 
-    assert _read_portfolio_holdings(db_path) == ["PORTFOLIO_SYM"]
+    monkeypatch.setattr(ov, "load_holdings", lambda store=None: ["SHEET_SYM"])
+    assert _read_portfolio_holdings(db_path) == ["SHEET_SYM"]
+    assert _read_portfolio_holdings(tmp_path / "missing.db") == ["SHEET_SYM"]
 
 
 def test_dollar_volume_db_override_routes_broad_top(tmp_path):

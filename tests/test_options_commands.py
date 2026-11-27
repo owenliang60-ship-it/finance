@@ -14,6 +14,32 @@ from terminal.options.formatter import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _sheet_unavailable_by_default(monkeypatch):
+    """No test may hit the network: the Google Sheet is unavailable unless a
+    test patches terminal.options.commands.load_sheet_book itself."""
+    from portfolio.holdings.sheet_book import SheetBookError
+
+    def _no_sheet(*a, **k):
+        raise SheetBookError("PORTFOLIO_SHEET_ID not configured")
+
+    monkeypatch.setattr("terminal.options.commands.load_sheet_book", _no_sheet)
+
+
+def _fake_book(net_total, holdings=()):
+    from types import SimpleNamespace
+    return SimpleNamespace(holdings=list(holdings),
+                           whole_port_net_total_usd=net_total)
+
+
+def _fake_holding(symbol, shares, cost):
+    from types import SimpleNamespace
+    return SimpleNamespace(symbol=symbol, market="US", shares=shares,
+                           cost_per_share=cost, sheet_price=cost,
+                           market_value=shares * cost, category="Test",
+                           is_leaps=False)
+
+
 @pytest.fixture
 def store(tmp_path):
     """Create a fresh CompanyStore for company-dimension data."""
@@ -372,45 +398,57 @@ class TestOPRMSStaleness:
 
 
 class TestPortfolioContext:
-    def test_empty_book_fails_closed(self, store):
+    """NAV = Whole Port 投资 Net Total from the read-only Google Sheet.
+    Fictional numbers only."""
+
+    def test_sheet_failure_fails_closed(self, store):
         pf = _get_portfolio_context("AAPL", store, 200.0)
         assert pf["holding"] is None
         assert pf["option_legs"] == []
+        assert pf["option_legs_note"] == "期权腿未纳入"
         assert pf["estimated_nav"] is None
-        assert pf["nav_is_estimated"] is False
         assert pf["max_loss_2pct"] is None
         assert pf["max_loss_3pct"] is None
+        assert pf["portfolio_status"] == "UNKNOWN"
 
-    def test_nav_uses_spot_for_symbol_and_cost_for_others(self, store):
-        store.upsert_company("MSFT", company_name="Microsoft")
-        store.insert_holding("AAPL", 100, 150.0, "2026-01-02")
-        store.insert_holding("MSFT", 10, 400.0, "2026-01-03")
-        store.set_cash(50000.0)
-        store.insert_option_position("AAPL", "2026-12-18", 220.0, "call", -1, 3.5, "2026-11-01")
+    def test_whole_port_net_total_is_nav(self, store, monkeypatch):
+        book = _fake_book(500000.0, [_fake_holding("AAPL", 100, 150.0),
+                                     _fake_holding("MSFT", 10, 400.0)])
+        monkeypatch.setattr("terminal.options.commands.load_sheet_book",
+                            lambda *a, **k: book)
+        pf = _get_portfolio_context("aapl", store, 200.0)
+        assert pf["holding"] == {"shares": 100, "avg_cost": 150.0, "open_date": None}
+        assert pf["estimated_nav"] == 500000.0
+        assert pf["nav_source"] == "whole_port_net_total"
+        assert pf["max_loss_2pct"] == 10000.0
+        assert pf["max_loss_3pct"] == 15000.0
+        assert pf["option_legs"] == []
+        assert pf["portfolio_status"] == "OK"
 
-        pf = _get_portfolio_context("AAPL", store, 200.0)
-
-        assert pf["holding"]["shares"] == 100
-        assert pf["holding"]["avg_cost"] == 150.0
-        assert len(pf["option_legs"]) == 1
-        assert pf["option_legs"][0]["quantity"] == -1
-        assert pf["cash"] == 50000.0
-        # 50000 + 100 × 200 (spot) + 10 × 400 (cost)
-        assert pf["estimated_nav"] == 74000.0
-        assert pf["nav_is_estimated"] is True
-        assert pf["max_loss_2pct"] == 1480.0
-        assert pf["max_loss_3pct"] == 2220.0
-
-    def test_missing_spot_falls_back_to_cost(self, store):
-        store.insert_holding("AAPL", 100, 150.0, "2026-01-02")
-        pf = _get_portfolio_context("AAPL", store, None)
-        assert pf["estimated_nav"] == 15000.0
-
-    def test_cash_only_book(self, store):
-        store.set_cash(10000.0)
+    def test_not_held_symbol(self, store, monkeypatch):
+        monkeypatch.setattr("terminal.options.commands.load_sheet_book",
+                            lambda *a, **k: _fake_book(500000.0))
         pf = _get_portfolio_context("AAPL", store, 200.0)
         assert pf["holding"] is None
-        assert pf["estimated_nav"] == 10000.0
+        assert pf["estimated_nav"] == 500000.0
+
+    @pytest.mark.parametrize("net_total", [None, 0.0, -1.0])
+    def test_missing_or_bad_net_total_fails_closed(self, store, monkeypatch, net_total):
+        book = _fake_book(net_total, [_fake_holding("AAPL", 100, 150.0)])
+        monkeypatch.setattr("terminal.options.commands.load_sheet_book",
+                            lambda *a, **k: book)
+        pf = _get_portfolio_context("AAPL", store, 200.0)
+        assert pf["estimated_nav"] is None
+        assert pf["max_loss_2pct"] is None
+        assert pf["holding"] is None
+        assert pf["portfolio_status"] == "UNKNOWN"
+
+    def test_never_reads_company_db_ledger(self, monkeypatch):
+        store = MagicMock()
+        monkeypatch.setattr("terminal.options.commands.load_sheet_book",
+                            lambda *a, **k: _fake_book(500000.0))
+        _get_portfolio_context("AAPL", store, 200.0)
+        assert store.method_calls == []
 
 
 class TestContextGates:

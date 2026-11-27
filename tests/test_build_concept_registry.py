@@ -745,36 +745,32 @@ def test_load_universe_returns_empty_for_unknown_dict_shape(tmp_path):
     assert _load_universe(p) == []
 
 
-def test_cli_reader_portfolio_uses_correct_company_store_api(monkeypatch, tmp_path):
-    """_read_portfolio_holdings must call CompanyStore(path) directly so the
-    --company-db override actually targets the requested DB. Using the
-    get_store() singleton silently ignores subsequent paths after the first
-    call (singleton cache).
-    """
+def test_cli_reader_portfolio_reads_sheet_overlay(monkeypatch, tmp_path):
+    """Portfolio holdings come from overlays.load_holdings (read-only Google
+    Sheet); company.db `holdings` is retired and must not be read."""
     from scripts import build_company_concept_registry as mod
-
-    fake_called = {"hits": 0, "paths": []}
-
-    class _FakeStore:
-        def __init__(self, db_path=None):
-            fake_called["paths"].append(db_path)
-
-        def get_all_open_holdings(self):
-            fake_called["hits"] += 1
-            return [{"symbol": "MU"}, {"symbol": "nvda"}, {"symbol": ""}]
-
+    import src.data.overlays as ov
     import terminal.company_store as cs_mod
-    monkeypatch.setattr(cs_mod, "CompanyStore", _FakeStore)
 
-    target = tmp_path / "company.db"
-    target.write_bytes(b"")  # exists() check passes
+    monkeypatch.setattr(ov, "load_holdings", lambda store=None: ["MU", "nvda", ""])
 
-    result = mod._read_portfolio_holdings(target)
-    assert fake_called["hits"] == 1
-    assert fake_called["paths"] == [target], (
-        "explicit company_db_path must be passed straight to CompanyStore"
-    )
-    assert result == ["MU", "NVDA"]
+    class _Boom:
+        def __init__(self, *a, **k):
+            raise AssertionError("CompanyStore must not be opened")
+
+    monkeypatch.setattr(cs_mod, "CompanyStore", _Boom)
+    assert mod._read_portfolio_holdings(tmp_path / "company.db") == ["MU", "NVDA"]
+
+
+def test_cli_reader_portfolio_sheet_failure_returns_empty(monkeypatch):
+    from scripts import build_company_concept_registry as mod
+    import src.data.overlays as ov
+
+    def boom(store=None):
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(ov, "load_holdings", boom)
+    assert mod._read_portfolio_holdings(None) == []
 
 
 def test_cli_reader_broad_top_uses_correct_get_rankings_signature(monkeypatch):

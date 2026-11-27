@@ -179,101 +179,6 @@ def analyze_ticker(
     return result
 
 
-def portfolio_status() -> Dict[str, Any]:
-    """
-    Comprehensive portfolio status check with total_NAV semantics.
-
-    Combines holdings, exposure alerts, and company DB records.
-    """
-    result: Dict[str, Any] = {"has_holdings": False}
-
-    # Holdings
-    try:
-        from portfolio.holdings.manager import PortfolioManager
-        from src.data.price_fetcher import get_price_df
-
-        mgr = PortfolioManager()
-        positions = mgr.load_holdings()
-
-        # Always check cash + options — either can exist without stock holdings
-        cash = mgr._store.get_cash_balance()
-        option_positions = mgr._store.get_open_option_positions()
-        has_anything = bool(positions) or bool(option_positions)
-
-        if has_anything:
-            result["has_holdings"] = True
-
-            # Fetch latest prices — get_price_df returns descending, iloc[0] = newest
-            prices = {}
-            for p in positions:
-                try:
-                    df = get_price_df(p.symbol, days=5, max_age_days=0)
-                    if df is not None and not df.empty:
-                        prices[p.symbol] = df["close"].iloc[0]
-                except Exception:
-                    pass
-
-            summary = mgr.get_portfolio_summary(prices)
-            result["summary"] = summary
-
-            # Run exposure alerts (stock positions only)
-            if positions:
-                try:
-                    from portfolio.exposure.alerts import run_all_checks
-                    refreshed = mgr.refresh_prices(prices)
-                    alerts = run_all_checks(refreshed)
-                    result["alerts"] = [a.to_dict() for a in alerts]
-                    result["alert_counts"] = {
-                        "CRITICAL": sum(1 for a in alerts if a.level.value == "CRITICAL"),
-                        "WARNING": sum(1 for a in alerts if a.level.value == "WARNING"),
-                        "INFO": sum(1 for a in alerts if a.level.value == "INFO"),
-                    }
-                except Exception as e:
-                    result["alerts_error"] = str(e)
-        else:
-            result["summary"] = {
-                "total_positions": 0,
-                "total_nav": cash,
-                "cash": cash,
-                "cash_pct": 1.0 if cash > 0 else 0,
-                "invested_pct": 0,
-                "message": "No holdings — cash only." if cash > 0 else "No holdings found.",
-            }
-    except Exception as e:
-        result["error"] = f"Failed to load holdings: {e}"
-
-    # Company DB coverage
-    tracked = list_all_companies()
-    result["company_db"] = {
-        "tracked_tickers": len(tracked),
-        "tickers": tracked,
-    }
-
-    # Analysis freshness summary
-    try:
-        from terminal.freshness import check_all_freshness
-        reports = check_all_freshness()
-        if reports:
-            red = [r for r in reports if r.level.value == "RED"]
-            yellow = [r for r in reports if r.level.value == "YELLOW"]
-            green = [r for r in reports if r.level.value == "GREEN"]
-            result["analysis_freshness"] = {
-                "red_count": len(red),
-                "yellow_count": len(yellow),
-                "green_count": len(green),
-                "red_tickers": [
-                    {"symbol": r.symbol, "reasons": r.reasons} for r in red
-                ],
-                "yellow_tickers": [
-                    {"symbol": r.symbol, "reasons": r.reasons} for r in yellow
-                ],
-            }
-    except Exception as e:
-        result["freshness_error"] = str(e)
-
-    return result
-
-
 def position_advisor(
     symbol: str,
     total_capital: float = 1_000_000,
@@ -315,16 +220,28 @@ def position_advisor(
             f"Every position must have observable invalidation triggers."
         )
 
-    # Current position (if held)
+    # Current position (if held) — read-only Google Sheet book of record
+    result["current_position"] = None
     try:
-        from portfolio.holdings.manager import get_position
-        pos = get_position(symbol)
-        if pos:
-            result["current_position"] = pos.to_dict()
-        else:
-            result["current_position"] = None
-    except Exception:
-        result["current_position"] = None
+        from portfolio.holdings import sheet_book
+        book = sheet_book.load_sheet_book()
+        for h in book.holdings:
+            if h.symbol == symbol:
+                result["current_position"] = {
+                    "symbol": h.symbol,
+                    "market": h.market,
+                    "shares": h.shares,
+                    "cost_per_share": h.cost_per_share,
+                    "sheet_price": h.sheet_price,
+                    "market_value": h.market_value,
+                    "category": h.category,
+                    "is_leaps": h.is_leaps,
+                    "source": "google_sheet",
+                }
+                break
+    except Exception as exc:
+        logger.warning("position_advisor: Google Sheet unavailable (%s)",
+                       type(exc).__name__)
 
     return result
 
@@ -360,16 +277,6 @@ def company_lookup(symbol: str) -> Dict[str, Any]:
     result["themes"] = themes
 
     return result
-
-
-def run_monitor() -> Dict[str, Any]:
-    """
-    Run the full portfolio monitoring sweep.
-
-    Delegates to terminal.monitor.run_full_monitor().
-    """
-    from terminal.monitor import run_full_monitor
-    return run_full_monitor()
 
 
 def theme_status(slug: str) -> Dict[str, Any]:
