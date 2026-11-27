@@ -113,7 +113,7 @@ def _normalize_symbol(raw: str) -> str:
     return sym
 
 
-def _parse_holdings(ws) -> List[SheetHolding]:
+def _parse_holdings_with_meta(ws) -> tuple[List[SheetHolding], bool]:
     header_map = None
     data_rows = []
     for i, row in enumerate(ws.iter_rows(values_only=True)):
@@ -139,10 +139,12 @@ def _parse_holdings(ws) -> List[SheetHolding]:
         return row[idx] if idx < len(row) else None
 
     merged: Dict[tuple[str, str], SheetHolding] = {}
+    seen_ticker_rows = False
     for row in data_rows:
         raw_ticker = cell(row, "Stock Ticker")
         if raw_ticker is None or str(raw_ticker).strip() == "":
             continue
+        seen_ticker_rows = True
         raw = str(raw_ticker).strip()
         sym = _normalize_symbol(raw)
         shares = _to_float_strict(
@@ -189,7 +191,12 @@ def _parse_holdings(ws) -> List[SheetHolding]:
             # warning logged above)
         else:
             merged[key] = h
-    return list(merged.values())
+    return list(merged.values()), seen_ticker_rows
+
+
+def _parse_holdings(ws) -> List[SheetHolding]:
+    holdings, _ = _parse_holdings_with_meta(ws)
+    return holdings
 
 
 def _parse_cash(ws) -> float:
@@ -263,8 +270,8 @@ def parse_sheet_book(
         if CASH_TAB not in wb.sheetnames:
             raise SheetBookError("sheet tab missing: %s" % CASH_TAB)
 
-        holdings = _parse_holdings(wb[SUMMARY_TAB])
-        if not holdings and not allow_empty_holdings:
+        holdings, seen_ticker_rows = _parse_holdings_with_meta(wb[SUMMARY_TAB])
+        if not holdings and (not allow_empty_holdings or not seen_ticker_rows):
             raise SheetBookError("no holdings parsed from sheet")
         cash = _parse_cash(wb[CASH_TAB])
         total = (

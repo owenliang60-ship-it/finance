@@ -754,8 +754,11 @@ def _read_dotenv_key(path: Path, key: str) -> str:
         return ""
     try:
         from dotenv import dotenv_values
-        vals = dotenv_values(path)
-        return str(vals.get(key) or "").strip()
+        vals = dotenv_values(path, interpolate=False)
+        val = str(vals.get(key) or "").strip()
+        if "${" in val:
+            return ""
+        return val
     except Exception:
         return ""
 
@@ -814,7 +817,8 @@ def extract_offensive_holdings(
 ) -> list[dict[str, Any]]:
     """Extract sanitized non-LTH open equity/ETF holdings (strict 5-field whitelist)."""
     priced_us = {str(s).strip().upper() for s in sheet_priced_us_symbols}
-    out: list[dict[str, Any]] = []
+    merged_items: dict[tuple[str, str], dict[str, Any]] = {}
+    merged_cats: dict[tuple[str, str], list[str]] = {}
 
     for h in getattr(book, "holdings", None) or []:
         raw_shares = getattr(h, "shares", 0)
@@ -839,6 +843,8 @@ def extract_offensive_holdings(
         sym = str(getattr(h, "symbol", "") or "").strip().upper()
         if not sym or " " in sym:
             continue
+        if _URL_RE.search(sym):
+            raise ValueError("invalid field content")
 
         ticker, tv_hint, needs_search = build_tv_symbol_hint(sym, mkt)
         if mkt == "US" and (sym in priced_us or ticker in priced_us):
@@ -853,19 +859,35 @@ def extract_offensive_holdings(
         offensive_cats = [c for c in cats if c.upper() != "LTH"]
         if not offensive_cats:
             continue
-        non_empty = [c for c in offensive_cats if c]
-        cat_label = " / ".join(non_empty) if non_empty else ""
-
-        if _URL_RE.search(ticker) or _URL_RE.search(cat_label):
+        for c in offensive_cats:
+            if _URL_RE.search(c):
+                raise ValueError("invalid field content")
+        if _URL_RE.search(ticker) or (tv_hint and _URL_RE.search(tv_hint)):
             raise ValueError("invalid field content")
 
-        out.append({
-            "ticker": ticker,
-            "market": mkt,
-            "category": cat_label,
-            "tv_symbol_hint": tv_hint,
-            "needs_tv_search": needs_search,
-        })
+        key = (mkt, ticker)
+        cat_bucket = merged_cats.setdefault(key, [])
+        for c in offensive_cats:
+            if c not in cat_bucket:
+                cat_bucket.append(c)
+
+        if key not in merged_items:
+            merged_items[key] = {
+                "ticker": ticker,
+                "market": mkt,
+                "category": "",
+                "tv_symbol_hint": tv_hint,
+                "needs_tv_search": needs_search,
+            }
+        elif merged_items[key]["tv_symbol_hint"] is None and tv_hint is not None:
+            merged_items[key]["tv_symbol_hint"] = tv_hint
+            merged_items[key]["needs_tv_search"] = needs_search
+
+    out: list[dict[str, Any]] = []
+    for key, item in merged_items.items():
+        non_empty = [c for c in merged_cats[key] if c]
+        item["category"] = " / ".join(non_empty) if non_empty else ""
+        out.append(item)
 
     out.sort(key=lambda item: (_OFFENSIVE_MARKET_ORDER[item["market"]], item["ticker"]))
     return out

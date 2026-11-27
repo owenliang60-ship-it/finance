@@ -167,6 +167,10 @@ class TestParseHoldings:
         book = parse_sheet_book(build_fixture(rows=rows), FETCHED_AT, allow_empty_holdings=True)
         assert book.holdings == []
 
+    def test_allow_empty_holdings_still_rejects_header_only_sheet(self):
+        with pytest.raises(SheetBookError, match="no holdings"):
+            parse_sheet_book(build_fixture(rows=[]), FETCHED_AT, allow_empty_holdings=True)
+
     def test_header_found_after_multiple_noise_rows(self):
         book = parse_sheet_book(build_fixture(noise_rows=5), FETCHED_AT)
         assert len(book.holdings) == 5

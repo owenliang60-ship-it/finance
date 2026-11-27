@@ -760,6 +760,7 @@ def evaluate_position_stop(
     pos: dict[str, Any],
     *,
     now_utc: dt.datetime | None = None,
+    require_now_utc: bool = False,
 ) -> dict[str, Any]:
     """Evaluate dual-track trailing stop (50% Supertrend + 50% Cow Channel lower band) with strict fail-closed checks."""
     if not isinstance(pos, dict):
@@ -821,6 +822,8 @@ def evaluate_position_stop(
         closed, closed_reason = _is_bar_closed_for_market(bar_d, market, norm_now)
         if not closed:
             return _fail(closed_reason)
+    elif require_now_utc:
+        return _fail("缺少报告生成时间，无法校验已收盘 K 线与首报窗口")
     else:
         norm_now = None
 
@@ -906,6 +909,8 @@ def evaluate_position_stop(
         cow_bull = False
         cow_status_text = "当日破下沿" if cow_flipped_bear else "空头（未收复上沿）"
     else:
+        if cow_upper is not None and close > cow_upper:
+            return _fail("奶牛通道待确认但收盘价高于上沿（数据矛盾）")
         if cow_flipped_bear:
             return _fail("奶牛通道待确认但奶牛翻空为 True（数据矛盾）")
         cow_bull = False
@@ -960,7 +965,20 @@ def evaluate_position_stop(
             banner_alert = None
     else:
         is_new_trigger = st_new_break or cow_new_break
-        if is_new_trigger:
+        if cow_dir == 0:
+            if is_new_trigger:
+                state = "exit_all_new"
+                badge_text = "🚨 ST翻空清仓 (0%)"
+                badge_cls = "pill-bear"
+                action_note = "当日 ST(14,2) 翻空且奶牛通道待确认，有效多头轨归零"
+                banner_alert = f"{ticker}（{label_ctx}）当日触发 ST(14,2) 翻空（奶牛通道待确认，有效多头轨归零）→ 🚨 清仓 (0%)"
+            else:
+                state = "exit_all_stale"
+                badge_text = "⚠️ 无有效多头轨 · 存量未清 (0%)"
+                badge_cls = "pill-warn"
+                action_note = "ST 已翻空且奶牛通道待确认（存量未清），请人工核对退出"
+                banner_alert = None
+        elif is_new_trigger:
             state = "exit_all_new"
             badge_text = "🚨 双破全清"
             badge_cls = "pill-bear"
@@ -970,7 +988,7 @@ def evaluate_position_stop(
             state = "exit_all_stale"
             badge_text = "⚠️ 双破全清 · 存量未清 (0%)"
             badge_cls = "pill-warn"
-            action_note = "双轨均非多头（存量未清），请人工核对退出"
+            action_note = "双轨均为空头（存量未清），请人工核对退出"
             banner_alert = None
 
     return {
@@ -1007,11 +1025,33 @@ def evaluate_position_stop(
     }
 
 
+def _exchange_symbol_matches_holding(
+    exch_sym: str, market: str, ticker: str, hint: str
+) -> bool:
+    exch = exch_sym.strip().upper()
+    if not exch or ":" not in exch:
+        return False
+    if hint:
+        return exch == hint.strip().upper()
+    prefix, code = (p.strip() for p in exch.split(":", 1))
+    if not prefix or code != ticker:
+        return False
+    if market == "US" and prefix in ("HKEX", "KRX", "BINANCE"):
+        return False
+    if market == "HK" and prefix != "HKEX":
+        return False
+    if market == "KR" and prefix != "KRX":
+        return False
+    return True
+
+
 def reconcile_active_positions(
     active_positions: dict[str, Any] | None,
     vol_env_holdings: dict[str, Any] | None,
     *,
     now_utc: dt.datetime | None = None,
+    require_authoritative: bool = False,
+    require_now_utc: bool = False,
 ) -> dict[str, Any] | None:
     """Reconcile agent-supplied active_positions against authoritative vol_env.active_holdings.
 
@@ -1024,6 +1064,14 @@ def reconcile_active_positions(
     ap = active_positions if isinstance(active_positions, dict) else {}
     ap_status = str(ap.get("status") or "").strip().lower()
     raw_positions = [p for p in (ap.get("positions") or []) if isinstance(p, dict)]
+
+    if vol_env_holdings is None and require_authoritative:
+        return {
+            "status": "unavailable",
+            "reason": "缺少权威主账 active_holdings 状态",
+            "fetched_at_sg": str(ap.get("fetched_at_sg") or ""),
+            "positions": [],
+        }
 
     if vol_env_holdings is not None:
         if not isinstance(vol_env_holdings, dict):
@@ -1058,8 +1106,8 @@ def reconcile_active_positions(
                 "positions": [],
             }
 
-        if ap_status == "unavailable":
-            unavail_reason = str(ap.get("reason") or "主动进攻仓指标不可用")
+        if ap_status != "ok":
+            unavail_reason = str(ap.get("reason") or f"主动进攻仓指标状态非 ok（{ap_status or '缺失'}）")
             placeholders = [
                 evaluate_position_stop(
                     {
@@ -1071,6 +1119,7 @@ def reconcile_active_positions(
                         "reason": unavail_reason,
                     },
                     now_utc=now_utc,
+                    require_now_utc=require_now_utc,
                 )
                 for item in vh_items
             ]
@@ -1103,6 +1152,7 @@ def reconcile_active_positions(
                             "reason": "未回传该标的止损指标（防漏占位）",
                         },
                         now_utc=now_utc,
+                        require_now_utc=require_now_utc,
                     )
                 )
             elif len(matches) > 1:
@@ -1117,35 +1167,44 @@ def reconcile_active_positions(
                             "reason": "重复回传同名同市场持仓数据",
                         },
                         now_utc=now_utc,
+                        require_now_utc=require_now_utc,
                     )
                 )
             else:
                 matched = matches[0]
-                exch = str(matched.get("exchange_symbol") or "").strip()
-                if hint and exch and exch.upper() != hint.upper():
-                    reconciled_list.append(
-                        evaluate_position_stop(
-                            {
-                                "ticker": tkr,
-                                "market": mkt,
-                                "category": cat,
-                                "exchange_symbol": exch,
-                                "available": False,
-                                "reason": "交易所代码与主账提示不一致",
-                            },
-                            now_utc=now_utc,
-                        )
-                    )
-                else:
+                if matched.get("available") is False:
                     merged = dict(matched)
                     merged["ticker"] = tkr
                     merged["market"] = mkt
                     merged["category"] = cat
-                    reconciled_list.append(evaluate_position_stop(merged, now_utc=now_utc))
+                    reconciled_list.append(evaluate_position_stop(merged, now_utc=now_utc, require_now_utc=require_now_utc))
+                else:
+                    exch = str(matched.get("exchange_symbol") or "").strip()
+                    if not _exchange_symbol_matches_holding(exch, mkt, tkr, hint):
+                        reconciled_list.append(
+                            evaluate_position_stop(
+                                {
+                                    "ticker": tkr,
+                                    "market": mkt,
+                                    "category": cat,
+                                    "exchange_symbol": exch,
+                                    "available": False,
+                                    "reason": "交易所代码缺失或与主账提示不一致",
+                                },
+                                now_utc=now_utc,
+                                require_now_utc=require_now_utc,
+                            )
+                        )
+                    else:
+                        merged = dict(matched)
+                        merged["ticker"] = tkr
+                        merged["market"] = mkt
+                        merged["category"] = cat
+                        reconciled_list.append(evaluate_position_stop(merged, now_utc=now_utc, require_now_utc=require_now_utc))
 
         return {"status": "ok", "reason": "", "fetched_at_sg": fetched_at_sg, "positions": reconciled_list}
 
-    # vol_env_holdings is None, active_positions is not None
+    # vol_env_holdings is None, active_positions is not None (only when require_authoritative=False)
     fetched_at_sg = str(ap.get("fetched_at_sg") or "")
     if not isinstance(active_positions, dict) or ap_status not in ("empty", "ok", "unavailable"):
         return {"status": "unavailable", "reason": "主动进攻仓状态无效", "fetched_at_sg": fetched_at_sg, "positions": []}
@@ -1158,7 +1217,7 @@ def reconcile_active_positions(
     if not raw_positions:
         return {"status": "unavailable", "reason": "active_positions 状态为 ok 但 positions 为空", "fetched_at_sg": fetched_at_sg, "positions": []}
 
-    evaluated = [evaluate_position_stop(p, now_utc=now_utc) for p in raw_positions]
+    evaluated = [evaluate_position_stop(p, now_utc=now_utc, require_now_utc=require_now_utc) for p in raw_positions]
     return {"status": "ok", "reason": "", "fetched_at_sg": fetched_at_sg, "positions": evaluated}
 
 
@@ -1324,6 +1383,8 @@ def render_html(data: dict[str, Any]) -> str:
             data.get("active_positions"),
             vol_holdings,
             now_utc=report_now_utc,
+            require_authoritative=True,
+            require_now_utc=True,
         )
         active_pos_sec, pos_banner_alerts = render_active_positions_section(reconciled_positions)
 

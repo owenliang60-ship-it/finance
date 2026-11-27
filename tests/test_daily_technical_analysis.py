@@ -330,11 +330,12 @@ def test_offensive_holdings_fail_closed_on_missing_env_and_download_error(tmp_pa
 # ---------------------------------------------------------------------------
 
 def _base_pos(**overrides):
+    ticker = overrides.get("ticker", "AAA")
     pos = {
-        "ticker": "AAA",
+        "ticker": ticker,
         "market": "US",
         "category": "Momentum",
-        "exchange_symbol": "NASDAQ:AAA",
+        "exchange_symbol": f"NASDAQ:{ticker}",
         "bar_date": "2026-11-26",
         "close": 100.0,
         "change_pct": 1.25,
@@ -1168,6 +1169,122 @@ def test_rework_timestamp_bars_privacy_env_isolation_and_exchange_mismatch(tmp_p
     )
     assert rec_empty_ok is not None
     assert rec_empty_ok["status"] == "unavailable"
+
+
+def test_codex_round2_eight_hardening_invariants(tmp_path, monkeypatch):
+    # #1a: daily mode omitting vol_env.active_holdings must fail closed (cannot claim empty or alert)
+    html_no_vh = rhtml.render_html({
+        "mode": "daily",
+        "report_date": "2026-11-27",
+        "generated_at": "2026-11-27 08:05 SGT",
+        "active_positions": {"status": "empty", "positions": []},
+        "symbols": [],
+    })
+    assert "不可用" in html_no_vh
+    assert "当前无主动进攻仓" not in html_no_vh
+
+    # #1b: vh=ok + ap=empty with stray rows must NOT evaluate stray rows
+    rec_ap_empty = rhtml.reconcile_active_positions(
+        active_positions={"status": "empty", "positions": [_base_pos(ticker="AAA", market="US")]},
+        vol_env_holdings={
+            "status": "ok",
+            "items": [{"ticker": "AAA", "market": "US", "category": "Momentum", "tv_symbol_hint": None, "needs_tv_search": True}],
+        },
+    )
+    assert rec_ap_empty is not None
+    assert rec_ap_empty["positions"][0]["available"] is False
+
+    # #2: daily mode missing BOTH generated_at and report_date must fail closed (future bar cannot alert)
+    html_no_time = rhtml.render_html({
+        "mode": "daily",
+        "vol_env": {
+            "active_holdings": {
+                "status": "ok",
+                "items": [{"ticker": "AAA", "market": "US", "category": "Momentum", "tv_symbol_hint": None, "needs_tv_search": True}],
+            }
+        },
+        "active_positions": {
+            "status": "ok",
+            "positions": [
+                _base_pos(
+                    ticker="AAA",
+                    market="US",
+                    bar_date="2030-11-29",
+                    st_direction="short",
+                    st_stop=None,
+                    st_flipped_bear=True,
+                    cow_direction=-1,
+                    cow_lower=102.0,
+                    cow_mid=105.0,
+                    cow_upper=108.0,
+                )
+            ],
+        },
+        "symbols": [],
+    })
+    assert "⚠️ 指标数据不可用" in html_no_time
+    assert 'class="alert-banner"' not in html_no_time
+
+    # #3: bare US ticker (needs_tv_search=True) with wrong or blank exchange_symbol must fail closed
+    for bad_exch in ("NASDAQ:BBB", "", "KRX:AAA"):
+        rec_exch = rhtml.reconcile_active_positions(
+            active_positions={"status": "ok", "positions": [_base_pos(ticker="AAA", market="US", exchange_symbol=bad_exch)]},
+            vol_env_holdings={
+                "status": "ok",
+                "items": [{"ticker": "AAA", "market": "US", "category": "Momentum", "tv_symbol_hint": None, "needs_tv_search": True}],
+            },
+        )
+        assert rec_exch is not None
+        assert rec_exch["positions"][0]["available"] is False, f"exchange_symbol={bad_exch!r} must fail closed"
+
+    # #4: KR numeric 5930 + text 005930 merged into single KR/005930 item
+    kr_dup_book = _make_book([
+        _make_holding("5930", "KR", "Momentum"),
+        _make_holding("005930", "KR", "Value"),
+    ])
+    kr_items = m.extract_offensive_holdings(kr_dup_book, SHEET_PRICED_US_SYMBOLS)
+    assert len(kr_items) == 1
+    assert kr_items[0]["ticker"] == "005930"
+    assert kr_items[0]["tv_symbol_hint"] == "KRX:005930"
+    assert "Momentum" in kr_items[0]["category"] and "Value" in kr_items[0]["category"]
+
+    # #5a: cow_direction == 0 with ST short break must NOT claim "双轨全破"
+    res_cow0_st_short = rhtml.evaluate_position_stop(
+        _base_pos(st_direction="short", st_stop=None, st_flipped_bear=True, cow_direction=0, cow_lower=96.0, cow_mid=99.0, cow_upper=104.0, close=100.0)
+    )
+    assert res_cow0_st_short["available"] is True
+    assert res_cow0_st_short["target_hold_pct"] == 0
+    assert res_cow0_st_short["banner_alert"] is not None
+    assert "双轨全破" not in res_cow0_st_short["banner_alert"]
+    assert "待确认" in res_cow0_st_short["banner_alert"]
+
+    # #5b: cow_direction == 0 with close > cow_upper must fail closed
+    res_cow0_above = rhtml.evaluate_position_stop(
+        _base_pos(cow_direction=0, cow_lower=96.0, cow_mid=99.0, cow_upper=102.0, close=110.0)
+    )
+    assert res_cow0_above["available"] is False
+
+    # #7: explicit env_file with ${PORTFOLIO_SHEET_ID} must NOT interpolate os.environ
+    monkeypatch.setenv("PORTFOLIO_SHEET_ID", "SHOULD_NOT_INTERPOLATE")
+    interp_env = tmp_path / "interp.env"
+    interp_env.write_text("PORTFOLIO_SHEET_ID=${PORTFOLIO_SHEET_ID}\n", encoding="utf-8")
+    called = []
+    res_interp = m.fetch_active_offensive_holdings(
+        now_sg=dt.datetime(2026, 11, 27, 8, 5, tzinfo=m.SG_TZ),
+        env_file=interp_env,
+        book_loader=lambda sid, t: called.append(sid),
+    )
+    assert res_interp["status"] == "unavailable"
+    assert called == []
+
+    # #8: URL in US ticker (colon-split bypass) must fail closed
+    url_ticker_book = _make_book([_make_holding("https://fixture.invalid/p", "US", "Momentum")])
+    res_url_tkr = m.fetch_active_offensive_holdings(
+        now_sg=dt.datetime(2026, 11, 27, 8, 5, tzinfo=m.SG_TZ),
+        sheet_id="FAKE_ID",
+        book_loader=lambda sid, t: url_ticker_book,
+    )
+    assert res_url_tkr["status"] == "unavailable"
 
 
 if __name__ == "__main__":
