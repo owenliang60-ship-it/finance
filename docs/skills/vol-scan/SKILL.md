@@ -20,7 +20,7 @@ arguments:
 ## 固定流程（每步一个动作）
 
 1. 在云端运行扫描（MarketData.app 只认云端 IP；本地不带 `--chain-dir` / `--no-chain` 会以退出码 2 拒绝）：
-   `ssh aliyun "cd /root/workspace/Finance && .venv/bin/python scripts/vol_scan.py --json"`
+   `ssh aliyun "cd /root/workspace/Finance && python3 scripts/vol_scan.py --json"`
    指定标的时加 `--symbols NVDA,MU`。
 2. 读 `symbols.<SYM>.gates`，逐项记下门控状态（见下表）。
 3. 列出所有 35 天内、`earnings.date_status == "ESTIMATED"` 的财报日（自身 + `sector_events.events`）。逐个去公司官方 IR 页面核对。

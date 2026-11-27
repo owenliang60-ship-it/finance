@@ -6,7 +6,7 @@ bound to the cloud IP), reads market.db strictly read-only, and prints
 plain metrics + gate flags. No scoring, no win-rate claims.
 
 Usage (cloud):
-    ssh aliyun "cd /root/workspace/Finance && .venv/bin/python scripts/vol_scan.py --json"
+    ssh aliyun "cd /root/workspace/Finance && python3 scripts/vol_scan.py --json"
     ... --symbols NVDA --legs "NVDA:2026-12-18:C:150:-1;NVDA:2027-01-15:C:150:+1"
 Offline replay / no chain:
     python scripts/vol_scan.py --chain-dir DIR --json      # DIR/{SYMBOL}.json
@@ -45,7 +45,7 @@ PRICE_STALE_DAYS = 4
 CLOUD_GATE_MSG = (
     "vol_scan: live option chains come from MarketData.app, which is bound to the "
     "cloud server IP. Run on the cloud:\n"
-    "  ssh aliyun \"cd /root/workspace/Finance && .venv/bin/python scripts/vol_scan.py --json\"\n"
+    "  ssh aliyun \"cd /root/workspace/Finance && python3 scripts/vol_scan.py --json\"\n"
     "or pass --chain-dir DIR (offline replay) or --no-chain (skip chain metrics)."
 )
 
