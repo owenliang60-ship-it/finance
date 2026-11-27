@@ -265,7 +265,10 @@ def _sm_row(reason="ok", *, is_etf=0, is_fund=0, company_name="X Inc."):
     ("FITB-PA", _sm_row("missing_profile", company_name="Fifth Third Bancorp"), None, ("other", 0)),
     ("FITB-PM", None, {"isEtf": False}, ("other", 0)),
     ("XYZ-WS", _sm_row(), {"isEtf": False}, ("other", 0)),
-    ("TEST", None, None, ("other", 0)),
+    ("TEST", None, None, ("other", 0)),             # PLACEHOLDER_SYMBOLS
+    ("NEWUS", None, None, ("us_equity", 1)),        # unprofiled sub-$10B US stock (e.g. GRAL)
+    ("TQQQ", None, None, ("etf", 0)),               # COMMON_US_ETFS
+    ("IBIT", None, None, ("etf", 0)),
     ("GRAL", _sm_row("missing_profile", company_name=None), None, ("other", 0)),
     ("RML", _sm_row("missing_profile", company_name="Resolution ADR"), None, ("us_equity", 1)),
     ("ABBNY", _sm_row(), None, ("us_equity", 1)),

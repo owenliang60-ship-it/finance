@@ -23,6 +23,7 @@ import hashlib
 import io
 import json
 import logging
+import math
 import os
 import re
 import shlex
@@ -72,6 +73,12 @@ SHEET_COLUMNS = ("Stock Ticker", "Market", "Shares")
 
 AUTO_KINDS = frozenset({"etf", "fund_cef", "crypto", "custom_basket", "other"})
 CUSTOM_BASKETS = frozenset({"DRAM", "SOX"})
+PLACEHOLDER_SYMBOLS = frozenset({"TEST"})
+# US ETFs held or watched without a security_master / report_concepts.json row (e.g. "TQQQ PUT").
+COMMON_US_ETFS = frozenset({
+    "SPY", "QQQ", "IWM", "DIA", "SOXX", "SMH", "XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP",
+    "XLU", "XLB", "XLRE", "XLC", "TQQQ", "SQQQ", "SOXL", "SOXS", "TLT", "GLD", "SLV", "IBIT",
+    "FBTC", "ETHA", "ARKK"})
 ROW_META_FIELDS = ("symbol", "cik", "asset_kind", "in_us_basket_calc", "profile_sector",
                    "profile_industry", "company_name_snapshot")
 DEFAULT_AGREEMENT = "single_pass_weekly"
@@ -248,15 +255,16 @@ def classify_asset_kind(symbol: str, *, sm_row: Optional[Mapping[str, Any]],
     sm = sm_row or {}
     prof = profile_meta or {}
     if (sm.get("is_etf") == 1 or sm.get("reason") == "etf" or prof.get("isEtf") is True
-            or symbol in extra_etfs):
+            or symbol in extra_etfs or symbol in COMMON_US_ETFS):
         return "etf", 0
     if sm.get("is_fund") == 1 or sm.get("reason") == "fund" or prof.get("isFund") is True:
         return "fund_cef", 0
-    if (sm.get("reason") == "non_common_instrument" or _NON_COMMON_RE.match(symbol)
-            or (sm_row is None and profile_meta is None)
+    if (symbol in PLACEHOLDER_SYMBOLS or sm.get("reason") == "non_common_instrument"
+            or _NON_COMMON_RE.match(symbol)
             or (sm.get("reason") == "missing_profile" and not sm.get("company_name")
                 and profile_meta is None)):
         return "other", 0
+    # No security_master / profile row: a sub-$10B US stock outside the pool (e.g. GRAL).
     return "us_equity", 1
 
 
@@ -290,10 +298,13 @@ def scan_sheet_tickers_tolerant(xlsx_bytes: bytes) -> List[Tuple[str, str]]:
             ticker, market, shares = (row[col] if col < len(row) else None for col in header)
             if ticker is None or not str(ticker).strip():
                 continue
+            if isinstance(shares, str):
+                shares = shares.replace(",", "").strip()  # "1,250"
             try:
-                held = float(shares) > 0
+                value = float(shares)
             except (TypeError, ValueError):
                 continue
+            held = math.isfinite(value) and value > 0
             if held:
                 found.append((str(ticker).strip(), str(market or "US").strip().upper() or "US"))
         if header is None:
@@ -726,6 +737,14 @@ def format_weekly_summary(result: Mapping[str, Any], local: Mapping[str, Any]) -
     ]
     if cloud_q or local_q:
         lines.append("隔离代码：" + ", ".join((cloud_q + local_q)[:20]))
+    unclassified = [str(s) for s in local.get("unclassified_symbols") or []]
+    if unclassified:
+        lines.append(f"未标代码 {len(unclassified)}：" + ", ".join(unclassified[:20]))
+    pivot_symbols = [str(s) for s in local.get("pivot_symbols") or []]
+    if pivot_symbols:
+        lines.append("异动代码：" + ", ".join(pivot_symbols[:20]))
+    lines += [f"异动建议：{n.get('symbol')}: {n.get('note')}"
+              for n in (local.get("pivot_notes") or [])[:10] if isinstance(n, Mapping)]
     lines += ["告警：" + str(w) for w in (local.get("warnings") or [])[:5]]
     return _md_escape("\n".join(lines))
 
@@ -962,6 +981,12 @@ def _gate_outbox(exchange_dir, today: str):
     extra = sorted(set(symbols) - {m["symbol"] for m in delta["missing_symbols"]})
     if extra:
         raise GateError(f"classifications outside missing_symbols: {extra[:10]}")
+    notes = payload.get("pivot_notes") or []
+    pivots = {p["symbol"] for p in delta["pivot_candidates"]}
+    if not isinstance(notes, list) or not all(
+            isinstance(n, dict) and isinstance(n.get("symbol"), str) and isinstance(n.get("note"), str)
+            and n["symbol"] in pivots for n in notes):
+        raise GateError("pivot_notes must be [{symbol, note}] for symbols in pivot_candidates")
     return dirs, delta, payload
 
 
@@ -1075,11 +1100,18 @@ def commit_outbox(*, exchange_dir, baskets_path, overrides_path, market_db_path,
     local_q += quarantined
     sealed = {"schema_version": SCHEMA_VERSION, "payload_id": compute_payload_id(clean), "rows": clean,
               "created_at": utc_stamp(), "delta_sha256": delta["delta_sha256"],
-              "local_summary": {"local_quarantined": [s for s, _ in local_q],
-                                "pivot_candidates": len(delta["pivot_candidates"]),
-                                "warnings": list(delta["warnings"])}}
+              "local_summary": {
+                  "local_quarantined": [s for s, _ in local_q],
+                  "pivot_candidates": len(delta["pivot_candidates"]),
+                  "warnings": list(delta["warnings"]),
+                  "unclassified_symbols": sorted({m["symbol"] for m in delta["missing_symbols"]}
+                                                 - {c["symbol"] for c in payload["classifications"]}),
+                  "pivot_symbols": [p["symbol"] for p in delta["pivot_candidates"]],
+                  "pivot_notes": [{"symbol": n["symbol"], "note": n["note"].strip()[:200]}
+                                  for n in payload.get("pivot_notes") or []]}}
     summary = {"mode": "commit-outbox", "payload_id": sealed["payload_id"], "rows": len(clean),
-               "local_quarantined": local_q}
+               "local_quarantined": local_q,
+               "unclassified": len(sealed["local_summary"]["unclassified_symbols"])}
     warnings: List[str] = []
     rc, _ = _replay_files(dirs["pending"], baskets_doc, overrides_doc, ssh_runner, send_telegram, warnings)
     reply: Dict[str, Any] = {"ok": False, "error": "pending replay failed first"}
