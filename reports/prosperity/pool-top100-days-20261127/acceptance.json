@@ -1,0 +1,246 @@
+{
+  "as_of": "2026-11-21",
+  "code_version": "13e5f9d5183f1b8e",
+  "trading_window": [
+    "2026-07-17",
+    "2026-11-20"
+  ],
+  "liquidity_daily": {
+    "covered": 854,
+    "total": 856,
+    "ratio": 0.9976635514018691
+  },
+  "pool_selected": 33,
+  "pool_members": [
+    {
+      "symbol": "SMCI",
+      "rank": 1,
+      "grade": "STRICT",
+      "top100_days": 67
+    },
+    {
+      "symbol": "SNDK",
+      "rank": 2,
+      "grade": "STRICT",
+      "top100_days": 90
+    },
+    {
+      "symbol": "MU",
+      "rank": 5,
+      "grade": "STRICT",
+      "top100_days": 90
+    },
+    {
+      "symbol": "STX",
+      "rank": 6,
+      "grade": "STRICT",
+      "top100_days": 90
+    },
+    {
+      "symbol": "AVGO",
+      "rank": 7,
+      "grade": "STRICT",
+      "top100_days": 90
+    },
+    {
+      "symbol": "LITE",
+      "rank": 8,
+      "grade": "STRICT",
+      "top100_days": 90
+    },
+    {
+      "symbol": "VLO",
+      "rank": 14,
+      "grade": "STRICT",
+      "top100_days": 43
+    },
+    {
+      "symbol": "VRT",
+      "rank": 15,
+      "grade": "STRICT",
+      "top100_days": 71
+    },
+    {
+      "symbol": "SPCX",
+      "rank": 16,
+      "grade": "STRICT",
+      "top100_days": 90
+    },
+    {
+      "symbol": "LRCX",
+      "rank": 17,
+      "grade": "STRICT",
+      "top100_days": 90
+    },
+    {
+      "symbol": "APP",
+      "rank": 19,
+      "grade": "STRICT",
+      "top100_days": 76
+    },
+    {
+      "symbol": "NVDA",
+      "rank": 28,
+      "grade": "STRICT",
+      "top100_days": 90
+    },
+    {
+      "symbol": "GLW",
+      "rank": 30,
+      "grade": "STRICT",
+      "top100_days": 69
+    },
+    {
+      "symbol": "TSM",
+      "rank": 34,
+      "grade": "STRICT",
+      "top100_days": 90
+    },
+    {
+      "symbol": "TXN",
+      "rank": 36,
+      "grade": "STRICT",
+      "top100_days": 86
+    },
+    {
+      "symbol": "PLTR",
+      "rank": 41,
+      "grade": "STRICT",
+      "top100_days": 90
+    },
+    {
+      "symbol": "COHR",
+      "rank": 45,
+      "grade": "STRICT",
+      "top100_days": 88
+    },
+    {
+      "symbol": "HPE",
+      "rank": 57,
+      "grade": "FULL",
+      "top100_days": 33
+    },
+    {
+      "symbol": "MRVL",
+      "rank": 64,
+      "grade": "FULL",
+      "top100_days": 90
+    },
+    {
+      "symbol": "ABBV",
+      "rank": 74,
+      "grade": "FULL",
+      "top100_days": 75
+    },
+    {
+      "symbol": "ADI",
+      "rank": 99,
+      "grade": "FULL",
+      "top100_days": 79
+    },
+    {
+      "symbol": "KLAC",
+      "rank": 106,
+      "grade": "FULL",
+      "top100_days": 90
+    },
+    {
+      "symbol": "NXPI",
+      "rank": 116,
+      "grade": "FULL",
+      "top100_days": 32
+    },
+    {
+      "symbol": "COIN",
+      "rank": 120,
+      "grade": "FULL",
+      "top100_days": 66
+    },
+    {
+      "symbol": "NFLX",
+      "rank": 124,
+      "grade": "FULL",
+      "top100_days": 90
+    },
+    {
+      "symbol": "ANET",
+      "rank": 126,
+      "grade": "FULL",
+      "top100_days": 53
+    },
+    {
+      "symbol": "V",
+      "rank": 129,
+      "grade": "FULL",
+      "top100_days": 90
+    },
+    {
+      "symbol": "XOM",
+      "rank": 132,
+      "grade": "FULL",
+      "top100_days": 90
+    },
+    {
+      "symbol": "AMGN",
+      "rank": 134,
+      "grade": "FULL",
+      "top100_days": 52
+    },
+    {
+      "symbol": "VZ",
+      "rank": 142,
+      "grade": "FULL",
+      "top100_days": 42
+    },
+    {
+      "symbol": "BKNG",
+      "rank": 144,
+      "grade": "FULL",
+      "top100_days": 55
+    },
+    {
+      "symbol": "SNOW",
+      "rank": 146,
+      "grade": "FULL",
+      "top100_days": 73
+    },
+    {
+      "symbol": "COST",
+      "rank": 151,
+      "grade": "FULL",
+      "top100_days": 90
+    }
+  ],
+  "positive_verifier_rc": 0,
+  "positive_verifier_output": "checked 72408 rows, 33 pool days, 33 pool list rows, 90 u70 symbols; differences: 0",
+  "tamper_negatives": {
+    "member_days_tampered": {
+      "rc": 1,
+      "output": "checked 72408 rows, 0 pool days, 33 pool list rows, 90 u70 symbols; differences: 861"
+    },
+    "member_dropped": {
+      "rc": 1,
+      "output": "checked 72408 rows, 0 pool days, 33 pool list rows, 90 u70 symbols; differences: 861"
+    },
+    "criteria_min_top_days_30": {
+      "rc": 1,
+      "output": "checked 72408 rows, 0 pool days, 33 pool list rows, 90 u70 symbols; differences: 861"
+    },
+    "html_cell_tampered": {
+      "rc": 1,
+      "output": "checked 72408 rows, 33 pool days, 33 pool list rows, 90 u70 symbols; differences: 1"
+    },
+    "momentum_days_tampered": {
+      "rc": 1,
+      "output": "checked 72408 rows, 33 pool days, 33 pool list rows, 90 u70 symbols; differences: 1"
+    },
+    "pool_nan_score": {
+      "rc": 1,
+      "output": "checked 72408 rows, 0 pool days, 33 pool list rows, 90 u70 symbols; differences: 861"
+    },
+    "coverage_ratio_spoofed": {
+      "rc": 1,
+      "output": "checked 72408 rows, 0 pool days, 33 pool list rows, 90 u70 symbols; differences: 861"
+    }
+  }
+}

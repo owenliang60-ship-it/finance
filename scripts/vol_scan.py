@@ -32,7 +32,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import settings  # noqa: E402
 from terminal.options import vol_scan as vs  # noqa: E402
-from terminal.options.chain_analyzer import get_earnings_proximity, parse_chain_response  # noqa: E402
+from terminal.options.chain_analyzer import (  # noqa: E402
+    ETF_NO_EARNINGS_SYMBOLS,
+    get_earnings_proximity,
+    parse_chain_response,
+)
 
 logger = logging.getLogger("vol_scan")
 
@@ -211,7 +215,7 @@ def scan_symbol(symbol: str, chain: Dict[str, Any], bars: List[Dict[str, Any]],
     atm = ts = skew = template = None
     if contracts and spot:
         atm = vs.atm_iv_by_expiry(contracts, spot, as_of)
-        is_etf = symbol in settings.ETF_NO_EARNINGS_SYMBOLS
+        is_etf = symbol in ETF_NO_EARNINGS_SYMBOLS
         events = [dict(earnings, symbol=symbol)]
         if is_etf:
             events += [dict(e, symbol=s) for s, e in sector_events.items()]
@@ -271,7 +275,7 @@ def scan_symbol(symbol: str, chain: Dict[str, Any], bars: List[Dict[str, Any]],
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Deterministic volatility scan (read-only)")
-    p.add_argument("--symbols", default=",".join(settings.VOL_SCAN_SYMBOLS))
+    p.add_argument("--symbols", default=",".join(vs.VOL_SCAN_SYMBOLS))
     p.add_argument("--legs", default=None,
                    help='e.g. "NVDA:2026-12-18:C:150:-1;NVDA:2027-01-15:C:150:+1"')
     src = p.add_mutually_exclusive_group()

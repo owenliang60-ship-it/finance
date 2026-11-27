@@ -23,6 +23,7 @@ SPLIT_MOVE_THRESHOLD = 0.40
 HV_WINDOWS = (5, 10, 20, 30, 60)
 FLAT_BAND_PT = 1.0
 SECTOR_CORE_SYMBOLS = ("NVDA", "MU", "AMD", "TSM")
+VOL_SCAN_SYMBOLS = ["QQQ", "SOXX", "NVDA", "MU", "AMD", "TSM"]
 MODEL_ASSUMPTIONS = "European Black-Scholes, zero dividend, no early exercise"
 IV_FLOOR = 0.01
 

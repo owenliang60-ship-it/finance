@@ -15,7 +15,7 @@ arguments:
 
 入口：`scripts/vol_scan.py`（纯计算在 `terminal/options/vol_scan.py`）。仓库内正本：`docs/skills/vol-scan/SKILL.md`。改动先改仓库，再复制到 `~/.claude/skills/vol-scan/`。
 
-默认标的：`config/settings.py:VOL_SCAN_SYMBOLS`（QQQ, SOXX, NVDA, MU, AMD, TSM）。
+默认标的：`terminal/options/vol_scan.py:VOL_SCAN_SYMBOLS`（QQQ, SOXX, NVDA, MU, AMD, TSM）。
 
 ## 固定流程（每步一个动作）
 

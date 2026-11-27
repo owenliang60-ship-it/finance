@@ -18,7 +18,8 @@ from scipy.stats import spearmanr
 from scipy.stats import t as t_dist
 
 from backtest.pipeline.primitives.evaluation import newey_west_tstat
-from src.data.prosperity_pool import LIQUIDITY_TOP, liquidity_ranks, tier_cut
+from src.data.prosperity_pool import (CALENDAR_SYMBOL, LIQUIDITY_MIN_TOP_DAYS, liquidity_top_days,
+                                      load_calendar, tier_cut)
 from terminal.financial_history import detect_split_like_jumps
 
 TOP_N = 40
@@ -36,7 +37,6 @@ SPLIT_IGNORE_MAX = 1.05              # records with max(f, 1/f) < 1.05 are ignor
 SPLIT_MATCH_TOL = 0.15               # |ln(r·f)| < min(0.15, |ln f| / 2) is the same split
 LARGE_MOVE = 2.0                     # single-day moves beyond ×2 / ÷2 go to the appendix
 SHARE_JUMP_MIN = 1.5                 # implied share-count change ≥ ×1.5 / ÷1.5 on a big jump → split_suspect
-CALENDAR_SYMBOL = 'SPY'
 POOL_GRADES = ('STRICT', 'FULL')
 CHAPTERS = ('分层前瞻收益', 'IC', '对照组', '与价格动量的重叠度', '行业集中度', '换手率', '失败案例', '短史因子')
 
@@ -158,8 +158,7 @@ class PriceBook:
     def load(cls, market, symbols: Iterable[str]) -> 'PriceBook':
         names = sorted(set(symbols))
         conn = market._get_conn()
-        calendar = [r[0] for r in conn.execute(
-            'SELECT date FROM daily_price WHERE symbol=? AND close > 0 ORDER BY date', (CALENDAR_SYMBOL,))]
+        calendar = load_calendar(market)
         closes: Dict[str, List[Tuple[str, float]]] = {}
         splits: Dict[str, List[Tuple[str, float]]] = {}
         for i in range(0, len(names), _QUERY_BATCH):
@@ -553,7 +552,7 @@ def premium_members(view: BoardView, fundamentals: Mapping[str, dict], *, as_of:
 
 
 def load_pool_liquidity(market, views: Sequence[BoardView]) -> Dict[str, Optional[Dict[str, int]]]:
-    """Dollar-volume ranks per board date, the live pool's rule; None when the window fails.
+    """Top-100 dollar-volume day counts per board date, the live pool's rule; None when the window fails.
 
     M8 forces the same row set on all four schemes of one batch, so each as_of is computed once.
     """
@@ -563,21 +562,21 @@ def load_pool_liquidity(market, views: Sequence[BoardView]) -> Dict[str, Optiona
             continue
         symbols = sorted({r.symbol for r in v.rows})
         try:
-            out[v.as_of] = dict(liquidity_ranks(market, symbols, v.as_of).ranks)
+            out[v.as_of] = dict(liquidity_top_days(market, symbols, v.as_of).top_days)
         except ValueError:
             out[v.as_of] = None
     return out
 
 
-def pool_members(view: BoardView, ranks: Optional[Mapping[str, int]]) -> Optional[Tuple[str, ...]]:
-    """景气精选池 rule on one board: first tier ∩ STRICT/FULL ∩ top-100 dollar volume, in rank order."""
-    if ranks is None:
+def pool_members(view: BoardView, top_days: Optional[Mapping[str, int]]) -> Optional[Tuple[str, ...]]:
+    """景气精选池 rule on one board: first tier ∩ STRICT/FULL ∩ ≥31/90 daily top-100 days, in rank order."""
+    if top_days is None:
         return None
     ranked = ranked_rows(view)
     cut = tier_cut(len(ranked))
     return tuple(r.symbol for r in ranked
                  if r.rank <= cut and r.grade in POOL_GRADES
-                 and ranks.get(r.symbol, LIQUIDITY_TOP + 1) <= LIQUIDITY_TOP)
+                 and top_days.get(r.symbol, 0) >= LIQUIDITY_MIN_TOP_DAYS)
 
 
 # ---------------------------------------------------------------------------

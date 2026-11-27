@@ -3253,7 +3253,7 @@ _PROSPERITY_TITLE = "0d. 景气动量精选池（试运行）"
 
 def _prosperity_member(symbol, cap, *, rank=1, grade="STRICT", score=72.39, close=110.0, ema30=100.0, above=True):
     """One scanned pool row as scan_selection_compass returns it in `members`."""
-    return {"symbol": symbol, "rank": rank, "grade": grade, "score": score, "dollar_volume_rank": 3,
+    return {"symbol": symbol, "rank": rank, "grade": grade, "score": score, "top100_days": 68,
             "close": close, "ema30": ema30, "above": above, "marketCap": cap}
 
 
@@ -3527,7 +3527,7 @@ def _prosperity_trial_pool(symbols):
         "coverage": {"tier_cut": 10, "eligible": 8, "selected": len(symbols)},
         "members": [
             {"symbol": s, "rank": i + 1, "grade": "STRICT", "score": 80.0 - i,
-             "dollar_volume_rank": 5 + i}
+             "top100_days": 85 - i}
             for i, s in enumerate(symbols)
         ],
     }
@@ -3695,7 +3695,7 @@ class TestProsperityCompassWiring:
         assert rows["BOTH"]["above"] is True and rows["BOTH"]["marketCap"] == 50e9
         assert rows["DOWN"]["above"] is False and rows["DOWN"]["marketCap"] is None
         assert rows["DOWN"]["close"] == 101.0 and rows["DOWN"]["ema30"] > 101.0
-        assert rows["DOWN"]["rank"] == 2 and rows["DOWN"]["dollar_volume_rank"] == 6
+        assert rows["DOWN"]["rank"] == 2 and rows["DOWN"]["top100_days"] == 84
         assert trial["pool"]["symbols"] == ["BOTH", "DOWN", "NEWP"]
 
     def test_no_pick_is_a_valid_empty_section_without_scan_or_store(self, monkeypatch):

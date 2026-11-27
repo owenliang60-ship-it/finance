@@ -67,7 +67,7 @@ cron 使用计划中的周六 16:30 / 20:30 CST 两个条目。所有 replay 入
 | 0 | 计算成功并已发布（`published` / `already_published`）；不传 `--pool-path` 时为 `publication_not_configured` | 只有 `published` 或 `already_published` 才表示池文件是本周的 |
 | 3 | 输入/基本面硬门控失败 | 修复输入证据后重试，不降低门槛。基本面质量报告按文件名时间戳倒序，取快照前（`after.as_of` 不晚于 cutoff）最新一份判定；更早的通过报告不能掩盖它的失败。倒序扫描中，在定论那份之前遇到损坏报告即为 unknown；比它更旧的损坏报告不影响结果。手工生成的报告必须沿用 `fundamentals-YYYYMMDDTHHMMSSZ.json`（UTC）命名 |
 | 4 | 日期、模式或参数错误 | 更正参数；当前周只能 live |
-| 5 | 已计算、发布未确认 | 同周重试只发布，不重算。池发布常见原因：`liquidity_window_short` / `liquidity_prices_stale`（价格没到或过期，先查 06:30 价格任务）、`pool_ranked_coverage_below_floor`（周榜可排名覆盖率 <90%；周榜已冻结，**同周重试不会好**，只能等下周或回北极星讨论门槛，不要反复重跑）、`pool_liquidity_coverage_below_floor`（有成交额排名的成员 <90%；价格缺失导致，**补齐价格后同周重试可以成功**）、磁盘错误。池文件此时是上一版，或本周已校验的新版（`os.replace` 后目录 fsync 或 `mark_published` 失败）；读取端不会看到半写文件 |
+| 5 | 已计算、发布未确认 | 同周重试只发布，不重算。池发布常见原因：`liquidity_window_short` / `liquidity_prices_stale`（SPY 交易日不足 90 天或最后交易日滞后超过 7 天，先查 06:30 价格任务）、`pool_ranked_coverage_below_floor`（周榜可排名覆盖率 <90%；周榜已冻结，**同周重试不会好**，只能等下周或回北极星讨论门槛，不要反复重跑）、`pool_liquidity_coverage_below_floor`（90 日窗口内某一天有合法成交额的成员 <90%；价格缺失导致，**补齐价格后同周重试可以成功**）、磁盘错误。池文件此时是上一版，或本周已校验的新版（`os.replace` 后目录 fsync 或 `mark_published` 失败）；读取端不会看到半写文件 |
 | 6 | 重建、空间、证据、恢复或运行故障 | 查 `.state/runs/` 的 error，保留候选记录。stdout 结果含 `backup_error` 时，榜已落库，投递已照常执行（结果里有 `delivery` 段），只是运行后备份失败：看 stderr 的 `post_run_backup_failed`（空间不足时附可归档版本提示），修复后下次运行会补备份。运行后备份失败不覆盖 5 / 7；运行前备份失败仍为 6 且不进入计算 |
 | 75 | job/resource 锁忙 | 等待下一次入口，不并发绕过锁 |
 
@@ -132,17 +132,17 @@ cron 和周更入口都不会移除任何数据。空间不足时周更退出 6�
   全部挂点成功后才 `mark_published`。
 - `--as-of` 与 `--rebuild-chain` 不调用挂点，不写池文件。
 - 直接运行 `scripts/prosperity_weekly.py` 不传 `--pool-path` 时不发布（本地验收即如此）。
-- 选池规则：F1 周榜第一档（排名 ≤ ceil(可排名数 / 5)）∩ STRICT/FULL ∩ 周榜成员内最近 30 个交易日平均日成交额前 100，
-  合格的全进池（北极星 §4.1）。读取用 `src/data/prosperity_pool.load_prosperity_pool`，
+- 选池规则：F1 周榜第一档（排名 ≤ ceil(可排名数 / 5)）∩ STRICT/FULL ∩ 近 90 个 SPY 交易日里至少 31 天（超过 30 天）进当期主池成员当日原始成交额前 100，
+  合格的全进池（北极星 §4.1，2026-11-27 起）。读取用 `src/data/prosperity_pool.load_prosperity_pool`，
   不可用原因四种：`prosperity_pool_missing` / `_criteria_mismatch` / `_stale` / `_invalid`。
   能读原榜的读取端另调 `board_mismatch(pool, stored)` 核对池文件自报的榜级计数与切点，
   再逐成员对照原榜核对排名和评级（`board_mismatch` 不查成员，北极星 §4.1）。
-  2026-11-02 起规则含第一档；此前按旧规则生成的池文件读取时报 `_criteria_mismatch`（预期）。
+  2026-11-27 起 `criteria.liquidity` 改为 `top_dollar_volume_days`（90 日 ≥31 天）；此前按历史 30 日均值前 100 规则生成的池文件读取时报 `_criteria_mismatch`（预期；周六 08:00 晨报前部署时若需平滑过渡，可经 Boss 确认后按下方重建方法对已落库的最新 live 周榜刷新一次池文件）。
 - 周榜一旦标记已发布，同周再跑只返回 `already_published`，**不会检查或重写池文件**。
   发布后池文件被删或损坏，读取端会报 `prosperity_pool_missing` / `_invalid`（fail-closed，不会读到错数据）；
-  重建方法：在云端用 `build_pool` + `publish_prosperity_pool` 对本周 F1 周榜手动重建，需 Boss 确认。
-- 成交额排名在发布时读当时的 `market.db`，不随周榜冻结。同一天内重试结果相同；
-  隔几天手动重建时，若期间 `as_of` 之前的价格被回补或修正，成员可能与当周略有不同。
+  重建方法：在云端用 `liquidity_top_days` + `build_pool` + `publish_prosperity_pool` 对本周 F1 周榜手动重建，需 Boss 确认。
+- 前 100 天数（`top100_days`）在发布时读当时的 `market.db`，不随周榜冻结。同一天内重试结果相同（正常周六与同次运行的 M16 动量榜读同一份行情，恒满足 `U70 ⊆ 选池准入`）；
+  隔几天手动重建或事后核对时，若期间 `as_of` 之前的价格被回补或修正，成员或天数可能与当周已写出的文件略有不同。
 - M13 起，live 周发布成功后在同一次运行里投递网页到 Telegram 私聊，见文末「Telegram 投递（M13）」。
 
 ### 首次发布核对（2026-11-07，M10 A9 + 第一档规则）
@@ -214,14 +214,14 @@ scp aliyun:/root/workspace/Finance/data/pool/prosperity_pool.json /tmp/web/  # �
 怎么读：
 - 页首目录之前是"精选池"一节（2026-11-09）：按景气排名列出全部成员，行取自 F1 最新周榜的入池标记。
   池文件没绑定时这一节只写原因；库里没有 F1 live 周榜时没有这一节。
-- 只有 F1 最新周榜标入池（✓ 与成交额排名）。池文件必须和这张榜完全对得上：as_of、criteria、code_version、来源哈希、
+- 只有 F1 最新周榜标入池（✓ 与前100天数 `xx/90`）。池文件必须和这张榜完全对得上：as_of、criteria、code_version、来源哈希、
   股票池、可排名数、第一档切点、合格数，以及每个成员的排名与评级。任一项不符就整张榜不标，榜头写"未标入池：原因"。
 - 本地快照常常超过 8 天，所以网页不查池文件新鲜度；入池标记只说明池文件属于这张榜，榜头会写明这一点。
 - 库里没有 F1 live 周榜时（例如重建冻结链后、第一个 live 周六前），页首写"未标入池：库中无 F1 live 周榜"。
 - 整张榜都是近似 PIT（回放出来的季末榜）时，榜头写"本榜全部为近似 PIT"，行内不再逐行标。
-- 独立核对：`/usr/bin/python3 -I reports/prosperity/m11-web-20261102/verify_web.py --db … --html … --code-version <页首的 code_version> [--pool …]`
-  （只用标准库，不 import 项目代码；`--code-version` 必填，取页首显示的值）。
-  输出 `checked N rows, M pool ranks, L pool list rows; differences: K`，L 是页首精选池的行数。
+- 独立核对：`/usr/bin/python3 -I reports/prosperity/pool-top100-days-20261127/verify_pool_days.py --db … --market-db … --html … --pool … --code-version <页首的 code_version> [--momentum …]`
+  （只用标准库，不 import 项目代码；同时核对整页全部榜行、90 日窗口、`top100_days`、页首精选池表及可选动量 `U70` 子集包含；若在周更数日后运行且历史价格被回补，天数可能与当周文件略有差异。历史归档脚本 `reports/prosperity/m11-web-20261102/verify_web.py` 仅适用于 `2026-11-21` 及以前旧 30 日规则页面）。
+  输出 `checked N rows, M pool days, L pool list rows, U u70 symbols; differences: K`，L 是页首精选池的行数。
 
 ## Telegram 投递（M13）
 
@@ -277,7 +277,7 @@ data/prosperity-delivery/
 | `momentum_coverage_below_floor` | 有效股票不足主池 90% | 多为价格缺口；补齐价格后重跑。不要改门槛 |
 | `weekly_board_missing` | 快照里没有本周 F1 live 周榜 | 不应出现（投递前已取到周榜）；查 `code_version` |
 | `momentum_payload_invalid` | JSON 不是本周的或结构不对 | 删 `out/<周六>/momentum-*.json` 后重跑。删后到重跑写出前，晨报 0d 显示"动量榜尚未生成" |
-| `message_too_long` | 消息超过 4096 字符 | 精选池上限 100 只时约 2,300 字符，不会出现；出现说明池规则变了，回北极星讨论 |
+| `message_too_long` | 消息超过 4096 字符 | 当前约 850–900 主池下（上榜 ≤39 只、未评分受 90% 覆盖率约束 ≤90 只）约 3,300 字符，不会出现；若未来主池大幅扩容触发超长，回北极星讨论 |
 
 消息里"不可用"的股票不参与打分。原因在 JSON 的 `boards.14w.unavailable` 里逐票列出：`price_gap`（窗口内缺收盘价）、
 `split_unresolved` / `split_suspect`（拆股三态未决）、`volume_missing`、`no_price`。

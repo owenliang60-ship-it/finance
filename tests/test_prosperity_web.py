@@ -59,7 +59,7 @@ def test_row_view_matches_the_stored_board(store):
         assert (w.status, w.rank, w.grade, w.score, w.observe_reason) == (
             r.status, r.rank, r.grade, r.score, r.observe_reason)
         assert dict(w.family_scores) == dict(r.family_scores) and w.name == names[w.symbol]
-        assert w.pool_rank is None
+        assert w.pool_days is None
     assert page.pool_note is None
     assert page.counts['STRICT'] + page.counts['FULL'] + page.counts['BELOW'] == page.counts['ranked']
 
@@ -83,12 +83,11 @@ F1 = scheme_hash(SCHEMES['F1'])
 
 
 def fake_liquidity(stored):
-    """Window = 30 weekdays ending the day before as_of; members by symbol, dollar volume descending."""
+    """Window = 90 weekdays ending the day before as_of; members get 90 - i top-100 days."""
     as_of = stored.board.as_of
-    window = weekdays((date.fromisoformat(as_of) - timedelta(days=1)).isoformat(), 30)
+    window = weekdays((date.fromisoformat(as_of) - timedelta(days=1)).isoformat(), 90)
     symbols = sorted(stored.meta.members)
-    return LiquidityResult(as_of, tuple(window), {s: 1e9 - i * 1e6 for i, s in enumerate(symbols)},
-                           {s: i + 1 for i, s in enumerate(symbols)})
+    return LiquidityResult(as_of, tuple(window), {s: 90 - i for i, s in enumerate(symbols)}, len(symbols))
 
 
 @pytest.fixture()
@@ -115,8 +114,9 @@ def test_pool_marks_only_when_bound(pool_store):
     old, stored = boards(pool_store)
     pool = pool_for(stored)
     assert len(pool['members']) == 4                                    # first tier = top 4 of 18 ranked
-    ranks, note = pool_binding(pool, stored)
-    assert ranks == {m['symbol']: m['dollar_volume_rank'] for m in pool['members']} and note.startswith('入池')
+    days, note = pool_binding(pool, stored)
+    assert days == {m['symbol']: m['top100_days'] for m in pool['members']}
+    assert note == f'入池 4 只（第一档 ∩ STRICT/FULL ∩ 近 90 个交易日至少 31 天进当日成交额前 100，as_of {stored.board.as_of}）'
     # a pool that is valid on its own but belongs to another week
     assert pool_binding(pool_for(old), stored) == ({}, '未标入池：池文件与本榜不符（as_of）')
     bad = copy.deepcopy(pool); bad['source']['content_hash'] = '0' * 64
@@ -168,15 +168,15 @@ def test_pool_note_only_on_f1_latest_weekly(pool_store):
     noted = [p for p in pages if p.pool_note]
     assert [(p.scheme_id, p.board_type) for p in noted] == [('F1', 'weekly')]
     assert noted[0].pool_note.startswith('入池')
-    marked = {r.symbol: r.pool_rank for r in noted[0].rows if r.pool_rank is not None}
-    assert marked == {m['symbol']: m['dollar_volume_rank'] for m in pool['members']}
-    assert all(r.pool_rank is None for p in pages[1:] for r in p.rows)
+    marked = {r.symbol: r.pool_days for r in noted[0].rows if r.pool_days is not None}
+    assert marked == {m['symbol']: m['top100_days'] for m in pool['members']}
+    assert all(r.pool_days is None for p in pages[1:] for r in p.rows)
 
 
 def test_pool_error_is_written_on_the_f1_board(pool_store):
     pages = load_pages(pool_store, code_version='test-v1', pool_error='池文件无法读取')
     assert pages[0].pool_note == '未标入池：池文件无法读取'
-    assert all(r.pool_rank is None for r in pages[0].rows)
+    assert all(r.pool_days is None for r in pages[0].rows)
 
 
 # ---- Task 2: HTML renderer ----------------------------------------------------------
@@ -288,13 +288,14 @@ def test_text_is_escaped(pages):
 
 def test_pool_columns_only_on_noted_board(pages_with_pool):
     html = render_page(pages_with_pool, generated_at='x', source={})
+    assert html.count('前100天数') == 3 and '成交额排名' not in html
     sections = html.split('<section id=')[1:]
-    assert '成交额排名' in sections[0] and sections[0].count('<td>✓') == 4
-    assert all('成交额排名' not in s and '✓' not in s for s in sections[1:])
-    marked = {r.symbol: r.pool_rank for r in pages_with_pool[0].rows if r.pool_rank}
-    for symbol, rank in marked.items():
+    assert sections[0].count('前100天数') == 2 and sections[0].count('<td>✓') == 4
+    assert all('前100天数' not in s and '✓' not in s for s in sections[1:])
+    marked = {r.symbol: r.pool_days for r in pages_with_pool[0].rows if r.pool_days is not None}
+    for symbol, days in marked.items():
         r = row_of(sections[0], symbol)
-        assert r['cells'][-2:] == ['✓', str(rank)] and r['class'] == 'p'
+        assert r['cells'][-2:] == ['✓', f'{days}/90'] and r['class'] == 'p'
     unmarked = [r for r in body_rows(sections[0]) if r['cells'][1] not in marked]
     assert unmarked and all(r['cells'][-2:] == ['', ''] and r['class'] is None for r in unmarked)
 
@@ -389,9 +390,11 @@ def test_pool_criteria_or_source_hash_edits_mark_nothing(pool_store):
     pool = pool_for(stored)
     bad = copy.deepcopy(pool); bad['source']['content_hash'] = 'f' * 64
     assert pool_binding(bad, stored) == ({}, '未标入池：池文件与本榜不符（content_hash）')
-    bad = copy.deepcopy(pool); bad['criteria']['liquidity']['top'] = 101
-    ranks, note = pool_binding(bad, stored)
-    assert ranks == {} and note.startswith('未标入池：池文件校验失败')
+    bad = copy.deepcopy(pool); bad['criteria']['liquidity']['min_top_days'] = 30
+    days, note = pool_binding(bad, stored)
+    assert days == {} and note.startswith('未标入池：池文件校验失败')
+    html = render_page(load_pages(pool_store, code_version='test-v1', pool=bad), generated_at='x', source={})
+    assert '/90' not in html
 
 
 # ---- pool list at the top (Boss 2026-11-09) -----------------------------------------
@@ -403,12 +406,12 @@ def _pool_block(html):
 def test_pool_list_at_the_top_in_rank_order(pages_with_pool):
     from src.data.prosperity_web import _score
     weekly = pages_with_pool[0]
-    members = [r for r in weekly.rows if r.pool_rank is not None]
+    members = [r for r in weekly.rows if r.pool_days is not None]
     assert len(members) == 4
     block = _pool_block(render_page(pages_with_pool, generated_at='x', source={}))
     rows = body_rows(block)
     assert [r['cells'] for r in rows] == [
-        [str(r.rank), r.symbol, r.name, r.sector or '—', r.grade, _score(r.score), str(r.pool_rank)]
+        [str(r.rank), r.symbol, r.name, r.sector or '—', r.grade, _score(r.score), f'{r.pool_days}/90']
         for r in members]
     assert f'精选池 · {weekly.as_of}' in block and '入池 4 只' in block
     assert f'href="#{section_id(weekly)}"' in block
