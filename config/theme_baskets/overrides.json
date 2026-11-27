@@ -1,0 +1,620 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-11-27",
+  "description": "公开大盘多元化/跨界龙头手工锁定表与补充代码映射（严禁写入任何个人私密中小盘持仓，私密票锁定走云端 market.db source='db_locked'）。",
+  "locked_stocks": [
+    {
+      "symbol": "AAPL",
+      "l2_id": "smart_terminals_electronics",
+      "cross_themes": [],
+      "rationale": "3.5万亿+消费电子旗舰生态，单独归智能终端以免吞噬AI服务器篮子市值权重"
+    },
+    {
+      "symbol": "MSFT",
+      "l2_id": "hyperscale_ai_cloud",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "platform_giant"
+        },
+        {
+          "theme_id": "cross_ai_software_agents",
+          "role": "platform_giant"
+        }
+      ],
+      "rationale": "Azure云与AI资本开支为核心定价锚"
+    },
+    {
+      "symbol": "NVDA",
+      "l2_id": "ai_compute_logic_soc",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        },
+        {
+          "theme_id": "cross_autonomy_robotics",
+          "role": "core"
+        }
+      ],
+      "rationale": "AI算力GPU与机器人/智驾计算平台绝对核心卖铲人"
+    },
+    {
+      "symbol": "GOOG",
+      "l2_id": "hyperscale_ai_cloud",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "platform_giant"
+        },
+        {
+          "theme_id": "cross_ai_software_agents",
+          "role": "platform_giant"
+        },
+        {
+          "theme_id": "cross_autonomy_robotics",
+          "role": "platform_giant"
+        }
+      ],
+      "rationale": "GCP+TPU+Gemini全栈云与Waymo自动驾驶，与MSFT/AMZN同列超大规模云"
+    },
+    {
+      "symbol": "AMZN",
+      "l2_id": "hyperscale_ai_cloud",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "platform_giant"
+        }
+      ],
+      "rationale": "AWS贡献核心营业利润与AI基础设施资本开支，按市场定价锚脱离传统零售"
+    },
+    {
+      "symbol": "META",
+      "l2_id": "digital_ads_social",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "platform_giant"
+        },
+        {
+          "theme_id": "cross_ai_software_agents",
+          "role": "platform_giant"
+        }
+      ],
+      "rationale": "无外部公有云IaaS收入，商业变现100%锚定社交与AI推荐数字广告"
+    },
+    {
+      "symbol": "SPCX",
+      "l2_id": "aerospace_defense_primes",
+      "cross_themes": [
+        {
+          "theme_id": "cross_space_modern_defense",
+          "role": "core"
+        }
+      ],
+      "rationale": "商业可回收火箭与Starlink低轨卫星星座绝对龙头"
+    },
+    {
+      "symbol": "TSM",
+      "l2_id": "foundry_osat",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        },
+        {
+          "theme_id": "cross_semicap_fab_expansion",
+          "role": "core"
+        }
+      ],
+      "rationale": "全球先进逻辑晶圆代工与CoWoS先进封装核心瓶颈"
+    },
+    {
+      "symbol": "AVGO",
+      "l2_id": "ai_compute_logic_soc",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "定制AI XPU ASIC与数据中心交换芯片双核心驱动"
+    },
+    {
+      "symbol": "TSLA",
+      "l2_id": "autos_ev_manufacturers",
+      "cross_themes": [
+        {
+          "theme_id": "cross_autonomy_robotics",
+          "role": "core"
+        }
+      ],
+      "rationale": "电动车制造叠加FSD自动驾驶与Optimus人形机器人核心定价锚"
+    },
+    {
+      "symbol": "BRK-B",
+      "l2_id": "insurance_pc_reinsurance",
+      "cross_themes": [],
+      "rationale": "以保险浮存金为核心资本底座的多元控股巨头"
+    },
+    {
+      "symbol": "LLY",
+      "l2_id": "large_specialty_pharma",
+      "cross_themes": [
+        {
+          "theme_id": "cross_glp1_metabolic",
+          "role": "core"
+        }
+      ],
+      "rationale": "全球GLP-1减重与代谢创新药第一龙头"
+    },
+    {
+      "symbol": "NVO",
+      "l2_id": "large_specialty_pharma",
+      "cross_themes": [
+        {
+          "theme_id": "cross_glp1_metabolic",
+          "role": "core"
+        }
+      ],
+      "rationale": "全球GLP-1糖尿病与减重双寡头之一"
+    },
+    {
+      "symbol": "MU",
+      "l2_id": "memory_storage",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "美股唯一纯正DRAM/NAND与AI HBM高带宽内存芯片原厂"
+    },
+    {
+      "symbol": "AMD",
+      "l2_id": "ai_compute_logic_soc",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "数据中心AI GPU与服务器EPYC CPU核心供应商"
+    },
+    {
+      "symbol": "ANT",
+      "l2_id": "hyperscale_ai_cloud",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_software_agents",
+          "role": "core"
+        },
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "platform_giant"
+        }
+      ],
+      "rationale": "Claude商业化基座大模型与企业Agent核心提供商"
+    },
+    {
+      "symbol": "ASML",
+      "l2_id": "semi_equipment_materials",
+      "cross_themes": [
+        {
+          "theme_id": "cross_semicap_fab_expansion",
+          "role": "core"
+        }
+      ],
+      "rationale": "全球EUV与DUV光刻机唯一垄断龙头"
+    },
+    {
+      "symbol": "ORCL",
+      "l2_id": "hyperscale_ai_cloud",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "OCI超大规模AI训练算力集群租赁为核心增长锚"
+    },
+    {
+      "symbol": "PLTR",
+      "l2_id": "cloud_data_ai_platform",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_software_agents",
+          "role": "core"
+        },
+        {
+          "theme_id": "cross_space_modern_defense",
+          "role": "core"
+        }
+      ],
+      "rationale": "企业AIP决策智能平台与现代国防AI操作底座双轮驱动"
+    },
+    {
+      "symbol": "ANET",
+      "l2_id": "optical_highspeed_interconnect",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "AI数据中心高速以太网交换机核心龙头"
+    },
+    {
+      "symbol": "APH",
+      "l2_id": "optical_highspeed_interconnect",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "AI机柜高速铜缆背板连接器绝对龙头（纠偏旧工业机械分类）"
+    },
+    {
+      "symbol": "GLW",
+      "l2_id": "optical_highspeed_interconnect",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "数据中心高密度光纤光缆核心供应商"
+    },
+    {
+      "symbol": "COHR",
+      "l2_id": "optical_highspeed_interconnect",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "800G/1.6T数通光模块与磷化铟激光器龙头（纠偏旧半导体设备分类）"
+    },
+    {
+      "symbol": "LITE",
+      "l2_id": "optical_highspeed_interconnect",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "高速EML光芯片与数通光模块核心供应商"
+    },
+    {
+      "symbol": "ALAB",
+      "l2_id": "optical_highspeed_interconnect",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "AI服务器PCIe/CXL/以太网高速互连Retimer芯片龙头"
+    },
+    {
+      "symbol": "CRDO",
+      "l2_id": "optical_highspeed_interconnect",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "AI集群AEC有源电缆与高速SerDes互连龙头"
+    },
+    {
+      "symbol": "DELL",
+      "l2_id": "ai_server_enterprise_hardware",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "企业级AI服务器整机与存储集成核心龙头"
+    },
+    {
+      "symbol": "SMCI",
+      "l2_id": "ai_server_enterprise_hardware",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "液冷与定制化AI服务器机架供应商"
+    },
+    {
+      "symbol": "VRT",
+      "l2_id": "dc_grid_power_cooling",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_power_grid",
+          "role": "core"
+        },
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "数据中心供电配电与液冷热管理纯正核心标的"
+    },
+    {
+      "symbol": "ETN",
+      "l2_id": "dc_grid_power_cooling",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_power_grid",
+          "role": "core"
+        },
+        {
+          "theme_id": "cross_us_reshoring_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "北美电网变压器、数据中心配电与工业电气化核心龙头"
+    },
+    {
+      "symbol": "GEV",
+      "l2_id": "ipp_nuclear_clean_power",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_power_grid",
+          "role": "core"
+        },
+        {
+          "theme_id": "cross_natgas_lng_power",
+          "role": "core"
+        }
+      ],
+      "rationale": "全球重型燃气轮机、电网高压设备与SMR核电技术龙头"
+    },
+    {
+      "symbol": "CEG",
+      "l2_id": "ipp_nuclear_clean_power",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_power_grid",
+          "role": "core"
+        },
+        {
+          "theme_id": "cross_nuclear_uranium",
+          "role": "core"
+        }
+      ],
+      "rationale": "北美最大商业核电机组独立发电商与AI数据中心核电PPA龙头"
+    },
+    {
+      "symbol": "VST",
+      "l2_id": "ipp_nuclear_clean_power",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_power_grid",
+          "role": "core"
+        },
+        {
+          "theme_id": "cross_nuclear_uranium",
+          "role": "core"
+        },
+        {
+          "theme_id": "cross_natgas_lng_power",
+          "role": "core"
+        }
+      ],
+      "rationale": "北美核电与气电市场化独立发电龙头"
+    },
+    {
+      "symbol": "CCJ",
+      "l2_id": "industrial_metals_mining",
+      "cross_themes": [
+        {
+          "theme_id": "cross_nuclear_uranium",
+          "role": "core"
+        }
+      ],
+      "rationale": "西方最大高品位天然铀矿与核燃料循环供应商"
+    },
+    {
+      "symbol": "P",
+      "l2_id": "memory_storage",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "原Pure Storage更名Everpure，企业级全闪存阵列龙头（纠偏旧工业分类）"
+    },
+    {
+      "symbol": "MSTR",
+      "l2_id": "crypto_digital_finance",
+      "cross_themes": [
+        {
+          "theme_id": "cross_crypto_blockchain",
+          "role": "core"
+        }
+      ],
+      "rationale": "比特币本位杠杆金库公司（纠偏FMP应用软件行业归属）"
+    },
+    {
+      "symbol": "COIN",
+      "l2_id": "crypto_digital_finance",
+      "cross_themes": [
+        {
+          "theme_id": "cross_crypto_blockchain",
+          "role": "core"
+        }
+      ],
+      "rationale": "美国最大合规加密货币交易与托管基础设施平台"
+    },
+    {
+      "symbol": "CRCL",
+      "l2_id": "crypto_digital_finance",
+      "cross_themes": [
+        {
+          "theme_id": "cross_crypto_blockchain",
+          "role": "core"
+        }
+      ],
+      "rationale": "USDC合规美元稳定币发行商（纠偏旧投行分类）"
+    },
+    {
+      "symbol": "HOOD",
+      "l2_id": "crypto_digital_finance",
+      "cross_themes": [
+        {
+          "theme_id": "cross_crypto_blockchain",
+          "role": "core"
+        }
+      ],
+      "rationale": "零售加密交易与链上代币化经纪高弹性龙头"
+    },
+    {
+      "symbol": "ISRG",
+      "l2_id": "medical_devices_robotics",
+      "cross_themes": [
+        {
+          "theme_id": "cross_autonomy_robotics",
+          "role": "core"
+        }
+      ],
+      "rationale": "达芬奇微创手术机器人全球垄断龙头"
+    },
+    {
+      "symbol": "RKLB",
+      "l2_id": "aerospace_defense_primes",
+      "cross_themes": [
+        {
+          "theme_id": "cross_space_modern_defense",
+          "role": "core"
+        }
+      ],
+      "rationale": "商业火箭发射与航天器系统制造商"
+    },
+    {
+      "symbol": "UBER",
+      "l2_id": "ecommerce_local_platform",
+      "cross_themes": [
+        {
+          "theme_id": "cross_autonomy_robotics",
+          "role": "platform_giant"
+        }
+      ],
+      "rationale": "全球移动出行与即时配送平台，Robotaxi商业化核心分发入口"
+    },
+    {
+      "symbol": "CRWV",
+      "l2_id": "hyperscale_ai_cloud",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "纯正GPU高性能AI算力云基础设施服务商"
+    },
+    {
+      "symbol": "NBIS",
+      "l2_id": "hyperscale_ai_cloud",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "欧美自建AI GPU集群云基础设施厂商"
+    },
+    {
+      "symbol": "CBRS",
+      "l2_id": "ai_compute_logic_soc",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "晶圆级大算力AI训练与超高速推理芯片厂商"
+    }
+  ],
+  "supplemental_aliases": [
+    {
+      "alias_symbol": "GOOGL",
+      "canonical_symbol": "GOOG",
+      "kind": "share_class",
+      "effective_from": null,
+      "note": "Alphabet A类/C类统一归主代表代码 GOOG"
+    },
+    {
+      "alias_symbol": "BRK.B",
+      "canonical_symbol": "BRK-B",
+      "kind": "share_class",
+      "effective_from": null,
+      "note": "Berkshire 点号代码写法归一"
+    },
+    {
+      "alias_symbol": "BRK.A",
+      "canonical_symbol": "BRK-B",
+      "kind": "share_class",
+      "effective_from": null,
+      "note": "Berkshire A类股统一归 BRK-B"
+    },
+    {
+      "alias_symbol": "BRK-A",
+      "canonical_symbol": "BRK-B",
+      "kind": "share_class",
+      "effective_from": null,
+      "note": "Berkshire A类股统一归 BRK-B"
+    },
+    {
+      "alias_symbol": "FOX",
+      "canonical_symbol": "FOXA",
+      "kind": "share_class",
+      "effective_from": null,
+      "note": "Fox Corp 双股类统一归 FOXA"
+    },
+    {
+      "alias_symbol": "NWS",
+      "canonical_symbol": "NWSA",
+      "kind": "share_class",
+      "effective_from": null,
+      "note": "News Corp 双股类统一归 NWSA"
+    },
+    {
+      "alias_symbol": "FWONA",
+      "canonical_symbol": "FWONK",
+      "kind": "share_class",
+      "effective_from": null,
+      "note": "Formula One 双股类统一归 FWONK"
+    },
+    {
+      "alias_symbol": "PSTG",
+      "canonical_symbol": "P",
+      "kind": "rename",
+      "effective_from": "2026-06-19",
+      "note": "Pure Storage 更名 Everpure (P)，PSTG 末日市值 2026-06-18"
+    },
+    {
+      "alias_symbol": "BK",
+      "canonical_symbol": "BNY",
+      "kind": "rename",
+      "effective_from": "2026-06-30",
+      "note": "Bank of New York Mellon 代码切换为 BNY，BK 末日市值 2026-06-29"
+    },
+    {
+      "alias_symbol": "SQ",
+      "canonical_symbol": "XYZ",
+      "kind": "rename",
+      "effective_from": "2025-01-21",
+      "note": "Block Inc. 旧代码 SQ 归一至当前代码 XYZ"
+    }
+  ]
+}
