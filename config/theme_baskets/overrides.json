@@ -26,7 +26,7 @@
     },
     {
       "symbol": "NVDA",
-      "l2_id": "ai_compute_logic_soc",
+      "l2_id": "ai_accelerators",
       "cross_themes": [
         {
           "theme_id": "cross_ai_compute_infra",
@@ -37,7 +37,7 @@
           "role": "core"
         }
       ],
-      "rationale": "AI算力GPU与机器人/智驾计算平台绝对核心卖铲人"
+      "rationale": "数据中心AI训练与推理GPU及机器人计算平台绝对核心卖铲人"
     },
     {
       "symbol": "GOOG",
@@ -56,7 +56,7 @@
           "role": "platform_giant"
         }
       ],
-      "rationale": "GCP+TPU+Gemini全栈云与Waymo自动驾驶，与MSFT/AMZN同列超大规模云"
+      "rationale": "GCP+TPU+Gemini全栈云与Waymo自动驾驶，与MSFT/AMZN/META同列超大规模云"
     },
     {
       "symbol": "AMZN",
@@ -71,7 +71,7 @@
     },
     {
       "symbol": "META",
-      "l2_id": "digital_ads_social",
+      "l2_id": "hyperscale_ai_cloud",
       "cross_themes": [
         {
           "theme_id": "cross_ai_compute_infra",
@@ -82,7 +82,7 @@
           "role": "platform_giant"
         }
       ],
-      "rationale": "无外部公有云IaaS收入，商业变现100%锚定社交与AI推荐数字广告"
+      "rationale": "超大规模AI算力集群资本开支（CapEx）与Llama基座大模型巨头，与MSFT/GOOG/AMZN共振"
     },
     {
       "symbol": "SPCX",
@@ -112,14 +112,14 @@
     },
     {
       "symbol": "AVGO",
-      "l2_id": "ai_compute_logic_soc",
+      "l2_id": "ai_accelerators",
       "cross_themes": [
         {
           "theme_id": "cross_ai_compute_infra",
           "role": "core"
         }
       ],
-      "rationale": "定制AI XPU ASIC与数据中心交换芯片双核心驱动"
+      "rationale": "定制AI XPU ASIC加速器与数据中心网络芯片核心龙头"
     },
     {
       "symbol": "TSLA",
@@ -173,14 +173,42 @@
     },
     {
       "symbol": "AMD",
-      "l2_id": "ai_compute_logic_soc",
+      "l2_id": "cpu_general_processors",
       "cross_themes": [
         {
           "theme_id": "cross_ai_compute_infra",
           "role": "core"
         }
       ],
-      "rationale": "数据中心AI GPU与服务器EPYC CPU核心供应商"
+      "rationale": "服务器EPYC与PC Ryzen x86通用CPU核心寡头（同时保留AI算力硬件跨界核心标签）"
+    },
+    {
+      "symbol": "INTC",
+      "l2_id": "cpu_general_processors",
+      "cross_themes": [],
+      "rationale": "服务器Xeon与PC酷睿x86通用CPU核心厂商"
+    },
+    {
+      "symbol": "QCOM",
+      "l2_id": "cpu_general_processors",
+      "cross_themes": [
+        {
+          "theme_id": "cross_autonomy_robotics",
+          "role": "core"
+        }
+      ],
+      "rationale": "移动端与ARM PC骁龙通用处理器SoC及车规智驾座舱平台核心厂商"
+    },
+    {
+      "symbol": "ARM",
+      "l2_id": "cpu_general_processors",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "全球移动端与数据中心Neoverse通用CPU指令集架构核心提供商"
     },
     {
       "symbol": "ANT",
@@ -255,6 +283,17 @@
         }
       ],
       "rationale": "AI机柜高速铜缆背板连接器绝对龙头（纠偏旧工业机械分类）"
+    },
+    {
+      "symbol": "MRVL",
+      "l2_id": "optical_highspeed_interconnect",
+      "cross_themes": [
+        {
+          "theme_id": "cross_ai_compute_infra",
+          "role": "core"
+        }
+      ],
+      "rationale": "数通光模块PAM4 DSP、AEC高速互连与数据中心交换芯片核心供应商"
     },
     {
       "symbol": "GLW",
@@ -513,36 +552,36 @@
     },
     {
       "symbol": "CRWV",
-      "l2_id": "hyperscale_ai_cloud",
+      "l2_id": "neocloud",
       "cross_themes": [
         {
           "theme_id": "cross_ai_compute_infra",
           "role": "core"
         }
       ],
-      "rationale": "纯正GPU高性能AI算力云基础设施服务商"
+      "rationale": "纯正GPU高性能AI算力租赁新兴云（Neocloud）龙头"
     },
     {
       "symbol": "NBIS",
-      "l2_id": "hyperscale_ai_cloud",
+      "l2_id": "neocloud",
       "cross_themes": [
         {
           "theme_id": "cross_ai_compute_infra",
           "role": "core"
         }
       ],
-      "rationale": "欧美自建AI GPU集群云基础设施厂商"
+      "rationale": "欧美自建高密度AI GPU集群新兴算力云（Neocloud）核心标的"
     },
     {
       "symbol": "CBRS",
-      "l2_id": "ai_compute_logic_soc",
+      "l2_id": "ai_accelerators",
       "cross_themes": [
         {
           "theme_id": "cross_ai_compute_infra",
           "role": "core"
         }
       ],
-      "rationale": "晶圆级大算力AI训练与超高速推理芯片厂商"
+      "rationale": "晶圆级大算力AI训练与超高速推理加速芯片厂商"
     }
   ],
   "supplemental_aliases": [

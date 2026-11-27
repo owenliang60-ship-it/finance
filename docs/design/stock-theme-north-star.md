@@ -26,7 +26,7 @@
 ```mermaid
 flowchart TB
     subgraph L1_CFG["第一层：字典与公开锁定配置层 (Git 公开仓)"]
-        BJSON["config/theme_baskets/baskets.json\n10 L1 + 60 L2互斥赛道 + 12 纯产业跨界篮\n+ 15 个 pi_bucket 定义 + asset_kind 默认桶表"]
+        BJSON["config/theme_baskets/baskets.json\n10 L1 + 62 L2互斥赛道 + 12 纯产业跨界篮\n+ 15 个 pi_bucket 定义 + asset_kind 默认桶表"]
         OJSON["config/theme_baskets/overrides.json\n公开大盘巨头锁定(最高优先) + 少量补充别名\n(私密小票走云端 db_locked + 仓外备份)"]
     end
 
@@ -63,7 +63,7 @@ flowchart TB
 3. **异构资产物理隔离硬不变量（`R4, D2`）**：`asset_kind` 仅由 Step A 确定性判定（严禁模型填），默认 `pi_bucket` 由 `baskets.json` 的 `asset_kind_default_pi_bucket` 字典给出（不依赖待删旧分类器）；除 `'us_equity'` 主代表股外，其余全部类型一律 `CHECK (in_us_basket_calc = 0)`，且 `etf, fund_cef, crypto, custom_basket` 强制 `l2_id IS NULL`。
 4. **双级锁定优先级与存量防漂移硬不变量（`R7`）**：优先级严格为 `overrides.json`（`source='override'`，公开大盘龙头） > 云端库内私有锁定（`source='db_locked'`，通过 `--lock-private` 加锁/`--unlock-private` 解锁，每次变更自动在仓外 `db_locked_backup/` 导出加密/本地备份） > 自动分类（`source='agy_llm'`）。日常周更对已有存量行只允许锁定段更新，新票段拒绝覆盖存量行。
 5. **景气 `CODE_VERSION_SOURCES` 全集零触碰硬不变量（`R11`）**：新模块严禁修改 `terminal/prosperity/version.py:CODE_VERSION_SOURCES` 全部 11 项路径中的任一字节，也严禁被其 `import`；验收断言为 **实施前后 `main` 的 `code_version()` 完全相等**。
-6. **成篮规模评审与禁删保护（`R3`）**：M1 新建篮子活跃代表股须 `≥ min_active_members`（默认 5 只，寡头赛道最低 4 只）；`theme_baskets` 触发器禁止 `DELETE` 任何行，且仍有活跃成员引用时拒绝将 `is_active` 置 `0`；日常市值波动导致跌破人数门槛由 `data_health.py` 报 `WARN`。
+6. **成篮规模评审与禁删保护（`R3`）**：M1 新建篮子活跃代表股须 `≥ min_active_members`（默认 5 只，寡头/新兴纯正赛道特批最低 2–4 只，如 `neocloud` 2 只、`ai_accelerators` 3 只）；`theme_baskets` 触发器禁止 `DELETE` 任何行，且仍有活跃成员引用时拒绝将 `is_active` 置 `0`；日常市值波动导致跌破人数门槛由 `data_health.py` 报 `WARN`。
 
 ---
 
@@ -74,7 +74,7 @@ flowchart TB
 - **职责**：Git 版本化管理「三层篮子字典 + 原 PI 15 粗桶字典 + 异构资产默认桶表」与「公开大盘龙头锁定表」。
 - **不负责**：不存全池结果；**严禁写入个人私密中小盘持仓或观察名单**。
 - **核心内容**：
-  - `config/theme_baskets/baskets.json`：含 15 个 `tier='pi_bucket'` 条目（带 `sort_order`，含 `'ETF/宏观工具'` 与 `'其他'`）+ `asset_kind_default_pi_bucket` 映射表 + **10 个 L1 大板块** + **60 个 L2 互斥赛道**（带 `default_pi_bucket` 与 `sort_order`）+ **12 个纯产业跨界大主题**（上限 `≤ 18` 个）。
+  - `config/theme_baskets/baskets.json`：含 15 个 `tier='pi_bucket'` 条目（带 `sort_order`，含 `'ETF/宏观工具'` 与 `'其他'`）+ `asset_kind_default_pi_bucket` 映射表 + **10 个 L1 大板块** + **62 个 L2 互斥赛道**（带 `default_pi_bucket` 与 `sort_order`）+ **12 个纯产业跨界大主题**（上限 `≤ 18` 个）。
   - `config/theme_baskets/overrides.json`：公开大盘跨界龙头锁定表 + 少量补充别名（含 `effective_from`）。改动后随时运行 `--sync-config` 即时发空行信封同步上云。
 - **关键决策**：对应 `R2, R3, R5, R7, R11` 与 `D1`。
 
@@ -126,7 +126,7 @@ flowchart TB
 
 | # | 模块 | 物理落点 | 依赖 | 层级 | 可跳过 | 一句话职责与里程碑对齐 |
 |---|---|---|---|---|---|---|
-| **M1** | **篮子字典与锁定表定稿** | `config/theme_baskets/{baskets,overrides}.json` | 无 | 基础 | ❌ | 定稿 10 L1 + 60 L2 + 12 跨界篮 + 15 个 `pi_bucket` 与公开巨头锁定表，Boss 签字（**对应 S1**） |
+| **M1** | **篮子字典与锁定表定稿** | `config/theme_baskets/{baskets,overrides}.json` | 无 | 基础 | ❌ | 定稿 10 L1 + 62 L2 + 12 跨界篮 + 15 个 `pi_bucket` 与公开巨头锁定表，Boss 签字（**对应 S1**） |
 | **M2** | **5 表存储引擎与体检接入** | `src/data/theme_basket_store.py` + `data_health.py` | M1 | 基础 | ❌ | 实现 5 张表、全部 `CHECK`/父子触发器/禁删触发器、`ON CONFLICT` 写入与 `data_health` 检查（`code_version` 恒等） |
 | **M2.5** | **Sidecar 越权拦截前置实测** | 最小测试 Sidecar（半小时门控） | 无 | 基础 | ❌ | 实测验证零命令权限 Sidecar 读 `.env` 与跑 `ssh` 是否被系统拦截，决定 M5 采用全自动或半自动触发 |
 | **M3** | **仓外三明治同步 CLI 与受限 SSH** | `scripts/theme_basket_sync.py` + 云端 `restrict,command` | M1, M2, M2.5 | 基础 | ❌ | 实现 `--detect-delta`、`--commit-outbox`（双段信封+`payload_id` 幂等+仓外 `pending/`）并实测云端 SQLite |
@@ -141,7 +141,7 @@ flowchart TB
 
 | 层 / 模块 | 当前完成度 | 关键缺口 |
 |---|---|---|
-| 第一层：字典与锁定表（M1） | 95%（待 Boss S1 签字） | 已产出 `baskets.json`（97 项：15 `pi_bucket` + 10 L1 + 60 L2 + 12 Cross）与 `overrides.json`（45 只公开龙头 + 10 条补充别名）及单测，待 Boss S1 审定 |
+| 第一层：字典与锁定表（M1） | 95%（待 Boss S1 签字） | 已产出 `baskets.json`（99 项：15 `pi_bucket` + 10 L1 + 62 L2 + 12 Cross）与 `overrides.json`（49 只公开龙头 + 10 条补充别名）及单测，待 Boss S1 审定 |
 | 第二层：5 表存储与体检（M2） | 0% | 待在独立 worktree 中 TDD 实现 `theme_basket_store.py` |
 | 第三层：M2.5 权限门控与三明治 CLI（M3） | 0% | 待跑半小时 Sidecar 越权实测并实现 `theme_basket_sync.py` |
 | 第四层：首轮双盲精标、自动化与清债（M4–M7） | 0% | 待按 M4 → M5 → M6 → M7 顺序推进 |

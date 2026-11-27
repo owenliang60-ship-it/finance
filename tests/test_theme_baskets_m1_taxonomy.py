@@ -56,7 +56,7 @@ def test_baskets_json_schema_and_global_uniqueness(baskets_doc: dict) -> None:
     date.fromisoformat(baskets_doc["updated_at"])
 
     baskets = baskets_doc["baskets"]
-    assert len(baskets) == 97
+    assert len(baskets) == 99
 
     by_tier: dict[str, list[dict]] = {"pi_bucket": [], "l1": [], "l2": [], "cross": []}
     seen_ids: set[str] = set()
@@ -84,7 +84,7 @@ def test_baskets_json_schema_and_global_uniqueness(baskets_doc: dict) -> None:
 
     assert len(by_tier["pi_bucket"]) == 15
     assert len(by_tier["l1"]) == 10
-    assert len(by_tier["l2"]) == 60
+    assert len(by_tier["l2"]) == 62
     assert len(by_tier["cross"]) == 12
     assert len(by_tier["cross"]) <= 18
 
@@ -124,11 +124,11 @@ def test_tier_referential_integrity_and_boundary_rules(baskets_doc: dict) -> Non
             assert b["parent_l1_id"] in l1_ids, f"{bid} has invalid parent_l1_id"
             l1_child_counts[b["parent_l1_id"]] += 1
             assert b["default_pi_bucket"] in pi_ids, f"{bid} has invalid default_pi_bucket"
-            assert b["min_active_members"] >= 4, f"{bid} min_active_members < 4"
+            assert b["min_active_members"] >= 2, f"{bid} min_active_members < 2"
             assert b["narrative_start_date"] is None
             pos = b["positive_examples"]
             neg = b["negative_examples"]
-            assert len(pos) >= 4, f"{bid} needs >=4 positive_examples"
+            assert len(pos) >= min(4, b["min_active_members"]), f"{bid} needs enough positive_examples"
             assert len(neg) >= 3, f"{bid} needs >=3 negative_examples"
             assert not (set(pos) & set(neg)), f"{bid} overlaps positive and negative examples"
             for sym in pos:
@@ -320,7 +320,7 @@ def test_in_memory_sqlite_ddl_rehearsal(baskets_doc: dict, overrides_doc: dict) 
                 (lk["symbol"], ct["theme_id"], ct["role"]),
             )
 
-    assert conn.execute("SELECT COUNT(*) FROM theme_baskets").fetchone()[0] == 97
+    assert conn.execute("SELECT COUNT(*) FROM theme_baskets").fetchone()[0] == 99
     assert conn.execute("SELECT COUNT(*) FROM stock_themes").fetchone()[0] == len(overrides_doc["locked_stocks"])
 
     # Duplicate label_zh must fail
