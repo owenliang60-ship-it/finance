@@ -110,6 +110,18 @@ class TestParseHoldings:
         assert h.market_value == 2000.0
         assert h.sheet_price == 10.0
 
+    def test_duplicate_ticker_lth_and_offensive_preserves_both_categories(self):
+        rows = [
+            _row("US", "QQQ", 500.0, 50, 400.0, 25000.0, "LTH"),
+            _row("US", "QQQ", 500.0, 20, 480.0, 10000.0, "Momentum"),
+        ]
+        book = parse_sheet_book(build_fixture(rows=rows), FETCHED_AT)
+        assert len(book.holdings) == 1
+        h = book.holdings[0]
+        assert h.symbol == "QQQ"
+        assert h.category == "LTH"
+        assert h.categories == ("LTH", "Momentum")
+
     def test_header_found_after_multiple_noise_rows(self):
         book = parse_sheet_book(build_fixture(noise_rows=5), FETCHED_AT)
         assert len(book.holdings) == 5

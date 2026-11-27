@@ -50,6 +50,7 @@ class SheetHolding:
     market_value: float    # sheet "Mkt Value" (USD, informational)
     category: str          # sheet "Category" sleeve
     is_leaps: bool
+    categories: tuple[str, ...] = ()
 
 
 @dataclass
@@ -149,6 +150,7 @@ def _parse_holdings(ws) -> List[SheetHolding]:
         if market not in ALLOWED_MARKETS:
             raise SheetBookError(
                 "unknown Market '%s' for %s in %s" % (market, raw, SUMMARY_TAB))
+        cat = str(cell(row, "Category") or "").strip()
         h = SheetHolding(
             symbol=sym,
             raw_ticker=raw,
@@ -160,8 +162,9 @@ def _parse_holdings(ws) -> List[SheetHolding]:
             sheet_price=_to_float_strict(
                 cell(row, "Last Price"), "Last Price for %s" % raw),
             market_value=_to_float(cell(row, "Mkt Value")),
-            category=str(cell(row, "Category") or "").strip(),
+            category=cat,
             is_leaps=sym.endswith(" LEAPS"),
+            categories=(cat,) if cat else (),
         )
         if sym in merged:
             prev = merged[sym]
@@ -173,6 +176,10 @@ def _parse_holdings(ws) -> List[SheetHolding]:
                 ) / total_shares
             prev.shares = total_shares
             prev.market_value += h.market_value
+            if h.category and h.category not in prev.categories:
+                prev.categories = (*prev.categories, h.category)
+            elif not h.category and "" not in prev.categories:
+                prev.categories = (*prev.categories, "")
             logger.warning("duplicate ticker merged: %s", sym)
             # sheet_price/category: keep first row's value (first-wins,
             # warning logged above)
