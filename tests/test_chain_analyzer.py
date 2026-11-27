@@ -147,6 +147,24 @@ class TestAnalyzeLiquidity:
         result = analyze_liquidity("AAPL", store)
         assert result["verdict"] == "NO_GO"
 
+    def test_expirations_filter(self, store):
+        base = {"strike": 200, "side": "call", "underlying_price": 200}
+        good = dict(base, expiration="2026-03-21", bid=9.9, ask=10.1, mid=10.0,
+                    volume=5000, open_interest=20000)
+        bad = dict(base, expiration="2026-04-17", bid=5.0, ask=6.0, mid=5.5,
+                   volume=1, open_interest=1)
+        store.save_options_snapshot("AAPL", "2026-02-24", [good, bad])
+        all_exp = analyze_liquidity("AAPL", store, "2026-02-24")
+        only_good = analyze_liquidity("AAPL", store, "2026-02-24", expirations=["2026-03-21"])
+        only_bad = analyze_liquidity("AAPL", store, "2026-02-24", expirations=["2026-04-17"])
+        assert only_good["avg_spread_pct"] < all_exp["avg_spread_pct"] < only_bad["avg_spread_pct"]
+        none_match = analyze_liquidity("AAPL", store, "2026-02-24", expirations=["2030-01-01"])
+        assert none_match["verdict"] == "NO_GO"
+
+    def test_parse_chain_response_public_alias(self):
+        from terminal.options import chain_analyzer as ca
+        assert ca._parse_chain_response is ca.parse_chain_response
+
     def test_poor_liquidity(self, store):
         """Wide spreads + low OI = POOR or NO_GO."""
         contracts = [
@@ -272,7 +290,9 @@ class TestEarningsProximity:
     @staticmethod
     def _day(offset):
         from datetime import timedelta
-        return (datetime.now().date() + timedelta(days=offset)).strftime("%Y-%m-%d")
+        from zoneinfo import ZoneInfo
+        today_et = datetime.now(ZoneInfo("America/New_York")).date()
+        return (today_et + timedelta(days=offset)).strftime("%Y-%m-%d")
 
     def _zone(self, offset):
         rows = [{"date": self._day(offset), "epsActual": None},
@@ -290,12 +310,14 @@ class TestEarningsProximity:
 
     def test_earnings_today_is_blackout_not_past(self):
         result = self._zone(0)
-        assert result == {"days_to_earnings": 0, "earnings_date": self._day(0), "zone": "BLACKOUT"}
+        assert result == {"days_to_earnings": 0, "earnings_date": self._day(0), "zone": "BLACKOUT",
+                          "date_status": "ESTIMATED", "date_source": "fmp"}
 
     def test_lookup_failure_is_unknown_never_clear(self):
         """FMP 404 / outage must not read as safe."""
         result = get_earnings_proximity("AAPL", fmp_client=self._fmp(error=RuntimeError("404")))
-        assert result == {"days_to_earnings": None, "earnings_date": None, "zone": "UNKNOWN"}
+        assert result == {"days_to_earnings": None, "earnings_date": None, "zone": "UNKNOWN",
+                          "date_status": "UNKNOWN", "date_source": None}
 
     def test_non_list_payload_is_unknown(self):
         result = get_earnings_proximity("AAPL", fmp_client=self._fmp(rows=None))
@@ -324,6 +346,75 @@ class TestEarningsProximity:
         get_earnings_proximity("aapl", fmp_client=mock_fmp)
         mock_fmp.get_earnings.assert_called_once_with("AAPL")
         mock_fmp.get_earnings_calendar.assert_not_called()
+
+    def test_non_etf_empty_fmp_is_unknown(self):
+        """A non-ETF with [] (no rows at all) must fail closed."""
+        result = get_earnings_proximity("NVDA", fmp_client=self._fmp([]))
+        assert result["zone"] == "UNKNOWN"
+        assert result["date_status"] == "UNKNOWN"
+
+    def test_non_etf_placeholder_rows_without_eps_is_unknown(self):
+        rows = [{"date": "2008-02-16", "epsActual": None}]
+        assert get_earnings_proximity("NVDA", fmp_client=self._fmp(rows))["zone"] == "UNKNOWN"
+
+    def test_etf_empty_is_clear_not_applicable(self):
+        result = get_earnings_proximity("QQQ", fmp_client=self._fmp([]))
+        assert result["zone"] == "CLEAR"
+        assert result["date_status"] == "NOT_APPLICABLE"
+
+    def test_fmp_future_date_is_estimated(self):
+        result = self._zone(20)
+        assert result["date_status"] == "ESTIMATED"
+        assert result["date_source"] == "fmp"
+
+    def test_confirmed_override_wins_and_skips_fmp(self, tmp_path):
+        import json as _json
+        from datetime import date as _date
+        cfg = tmp_path / "earnings_confirmed.json"
+        cfg.write_text(_json.dumps({"MU": {
+            "earnings_date": "2026-12-17", "source": "Micron FY2027 Q1 official press release",
+            "verified_at": "2026-11-27"}}))
+        mock_fmp = self._fmp(error=RuntimeError("must not be called"))
+        result = get_earnings_proximity("mu", fmp_client=mock_fmp, confirmed_path=cfg,
+                                        today_et=_date(2026, 11, 27))
+        assert result["earnings_date"] == "2026-12-17"
+        assert result["days_to_earnings"] == 20
+        assert result["zone"] == "CAUTION"
+        assert result["date_status"] == "CONFIRMED"
+        assert result["date_source"] == "Micron FY2027 Q1 official press release"
+        mock_fmp.get_earnings.assert_not_called()
+
+    def test_expired_confirmed_entry_falls_through_to_fmp(self, tmp_path):
+        import json as _json
+        from datetime import date as _date
+        cfg = tmp_path / "earnings_confirmed.json"
+        cfg.write_text(_json.dumps({"MU": {"earnings_date": "2026-09-01", "source": "old"}}))
+        result = get_earnings_proximity("MU", fmp_client=self._fmp([]), confirmed_path=cfg,
+                                        today_et=_date(2026, 11, 27))
+        assert result["zone"] == "UNKNOWN"
+
+    def test_repo_confirmed_file_has_mu(self):
+        from datetime import date as _date
+        result = get_earnings_proximity("MU", fmp_client=self._fmp([]),
+                                        today_et=_date(2026, 11, 27))
+        assert result["earnings_date"] == "2026-12-17"
+        assert result["date_status"] == "CONFIRMED"
+
+    def test_today_uses_eastern_time(self, monkeypatch):
+        """At 2026-11-28 02:00 UTC it is still 2026-11-27 in New York."""
+        import datetime as _dt
+        from terminal.options import chain_analyzer as ca
+
+        class _FrozenDT(_dt.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                base = _dt.datetime(2026, 11, 28, 2, 0, tzinfo=_dt.timezone.utc)
+                return base.astimezone(tz) if tz else base.replace(tzinfo=None)
+
+        monkeypatch.setattr(ca, "datetime", _FrozenDT)
+        rows = [{"date": "2026-11-28", "epsActual": None}]
+        result = get_earnings_proximity("NVDA", fmp_client=self._fmp(rows))
+        assert result["days_to_earnings"] == 1
 
     def test_unparseable_dates_are_skipped(self):
         rows = [{"date": "n/a"}, {"date": ""}, {}, {"date": self._day(8), "epsActual": None}]
@@ -476,7 +567,8 @@ class TestCompute25dSkew:
         store.save_options_snapshot("AAPL", "2026-11-26", contracts)
         assert compute_25d_skew("AAPL", store)["expiration"] == "2027-01-16"
 
-    def test_falls_back_outside_window(self, store):
+    def test_no_expiry_in_window_is_unavailable(self, store):
+        """No silent fallback to a 9 DTE / 114 DTE expiry outside [20, 60]."""
         contracts = (
             _expiry_block("2026-12-05", 9, 0.50, 0.40, 0.45)
             + _expiry_block("2027-03-20", 114, 0.36, 0.31, 0.33)
@@ -484,8 +576,7 @@ class TestCompute25dSkew:
         store.save_options_snapshot("AAPL", "2026-11-26", contracts)
 
         res = compute_25d_skew("AAPL", store)
-        assert res["available"] is True
-        assert res["expiration"] == "2026-12-05"
+        assert res == {"available": False, "reason": "no_expiry_in_window"}
 
     def test_no_valid_pair_anywhere(self, store):
         contracts = [c for c in _expiry_block("2026-12-31", 35, 0.38, 0.30, 0.32)

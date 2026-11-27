@@ -11,11 +11,18 @@ Core functions:
 - check_snapshot_freshness(): FRESH / STALE / MISSING gate for a chain snapshot
 - compute_25d_skew(): 25-delta put/call IV skew + Cornish-Fisher alpha
 """
+from __future__ import annotations
+
+import json
 import logging
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from config.settings import (
+    EARNINGS_CONFIRMED_PATH,
+    ETF_NO_EARNINGS_SYMBOLS,
     OPTIONS_CHAIN_DTE_MIN,
     OPTIONS_CHAIN_DTE_MAX,
     OPTIONS_SNAPSHOT_RETAIN_DAYS,
@@ -66,7 +73,7 @@ def fetch_and_store_chain(
         return None
 
     # Parse array-style response into contract dicts
-    contracts = _parse_chain_response(data, symbol)
+    contracts = parse_chain_response(data, symbol)
     if not contracts:
         logger.warning("No valid contracts parsed for %s", symbol)
         return None
@@ -96,7 +103,7 @@ def fetch_and_store_chain(
     }
 
 
-def _parse_chain_response(data: Dict, symbol: str) -> List[Dict[str, Any]]:
+def parse_chain_response(data: Dict, symbol: str) -> List[Dict[str, Any]]:
     """Parse MarketData.app array-style chain response into contract dicts.
 
     MarketData.app returns parallel arrays:
@@ -140,6 +147,9 @@ def _parse_chain_response(data: Dict, symbol: str) -> List[Dict[str, Any]]:
     return contracts
 
 
+_parse_chain_response = parse_chain_response  # backward-compatible alias
+
+
 def _safe_get(data: Dict, key: str, index: int, default=None):
     """Safely get value from parallel array."""
     arr = data.get(key, [])
@@ -152,16 +162,21 @@ def analyze_liquidity(
     symbol: str,
     store,
     snapshot_date: Optional[str] = None,
+    expirations: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Assess options liquidity quality for a symbol.
 
-    Checks bid-ask spread, OI, volume across ATM strikes.
+    Checks bid-ask spread, OI, volume across ATM strikes. `expirations`
+    (optional) limits the check to those expiration dates.
 
     Returns:
         Dict with verdict (EXCELLENT/GOOD/FAIR/POOR/NO_GO),
         avg_spread_pct, avg_oi, avg_volume, details
     """
     contracts = store.get_options_snapshot(symbol, snapshot_date)
+    if contracts and expirations is not None:
+        wanted = {str(e) for e in expirations}
+        contracts = [c for c in contracts if str(c.get("expiration")) in wanted]
     if not contracts:
         return {
             "verdict": "NO_GO",
@@ -415,43 +430,83 @@ def find_atm_options(
     return result
 
 
+def _earnings_zone(days: int) -> str:
+    if days > 30:
+        return "CLEAR"
+    if days > 10:
+        return "CAUTION"
+    if days > 5:
+        return "T5_WARNING"
+    return "BLACKOUT"
+
+
+def _load_confirmed_earnings(path: Path) -> Dict[str, Any]:
+    """Official-IR earnings dates. Missing / malformed file -> {} (FMP path
+    still applies and stays fail-closed)."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except Exception as exc:
+        logger.warning("earnings_confirmed unreadable (%s); ignored", type(exc).__name__)
+        return {}
+    if not isinstance(data, dict):
+        logger.warning("earnings_confirmed is not an object; ignored")
+        return {}
+    return {str(k).upper(): v for k, v in data.items() if isinstance(v, dict)}
+
+
 def get_earnings_proximity(
     symbol: str,
     fmp_client=None,
+    confirmed_path: Optional[Path] = None,
+    today_et: Optional[date] = None,
 ) -> Dict[str, Any]:
     """Get earnings proximity and zone classification.
 
-    Zones (calendar days from today to the next earnings date):
-    - CLEAR: > 30 days, or a symbol that has never reported an EPS (ETF)
+    Zones (US/Eastern calendar days from today to the next earnings date):
+    - CLEAR: > 30 days, or an ETF in ETF_NO_EARNINGS_SYMBOLS with no date
     - CAUTION: 11-30 days
     - T5_WARNING: 6-10 days
     - BLACKOUT: 0-5 days (earnings today counts)
-    - UNKNOWN: the lookup failed, or the company reports earnings but FMP lists
-      no upcoming date. UNKNOWN is never safe: verify the date by hand.
+    - UNKNOWN: lookup failed, or a non-ETF with no upcoming date listed.
+      UNKNOWN is never safe: verify the date by hand.
 
-    Source is the per-symbol `earnings` endpoint. The whole-market calendar
-    endpoint truncates at 4000 rows and silently drops symbols (issue 044).
-
-    Args:
-        symbol: Stock ticker
-        fmp_client: FMP client for earnings calendar (defaults to singleton)
-
-    Returns:
-        Dict with days_to_earnings, earnings_date, zone
+    Date priority: config/earnings_confirmed.json (date_status CONFIRMED,
+    only when the date is today or later) > FMP per-symbol `earnings`
+    endpoint (ESTIMATED). The whole-market calendar endpoint truncates at
+    4000 rows and silently drops symbols (issue 044).
     """
+    symbol = symbol.upper()
+    today = today_et or datetime.now(ZoneInfo("America/New_York")).date()
+    unknown = {"days_to_earnings": None, "earnings_date": None, "zone": "UNKNOWN",
+               "date_status": "UNKNOWN", "date_source": None}
+
+    entry = _load_confirmed_earnings(confirmed_path or EARNINGS_CONFIRMED_PATH).get(symbol)
+    if entry:
+        try:
+            confirmed = datetime.strptime(str(entry.get("earnings_date", ""))[:10],
+                                          "%Y-%m-%d").date()
+        except ValueError:
+            confirmed = None
+            logger.warning("%s: earnings_confirmed date unparseable; ignored", symbol)
+        if confirmed is not None and confirmed >= today:
+            days = (confirmed - today).days
+            return {
+                "days_to_earnings": days,
+                "earnings_date": confirmed.strftime("%Y-%m-%d"),
+                "zone": _earnings_zone(days),
+                "date_status": "CONFIRMED",
+                "date_source": entry.get("source") or "earnings_confirmed.json",
+            }
+
     if fmp_client is None:
         try:
             from src.data.fmp_client import fmp_client as _fmp
             fmp_client = _fmp
         except ImportError:
-            return {
-                "days_to_earnings": None,
-                "earnings_date": None,
-                "zone": "UNKNOWN",
-            }
+            return unknown
 
-    unknown = {"days_to_earnings": None, "earnings_date": None, "zone": "UNKNOWN"}
-    symbol = symbol.upper()
     try:
         rows = fmp_client.get_earnings(symbol)
     except Exception as exc:
@@ -462,13 +517,10 @@ def get_earnings_proximity(
         return unknown
 
     # Find the CLOSEST earnings date that is today or later
-    today = datetime.now().date()
     closest_days = None
     closest_date_str = None
-    reported_rows = 0  # past rows with a real EPS: the symbol is an earnings reporter
-
-    for entry in rows:
-        earnings_date_str = entry.get("date", "") if isinstance(entry, dict) else ""
+    for row in rows:
+        earnings_date_str = row.get("date", "") if isinstance(row, dict) else ""
         if not earnings_date_str:
             continue
         try:
@@ -477,41 +529,27 @@ def get_earnings_proximity(
             continue
         days = (earnings_date - today).days
         if days < 0:
-            if entry.get("epsActual") is not None:
-                reported_rows += 1
             continue  # Past earnings
         if closest_days is None or days < closest_days:
             closest_days = days
             closest_date_str = earnings_date_str[:10]
 
     if closest_days is not None:
-        if closest_days > 30:
-            zone = "CLEAR"
-        elif closest_days > 10:
-            zone = "CAUTION"
-        elif closest_days > 5:
-            zone = "T5_WARNING"
-        else:
-            zone = "BLACKOUT"
-
         return {
             "days_to_earnings": closest_days,
             "earnings_date": closest_date_str,
-            "zone": zone,
+            "zone": _earnings_zone(closest_days),
+            "date_status": "ESTIMATED",
+            "date_source": "fmp",
         }
 
-    if reported_rows:
-        # The company reports earnings, but no upcoming date is listed: not proof of safety.
-        logger.warning("%s: no upcoming earnings date listed, zone UNKNOWN", symbol)
-        return unknown
+    if symbol in ETF_NO_EARNINGS_SYMBOLS:
+        return {"days_to_earnings": None, "earnings_date": None, "zone": "CLEAR",
+                "date_status": "NOT_APPLICABLE", "date_source": None}
 
-    return {
-        "days_to_earnings": None,
-        "earnings_date": None,
-        # Never reported an EPS: ETF / index product (FMP keeps EPS-less placeholder
-        # rows for QQQ and SPY, and returns [] for SOXX).
-        "zone": "CLEAR",
-    }
+    # Non-ETF with no upcoming date (incl. FMP []): not proof of safety.
+    logger.warning("%s: no upcoming earnings date listed, zone UNKNOWN", symbol)
+    return unknown
 
 
 def check_snapshot_freshness(
@@ -554,8 +592,8 @@ def compute_25d_skew(
     """25-delta skew from the latest snapshot.
 
     Expiration: closest to 35 DTE inside [target_dte_min, target_dte_max]
-    with at least one valid put and call (delta present, iv > 0). If none
-    qualifies, falls back to the valid expiration closest to 35 DTE.
+    with at least one valid put and call (delta present, iv > 0). No
+    expiry outside the window is used: none qualifying -> unavailable.
     """
     contracts = store.get_options_snapshot(symbol)
     if not contracts:
@@ -576,7 +614,9 @@ def compute_25d_skew(
         return {"available": False, "reason": "no_valid_put_call"}
 
     in_window = [x for x in candidates if target_dte_min <= x[1] <= target_dte_max]
-    exp, dte, puts, calls = min(in_window or candidates, key=lambda x: (abs(x[1] - 35), x[1]))
+    if not in_window:
+        return {"available": False, "reason": "no_expiry_in_window"}
+    exp, dte, puts, calls = min(in_window, key=lambda x: (abs(x[1] - 35), x[1]))
 
     put_25 = min(puts, key=lambda c: abs(c["delta"] + 0.25))
     call_25 = min(calls, key=lambda c: abs(c["delta"] - 0.25))

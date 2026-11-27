@@ -4,6 +4,8 @@ Options Commands — Orchestrator for /options skill.
 prepare_options_context(symbol) collects all data needed for the options
 strategy discussion in one call.
 """
+from __future__ import annotations
+
 import logging
 import math
 from datetime import date, datetime
@@ -53,8 +55,8 @@ def prepare_options_context(
     - Kill conditions
     - Report summary path
     - Snapshot freshness, 25-delta skew, 30D 1-sigma expected move
-    - Actual holdings from company.db (not the book of record) + estimated NAV
-    - Gates summary: snapshot / liquidity / earnings
+    - Actual holdings + NAV (Whole Port 投资 Net Total) from the read-only Google Sheet; 期权腿未纳入
+    - Gates summary: snapshot / liquidity / earnings / iv
 
     Args:
         symbol: Stock ticker
@@ -148,6 +150,7 @@ def prepare_options_context(
             "snapshot": snapshot_freshness["status"],
             "liquidity": (liquidity or {}).get("verdict"),
             "earnings": (earnings or {}).get("zone", "UNKNOWN"),
+            "iv": (iv_summary or {}).get("iv_freshness", {}).get("status", "MISSING"),
         },
     }
 

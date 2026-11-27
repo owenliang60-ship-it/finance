@@ -8,11 +8,14 @@ Core functions:
 - get_iv_history_summary(): One-stop IV snapshot for a symbol
 - compute_hv(): Historical (realized) volatility from price data
 """
+from __future__ import annotations
+
 import logging
 import math
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
+from zoneinfo import ZoneInfo
 
 from config.settings import OPTIONS_IV_LOOKBACK_DAYS
 
@@ -148,15 +151,42 @@ def get_iv_percentile(
     return round(percentile, 1)
 
 
+def _iv_freshness(
+    iv_date: Optional[str],
+    as_of: Optional[Union[date, str]] = None,
+    max_stale_days: int = 3,
+) -> Dict[str, Any]:
+    """FRESH / STALE / MISSING for the latest iv_daily row (US/Eastern
+    calendar days). Missing or unparseable date -> MISSING (fail-closed)."""
+    try:
+        d = datetime.strptime(str(iv_date)[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return {"status": "MISSING", "date": None, "age_days": None}
+    if as_of is None:
+        ref = datetime.now(ZoneInfo("America/New_York")).date()
+    elif isinstance(as_of, str):
+        ref = datetime.strptime(as_of[:10], "%Y-%m-%d").date()
+    else:
+        ref = as_of
+    age = (ref - d).days
+    return {
+        "status": "FRESH" if age <= max_stale_days else "STALE",
+        "date": d.strftime("%Y-%m-%d"),
+        "age_days": age,
+    }
+
+
 def get_iv_history_summary(
     symbol: str,
     store,
+    as_of: Optional[Union[date, str]] = None,
+    max_stale_days: int = 3,
 ) -> Optional[Dict[str, Any]]:
     """One-stop IV summary for a symbol.
 
     Returns:
         Dict with current_iv, iv_rank, iv_percentile, hv_30d, rv_iv_ratio,
-        iv_52w_high, iv_52w_low, data_days
+        iv_52w_high, iv_52w_low, data_days, iv_freshness
     """
     latest = store.get_latest_iv(symbol)
     if not latest or latest.get("iv_30d") is None:
@@ -186,6 +216,7 @@ def get_iv_history_summary(
         "iv_52w_low": min(iv_values) if iv_values else None,
         "data_days": len(iv_values),
         "date": latest["date"],
+        "iv_freshness": _iv_freshness(latest.get("date"), as_of, max_stale_days),
     }
 
 

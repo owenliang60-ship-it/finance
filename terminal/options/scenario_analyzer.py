@@ -6,6 +6,8 @@ Options Scenario Analyzer — BS 概率加权场景定价引擎
 
 纯 Python + math，零外部依赖，兼容云端 Python 3.10。
 """
+from __future__ import annotations
+
 import math
 import logging
 from typing import Any, Dict, List, Optional
@@ -31,6 +33,8 @@ def build_strategy(legs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         iv: float (annualized, e.g. 0.35)
         entry_price: float (mid price at entry)
         contracts: int (default 1)
+        expiration: str YYYY-MM-DD (optional, passed through for
+            price_strategy(iv_shift_by_expiry=...))
 
     Returns:
         Normalized list of legs with direction_sign added.
@@ -60,7 +64,7 @@ def build_strategy(legs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if strike <= 0 or expiry_dte <= 0 or iv <= 0 or entry_price < 0 or contracts <= 0:
             raise ValueError("Leg {}: invalid numeric values (strike, dte, iv, contracts must be > 0)".format(i))
 
-        normalized.append({
+        norm = {
             "side": side,
             "direction": direction,
             "direction_sign": 1 if direction == "long" else -1,
@@ -69,7 +73,10 @@ def build_strategy(legs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "iv": iv,
             "entry_price": entry_price,
             "contracts": contracts,
-        })
+        }
+        if leg.get("expiration"):
+            norm["expiration"] = str(leg["expiration"])
+        normalized.append(norm)
 
     return normalized
 
@@ -80,6 +87,7 @@ def price_strategy(
     days_forward: int,
     r: float,
     iv_shift: float = 0.0,
+    iv_shift_by_expiry: Optional[Dict[Any, float]] = None,
 ) -> float:
     """Reprice an entire strategy at a given (S, T, IV) point using BS.
 
@@ -88,7 +96,12 @@ def price_strategy(
         S: hypothetical underlying price
         days_forward: days elapsed since entry (0 = entry day)
         r: risk-free rate
-        iv_shift: multiplicative IV shift (e.g. 0.1 = +10% IV)
+        iv_shift: multiplicative IV shift (e.g. 0.1 = +10% IV); used only
+            when iv_shift_by_expiry is None
+        iv_shift_by_expiry: per-expiry ABSOLUTE vol-point change, keyed by
+            leg "expiration" string or "expiry_dte" int (e.g. -0.10 = IV
+            down 10 vol points). New IV floored at 0.01. Legs with no
+            matching key keep their IV. Replaces iv_shift when given.
 
     Returns:
         Net strategy P&L per unit (in dollars, × 100 for per-contract).
@@ -98,8 +111,16 @@ def price_strategy(
     for leg in strategy:
         remaining_dte = leg["expiry_dte"] - days_forward
         T = max(remaining_dte / 365.0, 0.0)
-        sigma = leg["iv"] * (1.0 + iv_shift)
-        sigma = max(sigma, 0.001)  # floor
+        if iv_shift_by_expiry is None:
+            sigma = leg["iv"] * (1.0 + iv_shift)
+            sigma = max(sigma, 0.001)  # floor
+        else:
+            exp_key = leg.get("expiration")
+            if exp_key is not None and exp_key in iv_shift_by_expiry:
+                shift = iv_shift_by_expiry[exp_key]
+            else:
+                shift = iv_shift_by_expiry.get(leg["expiry_dte"], 0.0)
+            sigma = max(leg["iv"] + float(shift), 0.01)
 
         new_price = bs_price(S, leg["strike"], T, r, sigma, leg["side"])
         leg_pnl = leg["direction_sign"] * (new_price - leg["entry_price"])
@@ -111,9 +132,10 @@ def price_strategy(
 def _compute_sigma_move(iv: float, dte: int) -> float:
     """Compute 1-sigma price move magnitude as fraction of S.
 
-    1σ = IV × √(DTE/252) using trading days.
+    1σ = IV × √(DTE/365) using calendar days (DTE is calendar days;
+    matches the BS T = dte/365 convention used everywhere else).
     """
-    return iv * math.sqrt(max(dte, 1) / 252.0)
+    return iv * math.sqrt(max(dte, 1) / 365.0)
 
 
 def _adaptive_price_points(S: float, sigma_move: float, n_points: int = 7) -> List[float]:
@@ -348,8 +370,10 @@ def generate_scenario_matrix(
             probability_summary: output of compute_probability_summary()
             sigma_labels: {price: sigma_label} for display
     """
-    # Use max DTE across legs for time axis
+    # Time axis / evaluation horizons stop at the SHORTEST leg: past it a
+    # calendar's short leg has expired and BS repricing is meaningless.
     max_dte = max(leg["expiry_dte"] for leg in strategy)
+    min_dte = min(leg["expiry_dte"] for leg in strategy)
 
     # Use average IV weighted by contracts for sigma move
     total_contracts = sum(leg["contracts"] for leg in strategy)
@@ -358,7 +382,7 @@ def generate_scenario_matrix(
     # Adaptive axes
     sigma_move = _compute_sigma_move(avg_iv, max_dte)
     price_points = _adaptive_price_points(S, sigma_move)
-    time_points = _adaptive_time_points(max_dte)
+    time_points = _adaptive_time_points(min_dte)
 
     # Build sigma labels for each price point
     sigma_labels = {}
@@ -383,7 +407,7 @@ def generate_scenario_matrix(
             )
 
     # IV sensitivity at +7d (or first non-zero time point), current price
-    eval_day = 7 if max_dte > 7 else max(1, max_dte // 2)
+    eval_day = 7 if min_dte > 7 else max(1, min_dte // 2)
     iv_shifts = [
         ("-20%", -0.20),
         ("-10%", -0.10),
@@ -398,7 +422,7 @@ def generate_scenario_matrix(
 
     # Probability summary at the evaluation time horizon
     # Use midpoint of strategy life for probability assessment
-    eval_horizon = min(max_dte, max(7, max_dte // 2))
+    eval_horizon = min(min_dte, max(7, min_dte // 2))
     prob_summary = compute_probability_summary(
         strategy, S, r, avg_iv, eval_horizon, skew_alpha
     )
@@ -407,6 +431,7 @@ def generate_scenario_matrix(
         "underlying_price": S,
         "avg_iv": round(avg_iv, 4),
         "max_dte": max_dte,
+        "min_dte": min_dte,
         "sigma_move": round(sigma_move, 4),
         "skew_alpha": skew_alpha,
         "price_points": price_points,
@@ -485,7 +510,11 @@ def compute_dual_probability_summary(
     if slippage_dollars < 0:
         raise ValueError("slippage_dollars must be >= 0, got {}".format(slippage_dollars))
 
-    p_vol = view_vol or market_iv
+    if view_vol is None:
+        view_vol = market_iv
+    if view_vol <= 0:
+        raise ValueError("view_vol must be > 0")
+    p_vol = view_vol
     half_drift = 0.5 * view_drift + 0.5 * r
     half_vol = 0.5 * (p_vol + market_iv)
 

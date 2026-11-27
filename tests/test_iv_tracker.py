@@ -205,6 +205,35 @@ class TestIVHistorySummary:
         """Should return None when no data."""
         assert get_iv_history_summary("AAPL", store) is None
 
+    def test_iv_freshness_fresh(self, store):
+        from datetime import date
+        store.save_iv_daily("AAPL", "2026-11-25", iv_30d=0.30, hv_30d=0.25)
+        summary = get_iv_history_summary("AAPL", store, as_of=date(2026, 11, 27))
+        assert summary["iv_freshness"] == {"status": "FRESH", "date": "2026-11-25", "age_days": 2}
+
+    def test_iv_freshness_stale(self, store):
+        from datetime import date
+        store.save_iv_daily("AAPL", "2026-08-21", iv_30d=0.30, hv_30d=0.25)
+        summary = get_iv_history_summary("AAPL", store, as_of=date(2026, 11, 27))
+        assert summary["iv_freshness"]["status"] == "STALE"
+        assert summary["iv_freshness"]["age_days"] == 98
+
+    def test_iv_freshness_boundary_and_custom_threshold(self, store):
+        from datetime import date
+        store.save_iv_daily("AAPL", "2026-11-24", iv_30d=0.30, hv_30d=0.25)
+        assert get_iv_history_summary("AAPL", store, as_of=date(2026, 11, 27))[
+            "iv_freshness"]["status"] == "FRESH"
+        assert get_iv_history_summary("AAPL", store, as_of=date(2026, 11, 27),
+                                      max_stale_days=2)["iv_freshness"]["status"] == "STALE"
+
+    def test_iv_freshness_unparseable_date_is_missing(self):
+        from unittest.mock import MagicMock
+        store = MagicMock()
+        store.get_latest_iv.return_value = {"date": "garbage", "iv_30d": 0.3, "hv_30d": 0.2}
+        store.get_iv_history.return_value = [{"iv_30d": 0.3}]
+        summary = get_iv_history_summary("AAPL", store)
+        assert summary["iv_freshness"]["status"] == "MISSING"
+
 
 class TestUpdateDailyIV:
     """Test batch IV update."""
