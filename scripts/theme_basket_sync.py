@@ -63,7 +63,7 @@ REMOTE_HOST = "aliyun"             # sync_to_cloud.sh:REMOTE_HOST
 REMOTE_DIR = "/root/workspace/Finance"
 REMOTE_PYTHON = "/usr/bin/python3"
 SSH_TIMEOUT_SEC = 1800             # covers a 1.5 GB backup + gzip of the previous one
-LSOF = "/usr/sbin/lsof"            # sync_to_cloud.sh:LSOF
+LSOF = "/usr/sbin/lsof" if Path("/usr/sbin/lsof").exists() else (shutil.which("lsof") or "/usr/sbin/lsof")
 
 logger = logging.getLogger("theme_basket_sync")
 
