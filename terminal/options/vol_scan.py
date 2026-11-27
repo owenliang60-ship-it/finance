@@ -14,6 +14,7 @@ from __future__ import annotations
 import math
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from terminal.options.iv_solver import bs_delta, bs_gamma, bs_price, bs_theta, bs_vega
 
@@ -31,14 +32,29 @@ IV_FLOOR = 0.01
 # ---------------------------------------------------------------------------
 
 def _to_date(value: Any) -> Optional[date]:
+    if isinstance(value, bool):
+        return None
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
         return value
+    if isinstance(value, str) and value.strip().isdigit():
+        value = int(value.strip())
+    if isinstance(value, (int, float)):
+        # MarketData.app expiration: Unix epoch seconds (16:00 ET)
+        if value < 1_000_000_000:
+            return None
+        return datetime.fromtimestamp(value, ZoneInfo("America/New_York")).date()
     try:
         return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
     except (TypeError, ValueError):
         return None
+
+
+def _exp_key(value: Any) -> str:
+    """Expiration as "YYYY-MM-DD" when parseable (ISO or epoch), else str()."""
+    d = _to_date(value)
+    return d.isoformat() if d is not None else str(value)
 
 
 def _num(value: Any) -> Optional[float]:
@@ -193,7 +209,7 @@ def atm_iv_by_expiry(contracts: List[Dict[str, Any]], spot: float,
     expiries that bracket 30 DTE. No cross-expiry averaging."""
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for c in contracts:
-        groups.setdefault(str(c.get("expiration")), []).append(c)
+        groups.setdefault(_exp_key(c.get("expiration")), []).append(c)
 
     rows = []
     for exp, cs in groups.items():
@@ -321,7 +337,7 @@ def compute_chain_25d_skew(contracts: List[Dict[str, Any]], dte_min: int = 20,
     [dte_min, dte_max]. None when no expiry in the window has both legs."""
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for c in contracts:
-        groups.setdefault(str(c.get("expiration")), []).append(c)
+        groups.setdefault(_exp_key(c.get("expiration")), []).append(c)
     cands = []
     for exp, cs in groups.items():
         dte = next((c.get("dte") for c in cs if c.get("dte") is not None), None)
@@ -455,7 +471,7 @@ def build_atm_calendar_template(contracts: List[Dict[str, Any]], spot: float,
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for c in contracts:
         if c.get("side") == "call" and c.get("dte") is not None:
-            groups.setdefault(str(c.get("expiration")), []).append(c)
+            groups.setdefault(_exp_key(c.get("expiration")), []).append(c)
 
     def _pick(lo, hi, target):
         cands = [(e, int(cs[0]["dte"])) for e, cs in groups.items() if lo <= cs[0]["dte"] <= hi]
@@ -475,7 +491,7 @@ def build_atm_calendar_template(contracts: List[Dict[str, Any]], spot: float,
         return {"available": False, "reason": "invalid_bid_ask_or_iv", "strike": k}
 
     def _leg(c, qty):
-        return {"expiration": str(c["expiration"]), "dte": int(c["dte"]), "side": "call",
+        return {"expiration": _exp_key(c["expiration"]), "dte": int(c["dte"]), "side": "call",
                 "strike": k, "qty": qty, "iv": float(c["iv"]),
                 "bid": float(c["bid"]), "ask": float(c["ask"]),
                 "open_interest": c.get("open_interest"), "volume": c.get("volume")}

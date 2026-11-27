@@ -402,9 +402,9 @@ class TestCli:
         q = out["symbols"]["QQQ"]
         assert q["chain"]["status"] == "REPLAY"
         assert q["term_structure"]["available"] is True
-        # No FMP key -> lookup failure -> UNKNOWN even for an ETF (only an FMP []
-        # proves "no earnings"); confirmed-file entries still apply.
-        assert q["gates"]["earnings"] == "UNKNOWN"
+        # ETF allowlist: CLEAR / NOT_APPLICABLE without any FMP call
+        assert q["gates"]["earnings"] == "CLEAR"
+        assert q["gates"]["earnings_date_status"] == "NOT_APPLICABLE"
         assert out["symbols"]["NVDA"]["gates"]["earnings"] == "UNKNOWN"
         assert out["symbols"]["MU"]["earnings"]["date_status"] == "CONFIRMED"
         assert out["symbols"]["NVDA"]["chain"]["status"] == "MISSING"
@@ -439,3 +439,83 @@ class TestCli:
         res = _run(["--chain-dir", str(FIXTURES), "--symbols", "QQQ",
                     "--legs", "QQQ:bad", "--market-db", str(tmp_path / "x.db")])
         assert res.returncode == 2
+
+
+
+# ── Real MarketData format: expiration = Unix epoch seconds (16:00 ET) ──
+
+EPOCH = {"2026-12-04": 1796418000, "2026-12-18": 1797627600, "2026-12-31": 1798750800,
+         "2027-01-15": 1800046800, "2027-02-19": 1803070800}
+
+
+class TestEpochExpirations:
+    def test_to_date_accepts_epoch(self):
+        assert vs._to_date(1796418000) == date(2026, 12, 4)
+        assert vs._to_date(1798750800.0) == date(2026, 12, 31)
+        assert vs._to_date("1798750800") == date(2026, 12, 31)
+        assert vs._to_date(True) is None
+        assert vs._to_date(12345) is None
+
+    def test_term_structure_events_with_epoch_rows(self):
+        rows = [{"expiration": EPOCH["2026-12-18"], "dte": 21, "atm_iv": 0.40},
+                {"expiration": EPOCH["2027-01-15"], "dte": 49, "atm_iv": 0.30}]
+        ev = [{"symbol": "MU", "earnings_date": "2026-12-17", "date_status": "CONFIRMED"},
+              {"symbol": "AMD", "earnings_date": "2027-01-05", "date_status": "ESTIMATED"}]
+        ts = vs.term_structure_metrics(rows, ev)
+        assert ts["inversion_source"] == "CONFIRMED_EVENT"
+        assert [e["symbol"] for e in ts["inversion_events"]] == ["MU"]
+        assert ts["forwards"][0]["events_between"] == ["AMD"]
+
+    def test_sector_flags_with_epoch_expirations(self):
+        exps = [EPOCH["2026-12-18"], str(EPOCH["2027-01-15"])]
+        sector = {"MU": {"earnings_date": "2026-12-17", "date_status": "CONFIRMED"},
+                  "AMD": {"earnings_date": "2027-01-05", "date_status": "ESTIMATED"}}
+        out = vs.build_sector_event_flags("SOXX", {"date_status": "NOT_APPLICABLE"}, sector, exps)
+        pos = {e["symbol"]: e["position"] for e in out["events"]}
+        assert pos == {"MU": "BEFORE_FIRST_EXPIRY", "AMD": "BETWEEN_EXPIRIES"}
+        mu = next(e for e in out["events"] if e["symbol"] == "MU")
+        assert mu["next_expiry"] == "2026-12-18"
+
+    def test_calendar_template_and_skew_with_epoch_expirations(self):
+        contracts = []
+        for iso, dte in (("2026-12-31", 34), ("2027-01-15", 49)):
+            for side, delta in (("call", 0.25), ("put", -0.25)):
+                contracts.append({"expiration": EPOCH[iso], "dte": dte, "side": side,
+                                  "strike": 100.0, "iv": 0.3, "delta": delta,
+                                  "bid": 1.0, "ask": 1.1})
+        tpl = vs.build_atm_calendar_template(contracts, 100.0)
+        assert [l["expiration"] for l in tpl["legs"]] == ["2026-12-31", "2027-01-15"]
+        assert vs.compute_chain_25d_skew(contracts)["expiration"] == "2026-12-31"
+        grid = vs.evaluate_strategy_grid(tpl["legs"], 100.0, 0.04, AS_OF)
+        assert grid["min_dte"] == 34
+
+    def test_atm_iv_epoch_expiration_without_dte(self):
+        contracts = [{"expiration": EPOCH["2026-12-31"], "side": s, "strike": 100.0, "iv": 0.3,
+                      "bid": 1.0, "ask": 1.1} for s in ("call", "put")]
+        rows = vs.atm_iv_by_expiry(contracts, 100.0, AS_OF)["rows"]
+        assert rows[0]["dte"] == 34
+
+
+def _epoch_chain_dir(tmp_path):
+    fx = json.loads((FIXTURES / "QQQ.json").read_text())
+    fx["data"]["expiration"] = [EPOCH[e] for e in fx["data"]["expiration"]]
+    d = tmp_path / "chains"
+    d.mkdir()
+    (d / "QQQ.json").write_text(json.dumps(fx))
+    return d
+
+
+class TestCliEpochChain:
+    def test_legs_match_on_epoch_chain(self, tmp_path):
+        d = _epoch_chain_dir(tmp_path)
+        res = _run(["--chain-dir", str(d), "--json", "--symbols", "QQQ",
+                    "--legs", "QQQ:2027-01-15:C:500:-1;QQQ:2027-02-19:C:500:+1",
+                    "--market-db", str(tmp_path / "missing.db")])
+        assert res.returncode == 0, res.stderr
+        q = json.loads(res.stdout)["symbols"]["QQQ"]
+        assert q["chain"]["expirations"] == ["2026-12-18", "2027-01-15", "2027-02-19"]
+        assert q["custom_structure"]["available"] is True, q["custom_structure"]
+        assert q["atm_calendar_template"]["available"] is True
+        assert q["term_structure"]["inversion_source"] == "CONFIRMED_EVENT"   # MU 2026-12-17
+        pos = {e["symbol"]: e["position"] for e in q["sector_events"]["events"]}
+        assert pos["MU"] == "BEFORE_FIRST_EXPIRY"

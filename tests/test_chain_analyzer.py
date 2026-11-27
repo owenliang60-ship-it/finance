@@ -585,3 +585,61 @@ class TestCompute25dSkew:
         res = compute_25d_skew("AAPL", store)
         assert res["available"] is False
         assert res["reason"] == "no_valid_put_call"
+
+
+class TestExpirationNormalization:
+    """MarketData.app returns `expiration` as Unix epoch seconds (16:00 ET)."""
+
+    def _resp(self, exps):
+        n = len(exps)
+        return {"s": "ok", "optionSymbol": ["X%d" % i for i in range(n)],
+                "expiration": exps, "strike": [100] * n, "side": ["call"] * n}
+
+    def test_epoch_int_and_float_to_et_date(self):
+        from terminal.options.chain_analyzer import parse_chain_response
+        out = parse_chain_response(self._resp([1796418000, 1798750800.0]), "QQQ")
+        assert [c["expiration"] for c in out] == ["2026-12-04", "2026-12-31"]
+
+    def test_numeric_string_epoch(self):
+        from terminal.options.chain_analyzer import parse_chain_response
+        out = parse_chain_response(self._resp(["1796418000"]), "QQQ")
+        assert out[0]["expiration"] == "2026-12-04"
+
+    def test_iso_string_kept_first_10(self):
+        from terminal.options.chain_analyzer import parse_chain_response
+        out = parse_chain_response(self._resp(["2026-12-04", "2026-12-31T16:00:00"]), "QQQ")
+        assert [c["expiration"] for c in out] == ["2026-12-04", "2026-12-31"]
+
+    def test_bool_and_small_numbers_not_treated_as_epoch(self):
+        from terminal.options.chain_analyzer import _normalize_expiration
+        assert _normalize_expiration(True) is True
+        assert _normalize_expiration(12345) == 12345
+        assert _normalize_expiration(None) is None
+
+    def test_fetch_and_store_saves_iso_expirations(self):
+        from terminal.options.chain_analyzer import fetch_and_store_chain
+        client = MagicMock()
+        client.get_options_chain.return_value = dict(
+            self._resp([1797627600]), underlyingPrice=[100.0])
+        store = MagicMock()
+        store.save_options_snapshot.return_value = 1
+        res = fetch_and_store_chain("QQQ", store, client=client)
+        saved = store.save_options_snapshot.call_args[0][2]
+        assert saved[0]["expiration"] == "2026-12-18"
+        assert res["expirations"] == ["2026-12-18"]
+
+
+class TestEtfEarningsAllowlist:
+    def test_etf_skips_fmp_entirely(self):
+        fmp = MagicMock()
+        fmp.get_earnings.side_effect = RuntimeError("FMP_API_KEY not configured")
+        for sym in ("QQQ", "soxx", "SPY"):
+            res = get_earnings_proximity(sym, fmp_client=fmp)
+            assert res == {"days_to_earnings": None, "earnings_date": None, "zone": "CLEAR",
+                           "date_status": "NOT_APPLICABLE", "date_source": "etf_allowlist"}
+        fmp.get_earnings.assert_not_called()
+
+    def test_non_etf_fmp_failure_still_unknown(self):
+        fmp = MagicMock()
+        fmp.get_earnings.side_effect = RuntimeError("down")
+        assert get_earnings_proximity("NVDA", fmp_client=fmp)["zone"] == "UNKNOWN"

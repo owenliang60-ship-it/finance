@@ -178,7 +178,7 @@ def _legs_from_chain(legs: List[Dict[str, Any]], contracts: List[Dict[str, Any]]
                      ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
     out = []
     for leg in legs:
-        match = next((c for c in contracts if str(c.get("expiration")) == leg["expiration"]
+        match = next((c for c in contracts if vs._exp_key(c.get("expiration")) == leg["expiration"]
                       and c.get("side") == leg["side"]
                       and vs._num(c.get("strike")) == leg["strike"]), None)
         if match is None:
@@ -223,7 +223,7 @@ def scan_symbol(symbol: str, chain: Dict[str, Any], bars: List[Dict[str, Any]],
 
     iv30 = atm["iv_30d_live"] if atm else None
     iv_hist = vs.evaluate_iv_history(iv_rows, iv30, as_of)
-    exps = sorted({str(c.get("expiration")) for c in contracts})
+    exps = sorted({vs._exp_key(c.get("expiration")) for c in contracts})
     sector_flags = vs.build_sector_event_flags(symbol, earnings, sector_events, exps)
 
     custom = None

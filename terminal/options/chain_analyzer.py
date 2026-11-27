@@ -103,6 +103,26 @@ def fetch_and_store_chain(
     }
 
 
+_EPOCH_MIN = 1_000_000_000  # Unix seconds ~2001-09; smaller numbers are not epochs
+
+
+def _normalize_expiration(val: Any) -> Any:
+    """MarketData.app sends expiration as Unix epoch seconds (16:00 ET).
+    Epoch int/float/numeric string -> "YYYY-MM-DD" (America/New_York);
+    "YYYY-MM-DD..." string -> first 10 chars; anything else unchanged."""
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        v = val.strip()
+        if v.isdigit():
+            val = int(v)
+        else:
+            return v[:10] if len(v) >= 10 and v[4] == "-" and v[7] == "-" else val
+    if isinstance(val, (int, float)) and val >= _EPOCH_MIN:
+        return datetime.fromtimestamp(val, ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+    return val
+
+
 def parse_chain_response(data: Dict, symbol: str) -> List[Dict[str, Any]]:
     """Parse MarketData.app array-style chain response into contract dicts.
 
@@ -125,7 +145,7 @@ def parse_chain_response(data: Dict, symbol: str) -> List[Dict[str, Any]]:
 
     for i in range(n):
         contract = {
-            "expiration": _safe_get(data, "expiration", i, ""),
+            "expiration": _normalize_expiration(_safe_get(data, "expiration", i, "")),
             "strike": _safe_get(data, "strike", i, 0),
             "side": _safe_get(data, "side", i, ""),
             "bid": _safe_get(data, "bid", i),
@@ -478,6 +498,10 @@ def get_earnings_proximity(
     4000 rows and silently drops symbols (issue 044).
     """
     symbol = symbol.upper()
+    if symbol in ETF_NO_EARNINGS_SYMBOLS:
+        # ETFs never report earnings: no FMP call, no dependence on FMP uptime.
+        return {"days_to_earnings": None, "earnings_date": None, "zone": "CLEAR",
+                "date_status": "NOT_APPLICABLE", "date_source": "etf_allowlist"}
     today = today_et or datetime.now(ZoneInfo("America/New_York")).date()
     unknown = {"days_to_earnings": None, "earnings_date": None, "zone": "UNKNOWN",
                "date_status": "UNKNOWN", "date_source": None}
