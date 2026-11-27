@@ -10,7 +10,7 @@ Usage:
 Exit codes:
     0: written successfully
     4: invalid CLI path (missing parent dir, output is directory, or output collides with input DB / WAL / SHM)
-    6: missing database or calculation/validation failure (nothing written)
+    6: missing database or calculation/validation/write failure
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -30,35 +30,54 @@ from backtest.theme_crowding.dashboard import render_dashboard_html  # noqa: E40
 from backtest.theme_crowding.engine import compute_crowding_payload  # noqa: E402
 
 
+def _input_family_paths(db_path: Path) -> Set[Path]:
+    """Collect both lexical and symlink-resolved DB + sidecar paths so symlinks cannot be bypassed."""
+    bases = {
+        db_path.parent.resolve() / db_path.name,
+        db_path.resolve(),
+    }
+    protected: Set[Path] = set()
+    for b in bases:
+        for suffix in ("", "-wal", "-shm", ".state"):
+            protected.add(b.with_name(b.name + suffix))
+    return protected
+
+
 def _collides_with_db(out_path: Path, db_path: Path) -> bool:
-    out_resolved = out_path.parent.resolve() / out_path.name
-    db_resolved = db_path.parent.resolve() / db_path.name
-    for suffix in ("", "-wal", "-shm", ".state"):
-        cand = db_resolved.with_name(db_resolved.name + suffix)
-        if out_resolved == cand:
-            return True
-        if out_resolved.exists() and cand.exists():
-            try:
-                if os.path.samefile(out_resolved, cand):
-                    return True
-            except OSError:
-                pass
+    out_candidates = {
+        out_path.parent.resolve() / out_path.name,
+        out_path.resolve(),
+    }
+    protected = _input_family_paths(db_path)
+    if out_candidates & protected:
+        return True
+    for oc in out_candidates:
+        if not oc.exists():
+            continue
+        for pc in protected:
+            if pc.exists():
+                try:
+                    if os.path.samefile(oc, pc):
+                        return True
+                except OSError:
+                    pass
     return False
 
 
-def _atomic_write_text(content: str, out_path: Path) -> None:
+def _stage_temp_text(content: str, out_path: Path) -> Tuple[Path, Path]:
     resolved_out = out_path.parent.resolve() / out_path.name
     fd, tmp_name = tempfile.mkstemp(prefix=".crowding-", suffix=".tmp", dir=resolved_out.parent)
+    tmp_path = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(content)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(tmp_name, resolved_out)
-        tmp_name = ""
-    finally:
-        if tmp_name:
-            Path(tmp_name).unlink(missing_ok=True)
+        os.chmod(tmp_path, 0o644)
+        return tmp_path, resolved_out
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def _validate_out_arg(out_arg: Path, db_arg: Path, flag_name: str) -> Optional[str]:
@@ -91,11 +110,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=None,
         help="Optional output path for JSON payload",
     )
-    parser.add_argument(
-        "--immutable",
-        action="store_true",
-        help="Open SQLite with ?immutable=1 (for read-only OS sandboxes)",
-    )
     args = parser.parse_args(argv)
 
     err = _validate_out_arg(args.out_html, args.market_db, "--out-html")
@@ -111,14 +125,20 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("--out-html and --out-json must not point to the same file", file=sys.stderr)
             return 4
 
+    staged: List[Tuple[Path, Path]] = []
     try:
-        payload = compute_crowding_payload(args.market_db, immutable=args.immutable)
+        payload = compute_crowding_payload(args.market_db)
         html = render_dashboard_html(payload)
+        staged.append(_stage_temp_text(html, args.out_html))
         if args.out_json is not None:
             json_text = json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)
-            _atomic_write_text(json_text, args.out_json)
-        _atomic_write_text(html, args.out_html)
+            staged.append(_stage_temp_text(json_text, args.out_json))
+        for tmp_p, final_p in staged:
+            os.replace(tmp_p, final_p)
+        staged.clear()
     except Exception as exc:
+        for tmp_p, _ in staged:
+            tmp_p.unlink(missing_ok=True)
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return 6
 

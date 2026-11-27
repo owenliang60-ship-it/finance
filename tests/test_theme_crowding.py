@@ -123,6 +123,18 @@ def test_cli_refuses_overwriting_input_db_and_renders_valid_html(tmp_path: Path)
     assert cli_main(["--market-db", str(fake_db), "--out-html", str(fake_wal)]) == 4
     assert cli_main(["--market-db", str(fake_db), "--out-html", str(tmp_path)]) == 4
 
+    # Symlinked DB path must also protect target's -wal/-shm sidecars (Fable P2-1)
+    link_dir = tmp_path / "wt_data"
+    link_dir.mkdir()
+    db_link = link_dir / "market.db"
+    db_link.symlink_to(fake_db)
+    assert cli_main(["--market-db", str(db_link), "--out-html", str(fake_wal)]) == 4
+
+    # Missing database returns exit code 6 without creating output files (Fable P2-4 / P2-9)
+    out_missing = tmp_path / "never_created.html"
+    assert cli_main(["--market-db", str(tmp_path / "missing.db"), "--out-html", str(out_missing)]) == 6
+    assert not out_missing.exists()
+
     sample_payload = {
         "version": "v2.2_codex_audited",
         "as_of": "2026-11-25",

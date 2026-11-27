@@ -333,8 +333,8 @@ TEMPLATE = r"""<!DOCTYPE html>
       </div>
       <div class="controls-row">
         <div class="btn-group" id="rangeBtns">
-          <button class="btn-toggle active" data-range="2026">2026年以来</button>
-          <button class="btn-toggle" data-range="full">近三年全区间 (2023.11–2026.11)</button>
+          <button class="btn-toggle active" data-range="ytd" id="btnRangeYtd">本年以来</button>
+          <button class="btn-toggle" data-range="full" id="btnRangeFull">全区间</button>
         </div>
         <div class="btn-group" id="cmpBtns">
           <button class="btn-toggle active" data-cmp="raw_ref">附浅色未平滑原线</button>
@@ -486,7 +486,7 @@ const SUB_META = {
 };
 
 let curBasket = "SOX";
-let curRange = "2026";
+let curRange = "ytd";
 let cmpMode = "raw_ref";
 let selectedSubKey = null;
 
@@ -527,6 +527,9 @@ function initStatic() {
   document.getElementById("hdrAsOf").textContent = DATA.as_of;
   const b0 = DATA.baskets["SOX"];
   document.getElementById("hdrSpan").textContent = `${b0.valid_start} ~ ${b0.valid_end} (${b0.n_valid_days}日)`;
+  const ytdYear = DATA.as_of.slice(0, 4);
+  document.getElementById("btnRangeYtd").textContent = `${ytdYear}年以来`;
+  document.getElementById("btnRangeFull").textContent = `全区间 (${b0.valid_start.slice(0, 7)}–${b0.valid_end.slice(0, 7)})`;
 
   const sumMap = {};
   DATA.equal_basket_regime_summary.forEach(r => { sumMap[r.code] = r; });
@@ -586,8 +589,10 @@ function renderStrip() {
 }
 
 function getActiveSeries(b) {
-  if (curRange === "2026") {
-    return b.series.filter(x => x.d >= "2026-01-01").map(x => ({ ...x, nav: x.nav_2026 }));
+  if (curRange === "ytd") {
+    const ytdStart = `${DATA.as_of.slice(0, 4)}-01-01`;
+    const sub = b.series.filter(x => x.d >= ytdStart).map(x => ({ ...x, nav: x.nav_2026 }));
+    if (sub.length > 0) return sub;
   }
   return b.series.map(x => ({ ...x, nav: x.nav_full }));
 }
@@ -987,5 +992,5 @@ renderAll();
 def render_dashboard_html(payload: dict) -> str:
     """Render self-contained interactive HTML dashboard from crowding payload."""
     compact = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-    safe_json = compact.replace("</", "<\\/")
+    safe_json = compact.replace("</", "<\\/").replace("<!--", "<\\!--")
     return TEMPLATE.replace("__CROWDING_JSON_PAYLOAD__", safe_json)

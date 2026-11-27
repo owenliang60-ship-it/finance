@@ -94,10 +94,10 @@ def canon_sym(raw: Optional[str]) -> str:
 def load_baskets_pit(conn: sqlite3.Connection) -> Dict[str, dict]:
     baskets: Dict[str, dict] = {}
     etf_meta = [
-        ("SOX", "SOXX", "费城半导体 (SOX)", "PIT历史季报持仓(2021.11起22期) + 官方周快照(2026-07-13起)"),
+        ("SOX", "SOXX", "费城半导体 (SOX)", "PIT历史季报持仓(2021.11起19期) + 官方周快照(2026-07-13起)"),
         ("IGV", None, "北美软件 (IGV)", "官方ETF周快照 (2026-07-13起PIT；此前为首期快照代理回放)"),
         ("XLF", None, "标普金融 (XLF)", "官方ETF周快照 (2026-07-13起PIT；此前为首期快照代理回放)"),
-        ("QQQ", "QQQ", "纳斯达克100 (QQQ)", "PIT历史季报持仓(2021.05起24期) + 官方周快照(2026-07-13起)"),
+        ("QQQ", "QQQ", "纳斯达克100 (QQQ)", "PIT历史季报持仓(2021.05起21期) + 官方周快照(2026-07-13起)"),
     ]
     has_fdh_table = bool(
         conn.execute(
@@ -213,6 +213,7 @@ def load_baskets_pit(conn: sqlite3.Connection) -> Dict[str, dict]:
 def load_market_daily_dv(
     conn: sqlite3.Connection, calendar_set: Set[str], suspect_all: Dict[str, Set[str]]
 ) -> Dict[str, Tuple[float, int]]:
+    """Aggregate US common-equity market dollar volume in SQL (avoids loading ~4M daily_price rows into RAM)."""
     excl_syms = {
         r[0]
         for r in conn.execute(
@@ -222,29 +223,42 @@ def load_market_daily_dv(
     }
     excl_syms.update({"SPY", "QQQ", "SOXX", "IVV", "VOO", "IWM", "DIA", "SMH", "IGV", "XLF", "DRAM", "TEST", "^VIX"})
 
-    rows = conn.execute(
-        "SELECT date, symbol, close * volume AS dv FROM daily_price WHERE close > 0 AND volume > 0"
-    ).fetchall()
-    present_by_day: Dict[str, Set[str]] = defaultdict(set)
-    for d, sym, _dv in rows:
-        if d in calendar_set:
-            present_by_day[d].add(sym)
+    tot_dv: Dict[str, float] = {}
+    cnt: Dict[str, int] = {}
+    for d, sum_dv, n_cnt in conn.execute(
+        "SELECT date, SUM(close * volume), COUNT(*) FROM daily_price "
+        "WHERE close > 0 AND volume > 0 AND symbol NOT LIKE '%.HK' AND symbol NOT LIKE '^%' "
+        "GROUP BY date"
+    ).fetchall():
+        if d in calendar_set and sum_dv is not None and math.isfinite(float(sum_dv)) and float(sum_dv) > 0:
+            tot_dv[d] = float(sum_dv)
+            cnt[d] = int(n_cnt)
 
-    tot_dv: Dict[str, float] = defaultdict(float)
-    cnt: Dict[str, int] = defaultdict(int)
-    for d, sym, dv in rows:
-        if d not in calendar_set or sym in excl_syms or sym.endswith(".HK") or sym.startswith("^"):
-            continue
-        if sym == "BK" and "BNY" in present_by_day[d]:
-            continue
-        if sym == "SKHYV" and "SKHY" in present_by_day[d]:
-            continue
-        if d in suspect_all.get(sym, set()):
-            continue
-        if dv is not None and math.isfinite(dv) and dv > 0:
-            tot_dv[d] += float(dv)
-            cnt[d] += 1
-    return {d: (tot_dv[d], cnt[d]) for d in tot_dv}
+    special_syms = sorted((excl_syms | {"BK", "BNY", "SKHYV", "SKHY"} | set(suspect_all.keys())))
+    if special_syms:
+        marks = ",".join("?" for _ in special_syms)
+        sp_rows = conn.execute(
+            f"SELECT date, symbol, close * volume FROM daily_price "
+            f"WHERE symbol IN ({marks}) AND close > 0 AND volume > 0 "
+            f"AND symbol NOT LIKE '%.HK' AND symbol NOT LIKE '^%'",
+            tuple(special_syms),
+        ).fetchall()
+        bny_days = {d for d, s, _ in sp_rows if s == "BNY" and d in tot_dv}
+        skhy_days = {d for d, s, _ in sp_rows if s == "SKHY" and d in tot_dv}
+        for d, sym, dv in sp_rows:
+            if d not in tot_dv or dv is None or not math.isfinite(float(dv)) or float(dv) <= 0:
+                continue
+            drop = (
+                sym in excl_syms
+                or (sym == "BK" and d in bny_days)
+                or (sym == "SKHYV" and d in skhy_days)
+                or (d in suspect_all.get(sym, set()))
+            )
+            if drop:
+                tot_dv[d] -= float(dv)
+                cnt[d] -= 1
+
+    return {d: (tot_dv[d], cnt[d]) for d in tot_dv if cnt[d] > 0 and tot_dv[d] > 0}
 
 
 def load_fx_table(conn: sqlite3.Connection) -> Dict[str, Tuple[List[str], List[float]]]:
@@ -606,23 +620,19 @@ def run_hysteresis_states(
     return codes, labels, entries
 
 
-def _connect_readonly_sqlite(db_path: Path, immutable: bool = False) -> sqlite3.Connection:
-    if immutable:
-        return sqlite3.connect(f"file:{db_path}?immutable=1", uri=True)
-    try:
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone()
-        return conn
-    except sqlite3.OperationalError:
-        return sqlite3.connect(f"file:{db_path}?immutable=1", uri=True)
+def _connect_readonly_sqlite(db_path: Path) -> sqlite3.Connection:
+    uri = f"{db_path.resolve().as_uri()}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone()
+    return conn
 
 
-def compute_crowding_payload(db_path: Path, *, immutable: bool = False) -> dict:
+def compute_crowding_payload(db_path: Path) -> dict:
     """Compute full V2.2 crowding payload for all 7 US equity theme baskets (strictly read-only)."""
     if not db_path.is_file():
         raise FileNotFoundError(f"market.db not found: {db_path}")
 
-    conn = _connect_readonly_sqlite(db_path, immutable=immutable)
+    conn = _connect_readonly_sqlite(db_path)
     store: Optional[MarketStore] = None
     try:
         baskets = load_baskets_pit(conn)
@@ -826,10 +836,12 @@ def compute_crowding_payload(db_path: Path, *, immutable: bool = False) -> dict:
         (">= 9.0 (拥挤红区)", lambda x: x >= 9.0),
     ]
 
-    for code, b in baskets.items():
+    expected_codes = ("SOX", "IGV", "XLF", "QQQ", "MEMORY", "SEMI_EQUIP", "HYPERSCALERS")
+    for code in expected_codes:
+        b = baskets.get(code)
+        if not b or not b["snapshots"]:
+            raise ValueError(f"Missing constituent snapshots for required basket: {code}")
         snaps = b["snapshots"]
-        if not snaps:
-            continue
         snap_dates = [sn[0] for sn in snaps]
         ipo_warm = b["ipo_warmup_bars"]
 
@@ -971,6 +983,10 @@ def compute_crowding_payload(db_path: Path, *, immutable: bool = False) -> dict:
             raise ValueError(f"Basket {code} produced zero valid crowding observations")
         first_i = valid_raw_idxs[0]
         last_i = valid_raw_idxs[-1]
+        if last_i != n_days - 1:
+            raise ValueError(
+                f"Basket {code} latest valid crowding date {calendar[last_i]} lags market as_of {calendar[-1]}"
+            )
 
         s_mom = ema_joint_valid(s_mom_raw, joint_valid, POST_EMA_SPAN)
         s_exvol = ema_joint_valid(s_exvol_raw, joint_valid, POST_EMA_SPAN)
