@@ -11,9 +11,8 @@ The Terminal layer is the primary Claude interface to the Finance workspace. All
 1. [Commands (Public API)](#commands-public-api) — `terminal/commands.py`
 2. [Pipeline (Analysis Workflow)](#pipeline-analysis-workflow) — `terminal/pipeline.py`
 3. [Company DB (Storage)](#company-db-storage) — `terminal/company_db.py`
-4. [Monitor (Risk Sweep)](#monitor-risk-sweep) — `terminal/monitor.py`
-5. [Themes (Clustering)](#themes-clustering) — `terminal/themes.py`
-6. [Regime (Macro Detection)](#regime-macro-detection) — `terminal/regime.py`
+4. [Themes (Clustering)](#themes-clustering) — `terminal/themes.py`
+5. [Regime (Macro Detection)](#regime-macro-detection) — `terminal/regime.py`
 
 ---
 
@@ -81,62 +80,6 @@ print(result["lens_prompt_paths"])  # Paths to 5 lens agent prompts
 
 ---
 
-### `portfolio_status`
-
-Comprehensive portfolio health check.
-
-**Signature**:
-```python
-def portfolio_status() -> Dict[str, Any]
-```
-
-**Parameters**: None
-
-**Returns**:
-```python
-{
-    "summary": {
-        "total_positions": 12,
-        "total_value": 1234567.89,
-        "largest_position": {"symbol": "NVDA", "weight": 0.18},
-        "cash_weight": 0.05
-    },
-    "alerts": [
-        {
-            "level": "CRITICAL",
-            "rule": "single_position_limit",
-            "message": "NVDA position (22%) exceeds S-tier max (20%)",
-            "symbol": "NVDA"
-        }
-    ],
-    "alert_counts": {
-        "CRITICAL": 1,
-        "WARNING": 3,
-        "INFO": 5
-    },
-    "company_db": {
-        "tracked_tickers": 15,
-        "tickers": ["AAPL", "MSFT", "NVDA", ...]
-    }
-}
-```
-
-**Side Effects**: Refreshes prices from FMP API (cached 24h).
-
-**Example**:
-```python
-from terminal.commands import portfolio_status
-
-status = portfolio_status()
-criticals = [a for a in status["alerts"] if a["level"] == "CRITICAL"]
-if criticals:
-    print(f"URGENT: {len(criticals)} critical alerts!")
-```
-
-**Code Reference**: `terminal/commands.py:96-140`
-
----
-
 ### `position_advisor`
 
 OPRMS-based position sizing recommendation.
@@ -177,16 +120,21 @@ def position_advisor(
         {"description": "Close below $600", "metric": "price", "threshold": 600},
         {"description": "Gross margin < 70%", "metric": "grossMargin", "threshold": 0.70}
     ],
-    "current_position": {                # If already held
+    "current_position": {                # If held — read-only Google Sheet book
         "symbol": "NVDA",
-        "quantity": 250,
+        "market": "US",
+        "shares": 250,
+        "cost_per_share": 600.0,
+        "sheet_price": 750.0,
         "market_value": 187500,
-        "weight": 0.1875
-    }
+        "category": "Fundamental",
+        "is_leaps": False,
+        "source": "google_sheet"
+    }                                    # None if not held or the sheet is unavailable
 }
 ```
 
-**Side Effects**: None (read-only).
+**Side Effects**: None (read-only; `portfolio_status` / `run_monitor` were retired 2026-11-27 with the company.db holdings ledger).
 
 **Example**:
 ```python
@@ -259,43 +207,6 @@ else:
 ```
 
 **Code Reference**: `terminal/commands.py:198-228`
-
----
-
-### `run_monitor`
-
-Full portfolio monitoring sweep.
-
-**Signature**:
-```python
-def run_monitor() -> Dict[str, Any]
-```
-
-**Parameters**: None
-
-**Returns**: See `MonitorReport` in [Monitor section](#run_full_monitor).
-
-**Side Effects**: Refreshes prices from FMP API.
-
-**Example**:
-```python
-from terminal.commands import run_monitor
-
-report = run_monitor()
-print(f"Scanned {report['position_count']} positions")
-print(f"Total alerts: {report['summary']['total_alerts']}")
-
-# Critical issues
-criticals = [a for a in report['exposure_alerts'] if a['level'] == 'CRITICAL']
-for alert in criticals:
-    print(f"CRITICAL: {alert['message']}")
-
-# Missing kill conditions
-if report['missing_kill_conditions']:
-    print(f"Positions without kill conditions: {', '.join(report['missing_kill_conditions'])}")
-```
-
-**Code Reference**: `terminal/commands.py:231-238`
 
 ---
 
@@ -1270,151 +1181,6 @@ print(", ".join(tickers))
 
 ---
 
-## Monitor (Risk Sweep)
-
-**Source**: `terminal/monitor.py:1-153`
-
-Portfolio health monitoring. Combines holdings exposure alerts with company DB kill condition checks.
-
----
-
-### `MonitorReport`
-
-**Source**: `terminal/monitor.py:16-55`
-
-Full monitoring sweep result dataclass.
-
-**Fields**:
-```python
-@dataclass
-class MonitorReport:
-    generated_at: str = ""
-    position_count: int = 0
-    total_value: float = 0.0
-    exposure_alerts: List[dict] = field(default_factory=list)
-    kill_condition_status: List[dict] = field(default_factory=list)
-    weight_drift: List[dict] = field(default_factory=list)
-    stale_reviews: List[dict] = field(default_factory=list)
-    missing_kill_conditions: List[str] = field(default_factory=list)
-```
-
-**Methods**:
-- `to_dict() -> dict`: Convert to serializable dict with summary stats
-
----
-
-### `run_full_monitor`
-
-Execute full portfolio monitoring sweep.
-
-**Signature**:
-```python
-def run_full_monitor() -> dict
-```
-
-**Parameters**: None
-
-**Returns**: `MonitorReport.to_dict()` output
-```python
-{
-    "generated_at": "2026-02-07T12:00:00",
-    "position_count": 12,
-    "total_value": 1234567.89,
-    "exposure_alerts": [
-        {
-            "level": "CRITICAL",
-            "rule": "single_position_limit",
-            "message": "NVDA position (22%) exceeds S-tier max (20%)",
-            "symbol": "NVDA",
-            "current_value": 0.22,
-            "threshold": 0.20
-        }
-    ],
-    "kill_condition_status": [
-        {
-            "symbol": "NVDA",
-            "conditions": [
-                {"description": "Close below $600", "metric": "price", "threshold": 600}
-            ],
-            "count": 1
-        }
-    ],
-    "weight_drift": [
-        {
-            "symbol": "AAPL",
-            "current_weight": 12.5,
-            "target_weight": 15.0,
-            "drift_pct": -16.7,
-            "direction": "underweight"
-        }
-    ],
-    "stale_reviews": [
-        {
-            "symbol": "MSFT",
-            "last_review": "2025-12-15",
-            "days_since": 54,
-            "status": "overdue"
-        }
-    ],
-    "missing_kill_conditions": ["GOOGL", "META"],
-    "summary": {
-        "total_alerts": 7,
-        "positions_with_kill_conditions": 10,
-        "positions_with_drift": 3,
-        "stale_count": 2,
-        "missing_kc_count": 2
-    }
-}
-```
-
-**Side Effects**: Refreshes prices from FMP API
-
-**Monitoring Checks**:
-1. **Exposure Alerts** (7 rules):
-   - Single position limit (DNA max)
-   - Sector concentration (40% max)
-   - Portfolio utilization (95% max)
-   - Correlation clusters
-   - S-tier position count (max 2 >20%)
-   - Top 3 concentration (60% max)
-   - Cash minimum (5%)
-
-2. **Kill Condition Status**: Active kill conditions per position
-
-3. **Weight Drift**: Current vs. OPRMS target (flags >10% drift)
-
-4. **Stale Reviews**: Positions not reviewed in 30+ days
-
-5. **Missing Kill Conditions**: Positions without defined exit triggers
-
-**Example**:
-```python
-from terminal.monitor import run_full_monitor
-
-report = run_full_monitor()
-
-# Critical alerts
-criticals = [a for a in report["exposure_alerts"] if a["level"] == "CRITICAL"]
-if criticals:
-    print("URGENT ACTION REQUIRED:")
-    for alert in criticals:
-        print(f"  - {alert['message']}")
-
-# Position management
-if report["weight_drift"]:
-    print("\nRebalancing needed:")
-    for drift in report["weight_drift"]:
-        print(f"  {drift['symbol']}: {drift['drift_pct']:+.1f}% from target")
-
-# Risk management
-if report["missing_kill_conditions"]:
-    print(f"\nDefine kill conditions for: {', '.join(report['missing_kill_conditions'])}")
-```
-
-**Code Reference**: `terminal/monitor.py:58-152`
-
----
-
 ## Themes (Clustering)
 
 **Source**: `terminal/themes.py:1-314`
@@ -1790,43 +1556,6 @@ report_path = compile_deep_report("NVDA", result["research_dir"])
 
 ---
 
-### Portfolio Monitoring Workflow
-
-```python
-from terminal.commands import run_monitor
-
-# Run full sweep
-report = run_monitor()
-
-# Check critical alerts
-criticals = [a for a in report["exposure_alerts"] if a["level"] == "CRITICAL"]
-if criticals:
-    print("CRITICAL ALERTS:")
-    for alert in criticals:
-        print(f"  {alert['message']}")
-        # Take action: rebalance, reduce position, etc.
-
-# Check weight drift
-for drift in report["weight_drift"]:
-    symbol = drift["symbol"]
-    current = drift["current_weight"]
-    target = drift["target_weight"]
-    print(f"{symbol}: {current:.1%} vs target {target:.1%}")
-
-# Check stale reviews
-for stale in report["stale_reviews"]:
-    symbol = stale["symbol"]
-    days = stale["days_since"]
-    print(f"{symbol}: No review in {days} days")
-    # Re-run analyze_ticker(symbol) to refresh analysis
-
-# Check missing kill conditions
-if report["missing_kill_conditions"]:
-    print(f"Define kill conditions for: {', '.join(report['missing_kill_conditions'])}")
-```
-
----
-
 ### Theme Management Workflow
 
 ```python
@@ -1906,7 +1635,6 @@ All terminal functions have unit tests in `tests/terminal/`:
 pytest tests/terminal/test_commands.py
 pytest tests/terminal/test_pipeline.py
 pytest tests/terminal/test_company_db.py
-pytest tests/terminal/test_monitor.py
 pytest tests/terminal/test_themes.py
 ```
 
