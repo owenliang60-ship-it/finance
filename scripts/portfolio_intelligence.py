@@ -435,7 +435,6 @@ def get_positions_as_of(store) -> dict:
     return {"latest": latest, "oldest_open_option": oldest_open_option}
 
 
-SHEET_PRICED_US_SYMBOLS = {"DRAM"}  # 自定义篮子等无交易所价格的 US 行，直接用 sheet 价
 
 
 def _position_from_sheet(mgr, holding):
@@ -1076,7 +1075,6 @@ def run_intelligence(
     positions = [_position_from_sheet(mgr, h) for h in book.holdings]
     markets = book.markets()
     sheet_prices = book.sheet_prices()
-    leaps_symbols = {h.symbol for h in book.holdings if h.is_leaps}
     option_positions = store.get_open_option_positions()  # 期权仍读 company.db（Boss 拍板）
     cash = book.cash_usd
     total_capital = book.total_capital_usd or TOTAL_CAPITAL_USD
@@ -1114,12 +1112,7 @@ def run_intelligence(
         if latest_date and (signals_as_of is None or latest_date > signals_as_of):
             signals_as_of = latest_date
 
-    us_symbols = [
-        s for s, m in markets.items()
-        if m == "US" and s not in leaps_symbols
-        and s not in SHEET_PRICED_US_SYMBOLS
-        and " " not in s  # multi-word rows (e.g. "X PUT") are sheet-only labels, never quotable
-    ]
+    us_symbols = book.quotable_us_symbols()
     if us_symbols or option_positions:
         require_cloud_env(allow_local=allow_local)
 

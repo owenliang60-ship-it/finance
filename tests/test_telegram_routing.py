@@ -312,7 +312,7 @@ class TestPortfolioRouting:
 
         book = SimpleNamespace(
             holdings=[], cash_usd=0.0, total_capital_usd=None,
-            markets=lambda: {}, sheet_prices=lambda: {},
+            markets=lambda: {}, sheet_prices=lambda: {}, quotable_us_symbols=lambda: [],
         )
         with patch("scripts.portfolio_intelligence.load_sheet_book", return_value=book):
             result = portfolio_intelligence.run_intelligence(dry_run=False)
@@ -368,6 +368,7 @@ class TestPortfolioRouting:
             holdings=[holding], cash_usd=100.0, total_capital_usd=1000.0,
             markets=lambda: {"AAPL": "US"},
             sheet_prices=lambda: {"AAPL": 125.0},
+            quotable_us_symbols=lambda: ["AAPL"],
             fetched_at=pd.Timestamp("2026-08-21T12:00:00Z").to_pydatetime(),
         )
         with patch("scripts.portfolio_intelligence.load_sheet_book", return_value=book):

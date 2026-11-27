@@ -1327,3 +1327,34 @@ def test_run_state_quarter_empty_persisted_and_resume_merges():  # round-5 证�
     state2 = json.loads(store.runs[(SNAP, "weekly")]["summary_json"])
     assert set(state2["run_state"]["quarter_empty"]) == {"MSFT"}
     assert len(state2["attempts"]) == 2  # append 而非替换
+
+
+def test_data_root_pair_holdings_from_sheet_not_company_db(tmp_path):
+    """Holdings overlay comes from overlays.load_holdings (sheet), never the
+    deprecated company.db `holdings` table; watchlist still read."""
+    import sqlite3
+    from scripts.update_fmp_forward import build_pool_loaders
+
+    mconn = sqlite3.connect(tmp_path / "market.db")
+    mconn.executescript(
+        "CREATE TABLE extended_membership (symbol TEXT, effective_to TEXT);"
+        "CREATE TABLE security_master (symbol TEXT, eligible INTEGER);"
+        "INSERT INTO extended_membership VALUES ('AAPL', NULL);"
+        "INSERT INTO security_master VALUES ('AAPL', 1);")
+    mconn.commit()
+    mconn.close()
+    cconn = sqlite3.connect(tmp_path / "company.db")
+    cconn.executescript(
+        "CREATE TABLE holdings (symbol TEXT, status TEXT);"
+        "INSERT INTO holdings VALUES ('STALE', 'OPEN');"
+        "CREATE TABLE watchlist (symbol TEXT);"
+        "INSERT INTO watchlist VALUES ('wch');")
+    cconn.commit()
+    cconn.close()
+
+    with patch("src.data.overlays.load_holdings", return_value=["HHH"]):
+        extras_loader, base_loader = build_pool_loaders(tmp_path)
+        extras = extras_loader()
+    assert "HHH" in extras and "WCH" in extras
+    assert "STALE" not in extras
+    assert base_loader() == ["AAPL"]

@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import io
 import logging
+import math
 import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional
@@ -21,6 +22,11 @@ CASH_TAB = "Portfolio Summary"
 CAPITAL_TAB = "Sheet26"
 CASH_LABEL = "现金合计"
 CAPITAL_LABEL = "total"
+WHOLE_PORT_TAB = "Whole Port"
+# Label priority (column B, strip + casefold). "总Net Total" never matches.
+WHOLE_PORT_NET_LABELS = ("投资net total", "net total")
+# PI quote filter: custom basket rows priced only by the sheet
+SHEET_PRICED_US_SYMBOLS = frozenset({"DRAM"})
 MAX_HEADER_SCAN_ROWS = 15
 ALLOWED_MARKETS = {"US", "HK", "KR", "CRYPTO"}
 REQUIRED_COLUMNS = [
@@ -52,6 +58,17 @@ class SheetBook:
     cash_usd: float
     total_capital_usd: Optional[float]
     fetched_at: dt.datetime
+    whole_port_net_total_usd: Optional[float] = None
+
+    def quotable_us_symbols(self) -> List[str]:
+        """US rows that have an exchange quote: no LEAPS, no sheet-priced
+        baskets, no multi-word labels (e.g. "X PUT")."""
+        return sorted({
+            h.symbol for h in self.holdings
+            if h.market == "US" and not h.is_leaps
+            and h.symbol not in SHEET_PRICED_US_SYMBOLS
+            and " " not in h.symbol
+        })
 
     def markets(self) -> Dict[str, str]:
         return {h.symbol: h.market for h in self.holdings}
@@ -192,6 +209,28 @@ def _parse_total_capital(ws) -> Optional[float]:
     return None
 
 
+def _parse_whole_port_net_total(ws) -> Optional[float]:
+    """Investment net total from 'Whole Port', located by column-B label
+    (never by row number). None when no label matches; a present-but-broken
+    value raises."""
+    found: Dict[str, object] = {}
+    for row in ws.iter_rows(values_only=True):
+        if row is None or len(row) < 2 or row[1] is None:
+            continue
+        label = str(row[1]).strip().casefold()
+        if label in WHOLE_PORT_NET_LABELS and label not in found:
+            found[label] = row[2] if len(row) > 2 else None
+    for label in WHOLE_PORT_NET_LABELS:
+        if label in found:
+            value = _to_float_strict(
+                found[label], "net total value in %s" % WHOLE_PORT_TAB)
+            if not math.isfinite(value) or value <= 0:
+                raise SheetBookError(
+                    "net total value invalid in %s" % WHOLE_PORT_TAB)
+            return value
+    return None
+
+
 def parse_sheet_book(xlsx_bytes: bytes, fetched_at: dt.datetime) -> SheetBook:
     import openpyxl
 
@@ -216,11 +255,16 @@ def parse_sheet_book(xlsx_bytes: bytes, fetched_at: dt.datetime) -> SheetBook:
             _parse_total_capital(wb[CAPITAL_TAB])
             if CAPITAL_TAB in wb.sheetnames else None
         )
+        net_total = (
+            _parse_whole_port_net_total(wb[WHOLE_PORT_TAB])
+            if WHOLE_PORT_TAB in wb.sheetnames else None
+        )
     finally:
         wb.close()
     return SheetBook(
         holdings=holdings, cash_usd=cash,
         total_capital_usd=total, fetched_at=fetched_at,
+        whole_port_net_total_usd=net_total,
     )
 
 
