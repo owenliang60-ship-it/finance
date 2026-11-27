@@ -14,6 +14,32 @@ from terminal.options.formatter import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _sheet_unavailable_by_default(monkeypatch):
+    """No test may hit the network: the Google Sheet is unavailable unless a
+    test patches terminal.options.commands.load_sheet_book itself."""
+    from portfolio.holdings.sheet_book import SheetBookError
+
+    def _no_sheet(*a, **k):
+        raise SheetBookError("PORTFOLIO_SHEET_ID not configured")
+
+    monkeypatch.setattr("terminal.options.commands.load_sheet_book", _no_sheet)
+
+
+def _fake_book(net_total, holdings=()):
+    from types import SimpleNamespace
+    return SimpleNamespace(holdings=list(holdings),
+                           whole_port_net_total_usd=net_total)
+
+
+def _fake_holding(symbol, shares, cost):
+    from types import SimpleNamespace
+    return SimpleNamespace(symbol=symbol, market="US", shares=shares,
+                           cost_per_share=cost, sheet_price=cost,
+                           market_value=shares * cost, category="Test",
+                           is_leaps=False)
+
+
 @pytest.fixture
 def store(tmp_path):
     """Create a fresh CompanyStore for company-dimension data."""
@@ -106,7 +132,7 @@ class TestPrepareOptionsContext:
         assert ctx["deep_analysis"]["executive_summary"] is not None
         assert ctx["iv_summary"] is not None
         assert ctx["liquidity"]["verdict"] != "NO_GO"
-        assert ctx["earnings"]["zone"] == "CLEAR"
+        assert ctx["earnings"]["zone"] == "UNKNOWN"  # non-ETF, FMP [] -> fail-closed
         assert "formatted_context" in ctx
 
     def test_skip_chain_fetch(self, store_with_data):
@@ -372,45 +398,57 @@ class TestOPRMSStaleness:
 
 
 class TestPortfolioContext:
-    def test_empty_book_fails_closed(self, store):
+    """NAV = Whole Port 投资 Net Total from the read-only Google Sheet.
+    Fictional numbers only."""
+
+    def test_sheet_failure_fails_closed(self, store):
         pf = _get_portfolio_context("AAPL", store, 200.0)
         assert pf["holding"] is None
         assert pf["option_legs"] == []
+        assert pf["option_legs_note"] == "期权腿未纳入"
         assert pf["estimated_nav"] is None
-        assert pf["nav_is_estimated"] is False
         assert pf["max_loss_2pct"] is None
         assert pf["max_loss_3pct"] is None
+        assert pf["portfolio_status"] == "UNKNOWN"
 
-    def test_nav_uses_spot_for_symbol_and_cost_for_others(self, store):
-        store.upsert_company("MSFT", company_name="Microsoft")
-        store.insert_holding("AAPL", 100, 150.0, "2026-01-02")
-        store.insert_holding("MSFT", 10, 400.0, "2026-01-03")
-        store.set_cash(50000.0)
-        store.insert_option_position("AAPL", "2026-12-18", 220.0, "call", -1, 3.5, "2026-11-01")
+    def test_whole_port_net_total_is_nav(self, store, monkeypatch):
+        book = _fake_book(500000.0, [_fake_holding("AAPL", 100, 150.0),
+                                     _fake_holding("MSFT", 10, 400.0)])
+        monkeypatch.setattr("terminal.options.commands.load_sheet_book",
+                            lambda *a, **k: book)
+        pf = _get_portfolio_context("aapl", store, 200.0)
+        assert pf["holding"] == {"shares": 100, "avg_cost": 150.0, "open_date": None}
+        assert pf["estimated_nav"] == 500000.0
+        assert pf["nav_source"] == "whole_port_net_total"
+        assert pf["max_loss_2pct"] == 10000.0
+        assert pf["max_loss_3pct"] == 15000.0
+        assert pf["option_legs"] == []
+        assert pf["portfolio_status"] == "OK"
 
-        pf = _get_portfolio_context("AAPL", store, 200.0)
-
-        assert pf["holding"]["shares"] == 100
-        assert pf["holding"]["avg_cost"] == 150.0
-        assert len(pf["option_legs"]) == 1
-        assert pf["option_legs"][0]["quantity"] == -1
-        assert pf["cash"] == 50000.0
-        # 50000 + 100 × 200 (spot) + 10 × 400 (cost)
-        assert pf["estimated_nav"] == 74000.0
-        assert pf["nav_is_estimated"] is True
-        assert pf["max_loss_2pct"] == 1480.0
-        assert pf["max_loss_3pct"] == 2220.0
-
-    def test_missing_spot_falls_back_to_cost(self, store):
-        store.insert_holding("AAPL", 100, 150.0, "2026-01-02")
-        pf = _get_portfolio_context("AAPL", store, None)
-        assert pf["estimated_nav"] == 15000.0
-
-    def test_cash_only_book(self, store):
-        store.set_cash(10000.0)
+    def test_not_held_symbol(self, store, monkeypatch):
+        monkeypatch.setattr("terminal.options.commands.load_sheet_book",
+                            lambda *a, **k: _fake_book(500000.0))
         pf = _get_portfolio_context("AAPL", store, 200.0)
         assert pf["holding"] is None
-        assert pf["estimated_nav"] == 10000.0
+        assert pf["estimated_nav"] == 500000.0
+
+    @pytest.mark.parametrize("net_total", [None, 0.0, -1.0])
+    def test_missing_or_bad_net_total_fails_closed(self, store, monkeypatch, net_total):
+        book = _fake_book(net_total, [_fake_holding("AAPL", 100, 150.0)])
+        monkeypatch.setattr("terminal.options.commands.load_sheet_book",
+                            lambda *a, **k: book)
+        pf = _get_portfolio_context("AAPL", store, 200.0)
+        assert pf["estimated_nav"] is None
+        assert pf["max_loss_2pct"] is None
+        assert pf["holding"] is None
+        assert pf["portfolio_status"] == "UNKNOWN"
+
+    def test_never_reads_company_db_ledger(self, monkeypatch):
+        store = MagicMock()
+        monkeypatch.setattr("terminal.options.commands.load_sheet_book",
+                            lambda *a, **k: _fake_book(500000.0))
+        _get_portfolio_context("AAPL", store, 200.0)
+        assert store.method_calls == []
 
 
 class TestContextGates:
@@ -437,7 +475,8 @@ class TestContextGates:
         assert ctx["gates"] == {
             "snapshot": "FRESH",
             "liquidity": ctx["liquidity"]["verdict"],
-            "earnings": "CLEAR",
+            "earnings": "UNKNOWN",   # non-ETF + FMP [] -> fail-closed
+            "iv": "STALE",           # iv_daily fixture stops at 2026-02-21
         }
         assert "available" in ctx["skew_25d"]
         assert ctx["portfolio"]["estimated_nav"] is None
@@ -454,6 +493,29 @@ class TestContextGates:
         assert ctx["snapshot_freshness"]["snapshot_date"] == "2026-02-24"
         assert ctx["snapshot_freshness"]["status"] == "STALE"
         assert ctx["gates"]["snapshot"] == "STALE"
+
+    def test_iv_gate_fresh_when_iv_daily_current(self, store, mkt_store):
+        from datetime import datetime as _dt
+        from zoneinfo import ZoneInfo
+        today = _dt.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+        mkt_store.save_iv_daily("AAPL", today, iv_30d=0.30, hv_30d=0.25)
+        ctx = prepare_options_context(
+            "AAPL", store=store, market_store=mkt_store,
+            fmp_client=_fmp(205.0), skip_chain_fetch=True,
+        )
+        assert ctx["gates"]["iv"] == "FRESH"
+
+    def test_portfolio_nav_from_whole_port(self, store, mkt_store, monkeypatch):
+        monkeypatch.setattr("terminal.options.commands.load_sheet_book",
+                            lambda *a, **k: _fake_book(400000.0))
+        ctx = prepare_options_context(
+            "AAPL", store=store, market_store=mkt_store,
+            fmp_client=_fmp(205.0), skip_chain_fetch=True,
+        )
+        assert ctx["portfolio"]["estimated_nav"] == 400000.0
+        assert "Whole Port" in ctx["formatted_context"]
+        assert "期权腿未纳入" in ctx["formatted_context"]
+        assert "company.db" not in ctx["formatted_context"].split("### Actual Holdings")[1][:200]
 
     def test_no_data_symbol_is_missing_everywhere(self, store, mkt_store):
         ctx = prepare_options_context(
@@ -524,32 +586,54 @@ class TestFormatterIssue045AndNewBlocks:
 
     def test_gates_line(self):
         out = format_options_context(_base_ctx(gates={
-            "snapshot": "STALE", "liquidity": "GOOD", "earnings": "T5_WARNING"}))
+            "snapshot": "STALE", "liquidity": "GOOD", "earnings": "T5_WARNING",
+            "iv": "STALE"}))
         assert "Gates" in out
         assert "STALE" in out and "GOOD" in out and "T5_WARNING" in out
+        assert "IV=STALE" in out
 
-    def test_holdings_block_empty_book(self):
+    def test_gates_line_iv_missing_by_default(self):
+        out = format_options_context(_base_ctx(gates={
+            "snapshot": "FRESH", "liquidity": "GOOD", "earnings": "CLEAR"}))
+        assert "IV=MISSING" in out
+
+    def test_holdings_block_sheet_unavailable(self):
         out = format_options_context(_base_ctx(portfolio={
-            "holding": None, "option_legs": [], "cash": 0.0,
-            "estimated_nav": None, "nav_is_estimated": False,
-            "max_loss_2pct": None, "max_loss_3pct": None,
+            "holding": None, "option_legs": [], "option_legs_note": "期权腿未纳入",
+            "estimated_nav": None, "nav_source": None,
+            "max_loss_2pct": None, "max_loss_3pct": None, "portfolio_status": "UNKNOWN",
         }))
-        assert "Actual Holdings (company.db, 非 Book of Record, 以只读 Google Sheet 为准)" in out
-        assert "无持仓记录" in out
+        assert "Actual Holdings (Google Sheet (Whole Port Net Total), 只读)" in out
+        assert "company.db" not in out.split("### Actual Holdings")[1].split("###")[0]
+        assert "期权腿未纳入" in out
+        assert "UNKNOWN" in out
+        assert "无持仓记录" not in out
 
-    def test_holdings_block_with_positions(self):
+    def test_holdings_block_with_position(self):
         out = format_options_context(_base_ctx(portfolio={
-            "holding": {"shares": 100, "avg_cost": 150.0, "open_date": "2026-01-02"},
-            "option_legs": [{"expiration": "2026-12-18", "strike": 220.0, "side": "CALL",
-                             "quantity": -1, "avg_premium": 3.5, "strategy_tag": "cc"}],
-            "cash": 50000.0, "estimated_nav": 74000.0, "nav_is_estimated": True,
-            "max_loss_2pct": 1480.0, "max_loss_3pct": 2220.0,
+            "holding": {"shares": 100, "avg_cost": 150.0, "open_date": None},
+            "option_legs": [], "option_legs_note": "期权腿未纳入",
+            "estimated_nav": 500000.0, "nav_source": "whole_port_net_total",
+            "max_loss_2pct": 10000.0, "max_loss_3pct": 15000.0, "portfolio_status": "OK",
         }))
         assert "100" in out and "$150.00" in out
-        assert "2026-12-18" in out and "$220" in out
-        assert "$74,000" in out
-        assert "$1,480" in out and "$2,220" in out
-        assert "无持仓记录" not in out
+        assert "$500,000" in out
+        assert "$10,000" in out and "$15,000" in out
+        assert "Whole Port" in out and "期权腿未纳入" in out
+
+    def test_holdings_block_not_held(self):
+        out = format_options_context(_base_ctx(portfolio={
+            "holding": None, "option_legs": [], "option_legs_note": "期权腿未纳入",
+            "estimated_nav": 500000.0, "nav_source": "whole_port_net_total",
+            "max_loss_2pct": 10000.0, "max_loss_3pct": 15000.0, "portfolio_status": "OK",
+        }))
+        assert "未持有正股" in out
+
+    def test_earnings_date_status_rendered(self):
+        out = format_options_context(_base_ctx(earnings={
+            "days_to_earnings": 20, "earnings_date": "2026-12-17", "zone": "CAUTION",
+            "date_status": "CONFIRMED", "date_source": "official IR"}))
+        assert "CONFIRMED" in out
 
     def test_holdings_not_loaded_is_not_rendered_as_empty(self):
         out = format_options_context(_base_ctx())

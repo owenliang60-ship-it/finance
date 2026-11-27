@@ -302,17 +302,14 @@ class TestPortfolioRouting:
     @patch("scripts.portfolio_intelligence.get_store")
     def test_run_intelligence_empty_holdings_uses_private_delivery(self, mock_get_store, mock_manager_cls, mock_deliver):
         mock_store = MagicMock()
-        mock_store.get_open_option_positions.return_value = []
-        mock_store.get_cash_balance.return_value = 0
         mock_get_store.return_value = mock_store
 
         mock_manager = MagicMock()
-        mock_manager.load_holdings.return_value = []
         mock_manager_cls.return_value = mock_manager
 
         book = SimpleNamespace(
             holdings=[], cash_usd=0.0, total_capital_usd=None,
-            markets=lambda: {}, sheet_prices=lambda: {},
+            markets=lambda: {}, sheet_prices=lambda: {}, quotable_us_symbols=lambda: [],
         )
         with patch("scripts.portfolio_intelligence.load_sheet_book", return_value=book):
             result = portfolio_intelligence.run_intelligence(dry_run=False)
@@ -327,14 +324,8 @@ class TestPortfolioRouting:
     @patch("scripts.portfolio_intelligence.get_store")
     def test_run_intelligence_normal_uses_private_delivery(self, mock_get_store, mock_manager_cls, _sqlite, mock_fetch_stock, mock_deliver):
         mock_store = MagicMock()
-        mock_store.get_open_option_positions.return_value = []
-        mock_store.get_cash_balance.return_value = 100
         mock_store.get_kill_conditions.return_value = []
         mock_store.get_oprms_history.return_value = []
-        # get_positions_as_of() walks _get_conn().execute().fetchone(); make it
-        # return (None,) so the helper short-circuits to None without comparing
-        # MagicMocks under max().
-        mock_store._get_conn.return_value.execute.return_value.fetchone.return_value = (None,)
         mock_get_store.return_value = mock_store
 
         position = Position(
@@ -343,11 +334,7 @@ class TestPortfolioRouting:
         )
 
         mock_manager = MagicMock()
-        mock_manager.load_holdings.return_value = [position]
         mock_manager.enrich_holding_row.return_value = position
-        mock_manager.get_total_nav.return_value = 1000.0
-        mock_manager.get_option_market_value.return_value = 0.0
-        mock_manager.refresh_prices.return_value = [position]
         mock_manager_cls.return_value = mock_manager
         mock_fetch_stock.return_value = SimpleNamespace(
             prices={"AAPL": 125.0},
@@ -368,6 +355,7 @@ class TestPortfolioRouting:
             holdings=[holding], cash_usd=100.0, total_capital_usd=1000.0,
             markets=lambda: {"AAPL": "US"},
             sheet_prices=lambda: {"AAPL": 125.0},
+            quotable_us_symbols=lambda: ["AAPL"],
             fetched_at=pd.Timestamp("2026-08-21T12:00:00Z").to_pydatetime(),
         )
         with patch("scripts.portfolio_intelligence.load_sheet_book", return_value=book):
@@ -377,5 +365,8 @@ class TestPortfolioRouting:
         assert "组合概览" in result
         assert "NAV 快照 ET" in result
         assert "credit header unavailable" in result
+        assert "期权腿未纳入" in result
+        mock_store.get_open_option_positions.assert_not_called()
+        mock_store._get_conn.assert_not_called()  # no deprecated ledger tables read
         mock_deliver.assert_called_once()
         assert mock_deliver.call_args.kwargs["dry_run"] is False

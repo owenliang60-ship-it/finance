@@ -16,6 +16,8 @@
 
 Spec: docs/design/2026-07-09-fmp-forward-eps-valuation-spec.md §5.3–§5.5
 """
+
+from __future__ import annotations
 import argparse
 import json
 import logging
@@ -676,16 +678,15 @@ def build_pool_loaders(data_root: Optional[Path]):
             raise RuntimeError("active eligible membership empty")
 
         from config.settings import BENCHMARK_SYMBOLS
+        from src.data.overlays import load_holdings
         extras = {s.upper() for s in BENCHMARK_SYMBOLS}
+        extras.update(s.upper() for s in load_holdings())  # sheet, fail -> []
         company_db = root / "company.db"
         if company_db.exists():
             cconn = sqlite3.connect(f"file:{company_db}?mode=ro", uri=True)
             try:
                 tables = {r[0] for r in cconn.execute(
                     "SELECT name FROM sqlite_master WHERE type='table'")}
-                if "holdings" in tables:
-                    extras.update(r[0].upper() for r in cconn.execute(
-                        "SELECT symbol FROM holdings WHERE status='OPEN'"))
                 if "watchlist" in tables:
                     extras.update(r[0].upper() for r in cconn.execute(
                         "SELECT symbol FROM watchlist"))

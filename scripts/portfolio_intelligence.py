@@ -4,6 +4,8 @@
 每日 22:00 SGT cron 运行，推送持仓级信号到 Telegram。
 三区块报告：行动信号 / 组合概览 / Kill Conditions。
 """
+
+from __future__ import annotations
 import os
 import sys
 import logging
@@ -220,33 +222,6 @@ def build_stock_position_details(
     return sorted(rows, key=lambda row: -abs(row["market_value"]))
 
 
-def build_option_position_details(
-    option_positions: list,
-    option_prices: dict,
-    nav: float,
-    total_capital: float = TOTAL_CAPITAL_USD,
-) -> list[dict]:
-    """Build option leg detail rows using live premium when available."""
-    rows = []
-    for op in option_positions:
-        key = (op["symbol"], op["expiration"], op["strike"], op["side"])
-        premium = (option_prices or {}).get(key, op["avg_premium"])
-        market_value = op["quantity"] * premium * 100
-        side_code = "C" if op["side"].upper() == "CALL" else "P"
-        rows.append({
-            "symbol": op["symbol"],
-            "contract": (
-                f"{op['symbol']} {op['expiration']} "
-                f"{op['strike']:g}{side_code} x{op['quantity']}"
-            ),
-            "strategy_tag": op.get("strategy_tag", ""),
-            "market_value": market_value,
-            "tracked_pct": (market_value / nav) if nav else 0,
-            "total_pct": (market_value / total_capital) if total_capital else 0,
-        })
-    return sorted(rows, key=lambda row: -abs(row["market_value"]))
-
-
 def calc_sector_exposure(position_details: list[dict]) -> dict:
     """Aggregate stock exposure by sector for detailed concentration reporting."""
     sectors: dict[str, dict] = {}
@@ -386,56 +361,6 @@ def _latest_signal_date(df: pd.DataFrame) -> str | None:
         return None
     value = pd.to_datetime(df["date"].iloc[-1])
     return value.strftime("%Y-%m-%d")
-
-
-# ---- positions-as-of helper ----
-
-def get_positions_as_of(store) -> dict:
-    """Return position-book freshness timestamps as YYYY-MM-DD strings.
-
-    Returns a dict with two keys:
-      - "latest": MAX(last_updated) across holdings/option_positions/portfolio_cash.
-        Represents "was the position book touched recently"; None if all empty.
-      - "oldest_open_option": MIN(last_updated) among OPEN option_positions only.
-        Represents "is there a stale OPEN leg hiding"; None if no OPEN legs.
-
-    The header renderer uses both so a frequently-updated cash row cannot mask
-    a months-old OPEN option leg — the exact visibility gap this helper is
-    designed to close.
-    """
-    conn = store._get_conn()
-    candidates: list[str] = []
-
-    row = conn.execute(
-        "SELECT MAX(last_updated) FROM holdings WHERE status = 'OPEN'"
-    ).fetchone()
-    if row and row[0]:
-        candidates.append(row[0])
-
-    row = conn.execute(
-        "SELECT MAX(last_updated) FROM option_positions WHERE status = 'OPEN'"
-    ).fetchone()
-    if row and row[0]:
-        candidates.append(row[0])
-
-    row = conn.execute(
-        "SELECT MAX(updated_at) FROM portfolio_cash"
-    ).fetchone()
-    if row and row[0]:
-        candidates.append(row[0])
-
-    # Oldest OPEN option leg — independent field to surface stale legs.
-    row = conn.execute(
-        "SELECT MIN(last_updated) FROM option_positions WHERE status = 'OPEN'"
-    ).fetchone()
-    oldest_open_option = row[0][:10] if row and row[0] else None
-
-    # ISO timestamps sort lexicographically. Slice to date portion.
-    latest = max(candidates)[:10] if candidates else None
-    return {"latest": latest, "oldest_open_option": oldest_open_option}
-
-
-SHEET_PRICED_US_SYMBOLS = {"DRAM"}  # 自定义篮子等无交易所价格的 US 行，直接用 sheet 价
 
 
 def _position_from_sheet(mgr, holding):
@@ -1053,7 +978,6 @@ def run_intelligence(
     from portfolio.holdings.manager import PortfolioManager
     from portfolio.holdings.live_quote_provider import (
         QuoteResult,
-        fetch_option_live_quotes,
         fetch_stock_live_quotes,
     )
 
@@ -1076,12 +1000,10 @@ def run_intelligence(
     positions = [_position_from_sheet(mgr, h) for h in book.holdings]
     markets = book.markets()
     sheet_prices = book.sheet_prices()
-    leaps_symbols = {h.symbol for h in book.holdings if h.is_leaps}
-    option_positions = store.get_open_option_positions()  # 期权仍读 company.db（Boss 拍板）
     cash = book.cash_usd
     total_capital = book.total_capital_usd or TOTAL_CAPITAL_USD
 
-    if not positions and not option_positions and cash <= 0:
+    if not positions and cash <= 0:
         msg = "📊 Portfolio Intelligence: 无持仓"
         return _send_private_report(msg, dry_run=dry_run)
 
@@ -1114,13 +1036,8 @@ def run_intelligence(
         if latest_date and (signals_as_of is None or latest_date > signals_as_of):
             signals_as_of = latest_date
 
-    us_symbols = [
-        s for s, m in markets.items()
-        if m == "US" and s not in leaps_symbols
-        and s not in SHEET_PRICED_US_SYMBOLS
-        and " " not in s  # multi-word rows (e.g. "X PUT") are sheet-only labels, never quotable
-    ]
-    if us_symbols or option_positions:
+    us_symbols = book.quotable_us_symbols()
+    if us_symbols:
         require_cloud_env(allow_local=allow_local)
 
     stock_live_result = QuoteResult()
@@ -1179,33 +1096,12 @@ def run_intelligence(
             price_latest[p.symbol] = p.cost_basis
             no_price_symbols.append(p.symbol)
 
-    # Fetch option live prices via MarketData
-    option_prices = {}
-    option_live_result = QuoteResult()
-    if option_positions:
-        logger.info("Fetching option prices for %d legs...", len(option_positions))
-        option_live_result = fetch_option_live_quotes(option_positions)
-        option_prices = option_live_result.prices
-        if option_live_result.credit_header_available:
-            logger.info(
-                "Option live quotes: %d/%d success, failed=%s, request_count=%d, credits=%s/%s",
-                len(option_prices), len(option_positions), option_live_result.failed,
-                option_live_result.request_count, option_live_result.credits_used,
-                option_live_result.credits_remaining,
-            )
-        else:
-            logger.info(
-                "Option live quotes: %d/%d success, failed=%s, request_count=%d (credit header unavailable)",
-                len(option_prices), len(option_positions), option_live_result.failed,
-                option_live_result.request_count,
-            )
-
-    # NAV + weights — inline (mgr.get_total_nav/refresh_prices re-read company.db)
-    option_mv = mgr.get_option_market_value(option_prices)  # options stay on company.db
+    # NAV + weights — inline. Option legs are not included (company.db
+    # option_positions is retired; Google Sheet has no option-leg book).
     for p in positions:
         p.current_price = price_latest.get(p.symbol, 0)
     stock_mv = sum(p.market_value for p in positions)
-    nav = stock_mv + option_mv + cash
+    nav = stock_mv + cash
     invested = nav - cash
     for p in positions:
         p.current_weight = (p.market_value / nav) if nav > 0 else 0
@@ -1256,9 +1152,6 @@ def run_intelligence(
     ])
     position_details = build_stock_position_details(
         positions_refreshed, nav, total_capital
-    )
-    option_details = build_option_position_details(
-        option_positions, option_prices, nav, total_capital
     )
     sector_exposure = calc_sector_exposure(position_details)
     concentration = build_concentration_summary(position_details, sector_exposure)
@@ -1311,18 +1204,10 @@ def run_intelligence(
                 )
 
     # ---- 格式化 ----
-    # Option P&L: (live_premium - avg_premium) * quantity * 100
-    option_pnl = 0.0
-    for op in option_positions:
-        key = (op["symbol"], op["expiration"], op["strike"], op["side"])
-        live = option_prices.get(key)
-        if live is not None:
-            option_pnl += (live - op["avg_premium"]) * op["quantity"] * 100
-
     # Sheet LEAPS rows use per-share premium semantics: Shares x Last Price == Mkt Value
     # (verified against the book), so linear unrealized_pnl is correct for them too.
     stock_pnl = sum(p.unrealized_pnl for p in positions_refreshed)
-    total_pnl = stock_pnl + option_pnl
+    total_pnl = stock_pnl
 
     summary = {
         "total_nav": nav,
@@ -1342,14 +1227,12 @@ def run_intelligence(
         "sector_warnings": sector_conc.get("_warnings", []),
         "concentration": concentration,
         "position_details": position_details,
-        "option_details": option_details,
+        "option_details": [],
         "total_positions": len(positions_refreshed),
         "dna_distribution": dna_dist,
     }
 
     et_now = datetime.now(ZoneInfo("America/New_York"))
-    positions_as_of = get_positions_as_of(store)
-    oldest_open_option = positions_as_of["oldest_open_option"]
     book_ts = book.fetched_at.astimezone(
         ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M")
     snapshot_line = (
@@ -1357,17 +1240,12 @@ def run_intelligence(
         f"| book(sheet) as of {book_ts} "
         f"| live {len(stock_live_result.prices)}/{len(us_symbols)} "
         f"| signals as of {signals_as_of or 'unknown'}"
+        f" | 期权腿未纳入"
     )
-    if oldest_open_option:
-        snapshot_line += f" | oldest open option {oldest_open_option}"
     if sheet_priced_symbols:
         snapshot_line += f" | sheet-priced: {','.join(sheet_priced_symbols)}"
     if fallback_symbols:
         snapshot_line += f" | ⚠️ fallback: {','.join(fallback_symbols)}"
-    if option_positions:
-        snapshot_line += f" | opt {len(option_prices)}/{len(option_positions)}"
-        if option_live_result.failed:
-            snapshot_line += f" (⚠️ fail {len(option_live_result.failed)})"
 
     credit_fragments = []
     if stock_live_result.request_count > 0:
@@ -1376,15 +1254,9 @@ def run_intelligence(
                 f"stock credits {stock_live_result.credits_used or '?'}"
                 f"/{stock_live_result.credits_remaining or '?'}"
             )
-    if option_live_result.request_count > 0:
-        if option_live_result.credit_header_available:
-            credit_fragments.append(
-                f"option credits {option_live_result.credits_used or '?'}"
-                f"/{option_live_result.credits_remaining or '?'}"
-            )
     if credit_fragments:
         snapshot_line += " | " + " | ".join(credit_fragments)
-    elif stock_live_result.request_count > 0 or option_live_result.request_count > 0:
+    elif stock_live_result.request_count > 0:
         snapshot_line += " | credit header unavailable"
 
     report = format_report(action_signals, summary, kc_data, snapshot_line=snapshot_line)

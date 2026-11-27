@@ -3,6 +3,8 @@ Options Formatter — Format chain data, Greeks, P/L, and comparison tables.
 
 Used by commands.py and the /options skill to present data to the user.
 """
+from __future__ import annotations
+
 from typing import Any, Dict, List, Optional
 
 
@@ -42,10 +44,11 @@ def format_options_context(ctx: Dict[str, Any]) -> str:
     # Gates summary
     gates = ctx.get("gates")
     if gates:
-        lines.append("**Gates**: Snapshot={} | Liquidity={} | Earnings={}".format(
+        lines.append("**Gates**: Snapshot={} | Liquidity={} | Earnings={} | IV={}".format(
             gates.get("snapshot") or "MISSING",
             gates.get("liquidity") or "—",
             gates.get("earnings") or "UNKNOWN",
+            gates.get("iv") or "MISSING",
         ))
         lines.append("")
 
@@ -108,9 +111,11 @@ def format_options_context(ctx: Dict[str, Any]) -> str:
         days = earnings.get("days_to_earnings")
         zone = earnings.get("zone", "UNKNOWN")
         edate = earnings.get("earnings_date", "—")
+        status = earnings.get("date_status")
+        status_str = " [{}]".format(status) if status else ""
         if days is not None:
-            lines.append("**Earnings**: {} ({} days) — Zone: **{}**".format(
-                edate, days, zone
+            lines.append("**Earnings**: {} ({} days){} — Zone: **{}**".format(
+                edate, days, status_str, zone
             ))
         elif zone == "CLEAR":
             lines.append("**Earnings**: No upcoming earnings found — Zone: **{}**".format(zone))
@@ -201,39 +206,24 @@ def _money(v: float) -> str:
 
 
 def _format_holdings(pf: Optional[Dict[str, Any]]) -> List[str]:
-    lines = ["### Actual Holdings (company.db, 非 Book of Record, 以只读 Google Sheet 为准)"]
-    if pf is None:
-        lines.append("- ⚠️ 持仓未加载 (UNKNOWN)：实际持仓必须问 Boss 或读 Google Sheet")
+    lines = ["### Actual Holdings (Google Sheet (Whole Port Net Total), 只读)"]
+    if pf is None or pf.get("portfolio_status") == "UNKNOWN" or pf.get("estimated_nav") is None:
+        lines.append("- ⚠️ 持仓 / NAV 未加载 (UNKNOWN)：Google Sheet 不可用或 Whole Port "
+                     "Net Total 缺失；实际持仓必须问 Boss，Max Loss 预算不给")
+        lines.append("- {}".format((pf or {}).get("option_legs_note") or "期权腿未纳入"))
         return lines
 
     holding = pf.get("holding")
-    legs = pf.get("option_legs") or []
     if holding:
-        lines.append("- 正股: {:g} 股 @ ${:.2f} (open {})".format(
-            holding["shares"], holding["avg_cost"], holding.get("open_date") or "—"
-        ))
-    if legs:
-        lines.append("- 期权腿:")
-        for leg in legs:
-            tag = " [{}]".format(leg["strategy_tag"]) if leg.get("strategy_tag") else ""
-            lines.append("  - {} ${:g} {} ×{:+d} @ ${:.2f}{}".format(
-                leg.get("expiration", "—"), leg.get("strike", 0),
-                str(leg.get("side", "—")).upper(), int(leg.get("quantity") or 0),
-                leg.get("avg_premium") or 0.0, tag,
-            ))
-    if not holding and not legs:
-        lines.append("- 无持仓记录")
-
-    nav = pf.get("estimated_nav")
-    if nav is None:
-        lines.append("- 估算 NAV: N/A（company.db 无现金与持仓记录，不估算；Max Loss 预算以 Google Sheet NAV 计）")
+        lines.append("- 正股: {:g} 股 @ ${:.2f}".format(holding["shares"], holding["avg_cost"]))
     else:
-        lines.append(
-            "- 估算 NAV: {} (现金 + 正股；本标的按现价、其余按成本，不含期权市值) | "
-            "Max Loss 2%: {} | 3%: {}".format(
-                _money(nav), _money(pf["max_loss_2pct"]), _money(pf["max_loss_3pct"])
-            )
-        )
+        lines.append("- 未持有正股")
+    lines.append("- {}".format(pf.get("option_legs_note") or "期权腿未纳入"))
+    lines.append(
+        "- NAV (Whole Port 投资 Net Total): {} | Max Loss 2%: {} | 3%: {}".format(
+            _money(pf["estimated_nav"]), _money(pf["max_loss_2pct"]),
+            _money(pf["max_loss_3pct"]))
+    )
     return lines
 
 
@@ -421,6 +411,8 @@ def format_scenario_matrix(result: Dict[str, Any], strategy_name: str = "") -> s
     S = result.get("underlying_price", 0)
     avg_iv = result.get("avg_iv", 0)
     max_dte = result.get("max_dte", 0)
+    # Calendars: time axis ends at the shortest leg
+    axis_dte = result.get("min_dte", max_dte)
     skew = result.get("skew_alpha", 0)
 
     # Header
@@ -429,7 +421,7 @@ def format_scenario_matrix(result: Dict[str, Any], strategy_name: str = "") -> s
     else:
         lines.append("### Scenario Analysis")
     lines.append("S=${:.2f} | IV={:.1f}% | DTE={} | Skew \u03b1={:.2f}".format(
-        S, avg_iv * 100, max_dte, skew
+        S, avg_iv * 100, axis_dte, skew
     ))
     lines.append("")
 
@@ -444,7 +436,7 @@ def format_scenario_matrix(result: Dict[str, Any], strategy_name: str = "") -> s
     for d in time_points:
         if d == 0:
             time_headers.append("Entry")
-        elif d == max_dte:
+        elif d == axis_dte:
             time_headers.append("Expiry")
         else:
             time_headers.append("+{}d".format(d))

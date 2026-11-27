@@ -108,7 +108,7 @@ Calendar spreads are theta-positive but vega-positive -- a rare combination. You
 
 ## Common Traps
 - **Chasing the "max profit" pin**: The max profit diagram shows a beautiful tent peak at the strike. In practice, the stock almost never pins exactly there. Set realistic profit targets (25-40% of debit)
-- **Ignoring term structure**: If near-term IV is 10 points above far-term IV (inverted structure), you're selling cheap vol and buying expensive vol. The calendar will lose money if term structure normalizes
+- **Ignoring term structure**: If near-term IV is 10 points above far-term IV (inverted structure), you're selling the expensive near-term vol and buying the cheaper far-term vol. That inversion usually prices a large near-term move; if the move arrives, the short leg's gamma loss can exceed the IV edge
 - **Holding through short leg expiry**: Letting the short leg expire while holding the long leg is NOT a free long option. You've already paid for it with the calendar debit. If the thesis has changed, close both legs
 - **Rolling endlessly**: "I'll just keep rolling the short leg" -- each roll has bid-ask slippage cost. After 2-3 rolls, evaluate whether the cumulative slippage has eroded your edge
 - **Ignoring the gamma cliff**: As the short leg approaches 7-5 DTE with the stock near the strike, gamma accelerates. A small move can flip the position from profitable to losing in hours. Close early

@@ -19,24 +19,41 @@ def _seed_company(store, symbol, name="Test Co"):
     )
 
 
-def test_load_holdings_returns_open_positions(tmp_company_store):
-    _seed_company(tmp_company_store, "AAPL")
-    conn = tmp_company_store._get_conn()
-    conn.execute(
-        "INSERT INTO holdings (symbol, shares, avg_cost, open_date, status, last_updated) "
-        "VALUES ('AAPL', 10, 100.0, '2026-08-01', 'OPEN', '2026-08-19')"
-    )
-    assert load_holdings(store=tmp_company_store) == ["AAPL"]
+class _FakeBook:
+    def __init__(self, symbols):
+        self._symbols = symbols
+
+    def quotable_us_symbols(self):
+        return list(self._symbols)
 
 
-def test_load_holdings_excludes_closed_positions(tmp_company_store):
-    _seed_company(tmp_company_store, "MSFT")
-    conn = tmp_company_store._get_conn()
-    conn.execute(
-        "INSERT INTO holdings (symbol, shares, avg_cost, open_date, status, close_date, last_updated) "
-        "VALUES ('MSFT', 5, 200.0, '2026-08-01', 'CLOSED', '2026-08-10', '2026-08-19')"
-    )
-    assert load_holdings(store=tmp_company_store) == []
+def test_load_holdings_reads_sheet_quotable_us(monkeypatch):
+    import portfolio.holdings.sheet_book as sb
+    monkeypatch.setattr(sb, "load_sheet_book", lambda: _FakeBook(["AAA", "BBB"]))
+    assert load_holdings() == ["AAA", "BBB"]
+
+
+def test_load_holdings_ignores_company_db(monkeypatch, tmp_company_store):
+    import portfolio.holdings.sheet_book as sb
+    monkeypatch.setattr(sb, "load_sheet_book", lambda: _FakeBook(["AAA"]))
+    # store arg kept for signature compatibility only
+    assert load_holdings(store=tmp_company_store) == ["AAA"]
+
+
+@pytest.mark.parametrize("exc", [None, RuntimeError("boom")])
+def test_load_holdings_sheet_failure_returns_empty_with_warning(
+        monkeypatch, caplog, exc):
+    import logging
+    import portfolio.holdings.sheet_book as sb
+
+    def boom():
+        raise exc if exc is not None else sb.SheetBookError("secret-id-xyz")
+
+    monkeypatch.setattr(sb, "load_sheet_book", boom)
+    with caplog.at_level(logging.WARNING, logger="src.data.overlays"):
+        assert load_holdings() == []
+    assert "Google Sheet unavailable" in caplog.text
+    assert "secret-id-xyz" not in caplog.text
 
 
 def test_load_watchlist_missing_table_returns_empty(tmp_company_store):

@@ -1724,28 +1724,18 @@ def _load_profiles(path: Path) -> dict[str, dict]:
 
 
 def _read_portfolio_holdings(company_db_path: Path | None = None) -> list[str]:
-    """Return open-holding symbols from the company DB at ``company_db_path``.
+    """Return quotable US holding symbols from the read-only Google Sheet.
 
-    Critical: we instantiate ``CompanyStore(company_db_path)`` directly rather
-    than calling ``get_store()``. The singleton honors its first-call db_path
-    and silently returns the cached instance on subsequent calls with a
-    different path — which would make ``--company-db`` a footgun (worktree
-    runs would read main-workspace holdings only on cold start).
+    ``company_db_path`` is unused (company.db ``holdings`` is retired) and kept
+    for caller compatibility. Sheet failure -> [] (logged by overlays).
     """
     try:
-        from terminal.company_store import CompanyStore
+        from src.data.overlays import load_holdings
+        symbols = load_holdings()
     except Exception as exc:
-        logger.warning("terminal.company_store import failed: %s", exc)
+        logger.warning("portfolio holdings unavailable: %s", type(exc).__name__)
         return []
-    try:
-        if company_db_path is not None and not company_db_path.exists():
-            logger.warning("company.db missing at %s — portfolio empty", company_db_path)
-            return []
-        rows = CompanyStore(company_db_path).get_all_open_holdings()
-    except Exception as exc:
-        logger.warning("get_all_open_holdings failed: %s", exc)
-        return []
-    return [str(r["symbol"]).upper() for r in rows if r.get("symbol")]
+    return [str(s).upper() for s in symbols if s]
 
 
 def _read_broad_top(

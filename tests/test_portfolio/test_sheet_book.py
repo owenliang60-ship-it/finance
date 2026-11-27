@@ -295,3 +295,86 @@ class TestInvalidContent:
     def test_html_response_raises_sheet_book_error(self):
         with pytest.raises(SheetBookError, match="not a valid xlsx"):
             parse_sheet_book(b"<html><body>sign in</body></html>", FETCHED_AT)
+
+
+# ---------------------------------------------------------------------------
+# Whole Port net total + quotable US symbols (fictional values only)
+# ---------------------------------------------------------------------------
+
+def _with_whole_port(rows):
+    """Base fixture plus a 'Whole Port' tab; rows are (label, value) in col B/C."""
+    wb = openpyxl.load_workbook(io.BytesIO(build_fixture()))
+    wp = wb.create_sheet("Whole Port")
+    for label, value in rows:
+        wp.append([None, label, value])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+class TestWholePortNetTotal:
+    def test_invest_net_total_label(self):
+        book = parse_sheet_book(_with_whole_port([
+            (None, "USD"), ("美股", 100.0), ("total", 900.0),
+            ("投资Net total", 700.0)]), FETCHED_AT)
+        assert book.whole_port_net_total_usd == 700.0
+
+    def test_row_position_insensitive(self):
+        book = parse_sheet_book(_with_whole_port([
+            ("noise", 1.0), ("noise2", 2.0), ("noise3", 3.0), ("美股", 100.0),
+            ("  投资NET TOTAL  ", 650.0)]), FETCHED_AT)
+        assert book.whole_port_net_total_usd == 650.0
+
+    def test_invest_label_preferred_over_plain_net_total(self):
+        book = parse_sheet_book(_with_whole_port([
+            ("Net Total", 500.0), ("投资Net total", 450.0)]), FETCHED_AT)
+        assert book.whole_port_net_total_usd == 450.0
+
+    def test_plain_net_total_fallback(self):
+        book = parse_sheet_book(_with_whole_port([
+            ("total", 900.0), ("Net Total", 600.0)]), FETCHED_AT)
+        assert book.whole_port_net_total_usd == 600.0
+
+    def test_ignores_grand_net_total(self):
+        book = parse_sheet_book(_with_whole_port([
+            ("总Net Total", 999.0), ("Net Total", 600.0)]), FETCHED_AT)
+        assert book.whole_port_net_total_usd == 600.0
+
+    def test_only_grand_net_total_returns_none(self):
+        book = parse_sheet_book(_with_whole_port([
+            ("总Net Total", 999.0)]), FETCHED_AT)
+        assert book.whole_port_net_total_usd is None
+
+    def test_non_numeric_raises(self):
+        with pytest.raises(SheetBookError, match="Whole Port"):
+            parse_sheet_book(_with_whole_port([("投资Net total", "#N/A")]),
+                             FETCHED_AT)
+
+    def test_zero_raises(self):
+        with pytest.raises(SheetBookError, match="Whole Port"):
+            parse_sheet_book(_with_whole_port([("Net Total", 0.0)]), FETCHED_AT)
+
+    def test_negative_raises(self):
+        with pytest.raises(SheetBookError, match="Whole Port"):
+            parse_sheet_book(_with_whole_port([("Net Total", -5.0)]), FETCHED_AT)
+
+    def test_nan_raises(self):
+        with pytest.raises(SheetBookError, match="Whole Port"):
+            parse_sheet_book(_with_whole_port([("Net Total", "nan")]), FETCHED_AT)
+
+    def test_missing_tab_returns_none(self):
+        book = parse_sheet_book(build_fixture(), FETCHED_AT)
+        assert book.whole_port_net_total_usd is None
+        assert book.total_capital_usd == 1000000.0  # Sheet26 path untouched
+
+
+class TestQuotableUsSymbols:
+    def test_four_filters_sorted_unique(self):
+        rows = DEFAULT_ROWS + [
+            _row("US", "DRAM", 5.0, 10, 5.0, 50.0, "Basket"),
+            _row("US", "CCC PUT", 1.0, 1, 1.0, 1.0, "Hedge"),
+            _row("US", "AAB", 3.0, 1, 3.0, 3.0, "Value"),
+        ]
+        book = parse_sheet_book(build_fixture(rows=rows), FETCHED_AT)
+        # KR/HK excluded, LEAPS excluded, DRAM excluded, space-containing excluded
+        assert book.quotable_us_symbols() == ["AAA", "AAB", "BSKT"]

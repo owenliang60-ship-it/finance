@@ -51,11 +51,11 @@
 
 | 入口 | 用途 |
 |------|------|
-| `commands.py` | analyze_ticker / portfolio_status / position_advisor / company_lookup / run_monitor / theme_status |
+| `commands.py` | analyze_ticker / position_advisor（持仓读只读 Google Sheet）/ company_lookup / theme_status |
 | `pipeline.py` | 共享构建块（collect_data / lens prompts / debate / position sizing） |
 | `macro_fetcher.py` + `macro_briefing.py` + `macro_snapshot.py` + `regime.py` | FRED 16 序列 → MacroSnapshot → 5 跨资产信号 + Regime 分类 |
 | `tools/` | 协议化工具注册（FRED / FMP / MarketData） |
-| `options/` | 期权策略子系统（IV tracker / chain analyzer / scenario analyzer / BS solver） |
+| `options/` | 期权策略子系统（IV tracker / chain analyzer / scenario analyzer / BS solver / vol_scan 纯计算，CLI `scripts/vol_scan.py`） |
 | `dashboard.py` + `pdf_report.py` + `html_report.py` | 报告渲染 |
 | `concept_classifier.py` + `company_concepts.py` | Concept Registry（公司业务标签体系） |
 | `company_db.py` + `company_store.py` | Per-ticker 知识库 + SQLite 写入抽象 |
@@ -155,7 +155,7 @@
 |-------------|--------|---------|------|
 | `market.db` | 云端独占写入 | daily_price, income/BS/CF quarterly, ratios, metrics_quarterly, security_master, extended_membership, company_profile, fundamental_vintage, coverage_status, fundamental_backfill_runs/jobs, iv_daily, options_snapshots, forward_estimates/metadata, fmp_estimates, fmp_earnings, fmp_etf_holdings_snapshot, fmp_forward_runs, historical_market_cap, fmp_stock_splits, fx_daily, fmp_fund_disclosure_holdings（PE 遗留，待删）, basket_*（PE 遗留，待删）, fmp_basket_valuation（PE 遗留，待删）, broad_scan_hits, concepts(*), company_concept_tags | pull 到本地 |
 | `reports/concept_registry/reviewed_current.csv` (+ manifest) | 云端独占写入 | concept registry canonical 快照（与 `company_concept_tags` symbol 集锁步；A3 weekly-sync 维护） | pull 到本地（仅 pull） |
-| `company.db` | 本地独占写入 | companies, oprms_ratings, analyses, kill_conditions, holdings, watchlist, transactions, portfolio_cash, option_positions, option_transactions | push 到云端 |
+| `company.db` | 本地独占写入 | companies, oprms_ratings, analyses, kill_conditions, watchlist（holdings / transactions / portfolio_cash / option_positions / option_transactions 为退役账本表：代码已不读写，旧库中的表未删除；持仓以只读 Google Sheet 为准） | push 到云端 |
 | `universe.json` | 双端（退役过渡） | 冻结 Core 定义；不再承载默认 base | 双向 merge，Stop G 后归档 |
 | `data/macro/` | 准实时缓存 | FRED snapshot（4h/12h TTL） | 不同步 |
 | `data/companies/{SYM}/` | 本地 | Per-ticker JSON 存档（oprms / memos / analyses / scratchpad） | 不同步 |

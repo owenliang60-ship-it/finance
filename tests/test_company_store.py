@@ -448,3 +448,71 @@ class TestEdgeCases:
         c = s2.get_company("AAPL")
         assert c["company_name"] == "Apple"
         s2.close()
+
+
+# ---------------------------------------------------------------------------
+# Retired ledger tables (holdings / cash / options / iv) — code removed,
+# existing files must still open cleanly; no DROP is performed.
+# ---------------------------------------------------------------------------
+
+_RETIRED_TABLES = {"holdings", "transactions", "portfolio_cash",
+                   "option_positions", "option_transactions",
+                   "iv_daily", "options_snapshots"}
+_ACTIVE_TABLES = {"companies", "analyses", "oprms_ratings", "kill_conditions"}
+
+
+def _tables(db_path):
+    import sqlite3
+    conn = sqlite3.connect(db_path)
+    try:
+        return {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+    finally:
+        conn.close()
+
+
+def test_fresh_db_has_no_retired_tables(tmp_path):
+    from terminal.company_store import CompanyStore
+    db = tmp_path / "fresh.db"
+    s = CompanyStore(db_path=db)
+    s.close()
+    tables = _tables(db)
+    assert _ACTIVE_TABLES <= tables
+    assert not (_RETIRED_TABLES & tables)
+
+
+def test_legacy_db_with_retired_tables_opens_and_keeps_them(tmp_path):
+    """Legacy file with duplicate OPEN option legs used to abort Migration 8;
+    retired tables must now be left untouched (no DROP, no raise)."""
+    import sqlite3
+    from terminal.company_store import CompanyStore
+    db = tmp_path / "legacy.db"
+    conn = sqlite3.connect(db)
+    conn.executescript("""
+        CREATE TABLE option_positions (id INTEGER PRIMARY KEY, symbol TEXT,
+            expiration TEXT, strike REAL, side TEXT, status TEXT,
+            strategy_tag TEXT);
+        INSERT INTO option_positions VALUES (1,'AAA','2026-12-18',10,'CALL','OPEN',NULL);
+        INSERT INTO option_positions VALUES (2,'AAA','2026-12-18',10,'CALL','OPEN','');
+        CREATE TABLE holdings (position_id INTEGER PRIMARY KEY, symbol TEXT);
+        CREATE TABLE portfolio_cash (id INTEGER PRIMARY KEY, amount REAL);
+    """)
+    conn.commit()
+    conn.close()
+    s = CompanyStore(db_path=db)
+    s.upsert_company("AAA", company_name="Fictional")
+    assert s.get_company("AAA")["company_name"] == "Fictional"
+    s.close()
+    tables = _tables(db)
+    assert {"option_positions", "holdings", "portfolio_cash"} <= tables
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT COUNT(*) FROM option_positions").fetchone()[0] == 2
+    conn.close()
+
+
+def test_retired_store_methods_removed():
+    from terminal.company_store import CompanyStore
+    for name in ("insert_holding", "get_all_open_holdings", "get_cash_balance",
+                 "set_cash", "get_open_option_positions", "insert_option_position",
+                 "save_iv_daily", "save_options_snapshot", "cleanup_old_snapshots"):
+        assert not hasattr(CompanyStore, name), name

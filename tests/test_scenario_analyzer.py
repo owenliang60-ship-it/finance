@@ -544,3 +544,81 @@ class TestDualSummaryEchoesInputs:
         assert dual["view_vol"] == 0.50
         assert dual["half_view_drift"] == pytest.approx(0.2225)
         assert dual["half_view_vol"] == pytest.approx(0.40)
+
+
+# ── Task 3 fixes: /365 sigma, per-expiry IV, calendar min_dte, view_vol guard ──
+
+def _calendar(short_dte=28, long_dte=50, iv_s=0.45, iv_l=0.45, strike=150.0,
+              short_entry=7.0, long_entry=9.5):
+    return build_strategy([
+        {"side": "call", "direction": "short", "strike": strike,
+         "expiry_dte": short_dte, "iv": iv_s, "entry_price": short_entry,
+         "expiration": "2026-12-18"},
+        {"side": "call", "direction": "long", "strike": strike,
+         "expiry_dte": long_dte, "iv": iv_l, "entry_price": long_entry,
+         "expiration": "2027-01-15"},
+    ])
+
+
+class TestSigmaMoveCalendarDays:
+    def test_uses_365(self):
+        assert _compute_sigma_move(0.40, 30) == pytest.approx(0.40 * math.sqrt(30 / 365.0))
+
+
+class TestPerExpiryIvShift:
+    def test_none_keeps_old_behaviour(self):
+        legs = _calendar()
+        assert price_strategy(legs, 150.0, 7, 0.04) == price_strategy(
+            legs, 150.0, 7, 0.04, iv_shift=0.0, iv_shift_by_expiry=None)
+
+    def test_front_minus_10pt_matches_hand_bs(self):
+        legs = _calendar()
+        got = price_strategy(legs, 150.0, 7, 0.04,
+                             iv_shift_by_expiry={"2026-12-18": -0.10})
+        short_px = bs_price(150.0, 150.0, 21 / 365.0, 0.04, 0.35, "call")
+        long_px = bs_price(150.0, 150.0, 43 / 365.0, 0.04, 0.45, "call")
+        expected = (-(short_px - 7.0) + (long_px - 9.5)) * 100.0
+        assert abs(got - expected) < 0.01
+
+    def test_keyed_by_dte_and_floor(self):
+        legs = _calendar()
+        got = price_strategy(legs, 150.0, 0, 0.04, iv_shift_by_expiry={50: -0.90})
+        long_px = bs_price(150.0, 150.0, 50 / 365.0, 0.04, 0.01, "call")
+        short_px = bs_price(150.0, 150.0, 28 / 365.0, 0.04, 0.45, "call")
+        expected = (-(short_px - 7.0) + (long_px - 9.5)) * 100.0
+        assert abs(got - expected) < 0.01
+
+
+class TestCalendarMinDte:
+    def test_time_axis_uses_shortest_leg(self):
+        res = generate_scenario_matrix(_calendar(), 150.0, 0.04)
+        assert res["min_dte"] == 28
+        assert res["max_dte"] == 50
+        assert max(res["time_points"]) == 28
+        assert res["iv_eval_day"] <= 28
+        assert res["probability_horizon_days"] <= 28
+
+    def test_single_expiry_unchanged(self):
+        res = generate_scenario_matrix(_bull_call_spread(), 200.0, 0.045)
+        assert res["min_dte"] == res["max_dte"] == 30
+        assert max(res["time_points"]) == 30
+
+    def test_formatter_expiry_column_uses_min_dte(self):
+        from terminal.options.formatter import format_scenario_matrix
+        out = format_scenario_matrix(generate_scenario_matrix(_calendar(), 150.0, 0.04))
+        assert "Expiry" in out
+        assert "DTE=28" in out
+
+
+class TestDualViewVolGuard:
+    def test_zero_view_vol_raises(self):
+        from terminal.options.scenario_analyzer import compute_dual_probability_summary
+        with pytest.raises(ValueError, match="view_vol must be > 0"):
+            compute_dual_probability_summary(_bull_call_spread(), 200.0, 0.045, 0.30, 30,
+                                             view_vol=0)
+
+    def test_negative_view_vol_raises(self):
+        from terminal.options.scenario_analyzer import compute_dual_probability_summary
+        with pytest.raises(ValueError):
+            compute_dual_probability_summary(_bull_call_spread(), 200.0, 0.045, 0.30, 30,
+                                             view_vol=-0.1)

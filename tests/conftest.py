@@ -51,3 +51,10 @@ def guard_real_data():
         # 使用 warnings 报告，不直接 fail (避免误报 tmpdir 场景)
         import warnings
         warnings.warn(msg, UserWarning)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_portfolio_sheet(monkeypatch):
+    """Holdings overlays read the Google Sheet; tests must never download the
+    real book. Tests that need an ID set a fake one via monkeypatch.setenv."""
+    monkeypatch.delenv("PORTFOLIO_SHEET_ID", raising=False)

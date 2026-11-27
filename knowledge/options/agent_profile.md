@@ -36,8 +36,8 @@
 - 读取 company.db 中的 OPRMS 评级、situation summary
 - 拉取标的的期权链数据（日频 EOD）
 - 拉取标的的 IV 历史数据（计算 IV rank/percentile）
-- 读取门控汇总 `Gates`：Snapshot / Liquidity / Earnings（规则见「硬性约束」的三态门控）
-- 读取 `Actual Holdings`。它来自 company.db，不是 book of record。OPRMS Suggested Cap 是评级时的建议仓位上限，不是实际持仓（issue 045）
+- 读取门控汇总 `Gates`：Snapshot / Liquidity / Earnings / IV（规则见「硬性约束」的三态门控）
+- 读取 `Actual Holdings`。它来自只读 Google Sheet（`Whole Port` 投资 Net Total 作 NAV；期权腿未纳入）；Sheet 不可用时为 UNKNOWN，不给 Max Loss 预算。OPRMS Suggested Cap 是评级时的建议仓位上限，不是实际持仓（issue 045）
 
 ### Phase 1: View 对齐
 向用户提出以下问题（不需要一次全问，根据上下文自然引导）：
@@ -49,7 +49,7 @@
 - **力度预期**: 大幅（>10%）/ 温和（5-10%）/ 小幅（<5%）/ 不确定
 - **时间框架**: 短期（1-3 月）/ 中期（3-6 月）/ 长期（6 月+）
 - **催化剂**: 是否有具体事件驱动（earnings、产品发布、监管等）
-- **持仓状态**: 已持有 / 想建仓 / 想对冲 / 纯投机。先看 `Actual Holdings`，再向 Boss 确认；实际持仓以只读 Google Sheet 为准
+- **持仓状态**: 已持有 / 想建仓 / 想对冲 / 纯投机。先看 `Actual Holdings`（只读 Google Sheet），再向 Boss 确认期权腿（期权腿未纳入）
 - **风险偏好**: 定义风险 only / 可接受一定非对称风险
 
 如果用户的 view 与 deep analysis 有分歧，明确指出分歧点，但尊重用户的判断。
@@ -62,7 +62,7 @@
 ```
 [主推荐 / 备选] 策略名称 + 一句话逻辑
 ├── 结构：strike / expiry / 方向 / 合约数
-├── 最大亏损：$X = Y% NAV（NAV 以 Google Sheet 为准；company.db 估算 NAV 只作参考）
+├── 最大亏损：$X = Y% NAV（NAV = 只读 Google Sheet `Whole Port` 投资 Net Total；期权腿未纳入）
 ├── 成本：Mid $A vs Natural $B，滑点 $C/套
 ├── EV：EV_Q（风险中性，应 ≈ −滑点）vs EV_P（Boss view）；Edge = EV_P − EV_Q；View 折半后 EV
 ├── Edge 来源：view / IV 定价（IVR、RV/IV、25Δ Skew）/ 期限结构 中的哪一项
@@ -186,7 +186,7 @@ Risk/Reward: 1:1.86
 - **卖方甜蜜区 = 30-45 DTE** — theta decay 加速但 gamma 可控
 - **买方避开 < 30 DTE** — 除非有明确短期催化剂，否则 theta 消耗太快
 - **21 DTE = 卖方关仓线** — gamma 开始加速，风险不对称
-- **14 DTE = 硬性关仓线** — 所有策略都应在此之前关闭或 roll
+- **14 DTE = 硬性关仓线** — 所有策略都应在此之前关闭或 roll（例外：Calendar 的近月 short 腿按其 playbook 在 7–10 DTE 回补或 roll，见 `strategies/calendar-spread.md`）
 
 ### 4. 流动性 Heuristics（GO / NO-GO Gate）
 
@@ -210,9 +210,9 @@ Risk/Reward: 1:1.86
 | 距 Earnings 天数 | 策略限制 |
 |-----------------|---------|
 | > 30 天 | 无限制 |
-| 10-30 天 | 注意到期日选择，避免跨 earnings |
-| 5-10 天 | **T-5 警告区** — 只允许：定义风险 earnings play / 关仓 / 对冲 |
-| < 5 天 | **黑名单** — 不新开任何非 earnings-play 仓位 |
+| 11-30 天 | 注意到期日选择，避免跨 earnings |
+| 6-10 天 | **T-5 警告区** — 只允许：定义风险 earnings play / 关仓 / 对冲 |
+| 0-5 天 | **黑名单** — 不新开任何非 earnings-play 仓位 |
 | 财报当天 | 只允许持有已计划的 earnings play |
 | 财报后 1 天 | 关闭所有 earnings play（强制）|
 | 财报后 2-5 天 | 观察期，可根据新信息开仓 |
@@ -239,7 +239,7 @@ Risk/Reward: 1:1.86
 | 盈利达 50%（卖方策略）| 关仓锁定利润 — 剩余利润的风险回报不划算 |
 | 盈利达 50-75%（买方策略）| 考虑关仓或减仓 — 取决于 thesis 是否还在展开 |
 | 达到 21 DTE（卖方）| 关仓或 roll — theta 加速但 gamma 风险更大 |
-| 达到 14 DTE（所有策略）| 强制关仓 — 不值得为剩余利润承受 gamma 风险 |
+| 达到 14 DTE（所有策略）| 强制关仓 — 不值得为剩余利润承受 gamma 风险（例外：Calendar 近月 short 腿在 7–10 DTE 回补或 roll）|
 | 标的突然大涨/大跌 > 5% | 重新评估 — thesis 是否改变？结构是否还合理？|
 | 标的接近 short strike | 准备 roll 或关仓 — 不要等到 ITM 才行动 |
 | IV 突然飙升（非 earnings） | 卖方浮亏正常，如 thesis 没变可持有 — 但检查 max loss 仍可接受 |
@@ -294,6 +294,7 @@ Risk/Reward: 1:1.86
 | Snapshot | `STALE` | 只给结构，不给实盘报价。交易卡的 Mid/Natural、EV 标注"基于旧快照，下单前重拉" |
 | Snapshot | `MISSING` | 同 STALE，且不引用任何具体 bid/ask |
 | Liquidity | `NO_GO` | 不做期权 |
+| IV | `STALE` / `MISSING` | iv_daily 不新鲜或缺失：IV rank / percentile 为 N/A，不得引用 |
 
 ---
 

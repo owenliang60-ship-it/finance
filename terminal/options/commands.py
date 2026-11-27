@@ -4,12 +4,15 @@ Options Commands — Orchestrator for /options skill.
 prepare_options_context(symbol) collects all data needed for the options
 strategy discussion in one call.
 """
+from __future__ import annotations
+
 import logging
 import math
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from portfolio.holdings.sheet_book import load_sheet_book
 from terminal.company_store import get_store as get_company_store
 from src.data.market_store import get_store as get_market_store
 from terminal.options.iv_tracker import get_iv_history_summary
@@ -52,8 +55,8 @@ def prepare_options_context(
     - Kill conditions
     - Report summary path
     - Snapshot freshness, 25-delta skew, 30D 1-sigma expected move
-    - Actual holdings from company.db (not the book of record) + estimated NAV
-    - Gates summary: snapshot / liquidity / earnings
+    - Actual holdings + NAV (Whole Port 投资 Net Total) from the read-only Google Sheet; 期权腿未纳入
+    - Gates summary: snapshot / liquidity / earnings / iv
 
     Args:
         symbol: Stock ticker
@@ -123,7 +126,7 @@ def prepare_options_context(
     skew_25d = compute_25d_skew(symbol, market_store)
     expected_move = _compute_expected_move(underlying_price, iv_summary, skew_25d)
 
-    # 11. Actual holdings (company.db; the Google Sheet stays the book of record)
+    # 11. Actual holdings + NAV (read-only Google Sheet, Whole Port net total)
     portfolio = _get_portfolio_context(symbol, store, underlying_price)
 
     # Build context
@@ -147,6 +150,7 @@ def prepare_options_context(
             "snapshot": snapshot_freshness["status"],
             "liquidity": (liquidity or {}).get("verdict"),
             "earnings": (earnings or {}).get("zone", "UNKNOWN"),
+            "iv": (iv_summary or {}).get("iv_freshness", {}).get("status", "MISSING"),
         },
     }
 
@@ -229,44 +233,53 @@ def _compute_expected_move(
     }
 
 
+OPTION_LEGS_NOTE = "期权腿未纳入"
+
+
 def _get_portfolio_context(symbol: str, store, underlying_price: Optional[float]) -> Dict[str, Any]:
-    """Actual holdings from company.db. Not the book of record (Google Sheet is).
+    """Holdings + NAV from the read-only Google Sheet (book of record).
 
-    estimated_nav = cash + Σ shares × (spot for this symbol, avg_cost otherwise).
-    Option legs are not valued. An empty book or a non-positive estimate gives
-    estimated_nav = None instead of an invented number.
+    estimated_nav = Whole Port 投资 Net Total. Option legs are not included.
+    Sheet failure or a missing / non-positive net total fails closed: no
+    holding, no NAV, no Max Loss budget (never falls back to company.db).
+    `store` / `underlying_price` are unused, kept for call-site compatibility.
     """
-    holding = store.get_open_holding(symbol)
-    option_legs = store.get_open_option_positions(symbol)
-    cash = store.get_cash_balance() or 0.0
-    all_holdings = store.get_all_open_holdings()
-
-    nav = None
-    if cash or all_holdings:
-        nav = cash
-        for h in all_holdings:
-            px = underlying_price if (h["symbol"] == symbol and underlying_price) else h["avg_cost"]
-            nav += h["shares"] * px
-        if nav <= 0:
-            nav = None
-
-    return {
-        "holding": {
-            "shares": holding["shares"],
-            "avg_cost": holding["avg_cost"],
-            "open_date": holding.get("open_date"),
-        } if holding else None,
-        "option_legs": [
-            {k: leg.get(k) for k in
-             ("expiration", "strike", "side", "quantity", "avg_premium", "strategy_tag")}
-            for leg in option_legs
-        ],
-        "cash": cash,
-        "estimated_nav": round(nav, 2) if nav is not None else None,
-        "nav_is_estimated": nav is not None,
-        "max_loss_2pct": round(nav * 0.02, 2) if nav is not None else None,
-        "max_loss_3pct": round(nav * 0.03, 2) if nav is not None else None,
+    out: Dict[str, Any] = {
+        "holding": None,
+        "option_legs": [],
+        "option_legs_note": OPTION_LEGS_NOTE,
+        "estimated_nav": None,
+        "nav_source": None,
+        "max_loss_2pct": None,
+        "max_loss_3pct": None,
+        "portfolio_status": "UNKNOWN",
     }
+    try:
+        book = load_sheet_book()
+    except Exception as exc:
+        logger.warning("options portfolio context: Google Sheet unavailable (%s)",
+                       type(exc).__name__)
+        return out
+    nav = getattr(book, "whole_port_net_total_usd", None)
+    if nav is None or not math.isfinite(nav) or nav <= 0:
+        logger.warning("options portfolio context: Whole Port net total unavailable")
+        return out
+
+    sym = symbol.upper()
+    holding = next((h for h in book.holdings if h.symbol == sym), None)
+    out.update({
+        "holding": {
+            "shares": holding.shares,
+            "avg_cost": holding.cost_per_share,
+            "open_date": None,
+        } if holding else None,
+        "estimated_nav": round(nav, 2),
+        "nav_source": "whole_port_net_total",
+        "max_loss_2pct": round(nav * 0.02, 2),
+        "max_loss_3pct": round(nav * 0.03, 2),
+        "portfolio_status": "OK",
+    })
+    return out
 
 
 def _find_report_summary(symbol: str) -> Optional[str]:
