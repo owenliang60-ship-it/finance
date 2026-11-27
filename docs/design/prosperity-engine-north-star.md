@@ -256,7 +256,7 @@ Python 冻结 dataclass（因子与权重、变换方式、闸门、行业豁免
 
 | 阶段 | 做什么 | 退出条件 |
 |---|---|---|
-| **并行期** | Premium 照旧驱动 🔴（Premium 的 EMA30 段 0c 已于 2026-11-10 删除）；新增一段"景气池（试运行）"：景气池成员跑同一个 EMA30 门，并列出与 Premium 的交集、新增、移出（M14，`src/data/prosperity_morning.py`，晨报 0d 段）。2026-11-09 Boss：0d 列全部成员（站上 EMA30 在前）；第 1 段 PMARP、第 2 段量能异常先列景气精选池、再列其他 Extended，组内排序不变，🔴 保留到 M15；景气池不可用时不分组并写原因。2026-11-19 Boss：0d 改为只显示景气动量精选池（景气池 ∩ 14 周动量榜前 30，按动量名次）；删去与 Premium 的对比；第 1/2 段仍按全量景气精选池分组（分支 `morning/0d-prosperity-momentum` 已于 2026-11-19 merge main（`17588c94`））。P2-16（2026-11-25）：EMA30 与市值只对入选行计算、按行显示，不因非入选成员缺数打掉整段 | 首份体检报告出来、Boss 看过 |
+| **并行期** | Premium 照旧驱动 🔴（Premium 的 EMA30 段 0c 已于 2026-11-10 删除）；新增一段"景气池（试运行）"：景气池成员跑同一个 EMA30 门，并列出与 Premium 的交集、新增、移出（M14，`src/data/prosperity_morning.py`，晨报 0d 段）。2026-11-09 Boss：0d 列全部成员（站上 EMA30 在前）；第 1 段 PMARP、第 2 段量能异常先列景气精选池、再列其他 Extended，组内排序不变，🔴 保留到 M15；景气池不可用时不分组并写原因。2026-11-19 Boss：0d 改为只显示景气动量精选池（景气池 ∩ 14 周动量榜前 30，按动量名次）；删去与 Premium 的对比；第 1/2 段仍按全量景气精选池分组（分支 `morning/0d-prosperity-momentum` 已于 2026-11-19 merge main（`17588c94`））。P2-16（2026-11-25）：EMA30 与市值只对入选行计算、按行显示，不因非入选成员缺数打掉整段。2026-11-26 Boss：动量榜改为 U70 + UDV（`scoring='udv1'`），0d 切点同步改为当周 `board_top_cut` | 首份体检报告出来、Boss 看过 |
 | **切换** | 新增配置 `SELECTION_POOL_SOURCE = premium / prosperity`，加一个统一的 `load_selection_pool()`，两种池返回同样的结构；晨报文案里的池名改为取自池文件，不再写死"精选Premium池"。Boss 拍板后改配置 | 切换后连续 4 周正常 |
 | **Premium 退役** | 停 Premium 的周更构建；代码归档，不删；`premium_pool.json` 冻结留档 | Boss 确认 |
 
