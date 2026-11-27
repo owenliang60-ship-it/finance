@@ -1,13 +1,14 @@
-"""M10 景气精选池: F1 live weekly board, first tier (rank ≤ ceil(n/5)) ∩ STRICT/FULL ∩ top-100
-average dollar volume → prosperity_pool.json.
+"""M10 景气精选池: F1 live weekly board, first tier (rank ≤ ceil(n/5)) ∩ STRICT/FULL ∩
+at least 31 of the last 90 trading days in the daily dollar-volume top 100 → prosperity_pool.json.
 
 Reads prosperity.db (one board) and market.db (daily_price) read-only. Not in code_version:
 pool selection never changes a score, only which already-scored rows are published.
 """
 from __future__ import annotations
 
+import bisect
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 import hashlib
 import json
 import math
@@ -30,14 +31,32 @@ POOL_SCHEME_ID = 'F1'
 POOL_GRADES = ('STRICT', 'FULL')
 LIQUIDITY_TOP = 100
 POOL_TIERS = 5                           # first tier = top 1/5 of ranked rows, same as M12 assign_tiers
-LIQUIDITY_DAYS = 30
-LIQUIDITY_MIN_DAYS = 5
-LIQUIDITY_LOOKBACK_CALENDAR_DAYS = 70   # 30 trading days ≈ 42 calendar days, plus holiday slack
+LIQUIDITY_DAYS = 90                      # 90 SPY trading days (~1 quarter + slack)
+LIQUIDITY_MIN_TOP_DAYS = 31              # strictly > 30 days in daily dollar-volume top 100
+LIQUIDITY_MAX_SPAN_DAYS = 160            # 90 trading days ≤ 133 calendar days + 7-day lag + holiday headroom
 LIQUIDITY_MAX_LAG_DAYS = 7
 COVERAGE_MIN = 0.90
 CALENDAR_SYMBOL = 'SPY'
 _QUERY_BATCH = 500
+_MEMBER_KEYS = frozenset({'symbol', 'name', 'sector', 'industry', 'rank', 'grade', 'score',
+                          'family_scores', 'badges', 'top100_days'})
 _TIMESTAMP = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})')
+
+
+class PoolCriteriaMismatch(RuntimeError):
+    """The file was built for another scheme/rule set. Distinct from RecursionError (also a RuntimeError)."""
+
+
+class PoolStale(TimeoutError):
+    """generated_at or as_of older than POOL_MAX_AGE_DAYS."""
+
+
+@dataclass(frozen=True)
+class LiquidityResult:
+    as_of: str                       # board date these counts were computed for
+    window: Tuple[str, ...]          # LIQUIDITY_DAYS ascending trading days
+    top_days: Mapping[str, int]      # symbol → days spent in daily top LIQUIDITY_TOP (0..LIQUIDITY_DAYS)
+    daily_min: int                   # fewest members with usable dollar volume on any day of `window`
 
 
 def load_calendar(market) -> List[str]:
@@ -74,54 +93,31 @@ def count_top_days(day_volumes: Mapping[str, Mapping], days: Sequence, top: int)
     return counts
 
 
-class PoolCriteriaMismatch(RuntimeError):
-    """The file was built for another scheme/rule set. Distinct from RecursionError (also a RuntimeError)."""
+def _day(value: Any) -> date:
+    """YYYY-MM-DD only. Python 3.11+ also accepts '20261030'; the cloud's 3.10 does not."""
+    if not isinstance(value, str) or date.fromisoformat(value).isoformat() != value:
+        raise ValueError(f'invalid date: {value!r}')
+    return date.fromisoformat(value)
 
 
-class PoolStale(TimeoutError):
-    """generated_at or as_of older than POOL_MAX_AGE_DAYS."""
-
-
-@dataclass(frozen=True)
-class LiquidityResult:
-    as_of: str                       # board date these ranks were computed for
-    window: Tuple[str, ...]          # ascending, distinct trading days
-    averages: Mapping[str, float]    # symbol → average daily dollar volume
-    ranks: Mapping[str, int]         # symbol → 1..n; average descending, ties by symbol
-
-
-def liquidity_ranks(market, symbols: Sequence[str], as_of: str) -> LiquidityResult:
-    """Original-site rule: mean(close × volume) over the last 30 trading days up to as_of.
-
-    A trading day is a date on which at least half of `symbols` have a price row, so stray
-    holiday rows (e.g. ^VIX alone) never enter the window. Fewer than 5 valid days → unranked.
-    """
+def liquidity_top_days(market, symbols: Sequence[str], as_of: str) -> LiquidityResult:
+    """Days each member spent in the daily close × volume top LIQUIDITY_TOP over the last 90 SPY days."""
+    board_day = _day(as_of)
     members = sorted(set(symbols))
     if not members:
         raise ValueError('liquidity_no_members')
-    end = date.fromisoformat(as_of)
-    start = end - timedelta(days=LIQUIDITY_LOOKBACK_CALENDAR_DAYS)
-    marks = ','.join('?' for _ in members)
-    conn = market._get_conn()
-    counts = conn.execute(
-        f'SELECT date, COUNT(DISTINCT symbol) FROM daily_price WHERE date > ? AND date <= ? '
-        f'AND symbol IN ({marks}) GROUP BY date ORDER BY date',
-        [start.isoformat(), as_of, *members]).fetchall()
-    days = [d for d, n in counts if n * 2 >= len(members)]
-    if len(days) < LIQUIDITY_DAYS:
-        raise ValueError(f'liquidity_window_short: {len(days)} < {LIQUIDITY_DAYS} trading days')
-    window = tuple(days[-LIQUIDITY_DAYS:])
-    lag = (end - date.fromisoformat(window[-1])).days
+    calendar = load_calendar(market)
+    end_i = bisect.bisect_right(calendar, as_of) - 1
+    if end_i + 1 < LIQUIDITY_DAYS:
+        raise ValueError(f'liquidity_window_short: {end_i + 1} < {LIQUIDITY_DAYS} trading days')
+    window = tuple(calendar[end_i - LIQUIDITY_DAYS + 1:end_i + 1])
+    lag = (board_day - _day(window[-1])).days
     if lag > LIQUIDITY_MAX_LAG_DAYS:
         raise ValueError(f'liquidity_prices_stale: last trading day {window[-1]} is {lag} days before {as_of}')
-    day_marks = ','.join('?' for _ in window)
-    rows = conn.execute(
-        f'SELECT symbol, AVG(close * volume), COUNT(*) FROM daily_price '
-        f'WHERE date IN ({day_marks}) AND symbol IN ({marks}) AND close > 0 AND volume >= 0 '
-        f'GROUP BY symbol', [*window, *members]).fetchall()
-    averages = {s: float(v) for s, v, n in rows if n >= LIQUIDITY_MIN_DAYS and v is not None}
-    order = sorted(averages, key=lambda s: (-averages[s], s))
-    return LiquidityResult(as_of, window, averages, {s: i for i, s in enumerate(order, 1)})
+    volumes = load_daily_dollar_volumes(market, members, window)
+    counts = count_top_days(volumes, window, LIQUIDITY_TOP)
+    daily_min = min(sum(1 for s in members if d in volumes.get(s, ())) for d in window)
+    return LiquidityResult(as_of, window, {s: int(counts.get(s, 0)) for s in members}, daily_min)
 
 
 def tier_cut(n_ranked: int) -> int:
@@ -133,15 +129,9 @@ def criteria_payload() -> dict:
     return {'scheme_id': POOL_SCHEME_ID, 'scheme_hash': scheme_hash(SCHEMES[POOL_SCHEME_ID]),
             'grades': list(POOL_GRADES),
             'tier': {'tiers': POOL_TIERS},
-            'liquidity': {'metric': 'avg_dollar_volume', 'trading_days': LIQUIDITY_DAYS,
-                          'min_days': LIQUIDITY_MIN_DAYS, 'top': LIQUIDITY_TOP}}
-
-
-def _day(value: Any) -> date:
-    """YYYY-MM-DD only. Python 3.11+ also accepts '20261030'; the cloud's 3.10 does not."""
-    if not isinstance(value, str) or date.fromisoformat(value).isoformat() != value:
-        raise ValueError(f'invalid date: {value!r}')
-    return date.fromisoformat(value)
+            'liquidity': {'metric': 'top_dollar_volume_days', 'calendar': CALENDAR_SYMBOL,
+                          'trading_days': LIQUIDITY_DAYS, 'min_top_days': LIQUIDITY_MIN_TOP_DAYS,
+                          'top': LIQUIDITY_TOP}}
 
 
 def _window_error(as_of: str, start: str, end: str) -> Optional[str]:
@@ -151,7 +141,7 @@ def _window_error(as_of: str, start: str, end: str) -> Optional[str]:
         return 'window_order'
     if (day - last).days > LIQUIDITY_MAX_LAG_DAYS:
         return 'window_stale'
-    if (day - first).days >= LIQUIDITY_LOOKBACK_CALENDAR_DAYS:
+    if (day - first).days >= LIQUIDITY_MAX_SPAN_DAYS:
         return 'window_too_long'
     return None
 
@@ -170,6 +160,19 @@ def _universe(members) -> dict:
             'symbols_sha256': hashlib.sha256('\n'.join(symbols).encode('utf-8')).hexdigest()}
 
 
+def _is_int(value) -> bool:
+    return type(value) is int
+
+
+def _finite(value) -> bool:
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:          # a 400-digit JSON integer
+        return False
+
+
 def build_pool(stored, liquidity: LiquidityResult, *, generated_at: str) -> dict:
     board, meta = stored.board, stored.meta
     if (board.scheme_id != POOL_SCHEME_ID or meta.board_type != 'weekly' or meta.mode != 'live'
@@ -178,7 +181,9 @@ def build_pool(stored, liquidity: LiquidityResult, *, generated_at: str) -> dict
     window = tuple(liquidity.window)
     members = set(meta.members)
     if (liquidity.as_of != board.as_of or len(window) != LIQUIDITY_DAYS or list(window) != sorted(set(window))
-            or _window_error(board.as_of, window[0], window[-1]) or not set(liquidity.ranks) <= members):
+            or _window_error(board.as_of, window[0], window[-1]) or not set(liquidity.top_days) <= members
+            or not all(_is_int(v) and 0 <= v <= LIQUIDITY_DAYS for v in liquidity.top_days.values())
+            or not _is_int(liquidity.daily_min) or not 0 <= liquidity.daily_min <= len(members)):
         raise ValueError('pool_liquidity_mismatch')
     stocks = {p['symbol']: p for p in stored.stocks}
     ranked = [r for r in board.rows if r.status == 'ranked']
@@ -186,15 +191,15 @@ def build_pool(stored, liquidity: LiquidityResult, *, generated_at: str) -> dict
     graded = sorted((r for r in ranked if r.rank <= cut and r.grade in POOL_GRADES), key=lambda r: r.rank)
     selected = []
     for r in graded:
-        dv_rank = liquidity.ranks.get(r.symbol)
-        if dv_rank is None or dv_rank > LIQUIDITY_TOP:
+        top_days = liquidity.top_days.get(r.symbol, 0)
+        if top_days < LIQUIDITY_MIN_TOP_DAYS:
             continue
         stock = stocks.get(r.symbol, {})
         selected.append({
             'symbol': r.symbol, 'name': stock.get('name'), 'sector': stock.get('sector'),
             'industry': stock.get('industry'), 'rank': r.rank, 'grade': r.grade, 'score': r.score,
             'family_scores': dict(r.family_scores), 'badges': list(r.badges),
-            'dollar_volume_rank': dv_rank, 'avg_dollar_volume': liquidity.averages[r.symbol]})
+            'top100_days': top_days})
     universe = _universe(members)
     return {
         'schema_version': POOL_SCHEMA_VERSION, 'name': POOL_NAME, 'as_of': board.as_of,
@@ -203,7 +208,7 @@ def build_pool(stored, liquidity: LiquidityResult, *, generated_at: str) -> dict
                    'computed_at': meta.computed_at, 'content_hash': content_hash(stored)},
         'universe': universe,
         'coverage': {'ranked': _stat(len(ranked), universe['count']),
-                     'liquidity_ranked': _stat(len(liquidity.ranks), universe['count']),
+                     'liquidity_daily': _stat(liquidity.daily_min, universe['count']),
                      'tier_cut': cut, 'eligible': len(graded), 'selected': len(selected),
                      'trading_window': [window[0], window[-1]]},
         'members': selected,
@@ -217,19 +222,6 @@ def _parse_time(value: Any) -> datetime:
         return instant(value)
     except OverflowError:
         raise ValueError(f'timestamp out of range: {value!r}') from None
-
-
-def _is_int(value) -> bool:
-    return type(value) is int
-
-
-def _finite(value) -> bool:
-    if type(value) not in (int, float):
-        return False
-    try:
-        return math.isfinite(float(value))
-    except OverflowError:          # a 400-digit JSON integer
-        return False
 
 
 def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, check_freshness: bool = True) -> None:
@@ -269,7 +261,7 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
         raise ValueError('pool universe metadata invalid')
     if not isinstance(coverage, dict):
         raise ValueError('pool coverage invalid')
-    for key in ('ranked', 'liquidity_ranked'):
+    for key in ('ranked', 'liquidity_daily'):
         stat = coverage.get(key)
         if not isinstance(stat, dict):
             raise ValueError('pool coverage stat invalid')
@@ -280,7 +272,7 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
             raise ValueError('pool coverage ratio invalid')
         if ratio < COVERAGE_MIN:
             # ranked comes from the stored board, so a publish-only retry cannot change it.
-            # liquidity_ranked comes from market.db prices; backfilling them and retrying can fix it.
+            # liquidity_daily comes from market.db prices; backfilling them and retrying can fix it.
             side = 'ranked' if key == 'ranked' else 'liquidity'
             raise ValueError(f'pool_{side}_coverage_below_floor: {covered}/{total} < {COVERAGE_MIN}')
     eligible, selected = coverage.get('eligible'), coverage.get('selected')
@@ -297,8 +289,8 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
         raise ValueError('pool trading window not bound to as_of')
     seen, last_rank = set(), 0
     for m in members:
-        if not isinstance(m, dict):
-            raise ValueError('pool member must be an object')
+        if not isinstance(m, dict) or set(m) != _MEMBER_KEYS:
+            raise ValueError('pool member must be an object with exact schema keys')
         symbol = m.get('symbol')
         if not isinstance(symbol, str) or not symbol or symbol != symbol.upper() or symbol in seen:
             raise ValueError('pool member symbol invalid or duplicated')
@@ -311,10 +303,10 @@ def validate_prosperity_pool(payload: Any, *, now: Optional[datetime] = None, ch
         if not all(m.get(k) is None or isinstance(m.get(k), str) for k in ('name', 'sector', 'industry')):
             raise ValueError('pool member descriptive fields invalid')
         last_rank = rank
-        dv_rank = m.get('dollar_volume_rank')
-        if not _is_int(dv_rank) or not 1 <= dv_rank <= LIQUIDITY_TOP:
-            raise ValueError('pool member dollar-volume rank invalid')
-        if not _finite(m.get('score')) or not _finite(m.get('avg_dollar_volume')) or m['avg_dollar_volume'] <= 0:
+        top_days = m.get('top100_days')
+        if not _is_int(top_days) or not LIQUIDITY_MIN_TOP_DAYS <= top_days <= LIQUIDITY_DAYS:
+            raise ValueError('pool member top-100 days invalid')
+        if not _finite(m.get('score')):
             raise ValueError('pool member number invalid')
         badges = m.get('badges')
         if not isinstance(badges, list) or not all(isinstance(b, str) for b in badges):
@@ -418,7 +410,7 @@ def pool_publisher(*, store, market, path=POOL_PATH, now=None):
         if stored is None:
             raise ValueError('pool_source_missing')
         at = clock()
-        liquidity = liquidity_ranks(market, stored.meta.members, stored.board.as_of)
+        liquidity = liquidity_top_days(market, stored.meta.members, stored.board.as_of)
         publish_prosperity_pool(build_pool(stored, liquidity, generated_at=_utc(at)), path, now=at)
 
     return publish

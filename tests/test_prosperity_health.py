@@ -658,11 +658,10 @@ def test_pool_replay_matches_build_pool_members(illiquid):
     tier = _first_tier(stored)
     out = {'none': set(), 'best': {tier[0]}, 'tier': set(tier)}[illiquid]
     symbols = sorted(stored.meta.members)
-    ranks = {s: (150 + i if s in out else i + 1) for i, s in enumerate(symbols)}
-    liquidity = LiquidityResult(stored.board.as_of, tuple(wd('2026-10-30', 30)),
-                                {s: 1e9 / r for s, r in ranks.items()}, ranks)
+    top_days = {s: (30 if s in out else 31 + i) for i, s in enumerate(symbols)}
+    liquidity = LiquidityResult(stored.board.as_of, tuple(wd('2026-10-30', 90)), top_days, len(symbols))
     live = build_pool(stored, liquidity, generated_at='2026-10-31T09:10:00Z')
-    got = pool_members(board_view(stored), liquidity.ranks)
+    got = pool_members(board_view(stored), liquidity.top_days)
     assert got == tuple(m['symbol'] for m in live['members'])
     assert len(got) == len(tier) - len(out)
     assert pool_members(board_view(stored), None) is None
@@ -681,15 +680,15 @@ def _control_views():
 def test_pool_control_uses_common_periods_where_the_pool_has_a_value():
     from backtest.research.prosperity_health import evaluate_board, group_excess, scheme_report
     views, closes, funds, early, late = _control_views()
-    ranks = {f'R{i:02d}': 45 - i for i in range(45)}             # R44 most liquid … R00 least (rank 45)
-    liquidity = {CAL[100]: ranks, early: ranks}                  # late: liquidity failed → None
+    top_days = {f'R{i:02d}': 45 + i for i in range(45)}          # all >= 31 top-100 days
+    liquidity = {CAL[100]: top_days, early: top_days}            # late: liquidity failed → None
     b = book(closes)
     base = scheme_report(views, [], b, funds)
     rep = scheme_report(views, [], b, funds, liquidity=liquidity)
     ctrl = rep['chapters']['对照组']
     assert ctrl['common_periods'] == base['chapters']['对照组']['common_periods']
     assert ctrl['common_periods']['1'] == 2
-    pool = tuple(f'R{i:02d}' for i in range(9))                   # tier_cut(45) = 9, all ranks ≤ 100
+    pool = tuple(f'R{i:02d}' for i in range(9))                   # tier_cut(45) = 9, all >= 31 days
     assert ctrl['pool_periods'] == [{'as_of': CAL[100], 'members': 9}, {'as_of': early, 'members': 9},
                                     {'as_of': late, 'members': None}]
     res = evaluate_board(views[1], b, horizon=1)
@@ -717,9 +716,9 @@ def test_pool_control_without_liquidity_is_empty_and_renders_a_dash():
 def test_pool_control_stays_out_of_the_bh_family():
     from backtest.research.prosperity_health import apply_bh, scheme_report
     views, closes, funds, early, _ = _control_views()
-    ranks = {f'R{i:02d}': i + 1 for i in range(45)}
+    top_days = {f'R{i:02d}': 45 + i for i in range(45)}
     b = book(closes)
-    reps = {sid: scheme_report(views, [], b, funds, liquidity={v.as_of: ranks for v in views})
+    reps = {sid: scheme_report(views, [], b, funds, liquidity={v.as_of: top_days for v in views})
             for sid in ('F1', 'F1-rank', 'F1-exfin', 'F0')}
     assert apply_bh(reps)['family'] == 24
     for rep in reps.values():
@@ -736,10 +735,10 @@ def test_load_pool_liquidity_once_per_board_date_and_none_on_failure(tmp_path, m
         calls.append((tuple(symbols), as_of))
         if as_of == 'bad':
             raise ValueError('liquidity_window_short')
-        return LiquidityResult(as_of, (), {}, {s: i for i, s in enumerate(symbols, 1)})
-    monkeypatch.setattr(health, 'liquidity_ranks', fake)
+        return LiquidityResult(as_of, (), {s: 30 + i for i, s in enumerate(symbols, 1)}, len(symbols))
+    monkeypatch.setattr(health, 'liquidity_top_days', fake)
     rows = [row('B', 1), row('A', 2), row('X', status='excluded')]
     views = [view(rows, as_of='d1'), view(rows, as_of='d1'), view(rows, as_of='bad')]
     out = health.load_pool_liquidity(object(), views)
-    assert out == {'d1': {'A': 1, 'B': 2, 'X': 3}, 'bad': None}
+    assert out == {'d1': {'A': 31, 'B': 32, 'X': 33}, 'bad': None}
     assert calls == [(('A', 'B', 'X'), 'd1'), (('A', 'B', 'X'), 'bad')]
