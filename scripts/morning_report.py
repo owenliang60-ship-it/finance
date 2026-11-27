@@ -1796,7 +1796,8 @@ def _prosperity_compass_display(payload: dict | None) -> dict:
         if member is None:
             raise ValueError("prosperity pick {} missing from the scanned pool".format(pick["symbol"]))
         row = {**member, "momentum_rank": pick["momentum_rank"], "momentum_return": pick["momentum_return"]}
-        if (not _is_int(row["momentum_rank"]) or row["momentum_rank"] < 1 or not _finite(row["momentum_return"])
+        if (not _is_int(row["momentum_rank"]) or not 1 <= row["momentum_rank"] <= top_n
+                or not _finite(row["momentum_return"])
                 or not _is_int(row.get("rank")) or row["rank"] < 1
                 or not isinstance(row.get("grade"), str) or not row["grade"]):
             raise ValueError("prosperity pick {} has an invalid row".format(pick["symbol"]))

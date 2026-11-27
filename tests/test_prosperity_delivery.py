@@ -159,7 +159,7 @@ class FakeRun:
         out = Path(cmd[cmd.index('--out') + 1])
         if cmd[1].endswith('momentum_board.py'):
             if self.momentum_rc == 0:
-                out.write_text(json.dumps(_payload(as_of=cmd[cmd.index('--as-of') + 1])), encoding='utf-8')
+                out.write_text(json.dumps(_env_payload(as_of=cmd[cmd.index('--as-of') + 1])), encoding='utf-8')
             return subprocess.CompletedProcess(cmd, self.momentum_rc, '', 'momentum stderr')
         if cmd[1].endswith('prosperity_web.py'):
             if self.web_rc == 0:
@@ -531,7 +531,7 @@ def test_delivered_text_lists_members_by_pool_rank(env):
 
 # --- M16: momentum board and prosperity-momentum picks ---------------------------------------
 
-def _payload(n=40, down=840, symbols=None, as_of='2026-11-07', u=75):
+def _payload(n=40, down=840, symbols=None, as_of='2026-11-07', u=75, unavailable=None):
     """A board that passes the shared checks: n long-eligible rows, then `down` falling ones; the first
     u rows are in U70 (u >= n: E ⊆ U70). Defaults: cut = min(ceil(75 / 5), ceil(40 / 2)) = 15."""
     names = symbols or [f'S{i:02d}' for i in range(1, n + 1)]
@@ -542,13 +542,20 @@ def _payload(n=40, down=840, symbols=None, as_of='2026-11-07', u=75):
                 'slope': -0.01, **metrics} for i in range(down)]
     for i, row in enumerate(scored):
         row.update(in_u70=i < u, top100_days=70 if i < u else 0)
-    unavailable = {f'U{i}': 'price_gap' for i in range(8)}
+    if unavailable is None:
+        unavailable = {f'U{i}': 'price_gap' for i in range(8)}
     price_date = (date.fromisoformat(as_of) - timedelta(days=1)).isoformat()
     board = {'days': 70, 'window': ['2026-07-30', price_date], 'scored': scored, 'unavailable': unavailable,
              'unavailable_top100_days': {s: 0 for s in unavailable}, 'adjustments': []}
     universe = sorted([*(r['symbol'] for r in scored), *unavailable])
     return {'schema_version': 1, 'as_of': as_of, 'price_date': price_date, 'scoring': 'udv1',
             'universe': {'count': len(universe), 'symbols': universe}, 'boards': {'14w': board}}
+
+
+def _env_payload(as_of=WEEK):
+    """A valid 20-member momentum board matching the `env` fixture's F1 board universe (S0000..S0019)."""
+    return _payload(symbols=[f'S{i:04d}' for i in range(19)], down=0, u=19, as_of=as_of,
+                    unavailable={'S0019': 'price_gap'})
 
 
 def test_momentum_text_lists_the_dynamic_cut_and_stars():
@@ -767,10 +774,23 @@ def test_payload_of_another_scoring_is_refused(env, scoring):
         def __call__(self, cmd, **kw):
             done = super().__call__(cmd, **kw)
             if cmd[1].endswith('momentum_board.py'):
-                payload = {**_payload(as_of=WEEK), 'scoring': scoring}
+                payload = {**_env_payload(as_of=WEEK), 'scoring': scoring}
                 Path(cmd[cmd.index('--out') + 1]).write_text(json.dumps(payload))
             return done
     out = deliver(env, Old(), FakeSend())
+    assert out.status == 'failed' and 'momentum_payload_invalid' in out.error
+    assert not {'momentum_text', 'combo_text'} & set(d.read_ledger(env['dir'], WEEK)['items'])
+
+
+def test_momentum_payload_for_another_universe_is_refused(env):
+    """A momentum JSON built for another universe than this F1 board is refused on Saturday too."""
+    class WrongUniverse(FakeRun):
+        def __call__(self, cmd, **kw):
+            done = super().__call__(cmd, **kw)
+            if cmd[1].endswith('momentum_board.py'):
+                Path(cmd[cmd.index('--out') + 1]).write_text(json.dumps(_payload(as_of=WEEK)))
+            return done
+    out = deliver(env, WrongUniverse(), FakeSend())
     assert out.status == 'failed' and 'momentum_payload_invalid' in out.error
     assert not {'momentum_text', 'combo_text'} & set(d.read_ledger(env['dir'], WEEK)['items'])
 
@@ -779,9 +799,9 @@ def test_payload_of_another_scoring_is_refused(env, scoring):
     lambda b: b['scored'][0].update(top100_days=0, in_u70=False),
     lambda b: b['scored'][0].update(slope=-0.1),
     lambda b: b['scored'][0].update(drawdown=0.50),
-    lambda b: b['unavailable_top100_days'].pop('U0'),
+    lambda b: b['unavailable_top100_days'].pop('S0019'),
     lambda b: b['unavailable_top100_days'].update(ZZZ=0),
-    lambda b: b['unavailable_top100_days'].update(U0=71),
+    lambda b: b['unavailable_top100_days'].update(S0019=71),
 ], ids=['eligible-out-of-u70', 'eligible-slope-negative', 'eligible-drawdown-50', 'top100-key-missing',
         'top100-key-extra', 'top100-above-window'])
 def test_a_board_failing_the_shared_checks_is_never_sent(env, tamper):
@@ -790,7 +810,7 @@ def test_a_board_failing_the_shared_checks_is_never_sent(env, tamper):
         def __call__(self, cmd, **kw):
             done = super().__call__(cmd, **kw)
             if cmd[1].endswith('momentum_board.py'):
-                payload = _payload(as_of=WEEK)
+                payload = _env_payload(as_of=WEEK)
                 tamper(payload['boards']['14w'])
                 Path(cmd[cmd.index('--out') + 1]).write_text(json.dumps(payload))
             return done
@@ -801,12 +821,13 @@ def test_a_board_failing_the_shared_checks_is_never_sent(env, tamper):
 
 def test_payload_with_other_boards_is_refused(env):
     """Code review (single window): a leftover two-board JSON, or one without 14w, never reaches the text."""
-    for boards in ({'7w': _payload()['boards']['14w'], '14w': _payload()['boards']['14w']}, {'7w': _payload()['boards']['14w']}):
+    base = _env_payload(as_of=WEEK)
+    for boards in ({'7w': base['boards']['14w'], '14w': base['boards']['14w']}, {'7w': base['boards']['14w']}):
         class Stale(FakeRun):
             def __call__(self, cmd, **kw):
                 done = super().__call__(cmd, **kw)
                 if cmd[1].endswith('momentum_board.py'):
-                    Path(cmd[cmd.index('--out') + 1]).write_text(json.dumps({**_payload(as_of=WEEK), 'boards': boards}))
+                    Path(cmd[cmd.index('--out') + 1]).write_text(json.dumps({**base, 'boards': boards}))
                 return done
         out = deliver(env, Stale(), FakeSend())
         assert out.status == 'failed' and 'momentum_payload_invalid' in out.error

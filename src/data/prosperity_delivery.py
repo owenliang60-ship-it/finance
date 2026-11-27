@@ -323,14 +323,16 @@ def _run_cli(run, script: str, args: Sequence[str], timeout: int) -> None:
         raise RuntimeError(f'{script} rc={result.returncode}: {tail[0][:200]}')
 
 
-def _read_momentum(path: Path, as_of: str) -> dict:
-    """The CLI's JSON for exactly this week, passing the morning reader's checks (review P2), or
-    momentum_payload_invalid."""
+def _read_momentum(path: Path, as_of: str, expected_symbols: Optional[Sequence[str]] = None) -> dict:
+    """The CLI's JSON for exactly this week and board universe, passing the morning reader's checks
+    (review P2), or momentum_payload_invalid."""
     try:
         payload = json.loads(path.read_text(encoding='utf-8'), parse_constant=reject_non_finite)
-        check_header(payload)
+        symbols = check_header(payload)
         if payload['as_of'] != as_of:
             raise ValueError('momentum board is for another week')
+        if expected_symbols is not None and symbols != sorted(set(expected_symbols)):
+            raise ValueError('momentum universe differs from the board')
         check_board(payload)
     except (ValueError, TypeError, KeyError, OverflowError, RecursionError) as exc:
         raise ValueError(f'momentum_payload_invalid: {exc}'[:200]) from exc
@@ -502,7 +504,7 @@ def deliver_week(*, as_of: str, code_version: str, db: Path, market_db: Path, po
                 _run_cli(run, 'momentum_board.py', ['--db', snap, '--market-db', market_db, '--code-version',
                                                     code_version, '--as-of', as_of, '--out', board_file],
                          MOMENTUM_TIMEOUT_SECONDS)
-                payload = _read_momentum(board_file, as_of)
+                payload = _read_momentum(board_file, as_of, stored.meta.members)
             except Exception as exc:
                 fail('momentum', exc)
             trusted = by_rank if members is not None else None

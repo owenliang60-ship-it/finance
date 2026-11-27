@@ -3478,6 +3478,12 @@ class TestProsperityCompassDisplay:
         assert mr.format_section_prosperity_compass(payload).splitlines()[1] == (
             "景气动量精选池 0 只（截至 2026-11-14，景气池 35 只 ∩ 14周动量榜前 0，动量价至 2026-11-13）")
 
+    def test_pick_rank_above_top_n_is_a_display_error(self):
+        momentum = _prosperity_momentum([("BIG", 9, 0.2)], top_n=8)
+        text, html, visual = _three_faces(_prosperity_payload(members=_POOL_ROWS, momentum=momentum))
+        warning = "⚠️ 景气动量精选池（试运行）不可用（显示异常）"
+        assert text.splitlines()[1] == warning and html[0]["subtitle"] == warning and visual[0]["subtitle"] == warning
+
 
 class TestProsperityCompassMomentumFilter:
     """2026-11-19: only the momentum picks are shown, counts come from them (since P2-16 only they are scanned)."""
@@ -3491,13 +3497,13 @@ class TestProsperityCompassMomentumFilter:
             _prosperity_member("HIDDEN1", 1e12, rank=2),                                 # not picked: not counted
             _prosperity_member("HIDDEN2", 1e12, rank=3, close=None, ema30=None, above=None),
         ]
-        payload = _prosperity_payload(members=members, picks=[("DOWN", 2, 0.4), ("SPCX", 9, 0.3), ("UP", 28, 0.05)])
+        payload = _prosperity_payload(members=members, picks=[("DOWN", 2, 0.4), ("SPCX", 9, 0.3), ("UP", 22, 0.05)])
         text, html, visual = _three_faces(payload)
         lines = text.splitlines()
         assert lines[1].endswith("动量价至 2026-11-13） | EMA30 2/3 | 站上EMA30 1 只")
         expected = [["DOWN", "2", "+40%", "1", "STRICT", "90.0", "90.00", "100.00", "下方", "$3.0T"],
                     ["SPCX", "9", "+30%", "17", "STRICT", "72.3", "—", "—", "—", "N/A"],
-                    ["UP", "28", "+5%", "4", "STRICT", "72.3", "110.00", "100.00", "上方", "$2.0T"]]
+                    ["UP", "22", "+5%", "4", "STRICT", "72.3", "110.00", "100.00", "上方", "$2.0T"]]
         assert [row.split(" | ") for row in lines[3:]] == expected
         assert [list(r.values()) for r in html[0]["rows"]] == expected
         assert [r["cells"] for r in visual[0]["blocks"][0]["rows"]] == expected
