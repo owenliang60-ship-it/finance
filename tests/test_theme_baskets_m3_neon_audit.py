@@ -150,9 +150,9 @@ def test_commit_outbox_surfaces_pivot_notes_and_unclassified_in_telegram(tmp_pat
         "classifications": [
             {
                 "symbol": "GRAL",
-                "l2_id": "diagnostics_genomics_tools",
+                "l2_id": "life_sci_tools_diagnostics",
                 "cross_themes": [],
-                "pi_bucket": "pi_healthcare",
+                "pi_bucket": "pi_pharma_bio",
                 "business_note": "Liquid biopsy cancer screening",
                 "agreement_status": "single_pass_weekly",
             }
@@ -193,6 +193,14 @@ def test_commit_outbox_surfaces_pivot_notes_and_unclassified_in_telegram(tmp_pat
     assert len(captured_messages) == 1
     channel, text = captured_messages[0]
     assert channel == "private"
+    assert "本地隔离 0" in text
     assert "SKIPME" in text
     assert "PIVOT1" in text
     assert "建议复核是否转入云基础设施赛道" in text
+
+    import sqlite3
+    with sqlite3.connect(str(cloud_db)) as conn:
+        gral = conn.execute(
+            "SELECT l2_id, pi_bucket, source FROM stock_themes WHERE symbol = 'GRAL'"
+        ).fetchone()
+    assert gral == ("life_sci_tools_diagnostics", "pi_pharma_bio", "agy_llm")
