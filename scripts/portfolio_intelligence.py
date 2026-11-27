@@ -4,6 +4,8 @@
 每日 22:00 SGT cron 运行，推送持仓级信号到 Telegram。
 三区块报告：行动信号 / 组合概览 / Kill Conditions。
 """
+
+from __future__ import annotations
 import os
 import sys
 import logging

@@ -16,6 +16,8 @@
 
 Spec: docs/design/2026-07-09-fmp-forward-eps-valuation-spec.md §5.3–§5.5
 """
+
+from __future__ import annotations
 import argparse
 import json
 import logging

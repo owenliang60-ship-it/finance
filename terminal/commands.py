@@ -3,6 +3,8 @@ Top-level commands — Claude calls these directly in conversation.
 
 Each command returns a structured dict that Claude formats for the user.
 """
+
+from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 

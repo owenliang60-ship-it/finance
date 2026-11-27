@@ -1,6 +1,8 @@
 """
 Finance 工作区配置 (Data Desk)
 """
+
+from __future__ import annotations
 import os
 from pathlib import Path
 from dotenv import load_dotenv

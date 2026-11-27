@@ -10,6 +10,8 @@ Usage:
     store.upsert_company("AAPL", company_name="Apple Inc.", sector="Technology")
     store.save_oprms_rating("AAPL", dna="S", timing="A", timing_coeff=0.9, ...)
 """
+
+from __future__ import annotations
 import json
 import logging
 import sqlite3
