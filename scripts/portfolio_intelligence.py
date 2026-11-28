@@ -211,6 +211,7 @@ def build_stock_position_details(
         market_value = _position_market_value(p, nav)
         rows.append({
             "symbol": getattr(p, "symbol", ""),
+            "market": getattr(p, "market", None) or "US",
             "company_name": getattr(p, "company_name", "") or "",
             "sector": getattr(p, "sector", "") or "Unknown",
             "industry": getattr(p, "industry", "") or "",
@@ -529,8 +530,8 @@ _PI_TABLE_ROW_H = 60
 
 
 def _pi_visual_deps():
-    """Load morning-report visual helpers so PI and morning report share buckets."""
-    from terminal.concept_classifier import get_report_concept_classifier
+    """Load theme-basket DB adapter and morning-report visual helpers for PI."""
+    from terminal.theme_baskets import get_theme_basket_adapter
     from scripts.morning_report import (
         _draw_fit,
         _load_visual_font,
@@ -538,11 +539,11 @@ def _pi_visual_deps():
         _scaled_widths,
     )
 
-    classifier = get_report_concept_classifier()
+    adapter = get_theme_basket_adapter()
     return {
-        "bucket_order": classifier.bucket_order,
-        "concept_bucket": classifier.classify,
-        "display_classification": classifier.business_role,
+        "bucket_order": adapter.pi_bucket_order,
+        "concept_bucket": adapter.classify_pi,
+        "display_classification": adapter.business_role,
         "draw_fit": _draw_fit,
         "font": _load_visual_font,
         "resize_photo": _resize_for_telegram_photo,
@@ -551,10 +552,11 @@ def _pi_visual_deps():
 
 
 def _pi_theme_item(row: dict) -> dict:
-    """Normalize a PI row into the morning-report classifier payload."""
+    """Normalize a PI row into the theme-basket lookup payload."""
     symbol = (row.get("symbol") or "").upper()
     return {
         "symbol": symbol,
+        "market": row.get("market") or "US",
         "companyName": row.get("company_name") or "",
         "shortName": row.get("company_name") or "",
         "longName": row.get("company_name") or "",

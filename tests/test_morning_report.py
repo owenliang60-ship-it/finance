@@ -396,7 +396,7 @@ class TestFormatSectionD:
         result = format_section_d(dv_result)
         assert "Unclassified" not in result
         assert "unclassified" not in result.lower()
-        assert "计算芯片/GPU加速器" in result
+        assert "AI加速芯片（GPU/ASIC）" in result
         assert "其他" in result
 
     def test_dv_section_is_flat_with_l2_column_in_rank_order(self):
@@ -418,8 +418,8 @@ class TestFormatSectionD:
         assert "半导体链 (" not in result
         # Rank order preserved: NVDA (#1) appears before MU (#2)
         assert result.find("NVDA") < result.find("MU")
-        # L2 label present (NVDA → 计算芯片/GPU加速器 from registry)
-        assert "计算芯片/GPU加速器" in result
+        # L2 label present (NVDA → AI加速芯片（GPU/ASIC） from theme_baskets)
+        assert "AI加速芯片（GPU/ASIC）" in result
 
     def test_dv_visual_blocks_are_flat_with_concept_column(self):
         from scripts.morning_report import build_morning_visual_sections
@@ -636,57 +636,27 @@ class TestLayeredSections:
         assert mu_idx < amat_idx
 
     def test_layered_dv_renders_three_tier_concept_tags(self, monkeypatch, tmp_path):
-        """When registry has display_tags, the layered DV row shows the full three tiers."""
-        from src.data.market_store import MarketStore
-        from terminal.company_concepts import ConceptRegistry
-        from terminal.concept_classifier import ConceptClassifier
-        from terminal.llm_concept_prefill import LLMResult
-        from scripts.build_company_concept_registry import build_registry
-        from terminal import concept_classifier as cc_mod
-        from config.settings import REPORT_CONCEPTS_PATH
+        """When theme_baskets DB has L1/L2/cross tags, the layered DV row shows them."""
+        import json
+        from contextlib import closing
+        from src.data import theme_basket_store as store
+        from terminal import theme_baskets as tb
 
-        cfg = PROJECT_ROOT / "config" / "concepts"
-        store = MarketStore(tmp_path / "market.db")
-        registry = ConceptRegistry(
-            taxonomy_path=cfg / "concept_taxonomy_v2.json",
-            watchlist_path=cfg / "concept_watchlist.json",
-        )
-        # MU's Semiconductors industry is ambiguous (not in industry_map) →
-        # unclassified → LLM. Mock prefill_one so the test stays offline and
-        # deterministically yields the 3-tier 半导体/存储芯片/半导体周期 result.
-        # NOTE: l3_themes must use a real level=3 concept_id from
-        # concept_taxonomy_v2.json — "hbm" is fabricated (no level=3 entry in
-        # the taxonomy) and causes ValueError at upsert_company_concepts write time.
-        # "semi_cycle" → "半导体周期" is a verified real level=3.
-        mu_llm = LLMResult(
-            l1="semiconductor", l2="memory_chip", l3_themes=["semi_cycle"],
-            business_role="DRAM/HBM存储", confidence=0.85,
-            source="llm", evidence="mocked", needs_review=0,
-        )
-        monkeypatch.setattr(
-            "scripts.build_company_concept_registry.prefill_one",
-            lambda **kw: mu_llm,
-        )
-        build_registry(
-            store=store, registry=registry,
-            universe_symbols=["MU"],
-            profiles={"MU": {"symbol": "MU", "sector": "Technology",
-                             "industry": "Semiconductors"}},
-            portfolio_holdings=["MU"],
-            broad_top_symbols=["MU"],
-            review_csv_path=tmp_path / "review.csv",
-            save=True, force_save=False,
-        )
-        # Inject a registry-aware classifier into the morning_report singleton.
-        injected = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=store)
-        monkeypatch.setattr(cc_mod, "_REPORT_CONCEPT_CLASSIFIER", injected)
+        db_path = tmp_path / "market.db"
+        baskets_doc = json.loads((PROJECT_ROOT / "config/theme_baskets/baskets.json").read_text(encoding="utf-8"))
+        overrides_doc = json.loads((PROJECT_ROOT / "config/theme_baskets/overrides.json").read_text(encoding="utf-8"))
+        with closing(store.open_writer(db_path)) as conn:
+            store.apply_envelope(
+                conn, baskets_doc=baskets_doc, overrides_doc=overrides_doc,
+                rows=[], payload_id=store.compute_payload_id([]),
+            )
+        injected = tb.ThemeBasketAdapter(db_path=db_path)
+        monkeypatch.setattr(tb, "_DEFAULT_ADAPTER", injected)
 
         result = format_section_layered_dv(sample_market_signals())
         assert "MU" in result
-        # Three-tier tags from the registry are joined into the row.
-        assert "半导体" in result
-        assert "存储" in result
-        assert "半导体周期" in result
+        assert "半导体与存储" in result
+        assert "存储芯片" in result
 
     def test_image_report_blocks_include_concept_column(self):
         """B 的 image-report cron 走 build_morning_visual_sections —— 2 个 layered
@@ -708,29 +678,24 @@ class TestLayeredSections:
         assert {"00_market_timing_factor", "01_pmarp",
                 "02_volume_anomaly"}.issubset(slugs_seen)
 
-    def test_layered_dv_missing_registry_keeps_legacy_bucket(self, monkeypatch):
-        """No store / empty registry → row falls back to the legacy single bucket
-        and never shows Unclassified."""
-        from terminal.concept_classifier import ConceptClassifier
-        from terminal import concept_classifier as cc_mod
-        from config.settings import REPORT_CONCEPTS_PATH
+    def test_layered_dv_missing_registry_keeps_legacy_bucket(self, monkeypatch, tmp_path):
+        """Missing/empty theme_baskets DB → row falls back to '其他' and never shows Unclassified."""
+        from terminal import theme_baskets as tb
 
-        legacy_only = ConceptClassifier(REPORT_CONCEPTS_PATH, market_store=None)
-        monkeypatch.setattr(cc_mod, "_REPORT_CONCEPT_CLASSIFIER", legacy_only)
+        empty_adapter = tb.ThemeBasketAdapter(db_path=tmp_path / "missing.db")
+        monkeypatch.setattr(tb, "_DEFAULT_ADAPTER", empty_adapter)
 
         result = format_section_layered_dv(sample_market_signals())
         assert "Unclassified" not in result
         assert "MU" in result
-        # Legacy bucket label still appears on the concept column.
-        assert "半导体链" in result
+        assert "其他" in result
 
     def test_layered_dv_groups_mu_under_l2_memory_chip_not_legacy_semi(self):
-        """[P1] With the registry-wired classifier, MU's section bucket is the L2
-        '存储芯片', not the legacy L1 '半导体链'. Grounds the L2-grouping switch."""
+        """[P1] With the theme_baskets adapter, MU's section bucket is the L2
+        '存储芯片与企业全闪存', not the legacy L1 '半导体链'."""
         from scripts.morning_report import format_section_layered_dv
         result = format_section_layered_dv(sample_market_signals())
-        # The bucket-group header for MU is the L2 label.
-        assert "存储芯片 (" in result
+        assert "存储芯片与企业全闪存 (" in result
         assert "半导体链 (" not in result
         assert "MU" in result
 
@@ -769,7 +734,7 @@ class TestLayeredSections:
         # and one that resolves to a legacy fallback label not in L2 order.
         # We construct the row with a pre-assigned legacy bucket to isolate the
         # render-path logic without relying on the live registry for the fallback case.
-        legacy_label = "其他"
+        legacy_label = "未知临时桶"
         assert legacy_label not in CONCEPT_BUCKET_ORDER  # precondition: truly an extra
         rows = [
             {"layer": "extend", "bucket": "计算芯片/GPU加速器", "cells": ["NVDA", "x"]},
