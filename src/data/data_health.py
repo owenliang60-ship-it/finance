@@ -546,10 +546,14 @@ def _theme_baskets_result(conn: sqlite3.Connection) -> CheckResult:
         if gap:
             problems.append(f"主池 {len(gap)} 只未分类: {gap[:10]}")
 
-        # 成员数只算仍在活跃主池里的票：跌出主池的老票保留 stock_themes 行，不能撑人数
-        active = """s.in_us_basket_calc = 1 AND s.is_superseded = 0 AND EXISTS (
-                        SELECT 1 FROM extended_membership m JOIN security_master sm ON sm.symbol = m.symbol
-                        WHERE m.symbol = s.symbol AND m.effective_to IS NULL AND sm.eligible = 1)"""
+        # 成员数采用统一活跃口径（在活跃主池内，或曾入主池且当前 eligible=1 且近 10 日市值 ≥ $10B）
+        from terminal.theme_baskets import active_us_member_sql
+
+        max_hmc = None
+        if "historical_market_cap" in tables:
+            row = conn.execute("SELECT MAX(date) FROM historical_market_cap").fetchone()
+            max_hmc = row[0] if row and row[0] else None
+        active = active_us_member_sql("s", has_hmc=bool(max_hmc), max_hmc_date=max_hmc)
         under = [f"{basket_id} {n}/{minimum}" for basket_id, minimum, n in conn.execute(
             f"""SELECT b.basket_id, b.min_active_members,
                       CASE b.tier

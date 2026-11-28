@@ -78,12 +78,12 @@ VOLCONC_MIN_ROWS = 292               # 有效截面日下限，低于此降级
 VOLCONC_COMPLETENESS_RATIO = 0.95    # 末日截面完整性 guard
 VOLCONC_MAX_STALE_STEPS = 3          # 末日不完整时最多回退天数
 
-from terminal.concept_classifier import get_report_concept_classifier
+from terminal.theme_baskets import get_theme_basket_adapter
 from terminal.morning_html_report import compile_morning_html_report
 
 
 def _get_concept_classifier():
-    return get_report_concept_classifier()
+    return get_theme_basket_adapter()
 
 
 def _concept_bucket_order() -> list[str]:
