@@ -889,10 +889,20 @@ def cloud_private_lock(*, db_path, lock_path, action: str, symbol: str, l2_id: O
 
 # ---------------------------------------------------------------- local → cloud transport
 
+def resolve_ssh_host(remote_args: Sequence[str]) -> str:
+    """Use THEME_SYNC_SSH_HOST (e.g. restricted-key alias) only for --apply-cloud-stdin."""
+    if remote_args and remote_args[0] == "--apply-cloud-stdin":
+        override = os.environ.get("THEME_SYNC_SSH_HOST", "").strip()
+        if override:
+            return override
+    return REMOTE_HOST
+
+
 def default_ssh_runner(remote_args: Sequence[str], stdin_bytes: Optional[bytes] = None):
     command = (f"cd {shlex.quote(REMOTE_DIR)} && {REMOTE_PYTHON} scripts/theme_basket_sync.py "
                + shlex.join(list(remote_args)))
-    proc = subprocess.run(["ssh", "-o", "BatchMode=yes", REMOTE_HOST, command],
+    host = resolve_ssh_host(remote_args)
+    proc = subprocess.run(["ssh", "-o", "BatchMode=yes", host, command],
                           input=stdin_bytes or b"", capture_output=True, timeout=SSH_TIMEOUT_SEC)
     return proc.returncode, proc.stdout, proc.stderr
 
