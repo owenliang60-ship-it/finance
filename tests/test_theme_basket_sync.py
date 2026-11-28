@@ -1234,6 +1234,15 @@ def test_zero_row_heartbeat_end_to_end(cloud, tmp_path):
     assert {r["symbol"] for r in env["rows"]} == {r["symbol"] for r in delta["auto_rows"]}
 
 
+def test_resolve_ssh_host_uses_env_only_for_apply_cloud_stdin(monkeypatch):
+    monkeypatch.delenv("THEME_SYNC_SSH_HOST", raising=False)
+    assert sync.resolve_ssh_host(["--apply-cloud-stdin"]) == sync.REMOTE_HOST
+    monkeypatch.setenv("THEME_SYNC_SSH_HOST", "aliyun-theme-sync")
+    assert sync.resolve_ssh_host(["--apply-cloud-stdin"]) == "aliyun-theme-sync"
+    assert sync.resolve_ssh_host(["--lock-private", "PRIV"]) == sync.REMOTE_HOST
+    assert sync.resolve_ssh_host([]) == sync.REMOTE_HOST
+
+
 def test_code_version_unchanged():
     from terminal.prosperity.version import code_version
 
