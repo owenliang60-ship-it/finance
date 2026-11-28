@@ -97,14 +97,8 @@ case "$MODE" in
     run_step_with_market_writer_lock "$MARKET_WRITER_WAIT_SECONDS" \
       "refresh_extended" "$PYTHON" \
       -m src.data.extended_universe_manager --refresh || extended_rc=$?
-    concept_rc=0
-    run_step_with_market_writer_lock 0 "concept_weekly_sync" "$PYTHON" \
-      scripts/build_company_concept_registry.py --weekly-sync --scheduled || concept_rc=$?
-    if [ "$concept_rc" -ne 0 ]; then
-      log "WARN concept_weekly_sync rc=$concept_rc (nonblocking, continuing)"
-    fi
     if [ "$extended_rc" -ne 0 ]; then
-      log "FAIL weekly_refresh refresh_extended_rc=$extended_rc after concept sync"
+      log "FAIL weekly_refresh refresh_extended_rc=$extended_rc"
       exit "$extended_rc"
     fi
     ;;
